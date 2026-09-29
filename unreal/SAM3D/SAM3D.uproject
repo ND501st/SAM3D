@@ -1,0 +1,25 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "",
+  "Category": "",
+  "Description": "SAM3D - first-person 3D air-defence simulator built on the simcore library.",
+  "Modules": [
+    {
+      "Name": "SAM3D",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "AdditionalDependencies": [
+        "Engine"
+      ]
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "ModelingToolsEditorMode",
+      "Enabled": true,
+      "TargetAllowList": [
+        "Editor"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+# ---------- Unreal Engine ----------
+unreal/**/Binaries/
+unreal/**/DerivedDataCache/
+unreal/**/Intermediate/
+unreal/**/Saved/
+unreal/**/Build/
+unreal/**/Plugins/**/Binaries/
+unreal/**/Plugins/**/Intermediate/
+unreal/**/*.sln
+unreal/**/*.VC.db
+unreal/**/*.VC.opendb
+unreal/**/*.opensdf
+unreal/**/*.sdf
+unreal/**/*.suo
+unreal/**/*.xcodeproj
+unreal/**/*.xcworkspace
+unreal/**/.vsconfig
+
+# ---------- IDEs ----------
+.vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.user
+.DS_Store
+Thumbs.db
+
+# ---------- C++ / CMake ----------
+build/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# ---------- Generated sim output ----------
+*.acmi
+*.zip.acmi
+
+# ---------- Original SAM Simulator files ----------
+# The creator's game, art and data stay OUT of git (size + his copyright).
+reference/*
+!reference/README.md
+
+# ---------- Reverse-engineering workspaces ----------
+*.gpr
+*.rep/
+ghidra_projects/
+
+# ---------- Claude Code local settings ----------
+.claude/settings.local.json

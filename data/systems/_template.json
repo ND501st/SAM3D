@@ -1,0 +1,57 @@
+{
+  "system_id": "example",
+  "display_name": "Example system (template)",
+  "status": "template - copy and fill in",
+  "crew": [
+    { "role": "commander", "count": 1, "source": "", "notes": "" }
+  ],
+  "vehicle": {
+    "mobility": "wheeled | tracked | towed | static",
+    "max_road_speed_mps": { "value": null, "source": "", "confidence": "" },
+    "deploy_time_s": { "value": null, "source": "", "confidence": "" },
+    "stow_time_s": { "value": null, "source": "", "confidence": "" }
+  },
+  "radars": [
+    {
+      "id": "search",
+      "role": "search | track | guidance | combined",
+      "peak_power_w": { "value": null, "source": "", "confidence": "" },
+      "antenna_gain_db": { "value": null, "source": "", "confidence": "" },
+      "wavelength_m": { "value": null, "source": "", "confidence": "" },
+      "bandwidth_hz": { "value": null, "source": "", "confidence": "" },
+      "noise_figure_db": { "value": null, "source": "", "confidence": "" },
+      "system_losses_db": { "value": null, "source": "", "confidence": "" },
+      "beamwidth_az_deg": { "value": null, "source": "", "confidence": "" },
+      "beamwidth_el_deg": { "value": null, "source": "", "confidence": "" },
+      "scan_rate_rpm": { "value": null, "source": "", "confidence": "" },
+      "instrumented_range_m": { "value": null, "source": "", "confidence": "" },
+      "warmup_time_s": { "value": null, "source": "", "confidence": "" }
+    }
+  ],
+  "missile": {
+    "published_envelope": {
+      "min_range_m": { "value": null, "source": "", "confidence": "" },
+      "max_range_m": { "value": null, "source": "", "confidence": "" },
+      "min_altitude_m": { "value": null, "source": "", "confidence": "" },
+      "max_altitude_m": { "value": null, "source": "", "confidence": "" },
+      "max_speed_mps": { "value": null, "source": "", "confidence": "" }
+    },
+    "model_parameters_calibrated_to_envelope": {
+      "launch_mass_kg": null,
+      "burnout_mass_kg": null,
+      "boost_thrust_n": null,
+      "boost_time_s": null,
+      "sustain_thrust_n": null,
+      "sustain_time_s": null,
+      "reference_area_m2": null,
+      "drag_coefficient": null,
+      "max_lateral_accel_mps2": null,
+      "notes": "Tuned so simulated flyouts reproduce the published envelope above."
+    },
+    "guidance": { "method": "", "source": "", "notes": "" }
+  },
+  "procedures_file": "data/procedures/example.json",
+  "validation_scenarios": [
+    { "name": "", "historical_reference": "", "expected_outcome": "", "source": "" }
+  ]
+}

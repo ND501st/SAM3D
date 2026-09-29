@@ -1,0 +1,12 @@
+[project]
+name = "samproto"
+version = "0.1.0"
+description = "Pure-Python prototype of the SAM3D simulation core"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "matplotlib>=3.8", "numpy>=1.26"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
