@@ -1,18 +1,25 @@
 // simcore/equipment.hpp — the circuits and mechanisms behind a control panel.
 //
-// Electrical logic never blocks a switch (only covers and keys do, in panel.hpp). Equipment turns switch
-// positions into subsystem states — a filament warming up, a mast deploying, a
-// fault when something is energised before its prerequisites are ready. Doing
-// things in the wrong order has consequences here rather than being blocked.
+// Electrical logic never blocks a switch (only covers, locks and keys do, in
+// panel.hpp). Equipment turns switch positions into subsystem states — a
+// filament warming up, a mast deploying, a fault when something is energised
+// before its prerequisites are ready. Doing things in the wrong order has
+// consequences here rather than being blocked.
 //
-// Each subsystem has an `enable` list (all true = commanded on) and a
-// `prerequisites` list (must hold while starting or running, otherwise it
-// faults). Progress runs 0..1: it rises over `start_time_s` and falls over
-// `stop_time_s`, so reversing half-way (e.g. lowering a half-raised mast) takes
-// only the time needed to undo what was done.
+// A subsystem is commanded on when all of `enable` hold and, if `enable_any` is
+// not empty, at least one of `enable_any` holds. A latching subsystem (a mode
+// engaged by a push-button, like the Osa's ЦУ АЗ) stays commanded after its
+// enable conditions pass, until all of `release` hold.
+// `prerequisites` must hold while starting or running, otherwise it faults.
+// Progress runs 0..1: it rises over `start_time_s` and falls over `stop_time_s`,
+// so reversing half-way (e.g. lowering a half-raised mast) takes only the time
+// needed to undo what was done.
+//
+// Inputs are yes/no signals the rest of the sim sets (e.g. "target within 15 s
+// of the firing zone"), so lamps and automatic sequences can depend on them.
 //
 // Placeholder model: a stopping subsystem winds down regardless of its
-// prerequisites, and a fault clears as soon as the subsystem is switched off.
+// prerequisites, and a fault clears as soon as the subsystem is commanded off.
 #pragma once
 
 #include <cstddef>
@@ -38,14 +45,15 @@ inline const char* ToString(SubsystemState s) {
     return "?";
 }
 
-// One thing that must be true: a control at a position, or a subsystem in a state.
+// One thing that must be true: a control at a position, a subsystem in a state, or a sim input set.
 struct Condition {
-    enum class Kind { ControlEquals, ControlAtLeast, SubsystemIs };
+    enum class Kind { ControlEquals, ControlAtLeast, SubsystemIs, InputIs };
 
     Kind kind = Kind::ControlEquals;
-    std::string id;                                // control id or subsystem id
+    std::string id;                                // control, subsystem or input id
     int position = 1;                              // control kinds
     SubsystemState state = SubsystemState::Ready;  // SubsystemIs
+    bool input_value = true;                       // InputIs
 
     static Condition Control(std::string control_id, int pos) {
         Condition c;
@@ -68,13 +76,24 @@ struct Condition {
     }
     static Condition Ready(std::string subsystem_id) { return Subsystem(std::move(subsystem_id), SubsystemState::Ready); }
     static Condition Stopped(std::string subsystem_id) { return Subsystem(std::move(subsystem_id), SubsystemState::Off); }
+    static Condition Input(std::string input_id, bool value = true) {
+        Condition c;
+        c.kind = Kind::InputIs;
+        c.id = std::move(input_id);
+        c.input_value = value;
+        return c;
+    }
 };
 
-// Control conditions need only the panel; subsystem conditions need Equipment.
+// Control conditions need only the panel; subsystem and input conditions need Equipment.
 inline bool ControlConditionHolds(const Condition& c, const ControlPanel& panel) {
     const int pos = panel.Get(c.id);
     if (pos < 0) return false;
     return c.kind == Condition::Kind::ControlAtLeast ? pos >= c.position : pos == c.position;
+}
+
+inline bool IsControlCondition(const Condition& c) {
+    return c.kind == Condition::Kind::ControlEquals || c.kind == Condition::Kind::ControlAtLeast;
 }
 
 struct SubsystemDef {
@@ -84,6 +103,9 @@ struct SubsystemDef {
     std::vector<Condition> prerequisites;  // must hold while starting/running, or it faults
     double start_time_s = 0.0;             // warm-up / deploy time
     double stop_time_s = 0.0;              // cool-down / stow time
+    std::vector<Condition> enable_any;     // if not empty, at least one must also hold
+    bool latching = false;                 // stays commanded once enabled, until `release`
+    std::vector<Condition> release;        // latching only; all true = commanded off (must not be empty)
 };
 
 struct SubsystemTransition {
@@ -95,13 +117,40 @@ struct SubsystemTransition {
 
 class Equipment {
 public:
-    // Rejects duplicate ids, negative times, unknown controls or positions, and
-    // subsystem references that aren't defined yet. Definition order is therefore
-    // dependency order: one Update pass sees this step's upstream states, deterministically.
+    // Declare a yes/no signal set by the sim. Starts false.
+    bool AddInput(const std::string& id) {
+        if (id.empty() || inputs_.count(id) != 0) return false;
+        inputs_[id] = false;
+        return true;
+    }
+
+    bool SetInput(const std::string& id, bool value) {
+        const auto it = inputs_.find(id);
+        if (it == inputs_.end()) return false;
+        it->second = value;
+        return true;
+    }
+
+    bool HasInput(const std::string& id) const { return inputs_.count(id) != 0; }
+
+    // False for undeclared inputs.
+    bool GetInput(const std::string& id) const {
+        const auto it = inputs_.find(id);
+        return it != inputs_.end() && it->second;
+    }
+
+    // Rejects duplicate ids, negative times, unknown controls, positions or inputs, a latching
+    // subsystem without release conditions, and subsystem references that aren't defined yet.
+    // Definition order is therefore dependency order: one Update pass sees this step's upstream
+    // states, deterministically.
     bool AddSubsystem(const SubsystemDef& def, const ControlPanel& panel) {
         if (def.id.empty() || index_.count(def.id) != 0) return false;
         if (def.start_time_s < 0.0 || def.stop_time_s < 0.0) return false;
-        if (!RefsValid(def.enable, panel) || !RefsValid(def.prerequisites, panel)) return false;
+        if (def.latching == def.release.empty()) return false;
+        if (!RefsValid(def.enable, panel) || !RefsValid(def.prerequisites, panel) ||
+            !RefsValid(def.enable_any, panel) || !RefsValid(def.release, panel)) {
+            return false;
+        }
         index_[def.id] = units_.size();
         Unit u;
         u.def = def;
@@ -131,8 +180,13 @@ public:
     }
 
     bool Holds(const Condition& c, const ControlPanel& panel) const {
-        if (c.kind == Condition::Kind::SubsystemIs) return Has(c.id) && State(c.id) == c.state;
-        return ControlConditionHolds(c, panel);
+        switch (c.kind) {
+            case Condition::Kind::SubsystemIs: return Has(c.id) && State(c.id) == c.state;
+            case Condition::Kind::InputIs: return HasInput(c.id) && GetInput(c.id) == c.input_value;
+            case Condition::Kind::ControlEquals:
+            case Condition::Kind::ControlAtLeast: return ControlConditionHolds(c, panel);
+        }
+        return false;
     }
 
     bool AllHold(const std::vector<Condition>& conds, const ControlPanel& panel) const {
@@ -140,6 +194,13 @@ public:
             if (!Holds(c, panel)) return false;
         }
         return true;
+    }
+
+    bool AnyHolds(const std::vector<Condition>& conds, const ControlPanel& panel) const {
+        for (const Condition& c : conds) {
+            if (Holds(c, panel)) return true;
+        }
+        return false;
     }
 
     double Time() const { return time_s_; }
@@ -156,19 +217,39 @@ private:
         SubsystemDef def;
         SubsystemState state = SubsystemState::Off;
         double progress = 0.0;
+        bool latched = false;
     };
 
     static constexpr double kProgressEps = 1e-9;
 
     bool RefsValid(const std::vector<Condition>& conds, const ControlPanel& panel) const {
         for (const Condition& c : conds) {
-            if (c.kind == Condition::Kind::SubsystemIs) {
-                if (!Has(c.id)) return false;
-            } else if (!panel.IsValidPosition(c.id, c.position)) {
-                return false;
+            switch (c.kind) {
+                case Condition::Kind::SubsystemIs:
+                    if (!Has(c.id)) return false;
+                    break;
+                case Condition::Kind::InputIs:
+                    if (!HasInput(c.id)) return false;
+                    break;
+                case Condition::Kind::ControlEquals:
+                case Condition::Kind::ControlAtLeast:
+                    if (!panel.IsValidPosition(c.id, c.position)) return false;
+                    break;
             }
         }
         return true;
+    }
+
+    bool Commanded(Unit& u, const ControlPanel& panel) {
+        const bool enabled =
+            AllHold(u.def.enable, panel) && (u.def.enable_any.empty() || AnyHolds(u.def.enable_any, panel));
+        if (!u.def.latching) return enabled;
+        if (u.latched && AllHold(u.def.release, panel)) {
+            u.latched = false;
+        } else if (!u.latched && enabled) {
+            u.latched = true;
+        }
+        return u.latched;
     }
 
     void Go(Unit& u, SubsystemState to) {
@@ -193,7 +274,7 @@ private:
     }
 
     void StepUnit(Unit& u, double dt, const ControlPanel& panel) {
-        const bool enabled = AllHold(u.def.enable, panel);
+        const bool enabled = Commanded(u, panel);
         const bool prereqs_ok = AllHold(u.def.prerequisites, panel);
         switch (u.state) {
             case SubsystemState::Off:
@@ -240,15 +321,16 @@ private:
     }
 
     std::unordered_map<std::string, std::size_t> index_;
+    std::unordered_map<std::string, bool> inputs_;
     std::vector<Unit> units_;
     std::vector<SubsystemTransition> transitions_;
     double time_s_ = 0.0;
 };
 
-// Conditions checked with or without Equipment. Without it, subsystem conditions count as met.
+// Conditions checked with or without Equipment. Without it, subsystem and input conditions count as met.
 inline bool ConditionsHold(const std::vector<Condition>& conds, const ControlPanel& panel, const Equipment* equipment) {
     for (const Condition& c : conds) {
-        if (c.kind == Condition::Kind::SubsystemIs) {
+        if (!IsControlCondition(c)) {
             if (equipment != nullptr && !equipment->Holds(c, panel)) return false;
         } else if (!ControlConditionHolds(c, panel)) {
             return false;

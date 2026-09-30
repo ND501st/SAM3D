@@ -107,10 +107,13 @@ The screen shows one continuous console split between them (Form56 and Form57 in
 | Key: insert, then rotate | ЗАПРЕТ ПУСКА launch-authorization key (p29–30) | 3-position `stepwise` |
 | Wheel locked until right-clicked | azimuth and elevation wheels (p22–23) | lock as a `guard_id` control |
 | Multi-position selectors | ДАЛЬНОСТЬ 0–15 / 0–35 / 10–45 km (p15); РОД РАБОТЫ, БР = live fire, leftmost (p29); beam select I / II / III / I–III / I–II (p15) | `positions` |
-| **Continuous wheels** | АЗИМУТ, УГОЛ МЕСТА, range wheel, drag with the mouse; fast left/right buttons (p16–17) | **missing** |
-| **Momentary push-buttons** | ЦУ АЗ (auto acquisition, p23), ПА (TV angle track, p25), ПОЛУАВТОМАТ (range-only track, p26), ПУСК (launch, p30) | **missing** |
-| Lamps driven by system state | ГОТОВ СПК, ВКЛ ВЫС, ЗАХВАТ, СХОД (p18); ВНИМАНИЕ, ПУСК ГОТОВ, ЦЕЛЬ В ЗОНЕ (p29); ТСЦ (p24), АВТОМАТ (p24), НЛЦ (p25) | `Equipment` states (lamp mapping not yet data) |
-| Automatic sequences | missile gyro spin-up (15 s) starts by itself when ВНИМАНИЕ lights, 15 s before the target reaches the zone (p27, p29); target captured automatically once the SSC is on azimuth and in the range gate (p24) | partly (`Equipment` start times) |
+| Continuous wheels | АЗИМУТ, УГОЛ МЕСТА, range wheel, drag with the mouse; fast left/right buttons (p16–17) | `ControlKind::Continuous` |
+| Momentary push-buttons | ЦУ АЗ (auto acquisition, p23), ПА (TV angle track, p25), ПОЛУАВТОМАТ (range-only track, p26), ПУСК (launch, p30) | `ControlKind::Momentary`; modes they engage are latching subsystems |
+| Lamps driven by system state | ГОТОВ СПК, ВКЛ ВЫС, ЗАХВАТ, СХОД (p18); ВНИМАНИЕ, ПУСК ГОТОВ, ЦЕЛЬ В ЗОНЕ (p29); ТСЦ (p24), АВТОМАТ (p24), НЛЦ (p25) | `Equipment` states and sim inputs (lamp-to-state mapping not yet data) |
+| Automatic sequences | missile gyro spin-up (15 s) starts by itself when ВНИМАНИЕ lights, 15 s before the target reaches the zone (p27, p29); target captured automatically once the SSC is on azimuth and in the range gate (p24) | sim inputs + `enable_any` (the sim doesn't set the inputs yet) |
+
+The console is data: [`data/procedures/osa_ak.json`](../../data/procedures/osa_ak.json) has the controls, subsystems and
+procedures A–E below, each with page references and confidence ratings.
 
 ### Procedures (order only; see the PDF for detail)
 

@@ -40,9 +40,11 @@ add_executable(simcore_tests
   tests/test_radar.cpp
   tests/test_engagement.cpp
   tests/test_procedures.cpp
-  tests/test_equipment.cpp)
+  tests/test_equipment.cpp
+  tests/test_console.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
+target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
 add_test(NAME simcore_tests COMMAND simcore_tests)
 
 # Header self-containment + "no exceptions" check: compile the umbrella header alone.

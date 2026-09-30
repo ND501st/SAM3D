@@ -20,5 +20,7 @@
 #include "simcore/panel.hpp"
 #include "simcore/equipment.hpp"
 #include "simcore/procedures.hpp"
+#include "simcore/json.hpp"
+#include "simcore/console_data.hpp"
 #include "simcore/world.hpp"
 #include "simcore/acmi.hpp"
