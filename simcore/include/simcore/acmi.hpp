@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdio>
+#include <fstream>
 #include <string>
 #include <unordered_set>
 
@@ -75,11 +76,10 @@ public:
     const std::string& Text() const { return text_; }
 
     bool SaveTo(const std::string& path) const {
-        std::FILE* f = std::fopen(path.c_str(), "wb");
-        if (f == nullptr) return false;
-        const bool ok = std::fwrite(text_.data(), 1, text_.size(), f) == text_.size();
-        std::fclose(f);
-        return ok;
+        std::ofstream f(path, std::ios::binary);
+        if (!f) return false;
+        f.write(text_.data(), static_cast<std::streamsize>(text_.size()));
+        return static_cast<bool>(f);
     }
 
 private:

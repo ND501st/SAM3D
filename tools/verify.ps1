@@ -25,8 +25,11 @@ if ($LASTEXITCODE -ne 0) { throw 'demo failed' }
 
 Write-Host '==> prototype: pytest' -ForegroundColor Cyan
 $py = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
+# Windows PowerShell 5.1 turns native stderr into a terminating error under 'Stop'; relax it for the probe.
+$ErrorActionPreference = 'Continue'
 & $py -m pytest --version *> $null
-if ($LASTEXITCODE -ne 0) { & $py -m pip install --user pytest | Out-Null }
+if ($LASTEXITCODE -ne 0) { & $py -m pip install --user pytest *> $null }
+$ErrorActionPreference = 'Stop'
 & $py -m pytest prototype -q
 if ($LASTEXITCODE -ne 0) { throw 'prototype tests failed' }
 
