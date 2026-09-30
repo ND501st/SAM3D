@@ -22,6 +22,35 @@ void Tick(ConsoleData& c, CrewMember& crew, double dt = 0.1) {
     crew.Update(dt, c.panel, &c.equipment);
 }
 
+// Run the crew until it has nothing left to do (or a time limit). Returns the time taken.
+double RunUntilIdle(ConsoleData& c, CrewMember& crew, double limit_s = 600.0) {
+    double t = 0.0;
+    for (; crew.IsBusy() && t < limit_s; t += 0.1) Tick(c, crew);
+    return t;
+}
+
+bool AnyFault(ConsoleData& c) {
+    bool fault = false;
+    for (const SubsystemTransition& tr : c.equipment.TakeTransitions()) {
+        if (tr.to == SubsystemState::Fault) {
+            std::printf("    fault: %s at %.1f s\n", tr.id.c_str(), tr.time_s);
+            fault = true;
+        }
+    }
+    return fault;
+}
+
+// From the march: stop, start the GTA and come into action. Returns once the GTA is running (the engine
+// generator powers the equipment until then) and leaves the crew idle.
+void PowerUpAndDeploy(ConsoleData& c, CrewMember& crew) {
+    c.equipment.SetInput("vehicle_stopped", true);
+    crew.Order(*c.FindProcedure("power_up"));
+    crew.Queue(*c.FindProcedure("deploy_at_halt"));
+    RunUntilIdle(c, crew);
+    for (int i = 0; i < 1000 && !c.equipment.IsReady("gta"); ++i) Tick(c, crew);
+    crew.TakeReports();
+}
+
 bool LoadErrorContains(const std::string& text, const std::string& expected) {
     ConsoleData c;
     std::string error;
@@ -191,15 +220,97 @@ SC_TEST("osa data: loads, with the manual's covers, key, wheels and buttons") {
     SC_EXPECT(!c.panel.SetValue("ssc.az_wheel", 10.0));  // locked until right-clicked
     SC_EXPECT(c.panel.Find("fo.launch")->kind == ControlKind::Momentary);
     SC_EXPECT(c.panel.Find("soc.range")->position_labels[2] == "10–45 km");
-    for (const char* id : {"acquire_with_soc", "track_low_target", "prepare_firing", "launch", "emcon_tv_engagement"}) {
+    for (const char* id : {"power_up", "search_on_march", "deploy_at_halt", "acquire_with_soc", "track_low_target",
+                           "prepare_firing", "launch", "emcon_tv_engagement", "stow_for_march", "stow_for_transport"}) {
         SC_EXPECT(c.FindProcedure(id) != nullptr);
     }
+}
+
+SC_TEST("osa data: nothing works without power, and switching on unpowered isn't a fault") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    c.panel.Set("soc.search", 1);
+    c.panel.Set("soc.hv_cover", 1);
+    c.panel.Set("soc.hv", 1);
+    c.panel.Set("tov.power", 1);
+    for (int i = 0; i < 50; ++i) c.equipment.Update(0.1, c.panel);
+    SC_EXPECT(!c.equipment.IsReady("soc_antenna") && !c.equipment.IsReady("soc_transmitter"));
+    SC_EXPECT(!c.equipment.IsReady("tov_camera") && !AnyFault(c));
+    c.panel.Set("pwr.gta", 1);
+    for (int i = 0; i < 605; ++i) c.equipment.Update(0.1, c.panel);  // GTA start (60 s, estimate)
+    SC_EXPECT(c.equipment.IsReady("power") && c.equipment.IsReady("soc_transmitter") && c.equipment.IsReady("tov_camera"));
+}
+
+SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ unlocked") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    CrewMember crew("Commander", "commander", 1.0);
+    crew.Order(*c.FindProcedure("power_up"));
+    crew.Queue(*c.FindProcedure("search_on_march"));
+    const double t = RunUntilIdle(c, crew);
+    Tick(c, crew);
+    SC_EXPECT(c.equipment.IsReady("soc_antenna") && c.equipment.IsReady("soc_transmitter"));  // while moving
+    SC_EXPECT(t > 60.0 && t < 70.0);  // GTA start dominates
+    c.panel.Set("tov.power", 1);
+    c.panel.Set("fo.pa", 1);
+    Tick(c, crew);
+    Tick(c, crew);
+    SC_EXPECT(!c.equipment.IsReady("tv_angle_track"));  // АПУ still locked for the march
+    crew.Order(*c.FindProcedure("deploy_at_halt"));
+    RunUntilIdle(c, crew, 5.0);
+    SC_EXPECT(crew.Status() == CrewStatus::Waiting);  // waits for the vehicle to stop
+    c.equipment.SetInput("vehicle_stopped", true);
+    RunUntilIdle(c, crew);
+    Tick(c, crew);
+    SC_EXPECT(c.equipment.IsReady("apu_free") && c.equipment.IsReady("pto_generator"));
+    SC_EXPECT(!AnyFault(c));
+}
+
+SC_TEST("osa data: stow for the march, then driving off is safe; driving unlocked faults the АПУ") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    CrewMember crew("Commander", "commander", 1.0);
+    PowerUpAndDeploy(c, crew);
+    SC_EXPECT(c.equipment.IsReady("apu_free"));
+    crew.Order(*c.FindProcedure("stow_for_march"));
+    RunUntilIdle(c, crew);
+    SC_EXPECT(crew.Tracker().IsComplete() && crew.Tracker().Deviations() == 0);
+    Tick(c, crew);
+    SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Off);
+    c.equipment.SetInput("vehicle_stopped", false);
+    Tick(c, crew);
+    SC_EXPECT(!AnyFault(c) && c.equipment.IsReady("power"));  // GTA keeps powering on the move
+    SC_EXPECT(!c.equipment.IsReady("pto_generator"));
+
+    c.equipment.SetInput("vehicle_stopped", true);
+    crew.Order(*c.FindProcedure("deploy_at_halt"));
+    RunUntilIdle(c, crew);
+    Tick(c, crew);
+    c.equipment.SetInput("vehicle_stopped", false);  // drives off without locking the АПУ
+    Tick(c, crew);
+    SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Fault);
+}
+
+SC_TEST("osa data: stow for transport folds the antenna and shuts down the GTA") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    CrewMember crew("Commander", "commander", 1.0);
+    PowerUpAndDeploy(c, crew);
+    crew.Order(*c.FindProcedure("search_on_march"));
+    crew.Queue(*c.FindProcedure("stow_for_march"));
+    crew.Queue(*c.FindProcedure("stow_for_transport"));
+    RunUntilIdle(c, crew);
+    for (int i = 0; i < 20; ++i) Tick(c, crew);
+    SC_EXPECT(crew.Tracker().GetProcedure().id == "stow_for_transport" && crew.Tracker().Deviations() == 0);
+    SC_EXPECT(c.equipment.State("search_antenna") == SubsystemState::Off && c.panel.Get("pwr.gta") == 0);
+    SC_EXPECT(!c.equipment.IsReady("power") && !AnyFault(c));
 }
 
 SC_TEST("osa data: crew acquires with the SOC, then the SSC locks on when the target is captured") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     CrewMember crew("Range officer", "range_officer", 1.0);
+    PowerUpAndDeploy(c, crew);
     crew.Order(*c.FindProcedure("acquire_with_soc"));
     for (int i = 0; i < 1000 && crew.IsBusy(); ++i) Tick(c, crew);
     SC_EXPECT(crew.Tracker().IsComplete() && crew.Tracker().Deviations() == 0);
@@ -216,6 +327,7 @@ SC_TEST("osa data: prepare, then launch waits for ПУСК ГОТОВ and ЦЕЛ
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     CrewMember crew("Firing officer", "firing_officer", 1.0);
+    PowerUpAndDeploy(c, crew);
     crew.Order(*c.FindProcedure("prepare_firing"));
     crew.Queue(*c.FindProcedure("launch"));
     double t = 0.0;
@@ -244,6 +356,7 @@ SC_TEST("osa data: TV-only engagement with the radars silent") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     CrewMember crew("Firing officer", "firing_officer", 1.0);
+    PowerUpAndDeploy(c, crew);
     crew.Order(*c.FindProcedure("emcon_tv_engagement"));
     bool launched = false;
     double t = 0.0;

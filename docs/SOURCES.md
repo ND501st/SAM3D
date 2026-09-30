@@ -26,6 +26,9 @@ new entry added here.
 | Manufacturer export brochures (e.g. Almaz-Antey) | Published envelopes for export variants |
 | Former Warsaw Pact operator manuals (Hungarian, Czech, East German), museum sites | Procedures, crew roles, panel layouts |
 | SAM Simulator (creator, [site](https://sites.google.com/site/samsimulator1972/home), now sign-in only; [archived copy](https://web.archive.org/web/20210120202958/https://sites.google.com/site/samsimulator1972/home)) | Reference for console behaviour and procedures |
+| "2ПВО МСД. Часть 2. Зенитные ракетные полки (зрп)", Word attachment on the wrk.ru (Aviabaza) forum ([file](https://www.wrk.ru/forums/attachment.php?item=1005313)) | Osa crew, power sources, march/combat positions, readiness norms. Unsigned; medium confidence. Summarised in `docs/re/osa.md` |
+| GlobalSecurity.org, [SA-8 GECKO / 9K33M3 Osa-AKM](https://www.globalsecurity.org/military/world/russia/sa-8.htm) | Osa deployment time, radar folding for transport |
+| missilery.info, [9K33M3 Osa-AKM](https://en.missilery.info/missile/osa-akm) | Osa power sources, march-to-combat time |
 | SAM Simulator documentation set v210109 (`SAMSIM_docs_210109.rar`, [MediaFire](https://www.mediafire.com/file/cgovijhk4hukl7n/SAMSIM_docs_210109.rar), linked from the creator's site) | Per-system manuals. Osa: `SA-8B_English.pdf` (v1, 2014), summarised in `docs/re/osa.md`. Kept in `reference/manuals/`, not in git |
 
 ## Validation scenarios

@@ -103,10 +103,12 @@ public:
     }
 
     // A valid position that isn't physically blocked right now (closed cover, or a stepwise jump).
+    // Staying where it already is always counts as possible: nothing has to move.
     bool CanMove(const std::string& id, int value) const {
         if (!IsValidPosition(id, value)) return false;
         const std::size_t i = index_.at(id);
         const ControlDef& def = defs_[i];
+        if (values_[i] == value) return true;
         if (GuardClosed(def)) return false;
         if (def.stepwise && (value > values_[i] + 1 || value < values_[i] - 1)) return false;
         return true;

@@ -147,8 +147,43 @@ in the crosshair; turn the key and press ПУСК.
 
 **F. Assessing the result (p31):** detonation and smoke on the TV; an "X" on the plotting board; the track ends.
 
+## March, deploy and stow (public sources, not SAM Simulator)
+
+SAM Simulator starts deployed, so this section comes from other public material. Sources (full references in
+`docs/SOURCES.md`):
+
+- **[wrk]** "2ПВО МСД. Часть 2. Зенитные ракетные полки (зрп)", an article on Soviet divisional SAM regiments
+  posted as a Word attachment on the wrk.ru (Aviabaza) forum. Detailed, apparently written from service
+  experience and Soviet documentation; unsigned in the file. Treated as **medium** confidence.
+- **[gs]** GlobalSecurity.org, "SA-8 GECKO / 9K33M3 Osa-AKM".
+- **[apa]** Air Power Australia, "9K33 Osa/Romb ... SA-8 Gecko", technical data table.
+- **[mis]** missilery.info, "9K33M3 Osa-AKM".
+- **[ru-wiki]** Russian Wikipedia, "Оса (зенитный ракетный комплекс)".
+
+### What the sources say
+
+| Fact | Source | Notes |
+|---|---|---|
+| Crew of 5: vehicle commander (an officer), guidance operator (sergeant, deputy crew chief), range operator, search operator, driver-mechanic-electromechanic | [wrk]; 5 also in [ru-wiki] for the 9A33B | [mis] and a Ukrainian museum page give 4 for later variants |
+| Two power sources: the 9И120 gas-turbine power unit (ГТА: 9И56-3 turbine + generator), which powers the vehicle **on the move and at a halt**; and an engine power take-off generator (ГОМ), **only at a halt** | [wrk], [mis] | [apa] writes "9I210", probably a typo; 9И120 used here |
+| Readiness for combat work, **including starting the GTA, within 4 minutes** | [wrk]; "combat deployment time is four minutes" [gs]; march-to-combat "up to 4 min" [mis] | [apa] gives 3–5 min each way |
+| On the march the antenna-launcher unit (АПУ) is **locked in the travel position with the SSC antenna facing rear** | [wrk] | |
+| When air targets appear on the march: the crew **pulls off the road, unlocks the АПУ**, captures the target and fires | [wrk] | |
+| Search radar can search **on the move** (at up to 80 km/h, from a stabilised platform); tracking and launch only **from a short halt or stationary** | [wrk], [mis], [gs] | |
+| "Excellent" standard: going to manual tracking, **including unlocking the АПУ and slewing it onto the target, 13 s**; with the АЗ method, 12 s. Tracking starts right after SSC high voltage comes on | [wrk] | |
+| A trained crew keeps the АПУ in the combat position and starts the search in beam II, in MTI (СДЦ) mode, with three operators each watching a sector of the PPI | [wrk] | |
+| For air transport (Il-76) the АПУ is stowed: the search radar **folds back 90°** to lower the vehicle for air transport and fast road travel | [wrk], [gs] | |
+
+### What they don't say
+
+No public source found gives the switch-level order for starting the GTA, unlocking or locking the АПУ, or
+folding the antenna, or any warm-up times other than the 4-minute total. The deploy and stow procedures in
+`data/procedures/osa_ak.json` are therefore **SAM3D's own design built on the facts above**, marked
+`confidence: estimate`, with English labels where the real panel label isn't known.
+
 ## Still not known
 
 - Exact screen positions of each control (only needed if SAM3D copies the layout; the cabin will be 3D anyway).
 - What the game does when steps are done out of order (fault, no effect, or refusal). Can be checked in the running game.
-- Power-up, deploy and stow: not in SAM Simulator (see above).
+- Power-up, deploy and stow: not in SAM Simulator. Public facts are above; the switch-level order is SAM3D's design.
+- The real panel labels and positions of the GTA, power take-off and АПУ lock controls.
