@@ -40,6 +40,27 @@
 
   "launch": { "button": "fo.launch", "armed": "launch_armed", "source": "samsim_osa p30", "confidence": "high" },
 
+  "sensors": {
+    "source": "samsim_osa p14–18, p21–26", "confidence": "high",
+    "notes": "Maps the SOC, SSC and TOV onto this console for the gameplay engagement model (simcore/engagement.hpp). Gameplay thresholds live in data/gameplay/osa_ak.json.",
+    "search": {
+      "antenna": "soc_antenna", "transmitter": "soc_transmitter",
+      "range_control": "soc.range", "range_scales_m": [[0, 15000], [0, 35000], [10000, 45000]],
+      "mti_control": "soc.mti", "mti_max_range_m": 35000,
+      "notes": "Scales p15 item 5; СДЦ works to 35 km, p15 item 12."
+    },
+    "track": {
+      "transmitter": "ssc_transmitter", "slew": "apu_free", "radar_mode": "auto_acquisition",
+      "tv_camera": "tov_camera", "tv_mode": "tv_angle_track", "range_only_mode": "range_semi_auto",
+      "az_wheel": "ssc.az_wheel", "el_wheel": "ssc.el_wheel", "range_wheel": "ssc.range_wheel",
+      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "fov_deg": [5, 1.5],
+      "max_range_m": 28000, "az_limit_deg": 330,
+      "captured_input": "target_captured", "too_low_input": "target_too_low",
+      "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
+      "notes": "SSC displayed range 28 km (p16); TOV lenses 5° wide / 1.5° narrow (p17); ±330° azimuth (p14, p16)."
+    }
+  },
+
   "inputs": [
     { "id": "vehicle_stopped", "description": "The vehicle is stationary (a short halt or a firing position)", "source": "wrk; mis (tracking and launch only from a short halt or stationary)", "confidence": "high" },
     { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },

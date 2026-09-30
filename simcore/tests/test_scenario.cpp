@@ -57,7 +57,7 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     std::string error;
     SC_EXPECT(LoadScenarioFile(PracticePath(), kData, def, console, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(def.crew.size() == 3 && def.targets.size() == 1 && def.triggers.size() == 7);
+    SC_EXPECT(def.crew.size() == 3 && def.targets.size() == 1 && def.triggers.size() == 4);
     ScenarioRunner runner(std::move(def), std::move(console));
     SC_EXPECT(runner.RunToEnd(0.1));
     SC_EXPECT(runner.EndReason() == "all targets gone");
@@ -67,7 +67,7 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     SC_EXPECT(s.procedures_aborted == 0 && s.procedures_completed >= 6);
     const std::string text = runner.Debrief();
     SC_EXPECT(text.find("LAUNCH") != std::string::npos && text.find("t1") != std::string::npos);
-    SC_EXPECT(runner.Console().equipment.IsReady("auto_tracking"));
+    SC_EXPECT(s.hits + s.misses == 1);  // resolved by the gameplay engagement model
     SC_EXPECT(runner.Acmi().Text().find("Name=9K33M2 Osa-AK") != std::string::npos);
     // Ends when the drone passes its last waypoint: 75 km at 150 m/s, less the capture radius.
     SC_EXPECT(runner.Time() > 490.0 && runner.Time() < 505.0);

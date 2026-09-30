@@ -74,7 +74,14 @@ The player's 3D cabin clicks call the same functions, so the player and the crew
   the targets, and lists triggers (time, target range, console conditions, launches) that set sim inputs, give
   crew orders or end the run. `ScenarioRunner` owns the World, console, crew and log, steps them in the order
   below, records launches, writes a Tacview track and produces the debrief. Runs are deterministic for a given
-  seed. Missile flight after a launch is not simulated yet (phase 3). `examples/scenario_demo.cpp` plays a file.
+  seed. `examples/scenario_demo.cpp` plays a file.
+- Engagement (`engagement.hpp`, numbers in `data/gameplay/<system>.json`): a deliberately gameplay-level model, not
+  radar or missile physics. The console's `sensors` block maps the search radar, tracking radar and TV sight onto
+  its controls. The model builds the search picture (range scale, line of sight, clutter/MTI), locks the tracking
+  radar when the operator has the azimuth line and range gate on a target in acquisition mode (or the TV has it in
+  view), follows it until the lock breaks, sets the capture / too-low / zone inputs, lets the aiming crew member turn
+  the wheels, and resolves each launch: losing the track loses the missile, otherwise the hit chance is a product
+  of plain, tunable factors printed in the debrief, decided by one draw from the scenario seed.
 
 Per step: `Equipment::Update`, then `ControlPanel::ReleaseMomentaries`, then crew. Crew see this step's lamps, and
 Equipment sees every button press exactly once.

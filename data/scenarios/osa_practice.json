@@ -4,12 +4,13 @@
   "description": "A fictional practice shoot. The Osa is on the march with its crew; a single target drone comes in from the north. The crew powers up, searches on the march, halts, deploys, acquires with the SOC, prepares and launches. No player actions: this is a regression and demo scenario.",
   "source": "sam3d",
   "confidence": "estimate",
-  "notes": "Fictional. The place is a flat plain chosen for convenience. The target's speed, height, route and RCS, and the ranges at which the triggers set the zone and capture inputs, are PLACEHOLDER numbers for exercising the pipeline, not data for any real system or envelope.",
+  "notes": "Fictional. The place is a flat plain chosen for convenience. The target's speed, height, route and RCS are PLACEHOLDER numbers for exercising the pipeline. Capture and zone lamps come from the gameplay engagement model (data/gameplay/osa_ak.json), not from this file.",
   "seed": 1,
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "terrain": { "type": "flat", "height_m": 110 },
   "own_unit": {
     "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "inputs": { "vehicle_stopped": false }
   },
@@ -20,7 +21,7 @@
   ],
   "targets": [
     {
-      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone",
+      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
       "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },
       "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
       "speed_mps": 150, "rcs_m2": 0.5,
@@ -35,16 +36,7 @@
     { "id": "acquire", "when": { "target": "t1", "target_within_m": 35000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
       "do": [ { "order": "acquire_with_soc", "crew": "Range officer" } ] },
     { "id": "prepare", "when": { "target": "t1", "target_within_m": 30000 },
-      "do": [ { "order": "prepare_firing", "crew": "Firing officer" }, { "queue": "launch", "crew": "Firing officer" } ] },
-    { "id": "ssc_captures", "when": { "target": "t1", "target_within_m": 25000, "conditions": [ { "subsystem": "ssc_transmitter", "is": "ready" } ] },
-      "do": [ { "set_input": "target_captured", "value": true } ],
-      "notes": "Stands in for the SSC's automatic capture until the tracking model exists (phase 3). Placeholder range." },
-    { "id": "caution", "when": { "target": "t1", "target_within_m": 15000 },
-      "do": [ { "set_input": "target_near_zone", "value": true } ],
-      "notes": "ВНИМАНИЕ. Placeholder range, not computed from any envelope." },
-    { "id": "in_zone", "when": { "target": "t1", "target_within_m": 10000 },
-      "do": [ { "set_input": "target_in_zone", "value": true } ],
-      "notes": "ЦЕЛЬ В ЗОНЕ. Placeholder range, not computed from any envelope." }
+      "do": [ { "order": "prepare_firing", "crew": "Firing officer" }, { "queue": "launch", "crew": "Firing officer" } ] }
   ],
   "end": { "time_limit_s": 700, "when_targets_gone": true }
 }

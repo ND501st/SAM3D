@@ -19,12 +19,14 @@ ranges at which zone lamps light) are labelled as such in `notes`.
   "terrain": { "type": "flat", "height_m": 110 },     // only flat so far
   "own_unit": {
     "console": "procedures/osa_ak.json",              // relative to data/
+    "tuning": "gameplay/osa_ak.json",                 // optional: turns on the gameplay engagement model
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "inputs": { "vehicle_stopped": false }            // starting values of console inputs
   },
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 } ],
   "targets": [
-    { "id": "t1", "name": "...", "type": "Air+FixedWing", "appear_at_s": 0,
+    { "id": "t1", "name": "...", "type": "Air+FixedWing", "class": "drone", "appear_at_s": 0,
+      "evade_on_launch": false, "evade_turn_rate_deg_s": 12,          // optional: break away when fired at
       "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },   // or { "lat_deg", "lon_deg", "alt_m" }
       "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
       "speed_mps": 150, "max_turn_rate_deg_s": 6, "rcs_m2": 0.5 }
@@ -46,4 +48,11 @@ Each trigger fires once, when every part of `when` holds. Positions: `east_m`/`n
 at `origin` (ENU metres); `lat_deg`/`lon_deg`/`alt_m` are converted to it.
 
 A launch is recorded when the console's launch button (`"launch"` in the console file) is pressed while its armed
-subsystem is ready. Missile flight and the outcome are not simulated yet; that is roadmap phase 3.
+subsystem is ready.
+
+With `"tuning"`, the gameplay engagement model (`simcore/engagement.hpp`, numbers in `data/gameplay/`) runs the
+search and tracking picture and sets the console's capture, too-low and zone inputs itself, so scenarios don't need
+triggers for those. The crew member whose role matches the tuning's `aim.crew_role` turns the wheels onto contacts.
+Each launch is resolved as a hit or a miss from the target's `class` and the factors listed in the tuning file; the
+debrief prints them. Heights given as `up_m` are in the flat local frame: far from the origin the true height is
+higher (about 45 m at 24 km), so give low targets in `lat_deg`/`lon_deg`/`alt_m` or keep them close.

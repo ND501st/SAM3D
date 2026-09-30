@@ -21,6 +21,39 @@
 
 namespace simcore {
 
+// How a console's radars and sight map onto its controls and equipment (the "sensors" block).
+// Used by the gameplay engagement model (engagement.hpp). Ids refer to this console.
+struct SearchSensorDef {
+    std::string antenna;       // subsystem: rotating
+    std::string transmitter;   // subsystem: radiating
+    std::string range_control; // selector: one displayed range scale per position
+    std::vector<std::pair<double, double>> range_scales_m;  // [min, max] per position
+    std::string mti_control;   // switch: moving-target indicator (1 = on); may be empty
+    double mti_max_range_m = 0.0;
+};
+
+struct TrackSensorDef {
+    std::string transmitter;     // subsystem: tracking radar radiating
+    std::string slew;            // subsystem: antenna free to turn
+    std::string radar_mode;      // subsystem: radar acquisition mode engaged (e.g. ЦУ АЗ)
+    std::string tv_camera;       // subsystem: TV camera on (may be empty)
+    std::string tv_mode;         // subsystem: TV angle tracking engaged (may be empty)
+    std::string range_only_mode; // subsystem: radar range-only tracking engaged (may be empty)
+    std::string az_wheel;        // wheels, in degrees and metres
+    std::string el_wheel;
+    std::string range_wheel;
+    std::string lock_control;    // lock that must be open before the aiming crew can turn the azimuth wheel
+    std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
+    double fov_wide_deg = 0.0;
+    double fov_narrow_deg = 0.0;
+    double max_range_m = 0.0;
+    double az_limit_deg = 360.0;  // wheel limits already enforce this; used to pick the reachable angle
+    std::string captured_input;   // inputs the model sets (may be empty)
+    std::string too_low_input;
+    std::string near_zone_input;
+    std::string in_zone_input;
+};
+
 struct ConsoleData {
     std::string system_id;
     std::string display_name;
@@ -29,6 +62,9 @@ struct ConsoleData {
     std::vector<Procedure> procedures;
     std::string launch_button;  // push-button that commands a launch (empty if the file has no "launch")
     std::string launch_armed;   // subsystem that must be ready for the button to launch
+    bool has_sensors = false;
+    SearchSensorDef search;
+    TrackSensorDef track;
 
     const Procedure* FindProcedure(const std::string& id) const {
         for (const Procedure& p : procedures) {
@@ -44,7 +80,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "inputs", "controls",
-                             "subsystems", "procedures", "launch"})) {
+                             "subsystems", "procedures", "launch", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -54,7 +90,8 @@ public:
         if (!LoadControls(root, out.panel)) return false;
         if (!LoadSubsystems(root, out.panel, out.equipment)) return false;
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
-        return LoadLaunch(root, out);
+        if (!LoadLaunch(root, out)) return false;
+        return LoadSensors(root, out);
     }
 
     const std::string& Message() const { return message_; }
@@ -315,6 +352,107 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const ControlDef* b = out.panel.Find(out.launch_button);
         if (b == nullptr || b->kind != ControlKind::Momentary) return Fail("launch.button", "must be a button control");
         if (!out.equipment.Has(out.launch_armed)) return Fail("launch.armed", "unknown subsystem '" + out.launch_armed + "'");
+        return true;
+    }
+
+    bool RefSubsystem(const json::Value& obj, const std::string& path, const char* key, const Equipment& eq,
+                      bool required, std::string& out) {
+        if (required ? !RequireString(obj, path, key, out) : !OptionalString(obj, path, key, out)) return false;
+        if (!out.empty() && !eq.Has(out)) return Fail(Join(path, key), "unknown subsystem '" + out + "'");
+        return true;
+    }
+
+    bool RefControl(const json::Value& obj, const std::string& path, const char* key, const ControlPanel& panel,
+                    ControlKind kind, bool required, std::string& out) {
+        if (required ? !RequireString(obj, path, key, out) : !OptionalString(obj, path, key, out)) return false;
+        if (out.empty()) return true;
+        const ControlDef* c = panel.Find(out);
+        if (c == nullptr) return Fail(Join(path, key), "unknown control '" + out + "'");
+        if (c->kind != kind) return Fail(Join(path, key), "control '" + out + "' is the wrong kind");
+        return true;
+    }
+
+    bool RefInput(const json::Value& obj, const std::string& path, const char* key, const Equipment& eq,
+                  std::string& out) {
+        if (!OptionalString(obj, path, key, out)) return false;
+        if (!out.empty() && !eq.HasInput(out)) return Fail(Join(path, key), "unknown input '" + out + "'");
+        return true;
+    }
+
+    bool LoadSensors(const json::Value& root, ConsoleData& out) {
+        const json::Value* s = root.Find("sensors");
+        if (s == nullptr) return true;
+        if (!Keys(*s, "sensors", {"search", "track", "source", "confidence", "notes"}) || !Provenance(*s, "sensors")) {
+            return false;
+        }
+        const ControlPanel& panel = out.panel;
+        const Equipment& eq = out.equipment;
+        const json::Value* se = s->Find("search");
+        const json::Value* tr = s->Find("track");
+        if (se == nullptr || tr == nullptr) return Fail("sensors", "needs search and track");
+        const std::string sp = "sensors.search";
+        SearchSensorDef& search = out.search;
+        if (!Keys(*se, sp, {"antenna", "transmitter", "range_control", "range_scales_m", "mti_control",
+                            "mti_max_range_m", "notes"}) ||
+            !RefSubsystem(*se, sp, "antenna", eq, true, search.antenna) ||
+            !RefSubsystem(*se, sp, "transmitter", eq, true, search.transmitter) ||
+            !RefControl(*se, sp, "range_control", panel, ControlKind::Discrete, true, search.range_control) ||
+            !RefControl(*se, sp, "mti_control", panel, ControlKind::Discrete, false, search.mti_control) ||
+            !OptionalNumber(*se, sp, "mti_max_range_m", search.mti_max_range_m)) {
+            return false;
+        }
+        const json::Value* scales = OptionalArray(*se, sp, "range_scales_m");
+        if (scales == nullptr) return message_.empty() ? Fail(Join(sp, "range_scales_m"), "required") : false;
+        for (std::size_t i = 0; i < scales->items.size(); ++i) {
+            const json::Value& pair = scales->items[i];
+            if (!pair.Is(json::Type::Array) || pair.items.size() != 2 || !pair.items[0].Is(json::Type::Number) ||
+                !pair.items[1].Is(json::Type::Number) || !(pair.items[1].number > pair.items[0].number)) {
+                return Fail(Index(Join(sp, "range_scales_m"), i), "expected [min, max] with max > min");
+            }
+            search.range_scales_m.emplace_back(pair.items[0].number, pair.items[1].number);
+        }
+        if (static_cast<int>(search.range_scales_m.size()) != panel.Find(search.range_control)->positions) {
+            return Fail(Join(sp, "range_scales_m"), "needs one scale per position of " + search.range_control);
+        }
+
+        const std::string tp = "sensors.track";
+        TrackSensorDef& track = out.track;
+        if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
+                            "el_wheel", "range_wheel", "lock_control", "fov_control", "fov_deg", "max_range_m",
+                            "az_limit_deg", "captured_input", "too_low_input", "near_zone_input", "in_zone_input",
+                            "notes"}) ||
+            !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
+            !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
+            !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
+            !RefSubsystem(*tr, tp, "tv_camera", eq, false, track.tv_camera) ||
+            !RefSubsystem(*tr, tp, "tv_mode", eq, false, track.tv_mode) ||
+            !RefSubsystem(*tr, tp, "range_only_mode", eq, false, track.range_only_mode) ||
+            !RefControl(*tr, tp, "az_wheel", panel, ControlKind::Continuous, true, track.az_wheel) ||
+            !RefControl(*tr, tp, "el_wheel", panel, ControlKind::Continuous, true, track.el_wheel) ||
+            !RefControl(*tr, tp, "range_wheel", panel, ControlKind::Continuous, true, track.range_wheel) ||
+            !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
+            !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
+            !OptionalNumber(*tr, tp, "max_range_m", track.max_range_m) ||
+            !OptionalNumber(*tr, tp, "az_limit_deg", track.az_limit_deg) ||
+            !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||
+            !RefInput(*tr, tp, "too_low_input", eq, track.too_low_input) ||
+            !RefInput(*tr, tp, "near_zone_input", eq, track.near_zone_input) ||
+            !RefInput(*tr, tp, "in_zone_input", eq, track.in_zone_input)) {
+            return false;
+        }
+        if (track.max_range_m <= 0.0) return Fail(Join(tp, "max_range_m"), "must be > 0");
+        if (const json::Value* fov = tr->Find("fov_deg")) {
+            if (!fov->Is(json::Type::Array) || fov->items.size() != 2 || !fov->items[0].Is(json::Type::Number) ||
+                !fov->items[1].Is(json::Type::Number) || fov->items[0].number <= 0.0 || fov->items[1].number <= 0.0) {
+                return Fail(Join(tp, "fov_deg"), "expected [wide, narrow] in degrees");
+            }
+            track.fov_wide_deg = fov->items[0].number;
+            track.fov_narrow_deg = fov->items[1].number;
+        }
+        if (!track.tv_mode.empty() && (track.tv_camera.empty() || track.fov_wide_deg <= 0.0)) {
+            return Fail(tp, "tv_mode needs tv_camera and fov_deg");
+        }
+        out.has_sensors = true;
         return true;
     }
 

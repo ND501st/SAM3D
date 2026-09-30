@@ -24,7 +24,7 @@
 namespace simcore {
 
 struct DebriefEntry {
-    enum class Kind { Started, Completed, Waiting, Aborted, EquipmentFault, Deviation, Transition, Scenario, Launch };
+    enum class Kind { Started, Completed, Waiting, Aborted, EquipmentFault, Deviation, Transition, Scenario, Launch, Hit, Miss };
     double time_s = 0.0;
     Kind kind = Kind::Started;
     std::string who;     // crew member or player name; empty for equipment
@@ -43,6 +43,8 @@ inline const char* ToString(DebriefEntry::Kind k) {
         case DebriefEntry::Kind::Transition: return "state";
         case DebriefEntry::Kind::Scenario: return "event";
         case DebriefEntry::Kind::Launch: return "LAUNCH";
+        case DebriefEntry::Kind::Hit: return "HIT";
+        case DebriefEntry::Kind::Miss: return "MISS";
     }
     return "?";
 }
@@ -54,6 +56,8 @@ struct DebriefSummary {
     int out_of_order_actions = 0;
     int equipment_faults = 0;
     int launches = 0;
+    int hits = 0;
+    int misses = 0;
 };
 
 class SessionLog {
@@ -117,6 +121,8 @@ public:
             if (e.kind == DebriefEntry::Kind::Aborted) ++s.procedures_aborted;
             if (e.kind == DebriefEntry::Kind::EquipmentFault && e.who.empty()) ++s.equipment_faults;
             if (e.kind == DebriefEntry::Kind::Launch) ++s.launches;
+            if (e.kind == DebriefEntry::Kind::Hit) ++s.hits;
+            if (e.kind == DebriefEntry::Kind::Miss) ++s.misses;
         }
         return s;
     }
@@ -147,9 +153,9 @@ public:
         const DebriefSummary s = Summary();
         std::snprintf(line, sizeof(line),
                       "\nProcedures completed: %d, aborted: %d. Deviations: %d early, %d out of order. "
-                      "Equipment faults: %d. Launches: %d.\n",
+                      "Equipment faults: %d. Launches: %d (hits %d, misses %d).\n",
                       s.procedures_completed, s.procedures_aborted, s.early_actions, s.out_of_order_actions,
-                      s.equipment_faults, s.launches);
+                      s.equipment_faults, s.launches, s.hits, s.misses);
         out += line;
         return out;
     }

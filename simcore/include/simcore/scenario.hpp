@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/engagement.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -41,6 +42,9 @@ struct ScenarioTarget {
     double max_turn_rate_rad_s = DegToRad(6.0);
     double rcs_m2 = 5.0;
     double appear_at_s = 0.0;
+    std::string target_class = "default";  // picks the hit chance in the gameplay tuning
+    bool evade_on_launch = false;          // breaks away onto a beam heading when a missile is launched at it
+    double evade_turn_rate_rad_s = DegToRad(12.0);
 };
 
 struct TriggerAction {
@@ -71,6 +75,8 @@ struct ScenarioDef {
     GeoPoint origin;
     double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
+    std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
+    EngagementTuning tuning;
     Vec3 unit_position;            // ENU [m]
     std::vector<std::pair<std::string, bool>> initial_inputs;
     std::vector<ScenarioCrew> crew;
@@ -166,13 +172,24 @@ private:
 
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
-        if (!RequireObject(root, "", "own_unit", u) || !Keys(*u, "own_unit", {"console", "position", "inputs"})) {
+        if (!RequireObject(root, "", "own_unit", u) ||
+            !Keys(*u, "own_unit", {"console", "tuning", "position", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
         std::string error;
         if (!LoadConsoleFile(data_dir + "/" + out.console_file, console, &error)) {
             return Fail("own_unit.console", error);
+        }
+        if (!OptionalString(*u, "own_unit", "tuning", out.tuning_file)) return false;
+        if (!out.tuning_file.empty()) {
+            if (!console.has_sensors) return Fail("own_unit.tuning", "the console has no \"sensors\" block");
+            if (!LoadEngagementTuningFile(data_dir + "/" + out.tuning_file, out.tuning, &error)) {
+                return Fail("own_unit.tuning", error);
+            }
+            if (out.tuning.system_id != console.system_id) {
+                return Fail("own_unit.tuning", "is for '" + out.tuning.system_id + "', not '" + console.system_id + "'");
+            }
         }
         const json::Value* pos = nullptr;
         if (!RequireObject(*u, "own_unit", "position", pos) ||
@@ -222,12 +239,20 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string p = Index("targets", i);
             const json::Value& t = arr->items[i];
-            if (!Keys(t, p, {"id", "name", "type", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s", "rcs_m2",
-                             "appear_at_s", "notes"})) {
+            if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
+                             "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
             double turn_deg_s = RadToDeg(tg.max_turn_rate_rad_s);
+            double evade_deg_s = RadToDeg(tg.evade_turn_rate_rad_s);
+            if (!OptionalString(t, p, "class", tg.target_class) ||
+                !OptionalBool(t, p, "evade_on_launch", tg.evade_on_launch) ||
+                !OptionalNumber(t, p, "evade_turn_rate_deg_s", evade_deg_s)) {
+                return false;
+            }
+            if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
+            tg.evade_turn_rate_rad_s = DegToRad(evade_deg_s);
             const json::Value* start = nullptr;
             if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||
                 !OptionalString(t, p, "type", tg.type) || !RequireObject(t, p, "start", start) ||
