@@ -1,0 +1,393 @@
+// simcore/scenario.hpp — scenario files: where, who, what flies, and what happens when.
+//
+// A scenario (data/scenarios/<id>.json, format in data/scenarios/README.md) names the
+// console file of the player's system, places the unit, lists its crew, the air
+// targets with their routes, and triggers. A trigger fires once when all of its
+// "when" conditions hold (time, a target's range, console conditions, number of
+// launches) and then sets sim inputs, gives crew orders, or ends the scenario.
+//
+// LoadScenarioFile also loads the console the scenario names, so every reference
+// (inputs, procedures, subsystems, controls) is checked when the scenario loads.
+#pragma once
+
+#include <cstddef>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "simcore/console_data.hpp"
+#include "simcore/geo.hpp"
+#include "simcore/json.hpp"
+#include "simcore/vec3.hpp"
+
+namespace simcore {
+
+struct ScenarioCrew {
+    std::string name;
+    std::string role;
+    double reaction_time_s = 1.0;
+    double reaction_jitter_s = 0.0;  // each run draws reaction_time_s ± this from the scenario seed
+};
+
+struct ScenarioTarget {
+    std::string id;
+    std::string name;
+    std::string type = "Air+FixedWing";  // Tacview type tags
+    Vec3 start;                          // ENU [m] at the scenario origin
+    std::vector<Vec3> waypoints;         // ENU [m]
+    double speed_mps = 200.0;
+    double max_turn_rate_rad_s = DegToRad(6.0);
+    double rcs_m2 = 5.0;
+    double appear_at_s = 0.0;
+};
+
+struct TriggerAction {
+    enum class Kind { SetInput, Order, Queue, End };
+    Kind kind = Kind::SetInput;
+    std::string input;      // SetInput
+    bool value = true;      // SetInput
+    std::string crew;       // Order, Queue
+    std::string procedure;  // Order, Queue
+    std::string reason;     // End
+};
+
+struct ScenarioTrigger {
+    std::string id;
+    double after_s = 0.0;                 // scenario time at or after
+    std::string target;                   // with target_within_m: that target is spawned, alive and this close
+    double target_within_m = -1.0;        // < 0: not used
+    std::vector<Condition> conditions;    // console conditions (controls, subsystems, inputs)
+    int launches_at_least = 0;
+    std::vector<TriggerAction> actions;
+};
+
+struct ScenarioDef {
+    std::string id;
+    std::string name;
+    std::string description;
+    unsigned seed = 1;
+    GeoPoint origin;
+    double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
+    std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
+    Vec3 unit_position;            // ENU [m]
+    std::vector<std::pair<std::string, bool>> initial_inputs;
+    std::vector<ScenarioCrew> crew;
+    std::vector<ScenarioTarget> targets;
+    std::vector<ScenarioTrigger> triggers;
+    double time_limit_s = 600.0;
+    bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
+};
+
+namespace detail {
+
+class ScenarioLoader : public ConsoleLoader {
+public:
+    bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
+        if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
+                             "terrain", "own_unit", "crew", "targets", "triggers", "end"})) {
+            return false;
+        }
+        if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
+            !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
+            return false;
+        }
+        int seed = 1;
+        if (!OptionalInt(root, "", "seed", seed)) return false;
+        if (seed < 0) return Fail("seed", "must be >= 0");
+        out.seed = static_cast<unsigned>(seed);
+        if (!LoadOrigin(root, out) || !LoadTerrain(root, out)) return false;
+        if (!LoadOwnUnit(root, data_dir, out, console)) return false;
+        if (!LoadCrew(root, out)) return false;
+        if (!LoadTargets(root, out)) return false;
+        if (!LoadTriggers(root, out, console)) return false;
+        return LoadEnd(root, out);
+    }
+
+private:
+    bool RequireObject(const json::Value& obj, const std::string& path, const char* key, const json::Value*& out) {
+        out = obj.Find(key);
+        if (out == nullptr) return Fail(Join(path, key), "required");
+        if (!out->Is(json::Type::Object)) return Fail(Join(path, key), "expected an object");
+        return true;
+    }
+
+    bool RequireNumber(const json::Value& obj, const std::string& path, const char* key, double& out) {
+        if (obj.Find(key) == nullptr) return Fail(Join(path, key), "required");
+        return OptionalNumber(obj, path, key, out);
+    }
+
+    // A position is either {"east_m", "north_m", "up_m"} (ENU at the origin) or {"lat_deg", "lon_deg", "alt_m"}.
+    bool LoadPosition(const json::Value& v, const std::string& path, const LocalFrame& frame, Vec3& out) {
+        if (!Keys(v, path, {"east_m", "north_m", "up_m", "lat_deg", "lon_deg", "alt_m"})) return false;
+        if (v.Find("east_m") != nullptr || v.Find("north_m") != nullptr || v.Find("up_m") != nullptr) {
+            if (v.Find("lat_deg") != nullptr || v.Find("lon_deg") != nullptr || v.Find("alt_m") != nullptr) {
+                return Fail(path, "use either east/north/up or lat/lon/alt, not both");
+            }
+            return RequireNumber(v, path, "east_m", out.x) && RequireNumber(v, path, "north_m", out.y) &&
+                   RequireNumber(v, path, "up_m", out.z);
+        }
+        double lat = 0.0;
+        double lon = 0.0;
+        double alt = 0.0;
+        if (!RequireNumber(v, path, "lat_deg", lat) || !RequireNumber(v, path, "lon_deg", lon) ||
+            !RequireNumber(v, path, "alt_m", alt)) {
+            return false;
+        }
+        out = frame.GeodeticToEnu(GeoPoint::FromDegrees(lat, lon, alt));
+        return true;
+    }
+
+    bool LoadOrigin(const json::Value& root, ScenarioDef& out) {
+        const json::Value* o = nullptr;
+        if (!RequireObject(root, "", "origin", o) || !Keys(*o, "origin", {"lat_deg", "lon_deg", "alt_m"})) return false;
+        double lat = 0.0;
+        double lon = 0.0;
+        double alt = 0.0;
+        if (!RequireNumber(*o, "origin", "lat_deg", lat) || !RequireNumber(*o, "origin", "lon_deg", lon) ||
+            !RequireNumber(*o, "origin", "alt_m", alt)) {
+            return false;
+        }
+        if (lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) return Fail("origin", "latitude/longitude out of range");
+        out.origin = GeoPoint::FromDegrees(lat, lon, alt);
+        frame_ = LocalFrame(out.origin);
+        return true;
+    }
+
+    bool LoadTerrain(const json::Value& root, ScenarioDef& out) {
+        const json::Value* t = nullptr;
+        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m"})) return false;
+        std::string type;
+        if (!RequireString(*t, "terrain", "type", type)) return false;
+        if (type != "flat") return Fail("terrain.type", "only \"flat\" is supported so far");
+        return RequireNumber(*t, "terrain", "height_m", out.ground_height_m);
+    }
+
+    bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
+        const json::Value* u = nullptr;
+        if (!RequireObject(root, "", "own_unit", u) || !Keys(*u, "own_unit", {"console", "position", "inputs"})) {
+            return false;
+        }
+        if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
+        std::string error;
+        if (!LoadConsoleFile(data_dir + "/" + out.console_file, console, &error)) {
+            return Fail("own_unit.console", error);
+        }
+        const json::Value* pos = nullptr;
+        if (!RequireObject(*u, "own_unit", "position", pos) ||
+            !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position)) {
+            return false;
+        }
+        if (const json::Value* in = u->Find("inputs")) {
+            if (!in->Is(json::Type::Object)) return Fail("own_unit.inputs", "expected an object of input: true/false");
+            for (std::size_t i = 0; i < in->keys.size(); ++i) {
+                const std::string p = Join("own_unit.inputs", in->keys[i]);
+                if (!console.equipment.HasInput(in->keys[i])) return Fail(p, "unknown input");
+                if (!in->items[i].Is(json::Type::Bool)) return Fail(p, "expected true or false");
+                out.initial_inputs.emplace_back(in->keys[i], in->items[i].boolean);
+            }
+        }
+        return true;
+    }
+
+    bool LoadCrew(const json::Value& root, ScenarioDef& out) {
+        const json::Value* arr = OptionalArray(root, "", "crew");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string p = Index("crew", i);
+            const json::Value& c = arr->items[i];
+            ScenarioCrew crew;
+            if (!Keys(c, p, {"name", "role", "reaction_time_s", "reaction_jitter_s"}) ||
+                !RequireString(c, p, "name", crew.name) || !RequireString(c, p, "role", crew.role) ||
+                !OptionalNumber(c, p, "reaction_time_s", crew.reaction_time_s) ||
+                !OptionalNumber(c, p, "reaction_jitter_s", crew.reaction_jitter_s)) {
+                return false;
+            }
+            if (crew.reaction_time_s <= 0.0) return Fail(Join(p, "reaction_time_s"), "must be > 0");
+            if (crew.reaction_jitter_s < 0.0 || crew.reaction_jitter_s >= crew.reaction_time_s) {
+                return Fail(Join(p, "reaction_jitter_s"), "must be >= 0 and less than reaction_time_s");
+            }
+            for (const ScenarioCrew& other : out.crew) {
+                if (other.name == crew.name) return Fail(Join(p, "name"), "duplicate crew name '" + crew.name + "'");
+            }
+            out.crew.push_back(std::move(crew));
+        }
+        return true;
+    }
+
+    bool LoadTargets(const json::Value& root, ScenarioDef& out) {
+        const json::Value* arr = OptionalArray(root, "", "targets");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string p = Index("targets", i);
+            const json::Value& t = arr->items[i];
+            if (!Keys(t, p, {"id", "name", "type", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s", "rcs_m2",
+                             "appear_at_s", "notes"})) {
+                return false;
+            }
+            ScenarioTarget tg;
+            double turn_deg_s = RadToDeg(tg.max_turn_rate_rad_s);
+            const json::Value* start = nullptr;
+            if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||
+                !OptionalString(t, p, "type", tg.type) || !RequireObject(t, p, "start", start) ||
+                !LoadPosition(*start, Join(p, "start"), frame_, tg.start) ||
+                !RequireNumber(t, p, "speed_mps", tg.speed_mps) ||
+                !OptionalNumber(t, p, "max_turn_rate_deg_s", turn_deg_s) || !OptionalNumber(t, p, "rcs_m2", tg.rcs_m2) ||
+                !OptionalNumber(t, p, "appear_at_s", tg.appear_at_s)) {
+                return false;
+            }
+            if (tg.speed_mps <= 0.0) return Fail(Join(p, "speed_mps"), "must be > 0");
+            if (turn_deg_s <= 0.0) return Fail(Join(p, "max_turn_rate_deg_s"), "must be > 0");
+            if (tg.rcs_m2 <= 0.0) return Fail(Join(p, "rcs_m2"), "must be > 0");
+            if (tg.appear_at_s < 0.0) return Fail(Join(p, "appear_at_s"), "must be >= 0");
+            tg.max_turn_rate_rad_s = DegToRad(turn_deg_s);
+            const json::Value* wps = OptionalArray(t, p, "waypoints");
+            if (wps == nullptr || wps->items.empty()) {
+                return message_.empty() ? Fail(Join(p, "waypoints"), "needs at least one waypoint") : false;
+            }
+            for (std::size_t j = 0; j < wps->items.size(); ++j) {
+                Vec3 wp;
+                if (!LoadPosition(wps->items[j], Index(Join(p, "waypoints"), j), frame_, wp)) return false;
+                tg.waypoints.push_back(wp);
+            }
+            for (const ScenarioTarget& other : out.targets) {
+                if (other.id == tg.id) return Fail(Join(p, "id"), "duplicate target '" + tg.id + "'");
+            }
+            out.targets.push_back(std::move(tg));
+        }
+        return true;
+    }
+
+    bool LoadAction(const json::Value& a, const std::string& p, const ScenarioDef& def, const ConsoleData& console,
+                    TriggerAction& out) {
+        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end"})) return false;
+        const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
+                          (a.Find("end") != nullptr);
+        if (kinds != 1) return Fail(p, "needs exactly one of set_input, order, queue or end");
+        if (a.Find("set_input") != nullptr) {
+            out.kind = TriggerAction::Kind::SetInput;
+            if (!RequireString(a, p, "set_input", out.input) || !OptionalBool(a, p, "value", out.value)) return false;
+            if (!console.equipment.HasInput(out.input)) return Fail(Join(p, "set_input"), "unknown input '" + out.input + "'");
+            return true;
+        }
+        if (a.Find("end") != nullptr) {
+            out.kind = TriggerAction::Kind::End;
+            return RequireString(a, p, "end", out.reason);
+        }
+        const bool queue = a.Find("queue") != nullptr;
+        out.kind = queue ? TriggerAction::Kind::Queue : TriggerAction::Kind::Order;
+        if (!RequireString(a, p, queue ? "queue" : "order", out.procedure) || !RequireString(a, p, "crew", out.crew)) {
+            return false;
+        }
+        if (console.FindProcedure(out.procedure) == nullptr) {
+            return Fail(Join(p, queue ? "queue" : "order"), "unknown procedure '" + out.procedure + "'");
+        }
+        for (const ScenarioCrew& c : def.crew) {
+            if (c.name == out.crew) return true;
+        }
+        return Fail(Join(p, "crew"), "unknown crew member '" + out.crew + "'");
+    }
+
+    bool LoadTriggers(const json::Value& root, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* arr = OptionalArray(root, "", "triggers");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string p = Index("triggers", i);
+            const json::Value& t = arr->items[i];
+            ScenarioTrigger tr;
+            const json::Value* when = nullptr;
+            if (!Keys(t, p, {"id", "when", "do", "notes"}) || !RequireString(t, p, "id", tr.id) ||
+                !RequireObject(t, p, "when", when)) {
+                return false;
+            }
+            const std::string wp = Join(p, "when");
+            if (!Keys(*when, wp, {"after_s", "target", "target_within_m", "conditions", "launches_at_least"}) ||
+                !OptionalNumber(*when, wp, "after_s", tr.after_s) || !OptionalString(*when, wp, "target", tr.target) ||
+                !OptionalNumber(*when, wp, "target_within_m", tr.target_within_m) ||
+                !OptionalInt(*when, wp, "launches_at_least", tr.launches_at_least) ||
+                !LoadConditions(*when, wp, "conditions", console.panel, console.equipment, tr.conditions)) {
+                return false;
+            }
+            if (tr.target.empty() != (when->Find("target_within_m") == nullptr)) {
+                return Fail(wp, "target and target_within_m go together");
+            }
+            if (!tr.target.empty()) {
+                bool found = false;
+                for (const ScenarioTarget& tg : out.targets) found = found || tg.id == tr.target;
+                if (!found) return Fail(Join(wp, "target"), "unknown target '" + tr.target + "'");
+                if (tr.target_within_m <= 0.0) return Fail(Join(wp, "target_within_m"), "must be > 0");
+            }
+            const json::Value* actions = OptionalArray(t, p, "do");
+            if (actions == nullptr || actions->items.empty()) {
+                return message_.empty() ? Fail(Join(p, "do"), "needs at least one action") : false;
+            }
+            for (std::size_t j = 0; j < actions->items.size(); ++j) {
+                TriggerAction a;
+                if (!LoadAction(actions->items[j], Index(Join(p, "do"), j), out, console, a)) return false;
+                tr.actions.push_back(std::move(a));
+            }
+            for (const ScenarioTrigger& other : out.triggers) {
+                if (other.id == tr.id) return Fail(Join(p, "id"), "duplicate trigger '" + tr.id + "'");
+            }
+            out.triggers.push_back(std::move(tr));
+        }
+        return true;
+    }
+
+    bool LoadEnd(const json::Value& root, ScenarioDef& out) {
+        const json::Value* e = root.Find("end");
+        if (e == nullptr) return true;
+        if (!Keys(*e, "end", {"time_limit_s", "when_targets_gone"}) ||
+            !OptionalNumber(*e, "end", "time_limit_s", out.time_limit_s) ||
+            !OptionalBool(*e, "end", "when_targets_gone", out.end_when_targets_gone)) {
+            return false;
+        }
+        if (out.time_limit_s <= 0.0) return Fail("end.time_limit_s", "must be > 0");
+        return true;
+    }
+
+    LocalFrame frame_;
+};
+
+}  // namespace detail
+
+// Parse a scenario and load the console it names from `data_dir` (the repo's data/ folder).
+// On failure the outputs are left unchanged.
+inline bool LoadScenario(const std::string& json_text, const std::string& data_dir, ScenarioDef& out,
+                         ConsoleData& console, std::string* error = nullptr) {
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(json_text, root, &parse_error)) {
+        if (error != nullptr) *error = parse_error;
+        return false;
+    }
+    ScenarioDef def;
+    ConsoleData loaded;
+    detail::ScenarioLoader loader;
+    if (!loader.Load(root, data_dir, def, loaded)) {
+        if (error != nullptr) *error = loader.Message();
+        return false;
+    }
+    out = std::move(def);
+    console = std::move(loaded);
+    return true;
+}
+
+inline bool LoadScenarioFile(const std::string& path, const std::string& data_dir, ScenarioDef& out,
+                             ConsoleData& console, std::string* error = nullptr) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) *error = "cannot open " + path;
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    if (!LoadScenario(text.str(), data_dir, out, console, error)) {
+        if (error != nullptr) *error = path + ": " + *error;
+        return false;
+    }
+    return true;
+}
+
+}  // namespace simcore

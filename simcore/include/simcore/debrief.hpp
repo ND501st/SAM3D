@@ -24,7 +24,7 @@
 namespace simcore {
 
 struct DebriefEntry {
-    enum class Kind { Started, Completed, Waiting, Aborted, EquipmentFault, Deviation, Transition };
+    enum class Kind { Started, Completed, Waiting, Aborted, EquipmentFault, Deviation, Transition, Scenario, Launch };
     double time_s = 0.0;
     Kind kind = Kind::Started;
     std::string who;     // crew member or player name; empty for equipment
@@ -41,6 +41,8 @@ inline const char* ToString(DebriefEntry::Kind k) {
         case DebriefEntry::Kind::EquipmentFault: return "FAULT";
         case DebriefEntry::Kind::Deviation: return "DEVIATION";
         case DebriefEntry::Kind::Transition: return "state";
+        case DebriefEntry::Kind::Scenario: return "event";
+        case DebriefEntry::Kind::Launch: return "LAUNCH";
     }
     return "?";
 }
@@ -51,6 +53,7 @@ struct DebriefSummary {
     int early_actions = 0;
     int out_of_order_actions = 0;
     int equipment_faults = 0;
+    int launches = 0;
 };
 
 class SessionLog {
@@ -113,6 +116,7 @@ public:
             if (e.kind == DebriefEntry::Kind::Completed) ++s.procedures_completed;
             if (e.kind == DebriefEntry::Kind::Aborted) ++s.procedures_aborted;
             if (e.kind == DebriefEntry::Kind::EquipmentFault && e.who.empty()) ++s.equipment_faults;
+            if (e.kind == DebriefEntry::Kind::Launch) ++s.launches;
         }
         return s;
     }
@@ -133,7 +137,9 @@ public:
         std::string out;
         char line[512];
         for (const DebriefEntry* e : order) {
-            const std::string who = e->who.empty() ? std::string("equipment") : e->who;
+            const std::string who = !e->who.empty()                        ? e->who
+                                    : e->kind == DebriefEntry::Kind::Scenario ? std::string("scenario")
+                                                                             : std::string("equipment");
             std::snprintf(line, sizeof(line), "%8.1f s  %-16s %-10s %s%s%s\n", e->time_s, who.c_str(), ToString(e->kind),
                           e->what.c_str(), e->detail.empty() ? "" : "  ", e->detail.c_str());
             out += line;
@@ -141,9 +147,9 @@ public:
         const DebriefSummary s = Summary();
         std::snprintf(line, sizeof(line),
                       "\nProcedures completed: %d, aborted: %d. Deviations: %d early, %d out of order. "
-                      "Equipment faults: %d.\n",
+                      "Equipment faults: %d. Launches: %d.\n",
                       s.procedures_completed, s.procedures_aborted, s.early_actions, s.out_of_order_actions,
-                      s.equipment_faults);
+                      s.equipment_faults, s.launches);
         out += line;
         return out;
     }

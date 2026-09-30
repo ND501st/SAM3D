@@ -27,6 +27,8 @@ struct ConsoleData {
     ControlPanel panel;
     Equipment equipment;
     std::vector<Procedure> procedures;
+    std::string launch_button;  // push-button that commands a launch (empty if the file has no "launch")
+    std::string launch_armed;   // subsystem that must be ready for the button to launch
 
     const Procedure* FindProcedure(const std::string& id) const {
         for (const Procedure& p : procedures) {
@@ -42,7 +44,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "inputs", "controls",
-                             "subsystems", "procedures"})) {
+                             "subsystems", "procedures", "launch"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -51,12 +53,13 @@ public:
         if (!LoadInputs(root, out.equipment)) return false;
         if (!LoadControls(root, out.panel)) return false;
         if (!LoadSubsystems(root, out.panel, out.equipment)) return false;
-        return LoadProcedures(root, out.panel, out.equipment, out.procedures);
+        if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
+        return LoadLaunch(root, out);
     }
 
     const std::string& Message() const { return message_; }
 
-private:
+protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool Fail(const std::string& path, const std::string& msg) {
         message_ = (path.empty() ? std::string() : path + ": ") + msg;
         return false;
@@ -298,6 +301,20 @@ private:
             }
             out.push_back(std::move(c));
         }
+        return true;
+    }
+
+    bool LoadLaunch(const json::Value& root, ConsoleData& out) {
+        const json::Value* l = root.Find("launch");
+        if (l == nullptr) return true;
+        if (!Keys(*l, "launch", {"button", "armed", "source", "confidence", "notes"}) ||
+            !RequireString(*l, "launch", "button", out.launch_button) ||
+            !RequireString(*l, "launch", "armed", out.launch_armed) || !Provenance(*l, "launch")) {
+            return false;
+        }
+        const ControlDef* b = out.panel.Find(out.launch_button);
+        if (b == nullptr || b->kind != ControlKind::Momentary) return Fail("launch.button", "must be a button control");
+        if (!out.equipment.Has(out.launch_armed)) return Fail("launch.armed", "unknown subsystem '" + out.launch_armed + "'");
         return true;
     }
 
