@@ -25,7 +25,8 @@ new entry added here.
 | Jane's Land-Based Air Defence (various editions) | Published performance figures |
 | Manufacturer export brochures (e.g. Almaz-Antey) | Published envelopes for export variants |
 | Former Warsaw Pact operator manuals (Hungarian, Czech, East German), museum sites | Procedures, crew roles, panel layouts |
-| SAM Simulator (creator, [site](https://sites.google.com/site/samsimulator1972/home)) | Reference for console behaviour and procedures |
+| SAM Simulator (creator, [site](https://sites.google.com/site/samsimulator1972/home), now sign-in only; [archived copy](https://web.archive.org/web/20210120202958/https://sites.google.com/site/samsimulator1972/home)) | Reference for console behaviour and procedures |
+| SAM Simulator documentation set v210109 (`SAMSIM_docs_210109.rar`, [MediaFire](https://www.mediafire.com/file/cgovijhk4hukl7n/SAMSIM_docs_210109.rar), linked from the creator's site) | Per-system manuals. Osa: `SA-8B_English.pdf` (v1, 2014), summarised in `docs/re/osa.md`. Kept in `reference/manuals/`, not in git |
 
 ## Validation scenarios
 

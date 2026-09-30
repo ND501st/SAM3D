@@ -39,8 +39,8 @@ Read from low-resolution sprites; partial words are marked with "…". Translati
 
 | Label | Meaning | Where |
 |---|---|---|
-| ПЕРЕДАТ(ЧИК) ВКЛ. | transmitter on | `osa010` |
-| СПК ВКЛ | "SPK" on (abbreviation not yet identified) | `osa034` |
+| ПЕРЕДАТ(ЧИК) ВКЛ. | SSC tracking-radar transmitter on (manual p16) | `osa010` |
+| (БОРТ) СПК ВКЛ | missile / SPK command-guidance preparation on (manual p18, p34) | `osa034` |
 | АВАРИЙНЫЙ ПУСК | emergency launch | `osa042` |
 | УГОЛ МЕСТА | elevation angle | `osa042` |
 | ГОРИЗ. СМЕЩ. | horizontal offset | `osa014` |
@@ -76,12 +76,76 @@ TV sight monitor, `osa220` (388×287, screen area blank for the game to draw int
 - `osa098`, `osa223`: blank 256×192 screens the game draws into.
 - `osa199`–`201`: target drone cards with speeds (350, 450, 850 km/h), used for training targets.
 
-## Not known yet (needs `sam.exe` or the creator)
+## Official manual (SAM Simulator documentation v210109)
 
-- Console layout: which sprites sit on which panel, and how many operator stations there are.
-- Procedure order and timings: power-up, deploy, search, track, launch, stow.
-- What each subsystem does when switched out of order (fault, no effect, or a message).
-- Lamp logic: which state lights which lamp.
+Source: `SA-8B_English.pdf`, "9K33M2 OSA-AK (SA-8B Gecko) Simulator Documentation", Version 1 (2014-04-25), 35 pages,
+from the creator's documentation set (`SAMSIM_docs_210109.rar`, linked from his site). Kept in `reference/manuals/`
+(git-ignored). Below is a paraphrased summary with page numbers; see the PDF for the full text and pictures.
 
-Those come from running the game and watching it, or from `sam.exe`'s forms. Decompiling needs the creator's OK
-first (`REVERSE_ENGINEERING.md`).
+### The biggest finding: no power-up, deploy or stow
+
+SAM Simulator's Osa **starts already deployed and powered**. The manual has no power-up, march-to-combat or stow
+procedure, and a session ends with ESC (p13). So SAM Simulator can't be the source for SAM3D's drive / deploy /
+stow sequence. That has to come from public operator material, or be SAM3D's own design, clearly labelled.
+
+### Stations (p13)
+
+| Station | Key | What it has |
+|---|---|---|
+| Range Officer | Z or Y | SOC search radar controls, SSC transmitter, azimuth wheel and indicator, range indicator and wheel |
+| Angle Officer | none listed | named on the keyboard diagram only; the manual gives no separate panel or key |
+| Firing Officer | X | elevation wheel and indicator, TV camera (TOV), SPK/SVR lamps, launch key, ПУСК |
+| PU-12 plotting board | C | target reports from the command post (BTR-60 9S482) |
+
+The screen shows one continuous console split between them (Form56 and Form57 in the running game).
+
+### Control behaviours that simcore must model
+
+| Behaviour | Examples (page) | simcore today |
+|---|---|---|
+| Guard removed by right-click before use | ВЫСОКОЕ ВКЛ (SOC transmitter, p15), ПЕРЕДАТЧИК ВКЛ (SSC transmitter, p16), БОРТ СПК ВКЛ (p34) | `guard_id` |
+| Key: insert, then rotate | ЗАПРЕТ ПУСКА launch-authorization key (p29–30) | 3-position `stepwise` |
+| Wheel locked until right-clicked | azimuth and elevation wheels (p22–23) | lock as a `guard_id` control |
+| Multi-position selectors | ДАЛЬНОСТЬ 0–15 / 0–35 / 10–45 km (p15); РОД РАБОТЫ, БР = live fire, leftmost (p29); beam select I / II / III / I–III / I–II (p15) | `positions` |
+| **Continuous wheels** | АЗИМУТ, УГОЛ МЕСТА, range wheel, drag with the mouse; fast left/right buttons (p16–17) | **missing** |
+| **Momentary push-buttons** | ЦУ АЗ (auto acquisition, p23), ПА (TV angle track, p25), ПОЛУАВТОМАТ (range-only track, p26), ПУСК (launch, p30) | **missing** |
+| Lamps driven by system state | ГОТОВ СПК, ВКЛ ВЫС, ЗАХВАТ, СХОД (p18); ВНИМАНИЕ, ПУСК ГОТОВ, ЦЕЛЬ В ЗОНЕ (p29); ТСЦ (p24), АВТОМАТ (p24), НЛЦ (p25) | `Equipment` states (lamp mapping not yet data) |
+| Automatic sequences | missile gyro spin-up (15 s) starts by itself when ВНИМАНИЕ lights, 15 s before the target reaches the zone (p27, p29); target captured automatically once the SSC is on azimuth and in the range gate (p24) | partly (`Equipment` start times) |
+
+### Procedures (order only; see the PDF for detail)
+
+**A. Autonomous acquisition with the SOC radar (p21–24)**
+1. Watch the plotting board until the target nears 50 km.
+2. Range Officer: SOC antenna rotation on (ПОИСК ВКЛ), then remove the guard and switch the SOC transmitter on (ВЫСОКОЕ ВКЛ).
+3. Select scanning of all three beams (I–III ЛУЧ) and set the range selector to 10–45 km.
+4. When the echo shows, select the beam it appeared in (shown by the lit indicator).
+5. Unlock the azimuth wheel and switch on its indicator lighting (ПОДСВЕТКА).
+6. At about 35 km, switch to the 0–35 km scale; move the range gate to about 27.5 km.
+7. Turn the SSC azimuth line onto the target mark.
+8. Firing Officer: unlock the elevation wheel, switch on its lighting, press ЦУ АЗ (automatic acquisition).
+9. Range Officer: at about 30 km, remove the guard and switch the SSC transmitter on (ПЕРЕДАТЧИК ВКЛ).
+10. The SSC captures the target by itself: ТСЦ (angle track) and АВТОМАТ (range track) light.
+
+**B. Ultra-low-altitude target (p25–26):** НЛЦ lights; switch the TV camera on (РАБ.РЕЖ. ВКЛ), select manual mode (РУ),
+bring the target under the crosshair with the wheels, press ПА for TV angle tracking, then bring the echo into the range
+gate with the range wheel and press ПОЛУАВТОМАТ for range-only tracking.
+
+**C. Preparation for firing (p29):** РОД РАБОТЫ to БР (live fire); insert the launch key; check the missiles available
+on each launcher (three per side, 1-II…3-II and 3-I…1-I); watch the target distance on the voltmeter (ДЦ, 10 V = 10 km).
+ВНИМАНИЕ starts missile preparation automatically; wait for ЗАХВАТ, ВКЛ ВЫС, then ПУСК ГОТОВ and ЦЕЛЬ В ЗОНЕ.
+
+**D. Launch (p30):** turn the launch key, press ПУСК; the missile is chosen automatically; СХОД lights when it leaves the
+container; when ПУСК ГОТОВ lights again, a second missile can be launched. Two missile channels, one target channel (p14).
+
+**E. Engagement with emissions control, TV only (p33–35):** find the target visually with the camera and wheels while the
+radars stay silent; press ПА; select БР; start missile/SPK/SVR preparation manually (БОРТ СПК ВКЛ, guarded); set ПОМЕХА so the
+fuse arms right after launch (range unknown); insert the key; switch to the narrow lens; judge range from the target's size
+in the crosshair; turn the key and press ПУСК.
+
+**F. Assessing the result (p31):** detonation and smoke on the TV; an "X" on the plotting board; the track ends.
+
+## Still not known
+
+- Exact screen positions of each control (only needed if SAM3D copies the layout; the cabin will be 3D anyway).
+- What the game does when steps are done out of order (fault, no effect, or refusal). Can be checked in the running game.
+- Power-up, deploy and stow: not in SAM Simulator (see above).
