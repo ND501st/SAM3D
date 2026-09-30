@@ -34,6 +34,10 @@
 | **ENU (sim frame)** | x=East, y=North, z=Up at the origin | m | all of simcore |
 | Unreal world | X=North, Y=East, Z=Up (left-handed) | cm | all of Unreal |
 
+With a Cesium georeference, Unreal positions go ENU → geodetic → Unreal through the georeference (Cesium's frame
+is +X east, +Y south at its origin), and the director puts the georeference origin on the scenario origin
+(`USimWorldSubsystem::ToUnreal` / `ToEnu`). Without Cesium, the flat X=North, Y=East mapping above is used.
+
 `LocalFrame` converts geodetic ↔ ENU exactly (via ECEF). Far from the origin, ENU `z` differs from altitude by
 about d²/2R (≈ 785 m at 100 km), so use `LocalFrame::AltitudeOf` whenever altitude matters.
 

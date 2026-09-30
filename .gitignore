@@ -15,6 +15,8 @@ unreal/**/*.suo
 unreal/**/*.xcodeproj
 unreal/**/*.xcworkspace
 unreal/**/.vsconfig
+# Cesium for Unreal keeps the ion access token here: never commit it.
+unreal/**/Content/CesiumSettings/
 
 # ---------- IDEs ----------
 .vs/

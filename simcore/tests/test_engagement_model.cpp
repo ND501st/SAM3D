@@ -180,6 +180,31 @@ SC_TEST("engagement: launching beyond reach runs out of flight time") {
     SC_EXPECT(Has(r, "out of reach: flight time ran out"));
 }
 
+SC_TEST("engagement: swapped-in terrain masks a target; moving the unit moves the picture") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenario(Engage(Target(24000, 300), kAcquireAndFire), kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    // A 1 km-high ridge running east-west, 5 km north of the unit (grid covers 30 x 30 km).
+    std::vector<double> heights(61 * 61, 0.0);
+    for (int col = 0; col < 61; ++col) heights[static_cast<std::size_t>(40 * 61 + col)] = 1000.0;
+    const GridTerrain ridge(-15000.0, -15000.0, 500.0, 61, 61, heights);
+    runner.SetTerrain(&ridge);
+    bool seen = false;
+    for (int i = 0; i < 1200; ++i) {  // 120 s: powered, searching, target still behind the ridge
+        runner.Step(0.1);
+        seen = seen || !runner.Engagement().SearchPicture().empty();
+    }
+    SC_EXPECT(!seen);
+    const Vec3 moved{0.0, 3000.0, 3.0};
+    runner.SetUnitPosition(moved);
+    const Vec3 target_pos = runner.GetWorld().AircraftList().front().position;
+    SC_EXPECT_NEAR(runner.TargetRange("t1"), (target_pos - moved).Length(), 1e-6);
+    runner.SetTerrain(nullptr);  // back to flat ground: the target comes into view
+    for (int i = 0; i < 20; ++i) runner.Step(0.1);
+    SC_EXPECT(!runner.Engagement().SearchPicture().empty());
+}
+
 SC_TEST("engagement: an evading target breaks away and the manoeuvre lowers the chance") {
     const Run r = Play(Engage(Target(24000, 1000, R"(, "evade_on_launch": true, "evade_turn_rate_deg_s": 12)"),
                               kAcquireAndFire));

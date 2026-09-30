@@ -41,6 +41,10 @@ public:
 
     const LocalFrame& Frame() const { return frame_; }
     const Terrain& GetTerrain() const { return terrain_ != nullptr ? *terrain_ : flat_; }
+
+    // Swap the terrain (e.g. once Cesium heights have been sampled). Null = flat ground at 0 m.
+    // It must outlive the World or be replaced before it goes away.
+    void SetTerrain(const Terrain* terrain) { terrain_ = terrain; }
     double Time() const { return time_s_; }
 
     int AddAircraft(Aircraft a) {

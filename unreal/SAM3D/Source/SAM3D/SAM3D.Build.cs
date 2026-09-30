@@ -12,7 +12,8 @@ public class SAM3D : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"InputCore"
+			"InputCore",
+			"CesiumRuntime"  // Cesium for Unreal: georeference, terrain height sampling
 		});
 
 		// simcore is a header-only C++17 library that lives at the repo root (../../../../simcore).
