@@ -66,6 +66,10 @@ Everything in simcore is deterministic for a given sequence of inputs, which mak
   aborted for voice lines and the order UI.
 
 The player's 3D cabin clicks call the same functions, so the player and the crew share one source of truth.
+- `SessionLog` (`debrief.hpp`): crew reports, equipment faults and player deviations on one clock, formatted as a
+  debrief timeline and summary. No points: SAM Simulator's rule is "no points, as in reality".
+  `examples/procedure_demo.cpp` runs an Osa session from the march to the debrief.
+
 Per step: `Equipment::Update`, then `ControlPanel::ReleaseMomentaries`, then crew. Crew see this step's lamps, and
 Equipment sees every button press exactly once.
 

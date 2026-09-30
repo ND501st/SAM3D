@@ -56,3 +56,8 @@ endif()
 
 add_executable(engagement_demo examples/engagement_demo.cpp)
 simcore_configure_target(engagement_demo)
+
+# Osa console session from the march to the debrief; also run as a test so CI checks the data file end to end.
+add_executable(procedure_demo examples/procedure_demo.cpp)
+simcore_configure_target(procedure_demo)
+add_test(NAME procedure_demo COMMAND procedure_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/procedures/osa_ak.json")

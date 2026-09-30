@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/debrief.hpp"
 #include "simcore/json.hpp"
 #include "test_framework.hpp"
 
@@ -369,6 +370,40 @@ SC_TEST("osa data: TV-only engagement with the radars silent") {
     SC_EXPECT(!c.equipment.IsReady("soc_transmitter") && !c.equipment.IsReady("ssc_transmitter"));
     SC_EXPECT(t > 20.0 && t < 35.0);  // ~9 s of switches, 15 s preparation, then key and launch
     SC_EXPECT(crew.TakeReports().back().kind == CrewReport::Kind::Completed);
+}
+
+SC_TEST("debrief: crew reports, faults and player deviations on one timeline") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    CrewMember crew("Commander", "commander", 1.0);
+    SessionLog log;
+    double t = 0.0;
+    auto step = [&] {
+        t += 0.1;
+        Tick(c, crew);
+        log.CollectEquipment(c.equipment);
+        log.CollectCrew(crew, t);
+    };
+    c.equipment.SetInput("vehicle_stopped", true);
+    crew.Order(*c.FindProcedure("deploy_at_halt"));
+    for (int i = 0; i < 50; ++i) step();
+    c.equipment.SetInput("vehicle_stopped", false);  // drives off with the АПУ unlocked
+    step();
+
+    ProcedureTracker player(*c.FindProcedure("launch"));
+    c.panel.Set("fo.key", 1);
+    log.RecordAttempt(t, "Player", player, player.Attempt(c.panel, "fo.key", 2, &c.equipment));   // early
+    log.RecordAttempt(t, "Player", player, player.Attempt(c.panel, "tov.power", 1, &c.equipment));  // out of order
+    log.RecordAttempt(t, "Player", player, player.Attempt(c.panel, "fo.launch", 1, &c.equipment));  // early: not armed
+    log.RecordAttempt(t, "Player", player, player.Attempt(c.panel, "fo.launch", 1, &c.equipment));  // done: not logged
+
+    const DebriefSummary s = log.Summary();
+    SC_EXPECT(s.procedures_completed == 1 && s.equipment_faults == 1);
+    SC_EXPECT(s.early_actions == 2 && s.out_of_order_actions == 1);
+    const std::string text = log.Format();
+    SC_EXPECT(text.find("FAULT") != std::string::npos && text.find("apu_free") != std::string::npos);
+    SC_EXPECT(text.find("step due: ПУСК") != std::string::npos);
+    SC_EXPECT(text.find("2 early, 1 out of order") != std::string::npos);
 }
 
 SC_TEST("osa data: a player who turns the key before ПУСК ГОТОВ is judged early") {

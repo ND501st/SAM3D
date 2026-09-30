@@ -28,6 +28,7 @@ cmake -S simcore -B simcore/build -DCMAKE_BUILD_TYPE=Release
 cmake --build simcore/build --config Release
 ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/engagement_demo out/demo.acmi     # Windows: simcore\build\Release\engagement_demo.exe
+./simcore/build/procedure_demo                    # Osa console session + debrief (run from the repo root)
 
 # Python prototype
 python -m pytest prototype -q
