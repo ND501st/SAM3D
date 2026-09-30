@@ -1,4 +1,4 @@
-// simcore/procedures.hpp — control panels, procedures, and NPC crew.
+// simcore/procedures.hpp — procedures, the procedure judge, and NPC crew.
 //
 // Core design rule: the player and NPC crew operate the SAME controls through
 // the SAME API. A crew member given an order ("power up the search radar")
@@ -10,63 +10,24 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "simcore/equipment.hpp"
+#include "simcore/panel.hpp"
+
 namespace simcore {
-
-struct ControlDef {
-    std::string id;       // stable identifier, e.g. "srch.hv_power"
-    std::string label;    // what's printed on the panel (Cyrillic OK)
-    int positions = 2;    // 2 = toggle; >2 = rotary / multi-position
-    int initial = 0;
-};
-
-class ControlPanel {
-public:
-    bool AddControl(const ControlDef& def) {
-        if (def.id.empty() || def.positions < 1 || index_.count(def.id) != 0) return false;
-        index_[def.id] = defs_.size();
-        defs_.push_back(def);
-        values_.push_back(def.initial);
-        return true;
-    }
-
-    bool Has(const std::string& id) const { return index_.count(id) != 0; }
-
-    // Current position, or -1 if the control doesn't exist.
-    int Get(const std::string& id) const {
-        const auto it = index_.find(id);
-        return it == index_.end() ? -1 : values_[it->second];
-    }
-
-    bool IsValidPosition(const std::string& id, int value) const {
-        const auto it = index_.find(id);
-        return it != index_.end() && value >= 0 && value < defs_[it->second].positions;
-    }
-
-    // Physically move a control. Returns false for unknown controls or invalid positions.
-    bool Set(const std::string& id, int value) {
-        if (!IsValidPosition(id, value)) return false;
-        values_[index_.at(id)] = value;
-        return true;
-    }
-
-    const std::vector<ControlDef>& Controls() const { return defs_; }
-
-private:
-    std::unordered_map<std::string, std::size_t> index_;
-    std::vector<ControlDef> defs_;
-    std::vector<int> values_;
-};
 
 struct ProcedureStep {
     std::string control_id;
     int value = 1;
     double min_wait_s = 0.0;  // time that must pass after the previous step (e.g. valve warm-up)
     std::string description;
+    // What the operator should see before doing this step (e.g. a READY lamp).
+    // Crew wait for it; a player who acts sooner is judged "early".
+    std::vector<Condition> wait_for;
 };
 
 struct Procedure {
@@ -77,11 +38,23 @@ struct Procedure {
 
 enum class StepResult {
     Accepted,          // correct next step; control moved; procedure advanced
+    AcceptedEarly,     // correct next step done before its wait_for held; moved, advanced, counted as a deviation
     NotNextStep,       // control moved, but it wasn't the expected step (counted as a deviation)
-    WaitRequired,      // correct step but too early; control NOT moved
+    WaitRequired,      // correct step but before min_wait_s; control NOT moved
     UnknownControl,
     InvalidPosition,
+    Blocked,           // physically blocked (cover closed, or a stepwise jump); control NOT moved, not judged
     ProcedureComplete  // procedure already finished; control moved
+};
+
+enum class DeviationKind { OutOfOrder, Early };
+
+struct Deviation {
+    DeviationKind kind = DeviationKind::OutOfOrder;
+    double time_s = 0.0;            // tracker clock
+    std::string control_id;         // what was actually moved
+    int value = 0;
+    std::size_t expected_step = 0;  // index of the step that was due
 };
 
 // Tracks progress through one procedure and judges each control action.
@@ -94,14 +67,21 @@ public:
         procedure_ = std::move(procedure);
         next_ = 0;
         elapsed_since_step_s_ = 0.0;
-        deviations_ = 0;
+        time_s_ = 0.0;
+        log_.clear();
     }
 
-    void Update(double dt) { elapsed_since_step_s_ += dt; }
+    void Update(double dt) {
+        elapsed_since_step_s_ += dt;
+        time_s_ += dt;
+    }
 
-    StepResult Attempt(ControlPanel& panel, const std::string& control_id, int value) {
+    // `equipment` is optional; without it, subsystem conditions in wait_for count as met.
+    StepResult Attempt(ControlPanel& panel, const std::string& control_id, int value,
+                       const Equipment* equipment = nullptr) {
         if (!panel.Has(control_id)) return StepResult::UnknownControl;
         if (!panel.IsValidPosition(control_id, value)) return StepResult::InvalidPosition;
+        if (!panel.CanMove(control_id, value)) return StepResult::Blocked;
         if (IsComplete()) {
             panel.Set(control_id, value);
             return StepResult::ProcedureComplete;
@@ -109,13 +89,15 @@ public:
         const ProcedureStep& step = procedure_.steps[next_];
         if (step.control_id == control_id && step.value == value) {
             if (elapsed_since_step_s_ < step.min_wait_s) return StepResult::WaitRequired;
+            const bool ready = ConditionsHold(step.wait_for, panel, equipment);
             panel.Set(control_id, value);
+            if (!ready) Log(DeviationKind::Early, control_id, value);
             ++next_;
             elapsed_since_step_s_ = 0.0;
-            return StepResult::Accepted;
+            return ready ? StepResult::Accepted : StepResult::AcceptedEarly;
         }
         panel.Set(control_id, value);
-        ++deviations_;
+        Log(DeviationKind::OutOfOrder, control_id, value);
         return StepResult::NotNextStep;
     }
 
@@ -123,14 +105,37 @@ public:
     std::size_t NextIndex() const { return next_; }
     const ProcedureStep* NextStep() const { return IsComplete() ? nullptr : &procedure_.steps[next_]; }
     double ElapsedSinceStep() const { return elapsed_since_step_s_; }
-    int Deviations() const { return deviations_; }
+    int Deviations() const { return static_cast<int>(log_.size()); }
+    const std::vector<Deviation>& DeviationLog() const { return log_; }
     const Procedure& GetProcedure() const { return procedure_; }
 
 private:
+    void Log(DeviationKind kind, const std::string& control_id, int value) {
+        log_.push_back({kind, time_s_, control_id, value, next_});
+    }
+
     Procedure procedure_;
     std::size_t next_ = 0;
     double elapsed_since_step_s_ = 0.0;
-    int deviations_ = 0;
+    double time_s_ = 0.0;
+    std::vector<Deviation> log_;
+};
+
+enum class CrewStatus { Idle, Working, Waiting };
+
+// What a crew member tells the player (drives voice lines and the order UI).
+struct CrewReport {
+    enum class Kind {
+        Started,         // began a procedure
+        Completed,       // finished a procedure
+        Waiting,         // waiting for equipment; detail = the condition's id
+        EquipmentFault,  // saw a fault it was waiting on; stopped; detail = subsystem id
+        Aborted          // stopped: cancelled, superseded, or bad procedure data; detail says which
+    };
+    Kind kind = Kind::Started;
+    std::string procedure_id;
+    std::string detail;
+    double time_s = 0.0;  // crew member's clock
 };
 
 // An NPC crew member who carries out ordered procedures on a control panel.
@@ -139,46 +144,144 @@ public:
     CrewMember(std::string name, std::string role, double reaction_time_s)
         : name_(std::move(name)), role_(std::move(role)), reaction_time_s_(reaction_time_s) {}
 
+    // Drop everything and do this now.
     void Order(const Procedure& procedure) {
-        tracker_.Reset(procedure);
-        action_timer_s_ = 0.0;
-        has_order_ = !procedure.steps.empty();
+        if (has_order_) Report(CrewReport::Kind::Aborted, "superseded");
+        has_order_ = false;
+        queue_.clear();
+        queue_.push_back(procedure);
+        StartNext();
     }
 
-    void CancelOrder() { has_order_ = false; }
+    // Do this after the current and already-queued orders.
+    void Queue(const Procedure& procedure) {
+        queue_.push_back(procedure);
+        if (!has_order_) StartNext();
+    }
 
-    // Call every sim step. Performs at most one control action per call.
-    void Update(double dt, ControlPanel& panel) {
+    // Stop the current order and forget the queue.
+    void CancelOrder() {
+        if (has_order_) Report(CrewReport::Kind::Aborted, "cancelled");
+        Stop();
+    }
+
+    // Call every sim step, after Equipment::Update. Performs at most one control action per call.
+    // Without `equipment`, subsystem conditions in wait_for count as met.
+    void Update(double dt, ControlPanel& panel, const Equipment* equipment = nullptr) {
+        time_s_ += dt;
         tracker_.Update(dt);
         if (!has_order_) return;
-        action_timer_s_ += dt;
         const ProcedureStep* step = tracker_.NextStep();
         if (step == nullptr) {
-            has_order_ = false;
+            FinishCurrent();
             return;
         }
+        const std::string faulted = FaultedSubsystem(step->wait_for, equipment);
+        if (!faulted.empty()) {
+            Report(CrewReport::Kind::EquipmentFault, faulted);
+            Stop();
+            return;
+        }
+        if (!ConditionsHold(step->wait_for, panel, equipment)) {
+            if (status_ != CrewStatus::Waiting) {
+                status_ = CrewStatus::Waiting;
+                Report(CrewReport::Kind::Waiting, FirstUnmet(step->wait_for, panel, equipment));
+            }
+            action_timer_s_ = 0.0;  // reaction time counts from when the lamp comes on
+            return;
+        }
+        status_ = CrewStatus::Working;
+        action_timer_s_ += dt;
         if (action_timer_s_ < reaction_time_s_ || tracker_.ElapsedSinceStep() < step->min_wait_s) return;
-        const StepResult r = tracker_.Attempt(panel, step->control_id, step->value);
+        const std::string control_id = step->control_id;
+        const StepResult r = tracker_.Attempt(panel, control_id, step->value, equipment);
         action_timer_s_ = 0.0;
-        if (r == StepResult::UnknownControl || r == StepResult::InvalidPosition) {
-            has_order_ = false;  // bad procedure data: stop rather than loop forever
+        if (r == StepResult::UnknownControl || r == StepResult::InvalidPosition || r == StepResult::Blocked) {
+            // Bad procedure data (e.g. a missing "open cover" step): stop rather than loop forever.
+            Report(CrewReport::Kind::Aborted, control_id);
+            Stop();
         } else if (tracker_.IsComplete()) {
-            has_order_ = false;
+            FinishCurrent();
         }
     }
 
     bool IsBusy() const { return has_order_; }
+    CrewStatus Status() const { return status_; }
+    std::size_t QueuedCount() const { return queue_.size(); }
     const std::string& Name() const { return name_; }
     const std::string& Role() const { return role_; }
     const ProcedureTracker& Tracker() const { return tracker_; }
 
+    // Reports since the last call, oldest first.
+    std::vector<CrewReport> TakeReports() {
+        std::vector<CrewReport> out;
+        out.swap(reports_);
+        return out;
+    }
+
 private:
+    void Report(CrewReport::Kind kind, std::string detail = std::string()) {
+        reports_.push_back({kind, tracker_.GetProcedure().id, std::move(detail), time_s_});
+    }
+
+    void StartNext() {
+        while (!queue_.empty()) {
+            Procedure next = std::move(queue_.front());
+            queue_.pop_front();
+            if (next.steps.empty()) continue;
+            tracker_.Reset(std::move(next));
+            action_timer_s_ = 0.0;
+            has_order_ = true;
+            status_ = CrewStatus::Working;
+            Report(CrewReport::Kind::Started);
+            return;
+        }
+        has_order_ = false;
+        status_ = CrewStatus::Idle;
+    }
+
+    void FinishCurrent() {
+        Report(CrewReport::Kind::Completed);
+        has_order_ = false;
+        StartNext();
+    }
+
+    void Stop() {
+        has_order_ = false;
+        queue_.clear();
+        status_ = CrewStatus::Idle;
+    }
+
+    // A subsystem this step is waiting on that has faulted (waiting would be forever).
+    static std::string FaultedSubsystem(const std::vector<Condition>& conds, const Equipment* equipment) {
+        if (equipment == nullptr) return std::string();
+        for (const Condition& c : conds) {
+            if (c.kind == Condition::Kind::SubsystemIs && c.state != SubsystemState::Fault &&
+                equipment->State(c.id) == SubsystemState::Fault) {
+                return c.id;
+            }
+        }
+        return std::string();
+    }
+
+    static std::string FirstUnmet(const std::vector<Condition>& conds, const ControlPanel& panel,
+                                  const Equipment* equipment) {
+        for (const Condition& c : conds) {
+            if (!ConditionsHold({c}, panel, equipment)) return c.id;
+        }
+        return std::string();
+    }
+
     std::string name_;
     std::string role_;
     double reaction_time_s_;
     double action_timer_s_ = 0.0;
+    double time_s_ = 0.0;
     bool has_order_ = false;
+    CrewStatus status_ = CrewStatus::Idle;
+    std::deque<Procedure> queue_;
     ProcedureTracker tracker_;
+    std::vector<CrewReport> reports_;
 };
 
 }  // namespace simcore

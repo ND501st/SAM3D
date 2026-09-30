@@ -21,7 +21,10 @@ function(simcore_configure_target tgt)
       target_compile_options(${tgt} PRIVATE /WX /GR-)
     endif()
   else()
-    target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
+    # Optional trailing struct fields (ControlDef::guard_id, ProcedureStep::wait_for...) have defaults and are
+    # meant to be left out of brace-initializers, which -Wmissing-field-initializers (in -Wextra) would reject.
+    target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
+                                          -Wno-missing-field-initializers)
     if(SIMCORE_STRICT)
       target_compile_options(${tgt} PRIVATE -Werror -fno-rtti)
     endif()
@@ -36,8 +39,10 @@ add_executable(simcore_tests
   tests/test_geo_atmosphere.cpp
   tests/test_radar.cpp
   tests/test_engagement.cpp
-  tests/test_procedures.cpp)
+  tests/test_procedures.cpp
+  tests/test_equipment.cpp)
 simcore_configure_target(simcore_tests)
+target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 add_test(NAME simcore_tests COMMAND simcore_tests)
 
 # Header self-containment + "no exceptions" check: compile the umbrella header alone.

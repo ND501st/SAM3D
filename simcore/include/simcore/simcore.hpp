@@ -17,6 +17,8 @@
 #include "simcore/radar.hpp"
 #include "simcore/aircraft.hpp"
 #include "simcore/missile.hpp"
+#include "simcore/panel.hpp"
+#include "simcore/equipment.hpp"
 #include "simcore/procedures.hpp"
 #include "simcore/world.hpp"
 #include "simcore/acmi.hpp"
