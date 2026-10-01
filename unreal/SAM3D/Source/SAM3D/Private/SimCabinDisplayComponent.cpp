@@ -129,8 +129,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 
 	if (Kind == simcore::CabinDisplayKind::Tv)
 	{
+		// Configured before registering, so it doesn't capture a frame on its own while the TV is off.
 		Capture = NewObject<USceneCaptureComponent2D>(GetOwner());
-		Capture->RegisterComponent();
 		Capture->TextureTarget = Target;
 		Capture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 		Capture->bCaptureEveryFrame = false;
@@ -140,6 +140,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		Capture->PostProcessSettings.ColorSaturation = FVector4(0.0, 0.0, 0.0, 1.0);
 		Capture->PostProcessBlendWeight = 1.0f;
 		Capture->HideActorComponents(GetOwner());
+		Capture->RegisterComponent();
 		// Crosshair over the picture.
 		for (int32 I = 0; I < 2 && Cube != nullptr; ++I)
 		{
@@ -468,10 +469,9 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	}
 	if (!bOn)
 	{
-		if (bTvWasOn)
-		{
-			UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
-		}
+		// A dark screen. Cleared every frame, not just when switched off: a capture can land in the target
+		// before the first update (found by tools/ue_cabin_check.py: a picture on a TV that was never on).
+		UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
 		bTvWasOn = false;
 		Capture->bCaptureEveryFrame = false;
 		return;

@@ -92,6 +92,10 @@ python tools/ue_remote.py "print(unreal.SystemLibrary.get_engine_version())"
 python tools/ue_remote.py -f my_script.py
 ```
 
+`tools/ue_cabin_check.py` uses it to check the cabin with no hands: it restarts Play with the cabin tour (the editor
+must run with the tour on), records sim time, equipment, lamps, the track and a screenshot at every view, and writes
+`out/cabin_check/<time>/report.md` and the debrief. `--at 70:tov.power=1` moves a control at a sim time.
+
 ## Code map
 
 | File | Purpose |

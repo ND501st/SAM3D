@@ -9,6 +9,13 @@ the engine, so nothing to install.
 
 The code runs as a script in the editor's Python (the `unreal` module is imported for you). Exit codes: 0 ok,
 1 the code raised, 2 no editor found. Set UE_ROOT if the engine isn't at D:\\UE_5.7.
+
+From other scripts:
+
+    with Editor() as ue:
+        ok, output = ue.run("print(1 + 1)")
+
+Each call runs on the editor's game thread and blocks it, so keep calls short and wait between them out here.
 """
 import argparse
 import os
@@ -22,21 +29,55 @@ import remote_execution  # noqa: E402  (ships with the engine)
 PROJECT = "SAM3D"
 
 
-def find_node(rex, timeout_s):
-    """The SAM3D editor if several are running, otherwise the first one found."""
-    deadline = time.time() + timeout_s
-    nodes = []
-    while time.time() < deadline:
-        nodes = rex.remote_nodes
-        if nodes:
-            time.sleep(0.3)  # let every running editor answer
-            nodes = rex.remote_nodes
-            break
-        time.sleep(0.1)
-    for node in nodes:
-        if node.get("project_name") == PROJECT:
-            return node
-    return nodes[0] if nodes else None
+class EditorNotFound(RuntimeError):
+    pass
+
+
+class Editor:
+    """A command connection to the open SAM3D editor (the first editor found if none is SAM3D)."""
+
+    def __init__(self, timeout_s=5.0):
+        self._timeout_s = timeout_s
+        self._rex = None
+
+    def __enter__(self):
+        self._rex = remote_execution.RemoteExecution(remote_execution.RemoteExecutionConfig())
+        self._rex.start()
+        node = self._find_node()
+        if node is None:
+            self._rex.stop()
+            raise EditorNotFound("No Unreal editor answered. Is it open, with remote execution on?")
+        self._rex.open_command_connection(node["node_id"])
+        return self
+
+    def __exit__(self, *exc):
+        self._rex.stop()
+        return False
+
+    def run(self, code):
+        """Run code in the editor. Returns (succeeded, printed output; the error text on failure)."""
+        result = self._rex.run_command("import unreal\n" + code, unattended=True,
+                                       exec_mode=remote_execution.MODE_EXEC_FILE)
+        out = "".join(line.get("output", "") if line.get("output", "").endswith("\n") else line.get("output", "") + "\n"
+                      for line in result.get("output", []))
+        if not result.get("success"):
+            out += str(result.get("result", "failed")) + "\n"
+        return bool(result.get("success")), out
+
+    def _find_node(self):
+        deadline = time.time() + self._timeout_s
+        nodes = []
+        while time.time() < deadline:
+            nodes = self._rex.remote_nodes
+            if nodes:
+                time.sleep(0.3)  # let every running editor answer
+                nodes = self._rex.remote_nodes
+                break
+            time.sleep(0.1)
+        for node in nodes:
+            if node.get("project_name") == PROJECT:
+                return node
+        return nodes[0] if nodes else None
 
 
 def main():
@@ -51,26 +92,14 @@ def main():
     if args.file:
         with open(args.file, encoding="utf-8") as f:
             code = f.read()
-    code = "import unreal\n" + code
-
-    rex = remote_execution.RemoteExecution(remote_execution.RemoteExecutionConfig())
-    rex.start()
     try:
-        node = find_node(rex, args.timeout)
-        if node is None:
-            print("No Unreal editor answered. Is it open, with remote execution on?", file=sys.stderr)
-            return 2
-        rex.open_command_connection(node["node_id"])
-        result = rex.run_command(code, unattended=True, exec_mode=remote_execution.MODE_EXEC_FILE)
-    finally:
-        rex.stop()
-    for line in result.get("output", []):
-        text = line.get("output", "")
-        print(text, end="" if text.endswith("\n") else "\n")
-    if not result.get("success"):
-        print(result.get("result", "failed"), file=sys.stderr)
-        return 1
-    return 0
+        with Editor(args.timeout) as ue:
+            ok, output = ue.run(code)
+    except EditorNotFound as e:
+        print(e, file=sys.stderr)
+        return 2
+    print(output, end="", file=sys.stdout if ok else sys.stderr)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
