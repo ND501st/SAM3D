@@ -58,3 +58,6 @@ ghidra_projects/
 
 # ---------- Claude Code local settings ----------
 .claude/settings.local.json
+
+# Cesium for Unreal request cache (local, regenerated)
+unreal/**/cesium-request-cache.sqlite*
