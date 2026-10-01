@@ -81,6 +81,16 @@ set SAM3D_CABIN_TOUR=6
 D:\UE_5.7\Engine\Binaries\Win64\UnrealEditor.exe C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject
 ```
 
+## Scripting the open editor
+
+Python remote execution is on (`Config/DefaultEngine.ini`), so scripts can drive the open editor: start and stop
+Play, list, add or delete actors, set properties, save levels, take screenshots.
+
+```
+python tools/ue_remote.py "print(unreal.SystemLibrary.get_engine_version())"
+python tools/ue_remote.py -f my_script.py
+```
+
 ## Code map
 
 | File | Purpose |
