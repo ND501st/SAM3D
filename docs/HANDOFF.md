@@ -1,6 +1,6 @@
 # SAM3D — Handoff for the next AI model
 
-*Written 30 Sep 2026 (Australia/Sydney); updated 2 Oct 2026 after the research review. Read this first, then
+*Written 30 Sep 2026 (Australia/Sydney); last updated 2 Oct 2026 at the end of the session that did the research review. Read this first, then
 `docs/BRIEFING_2026-10.md`, the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*
 
 ---
@@ -23,7 +23,7 @@ PU-12, and NPC crew work the *same* controls the player does.
 | Thing | Location |
 |---|---|
 | Repo | **`ND501st/SAM3D`** (private) |
-| Branches and PRs | `main` is still at `5cb032e`. All work is on **stacked PRs**, each on the one before: #1 `fix/windows-build-and-verify` → #2 `feature/equipment-and-crew-orders` → #3 `feature/scenarios` → #4 `feature/engagement` → #5 `feature/unreal-bringup` → #6 `feature/cabin` → #7 `feature/scopes` (newest). Merge in order with merge commits or rebase, **not squash**. |
+| Branches and PRs | `main` is still at `5cb032e`. All work is on **stacked PRs**, each on the one before: #1 `fix/windows-build-and-verify` → #2 `feature/equipment-and-crew-orders` → #3 `feature/scenarios` → #4 `feature/engagement` → #5 `feature/unreal-bringup` → #6 `feature/cabin` → #7 `feature/scopes` → #8 `docs/research-review` (newest; documentation only). Merge in order with merge commits or rebase, **not squash**. |
 | PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
 | Unreal | UE 5.7.4 at `D:\UE_5.7`, Cesium for Unreal 2.29+; level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
 | Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
@@ -103,7 +103,8 @@ a `ProcedureTracker` so the debrief records early and out-of-order actions.
 | 0–3 | Done: Windows build, consoles and procedures from data, crew orders, debrief, scenarios, gameplay-level engagement model |
 | 4 Unreal bring-up | Done except Chaos Vehicles (needs a real mesh), the real model, the performance check |
 | 5 3D cabin | Done: layout data, controls, lamps (glowing), instruments (search scope, range indicator, TV with a black-and-white scene capture, βс/εс dials, ДЦ voltmeter), hands-free tour, scripted checks. The practice shoot runs end to end in Unreal: lock at ~28 km, launch at 235 s, **hit** at 257 s (seed 4) |
-| **6 Accuracy pass** | **Next.** See below |
+| Research review | Done (PR #8): research file, briefing, re-plan; the user's video transcript analysed (Korovin's «Техника и вооружение» series added as a tier-1 source) |
+| **6 Accuracy pass** | **Next, after the user answers the briefing's decisions.** See below |
 
 ## 9. The research review (2 Oct 2026) and what it changed
 
@@ -153,7 +154,8 @@ physics stays unscheduled.
 
 ## 13. Next steps
 
-1. **User:** answer the decisions in `docs/BRIEFING_2026-10.md` §5; merge PRs #1–#7 in order.
+1. **User:** answer the decisions in `docs/BRIEFING_2026-10.md` §5; merge PRs #1–#8 in order; name the video
+   (title/channel) so `video_osa` can be cited properly.
 2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
    one PR.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
@@ -166,3 +168,13 @@ physics stays unscheduled.
 - Commit/PR attribution: follow the session's instructions; the repo's `CLAUDE.md` takes precedence.
 - C++ and Python kept matching, with tests, for any model both implement.
 - Prefers Claude to test in Unreal itself (scripts, screenshots) and to explain findings plainly.
+
+## 15. State at the end of the last session (2 Oct 2026)
+
+- Branch checked out: `docs/research-review` (PR #8); working tree clean except the editor's uncommitted lines in
+  `unreal/SAM3D/Config/DefaultEngine.ini` (leave them out of commits).
+- Unreal: all packages saved and the editor told to quit by script (`SystemLibrary.quit_editor`); it logged
+  "Exiting." (it can linger a minute after that). Next session: start it with `SAM3D_CABIN_TOUR=6` if you want the
+  scripted checks.
+- Auto-fix is on for PRs #1, #3, #5, #6, #7 (the app refused it for #2 and #4); CI results not yet reviewed.
+- Nothing is waiting on Claude; everything waits on the user's decisions (briefing §5).
