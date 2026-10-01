@@ -26,5 +26,6 @@
 #include "simcore/engagement.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
+#include "simcore/cabin.hpp"
 #include "simcore/world.hpp"
 #include "simcore/acmi.hpp"

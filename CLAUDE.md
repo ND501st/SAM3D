@@ -17,6 +17,7 @@ The first system is the **9K33 Osa**.
 | `data/systems/` | Per-system parameters. **Every value needs a source.** |
 | `data/procedures/` | Per-system consoles: controls, subsystems, procedures (loaded by `console_data.hpp`). Same sourcing rules. |
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
+| `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `docs/` | Plan, architecture, sources, dev setup, reverse-engineering notes. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |

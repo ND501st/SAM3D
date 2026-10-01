@@ -9,6 +9,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "SAM3D.h"
+#include "SimCabinComponent.h"
+#include "SimCabinHUD.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -74,6 +76,15 @@ ASimOsaVehicle::ASimOsaVehicle()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom);
 
+	// The cabin's body frame has its origin at the root (ground under the hull centre), like the hull boxes.
+	Cabin = CreateDefaultSubobject<USimCabinComponent>(TEXT("Cabin"));
+	Cabin->SetupAttachment(Root);
+	CabinCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CabinCamera"));
+	CabinCamera->SetupAttachment(Root);
+	CabinCamera->SetFieldOfView(80.0f);
+	CabinCamera->bAutoActivate = false;
+	CabinHUDClass = ASimCabinHUD::StaticClass();
+
 	// Placeholder crew orders until the order menu exists (phase 6). Crew names and procedures are the
 	// practice scenario's (data/scenarios/osa_practice.json, data/procedures/osa_ak.json).
 	CrewHotkeys = {
@@ -96,6 +107,16 @@ void ASimOsaVehicle::BeginPlay()
 	FollowGround();
 }
 
+void ASimOsaVehicle::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	APlayerController* Pc = Cast<APlayerController>(NewController);
+	if (Pc != nullptr && CabinHUDClass)
+	{
+		Pc->ClientSetHUD(CabinHUDClass);
+	}
+}
+
 void ASimOsaVehicle::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -109,6 +130,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 		HandleHotkeys(Pc, Sim);
 		AnimateFromSim(Sim);
 	}
+	HandleCabin(DeltaSeconds, Pc);
 }
 
 void ASimOsaVehicle::Drive(float DeltaSeconds, APlayerController* Pc)
@@ -198,5 +220,141 @@ void ASimOsaVehicle::HandleHotkeys(APlayerController* Pc, USimWorldSubsystem* Si
 				FString::Printf(TEXT("Order: %s -> %s%s%s"), *H.Crew, *H.Procedure, H.bQueue ? TEXT(" (queued)") : TEXT(""),
 					bOk ? TEXT("") : TEXT("  FAILED")));
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------------------------- cabin
+
+bool ASimOsaVehicle::SetInCabin(bool bEnter)
+{
+	if (bEnter && Cabin->GetNumStations() == 0)
+	{
+		FeedbackText = TEXT("No cabin layout loaded");
+		FeedbackSecondsLeft = 3.0f;
+		return false;
+	}
+	bInCabin = bEnter;
+	Camera->SetActive(!bEnter);
+	CabinCamera->SetActive(bEnter);
+	DraggedWheel = INDEX_NONE;
+	HoveredItem = INDEX_NONE;
+	HoverText.Reset();
+	Cabin->SetHighlightedItem(INDEX_NONE);
+	if (bEnter)
+	{
+		Station = FMath::Clamp(Station, 0, Cabin->GetNumStations() - 1);
+		ApplyStationView();
+	}
+	return true;
+}
+
+void ASimOsaVehicle::ApplyStationView()
+{
+	FVector Eye;
+	FRotator View;
+	if (Cabin->GetStationView(Station, Eye, View, StationLabel))
+	{
+		CabinCamera->SetRelativeLocationAndRotation(
+			Eye, FRotator(FMath::Clamp(View.Pitch + LookPitchDeg, -85.0, 85.0), View.Yaw + LookYawDeg, 0.0));
+	}
+}
+
+void ASimOsaVehicle::ShowFeedback(ESimPlayerActionResult Result)
+{
+	// Only physical refusals are shown: procedure mistakes go to the debrief, as in SAM Simulator.
+	switch (Result)
+	{
+	case ESimPlayerActionResult::Blocked:
+		FeedbackText = TEXT("Blocked: open its cover or lock first (keys turn one step at a time)");
+		break;
+	case ESimPlayerActionResult::NotYet:
+		FeedbackText = TEXT("Not yet");
+		break;
+	case ESimPlayerActionResult::Invalid:
+		FeedbackText = TEXT("Nothing happens");
+		break;
+	default:
+		return;
+	}
+	FeedbackSecondsLeft = 2.0f;
+}
+
+void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
+{
+	FeedbackSecondsLeft = FMath::Max(0.0f, FeedbackSecondsLeft - DeltaSeconds);
+	if (Pc == nullptr)
+	{
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(CabinKey))
+	{
+		SetInCabin(!bInCabin);
+	}
+	if (!bInCabin)
+	{
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(NextStationKey))
+	{
+		Station = (Station + 1) % FMath::Max(1, Cabin->GetNumStations());
+		LookYawDeg = 0.0;
+		LookPitchDeg = 0.0;
+		DraggedWheel = INDEX_NONE;
+	}
+
+	// Mouse: turns the dragged hand wheel, otherwise turns the head.
+	float Dx = 0.0f;
+	float Dy = 0.0f;
+	Pc->GetInputMouseDelta(Dx, Dy);
+	if (DraggedWheel != INDEX_NONE && !Pc->IsInputKeyDown(EKeys::LeftMouseButton))
+	{
+		DraggedWheel = INDEX_NONE;
+	}
+	if (DraggedWheel != INDEX_NONE)
+	{
+		if (Dx != 0.0f && !Cabin->TurnWheel(DraggedWheel, Dx * WheelTurnsPerMouseUnit))
+		{
+			FeedbackText = TEXT("Locked: release the wheel lock first");
+			FeedbackSecondsLeft = 2.0f;
+		}
+	}
+	else
+	{
+		LookYawDeg = FMath::Clamp(LookYawDeg + Dx * CabinLookDegPerMouseUnit, -110.0, 110.0);
+		LookPitchDeg = FMath::Clamp(LookPitchDeg + Dy * CabinLookDegPerMouseUnit, -70.0, 60.0);
+	}
+	ApplyStationView();
+
+	const FVector Start = CabinCamera->GetComponentLocation();
+	const FVector End = Start + CabinCamera->GetForwardVector() * CabinReachCm;
+	HoveredItem = DraggedWheel != INDEX_NONE ? DraggedWheel : Cabin->TraceItem(Start, End);
+	Cabin->SetHighlightedItem(HoveredItem);
+	HoverText = Cabin->DescribeItem(HoveredItem);
+	if (HoveredItem == INDEX_NONE)
+	{
+		return;
+	}
+	if (Cabin->IsWheel(HoveredItem))
+	{
+		if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+		{
+			DraggedWheel = HoveredItem;
+		}
+		const double Notches = (Pc->WasInputKeyJustPressed(EKeys::MouseScrollUp) ? 1.0 : 0.0) -
+							   (Pc->WasInputKeyJustPressed(EKeys::MouseScrollDown) ? 1.0 : 0.0);
+		if (Notches != 0.0 && !Cabin->TurnWheel(HoveredItem, Notches * WheelTurnsPerScrollNotch))
+		{
+			FeedbackText = TEXT("Locked: release the wheel lock first");
+			FeedbackSecondsLeft = 2.0f;
+		}
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		ShowFeedback(Cabin->ClickItem(HoveredItem, 1));
+	}
+	else if (Pc->WasInputKeyJustPressed(EKeys::RightMouseButton))
+	{
+		ShowFeedback(Cabin->ClickItem(HoveredItem, -1));
 	}
 }

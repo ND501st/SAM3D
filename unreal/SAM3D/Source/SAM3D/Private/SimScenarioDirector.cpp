@@ -54,6 +54,10 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 		}
 		return;
 	}
+	if (!CabinFile.IsEmpty() && !Sim->LoadCabin(CabinFile, Error) && GEngine != nullptr)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Red, FString::Printf(TEXT("Cabin failed to load: %s"), *Error));
+	}
 	if (bUseCesiumGeoreference)
 	{
 		if (ACesiumGeoreference* Geo = ACesiumGeoreference::GetDefaultGeoreferenceForActor(this))

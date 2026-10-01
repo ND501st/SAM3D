@@ -101,6 +101,26 @@ struct SAM3D_API FSimDebriefEntry
 	FString Detail;
 };
 
+/** What happened when the player moved a control (simcore::StepResult). */
+UENUM(BlueprintType)
+enum class ESimPlayerActionResult : uint8
+{
+	/** Moved; no procedure is being judged (free play), or it is already complete. */
+	Moved,
+	/** Moved; the correct next step of the player's procedure. */
+	Accepted,
+	/** Moved; the correct step, but before its lamp/condition. Counted in the debrief. */
+	AcceptedEarly,
+	/** Moved; not the step that was due. Counted in the debrief. */
+	OutOfOrder,
+	/** Not moved: the correct step, but too soon after the previous one. */
+	NotYet,
+	/** Not moved: a closed cover or lock, or a key switch jumping a position. */
+	Blocked,
+	/** Not moved: no such control or position, or no scenario running. */
+	Invalid
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimDebriefEntry, const FSimDebriefEntry&, Entry);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimTerrainReady, bool, bSucceeded);
@@ -210,6 +230,40 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Console")
 	FString GetTrackedTarget() const;
 
+	// ------------------------------------------------------------------ player and cabin (scenario mode)
+
+	/**
+	 * Load the 3D cabin layout for the scenario's console (relative to the data folder, e.g. "cabins/osa_ak.json").
+	 * Load the scenario first; loading a scenario drops the cabin.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	bool LoadCabin(const FString& CabinFile, FString& OutError);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool HasCabin() const { return Cabin.IsValid(); }
+
+	/**
+	 * The player's hand on a switch, selector, key or button. Goes through the player's procedure tracker, so
+	 * early and out-of-order actions reach the debrief (SetControlPosition bypasses it; use that for scripts).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	ESimPlayerActionResult PlayerSetControl(const FString& ControlId, int32 Position);
+
+	/** The player turning a hand wheel. False if its lock is closed or it isn't a wheel. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	bool PlayerTurnWheel(const FString& ControlId, double Value);
+
+	/** Judge the player's actions against a procedure of the console; empty = free play. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	bool SetPlayerProcedure(const FString& ProcedureId);
+
+	/** Whether a lamp of the cabin layout is lit now. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsLampLit(const FString& LampId) const;
+
+	/** The loaded cabin layout (null without one). */
+	const simcore::CabinLayout* GetCabinLayout() const { return Cabin.Get(); }
+
 	// ------------------------------------------------------------------ terrain and Cesium
 
 	/** Use this georeference for all ENU <-> Unreal conversions (null = flat mapping). */
@@ -290,6 +344,7 @@ private:
 
 	// Scenario mode.
 	TUniquePtr<simcore::ScenarioRunner> Runner;
+	TUniquePtr<simcore::CabinLayout> Cabin;
 	TUniquePtr<simcore::GridTerrain> SampledTerrain;
 	double ScenarioStepSeconds = 0.05;
 	size_t DebriefEntriesSent = 0;

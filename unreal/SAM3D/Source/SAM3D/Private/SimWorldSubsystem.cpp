@@ -301,12 +301,92 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	SimWorld.Reset();
 	bDemoActive = false;
 	SampledTerrain.Reset();
+	Cabin.Reset();
 	Runner = MakeUnique<simcore::ScenarioRunner>(std::move(Def), std::move(Console));
 	Accumulator = 0.0;
 	DebriefEntriesSent = 0;
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)"), *ToF(Runner->Def().name), *Path);
 	BroadcastNewDebriefEntries();
 	return true;
+}
+
+bool USimWorldSubsystem::LoadCabin(const FString& CabinFile, FString& OutError)
+{
+	if (!Runner)
+	{
+		OutError = TEXT("load a scenario first");
+		return false;
+	}
+	const FString Path = FPaths::Combine(ResolveDataDirectory(), CabinFile);
+	TUniquePtr<simcore::CabinLayout> Loaded = MakeUnique<simcore::CabinLayout>();
+	std::string Error;
+	if (!simcore::LoadCabinFile(ToStd(Path), Runner->Console(), *Loaded, &Error))
+	{
+		OutError = ToF(Error);
+		UE_LOG(LogSAM3D, Error, TEXT("Cabin failed to load: %s"), *OutError);
+		return false;
+	}
+	for (const std::string& Id : Loaded->UnplacedControls(Runner->Console().panel))
+	{
+		UE_LOG(LogSAM3D, Warning, TEXT("Cabin %s doesn't place control %s"), *CabinFile, *ToF(Id));
+	}
+	Cabin = MoveTemp(Loaded);
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin loaded: %s"), *Path);
+	return true;
+}
+
+ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& ControlId, int32 Position)
+{
+	if (!Runner)
+	{
+		return ESimPlayerActionResult::Invalid;
+	}
+	const simcore::StepResult Result = Runner->PlayerSet(ToStd(ControlId), Position);
+	BroadcastNewDebriefEntries();
+	switch (Result)
+	{
+	case simcore::StepResult::Accepted: return ESimPlayerActionResult::Accepted;
+	case simcore::StepResult::AcceptedEarly: return ESimPlayerActionResult::AcceptedEarly;
+	case simcore::StepResult::NotNextStep: return ESimPlayerActionResult::OutOfOrder;
+	case simcore::StepResult::WaitRequired: return ESimPlayerActionResult::NotYet;
+	case simcore::StepResult::Blocked: return ESimPlayerActionResult::Blocked;
+	case simcore::StepResult::ProcedureComplete: return ESimPlayerActionResult::Moved;
+	case simcore::StepResult::UnknownControl:
+	case simcore::StepResult::InvalidPosition: break;
+	}
+	return ESimPlayerActionResult::Invalid;
+}
+
+bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
+{
+	return Runner && Runner->PlayerTurn(ToStd(ControlId), Value);
+}
+
+bool USimWorldSubsystem::SetPlayerProcedure(const FString& ProcedureId)
+{
+	if (!Runner || !Runner->SetPlayerProcedure(ToStd(ProcedureId)))
+	{
+		return false;
+	}
+	BroadcastNewDebriefEntries();
+	return true;
+}
+
+bool USimWorldSubsystem::IsLampLit(const FString& LampId) const
+{
+	if (!Runner || !Cabin)
+	{
+		return false;
+	}
+	const std::string Id = ToStd(LampId);
+	for (const simcore::CabinLamp& Lamp : Cabin->lamps)
+	{
+		if (Lamp.id == Id)
+		{
+			return simcore::CabinLayout::LampLit(Lamp, Runner->Console().panel, Runner->Console().equipment);
+		}
+	}
+	return false;
 }
 
 bool USimWorldSubsystem::IsScenarioFinished() const
