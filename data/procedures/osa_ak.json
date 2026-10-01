@@ -1,0 +1,327 @@
+{
+  "system_id": "osa_ak",
+  "display_name": "9K33M2 Osa-AK (SA-8B Gecko)",
+  "status": "Engagement consoles from the SAM Simulator manual. Power-up, deploy and stow are SAM3D's design built on public facts (SAM Simulator's Osa starts deployed and powered); see docs/re/osa.md.",
+  "notes": "Positions, labels and procedure order come from the manual and the game's control sprites. Timings are only included where a source gives them. Release behaviour of the tracking-mode buttons is not described in the manual and is marked low confidence; check it in the running game.",
+  "sources": [
+    {
+      "id": "samsim_osa",
+      "title": "9K33M2 OSA-AK (SA-8B Gecko) Simulator Documentation, Version 1 (SAM Simulator documentation set v210109, SA-8B_English.pdf)",
+      "url": "https://www.mediafire.com/file/cgovijhk4hukl7n/SAMSIM_docs_210109.rar",
+      "notes": "By SAM Simulator's creator. Kept locally in reference/manuals/. Page numbers below are the PDF's printed page numbers."
+    },
+    {
+      "id": "samsim_sprites",
+      "title": "SAM Simulator v930.2 Osa control sprites (osa*.dat)",
+      "notes": "Number of positions per control, where the manual doesn't say. See docs/re/osa.md."
+    },
+    {
+      "id": "wrk",
+      "title": "2ПВО МСД. Часть 2. Зенитные ракетные полки (зрп) (unsigned article, Word attachment on the wrk.ru forum)",
+      "url": "https://www.wrk.ru/forums/attachment.php?item=1005313",
+      "notes": "Crew, power sources, march/combat positions of the АПУ, readiness norms. Medium confidence."
+    },
+    {
+      "id": "gs",
+      "title": "GlobalSecurity.org, SA-8 GECKO / 9K33M3 Osa-AKM",
+      "url": "https://www.globalsecurity.org/military/world/russia/sa-8.htm"
+    },
+    {
+      "id": "mis",
+      "title": "missilery.info, 9K33M3 Osa-AKM",
+      "url": "https://en.missilery.info/missile/osa-akm"
+    },
+    {
+      "id": "sam3d",
+      "title": "SAM3D design decision",
+      "notes": "Used where no source gives the detail. Always with confidence 'estimate' and a note saying what it is based on."
+    }
+  ],
+
+  "inputs": [
+    { "id": "vehicle_stopped", "description": "The vehicle is stationary (a short halt or a firing position)", "source": "wrk; mis (tracking and launch only from a short halt or stationary)", "confidence": "high" },
+    { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
+    { "id": "target_in_zone", "description": "Target is within the firing zone (ЦЕЛЬ В ЗОНЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
+    { "id": "target_too_low", "description": "Target too low for the SSC radar to track in angle (НЛЦ lamp)", "source": "samsim_osa p25", "confidence": "high" },
+    { "id": "target_captured", "description": "SSC is on the target azimuth and the target is inside the range gate, so it captures automatically", "source": "samsim_osa p24", "confidence": "high" }
+  ],
+
+  "controls": [
+    { "id": "pwr.gta", "label": "ГТА (gas-turbine power unit)", "station": "commander", "kind": "switch", "position_labels": ["off", "on"],
+      "source": "wrk (9И120 unit powers the vehicle on the move and at a halt); control: sam3d", "confidence": "estimate",
+      "notes": "The unit is real; the real control(s), label and station aren't known. One on/off switch stands in for the start sequence." },
+    { "id": "pwr.pto", "label": "power take-off generator", "station": "driver", "kind": "switch", "position_labels": ["off", "on"],
+      "source": "wrk (engine-driven generator, at a halt only); control: sam3d", "confidence": "estimate",
+      "notes": "Real control and label not known." },
+    { "id": "apu.lock", "label": "АПУ travel lock", "station": "commander", "kind": "switch", "position_labels": ["locked", "unlocked"],
+      "source": "wrk (АПУ locked in travel position on the march; crew unlocks it at a halt); control: sam3d", "confidence": "estimate",
+      "notes": "The lock is real; whether it is one switch, and where, isn't known." },
+    { "id": "apu.stow", "label": "search antenna (transport stowage)", "station": "commander", "kind": "switch", "position_labels": ["folded", "raised"], "initial": 1,
+      "source": "gs (folds back 90° for air transport and fast road travel), wrk (АПУ stowed for Il-76 transport); control: sam3d", "confidence": "estimate",
+      "notes": "Starts raised: the normal march is with the antenna up (search on the move is possible). Folding is for transport only." },
+    { "id": "soc.search", "label": "ПОИСК", "station": "range_officer", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p15 (items 1/2)", "confidence": "high", "notes": "SOC search antenna rotation." },
+    { "id": "soc.hv_cover", "label": "guard over ВЫСОКОЕ", "station": "range_officer", "kind": "switch", "position_labels": ["closed", "open"],
+      "source": "samsim_osa p15 (right-click removes the guard)", "confidence": "high" },
+    { "id": "soc.hv", "label": "ВЫСОКОЕ", "station": "range_officer", "kind": "switch", "guard": "soc.hv_cover", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p15 (items 3/4)", "confidence": "high", "notes": "SOC transmitter." },
+    { "id": "soc.range", "label": "ДАЛЬНОСТЬ", "station": "range_officer", "kind": "switch", "position_labels": ["0–15 km", "0–35 km", "10–45 km"], "initial": 0,
+      "source": "samsim_osa p15 (item 5); position order from sprites osa017–019", "confidence": "high",
+      "notes": "Initial position not stated; 0 is a guess." },
+    { "id": "soc.beam", "label": "ЛУЧ", "station": "range_officer", "kind": "switch", "position_labels": ["I", "II", "III", "I–III", "I–II"], "initial": 0,
+      "source": "samsim_osa p15 (items 6–10)", "confidence": "medium",
+      "notes": "Five buttons with an illuminated indicator in the game; modelled as one selector since only one can be active. Initial selection not stated." },
+    { "id": "soc.mti", "label": "СДЦ (SOC)", "station": "range_officer", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p15 (item 12)", "confidence": "high", "notes": "Moving target indicator, works to 35 km." },
+    { "id": "ssc.tx_cover", "label": "guard over ПЕРЕДАТЧИК", "station": "range_officer", "kind": "switch", "position_labels": ["closed", "open"],
+      "source": "samsim_osa p16", "confidence": "high" },
+    { "id": "ssc.tx", "label": "ПЕРЕДАТЧИК", "station": "range_officer", "kind": "switch", "guard": "ssc.tx_cover", "position_labels": ["ОТКЛ", "ВКЛ"],
+      "source": "samsim_osa p16 (items 1/2)", "confidence": "high", "notes": "SSC tracking-radar transmitter." },
+    { "id": "ssc.az_lock", "label": "azimuth wheel lock", "station": "range_officer", "kind": "switch", "position_labels": ["locked", "unlocked"],
+      "source": "samsim_osa p22 (right-click unlocks)", "confidence": "high" },
+    { "id": "ssc.az_light", "label": "ПОДСВЕТКА (βс)", "station": "range_officer", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p16 (item 4), p22", "confidence": "high" },
+    { "id": "ssc.az_wheel", "label": "АЗИМУТ", "station": "range_officer", "kind": "wheel", "guard": "ssc.az_lock", "min": -330, "max": 330, "initial_value": 0, "unit": "deg",
+      "source": "samsim_osa p14 and p16 (antenna rotates ±330°)", "confidence": "high",
+      "notes": "Slow rotation by dragging; ВЛЕВО/ВПРАВО give fast rotation (not modelled separately)." },
+    { "id": "ssc.range_wheel", "label": "range wheel", "station": "range_officer", "kind": "wheel", "min": 0, "max": 28000, "initial_value": 0, "unit": "m",
+      "source": "samsim_osa p16 (item 9; range indicator shows 28 km)", "confidence": "medium",
+      "notes": "Moves the range gate. Range limits taken from the indicator's displayed range." },
+    { "id": "ssc.mti", "label": "СДЦ (SSC)", "station": "range_officer", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p16 (item 10)", "confidence": "high" },
+    { "id": "ro.semi_auto", "label": "ПОЛУАВТОМАТ", "station": "range_officer", "kind": "button",
+      "source": "samsim_osa p26", "confidence": "high", "notes": "Range-only tracking by the SSC." },
+
+    { "id": "ssc.el_lock", "label": "elevation wheel lock", "station": "firing_officer", "kind": "switch", "position_labels": ["locked", "unlocked"],
+      "source": "samsim_osa p23 (right-click unlocks)", "confidence": "high" },
+    { "id": "ssc.el_light", "label": "ПОДСВЕТКА (εс)", "station": "firing_officer", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p17 (item 1), p23", "confidence": "high" },
+    { "id": "ssc.el_wheel", "label": "УГОЛ МЕСТА", "station": "firing_officer", "kind": "wheel", "guard": "ssc.el_lock", "min": 0, "max": 90, "initial_value": 0, "unit": "deg",
+      "source": "samsim_osa p17 (item 4; instrument reads to 15-00 = 90°)", "confidence": "estimate",
+      "notes": "Travel limits not given; 0–90° assumed from the instrument scale." },
+    { "id": "fo.ru", "label": "РУ", "station": "firing_officer", "kind": "button",
+      "source": "samsim_osa p17 (item 3), p25", "confidence": "medium", "notes": "Manual tracking mode. Button vs. switch not stated; clicked in the manual." },
+    { "id": "fo.cu_az", "label": "ЦУ АЗ", "station": "firing_officer", "kind": "button",
+      "source": "samsim_osa p23 (item 3)", "confidence": "high", "notes": "Engages automatic target acquisition." },
+    { "id": "fo.pa", "label": "ПА", "station": "firing_officer", "kind": "button",
+      "source": "samsim_osa p25 (item 7), p34", "confidence": "high", "notes": "Angle tracking with the TOV camera." },
+    { "id": "tov.power", "label": "РАБ.РЕЖ.", "station": "firing_officer", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
+      "source": "samsim_osa p17 (item 1)", "confidence": "high", "notes": "TOV camera on/off." },
+    { "id": "tov.fov", "label": "УГОЛ ЗРЕНИЯ", "station": "firing_officer", "kind": "switch", "position_labels": ["ШИРОКИЙ", "УЗКИЙ"],
+      "source": "samsim_osa p17 (item 2), p35 (down = narrow)", "confidence": "high" },
+    { "id": "fo.mode", "label": "РОД РАБОТЫ", "station": "firing_officer", "kind": "switch", "position_labels": ["БР", "other"], "initial": 1,
+      "source": "samsim_osa p29 (БР = live firing, leftmost); two positions from sprites osa022–023", "confidence": "medium",
+      "notes": "Only БР is named in the manual. Starting position not stated; assumed not in БР since the procedure selects it." },
+    { "id": "fo.bort_spk_cover", "label": "guard over БОРТ СПК", "station": "firing_officer", "kind": "switch", "position_labels": ["closed", "open"],
+      "source": "samsim_osa p34", "confidence": "high" },
+    { "id": "fo.bort_spk", "label": "БОРТ СПК", "station": "firing_officer", "kind": "switch", "guard": "fo.bort_spk_cover", "position_labels": ["ОТКЛ", "ВКЛ"],
+      "source": "samsim_osa p34 (item 6)", "confidence": "high", "notes": "Starts missile, SPK and SVR preparation by hand." },
+    { "id": "fo.pomekha", "label": "ПОМЕХА", "station": "firing_officer", "kind": "switch", "position_labels": ["down", "up"],
+      "source": "samsim_osa p34 (item 7)", "confidence": "medium", "notes": "Up = radio proximity fuse arms right after launch (range unknown)." },
+    { "id": "fo.key", "label": "ЗАПРЕТ ПУСКА", "station": "firing_officer", "kind": "key", "position_labels": ["no key", "inserted", "turned"],
+      "source": "samsim_osa p29 (insert), p30 (turn)", "confidence": "high", "notes": "Launch authorization key." },
+    { "id": "fo.launch", "label": "ПУСК", "station": "firing_officer", "kind": "button",
+      "source": "samsim_osa p30", "confidence": "high" }
+  ],
+
+  "subsystems": [
+    { "id": "gta", "name": "Gas-turbine power unit (9И120) running",
+      "enable": [ { "control": "pwr.gta", "is": 1 } ],
+      "start_time_s": { "value": 60, "source": "wrk (readiness within 4 min including GTA start); split: sam3d", "confidence": "estimate",
+                        "notes": "No source gives the GTA start time alone. 60 s keeps the whole march-to-combat sequence well inside 4 minutes." },
+      "source": "wrk, mis", "confidence": "medium" },
+    { "id": "pto_generator", "name": "Engine power take-off generator on line",
+      "enable": [ { "control": "pwr.pto", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
+      "source": "wrk (at a halt only)", "confidence": "medium", "notes": "Drops out as soon as the vehicle moves." },
+    { "id": "power", "name": "Equipment power available",
+      "enable_any": [ { "subsystem": "gta", "is": "ready" }, { "subsystem": "pto_generator", "is": "ready" } ],
+      "source": "wrk (two independent power sources)", "confidence": "medium" },
+    { "id": "search_antenna", "name": "Search antenna raised (not stowed for transport)",
+      "enable": [ { "control": "apu.stow", "is": 1 } ],
+      "start_time_s": { "value": 30, "source": "sam3d", "confidence": "estimate", "notes": "No source gives the folding time." },
+      "stop_time_s": { "value": 30, "source": "sam3d", "confidence": "estimate", "notes": "No source gives the folding time." },
+      "source": "gs, wrk", "confidence": "medium" },
+    { "id": "apu_free", "name": "АПУ unlocked (can slew in azimuth)",
+      "enable": [ { "control": "apu.lock", "is": 1 } ],
+      "prerequisites": [ { "input": "vehicle_stopped", "is": true } ],
+      "source": "wrk (unlocked at a halt; 13 s norm includes unlocking and slewing, so unlocking itself is quick)", "confidence": "medium",
+      "notes": "Faulting when the vehicle moves with the АПУ unlocked is a SAM3D rule (sam3d, estimate): the sources only say it is locked for the march." },
+    { "id": "soc_antenna", "name": "SOC search antenna rotating",
+      "enable": [ { "control": "soc.search", "is": 1 }, { "subsystem": "power", "is": "ready" }, { "subsystem": "search_antenna", "is": "ready" } ],
+      "source": "samsim_osa p15; power and raised antenna: wrk, gs", "confidence": "high", "notes": "Works on the move (wrk, mis)." },
+    { "id": "soc_transmitter", "name": "SOC transmitter radiating",
+      "enable": [ { "control": "soc.hv", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
+      "source": "samsim_osa p15", "confidence": "high", "notes": "Warm-up time not given." },
+    { "id": "ssc_transmitter", "name": "SSC transmitter radiating",
+      "enable": [ { "control": "ssc.tx", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
+      "source": "samsim_osa p16", "confidence": "high", "notes": "Warm-up time not given." },
+    { "id": "tov_camera", "name": "TOV camera on",
+      "enable": [ { "control": "tov.power", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
+      "source": "samsim_osa p17", "confidence": "high" },
+    { "id": "auto_acquisition", "name": "Automatic target acquisition mode (ЦУ АЗ)",
+      "enable": [ { "control": "fo.cu_az", "is": 1 } ],
+      "latching": true, "release": [ { "control": "fo.ru", "is": 1 } ],
+      "source": "samsim_osa p23", "confidence": "low",
+      "notes": "Engaging is from the manual. Leaving the mode is not described; release by РУ (manual mode) is a guess to check in the game." },
+    { "id": "auto_tracking", "name": "Automatic tracking (ТСЦ angle, АВТОМАТ range lamps)",
+      "enable": [ { "subsystem": "auto_acquisition", "is": "ready" }, { "subsystem": "ssc_transmitter", "is": "ready" }, { "subsystem": "apu_free", "is": "ready" }, { "input": "target_captured", "is": true } ],
+      "source": "samsim_osa p24; АПУ unlocked: wrk", "confidence": "medium" },
+    { "id": "tv_angle_track", "name": "TOV angle tracking (ПА)",
+      "enable": [ { "control": "fo.pa", "is": 1 }, { "subsystem": "tov_camera", "is": "ready" }, { "subsystem": "apu_free", "is": "ready" } ],
+      "latching": true, "release": [ { "control": "fo.ru", "is": 1 } ],
+      "source": "samsim_osa p25, p34", "confidence": "low", "notes": "Release by РУ is a guess to check in the game." },
+    { "id": "range_semi_auto", "name": "SSC range-only tracking (ПОЛУАВТОМАТ)",
+      "enable": [ { "control": "ro.semi_auto", "is": 1 }, { "subsystem": "ssc_transmitter", "is": "ready" } ],
+      "latching": true, "release": [ { "control": "ssc.tx", "is": 0 } ],
+      "source": "samsim_osa p26", "confidence": "low", "notes": "Release when the SSC transmitter goes off is a guess to check in the game." },
+    { "id": "missile_prep", "name": "Missile, SPK and SVR preparation (ЗАХВАТ, ВКЛ ВЫС, then ПУСК ГОТОВ)",
+      "enable": [ { "subsystem": "power", "is": "ready" } ],
+      "enable_any": [ { "control": "fo.bort_spk", "is": 1 }, { "input": "target_near_zone", "is": true } ],
+      "start_time_s": { "value": 15, "source": "samsim_osa p27 (gyroscope spin-up before launch: 15 s), p29", "confidence": "medium" },
+      "source": "samsim_osa p29 (starts automatically with ВНИМАНИЕ), p34 (started by hand with БОРТ СПК)", "confidence": "medium",
+      "notes": "Ready = ПУСК ГОТОВ lit. Whether preparation continues if ВНИМАНИЕ goes out again is not described." },
+    { "id": "launch_armed", "name": "Launch circuit armed (live-fire mode, key turned, missile ready)",
+      "enable": [ { "control": "fo.mode", "is": 0 }, { "control": "fo.key", "is": 2 }, { "subsystem": "missile_prep", "is": "ready" } ],
+      "source": "samsim_osa p29–30", "confidence": "medium",
+      "notes": "SAM3D's name for the condition under which ПУСК launches; not a lamp in the manual." }
+  ],
+
+  "procedures": [
+    {
+      "id": "power_up", "name": "Start the gas-turbine power unit",
+      "source": "wrk (GTA powers the vehicle on the move and at a halt; readiness within 4 min including its start); steps: sam3d", "confidence": "estimate",
+      "notes": "Can be done on the move. The real start sequence isn't public; one switch stands in for it.",
+      "steps": [
+        { "control": "pwr.gta", "position": 1, "description": "Start the ГТА" }
+      ]
+    },
+    {
+      "id": "search_on_march", "name": "Search with the SOC on the march",
+      "source": "wrk (search possible on the move; a trained crew starts in beam II with СДЦ on); control names: samsim_osa p15", "confidence": "medium",
+      "steps": [
+        { "control": "soc.search", "position": 1, "description": "ПОИСК ВКЛ, SOC antenna rotation on",
+          "wait_for": [ { "subsystem": "power", "is": "ready" } ] },
+        { "control": "soc.beam", "position": 1, "description": "II ЛУЧ, search in the middle beam" },
+        { "control": "soc.mti", "position": 1, "description": "СДЦ on, so ground clutter drops out" },
+        { "control": "soc.hv_cover", "position": 1, "description": "Remove the guard over ВЫСОКОЕ" },
+        { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, SOC transmitter on" }
+      ]
+    },
+    {
+      "id": "deploy_at_halt", "name": "Come into action at a halt",
+      "source": "wrk (pull off the road, unlock the АПУ; engine generator works at a halt only); steps: sam3d", "confidence": "estimate",
+      "notes": "Tracking and launch are only possible from a halt (wrk, mis). The 13 s norm for unlocking, slewing and taking up manual tracking (wrk) is the target for a trained crew.",
+      "steps": [
+        { "control": "apu.lock", "position": 1, "description": "Vehicle stopped off the road: unlock the АПУ",
+          "wait_for": [ { "input": "vehicle_stopped", "is": true } ] },
+        { "control": "pwr.pto", "position": 1, "description": "Put the engine power take-off generator on line as a second power source" }
+      ]
+    },
+    {
+      "id": "acquire_with_soc", "name": "Autonomous target acquisition with the SOC radar",
+      "source": "samsim_osa p21–24", "confidence": "high",
+      "notes": "Several steps wait for target geometry (50, 35, 30 km) that the sim provides later; those waits are in the descriptions.",
+      "steps": [
+        { "control": "soc.search", "position": 1, "description": "When the target nears 50 km on the plotting board: ПОИСК ВКЛ, SOC antenna rotation on" },
+        { "control": "soc.hv_cover", "position": 1, "description": "Remove the guard over ВЫСОКОЕ" },
+        { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, SOC transmitter on" },
+        { "control": "soc.beam", "position": 3, "description": "I–III ЛУЧ, scan all three height beams" },
+        { "control": "soc.range", "position": 2, "description": "ДАЛЬНОСТЬ 10–45 km" },
+        { "control": "soc.beam", "position": 0, "description": "When the echo shows, select the beam it appeared in (beam I in the manual's example)" },
+        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel" },
+        { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
+        { "control": "soc.range", "position": 1, "description": "At about 35 km: ДАЛЬНОСТЬ 0–35 km. Then move the range gate to about 27.5 km and turn the azimuth wheel until the SSC line crosses the target mark" },
+        { "control": "ssc.el_lock", "position": 1, "description": "Unlock the elevation wheel" },
+        { "control": "ssc.el_light", "position": 1, "description": "ПОДСВЕТКА, light the elevation indicator" },
+        { "control": "fo.cu_az", "position": 1, "description": "ЦУ АЗ, automatic target acquisition" },
+        { "control": "ssc.tx_cover", "position": 1, "description": "Remove the guard over ПЕРЕДАТЧИК" },
+        { "control": "ssc.tx", "position": 1, "description": "At about 30 km: ПЕРЕДАТЧИК ВКЛ, SSC transmitter on. The SSC then captures the target by itself (ТСЦ and АВТОМАТ light)" }
+      ]
+    },
+    {
+      "id": "track_low_target", "name": "Tracking a target at ultra-low altitude",
+      "source": "samsim_osa p25–26", "confidence": "high",
+      "steps": [
+        { "control": "tov.power", "position": 1, "description": "НЛЦ is lit: РАБ.РЕЖ. ВКЛ, TOV camera on",
+          "wait_for": [ { "input": "target_too_low", "is": true } ] },
+        { "control": "fo.ru", "position": 1, "description": "РУ, manual tracking mode. Then bring the target under the TV crosshair with the azimuth and elevation wheels" },
+        { "control": "fo.pa", "position": 1, "description": "ПА, angle tracking with the TOV camera",
+          "wait_for": [ { "subsystem": "tov_camera", "is": "ready" } ] },
+        { "control": "ro.semi_auto", "position": 1, "description": "Bring the echo into the range gate with the range wheel, then ПОЛУАВТОМАТ, range-only tracking",
+          "wait_for": [ { "subsystem": "ssc_transmitter", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "prepare_firing", "name": "Preparation for firing",
+      "source": "samsim_osa p29", "confidence": "high",
+      "notes": "Also: check the missiles available on each launcher and watch the target distance on the ДЦ voltmeter (10 V = 10 km).",
+      "steps": [
+        { "control": "fo.mode", "position": 0, "description": "РОД РАБОТЫ to БР, live firing" },
+        { "control": "fo.key", "position": 1, "description": "Insert the launch authorization key (ЗАПРЕТ ПУСКА)" }
+      ]
+    },
+    {
+      "id": "launch", "name": "Launch",
+      "source": "samsim_osa p29–30", "confidence": "high",
+      "notes": "After СХОД, when ПУСК ГОТОВ lights again, a second missile can be launched with ПУСК.",
+      "steps": [
+        { "control": "fo.key", "position": 2, "description": "ПУСК ГОТОВ and ЦЕЛЬ В ЗОНЕ lit: turn the launch key",
+          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" }, { "input": "target_in_zone", "is": true } ] },
+        { "control": "fo.launch", "position": 1, "description": "ПУСК",
+          "wait_for": [ { "subsystem": "launch_armed", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "emcon_tv_engagement", "name": "Engagement with emissions control (TV only, radars silent)",
+      "source": "samsim_osa p33–35", "confidence": "high",
+      "notes": "Range is judged from the target's size in the narrow-lens crosshair, so ЦЕЛЬ В ЗОНЕ is not awaited.",
+      "steps": [
+        { "control": "tov.power", "position": 1, "description": "When the target nears 50 km on the plotting board: РАБ.РЕЖ. ВКЛ, TOV camera on" },
+        { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
+        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel, then turn towards the target's azimuth from the plotting board" },
+        { "control": "ssc.el_light", "position": 1, "description": "ПОДСВЕТКА, light the elevation indicator" },
+        { "control": "ssc.el_lock", "position": 1, "description": "Unlock the elevation wheel (p23), then scan slowly upwards until the target shows on the TV and bring it into the crosshair" },
+        { "control": "fo.pa", "position": 1, "description": "ПА, angle tracking with the TOV camera",
+          "wait_for": [ { "subsystem": "tov_camera", "is": "ready" } ] },
+        { "control": "fo.mode", "position": 0, "description": "РОД РАБОТЫ to БР, live firing" },
+        { "control": "fo.bort_spk_cover", "position": 1, "description": "Remove the guard over БОРТ СПК" },
+        { "control": "fo.bort_spk", "position": 1, "description": "БОРТ СПК ВКЛ, start missile, SPK and SVR preparation by hand" },
+        { "control": "fo.pomekha", "position": 1, "description": "ПОМЕХА up, so the fuse arms right after launch" },
+        { "control": "fo.key", "position": 1, "description": "Insert the launch authorization key" },
+        { "control": "tov.fov", "position": 1, "description": "УГОЛ ЗРЕНИЯ УЗКИЙ, narrow lens" },
+        { "control": "fo.key", "position": 2, "description": "When the target fills the crosshair (roughly within range): turn the launch key",
+          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" } ] },
+        { "control": "fo.launch", "position": 1, "description": "ПУСК",
+          "wait_for": [ { "subsystem": "launch_armed", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "stow_for_march", "name": "Stow for the march",
+      "source": "wrk (on the march the АПУ is locked in the travel position, SSC antenna facing rear); steps: sam3d", "confidence": "estimate",
+      "notes": "The SOC can keep searching on the march, so it is left alone. Take out the launch key before this if it is in (turn it back, then remove it).",
+      "steps": [
+        { "control": "ssc.tx", "position": 0, "description": "ПЕРЕДАТЧИК ОТКЛ, SSC transmitter off" },
+        { "control": "ssc.tx_cover", "position": 0, "description": "Close the guard over ПЕРЕДАТЧИК" },
+        { "control": "tov.power", "position": 0, "description": "РАБ.РЕЖ. ВЫКЛ, TOV camera off" },
+        { "control": "fo.bort_spk", "position": 0, "description": "БОРТ СПК off" },
+        { "control": "fo.bort_spk_cover", "position": 0, "description": "Close the guard over БОРТ СПК" },
+        { "control": "pwr.pto", "position": 0, "description": "Take the power take-off generator off line" },
+        { "control": "apu.lock", "position": 0, "description": "Turn the АПУ so the SSC antenna faces rear (azimuth wheel to 180°), then lock it for travel" }
+      ]
+    },
+    {
+      "id": "stow_for_transport", "name": "Stow for air or rail transport",
+      "source": "gs (search radar folds back 90° for air transport and fast road travel), wrk (АПУ stowed for Il-76 transport); steps: sam3d", "confidence": "estimate",
+      "notes": "Run stow_for_march first.",
+      "steps": [
+        { "control": "soc.hv", "position": 0, "description": "ВЫСОКОЕ ВЫКЛ, SOC transmitter off" },
+        { "control": "soc.hv_cover", "position": 0, "description": "Close the guard over ВЫСОКОЕ" },
+        { "control": "soc.search", "position": 0, "description": "ПОИСК ВЫКЛ, stop the SOC antenna" },
+        { "control": "apu.stow", "position": 0, "description": "Fold the search antenna down for transport",
+          "wait_for": [ { "input": "vehicle_stopped", "is": true }, { "subsystem": "soc_antenna", "is": "off" } ] },
+        { "control": "pwr.gta", "position": 0, "description": "Shut down the ГТА once the antenna is folded",
+          "wait_for": [ { "subsystem": "search_antenna", "is": "off" } ] }
+      ]
+    }
+  ]
+}

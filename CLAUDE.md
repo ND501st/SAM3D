@@ -15,6 +15,7 @@ The first system is the **9K33 Osa**.
 | `prototype/` | Pure-Python mirror of simcore for fast experiments (runs on the Mac too). |
 | `unreal/SAM3D/` | UE5 C++ project. Includes simcore through `SimCoreIncludes.h` only. |
 | `data/systems/` | Per-system parameters. **Every value needs a source.** |
+| `data/procedures/` | Per-system consoles: controls, subsystems, procedures (loaded by `console_data.hpp`). Same sourcing rules. |
 | `docs/` | Plan, architecture, sources, dev setup, reverse-engineering notes. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
 | `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash). |
@@ -27,6 +28,7 @@ cmake -S simcore -B simcore/build -DCMAKE_BUILD_TYPE=Release
 cmake --build simcore/build --config Release
 ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/engagement_demo out/demo.acmi     # Windows: simcore\build\Release\engagement_demo.exe
+./simcore/build/procedure_demo                    # Osa console session + debrief (run from the repo root)
 
 # Python prototype
 python -m pytest prototype -q
