@@ -16,14 +16,15 @@ Or double-click `SAM3D.uproject` and let Unreal compile it.
 
 ## First level: Osa practice scenario on Cesium terrain
 
-1. Open `SAM3D.uproject`. **File → New Level → Empty Level**, save it as `Content/Maps/OsaPractice`.
-2. **Window → Cesium**. Sign in to Cesium ion (or paste your own token in the Cesium panel yourself), then use
-   **Quick Add → Cesium World Terrain + Bing Maps Aerial imagery**. This adds a `CesiumGeoreference`, the terrain
-   tileset, and `CesiumSunSky` (lighting).
-3. From Place Actors, drag in **Sim Scenario Director**. In its details:
-   - **Scenario File**: `scenarios/osa_practice.json` (the default).
-   - **Terrain Tileset**: pick the `Cesium World Terrain` actor.
-4. Press **Play**. The director loads the scenario, moves the georeference origin onto the scenario origin
+The level is in the repository (`Content/Maps/OsaPractice`, stored with Git LFS: run `git lfs install` once per
+clone) and the editor opens it on startup. It holds a `CesiumGeoreference`, Cesium World Terrain with Bing Maps
+aerial imagery, a `CesiumSunSky` and a **Sim Scenario Director** (scenario `scenarios/osa_practice.json`, terrain
+tileset set). Don't place a Sim Osa Vehicle in it: the director spawns the player's.
+
+1. Open `SAM3D.uproject`.
+2. **Window → Cesium** and sign in to Cesium ion once per machine (or paste your own token). The token is saved under
+   `Content/CesiumSettings/`, which git ignores; the level itself holds none.
+3. Press **Play**. The director loads the scenario, moves the georeference origin onto the scenario origin
    (46.9° N, 19.7° E), samples terrain heights for the simulation after a few seconds, spawns the Osa placeholder
    at the unit's position and gives you control of it, and spawns a cone for the target drone.
 
