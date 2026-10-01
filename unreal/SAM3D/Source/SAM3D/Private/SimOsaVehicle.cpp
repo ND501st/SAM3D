@@ -172,7 +172,9 @@ void ASimOsaVehicle::FollowGround()
 	const FVector Here = GetActorLocation();
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimOsaGround), false, this);
-	if (World->LineTraceSingleByChannel(Hit, Here + FVector(0, 0, 5000.0), Here - FVector(0, 0, 50000.0), ECC_Visibility, Params))
+	// Start well above: the vehicle can begin under the real terrain (scenario heights are approximate and Cesium
+	// heights are above the ellipsoid), and a trace that starts inside the ground never hits its surface.
+	if (World->LineTraceSingleByChannel(Hit, Here + FVector(0, 0, 300000.0), Here - FVector(0, 0, 300000.0), ECC_Visibility, Params))
 	{
 		const FRotator Pitch = FRotationMatrix::MakeFromXZ(FRotator(0.0, HeadingDeg, 0.0).Vector(), Hit.ImpactNormal).Rotator();
 		SetActorLocationAndRotation(Hit.ImpactPoint, Pitch);
@@ -288,7 +290,19 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	if (Pc->WasInputKeyJustPressed(CabinKey))
 	{
-		SetInCabin(!bInCabin);
+		if (bTouring)
+		{
+			StopCabinTour();
+		}
+		else
+		{
+			SetInCabin(!bInCabin);
+		}
+	}
+	if (bTouring)
+	{
+		UpdateTour(DeltaSeconds);
+		return;
 	}
 	if (!bInCabin)
 	{
@@ -357,4 +371,93 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		ShowFeedback(Cabin->ClickItem(HoveredItem, -1));
 	}
+}
+
+// ---------------------------------------------------------------------------------------------- cabin tour
+
+void ASimOsaVehicle::StartCabinTour(float SecondsPerView)
+{
+	bTouring = true;
+	TourSecondsPerView = FMath::Max(1.0f, SecondsPerView);
+	TourViews.Reset();  // built once the cabin layout is loaded
+	TourIndex = 0;
+	TourClock = 0.0f;
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin tour: starting, %.0f s per view"), TourSecondsPerView);
+}
+
+void ASimOsaVehicle::StopCabinTour()
+{
+	bTouring = false;
+	CabinCamera->SetFieldOfView(80.0f);
+	LookYawDeg = 0.0;
+	LookPitchDeg = 0.0;
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin tour: stopped"));
+}
+
+void ASimOsaVehicle::UpdateTour(float DeltaSeconds)
+{
+	if (TourViews.IsEmpty())
+	{
+		const int32 Stations = Cabin->GetNumStations();
+		if (Stations == 0)
+		{
+			return;  // no cabin yet
+		}
+		// Each seat as the operator sits, then a close-up of each instrument read from that seat.
+		for (int32 S = 0; S < Stations; ++S)
+		{
+			FSimCabinTourView Seat;
+			Seat.Station = S;
+			FVector Eye;
+			FRotator View;
+			Cabin->GetStationView(S, Eye, View, Seat.Label);
+			TourViews.Add(Seat);
+			for (int32 D = 0; D < Cabin->GetNumDisplays(); ++D)
+			{
+				FSimCabinTourView Close;
+				FString DisplayLabel;
+				if (Cabin->GetDisplayView(D, Close.Station, Close.Target, DisplayLabel) && Close.Station == S)
+				{
+					Close.bLookAt = true;
+					Close.Label = Seat.Label + TEXT(" - ") + DisplayLabel;
+					TourViews.Add(Close);
+				}
+			}
+		}
+		SetInCabin(true);
+		TourIndex = 0;
+		TourClock = 0.0f;
+		ShowTourView();
+		return;
+	}
+	TourClock += DeltaSeconds;
+	if (TourClock >= TourSecondsPerView)
+	{
+		TourClock = 0.0f;
+		TourIndex = (TourIndex + 1) % TourViews.Num();
+		ShowTourView();
+	}
+	ApplyStationView();
+	HoverText = FString::Printf(TEXT("Cabin tour %d/%d: %s"), TourIndex + 1, TourViews.Num(), *TourViews[TourIndex].Label);
+}
+
+void ASimOsaVehicle::ShowTourView()
+{
+	const FSimCabinTourView& V = TourViews[TourIndex];
+	Station = V.Station;
+	LookYawDeg = 0.0;
+	LookPitchDeg = 0.0;
+	FVector Eye;
+	FRotator View;
+	if (Cabin->GetStationView(Station, Eye, View, StationLabel) && V.bLookAt)
+	{
+		const FRotator Want = (V.Target - Eye).Rotation();
+		LookYawDeg = FRotator::NormalizeAxis(Want.Yaw - View.Yaw);
+		LookPitchDeg = Want.Pitch - View.Pitch;
+	}
+	CabinCamera->SetFieldOfView(V.bLookAt ? 40.0f : 80.0f);
+	ApplyStationView();
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin tour view %d/%d at t=%.0f s: %s"), TourIndex + 1, TourViews.Num(),
+		Sim != nullptr ? Sim->GetSimTimeSeconds() : 0.0, *V.Label);
 }

@@ -6,6 +6,7 @@
 #include "SimCabinComponent.generated.h"
 
 class UMaterialInstanceDynamic;
+class USimCabinDisplayComponent;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -53,7 +54,8 @@ struct SAM3D_API FSimCabinItem
 
 /**
  * The 3D cabin of the player's vehicle, built from the cabin layout the world subsystem loaded
- * (data/cabins/<system>.json, simcore/cabin.hpp): panels, controls and lamps from engine basic shapes.
+ * (data/cabins/<system>.json, simcore/cabin.hpp): panels, controls and lamps from engine basic shapes, and the
+ * instruments (scopes, TV, dials) as USimCabinDisplayComponent screens.
  *
  * Presentation only. Every control shows the console's state each frame (switch throw, knob angle, cover open,
  * key turned, wheel angle, lamp lit), and player actions go to USimWorldSubsystem::PlayerSetControl /
@@ -80,6 +82,13 @@ public:
 	/** A seat's eye point and view, relative to this component. False if there is no such station. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool GetStationView(int32 Station, FVector& OutLocation, FRotator& OutRotation, FString& OutLabel) const;
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	int32 GetNumDisplays() const;
+
+	/** Where a display is (centre, relative to this component), which station reads it, and its label. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	bool GetDisplayView(int32 Display, int32& OutStation, FVector& OutCentre, FString& OutLabel) const;
 
 	/** The control or lamp a world-space segment hits first; INDEX_NONE if none. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -121,6 +130,9 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PanelMeshes;
 
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USimCabinDisplayComponent>> Displays;
+
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
 
@@ -133,6 +145,10 @@ private:
 	/** Engine basic-shape material; its "Color" parameter tints each part. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ShapeMaterial;
+
+	/** Engine material that shows a texture ("SlateUI") unlit: the displays' screens. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> ScreenMaterial;
 
 	/** The layout the parts were built from; rebuilt when the subsystem loads another. */
 	const simcore::CabinLayout* BuiltLayout = nullptr;

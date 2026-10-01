@@ -84,6 +84,12 @@ void ASimScenarioDirector::SpawnPlayerVehicle(USimWorldSubsystem* Sim)
 	{
 		Pc->Possess(Vehicle);
 	}
+	const FString TourEnv = FPlatformMisc::GetEnvironmentVariable(TEXT("SAM3D_CABIN_TOUR"));
+	if (Vehicle != nullptr && (bCabinTour || !TourEnv.IsEmpty()))
+	{
+		const float Seconds = TourEnv.IsEmpty() ? CabinTourSecondsPerView : FCString::Atof(*TourEnv);
+		Vehicle->StartCabinTour(Seconds > 0.0f ? Seconds : CabinTourSecondsPerView);
+	}
 }
 
 void ASimScenarioDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)

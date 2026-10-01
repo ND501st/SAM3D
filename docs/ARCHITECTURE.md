@@ -76,7 +76,11 @@ The player's 3D cabin clicks call the same functions, so the player and the crew
 - Cabin layout (`cabin.hpp`, `data/cabins/<system>.json`): where stations, panels, controls and lamps sit in the
   vehicle's body frame, each control's look (toggle, rotary, key, button, wheel, cover), and when each lamp is lit
   (console conditions). Presentation data checked against the console: every control placed once, on its own
-  station's panel. Unreal's `USimCabinComponent` builds and animates the cabin from it.
+  station's panel. Its displays (search scope, range indicator, TV, dials, meters) say when each instrument is powered
+  and lit. Unreal's `USimCabinComponent` builds and animates the cabin from it.
+- Scopes (`scopes.hpp`): `SearchScope` keeps a search scope's sweep angle and fading echoes from the engagement
+  model's search picture, so the display shows an echo only after the sweep passes it. The engagement model's
+  `TrackReturns` are the tracking radar's echoes for the range indicator.
 - `SessionLog` (`debrief.hpp`): crew reports, equipment faults and player deviations on one clock, formatted as a
   debrief timeline and summary. No points: SAM Simulator's rule is "no points, as in reality".
   `examples/procedure_demo.cpp` runs an Osa session from the march to the debrief.

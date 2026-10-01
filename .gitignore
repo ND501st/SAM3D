@@ -61,3 +61,5 @@ ghidra_projects/
 
 # Cesium for Unreal request cache (local, regenerated)
 unreal/**/cesium-request-cache.sqlite*
+# Unreal's per-user scratch folder in Content
+unreal/**/Content/Developers/

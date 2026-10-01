@@ -62,6 +62,7 @@ struct ConsoleData {
     std::vector<Procedure> procedures;
     std::string launch_button;  // push-button that commands a launch (empty if the file has no "launch")
     std::string launch_armed;   // subsystem that must be ready for the button to launch
+    std::string launch_restarts;  // subsystem restarted by each launch (the next missile's preparation); may be empty
     bool has_sensors = false;
     SearchSensorDef search;
     TrackSensorDef track;
@@ -344,7 +345,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadLaunch(const json::Value& root, ConsoleData& out) {
         const json::Value* l = root.Find("launch");
         if (l == nullptr) return true;
-        if (!Keys(*l, "launch", {"button", "armed", "source", "confidence", "notes"}) ||
+        if (!Keys(*l, "launch", {"button", "armed", "restarts", "source", "confidence", "notes"}) ||
+            !OptionalString(*l, "launch", "restarts", out.launch_restarts) ||
             !RequireString(*l, "launch", "button", out.launch_button) ||
             !RequireString(*l, "launch", "armed", out.launch_armed) || !Provenance(*l, "launch")) {
             return false;
@@ -352,6 +354,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const ControlDef* b = out.panel.Find(out.launch_button);
         if (b == nullptr || b->kind != ControlKind::Momentary) return Fail("launch.button", "must be a button control");
         if (!out.equipment.Has(out.launch_armed)) return Fail("launch.armed", "unknown subsystem '" + out.launch_armed + "'");
+        if (!out.launch_restarts.empty() && !out.equipment.Has(out.launch_restarts)) {
+            return Fail("launch.restarts", "unknown subsystem '" + out.launch_restarts + "'");
+        }
         return true;
     }
 
@@ -475,12 +480,13 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string path = Index("subsystems", i);
             const json::Value& s = arr->items[i];
             if (!Keys(s, path, {"id", "name", "enable", "enable_any", "prerequisites", "latching", "release",
-                                "start_time_s", "stop_time_s", "source", "confidence", "notes"})) {
+                                "start_ready", "start_time_s", "stop_time_s", "source", "confidence", "notes"})) {
                 return false;
             }
             SubsystemDef def;
             if (!RequireString(s, path, "id", def.id) || !RequireString(s, path, "name", def.name) ||
                 !Provenance(s, path) || !OptionalBool(s, path, "latching", def.latching) ||
+                !OptionalBool(s, path, "start_ready", def.start_ready) ||
                 !LoadConditions(s, path, "enable", panel, eq, def.enable) ||
                 !LoadConditions(s, path, "enable_any", panel, eq, def.enable_any) ||
                 !LoadConditions(s, path, "prerequisites", panel, eq, def.prerequisites) ||

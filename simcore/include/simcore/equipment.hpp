@@ -18,6 +18,12 @@
 // Inputs are yes/no signals the rest of the sim sets (e.g. "target within 15 s
 // of the firing zone"), so lamps and automatic sequences can depend on them.
 //
+// A subsystem can start the session ready (`start_ready`, e.g. a mast that is
+// already up when the session begins); like any other it then stops at the first
+// update if its enable conditions don't hold. Restart() sends a running subsystem
+// back to the start of its warm-up (e.g. the next missile's preparation after a
+// launch).
+//
 // Placeholder model: a stopping subsystem winds down regardless of its
 // prerequisites, and a fault clears as soon as the subsystem is commanded off.
 #pragma once
@@ -106,6 +112,7 @@ struct SubsystemDef {
     std::vector<Condition> enable_any;     // if not empty, at least one must also hold
     bool latching = false;                 // stays commanded once enabled, until `release`
     std::vector<Condition> release;        // latching only; all true = commanded off (must not be empty)
+    bool start_ready = false;              // starts the session ready (not for latching subsystems)
 };
 
 struct SubsystemTransition {
@@ -147,6 +154,7 @@ public:
         if (def.id.empty() || index_.count(def.id) != 0) return false;
         if (def.start_time_s < 0.0 || def.stop_time_s < 0.0) return false;
         if (def.latching == def.release.empty()) return false;
+        if (def.start_ready && def.latching) return false;
         if (!RefsValid(def.enable, panel) || !RefsValid(def.prerequisites, panel) ||
             !RefsValid(def.enable_any, panel) || !RefsValid(def.release, panel)) {
             return false;
@@ -154,6 +162,10 @@ public:
         index_[def.id] = units_.size();
         Unit u;
         u.def = def;
+        if (def.start_ready) {
+            u.state = SubsystemState::Ready;
+            u.progress = 1.0;
+        }
         units_.push_back(std::move(u));
         return true;
     }
@@ -164,6 +176,18 @@ public:
     }
 
     bool Has(const std::string& id) const { return index_.count(id) != 0; }
+
+    // Back to the start of the warm-up, if it is ready or warming up; false otherwise (off, stopping, fault).
+    bool Restart(const std::string& id) {
+        const auto it = index_.find(id);
+        if (it == index_.end()) return false;
+        Unit& u = units_[it->second];
+        if (u.state != SubsystemState::Ready && u.state != SubsystemState::Starting) return false;
+        u.progress = 0.0;
+        if (u.state == SubsystemState::Ready) Go(u, SubsystemState::Starting);
+        if (u.def.start_time_s <= 0.0) Rise(u, 0.0);
+        return true;
+    }
 
     // Off for unknown ids.
     SubsystemState State(const std::string& id) const {

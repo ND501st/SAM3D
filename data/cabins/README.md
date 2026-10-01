@@ -46,12 +46,37 @@ reference point. Angles are in degrees in the file.
 }
 ```
 
+## Displays
+
+The instruments the crew reads. Each sits on a panel (`at_m` is its centre, `size_m` its width and height, all of it
+inside the panel), says when it is powered (`on_when`, `on_when_any`, console conditions; empty = always) and needs a
+`source` and `confidence`.
+
+| `kind` | Shows | Extra keys |
+|---|---|---|
+| `ppi` | The search radar's picture on a rotating sweep with fading echoes, on the scale the range selector picks; the tracking radar's azimuth line and range gate | `sweep_period_s`, `afterglow_s` |
+| `range_scope` | The tracking radar's range indicator: an upper sweep over its whole range with echoes as spikes, a lower sweep magnified around the range gate, and the range counter | `magnified_window_m` |
+| `tv` | The TV sight's picture, looking along the tracking radar's azimuth and elevation with the selected lens, and a crosshair | none |
+| `dial` | A needle turning with a control's value (one turn = `value_per_turn`), scale `0..labels_per_turn` in `marks` divisions; `lit_when` for its backlight | `control`, `marks`, `value_per_turn`, `labels_per_turn` |
+| `meter` | A needle swinging with `value x scale`, full deflection at `full_scale` `unit`; rests at 0 when not powered | `control`, `marks`, `scale`, `full_scale`, `unit` |
+
+```jsonc
+{ "id": "beta_c", "label": "βс", "kind": "dial", "panel": "ro_panel", "at_m": [0.42, 0.3], "size_m": [0.14, 0.14],
+  "control": "ssc.az_wheel", "marks": 12, "value_per_turn": 360, "labels_per_turn": 60,
+  "on_when": [ { "subsystem": "power", "is": "ready" } ], "lit_when": [ { "control": "ssc.az_light", "is": 1 } ],
+  "source": "samsim_osa p16", "confidence": "high" }
+```
+
+What the radars see comes from the engagement model (`EngagementModel::SearchPicture`, `TrackReturns`); a display
+only shows it. `ppi`, `range_scope` and `tv` need the console's `sensors` block.
+
 Rules the loader checks:
 
 - Each console control is placed at most once, on a panel whose station matches the control's `station`.
 - The default style follows the control: buttons and wheels by kind, a control that guards another is a `cover`,
   key switches are `key`, more than two positions is `rotary`, otherwise `toggle`. An explicit `style` must fit.
 - A cover or lock that isn't placed itself is put over the control it guards.
+- Displays must fit inside their panel and only use the keys of their kind.
 - Lamp conditions use the console's condition format (`data/procedures/README.md`); `color` is green, red, amber
   or white.
 

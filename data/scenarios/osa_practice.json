@@ -5,7 +5,7 @@
   "source": "sam3d",
   "confidence": "estimate",
   "notes": "Fictional. The place is a flat plain chosen for convenience. The target's speed, height, route and RCS are PLACEHOLDER numbers for exercising the pipeline. Capture and zone lamps come from the gameplay engagement model (data/gameplay/osa_ak.json), not from this file.",
-  "seed": 1,
+  "seed": 4,
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "terrain": { "type": "flat", "height_m": 110 },
   "own_unit": {

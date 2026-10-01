@@ -38,6 +38,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
 	FString CabinFile = TEXT("cabins/osa_ak.json");
 
+	/**
+	 * Hands-free test mode: the player's vehicle tours its cabin (every seat and instrument) while the scenario
+	 * plays. Also switched on by the environment variable SAM3D_CABIN_TOUR=<seconds per view> when the editor
+	 * starts, so a run can be checked from screenshots and the log without touching the keyboard.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Testing")
+	bool bCabinTour = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Testing", meta = (ClampMin = "1"))
+	float CabinTourSecondsPerView = 6.0f;
+
 	/** Move the level's Cesium georeference so its origin is the scenario origin, and convert through it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cesium")
 	bool bUseCesiumGeoreference = true;

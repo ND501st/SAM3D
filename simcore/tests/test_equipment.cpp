@@ -239,3 +239,49 @@ SC_TEST("crew: a new order supersedes; cancel clears the queue") {
     SC_EXPECT(HasReport(reports, CrewReport::Kind::Aborted, "superseded"));
     SC_EXPECT(HasReport(reports, CrewReport::Kind::Aborted, "cancelled"));
 }
+
+SC_TEST("equipment: start_ready subsystems begin ready; Restart repeats the warm-up") {
+    ControlPanel panel;
+    ControlDef sw;
+    sw.id = "mast";
+    sw.initial = 1;
+    SC_EXPECT(panel.AddControl(sw));
+    Equipment eq;
+    SubsystemDef mast;
+    mast.id = "mast_up";
+    mast.enable = {Condition::Control("mast", 1)};
+    mast.start_time_s = 10.0;
+    mast.stop_time_s = 10.0;
+    mast.start_ready = true;
+    SC_EXPECT(eq.AddSubsystem(mast, panel));
+    SC_EXPECT(eq.IsReady("mast_up"));
+    SC_EXPECT_NEAR(eq.Progress("mast_up"), 1.0, 1e-12);
+    eq.Update(0.1, panel);
+    SC_EXPECT(eq.IsReady("mast_up"));
+
+    // Restart: back to the start of the warm-up, ready again after its start time.
+    SC_EXPECT(eq.Restart("mast_up"));
+    SC_EXPECT(eq.State("mast_up") == SubsystemState::Starting);
+    SC_EXPECT_NEAR(eq.Progress("mast_up"), 0.0, 1e-12);
+    for (int i = 0; i < 99; ++i) eq.Update(0.1, panel);
+    SC_EXPECT(eq.State("mast_up") == SubsystemState::Starting);
+    eq.Update(0.1, panel);
+    SC_EXPECT(eq.IsReady("mast_up"));
+
+    // Nothing to restart once it is off; a start_ready subsystem that isn't enabled stops at the first update.
+    panel.Set("mast", 0);
+    for (int i = 0; i < 200; ++i) eq.Update(0.1, panel);
+    SC_EXPECT(eq.State("mast_up") == SubsystemState::Off && !eq.Restart("mast_up") && !eq.Restart("nope"));
+    SubsystemDef idle = mast;
+    idle.id = "idle";
+    SC_EXPECT(eq.AddSubsystem(idle, panel) && eq.IsReady("idle"));
+    eq.Update(0.1, panel);
+    SC_EXPECT(eq.State("idle") == SubsystemState::Stopping);
+
+    // Not for latching modes: they are engaged by a button press.
+    SubsystemDef latch = mast;
+    latch.id = "latch";
+    latch.latching = true;
+    latch.release = {Condition::Control("mast", 0)};
+    SC_EXPECT(!eq.AddSubsystem(latch, panel));
+}

@@ -67,10 +67,11 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     SC_EXPECT(s.procedures_aborted == 0 && s.procedures_completed >= 6);
     const std::string text = runner.Debrief();
     SC_EXPECT(text.find("LAUNCH") != std::string::npos && text.find("t1") != std::string::npos);
-    SC_EXPECT(s.hits + s.misses == 1);  // resolved by the gameplay engagement model
+    // Resolved by the gameplay engagement model; the scenario's seed (4) gives a hit, so the practice ends well.
+    SC_EXPECT(s.hits == 1 && s.misses == 0);
     SC_EXPECT(runner.Acmi().Text().find("Name=9K33M2 Osa-AK") != std::string::npos);
-    // Ends when the drone passes its last waypoint: 75 km at 150 m/s, less the capture radius.
-    SC_EXPECT(runner.Time() > 490.0 && runner.Time() < 505.0);
+    // Ends when the drone goes down: launch at about 235 s, about 22 s of flight.
+    SC_EXPECT(runner.Time() > 250.0 && runner.Time() < 265.0);
 }
 
 SC_TEST("scenario: same seed, same run; another seed changes crew timing") {
