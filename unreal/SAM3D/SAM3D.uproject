@@ -1,6 +1,6 @@
 {
   "FileVersion": 3,
-  "EngineAssociation": "",
+  "EngineAssociation": "5.7",
   "Category": "",
   "Description": "SAM3D - first-person 3D air-defence simulator built on the simcore library.",
   "Modules": [
@@ -14,6 +14,10 @@
     }
   ],
   "Plugins": [
+    {
+      "Name": "CesiumForUnreal",
+      "Enabled": true
+    },
     {
       "Name": "ModelingToolsEditorMode",
       "Enabled": true,

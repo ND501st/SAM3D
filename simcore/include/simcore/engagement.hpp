@@ -302,6 +302,27 @@ public:
         }
     }
 
+    // Missiles in flight for display: an illustrative straight path from the launch point to the target,
+    // advanced by the fraction of the flight time elapsed. Not a flight path.
+    struct MissileView {
+        int number = 0;
+        Vec3 position;
+        Vec3 velocity;
+    };
+
+    std::vector<MissileView> MissilesInFlight(double t, World& world, const std::vector<EngagementTarget>& targets) const {
+        std::vector<MissileView> out;
+        for (const Shot& s : shots_) {
+            if (s.done) continue;
+            const Aircraft* a = TargetAircraft(world, targets, s.target_id);
+            if (a == nullptr) continue;
+            const double f = Clamp((t - s.launch_t) / s.flight_time_s, 0.0, 1.0);
+            const Vec3 path = a->position - s.launch_pos;
+            out.push_back({s.number, s.launch_pos + path * f, path / s.flight_time_s});
+        }
+        return out;
+    }
+
     // Tacview: an illustrative missile path (straight line from the unit to the target), not a flight path.
     void WriteAcmi(AcmiWriter& acmi, double t, World& world, const std::vector<EngagementTarget>& targets) {
         for (Shot& s : shots_) {
@@ -321,6 +342,10 @@ public:
             s.acmi_shown = true;
         }
     }
+
+    // The unit moved (driven by the player or an AI driver).
+    void SetUnitPosition(const Vec3& unit_position) { unit_ = unit_position; }
+    const Vec3& UnitPosition() const { return unit_; }
 
     const std::vector<Contact>& SearchPicture() const { return picture_; }
     TrackMethod Method() const { return method_; }

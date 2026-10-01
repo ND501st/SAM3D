@@ -104,10 +104,28 @@ public:
     const ScenarioDef& Def() const { return def_; }
     ConsoleData& Console() { return console_; }
     World& GetWorld() { return world_; }
+    const World& GetWorld() const { return world_; }
+
+    // Missiles in flight, for display (empty without the engagement model).
+    std::vector<EngagementModel::MissileView> MissilesInFlight() {
+        if (!engagement_on_) return {};
+        return engagement_.MissilesInFlight(time_, world_, eng_targets_);
+    }
     SessionLog& Log() { return log_; }
     const AcmiWriter& Acmi() const { return acmi_; }
     bool EngagementOn() const { return engagement_on_; }
     const EngagementModel& Engagement() const { return engagement_; }
+
+    // The unit moved (e.g. the player drove it). Target ranges, triggers, sensors and the Tacview track follow.
+    void SetUnitPosition(const Vec3& enu) {
+        def_.unit_position = enu;
+        engagement_.SetUnitPosition(enu);
+    }
+    const Vec3& UnitPosition() const { return def_.unit_position; }
+
+    // Replace the scenario's flat ground, e.g. with heights sampled from Cesium. Null restores the flat ground.
+    // The terrain must outlive the runner or be replaced first.
+    void SetTerrain(const Terrain* terrain) { world_.SetTerrain(terrain != nullptr ? terrain : &ground_); }
 
     CrewMember* Crew(const std::string& name) {
         for (CrewMember& c : crew_) {
