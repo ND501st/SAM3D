@@ -68,6 +68,19 @@ faults red) and go to the Output Log (`LogSAM3D`). Driving off with the АПУ u
 **Your Cesium ion token** is saved by the plugin under `Content/CesiumSettings/`, which is git-ignored so it
 never reaches the repository.
 
+## Hands-free test run
+
+Tick **Cabin Tour** on the Sim Scenario Director, or start the editor with the environment variable
+`SAM3D_CABIN_TOUR=<seconds per view>`. On Play the camera enters the cabin and steps through every seat and a
+close-up of every instrument while the scenario plays itself, logging each view (`LogSAM3D: Cabin tour view 4/10 at
+t=78 s: Range officer - SOC indicator`). A run can then be checked from screenshots and the log without the
+keyboard. C stops it.
+
+```
+set SAM3D_CABIN_TOUR=6
+D:\UE_5.7\Engine\Binaries\Win64\UnrealEditor.exe C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject
+```
+
 ## Code map
 
 | File | Purpose |
