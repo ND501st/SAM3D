@@ -1,133 +1,131 @@
 # Development roadmap
 
 How the project gets built, in order. Complements `PROJECT_PLAN.md` (goals and milestones) with the concrete sequence,
-what blocks what, and how each task is finished. Written 30 Sep 2026.
+what blocks what, and how each task is finished. Written 30 Sep 2026; **re-sequenced 2 Oct 2026** after the research
+review (`docs/BRIEFING_2026-10.md`).
 
-**Status (1 Oct 2026, `885f568`):** phases 1-3 done; phase 4 done except Chaos Vehicles, the real model and the
-performance check; phase 0 open only for merging the stacked PRs. Phase 5: 5.1, 5.2, 5.4 (lamps) on
-`feature/cabin`, 5.3 (scopes) on `feature/scopes`; next phase 6. Details in `docs/HANDOFF.md` §8.
+**Status (2 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check),
+merged to `main` on 2 Oct 2026 (PRs ND501st/SAM3D#1–#8). **The briefing's decisions were all adopted (five-man
+crew, real timings with time compression, manual TV tracking, calibrated hit chances, Osa-AK, Osa scenarios). Next:
+phase 6, the accuracy pass, starting with 6.1.** The old "crew and mission"
+phase is now phase 8, after the battery (phase 7), because the real Osa got most of its targets from the battery's
+PU-12 and the crew changes ripple through everything after them.
 
 ## Principles
 
 1. **simcore is the game, Unreal is the presentation.** Build and test behaviour in simcore first; Unreal only displays it.
-2. **Procedures and consoles are the heart of the game.** SAM Simulator is about operating the system correctly, so
-   operator procedures, interlocks, crew and scenarios come before any deeper physics.
-3. **Vertical slice first.** One system (Osa), one complete engagement, before a second system.
-4. **Small PRs on branches**, one topic each. Never commit to `main` directly.
-5. **Definition of done for every task:** builds with warnings-as-errors, tests added, `tools/verify.ps1` passes, docs
-   updated if behaviour or data format changed. Unreal changes: the user builds and plays it; Claude can't run the editor.
-6. **Public and declassified sources only.** Every data value has `source` and `confidence`. Code and tests use labelled
-   placeholder numbers. SAM Simulator's art, sounds and `sam.exe` never enter git.
+2. **Procedures and consoles are the heart of the game.** Operator procedures, interlocks, crew, battery and scenarios
+   come before any deeper physics.
+3. **Accuracy before features.** When research shows the model is wrong, fix the data model before building UI on it.
+4. **Vertical slice first.** One system (Osa-AK), one battery position, one complete mission, before a second system.
+5. **Small PRs on branches**, one topic each. Never commit to `main` directly.
+6. **Definition of done:** builds with warnings-as-errors, tests added, `tools/verify.ps1` passes, docs updated if
+   behaviour or data format changed. Unreal changes: built from the command line and checked with
+   `tools/ue_cabin_check.py` where it applies; the user plays it.
+7. **Public and declassified sources only, best tier first** (`docs/SOURCES.md`). Every data value has `source` and
+   `confidence`; disagreements between sources are recorded, not hidden. SAM Simulator's art, sounds and `sam.exe`
+   never enter git.
 
-## Phase 0 - Environment and first contact (now)
+## Phases 0–5 (done)
 
-| # | Task | Blocked by |
+| Phase | What | Where |
 |---|---|---|
-| 0.1 | Unreal Engine install finishes (new Epic account) | download |
-| 0.2 | `gh auth login`, push `fix/windows-build-and-verify`, open PR | user sign-in |
-| 0.3 | Decide whether `docs/HANDOFF.md` and this file get committed | - |
-| 0.4 | Switch `SAM3D.uproject` to the installed engine, generate project files, build Development Editor | 0.1 |
-| 0.5 | Fix whatever the first-ever Unreal compile reports; play the demo level (see `unreal/README.md`) | 0.4 |
-| 0.6 | Confirm CI is green on GitHub (Ubuntu, Windows, macOS, Python) | 0.2 |
+| 0 | Environment: Windows build, UE 5.7, Cesium, `gh`, CI | PR #1 |
+| 1 | Consoles and procedures from data; equipment and interlocks; crew order queue; debrief | PR #2 |
+| 2 | Scenarios, deterministic runner, `osa.json` (vehicle, crew, power) | PR #3 |
+| 3 | Gameplay-level engagement model (search picture, lock/break-lock, outcome resolver) | PR #4 |
+| 4 | Unreal bring-up: scenario mode, Cesium terrain, placeholder Osa (open: 4.3 Chaos Vehicles, real model, 4.5 performance check) | PR #5 |
+| 5 | 3D cabin: layout data, player actions judged by a tracker, instruments (search scope, range indicator, TV, dials, voltmeter), hands-free tour and scripted checks | PRs #6, #7 |
 
-**Exit:** demo engagement plays in the editor, CI green, the PR is merged.
+## Phase 6 - Accuracy pass (simcore, data, cabin)
 
-## Phase 1 - Console and procedure system (no Unreal needed, start immediately)
+Corrections from `docs/research/OSA_RESEARCH_2026-10.md`. Each task names the research section it comes from.
 
-Why first: it is the core of the game, it can be tested headless, and it does not depend on the creator's answers
-(placeholder procedures are fine until real ones arrive).
-
-| # | Task | Notes |
+| # | Task | Research |
 |---|---|---|
-| 1.1 | Data-driven panels and procedures: JSON loader for `ControlDef`/`Procedure` | no third-party deps; a tiny hand-written parser, or a generated header |
-| 1.2 | Interlocks and dependencies ("switch A needs B"), warm-up timers, states (off / warming / ready / fault) | extends `ControlPanel` |
-| 1.3 | Osa power-up -> deploy -> ready -> stow state machine, using generic labelled placeholder steps | real steps replace placeholders later |
-| 1.4 | Crew order API: orders queue, priorities, reaction-time and error model, status reports back to the player | builds on `CrewMember` |
-| 1.5 | Score/deviation reporting: what the player or crew got wrong, and when | feeds the debrief |
-| 1.6 | Tests for each of the above; extend the demo to print a procedure run | |
+| 6.1 | **Five-man crew and seats.** Split the "range officer" into the senior operator (search radar, IFF, azimuth) and the operator (range); the "firing officer" becomes the deputy commander (elevation, TV, launch); the commander receives designations and gives orders; the driver. Console `station` fields, cabin layout (five seats, operators' cabin behind the driver's cab), procedures, scenario crews, aim roles. Panel detail: red dots marking each control's starting position | §2, §6 |
+| 6.2 | **Real start-up and readiness states.** Switch-on cycle and a function-check procedure (about 3.8 + 3.0 min cold), computer warm-up (100 s), march-to-combat ≤ 4 min, reaction 26–40 s as test targets; scenarios start cold, powered on the march, or deployed (a powered battery stops and deploys fast); crew-skill timing for NPCs (next target 40–120 s, unverified); time compression so it stays playable | §3, §10, §12 |
+| 6.3 | **Missile load, selection and channels.** Six containers (1–3 I, 1–3 II) with ammunition lamps; automatic selection, outer first; selector switch; two channels, ≥ 4 s between launches; per-channel lamp sequence СХОД → ЗАХВАТ → СР.Л → УЗКИЙ ЛУЧ → К3; command transmitter on at ВНИМАНИЕ; preparation at "target in zone"; fix the ЗАХВАТ / ВКЛ ВЫС mapping | §6 |
+| 6.4 | **Search radar.** 33 rpm; elevation beams I/II/III that decide what the radar sees (4°, 4°, 19° high), plus the beam indicator; shorter detection and capture ranges against low targets (27 km and 14 km at 50 m, original Osa); range rings as operators describe them; IFF interrogation and friendly targets; overhead blind cone; normal video vs MTI | §4 |
+| 6.5 | **Vehicle heading and orientation.** Drop "the hull faces north": azimuths relative to the hull, the navigation/orientation set aligned at a halt, designation errors when it isn't | §3, §7 |
+| 6.6 | **Manual TV tracking.** The TV channel follows the wheels (player) or a skill model (NPC); 3-mil reticle; operator lens fields; memory mode; range judged from the reticle | §5 |
+| 6.7 | **Zones and guidance methods.** Head-on, pursuit and optical "Ф" zones; methods T/T, Горка, Ф, Н chosen automatically; hit chances calibrated inside the NVA single-shot ranges and Korovin's low-altitude figures (0.35–0.4 at 50 m) (game-balance file) | §5 |
+| 6.8 | **Citations.** Replace Western "facts" citations in `data/` with operator-country sources; record conflicts | §1, §10 |
 
-**Exit:** a headless scenario where a crew member powers up and stows the Osa from an order, with a correct-step and
-wrong-step test for every interlock.
+**Exit:** the practice scenario runs with five crew, real timings (with time compression), six missiles and a
+two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_cabin_check.py` shows it.
 
-## Phase 2 - Scenarios and debrief (simcore, still no Unreal)
-
-| # | Task |
-|---|---|
-| 2.1 | Scenario file format (JSON): origin, terrain, own unit, targets with waypoints, triggers, win/lose conditions |
-| 2.2 | Scenario loader + runner in simcore, with deterministic seeds |
-| 2.3 | Debrief report (text + ACMI): detections, launches, outcomes, procedure deviations |
-| 2.4 | `data/systems/osa.json` with cited, rated values, filled only from public sources |
-
-## Phase 3 - Engagement outcome model (needs a decision, see below)
-
-Start from what exists: flat-earth point-mass missile, PN guidance, proximity fuze, single-look radar detection.
-Gameplay needs, in order of value:
+## Phase 7 - Battery and PU-12
 
 | # | Task |
 |---|---|
-| 3.1 | Scanning search radar and a track radar with lock/break-lock behaviour at gameplay level (states the operator sees) |
-| 3.2 | **Outcome resolver** (abstracted): hit/miss decided from tunable gameplay factors - operator procedure quality, tracking quality, target type and manoeuvre - rather than from detailed physics |
-| 3.3 | Target AI behaviour: attack profiles, terrain masking, evasion at gameplay level |
-| 3.4 | Keep `prototype/` in parity for anything both implement |
+| 7.1 | PU-12 command post in simcore: air picture from the regiment, updated once a minute; SAM Simulator's plotting-board notation (target number, height, type, formation) |
+| 7.2 | Target designation by radio: the battery commander (NPC or player) gives "azimuth, range" to each vehicle; the vehicle commander passes it on |
+| 7.3 | Four vehicles per battery (others NPC-crewed) and the TZM: reload 6 missiles in about 6 min |
+| 7.4 | Fuel: turbine and take-off generator consumption, the half-tank rule, refuelling from the TZM |
+| 7.5 | NPC battery behaviour from the battery tactics in the research (§7): march spacing, short-halt drill, combat formation in pairs, reload vehicles behind, halts every 3–4 h; batteries feeding each other's air picture |
+| 7.6 | Prepared positions: emplacements, nets, dummy positions, grid power in peacetime and diesel when cut off (a third power option) |
+| 7.7 | Unreal: plotting board in the PU-12, radio messages, battery vehicles on the map |
 
-**Decision needed from the user:** how far the physics goes (see "Open decision" below). Tasks 3.1-3.4 are scoped
-to the gameplay-level option until the user says otherwise.
-
-## Phase 4 - Unreal bring-up (after Phase 0)
-
-| # | Task |
-|---|---|
-| 4.1 | Cesium for Unreal plugin, `CesiumGeoreference` matching the director's origin |
-| 4.2 | `simcore::Terrain` backed by Cesium heights (line traces or height query), cached to keep the sim at 100 Hz |
-| 4.3 | Drivable Osa proxy (Chaos Vehicles), placeholder mesh from Blender |
-| 4.4 | Deploy/stow driven by the Phase 1 state machine: animations follow sim state, never the reverse |
-| 4.5 | Performance check: 100 Hz sim step cost, terrain queries, frame time |
-
-## Phase 5 - 3D cabin
+## Phase 8 - Crew and mission (the vertical slice)
 
 | # | Task |
 |---|---|
-| 5.1 | First-person interaction framework: look, reach, click/drag controls |
-| 5.2 | Controls bound to `ControlPanel` by `ControlDef.id`; the panel layout is data, not hard-coded |
-| 5.3 | Radar scopes as render targets fed by sim data |
-| 5.4 | Lights, indicators, audio cues driven by panel state |
-| 5.5 | Placeholder cabin first; real art only after the creator's permission, or original art otherwise |
-
-## Phase 6 - Crew and mission (the vertical slice)
-
-| # | Task |
-|---|---|
-| 6.1 | Two NPC crew: bodies, animations, seat positions, voice-line hooks |
-| 6.2 | Order menu (radial or list) that calls the Phase 1 crew API |
-| 6.3 | One scripted mission end to end: drive, choose position, deploy, engage, stow, debrief |
-| 6.4 | Playtest pass and balance; fix the rough edges |
+| 8.1 | NPC crew bodies, animations, seats, voice-line hooks (five seats) |
+| 8.2 | Order menu (radial or list) on top of the crew API; the player can take any seat |
+| 8.3 | One mission end to end: march, choose a position, orient, deploy, function check, engage, reload, stow, debrief |
+| 8.4 | Playtest and balance |
 
 **Exit = M2:** a person can play the whole mission without touching the editor.
 
+## Phase 9 - Threats
+
+| # | Task |
+|---|---|
+| 9.1 | Jamming at gameplay level: range-gate pull-off on the search scope, noise jammers, method Н, the ПОМЕХА switch |
+| 9.2 | Anti-radiation missiles and the drills (stop emitting, relocate; TV-first tracking, the search radar on for two turns, brief tracking-radar bursts); EMCON TV engagement as a full mission |
+| 9.4 | ECCM at gameplay level: mixed (semi-automatic/automatic) tracking, the external-coherence MTI mode against chaff, counter-jamming only while firing |
+| 9.3 | Target behaviour: pop-up helicopters, low strike runs, evasion, terrain masking |
+
+## Phase 10 - Scenarios and training
+
+| # | Task |
+|---|---|
+| 10.1 | Training-range scenarios in the style of Ashuluk / Kapustin Yar / Ustka / NAMFI (drones, P-15 targets) |
+| 10.2 | Angola 1983–88 (dug-in Osa-AK unit, night moves, night bombers; Cuito Cuanavale) and Lebanon, 24 July 1982 |
+| 10.3 | Instructor mode modelled on the 9Ф632 trainer: a second player changes target behaviour live |
+
+## Later
+
+Phase 4 leftovers (Chaos Vehicles with a real model, performance check); Osa-AKM variant (9M33M3, hovering targets);
+ZSU-23-4 Shilka (shares the PU-12); mission editor; multiplayer crew.
+
 ## Parallel track (any time)
 
-- **Creator outreach:** send the message with the three open questions (VB6 source or notes, written permission for art
-  and procedures, manuals). Drafting it is a task Claude can do now. The answers decide how much reverse-engineering
-  is ever needed.
-- **SAM Simulator archive** (`reference/samsimv9302.rar`): extract into `reference/samsim/` when panel art or
-  behaviour reference is needed. Needs about 3.6 GB free on `C:`; move it to `D:` if space is tight.
-- **Reverse-engineering** (fallback only, and only with the creator's OK): VB Decompiler Lite for the form/handler
-  map, Ghidra for the timer handlers first. Notes go in `docs/re/<system>.md`.
-- **Tooling:** keep `verify.ps1`/`verify.sh` and CI current; add clang-tidy or sanitizers to CI when useful.
+- **Creator outreach:** drafted in `docs/outreach/creator_message_draft.md` (VB6 source or notes, art permission,
+  the source conflicts, operator contacts); the user reviews and sends it.
+- **Acquire documents:** the BSU textbook *Боевое применение ЗРК 9К33М3* (2020), the GDR troop handbooks (1984,
+  1990), the Angola memoir collection. Summaries go into `docs/re/osa.md` with page references.
+- **SAM Simulator archive** (`reference/samsimv9302.rar`) and its documentation set: keep using them as reference
+  for console behaviour; nothing from them enters git.
+- **Reverse-engineering** (fallback only, and only with the creator's OK): see `REVERSE_ENGINEERING.md`.
+- **Tooling:** keep `verify.ps1`/`verify.sh`, CI and the Unreal scripts (`tools/ue_remote.py`,
+  `tools/ue_cabin_check.py`) current.
 
 ## Decision: how far the physics goes (resolved)
 
 The user chose the **gameplay-level route** (phase 3 option 1, `e5271e7`): operators win or lose by how well they run
 the procedures, track and engage, and the resolver turns that into outcomes with tunable numbers in `data/gameplay/`.
-Detailed, calibrated weapon-performance physics is not scheduled; if it comes up again, treat it as its own
-discussion and PR.
+Hit chances are calibrated to published single-shot ranges (phase 6.7); detailed weapon-performance physics is not
+scheduled.
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Unreal C++ build breaks unnoticed | Build from the command line (`unreal/README.md`) after every Unreal change |
-| Creator never replies or says no | Original art and original procedures; Phase 1 works with placeholders either way |
-| Solo part-time scope | Vertical slice only; cut M3 ideas until M2 ships |
-| Disk space on `C:` (30 GB free) | Engine and caches on `D:`; repo stays on `C:` |
-| OneDrive sync damaging builds | Repo stays at `C:\dev\SAM3D`, out of OneDrive |
+| Phase 6 changes break saved data and tests | One task per PR; tests for each correction; data format changes documented in the READMEs |
+| Real timings make the game slow | Time compression (as SAM Simulator's F1–F4) and scenarios that start at different readiness states |
+| Manual TV tracking is too hard | NPC operators can track; an assist option if playtests demand it |
+| Creator never replies or says no | Original art and procedures from operator sources; the research file covers most behaviour |
+| Unreal C++ build breaks unnoticed | Build from the command line after every Unreal change; scripted checks |
+| Solo part-time scope | Vertical slice only; phases 9–10 wait until M2 ships |

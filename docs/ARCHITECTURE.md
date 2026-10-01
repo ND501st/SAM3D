@@ -103,9 +103,23 @@ Equipment sees every button press exactly once.
 
 ## Known limitations (deliberate, for now)
 
+Generic simcore models (used by the demo, not by the Osa's outcomes):
+
 - Aircraft: constant speed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances.
-- Missile: PN only, perfect target knowledge, no autopilot lag or noise (so misses are unrealistically small),
-  constant Cd, deterministic kill radius.
-- Radar: single-look SNR threshold (no Swerling fluctuation or Pd/Pfa), no clutter or multipath, no scanning or tracking loops.
-- Terrain: flat in the demo. `GridTerrain` exists; Cesium-backed terrain isn't implemented yet.
+- Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
+  deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
+- Radar physics: single-look SNR threshold, no clutter or multipath.
 - ISA atmosphere treats geopotential altitude as geometric (< 0.5 % error below 32 km).
+
+Osa model gaps found by the October 2026 research review (`docs/research/OSA_RESEARCH_2026-10.md`), scheduled as
+roadmap phase 6:
+
+- Crew: four seats; the real vehicle has five (the senior operator and the operator are merged). (6.1)
+- Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
+- Missiles: no missile load, selection or second channel; ЗАХВАТ / ВКЛ ВЫС lamps mapped to preparation. (6.3)
+- Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)
+- Heading: the engagement model takes the hull to face north (`engagement.hpp`); the real vehicle is oriented with
+  its navigation set. (6.5)
+- TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
+- Engagement zone: one box; no pursuit or optical zones, no guidance-method selection. (6.7)
+- No PU-12 or battery yet: targets are found by the vehicle's own radar only. (phase 7)

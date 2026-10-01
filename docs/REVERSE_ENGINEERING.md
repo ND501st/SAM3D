@@ -3,6 +3,12 @@
 **First choice: ask the creator for the VB6 source.** Reverse-engineering is the fallback. Before starting, confirm
 he's happy for you to decompile it.
 
+**Less needed than it was (October 2026).** The research review (`docs/research/OSA_RESEARCH_2026-10.md`) found the
+creator's own development thread, where he explains the Osa's stations, lamps, guidance phases and methods with a
+Greek Osa officer, and an NVA veteran's record of crew, firing sequence and timings. SAM3D also decides outcomes with
+a gameplay-level model, so the game's internal formulas matter less. What only `sam.exe` can still tell us: how its
+search picture, clutter and jamming look and behave frame by frame, and the exact lock and break-lock conditions.
+
 ## What we already know
 
 | Item | Finding |
@@ -29,8 +35,10 @@ Suggested model: **Claude Opus 5.5** for reading decompiler output (paste one ha
 
 ## What to extract (priority order, for the Osa)
 
-1. Target detection and display on the search scope (range/SNR model, clutter, jamming)
-2. Track acquisition and tracking loops (angle and range gates, lock-on conditions)
-3. Missile launch conditions and guidance commands
-4. Fuzing and kill assessment
-5. Power-up and state-machine interlocks (which switches depend on which)
+1. How the search scope shows targets, clutter and jamming (normal video vs MTI, range-gate pull-off), for SAM3D's
+   display behaviour
+2. Lock-on and break-lock conditions (angle and range gates, low targets, jamming)
+3. Missile-channel lamp timing after launch (to check the sequence from the forum and the NVA account)
+
+Power-up and interlocks, launch conditions and fuzing are now covered well enough by the manual, the forum thread and
+the NVA record; the Osa's start-up and stow aren't in SAM Simulator at all (its Osa starts deployed).
