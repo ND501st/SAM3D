@@ -8,6 +8,11 @@ Fictional and training scenarios use `"source": "sam3d"` with `"confidence": "es
 their sources like any other data file (`data/systems/README.md`). Placeholder numbers (target speed, RCS, the
 ranges at which zone lamps light) are labelled as such in `notes`.
 
+Planned Osa scenarios (roadmap phase 10, sources in `docs/SOURCES.md` → "Validation scenarios"): training-range
+shoots in the style of Ashuluk / Kapustin Yar / Ustka / NAMFI, Angola 1987–88 and Lebanon, 24 July 1982. Once the
+battery exists (phase 7), scenarios will also say who designates targets (the PU-12 or the vehicle itself) and
+the readiness state they start in (march, deployed, powered).
+
 ## Format
 
 ```jsonc

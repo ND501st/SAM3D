@@ -127,4 +127,8 @@ hull heading so it still points the right way.
 - Real Osa model and deploy/stow animation beyond the placeholder antenna fold.
 - Cabin: audio cues, a real interior (the cabin is floating placeholder panels inside the hull box, which is
   see-through from inside), real instrument faces.
-- The crew order menu (phase 6); crew orders are number keys for now.
+- Corrections from the October 2026 research (roadmap phase 6): a fifth seat (the cabin has four; the real vehicle
+  has commander, deputy commander, senior operator, operator and driver), missile containers and per-channel guidance
+  lamps, the elevation display, a TV channel tracked by hand, and the vehicle's heading instead of "hull faces north".
+- The PU-12 command post and plotting board (phase 7), and the crew order menu (phase 8); crew orders are number keys
+  for now.

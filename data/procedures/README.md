@@ -4,9 +4,14 @@ One JSON file per system: its operator controls, the equipment behind them, and 
 `simcore::LoadConsoleFile` (`simcore/include/simcore/console_data.hpp`), which rejects unknown keys, missing sources
 and bad references, and reports the path to the problem (e.g. `controls[4].guard: unknown control 'x'`).
 
-The rules in `data/systems/README.md` apply: public material only, and every item has a `source` and a `confidence`
-(`high` / `medium` / `low` / `estimate`). Use `low` or `estimate` for anything inferred rather than read in a
-source, and say why in `notes`.
+The rules in `data/systems/README.md` apply: public material only, best source tier first, and every item has a
+`source` and a `confidence` (`high` / `medium` / `low` / `estimate`). Use `low` or `estimate` for anything inferred
+rather than read in a source, and say why in `notes`.
+
+**Planned change to the Osa file (roadmap 6.1, 6.3):** stations become the real five-man crew (commander, deputy
+commander, senior operator, operator, driver) instead of SAM Simulator's three operator panels, and the missile
+channels get their own lamps and missile containers. `docs/re/osa.md` → "Corrections from operators" has the
+details.
 
 ## Format
 

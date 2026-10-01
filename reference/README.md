@@ -12,6 +12,12 @@ reference/
   photos/          # cabin / vehicle reference photos
 ```
 
+What is on the PC now (October 2026): `samsim/` (the Osa's `.dat` files), `manuals/` with the creator's documentation
+set (`SAMSIM_docs_210109.rar`) and, extracted from it, `SA-8B_English.pdf` / `.txt`, `SA-8B_Russian.pdf`,
+`Operation El-Dorado Canyon_English.pdf` and *History of the Electro-Optical Guided Missiles*. Documents worth adding
+when acquired: the BSU textbook *Боевое применение ЗРК 9К33М3* (2020) and the GDR troop handbooks listed in
+`docs/SOURCES.md`.
+
 Why it's kept out of git:
 - The original game's art, sounds and data belong to its creator. Don't commit them unless he has given written permission to redistribute them.
 - It's large (about 3.6 GB installed).

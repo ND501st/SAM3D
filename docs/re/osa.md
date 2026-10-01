@@ -109,7 +109,7 @@ The screen shows one continuous console split between them (Form56 and Form57 in
 | Multi-position selectors | ДАЛЬНОСТЬ 0–15 / 0–35 / 10–45 km (p15); РОД РАБОТЫ, БР = live fire, leftmost (p29); beam select I / II / III / I–III / I–II (p15) | `positions` |
 | Continuous wheels | АЗИМУТ, УГОЛ МЕСТА, range wheel, drag with the mouse; fast left/right buttons (p16–17) | `ControlKind::Continuous` |
 | Momentary push-buttons | ЦУ АЗ (auto acquisition, p23), ПА (TV angle track, p25), ПОЛУАВТОМАТ (range-only track, p26), ПУСК (launch, p30) | `ControlKind::Momentary`; modes they engage are latching subsystems |
-| Lamps driven by system state | ГОТОВ СПК, ВКЛ ВЫС, ЗАХВАТ, СХОД (p18); ВНИМАНИЕ, ПУСК ГОТОВ, ЦЕЛЬ В ЗОНЕ (p29); ТСЦ (p24), АВТОМАТ (p24), НЛЦ (p25) | `Equipment` states and sim inputs (lamp-to-state mapping not yet data) |
+| Lamps driven by system state | ГОТОВ СПК, ВКЛ ВЫС, ЗАХВАТ, СХОД (p18); ВНИМАНИЕ, ПУСК ГОТОВ, ЦЕЛЬ В ЗОНЕ (p29); ТСЦ (p24), АВТОМАТ (p24), НЛЦ (p25) | Lamps are data (`data/cabins/osa_ak.json`). The per-channel guidance lamps are wrong today; see "Corrections from operators" below |
 | Automatic sequences | missile gyro spin-up (15 s) starts by itself when ВНИМАНИЕ lights, 15 s before the target reaches the zone (p27, p29); target captured automatically once the SSC is on azimuth and in the range gate (p24) | sim inputs + `enable_any` (the sim doesn't set the inputs yet) |
 
 The console is data: [`data/procedures/osa_ak.json`](../../data/procedures/osa_ak.json) has the controls, subsystems and
@@ -187,3 +187,20 @@ folding the antenna, or any warm-up times other than the 4-minute total. The dep
 - What the game does when steps are done out of order (fault, no effect, or refusal). Can be checked in the running game.
 - Power-up, deploy and stow: not in SAM Simulator. Public facts are above; the switch-level order is SAM3D's design.
 - The real panel labels and positions of the GTA, power take-off and АПУ lock controls.
+
+## Corrections from operators and the creator's forum (October 2026)
+
+The manual is a player's guide; the creator's development thread on SimHQ (2013–2017) and an NVA veteran's record
+(flak11.de) add or correct details. Full list with sources: `docs/research/OSA_RESEARCH_2026-10.md`.
+
+| Topic | Manual | Forum / NVA |
+|---|---|---|
+| Stations | Range, Angle and Firing Officer (p13) | Range operator, azimuth operator, elevation operator (creator); NVA: senior operator (search scope, IFF, azimuth/range marks), operator (range display), deputy commander (elevation, TV, launch), commander (radio designations), driver |
+| Guidance lamps, per channel | ЗАХВАТ and ВКЛ ВЫС light during preparation (p18, p29) | СХОД (left the container) → ЗАХВАТ (captured by the missile-tracking radar, wide beam) → СР.Л (medium beam) → УЗКИЙ ЛУЧ (narrow beam) → К3 (fuse armed, ~120 m before the target). ГОТОВ СПК = transmitter ready; ВКЛ ВЫС = transmitter high voltage on, automatically at ВНИМАНИЕ (NVA). 1/2/3-I and -II = missile in that container; flashes if its gyro overheats |
+| Missile selection | "automatically selected missile" (p30) | Two missiles selected at ВНИМАНИЕ, outer ones first; a rotary switch on the deputy commander's console can pick another; ≥ 4 s between launches |
+| Preparation | Starts with ВНИМАНИЕ; 15 s spin-up (p27, p29) | NVA: starts at "target in zone"; ПУСК ГОТОВ after 13 s |
+| TV tracking | ПА engages TV angle tracking; footnote: in reality tracked by hand (p25) | "Only manual tracking" (ePap); 3-mil reticle; lenses 1 × 1.4° and 3.5 × 4.7° |
+| Search scope | Scales 0–15 / 0–35 / 10–45 km (p15) | Rings every 5 km; on 0–15 km at 2, 7, 12 km; 0–35 km is the working scale; 33 rpm; beams I 0–4°, II 4–8°, III 8–28° (NVA) |
+| Guidance methods | "automatically chosen" (p30) | T/T above ε 00-30; Горка or Ф (helicopters) below; Н against jammers (no range) |
+| PU-12 | Plotting board read by the player (p20) | Designations reach each vehicle by voice: azimuth and range |
+

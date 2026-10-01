@@ -1,42 +1,60 @@
 {
   "system_id": "osa_ak",
   "display_name": "9K33M2 Osa-AK (SA-8B Gecko)",
-  "status": "Vehicle and crew filled from public sources. Radar and missile sections are deliberately empty until the engagement-model decision (docs/DEVELOPMENT_ROADMAP.md, 'Open decision') is made.",
+  "status": "Vehicle and crew filled from public sources, re-cited after the October 2026 research review (docs/research/OSA_RESEARCH_2026-10.md). Radar and missile sections stay empty: outcomes come from the gameplay-level model (data/gameplay/osa_ak.json), not from per-system performance data. Tier-5 citations (gs, apa) are kept only where no better source exists yet (roadmap 6.8).",
   "sources": {
-    "wrk": "2ПВО МСД. Часть 2. Зенитные ракетные полки (зрп), unsigned article, wrk.ru forum attachment (docs/SOURCES.md)",
-    "gs": "GlobalSecurity.org, SA-8 GECKO / 9K33M3 Osa-AKM",
-    "mis": "missilery.info, 9K33M3 Osa-AKM",
-    "apa": "Air Power Australia, 9K33 Osa/Romb ... SA-8 Gecko",
-    "ru_wiki": "Russian Wikipedia, Оса (зенитный ракетный комплекс)",
-    "nuou": "Ukrainian National Defence University museum page, 9A33BM Osa"
+    "flak11": "Tier 1. R. Wagner, flak11.de (NVA Fla-Raketen-Regiment 11), 2005: 9K33-0, 9K33-3, 9A33-1, 9A33-3, PU12-0 (docs/SOURCES.md)",
+    "nvo_2015": "Tier 1. I. Rykov (deputy chief designer, IEMZ Kupol), 'Смертоносная «Оса» в новом исполнении', NVO, 21 Aug 2015",
+    "wrk": "Tier 1. 2ПВО МСД. Часть 2. Зенитные ракетные полки (зрп), unsigned article, wrk.ru forum attachment",
+    "samsim_thread": "Tier 2/3. SimHQ thread '9K33M2 OSA-AK (SA-8B Gecko)', 2013–2017 (the creator and ePap, a Greek Osa officer)",
+    "ilya_prosto": "Tier 2. First-hand account, Osa-AKM deputy crew chief, 2012–13 (LiveJournal)",
+    "zbiam_2019": "Tier 2. M. Gyűrösi, Wojsko i Technika 11/2019",
+    "vpvo": "Tier 4. vpvo.narod.ru, ВЗРК «Оса-АКМ»",
+    "ru_wiki": "Tier 4. Russian Wikipedia, Оса (зенитный ракетный комплекс)",
+    "mis": "Tier 4. missilery.info, 9K33M3 Osa-AKM",
+    "nuou": "Tier 4. Ukrainian National Defence University museum page, 9A33BM Osa",
+    "gs": "Tier 5. GlobalSecurity.org, SA-8 GECKO / 9K33M3 Osa-AKM (to be replaced)",
+    "apa": "Tier 5. Air Power Australia, 9K33 Osa/Romb ... SA-8 Gecko (to be replaced)"
   },
   "crew": [
-    { "role": "commander", "count": 1, "source": "wrk", "notes": "An officer; on the battery's first vehicle, the deputy battery commander." },
-    { "role": "guidance_operator", "count": 1, "source": "wrk", "notes": "Sergeant, deputy crew chief. SAM Simulator: Firing Officer." },
-    { "role": "range_operator", "count": 1, "source": "wrk", "notes": "SAM Simulator: Range Officer." },
-    { "role": "search_operator", "count": 1, "source": "wrk", "notes": "" },
-    { "role": "driver_mechanic_electromechanic", "count": 1, "source": "wrk", "notes": "Crew of 5 also in ru_wiki (9A33B); mis and nuou give 4 for later variants." }
+    { "role": "commander", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
+      "notes": "An officer; receives target designations from the battery PU-12 by radio and gives orders. NVA: the platoon leader commands one of the platoon's vehicles. Front cab, beside the driver (zbiam_2019)." },
+    { "role": "deputy_commander", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
+      "notes": "Career NCO / sergeant, deputy crew chief: launch console (key, launch-ready lamp, missile selector, voltmeter), elevation wheel, TV monitor, elevation display. SAM Simulator: Firing Officer / elevation operator. wrk: guidance operator." },
+    { "role": "senior_operator", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
+      "notes": "Search radar scope, IFF interrogation, puts the target under the azimuth and range marks with handwheels. SAM Simulator: azimuth operator. wrk: search operator." },
+    { "role": "operator", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
+      "notes": "Range display and range tracking; captures with ТСЦ. SAM Simulator: Range Officer. wrk: range operator." },
+    { "role": "driver_mechanic", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
+      "notes": "Crew of five in the NVA (flak11), Soviet (wrk), Polish and ru_wiki sources for the Osa-AK. Four in Russian service after the Osa-AKM1 upgrade ('crew reduced by one', nvo_2015; ilya_prosto)." }
   ],
   "vehicle": {
     "mobility": "wheeled",
     "chassis": { "value": "BAZ-5937, 6x6, amphibious (water jet)", "source": "ru_wiki, wrk", "confidence": "high" },
-    "max_road_speed_mps": { "value": 19.4, "source": "ru_wiki (70 km/h, 9A33B)", "confidence": "low",
-                            "notes": "Sources disagree: 60 km/h on roads for the complex's vehicles (wrk), 70 km/h (ru_wiki), 80 km/h (nuou; wrk for the chassis). 70 km/h picked as the middle value." },
-    "max_water_speed_mps": { "value": 2.2, "source": "wrk, nuou (8 km/h)", "confidence": "medium" },
-    "deploy_time_s": { "value": 240, "source": "wrk (within 4 min including the GTA start), gs (4 min), mis (up to 4 min)", "confidence": "medium",
-                       "notes": "apa gives 3–5 min." },
+    "max_road_speed_mps": { "value": 19.4, "source": "flak11 (9K33-0: 70 km/h road, 15 km/h terrain), ru_wiki (70 km/h, 9A33B)", "confidence": "medium",
+                            "notes": "Sources disagree: 60 km/h on roads for the complex's vehicles (wrk), 70 km/h (flak11, ru_wiki; flak11 adds 'in practice much faster'), 80 km/h (nuou; wrk for the chassis). 70 km/h used." },
+    "max_water_speed_mps": { "value": 2.2, "source": "flak11 (9K33-0: 8 km/h), wrk, nuou", "confidence": "high" },
+    "deploy_time_s": { "value": 240, "source": "nvo_2015 (march to combat position no more than 4 min), wrk (within 4 min including the GTA start)", "confidence": "high",
+                       "notes": "Russian norms quoted as 3 min for the Osa-AKM. Different measure: a cold start (switch-on cycle 3.8 min + function check 3.0 min = 6.8 min, flak11 9K33-0), which SAM3D does not model yet (roadmap 6.2)." },
     "stow_time_s": { "value": 300, "source": "ru_wiki (deployment and stowing not more than 5 min)", "confidence": "medium",
-                     "notes": "apa gives 3–5 min." },
+                     "notes": "No tier-1 source found yet for stowing alone." },
     "search_on_the_move_max_speed_mps": { "value": 22.2, "source": "wrk (search possible at up to 80 km/h)", "confidence": "medium" },
-    "engages_from": { "value": "short halt or stationary only", "source": "wrk, mis", "confidence": "high" },
+    "engages_from": { "value": "short halt or stationary only", "source": "nvo_2015 ('с места или короткой остановки'), wrk, flak11", "confidence": "high" },
     "power": {
       "value": "9И120 gas-turbine unit (on the move and at a halt); engine power take-off generator (at a halt only)",
-      "source": "wrk, mis", "confidence": "medium",
-      "notes": "apa writes 9I210, probably a typo. Output figures in wrk are not used by the sim."
+      "source": "vpvo, wrk, samsim_thread (ePap)", "confidence": "high",
+      "notes": "9И120 = 9И56-3 gas-turbine engine + С-75 generator, about 50 kW; the take-off generator about 35 kW. Fuel (ePap): ~300 l tank, turbine ~75 l/h stationary and ~100 l/h moving, take-off generator ~25 l/h; half the tank is kept for driving. '9I210' in apa and flak11 is probably a confusion with the 9В210 maintenance vehicle."
     }
   },
   "radars": [],
   "missile": null,
   "procedures_file": "data/procedures/osa_ak.json",
-  "validation_scenarios": []
+  "validation_scenarios": [
+    { "id": "training_range", "description": "Training-range shoot (Ashuluk, Kapustin Yar, Ustka, NAMFI style): drones or P-15 targets, two-missile salvo, a kill near maximum range (10.3 km reported at Kapustin Yar, 2013)",
+      "source": "samsim_thread, ilya_prosto, flak11", "confidence": "medium" },
+    { "id": "lebanon_1982", "description": "Bekaa, 24 July 1982: Syrian SA-8 shoots down an Israeli F-4E while other vehicles are attacked",
+      "source": "Washington Post, 25 July 1982 (docs/SOURCES.md wapo_1982)", "confidence": "medium" },
+    { "id": "angola_1987_88", "description": "Cuito Cuanavale, 1987–88: FAPLA Osa-AK units against SAAF aircraft and RPVs; Mirage F1AZ, 20 February 1988",
+      "source": "samsim_osa p31, kuito_memoirs (to acquire)", "confidence": "low" }
+  ]
 }

@@ -6,7 +6,9 @@ file (`data/procedures/<system>.json`), which still decides what every control d
 keys and bad references, and reports the path to the problem (e.g. `controls[3].panel: unknown panel 'x'`).
 
 Layouts are presentation data. Positions don't need a source, but say in `status` where they come from (the
-current Osa layout is a SAM3D placeholder). **Lamps** say what the system shows the crew, so each lamp needs a
+current Osa layout is a SAM3D placeholder). The real vehicle has the driver and commander in the front cab and an
+operators' cabin behind it with three working seats (`zbiam_2019`, `flak11`); the layout gets a fifth seat with
+roadmap 6.1. **Lamps** say what the system shows the crew, so each lamp needs a
 `source` and `confidence` like the console data (`data/systems/README.md`).
 
 ## Frame

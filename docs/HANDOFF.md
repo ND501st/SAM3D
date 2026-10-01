@@ -1,146 +1,144 @@
 # SAM3D — Handoff for the next AI model
 
-*Written 30 Sep 2026 (Australia/Sydney) from the SAM project notes, previous chats, and a read of the repo at commit `5cb032e`. Updated 1 Oct 2026 for the state at `885f568` (branch `feature/unreal-bringup`). Read this first, then the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*
+*Written 30 Sep 2026 (Australia/Sydney); updated 2 Oct 2026 after the research review. Read this first, then
+`docs/BRIEFING_2026-10.md`, the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*
 
 ---
 
 ## 1. What the project is
 
-**SAM3D** is a first-person, realistic 3D surface-to-air missile (SAM) game in **Unreal Engine 5**, rebuilding the console and procedure mechanics of **SAM Simulator v930.2** (a free hobbyist game) **with its creator's blessing**. The player drives a SAM vehicle, picks a position, deploys and stows it, works the operator consoles as 3D cabins, runs an engagement, and gives orders to NPC crew who operate the *same* controls the player does.
+**SAM3D** is a first-person, realistic 3D surface-to-air missile game in **Unreal Engine 5**, rebuilding the console
+and procedure mechanics of **SAM Simulator v930.2** (a free hobbyist "system simulator" by "Hpasp", Hungary) **with
+its creator's blessing**. The first system is the **9K33M2 Osa-AK as fielded in the 1980s, played as a battery**:
+the player drives the vehicle, orients and deploys it, takes any of the five crew seats or the battery commander's
+PU-12, and NPC crew work the *same* controls the player does.
 
-- **First system / vertical slice:** 9K33 Osa — drive, deploy, 2 NPC crew, one complete engagement. Estimate: 6–12 months part-time, solo.
-- **Second system:** ZSU-23-4 Shilka. Fixed sites (S-75, S-125, S-200) later; they don't fit "drive around" and need big crews.
+- **Vertical slice:** one Osa-AK battery position, five-man crew, PU-12 designations, one mission from march to stow.
+- **Later:** the rest of the battery and the TZM, historic scenarios (Angola 1987–88, Lebanon 1982, training ranges),
+  Osa-AKM, then ZSU-23-4 Shilka.
 - **Developer:** Nicholas (GitHub `ND501st`), solo, part-time, Melbourne (Australia/Sydney time zone).
 
 ## 2. Where things live
 
 | Thing | Location |
 |---|---|
-| Repo | **`ND501st/SAM3D`** (private) — https://github.com/ND501st/SAM3D |
-| Branches | `main` is still at the initial commit **`5cb032e`**. All later work is on **stacked branches**, each built on the one before, all pushed, **no PRs opened yet** (`gh` isn't signed in on the PC): `fix/windows-build-and-verify` → `feature/equipment-and-crew-orders` → `feature/scenarios` → `feature/engagement` → `feature/unreal-bringup` (newest). Merge them in that order. |
-| PC checkout | `C:\dev\SAM3D` |
-| Mac checkout | Any non-synced folder |
-| Project notes | claude.ai project "SAM" → `claude/SAM 3D - project plan and dev setup.md` |
-| Local reference material | `reference/` in the repo (git-ignored): SAM Sim install, manuals, Ghidra project, photos |
-
-**Keep the repo out of OneDrive/iCloud.** Sync clashes with `.git` and Unreal's `Intermediate/`/`DerivedDataCache/`, and OneDrive paths are too long for Unreal. Git is the only sync between machines.
+| Repo | **`ND501st/SAM3D`** (private) |
+| Branches and PRs | `main` is still at `5cb032e`. All work is on **stacked PRs**, each on the one before: #1 `fix/windows-build-and-verify` → #2 `feature/equipment-and-crew-orders` → #3 `feature/scenarios` → #4 `feature/engagement` → #5 `feature/unreal-bringup` → #6 `feature/cabin` → #7 `feature/scopes` (newest). Merge in order with merge commits or rebase, **not squash**. |
+| PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
+| Unreal | UE 5.7.4 at `D:\UE_5.7`, Cesium for Unreal 2.29+; level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
+| Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
+| Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions) |
 
 ## 3. Machines and tooling
 
-| Machine | Role | Key software |
-|---|---|---|
-| **Windows PC** (32 GB, RTX 3060 Ti) | Main workstation | UE5 + Cesium for Unreal, VS 2022 (Game dev with C++), Git + LFS, Claude Code, Ghidra, Python, Blender, SAM Sim reference install, Sunshine + OpenSSH + Tailscale. Installed by `tools/setup-pc.ps1`. |
-| **Mac M3 Pro** (16 GB) | Remote access + native simcore/prototype work | Moonlight (streams the PC), Tailscale, VS Code Remote-SSH, Claude Code over SSH. Installed by `tools/setup-mac.sh`. |
+| Machine | Role |
+|---|---|
+| **Windows PC** (32 GB, RTX 3060 Ti) | Main workstation: UE 5.7, VS 2022, Git + LFS, Python, `gh` (signed in) |
+| **Mac M3 Pro** | Remote access (Moonlight, Tailscale), simcore/prototype work over SSH |
 
-**State as of 1 Oct:** the PC is set up. **UE 5.7.4 is at `D:\UE_5.7`** with Cesium for Unreal 2.29.1. `.\tools\verify.ps1` passes on Windows (from a VS developer shell), and the editor target builds from the command line without opening the editor (close the editor first):
+What Claude can do on the PC:
+- **Build simcore and run everything:** `.\tools\verify.ps1` from a VS developer shell.
+- **Build the Unreal module** from the command line when the editor is closed:
+  `D:\UE_5.7\Engine\Build\BatchFiles\Build.bat SAM3DEditor Win64 Development -Project=C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject -WaitMutex -NoHotReload`.
+  With the editor open, compile through Live Coding from a script (`LiveCoding.Compile`, see below); header changes
+  need the editor closed.
+- **Drive the open editor by script** (Python remote execution is on): `python tools/ue_remote.py "<python>"`
+  (actors, Play, levels, screenshots, console commands). `python tools/ue_cabin_check.py` plays the level with the
+  hands-free cabin tour and records every view (state + screenshot) to `out/cabin_check/`. The tour needs the editor
+  started with `SAM3D_CABIN_TOUR=6` or the director's **Cabin Tour** ticked.
+- **Not possible:** sending keystrokes into a playing game through screen control (the game holds the keyboard).
 
-```
-D:\UE_5.7\Engine\Build\BatchFiles\Build.bat SAM3DEditor Win64 Development -Project=C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject -WaitMutex -NoHotReload
-```
-
-So Claude can compile Unreal C++ itself. It still can't run the editor or play the level; the user does that.
-
-**Claude chat ↔ computers:** a claude.ai chat links to whichever machine's Claude desktop app last sent a message in it. That machine's folders must be granted before Claude can see them, and the other machine isn't reachable from that chat. Claude cannot run the Unreal editor; after Unreal C++ changes, ask the user to build.
+Gotchas seen so far:
+- The editor sometimes hangs on exit after "Exiting." in the log; it does finish. Don't kill it without asking.
+- The Epic launcher once half-updated Cesium for Unreal while the editor was open (CesiumEditor.dll new, Runtime old →
+  error 127). Fix: finish the update in the launcher with the editor closed, then rebuild.
+- `unreal/SAM3D/Config/DefaultEngine.ini` has uncommitted editor additions (an Android File Server block with a
+  token, shader formats). Commit only your own lines (stage a constructed blob), never that block.
+- Git Bash heredocs mangle `\n` and `\\` inside Python strings; write scripts to files instead.
 
 ## 4. Repo map
 
 | Path | Contents |
 |---|---|
-| `simcore/` | **Header-only C++17 sim core** — engine-agnostic. Physics-side headers: `vec3`, `geo` (WGS-84/ECEF/ENU `LocalFrame`), `atmosphere` (ISA), `terrain` (`FlatTerrain`, `GridTerrain`), `radar`, `aircraft`, `missile`, `world`, `acmi`. Game-side headers: `panel` (`ControlPanel`: switches, guarded/stepwise controls, wheels, push-buttons), `equipment` (subsystems off/starting/ready/stopping/fault, interlocks, inputs, latching modes), `procedures` (`ProcedureTracker`, `CrewMember` with order queue), `json` + `console_data` (load consoles from JSON), `debrief` (`SessionLog`), `scenario` + `scenario_runner` (deterministic scenario playback), `engagement` (gameplay-level radar picture, lock/break-lock, outcome resolver). |
-| `simcore/tests/` | 70 dependency-free tests (`SC_TEST`, `SC_EXPECT_NEAR`) + `header_check.cpp` (enforces the macro-name ban). |
-| `simcore/examples/` | `engagement_demo` (writes `.acmi`), `procedure_demo` (Osa console session + debrief), `scenario_demo` (plays `osa_practice.json`). The last two run under CTest. |
-| `prototype/` | Pure-Python mirror of the physics side of simcore (13 tests). The console/scenario/engagement-model side has no Python mirror. |
-| `unreal/SAM3D/` | UE 5.7 C++ project, builds with no warnings. `USimWorldSubsystem` (runs a `ScenarioRunner` at 100 Hz, console API for Blueprints, Cesium terrain sampling, ENU↔Unreal through the Cesium georeference), `ASimScenarioDirector` (loads a scenario, georeference, spawns/possesses the vehicle, on-screen status + debrief), `ASimOsaVehicle` (kinematic placeholder Osa, number-key crew orders), `ASimEntityActor` (target/missile proxy). See `unreal/README.md`. |
-| `data/` | `procedures/osa_ak.json` (Osa-AK consoles and procedures), `systems/osa.json` (cited system data; radar and missile sections deliberately empty), `scenarios/osa_practice.json`, `gameplay/osa_ak.json` (game-balance numbers). |
-| `docs/` | `DEVELOPMENT_ROADMAP.md` (task order), `PROJECT_PLAN.md`, `ARCHITECTURE.md`, `DEV_SETUP.md`, `REVERSE_ENGINEERING.md`, `SOURCES.md`, `re/osa.md` (Osa notes from SAM Simulator's manual, with page references) |
-| `tools/` | `setup-pc.ps1`, `setup-mac.sh`, `verify.ps1`, `verify.sh` |
-| `.github/workflows/ci.yml` | simcore build+test on Ubuntu/Windows/macOS; prototype pytest on Python 3.12 |
-| `CLAUDE.md` | Conventions for Claude Code — **authoritative; read it.** |
+| `simcore/` | **Header-only C++17 sim core.** Physics side: `vec3`, `geo`, `atmosphere`, `terrain`, `radar`, `aircraft`, `missile`, `world`, `acmi`. Game side: `panel`, `equipment` (incl. `start_ready`, `Restart`), `procedures`, `json` + `console_data`, `debrief`, `scenario` + `scenario_runner` (incl. the player's tracker, launch restarts), `engagement` (gameplay-level picture, lock, outcomes, `TrackReturns`), `cabin` (layout, lamps, displays), `scopes` (search-scope sweep and afterglow) |
+| `simcore/tests/` | 84 tests + `header_check.cpp` |
+| `prototype/` | Python mirror of the physics side (13 tests) |
+| `unreal/SAM3D/` | UE 5.7 project: `USimWorldSubsystem`, `ASimScenarioDirector` (incl. cabin tour switch), `ASimOsaVehicle` (placeholder, cabin mode, tour), `USimCabinComponent`, `USimCabinDisplayComponent`, `ASimCabinHUD`, `ASimEntityActor`. See `unreal/README.md` |
+| `data/` | `procedures/osa_ak.json` (console), `cabins/osa_ak.json` (cabin), `systems/osa.json` (cited system data), `scenarios/osa_practice.json`, `gameplay/osa_ak.json` (game balance) |
+| `docs/` | `BRIEFING_2026-10.md`, `research/`, `DEVELOPMENT_ROADMAP.md`, `PROJECT_PLAN.md`, `ARCHITECTURE.md`, `SOURCES.md`, `DEV_SETUP.md`, `REVERSE_ENGINEERING.md`, `re/osa.md` |
+| `tools/` | setup and verify scripts; `ue_remote.py`, `ue_cabin_check.py`; `build_overview_pdf.py` |
 
 ## 5. Commands
 
 ```bash
-# simcore (Windows: run from "Developer PowerShell for VS 2022")
 cmake -S simcore -B simcore/build -DCMAKE_BUILD_TYPE=Release
 cmake --build simcore/build --config Release
 ctest --test-dir simcore/build -C Release --output-on-failure
-./simcore/build/engagement_demo out/demo.acmi
-
-# Python prototype
 python -m pytest prototype -q
-python prototype/scripts/run_demo.py out/demo_py.acmi
-
-# Everything
-./tools/verify.sh        # Mac/Linux
-.\tools\verify.ps1       # Windows
+.\tools\verify.ps1                              # everything (Windows)
+python tools/ue_cabin_check.py --until 270      # scripted Unreal check (editor open, tour on)
 ```
 
 ## 6. Architecture in one paragraph
 
-**simcore is the game; Unreal is the presentation.** Everything that decides an outcome (detection, tracking, flight, fuzing, procedure correctness, crew actions) lives in simcore, which is deterministic and runs without Unreal. Unreal does rendering, input, cabins, animation, audio, UI and terrain data. `USimWorldSubsystem::Tick` accumulates frame time and calls `World::Step(0.01)` in a loop — never step simcore from actor ticks. Frames: simcore uses **ENU metres (x=E, y=N, z=U)**; Unreal uses **cm, X=N, Y=E, Z=U (left-handed)**; convert only via `EnuToUnreal`/`UnrealToEnu`. ENU `z` ≠ altitude far from origin (≈785 m off at 100 km) — use `LocalFrame::AltitudeOf`. Player cabin clicks and NPC `CrewMember`s act on the **same** `simcore::ControlPanel` through `ProcedureTracker` (accepts correct steps, refuses early ones during warm-up, counts deviations).
+**simcore is the game; Unreal is the presentation.** Everything that decides an outcome (detection, tracking,
+procedure correctness, crew actions, hits) lives in simcore, which is deterministic and runs without Unreal.
+`USimWorldSubsystem::Tick` steps the scenario at a fixed rate; never step simcore from actor ticks. simcore uses ENU
+metres (x=E, y=N, z=U); Unreal converts only through the subsystem (via the Cesium georeference when present). The
+player's cabin clicks and NPC `CrewMember`s act on the **same** `simcore::ControlPanel`; the player's moves go through
+a `ProcedureTracker` so the debrief records early and out-of-order actions.
 
 ## 7. Hard rules (from CLAUDE.md — do not break)
 
-**simcore**
-- Header-only, C++17, standard library only. No Unreal types, no third-party deps.
-- No exceptions, no RTTI (`throw`, `dynamic_cast`, `typeid` banned).
-- Don't use identifiers Unreal/Windows define as macros: `check verify ensure PI TEXT IN OUT ERROR near far small interface min max DELETE`.
-- SI units with suffixes (`_m`, `_s`, `_mps`, `_rad`, `_db`); degrees only at API edges.
-- Warnings are errors (`-Wall -Wextra -Wshadow -Wconversion -Werror`, MSVC `/W4 /WX`).
-- Every new model/behaviour gets a test. **Keep `prototype/` in sync** with simcore where both implement a model.
+- simcore: header-only C++17, standard library only, no exceptions/RTTI, no macro-clashing identifiers, SI units with
+  suffixes, warnings are errors, every behaviour gets a test, keep `prototype/` in sync where both implement a model.
+- Data: **public and declassified sources only**, cited with id, tier and confidence (`docs/SOURCES.md`); code and
+  tests use labelled placeholder numbers. **Never commit SAM Simulator's art, sounds, data or `sam.exe`.**
+- Unreal: Epic coding standard; game logic in simcore.
 
-**Realism and data**
-- **Public and declassified sources only.** Never request, use or add classified or export-controlled material.
-- Every value in `data/systems/*.json` needs `source` and `confidence` (`high/medium/low/estimate`). Code demos/tests use **generic placeholder numbers**, labelled, never real system data.
-- **Never commit SAM Simulator's art, sounds, data or `sam.exe`.** They stay in `reference/`.
-
-**Unreal**
-- Epic coding standard (tabs, `F/U/A/E` prefixes, `b` bools), categories `SAM3D|...`.
-- Game logic that affects the sim goes in simcore.
-
-## 8. Status and roadmap
-
-Task-level detail and order: `docs/DEVELOPMENT_ROADMAP.md`. Done as of `885f568`:
+## 8. Status
 
 | Phase | State |
 |---|---|
-| 0 Environment | Windows build fixed, `verify.ps1` passes, Unreal builds. **Open:** `gh auth login`, open the five stacked PRs, confirm CI green. |
-| 1 Consoles and procedures | Done: equipment/interlocks, guarded/stepwise controls, wheels, push-buttons, JSON consoles, Osa power-up/deploy/stow, crew order queue, session debrief. |
-| 2 Scenarios and debrief | Done: scenario JSON + loader, deterministic `ScenarioRunner`, ACMI track, `osa.json` (crew/vehicle/deploy/power only). |
-| 3 Engagement outcome | Done at **gameplay level** (option 1): search picture, lock/break-lock, TV tracking, outcome resolver with every factor in the debrief, target breakaway. |
-| 4 Unreal bring-up | Mostly done: Cesium georeference + terrain sampled into `GridTerrain`, kinematic placeholder Osa, antenna fold follows sim state. **Open:** Chaos Vehicles (needs a mesh with wheel bones), real model/animation, performance check. |
-| 5 3D cabin | `feature/cabin`: cabin layout data + loader (`cabin.hpp`, `data/cabins/osa_ak.json`), player actions judged by a `ProcedureTracker`, Unreal cabin component (placeholder shapes, lamps, first-person interaction, HUD). `feature/scopes`: SOC scope, SSC range indicator, βс/εс dials, ДЦ voltmeter, TOV monitor (scene capture). **Open:** audio, real interior. |
-| 6 Crew and mission | Not started (crew orders are number keys for now). |
+| 0–3 | Done: Windows build, consoles and procedures from data, crew orders, debrief, scenarios, gameplay-level engagement model |
+| 4 Unreal bring-up | Done except Chaos Vehicles (needs a real mesh), the real model, the performance check |
+| 5 3D cabin | Done: layout data, controls, lamps (glowing), instruments (search scope, range indicator, TV with a black-and-white scene capture, βс/εс dials, ДЦ voltmeter), hands-free tour, scripted checks. The practice shoot runs end to end in Unreal: lock at ~28 km, launch at 235 s, **hit** at 257 s (seed 4) |
+| **6 Accuracy pass** | **Next.** See below |
 
-**Known deliberate simplifications** (ARCHITECTURE.md): aircraft constant speed in straight ENU lines; the old physics missile (`missile.hpp`, used only by `engagement_demo`) is PN-only with perfect target knowledge, so it shows 0.0 m misses; the scenario path resolves launches with the gameplay model instead of flying a missile; radar physics is a single-look SNR threshold.
+## 9. The research review (2 Oct 2026) and what it changed
 
-## 9. The physics-depth decision (resolved)
+The user asked for a step back: read everything on SAM Simulator and research the real Osa, preferring documents
+from operator countries. Main findings (detail and sources in `docs/research/OSA_RESEARCH_2026-10.md`):
 
-On 30 Sep a session declined to build detailed missile-performance models (guidance noise, autopilot lag, Mach-dependent drag, probabilistic warhead kill) and offered an abstracted, hand-tuned outcome resolver instead. The user took that route: **phase 3 option 1** (`e5271e7`). Outcomes come from game-balance numbers in `data/gameplay/` (operator tracking, target class, zone, manoeuvre, crew mistakes), not from weapon physics. Detailed, calibrated weapon-performance physics stays unscheduled; if it comes up again, treat it as its own discussion.
+- **Crew of five** (commander, deputy commander, senior operator, operator, driver); SAM3D has four seats.
+- **Target designation came mostly from the battery's PU-12 by voice** (azimuth, range); SAM3D has no PU-12 yet.
+- **Real timings are minutes:** cold switch-on 3.8 min + function check 3.0 min; march-to-combat ≤ 4 min; reaction
+  26–40 s. SAM3D powers up in about a minute.
+- **Missiles:** six in containers, automatic selection outer first, two channels, ≥ 4 s apart; guidance lamps per
+  channel (СХОД → ЗАХВАТ → СР.Л → УЗКИЙ ЛУЧ → К3). SAM3D has no missile load and maps ЗАХВАТ/ВКЛ ВЫС wrongly.
+- **TV tracking is manual**, search radar beams matter, the vehicle must be oriented (SAM3D assumes the hull faces
+  north).
 
-## 10. SAM Simulator findings
+Consequences: the roadmap was re-sequenced (phase 6 accuracy pass, phase 7 battery and PU-12, phase 8 crew and
+mission, then threats and scenarios); the validation set is now Osa events; `docs/SOURCES.md` has source tiers and
+Western "facts and stats" pages are no longer used for decisions. **The user has not yet answered the decisions in
+`docs/BRIEFING_2026-10.md` §5; confirm them before starting phase 6.**
 
-- Covers 7 systems: S-75 Dvina, S-75M Volkhov, S-125 Neva, 2K11 Krug, 9K33 Osa, S-200 Vega, ZSU-23-4 Shilka. ~1,600 data files, ~3.6 GB installed.
-- `.dat` files (prefixed `volhov`, `krug`, `neva`, `osa`, `dvina`, `vega`, `silka`, `world`) are **only JPEG/BMP panel art and WAV audio** — no mechanics.
-- `sam.exe`: ~100 MB PE32, **VB6 compiled to native x86** (not P-code), 67 unnamed forms (`Form1`–`Form67`) + `Module1`, ~1,300 event handlers; nearly all logic is in the forms. Deps: MSVBVM60, COMCTL32, MSWINSCK, MCI32, MSSTDFMT; no DirectX. Installer is a VB6 P&D Wizard package (`SAM1–7.CAB`).
-- **Biggest shortcut: ask the creator for the VB6 source (`.frm`/`.bas`) and written permission to reuse art.** Reverse-engineering (VB Decompiler Lite for form/handler map → Ghidra for pseudo-C, timer handlers first) is the fallback, and only after confirming the creator is happy with decompilation. Workflow in `docs/REVERSE_ENGINEERING.md`; findings go in `docs/re/<system>.md`.
-- Tacview isn't needed for the core game; ACMI export already exists for debriefs/debugging.
+## 10. SAM Simulator, in short
 
-**Open questions for the creator** (none answered yet):
-1. Will he share the VB6 source, or notes on how the consoles/procedures behave?
-2. Written permission to reuse or reference panel art, sounds and procedures?
-3. Operator manuals or veteran contacts he used?
+- Seven systems; `.dat` files are images and sounds; logic in `sam.exe` (VB6 native). Its Osa starts deployed, has
+  three operator panels plus the PU-12 plotting board, a TV sight, ARMs, jamming, night. "Realistic to the switch";
+  "no points are given, as in reality"; a situation ends when you switch the system off.
+- The SimHQ development thread (2013–2017, archived) is a primary source: the creator worked with a Greek Osa officer
+  ("ePap") who answered as an operator.
+- **Ask the creator** for the VB6 source or notes, written art permission, the source conflicts (research §10) and
+  his operator contacts. Reverse-engineering is a fallback, only with his OK (`docs/REVERSE_ENGINEERING.md`).
 
-## 11. Realism approach (as planned by the user)
+## 11. Physics depth (resolved)
 
-| Layer | Source of truth |
-|---|---|
-| Consoles, switch order, procedures | SAM Simulator's behaviour + public Warsaw Pact operator manuals + veteran accounts |
-| Physics | Public textbooks (Skolnik, Mahafza, Zarchan, Fleeman — see `docs/SOURCES.md`) |
-| Per-system numbers | Public/declassified figures, each cited in `data/systems/*.json` |
-| Validation | Historical engagements (1960 U-2, Vietnam SA-2, 1999 F-117) |
-
-Physics depth: see §9 (gameplay-level outcomes chosen).
+Outcomes come from game-balance numbers (`data/gameplay/`), not weapon physics: phase 3 option 1 (`e5271e7`). The
+research adds published single-shot kill-probability ranges to calibrate against (roadmap 6.7). Detailed weapon
+physics stays unscheduled.
 
 ## 12. Model plan the user set
 
@@ -148,18 +146,21 @@ Physics depth: see §9 (gameplay-level outcomes chosen).
 |---|---|
 | Architecture, sim-core maths, validation, hardest bugs | Claude Fable 5.1 or Opus 5.5 |
 | Reading decompiler output, research synthesis, big refactors | Claude Opus 5.5 |
-| Everyday Unreal C++/Blueprints, UI, crew AI, tests | Claude Sonnet (docs say "Sonnet 5"; current is Sonnet 5.5) |
+| Everyday Unreal C++/Blueprints, UI, crew AI, tests | Claude Sonnet 5.5 |
 | Bulk data entry, log triage, quick lookups | Claude Haiku 4.5 |
 
 ## 13. Next steps
 
-1. **User:** merge the stacked PRs ND501st/SAM3D#1–#5 in order (merge commits or rebase, not squash), then the cabin (#6) and scopes PRs.
-2. **Phase 6:** crew order menu calling the existing order API (replaces the number keys); then the scripted mission end to end.
-3. Remaining phase 4: Chaos Vehicles once there's an Osa mesh with wheel bones; performance check of the 100 Hz step and terrain sampling.
-4. Draft the message to the SAM Sim creator with the three open questions (§10).
+1. **User:** answer the decisions in `docs/BRIEFING_2026-10.md` §5; merge PRs #1–#7 in order.
+2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
+   one PR.
+3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
+4. Draft the message to the SAM Simulator creator (questions in `PROJECT_PLAN.md`).
+5. User: acquire the BSU textbook (2020), the GDR handbooks, the Angola memoirs if possible.
 
 ## 14. Working conventions with this user
 
-- Wants PRs on branches for review, not pushes to `main`.
+- PRs on branches for review, not pushes to `main`; stacked PRs are fine.
 - Commit/PR attribution: follow the session's instructions; the repo's `CLAUDE.md` takes precedence.
-- Wants the C++ and Python versions kept matching, with tests, for any model change.
+- C++ and Python kept matching, with tests, for any model both implement.
+- Prefers Claude to test in Unreal itself (scripts, screenshots) and to explain findings plainly.

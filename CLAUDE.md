@@ -3,7 +3,8 @@
 A first-person, realistic 3D surface-to-air missile (SAM) simulator, rebuilding the mechanics of
 SAM Simulator v930.2 (free, by a single hobbyist developer, used with his blessing) in Unreal Engine 5.
 The player drives a SAM unit, deploys it, runs engagements, and gives orders to NPC crew.
-The first system is the **9K33 Osa**.
+The first system is the **9K33M2 Osa-AK as fielded in the 1980s, played as a battery** (five-man crew, PU-12 command
+post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/research/OSA_RESEARCH_2026-10.md`.
 
 ## Repo map
 
@@ -19,7 +20,7 @@ The first system is the **9K33 Osa**.
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
-| `docs/` | Plan, architecture, sources, dev setup, reverse-engineering notes. |
+| `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
 | `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash). |
 
@@ -61,10 +62,15 @@ After changing Unreal C++, ask the user to build (or run UnrealBuildTool from th
 ## Realism and data rules
 
 - **Public and declassified sources only.** Never ask for, use or add classified or export-controlled material.
+- **Prefer sources from countries that operated the system** (tiers in `docs/SOURCES.md`): official documents and
+  historic records first, then operator accounts, then SAM Simulator, then operator-country reference pages. Don't
+  base decisions on Western "facts and stats" pages. When sources disagree, record both and say which was used.
 - Every system parameter in `data/systems/*.json` needs `source` and `confidence`. Code demos and tests use
   **generic placeholder numbers**, clearly labelled, never real system data.
-- Consoles and procedures follow SAM Simulator's behaviour, plus public operator manuals. Physics comes from textbooks
-  (`docs/SOURCES.md`). Validate against historical engagements.
+- Consoles and procedures follow SAM Simulator's behaviour, corrected by operator-country documents and operator
+  accounts (`docs/re/osa.md`). Outcomes come from the gameplay-level model (`data/gameplay/`), calibrated to published
+  ranges; generic physics comes from textbooks. Validate against Osa events (training ranges, Lebanon 1982, Angola
+  1987–88).
 - **Never commit the original SAM Simulator art, sounds, data or `sam.exe`.** They live in `reference/` (git-ignored).
 
 ## Unreal conventions
@@ -88,4 +94,6 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/PROJECT_PLAN.md` → "Roadmap". Known simplifications are listed in `docs/ARCHITECTURE.md` → "Known limitations".
+See `docs/DEVELOPMENT_ROADMAP.md` (next: phase 6, the accuracy pass) and `docs/HANDOFF.md`. Known gaps are listed in
+`docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
+`tools/ue_cabin_check.py` (see `unreal/README.md`).
