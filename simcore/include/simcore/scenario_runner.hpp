@@ -12,9 +12,10 @@
 // the scenario seed with a portable mapping (std::mt19937 output is fully
 // specified; std:: distributions are not).
 //
-// Launches are recorded, but missile flight and outcomes are not simulated here:
-// how the engagement is resolved is the open design decision in
-// docs/DEVELOPMENT_ROADMAP.md (phase 3).
+// If the scenario names a gameplay tuning file, the EngagementModel (engagement.hpp)
+// runs the search and tracking picture, sets the console's capture and zone inputs,
+// lets the aiming crew member turn the wheels, and resolves each launch as a hit or
+// a miss (step 1b, and on launch). Without one, launches are only recorded.
 #pragma once
 
 #include <cstddef>
@@ -27,6 +28,7 @@
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
+#include "simcore/engagement.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/world.hpp"
@@ -41,14 +43,25 @@ public:
           ground_(def_.ground_height_m),
           world_(def_.origin, &ground_),
           acmi_(world_.Frame(), "2026-01-01T00:00:00Z", def_.name),
-          rng_(def_.seed) {
+          rng_(def_.seed),
+          engagement_on_(!def_.tuning_file.empty()),
+          engagement_(def_.tuning, def_.unit_position) {
         for (const ScenarioCrew& c : def_.crew) {
-            const double u = static_cast<double>(rng_()) / 4294967296.0;  // [0, 1)
+            const double u = Uniform01(rng_);
             const double reaction = c.reaction_time_s + (2.0 * u - 1.0) * c.reaction_jitter_s;
             crew_.emplace_back(c.name, c.role, reaction);
+            if (engagement_on_ && c.role == def_.tuning.aim_role) aim_crew_present_ = true;
         }
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
         targets_.resize(def_.targets.size());
+        for (const ScenarioTarget& t : def_.targets) {
+            EngagementTarget e;
+            e.id = t.id;
+            e.target_class = t.target_class;
+            e.evade_on_launch = t.evade_on_launch;
+            e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
+            eng_targets_.push_back(e);
+        }
         fired_.assign(def_.triggers.size(), false);
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
@@ -60,6 +73,9 @@ public:
         if (finished_) return;
         time_ += dt;
         UpdateTargets(dt);
+        if (engagement_on_) {
+            engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_present_);
+        }
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
@@ -90,6 +106,8 @@ public:
     World& GetWorld() { return world_; }
     SessionLog& Log() { return log_; }
     const AcmiWriter& Acmi() const { return acmi_; }
+    bool EngagementOn() const { return engagement_on_; }
+    const EngagementModel& Engagement() const { return engagement_; }
 
     CrewMember* Crew(const std::string& name) {
         for (CrewMember& c : crew_) {
@@ -144,6 +162,7 @@ private:
             a.waypoints = t.waypoints;
             targets_[i].world_id = world_.AddAircraft(std::move(a));
             targets_[i].spawned = true;
+            eng_targets_[i].world_id = targets_[i].world_id;
             Event(t.id, "appeared: " + t.name);
         }
         world_.Step(dt);
@@ -219,7 +238,9 @@ private:
         if (console_.equipment.IsReady(console_.launch_armed)) {
             ++launches_;
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
-                         "missile " + std::to_string(launches_) + " (flight not simulated yet: phase 3)"});
+                         "missile " + std::to_string(launches_) +
+                             (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
+            if (engagement_on_) engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_);
         } else {
             Event(console_.launch_button, "pressed, but " + console_.launch_armed + " is not ready: no launch");
         }
@@ -229,6 +250,7 @@ private:
         acmi_.WriteWorld(world_);
         acmi_.WriteObject(kUnitAcmiId, def_.unit_position, Vec3{},
                           "Type=Ground+AntiAircraft,Name=" + console_.display_name + ",Color=Red");
+        if (engagement_on_) engagement_.WriteAcmi(acmi_, time_, world_, eng_targets_);
     }
 
     void CheckEnd() {
@@ -238,6 +260,7 @@ private:
             return;
         }
         if (!def_.end_when_targets_gone || def_.targets.empty()) return;
+        if (engagement_on_ && engagement_.ShotsInFlight()) return;
         for (const TargetState& s : targets_) {
             if (!s.spawned || !s.gone) return;
         }
@@ -258,6 +281,10 @@ private:
     World world_;
     AcmiWriter acmi_;
     std::mt19937 rng_;
+    bool engagement_on_;
+    EngagementModel engagement_;
+    bool aim_crew_present_ = false;
+    std::vector<EngagementTarget> eng_targets_;
     std::vector<CrewMember> crew_;
     std::vector<TargetState> targets_;
     std::vector<bool> fired_;

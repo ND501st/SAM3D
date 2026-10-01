@@ -384,6 +384,17 @@ def build(out_path):
             "Runner steps targets, triggers, equipment and crew in a fixed order and records launches.",
             "Deterministic for a seed (crew reaction variation from a portable random mapping).",
             "Ends on a time limit, an end action, or when every target is gone."]),
+        ("Engagement (gameplay level)", "engagement.hpp, data/gameplay/", [
+            "Search radar picture: range scale, line of sight, ground clutter unless MTI is on.",
+            "Tracking radar locks when the operator puts the azimuth line and range gate on a target in ЦУ АЗ mode; "
+            "TV tracking locks when the target is in the lens's view in ПА mode.",
+            "Locks break on masking, a target too low for the radar, fast crossing, or equipment switched off.",
+            "Sets the capture (ТСЦ/АВТОМАТ), НЛЦ, ВНИМАНИЕ and ЦЕЛЬ В ЗОНЕ lamps from the track.",
+            "The aiming crew member turns the wheels onto the nearest contact.",
+            "Launch outcome: losing the track loses the missile; otherwise a hit chance from target class x tracking "
+            "method x in zone x manoeuvre x crew mistakes, one seeded draw, every factor in the debrief.",
+            "Targets can break away onto a beam heading when fired at.",
+            "All numbers are game balance in one file; not a physics model."]),
         ("Debrief", "debrief.hpp, acmi.hpp", [
             "One timeline of crew reports, equipment faults, player deviations, scenario events and launches.",
             "Summary counts; no points (SAM Simulator's rule: 'no points, as in reality').",
@@ -410,10 +421,9 @@ def build(out_path):
     # ---- 5. not done
     story += [PageBreak(), P("5. Not done yet, and decisions pending", "h1")]
     pending = [
-        ["Engagement outcome (phase 3)", "A launch is recorded but nothing flies, hits or misses. Needs a decision: "
-         "a gameplay-level outcome resolver (recommended) or detailed missile physics."],
-        ["Radar model", "Search/track radar behaviour the operators see (scan, lock, break-lock, clutter) is not modelled; "
-         "scenarios stand in with triggers such as 'target captured at 25 km' (placeholder)."],
+        ["Game balance", "The engagement numbers in data/gameplay/osa_ak.json are first guesses; they need playtesting."],
+        ["Jamming, multiple targets", "Not modelled yet: one tracked target at a time, no jamming or decoys."],
+        ["Player cabin", "The player acts through the same API as the crew, but there is no 3D cabin yet (phase 5)."],
         ["Unreal", "Unreal Engine is installed but the project has never been opened or built. No cabin, vehicle or "
          "Cesium terrain yet."],
         ["Real panel labels for power / АПУ controls", "Not in any public source found; English stand-ins, marked estimate."],
@@ -421,7 +431,7 @@ def build(out_path):
          "wheel limits; starting positions of some selectors. Marked low / estimate in the data."],
         ["Other systems", "Only the Osa-AK. Shilka manual downloaded for later."],
         ["Build coverage", "Built and tested with MSVC only. GCC/Clang run in CI once the pull requests are opened."],
-        ["Pull requests", "Three branches pushed (fix, feature, scenarios); PRs not opened yet."],
+        ["Pull requests", "Four branches pushed (fix, feature, scenarios, engagement); PRs not opened yet."],
     ]
     story.append(data_table(["Item", "Status"], pending, [70 * mm, 195 * mm]))
 
