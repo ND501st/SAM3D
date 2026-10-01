@@ -1,8 +1,11 @@
 #include "SimCabinComponent.h"
 
+#include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "SAM3D.h"
@@ -18,7 +21,8 @@ namespace
 	FVector BodyPoint(const simcore::Vec3& V) { return FVector(V.y, V.x, V.z) * 100.0; }
 	FVector BodyDir(const simcore::Vec3& V) { return FVector(V.y, V.x, V.z); }
 
-	const FLinearColor PanelColor(0.05f, 0.08f, 0.07f);
+	const FLinearColor PanelColor(0.2f, 0.27f, 0.25f);  // grey-green instrument paint
+	const FName CabinLightTag(TEXT("SAM3DCabinLight"));
 	const FLinearColor MetalColor(0.25f, 0.25f, 0.27f);
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
 	const FLinearColor ChromeColor(0.7f, 0.7f, 0.72f);
@@ -117,7 +121,8 @@ void USimCabinComponent::Paint(UStaticMeshComponent* Mesh, const FLinearColor& C
 	}
 	if (UMaterialInstanceDynamic* Mid = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(0)))
 	{
-		Mid->SetVectorParameterValue(TEXT("Color"), Color);
+		Mid->SetVectorParameterValue(TEXT("Color"), Color);                // basic-shape parts
+		Mid->SetVectorParameterValue(TEXT("TintColorAndOpacity"), Color);  // glowing lamp glass
 	}
 }
 
@@ -147,6 +152,18 @@ void USimCabinComponent::DestroyParts()
 			Display->DestroyComponent();
 		}
 	}
+	TArray<UPointLightComponent*> Lights;
+	if (GetOwner() != nullptr)
+	{
+		GetOwner()->GetComponents(Lights);
+	}
+	for (UPointLightComponent* Light : Lights)
+	{
+		if (Light->ComponentHasTag(CabinLightTag))
+		{
+			Light->DestroyComponent();
+		}
+	}
 	Items.Reset();
 	PanelMeshes.Reset();
 	Displays.Reset();
@@ -171,6 +188,20 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		Place(Mesh, BodyPoint(Panel.centre_m) - N * 1.0, FRotationMatrix::MakeFromXZ(N, U).Rotator(),
 			FVector(0.02, Panel.width_m, Panel.height_m));
 		PanelMeshes.Add(Mesh);
+	}
+	// A dim lamp above each seat, so the panels read when the sun is outside.
+	for (const simcore::CabinStation& Station : Layout->stations)
+	{
+		UPointLightComponent* Light = NewObject<UPointLightComponent>(GetOwner());
+		Light->SetupAttachment(this);
+		Light->ComponentTags.Add(CabinLightTag);
+		Light->SetIntensityUnits(ELightUnits::Lumens);
+		Light->SetIntensity(150.0f);
+		Light->SetAttenuationRadius(180.0f);
+		Light->SetLightColor(FLinearColor(1.0f, 0.92f, 0.8f));
+		Light->SetCastShadows(false);
+		Light->RegisterComponent();
+		Light->SetRelativeLocation(BodyPoint(Station.eye_m) + FVector(0.0, 0.0, 40.0));
 	}
 	for (int32 I = 0; I < static_cast<int32>(Layout->controls.size()); ++I)
 	{
@@ -280,6 +311,17 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 	Place(Item.Base, Item.Location + Item.Normal * 0.3, FRotationMatrix::MakeFromZ(Item.Normal).Rotator(), FVector(0.03, 0.03, 0.006));
 	Item.Moving = AddMesh(SphereMesh, Item.MovingColor * 0.08f);
 	Place(Item.Moving, Item.Location + Item.Normal * 0.8, FRotator::ZeroRotator, FVector(0.022));
+	// The glass glows by itself (unlit), so lit and dark lamps read the same in sun or shade: the screens'
+	// unlit material showing a white texture, tinted with the lamp's colour.
+	if (ScreenMaterial != nullptr)
+	{
+		// A tiny white texture per lamp; the material instance keeps it alive.
+		UTextureRenderTarget2D* LampTexture = UKismetRenderingLibrary::CreateRenderTarget2D(this, 4, 4, RTF_RGBA8, FLinearColor::White);
+		UMaterialInstanceDynamic* Glass = UMaterialInstanceDynamic::Create(ScreenMaterial, this);
+		Glass->SetTextureParameterValue(TEXT("SlateUI"), LampTexture);
+		Item.Moving->SetMaterial(0, Glass);
+		Paint(Item.Moving, Item.MovingColor * 0.04f);
+	}
 	Items.Add(Item);
 }
 
@@ -296,7 +338,7 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		if (!Item.LampId.IsEmpty())
 		{
 			const bool bLit = simcore::CabinLayout::LampLit(Layout.lamps[Item.LayoutIndex], Console.panel, Console.equipment);
-			const FLinearColor Glass = bLit ? Item.MovingColor : Item.MovingColor * 0.08f;
+			const FLinearColor Glass = bLit ? Item.MovingColor : Item.MovingColor * 0.04f;
 			Paint(Item.Moving, bHighlighted ? FMath::Lerp(Glass, HighlightColor, 0.4f) : Glass);
 			Paint(Item.Base, bHighlighted ? HighlightColor : Item.BaseColor);
 			continue;
@@ -399,6 +441,36 @@ bool USimCabinComponent::GetStationView(int32 Station, FVector& OutLocation, FRo
 	OutRotation = FRotator(FMath::RadiansToDegrees(S.pitch_rad), FMath::RadiansToDegrees(S.yaw_rad), 0.0);
 	OutLabel = ToF(S.label);
 	return true;
+}
+
+int32 USimCabinComponent::GetNumDisplays() const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	return Layout != nullptr ? static_cast<int32>(Layout->displays.size()) : 0;
+}
+
+bool USimCabinComponent::GetDisplayView(int32 Display, int32& OutStation, FVector& OutCentre, FString& OutLabel) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	if (Layout == nullptr || Display < 0 || Display >= static_cast<int32>(Layout->displays.size()))
+	{
+		return false;
+	}
+	const simcore::CabinDisplay& D = Layout->displays[Display];
+	const simcore::CabinPanel& Panel = *Layout->FindPanel(D.panel_id);
+	OutStation = INDEX_NONE;
+	for (int32 I = 0; I < static_cast<int32>(Layout->stations.size()); ++I)
+	{
+		if (Layout->stations[I].id == Panel.station)
+		{
+			OutStation = I;
+		}
+	}
+	OutCentre = BodyPoint(Panel.PointAt(D.u_m, D.v_m));
+	OutLabel = ToF(D.label);
+	return OutStation != INDEX_NONE;
 }
 
 int32 USimCabinComponent::TraceItem(const FVector& WorldStart, const FVector& WorldEnd) const

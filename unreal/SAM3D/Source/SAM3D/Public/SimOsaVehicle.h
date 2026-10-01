@@ -33,6 +33,15 @@ struct SAM3D_API FSimCrewHotkey
 	bool bQueue = false;
 };
 
+/** One stop of the hands-free cabin tour: a seat, optionally looking straight at one instrument. */
+struct FSimCabinTourView
+{
+	int32 Station = 0;
+	bool bLookAt = false;
+	FVector Target = FVector::ZeroVector;
+	FString Label;
+};
+
 /**
  * Placeholder drivable 9K33 Osa: engine box shapes, kinematic driving over the ground, a turret that follows
  * the tracking antenna's azimuth wheel and a search antenna that folds with the sim's stowage progress.
@@ -135,6 +144,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetCabinStationLabel() const { return StationLabel; }
 
+	/**
+	 * Hands-free test mode: enter the cabin and step through every seat and a close-up of every instrument,
+	 * SecondsPerView each, round and round, logging each view (LogSAM3D). Lets a run be checked from screenshots
+	 * and the log alone. C stops it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void StartCabinTour(float SecondsPerView = 6.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void StopCabinTour();
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsTouringCabin() const { return bTouring; }
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USceneComponent> Root;
@@ -179,6 +202,8 @@ private:
 	void HandleCabin(float DeltaSeconds, class APlayerController* Pc);
 	void ApplyStationView();
 	void ShowFeedback(ESimPlayerActionResult Result);
+	void UpdateTour(float DeltaSeconds);
+	void ShowTourView();
 
 	double SpeedMps = 0.0;
 	double HeadingDeg = 0.0;
@@ -194,4 +219,10 @@ private:
 	FString HoverText;
 	FString FeedbackText;
 	float FeedbackSecondsLeft = 0.0f;
+
+	bool bTouring = false;
+	float TourSecondsPerView = 6.0f;
+	float TourClock = 0.0f;
+	int32 TourIndex = 0;
+	TArray<FSimCabinTourView> TourViews;
 };

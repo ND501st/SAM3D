@@ -83,6 +83,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool GetStationView(int32 Station, FVector& OutLocation, FRotator& OutRotation, FString& OutLabel) const;
 
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	int32 GetNumDisplays() const;
+
+	/** Where a display is (centre, relative to this component), which station reads it, and its label. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	bool GetDisplayView(int32 Display, int32& OutStation, FVector& OutCentre, FString& OutLabel) const;
+
 	/** The control or lamp a world-space segment hits first; INDEX_NONE if none. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	int32 TraceItem(const FVector& WorldStart, const FVector& WorldEnd) const;

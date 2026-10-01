@@ -150,10 +150,11 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			Line->SetCastShadow(false);
 			Line->RegisterComponent();
 			Line->SetRelativeLocationAndRotation(Centre + Normal * 1.4, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
-			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.3 * Display.width_m, 0.0015) : FVector(0.001, 0.0015, 0.3 * Display.height_m));
+			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.003) : FVector(0.001, 0.003, 0.4 * Display.height_m));
 			if (ShapeMaterial != nullptr)
 			{
-				Line->CreateDynamicMaterialInstance(0, ShapeMaterial)->SetVectorParameterValue(TEXT("Color"), FLinearColor::White);
+				// Black reads against the bright sky the camera mostly sees.
+				Line->CreateDynamicMaterialInstance(0, ShapeMaterial)->SetVectorParameterValue(TEXT("Color"), FLinearColor::Black);
 			}
 			Line->SetVisibility(false);
 			Parts.Add(Line);
@@ -298,7 +299,11 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		{
 			continue;
 		}
-		Disc(Canvas, Polar(C, B.azimuth_rad, RadiusOf(B.range_m)), 3.5, Phosphor * static_cast<float>(B.brightness));
+		// A bright arc-shaped smear when fresh, fading with the afterglow.
+		const float Glow = static_cast<float>(B.brightness);
+		const FVector2D P = Polar(C, B.azimuth_rad, RadiusOf(B.range_m));
+		Disc(Canvas, P, 7.0, Phosphor * (0.35f * Glow));
+		Disc(Canvas, P, 4.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
 	}
 
 	// The sweep, with a short fading trail.
@@ -427,7 +432,8 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 {
 	const FLinearColor Face(0.8f, 0.78f, 0.7f);
 	const FLinearColor Ink(0.05f, 0.05f, 0.05f);
-	Canvas->K2_DrawPolygon(nullptr, Size * 0.5, Size * 0.72, 4, Face);  // square face, corners off-screen
+	// Fill the face: one line as thick as the face is tall.
+	Canvas->K2_DrawLine(FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y), Face);
 	const FVector2D Pivot(0.5 * Size.X, 0.92 * Size.Y);
 	const double R = 0.75 * Size.Y;
 	constexpr double SwingDeg = 50.0;
