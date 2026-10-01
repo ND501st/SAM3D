@@ -172,7 +172,9 @@ void ASimOsaVehicle::FollowGround()
 	const FVector Here = GetActorLocation();
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimOsaGround), false, this);
-	if (World->LineTraceSingleByChannel(Hit, Here + FVector(0, 0, 5000.0), Here - FVector(0, 0, 50000.0), ECC_Visibility, Params))
+	// Start well above: the vehicle can begin under the real terrain (scenario heights are approximate and Cesium
+	// heights are above the ellipsoid), and a trace that starts inside the ground never hits its surface.
+	if (World->LineTraceSingleByChannel(Hit, Here + FVector(0, 0, 300000.0), Here - FVector(0, 0, 300000.0), ECC_Visibility, Params))
 	{
 		const FRotator Pitch = FRotationMatrix::MakeFromXZ(FRotator(0.0, HeadingDeg, 0.0).Vector(), Hit.ImpactNormal).Rotator();
 		SetActorLocationAndRotation(Hit.ImpactPoint, Pitch);
