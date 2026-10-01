@@ -41,13 +41,13 @@ Corrections from `docs/research/OSA_RESEARCH_2026-10.md`. Each task names the re
 
 | # | Task | Research |
 |---|---|---|
-| 6.1 | **Five-man crew and seats.** Split the "range officer" into the senior operator (search radar, IFF, azimuth) and the operator (range); the "firing officer" becomes the deputy commander (elevation, TV, launch); the commander receives designations and gives orders; the driver. Console `station` fields, cabin layout (five seats, operators' cabin behind the driver's cab), procedures, scenario crews, aim roles | §2 |
-| 6.2 | **Real start-up.** Switch-on cycle and a function-check procedure (about 3.8 + 3.0 min cold), computer warm-up (100 s), march-to-combat ≤ 4 min, reaction 26–40 s as test targets; time compression so it stays playable | §3 |
+| 6.1 | **Five-man crew and seats.** Split the "range officer" into the senior operator (search radar, IFF, azimuth) and the operator (range); the "firing officer" becomes the deputy commander (elevation, TV, launch); the commander receives designations and gives orders; the driver. Console `station` fields, cabin layout (five seats, operators' cabin behind the driver's cab), procedures, scenario crews, aim roles. Panel detail: red dots marking each control's starting position | §2, §6 |
+| 6.2 | **Real start-up and readiness states.** Switch-on cycle and a function-check procedure (about 3.8 + 3.0 min cold), computer warm-up (100 s), march-to-combat ≤ 4 min, reaction 26–40 s as test targets; scenarios start cold, powered on the march, or deployed (a powered battery stops and deploys fast); crew-skill timing for NPCs (next target 40–120 s, unverified); time compression so it stays playable | §3, §10, §12 |
 | 6.3 | **Missile load, selection and channels.** Six containers (1–3 I, 1–3 II) with ammunition lamps; automatic selection, outer first; selector switch; two channels, ≥ 4 s between launches; per-channel lamp sequence СХОД → ЗАХВАТ → СР.Л → УЗКИЙ ЛУЧ → К3; command transmitter on at ВНИМАНИЕ; preparation at "target in zone"; fix the ЗАХВАТ / ВКЛ ВЫС mapping | §6 |
-| 6.4 | **Search radar.** 33 rpm; elevation beams I/II/III that decide what the radar sees, plus the beam indicator; range rings as operators describe them; IFF interrogation and friendly targets; overhead blind cone; normal video vs MTI | §4 |
+| 6.4 | **Search radar.** 33 rpm; elevation beams I/II/III that decide what the radar sees (4°, 4°, 19° high), plus the beam indicator; shorter detection and capture ranges against low targets (27 km and 14 km at 50 m, original Osa); range rings as operators describe them; IFF interrogation and friendly targets; overhead blind cone; normal video vs MTI | §4 |
 | 6.5 | **Vehicle heading and orientation.** Drop "the hull faces north": azimuths relative to the hull, the navigation/orientation set aligned at a halt, designation errors when it isn't | §3, §7 |
 | 6.6 | **Manual TV tracking.** The TV channel follows the wheels (player) or a skill model (NPC); 3-mil reticle; operator lens fields; memory mode; range judged from the reticle | §5 |
-| 6.7 | **Zones and guidance methods.** Head-on, pursuit and optical "Ф" zones; methods T/T, Горка, Ф, Н chosen automatically; hit chances calibrated inside the NVA single-shot ranges (game-balance file) | §5 |
+| 6.7 | **Zones and guidance methods.** Head-on, pursuit and optical "Ф" zones; methods T/T, Горка, Ф, Н chosen automatically; hit chances calibrated inside the NVA single-shot ranges and Korovin's low-altitude figures (0.35–0.4 at 50 m) (game-balance file) | §5 |
 | 6.8 | **Citations.** Replace Western "facts" citations in `data/` with operator-country sources; record conflicts | §1, §10 |
 
 **Exit:** the practice scenario runs with five crew, real timings (with time compression), six missiles and a
@@ -61,7 +61,9 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 | 7.2 | Target designation by radio: the battery commander (NPC or player) gives "azimuth, range" to each vehicle; the vehicle commander passes it on |
 | 7.3 | Four vehicles per battery (others NPC-crewed) and the TZM: reload 6 missiles in about 6 min |
 | 7.4 | Fuel: turbine and take-off generator consumption, the half-tank rule, refuelling from the TZM |
-| 7.5 | Unreal: plotting board in the PU-12, radio messages, battery vehicles on the map |
+| 7.5 | NPC battery behaviour from the battery tactics in the research (§7): march spacing, short-halt drill, combat formation in pairs, reload vehicles behind, halts every 3–4 h; batteries feeding each other's air picture |
+| 7.6 | Prepared positions: emplacements, nets, dummy positions, grid power in peacetime and diesel when cut off (a third power option) |
+| 7.7 | Unreal: plotting board in the PU-12, radio messages, battery vehicles on the map |
 
 ## Phase 8 - Crew and mission (the vertical slice)
 
@@ -79,7 +81,8 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 | # | Task |
 |---|---|
 | 9.1 | Jamming at gameplay level: range-gate pull-off on the search scope, noise jammers, method Н, the ПОМЕХА switch |
-| 9.2 | Anti-radiation missiles and the drill (stop emitting, relocate); EMCON TV engagement as a full mission |
+| 9.2 | Anti-radiation missiles and the drills (stop emitting, relocate; TV-first tracking, the search radar on for two turns, brief tracking-radar bursts); EMCON TV engagement as a full mission |
+| 9.4 | ECCM at gameplay level: mixed (semi-automatic/automatic) tracking, the external-coherence MTI mode against chaff, counter-jamming only while firing |
 | 9.3 | Target behaviour: pop-up helicopters, low strike runs, evasion, terrain masking |
 
 ## Phase 10 - Scenarios and training
@@ -87,7 +90,7 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 | # | Task |
 |---|---|
 | 10.1 | Training-range scenarios in the style of Ashuluk / Kapustin Yar / Ustka / NAMFI (drones, P-15 targets) |
-| 10.2 | Angola 1987–88 (Cuito Cuanavale) and Lebanon, 24 July 1982 |
+| 10.2 | Angola 1983–88 (dug-in Osa-AK unit, night moves, night bombers; Cuito Cuanavale) and Lebanon, 24 July 1982 |
 | 10.3 | Instructor mode modelled on the 9Ф632 trainer: a second player changes target behaviour live |
 
 ## Later

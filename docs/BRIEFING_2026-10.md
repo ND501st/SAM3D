@@ -90,7 +90,40 @@ console fidelity plus what it couldn't do: driving, deploying, a crew, a battery
 | 7 | Buy or borrow the BSU textbook, the GDR handbooks and the Angola memoirs | Your call; the BSU textbook is the most useful |
 | 8 | Write to the SAM Simulator creator now, with the specific open conflicts (§10 of the research file) | **Yes**; I can draft it |
 
-## 6. What I changed today
+## 6. Update, 2 October: the video transcript
+
+You sent a transcript of a long YouTube documentary on the Osa. Analysis in the research file, §12.
+
+- **What it is:** its history and technical figures closely retell Vladimir Korovin's series in «Техника и
+  вооружение» (2010), which I found while checking it and added as a tier-1 source. Its battery-tactics chapter
+  cites unnamed manuals, so it stays unverified until a manual turns up (the BSU textbook is the best candidate).
+- **What it confirms:** 33 rpm search radar with three beams; IFF, then a short halt and auto-track; two missiles on
+  one target, 3–5 s apart; the "Горка" low-target method; search on the move, fire from a short halt; and the crew
+  decision: an officer commanding, and a sergeant (later a warrant officer) in the guidance seat. That supports the
+  five-man crew change (decision 1).
+- **What's new for SAM3D:**
+  - The radar sees low targets much closer in: detection at 27 km and lock at 14 km against a target at 50 m.
+  - Kill chances at 50 m are lower (0.35–0.4).
+  - Battery tactics for NPC behaviour and missions: march spacing, the short-halt drill, pairs about 3 km apart,
+    river crossings, ambushes, halts every 3–4 h, dug-in positions on grid power.
+  - Drills against anti-radiation missiles and jamming.
+  - Crew-skill timings: a battery deploying in 35–50 s from a powered march (unverified).
+  - A cabin detail: red dots marking each control's starting position.
+- **What I didn't adopt:** "80 missiles" per regiment (it should be 120), the 27 m minimum altitude (operators say
+  25 m), the decoys against anti-radiation missiles (the video itself says they're unconfirmed), and the claims about
+  jamming results in Syria.
+- **Plan changes:**
+  - 6.2 now models readiness states: a cold start takes minutes, a powered battery stopping from the march is quick.
+    This also explains why the sources' timings conflict.
+  - 6.4 and 6.7 get the low-altitude figures.
+  - Phase 7 gets NPC battery tactics and prepared positions.
+  - Phase 9 gets the anti-radiation and jamming drills.
+  - The Angola scenario covers 1983–88, using a Soviet engineer's memoir of an Osa-AK unit there (in Korovin's
+    series).
+
+Could you tell me the video's title or channel? I'd like to cite it properly.
+
+## 7. What I changed today
 
 Documentation only; no code or behaviour changes. New: this briefing and `docs/research/OSA_RESEARCH_2026-10.md`.
 Rewritten or updated: `PROJECT_PLAN.md`, `DEVELOPMENT_ROADMAP.md`, `HANDOFF.md`, `SOURCES.md`, `ARCHITECTURE.md`,

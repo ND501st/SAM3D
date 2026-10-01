@@ -203,4 +203,6 @@ The manual is a player's guide; the creator's development thread on SimHQ (2013�
 | Search scope | Scales 0–15 / 0–35 / 10–45 km (p15) | Rings every 5 km; on 0–15 km at 2, 7, 12 km; 0–35 km is the working scale; 33 rpm; beams I 0–4°, II 4–8°, III 8–28° (NVA) |
 | Guidance methods | "automatically chosen" (p30) | T/T above ε 00-30; Горка or Ф (helicopters) below; Н against jammers (no range) |
 | PU-12 | Plotting board read by the player (p20) | Designations reach each vehicle by voice: azimuth and range |
+| Panels | White panels (the creator: "first white panel" in SAM Simulator) | Light front panels for reading in a dim compartment, and red dots beside knobs and switches marking their starting positions (Korovin, «Техника и вооружение» 2010) |
+| Low targets | НЛЦ, then TV angle tracking (p25) | "Горка" method for targets at 50–100 m; the original Osa detects a 50 m target at about 27 km and locks it at about 14 km (Korovin) |
 

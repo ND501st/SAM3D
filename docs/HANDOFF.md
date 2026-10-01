@@ -121,7 +121,9 @@ from operator countries. Main findings (detail and sources in `docs/research/OSA
 
 Consequences: the roadmap was re-sequenced (phase 6 accuracy pass, phase 7 battery and PU-12, phase 8 crew and
 mission, then threats and scenarios); the validation set is now Osa events; `docs/SOURCES.md` has source tiers and
-Western "facts and stats" pages are no longer used for decisions. **The user has not yet answered the decisions in
+Western "facts and stats" pages are no longer used for decisions. On the same day the user supplied a YouTube documentary transcript; it retells V. Korovin's «Техника и вооружение»
+series (2010, now a tier-1 source) and adds unverified battery tactics (research file §12, briefing §6). **The user
+has not yet answered the decisions in
 `docs/BRIEFING_2026-10.md` §5; confirm them before starting phase 6.**
 
 ## 10. SAM Simulator, in short
