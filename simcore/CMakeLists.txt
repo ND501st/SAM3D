@@ -41,7 +41,8 @@ add_executable(simcore_tests
   tests/test_engagement.cpp
   tests/test_procedures.cpp
   tests/test_equipment.cpp
-  tests/test_console.cpp)
+  tests/test_console.cpp
+  tests/test_scenario.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -61,3 +62,10 @@ simcore_configure_target(engagement_demo)
 add_executable(procedure_demo examples/procedure_demo.cpp)
 simcore_configure_target(procedure_demo)
 add_test(NAME procedure_demo COMMAND procedure_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/procedures/osa_ak.json")
+
+# Play a scenario file headless and print the debrief; also run as a test on the practice scenario.
+add_executable(scenario_demo examples/scenario_demo.cpp)
+simcore_configure_target(scenario_demo)
+add_test(NAME scenario_demo
+         COMMAND scenario_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/osa_practice.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/osa_practice.acmi")

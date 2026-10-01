@@ -70,6 +70,12 @@ The player's 3D cabin clicks call the same functions, so the player and the crew
   debrief timeline and summary. No points: SAM Simulator's rule is "no points, as in reality".
   `examples/procedure_demo.cpp` runs an Osa session from the march to the debrief.
 
+- Scenarios (`scenario.hpp`, `scenario_runner.hpp`): `data/scenarios/<id>.json` places the unit, its crew and
+  the targets, and lists triggers (time, target range, console conditions, launches) that set sim inputs, give
+  crew orders or end the run. `ScenarioRunner` owns the World, console, crew and log, steps them in the order
+  below, records launches, writes a Tacview track and produces the debrief. Runs are deterministic for a given
+  seed. Missile flight after a launch is not simulated yet (phase 3). `examples/scenario_demo.cpp` plays a file.
+
 Per step: `Equipment::Update`, then `ControlPanel::ReleaseMomentaries`, then crew. Crew see this step's lamps, and
 Equipment sees every button press exactly once.
 

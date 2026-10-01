@@ -38,6 +38,8 @@
     }
   ],
 
+  "launch": { "button": "fo.launch", "armed": "launch_armed", "source": "samsim_osa p30", "confidence": "high" },
+
   "inputs": [
     { "id": "vehicle_stopped", "description": "The vehicle is stationary (a short halt or a firing position)", "source": "wrk; mis (tracking and launch only from a short halt or stationary)", "confidence": "high" },
     { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },

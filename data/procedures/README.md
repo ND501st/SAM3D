@@ -18,6 +18,9 @@ source, and say why in `notes`.
   "notes": "free text",
   "sources": [ { "id": "samsim_osa", "title": "...", "url": "...", "notes": "..." } ],
 
+  // Optional: the push-button that launches, and the subsystem that must be ready for it to (used by the scenario runner).
+  "launch": { "button": "fo.launch", "armed": "launch_armed", "source": "...", "confidence": "high" },
+
   // Yes/no signals the sim sets (target geometry etc.), so lamps and automatic sequences can use them.
   "inputs": [ { "id": "target_in_zone", "description": "...", "source": "...", "confidence": "high" } ],
 

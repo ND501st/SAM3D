@@ -23,5 +23,7 @@
 #include "simcore/json.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
+#include "simcore/scenario.hpp"
+#include "simcore/scenario_runner.hpp"
 #include "simcore/world.hpp"
 #include "simcore/acmi.hpp"

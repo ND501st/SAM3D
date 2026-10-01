@@ -1,0 +1,42 @@
+{
+  "system_id": "osa_ak",
+  "display_name": "9K33M2 Osa-AK (SA-8B Gecko)",
+  "status": "Vehicle and crew filled from public sources. Radar and missile sections are deliberately empty until the engagement-model decision (docs/DEVELOPMENT_ROADMAP.md, 'Open decision') is made.",
+  "sources": {
+    "wrk": "2ПВО МСД. Часть 2. Зенитные ракетные полки (зрп), unsigned article, wrk.ru forum attachment (docs/SOURCES.md)",
+    "gs": "GlobalSecurity.org, SA-8 GECKO / 9K33M3 Osa-AKM",
+    "mis": "missilery.info, 9K33M3 Osa-AKM",
+    "apa": "Air Power Australia, 9K33 Osa/Romb ... SA-8 Gecko",
+    "ru_wiki": "Russian Wikipedia, Оса (зенитный ракетный комплекс)",
+    "nuou": "Ukrainian National Defence University museum page, 9A33BM Osa"
+  },
+  "crew": [
+    { "role": "commander", "count": 1, "source": "wrk", "notes": "An officer; on the battery's first vehicle, the deputy battery commander." },
+    { "role": "guidance_operator", "count": 1, "source": "wrk", "notes": "Sergeant, deputy crew chief. SAM Simulator: Firing Officer." },
+    { "role": "range_operator", "count": 1, "source": "wrk", "notes": "SAM Simulator: Range Officer." },
+    { "role": "search_operator", "count": 1, "source": "wrk", "notes": "" },
+    { "role": "driver_mechanic_electromechanic", "count": 1, "source": "wrk", "notes": "Crew of 5 also in ru_wiki (9A33B); mis and nuou give 4 for later variants." }
+  ],
+  "vehicle": {
+    "mobility": "wheeled",
+    "chassis": { "value": "BAZ-5937, 6x6, amphibious (water jet)", "source": "ru_wiki, wrk", "confidence": "high" },
+    "max_road_speed_mps": { "value": 19.4, "source": "ru_wiki (70 km/h, 9A33B)", "confidence": "low",
+                            "notes": "Sources disagree: 60 km/h on roads for the complex's vehicles (wrk), 70 km/h (ru_wiki), 80 km/h (nuou; wrk for the chassis). 70 km/h picked as the middle value." },
+    "max_water_speed_mps": { "value": 2.2, "source": "wrk, nuou (8 km/h)", "confidence": "medium" },
+    "deploy_time_s": { "value": 240, "source": "wrk (within 4 min including the GTA start), gs (4 min), mis (up to 4 min)", "confidence": "medium",
+                       "notes": "apa gives 3–5 min." },
+    "stow_time_s": { "value": 300, "source": "ru_wiki (deployment and stowing not more than 5 min)", "confidence": "medium",
+                     "notes": "apa gives 3–5 min." },
+    "search_on_the_move_max_speed_mps": { "value": 22.2, "source": "wrk (search possible at up to 80 km/h)", "confidence": "medium" },
+    "engages_from": { "value": "short halt or stationary only", "source": "wrk, mis", "confidence": "high" },
+    "power": {
+      "value": "9И120 gas-turbine unit (on the move and at a halt); engine power take-off generator (at a halt only)",
+      "source": "wrk, mis", "confidence": "medium",
+      "notes": "apa writes 9I210, probably a typo. Output figures in wrk are not used by the sim."
+    }
+  },
+  "radars": [],
+  "missile": null,
+  "procedures_file": "data/procedures/osa_ak.json",
+  "validation_scenarios": []
+}
