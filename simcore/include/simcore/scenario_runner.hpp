@@ -7,6 +7,7 @@
 //   3. Equipment::Update; a press of the launch button with the launch circuit
 //      armed is recorded as a launch;
 //   4. ControlPanel::ReleaseMomentaries; crew act; the log collects;
+//      (the player acts between steps, through PlayerSet / PlayerTurn);
 //   5. a Tacview frame is written once per simulated second; end conditions are checked.
 // Deterministic: the only randomness is the crew reaction times, drawn once from
 // the scenario seed with a portable mapping (std::mt19937 output is fully
@@ -81,6 +82,7 @@ public:
         CheckLaunch();
         console_.panel.ReleaseMomentaries();
         for (CrewMember& c : crew_) c.Update(dt, console_.panel, &console_.equipment);
+        player_.Update(dt);
         log_.CollectEquipment(console_.equipment);
         for (CrewMember& c : crew_) log_.CollectCrew(c, time_);
         if (time_ + 1e-9 >= next_acmi_s_) {
@@ -133,6 +135,42 @@ public:
         }
         return nullptr;
     }
+
+    // ---- The player's hands on the console (the 3D cabin).
+    // Moves go through a ProcedureTracker, the same way a crew member's do, so the debrief records early and
+    // out-of-order actions against the procedure the player is working through. No procedure = free play:
+    // only physical blocks (covers, locks, key steps) apply.
+
+    // Start judging the player against a procedure of the console; "" for free play. False if unknown.
+    bool SetPlayerProcedure(const std::string& procedure_id) {
+        if (procedure_id.empty()) {
+            player_.Reset(Procedure{});
+            return true;
+        }
+        const Procedure* p = console_.FindProcedure(procedure_id);
+        if (p == nullptr) return false;
+        player_.Reset(*p);
+        log_.Record({time_, DebriefEntry::Kind::Started, kPlayerName, procedure_id, std::string()});
+        return true;
+    }
+
+    // Move a switch, selector or key, or press a button. The control moves unless the result is Blocked,
+    // WaitRequired, UnknownControl or InvalidPosition.
+    StepResult PlayerSet(const std::string& control_id, int position) {
+        const bool was_complete = player_.IsComplete();
+        const StepResult r = player_.Attempt(console_.panel, control_id, position, &console_.equipment);
+        log_.RecordAttempt(time_, kPlayerName, player_, r);
+        if (!was_complete && player_.IsComplete()) {
+            log_.Record({time_, DebriefEntry::Kind::Completed, kPlayerName, player_.GetProcedure().id, std::string()});
+        }
+        return r;
+    }
+
+    // Turn a hand wheel to a value. Wheel work isn't a procedure step (data/procedures/README.md).
+    bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
+
+    const ProcedureTracker& PlayerTracker() const { return player_; }
+    static constexpr const char* kPlayerName = "Player";
 
     // Distance from the unit to a target, or a negative number if it isn't in the air.
     double TargetRange(const std::string& target_id) {
@@ -304,6 +342,7 @@ private:
     bool aim_crew_present_ = false;
     std::vector<EngagementTarget> eng_targets_;
     std::vector<CrewMember> crew_;
+    ProcedureTracker player_;  // empty procedure = free play
     std::vector<TargetState> targets_;
     std::vector<bool> fired_;
     SessionLog log_;

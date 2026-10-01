@@ -70,6 +70,13 @@ Everything in simcore is deterministic for a given sequence of inputs, which mak
   aborted for voice lines and the order UI.
 
 The player's 3D cabin clicks call the same functions, so the player and the crew share one source of truth.
+- Player: `ScenarioRunner::PlayerSet` puts the player's moves through a `ProcedureTracker` (the procedure set with
+  `SetPlayerProcedure`, or none for free play), so early and out-of-order actions reach the debrief like a crew
+  member's; `PlayerTurn` turns hand wheels.
+- Cabin layout (`cabin.hpp`, `data/cabins/<system>.json`): where stations, panels, controls and lamps sit in the
+  vehicle's body frame, each control's look (toggle, rotary, key, button, wheel, cover), and when each lamp is lit
+  (console conditions). Presentation data checked against the console: every control placed once, on its own
+  station's panel. Unreal's `USimCabinComponent` builds and animates the cabin from it.
 - `SessionLog` (`debrief.hpp`): crew reports, equipment faults and player deviations on one clock, formatted as a
   debrief timeline and summary. No points: SAM Simulator's rule is "no points, as in reality".
   `examples/procedure_demo.cpp` runs an Osa session from the march to the debrief.

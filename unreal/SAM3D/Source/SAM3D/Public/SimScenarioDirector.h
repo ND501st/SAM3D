@@ -34,6 +34,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
 	FString ScenarioFile = TEXT("scenarios/osa_practice.json");
 
+	/** 3D cabin layout for the scenario's console, relative to the data folder. Empty = no cabin. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
+	FString CabinFile = TEXT("cabins/osa_ak.json");
+
 	/** Move the level's Cesium georeference so its origin is the scenario origin, and convert through it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cesium")
 	bool bUseCesiumGeoreference = true;

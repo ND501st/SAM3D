@@ -109,7 +109,7 @@ Task-level detail and order: `docs/DEVELOPMENT_ROADMAP.md`. Done as of `885f568`
 | 2 Scenarios and debrief | Done: scenario JSON + loader, deterministic `ScenarioRunner`, ACMI track, `osa.json` (crew/vehicle/deploy/power only). |
 | 3 Engagement outcome | Done at **gameplay level** (option 1): search picture, lock/break-lock, TV tracking, outcome resolver with every factor in the debrief, target breakaway. |
 | 4 Unreal bring-up | Mostly done: Cesium georeference + terrain sampled into `GridTerrain`, kinematic placeholder Osa, antenna fold follows sim state. **Open:** Chaos Vehicles (needs a mesh with wheel bones), real model/animation, performance check. |
-| 5 3D cabin | Not started. |
+| 5 3D cabin | `feature/cabin`: cabin layout data + loader (`cabin.hpp`, `data/cabins/osa_ak.json`), player actions judged by a `ProcedureTracker`, Unreal cabin component (placeholder shapes, lamps, first-person interaction, HUD). **Open:** scopes as render targets (5.3), audio, real interior. |
 | 6 Crew and mission | Not started (crew orders are number keys for now). |
 
 **Known deliberate simplifications** (ARCHITECTURE.md): aircraft constant speed in straight ENU lines; the old physics missile (`missile.hpp`, used only by `engagement_demo`) is PN-only with perfect target knowledge, so it shows 0.0 m misses; the scenario path resolves launches with the gameplay model instead of flying a missile; radar physics is a single-look SNR threshold.
@@ -153,8 +153,8 @@ Physics depth: see §9 (gameplay-level outcomes chosen).
 
 ## 13. Next steps
 
-1. **User:** `gh auth login`, then open the five stacked PRs in order (§2) and check CI.
-2. **Phase 5 cabin** (Claude can write and compile it): first-person interaction framework, controls bound to `ControlPanel` by `ControlDef.id`, panel layout as data, scopes as render targets fed by the engagement model.
+1. **User:** merge the stacked PRs ND501st/SAM3D#1–#5 in order (merge commits or rebase, not squash), then the cabin PR.
+2. **Phase 5.3:** SOC/SSC scopes and the TV picture as render targets fed by the engagement model, placed on the cabin panels.
 3. **Phase 6:** crew order menu calling the existing order API (replaces the number keys), then the scripted mission end to end.
 4. Remaining phase 4: Chaos Vehicles once there's an Osa mesh with wheel bones; performance check of the 100 Hz step and terrain sampling.
 5. Draft the message to the SAM Sim creator with the three open questions (§10).

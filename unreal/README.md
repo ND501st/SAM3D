@@ -40,6 +40,21 @@ In play:
 | 5, 6 | Firing officer: prepare for firing; launch (queued) |
 | 7 | Firing officer: TV-only engagement |
 | 8, 9 | Commander: stow for the march; stow for transport |
+| C | Enter or leave the 3D cabin |
+
+In the cabin (placeholder shapes from `data/cabins/osa_ak.json`):
+
+| Input | Action |
+|---|---|
+| Mouse | Look around the seat |
+| Tab | Next seat: driver, commander, range officer, firing officer |
+| Left click | Flip a switch or cover, step a selector or key forward, press a button |
+| Right click | Step a selector or key back |
+| Left drag / scroll on a hand wheel | Turn it (a wheel lock must be released first) |
+
+The crosshair names the control under it and its position. Clicks go through the player's procedure tracker
+(`USimWorldSubsystem::PlayerSetControl`), so mistakes reach the debrief; only physical refusals (a closed cover,
+a key jumping a position) show on screen. The crew keeps working the same switches, so you see their actions too.
 
 The practice scenario also gives the crew these orders itself as the drone approaches (its triggers), so you can
 just watch. The status line at the top shows power, the АПУ, the search antenna (it folds for transport), the
@@ -56,7 +71,9 @@ never reaches the repository.
 | `Source/SAM3D/Public/SimCoreIncludes.h` | The only place Unreal code includes `simcore` (wrapped in `THIRD_PARTY_INCLUDES_*`). |
 | `SimWorldSubsystem` | Runs the simulation at a fixed step: a `simcore::ScenarioRunner` (scenario mode) or the older demo `World`. Console API for Blueprints and C++ (controls, wheels, equipment states and progress, inputs, crew orders), debrief events, Cesium terrain sampling, coordinate conversion. |
 | `SimScenarioDirector` | Level actor: loads the scenario, syncs the Cesium georeference, requests terrain, spawns and possesses the player's vehicle, spawns proxies, prints status and debrief. |
-| `SimOsaVehicle` | Placeholder drivable Osa (engine box shapes): kinematic driving over the ground, turret follows the tracking antenna's azimuth, search antenna folds with the sim's stowage progress, number keys give crew orders. |
+| `SimOsaVehicle` | Placeholder drivable Osa (engine box shapes): kinematic driving over the ground, turret follows the tracking antenna's azimuth, search antenna folds with the sim's stowage progress, number keys give crew orders, C enters the cabin. |
+| `SimCabinComponent` | Builds the cabin's panels, controls and lamps from the loaded cabin layout and shows the console state on them every frame; tracing, hover text, clicks and wheel turns for the vehicle. |
+| `SimCabinHUD` | Crosshair, hover text, feedback and key help while in the cabin. |
 | `SimEntityActor` | Visual proxy for one target or missile. Subclass in Blueprint for real meshes and effects. |
 
 ## Coordinates
@@ -75,4 +92,6 @@ hull heading so it still points the right way.
 
 - Chaos Vehicles physics for driving (needs a vehicle mesh with wheel bones); driving is kinematic.
 - Real Osa model and deploy/stow animation beyond the placeholder antenna fold.
-- The 3D cabin (phase 5) and the crew order menu (phase 6); crew orders are number keys for now.
+- Cabin: radar scopes and the TV picture as render targets (phase 5.3), audio cues, a real interior (the cabin is
+  floating placeholder panels inside the hull box, which is see-through from inside).
+- The crew order menu (phase 6); crew orders are number keys for now.
