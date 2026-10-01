@@ -14,6 +14,11 @@
 // Items sit at (u, v) on the panel from its centre: u to the operator's right, v up
 // the face.
 //
+// Displays are the instruments the crew reads: the search radar's scope ("ppi"), the
+// tracking radar's range indicator ("range_scope"), the TV sight's monitor ("tv"), and
+// needle instruments showing a control's value ("dial" turns, "meter" swings). Each
+// has conditions for when it is powered and (dials) when its backlight is on.
+//
 // Loading checks every reference against the console: each control placed at most
 // once, on a panel of its own station, inside the panel. A guard (cover or lock) that
 // isn't placed itself is placed over the control it guards.
@@ -125,12 +130,55 @@ struct CabinLamp {
     std::vector<Condition> lit_when_any; // if not empty, at least one must also hold
 };
 
+enum class CabinDisplayKind { Ppi, RangeScope, Tv, Dial, Meter };
+
+inline const char* ToString(CabinDisplayKind k) {
+    switch (k) {
+        case CabinDisplayKind::Ppi: return "ppi";
+        case CabinDisplayKind::RangeScope: return "range_scope";
+        case CabinDisplayKind::Tv: return "tv";
+        case CabinDisplayKind::Dial: return "dial";
+        case CabinDisplayKind::Meter: return "meter";
+    }
+    return "?";
+}
+
+struct CabinDisplay {
+    std::string id;
+    std::string label;
+    std::string panel_id;
+    CabinDisplayKind kind = CabinDisplayKind::Dial;
+    double u_m = 0.0;  // centre on the panel
+    double v_m = 0.0;
+    double width_m = 0.0;
+    double height_m = 0.0;
+    std::vector<Condition> on_when;      // powered: all must hold (empty = always)
+    std::vector<Condition> on_when_any;  // if not empty, at least one must also hold
+    std::vector<Condition> lit_when;     // dial backlight: all must hold (empty = lit whenever powered)
+    // dial and meter
+    std::string control;                 // the control whose value the needle shows
+    int marks = 12;                      // labelled divisions on the scale
+    // dial: one needle revolution = value_per_turn; the scale reads 0..labels_per_turn around it
+    double value_per_turn = 360.0;
+    double labels_per_turn = 360.0;
+    // meter: reading = value * scale, full deflection at full_scale, in `unit`
+    double scale = 1.0;
+    double full_scale = 1.0;
+    std::string unit;
+    // ppi
+    double sweep_period_s = 2.0;
+    double afterglow_s = 3.0;
+    // range_scope: span of the magnified lower sweep, centred on the range gate
+    double magnified_window_m = 1500.0;
+};
+
 struct CabinLayout {
     std::string system_id;
     std::vector<CabinStation> stations;
     std::vector<CabinPanel> panels;
     std::vector<CabinControl> controls;
     std::vector<CabinLamp> lamps;
+    std::vector<CabinDisplay> displays;
 
     const CabinStation* FindStation(const std::string& id) const {
         for (const CabinStation& s : stations) {
@@ -160,6 +208,14 @@ struct CabinLayout {
         return lamp.lit_when_any.empty() || equipment.AnyHolds(lamp.lit_when_any, panel);
     }
 
+    static bool DisplayOn(const CabinDisplay& d, const ControlPanel& panel, const Equipment& equipment) {
+        if (!equipment.AllHold(d.on_when, panel)) return false;
+        return d.on_when_any.empty() || equipment.AnyHolds(d.on_when_any, panel);
+    }
+    static bool DisplayLit(const CabinDisplay& d, const ControlPanel& panel, const Equipment& equipment) {
+        return DisplayOn(d, panel, equipment) && equipment.AllHold(d.lit_when, panel);
+    }
+
     // Console controls the layout doesn't place (a cabin should usually place them all).
     std::vector<std::string> UnplacedControls(const ControlPanel& panel) const {
         std::vector<std::string> out;
@@ -175,13 +231,15 @@ namespace detail {
 class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "stations", "panels", "controls", "lamps"})) return false;
+        if (!Keys(root, "", {"system_id", "status", "notes", "stations", "panels", "controls", "lamps", "displays"})) {
+            return false;
+        }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
         if (out.system_id != console.system_id) {
             return Fail("system_id", "'" + out.system_id + "' doesn't match the console's '" + console.system_id + "'");
         }
         return LoadStations(root, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
-               PlaceGuards(console.panel, out) && LoadLamps(root, console, out);
+               PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out);
     }
 
 private:
@@ -381,6 +439,105 @@ private:
                 return Fail(path, "needs lit_when or lit_when_any");
             }
             out.lamps.push_back(std::move(lamp));
+        }
+        return true;
+    }
+
+    bool LoadDisplays(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "displays");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("displays", i);
+            const json::Value& d = arr->items[i];
+            if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
+                                "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
+                                "sweep_period_s", "afterglow_s", "magnified_window_m", "source", "confidence",
+                                "notes"})) {
+                return false;
+            }
+            CabinDisplay disp;
+            std::string kind;
+            if (!RequireString(d, path, "id", disp.id) || !RequireString(d, path, "label", disp.label) ||
+                !RequireString(d, path, "kind", kind) || !Provenance(d, path) ||
+                !RequireString(d, path, "panel", disp.panel_id) || !Number2(d, path, "at_m", disp.u_m, disp.v_m) ||
+                !Number2(d, path, "size_m", disp.width_m, disp.height_m)) {
+                return false;
+            }
+            const CabinPanel* panel = out.FindPanel(disp.panel_id);
+            if (panel == nullptr) return Fail(Join(path, "panel"), "unknown panel '" + disp.panel_id + "'");
+            if (!(disp.width_m > 0.0) || !(disp.height_m > 0.0)) return Fail(Join(path, "size_m"), "must be positive");
+            if (!panel->Contains(disp.u_m - 0.5 * disp.width_m, disp.v_m - 0.5 * disp.height_m) ||
+                !panel->Contains(disp.u_m + 0.5 * disp.width_m, disp.v_m + 0.5 * disp.height_m)) {
+                return Fail(Join(path, "at_m"), "display doesn't fit inside panel '" + disp.panel_id + "'");
+            }
+            for (const CabinDisplay& other : out.displays) {
+                if (other.id == disp.id) return Fail(Join(path, "id"), "duplicate display '" + disp.id + "'");
+            }
+            if (!LoadConditions(d, path, "on_when", console.panel, console.equipment, disp.on_when) ||
+                !LoadConditions(d, path, "on_when_any", console.panel, console.equipment, disp.on_when_any) ||
+                !LoadConditions(d, path, "lit_when", console.panel, console.equipment, disp.lit_when)) {
+                return false;
+            }
+            if (!LoadDisplayKind(d, path, kind, console, disp)) return false;
+            out.displays.push_back(std::move(disp));
+        }
+        return true;
+    }
+
+    // The keys each kind takes beyond the common ones, and what it needs from the console.
+    bool LoadDisplayKind(const json::Value& d, const std::string& path, const std::string& kind,
+                         const ConsoleData& console, CabinDisplay& disp) {
+        std::vector<std::string> allowed;
+        if (kind == "ppi") {
+            disp.kind = CabinDisplayKind::Ppi;
+            allowed = {"sweep_period_s", "afterglow_s"};
+            if (!console.has_sensors) return Fail(Join(path, "kind"), "a ppi needs the console's sensors block");
+        } else if (kind == "range_scope") {
+            disp.kind = CabinDisplayKind::RangeScope;
+            allowed = {"magnified_window_m"};
+            if (!console.has_sensors) return Fail(Join(path, "kind"), "a range_scope needs the console's sensors block");
+        } else if (kind == "tv") {
+            disp.kind = CabinDisplayKind::Tv;
+            if (!console.has_sensors || console.track.tv_camera.empty()) {
+                return Fail(Join(path, "kind"), "a tv needs a TV camera in the console's sensors block");
+            }
+        } else if (kind == "dial") {
+            disp.kind = CabinDisplayKind::Dial;
+            allowed = {"control", "marks", "value_per_turn", "labels_per_turn"};
+        } else if (kind == "meter") {
+            disp.kind = CabinDisplayKind::Meter;
+            allowed = {"control", "marks", "scale", "full_scale", "unit"};
+        } else {
+            return Fail(Join(path, "kind"), "must be ppi, range_scope, tv, dial or meter");
+        }
+        for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
+                                "sweep_period_s", "afterglow_s", "magnified_window_m"}) {
+            bool ok = d.Find(key) == nullptr;
+            for (const std::string& a : allowed) ok = ok || a == key;
+            if (!ok) return Fail(Join(path, key), "not used by a " + kind);
+        }
+        if (disp.kind == CabinDisplayKind::Dial || disp.kind == CabinDisplayKind::Meter) {
+            if (!RequireString(d, path, "control", disp.control)) return false;
+            if (!console.panel.Has(disp.control)) {
+                return Fail(Join(path, "control"), "unknown control '" + disp.control + "'");
+            }
+        }
+        if (!OptionalInt(d, path, "marks", disp.marks) || !OptionalNumber(d, path, "value_per_turn", disp.value_per_turn) ||
+            !OptionalNumber(d, path, "labels_per_turn", disp.labels_per_turn) ||
+            !OptionalNumber(d, path, "scale", disp.scale) || !OptionalNumber(d, path, "full_scale", disp.full_scale) ||
+            !OptionalString(d, path, "unit", disp.unit) ||
+            !OptionalNumber(d, path, "sweep_period_s", disp.sweep_period_s) ||
+            !OptionalNumber(d, path, "afterglow_s", disp.afterglow_s) ||
+            !OptionalNumber(d, path, "magnified_window_m", disp.magnified_window_m)) {
+            return false;
+        }
+        if (disp.marks < 1) return Fail(Join(path, "marks"), "must be at least 1");
+        for (double v : {disp.value_per_turn, disp.full_scale, disp.sweep_period_s, disp.afterglow_s,
+                         disp.magnified_window_m}) {
+            if (!(v > 0.0)) {
+                return Fail(path, "value_per_turn, full_scale, sweep_period_s, afterglow_s and magnified_window_m "
+                                  "must be positive");
+            }
         }
         return true;
     }

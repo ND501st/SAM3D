@@ -6,6 +6,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "SAM3D.h"
+#include "SimCabinDisplayComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -56,10 +57,13 @@ USimCabinComponent::USimCabinComponent()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Screen(
+		TEXT("/Engine/EngineMaterials/Widget3DPassThrough_Opaque.Widget3DPassThrough_Opaque"));
 	CubeMesh = Cube.Succeeded() ? Cube.Object : nullptr;
 	CylinderMesh = Cylinder.Succeeded() ? Cylinder.Object : nullptr;
 	SphereMesh = Sphere.Succeeded() ? Sphere.Object : nullptr;
 	ShapeMaterial = Material.Succeeded() ? Material.Object : nullptr;
+	ScreenMaterial = Screen.Succeeded() ? Screen.Object : nullptr;
 }
 
 USimWorldSubsystem* USimCabinComponent::GetSim() const
@@ -136,8 +140,16 @@ void USimCabinComponent::DestroyParts()
 			Part->DestroyComponent();
 		}
 	}
+	for (USimCabinDisplayComponent* Display : Displays)
+	{
+		if (Display != nullptr)
+		{
+			Display->DestroyComponent();
+		}
+	}
 	Items.Reset();
 	PanelMeshes.Reset();
+	Displays.Reset();
 	HighlightedItem = INDEX_NONE;
 	BuiltLayout = nullptr;
 }
@@ -168,8 +180,19 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	{
 		BuildLamp(Sim, I);
 	}
+	for (int32 I = 0; I < static_cast<int32>(Layout->displays.size()); ++I)
+	{
+		const simcore::CabinDisplay& D = Layout->displays[I];
+		const simcore::CabinPanel& Panel = *Layout->FindPanel(D.panel_id);
+		USimCabinDisplayComponent* Display = NewObject<USimCabinDisplayComponent>(GetOwner());
+		Display->SetupAttachment(this);
+		Display->RegisterComponent();
+		Display->Setup(Sim, I, BodyPoint(Panel.PointAt(D.u_m, D.v_m)), BodyDir(Panel.Normal()), BodyDir(Panel.Right()),
+			BodyDir(Panel.Up()), ScreenMaterial, CubeMesh, ShapeMaterial);
+		Displays.Add(Display);
+	}
 	BuiltLayout = Layout;
-	UE_LOG(LogSAM3D, Log, TEXT("Cabin built: %d panels, %d items"), PanelMeshes.Num(), Items.Num());
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin built: %d panels, %d items, %d displays"), PanelMeshes.Num(), Items.Num(), Displays.Num());
 	return true;
 }
 

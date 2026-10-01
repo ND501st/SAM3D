@@ -4,8 +4,8 @@ How the project gets built, in order. Complements `PROJECT_PLAN.md` (goals and m
 what blocks what, and how each task is finished. Written 30 Sep 2026.
 
 **Status (1 Oct 2026, `885f568`):** phases 1-3 done; phase 4 done except Chaos Vehicles, the real model and the
-performance check; phase 0 open only for merging the stacked PRs. Phase 5: 5.1, 5.2 and 5.4 (lamps) done on
-`feature/cabin`; next 5.3 (scopes). Details in `docs/HANDOFF.md` §8.
+performance check; phase 0 open only for merging the stacked PRs. Phase 5: 5.1, 5.2, 5.4 (lamps) on
+`feature/cabin`, 5.3 (scopes) on `feature/scopes`; next phase 6. Details in `docs/HANDOFF.md` §8.
 
 ## Principles
 

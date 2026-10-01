@@ -52,6 +52,10 @@ In the cabin (placeholder shapes from `data/cabins/osa_ak.json`):
 | Right click | Step a selector or key back |
 | Left drag / scroll on a hand wheel | Turn it (a wheel lock must be released first) |
 
+The instruments work: the SOC scope (sweep, fading echoes, the SSC azimuth line and range gate), the SSC range
+indicator (two sweeps and the range counter), the βс and εс dials (lit by their ПОДСВЕТКА switches), the ДЦ
+voltmeter, and the TOV monitor, which films the world along the SSC wheels in black and white.
+
 The crosshair names the control under it and its position. Clicks go through the player's procedure tracker
 (`USimWorldSubsystem::PlayerSetControl`), so mistakes reach the debrief; only physical refusals (a closed cover,
 a key jumping a position) show on screen. The crew keeps working the same switches, so you see their actions too.
@@ -73,6 +77,7 @@ never reaches the repository.
 | `SimScenarioDirector` | Level actor: loads the scenario, syncs the Cesium georeference, requests terrain, spawns and possesses the player's vehicle, spawns proxies, prints status and debrief. |
 | `SimOsaVehicle` | Placeholder drivable Osa (engine box shapes): kinematic driving over the ground, turret follows the tracking antenna's azimuth, search antenna folds with the sim's stowage progress, number keys give crew orders, C enters the cabin. |
 | `SimCabinComponent` | Builds the cabin's panels, controls and lamps from the loaded cabin layout and shows the console state on them every frame; tracing, hover text, clicks and wheel turns for the vehicle. |
+| `SimCabinDisplayComponent` | One instrument: draws the scope, range indicator, dial or meter into a render target every frame (or films the TV picture with a scene capture) and shows it on a quad on the panel. Uses the ProceduralMeshComponent plugin and the engine's `Widget3DPassThrough_Opaque` material. |
 | `SimCabinHUD` | Crosshair, hover text, feedback and key help while in the cabin. |
 | `SimEntityActor` | Visual proxy for one target or missile. Subclass in Blueprint for real meshes and effects. |
 
@@ -92,6 +97,6 @@ hull heading so it still points the right way.
 
 - Chaos Vehicles physics for driving (needs a vehicle mesh with wheel bones); driving is kinematic.
 - Real Osa model and deploy/stow animation beyond the placeholder antenna fold.
-- Cabin: radar scopes and the TV picture as render targets (phase 5.3), audio cues, a real interior (the cabin is
-  floating placeholder panels inside the hull box, which is see-through from inside).
+- Cabin: audio cues, a real interior (the cabin is floating placeholder panels inside the hull box, which is
+  see-through from inside), real instrument faces.
 - The crew order menu (phase 6); crew orders are number keys for now.

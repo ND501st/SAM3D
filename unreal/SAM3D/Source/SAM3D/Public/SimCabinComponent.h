@@ -6,6 +6,7 @@
 #include "SimCabinComponent.generated.h"
 
 class UMaterialInstanceDynamic;
+class USimCabinDisplayComponent;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -53,7 +54,8 @@ struct SAM3D_API FSimCabinItem
 
 /**
  * The 3D cabin of the player's vehicle, built from the cabin layout the world subsystem loaded
- * (data/cabins/<system>.json, simcore/cabin.hpp): panels, controls and lamps from engine basic shapes.
+ * (data/cabins/<system>.json, simcore/cabin.hpp): panels, controls and lamps from engine basic shapes, and the
+ * instruments (scopes, TV, dials) as USimCabinDisplayComponent screens.
  *
  * Presentation only. Every control shows the console's state each frame (switch throw, knob angle, cover open,
  * key turned, wheel angle, lamp lit), and player actions go to USimWorldSubsystem::PlayerSetControl /
@@ -121,6 +123,9 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PanelMeshes;
 
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USimCabinDisplayComponent>> Displays;
+
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
 
@@ -133,6 +138,10 @@ private:
 	/** Engine basic-shape material; its "Color" parameter tints each part. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ShapeMaterial;
+
+	/** Engine material that shows a texture ("SlateUI") unlit: the displays' screens. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> ScreenMaterial;
 
 	/** The layout the parts were built from; rebuilt when the subsystem loads another. */
 	const simcore::CabinLayout* BuiltLayout = nullptr;

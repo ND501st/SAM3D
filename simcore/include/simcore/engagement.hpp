@@ -251,6 +251,14 @@ struct Contact {
     double elevation_deg = 0.0;
 };
 
+// Full width of the TV sight's field of view for the lens selected now (0 if the console has no TV).
+inline double TvFieldOfViewDeg(const ConsoleData& console) {
+    const TrackSensorDef& d = console.track;
+    if (d.tv_camera.empty()) return 0.0;
+    const bool narrow = !d.fov_control.empty() && console.panel.Get(d.fov_control) == 1;
+    return narrow ? d.fov_narrow_deg : d.fov_wide_deg;
+}
+
 // One number from [0, 1) drawn from a std::mt19937, the same on every platform.
 inline double Uniform01(std::mt19937& rng) { return static_cast<double>(rng()) / 4294967296.0; }
 
@@ -268,6 +276,7 @@ public:
         UpdateSearch(t, console, log);
         if (aim_crew_present && method_ == TrackMethod::None) Aim(dt, console);
         UpdateTrack(t, dt, console, log);
+        UpdateTrackReturns(console);
         SetInputs(console);
     }
 
@@ -348,6 +357,10 @@ public:
     const Vec3& UnitPosition() const { return unit_; }
 
     const std::vector<Contact>& SearchPicture() const { return picture_; }
+    // Echoes on the tracking radar's range indicator: targets inside its beam (the azimuth line, within the
+    // tracking tolerance) up to its displayed range, with line of sight, while it radiates. Low targets still show:
+    // the radar measures their range even when it can't hold them in angle.
+    const std::vector<Contact>& TrackReturns() const { return track_returns_; }
     TrackMethod Method() const { return method_; }
     const std::string& TrackedTarget() const { return tracked_; }
     const EngagementTuning& Tuning() const { return tuning_; }
@@ -580,10 +593,22 @@ private:
         }
     }
 
-    double TvHalfFov(const ConsoleData& console) const {
+    static double TvHalfFov(const ConsoleData& console) { return 0.5 * TvFieldOfViewDeg(console); }
+
+    void UpdateTrackReturns(const ConsoleData& console) {
+        track_returns_.clear();
         const TrackSensorDef& d = console.track;
-        const bool narrow = !d.fov_control.empty() && console.panel.Get(d.fov_control) == 1;
-        return 0.5 * (narrow ? d.fov_narrow_deg : d.fov_wide_deg);
+        if (!console.equipment.IsReady(d.transmitter)) return;
+        const double wheel_az = console.panel.GetValue(d.az_wheel);
+        for (const auto& kv : geo_) {
+            const Geometry& g = kv.second;
+            if (!g.alive || !g.los || g.range_m > d.max_range_m) continue;
+            const bool in_beam =
+                std::fabs(WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= tuning_.az_tolerance_deg;
+            if (in_beam || (kv.first == tracked_ && method_ == TrackMethod::Radar)) {
+                track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
+            }
+        }
     }
 
     // Why a lock on target g by `method` can't be held right now; nullptr if it can.
@@ -717,6 +742,7 @@ private:
     Vec3 unit_;
     std::map<std::string, Geometry> geo_;  // ordered by id: deterministic iteration
     std::vector<Contact> picture_;
+    std::vector<Contact> track_returns_;
     std::set<std::string> seen_by_search_;
     TrackMethod method_ = TrackMethod::None;
     std::string tracked_;
