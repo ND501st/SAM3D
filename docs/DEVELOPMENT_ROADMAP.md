@@ -5,7 +5,9 @@ what blocks what, and how each task is finished. Written 30 Sep 2026; **re-seque
 review (`docs/BRIEFING_2026-10.md`).
 
 **Status (2 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check),
-on stacked PRs ND501st/SAM3D#1–#7 awaiting merge. **Next: phase 6, the accuracy pass.** The old "crew and mission"
+merged to `main` on 2 Oct 2026 (PRs ND501st/SAM3D#1–#8). **The briefing's decisions were all adopted (five-man
+crew, real timings with time compression, manual TV tracking, calibrated hit chances, Osa-AK, Osa scenarios). Next:
+phase 6, the accuracy pass, starting with 6.1.** The old "crew and mission"
 phase is now phase 8, after the battery (phase 7), because the real Osa got most of its targets from the battery's
 PU-12 and the crew changes ripple through everything after them.
 
@@ -100,8 +102,8 @@ ZSU-23-4 Shilka (shares the PU-12); mission editor; multiplayer crew.
 
 ## Parallel track (any time)
 
-- **Creator outreach:** send the questions in `PROJECT_PLAN.md` (VB6 source or notes, art permission, the source
-  conflicts, operator contacts). Claude can draft it.
+- **Creator outreach:** drafted in `docs/outreach/creator_message_draft.md` (VB6 source or notes, art permission,
+  the source conflicts, operator contacts); the user reviews and sends it.
 - **Acquire documents:** the BSU textbook *Боевое применение ЗРК 9К33М3* (2020), the GDR troop handbooks (1984,
   1990), the Angola memoir collection. Summaries go into `docs/re/osa.md` with page references.
 - **SAM Simulator archive** (`reference/samsimv9302.rar`) and its documentation set: keep using them as reference

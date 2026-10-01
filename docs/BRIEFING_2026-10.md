@@ -77,7 +77,10 @@ console fidelity plus what it couldn't do: driving, deploying, a crew, a battery
 
 **Unchanged:** the gameplay-level outcome model, public sources only, simcore first, Unreal for presentation.
 
-## 5. Decisions I need from you
+## 5. Decisions
+
+**Decided 2 Oct 2026: Nicholas adopted every recommendation below.** The creator message is drafted in
+`docs/outreach/creator_message_draft.md` for him to review and send; acquiring documents (7) is his.
 
 | # | Decision | My recommendation |
 |---|---|---|

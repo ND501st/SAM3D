@@ -23,7 +23,7 @@ PU-12, and NPC crew work the *same* controls the player does.
 | Thing | Location |
 |---|---|
 | Repo | **`ND501st/SAM3D`** (private) |
-| Branches and PRs | `main` is still at `5cb032e`. All work is on **stacked PRs**, each on the one before: #1 `fix/windows-build-and-verify` → #2 `feature/equipment-and-crew-orders` → #3 `feature/scenarios` → #4 `feature/engagement` → #5 `feature/unreal-bringup` → #6 `feature/cabin` → #7 `feature/scopes` → #8 `docs/research-review` (newest; documentation only). Merge in order with merge commits or rebase, **not squash**. |
+| Branches and PRs | Everything is on **`main`**: stacked PRs #1–#8 were merged in order with merge commits on 2 Oct 2026 and their branches deleted. New work: one branch per task from `main` (next: phase 6.1). |
 | PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
 | Unreal | UE 5.7.4 at `D:\UE_5.7`, Cesium for Unreal 2.29+; level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
 | Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
@@ -123,9 +123,10 @@ from operator countries. Main findings (detail and sources in `docs/research/OSA
 Consequences: the roadmap was re-sequenced (phase 6 accuracy pass, phase 7 battery and PU-12, phase 8 crew and
 mission, then threats and scenarios); the validation set is now Osa events; `docs/SOURCES.md` has source tiers and
 Western "facts and stats" pages are no longer used for decisions. On the same day the user supplied a YouTube documentary transcript; it retells V. Korovin's «Техника и вооружение»
-series (2010, now a tier-1 source) and adds unverified battery tactics (research file §12, briefing §6). **The user
-has not yet answered the decisions in
-`docs/BRIEFING_2026-10.md` §5; confirm them before starting phase 6.**
+series (2010, now a tier-1 source) and adds unverified battery tactics (research file §12, briefing §6). **On 2 Oct
+the user adopted every recommendation in `docs/BRIEFING_2026-10.md` §5**: five-man crew now, real timings with time
+compression, manual TV tracking for the player, hit chances calibrated to the published ranges, Osa-AK first, Osa
+scenarios. Phase 6 can start.
 
 ## 10. SAM Simulator, in short
 
@@ -154,13 +155,12 @@ physics stays unscheduled.
 
 ## 13. Next steps
 
-1. **User:** answer the decisions in `docs/BRIEFING_2026-10.md` §5; merge PRs #1–#8 in order; name the video
-   (title/channel) so `video_osa` can be cited properly.
+1. **User:** review and send `docs/outreach/creator_message_draft.md`; name the video (title/channel) so
+   `video_osa` can be cited properly; acquire the BSU textbook / GDR handbooks if possible.
 2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
-   one PR.
+   one PR, branched from `main`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
-4. Draft the message to the SAM Simulator creator (questions in `PROJECT_PLAN.md`).
-5. User: acquire the BSU textbook (2020), the GDR handbooks, the Angola memoirs if possible.
+4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
 
 ## 14. Working conventions with this user
 
@@ -171,10 +171,10 @@ physics stays unscheduled.
 
 ## 15. State at the end of the last session (2 Oct 2026)
 
-- Branch checked out: `docs/research-review` (PR #8); working tree clean except the editor's uncommitted lines in
-  `unreal/SAM3D/Config/DefaultEngine.ini` (leave them out of commits).
+- **Everything is merged to `main`** (PRs #1–#8, merge commits, branches deleted); `main` checked out. Working tree
+  clean except the editor's uncommitted lines in `unreal/SAM3D/Config/DefaultEngine.ini` (leave them out of commits).
+- Decisions in briefing §5 adopted; phase 6.1 is the next task.
 - Unreal: all packages saved and the editor told to quit by script (`SystemLibrary.quit_editor`); it logged
   "Exiting." (it can linger a minute after that). Next session: start it with `SAM3D_CABIN_TOUR=6` if you want the
   scripted checks.
-- Auto-fix is on for PRs #1, #3, #5, #6, #7 (the app refused it for #2 and #4); CI results not yet reviewed.
-- Nothing is waiting on Claude; everything waits on the user's decisions (briefing §5).
+- CI was green on all eight PRs (Ubuntu/GCC, macOS/Clang, Windows/MSVC, prototype) before merging.
