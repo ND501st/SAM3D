@@ -38,7 +38,8 @@
     }
   ],
 
-  "launch": { "button": "fo.launch", "armed": "launch_armed", "source": "samsim_osa p30", "confidence": "high" },
+  "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "samsim_osa p30", "confidence": "high",
+              "notes": "Restarts: after a launch ПУСК ГОТОВ goes out and lights again when the next missile can be launched (p30). The manual gives no time; SAM3D repeats missile preparation (the 15 s spin-up), confidence estimate." },
 
   "sensors": {
     "source": "samsim_osa p14–18, p21–26", "confidence": "high",
@@ -163,7 +164,9 @@
       "enable": [ { "control": "apu.stow", "is": 1 } ],
       "start_time_s": { "value": 30, "source": "sam3d", "confidence": "estimate", "notes": "No source gives the folding time." },
       "stop_time_s": { "value": 30, "source": "sam3d", "confidence": "estimate", "notes": "No source gives the folding time." },
-      "source": "gs, wrk", "confidence": "medium" },
+      "start_ready": true,
+      "source": "gs, wrk", "confidence": "medium",
+      "notes": "Starts raised, like its switch: the normal march is with the antenna up; folding is for transport. Raising and folding are driven, so they surely need power, but the equipment model can't make power a condition of moving only (as an enable, a power cut would fold a raised antenna; as a prerequisite, it would fault it), so they don't need it here. SAM3D decision." },
     { "id": "apu_free", "name": "АПУ unlocked (can slew in azimuth)",
       "enable": [ { "control": "apu.lock", "is": 1 } ],
       "prerequisites": [ { "input": "vehicle_stopped", "is": true } ],

@@ -221,6 +221,9 @@ SC_TEST("osa data: loads, with the manual's covers, key, wheels and buttons") {
     SC_EXPECT(!c.panel.SetValue("ssc.az_wheel", 10.0));  // locked until right-clicked
     SC_EXPECT(c.panel.Find("fo.launch")->kind == ControlKind::Momentary);
     SC_EXPECT(c.panel.Find("soc.range")->position_labels[2] == "10–45 km");
+    // The march starts with the search antenna up, like its switch; each launch restarts missile preparation.
+    SC_EXPECT(c.panel.Get("apu.stow") == 1 && c.equipment.IsReady("search_antenna"));
+    SC_EXPECT(c.launch_restarts == "missile_prep");
     for (const char* id : {"power_up", "search_on_march", "deploy_at_halt", "acquire_with_soc", "track_low_target",
                            "prepare_firing", "launch", "emcon_tv_engagement", "stow_for_march", "stow_for_transport"}) {
         SC_EXPECT(c.FindProcedure(id) != nullptr);

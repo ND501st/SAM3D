@@ -211,3 +211,19 @@ SC_TEST("engagement: an evading target breaks away and the manoeuvre lowers the 
     SC_EXPECT(Has(r, "breaks away onto a beam heading"));
     SC_EXPECT(Has(r, "manoeuvre 0.52 (12 deg/s)"));
 }
+
+SC_TEST("engagement: after a launch ПУСК ГОТОВ goes out until the next missile is prepared") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenario(Engage(Target(24000, 1000), kAcquireAndFire), kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    while (!runner.Finished() && runner.Launches() == 0) runner.Step(0.1);
+    SC_EXPECT(runner.Launches() == 1);
+    runner.Step(0.1);
+    const Equipment& eq = runner.Console().equipment;
+    SC_EXPECT(!eq.IsReady("launch_armed") && eq.State("missile_prep") == SubsystemState::Starting);
+    // Lit again after the 15 s preparation (data/procedures/osa_ak.json), while the missile is still flying.
+    const double t0 = runner.Time();
+    while (!runner.Finished() && !eq.IsReady("launch_armed") && runner.Time() < t0 + 60.0) runner.Step(0.1);
+    SC_EXPECT_NEAR(runner.Time() - t0, 15.0, 0.3);
+}

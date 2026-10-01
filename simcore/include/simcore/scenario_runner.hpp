@@ -297,6 +297,8 @@ private:
                          "missile " + std::to_string(launches_) +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
             if (engagement_on_) engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_);
+            // The next missile has to be prepared before the circuit is armed again (ПУСК ГОТОВ goes out).
+            if (!console_.launch_restarts.empty()) console_.equipment.Restart(console_.launch_restarts);
         } else {
             Event(console_.launch_button, "pressed, but " + console_.launch_armed + " is not ready: no launch");
         }

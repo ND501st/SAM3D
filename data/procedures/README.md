@@ -19,7 +19,8 @@ source, and say why in `notes`.
   "sources": [ { "id": "samsim_osa", "title": "...", "url": "...", "notes": "..." } ],
 
   // Optional: the push-button that launches, and the subsystem that must be ready for it to (used by the scenario runner).
-  "launch": { "button": "fo.launch", "armed": "launch_armed", "source": "...", "confidence": "high" },
+  // "restarts" (optional): a subsystem each launch sends back to the start of its warm-up (the next missile's preparation).
+  "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "...", "confidence": "high" },
 
   // Yes/no signals the sim sets (target geometry etc.), so lamps and automatic sequences can use them.
   "inputs": [ { "id": "target_in_zone", "description": "...", "source": "...", "confidence": "high" } ],
@@ -43,6 +44,7 @@ source, and say why in `notes`.
       "enable_any": [ ... ],        // optional; at least one must also hold
       "prerequisites": [ ... ],     // must hold while starting/running, or it faults
       "latching": true, "release": [ ... ],   // a mode engaged by a button, until release holds
+      "start_ready": false,         // optional; true = ready when the session starts (e.g. a mast already up)
       "start_time_s": { "value": 15, "source": "...", "confidence": "medium" },
       "stop_time_s":  { "value": 0,  "source": "...", "confidence": "estimate" },
       "source": "...", "confidence": "medium", "notes": "..." }
