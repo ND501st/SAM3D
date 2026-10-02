@@ -36,7 +36,8 @@ reference point. Angles are in degrees in the file.
                 "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9] } ],
   "controls": [
     { "control": "soc.range", "panel": "so_panel", "at_m": [-0.15, 0.06] },
-    // optional: "style" (toggle, rotary, key, button, wheel, cover); wheels: "units_per_turn"
+    // optional: "style" (toggle, rotary, key, button, wheel, cover); wheels: "units_per_turn";
+    // toggles and rotaries: "red_dot", the position a red dot printed on the panel marks
     { "control": "ssc.az_wheel", "panel": "so_panel", "at_m": [-0.1, -0.3], "units_per_turn": 60 }
   ],
   "lamps": [
@@ -79,6 +80,10 @@ Rules the loader checks:
 - The default style follows the control: buttons and wheels by kind, a control that guards another is a `cover`,
   key switches are `key`, more than two positions is `rotary`, otherwise `toggle`. An explicit `style` must fit.
 - A cover or lock that isn't placed itself is put over the control it guards.
+- `red_dot` is only for toggles and rotaries, and must be one of the control's positions. The real panels have red
+  dots beside some knobs and switches marking their working position for combat, which is often not where they
+  start (РОД РАБОТЫ's dot is at БР; `docs/research/OSA_CONSOLE_MAP_2026-10.md` §12). Give one only where a picture
+  shows the dot.
 - Displays must fit inside their panel and only use the keys of their kind.
 - Lamp conditions use the console's condition format (`data/procedures/README.md`); `color` is green, red, amber
   or white.

@@ -89,7 +89,7 @@ ASimOsaVehicle::ASimOsaVehicle()
 	// practice scenario's (data/scenarios/osa_practice.json, data/procedures/osa_ak.json). Each procedure
 	// belongs to one seat, so a key that starts a drill gives each seat involved its part.
 	CrewHotkeys = {
-		Hotkey(EKeys::One, TEXT("Commander"), TEXT("power_up")),
+		Hotkey(EKeys::One, TEXT("Driver"), TEXT("power_up")),
 		Hotkey(EKeys::Two, TEXT("Senior operator"), TEXT("search_on_march")),
 		Hotkey(EKeys::Three, TEXT("Commander"), TEXT("deploy_at_halt")),
 		Hotkey(EKeys::Three, TEXT("Driver"), TEXT("pto_on_line")),
@@ -106,6 +106,7 @@ ASimOsaVehicle::ASimOsaVehicle()
 		Hotkey(EKeys::Eight, TEXT("Commander"), TEXT("stow_for_march")),
 		Hotkey(EKeys::Nine, TEXT("Senior operator"), TEXT("stop_search")),
 		Hotkey(EKeys::Nine, TEXT("Commander"), TEXT("stow_for_transport"), true),
+		Hotkey(EKeys::Nine, TEXT("Driver"), TEXT("power_down"), true),
 	};
 }
 

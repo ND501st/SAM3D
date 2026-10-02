@@ -117,6 +117,7 @@ struct CabinControl {
     CabinStyle style = CabinStyle::Toggle;
     double units_per_turn = 360.0;  // wheels: value change for one full turn of the hand wheel
     bool auto_placed = false;       // a guard placed over the control it guards
+    int red_dot = -1;               // toggles and rotaries: the position a red dot marks on the panel, or -1
 };
 
 struct CabinLamp {
@@ -223,12 +224,14 @@ struct CabinLayout {
         }
     }
 
-    // The red dot beside a toggle or rotary that marks its starting position (korovin_tiv_2010: red dots by the
-    // knobs and switches for quick preparation before firing): its offset on the panel from the control's
-    // centre (u right, v up the face, metres). The starting position is the control's initial one. False for
-    // keys, buttons, wheels and covers, which have none.
-    static bool StartMark(const CabinControl& c, const ControlDef& def, double& du_m, double& dv_m) {
+    // The red dot printed beside a toggle or rotary (korovin_tiv_2010: red dots by the knobs and switches for quick
+    // preparation before firing): its offset on the panel from the control's centre (u right, v up the face,
+    // metres). The dot marks the control's working position, which is often not where it starts (РОД РАБОТЫ's dot
+    // is at БР; docs/research/OSA_CONSOLE_MAP_2026-10.md §12), so the layout file names it. False for controls
+    // without a dot.
+    static bool RedDot(const CabinControl& c, const ControlDef& def, double& du_m, double& dv_m) {
         double radius_m = 0.0;
+        if (c.red_dot < 0) return false;
         if (c.style == CabinStyle::Toggle) {
             radius_m = 0.03;
         } else if (c.style == CabinStyle::Rotary) {
@@ -236,7 +239,7 @@ struct CabinLayout {
         } else {
             return false;
         }
-        const double a = DegToRad(PositionAngleDeg(c.style, def.positions, def.initial));
+        const double a = DegToRad(PositionAngleDeg(c.style, def.positions, c.red_dot));
         du_m = radius_m * std::sin(a);
         dv_m = radius_m * std::cos(a);
         return true;
@@ -405,7 +408,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
-            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "notes"})) return false;
+            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "notes"})) return false;
             CabinControl item;
             if (!RequireString(c, path, "control", item.control_id)) return false;
             const ControlDef* def = console_panel.Find(item.control_id);
@@ -434,6 +437,15 @@ private:
                 if (!OptionalNumber(c, path, "units_per_turn", item.units_per_turn)) return false;
                 if (!(item.units_per_turn > 0.0)) return Fail(Join(path, "units_per_turn"), "must be positive");
             }
+            if (c.Find("red_dot") != nullptr) {
+                if (item.style != CabinStyle::Toggle && item.style != CabinStyle::Rotary) {
+                    return Fail(Join(path, "red_dot"), "for toggles and rotaries only");
+                }
+                if (!OptionalInt(c, path, "red_dot", item.red_dot)) return false;
+                if (item.red_dot < 0 || item.red_dot >= def->positions) {
+                    return Fail(Join(path, "red_dot"), "not a position of '" + item.control_id + "'");
+                }
+            }
             out.controls.push_back(std::move(item));
         }
         return true;
@@ -450,6 +462,7 @@ private:
             cover.style = DefaultCabinStyle(*console_panel.Find(def->guard_id), console_panel);
             cover.units_per_turn = 360.0;
             cover.auto_placed = true;
+            cover.red_dot = -1;
             out.controls.push_back(std::move(cover));
         }
         return true;

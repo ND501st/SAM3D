@@ -2,7 +2,7 @@
   "system_id": "osa_ak",
   "display_name": "9K33M2 Osa-AK (SA-8B Gecko)",
   "status": "Engagement consoles from the SAM Simulator manual. Power-up, deploy and stow are SAM3D's design built on public facts (SAM Simulator's Osa starts deployed and powered); see docs/re/osa.md.",
-  "notes": "Positions, labels and procedure order come from the manual and the game's control sprites. Timings are only included where a source gives them. Release behaviour of the tracking-mode buttons is not described in the manual and is marked low confidence; check it in the running game.",
+  "notes": "Positions, labels and procedure order come from the manual and the game's control sprites; start positions were measured in the running game (samsim_game, docs/research/OSA_CONSOLE_MAP_2026-10.md §12). Controls whose function isn't known are present but inert (no subsystem uses them). Timings are only included where a source gives them.",
   "sources": [
     {
       "id": "samsim_osa",
@@ -14,6 +14,17 @@
       "id": "samsim_sprites",
       "title": "SAM Simulator v930.2 Osa control sprites (osa*.dat)",
       "notes": "Number of positions per control, where the manual doesn't say. See docs/re/osa.md."
+    },
+    {
+      "id": "samsim_game",
+      "title": "SAM Simulator v930.2, running (sam.exe), played 3 Oct 2026",
+      "notes": "Start position of every sprite-backed control, measured by matching the sprites against the running game's console forms; what controls do at idle. Tier 3. docs/research/OSA_CONSOLE_MAP_2026-10.md §12."
+    },
+    {
+      "id": "rwd_mb3",
+      "title": "NVA technical-service veterans' catalogue, 9A33 pages (rwd-mb3.de, Bilder innen and Schemen)",
+      "url": "https://www.rwd-mb3.de/pages/9a33_3.htm",
+      "notes": "Captioned interior photos: block names, the seat columns, the power-supply control panel PU-303 at the driver's left. docs/SOURCES.md."
     },
     {
       "id": "flak11",
@@ -52,15 +63,15 @@
 
   "stations": [
     { "id": "commander", "label": "Commander", "source": "flak11 (9A33-3), wrk", "confidence": "high",
-      "notes": "Officer; front cab beside the driver. Receives designations from the battery PU-12 by radio and gives the orders. Power and АПУ controls here are SAM3D placements (their real seat isn't known)." },
+      "notes": "Officer; front cab beside the driver. Receives designations from the battery PU-12 by radio and gives the orders. The АПУ controls here are SAM3D placements (their real seat isn't known); power is the driver's (PU-303, rwd_mb3)." },
     { "id": "deputy_commander", "label": "Deputy commander", "source": "flak11 (9A33-3); samsim_thread (elevation operator); samsim_osa (Firing Officer)", "confidence": "high",
       "notes": "Launch console (key, ПУСК ГОТОВ, missile selection), elevation wheel and dial, TV monitor. Control ids keep SAM Simulator's 'fo.' (Firing Officer) prefix." },
     { "id": "senior_operator", "label": "Senior operator", "source": "flak11 (9A33-3); samsim_thread (azimuth operator)", "confidence": "high",
       "notes": "Search radar (SOC) scope, IFF, azimuth wheel: puts the target under the SSC azimuth line." },
     { "id": "operator", "label": "Operator", "source": "flak11 (9A33-3); samsim_thread (range operator); samsim_osa (Range Officer)", "confidence": "high",
       "notes": "Range indicator and range wheel; SSC transmitter and capture (ТСЦ). The NVA senior operator also sets the range mark on the search scope; SAM3D has one range wheel, so it is the operator's (sam3d)." },
-    { "id": "driver", "label": "Driver", "source": "flak11 (9A33-3), wrk (driver-mechanic)", "confidence": "high",
-      "notes": "Front cab." }
+    { "id": "driver", "label": "Driver", "source": "flak11 (9A33-3), wrk (driver-mechanic); rwd_mb3 (PU-303)", "confidence": "high",
+      "notes": "Front cab. Works the power supply: the power-supply control panel PU-303 is at his left (rwd_mb3)." }
   ],
 
   "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "samsim_osa p30", "confidence": "high",
@@ -96,9 +107,9 @@
   ],
 
   "controls": [
-    { "id": "pwr.gta", "label": "ГТА (gas-turbine power unit)", "station": "commander", "kind": "switch", "position_labels": ["off", "on"],
-      "source": "wrk (9И120 unit powers the vehicle on the move and at a halt); control: sam3d", "confidence": "estimate",
-      "notes": "The unit is real; the real control(s), label and station aren't known. One on/off switch stands in for the start sequence." },
+    { "id": "pwr.gta", "label": "ГТА (gas-turbine power unit)", "station": "driver", "kind": "switch", "position_labels": ["off", "on"],
+      "source": "wrk (9И120 unit powers the vehicle on the move and at a halt); station: rwd_mb3 (power-supply control panel PU-303 at the driver's left); control: sam3d", "confidence": "estimate",
+      "notes": "The unit is real, and the power system's control panel PU-303 is the driver's (medium). Its labels can't be read in any picture found, so one on/off switch stands in for the start sequence." },
     { "id": "pwr.pto", "label": "power take-off generator", "station": "driver", "kind": "switch", "position_labels": ["off", "on"],
       "source": "wrk (engine-driven generator, at a halt only); control: sam3d", "confidence": "estimate",
       "notes": "Real control and label not known." },
@@ -114,14 +125,14 @@
       "source": "samsim_osa p15 (right-click removes the guard)", "confidence": "high" },
     { "id": "soc.hv", "label": "ВЫСОКОЕ", "station": "senior_operator", "kind": "switch", "guard": "soc.hv_cover", "position_labels": ["ВЫКЛ", "ВКЛ"],
       "source": "samsim_osa p15 (items 3/4)", "confidence": "high", "notes": "SOC transmitter." },
-    { "id": "soc.range", "label": "ДАЛЬНОСТЬ", "station": "senior_operator", "kind": "switch", "position_labels": ["0–15 km", "0–35 km", "10–45 km"], "initial": 0,
-      "source": "samsim_osa p15 (item 5); position order from sprites osa017–019", "confidence": "high",
-      "notes": "Initial position not stated; 0 is a guess." },
+    { "id": "soc.range", "label": "ДАЛЬНОСТЬ", "station": "senior_operator", "kind": "switch", "position_labels": ["0–15 km", "0–35 km", "10–45 km"], "initial": 1,
+      "source": "samsim_osa p15 (item 5); position order from sprites osa017–019; start: samsim_game", "confidence": "high",
+      "notes": "Starts at 0–35 km, the working scale (ePap, samsim_thread 19 May 2013). No red dot on this switch." },
     { "id": "soc.beam", "label": "ЛУЧ", "station": "senior_operator", "kind": "switch", "position_labels": ["I", "II", "III", "I–III", "I–II"], "initial": 0,
       "source": "samsim_osa p15 (items 6–10)", "confidence": "medium",
-      "notes": "Five buttons with an illuminated indicator in the game; modelled as one selector since only one can be active. Initial selection not stated." },
-    { "id": "soc.mti", "label": "СДЦ (SOC)", "station": "senior_operator", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
-      "source": "samsim_osa p15 (item 12)", "confidence": "high", "notes": "Moving target indicator, works to 35 km." },
+      "notes": "Five buttons with an illuminated indicator in the game; modelled as one selector since only one can be active. Starts on beam I (I ЛУЧ lit, samsim_game). In I–III the lit lamp steps from beam to beam as the antenna scans (not modelled)." },
+    { "id": "soc.mti", "label": "СДЦ / ШТ. (SOC)", "station": "senior_operator", "kind": "switch", "position_labels": ["ШТ.", "СДЦ"],
+      "source": "samsim_osa p15 (item 12); start: samsim_game", "confidence": "high", "notes": "Moving target indicator, works to 35 km. On OP63-6M2 below the scope. Starts at ШТ. (normal video)." },
     { "id": "ssc.tx_cover", "label": "guard over ПЕРЕДАТЧИК", "station": "operator", "kind": "switch", "position_labels": ["closed", "open"],
       "source": "samsim_osa p16", "confidence": "high" },
     { "id": "ssc.tx", "label": "ПЕРЕДАТЧИК", "station": "operator", "kind": "switch", "guard": "ssc.tx_cover", "position_labels": ["ОТКЛ", "ВКЛ"],
@@ -136,41 +147,71 @@
     { "id": "ssc.range_wheel", "label": "range wheel", "station": "operator", "kind": "wheel", "min": 0, "max": 28000, "initial_value": 0, "unit": "m",
       "source": "samsim_osa p16 (item 9; range indicator shows 28 km)", "confidence": "medium",
       "notes": "Moves the range gate. Range limits taken from the indicator's displayed range." },
-    { "id": "ssc.mti", "label": "СДЦ (SSC)", "station": "operator", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
-      "source": "samsim_osa p16 (item 10)", "confidence": "high" },
+    { "id": "ssc.mti", "label": "СДЦ / ШТ. (SSC)", "station": "operator", "kind": "switch", "position_labels": ["ШТ.", "СДЦ"],
+      "source": "samsim_osa p16 (item 10); start: samsim_game", "confidence": "high", "notes": "On OS61-5M. Starts at ШТ." },
     { "id": "ro.semi_auto", "label": "ПОЛУАВТОМАТ", "station": "operator", "kind": "button",
       "source": "samsim_osa p26", "confidence": "high", "notes": "Range-only tracking by the SSC." },
+    { "id": "ssc.check_mode", "label": "РАБОТА / КОНТРОЛЬ / КАЛИБР.", "station": "operator", "kind": "switch", "position_labels": ["РАБОТА", "КОНТРОЛЬ", "КАЛИБР."], "initial": 1,
+      "source": "samsim_osa p24 photo (labels); samsim_game (starts away from РАБОТА; red dot at РАБОТА)", "confidence": "medium",
+      "notes": "Range indicator's check and calibration selector. The game has two sprites and starts with the pointer near КОНТРОЛЬ; one left click gives РАБОТА. Inert: no visible effect in the game, real function not described." },
+    { "id": "ssc.target_select", "label": "ЦЕЛЬ", "station": "operator", "kind": "switch", "position_labels": ["left", "centre", "right"], "initial": 1,
+      "source": "samsim_sprites osa014–016; samsim_osa p16, p24 photos; start: samsim_game", "confidence": "low",
+      "notes": "On the range indicator, right of the ГОРИЗ. СМЕЩ. trim knob. Scale marks unreadable. Inert: no effect at idle in the game; what it does with a target is a question for the creator." },
 
     { "id": "ssc.el_lock", "label": "elevation wheel lock", "station": "deputy_commander", "kind": "switch", "position_labels": ["locked", "unlocked"],
       "source": "samsim_osa p23 (right-click unlocks)", "confidence": "high" },
     { "id": "ssc.el_light", "label": "ПОДСВЕТКА (εс)", "station": "deputy_commander", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
       "source": "samsim_osa p17 (item 1), p23", "confidence": "high" },
-    { "id": "ssc.el_wheel", "label": "УГОЛ МЕСТА", "station": "deputy_commander", "kind": "wheel", "guard": "ssc.el_lock", "min": 0, "max": 90, "initial_value": 0, "unit": "deg",
-      "source": "samsim_osa p17 (item 4; instrument reads to 15-00 = 90°)", "confidence": "estimate",
-      "notes": "Travel limits not given; 0–90° assumed from the instrument scale." },
+    { "id": "ssc.el_wheel", "label": "УГОЛ МЕСТА", "station": "deputy_commander", "kind": "wheel", "guard": "ssc.el_lock", "min": -12, "max": 78, "initial_value": 0, "unit": "deg",
+      "source": "samsim_osa p17 (item 4); limits: flak11 (−12° to +78°)", "confidence": "medium",
+      "notes": "In the running game the wheel turned whatever was done to its lock (samsim_game); SAM3D keeps the lock, as the manual describes it (p23)." },
     { "id": "fo.ru", "label": "РУ", "station": "deputy_commander", "kind": "button",
       "source": "samsim_osa p17 (item 3), p25", "confidence": "medium", "notes": "Manual tracking mode. Button vs. switch not stated; clicked in the manual." },
-    { "id": "fo.cu_az", "label": "ЦУ АЗ", "station": "deputy_commander", "kind": "button",
-      "source": "samsim_osa p23 (item 3)", "confidence": "high", "notes": "Engages automatic target acquisition." },
+    { "id": "fo.cu_az", "label": "ЦУ", "station": "deputy_commander", "kind": "button",
+      "source": "samsim_osa p23 (item 3; the photo's marker is on the ЦУ button); samsim_game", "confidence": "high",
+      "notes": "Engages automatic target acquisition, the manual's 'ЦУ АЗ': in the game it lights both the ЦУ and АЗ lamps and puts out РУ. Accepted with nothing else set up (no refusal). Id kept from the old label." },
+    { "id": "fo.az", "label": "АЗ", "station": "deputy_commander", "kind": "button",
+      "source": "samsim_osa p17, p23 photos (button between ЦУ and РУ); samsim_game", "confidence": "medium",
+      "notes": "Inert. In the game pressing it does nothing, from РУ or from ЦУ; its lamp lights with ЦУ. Real function unknown (question for the creator)." },
     { "id": "fo.pa", "label": "ПА", "station": "deputy_commander", "kind": "button",
       "source": "samsim_osa p25 (item 7), p34", "confidence": "high", "notes": "Angle tracking with the TOV camera." },
     { "id": "tov.power", "label": "РАБ.РЕЖ.", "station": "deputy_commander", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"],
       "source": "samsim_osa p17 (item 1)", "confidence": "high", "notes": "TOV camera on/off." },
     { "id": "tov.fov", "label": "УГОЛ ЗРЕНИЯ", "station": "deputy_commander", "kind": "switch", "position_labels": ["ШИРОКИЙ", "УЗКИЙ"],
       "source": "samsim_osa p17 (item 2), p35 (down = narrow)", "confidence": "high" },
-    { "id": "fo.mode", "label": "РОД РАБОТЫ", "station": "deputy_commander", "kind": "switch", "position_labels": ["БР", "other"], "initial": 1,
-      "source": "samsim_osa p29 (БР = live firing, leftmost); two positions from sprites osa022–023", "confidence": "medium",
-      "notes": "Only БР is named in the manual. Starting position not stated; assumed not in БР since the procedure selects it." },
+    { "id": "fo.mode", "label": "РОД РАБОТЫ", "station": "deputy_commander", "kind": "switch", "position_labels": ["БР", "ТР"], "initial": 1,
+      "source": "samsim_osa p29 (БР = live firing, leftmost); ТР: samsim_thread (ePap, 6 Jul 2013); two positions from sprites osa022–023; start: samsim_game", "confidence": "high",
+      "notes": "Starts at ТР (training, with the 9Ф632 trainer connected); one click to БР lights the БР lamp (samsim_game). Red dot at БР. The real dial has two more marks, read as РР and ФК at low resolution; the game has two positions. ePap: in ТР the real vehicle can't lock and fire; SAM3D, like the game, only blocks the launch." },
     { "id": "fo.bort_spk_cover", "label": "guard over БОРТ СПК", "station": "deputy_commander", "kind": "switch", "position_labels": ["closed", "open"],
       "source": "samsim_osa p34", "confidence": "high" },
     { "id": "fo.bort_spk", "label": "БОРТ СПК", "station": "deputy_commander", "kind": "switch", "guard": "fo.bort_spk_cover", "position_labels": ["ОТКЛ", "ВКЛ"],
       "source": "samsim_osa p34 (item 6)", "confidence": "high", "notes": "Starts missile, SPK and SVR preparation by hand." },
-    { "id": "fo.pomekha", "label": "ПОМЕХА", "station": "deputy_commander", "kind": "switch", "position_labels": ["down", "up"],
-      "source": "samsim_osa p34 (item 7)", "confidence": "medium", "notes": "Up = radio proximity fuse arms right after launch (range unknown)." },
+    { "id": "fo.pomekha", "label": "ПОМЕХА", "station": "deputy_commander", "kind": "switch", "position_labels": ["ОТКЛ.", "ПОМЕХА"],
+      "source": "samsim_osa p34 (item 7); start: samsim_game", "confidence": "medium", "notes": "ПОМЕХА (up) = jamming target: the radio proximity fuse arms right after launch (range unknown). Starts at ОТКЛ." },
     { "id": "fo.key", "label": "ЗАПРЕТ ПУСКА", "station": "deputy_commander", "kind": "key", "position_labels": ["no key", "inserted", "turned"],
       "source": "samsim_osa p29 (insert), p30 (turn)", "confidence": "high", "notes": "Launch authorization key." },
     { "id": "fo.launch", "label": "ПУСК", "station": "deputy_commander", "kind": "button",
-      "source": "samsim_osa p30", "confidence": "high" }
+      "source": "samsim_osa p30", "confidence": "high" },
+    { "id": "msl.select", "label": "missile selector", "station": "deputy_commander", "kind": "switch",
+      "position_labels": ["3-II", "2-II", "1-II", "ОТКЛ.", "1-I", "2-I", "3-I"], "initial": 3,
+      "source": "samsim_sprites osa024–030; samsim_osa p29 photo (dial marks); flak11 (a rotary switch picks another missile); start: samsim_game", "confidence": "medium",
+      "notes": "Centre ОТКЛ. = automatic selection. Inert until the missile channels are modelled (roadmap 6.3); title unreadable." },
+    { "id": "msl.channels", "label": "КАНАЛЫ", "station": "deputy_commander", "kind": "switch",
+      "position_labels": ["КАН. II", "КАН. I", "СОВМ."], "initial": 2,
+      "source": "samsim_sprites osa031–033; samsim_osa p29 photo; start: samsim_game", "confidence": "medium",
+      "notes": "Missile channel II, channel I, or both together. Starts at СОВМ., on its red dot. Inert until 6.3; no effect at idle in the game." },
+    { "id": "msl.change", "label": "СМЕНА РКТ", "station": "deputy_commander", "kind": "key",
+      "position_labels": ["latch closed", "latch open", "СМЕНА"], "initial": 0,
+      "source": "samsim_sprites osa050–052; samsim_osa p29 photo; samsim_game (one three-step control that stays at СМЕНА)", "confidence": "low",
+      "notes": "A knob under a hinged latch: opening the latch and turning the knob are one stepwise control, as in the game. Probably changes to the next missile (смена ракеты), inferred from the label. Inert until 6.3." },
+    { "id": "fo.mc", "label": "…МЦ", "station": "deputy_commander", "kind": "switch", "position_labels": ["ОТКЛ.", "…МЦ"],
+      "source": "samsim_osa p29 photo (low resolution, first letter unreadable); sprites osa044–045; start: samsim_game", "confidence": "low",
+      "notes": "Toggle at the launch console's top left. Inert; function unknown." },
+    { "id": "msl.emergency_cover", "label": "guard over АВАРИЙНЫЙ ПУСК", "station": "deputy_commander", "kind": "switch", "position_labels": ["closed", "open"],
+      "source": "samsim_sprites osa042–043; samsim_osa p29 photo; start: samsim_game", "confidence": "medium" },
+    { "id": "msl.emergency", "label": "АВАРИЙНЫЙ ПУСК", "station": "deputy_commander", "kind": "button", "guard": "msl.emergency_cover",
+      "source": "samsim_osa p29 photo; samsim_thread (ePap, 29–30 Jun 2013)", "confidence": "medium",
+      "notes": "Throws a missile off unguided when the launcher has lost power, or to get rid of missiles fast. Inert in SAM3D." }
   ],
 
   "subsystems": [
@@ -212,8 +253,8 @@
     { "id": "auto_acquisition", "name": "Automatic target acquisition mode (ЦУ АЗ)",
       "enable": [ { "control": "fo.cu_az", "is": 1 } ],
       "latching": true, "release": [ { "control": "fo.ru", "is": 1 } ],
-      "source": "samsim_osa p23", "confidence": "low",
-      "notes": "Engaging is from the manual. Leaving the mode is not described; release by РУ (manual mode) is a guess to check in the game." },
+      "source": "samsim_osa p23; release: samsim_game", "confidence": "medium",
+      "notes": "In the game ЦУ lights ЦУ and АЗ; РУ puts both out and lights РУ again (manual mode)." },
     { "id": "auto_tracking", "name": "Automatic tracking (ТСЦ angle, АВТОМАТ range lamps)",
       "enable": [ { "subsystem": "auto_acquisition", "is": "ready" }, { "subsystem": "ssc_transmitter", "is": "ready" }, { "subsystem": "apu_free", "is": "ready" }, { "input": "target_captured", "is": true } ],
       "source": "samsim_osa p24; АПУ unlocked: wrk", "confidence": "medium" },
@@ -241,7 +282,7 @@
     {
       "id": "power_up", "name": "Start the gas-turbine power unit",
       "source": "wrk (GTA powers the vehicle on the move and at a halt; readiness within 4 min including its start); steps: sam3d", "confidence": "estimate",
-      "notes": "Commander. Can be done on the move. The real start sequence isn't public; one switch stands in for it.",
+      "notes": "Driver (power-supply control panel PU-303, rwd_mb3). Can be done on the move. The real start sequence isn't public; one switch stands in for it.",
       "steps": [
         { "control": "pwr.gta", "position": 1, "description": "Start the ГТА" }
       ]
@@ -434,10 +475,17 @@
     {
       "id": "stow_for_transport", "name": "Stow for air or rail transport",
       "source": "gs (search radar folds back 90° for air transport and fast road travel), wrk (АПУ stowed for Il-76 transport); steps: sam3d", "confidence": "estimate",
-      "notes": "Commander. Stow for the march first; the senior operator stops the SOC (stop_search).",
+      "notes": "Commander. Stow for the march first; the senior operator stops the SOC (stop_search), and the driver shuts down the ГТА once the antenna is folded (power_down).",
       "steps": [
         { "control": "apu.stow", "position": 0, "description": "SOC stopped: fold the search antenna down for transport",
-          "wait_for": [ { "input": "vehicle_stopped", "is": true }, { "subsystem": "soc_antenna", "is": "off" } ] },
+          "wait_for": [ { "input": "vehicle_stopped", "is": true }, { "subsystem": "soc_antenna", "is": "off" } ] }
+      ]
+    },
+    {
+      "id": "power_down", "name": "Shut down the gas-turbine power unit",
+      "source": "steps: sam3d; station: rwd_mb3 (PU-303)", "confidence": "estimate",
+      "notes": "Driver, with stow_for_transport (commander): the antenna folds under power first.",
+      "steps": [
         { "control": "pwr.gta", "position": 0, "description": "Shut down the ГТА once the antenna is folded",
           "wait_for": [ { "subsystem": "search_antenna", "is": "off" } ] }
       ]
