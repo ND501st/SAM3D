@@ -172,7 +172,10 @@ physics stays unscheduled.
    or accepted, never faulted. **Still to do for 6.0:** with a target, the elevation screen's axes and what ЦЕЛЬ /
    КАНАЛЫ / СМЕНА РКТ do. A second try saw targets at Ustka and NAMFI (scope bursts, map §12) and a player's video
    showed a full engagement, but capture failed on input limits (no right-button hold; wheels ignore synthetic drags):
-   best done by a person at NAMFI, or asked of the creator. Then the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
+   best done by a person at NAMFI, or asked of the creator. **Data step part 1 done (3 Oct 2026, PR #13 on top of
+   #10):** start positions, labels, new inert controls, elevation limits, power to the driver, red dots as working
+   positions (`red_dot`), the game's lamps. **Next:** the real cabinet layout (panels named after the SL-2M2 blocks, positions
+   from the panel photos), then the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
    `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
@@ -208,6 +211,9 @@ physics stays unscheduled.
   scope region ~25 times over one turn and take the per-pixel maximum (`burst.ps1` / `maxc.py` style, in the scratchpad).
 - A player's video of a full engagement: `video_samsim_osa` (`docs/SOURCES.md`). In a browser pane, YouTube frames
   can be drawn from the `<video>` element into a canvas for crops; the embed player is blocked.
-- Unreal was not used. No code or data changed; no build or tests needed. The data corrections (e.g. `soc.range`
-  initial 1 for 0–35 km) wait for the 6.0 data step on top of 6.1.
+- Data step part 1 is PR #13 (`feature/console-accuracy`, worktree `C:\dev\SAM3D-console`, stacked on #10): simcore
+  tests pass (90); its Unreal changes (red-dot call renamed, power hotkeys to the driver) still need a build.
+  Merge order: #9 → #11 → #12, and #10 → #13.
+- Approach note: playing SAM Simulator by desktop control is slow and limited by input; the game is tier 3. Prefer
+  the data step, the creator's answers and the NVA documents; use the game only for specific questions.
 - Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.
