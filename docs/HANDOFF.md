@@ -166,7 +166,7 @@ physics stays unscheduled.
    the dials' backlight; ЦУ and АЗ are separate buttons; **red dots mark working positions, not start positions**
    (this affects 6.1's red-dot plan). **Still to do for 6.0:** the `rwd_mb3` interior photos and layout drawings (web,
    not in `reference/`), the running game (the elevation screen's axes, what ЦЕЛЬ / АЗ / СМЕНА РКТ / КАНАЛЫ do, start
-   positions), the creator questions (map §11), then put the corrections into `data/procedures/osa_ak.json` and
+   positions), the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
    `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
