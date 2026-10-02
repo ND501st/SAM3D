@@ -15,14 +15,14 @@ echo "==> simcore: engagement demo"
 mkdir -p out
 ./simcore/build/engagement_demo out/engagement_demo.acmi
 
-echo "==> prototype: pytest"
+echo "==> prototype and tools: pytest"
 PY=python3
 if ! "$PY" -m pytest --version >/dev/null 2>&1; then
   if [ ! -d .venv ]; then "$PY" -m venv .venv; fi
   ./.venv/bin/pip install -q pytest
   PY=./.venv/bin/python
 fi
-"$PY" -m pytest prototype -q
+"$PY" -m pytest prototype tools -q
 
 echo
 echo "All checks passed. Tacview replay: out/engagement_demo.acmi"
