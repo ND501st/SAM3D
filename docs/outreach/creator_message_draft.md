@@ -37,8 +37,9 @@ A few questions, if you have time:
    - On the range indicator: what does the ЦЕЛЬ selector do, and on the range-tracking block the two ПЕЛЕНГ buttons?
    - The red dots: do they mark each switch's working position for combat, rather than where it starts? (In your
      game РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their dots, and КАНАЛЫ starts on its dot at СОВМ.)
-   - What does the elevation indicator (by the TV monitor) show: elevation against range, or something else, and
-     when does the operator use it?
+   - What does the elevation indicator (by the TV monitor) show? In your game its trace sits low until the tracking
+     transmitter comes on, then centred, with the target as a bright mark: is the vertical position the elevation
+     error, and when does the operator use it?
    - The switch-on panels to the left of the range operator, which you left out on purpose: do you have their
      labels and the switch-on order, and which crew member works them?
    - Where is the launcher's (АПУ) travel lock, and who works it? What does the commander have in front of him

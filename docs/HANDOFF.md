@@ -170,7 +170,9 @@ physics stays unscheduled.
    starts at 0–35 km, not the data's 0–15; РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their red dots, КАНАЛЫ on
    its dot); ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; wrong orders are ignored
    or accepted, never faulted. **Still to do for 6.0:** with a target, the elevation screen's axes and what ЦЕЛЬ /
-   КАНАЛЫ / СМЕНА РКТ do (no echo appeared at Ashuluk; try again or ask the creator), the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
+   КАНАЛЫ / СМЕНА РКТ do. A second try saw targets at Ustka and NAMFI (scope bursts, map §12) and a player's video
+   showed a full engagement, but capture failed on input limits (no right-button hold; wheels ignore synthetic drags):
+   best done by a person at NAMFI, or asked of the creator. Then the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
    `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
@@ -199,9 +201,13 @@ physics stays unscheduled.
   screen) and template-match the sprites in `reference/samsim/osa_view/` with OpenCV (installed into the session
   scratchpad, not the system). `PrintWindow` returns a stale picture of the search scope, so read scopes from live
   screenshots.
-- No target was captured: at Ashuluk the La-17M drone's track reached about 15 km on the PU-12 board, but no echo
-  showed on the search scope on any scale or beam. Worth one more try (another target type, or the Ustka range), or
-  leave it to the creator.
+- No target was captured. Ashuluk's drone never showed on the scope; Ustka's P-15 and NAMFI's Iris drone did. At
+  NAMFI the session got the azimuth line on the drone, ЦУ, the tracking transmitter on and the target spike into the
+  range gate, but no capture. The desktop-control tools can't hold the right mouse button (fast slew only turns
+  anticlockwise, no coarse range wheel) and the wheels barely move with synthetic drags. To see echoes, capture the
+  scope region ~25 times over one turn and take the per-pixel maximum (`burst.ps1` / `maxc.py` style, in the scratchpad).
+- A player's video of a full engagement: `video_samsim_osa` (`docs/SOURCES.md`). In a browser pane, YouTube frames
+  can be drawn from the `<video>` element into a canvas for crops; the embed player is blocked.
 - Unreal was not used. No code or data changed; no build or tests needed. The data corrections (e.g. `soc.range`
   initial 1 for 0–35 km) wait for the 6.0 data step on top of 6.1.
 - Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.

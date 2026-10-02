@@ -222,5 +222,8 @@ Full results: `docs/research/OSA_CONSOLE_MAP_2026-10.md` §12. In short:
 - **Clicks:** rotary selectors step anticlockwise on a left click and clockwise on a right click, stopping at the
   ends; ДАЛЬНОСТЬ goes up on a right click; guards open on a right click; some push-buttons need a press of about 0.4 s.
 - СМЕНА РКТ (`osa050`–`052`) is one three-step control, not a latch plus a knob.
-- КАНАЛЫ, ЦЕЛЬ, СМЕНА РКТ and РАБОТА / КОНТРОЛЬ change nothing visible without a target or missile; their effect,
-  and the elevation indicator's axes, are still open (no target was captured).
+- КАНАЛЫ, ЦЕЛЬ, СМЕНА РКТ and РАБОТА / КОНТРОЛЬ change nothing visible without a target or missile; their effect is
+  still open (targets were seen at Ustka and NAMFI but not captured).
+- The elevation indicator's trace sits low with the tracking transmitter off and centred with it on; a player's video
+  (`video_samsim_osa`) shows the target as a bright mark at its centre during tracking.
+- Use Ustka or NAMFI for targets; the Ashuluk drone never showed on the scope. NAMFI has no PU-12 board.

@@ -271,7 +271,7 @@ default to the operator for power and the deputy commander for the gyros and ant
 | Search scope | OP81-16M3 | have | Rings every 5 km (2/7/12 on 0–15); IFF mark beside the blip; normal video vs MTI; jamming spirals later |
 | Range indicator | OS82-9M | have | Add the missile's return after launch |
 | TV monitor | WPU-55 | have | Screen 171 × 127 mm (4:3). Lens fields: `rwd_mb3` narrow 1°27′ × 1°05′ (f = 500 mm), wide transcribed as 4°05′ × 3°38′ (f = 150 mm; probably 4°50′, which fits 4:3); ePap 1.4° × 1° and 4.7° × 3.5°; game manual 1.5° / 5°. The three agree: use 1.45° × 1.08° and 4.8° × 3.6° once the page is rechecked. 3-mil reticle (ePap) |
-| **Elevation search indicator** | OS81-10M (photo plate ОС8?-10М, consistent) | **new display kind** | The deputy commander acquires the target in elevation on it (step 6 of the creator's first sequence, late March 2013). **Manual p24:** a round CRT beside the elevation block. SAM Simulator draws one horizontal trace across it, with the target as a short bright mark in the middle once the tracking radar captures ("the target signal is displayed in the elevation indicator"). The photo doesn't show what the axes are (elevation against range, or an error signal). In the running game, with no target, the trace stays flat and doesn't follow the elevation wheel; the axes need a captured target (§12). None of the sprites is a background bitmap for it |
+| **Elevation search indicator** | OS81-10M (photo plate ОС8?-10М, consistent) | **new display kind** | The deputy commander acquires the target in elevation on it (step 6 of the creator's first sequence, late March 2013). **Manual p24:** a round CRT beside the elevation block. SAM Simulator draws one horizontal trace across it, with the target as a short bright mark in the middle once the tracking radar captures ("the target signal is displayed in the elevation indicator"). The photo doesn't show what the axes are (elevation against range, or an error signal). In the running game the trace sits low with the tracking transmitter off and moves to the middle when it is on; it doesn't follow the elevation wheel. A player's video shows it centred during tracking with a bright mark at its centre while a missile flies (§12). Its vertical axis is still not certain. None of the sprites is a background bitmap for it |
 | βс, εс dials | On the faces of OS52-12M and the elevation block (mechanism OO94-9) | have | Each backlit by its ПОДСВЕТКА toggle; sprites `osa094`–`097` are the two dials unlit and lit |
 | Range dial | (OS81-18M?) | have as counter | SAM Simulator draws it large; see 4.3 for what the operator uses it for |
 | ДЦ voltmeter | on OO04-11M2 | have | 10 V = 10 km (`samsim_osa` p29). It does not read the +27 V checks: those are pins of test socket Ш7 (§4.5) |
@@ -385,7 +385,7 @@ For a session linked to the PC, or for Nicholas. Each line is a question a pictu
 |---|---|
 | `rwd_mb3` → 9A33 → *Bilder innen* (rwd-mb3.de/pages/9a33_3.htm) | Position of every block in SL-2M2 (confirm the seat columns in §3); which way the seats face; where OO96-9M and OO05-8M sit; PU-303's controls; the commander's seat and radio; the antenna-lowering panel |
 | `rwd_mb3` → 9A33 → *Schemen* (9a33_4.htm) | Plan of the fighting compartment and cabinets: seat and cabinet positions in metres for `data/cabins/` |
-| SAM Simulator, running (Form56 / Form57) | **Done, except with a target** (3 Oct 2026, §12): the start position of every sprite-backed control; ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; КАНАЛЫ, ЦЕЛЬ and СМЕНА РКТ show no effect at idle; a wrong order is ignored or accepted, never faulted. **Still open:** the elevation screen's axes and what ЦЕЛЬ, КАНАЛЫ, СМЕНА РКТ and АЗ do with a target or missile in play (no echo appeared in the session) |
+| SAM Simulator, running (Form56 / Form57) | **Done, except with a target** (3 Oct 2026, §12): the start position of every sprite-backed control; ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; КАНАЛЫ, ЦЕЛЬ and СМЕНА РКТ show no effect at idle; a wrong order is ignored or accepted, never faulted. **Still open:** the elevation screen's vertical axis and what ЦЕЛЬ, КАНАЛЫ, СМЕНА РКТ and АЗ do with a target or missile in play: targets were seen at Ustka and NAMFI, but not captured (input limits of the desktop-control tools, §12) |
 | `reference/manuals/SA-8B_English.pdf` p14–18 | **Done** (eyes-on pass), with pp. 13 and 21–35: §12 lists every numbered item and the labelled but unnumbered controls on each panel photo |
 | `valka_osa`: two interior photos and the labelled 9A33BM2 drawing | General view of the cabin; antenna names |
 | Creator's interior photos, first page of `samsim_thread` (22 Mar 2013) | The panels he worked from. The image links point at the old simhq.com host and may be dead |
@@ -429,7 +429,7 @@ commander's seat or switch-on panels. The running game was played on 3 Oct 2026 
 | 8 | The driver's controls on the BAZ-5937 | **Open** | Not in `reference/` |
 | 9 | Start position of every switch in the game | **Closed** (3 Oct 2026) | Measured by matching every sprite set against the running game's forms (§12): e.g. ДАЛЬНОСТЬ 0–35 km, guards closed, toggles at ОТКЛ. / ШТ., missile selector ОТКЛ., key out, РУ lit |
 | 10 | What ЦЕЛЬ, АЗ, СМЕНА РКТ and КАНАЛЫ do in the game | **Partly closed** | ЦУ lights ЦУ and АЗ together and АЗ alone does nothing; СМЕНА РКТ is one three-step control that stays at СМЕНА; the others change nothing at idle. Their effect with a target or missile is open: no echo appeared in the session |
-| 11 | What a wrong order does in the game, and the elevation indicator's axes | **Wrong order closed; axes open** | Out-of-order actions are ignored or accepted, never faulted. The elevation indicator shows a flat trace without a target; its axes need a captured target |
+| 11 | What a wrong order does in the game, and the elevation indicator's axes | **Wrong order closed; axes partly** | Out-of-order actions are ignored or accepted, never faulted. The elevation indicator is a horizontal time base: low with the tracking transmitter off, centred with it on, the target a bright mark at the centre (game and `video_samsim_osa`). What its vertical position means is open |
 
 Questions 2, 4, 5 and 7, the new item 3 questions, item 10's open half and the axes of the elevation indicator are good ones for the
 creator and, through him, ePap: added to `docs/outreach/creator_message_draft.md` §4 (2 Oct 2026). Questions 1, 2 and 4 also need
@@ -572,8 +572,37 @@ depends on the scenario (45-00 at Hungary, about 12-00 at Ashuluk).
 closed guard, АЗ) or accepted without complaint (ЦУ before search, transmitters or wheel unlock). No message,
 lamp or fault appeared.
 
-**Not done: anything that needs a tracked target.** The drone's track came to about 15 km on the PU-12 board, but no
-echo appeared on the search scope on any scale or beam, so the tracking radar never captured. Still open from the game:
-the elevation indicator's axes with a target on it, and what ЦЕЛЬ, КАНАЛЫ, СМЕНА РКТ and АЗ do once a target or
-missile is in play. A newly seen control: a toggle beside the azimuth wheel on OS52-12M, read as ЗРП ОТКЛ. / ВКЛ. at
-low resolution, not in this file before.
+**Targets (first try, Ashuluk):** the La-17M drone's track came to about 15 km on the PU-12 board, but no echo appeared
+on the search scope on any scale or beam.
+
+**Second try, and a player's video (same day).** To see echoes the session captured the scope region about 25 times
+over one antenna turn and took the per-pixel maximum (the game's scope fades, and single screenshots catch only part of
+a turn); subtracting the composites from their median left only moving echoes.
+
+- *Ustka* (P-15 targets, sea-skimming, height 0 on the board): the P-15 showed as a small echo about 15 km north,
+  crossing west at about 290 m/s. Too fast to work by hand with these tools.
+- *NAMFI Greece* (Iris Prop drone, 350 km/h; this range has no PU-12 board, the C key does nothing): the drone showed
+  inbound from about 03-00 at 27 km. The session slewed the azimuth line onto it, pressed ЦУ (ЦУ and АЗ lit), and
+  switched on the tracking transmitter (ПЕРЕДАТЧИК): ВКЛ. ВЫСОК. lit on the range indicator, whose upper sweep showed
+  the transmit pulse at 0 km, the range gate as a small step near 14 km, and the target as a spike that came and went
+  (at about 25 km, then at the gate as the drone closed). When the spike reached the gate the lower sweep showed its
+  echo, but the radar did not capture (АВТОМАТ and ТСЦ stayed dark), probably because azimuth, elevation and range
+  were not all on the target at once.
+- **Elevation indicator:** its trace sits **low** on the tube with the transmitter off, and moves to the **middle**
+  once the tracking transmitter is on. In the player's video (below) it is centred during tracking, with a bright
+  mark at its centre while a missile is in flight. So the trace is a horizontal time base and the target shows as a
+  mark on it; what its vertical position means (elevation error or a mode) is still not certain.
+- **Input limits, not game limits:** the desktop-control tools can't hold the right mouse button, so the fast slew
+  turns only anticlockwise (left button) and the range wheel's coarse mode can't be used; the azimuth and range
+  wheels barely respond to synthetic drags. A person at the PC would not have this problem.
+
+**Player's video** (`video_samsim_osa`): "SAM simulator 9K33 OSA", YouTube, 12:41, recorded with Bandicam, NAMFI range,
+360p. Stepped through at 20–30 s intervals, frames read from the video element. It shows the whole engagement from the
+X and Z views: search scope on, TV on from the start, the range indicator's target spike with the gate around it
+(4:41), the elevation indicator as above (6:11, 8:41), two launches with smoke trails crossing the TV (6:11, 12:01).
+The lettering is too small at 360p to read switch positions.
+
+Still open from the game: the elevation indicator's vertical axis, and what ЦЕЛЬ, КАНАЛЫ, СМЕНА РКТ and АЗ do once a
+target or missile is in play. A person playing NAMFI with the right mouse button would get there quickly. A newly
+seen control: a toggle beside the azimuth wheel on OS52-12M, read as ЗРП ОТКЛ. / ВКЛ. at low resolution, not in this
+file before.
