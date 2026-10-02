@@ -32,10 +32,11 @@ A few questions, if you have time:
 4. **Controls I can't identify.** From your manual's panel photos and a photo catalogue of the NVA's vehicles:
    - On the launch console: what do СМЕНА РКТ (under the latch), КАНАЛЫ (КАН. I / КАН. II / СОВМ.) and the
      СР.Л. / ШИР. toggle do, and are РР and ФК the other РОД РАБОТЫ positions (ФК for the function check)?
-   - On the elevation block: what does the АЗ button do, next to ЦУ and РУ?
+   - On the elevation block: what does the АЗ button do, next to ЦУ and РУ? In your game ЦУ lights both ЦУ and АЗ,
+     and pressing АЗ on its own does nothing.
    - On the range indicator: what does the ЦЕЛЬ selector do, and on the range-tracking block the two ПЕЛЕНГ buttons?
-   - The red dots: do they mark each switch's working position for combat, rather than where it starts? (РОД
-     РАБОТЫ's dot is at БР, but your manual has the player select БР.)
+   - The red dots: do they mark each switch's working position for combat, rather than where it starts? (In your
+     game РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their dots, and КАНАЛЫ starts on its dot at СОВМ.)
    - What does the elevation indicator (by the TV monitor) show: elevation against range, or something else, and
      when does the operator use it?
    - The switch-on panels to the left of the range operator, which you left out on purpose: do you have their

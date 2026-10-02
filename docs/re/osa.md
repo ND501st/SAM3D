@@ -2,7 +2,8 @@
 
 Source: SAM Simulator v930.2 data files `osa001.dat`–`osa245.dat` (204 files), viewed locally from
 `reference/samsim/` (git-ignored). Only facts and label transcriptions are recorded here. **No art, sounds or
-data from the game are committed.** `sam.exe` has not been examined.
+data from the game are committed.** `sam.exe` has not been decompiled; it was run on 3 Oct 2026 (below, "Running
+the game").
 
 ## What the files contain
 
@@ -107,10 +108,10 @@ The screen shows one continuous console split between them (Form56 and Form57 in
 |---|---|---|
 | Guard removed by right-click before use | ВЫСОКОЕ ВКЛ (SOC transmitter, p15), ПЕРЕДАТЧИК ВКЛ (SSC transmitter, p16), БОРТ СПК ВКЛ (p34) | `guard_id` |
 | Key: insert, then rotate | ЗАПРЕТ ПУСКА launch-authorization key (p29–30) | 3-position `stepwise` |
-| Wheel locked until right-clicked | azimuth and elevation wheels (p22–23) | lock as a `guard_id` control |
+| Wheel locked until right-clicked | azimuth and elevation wheels (p22–23); in the running game the elevation wheel turned whatever was done to its lock | lock as a `guard_id` control |
 | Multi-position selectors | ДАЛЬНОСТЬ 0–15 / 0–35 / 10–45 km (p15); РОД РАБОТЫ, БР = live fire, leftmost (p29); beam select I / II / III / I–III / I–II (p15) | `positions` |
 | Continuous wheels | АЗИМУТ, УГОЛ МЕСТА, range wheel, drag with the mouse; fast left/right buttons (p16–17) | `ControlKind::Continuous` |
-| Momentary push-buttons | ЦУ АЗ (auto acquisition, p23), ПА (TV angle track, p25), ПОЛУАВТОМАТ (range-only track, p26), ПУСК (launch, p30) | `ControlKind::Momentary`; modes they engage are latching subsystems |
+| Momentary push-buttons | ЦУ АЗ (auto acquisition, p23; in the game the ЦУ button lights both ЦУ and АЗ, and АЗ alone does nothing), ПА (TV angle track, p25), ПОЛУАВТОМАТ (range-only track, p26), ПУСК (launch, p30) | `ControlKind::Momentary`; modes they engage are latching subsystems |
 | Lamps driven by system state | ГОТОВ СПК, ВКЛ ВЫС, ЗАХВАТ, СХОД (p18); ВНИМАНИЕ, ПУСК ГОТОВ, ЦЕЛЬ В ЗОНЕ (p29); ТСЦ (p24), АВТОМАТ (p24), НЛЦ (p25) | Lamps are data (`data/cabins/osa_ak.json`). The per-channel guidance lamps are wrong today; see "Corrections from operators" below |
 | Automatic sequences | missile gyro spin-up (15 s) starts by itself when ВНИМАНИЕ lights, 15 s before the target reaches the zone (p27, p29); target captured automatically once the SSC is on azimuth and in the range gate (p24) | sim inputs + `enable_any` (the sim doesn't set the inputs yet) |
 
@@ -186,7 +187,8 @@ folding the antenna, or any warm-up times other than the 4-minute total. The dep
 ## Still not known
 
 - Exact screen positions of each control (only needed if SAM3D copies the layout; the cabin will be 3D anyway).
-- What the game does when steps are done out of order (fault, no effect, or refusal). Can be checked in the running game.
+- ~~What the game does when steps are done out of order.~~ Answered in the running game: it ignores them (a left click
+  on a closed guard, АЗ) or accepts them (ЦУ before search or transmitters), with no fault or message.
 - Power-up, deploy and stow: not in SAM Simulator. Public facts are above; the switch-level order is SAM3D's design.
 - The real panel labels and positions of the GTA, power take-off and АПУ lock controls.
 
@@ -208,3 +210,17 @@ The manual is a player's guide; the creator's development thread on SimHQ (2013�
 | Panels | White panels (the creator: "first white panel" in SAM Simulator) | Light front panels for reading in a dim compartment, and red dots beside knobs and switches marking their starting positions (Korovin, «Техника и вооружение» 2010) |
 | Low targets | НЛЦ, then TV angle tracking (p25) | "Горка" method for targets at 50–100 m; the original Osa detects a 50 m target at about 27 km and locks it at about 14 km (Korovin) |
 
+## Running the game (3 October 2026)
+
+SAM Simulator v930.2 was played on the PC (Practice "Hungary", Live Practice "Ashuluk"). The start position of every
+sprite-backed control was measured by template-matching the sprites above against captures of the two console forms.
+Full results: `docs/research/OSA_CONSOLE_MAP_2026-10.md` §12. In short:
+
+- **Start positions:** guards closed; toggles at ОТКЛ. / ШТ.; ДАЛЬНОСТЬ 0–35 km; ЦЕЛЬ in the middle; РАБОТА / КОНТРОЛЬ
+  and РОД РАБОТЫ away from their red dots (РОД РАБОТЫ to БР lights the БР lamp); КАНАЛЫ at СОВМ., on its dot; missile
+  selector ОТКЛ.; key out; TV lens wide; РУ lit.
+- **Clicks:** rotary selectors step anticlockwise on a left click and clockwise on a right click, stopping at the
+  ends; ДАЛЬНОСТЬ goes up on a right click; guards open on a right click; some push-buttons need a press of about 0.4 s.
+- СМЕНА РКТ (`osa050`–`052`) is one three-step control, not a latch plus a knob.
+- КАНАЛЫ, ЦЕЛЬ, СМЕНА РКТ and РАБОТА / КОНТРОЛЬ change nothing visible without a target or missile; their effect,
+  and the elevation indicator's axes, are still open (no target was captured).

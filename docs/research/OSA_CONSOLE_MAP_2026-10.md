@@ -31,7 +31,9 @@ Documentation only: no code or data files change with this file.
   9A33BM2 (A 327/1/154, 1984) and the Osa-AK training instruction (1983). They would settle most of the open labels.
 - **The first session could not look at any picture.** A second session on the PC (2 Oct 2026, task 6.0) viewed
   the SAM Simulator manual's panel photos (`samsim_osa` pp. 13–35) and the Osa sprites, and corrected this file; its
-  findings are in §12. Still not seen: the `rwd_mb3` photos and drawings, and the running game (§9, §11).
+  findings are in §12. The same day it viewed the `rwd_mb3` photos and drawings, and on 3 Oct 2026 it played the
+  running game: the start position of every sprite-backed control is now measured, and the game ignores or accepts
+  out-of-order actions without any fault (§12). Still not seen in the game: anything that needs a tracked target.
 
 ## 2. What was read, and what wasn't
 
@@ -170,8 +172,8 @@ Blocks OS82-9M, OS81-18M. SAM Simulator's "Range Officer".
 | *Range mode buttons* | АВТОМАТ, ТСЦ, РУЧНОЕ (with ПОЛУАВТОМАТ, a row of four push-buttons on OS81-18M) | Range auto-track, angle auto-track, manual range | new (the lamps exist) | S | `samsim_osa` p24, p16 photos. The game drives them itself; who presses them in the drill is unknown. medium |
 | *`ssc.pa_rate`* | СКОРОСТЬ П А (− / +) | Aided-tracking rate | new | F (6.6) | `samsim_osa` p24 photo. medium |
 | `ssc.mti` | СДЦ / ШТ. (toggle on OS61-5M) | MTI on the tracking radar | have | F | `samsim_osa` p16 item 10. high |
-| *`ssc.target_select`* | ЦЕЛЬ, 3 positions (scale marks unreadable) | Unknown; on the range indicator, right of ГОРИЗ. СМЕЩ. | new (this is sprite set `osa014`–`016`, formerly `unk.horiz`) | F | `samsim_sprites`; `samsim_osa` p16, p24 photos. low |
-| *`ssc.check_mode`* | РАБОТА / КОНТРОЛЬ / КАЛИБР. | Range-indicator check and calibration | new (sprites `osa012`–`013`) | A | `samsim_osa` p24 photo. medium |
+| *`ssc.target_select`* | ЦЕЛЬ, 3 positions (scale marks unreadable) | Unknown; on the range indicator, right of ГОРИЗ. СМЕЩ. | new (this is sprite set `osa014`–`016`, formerly `unk.horiz`) | F | `samsim_sprites`; `samsim_osa` p16, p24 photos. The game starts it in the middle; turning it changes nothing at idle (`samsim_game`). low |
+| *`ssc.check_mode`* | РАБОТА / КОНТРОЛЬ / КАЛИБР. | Range-indicator check and calibration | new (sprites `osa012`–`013`) | A | `samsim_osa` p24 photo. The game starts it **away from РАБОТА** (two sprites; a red dot at РАБОТА); no visible effect at idle (`samsim_game`). medium |
 | Lamps `avtomat`, `tsc` | АВТОМАТ, ПОЛУАВТОМАТ (OS81-18M); ТСЦ (elevation block) | Range and angle auto-track | have | S | `samsim_osa` p24 |
 | Display `ssc_range` | – | Range indicator: whole range above, magnified gate below, counter | have | S | `samsim_osa` p24. **Add:** the missile's own response is visible and tracked on this scope after launch (ePap, 26 Jan 2014) |
 | Receiver and scope controls | OS61-5M: КОМПЕНСАЦИЯ ВЕТРА ГРУБО (0–360°) and ТОЧНО, КОМПЕНС. ВЕТРА / ОТКЛ., ДОП. УСИЛ. / ОТКЛ., УВ. ПОМ. / ОТКЛ.; range indicator: ВЕРТ. СМЕЩ., ГОРИЗ. СМЕЩ., ЯРКОСТЬ, ФОКУС and АСТИГМАТ. for each sweep (I, II), ЯРКОСТЬ СТРОБА Р, РПЧМ / АПЧМ, ССЦ РПЧМ; OS81-18M: БАЛАНС АВТОМАТА; test jacks | Wind (clutter-motion) compensation, extra gain, receiver frequency control, CRT trims | new | A | `samsim_osa` p16, p24 photos. No gain (РРУ) control is visible at this seat. medium |
@@ -188,7 +190,7 @@ Blocks OP81-16M3, OS52-12M, OO94-9. SAM Simulator's "Azimuth Operator".
 |---|---|---|---|---|---|
 | `soc.search` | ПОИСК ВКЛ. / ВЫКЛ. (two push-buttons) | Search antenna rotation | have | S | `samsim_osa` p15. high |
 | `soc.hv_cover`, `soc.hv` | ВЫСОКОЕ ВКЛ. / ВЫКЛ. (guarded), with a ВЫСОК. indicator window to its left | Search-radar transmitter | have | S | `samsim_osa` p15. high |
-| `soc.range` | ДАЛЬНОСТЬ 0÷15 / 0÷35 / 10÷45 КМ (3-position toggle, sprites `osa017`–`019`) | Scope scale | have | S | `samsim_osa` p15; 0–35 is the working scale, 0–15 a zoom once tracking (ePap, 19 May 2013). The manual's sequence switches to 10–45 first, then to 0–35 at 35 km (p21–22), so the game does not start at 10–45. No red dot is visible on this switch. Start position still unknown; today's 0–15 is a guess |
+| `soc.range` | ДАЛЬНОСТЬ 0÷15 / 0÷35 / 10÷45 КМ (3-position toggle, sprites `osa017`–`019`) | Scope scale | have | S | `samsim_osa` p15; 0–35 is the working scale, 0–15 a zoom once tracking (ePap, 19 May 2013). The manual's sequence switches to 10–45 first, then to 0–35 at 35 km (p21–22), so the game does not start at 10–45. No red dot is visible on this switch. **The game starts at 0–35 km** (`samsim_game`, §12); today's 0–15 is wrong |
 | `soc.beam` | I ЛУЧ, II ЛУЧ, III ЛУЧ; I–III ЛУЧ (marked АВТ.) and I–II ЛУЧ | Elevation beam | **fix**: five push-buttons in two groups, with a three-window lit indicator (I/II/III ЛУЧ) beside them, not one rotary | S (6.4) | `samsim_osa` p15 photo (**confirmed**), `flak11`. high |
 | `soc.mti` | СДЦ / ШТ. (toggle on OP63-6M2, below the scope) | MTI, to 35 km | have | S | `samsim_osa` p15 item 12. high |
 | *`iff.interrogate`* | ЗАПРОС (reading at low resolution; with a КОНТР. button and a lamp) | IFF interrogation; the reply shows beside the target's mark on the search scope | new | F (6.4) | Lower left of OP81-16M (`samsim_osa` p15 photo; not numbered in the manual, not used by the game). `flak11` (senior operator interrogates); `rwd_mb3` 1S51: reply "next to the target mark on the PPI". medium |
@@ -209,9 +211,9 @@ Blocks WPU-55, OS81-10M, OO04-11M2, OS52-14M2, OO04-14M. SAM Simulator's "Elevat
 
 | Id | Label | What it does | Status | Tier | Evidence, conf. |
 |---|---|---|---|---|---|
-| `ssc.el_lock`, `ssc.el_light`, `ssc.el_wheel` | lock; ПОДСВЕТКА; УГОЛ МЕСТА | Elevation of the tracking radar and TV | have; **fix** limits to −12°…+78° (now 0…90 estimate) | S | `samsim_osa` p17, p23; limits `flak11` |
+| `ssc.el_lock`, `ssc.el_light`, `ssc.el_wheel` | lock; ПОДСВЕТКА; УГОЛ МЕСТА | Elevation of the tracking radar and TV | have; **fix** limits to −12°…+78° (now 0…90 estimate) | S | `samsim_osa` p17, p23; limits `flak11`. In the game the wheel turned whatever was done to the lock (`samsim_game`, §12) |
 | `fo.cu_az` | **ЦУ** (push-button with lamp) | Automatic acquisition after azimuth designation | have; **fix the label**: ЦУ and АЗ are two buttons | S | `samsim_osa` p23: the text says "ЦУ АЗ", the photo's marker is on the ЦУ button. high |
-| *`fo.az`* | АЗ (push-button with lamp, between ЦУ and РУ) | Unknown; not used in the manual | new | F | `samsim_osa` p17, p23 photos. Function to ask the creator. low |
+| *`fo.az`* | АЗ (push-button with lamp, between ЦУ and РУ) | Unknown; not used in the manual. In the game it is only a lamp: ЦУ lights ЦУ and АЗ together, and pressing АЗ does nothing (`samsim_game`) | new | F | `samsim_osa` p17, p23 photos. Function to ask the creator. low |
 | *`fo.tsc`* | ТСЦ (push-button, below the ПА / ТСЦ / НЛЦ lamps) | Probably selects angle auto-track | new | F | `samsim_osa` p17 photo. low |
 | `fo.ru` | РУ | Manual tracking | have | S | `samsim_osa` p17, p25; ePap: "PY (RU) manual tracking" |
 | `fo.pa` | ПА | Aided (semi-automatic) angle tracking with the TV. Real: the operator tracks by hand with rate aiding; SAM Simulator tracks for him | have; behaviour to change (6.6) | S | ePap, 5 May 2014: "semi tracking (or aid tracking, so called PA mode)"; "Only manually" |
@@ -225,8 +227,8 @@ Blocks WPU-55, OS81-10M, OO04-11M2, OS52-14M2, OO04-14M. SAM Simulator's "Elevat
 | `fo.bort_spk_cover`, `fo.bort_spk` | БОРТ СПК: ВКЛ. (guarded) and a red ОТКЛ. push-button | Starts missile and command-link preparation by hand | have; add the ОТКЛ. button | S | `samsim_osa` p34, p29 photo. high |
 | `fo.pomekha` | ПОМЕХА / ОТКЛ. (toggle) | Jamming target, no range: method Н, fuse armed right after launch (0.8 s) | have | F (9.1) | `samsim_osa` p34; `samsim_thread` (piston79, 1 Jun 2019). The only guidance method the crew picks by hand |
 | *`msl.select`* | 7 positions: 3-II, 2-II, 1-II, ОТКЛ. (centre), 1-I, 2-I, 3-I; title unreadable | The missile selector: off (automatic selection) in the centre, the three containers of each launcher either side | new | S (6.3) | Sprites `osa024`–`030`; the dial's marks on the launch console (`samsim_osa` p29 photo), next to the ammunition lamps; `flak11` (rotary switch picks another missile). medium |
-| *`msl.channels`* | КАНАЛЫ: КАН. II / КАН. I / СОВМ. (red dot at СОВМ.) | Selects missile channel II, channel I, or both together | new (sprites `osa031`–`033`, formerly `unk.bort`: "БОРТ" is the БОРТ СПК label under the knob) | S (6.3) | `samsim_osa` p29 photo; `samsim_sprites`. medium |
-| *`msl.change_cover`*, *`msl.change`* | СМЕНА РКТ (rotary under a hinged latch; СМЕНА to the left, red dot at the normal position) | Probably changes to the next missile ("смена ракеты") | new (sprites `osa050`–`052`: latch closed; latch open; knob turned to СМЕНА) | F (6.3) | `samsim_sprites`; `samsim_osa` p29 photo. Function inferred from the label. low |
+| *`msl.channels`* | КАНАЛЫ: КАН. II / КАН. I / СОВМ. (red dot at СОВМ.) | Selects missile channel II, channel I, or both together | new (sprites `osa031`–`033`, formerly `unk.bort`: "БОРТ" is the БОРТ СПК label under the knob). The game starts it at СОВМ. | S (6.3) | `samsim_osa` p29 photo; `samsim_sprites`; `samsim_game`. medium |
+| *`msl.change_cover`*, *`msl.change`* | СМЕНА РКТ (rotary under a hinged latch; СМЕНА to the left, red dot at the normal position) | Probably changes to the next missile ("смена ракеты") | new (sprites `osa050`–`052`: latch closed; latch open; knob turned to СМЕНА). In the game it is **one three-step control** (left click steps on, right click back), and it stays at СМЕНА | F (6.3) | `samsim_sprites`; `samsim_osa` p29 photo; `samsim_game`. Function inferred from the label. low |
 | *`msl.emergency_cover`*, *`msl.emergency`* | АВАРИЙНЫЙ ПУСК (guarded), with lamps АВАР. ПУСК ОБЕСТОЧ. and АВАР. ПУСК ГОТОВ | Throws a missile off unguided, on a ballistic path: when the launcher has lost power, or to get rid of missiles fast | new | L | Sprites `osa042`–`043` (the sprite shows the УГОЛ МЕСТА lettering of the elevation block right below it); `samsim_osa` p29 photo; ePap, 29–30 Jun 2013. medium |
 | ~~*`chk.volt_select`*~~ → socket Ш7 | Ш7: +27В ОБЩ., +27В ОТКЛ. ДУС I, +27В ИСХ. ДР. I, +27В ИСХ. ДР. II, +27В ОТКЛ. ДУС II, +27В НАЧ. ПОДГ. I, +27В НАЧ. ПОДГ. II, КОРПУС | **Not a selector**: an 8-pin test socket and its pin legend (test points for a meter) | **drop `chk.volt_select`**; the socket is ambience, or a function-check step with a test meter (6.2) | A / F | `samsim_osa` p29 photo: "Ш7" above a connector. The earlier reading came from sprite `osa050`–`052`, which shows the legend beside the СМЕНА РКТ latch. medium |
 | *`msl.beam`* | СР.Л. / ШИР. (toggle) | Probably medium or wide missile-capture beam | new | F | `samsim_osa` p29 photo; not used in the manual. low |
@@ -269,7 +271,7 @@ default to the operator for power and the deputy commander for the gyros and ant
 | Search scope | OP81-16M3 | have | Rings every 5 km (2/7/12 on 0–15); IFF mark beside the blip; normal video vs MTI; jamming spirals later |
 | Range indicator | OS82-9M | have | Add the missile's return after launch |
 | TV monitor | WPU-55 | have | Screen 171 × 127 mm (4:3). Lens fields: `rwd_mb3` narrow 1°27′ × 1°05′ (f = 500 mm), wide transcribed as 4°05′ × 3°38′ (f = 150 mm; probably 4°50′, which fits 4:3); ePap 1.4° × 1° and 4.7° × 3.5°; game manual 1.5° / 5°. The three agree: use 1.45° × 1.08° and 4.8° × 3.6° once the page is rechecked. 3-mil reticle (ePap) |
-| **Elevation search indicator** | OS81-10M (photo plate ОС8?-10М, consistent) | **new display kind** | The deputy commander acquires the target in elevation on it (step 6 of the creator's first sequence, late March 2013). **Manual p24:** a round CRT beside the elevation block. SAM Simulator draws one horizontal trace across it, with the target as a short bright mark in the middle once the tracking radar captures ("the target signal is displayed in the elevation indicator"). The photo doesn't show what the axes are (elevation against range, or an error signal): check in the running game. None of the sprites is a background bitmap for it |
+| **Elevation search indicator** | OS81-10M (photo plate ОС8?-10М, consistent) | **new display kind** | The deputy commander acquires the target in elevation on it (step 6 of the creator's first sequence, late March 2013). **Manual p24:** a round CRT beside the elevation block. SAM Simulator draws one horizontal trace across it, with the target as a short bright mark in the middle once the tracking radar captures ("the target signal is displayed in the elevation indicator"). The photo doesn't show what the axes are (elevation against range, or an error signal). In the running game, with no target, the trace stays flat and doesn't follow the elevation wheel; the axes need a captured target (§12). None of the sprites is a background bitmap for it |
 | βс, εс dials | On the faces of OS52-12M and the elevation block (mechanism OO94-9) | have | Each backlit by its ПОДСВЕТКА toggle; sprites `osa094`–`097` are the two dials unlit and lit |
 | Range dial | (OS81-18M?) | have as counter | SAM Simulator draws it large; see 4.3 for what the operator uses it for |
 | ДЦ voltmeter | on OO04-11M2 | have | 10 V = 10 km (`samsim_osa` p29). It does not read the +27 V checks: those are pins of test socket Ш7 (§4.5) |
@@ -338,7 +340,7 @@ only when ПУСК is pressed; strong fans blow the launch smoke away from the T
 1. 6.1 seat split, with the real order: `operator` = today's `ssc.tx*`, `ssc.range_wheel`, `ro.semi_auto`, `ssc.mti`;
    `senior_operator` = `soc.*`, `ssc.az_*`; `deputy_commander` = `ssc.el_*`, `fo.*`, `tov.*`.
 2. Move `pwr.gta` to the driver. Move `apu.stow` off the commander (antenna-lowering panel).
-3. `ssc.el_wheel` limits −12° to +78°. `soc.range` starts at 0–35 km until its red dot is known. `fo.mode` second
+3. `ssc.el_wheel` limits −12° to +78°. `soc.range` starts at 0–35 km (the game's start position, §12). `fo.mode` second
    position = ТР, and ТР blocks lock and launch.
 4. New for 6.2: `pwr.master`, `stab.gyro`, subsystem `computer` (100 s), a function-check procedure.
 5. New for 6.3: `msl.select` (7 positions, confirmed on the launch-console photo), `msl.channels`, `msl.change`,
@@ -383,7 +385,7 @@ For a session linked to the PC, or for Nicholas. Each line is a question a pictu
 |---|---|
 | `rwd_mb3` → 9A33 → *Bilder innen* (rwd-mb3.de/pages/9a33_3.htm) | Position of every block in SL-2M2 (confirm the seat columns in §3); which way the seats face; where OO96-9M and OO05-8M sit; PU-303's controls; the commander's seat and radio; the antenna-lowering panel |
 | `rwd_mb3` → 9A33 → *Schemen* (9a33_4.htm) | Plan of the fighting compartment and cabinets: seat and cabinet positions in metres for `data/cabins/` |
-| SAM Simulator, running (Form56 / Form57) | **Still open** (the eyes-on pass had no way to play the game). Narrowed by the manual to: what the elevation screen's axes are; what ЦЕЛЬ, АЗ, СМЕНА РКТ and КАНАЛЫ do in the game; the start position of every switch; what a wrong order does. Answered from the manual and sprites: the 7-position selector, "БОРТ", ГОРИЗ. СМЕЩ., the β / ε "lamps", the range gate's fast movement (§12) |
+| SAM Simulator, running (Form56 / Form57) | **Done, except with a target** (3 Oct 2026, §12): the start position of every sprite-backed control; ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; КАНАЛЫ, ЦЕЛЬ and СМЕНА РКТ show no effect at idle; a wrong order is ignored or accepted, never faulted. **Still open:** the elevation screen's axes and what ЦЕЛЬ, КАНАЛЫ, СМЕНА РКТ and АЗ do with a target or missile in play (no echo appeared in the session) |
 | `reference/manuals/SA-8B_English.pdf` p14–18 | **Done** (eyes-on pass), with pp. 13 and 21–35: §12 lists every numbered item and the labelled but unnumbered controls on each panel photo |
 | `valka_osa`: two interior photos and the labelled 9A33BM2 drawing | General view of the cabin; antenna names |
 | Creator's interior photos, first page of `samsim_thread` (22 Mar 2013) | The panels he worked from. The image links point at the old simhq.com host and may be dead |
@@ -413,20 +415,23 @@ service document that was never released, it stays out (CLAUDE.md, public and de
 
 Status after the eyes-on pass against `reference/` (2 Oct 2026; detail in §12). `reference/` holds the SAM Simulator
 manuals and archives, and the Osa sprites. It has no `rwd_mb3` photos or drawings, nothing on the driver's cab,
-commander's seat or switch-on panels, and no way to run the game in this session.
+commander's seat or switch-on panels. The running game was played on 3 Oct 2026 (§12, items 9–11).
 
 | # | Question | Status | What `reference/` showed |
 |---|---|---|---|
 | 1 | Positions of everything (§9) | **Mostly closed** | Manual photos: every control on each seat 1–2 block face and the launch console (§12). `rwd_mb3` photos (§12): all three seat columns top to bottom, seats in a row facing SL-2M2, the power cabinet at the end of the row, PU-303 left of the driver's wheel. Open: which side wall SL-2M2 stands on, distances, the antenna-lowering panel |
 | 2 | Labels on PU-303, OO96-9M, OO05-8M, the function-check blocks and the IFF controls | **IFF partly closed; the rest open** | IFF: ЗАПРОС and КОНТР. buttons with a lamp on OP81-16M (low resolution). РОД РАБОТЫ may have a ФК (function check) position. The `rwd_mb3` photos show these panels' layout (meters, switch rows) but are too small to read |
-| 3 | What БОРТ, ГОРИЗ. СМЕЩ. and the β / ε lamps do; whether the 7-position selector is the missile selector | **Closed** | "БОРТ" sprites = the КАНАЛЫ selector (КАН. II / КАН. I / СОВМ.). ГОРИЗ. СМЕЩ. = a range-indicator trim knob; its sprites show the ЦЕЛЬ selector beside it. β / ε = the dials' backlight. The 7-position selector = the missile selector, 3-II … ОТКЛ. … 3-I. **New open items:** what ЦЕЛЬ, АЗ, СМЕНА РКТ, СР.Л. / ШИР. and the two ПЕЛЕНГ buttons do |
+| 3 | What БОРТ, ГОРИЗ. СМЕЩ. and the β / ε lamps do; whether the 7-position selector is the missile selector | **Closed** | "БОРТ" sprites = the КАНАЛЫ selector (КАН. II / КАН. I / СОВМ.). ГОРИЗ. СМЕЩ. = a range-indicator trim knob; its sprites show the ЦЕЛЬ selector beside it. β / ε = the dials' backlight. The 7-position selector = the missile selector, 3-II … ОТКЛ. … 3-I. **New open items:** what ЦЕЛЬ, АЗ, СМЕНА РКТ, СР.Л. / ШИР. and the two ПЕЛЕНГ buttons do. The running game shows no effect for ЦЕЛЬ, КАНАЛЫ or СМЕНА РКТ at idle, and АЗ is only a lamp lit by ЦУ (item 10) |
 | 4 | Where the АПУ travel lock is and who works it | **Open** | Not in `reference/`. One lead: a red lamp or button on the launch console's left edge reads "ЗАХ. АПУ II" at low resolution |
 | 5 | Who works the switch-on panels in the drill | **Open** | Not in `reference/` (the game leaves the panels out) |
-| 6 | Start position of РОД РАБОТЫ | **Answered for the game; changes the red-dot model** | The red dot is printed at БР (sprite `osa022`, p29 photo), and the manual has the player select БР (pp. 29, 34). So the game starts away from БР (probably ТР), and red dots mark working positions, not start positions (§7) |
+| 6 | Start position of РОД РАБОТЫ | **Closed for the game; changes the red-dot model** | The red dot is printed at БР (p29 photo), and the manual has the player select БР (pp. 29, 34). **The running game confirms it** (§12): РОД РАБОТЫ starts on sprite `osa022`, and one click to `osa023` lights the БР lamp. So red dots mark working positions, not start positions (§7). РАБОТА / КОНТРОЛЬ also starts away from its dot; КАНАЛЫ starts at its dot (СОВМ.) |
 | 7 | What the commander has besides the radio | **Open** | Not in `reference/`: SAM Simulator has no commander's seat (its views are the three operators' panels and the PU-12 board, `samsim_osa` p13) |
 | 8 | The driver's controls on the BAZ-5937 | **Open** | Not in `reference/` |
+| 9 | Start position of every switch in the game | **Closed** (3 Oct 2026) | Measured by matching every sprite set against the running game's forms (§12): e.g. ДАЛЬНОСТЬ 0–35 km, guards closed, toggles at ОТКЛ. / ШТ., missile selector ОТКЛ., key out, РУ lit |
+| 10 | What ЦЕЛЬ, АЗ, СМЕНА РКТ and КАНАЛЫ do in the game | **Partly closed** | ЦУ lights ЦУ and АЗ together and АЗ alone does nothing; СМЕНА РКТ is one three-step control that stays at СМЕНА; the others change nothing at idle. Their effect with a target or missile is open: no echo appeared in the session |
+| 11 | What a wrong order does in the game, and the elevation indicator's axes | **Wrong order closed; axes open** | Out-of-order actions are ignored or accepted, never faulted. The elevation indicator shows a flat trace without a target; its axes need a captured target |
 
-Questions 2, 4, 5 and 7, the new item 3 questions and the axes of the elevation indicator are good ones for the
+Questions 2, 4, 5 and 7, the new item 3 questions, item 10's open half and the axes of the elevation indicator are good ones for the
 creator and, through him, ePap: added to `docs/outreach/creator_message_draft.md` §4 (2 Oct 2026). Questions 1, 2 and 4 also need
 the `rwd_mb3` interior photos (§9).
 
@@ -435,8 +440,8 @@ the `rwd_mb3` interior photos (§9).
 A session on the PC checked §11 against `reference/`: `samsim_osa` (`SA-8B_English.pdf`, all 35 pages, rendered and
 zoomed, with the Russian edition's text for comparison) and `samsim_sprites` (all 204 files, with the contact sheets
 `states_osa.jpg` and `labels_osa.jpg`). The manual's panel photos are small (about 100 px a panel row), so lettering
-below about 2 mm on the real panel is a reading, marked "low resolution" where it matters. **Not done:** the running
-game (it can't be driven in this session), the `rwd_mb3` photos and drawings (not in `reference/`), and the seat check
+below about 2 mm on the real panel is a reading, marked "low resolution" where it matters. **Done later:** the
+`rwd_mb3` photos and drawings, and the running game (3 Oct 2026), both at the end of this section. **Not done:** the seat check
 with `tools/panel_sheet.py` (that belongs to the data part of 6.0, after the corrections below are in the data).
 The `SA-8B_Russian.txt` in `reference/` lost its Cyrillic when it was extracted; use the PDF.
 
@@ -503,3 +508,72 @@ What this settles for §11: **item 1** (positions) for the whole SL-2M2 face, th
 at the end of the row and PU-303 at the driver's left. Still open: which side wall the cabinet stands on, distances
 for `data/cabins/`, and every label on PU-303, OO96, OO05-8M and the commander's panel (**item 2**). Those need sharper
 pictures: the WWP book (§10) or the NVA regulations.
+
+### Running the game (3 October 2026)
+
+SAM Simulator v930.2 (`samsim_game`), installed on the PC, was played by a session with desktop control: the Osa in
+the Practice scenario "Hungary", then in the Live Practice "Ashuluk" with one La-17M drone. **Method for start
+positions:** each console form was captured with `PrintWindow` at the game's own resolution (the screen shows it at
+1.25×), and every sprite set in `reference/samsim/` was template-matched against it. A true match scores 0.97–1.00 and
+the control's other states 0.6–0.9, so the states below are measured, not read by eye. Both scenarios gave the same
+start positions, so they are the game's defaults.
+
+The game has two console forms (the manual's Form56 / Form57). The wider one is always seat 2 (search scope,
+OP63-6M2, azimuth block); the narrower one is seat 1 in the Z view and seat 3 in the X view.
+
+**Start positions in the game:**
+
+| Control | Seat | Starts at | Notes |
+|---|---|---|---|
+| ПЕРЕДАТЧИК guard | 1 | closed | `osa011` (`osa010` is the open guard) |
+| РАБОТА / КОНТРОЛЬ / КАЛИБР. | 1 | **not РАБОТА** (pointer between КОНТРОЛЬ and КАЛИБР.) | Two sprites only. One left click turns it to РАБОТА, where a red dot is printed |
+| ЦЕЛЬ | 1 | middle of three | |
+| СДЦ / ШТ. (OS61-5M) | 1 | ШТ. | |
+| ДАЛЬНОСТЬ | 2 | **0–35 km** | SAM3D's data guesses 0–15 km |
+| ВЫСОКОЕ guard | 2 | closed | |
+| СДЦ / ШТ. (OP63-6M2) | 2 | ШТ. | |
+| ПОДСВЕТКА βс, εс | 2, 3 | ОТКЛ. | Both dials unlit |
+| Beam lamps | 2 | I ЛУЧ lit | |
+| РОД РАБОТЫ | 3 | **not БР** (`osa022`) | Two sprites only. One left click turns it to БР (`osa023`) and lights the БР lamp. Confirms §11 item 6 |
+| Missile selector | 3 | ОТКЛ. (centre) | |
+| КАНАЛЫ | 3 | **СОВМ.**, at its red dot | So not every control starts away from its dot |
+| СМЕНА РКТ | 3 | latch closed | |
+| БОРТ СПК guard, АВАРИЙНЫЙ ПУСК guard | 3 | closed | |
+| ПОМЕХА, ?МЦ | 3 | ОТКЛ. | |
+| Launch key | 3 | out | |
+| TV УГОЛ ЗРЕНИЯ | 3 | ШИРОКИЙ | |
+| ЦУ / АЗ / РУ | 3 | **РУ lit** (manual tracking) | |
+
+Lamps lit at the start: ГОТОВ on the range indicator and on the search scope, ГОТОВ СПК on both channels, ЛЮКИ ЗАКР.
+and АВАР. ПУСК ОБЕСТОЧ. The search antenna is still; the tracking radar's azimuth line starts at a bearing that
+depends on the scenario (45-00 at Hungary, about 12-00 at Ashuluk).
+
+**What the controls do in the game:**
+
+| Control | Behaviour |
+|---|---|
+| Rotary selectors (ЦЕЛЬ, КАНАЛЫ, РОД РАБОТЫ, РАБОТА / КОНТРОЛЬ) | Left click turns one step anticlockwise, right click one step clockwise; they stop at the end stops and don't wrap. КАНАЛЫ goes СОВМ. → КАН. I → КАН. II with left clicks |
+| ДАЛЬНОСТЬ toggle | Right click moves it up (towards 0–15), left click down (towards 10–45) |
+| Guards (ВЫСОКОЕ, ПЕРЕДАТЧИК) | Right click opens. A left click on a closed guard does nothing; on the open guard it presses the button under it |
+| СМЕНА РКТ | **One three-step control**, not a separate latch and knob: left click opens the latch (`osa051`), a second left click turns the knob to СМЕНА (`osa052`); it stays there; right click steps back. Nothing else on the panels changed (no missile was in play) |
+| КАНАЛЫ, ЦЕЛЬ, РАБОТА / КОНТРОЛЬ | Only the knob changes at idle: no lamp, no change on the range indicator. Their effect needs a target or a missile |
+| ПОИСК ВКЛ., ВЫСОКОЕ ВКЛ. | ПОИСК starts the sweep. ВЫСОКОЕ lights ВЫСОК. (red) in the same window as ГОТОВ, which goes out |
+| Beam buttons | I, II, III select a beam and light its lamp. With I–III the lit lamp steps from beam to beam as the antenna scans |
+| **ЦУ** | Lights **both ЦУ and АЗ**, and РУ goes out: this is the manual's "ЦУ АЗ" mode. Accepted with nothing else set up (search off, transmitters off): no refusal |
+| **АЗ** | Pressing it does nothing, from РУ or from ЦУ |
+| РУ | Back to manual: ЦУ and АЗ go out, РУ lights |
+| Elevation wheel | Drag (starting on the wheel) turns the wheel and the εс dial. It turned after every pattern of lock clicks tried (right, left, both), and the lock graphic never changes, so the game was **not** seen to enforce the lock |
+| Azimuth fast slew (ВЛЕВО / ВПРАВО) | Holding the left mouse button on the lever slews the azimuth line anticlockwise at about 5-00 (30°) a second, wherever on the lever it is pressed; a quick right click did nothing (the desktop-control tools can't hold the right button). The line turned about 56-00 (336°) in one direction without reaching a stop |
+| Azimuth wheel | A drag turns the line only slowly (about 0-50 per 60 px of drag) |
+| Elevation indicator | With no target: one flat horizontal trace, which did not move when the elevation wheel turned |
+| Push-buttons generally | Some drop a very short click; a press held for about 0.4 s always works |
+
+**What a wrong order does:** nothing visible. Every out-of-order action tried was either ignored (left click on a
+closed guard, АЗ) or accepted without complaint (ЦУ before search, transmitters or wheel unlock). No message,
+lamp or fault appeared.
+
+**Not done: anything that needs a tracked target.** The drone's track came to about 15 km on the PU-12 board, but no
+echo appeared on the search scope on any scale or beam, so the tracking radar never captured. Still open from the game:
+the elevation indicator's axes with a target on it, and what ЦЕЛЬ, КАНАЛЫ, СМЕНА РКТ and АЗ do once a target or
+missile is in play. A newly seen control: a toggle beside the azimuth wheel on OS52-12M, read as ЗРП ОТКЛ. / ВКЛ. at
+low resolution, not in this file before.

@@ -1,6 +1,6 @@
 # SAM3D — Handoff for the next AI model
 
-*Written 30 Sep 2026 (Australia/Sydney); last updated 2 Oct 2026 at the end of the session that did the eyes-on pass (6.0, first half). Read this first, then
+*Written 30 Sep 2026 (Australia/Sydney); last updated 3 Oct 2026 at the end of the session that played the running game for 6.0. Read this first, then
 `docs/BRIEFING_2026-10.md`, the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*
 
 ---
@@ -165,8 +165,12 @@ physics stays unscheduled.
    channel selector; the "+27 V selector" is test socket Ш7 beside a guarded СМЕНА РКТ switch; the "β / ε lamps" are
    the dials' backlight; ЦУ and АЗ are separate buttons; **red dots mark working positions, not start positions**
    (this affects 6.1's red-dot plan). The `rwd_mb3` photos are now in `reference/photos/rwd_mb3/` and checked (map §12):
-   seat columns and the seat row confirmed, labels too small to read. **Still to do for 6.0:** the running game (the elevation screen's axes, what ЦЕЛЬ / АЗ / СМЕНА РКТ / КАНАЛЫ do, start
-   positions), the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
+   seat columns and the seat row confirmed, labels too small to read. **Running game done (3 Oct 2026, map §12)**,
+   except anything needing a tracked target: start positions measured for every sprite-backed control (ДАЛЬНОСТЬ
+   starts at 0–35 km, not the data's 0–15; РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their red dots, КАНАЛЫ on
+   its dot); ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; wrong orders are ignored
+   or accepted, never faulted. **Still to do for 6.0:** with a target, the elevation screen's axes and what ЦЕЛЬ /
+   КАНАЛЫ / СМЕНА РКТ do (no echo appeared at Ashuluk; try again or ask the creator), the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
    `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
@@ -178,16 +182,26 @@ physics stays unscheduled.
 - C++ and Python kept matching, with tests, for any model both implement.
 - Prefers Claude to test in Unreal itself (scripts, screenshots) and to explain findings plainly.
 
-## 15. State at the end of the last session (2 Oct 2026, eyes-on pass)
+## 15. State at the end of the last session (3 Oct 2026, running-game checks)
 
-- **Open PRs, stacked:** #9 `docs/osa-console-map` → #11 `tools/panel-sheet` → `docs/eyes-on-pass` (this session's
-  docs-only branch, map and `docs/re/osa.md` corrections). #10 `feature/five-man-crew` (6.1) is separate, from `main`.
-  Merge in that order; retarget the next PR to `main` before deleting a merged base branch.
-- This session worked in a separate worktree, `C:\dev\SAM3D-eyeson`, so the main checkout (`C:\dev\SAM3D`, on
-  `feature/five-man-crew` with the editor's uncommitted `DefaultEngine.ini` lines) was not touched. Remove the
-  worktree with `git worktree remove ../SAM3D-eyeson` once the branch is pushed.
-- Reading `reference/` needs tools the PC lacks by default: PDF pages were rendered with PyMuPDF and sprites enlarged
-  with Pillow, both installed into the session scratchpad, not the system. `SA-8B_Russian.txt` lost its Cyrillic
-  in extraction; read the PDF. The manual's photos are small: zoom to 400–1000 dpi crops to read labels.
-- Unreal was not used. No code or data changed; no build or tests needed.
+- **Open PRs, stacked:** #9 `docs/osa-console-map` → #11 `tools/panel-sheet` → #12 `docs/eyes-on-pass` (docs only:
+  map, `docs/re/osa.md`, `SOURCES.md`, creator draft; this session added the running-game results to it). #10
+  `feature/five-man-crew` (6.1) is separate, from `main`. Merge in that order; retarget the next PR to `main` before
+  deleting a merged base branch.
+- Work happens in a separate worktree, `C:\dev\SAM3D-eyeson`, so the main checkout (`C:\dev\SAM3D`, on
+  `feature/five-man-crew` with the editor's uncommitted `DefaultEngine.ini` lines) is not touched. Remove the
+  worktree with `git worktree remove ../SAM3D-eyeson` once #12 is merged.
+- **Playing SAM Simulator from a session:** it is installed at `C:\Program Files (x86)\SAM Simulator\sam.exe` and
+  can be driven with desktop control (grant "SAM Simulator"). Hints: the game needs keyboard focus (click an empty
+  part of the board before pressing Z / X / C); hold push-buttons about 0.4 s; wheels need a drag that starts on the
+  wheel. Escape at the end of a session left the game stuck on a map, so close the process instead. For exact
+  states, capture each console form with `PrintWindow` (the forms are `ThunderRT6FormDC` windows, drawn at 1.25× on
+  screen) and template-match the sprites in `reference/samsim/osa_view/` with OpenCV (installed into the session
+  scratchpad, not the system). `PrintWindow` returns a stale picture of the search scope, so read scopes from live
+  screenshots.
+- No target was captured: at Ashuluk the La-17M drone's track reached about 15 km on the PU-12 board, but no echo
+  showed on the search scope on any scale or beam. Worth one more try (another target type, or the Ustka range), or
+  leave it to the creator.
+- Unreal was not used. No code or data changed; no build or tests needed. The data corrections (e.g. `soc.range`
+  initial 1 for 0–35 km) wait for the 6.0 data step on top of 6.1.
 - Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.
