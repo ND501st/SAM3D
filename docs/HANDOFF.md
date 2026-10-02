@@ -157,10 +157,11 @@ physics stays unscheduled.
 
 1. **User:** review and send `docs/outreach/creator_message_draft.md`; name the video (title/channel) so
    `video_osa` can be cited properly; acquire the BSU textbook / GDR handbooks if possible.
-2. **Phase 6.0:** the eyes-on pass over the cabin photos, the SAM Simulator manual and the running game (needs a
-   session linked to the PC; `docs/research/OSA_CONSOLE_MAP_2026-10.md` §9; check layouts with
-   `tools/panel_sheet.py`). Then **phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
-   one PR, branched from `main`.
+2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
+   one PR, branched from `main` (in review as PR #10). Then **phase 6.0:** the eyes-on pass over the cabin photos,
+   the SAM Simulator manual and the running game (needs a session on the PC, for `reference/`;
+   `docs/research/OSA_CONSOLE_MAP_2026-10.md` §9; check layouts with `tools/panel_sheet.py`). It corrects 6.1's
+   seats and layout where the photos differ.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
 

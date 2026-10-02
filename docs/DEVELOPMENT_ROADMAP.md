@@ -7,7 +7,7 @@ review (`docs/BRIEFING_2026-10.md`).
 **Status (2 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check),
 merged to `main` on 2 Oct 2026 (PRs ND501st/SAM3D#1–#8). **The briefing's decisions were all adopted (five-man
 crew, real timings with time compression, manual TV tracking, calibrated hit chances, Osa-AK, Osa scenarios). Next:
-phase 6, the accuracy pass, starting with 6.0 (the eyes-on pass), then 6.1.** The old "crew and mission"
+phase 6, the accuracy pass: 6.1 is in review (PR #10); 6.0 (the eyes-on pass) comes next, before 6.2.** The old "crew and mission"
 phase is now phase 8, after the battery (phase 7), because the real Osa got most of its targets from the battery's
 PU-12 and the crew changes ripple through everything after them.
 
@@ -41,7 +41,10 @@ PU-12 and the crew changes ripple through everything after them.
 
 Corrections from `docs/research/OSA_RESEARCH_2026-10.md`. Each task names the research section it comes from.
 The control-level breakdown (which switch, at which seat, in which real block) is in
-`docs/research/OSA_CONSOLE_MAP_2026-10.md`. Its task 6.0 was adopted on 2 Oct 2026 and comes first.
+`docs/research/OSA_CONSOLE_MAP_2026-10.md`. Its task 6.0 was adopted on 2 Oct 2026. 6.1 was built the same day
+without it (PR #10), so 6.0 runs after 6.1 and before 6.2, and corrects 6.1's seats and layout where the photos
+differ (the map has the turbine switch at the driver's power panel, and the three operators side by side at one
+cabinet).
 
 | # | Task | Research |
 |---|---|---|
