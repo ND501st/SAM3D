@@ -1,6 +1,6 @@
 # SAM3D — Handoff for the next AI model
 
-*Written 30 Sep 2026 (Australia/Sydney); last updated 2 Oct 2026 at the end of the session that did the research review. Read this first, then
+*Written 30 Sep 2026 (Australia/Sydney); last updated 2 Oct 2026 at the end of the session that did the eyes-on pass (6.0, first half). Read this first, then
 `docs/BRIEFING_2026-10.md`, the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*
 
 ---
@@ -27,7 +27,7 @@ PU-12, and NPC crew work the *same* controls the player does.
 | PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
 | Unreal | UE 5.7.4 at `D:\UE_5.7`, Cesium for Unreal 2.29+; level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
 | Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
-| Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions), `docs/research/OSA_CONSOLE_MAP_2026-10.md` (control and feature map by seat; proposals, not adopted yet) |
+| Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions), `docs/research/OSA_CONSOLE_MAP_2026-10.md` (control and feature map by seat; proposals, not adopted yet; checked against `reference/` in §12, open items in §11) |
 
 ## 3. Machines and tooling
 
@@ -158,10 +158,16 @@ physics stays unscheduled.
 1. **User:** review and send `docs/outreach/creator_message_draft.md`; name the video (title/channel) so
    `video_osa` can be cited properly; acquire the BSU textbook / GDR handbooks if possible.
 2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
-   one PR, branched from `main` (in review as PR #10). Then **phase 6.0:** the eyes-on pass over the cabin photos,
-   the SAM Simulator manual and the running game (needs a session on the PC, for `reference/`;
-   `docs/research/OSA_CONSOLE_MAP_2026-10.md` §9; check layouts with `tools/panel_sheet.py`). It corrects 6.1's
-   seats and layout where the photos differ.
+   one PR, branched from `main` (in review as PR #10). Then **phase 6.0:** the eyes-on pass. **First half done**
+   (branch `docs/eyes-on-pass`, stacked on PR #11): every §11 item of `docs/research/OSA_CONSOLE_MAP_2026-10.md`
+   checked against `reference/` (the SAM Simulator manual's panel photos and the Osa sprites), the map corrected,
+   findings in its §12. Main results: the 7-position knob is the missile selector; "БОРТ" sprites are the КАНАЛЫ
+   channel selector; the "+27 V selector" is test socket Ш7 beside a guarded СМЕНА РКТ switch; the "β / ε lamps" are
+   the dials' backlight; ЦУ and АЗ are separate buttons; **red dots mark working positions, not start positions**
+   (this affects 6.1's red-dot plan). **Still to do for 6.0:** the `rwd_mb3` interior photos and layout drawings (web,
+   not in `reference/`), the running game (the elevation screen's axes, what ЦЕЛЬ / АЗ / СМЕНА РКТ / КАНАЛЫ do, start
+   positions), the creator questions (map §11), then put the corrections into `data/procedures/osa_ak.json` and
+   `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
 
@@ -172,12 +178,16 @@ physics stays unscheduled.
 - C++ and Python kept matching, with tests, for any model both implement.
 - Prefers Claude to test in Unreal itself (scripts, screenshots) and to explain findings plainly.
 
-## 15. State at the end of the last session (2 Oct 2026)
+## 15. State at the end of the last session (2 Oct 2026, eyes-on pass)
 
-- **Everything is merged to `main`** (PRs #1–#8, merge commits, branches deleted); `main` checked out. Working tree
-  clean except the editor's uncommitted lines in `unreal/SAM3D/Config/DefaultEngine.ini` (leave them out of commits).
-- Decisions in briefing §5 adopted; phase 6.1 is the next task.
-- Unreal: all packages saved and the editor told to quit by script (`SystemLibrary.quit_editor`); it logged
-  "Exiting." (it can linger a minute after that). Next session: start it with `SAM3D_CABIN_TOUR=6` if you want the
-  scripted checks.
-- CI was green on all eight PRs (Ubuntu/GCC, macOS/Clang, Windows/MSVC, prototype) before merging.
+- **Open PRs, stacked:** #9 `docs/osa-console-map` → #11 `tools/panel-sheet` → `docs/eyes-on-pass` (this session's
+  docs-only branch, map and `docs/re/osa.md` corrections). #10 `feature/five-man-crew` (6.1) is separate, from `main`.
+  Merge in that order; retarget the next PR to `main` before deleting a merged base branch.
+- This session worked in a separate worktree, `C:\dev\SAM3D-eyeson`, so the main checkout (`C:\dev\SAM3D`, on
+  `feature/five-man-crew` with the editor's uncommitted `DefaultEngine.ini` lines) was not touched. Remove the
+  worktree with `git worktree remove ../SAM3D-eyeson` once the branch is pushed.
+- Reading `reference/` needs tools the PC lacks by default: PDF pages were rendered with PyMuPDF and sprites enlarged
+  with Pillow, both installed into the session scratchpad, not the system. `SA-8B_Russian.txt` lost its Cyrillic
+  in extraction; read the PDF. The manual's photos are small: zoom to 400–1000 dpi crops to read labels.
+- Unreal was not used. No code or data changed; no build or tests needed.
+- Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.

@@ -26,12 +26,14 @@ These drive what `simcore` must support. Guarded and stepwise controls were adde
 | Guarded toggle (hinged cover) | `osa020`–`021` ВКЛ.; `osa034`–`035` СПК ВКЛ | cover closed / open | same |
 | Guarded emergency button | `osa042`–`043` АВАРИЙНЫЙ ПУСК | cover closed / open | same |
 | Key switch | `osa195`–`197` | no key / key in / key turned | 3 positions, `stepwise` |
-| Rotary selector, 3 positions | `osa014`–`016` (next to ГОРИЗ. СМЕЩ.), `osa031`–`033` БОРТ | 3 | `positions = 3` |
-| Rotary selector, 7 positions | `osa024`–`030` (centre ОТКЛ.) | 7 | `positions = 7` |
-| Rotary with a 5-way voltage check | `osa050`–`052` +27В … | 3 sprites | `positions = 3` (TBC) |
+| Rotary selector, 3 positions | `osa014`–`016` ЦЕЛЬ on the range indicator (next to the ГОРИЗ. СМЕЩ. trim knob), `osa031`–`033` КАНАЛЫ: КАН. II / КАН. I / СОВМ. ("БОРТ" is the БОРТ СПК label below it) | 3 | `positions = 3` |
+| Rotary selector, 7 positions | `osa024`–`030` missile selector 3-II … ОТКЛ. (centre) … 3-I | 7 | `positions = 7` |
+| Rotary under a hinged latch | `osa050`–`052` СМЕНА РКТ: latch closed / latch open / knob turned to СМЕНА | 3 sprites | latch is its own control, knob 2 positions |
 | Lever / toggle, 3 positions | `osa017`–`019` range: 0–15 KM / 0–35 KM / 10–45 KM | 3 | `positions = 3` |
 | Toggle, 2 positions | `osa036`–`041`, `osa044`–`049` (ПОДСВЕТ…, ОТКЛ., ШТ.) | 2 | default |
-| Indicator lamp | `osa094`–`097` (β, ε) | off / lit | output from `Equipment`, not a control |
+| Dial backlight | `osa094`–`097` βс, εс dials unlit / lit (ПОДСВЕТКА) | off / lit | output of the ПОДСВЕТКА toggles, not a control |
+
+Corrected on 2 Oct 2026 by the eyes-on pass against the manual's panel photos (`docs/research/OSA_CONSOLE_MAP_2026-10.md` §12).
 
 ## Label transcriptions
 
@@ -43,13 +45,13 @@ Read from low-resolution sprites; partial words are marked with "…". Translati
 | (БОРТ) СПК ВКЛ | missile / SPK command-guidance preparation on (manual p18, p34) | `osa034` |
 | АВАРИЙНЫЙ ПУСК | emergency launch | `osa042` |
 | УГОЛ МЕСТА | elevation angle | `osa042` |
-| ГОРИЗ. СМЕЩ. | horizontal offset | `osa014` |
+| ГОРИЗ. СМЕЩ. | horizontal shift (a CRT trim knob; the switch in the sprite is ЦЕЛЬ) | `osa014` |
 | ДАЛЬНОСТЬ 0÷15 KM / 0÷35 KM / 10÷45 KM | range scale | `osa017` |
-| БОРТ | "board / on-board" | `osa031` |
-| +27В ОБЩ., +27В ОТКЛ. ДУС I / II, +27В ИСХ. ДР. I / II | +27 V common; +27 V off, DUS I/II; +27 V source, DR I/II | `osa050` |
+| КАН. II … СОВМ.; БОРТ (СПК) | channel selector; the БОРТ СПК label under it | `osa031` |
+| +27В ОБЩ., +27В ОТКЛ. ДУС I / II, +27В ИСХ. ДР. I / II | pin legend of test socket Ш7 beside the СМЕНА РКТ latch, not a selector (manual p29 photo) | `osa050` |
 | ПОДСВЕТ… | backlight / illumination | `osa036`, `osa038` |
 | ОТКЛ. | off | several |
-| β, ε | azimuth and elevation (lamps) | `osa094`–`097` |
+| βс, εс | azimuth and elevation dials (backlight states) | `osa094`–`097` |
 
 TV sight monitor, `osa220` (388×287, screen area blank for the game to draw into):
 
