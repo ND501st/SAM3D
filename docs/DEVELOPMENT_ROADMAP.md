@@ -40,6 +40,9 @@ PU-12 and the crew changes ripple through everything after them.
 ## Phase 6 - Accuracy pass (simcore, data, cabin)
 
 Corrections from `docs/research/OSA_RESEARCH_2026-10.md`. Each task names the research section it comes from.
+The control-level breakdown (which switch, at which seat, in which real block) is in
+`docs/research/OSA_CONSOLE_MAP_2026-10.md`; it proposes a task 6.0 (an eyes-on pass over the cabin photos, the
+SAM Simulator manual and the running game) before 6.1. Not adopted yet.
 
 | # | Task | Research |
 |---|---|---|
