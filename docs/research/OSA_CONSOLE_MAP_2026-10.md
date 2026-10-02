@@ -427,7 +427,7 @@ commander's seat or switch-on panels, and no way to run the game in this session
 | 8 | The driver's controls on the BAZ-5937 | **Open** | Not in `reference/` |
 
 Questions 2, 4, 5 and 7, the new item 3 questions and the axes of the elevation indicator are good ones for the
-creator and, through him, ePap: add them to `docs/outreach/creator_message_draft.md`. Questions 1, 2 and 4 also need
+creator and, through him, ePap: added to `docs/outreach/creator_message_draft.md` §4 (2 Oct 2026). Questions 1, 2 and 4 also need
 the `rwd_mb3` interior photos (§9).
 
 ## 12. Eyes-on pass (task 6.0, 2 October 2026)
