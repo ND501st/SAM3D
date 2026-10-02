@@ -417,8 +417,8 @@ commander's seat or switch-on panels, and no way to run the game in this session
 
 | # | Question | Status | What `reference/` showed |
 |---|---|---|---|
-| 1 | Positions of everything (§9) | **Partly closed** | Seats 1 and 2: the block stacking and every control on each block face (§3, §12). Seat 3: the launch console sits directly above the elevation block, with the TV monitor and elevation indicator beside it; how they are arranged around the seat is not shown. Seat facing, OO96-9M, OO05-8M, PU-303, the commander's seat and the antenna-lowering panel: not in `reference/` (`rwd_mb3` photos) |
-| 2 | Labels on PU-303, OO96-9M, OO05-8M, the function-check blocks and the IFF controls | **IFF partly closed; the rest open** | IFF: ЗАПРОС and КОНТР. buttons with a lamp on OP81-16M (low resolution). РОД РАБОТЫ may have a ФК (function check) position. The other panels are not in `reference/` |
+| 1 | Positions of everything (§9) | **Mostly closed** | Manual photos: every control on each seat 1–2 block face and the launch console (§12). `rwd_mb3` photos (§12): all three seat columns top to bottom, seats in a row facing SL-2M2, the power cabinet at the end of the row, PU-303 left of the driver's wheel. Open: which side wall SL-2M2 stands on, distances, the antenna-lowering panel |
+| 2 | Labels on PU-303, OO96-9M, OO05-8M, the function-check blocks and the IFF controls | **IFF partly closed; the rest open** | IFF: ЗАПРОС and КОНТР. buttons with a lamp on OP81-16M (low resolution). РОД РАБОТЫ may have a ФК (function check) position. The `rwd_mb3` photos show these panels' layout (meters, switch rows) but are too small to read |
 | 3 | What БОРТ, ГОРИЗ. СМЕЩ. and the β / ε lamps do; whether the 7-position selector is the missile selector | **Closed** | "БОРТ" sprites = the КАНАЛЫ selector (КАН. II / КАН. I / СОВМ.). ГОРИЗ. СМЕЩ. = a range-indicator trim knob; its sprites show the ЦЕЛЬ selector beside it. β / ε = the dials' backlight. The 7-position selector = the missile selector, 3-II … ОТКЛ. … 3-I. **New open items:** what ЦЕЛЬ, АЗ, СМЕНА РКТ, СР.Л. / ШИР. and the two ПЕЛЕНГ buttons do |
 | 4 | Where the АПУ travel lock is and who works it | **Open** | Not in `reference/`. One lead: a red lamp or button on the launch console's left edge reads "ЗАХ. АПУ II" at low resolution |
 | 5 | Who works the switch-on panels in the drill | **Open** | Not in `reference/` (the game leaves the panels out) |
@@ -478,3 +478,28 @@ Firing Officer's, **C** the PU-12 board.
 | Range indicator OS82-9M; search scope OP81-16M3, OP63-6M3, OK62-5M1, OS61-5M1 | Plates on the photos: ОС81-8М/-9М, ОП81-16М, ОП63-6М2, ОК62-5М, ОС61-5М; both recorded | p15, p16 |
 | Elevation indicator: "check what it draws" | One horizontal trace with the target mark | p24 |
 | Lamps: no МЕТОД Ф, no emergency-launch or hatch lamps | Added | p18, p29 |
+
+### `rwd_mb3` interior photos and drawings (same day)
+
+The 9A33 pages *Bilder innen* (`9a33_3.htm`, 17 photos) and *Schemen* (`9a33_4.htm`, 3 drawings) downloaded to
+`reference/photos/rwd_mb3/` (git-ignored; the site's own images, for research only) and viewed. Each image was
+matched to its caption from the page's HTML. **The site only has 300 px images** (no larger versions), so they show
+layout, not labels: no lettering on any panel can be read.
+
+| Photo | Caption | What it shows |
+|---|---|---|
+| `9a33_42`, `_43`, `_44` | Seats 1, 2, 3 (*Platz Funkorter / Oberfunkorter / Stv. Kommandant*) | **The three seat columns side by side in one cabinet face, confirmed.** Top to bottom, exactly in the caption order. Seat 1: OS62-6M1 (three meters), range indicator, OK62-5M1, OS61-5M1, OS81-18M (range wheel), OO51-7M. Seat 2: OO94-9 (a row of eight round windows), search scope, OP63-6M3, OS52-12M (azimuth wheel and dial), OK81-4M I. Seat 3: **OO04-14M (four meters) at the top; the TV monitor and the round elevation indicator side by side below it (TV left); the launch console OO04-11M2 below them; the elevation block OS52-14M2 below that;** OK51-6M at the bottom. The caption pairs "WPU-55 / OS81-10M" as one line |
+| `9a33_40` | View into the fighting compartment | The SL-2M2 face with the seat 2 and 3 columns; further cabinets beyond |
+| `9a33_46` | Operators' workplaces in front of SL-2M2, behind them cabinet OO96-2M2 | **Seats in a row facing SL-2M2, with the power cabinet at the end of the row**, consistent with ePap's "on your left looking towards the existing panels" and the creator's "left of the Range Officer". The cabinet face has two meters and rows of switches; labels unreadable |
+| `9a33_13`, `_30`, `_31` | Driver's seat through the hatch; through the right window; driver's dashboard | **A black panel full of small switches and lamps left of the steering wheel**: PU-303, matching the caption "links Bedienpult PU-303". The dashboard has about eight round gauges and a few switches |
+| `9a33_32` | Commander's place, DP-3 at the right | An instrument panel (gauges), a panel with a row of toggle switches and a small blue control box (probably radio or intercom), and the DP-3 at the right. No navigation set is visible |
+| `9a33_51` | SL-1M1 left: OO04-12M, OK81-4M II | Two meters and two rotary selectors on OO04-12M |
+| `9a33_52` | SL-1M1 right: gyro switch-on panel OO05-8M, OS51-8M, OO09-5M | Top block: a black sub-panel of switches, a row of about ten lamps and a large round dial; middle: a meter with a many-position selector and two pin sockets; bottom: guarded switches and lamps. Which block is which beyond the top one is not certain |
+| `9a33_41`, `_47`, `_50`, `_64`, `_45`, `_81` | SP-2M2 (computer), SP-1M1, SL-3M, modernised search scope | Racks of blocks with jacks; ambience |
+| `9a33_61` | Layout of the fighting and engine compartments (25-item legend; source A 327/1/153) | Top view, driving direction marked. Cabinets SL-1M1 (18), SL-2M2 (14) and SL-3M1 (10) in a row along one side wall, front to rear; SP-1M1 (1) and SP-3M2 (3) along the other; OO96-9M2 (12), the gyros (11, 13) and the PAB-2M tripod (15) between them. Which side wall SL-2M2 is on, and the exact positions of 9, 16, 21–25, can't be resolved at 400 px |
+| `9a33_62`, `_63` | Extra equipment in the base vehicle; antennas and launcher | Legends already used in §3; the drawings add nothing readable |
+
+What this settles for §11: **item 1** (positions) for the whole SL-2M2 face, the seat row, the power cabinet's place
+at the end of the row and PU-303 at the driver's left. Still open: which side wall the cabinet stands on, distances
+for `data/cabins/`, and every label on PU-303, OO96, OO05-8M and the commander's panel (**item 2**). Those need sharper
+pictures: the WWP book (§10) or the NVA regulations.

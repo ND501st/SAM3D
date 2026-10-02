@@ -164,8 +164,8 @@ physics stays unscheduled.
    findings in its §12. Main results: the 7-position knob is the missile selector; "БОРТ" sprites are the КАНАЛЫ
    channel selector; the "+27 V selector" is test socket Ш7 beside a guarded СМЕНА РКТ switch; the "β / ε lamps" are
    the dials' backlight; ЦУ and АЗ are separate buttons; **red dots mark working positions, not start positions**
-   (this affects 6.1's red-dot plan). **Still to do for 6.0:** the `rwd_mb3` interior photos and layout drawings (web,
-   not in `reference/`), the running game (the elevation screen's axes, what ЦЕЛЬ / АЗ / СМЕНА РКТ / КАНАЛЫ do, start
+   (this affects 6.1's red-dot plan). The `rwd_mb3` photos are now in `reference/photos/rwd_mb3/` and checked (map §12):
+   seat columns and the seat row confirmed, labels too small to read. **Still to do for 6.0:** the running game (the elevation screen's axes, what ЦЕЛЬ / АЗ / СМЕНА РКТ / КАНАЛЫ do, start
    positions), the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
    `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
