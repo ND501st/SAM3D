@@ -267,9 +267,10 @@ def build(out_path):
                 "that cover or lock is at position 1 (open / unlocked). Push-buttons read pressed for one sim step.",
                 "body"), Spacer(1, 3 * mm), legend(), Spacer(1, 4 * mm)]
     station_names = {"commander": "Commander", "driver": "Driver",
-                     "range_officer": "Range Officer (SAM Simulator: Z / Y panels)",
-                     "firing_officer": "Firing Officer (SAM Simulator: X panel)"}
-    order = ["commander", "driver", "range_officer", "firing_officer"]
+                     "senior_operator": "Senior operator (SAM Simulator: azimuth operator)",
+                     "operator": "Operator (SAM Simulator: Range Officer)",
+                     "deputy_commander": "Deputy commander (SAM Simulator: Firing Officer / elevation operator)"}
+    order = ["commander", "driver", "senior_operator", "operator", "deputy_commander"]
     for station in order:
         cs = [c for c in console["controls"] if c.get("station") == station]
         if not cs:

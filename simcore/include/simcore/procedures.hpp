@@ -34,6 +34,7 @@ struct Procedure {
     std::string id;
     std::string name;
     std::vector<ProcedureStep> steps;
+    std::string station;  // the seat whose controls it uses (console_data fills it); empty = any crew member
 };
 
 enum class StepResult {
@@ -130,7 +131,8 @@ struct CrewReport {
         Completed,       // finished a procedure
         Waiting,         // waiting for equipment; detail = the condition's id
         EquipmentFault,  // saw a fault it was waiting on; stopped; detail = subsystem id
-        Aborted          // stopped: cancelled, superseded, or bad procedure data; detail says which
+        Aborted          // stopped: cancelled, superseded, bad procedure data, or another seat's
+                         // procedure; detail says which
     };
     Kind kind = Kind::Started;
     std::string procedure_id;
@@ -229,6 +231,11 @@ private:
             Procedure next = std::move(queue_.front());
             queue_.pop_front();
             if (next.steps.empty()) continue;
+            if (!next.station.empty() && next.station != role_) {
+                // Not this seat's controls: refuse it rather than reach across the vehicle.
+                reports_.push_back({CrewReport::Kind::Aborted, next.id, "station " + next.station, time_s_});
+                continue;
+            }
             tracker_.Reset(std::move(next));
             action_timer_s_ = 0.0;
             has_order_ = true;

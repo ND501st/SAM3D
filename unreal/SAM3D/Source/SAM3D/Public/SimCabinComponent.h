@@ -48,6 +48,10 @@ struct SAM3D_API FSimCabinItem
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Pointer;
 
+	/** Red dot beside the control marking its starting position (simcore::CabinLayout::StartMark). May be null. */
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> Mark;
+
 	FLinearColor BaseColor = FLinearColor::Black;
 	FLinearColor MovingColor = FLinearColor::Black;
 };

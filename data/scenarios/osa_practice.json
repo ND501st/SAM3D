@@ -1,11 +1,11 @@
 {
   "scenario_id": "osa_practice",
   "name": "Osa-AK practice: one drone, crew only",
-  "description": "A fictional practice shoot. The Osa is on the march with its crew; a single target drone comes in from the north. The crew powers up, searches on the march, halts, deploys, acquires with the SOC, prepares and launches. No player actions: this is a regression and demo scenario.",
+  "description": "A fictional practice shoot. The Osa is on the march with its crew of five; a single target drone comes in from the north. The crew powers up, searches on the march, halts, deploys, acquires with the SOC and captures with the SSC, prepares and launches. No player actions: this is a regression and demo scenario.",
   "source": "sam3d",
   "confidence": "estimate",
   "notes": "Fictional. The place is a flat plain chosen for convenience. The target's speed, height, route and RCS are PLACEHOLDER numbers for exercising the pipeline. Capture and zone lamps come from the gameplay engagement model (data/gameplay/osa_ak.json), not from this file.",
-  "seed": 4,
+  "seed": 1,
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "terrain": { "type": "flat", "height_m": 110 },
   "own_unit": {
@@ -16,8 +16,10 @@
   },
   "crew": [
     { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
-    { "name": "Range officer", "role": "range_officer", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
-    { "name": "Firing officer", "role": "firing_officer", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 }
+    { "name": "Deputy commander", "role": "deputy_commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Senior operator", "role": "senior_operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Operator", "role": "operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Driver", "role": "driver", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 }
   ],
   "targets": [
     {
@@ -30,13 +32,15 @@
   ],
   "triggers": [
     { "id": "on_the_march", "when": { "after_s": 0 },
-      "do": [ { "order": "power_up", "crew": "Commander" }, { "queue": "search_on_march", "crew": "Commander" } ] },
+      "do": [ { "order": "power_up", "crew": "Commander" }, { "order": "search_on_march", "crew": "Senior operator" } ] },
     { "id": "halt", "when": { "target": "t1", "target_within_m": 40000 },
-      "do": [ { "set_input": "vehicle_stopped", "value": true }, { "queue": "deploy_at_halt", "crew": "Commander" } ] },
+      "do": [ { "set_input": "vehicle_stopped", "value": true }, { "order": "deploy_at_halt", "crew": "Commander" },
+              { "order": "pto_on_line", "crew": "Driver" } ] },
     { "id": "acquire", "when": { "target": "t1", "target_within_m": 35000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
-      "do": [ { "order": "acquire_with_soc", "crew": "Range officer" } ] },
+      "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy commander" },
+              { "order": "capture_with_ssc", "crew": "Operator" } ] },
     { "id": "prepare", "when": { "target": "t1", "target_within_m": 30000 },
-      "do": [ { "order": "prepare_firing", "crew": "Firing officer" }, { "queue": "launch", "crew": "Firing officer" } ] }
+      "do": [ { "queue": "prepare_firing", "crew": "Deputy commander" }, { "queue": "launch", "crew": "Deputy commander" } ] }
   ],
   "end": { "time_limit_s": 700, "when_targets_gone": true }
 }

@@ -54,9 +54,16 @@ struct TrackSensorDef {
     std::string in_zone_input;
 };
 
+// A crew seat that owns controls (e.g. "senior_operator"). Crew roles name these.
+struct ConsoleStation {
+    std::string id;
+    std::string label;
+};
+
 struct ConsoleData {
     std::string system_id;
     std::string display_name;
+    std::vector<ConsoleStation> stations;  // empty if the file lists none (then control stations are free text)
     ControlPanel panel;
     Equipment equipment;
     std::vector<Procedure> procedures;
@@ -73,6 +80,13 @@ struct ConsoleData {
         }
         return nullptr;
     }
+
+    const ConsoleStation* FindStation(const std::string& id) const {
+        for (const ConsoleStation& s : stations) {
+            if (s.id == id) return &s;
+        }
+        return nullptr;
+    }
 };
 
 namespace detail {
@@ -80,15 +94,16 @@ namespace detail {
 class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
-        if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "inputs", "controls",
-                             "subsystems", "procedures", "launch", "sensors"})) {
+        if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
+                             "controls", "subsystems", "procedures", "launch", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
         if (!RequireString(root, "", "display_name", out.display_name)) return false;
         if (!LoadSources(root)) return false;
+        if (!LoadStations(root, out.stations)) return false;
         if (!LoadInputs(root, out.equipment)) return false;
-        if (!LoadControls(root, out.panel)) return false;
+        if (!LoadControls(root, out.stations, out.panel)) return false;
         if (!LoadSubsystems(root, out.panel, out.equipment)) return false;
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
         if (!LoadLaunch(root, out)) return false;
@@ -212,7 +227,27 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         return true;
     }
 
-    bool LoadControls(const json::Value& root, ControlPanel& panel) {
+    bool LoadStations(const json::Value& root, std::vector<ConsoleStation>& out) {
+        const json::Value* arr = OptionalArray(root, "", "stations");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("stations", i);
+            const json::Value& st = arr->items[i];
+            if (!Keys(st, path, {"id", "label", "source", "confidence", "notes"})) return false;
+            ConsoleStation station;
+            if (!RequireString(st, path, "id", station.id) || !RequireString(st, path, "label", station.label) ||
+                !Provenance(st, path)) {
+                return false;
+            }
+            for (const ConsoleStation& existing : out) {
+                if (existing.id == station.id) return Fail(Join(path, "id"), "duplicate station '" + station.id + "'");
+            }
+            out.push_back(std::move(station));
+        }
+        return true;
+    }
+
+    bool LoadControls(const json::Value& root, const std::vector<ConsoleStation>& stations, ControlPanel& panel) {
         const json::Value* arr = OptionalArray(root, "", "controls");
         if (arr == nullptr) return message_.empty();
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
@@ -228,6 +263,14 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RequireString(c, path, "kind", kind) || !OptionalString(c, path, "station", def.station) ||
                 !OptionalString(c, path, "guard", def.guard_id) || !Provenance(c, path)) {
                 return false;
+            }
+            if (!stations.empty()) {  // with a station list, every control belongs to one of its seats
+                bool known = false;
+                for (const ConsoleStation& st : stations) known = known || st.id == def.station;
+                if (!known) {
+                    return Fail(Join(path, "station"), def.station.empty() ? std::string("required")
+                                                                           : "unknown station '" + def.station + "'");
+                }
             }
             if (const json::Value* labels = OptionalArray(c, path, "position_labels")) {
                 for (std::size_t j = 0; j < labels->items.size(); ++j) {
@@ -542,11 +585,30 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                                         std::to_string(step.value));
                 }
                 if (step.min_wait_s < 0.0) return Fail(Join(sp, "min_wait_s"), "must be >= 0");
+                // One seat per procedure: a crew member can only reach the controls of their own station.
+                const std::string& station = StationOf(panel, step.control_id);
+                if (!station.empty()) {
+                    if (proc.station.empty()) {
+                        proc.station = station;
+                    } else if (station != proc.station) {
+                        return Fail(sp, "control '" + step.control_id + "' is at station '" + station +
+                                            "', the procedure's earlier steps at '" + proc.station +
+                                            "'; split it into one procedure per station");
+                    }
+                }
                 proc.steps.push_back(std::move(step));
             }
             out.push_back(std::move(proc));
         }
         return true;
+    }
+
+    static const std::string& StationOf(const ControlPanel& panel, const std::string& control_id) {
+        static const std::string none;
+        for (const ControlDef& c : panel.Controls()) {
+            if (c.id == control_id) return c.station;
+        }
+        return none;
     }
 
     std::string message_;

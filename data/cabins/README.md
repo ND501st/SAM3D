@@ -30,14 +30,14 @@ reference point. Angles are in degrees in the file.
 {
   "system_id": "osa_ak",              // must match the console file
   "status": "free text", "notes": "free text",
-  "stations": [ { "id": "range_officer", "label": "Range officer", "eye_m": [-0.35, 1.9, 1.5],
-                  "yaw_deg": -90, "pitch_deg": -10 } ],
-  "panels": [ { "id": "ro_panel", "label": "...", "station": "range_officer", "centre_m": [-1.0, 1.9, 1.35],
-                "facing_deg": 90, "tilt_deg": 15, "size_m": [1.0, 0.6] } ],
+  "stations": [ { "id": "senior_operator", "label": "Senior operator", "eye_m": [-0.35, 2.4, 1.5],
+                  "yaw_deg": -90, "pitch_deg": -10 } ],      // one seat per console station
+  "panels": [ { "id": "so_panel", "label": "...", "station": "senior_operator", "centre_m": [-1.0, 2.4, 1.4],
+                "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9] } ],
   "controls": [
-    { "control": "soc.range", "panel": "ro_panel", "at_m": [-0.17, 0.2] },
+    { "control": "soc.range", "panel": "so_panel", "at_m": [-0.15, 0.06] },
     // optional: "style" (toggle, rotary, key, button, wheel, cover); wheels: "units_per_turn"
-    { "control": "ssc.az_wheel", "panel": "ro_panel", "at_m": [-0.25, -0.17], "units_per_turn": 60 }
+    { "control": "ssc.az_wheel", "panel": "so_panel", "at_m": [-0.1, -0.3], "units_per_turn": 60 }
   ],
   "lamps": [
     { "id": "in_zone", "label": "ЦЕЛЬ В ЗОНЕ", "panel": "fo_panel", "at_m": [0.42, 0.2], "color": "green",
@@ -63,7 +63,7 @@ inside the panel), says when it is powered (`on_when`, `on_when_any`, console co
 | `meter` | A needle swinging with `value x scale`, full deflection at `full_scale` `unit`; rests at 0 when not powered | `control`, `marks`, `scale`, `full_scale`, `unit` |
 
 ```jsonc
-{ "id": "beta_c", "label": "βс", "kind": "dial", "panel": "ro_panel", "at_m": [0.42, 0.3], "size_m": [0.14, 0.14],
+{ "id": "beta_c", "label": "βс", "kind": "dial", "panel": "so_panel", "at_m": [0.3, 0.28], "size_m": [0.14, 0.14],
   "control": "ssc.az_wheel", "marks": 12, "value_per_turn": 360, "labels_per_turn": 60,
   "on_when": [ { "subsystem": "power", "is": "ready" } ], "lit_when": [ { "control": "ssc.az_light", "is": 1 } ],
   "source": "samsim_osa p16", "confidence": "high" }
@@ -74,6 +74,7 @@ only shows it. `ppi`, `range_scope` and `tv` need the console's `sensors` block.
 
 Rules the loader checks:
 
+- When the console lists `stations`, the cabin has exactly one seat for each of them, and no others.
 - Each console control is placed at most once, on a panel whose station matches the control's `station`.
 - The default style follows the control: buttons and wheels by kind, a control that guards another is a `cover`,
   key switches are `key`, more than two positions is `rotary`, otherwise `toggle`. An explicit `style` must fit.

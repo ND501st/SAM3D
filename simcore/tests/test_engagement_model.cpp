@@ -13,7 +13,7 @@ namespace {
 const std::string kData = SIMCORE_DATA_DIR;
 
 // An Osa scenario with the gameplay engagement model: the unit starts halted; the commander
-// powers up, deploys and searches; the range officer acquires once the АПУ is free.
+// powers up and deploys, the driver puts the generator on line, the senior operator searches.
 // `target` is one target object; `triggers` are extra triggers (with a leading comma).
 std::string Engage(const std::string& target, const std::string& triggers = "", unsigned seed = 1) {
     return R"({
@@ -23,22 +23,25 @@ std::string Engage(const std::string& target, const std::string& triggers = "", 
       "terrain": { "type": "flat", "height_m": 0 },
       "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json",
                     "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
-      "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Range officer", "role": "range_officer" },
-                { "name": "Firing officer", "role": "firing_officer" } ],
+      "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
+                { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
+                { "name": "Driver", "role": "driver" } ],
       "targets": [ )" +
            target + R"( ],
       "triggers": [
         { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Commander" },
                                            { "queue": "deploy_at_halt", "crew": "Commander" },
-                                           { "queue": "search_on_march", "crew": "Commander" } ] } )" +
+                                           { "order": "pto_on_line", "crew": "Driver" },
+                                           { "order": "search_on_march", "crew": "Senior operator" } ] } )" +
            triggers + R"( ],
       "end": { "time_limit_s": 400 } })";
 }
 
 const char* kAcquireAndFire = R"(,
         { "id": "acq", "when": { "conditions": [ { "subsystem": "soc_transmitter", "is": "ready" } ] },
-          "do": [ { "order": "acquire_with_soc", "crew": "Range officer" },
-                  { "order": "prepare_firing", "crew": "Firing officer" }, { "queue": "launch", "crew": "Firing officer" } ] })";
+          "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy" },
+                  { "order": "capture_with_ssc", "crew": "Operator" },
+                  { "queue": "prepare_firing", "crew": "Deputy" }, { "queue": "launch", "crew": "Deputy" } ] })";
 
 std::string Target(double north_m, double up_m, const std::string& extra = "") {
     return R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": )" +
@@ -82,7 +85,8 @@ SC_TEST("tuning: the Osa game-balance file loads; bad values are rejected with p
     EngagementTuning t;
     std::string error;
     SC_EXPECT(LoadEngagementTuningFile(kData + "/gameplay/osa_ak.json", t, &error));
-    SC_EXPECT(t.system_id == "osa_ak" && t.aim_role == "range_officer");
+    SC_EXPECT(t.system_id == "osa_ak" && t.aim_az_role == "senior_operator");
+    SC_EXPECT(t.aim_el_role == "deputy_commander" && t.aim_range_role == "operator");
     SC_EXPECT_NEAR(t.HitChanceFor("drone"), 0.8, 1e-12);
     SC_EXPECT_NEAR(t.HitChanceFor("zeppelin"), t.HitChanceFor("default"), 1e-12);
     SC_EXPECT_NEAR(t.zone_max_range_m, 10300.0, 1e-9);
@@ -135,7 +139,7 @@ SC_TEST("engagement: the same seed gives the same outcome; over many seeds hits 
 
 SC_TEST("engagement: losing the track after launch loses the missile") {
     const std::string stow = R"(,
-        { "id": "stow", "when": { "launches_at_least": 1 }, "do": [ { "order": "stow_for_march", "crew": "Range officer" } ] })";
+        { "id": "stow", "when": { "launches_at_least": 1 }, "do": [ { "order": "stow_ssc", "crew": "Operator" } ] })";
     const Run r = Play(Engage(Target(24000, 1000), std::string(kAcquireAndFire) + stow));
     SC_EXPECT(r.summary.launches == 1 && r.summary.misses == 1 && r.summary.hits == 0);
     SC_EXPECT(Has(r, "track lost: transmitter off"));
@@ -163,8 +167,9 @@ SC_TEST("engagement: a target too low for the radar lights НЛЦ and is never r
 SC_TEST("engagement: TV-only engagement tracks with the camera and uses the TV factor") {
     const std::string emcon = R"(,
         { "id": "tv", "when": { "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
-          "do": [ { "order": "emcon_tv_engagement", "crew": "Firing officer" } ] })";
-    // No search: the commander only powers up and deploys (the search procedure is never reached in time).
+          "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
+                  { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
+    // No search: the senior operator's emissions-control order replaces the search order (still waiting for power).
     const Run r = Play(Engage(Target(12000, 800), emcon));
     SC_EXPECT(Has(r, "TV track"));
     SC_EXPECT(r.summary.launches == 1 && r.summary.hits + r.summary.misses == 1);
@@ -174,7 +179,8 @@ SC_TEST("engagement: TV-only engagement tracks with the camera and uses the TV f
 SC_TEST("engagement: launching beyond reach runs out of flight time") {
     const std::string emcon = R"(,
         { "id": "tv", "when": { "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
-          "do": [ { "order": "emcon_tv_engagement", "crew": "Firing officer" } ] })";
+          "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
+                  { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
     const Run r = Play(Engage(Target(19000, 800), emcon));
     SC_EXPECT(Has(r, "OUTSIDE the zone"));
     SC_EXPECT(Has(r, "out of reach: flight time ran out"));

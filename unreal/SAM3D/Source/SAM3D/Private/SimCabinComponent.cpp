@@ -27,6 +27,7 @@ namespace
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
 	const FLinearColor ChromeColor(0.7f, 0.7f, 0.72f);
 	const FLinearColor CoverColor(0.6f, 0.03f, 0.02f);
+	const FLinearColor StartMarkColor(0.75f, 0.0f, 0.0f);
 	const FLinearColor BrassColor(0.6f, 0.45f, 0.1f);
 	const FLinearColor HighlightColor(1.0f, 0.85f, 0.2f);
 
@@ -130,7 +131,7 @@ void USimCabinComponent::DestroyParts()
 {
 	for (FSimCabinItem& Item : Items)
 	{
-		for (UStaticMeshComponent* Part : {Item.Base.Get(), Item.Moving.Get(), Item.Pointer.Get()})
+		for (UStaticMeshComponent* Part : {Item.Base.Get(), Item.Moving.Get(), Item.Pointer.Get(), Item.Mark.Get()})
 		{
 			if (Part != nullptr)
 			{
@@ -289,6 +290,17 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Place(Item.Base, Item.Location + Item.Normal * (50.0 * Collar.Y), FRotationMatrix::MakeFromZ(Item.Normal).Rotator(),
 			FVector(Collar.X, Collar.X, Collar.Y));
 	}
+	const simcore::ControlDef* Def = Sim->GetScenarioRunner()->Console().panel.Find(Control.control_id);
+	double MarkU = 0.0;
+	double MarkV = 0.0;
+	if (Def != nullptr && simcore::CabinLayout::StartMark(Control, *Def, MarkU, MarkV))
+	{
+		// A flat red dot on the panel face (m to cm), clear of the collar.
+		Item.Mark = AddMesh(CylinderMesh, StartMarkColor);
+		Item.Mark->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Place(Item.Mark, Item.Location + (Item.Right * MarkU + Item.Up * MarkV) * 100.0 + Item.Normal * 0.15,
+			FRotationMatrix::MakeFromZ(Item.Normal).Rotator(), FVector(0.007, 0.007, 0.002));
+	}
 	Items.Add(Item);
 }
 
@@ -368,7 +380,8 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	case simcore::CabinStyle::Toggle:
 	{
 		// Lever thrown 35 degrees up the face for position 1 ("on"), down for 0.
-		const double A = FMath::DegreesToRadians(Position >= 1 ? 35.0 : -35.0);
+		const double Face = simcore::CabinLayout::PositionAngleDeg(Control.style, Def->positions, Position);
+		const double A = FMath::DegreesToRadians(Face < 90.0 ? 35.0 : -35.0);
 		const FVector Lever = N * FMath::Cos(A) + Item.Up * FMath::Sin(A);
 		Place(Item.Moving, L + N * 0.8 + Lever * 1.75, FRotationMatrix::MakeFromZ(Lever).Rotator(), FVector(0.008, 0.008, 0.035));
 		break;
@@ -376,9 +389,7 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	case simcore::CabinStyle::Rotary:
 	{
 		// Positions spread symmetrically about "up", at most 30 degrees apart.
-		const int32 Count = FMath::Max(Def->positions, 2);
-		const double Step = FMath::Min(30.0, 240.0 / (Count - 1));
-		const FVector Dir = FaceDirection(Item, (Position - 0.5 * (Count - 1)) * Step);
+		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::PositionAngleDeg(Control.style, Def->positions, Position));
 		Place(Item.Moving, L + N * 1.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(0.03, 0.03, 0.02));
 		Place(Item.Pointer, L + N * 2.05 + Dir * 0.9, FRotationMatrix::MakeFromXZ(Dir, N).Rotator(), FVector(0.014, 0.003, 0.002));
 		break;

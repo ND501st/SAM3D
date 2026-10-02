@@ -3,6 +3,7 @@
 One JSON file per scenario, loaded by `simcore::LoadScenarioFile` (`simcore/include/simcore/scenario.hpp`) and
 played by `simcore::ScenarioRunner` (`scenario_runner.hpp`). Loading also loads the console the scenario names and
 checks every reference in it (inputs, procedures, crew, targets, conditions), reporting the path to any problem.
+An order must go to the crew member in the seat that owns the procedure (`data/procedures/README.md`).
 
 Fictional and training scenarios use `"source": "sam3d"` with `"confidence": "estimate"`. Historical scenarios cite
 their sources like any other data file (`data/systems/README.md`). Placeholder numbers (target speed, RCS, the
@@ -28,7 +29,8 @@ the readiness state they start in (march, deployed, powered).
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "inputs": { "vehicle_stopped": false }            // starting values of console inputs
   },
-  "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 } ],
+  "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+            { "name": "Deputy commander", "role": "deputy_commander" } ],   // role = a console station, one each
   "targets": [
     { "id": "t1", "name": "...", "type": "Air+FixedWing", "class": "drone", "appear_at_s": 0,
       "evade_on_launch": false, "evade_turn_rate_deg_s": 12,          // optional: break away when fired at
@@ -42,7 +44,7 @@ the readiness state they start in (march, deployed, powered).
                 "conditions": [ { "subsystem": "power", "is": "ready" } ], "launches_at_least": 0 },
       "do": [ { "set_input": "vehicle_stopped", "value": true },
               { "order": "deploy_at_halt", "crew": "Commander" },     // drop everything, do this
-              { "queue": "prepare_firing", "crew": "Commander" },     // after current orders
+              { "queue": "prepare_firing", "crew": "Deputy commander" },  // after current orders
               { "end": "reason text" } ] }
   ],
   "end": { "time_limit_s": 600, "when_targets_gone": true }
@@ -57,7 +59,9 @@ subsystem is ready.
 
 With `"tuning"`, the gameplay engagement model (`simcore/engagement.hpp`, numbers in `data/gameplay/`) runs the
 search and tracking picture and sets the console's capture, too-low and zone inputs itself, so scenarios don't need
-triggers for those. The crew member whose role matches the tuning's `aim.crew_role` turns the wheels onto contacts.
+triggers for those. The crew members whose roles match the tuning's `aim` roles turn the wheels onto contacts:
+`azimuth_role`, `elevation_role` and `range_role` each turn their own wheel; a seat with no crew member (the player's)
+is left alone.
 Each launch is resolved as a hit or a miss from the target's `class` and the factors listed in the tuning file; the
 debrief prints them. Heights given as `up_m` are in the flat local frame: far from the origin the true height is
 higher (about 45 m at 24 km), so give low targets in `lat_deg`/`lon_deg`/`alt_m` or keep them close.

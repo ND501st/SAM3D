@@ -17,12 +17,18 @@ const std::string kData = SIMCORE_DATA_DIR;
 
 bool LoadOsaConsole(ConsoleData& console) { return LoadConsoleFile(kData + "/procedures/osa_ak.json", console); }
 
+// The Osa console's five seats, at made-up eye points.
+const char* kSeats = R"("stations": [ { "id": "senior_operator", "label": "SO", "eye_m": [0, 0, 1.5], "yaw_deg": -90 },
+                        { "id": "operator", "label": "O", "eye_m": [0, 1, 1.5] },
+                        { "id": "deputy_commander", "label": "DC", "eye_m": [1, 0, 1.5] },
+                        { "id": "commander", "label": "C", "eye_m": [1, 3, 1.5] },
+                        { "id": "driver", "label": "D", "eye_m": [-1, 3, 1.5] } ])";
+
 // A small valid layout on the Osa console; `extra` is spliced in after the panels.
 std::string Small(const std::string& extra = "") {
     return R"({
-      "system_id": "osa_ak",
-      "stations": [ { "id": "range_officer", "label": "RO", "eye_m": [0, 0, 1.5], "yaw_deg": -90 } ],
-      "panels": [ { "id": "p", "label": "P", "station": "range_officer", "centre_m": [-1, 0, 1.3],
+      "system_id": "osa_ak", )" + std::string(kSeats) + R"(,
+      "panels": [ { "id": "p", "label": "P", "station": "senior_operator", "centre_m": [-1, 0, 1.3],
                     "facing_deg": 90, "tilt_deg": 0, "size_m": [1.0, 0.6] } ])" +
            extra + "}";
 }
@@ -88,6 +94,42 @@ SC_TEST("cabin: default styles and click targets follow the control") {
     SC_EXPECT(CabinClickTarget(*panel.Find("ssc.az_wheel"), 0, 1) == -1);
 }
 
+SC_TEST("cabin: red dots mark each toggle's and rotary's starting position") {
+    // Hand calculations: toggles point up for on, down for off; a 3-way rotary spreads 30 degrees apart about up,
+    // a 5-way one too (240 / 4 = 60 is capped at 30).
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Toggle, 2, 0), 180.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Toggle, 2, 1), 0.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Rotary, 3, 0), -30.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Rotary, 5, 4), 60.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Rotary, 9, 0), -120.0, 1e-12);  // 240 / 8 = 30
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Key, 3, 2), 90.0, 1e-12);
+
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    double du = 0.0;
+    double dv = 0.0;
+    // ПОИСК starts off: the dot is below the switch.
+    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("soc.search"), *console.panel.Find("soc.search"), du, dv));
+    SC_EXPECT_NEAR(du, 0.0, 1e-12);
+    SC_EXPECT_NEAR(dv, -0.03, 1e-12);
+    // РОД РАБОТЫ starts at "other" (position 1 of 2): up.
+    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("fo.mode"), *console.panel.Find("fo.mode"), du, dv));
+    SC_EXPECT_NEAR(dv, 0.03, 1e-12);
+    // ДАЛЬНОСТЬ starts at 0-15 km (position 0 of 3): 30 degrees left of up.
+    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("soc.range"), *console.panel.Find("soc.range"), du, dv));
+    SC_EXPECT_NEAR(du, -0.016, 1e-12);
+    SC_EXPECT_NEAR(dv, 0.032 * std::cos(DegToRad(30.0)), 1e-12);
+    // ЛУЧ starts at I (position 0 of 5): 60 degrees left of up.
+    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("soc.beam"), *console.panel.Find("soc.beam"), du, dv));
+    SC_EXPECT_NEAR(du, -0.032 * std::sin(DegToRad(60.0)), 1e-12);
+    SC_EXPECT_NEAR(dv, 0.032 * std::cos(DegToRad(60.0)), 1e-12);
+    for (const char* none : {"fo.key", "fo.launch", "ssc.az_wheel", "soc.hv_cover"}) {
+        SC_EXPECT(!CabinLayout::StartMark(*layout.FindControl(none), *console.panel.Find(none), du, dv));
+    }
+}
+
 SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));
@@ -95,7 +137,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 4 && layout.panels.size() == 4);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 5);
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
@@ -147,9 +189,18 @@ SC_TEST("cabin: the loader rejects bad layouts with a path to the problem") {
     SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0] },
                                                      { "control": "soc.mti", "panel": "p", "at_m": [0.1, 0] } ])"),
                             "placed twice"));
-    // fo.launch belongs to the firing officer, not the range officer's panel.
+    // fo.launch belongs to the deputy commander, not the senior operator's panel.
     SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "fo.launch", "panel": "p", "at_m": [0, 0] } ])"),
-                            "belongs to station 'firing_officer'"));
+                            "belongs to station 'deputy_commander'"));
+    // One seat per console station, no more, no fewer.
+    std::string missing = Small();
+    missing.erase(missing.find(R"(,
+                        { "id": "driver")"), std::string(R"(,
+                        { "id": "driver", "label": "D", "eye_m": [-1, 3, 1.5] })").size());
+    SC_EXPECT(ErrorContains(missing, "stations: no seat for the console's 'driver'"));
+    std::string extra_seat = Small();
+    extra_seat.replace(extra_seat.find(R"("id": "driver")"), 14, R"("id": "loader")");
+    SC_EXPECT(ErrorContains(extra_seat, "stations[4].id: 'loader' is not a station of the console"));
     SC_EXPECT(ErrorContains(
         Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0], "style": "toggle" } ])"),
         "doesn't fit"));

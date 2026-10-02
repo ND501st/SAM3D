@@ -6,8 +6,9 @@
   "stations": [
     { "id": "driver", "label": "Driver", "eye_m": [-0.65, 3.6, 1.55], "yaw_deg": 0, "pitch_deg": -15 },
     { "id": "commander", "label": "Commander", "eye_m": [0.65, 3.6, 1.55], "yaw_deg": 0, "pitch_deg": -15 },
-    { "id": "range_officer", "label": "Range officer", "eye_m": [-0.35, 1.9, 1.5], "yaw_deg": -90, "pitch_deg": -10 },
-    { "id": "firing_officer", "label": "Firing officer", "eye_m": [0.35, 1.9, 1.5], "yaw_deg": 90, "pitch_deg": -10 }
+    { "id": "senior_operator", "label": "Senior operator", "eye_m": [-0.35, 2.4, 1.5], "yaw_deg": -90, "pitch_deg": -10 },
+    { "id": "operator", "label": "Operator", "eye_m": [-0.35, 1.4, 1.5], "yaw_deg": -90, "pitch_deg": -10 },
+    { "id": "deputy_commander", "label": "Deputy commander", "eye_m": [0.35, 1.9, 1.5], "yaw_deg": 90, "pitch_deg": -10 }
   ],
 
   "panels": [
@@ -15,9 +16,11 @@
       "centre_m": [-0.65, 4.2, 1.25], "facing_deg": 180, "tilt_deg": 30, "size_m": [0.5, 0.3] },
     { "id": "commander_panel", "label": "Commander", "station": "commander",
       "centre_m": [0.65, 4.2, 1.25], "facing_deg": 180, "tilt_deg": 30, "size_m": [0.7, 0.3] },
-    { "id": "ro_panel", "label": "SOC / SSC (range officer)", "station": "range_officer",
-      "centre_m": [-1.0, 1.9, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [1.1, 0.9] },
-    { "id": "fo_panel", "label": "SSC elevation / TOV / launch (firing officer)", "station": "firing_officer",
+    { "id": "so_panel", "label": "SOC / SSC azimuth (senior operator)", "station": "senior_operator",
+      "centre_m": [-1.0, 2.4, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9] },
+    { "id": "op_panel", "label": "SSC range (operator)", "station": "operator",
+      "centre_m": [-1.0, 1.4, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9] },
+    { "id": "fo_panel", "label": "SSC elevation / TOV / launch (deputy commander)", "station": "deputy_commander",
       "centre_m": [1.0, 1.9, 1.4], "facing_deg": -90, "tilt_deg": 15, "size_m": [1.1, 0.9] }
   ],
 
@@ -28,19 +31,20 @@
     { "control": "apu.lock", "panel": "commander_panel", "at_m": [-0.1, 0.05] },
     { "control": "apu.stow", "panel": "commander_panel", "at_m": [0.05, 0.05] },
 
-    { "control": "soc.search", "panel": "ro_panel", "at_m": [-0.42, 0.06] },
-    { "control": "soc.hv", "panel": "ro_panel", "at_m": [-0.3, 0.06] },
-    { "control": "soc.range", "panel": "ro_panel", "at_m": [-0.17, 0.06] },
-    { "control": "soc.beam", "panel": "ro_panel", "at_m": [-0.03, 0.06] },
-    { "control": "soc.mti", "panel": "ro_panel", "at_m": [0.1, 0.06] },
-    { "control": "ssc.tx", "panel": "ro_panel", "at_m": [-0.42, -0.1] },
-    { "control": "ssc.mti", "panel": "ro_panel", "at_m": [-0.3, -0.1] },
-    { "control": "ssc.az_light", "panel": "ro_panel", "at_m": [-0.18, -0.1] },
-    { "control": "ssc.az_lock", "panel": "ro_panel", "at_m": [-0.06, -0.1] },
-    { "control": "ro.semi_auto", "panel": "ro_panel", "at_m": [0.08, -0.1] },
-    { "control": "ssc.az_wheel", "panel": "ro_panel", "at_m": [-0.25, -0.3], "units_per_turn": 60,
+    { "control": "soc.search", "panel": "so_panel", "at_m": [-0.4, 0.06] },
+    { "control": "soc.hv", "panel": "so_panel", "at_m": [-0.28, 0.06] },
+    { "control": "soc.range", "panel": "so_panel", "at_m": [-0.15, 0.06] },
+    { "control": "soc.beam", "panel": "so_panel", "at_m": [-0.01, 0.06] },
+    { "control": "soc.mti", "panel": "so_panel", "at_m": [0.12, 0.06] },
+    { "control": "ssc.az_light", "panel": "so_panel", "at_m": [-0.4, -0.1] },
+    { "control": "ssc.az_lock", "panel": "so_panel", "at_m": [-0.28, -0.1] },
+    { "control": "ssc.az_wheel", "panel": "so_panel", "at_m": [-0.1, -0.3], "units_per_turn": 60,
       "notes": "One turn of the hand wheel = 60 degrees of azimuth (SAM3D estimate, for playability)." },
-    { "control": "ssc.range_wheel", "panel": "ro_panel", "at_m": [0.1, -0.3], "units_per_turn": 5000,
+
+    { "control": "ssc.tx", "panel": "op_panel", "at_m": [-0.4, -0.1] },
+    { "control": "ssc.mti", "panel": "op_panel", "at_m": [-0.28, -0.1] },
+    { "control": "ro.semi_auto", "panel": "op_panel", "at_m": [-0.16, -0.1] },
+    { "control": "ssc.range_wheel", "panel": "op_panel", "at_m": [-0.1, -0.3], "units_per_turn": 5000,
       "notes": "SAM3D estimate, for playability. The wheel's unit is in data/procedures/osa_ak.json." },
 
     { "control": "tov.power", "panel": "fo_panel", "at_m": [-0.42, 0.06] },
@@ -80,10 +84,10 @@
                         { "subsystem": "apu_free", "is": "fault" }, { "subsystem": "search_antenna", "is": "fault" } ],
       "source": "sam3d", "confidence": "estimate", "notes": "No source for this lamp; tells the commander something faulted (e.g. driving with the АПУ unlocked)." },
 
-    { "id": "tsc", "label": "ТСЦ", "panel": "ro_panel", "at_m": [0.3, 0.06], "color": "green",
+    { "id": "tsc", "label": "ТСЦ", "panel": "op_panel", "at_m": [0.28, -0.1], "color": "green",
       "lit_when": [ { "subsystem": "auto_tracking", "is": "ready" } ],
-      "source": "samsim_osa p24", "confidence": "medium", "notes": "Angle tracking lamp. The console models angle and range tracking as one subsystem." },
-    { "id": "avtomat", "label": "АВТОМАТ", "panel": "ro_panel", "at_m": [0.42, 0.06], "color": "green",
+      "source": "samsim_osa p24; panel: flak11 (the operator captures with ТСЦ)", "confidence": "medium", "notes": "Angle tracking lamp. The console models angle and range tracking as one subsystem." },
+    { "id": "avtomat", "label": "АВТОМАТ", "panel": "op_panel", "at_m": [0.4, -0.1], "color": "green",
       "lit_when": [ { "subsystem": "auto_tracking", "is": "ready" } ],
       "source": "samsim_osa p24", "confidence": "medium", "notes": "Range tracking lamp; same subsystem as ТСЦ." },
 
@@ -110,17 +114,17 @@
   ],
 
   "displays": [
-    { "id": "soc_ppi", "label": "SOC indicator", "kind": "ppi", "panel": "ro_panel", "at_m": [-0.3, 0.28], "size_m": [0.28, 0.28],
+    { "id": "soc_ppi", "label": "SOC indicator", "kind": "ppi", "panel": "so_panel", "at_m": [-0.15, 0.28], "size_m": [0.28, 0.28],
       "on_when": [ { "subsystem": "power", "is": "ready" } ],
       "sweep_period_s": 2.0, "afterglow_s": 3.0,
       "source": "samsim_osa p15, p21-22", "confidence": "medium",
       "notes": "Search picture up to 45 km on the selected scale, with the SSC azimuth line and range gate the operator puts on the target mark (p22). Sweep period, afterglow, the 10-45 km scale drawn as a delayed sweep (centre = 10 km), the clutter disc and the gate marker are SAM3D estimates." },
-    { "id": "ssc_range", "label": "Range indicator", "kind": "range_scope", "panel": "ro_panel", "at_m": [0.12, 0.3], "size_m": [0.3, 0.2],
+    { "id": "ssc_range", "label": "Range indicator", "kind": "range_scope", "panel": "op_panel", "at_m": [-0.1, 0.25], "size_m": [0.4, 0.27],
       "on_when": [ { "subsystem": "power", "is": "ready" } ],
       "magnified_window_m": 1500,
       "source": "samsim_osa p24", "confidence": "high",
       "notes": "Two sweeps: the upper shows 0-28 km with the target as a spike, the lower a 1.5 km magnification around the range gates. The counter shows the range wheel (p24 item 2)." },
-    { "id": "beta_c", "label": "βс", "kind": "dial", "panel": "ro_panel", "at_m": [0.42, 0.3], "size_m": [0.14, 0.14],
+    { "id": "beta_c", "label": "βс", "kind": "dial", "panel": "so_panel", "at_m": [0.3, 0.28], "size_m": [0.14, 0.14],
       "control": "ssc.az_wheel", "marks": 12, "value_per_turn": 360, "labels_per_turn": 60,
       "on_when": [ { "subsystem": "power", "is": "ready" } ],
       "lit_when": [ { "control": "ssc.az_light", "is": 1 } ],

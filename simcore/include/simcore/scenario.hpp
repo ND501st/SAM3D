@@ -105,7 +105,7 @@ public:
         out.seed = static_cast<unsigned>(seed);
         if (!LoadOrigin(root, out) || !LoadTerrain(root, out)) return false;
         if (!LoadOwnUnit(root, data_dir, out, console)) return false;
-        if (!LoadCrew(root, out)) return false;
+        if (!LoadCrew(root, out, console)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -190,6 +190,11 @@ private:
             if (out.tuning.system_id != console.system_id) {
                 return Fail("own_unit.tuning", "is for '" + out.tuning.system_id + "', not '" + console.system_id + "'");
             }
+            for (const std::string* role : {&out.tuning.aim_az_role, &out.tuning.aim_el_role, &out.tuning.aim_range_role}) {
+                if (!console.stations.empty() && console.FindStation(*role) == nullptr) {
+                    return Fail("own_unit.tuning", "aim role '" + *role + "' is not a station of the console");
+                }
+            }
         }
         const json::Value* pos = nullptr;
         if (!RequireObject(*u, "own_unit", "position", pos) ||
@@ -208,7 +213,7 @@ private:
         return true;
     }
 
-    bool LoadCrew(const json::Value& root, ScenarioDef& out) {
+    bool LoadCrew(const json::Value& root, ScenarioDef& out, const ConsoleData& console) {
         const json::Value* arr = OptionalArray(root, "", "crew");
         if (arr == nullptr) return message_.empty();
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
@@ -225,8 +230,12 @@ private:
             if (crew.reaction_jitter_s < 0.0 || crew.reaction_jitter_s >= crew.reaction_time_s) {
                 return Fail(Join(p, "reaction_jitter_s"), "must be >= 0 and less than reaction_time_s");
             }
+            if (!console.stations.empty() && console.FindStation(crew.role) == nullptr) {
+                return Fail(Join(p, "role"), "'" + crew.role + "' is not a station of the console");
+            }
             for (const ScenarioCrew& other : out.crew) {
                 if (other.name == crew.name) return Fail(Join(p, "name"), "duplicate crew name '" + crew.name + "'");
+                if (other.role == crew.role) return Fail(Join(p, "role"), "'" + crew.role + "' already has a crew member");
             }
             out.crew.push_back(std::move(crew));
         }
@@ -305,11 +314,17 @@ private:
         if (!RequireString(a, p, queue ? "queue" : "order", out.procedure) || !RequireString(a, p, "crew", out.crew)) {
             return false;
         }
-        if (console.FindProcedure(out.procedure) == nullptr) {
+        const Procedure* proc = console.FindProcedure(out.procedure);
+        if (proc == nullptr) {
             return Fail(Join(p, queue ? "queue" : "order"), "unknown procedure '" + out.procedure + "'");
         }
         for (const ScenarioCrew& c : def.crew) {
-            if (c.name == out.crew) return true;
+            if (c.name != out.crew) continue;
+            if (!proc->station.empty() && proc->station != c.role) {
+                return Fail(Join(p, "crew"), "'" + out.procedure + "' is done at station '" + proc->station + "', " +
+                                                 out.crew + " sits at '" + c.role + "'");
+            }
+            return true;
         }
         return Fail(Join(p, "crew"), "unknown crew member '" + out.crew + "'");
     }

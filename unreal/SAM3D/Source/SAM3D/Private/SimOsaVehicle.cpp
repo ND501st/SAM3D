@@ -85,18 +85,27 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CabinCamera->bAutoActivate = false;
 	CabinHUDClass = ASimCabinHUD::StaticClass();
 
-	// Placeholder crew orders until the order menu exists (phase 6). Crew names and procedures are the
-	// practice scenario's (data/scenarios/osa_practice.json, data/procedures/osa_ak.json).
+	// Placeholder crew orders until the order menu exists (phase 8). Crew names and procedures are the
+	// practice scenario's (data/scenarios/osa_practice.json, data/procedures/osa_ak.json). Each procedure
+	// belongs to one seat, so a key that starts a drill gives each seat involved its part.
 	CrewHotkeys = {
 		Hotkey(EKeys::One, TEXT("Commander"), TEXT("power_up")),
-		Hotkey(EKeys::Two, TEXT("Commander"), TEXT("search_on_march"), true),
+		Hotkey(EKeys::Two, TEXT("Senior operator"), TEXT("search_on_march")),
 		Hotkey(EKeys::Three, TEXT("Commander"), TEXT("deploy_at_halt")),
-		Hotkey(EKeys::Four, TEXT("Range officer"), TEXT("acquire_with_soc")),
-		Hotkey(EKeys::Five, TEXT("Firing officer"), TEXT("prepare_firing")),
-		Hotkey(EKeys::Six, TEXT("Firing officer"), TEXT("launch"), true),
-		Hotkey(EKeys::Seven, TEXT("Firing officer"), TEXT("emcon_tv_engagement")),
+		Hotkey(EKeys::Three, TEXT("Driver"), TEXT("pto_on_line")),
+		Hotkey(EKeys::Four, TEXT("Senior operator"), TEXT("acquire_with_soc")),
+		Hotkey(EKeys::Four, TEXT("Deputy commander"), TEXT("ready_capture")),
+		Hotkey(EKeys::Four, TEXT("Operator"), TEXT("capture_with_ssc")),
+		Hotkey(EKeys::Five, TEXT("Deputy commander"), TEXT("prepare_firing"), true),
+		Hotkey(EKeys::Six, TEXT("Deputy commander"), TEXT("launch"), true),
+		Hotkey(EKeys::Seven, TEXT("Senior operator"), TEXT("emcon_tv_azimuth")),
+		Hotkey(EKeys::Seven, TEXT("Deputy commander"), TEXT("emcon_tv_engagement")),
+		Hotkey(EKeys::Eight, TEXT("Operator"), TEXT("stow_ssc")),
+		Hotkey(EKeys::Eight, TEXT("Deputy commander"), TEXT("stow_launch_console")),
+		Hotkey(EKeys::Eight, TEXT("Driver"), TEXT("pto_off_line")),
 		Hotkey(EKeys::Eight, TEXT("Commander"), TEXT("stow_for_march")),
-		Hotkey(EKeys::Nine, TEXT("Commander"), TEXT("stow_for_transport")),
+		Hotkey(EKeys::Nine, TEXT("Senior operator"), TEXT("stop_search")),
+		Hotkey(EKeys::Nine, TEXT("Commander"), TEXT("stow_for_transport"), true),
 	};
 }
 
