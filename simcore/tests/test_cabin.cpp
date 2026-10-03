@@ -361,3 +361,44 @@ SC_TEST("cabin: player moves go through a procedure tracker into the debrief") {
     }
     SC_EXPECT(completed);
 }
+
+SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    const std::string ok = Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0],
+                                                      "look": { "kind": "toggle", "size_m": 0.014, "color": "chrome" } } ],
+          "blocks": [ { "id": "b", "panel": "p", "label": "ОП63-6М2", "at_m": [0, 0], "size_m": [0.9, 0.5] } ],
+          "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "lamp_button", "size_m": 0.044, "color": "red",
+                          "ring": "yellow", "label": "ТСЦ" },
+                        { "panel": "p", "at_m": [0.2, 0.1], "kind": "nameplate", "size_m": [0.05, 0.013], "label": "ОС81-9М" } ])");
+    std::string error;
+    SC_EXPECT(LoadCabin(ok, console, layout, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(layout.blocks.size() == 1 && layout.fixtures.size() == 2);
+    SC_EXPECT(layout.fixtures.size() == 2 && layout.fixtures[0].look.kind == CabinLookKind::LampButton &&
+              layout.fixtures[0].look.ring == "yellow");
+    SC_EXPECT_NEAR(layout.fixtures.empty() ? 0.0 : layout.fixtures[0].look.width_m, 0.044, 1e-12);
+    SC_EXPECT(!layout.controls.empty() && layout.controls[0].look.kind == CabinLookKind::Toggle);
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gizmo", "size_m": 0.02 } ])"),
+                            "fixtures[0].kind: unknown look 'gizmo'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob" } ])"),
+                            "fixtures[0].size_m: required"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "color": "purple" } ])"),
+                            "fixtures[0].color: unknown colour 'purple'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "nameplate", "size_m": [0.05, 0.01] } ])"),
+                            "fixtures[0].label: required"));
+    SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [1.5, 0.5] } ])"),
+                            "blocks[0].at_m: block doesn't fit"));
+    // The Osa layout has every column's blocks and fixtures from SAM Simulator's panel photos.
+    CabinLayout osa;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, osa));
+    int per_panel[3] = {0, 0, 0};
+    for (const CabinFixture& f : osa.fixtures) {
+        per_panel[0] += f.panel_id == "op_panel";
+        per_panel[1] += f.panel_id == "so_panel";
+        per_panel[2] += f.panel_id == "fo_panel";
+    }
+    SC_EXPECT(per_panel[0] > 50 && per_panel[1] > 50 && per_panel[2] > 50);
+    SC_EXPECT(osa.blocks.size() >= 15);
+}

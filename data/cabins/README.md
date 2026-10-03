@@ -49,6 +49,22 @@ reference point. Angles are in degrees in the file.
 }
 ```
 
+## Blocks, fixtures and looks
+
+So the cabin resembles the real consoles, a layout can carry what the sim doesn't model, and say what every item looks
+like. The Osa's operator columns are copied from SAM Simulator's panel photos at 1 mm per pixel (`samsim_panels`),
+checked with `tools/cabin_preview.py` (draws a panel from this file alone, optionally beside and blended over a
+reference picture kept in `reference/`).
+
+- `blocks`: the instrument blocks of a column, `{ "id", "panel", "label" (type plate, e.g. "ОС81-9М"), "at_m",
+  "size_m": [w, h] }`, inside their panel.
+- `fixtures`: items drawn but not operated, `{ "panel", "at_m", "kind", "size_m", "color", "ring", "label" }`.
+- `look` on a control or lamp placement: `{ "kind", "size_m", "color", "ring", "label" }`, all optional.
+
+`kind`: `knob`, `pointer_knob`, `trim`, `toggle`, `lever`, `lamp`, `lamp_button` (cap `color` in a `ring`), `button`,
+`jack`, `socket`, `latch`, `nameplate` (needs `label`), `bezel`, `window`, `diagram`, `oval`. `size_m` is a diameter
+or `[width, height]`. Colours: black, white, grey, chrome, brass, red, green, amber, yellow, orange.
+
 ## Displays
 
 The instruments the crew reads. Each sits on a panel (`at_m` is its centre, `size_m` its width and height, all of it
