@@ -67,6 +67,12 @@ namespace
 		Mesh->SetRelativeScale3D(SizeM);
 	}
 
+	// The parts library's meshes stand along +Z with "up the face" along their -Y (as imported from Blender).
+	FRotator PartRotation(const FVector& Out, const FVector& UpTheFace)
+	{
+		return FRotationMatrix::MakeFromZY(Out, -UpTheFace).Rotator();
+	}
+
 	// Direction in the panel's face at Angle degrees clockwise from "up the face", as the operator sees it.
 	FVector FaceDirection(const FSimCabinItem& Item, double AngleDeg)
 	{
@@ -357,7 +363,43 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	{
 		Collar.X = Control.look.width_m;
 	}
-	if (Control.style != simcore::CabinStyle::Cover)
+	// The parts library, where it has the meshes: a toggle's nut and lever, a push-button's ring and cap, a knob,
+	// a hand wheel's dish and handle (AnimateControl places them).
+	UStaticMesh* PartBase = nullptr;
+	double PartBaseSize = 0.0;
+	if (Control.style == simcore::CabinStyle::Toggle && !bCapLook && PartMesh(TEXT("SM_ToggleBase")) && PartMesh(TEXT("SM_ToggleLever")))
+	{
+		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_ToggleLever")));
+		PartBase = PartMesh(TEXT("SM_ToggleBase"));
+		PartBaseSize = Control.look.width_m > 0.0 ? Control.look.width_m : 0.016;
+	}
+	else if ((Control.style == simcore::CabinStyle::Button || (Control.style == simcore::CabinStyle::Toggle && bCapLook)) &&
+			 PartMesh(TEXT("SM_ButtonRing")) && PartMesh(TEXT("SM_ButtonCap")))
+	{
+		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_ButtonCap")));
+		PartBase = PartMesh(TEXT("SM_ButtonRing"));
+		PartBaseSize = Control.look.width_m > 0.0 ? Control.look.width_m : 0.03;
+		Item.LookWidthM = PartBaseSize;
+	}
+	else if (Control.style == simcore::CabinStyle::Rotary && PartMesh(TEXT("SM_KnobPointer")))
+	{
+		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_KnobPointer")));
+		Item.Pointer->SetVisibility(false);
+		Item.bParts = true;
+	}
+	else if (Control.style == simcore::CabinStyle::Wheel && PartMesh(TEXT("SM_WheelDish")) && PartMesh(TEXT("SM_WheelHandle")))
+	{
+		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_WheelDish")));
+		Item.Pointer->SetStaticMesh(PartMesh(TEXT("SM_WheelHandle")));
+		Item.bParts = true;
+	}
+	if (PartBase != nullptr)
+	{
+		Item.bParts = true;
+		Item.Base = AddMesh(PartBase, Item.BaseColor);
+		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(PartBaseSize));
+	}
+	else if (Control.style != simcore::CabinStyle::Cover && !(Item.bParts && Control.style == simcore::CabinStyle::Rotary))
 	{
 		Item.Base = AddMesh(CylinderMesh, Item.BaseColor);
 		Place(Item.Base, Item.Location + Item.Normal * (50.0 * Collar.Y), FRotationMatrix::MakeFromZ(Item.Normal).Rotator(),
@@ -397,7 +439,17 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 	const FRotator Facing = FRotationMatrix::MakeFromZ(Item.Normal).Rotator();
 	const double W = Lamp.look.width_m > 0.0 ? Lamp.look.width_m : 0.022;
 	const double H = Lamp.look.height_m > 0.0 ? Lamp.look.height_m : W;
-	if (Lamp.look.kind == simcore::CabinLookKind::LampButton)
+	if (Lamp.look.kind == simcore::CabinLookKind::LampButton && PartMesh(TEXT("SM_ButtonRing")) && PartMesh(TEXT("SM_ButtonCap")))
+	{
+		// An illuminated push-button from the parts library: the glass cap in its ring.
+		Item.bParts = true;
+		Item.BaseColor = LookColor(Lamp.look.ring, ChromeColor);
+		Item.Base->SetStaticMesh(PartMesh(TEXT("SM_ButtonRing")));
+		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W));
+		Item.Moving = AddMesh(PartMesh(TEXT("SM_ButtonCap")), Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W));
+	}
+	else if (Lamp.look.kind == simcore::CabinLookKind::LampButton)
 	{
 		// An illuminated push-button: the glass cap in a ring.
 		Item.BaseColor = LookColor(Lamp.look.ring, ChromeColor);
@@ -415,6 +467,16 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Item.Moving = AddMesh(CubeMesh, Item.MovingColor * 0.08f);
 		Place(Item.Moving, Item.Location + Item.Normal * 0.7, FRotationMatrix::MakeFromXZ(Item.Normal, Item.Up).Rotator(),
 			FVector(0.006, W, H));
+	}
+	else if (PartMesh(TEXT("SM_LampBezel")) && PartMesh(TEXT("SM_LampLens")))
+	{
+		// A lamp from the parts library: the lens in its chrome bezel.
+		Item.bParts = true;
+		Item.BaseColor = ChromeColor;
+		Item.Base->SetStaticMesh(PartMesh(TEXT("SM_LampBezel")));
+		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W * 1.4));
+		Item.Moving = AddMesh(PartMesh(TEXT("SM_LampLens")), Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W * 1.4));
 	}
 	else
 	{
@@ -434,6 +496,19 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Paint(Item.Moving, Item.MovingColor * 0.04f);
 	}
 	Items.Add(Item);
+}
+
+UStaticMesh* USimCabinComponent::PartMesh(const TCHAR* Name)
+{
+	const FName Key(Name);
+	if (const TObjectPtr<UStaticMesh>* Found = PartMeshes.Find(Key))
+	{
+		return Found->Get();
+	}
+	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("/Game/SAM3D/Cabin/Parts/%s.%s"), Name, Name),
+		nullptr, LOAD_NoWarn | LOAD_Quiet);
+	PartMeshes.Add(Key, Mesh);
+	return Mesh;
 }
 
 UStaticMeshComponent* USimCabinComponent::AddDecor(UStaticMesh* Mesh, const FLinearColor& Color)
@@ -530,6 +605,52 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Place(M, At + N * (BaseCm + 0.5 * DepthCm), Flat, FVector(0.01 * DepthCm, Bw, Bh));
 		return M;
 	};
+	// The parts library first (art/cabin_parts); engine shapes below where a part isn't imported.
+	auto Part = [&](const TCHAR* Name, double Size, const FLinearColor& C)
+	{
+		UStaticMesh* M = PartMesh(Name);
+		if (M != nullptr)
+		{
+			Place(AddDecor(M, C), L, PartRotation(N, U), FVector(Size));
+		}
+		return M != nullptr;
+	};
+	bool bDone = false;
+	switch (Look.kind)
+	{
+	case CabinLookKind::Knob: bDone = Part(TEXT("SM_Knob"), W, Color); break;
+	case CabinLookKind::PointerKnob: bDone = Part(TEXT("SM_KnobPointer"), W, Color); break;
+	case CabinLookKind::Trim: bDone = Part(TEXT("SM_Trim"), W, Color); break;
+	case CabinLookKind::Jack: bDone = Part(TEXT("SM_Jack"), W, Color); break;
+	case CabinLookKind::Socket: bDone = Part(TEXT("SM_Socket"), W, Color); break;
+	case CabinLookKind::Latch: bDone = Part(TEXT("SM_Latch"), W, ChromeColor); break;
+	case CabinLookKind::Lamp:
+		bDone = PartMesh(TEXT("SM_LampLens")) != nullptr && Part(TEXT("SM_LampBezel"), 1.4 * W, ChromeColor) &&
+				Part(TEXT("SM_LampLens"), 1.4 * W, Color * 0.5f);
+		break;
+	case CabinLookKind::LampButton:
+	case CabinLookKind::Button:
+		bDone = PartMesh(TEXT("SM_ButtonCap")) != nullptr && Part(TEXT("SM_ButtonRing"), W, LookColor(Look.ring, ChromeColor)) &&
+				Part(TEXT("SM_ButtonCap"), W, Color);
+		break;
+	case CabinLookKind::Toggle:
+		if (PartMesh(TEXT("SM_ToggleLever")) != nullptr && Part(TEXT("SM_ToggleBase"), W, ChromeColor))
+		{
+			// Shown thrown down (off), 3 cm long from the bushing's top.
+			const double A = FMath::DegreesToRadians(-35.0);
+			const FVector Lever = N * FMath::Cos(A) + U * FMath::Sin(A);
+			Place(AddDecor(PartMesh(TEXT("SM_ToggleLever")), ChromeColor), L + N * (42.0 * W),
+				FRotationMatrix::MakeFromZX(Lever, R).Rotator(), FVector(0.03));
+			bDone = true;
+		}
+		break;
+	default:
+		break;
+	}
+	if (bDone)
+	{
+		return;
+	}
 	switch (Look.kind)
 	{
 	case CabinLookKind::Knob:
@@ -642,6 +763,10 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	const int32 Position = Panel.Get(Control.control_id);
 	const FVector& L = Item.Location;
 	const FVector& N = Item.Normal;
+	if (Item.bParts && AnimatePart(Panel, Control, *Def, Position, Item))
+	{
+		return;
+	}
 	switch (Control.style)
 	{
 	case simcore::CabinStyle::Toggle:
@@ -705,6 +830,57 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 		Place(Item.Moving, Hinge + Down * 3.5, FRotationMatrix::MakeFromZX(FlapNormal, Item.Right).Rotator(), FVector(0.05, 0.07, 0.004));
 		break;
 	}
+	}
+}
+
+bool USimCabinComponent::AnimatePart(const simcore::ControlPanel& Panel, const simcore::CabinControl& Control,
+	const simcore::ControlDef& Def, int32 Position, FSimCabinItem& Item)
+{
+	const FVector& L = Item.Location;
+	const FVector& N = Item.Normal;
+	const bool bCap = Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::Button) ||
+					  Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::LampButton);
+	switch (Control.style)
+	{
+	case simcore::CabinStyle::Toggle:
+		if (!bCap)
+		{
+			// The lever from the bushing's top, thrown 35 degrees up the face for "on", down for "off"; 3 cm long.
+			const double Face = simcore::CabinLayout::PositionAngleDeg(Control.style, Def.positions, Position);
+			const double A = FMath::DegreesToRadians(Face < 90.0 ? 35.0 : -35.0);
+			const FVector Lever = N * FMath::Cos(A) + Item.Up * FMath::Sin(A);
+			const double Bushing = 100.0 * 0.42 * (Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.016);
+			Place(Item.Moving, L + N * Bushing, FRotationMatrix::MakeFromZX(Lever, Item.Right).Rotator(), FVector(0.03));
+			return true;
+		}
+		[[fallthrough]];
+	case simcore::CabinStyle::Button:
+	{
+		// The cap in its ring, pushed in while pressed (or, for a switch drawn as a button, while on).
+		const bool bPressed = Position == 1 || Item.PressedFor > 0.0f;
+		const double W = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.03;
+		Place(Item.Moving, L - N * (bPressed ? 10.0 * W : 0.0), PartRotation(N, Item.Up), FVector(W));
+		return true;
+	}
+	case simcore::CabinStyle::Rotary:
+	{
+		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::PositionAngleDeg(Control.style, Def.positions, Position));
+		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.026;
+		Place(Item.Moving, L, PartRotation(N, Dir), FVector(D));
+		return true;
+	}
+	case simcore::CabinStyle::Wheel:
+	{
+		const double Turns = Panel.GetValue(Control.control_id) / Control.units_per_turn;
+		const FVector Dir = FaceDirection(Item, 360.0 * Turns);
+		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.12;
+		Place(Item.Moving, L + N * 0.5, PartRotation(N, Dir), FVector(D));
+		// The crank handle on the rim, 4.5 cm long.
+		Place(Item.Pointer, L + N * (0.5 + 100.0 * 0.22 * D) + Dir * (100.0 * 0.4 * D), PartRotation(N, Dir), FVector(0.045));
+		return true;
+	}
+	default:
+		return false;
 	}
 }
 

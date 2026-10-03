@@ -60,6 +60,9 @@ struct SAM3D_API FSimCabinItem
 	uint8 LookKind = 0;
 	double LookWidthM = 0.0;
 	double LookHeightM = 0.0;
+
+	/** Shown with the cabin parts library's meshes (art/cabin_parts) rather than engine basic shapes. */
+	bool bParts = false;
 };
 
 /**
@@ -131,6 +134,8 @@ private:
 	void BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture);
 	/** A static part of the panel decoration (no collision); kept for DestroyParts. */
 	UStaticMeshComponent* AddDecor(UStaticMesh* Mesh, const FLinearColor& Color);
+	/** A mesh of the cabin parts library (/Game/SAM3D/Cabin/Parts/<Name>), or null if it isn't imported. */
+	UStaticMesh* PartMesh(const TCHAR* Name);
 	/** A flat quad on the face showing Text (drawn once into a small texture with a font that has Cyrillic). */
 	void AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double WidthM,
 		double HeightM, const FString& Text, const FLinearColor& Paper);
@@ -138,6 +143,9 @@ private:
 	UStaticMeshComponent* AddMesh(UStaticMesh* Mesh, const FLinearColor& Color);
 	void Animate(const USimWorldSubsystem* Sim, float DeltaTime);
 	void AnimateControl(const USimWorldSubsystem* Sim, FSimCabinItem& Item);
+	/** AnimateControl for an item drawn with parts library meshes; false if its style isn't handled that way. */
+	bool AnimatePart(const simcore::ControlPanel& Panel, const simcore::CabinControl& Control, const simcore::ControlDef& Def,
+		int32 Position, FSimCabinItem& Item);
 	void Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color) const;
 	USimWorldSubsystem* GetSim() const;
 
@@ -146,6 +154,10 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PanelMeshes;
+
+	/** Parts library meshes loaded so far, by name (null entries: not imported). */
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UStaticMesh>> PartMeshes;
 
 	/** Blocks, fixtures and nameplate texts: drawn, not operated. */
 	UPROPERTY(Transient)

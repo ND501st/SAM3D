@@ -63,3 +63,6 @@ ghidra_projects/
 unreal/**/cesium-request-cache.sqlite*
 # Unreal's per-user scratch folder in Content
 unreal/**/Content/Developers/
+
+# Blender backups
+*.blend1

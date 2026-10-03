@@ -83,6 +83,19 @@ set SAM3D_CABIN_TOUR=6
 D:\UE_5.7\Engine\Binaries\Win64\UnrealEditor.exe C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject
 ```
 
+## Cabin parts library
+
+The cabin's knobs, toggles, lamps, buttons, jacks, sockets, latches and hand wheels are meshes built from code in
+Blender: `tools/blender/build_cabin_parts.py` writes `art/cabin_parts/*.fbx` and `cabin_parts.blend`, and
+`tools/ue_import_cabin_parts.py` imports them into the open editor as `/Game/SAM3D/Cabin/Parts/SM_*` (all through Git
+LFS). Each part is 1 m across at unit scale; the cabin scales and tints it from `data/cabins/<system>.json`, and falls
+back to engine basic shapes for any part that isn't imported.
+
+```
+"C:\Program Files\Blender Foundation\Blender 4.2lender.exe" --background --python tools/blender/build_cabin_parts.py -- --preview out/parts_preview.png
+python tools/ue_import_cabin_parts.py
+```
+
 ## Scripting the open editor
 
 Python remote execution is on (`Config/DefaultEngine.ini`), so scripts can drive the open editor: start and stop
