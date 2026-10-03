@@ -27,6 +27,9 @@ namespace
 	const FLinearColor PanelColor(0.03f, 0.03f, 0.03f);  // the dark rack behind the blocks
 	const FLinearColor PlateColor(0.55f, 0.54f, 0.47f);  // the blocks' cream front plates
 	constexpr double PlateDepthCm = 1.0;                  // blocks stand this far proud of the rack
+	const FLinearColor CabinPaint(0.15f, 0.2f, 0.18f);   // the compartment's grey-green paint
+	const FLinearColor FloorColor(0.04f, 0.04f, 0.04f);
+	const FLinearColor GlassColor(0.01f, 0.012f, 0.015f);
 	const FName CabinLightTag(TEXT("SAM3DCabinLight"));
 	const FLinearColor MetalColor(0.25f, 0.25f, 0.27f);
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
@@ -61,6 +64,9 @@ namespace
 		if (C.Equals(MetalColor)) return FVector2D(0.4, 0.8);
 		if (C.Equals(PlateColor)) return FVector2D(0.55, 0.0);
 		if (C.Equals(PanelColor)) return FVector2D(0.85, 0.0);
+		if (C.Equals(CabinPaint)) return FVector2D(0.65, 0.0);
+		if (C.Equals(FloorColor)) return FVector2D(0.9, 0.0);
+		if (C.Equals(GlassColor)) return FVector2D(0.05, 0.0);
 		return FVector2D(0.28, 0.0);
 	}
 
@@ -133,6 +139,12 @@ void USimCabinComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 // ---------------------------------------------------------------------------------------------- building
 
+void USimCabinComponent::UseCabinLighting(UPrimitiveComponent* Part)
+{
+	Part->LightingChannels.bChannel0 = false;
+	Part->LightingChannels.bChannel1 = true;
+}
+
 UStaticMeshComponent* USimCabinComponent::AddMesh(UStaticMesh* Mesh, const FLinearColor& Color)
 {
 	UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(GetOwner());
@@ -144,6 +156,7 @@ UStaticMeshComponent* USimCabinComponent::AddMesh(UStaticMesh* Mesh, const FLine
 	Part->SetCollisionResponseToAllChannels(ECR_Ignore);
 	Part->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	Part->SetCastShadow(false);
+	UseCabinLighting(Part);
 	Part->RegisterComponent();
 	if (UMaterialInterface* Base = SurfaceMaterial != nullptr ? SurfaceMaterial.Get() : ShapeMaterial.Get())
 	{
@@ -265,6 +278,10 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	{
 		BuildBlock(*Layout, Block);
 	}
+	for (const simcore::CabinShellPart& Part : Layout->shell)
+	{
+		BuildShell(Part);
+	}
 	for (const simcore::CabinFixture& Fixture : Layout->fixtures)
 	{
 		BuildFixture(*Layout, Fixture);
@@ -280,6 +297,8 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		Light->SetAttenuationRadius(180.0f);
 		Light->SetLightColor(FLinearColor(1.0f, 0.92f, 0.8f));
 		Light->SetCastShadows(false);
+		Light->LightingChannels.bChannel0 = false;  // the cabin's channel only (UseCabinLighting)
+		Light->LightingChannels.bChannel1 = true;
 		Light->RegisterComponent();
 		Light->SetRelativeLocation(BodyPoint(Station.eye_m) + FVector(0.0, 0.0, 40.0));
 	}
@@ -584,6 +603,7 @@ void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Norm
 	Quad->SetupAttachment(this);
 	Quad->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Quad->SetCastShadow(false);
+	UseCabinLighting(Quad);
 	Quad->RegisterComponent();
 	const FVector Hr = Right * (50.0 * WidthM);
 	const FVector Hu = Up * (50.0 * HeightM);
@@ -613,6 +633,37 @@ void USimCabinComponent::AddLabel(const FVector& Centre, const FVector& Normal, 
 	const double WidthM = FMath::Min(0.09, 0.0022 * Text.Len() + 0.004);
 	AddTextPlate(Centre + Up * (100.0 * (0.5 * ItemHeightM + 0.004 + 0.5 * LetterM)) + Normal * 0.05, Normal, Right, Up, WidthM,
 		LetterM * 1.4, Text, FLinearColor::Transparent, true);
+}
+
+void USimCabinComponent::BuildShell(const simcore::CabinShellPart& Part)
+{
+	const FVector Centre = BodyPoint(Part.centre_m);
+	if (Part.kind == simcore::CabinShellKind::Light)
+	{
+		// An interior lamp: warm, soft, reaching as far as the part's size.
+		UPointLightComponent* Light = NewObject<UPointLightComponent>(GetOwner());
+		Light->SetupAttachment(this);
+		Light->ComponentTags.Add(CabinLightTag);
+		Light->SetIntensityUnits(ELightUnits::Lumens);
+		Light->SetIntensity(400.0f);
+		Light->SetAttenuationRadius(static_cast<float>(100.0 * Part.size_m.x));
+		Light->SetSourceRadius(8.0f);
+		Light->SetLightColor(FLinearColor(1.0f, 0.9f, 0.75f));
+		Light->SetCastShadows(false);
+		Light->LightingChannels.bChannel0 = false;  // the cabin's channel only (UseCabinLighting)
+		Light->LightingChannels.bChannel1 = true;
+		Light->RegisterComponent();
+		Light->SetRelativeLocation(Centre);
+		return;
+	}
+	FLinearColor Color = LookColor(Part.color, CabinPaint);
+	if (Part.color == "paint" || Part.color.empty()) Color = CabinPaint;
+	if (Part.color == "floor") Color = FloorColor;
+	if (Part.kind == simcore::CabinShellKind::Glass) Color = GlassColor;
+	if (Part.color == "white") Color = PlateColor;  // racks: the same cream plates as the console
+	UStaticMeshComponent* Box = AddDecor(CubeMesh, Color);
+	// Body frame (x right, y forward, z up) to this component (X forward, Y right, Z up); a cube is 1 m across.
+	Place(Box, Centre, FRotator::ZeroRotator, FVector(Part.size_m.y, Part.size_m.x, Part.size_m.z));
 }
 
 void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block)

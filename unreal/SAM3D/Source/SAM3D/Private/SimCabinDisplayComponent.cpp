@@ -9,6 +9,7 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
+#include "SimCabinComponent.h"
 #include "SimWorldSubsystem.h"
 
 namespace
@@ -92,6 +93,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		Bezel->SetupAttachment(GetAttachParent());
 		Bezel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Bezel->SetCastShadow(false);
+		USimCabinComponent::UseCabinLighting(Bezel);
 		Bezel->RegisterComponent();
 		Bezel->SetRelativeLocationAndRotation(Centre + Normal * 0.5, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
 		Bezel->SetRelativeScale3D(FVector(0.012, Display.width_m + 0.02, Display.height_m + 0.02));
@@ -108,6 +110,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	Screen->SetupAttachment(GetAttachParent());
 	Screen->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Screen->SetCastShadow(false);
+	USimCabinComponent::UseCabinLighting(Screen);
 	Screen->RegisterComponent();
 	const FVector C = Centre + Normal * 1.3;
 	const FVector Hr = Right * (0.5 * WidthCm);
@@ -154,6 +157,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			Line->SetupAttachment(GetAttachParent());
 			Line->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Line->SetCastShadow(false);
+			USimCabinComponent::UseCabinLighting(Line);
 			Line->RegisterComponent();
 			Line->SetRelativeLocationAndRotation(Centre + Normal * 1.4, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
 			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.003) : FVector(0.001, 0.003, 0.4 * Display.height_m));

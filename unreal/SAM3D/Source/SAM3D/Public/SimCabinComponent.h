@@ -107,6 +107,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	int32 TraceItem(const FVector& WorldStart, const FVector& WorldEnd) const;
 
+	/** Puts a cabin part on the cabin's own lighting channel (1), lit by the cabin lamps and never by the sun: the thin
+	 * shell doesn't shadow a low sun reliably, and a sunlit patch burns white at the cabin's fixed indoor exposure.
+	 * Call before registering the component. */
+	static void UseCabinLighting(UPrimitiveComponent* Part);
+
 	/** Label and current state, e.g. "ПОИСК: ВКЛ". */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString DescribeItem(int32 Item) const;
@@ -131,6 +136,7 @@ private:
 	void BuildControl(const USimWorldSubsystem* Sim, int32 LayoutIndex);
 	void BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIndex);
 	void BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block);
+	void BuildShell(const simcore::CabinShellPart& Part);
 	void BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture);
 	/** A static part of the panel decoration (no collision); kept for DestroyParts. */
 	UStaticMeshComponent* AddDecor(UStaticMesh* Mesh, const FLinearColor& Color);

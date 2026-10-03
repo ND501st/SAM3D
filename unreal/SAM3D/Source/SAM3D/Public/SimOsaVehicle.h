@@ -92,6 +92,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sim")
 	FString TurretAzimuthWheel = TEXT("ssc.az_wheel");
 
+	/** The cabin camera's fixed exposure (EV100): the compartment lit by its dome lamps. */
+	UPROPERTY(EditAnywhere, Category = "SAM3D|Cabin")
+	float CabinExposureEv100 = 3.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sim")
 	FString SearchAntennaSubsystem = TEXT("search_antenna");
 

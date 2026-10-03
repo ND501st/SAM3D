@@ -401,4 +401,14 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
     }
     SC_EXPECT(per_panel[0] > 50 && per_panel[1] > 50 && per_panel[2] > 50);
     SC_EXPECT(osa.blocks.size() >= 15);
+    // The shell: floor, walls, bench and racks, two dome lamps.
+    int lights = 0;
+    for (const CabinShellPart& part : osa.shell) lights += part.kind == CabinShellKind::Light;
+    SC_EXPECT(osa.shell.size() >= 15 && lights == 2);
+    SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "wall", "centre_m": [0, 0, 1],
+                                                   "size_m": [1, 1, 1], "source": "s", "confidence": "low" } ])"),
+                            "shell[0].kind: must be box, glass or light"));
+    SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "box", "centre_m": [0, 0, 1],
+                                                   "size_m": [1, 0, 1], "source": "s", "confidence": "low" } ])"),
+                            "shell[0].size_m: must be positive"));
 }

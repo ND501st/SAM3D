@@ -83,6 +83,12 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);
 	CabinCamera->bAutoActivate = false;
+	// A fixed exposure for the closed cabin (EV100, the project's default units): auto exposure would adapt to the
+	// dark compartment and burn out everything its lamps light.
+	CabinCamera->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+	CabinCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+	CabinCamera->PostProcessSettings.AutoExposureMinBrightness = CabinExposureEv100;
+	CabinCamera->PostProcessSettings.AutoExposureMaxBrightness = CabinExposureEv100;
 	CabinHUDClass = ASimCabinHUD::StaticClass();
 
 	// Placeholder crew orders until the order menu exists (phase 8). Crew names and procedures are the

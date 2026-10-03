@@ -151,6 +151,19 @@ struct CabinFixture {
     CabinLook look;
 };
 
+// A piece of the cabin's shell in the body frame: floor, walls, ceiling, bench, racks ("box"), a window ("glass"), or
+// an interior lamp ("light", its size the light's reach).
+enum class CabinShellKind { Box, Glass, Light };
+
+struct CabinShellPart {
+    std::string id;
+    std::string label;
+    CabinShellKind kind = CabinShellKind::Box;
+    Vec3 centre_m;
+    Vec3 size_m;       // x (right), y (forward), z (up)
+    std::string color; // a look colour (CabinLook), or "paint" (the cabin's grey-green), "floor"
+};
+
 struct CabinStation {
     std::string id;           // a station id used by the console's controls, e.g. "senior_operator"
     std::string label;
@@ -270,6 +283,7 @@ struct CabinLayout {
     std::vector<CabinDisplay> displays;
     std::vector<CabinBlock> blocks;
     std::vector<CabinFixture> fixtures;
+    std::vector<CabinShellPart> shell;
 
     const CabinStation* FindStation(const std::string& id) const {
         for (const CabinStation& s : stations) {
@@ -364,7 +378,7 @@ class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
         if (!Keys(root, "", {"system_id", "status", "notes", "stations", "panels", "controls", "lamps", "displays",
-                             "blocks", "fixtures"})) {
+                             "blocks", "fixtures", "shell"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -373,7 +387,7 @@ public:
         }
         return LoadSeats(root, console, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
                PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out) &&
-               LoadBlocks(root, out) && LoadFixtures(root, out);
+               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out);
     }
 
 private:
@@ -672,6 +686,48 @@ private:
                 if (other.id == block.id) return Fail(Join(path, "id"), "duplicate block '" + block.id + "'");
             }
             out.blocks.push_back(std::move(block));
+        }
+        return true;
+    }
+
+    bool LoadShell(const json::Value& root, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "shell");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("shell", i);
+            const json::Value& v = arr->items[i];
+            if (!Keys(v, path, {"id", "label", "kind", "centre_m", "size_m", "color", "source", "confidence", "notes"})) {
+                return false;
+            }
+            CabinShellPart part;
+            std::string kind;
+            if (!RequireString(v, path, "id", part.id) || !RequireString(v, path, "label", part.label) ||
+                !RequireString(v, path, "kind", kind) || !Number3(v, path, "centre_m", part.centre_m) ||
+                !Number3(v, path, "size_m", part.size_m) || !OptionalString(v, path, "color", part.color) ||
+                !Provenance(v, path)) {
+                return false;
+            }
+            if (kind == "box") {
+                part.kind = CabinShellKind::Box;
+            } else if (kind == "glass") {
+                part.kind = CabinShellKind::Glass;
+            } else if (kind == "light") {
+                part.kind = CabinShellKind::Light;
+            } else {
+                return Fail(Join(path, "kind"), "must be box, glass or light");
+            }
+            if (!(part.size_m.x > 0.0) || !(part.size_m.y > 0.0) || !(part.size_m.z > 0.0)) {
+                return Fail(Join(path, "size_m"), "must be positive");
+            }
+            bool known = part.color.empty() || part.color == "paint" || part.color == "floor";
+            for (const char* c : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange"}) {
+                known = known || part.color == c;
+            }
+            if (!known) return Fail(Join(path, "color"), "unknown colour '" + part.color + "'");
+            for (const CabinShellPart& other : out.shell) {
+                if (other.id == part.id) return Fail(Join(path, "id"), "duplicate shell part '" + part.id + "'");
+            }
+            out.shell.push_back(std::move(part));
         }
         return true;
     }

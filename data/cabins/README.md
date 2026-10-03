@@ -65,6 +65,14 @@ reference picture kept in `reference/`).
 `jack`, `socket`, `latch`, `nameplate` (needs `label`), `bezel`, `window`, `diagram`, `oval`. `size_m` is a diameter
 or `[width, height]`. Colours: black, white, grey, chrome, brass, red, green, amber, yellow, orange.
 
+## Shell
+
+`shell` is the room around the consoles: floor, ceiling, walls, seats, racks and windows as boxes in the body frame,
+plus the interior lamps. Each part is `{ "id", "label", "kind", "centre_m", "size_m": [x, y, z], "color", "source",
+"confidence" }`. `kind` is `box`, `glass` (a window) or `light` (an interior lamp reaching as far as `size_m`). `color`
+takes the look colours above, plus `paint` (the cabin's grey-green, the default) and `floor`. In Unreal the cabin is
+lit only by its own lamps (a lighting channel of its own), so the sun outside never reaches the panels.
+
 ## Displays
 
 The instruments the crew reads. Each sits on a panel (`at_m` is its centre, `size_m` its width and height, all of it
