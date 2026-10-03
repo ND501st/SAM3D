@@ -76,6 +76,10 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	{
 		Scope = MakeUnique<simcore::SearchScope>(Display.sweep_period_s, Display.afterglow_s);
 	}
+	if (Kind == simcore::CabinDisplayKind::ElevationScope)
+	{
+		ElevScope = MakeUnique<simcore::ElevationScope>(Display.scan_period_s, Display.afterglow_s, Display.beam_width_deg);
+	}
 	const double WidthCm = Display.width_m * 100.0;
 	const double HeightCm = Display.height_m * 100.0;
 
@@ -212,6 +216,25 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		const bool bRotating = Console.has_sensors && Console.equipment.IsReady(Console.search.antenna);
 		Scope->Update(Dt, bRotating, Runner->Engagement().SearchPicture());
 	}
+	if (Kind == simcore::CabinDisplayKind::ElevationScope && Console.has_sensors)
+	{
+		const double Now = Runner->Time();
+		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
+		LastSimTimeSeconds = Now;
+		// The raster of the beam the target was found in; the antenna scans through it during target designation,
+		// otherwise it points where the elevation wheel (or the tracking servo) puts it.
+		const simcore::TrackSensorDef& Track = Console.track;
+		const double WheelEl = Console.panel.GetValue(Track.el_wheel);
+		ElevRaster = simcore::CabinLayout::ElevationRasterFor(Display, Console.panel, WheelEl);
+		if (ElevRaster >= 0)
+		{
+			const simcore::ElevationRaster& R = Display.rasters[ElevRaster];
+			const bool bScanning = simcore::CabinLayout::ElevationScanOn(Display, Console.panel, Console.equipment);
+			ElevScope->Update(Dt, bOn && Console.equipment.IsReady(Track.transmitter), bScanning, WheelEl, R.el_low_deg,
+				R.el_high_deg, Console.panel.GetValue(Track.range_wheel), Display.range_window_m,
+				Runner->Engagement().TrackReturns());
+		}
+	}
 
 	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
 	UCanvas* Canvas = nullptr;
@@ -227,6 +250,9 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			break;
 		case simcore::CabinDisplayKind::RangeScope:
 			DrawRangeScope(Canvas, Size, *Runner, bOn);
+			break;
+		case simcore::CabinDisplayKind::ElevationScope:
+			DrawElevationScope(Canvas, Size, Display, Console, bOn);
 			break;
 		case simcore::CabinDisplayKind::Dial:
 			DrawDial(Canvas, Size, Display, Console, bOn, simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
@@ -399,6 +425,62 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	Text(Canvas, FString::Printf(TEXT("%.0f km"), MaxM / 1000.0), FVector2D(X1 - 12.0, 0.48 * Size.Y), TraceGreen * 0.6f, 1.0f);
 	// The range counter: where the gate is (it follows the target while tracking in range).
 	Text(Canvas, FString::Printf(TEXT("%05.0f m"), FMath::Max(0.0, Gate)), FVector2D(0.5 * Size.X, 0.1 * Size.Y), Amber, 1.6f);
+}
+
+// ---------------------------------------------------------------------------------------------- elevation search
+
+void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
+	const simcore::ConsoleData& Console, bool bOn)
+{
+	// A round tube (OS81-10M) with a square raster area inside it: range across, elevation up.
+	const FVector2D C = Size * 0.5;
+	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
+	Disc(Canvas, C, R, bOn ? Phosphor * 0.03f : FLinearColor(0.01f, 0.01f, 0.01f));
+	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()))
+	{
+		return;
+	}
+	const simcore::ElevationRaster& Raster = Display.rasters[ElevRaster];
+	const double Half = 0.66 * R;  // the square fits inside the round screen
+	const double Left = C.X - Half;
+	const double Right = C.X + Half;
+	auto YOfScreen = [&](double Fraction) { return C.Y + Half - 2.0 * Half * Fraction; };  // 0 bottom, 1 top
+	const double Top = YOfScreen(Raster.screen_high);
+	const double Bottom = YOfScreen(Raster.screen_low);
+	auto YOfEl = [&](double El)
+	{
+		const double F = (El - Raster.el_low_deg) / (Raster.el_high_deg - Raster.el_low_deg);
+		return Bottom + (Top - Bottom) * FMath::Clamp(F, 0.0, 1.0);
+	};
+	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
+
+	// The raster: faint horizontal lines over the beam's band, with its outline.
+	for (double Y = Top; Y <= Bottom; Y += 4.0)
+	{
+		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.12f);
+	}
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 1.0f, Phosphor * 0.3f);
+	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.0f, Phosphor * 0.3f);
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 1.0f, Phosphor * 0.3f);
+	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 1.0f, Phosphor * 0.3f);
+	// The range gate sits in the middle of the range window.
+	Canvas->K2_DrawLine(FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
+
+	// Where the antenna points now: a brighter line while the tracking radar radiates.
+	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
+	const double AntennaY = YOfEl(ElevScope->AntennaElevationDeg());
+	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * (bRadiating ? 0.6f : 0.25f));
+
+	// Target marks: bright spots fading with the afterglow.
+	for (const simcore::ElevationScope::Mark& M : ElevScope->Marks())
+	{
+		const float Glow = static_cast<float>(M.brightness);
+		const FVector2D P(XOfOffset(M.range_offset_m), YOfEl(M.elevation_deg));
+		Disc(Canvas, P, 6.0, Phosphor * (0.35f * Glow));
+		Disc(Canvas, P, 3.5, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+	}
+	Text(Canvas, FString::Printf(TEXT("%.0f..%.0f°"), Raster.el_low_deg, Raster.el_high_deg),
+		FVector2D(C.X, C.Y + 0.85 * R), Phosphor * 0.5f, 0.9f);
 }
 
 // ---------------------------------------------------------------------------------------------- instruments

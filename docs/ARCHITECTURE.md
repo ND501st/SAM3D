@@ -120,6 +120,9 @@ roadmap phase 6:
 - Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
 - Missiles: no missile load, selection or second channel; ЗАХВАТ / ВКЛ ВЫС lamps mapped to preparation. (6.3)
 - Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)
+- Tracking radar capture: azimuth and range only. The elevation-search indicator draws the ЦУ elevation scan and its
+  target marks, but the scan doesn't gate the capture yet (real: the OS81-10M auto-capture circuit fires when the
+  antenna's beam crosses the target with the range gate on it). (6.4)
 - Heading: the engagement model takes the hull to face north (`engagement.hpp`); the real vehicle is oriented with
   its navigation set. (6.5)
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)

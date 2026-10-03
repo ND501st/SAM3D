@@ -377,4 +377,28 @@ off the labels.
 - `data/procedures/osa_ak.json`: sources `grezicki_wzu`, `cabin_photos` and `samsim_panels`.
 - Test: the bench test also checks that the columns are taller than wide and that screens sit above wheels and the
   launch block between the TV and elevation blocks.
-- Next: the elevation-search indicator OS81-10M as a display.
+
+## Elevation-search indicator OS81-10M (display added)
+
+`voenizdat_osa_1991` p95 and Fig. 2.37 (p97): a two-coordinate sector indicator with a rectangular raster and a
+brightness mark, for pointing the tracking antenna in elevation from the search radar's designation. It covers 31° of
+elevation and 2 km of range; the middle of the range span is tied to the tracking radar's range gate (the "visir" on
+the range indicator). The sector is split into three ranges for search beams I, II and III, and the raster sits in a
+different place on the screen for each (Fig. 2.37: beam I −1° to 5°, beam II 3° to 9°, beam III 6° to 30°). During ЦУ
+the antenna oscillates in elevation through the beam the target was found in (p86: the elevation channel's scan
+circuit; the tracking servo drives the indicator's elevation sweep). The block holds the auto-capture circuit: armed by
+ЦУ and АЗ, it fires when the target is in the antenna's beam (a mark appears) and the range gate is on the target,
+sending АВТОМАТ to OS81-18M and ТСЦ to OS52-14M.
+
+In SAM3D (`feature/cabin-bench`):
+
+- Display kind `elevation_scope` (`data/cabins/README.md`); the Osa's `elev_search` sits where the round screen is in
+  the game's photo (right of the TV). The ЛУЧ selector picks the raster; in the automatic beam programmes the raster
+  holding the antenna's elevation is shown.
+- `simcore::ElevationScope` (scopes.hpp): during ЦУ the antenna sweeps the raster's elevations (period 2 s, an
+  estimate); a target under the azimuth line, inside the 2 km window and within half a beam width (1°,
+  `korovin_tiv_2010`) of the sweep lights a mark that fades (1.5 s, an estimate). Outside ЦУ the line sits at the
+  elevation wheel, which the tracking servo holds on the target, so a tracked target shows a steady mark.
+- Not yet: the engagement model still captures on azimuth and range alone, so the elevation scan doesn't gate the
+  capture. Raster heights on the screen are read off the figure and approximate.
+
