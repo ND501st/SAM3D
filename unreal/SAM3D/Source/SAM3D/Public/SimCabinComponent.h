@@ -6,6 +6,7 @@
 #include "SimCabinComponent.generated.h"
 
 class UMaterialInstanceDynamic;
+class UPrimitiveComponent;
 class USimCabinDisplayComponent;
 class UMaterialInterface;
 class UStaticMesh;
@@ -54,6 +55,11 @@ struct SAM3D_API FSimCabinItem
 
 	FLinearColor BaseColor = FLinearColor::Black;
 	FLinearColor MovingColor = FLinearColor::Black;
+
+	/** simcore::CabinLookKind from the layout's "look" (Default = by style), and its size (m, 0 = the style's). */
+	uint8 LookKind = 0;
+	double LookWidthM = 0.0;
+	double LookHeightM = 0.0;
 };
 
 /**
@@ -121,6 +127,13 @@ private:
 	bool Build(const USimWorldSubsystem* Sim);
 	void BuildControl(const USimWorldSubsystem* Sim, int32 LayoutIndex);
 	void BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIndex);
+	void BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block);
+	void BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture);
+	/** A static part of the panel decoration (no collision); kept for DestroyParts. */
+	UStaticMeshComponent* AddDecor(UStaticMesh* Mesh, const FLinearColor& Color);
+	/** A flat quad on the face showing Text (drawn once into a small texture with a font that has Cyrillic). */
+	void AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double WidthM,
+		double HeightM, const FString& Text, const FLinearColor& Paper);
 	void DestroyParts();
 	UStaticMeshComponent* AddMesh(UStaticMesh* Mesh, const FLinearColor& Color);
 	void Animate(const USimWorldSubsystem* Sim, float DeltaTime);
@@ -133,6 +146,10 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PanelMeshes;
+
+	/** Blocks, fixtures and nameplate texts: drawn, not operated. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UPrimitiveComponent>> DecorParts;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USimCabinDisplayComponent>> Displays;

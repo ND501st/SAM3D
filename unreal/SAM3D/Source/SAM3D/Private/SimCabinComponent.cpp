@@ -1,6 +1,9 @@
 #include "SimCabinComponent.h"
 
 #include "Components/PointLightComponent.h"
+#include "Engine/Canvas.h"
+#include "Engine/Font.h"
+#include "ProceduralMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -21,7 +24,9 @@ namespace
 	FVector BodyPoint(const simcore::Vec3& V) { return FVector(V.y, V.x, V.z) * 100.0; }
 	FVector BodyDir(const simcore::Vec3& V) { return FVector(V.y, V.x, V.z); }
 
-	const FLinearColor PanelColor(0.2f, 0.27f, 0.25f);  // grey-green instrument paint
+	const FLinearColor PanelColor(0.03f, 0.03f, 0.03f);  // the dark rack behind the blocks
+	const FLinearColor PlateColor(0.55f, 0.54f, 0.47f);  // the blocks' cream front plates
+	constexpr double PlateDepthCm = 1.0;                  // blocks stand this far proud of the rack
 	const FName CabinLightTag(TEXT("SAM3DCabinLight"));
 	const FLinearColor MetalColor(0.25f, 0.25f, 0.27f);
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
@@ -30,6 +35,22 @@ namespace
 	const FLinearColor RedDotColor(0.75f, 0.0f, 0.0f);
 	const FLinearColor BrassColor(0.6f, 0.45f, 0.1f);
 	const FLinearColor HighlightColor(1.0f, 0.85f, 0.2f);
+
+	// A look colour name (simcore::CabinLook) as a linear colour for the basic-shape material.
+	FLinearColor LookColor(const std::string& Name, const FLinearColor& Fallback)
+	{
+		if (Name == "black") return FLinearColor(0.015f, 0.015f, 0.015f);
+		if (Name == "white") return FLinearColor(0.62f, 0.6f, 0.52f);
+		if (Name == "grey") return FLinearColor(0.22f, 0.22f, 0.21f);
+		if (Name == "chrome") return FLinearColor(0.6f, 0.6f, 0.62f);
+		if (Name == "brass") return FLinearColor(0.55f, 0.38f, 0.1f);
+		if (Name == "red") return FLinearColor(0.45f, 0.02f, 0.01f);
+		if (Name == "green") return FLinearColor(0.02f, 0.35f, 0.04f);
+		if (Name == "amber") return FLinearColor(0.6f, 0.28f, 0.02f);
+		if (Name == "yellow") return FLinearColor(0.65f, 0.48f, 0.12f);
+		if (Name == "orange") return FLinearColor(0.5f, 0.14f, 0.03f);
+		return Fallback;
+	}
 
 	FLinearColor LampColor(const std::string& Name)
 	{
@@ -146,6 +167,14 @@ void USimCabinComponent::DestroyParts()
 			Part->DestroyComponent();
 		}
 	}
+	for (UPrimitiveComponent* Part : DecorParts)
+	{
+		if (Part != nullptr)
+		{
+			Part->DestroyComponent();
+		}
+	}
+	DecorParts.Reset();
 	for (USimCabinDisplayComponent* Display : Displays)
 	{
 		if (Display != nullptr)
@@ -185,10 +214,29 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		const FVector N = BodyDir(Panel.Normal());
 		const FVector U = BodyDir(Panel.Up());
 		UStaticMeshComponent* Mesh = AddMesh(CubeMesh, PanelColor);
-		// 2 cm thick, with its front face on the panel's plane.
-		Place(Mesh, BodyPoint(Panel.centre_m) - N * 1.0, FRotationMatrix::MakeFromXZ(N, U).Rotator(),
+		// The rack: 2 cm thick, its front face a block plate's depth behind the panel's plane (the plates' faces,
+		// where the controls are). A panel without blocks is one plate.
+		bool bHasBlocks = false;
+		for (const simcore::CabinBlock& Block : Layout->blocks)
+		{
+			bHasBlocks = bHasBlocks || Block.panel_id == Panel.id;
+		}
+		const double Back = bHasBlocks ? PlateDepthCm : 0.0;
+		Place(Mesh, BodyPoint(Panel.centre_m) - N * (1.0 + Back), FRotationMatrix::MakeFromXZ(N, U).Rotator(),
 			FVector(0.02, Panel.width_m, Panel.height_m));
+		if (!bHasBlocks)
+		{
+			Paint(Mesh, PlateColor * 0.6f);
+		}
 		PanelMeshes.Add(Mesh);
+	}
+	for (const simcore::CabinBlock& Block : Layout->blocks)
+	{
+		BuildBlock(*Layout, Block);
+	}
+	for (const simcore::CabinFixture& Fixture : Layout->fixtures)
+	{
+		BuildFixture(*Layout, Fixture);
 	}
 	// A dim lamp above each seat, so the panels read when the sun is outside.
 	for (const simcore::CabinStation& Station : Layout->stations)
@@ -224,7 +272,8 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		Displays.Add(Display);
 	}
 	BuiltLayout = Layout;
-	UE_LOG(LogSAM3D, Log, TEXT("Cabin built: %d panels, %d items, %d displays"), PanelMeshes.Num(), Items.Num(), Displays.Num());
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin built: %d panels, %d blocks, %d fixtures, %d items, %d displays"), PanelMeshes.Num(),
+		static_cast<int32>(Layout->blocks.size()), static_cast<int32>(Layout->fixtures.size()), Items.Num(), Displays.Num());
 	return true;
 }
 
@@ -247,6 +296,9 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	FVector2D Collar(0.03, 0.008);
 	Item.BaseColor = MetalColor;
 	Item.MovingColor = ChromeColor;
+	Item.LookKind = static_cast<uint8>(Control.look.kind);
+	Item.LookWidthM = Control.look.width_m;
+	Item.LookHeightM = Control.look.height_m;
 	switch (Control.style)
 	{
 	case simcore::CabinStyle::Toggle:
@@ -284,6 +336,27 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Item.Moving = AddMesh(CubeMesh, Item.MovingColor);
 		break;
 	}
+	// The layout's look: colours, and the collar scaled to the item's size (a push-button look on a switch draws as
+	// a cap in a ring, see AnimateControl).
+	const simcore::CabinLookKind Look = Control.look.kind;
+	const bool bCapLook = Look == simcore::CabinLookKind::Button || Look == simcore::CabinLookKind::LampButton;
+	if (!Control.look.color.empty())
+	{
+		Item.MovingColor = LookColor(Control.look.color, Item.MovingColor);
+		Paint(Item.Moving, Item.MovingColor);
+	}
+	if (!Control.look.ring.empty() || bCapLook)
+	{
+		Item.BaseColor = LookColor(Control.look.ring, ChromeColor);
+	}
+	if (bCapLook && Control.style == simcore::CabinStyle::Toggle && Item.Moving != nullptr)
+	{
+		Item.Moving->SetStaticMesh(CylinderMesh);
+	}
+	if (Control.look.width_m > 0.0 && Control.style != simcore::CabinStyle::Wheel)
+	{
+		Collar.X = Control.look.width_m;
+	}
 	if (Control.style != simcore::CabinStyle::Cover)
 	{
 		Item.Base = AddMesh(CylinderMesh, Item.BaseColor);
@@ -319,10 +392,36 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 	Item.Up = BodyDir(Panel.Up());
 	Item.MovingColor = LampColor(Lamp.color);
 	Item.BaseColor = MetalColor;
+	Item.LookKind = static_cast<uint8>(Lamp.look.kind);
 	Item.Base = AddMesh(CylinderMesh, Item.BaseColor);
-	Place(Item.Base, Item.Location + Item.Normal * 0.3, FRotationMatrix::MakeFromZ(Item.Normal).Rotator(), FVector(0.03, 0.03, 0.006));
-	Item.Moving = AddMesh(SphereMesh, Item.MovingColor * 0.08f);
-	Place(Item.Moving, Item.Location + Item.Normal * 0.8, FRotator::ZeroRotator, FVector(0.022));
+	const FRotator Facing = FRotationMatrix::MakeFromZ(Item.Normal).Rotator();
+	const double W = Lamp.look.width_m > 0.0 ? Lamp.look.width_m : 0.022;
+	const double H = Lamp.look.height_m > 0.0 ? Lamp.look.height_m : W;
+	if (Lamp.look.kind == simcore::CabinLookKind::LampButton)
+	{
+		// An illuminated push-button: the glass cap in a ring.
+		Item.BaseColor = LookColor(Lamp.look.ring, ChromeColor);
+		Place(Item.Base, Item.Location + Item.Normal * 0.4, Facing, FVector(W, W, 0.008));
+		Item.Moving = AddMesh(CylinderMesh, Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location + Item.Normal * 1.0, Facing, FVector(W * 0.65, W * 0.65, 0.01));
+	}
+	else if (FMath::Abs(W - H) > 1e-6)
+	{
+		// A rectangular lamp window (e.g. ПУСК ГОТОВ).
+		Place(Item.Base, Item.Location + Item.Normal * 0.3, Facing, FVector(W * 1.15, H * 1.4, 0.006));
+		Item.Base->SetStaticMesh(CubeMesh);
+		Place(Item.Base, Item.Location + Item.Normal * 0.3, FRotationMatrix::MakeFromXZ(Item.Normal, Item.Up).Rotator(),
+			FVector(0.006, W * 1.15, H * 1.4));
+		Item.Moving = AddMesh(CubeMesh, Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location + Item.Normal * 0.7, FRotationMatrix::MakeFromXZ(Item.Normal, Item.Up).Rotator(),
+			FVector(0.006, W, H));
+	}
+	else
+	{
+		Place(Item.Base, Item.Location + Item.Normal * 0.3, Facing, FVector(W * 1.4, W * 1.4, 0.006));
+		Item.Moving = AddMesh(SphereMesh, Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location + Item.Normal * 0.8, FRotator::ZeroRotator, FVector(W));
+	}
 	// The glass glows by itself (unlit), so lit and dark lamps read the same in sun or shade: the screens'
 	// unlit material showing a white texture, tinted with the lamp's colour.
 	if (ScreenMaterial != nullptr)
@@ -335,6 +434,174 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Paint(Item.Moving, Item.MovingColor * 0.04f);
 	}
 	Items.Add(Item);
+}
+
+UStaticMeshComponent* USimCabinComponent::AddDecor(UStaticMesh* Mesh, const FLinearColor& Color)
+{
+	UStaticMeshComponent* Part = AddMesh(Mesh, Color);
+	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Part->SetMobility(EComponentMobility::Movable);
+	DecorParts.Add(Part);
+	return Part;
+}
+
+void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
+	double WidthM, double HeightM, const FString& Text, const FLinearColor& Paper)
+{
+	static UFont* Font = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
+	if (ScreenMaterial == nullptr || Font == nullptr)
+	{
+		return;
+	}
+	// The texture: 1 px per 0.25 mm, dark text on the plate's colour.
+	const int32 Tw = FMath::Clamp(FMath::RoundToInt32(WidthM * 4000.0), 16, 512);
+	const int32 Th = FMath::Clamp(FMath::RoundToInt32(HeightM * 4000.0), 8, 256);
+	UTextureRenderTarget2D* Target = UKismetRenderingLibrary::CreateRenderTarget2D(this, Tw, Th, RTF_RGBA8, Paper);
+	UCanvas* Canvas = nullptr;
+	FVector2D Size;
+	FDrawToRenderTargetContext Context;
+	UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(this, Target, Canvas, Size, Context);
+	if (Canvas != nullptr)
+	{
+		const float Scale = static_cast<float>(Size.Y) / 30.0f;  // Roboto's default size is about 24 px high
+		Canvas->K2_DrawText(Font, Text, Size * 0.5, FVector2D(Scale, Scale), FLinearColor(0.02f, 0.02f, 0.02f), 0.0f,
+			FLinearColor::Transparent, FVector2D::ZeroVector, true, true);
+	}
+	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
+
+	// The quad, 1.3 mm out, texture (0,0) at the reader's top left; both windings.
+	UProceduralMeshComponent* Quad = NewObject<UProceduralMeshComponent>(GetOwner());
+	Quad->SetupAttachment(this);
+	Quad->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Quad->SetCastShadow(false);
+	Quad->RegisterComponent();
+	const FVector Hr = Right * (50.0 * WidthM);
+	const FVector Hu = Up * (50.0 * HeightM);
+	const TArray<FVector> Vertices = {Centre - Hr + Hu, Centre + Hr + Hu, Centre - Hr - Hu, Centre + Hr - Hu};
+	const TArray<FVector2D> Uv = {FVector2D(0, 0), FVector2D(1, 0), FVector2D(0, 1), FVector2D(1, 1)};
+	const TArray<int32> Triangles = {0, 1, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1};
+	const TArray<FVector> Normals = {Normal, Normal, Normal, Normal};
+	Quad->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Uv, {}, {}, false);
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(ScreenMaterial, this);
+	Mid->SetTextureParameterValue(TEXT("SlateUI"), Target);
+	Mid->SetVectorParameterValue(TEXT("TintColorAndOpacity"), FLinearColor::White);
+	Mid->SetVectorParameterValue(TEXT("BackColor"), Paper);
+	Mid->SetScalarParameterValue(TEXT("OpacityFromTexture"), 1.0f);
+	Quad->SetMaterial(0, Mid);
+	DecorParts.Add(Quad);
+}
+
+void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block)
+{
+	const simcore::CabinPanel& Panel = *Layout.FindPanel(Block.panel_id);
+	const FVector N = BodyDir(Panel.Normal());
+	const FVector U = BodyDir(Panel.Up());
+	// The plate's front face on the panel's plane, a little smaller than its outline so neighbours show a gap.
+	UStaticMeshComponent* Plate = AddDecor(CubeMesh, PlateColor);
+	Place(Plate, BodyPoint(Panel.PointAt(Block.u_m, Block.v_m)) - N * (0.5 * PlateDepthCm),
+		FRotationMatrix::MakeFromXZ(N, U).Rotator(), FVector(0.01 * PlateDepthCm, Block.width_m - 0.004, Block.height_m - 0.004));
+}
+
+void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture)
+{
+	using simcore::CabinLookKind;
+	const simcore::CabinPanel& Panel = *Layout.FindPanel(Fixture.panel_id);
+	const simcore::CabinLook& Look = Fixture.look;
+	const FVector N = BodyDir(Panel.Normal());
+	const FVector R = BodyDir(Panel.Right());
+	const FVector U = BodyDir(Panel.Up());
+	const FVector L = BodyPoint(Panel.PointAt(Fixture.u_m, Fixture.v_m));
+	const FRotator Round = FRotationMatrix::MakeFromZX(N, U).Rotator();  // cylinders: axis out of the face
+	const FRotator Flat = FRotationMatrix::MakeFromXZ(N, U).Rotator();   // cubes: X out of the face, Z up it
+	const double W = Look.width_m;
+	const double H = Look.height_m;
+	const FLinearColor Color = LookColor(Look.color, DarkColor);
+	// A cylinder standing out of the face: diameter (m) across, depth (cm) out, scaled to an ellipse for w != h.
+	auto Disc = [&](double Dw, double Dh, double DepthCm, const FLinearColor& C, double BaseCm = 0.0)
+	{
+		UStaticMeshComponent* M = AddDecor(CylinderMesh, C);
+		// The rotation puts the cylinder's X up the face: X takes the height, Y the width.
+		Place(M, L + N * (BaseCm + 0.5 * DepthCm), Round, FVector(Dh, Dw, 0.01 * DepthCm));
+		return M;
+	};
+	auto Box = [&](const FVector& At, double Bw, double Bh, double DepthCm, const FLinearColor& C, double BaseCm = 0.0)
+	{
+		UStaticMeshComponent* M = AddDecor(CubeMesh, C);
+		Place(M, At + N * (BaseCm + 0.5 * DepthCm), Flat, FVector(0.01 * DepthCm, Bw, Bh));
+		return M;
+	};
+	switch (Look.kind)
+	{
+	case CabinLookKind::Knob:
+		Disc(W, W, FMath::Min(2.0, 60.0 * W), Color);
+		break;
+	case CabinLookKind::PointerKnob:
+		Disc(W, W, FMath::Min(2.0, 60.0 * W), Color);
+		Box(L + U * (25.0 * W), 0.003, 0.45 * W, 0.2, FLinearColor::White, FMath::Min(2.0, 60.0 * W));
+		break;
+	case CabinLookKind::Trim:
+		Disc(W, W, 0.4, Color);
+		Box(L, 0.75 * W, 0.002, 0.1, DarkColor, 0.4);
+		break;
+	case CabinLookKind::Toggle:
+	{
+		Disc(W, W, 0.6, ChromeColor);
+		// Shown thrown down (off).
+		const FVector Lever = (N * FMath::Cos(FMath::DegreesToRadians(-35.0)) + U * FMath::Sin(FMath::DegreesToRadians(-35.0)));
+		UStaticMeshComponent* M = AddDecor(CylinderMesh, ChromeColor);
+		Place(M, L + N * 0.6 + Lever * 1.6, FRotationMatrix::MakeFromZ(Lever).Rotator(), FVector(0.007, 0.007, 0.032));
+		break;
+	}
+	case CabinLookKind::Lever:
+		Box(L, W, H, 0.6, Color);
+		break;
+	case CabinLookKind::Lamp:
+		Disc(W * 1.4, W * 1.4, 0.4, MetalColor);
+		Disc(W, W, 0.6, Color * 0.5f, 0.4);
+		break;
+	case CabinLookKind::LampButton:
+	case CabinLookKind::Button:
+		Disc(W, W, 0.8, LookColor(Look.ring, ChromeColor));
+		Disc(0.65 * W, 0.65 * W, 0.8, Color, 0.8);
+		break;
+	case CabinLookKind::Jack:
+		Disc(W, W, 0.6, Color);
+		Disc(0.4 * W, 0.4 * W, 0.1, DarkColor, 0.6);
+		break;
+	case CabinLookKind::Socket:
+		Disc(W, W, 1.0, Color);
+		Disc(0.45 * W, 0.45 * W, 0.1, DarkColor, 1.0);
+		break;
+	case CabinLookKind::Latch:
+		Disc(W, W, 0.8, ChromeColor);
+		Box(L, 0.25 * W, 0.6 * W, 0.4, DarkColor, 0.8);
+		break;
+	case CabinLookKind::Nameplate:
+		Box(L, W, H, 0.15, FLinearColor(0.7f, 0.69f, 0.62f));
+		AddTextPlate(L + N * 0.2, N, R, U, W, H, ToF(Look.label), FLinearColor(0.8f, 0.79f, 0.72f));
+		break;
+	case CabinLookKind::Bezel:
+		Box(L, W, H, 1.0, Color);
+		break;
+	case CabinLookKind::Window:
+		Box(L, W, H, 0.8, Color);
+		break;
+	case CabinLookKind::Oval:
+		Disc(W, H, 0.8, Color);
+		break;
+	case CabinLookKind::Diagram:
+	{
+		// A printed outline: four thin lines.
+		const FLinearColor Ink(0.25f, 0.2f, 0.08f);
+		Box(L + U * (50.0 * H), W, 0.0015, 0.05, Ink);
+		Box(L - U * (50.0 * H), W, 0.0015, 0.05, Ink);
+		Box(L + R * (50.0 * W), 0.0015, H, 0.05, Ink);
+		Box(L - R * (50.0 * W), 0.0015, H, 0.05, Ink);
+		break;
+	}
+	case CabinLookKind::Default:
+		break;
+	}
 }
 
 // ---------------------------------------------------------------------------------------------- animation
@@ -379,6 +646,14 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	{
 	case simcore::CabinStyle::Toggle:
 	{
+		if (Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::Button) ||
+			Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::LampButton))
+		{
+			// Drawn as a push-button (e.g. ВЫСОКОЕ ВКЛ.): the cap sits pressed in while the switch is on.
+			const double D = (Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.025) * 0.65;
+			Place(Item.Moving, L + N * (Position >= 1 ? 1.0 : 1.6), FRotationMatrix::MakeFromZ(N).Rotator(), FVector(D, D, 0.012));
+			break;
+		}
 		// Lever thrown 35 degrees up the face for position 1 ("on"), down for 0.
 		const double Face = simcore::CabinLayout::PositionAngleDeg(Control.style, Def->positions, Position);
 		const double A = FMath::DegreesToRadians(Face < 90.0 ? 35.0 : -35.0);
@@ -390,8 +665,10 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	{
 		// Positions spread symmetrically about "up", at most 30 degrees apart.
 		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::PositionAngleDeg(Control.style, Def->positions, Position));
-		Place(Item.Moving, L + N * 1.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(0.03, 0.03, 0.02));
-		Place(Item.Pointer, L + N * 2.05 + Dir * 0.9, FRotationMatrix::MakeFromXZ(Dir, N).Rotator(), FVector(0.014, 0.003, 0.002));
+		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.03;
+		Place(Item.Moving, L + N * 1.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(D, D, 0.02));
+		Place(Item.Pointer, L + N * 2.05 + Dir * (30.0 * D), FRotationMatrix::MakeFromXZ(Dir, N).Rotator(),
+			FVector(0.47 * D, 0.003, 0.002));
 		break;
 	}
 	case simcore::CabinStyle::Key:
@@ -405,15 +682,17 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	case simcore::CabinStyle::Button:
 	{
 		const bool bPressed = Position == 1 || Item.PressedFor > 0.0f;
-		Place(Item.Moving, L + N * (bPressed ? 1.0 : 1.6), FRotationMatrix::MakeFromZ(N).Rotator(), FVector(0.025, 0.025, 0.012));
+		const double D = Item.LookWidthM > 0.0 ? 0.65 * Item.LookWidthM : 0.025;
+		Place(Item.Moving, L + N * (bPressed ? 1.0 : 1.6), FRotationMatrix::MakeFromZ(N).Rotator(), FVector(D, D, 0.012));
 		break;
 	}
 	case simcore::CabinStyle::Wheel:
 	{
 		const double Turns = Panel.GetValue(Control.control_id) / Control.units_per_turn;
 		const FVector Dir = FaceDirection(Item, 360.0 * Turns);
-		Place(Item.Moving, L + N * 2.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(0.12, 0.12, 0.012));
-		Place(Item.Pointer, L + N * 4.0 + Dir * 5.0, FRotationMatrix::MakeFromZ(N).Rotator(), FVector(0.012, 0.012, 0.04));
+		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.12;
+		Place(Item.Moving, L + N * 2.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(D, D, 0.012));
+		Place(Item.Pointer, L + N * 4.0 + Dir * (42.0 * D), FRotationMatrix::MakeFromZ(N).Rotator(), FVector(0.012, 0.012, 0.04));
 		break;
 	}
 	case simcore::CabinStyle::Cover:

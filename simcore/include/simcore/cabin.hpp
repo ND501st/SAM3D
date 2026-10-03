@@ -560,6 +560,7 @@ private:
             cover.units_per_turn = 360.0;
             cover.auto_placed = true;
             cover.red_dot = -1;
+            cover.look = CabinLook{};  // a cover keeps its own look, not the guarded control's
             out.controls.push_back(std::move(cover));
         }
         return true;
