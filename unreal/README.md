@@ -92,7 +92,7 @@ LFS). Each part is 1 m across at unit scale; the cabin scales and tints it from 
 back to engine basic shapes for any part that isn't imported.
 
 ```
-"C:\Program Files\Blender Foundation\Blender 4.2lender.exe" --background --python tools/blender/build_cabin_parts.py -- --preview out/parts_preview.png
+"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe" --background --python tools/blender/build_cabin_parts.py -- --preview out/parts_preview.png
 python tools/ue_import_cabin_parts.py
 ```
 
