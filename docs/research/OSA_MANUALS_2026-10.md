@@ -268,4 +268,49 @@ meters (КАНАЛ Ц, КАНАЛ Р), ЧАСТОТА. The function check must n
   stow_ssc, equipment_off), commander (lower / raise the search antenna). The practice scenario now launches its drone
   200 s in, giving the crew its 4 min to readiness.
 - Not done yet: the vehicle orientation (АК — ЗК, СОГЛАСОВАНИЕ), the IFF controls, the function check, the
-  elevation-search indicator display (axes now known), and the real cabin layout from Fig. 3 (next step).
+  elevation-search indicator display (axes now known). The cabin seats followed in `feature/cabin-bench` (below).
+
+## Two more documents (3 Oct 2026, later)
+
+| Key | Document | Use |
+|---|---|---|
+| `korovin_tiv_2010` | `OSA_Entw_geschichte_RU.pdf`: a 2012 Word compilation (52 pp.) of Korovin's «Зенитный ракетный комплекс «Оса»» from the ser-sarajkin.narod2.ru mirror of «Техника и вооружение», with its photos and a summary table (PDF p. 51) | Already a source; this copy has all three parts in one file |
+| `grezicki_wzu` | M. Gręzicki, J. Walczak (Wojskowe Zakłady Uzbrojenia SA, Grudziądz), *Modernizacja i modyfikacja jako determinanty rozwoju przeciwlotniczych zestawów rakietowych*, journal pp. 217–232 (after 2018; PDF made Jan 2025). Polish | Tier 2, for seat order and crew titles only: the vehicles shown are the modernised Osa-P/PM, not the 1980s console |
+
+### Korovin: what wasn't in our notes yet
+
+- Summary table (PDF p. 51), Osa / Osa-AK / Osa-AKM: range 2–9 / 1.5–10 / 1.5–10 km; height 50–5000 / 25–5000 /
+  25–5000 m; parameter 4 / 6 km; target speed 420 / 500 / 500 m/s; target manoeuvre 5 / 8 g; missiles 4 / 6 / 6;
+  **reaction time 26–34 / 27–39 / 27–39 s**.
+- Firing at low targets: the tracking radar's antenna was locked (стопорилась), so at the 1970 trials the crew could
+  not judge the target's height and used a height-to-range table to pick the launch range (PDF p. 26). Agrees with the
+  НЛЦ mode already in the data (`voenizdat_osa_1991` p. 100: antennas held at a fixed elevation).
+- In heavy jamming: angles from the TV sight, range from the search radar, three-point guidance (PDF p. 24). Matches
+  `emcon_tv_engagement` and `track_range_semi_auto`.
+- Osa-A work (from 1971): light front panels and **red dots beside the knobs, toggles and switches that are set to
+  their starting position** before live firing (PDF p. 31). Supports the `red_dot` placements.
+- 9M33M2 (Osa-AK missile): wings fold in pairs to fit the square container; better radiation hardness; 5-year storage
+  guarantee (PDF p. 35). The Osa-AK's 27 m floor came from a dual-mode fuse receiver that checks height at arming.
+- OKR «Мара» (from Nov 1975, the Osa-AKM): helicopters needed a changed guidance method, a sharper ИКО, multi-mode
+  warhead control and fuse-delay correction; semi-automatic TV angle tracking was proposed for them (PDF p. 36).
+- Organisation: a battery is four vehicles and a battery command post; the regiment's control battery holds the
+  PU-12 (PU-12M) and a P-15 (P-19) (PDF p. 40–41). Recorded in `OSA_RESEARCH_2026-10.md` §7.
+- Nothing in it changes the console: it is a development history with exterior photos only.
+
+### WZU paper: seats and crew titles
+
+- Fig. 4 (camera views of a live firing, Polish Osa-PM): the **guidance operator (operator naprowadzania, ON)** sits
+  beside the **search operator (operator poszukiwania, OP)** on the forward side, and the **range operator (operator
+  odległości, OO)** beside OP on the rear side; a safety officer (OB) supervises. This is the same order as
+  `mon_2112_80` Fig. 3: guidance, search, range, front to rear, on the left-wall bench.
+- Fig. 3: the 9F632.M1 trainer (cabin imitator of the 9A33BM2/3 upgraded to Osa-PM standard, five crews at once).
+- The upgrade replaced the PPI with a digital one (OP81-16PM) and added an EO head with laser rangefinder (100–30 000 m)
+  and video tracker (BZK01). Not 1980s equipment; not used.
+
+### What changed in SAM3D's data (`feature/cabin-bench`)
+
+- `data/cabins/osa_ak.json`: the deputy commander moves from the right wall to the front seat of the left bench, with
+  the deputy commander's panel (TV monitor, elevation, launch) as the front column of the main console; the senior operator (search) sits
+  in the middle and the operator (range) at the rear; the power cabinet is behind the bench. The cabin's status now
+  cites the two sources. Distances and panel sizes remain estimates.
+- Test: `cabin: the Osa operators share the left-wall bench, guidance in front, then search, then range`.

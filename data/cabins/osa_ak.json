@@ -1,14 +1,17 @@
 {
   "system_id": "osa_ak",
-  "status": "Placeholder layout (SAM3D design). Seats, panels and positions are not from any source and only need to be reachable and readable; replace them when real cabin references or the creator's panel art are available. Lamp meanings follow the SAM Simulator manual where it gives them.",
+  "status": "Seat arrangement from the Polish Osa-AK manual's cabin plan (mon_2112_80 Fig. 3, pp. 23–25), confirmed by WZU camera views of a Polish crew at work (grezicki_wzu Fig. 4): driver front left, commander front right, the three operators on one bench along the left wall facing the main console SŁ-2M, front to rear guidance (deputy commander), search (senior operator), range (operator). Exact distances, panel sizes and control positions are SAM3D estimates that only need to be reachable and readable. Lamp meanings follow the SAM Simulator manual where it gives them.",
   "notes": "Body frame: metres, x right, y forward, z up, from the ground under the hull centre. The placeholder hull in Unreal is 9.1 x 2.8 m with its roof at 2.2 m. Lamp sources use the source ids of data/procedures/osa_ak.json. Red dots (red_dot) are only given where a picture shows one: they mark a control's working position, not where it starts (docs/research/OSA_CONSOLE_MAP_2026-10.md §12).",
 
   "stations": [
     { "id": "driver", "label": "Driver", "eye_m": [-0.65, 3.6, 1.55], "yaw_deg": 0, "pitch_deg": -15 },
     { "id": "commander", "label": "Commander", "eye_m": [0.65, 3.6, 1.55], "yaw_deg": 0, "pitch_deg": -15 },
-    { "id": "senior_operator", "label": "Senior operator", "eye_m": [-0.35, 2.4, 1.5], "yaw_deg": -90, "pitch_deg": -10 },
-    { "id": "operator", "label": "Operator", "eye_m": [-0.35, 1.4, 1.5], "yaw_deg": -90, "pitch_deg": -10 },
-    { "id": "deputy_commander", "label": "Deputy commander", "eye_m": [0.35, 1.9, 1.5], "yaw_deg": 90, "pitch_deg": -10 }
+    { "id": "senior_operator", "label": "Senior operator", "eye_m": [-0.35, 1.6, 1.5], "yaw_deg": -90, "pitch_deg": -10,
+      "notes": "Middle seat of the left bench, in front of the search indicator (mon_2112_80 Fig. 3: search operator; grezicki_wzu Fig. 4: OP)." },
+    { "id": "operator", "label": "Operator", "eye_m": [-0.35, 0.6, 1.5], "yaw_deg": -90, "pitch_deg": -10,
+      "notes": "Rear seat of the left bench (mon_2112_80 Fig. 3: range operator; grezicki_wzu Fig. 4: OO, on the rear side of OP)." },
+    { "id": "deputy_commander", "label": "Deputy commander", "eye_m": [-0.35, 2.75, 1.5], "yaw_deg": -90, "pitch_deg": -10,
+      "notes": "Front seat of the left bench (mon_2112_80 Fig. 3: the senior, guidance operator; telephone TA-57 here). grezicki_wzu Fig. 4 shows the guidance operator (ON) beside the search operator (OP), on the forward side." }
   ],
 
   "panels": [
@@ -17,13 +20,17 @@
     { "id": "commander_panel", "label": "Commander", "station": "commander",
       "centre_m": [0.65, 4.2, 1.25], "facing_deg": 180, "tilt_deg": 30, "size_m": [0.7, 0.3] },
     { "id": "so_panel", "label": "SOC / SSC azimuth (senior operator)", "station": "senior_operator",
-      "centre_m": [-1.0, 2.4, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9] },
+      "centre_m": [-1.0, 1.6, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9],
+      "notes": "Middle column of SŁ-2M: search indicator OP81-16M, OP63-6M2, azimuth block OS52-12M (mon_2112_80 Fig. 3)." },
     { "id": "op_panel", "label": "SSC range (operator)", "station": "operator",
-      "centre_m": [-1.0, 1.4, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9] },
+      "centre_m": [-1.0, 0.6, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [0.95, 0.9],
+      "notes": "Rear column of SŁ-2M: range block OS61-5M with OS81-9M, OK62-5M, OS81-18M (mon_2112_80 Fig. 3)." },
     { "id": "pwr_cabinet", "label": "Distribution cabinet 0096-9M1 (operator)", "station": "operator",
-      "centre_m": [-0.6, 0.6, 1.2], "facing_deg": 45, "tilt_deg": 0, "size_m": [0.6, 0.5] },
+      "centre_m": [-0.6, -0.2, 1.2], "facing_deg": 45, "tilt_deg": 0, "size_m": [0.6, 0.5],
+      "notes": "Angled behind the bench (mon_2112_80 Fig. 3)." },
     { "id": "fo_panel", "label": "SSC elevation / TOV / launch (deputy commander)", "station": "deputy_commander",
-      "centre_m": [1.0, 1.9, 1.4], "facing_deg": -90, "tilt_deg": 15, "size_m": [1.3, 0.9] }
+      "centre_m": [-1.0, 2.75, 1.4], "facing_deg": 90, "tilt_deg": 15, "size_m": [1.3, 0.9],
+      "notes": "Front column of SŁ-2M: TV monitor WPU-44 with OS81-10M, elevation block OS52-14M1, OK51-6M (mon_2112_80 Fig. 3)." }
   ],
 
   "controls": [

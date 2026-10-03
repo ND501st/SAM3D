@@ -149,6 +149,36 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     SC_EXPECT_NEAR(wheel != nullptr ? wheel->units_per_turn : 0.0, 60.0, 1e-12);
 }
 
+SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, then search, then range") {
+    // mon_2112_80 Fig. 3 (cabin plan) and the WZU crew photos (grezicki_wzu Fig. 4).
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const char* bench[] = {"deputy_commander", "senior_operator", "operator"};
+    const char* consoles[] = {"fo_panel", "so_panel", "op_panel"};
+    double previous_y = 1e9;
+    for (int i = 0; i < 3; ++i) {
+        const CabinStation* seat = layout.FindStation(bench[i]);
+        const CabinPanel* panel = layout.FindPanel(consoles[i]);
+        SC_EXPECT(seat != nullptr && panel != nullptr);
+        if (seat == nullptr || panel == nullptr) return;
+        SC_EXPECT(seat->eye_m.x < 0.0 && panel->centre_m.x < seat->eye_m.x);    // left wall, panel in front of the seat
+        SC_EXPECT_NEAR(seat->yaw_rad, DegToRad(-90.0), 1e-12);                  // facing the wall
+        SC_EXPECT_NEAR(panel->centre_m.y, seat->eye_m.y, 1e-9);                 // panel straight ahead
+        SC_EXPECT(seat->eye_m.y < previous_y);                                   // front to rear
+        previous_y = seat->eye_m.y;
+    }
+    // The three columns of the main console don't overlap along the wall.
+    for (int i = 0; i + 1 < 3; ++i) {
+        const CabinPanel* front = layout.FindPanel(consoles[i]);
+        const CabinPanel* rear = layout.FindPanel(consoles[i + 1]);
+        SC_EXPECT(front->centre_m.y - 0.5 * front->width_m >= rear->centre_m.y + 0.5 * rear->width_m);
+    }
+    // Driver front left, commander front right.
+    SC_EXPECT(layout.FindStation("driver")->eye_m.x < 0.0 && layout.FindStation("commander")->eye_m.x > 0.0);
+}
+
 SC_TEST("cabin: lamps light from subsystem states and inputs") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));

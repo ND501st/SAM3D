@@ -66,13 +66,13 @@ working seats under other names. **SAM3D has four stations and folds the senior 
 | Switch-on cycle (cold) | 3.8 min, plus 3.0 min function check = **6.8 min** preliminary preparation; 14 min with the PU-12M fully set up | `flak11` |
 | Fire-control computer 9С456М3 (analogue) | 100 s to switch on, 3 s to change mode | `flak11` |
 | March to combat position | **≤ 4 min** (manufacturer), 3 min (Russian norms quoted elsewhere) | `nvo_2015`, `wrk` |
-| Reaction time | **26–40 s** (target detection to launch) | `nvo_2015` |
+| Reaction time | **26–40 s** (target detection to launch); Korovin's summary table: 26–34 s (Osa), 27–39 s (Osa-AK and Osa-AKM) | `nvo_2015`, `korovin_tiv_2010` |
 | Target designation to missile ready | 41–60 s; firing cycle 60 s | `flak11` |
 | Missile preparation | 13 s after "target in zone" (NVA); 15 s gyro spin-up (game manual); "12 s" (creator, 2013) | `flak11`, `samsim_osa` p27, `samsim_thread` |
 | Two missiles in the air | at least 4 s apart (ePap), 3–5 s (Russian) | ePap, `nvo_2015` context |
 | Reloading 6 missiles from the TZM | 6 min; crane traverse holds up to 3 containers | `flak11` |
 | Vehicle setup for correct designations | Vehicle must be oriented with its navigation/orientation set (TNA-3) | `flak11` |
-| Readiness requirement at the 1970 trials | 2 min, not met at first; heaters were added to speed warm-up | `korovin_tiv_2010`, `video_osa` |
+| Readiness requirement at the 1970 trials | 1–2 min, not met with the valves then in use; the developers asked the Svetlana plant for valves that warm up faster (`korovin_tiv_2010`); "heaters were added" (`video_osa`) | `korovin_tiv_2010`, `video_osa` |
 | Speeds (9A33B) | Dirt roads average 36 km/h by day, 25 km/h at night; road up to 80 km/h; water 7–10 km/h | `korovin_tiv_2010` |
 | Battery deploy / march order (from a powered march) | 35–50 s / 15–30 s, by crew skill | `video_osa` only, **unverified**; Russian reference pages give 3–5 min for deploying and stowing |
 | New target after a kill | 40 s (excellent crew) to 120 s (poor) | `video_osa` only, **unverified** |
@@ -163,6 +163,7 @@ useful cabin detail for SAM3D.
 | Battery (NVA) | Battery commander's PU-12M (with a reconnaissance team), **two platoons of two 9A33 and one TZM**, maintenance vehicle 9В210, spares set 9Ф372, and a close-defence platoon (Strela-2M MANPADS, ZU-23-2) | `flak11` |
 | Regiment (NVA) | 5 firing batteries, HQ battery (PU-12M, P-40, 2 × P-19, P-18), technical battery, transport company; 480 missiles | `flak11` |
 | Regiment (Soviet, theoretical) | HQ, 5 firing batteries, technical battery; 2 × PU-12M at HQ | `samsim_thread` (creator) |
+| Regiment (Soviet) | 5 batteries, each **four vehicles and a battery command post**; the regiment's control battery holds the PU-12 (PU-12M) and a P-15 (P-19) radar; 20 vehicles, 80 missiles (Osa) or 120 (Osa-AK, -AKM) | `korovin_tiv_2010` |
 | Target designation | Automated (telecode) only down to the battery PU-12M; **from there by voice radio, azimuth and range, to each vehicle**. PU-12M navigation errors up to 5° and 3 km | `flak11` |
 | PU-12 plotting board (game) | Target notation (number, height in hectometres, type/IFF digit, formation size), updated once a minute, range rings 50–200 km, mils | `samsim_osa` p20 |
 | Trainer 9Ф632 | Ural-375 with all vehicle workplaces plus an instructor seat who enters the air picture; can be coupled to a real vehicle; instructor changes up to two targets' behaviour live; ECCM and HARM drills | `flak11`, ePap |
@@ -227,7 +228,7 @@ SAM3D's current validation list (U-2 1960, Vietnam, F-117 1999) is for other sys
 | When preparation starts | At ВНИМАНИЕ (game) vs at "target in zone" after missile selection at ВНИМАНИЕ (NVA) | Follow NVA: selection and transmitter at ВНИМАНИЕ, preparation at the zone |
 | Deploy and stow times | 35–50 s / 15–30 s for a battery (`video_osa`, unverified) vs ≤ 4 min march-to-combat (`nvo_2015`) vs 3–5 min (Russian reference pages) vs 6.8 min cold start (`flak11`) | Different starting states: a powered battery stopping from the march is fast; one that must start the turbine takes minutes; a cold start with the function check longest. Model readiness states (roadmap 6.2) and keep the video's figures as a crew-skill target until a source is found |
 | Guidance seat rank | Sergeant (`wrk`), NCO (`flak11`), conscript sergeant then warrant officer (`korovin_tiv_2010`) | "Deputy commander" for the seat; rank varies by army and period |
-| Minimum target altitude (Osa-AK) | 25 m (game, `flak11`) vs 27 m (`video_osa`) | 25 m |
+| Minimum target altitude (Osa-AK) | 25 m (game, `flak11`, `mon_2112_80`, Korovin's summary table) vs 27 m (`video_osa`; Korovin's text: a dual-mode fuse receiver that checks height at arming) | 25 m |
 | Regiment missile count | 120 on an Osa-AK regiment's vehicles, "80" for an Osa-AKM regiment (`video_osa`) vs 20 vehicles × 6 = 120 and 480 in all (`flak11`) | The video's 80 looks wrong; use `flak11` |
 | Tracking-radar power | 200 kW (`korovin_tiv_2010`, original) vs 180 kW (game) vs 18 kW (`flak11` page) | Not used by SAM3D |
 
