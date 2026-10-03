@@ -138,7 +138,10 @@ private:
 	UStaticMesh* PartMesh(const TCHAR* Name);
 	/** A flat quad on the face showing Text (drawn once into a small texture with a font that has Cyrillic). */
 	void AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double WidthM,
-		double HeightM, const FString& Text, const FLinearColor& Paper);
+		double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved = false);
+	/** An item's engraved label just above it (an item ItemHeightM tall at Centre); nothing for an empty text. */
+	void AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double ItemHeightM,
+		const FString& Text);
 	void DestroyParts();
 	UStaticMeshComponent* AddMesh(UStaticMesh* Mesh, const FLinearColor& Color);
 	void Animate(const USimWorldSubsystem* Sim, float DeltaTime);
@@ -178,6 +181,15 @@ private:
 	/** Engine basic-shape material; its "Color" parameter tints each part. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ShapeMaterial;
+
+	/** The cabin's master material (/Game/SAM3D/Cabin/Materials/M_CabinSurface: Color, Roughness, Metallic); null =
+	 * engine basic-shape material. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> SurfaceMaterial;
+
+	/** Engraved labels: /Game/SAM3D/Cabin/Materials/M_CabinLabel (a texture's red channel masks dark, lit letters). */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> LabelMaterial;
 
 	/** Engine material that shows a texture ("SlateUI") unlit: the displays' screens. */
 	UPROPERTY()

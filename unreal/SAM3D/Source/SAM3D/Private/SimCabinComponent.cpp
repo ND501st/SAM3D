@@ -52,6 +52,18 @@ namespace
 		return Fallback;
 	}
 
+	// How shiny a part is, from the colour it is built with: chrome and brass are polished metal, the plates satin
+	// paint, the rack matt, anything else glossy bakelite or enamel. (Roughness, Metallic.)
+	FVector2D FinishFor(const FLinearColor& C)
+	{
+		if (C.Equals(ChromeColor) || C.Equals(LookColor("chrome", FLinearColor::Black))) return FVector2D(0.22, 1.0);
+		if (C.Equals(BrassColor) || C.Equals(LookColor("brass", FLinearColor::Black))) return FVector2D(0.35, 1.0);
+		if (C.Equals(MetalColor)) return FVector2D(0.4, 0.8);
+		if (C.Equals(PlateColor)) return FVector2D(0.55, 0.0);
+		if (C.Equals(PanelColor)) return FVector2D(0.85, 0.0);
+		return FVector2D(0.28, 0.0);
+	}
+
 	FLinearColor LampColor(const std::string& Name)
 	{
 		if (Name == "green") return FLinearColor(0.1f, 1.0f, 0.1f);
@@ -133,9 +145,12 @@ UStaticMeshComponent* USimCabinComponent::AddMesh(UStaticMesh* Mesh, const FLine
 	Part->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	Part->SetCastShadow(false);
 	Part->RegisterComponent();
-	if (ShapeMaterial != nullptr)
+	if (UMaterialInterface* Base = SurfaceMaterial != nullptr ? SurfaceMaterial.Get() : ShapeMaterial.Get())
 	{
-		Part->CreateDynamicMaterialInstance(0, ShapeMaterial);
+		UMaterialInstanceDynamic* Mid = Part->CreateDynamicMaterialInstance(0, Base);
+		const FVector2D Finish = FinishFor(Color);
+		Mid->SetScalarParameterValue(TEXT("Roughness"), static_cast<float>(Finish.X));
+		Mid->SetScalarParameterValue(TEXT("Metallic"), static_cast<float>(Finish.Y));
 	}
 	Paint(Part, Color);
 	return Part;
@@ -211,6 +226,16 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 {
 	DestroyParts();
 	const simcore::CabinLayout* Layout = Sim->GetCabinLayout();
+	if (SurfaceMaterial == nullptr)
+	{
+		SurfaceMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Cabin/Materials/M_CabinSurface.M_CabinSurface"),
+			nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+	if (LabelMaterial == nullptr)
+	{
+		LabelMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Cabin/Materials/M_CabinLabel.M_CabinLabel"),
+			nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
 	if (Layout == nullptr || CubeMesh == nullptr || CylinderMesh == nullptr || SphereMesh == nullptr)
 	{
 		return false;
@@ -405,6 +430,12 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Place(Item.Base, Item.Location + Item.Normal * (50.0 * Collar.Y), FRotationMatrix::MakeFromZ(Item.Normal).Rotator(),
 			FVector(Collar.X, Collar.X, Collar.Y));
 	}
+	if (!Control.auto_placed)
+	{
+		AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up,
+			Control.look.width_m > 0.0 ? Control.look.width_m : (Control.style == simcore::CabinStyle::Wheel ? 0.12 : 0.03),
+			ToF(Control.look.label));
+	}
 	const simcore::ControlDef* Def = Sim->GetScenarioRunner()->Console().panel.Find(Control.control_id);
 	double MarkU = 0.0;
 	double MarkV = 0.0;
@@ -484,6 +515,7 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Item.Moving = AddMesh(SphereMesh, Item.MovingColor * 0.08f);
 		Place(Item.Moving, Item.Location + Item.Normal * 0.8, FRotator::ZeroRotator, FVector(W));
 	}
+	AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up, FMath::Max(W, H) * (Item.bParts ? 1.4 : 1.0), ToF(Lamp.look.label));
 	// The glass glows by itself (unlit), so lit and dark lamps read the same in sun or shade: the screens'
 	// unlit material showing a white texture, tinted with the lamp's colour.
 	if (ScreenMaterial != nullptr)
@@ -521,17 +553,20 @@ UStaticMeshComponent* USimCabinComponent::AddDecor(UStaticMesh* Mesh, const FLin
 }
 
 void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
-	double WidthM, double HeightM, const FString& Text, const FLinearColor& Paper)
+	double WidthM, double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved)
 {
 	static UFont* Font = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
-	if (ScreenMaterial == nullptr || Font == nullptr)
+	UMaterialInterface* Material = bEngraved ? LabelMaterial.Get() : ScreenMaterial.Get();
+	if (Material == nullptr || Font == nullptr)
 	{
 		return;
 	}
 	// The texture: 1 px per 0.25 mm, dark text on the plate's colour.
 	const int32 Tw = FMath::Clamp(FMath::RoundToInt32(WidthM * 4000.0), 16, 512);
 	const int32 Th = FMath::Clamp(FMath::RoundToInt32(HeightM * 4000.0), 8, 256);
-	UTextureRenderTarget2D* Target = UKismetRenderingLibrary::CreateRenderTarget2D(this, Tw, Th, RTF_RGBA8, Paper);
+	// Engraved text: white letters on black, the red channel masking the label material (only the letters show).
+	UTextureRenderTarget2D* Target =
+		UKismetRenderingLibrary::CreateRenderTarget2D(this, Tw, Th, RTF_RGBA8, bEngraved ? FLinearColor::Black : Paper);
 	UCanvas* Canvas = nullptr;
 	FVector2D Size;
 	FDrawToRenderTargetContext Context;
@@ -539,7 +574,7 @@ void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Norm
 	if (Canvas != nullptr)
 	{
 		const float Scale = static_cast<float>(Size.Y) / 30.0f;  // Roboto's default size is about 24 px high
-		Canvas->K2_DrawText(Font, Text, Size * 0.5, FVector2D(Scale, Scale), FLinearColor(0.02f, 0.02f, 0.02f), 0.0f,
+		Canvas->K2_DrawText(Font, Text, Size * 0.5, FVector2D(Scale, Scale), bEngraved ? FLinearColor::White : FLinearColor(0.02f, 0.02f, 0.02f), 0.0f,
 			FLinearColor::Transparent, FVector2D::ZeroVector, true, true);
 	}
 	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
@@ -557,13 +592,27 @@ void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Norm
 	const TArray<int32> Triangles = {0, 1, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1};
 	const TArray<FVector> Normals = {Normal, Normal, Normal, Normal};
 	Quad->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Uv, {}, {}, false);
-	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(ScreenMaterial, this);
-	Mid->SetTextureParameterValue(TEXT("SlateUI"), Target);
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Material, this);
+	Mid->SetTextureParameterValue(bEngraved ? TEXT("Text") : TEXT("SlateUI"), Target);
 	Mid->SetVectorParameterValue(TEXT("TintColorAndOpacity"), FLinearColor::White);
-	Mid->SetVectorParameterValue(TEXT("BackColor"), Paper);
+	Mid->SetVectorParameterValue(TEXT("BackColor"), bEngraved ? FLinearColor(0.0f, 0.0f, 0.0f, 0.0f) : Paper);
 	Mid->SetScalarParameterValue(TEXT("OpacityFromTexture"), 1.0f);
 	Quad->SetMaterial(0, Mid);
 	DecorParts.Add(Quad);
+}
+
+void USimCabinComponent::AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
+	double ItemHeightM, const FString& Text)
+{
+	if (Text.IsEmpty())
+	{
+		return;
+	}
+	// Letters about 3.5 mm high, 4 mm above the item.
+	constexpr double LetterM = 0.0035;
+	const double WidthM = FMath::Min(0.09, 0.0022 * Text.Len() + 0.004);
+	AddTextPlate(Centre + Up * (100.0 * (0.5 * ItemHeightM + 0.004 + 0.5 * LetterM)) + Normal * 0.05, Normal, Right, Up, WidthM,
+		LetterM * 1.4, Text, FLinearColor::Transparent, true);
 }
 
 void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block)
@@ -575,6 +624,23 @@ void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const si
 	UStaticMeshComponent* Plate = AddDecor(CubeMesh, PlateColor);
 	Place(Plate, BodyPoint(Panel.PointAt(Block.u_m, Block.v_m)) - N * (0.5 * PlateDepthCm),
 		FRotationMatrix::MakeFromXZ(N, U).Rotator(), FVector(0.01 * PlateDepthCm, Block.width_m - 0.004, Block.height_m - 0.004));
+	// Fixing screws 1 cm in from the corners, and along the long edges (decoration, not from the photos).
+	if (UStaticMesh* Screw = PartMesh(TEXT("SM_Screw")))
+	{
+		const double Hw = 0.5 * Block.width_m - 0.01;
+		const double Hh = 0.5 * Block.height_m - 0.01;
+		TArray<FVector2D> At = {FVector2D(-Hw, -Hh), FVector2D(Hw, -Hh), FVector2D(-Hw, Hh), FVector2D(Hw, Hh)};
+		if (Block.width_m > 0.3 && Block.height_m > 0.08)
+		{
+			At.Add(FVector2D(0.0, -Hh));
+			At.Add(FVector2D(0.0, Hh));
+		}
+		for (const FVector2D& P : At)
+		{
+			Place(AddDecor(Screw, ChromeColor * 0.7f), BodyPoint(Panel.PointAt(Block.u_m + P.X, Block.v_m + P.Y)),
+				PartRotation(N, U), FVector(0.007));
+		}
+	}
 }
 
 void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture)
@@ -605,6 +671,12 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Place(M, At + N * (BaseCm + 0.5 * DepthCm), Flat, FVector(0.01 * DepthCm, Bw, Bh));
 		return M;
 	};
+	// The engraved label above the item (nameplates show their own text; big surrounds and diagrams have none).
+	if (Look.kind != CabinLookKind::Nameplate && Look.kind != CabinLookKind::Bezel && Look.kind != CabinLookKind::Diagram &&
+		Look.kind != CabinLookKind::Window)
+	{
+		AddLabel(L, N, R, U, Look.kind == CabinLookKind::Oval ? H : FMath::Max(W, H), ToF(Look.label));
+	}
 	// The parts library first (art/cabin_parts); engine shapes below where a part isn't imported.
 	auto Part = [&](const TCHAR* Name, double Size, const FLinearColor& C)
 	{
