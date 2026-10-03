@@ -215,7 +215,7 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
 		LastSimTimeSeconds = Now;
 		const bool bRotating = Console.has_sensors && Console.equipment.IsReady(Console.search.antenna);
-		Scope->Update(Dt, bRotating, Runner->Engagement().SearchPicture());
+		Scope->Update(Dt, bRotating, Runner->Engagement().SearchPicture(), Runner->Engagement().IffReplies());
 	}
 	if (Kind == simcore::CabinDisplayKind::ElevationScope && Console.has_sensors)
 	{
@@ -315,11 +315,29 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		}
 	}
 
-	// Fading echoes.
+	// Fading echoes, and IFF replies as arcs just beyond the echo: 20 degrees wide in open reception, narrow when
+	// gated by the echo (mon_2112_80 p21); a second arc for a control interrogation (ЗАПРОС К).
+	const bool bGated = !Search.iff_gate_control.empty() && Console.panel.Get(Search.iff_gate_control) == 1;
 	for (const simcore::SearchScope::Blip& B : Scope->Blips())
 	{
 		if (B.range_m < MinM || B.range_m > MaxM)
 		{
+			continue;
+		}
+		if (B.iff_reply)
+		{
+			const double Half = FMath::DegreesToRadians(bGated ? 2.0 : 10.0);
+			const float Glow = static_cast<float>(B.brightness);
+			for (int32 Arc = 0; Arc < (B.control_reply ? 2 : 1); ++Arc)
+			{
+				const double Rr = RadiusOf(B.range_m) + 9.0 + 5.0 * Arc;
+				for (int32 I = 0; I < 8; ++I)
+				{
+					const double A0 = B.azimuth_rad - Half + 2.0 * Half * I / 8.0;
+					const double A1 = B.azimuth_rad - Half + 2.0 * Half * (I + 1) / 8.0;
+					Canvas->K2_DrawLine(Polar(C, A0, Rr), Polar(C, A1, Rr), 2.0f, Phosphor * Glow);
+				}
+			}
 			continue;
 		}
 		// A bright arc-shaped smear when fresh, fading with the afterglow.
@@ -559,9 +577,10 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 		return;
 	}
 	bTvWasOn = true;
-	// The camera sits on the antenna unit and looks along the tracking radar's azimuth (from north) and elevation.
+	// The camera sits on the antenna unit and looks along the tracking radar's azimuth and elevation (the wheel's
+	// azimuth is in the crew's frame; the camera needs it from true north).
 	const simcore::ConsoleData& Console = Runner.Console();
-	const double Az = FMath::DegreesToRadians(Console.panel.GetValue(Console.track.az_wheel));
+	const double Az = FMath::DegreesToRadians(Runner.Engagement().IndicatedToTrueDeg(Console.panel.GetValue(Console.track.az_wheel)));
 	const double El = FMath::DegreesToRadians(Console.panel.GetValue(Console.track.el_wheel));
 	const simcore::Vec3 Dir{FMath::Sin(Az) * FMath::Cos(El), FMath::Cos(Az) * FMath::Cos(El), FMath::Sin(El)};
 	const simcore::Vec3& Unit = Runner.UnitPosition();

@@ -25,7 +25,12 @@
 //     tracking method, in the zone at launch, target manoeuvre, crew mistakes — and one
 //     draw from the scenario's random stream decides it. The debrief shows every factor.
 //
-// The vehicle's hull is taken to face north (azimuth 0) in this version.
+//   * Heading: azimuths the crew sees and sets are in the vehicle's heading-reference frame
+//     (a gyro half-compass, ConsoleData::orientation). It follows the hull's turns but only
+//     knows north once the crew has oriented it; until then the picture is rotated by its
+//     error, and designations given in true azimuth (the plotting board) point wrong.
+//     Without an orientation block the frame is true north.
+//   * IFF: an interrogation makes friendly aircraft reply on the search scope.
 #pragma once
 
 #include <cmath>
@@ -241,6 +246,7 @@ struct EngagementTarget {
     int world_id = -1;  // -1 until it appears
     bool evade_on_launch = false;
     double evade_turn_rate_rad_s = 0.0;
+    bool friendly = false;  // replies to IFF interrogation
 };
 
 enum class TrackMethod { None, Radar, Tv };
@@ -257,8 +263,9 @@ inline const char* ToString(TrackMethod m) {
 struct Contact {
     std::string target_id;
     double range_m = 0.0;
-    double azimuth_deg = 0.0;  // -180..180, 0 = north (hull forward)
+    double azimuth_deg = 0.0;  // -180..180 in the vehicle's heading-reference frame (true north once oriented)
     double elevation_deg = 0.0;
+    bool control_reply = false;  // IFF replies only: to a control interrogation (ЗАПРОС К)
 };
 
 // Full width of the TV sight's field of view for the lens selected now (0 if the console has no TV).
@@ -288,9 +295,11 @@ public:
     void Step(double t, double dt, World& world, ConsoleData& console, std::vector<EngagementTarget>& targets,
               SessionLog& log, std::mt19937& rng, const AimCrew& aim_crew) {
         if (!console.has_sensors) return;
+        UpdateOrientation(t, dt, console, log, aim_crew.elevation);
         Measure(dt, world, targets);
         ResolveShots(t, world, targets, log, rng);
         UpdateSearch(t, console, log);
+        UpdateIff(t, console, log);
         if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
         UpdateTrack(t, dt, console, log);
         UpdateTrackReturns(console);
@@ -312,6 +321,7 @@ public:
             return;
         }
         const Geometry& g = geo_.at(tracked_);
+        if (g.friendly) log.Record({t, DebriefEntry::Kind::Deviation, who, tracked_, "fired at a friendly aircraft"});
         s.target_id = tracked_;
         s.method = method_;
         s.in_zone = InZone(g);
@@ -371,6 +381,17 @@ public:
 
     // The unit moved (driven by the player or an AI driver).
     void SetUnitPosition(const Vec3& unit_position) { unit_ = unit_position; }
+    // The hull's true heading, degrees clockwise from north (driven by the player or the scenario).
+    void SetUnitHeading(double heading_deg) { unit_heading_deg_ = heading_deg; }
+    double UnitHeadingDeg() const { return unit_heading_deg_; }
+    // The heading the gyro holds (its idea of the hull's heading), and the frame conversion: an azimuth in the
+    // crew's frame (wheels, scope) to true azimuth from north.
+    double GyroHeadingDeg() const { return gyro_heading_deg_; }
+    double IndicatedToTrueDeg(double indicated_deg) const {
+        return Wrap180(indicated_deg + unit_heading_deg_ - gyro_heading_deg_);
+    }
+    // IFF replies painted on the search scope this step.
+    const std::vector<Contact>& IffReplies() const { return iff_replies_; }
     const Vec3& UnitPosition() const { return unit_; }
 
     const std::vector<Contact>& SearchPicture() const { return picture_; }
@@ -406,6 +427,8 @@ private:
         double az_deg = 0.0;
         double el_deg = 0.0;
         double agl_m = 0.0;
+        double true_az_deg = 0.0;  // from north; az_deg is in the crew's frame
+        bool friendly = false;
         double closing_mps = 0.0;
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
@@ -466,13 +489,15 @@ private:
         for (const EngagementTarget& tg : targets) {
             Geometry& g = geo_[tg.id];
             g.target_class = tg.target_class;
+            g.friendly = tg.friendly;
             const Aircraft* a = tg.world_id >= 0 ? world.FindAircraft(tg.world_id) : nullptr;
             g.alive = a != nullptr && a->alive;
             if (!g.alive) continue;
             const Vec3 los = a->position - unit_;
             const double alt = frame.AltitudeOf(a->position);
             g.range_m = los.Length();
-            g.az_deg = Wrap180(RadToDeg(AzimuthOf(los)));
+            g.true_az_deg = Wrap180(RadToDeg(AzimuthOf(los)));
+            g.az_deg = Wrap180(g.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
             g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
@@ -598,12 +623,14 @@ private:
             range_known = true;
         }
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
+        bool from_board = false;
         if (best == nullptr && tv_search) {  // radars silent: azimuth from the plotting board
             for (const auto& kv : geo_) {
                 const Geometry& g = kv.second;
                 if (g.alive && g.range_m <= tuning_.plotting_board_range_m &&
                     (best == nullptr || g.range_m < best->range_m)) {
                     best = &g;
+                    from_board = true;
                 }
             }
         }
@@ -611,7 +638,8 @@ private:
         const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
         if (crew.azimuth && !az_locked) {
             const double wheel_az = console.panel.GetValue(d.az_wheel);
-            const double want_az = WheelAzimuth(best->az_deg, wheel_az, d.az_limit_deg);
+            // The board gives true azimuth, set on the wheel as it is: right only if the vehicle is oriented.
+            const double want_az = WheelAzimuth(from_board ? best->true_az_deg : best->az_deg, wheel_az, d.az_limit_deg);
             console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * dt));
         }
         if (crew.range && range_known) {
@@ -736,6 +764,97 @@ private:
         std::snprintf(detail, sizeof(detail), "%s track, %.1f km, azimuth %.0f deg", ToString(method_),
                       g.range_m / 1000.0, g.az_deg);
         log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
+    }
+
+    // The gyro half-compass: it turns with the hull; slaved to the course setter it turns towards the setter's
+    // value (fast after СОГЛАСОВАНИЕ, until they agree). Without power it loses its orientation and starts again
+    // taking the hull to face north. When the setter is connected the crew chief gives the measured heading
+    // (logged), and an NPC in the elevation seat (the deputy commander) turns the setter to it.
+    void UpdateOrientation(double t, double dt, ConsoleData& console, SessionLog& log, bool npc_sets_heading) {
+        const double turned = Wrap180(unit_heading_deg_ - last_unit_heading_deg_);
+        last_unit_heading_deg_ = unit_heading_deg_;
+        if (!console.has_orientation) {
+            gyro_heading_deg_ = unit_heading_deg_;  // no heading reference modelled: the frame is true north
+            return;
+        }
+        const OrientationDef& o = console.orientation;
+        if (!console.equipment.IsReady(o.gyro)) {
+            gyro_heading_deg_ = 0.0;
+            fast_sync_ = false;
+            if (!o.synced_input.empty()) console.equipment.SetInput(o.synced_input, false);
+            return;
+        }
+        gyro_heading_deg_ = Wrap360(gyro_heading_deg_ + turned);
+        const bool setting = console.panel.Get(o.mode_control) == o.set_position;
+        const double true_heading = Wrap360(unit_heading_deg_);
+        if (setting && !was_setting_) {
+            char detail[64];
+            std::snprintf(detail, sizeof(detail), "Qc = %.1f deg (by compass)", true_heading);
+            log.Record({t, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
+        }
+        was_setting_ = setting;
+        if (setting && npc_sets_heading) {
+            const double now = Wrap360(console.panel.GetValue(o.setter));
+            const double err = Wrap180(true_heading - now);
+            const double step = tuning_.aim_az_rate_deg_s * dt;
+            console.panel.SetValue(o.setter, std::fabs(err) <= step ? true_heading : Wrap360(now + (err > 0.0 ? step : -step)));
+        }
+        const bool slaved = setting && console.panel.Get(o.relay_control) == o.relay_position;
+        bool synced = false;
+        if (slaved) {
+            if (console.panel.Get(o.sync_button) == 1) fast_sync_ = true;
+            const double want = Wrap360(console.panel.GetValue(o.setter));
+            const double err = Wrap180(want - gyro_heading_deg_);
+            const double step = (fast_sync_ ? o.sync_rate_deg_s : o.slew_rate_deg_s) * dt;
+            gyro_heading_deg_ = std::fabs(err) <= step ? want : Wrap360(gyro_heading_deg_ + (err > 0.0 ? step : -step));
+            synced = std::fabs(Wrap180(want - gyro_heading_deg_)) < 0.05;
+            if (synced) fast_sync_ = false;  // the scale stops
+        } else {
+            fast_sync_ = false;
+        }
+        if (!o.synced_input.empty()) console.equipment.SetInput(o.synced_input, synced);
+    }
+
+    static double Wrap360(double deg) {
+        double d = std::fmod(deg, 360.0);
+        if (d < 0.0) d += 360.0;
+        return d;
+    }
+
+    // IFF: a press interrogates for a while; friendly aircraft in range reply (gated: only those on the scope).
+    void UpdateIff(double t, ConsoleData& console, SessionLog& log) {
+        iff_replies_.clear();
+        const SearchSensorDef& d = console.search;
+        if (d.iff_query.empty()) return;
+        const bool ready = console.equipment.IsReady(d.iff_ready);
+        if (ready && console.panel.Get(d.iff_query) == 1) {
+            iff_until_s_ = t + d.iff_query_time_s;
+            iff_control_ = false;
+        }
+        if (ready && !d.iff_control_query.empty() && console.panel.Get(d.iff_control_query) == 1) {
+            iff_until_s_ = t + d.iff_query_time_s;
+            iff_control_ = true;
+        }
+        const bool active = ready && t < iff_until_s_ + 1e-9;
+        if (!d.iff_interrogating_input.empty()) console.equipment.SetInput(d.iff_interrogating_input, active);
+        if (!active) return;
+        const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
+        for (const auto& kv : geo_) {
+            const Geometry& g = kv.second;
+            if (!g.alive || !g.friendly || !g.los || g.range_m > d.iff_max_range_m) continue;
+            if (gated) {
+                bool on_scope = false;
+                for (const Contact& c : picture_) on_scope = on_scope || c.target_id == kv.first;
+                if (!on_scope) continue;
+            }
+            iff_replies_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg, iff_control_});
+            if (replied_.insert(kv.first).second) {
+                char detail[96];
+                std::snprintf(detail, sizeof(detail), "IFF reply: friend, %.1f km, azimuth %.0f deg", g.range_m / 1000.0,
+                              g.az_deg);
+                log.Record({t, DebriefEntry::Kind::Scenario, "IFF", kv.first, detail});
+            }
+        }
     }
 
     // A triangle wave over [low, high]: low at phase 0, high at 0.5, low again at 1.
@@ -863,6 +982,15 @@ private:
     std::vector<Contact> picture_;
     std::vector<Contact> track_returns_;
     std::set<std::string> seen_by_search_;
+    std::set<std::string> replied_;
+    std::vector<Contact> iff_replies_;
+    double iff_until_s_ = -1.0;
+    bool iff_control_ = false;
+    double unit_heading_deg_ = 0.0;
+    double last_unit_heading_deg_ = 0.0;
+    double gyro_heading_deg_ = 0.0;
+    bool fast_sync_ = false;
+    bool was_setting_ = false;
     TrackMethod method_ = TrackMethod::None;
     std::string tracked_;
     std::string candidate_;

@@ -110,7 +110,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 7);
+    SC_EXPECT(layout.displays.size() == 8);
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {
@@ -255,4 +255,16 @@ SC_TEST("scopes: the loader checks an elevation scope's rasters") {
     SC_EXPECT(Has(Error(R"(, "rasters": [ { "screen": [0, 0.7] }, { "screen": [0.4, 1.2] }, { "screen": [0.1, 1] } ])"),
                   "rasters[1].screen"));
     SC_EXPECT(Has(Error(three + R"(, "magnified_window_m": 100)"), "not used by a elevation_scope"));
+}
+
+SC_TEST("scopes: the search scope paints IFF replies as the sweep passes them") {
+    SearchScope scope(2.0, 3.0);
+    Contact reply = At("f", 90.0, 20000.0);
+    reply.control_reply = true;
+    scope.Update(0.6, true, {At("f", 90.0, 20000.0)}, {reply});  // sweep 0 -> 108 deg passes 90
+    const std::vector<SearchScope::Blip> blips = scope.Blips();
+    SC_EXPECT(blips.size() == 2);
+    if (blips.size() != 2) return;
+    SC_EXPECT(!blips[0].iff_reply && blips[1].iff_reply && blips[1].control_reply);
+    SC_EXPECT_NEAR(blips[1].azimuth_rad, DegToRad(90.0), 1e-9);
 }

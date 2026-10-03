@@ -340,3 +340,108 @@ SC_TEST("engagement: the console's elevation search is checked when it loads") {
     SC_EXPECT(Has(Error(R"([ [-1, 5], [3, 9], [6, 30] ])", R"([ [5, -1], [3, 9], [6, 30] ])"), "beams_deg[0]"));
     SC_EXPECT(Has(Error(R"("beam_width_deg": 1.0)", R"("beam_width_deg": 0)"), "beam_width_deg"));
 }
+
+namespace {
+
+// An Osa scenario with the hull facing `heading_deg`, the given target and extra triggers.
+std::unique_ptr<ScenarioRunner> Heading(double heading_deg, const std::string& target, const std::string& triggers) {
+    std::string text = Engage(target, triggers);
+    const std::string at = R"("up_m": 3 }, "inputs")";
+    const std::size_t i = text.find(at);
+    if (i == std::string::npos) return nullptr;
+    text.replace(i, at.size(), R"("up_m": 3 }, "heading_deg": )" + std::to_string(heading_deg) + R"(, "inputs")");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    if (!LoadScenario(text, kData, def, console, &error)) {
+        std::printf("    load: %s\n", error.c_str());
+        return nullptr;
+    }
+    return std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
+}
+
+}  // namespace
+
+SC_TEST("engagement: an unoriented vehicle sees the picture turned by its heading; orienting it fixes the frame") {
+    const char* orient = R"(,
+        { "id": "or", "when": { "conditions": [ { "subsystem": "soc_transmitter", "is": "ready" } ] },
+          "do": [ { "order": "orient_vehicle", "crew": "Deputy" } ] })";
+    std::unique_ptr<ScenarioRunner> runner = Heading(40.0, Target(30000, 1000), orient);
+    SC_EXPECT(runner != nullptr);
+    if (runner == nullptr) return;
+    const EngagementModel& e = runner->Engagement();
+    ConsoleData& c = runner->Console();
+    // Before orientation the gyro takes the hull to face north: the crew's frame is 40 deg off true north.
+    runner->Step(0.1);
+    SC_EXPECT_NEAR(e.IndicatedToTrueDeg(10.0), 50.0, 1e-9);
+    while (!runner->Finished() && !c.equipment.GetInput("heading_synced") && runner->Time() < 400.0) runner->Step(0.1);
+    SC_EXPECT(c.equipment.GetInput("heading_synced"));
+    // The deputy finishes the drill (АК, РЕЛЕ); the frame is now true north.
+    for (int i = 0; i < 100 && c.panel.Get("orient.relay") != 0; ++i) runner->Step(0.1);
+    SC_EXPECT(c.panel.Get("orient.ak_zk") == 0 && c.panel.Get("orient.relay") == 0);
+    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 40.0, 0.1);
+    SC_EXPECT_NEAR(e.IndicatedToTrueDeg(10.0), 10.0, 0.1);
+    SC_EXPECT(runner->Debrief().find("Qc = 40.0 deg") != std::string::npos);
+    // The hull turns: the gyro follows, so the frame stays true north.
+    runner->SetUnitHeading(70.0);
+    runner->Step(0.1);
+    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 70.0, 0.1);
+    SC_EXPECT_NEAR(e.IndicatedToTrueDeg(10.0), 10.0, 0.1);
+    // Power off: orientation lost.
+    c.panel.Set("pwr.gta", 0);
+    c.panel.Set("pwr.pto", 0);  // both sources: the power take-off generator feeds it too
+    for (int i = 0; i < 600 && c.equipment.IsReady("power"); ++i) runner->Step(0.1);
+    runner->Step(0.1);
+    SC_EXPECT(!c.equipment.IsReady("power"));
+    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 0.0, 1e-9);
+    SC_EXPECT(!c.equipment.GetInput("heading_synced"));
+}
+
+SC_TEST("engagement: a friendly target replies to ЗАПРОС; firing at it is a crew mistake") {
+    const Run friend_run = Play(Engage(Target(24000, 1000, R"(, "iff": "friend")"), kAcquireAndFire));
+    SC_EXPECT(Has(friend_run, "IFF reply: friend"));
+    SC_EXPECT(Has(friend_run, "fired at a friendly aircraft"));
+    const Run hostile = Play(Engage(Target(24000, 1000), kAcquireAndFire));
+    SC_EXPECT(hostile.debrief.find("IFF reply") == std::string::npos);
+    SC_EXPECT(hostile.debrief.find("friendly aircraft") == std::string::npos);
+}
+
+SC_TEST("engagement: in the gated IFF mode only aircraft on the search scope reply") {
+    std::unique_ptr<ScenarioRunner> runner = Heading(0.0, Target(30000, 1000, R"(, "iff": "friend")"), "");
+    SC_EXPECT(runner != nullptr);
+    if (runner == nullptr) return;
+    ConsoleData& c = runner->Console();
+    const EngagementModel& e = runner->Engagement();
+    while (!runner->Finished() && runner->Time() < 260.0) runner->Step(0.1);  // the friend is up, about 26 km out
+    SC_EXPECT(c.equipment.IsReady("soc_transmitter"));
+    auto Query = [&](int gate, int scale) {
+        c.panel.Set("iff.gate", gate);
+        c.panel.Set("soc.range", scale);
+        c.panel.Set("iff.query", 1);
+        runner->Step(0.1);
+        return e.IffReplies().size();
+    };
+    SC_EXPECT(Query(0, 0) == 1);  // open reception: replies though off the 0-15 km scale
+    SC_EXPECT(c.equipment.GetInput("iff_interrogating"));
+    SC_EXPECT(Query(1, 0) == 0);  // КЛАПАН: no echo on the scale, no reply
+    SC_EXPECT(Query(1, 1) == 1);  // on the 0-35 km scale it shows, so it replies
+    for (int i = 0; i < 15; ++i) runner->Step(0.1);  // the interrogation lasts about 1 s
+    SC_EXPECT(e.IffReplies().empty() && !c.equipment.GetInput("iff_interrogating"));
+}
+
+SC_TEST("engagement: the loaders check a target's iff and the console's orientation") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(!LoadScenario(Engage(Target(24000, 1000, R"(, "iff": "maybe")")), kData, def, console, &error));
+    SC_EXPECT(error.find("targets[0].iff: must be friend or none") != std::string::npos);
+    std::ifstream f(kData + "/procedures/osa_ak.json", std::ios::binary);
+    std::stringstream text;
+    text << f.rdbuf();
+    std::string osa = text.str();
+    const std::string from = R"("set_position": 1)";
+    osa.replace(osa.find(from), from.size(), R"("set_position": 2)");
+    ConsoleData c;
+    SC_EXPECT(!LoadConsole(osa, c, &error));
+    SC_EXPECT(error.find("sensors.orientation.set_position") != std::string::npos);
+}

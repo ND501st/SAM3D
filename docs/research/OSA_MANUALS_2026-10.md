@@ -404,3 +404,45 @@ In SAM3D (`feature/cabin-bench`):
   `simcore::ElevationScope` keeps the fading marks (1.5 s afterglow, an estimate) of targets inside the 2 km window that
   the antenna's beam passed over.
 
+## Vehicle orientation and IFF (added to the data)
+
+**Orientation** (`voenizdat_osa_1991` p48, p50–52, p246, p249; `mon_2112_80` p65):
+
+- The stabilisation system measures the vehicle's heading **Qc** (clockwise from north to the hull's axis) with the
+  gyro half-compass **GA-3**, which only holds north once oriented.
+- The crew chief finds Qc with an artillery compass (PAB) and the TV sight by mutual sighting, and commands it.
+- The deputy crew chief, at a halt, sets **АК — ЗК** to ЗК and the Qc on the course setter **ЗК-4** (block 0005-8M,
+  panel ПУ-11), sets **РЕЛЕ — Qc** to Qc (azimuth correction), and holds **СОГЛАСОВАНИЕ** until the Qc scale on OR-31M
+  stops. Then АК — ЗК goes back to АК and РЕЛЕ — Qc to РЕЛЕ. The orientation is lost when the equipment is switched
+  off.
+
+In SAM3D: `sensors.orientation` and the controls `orient.ak_zk`, `orient.relay`, `orient.qc`, `orient.sync` on a new
+gyro panel at the front of the bench (its layout is an estimate); the drill `orient_vehicle` (deputy commander). The
+engagement model keeps the gyro's heading:
+
+- It turns with the hull, and it is slaved to the setter in ЗК + Qc (1°/s, or 15°/s after СОГЛАСОВАНИЕ until they
+  agree; rates estimated).
+- Without power it restarts taking the hull to face north.
+- Every azimuth the crew sees and sets (scope, azimuth wheel) is in the gyro's frame. An unoriented vehicle shows the
+  picture turned by its error, and plotting-board designations (true azimuth) point the antenna wrong.
+- The crew chief's Qc is logged when ЗК is selected; an NPC deputy turns the setter to it.
+
+**IFF** (`mon_2112_80` p14, p21; `voenizdat_osa_1991` p17, p53–56):
+
+- The interrogator's antenna is built into the search antenna.
+- General interrogation (**ЗАПРОС**, **ЗАПРОС К**): a friend's reply is a 20° arc on the PPI beside its echo.
+- In the gated mode (КЛАПАН) the echo gates the reply, which keeps the mark narrow and suppresses replies from
+  aircraft the radar can't see.
+- ЗАПРОС К is a control interrogation confirming a friend.
+- The 1991 book's 1L24-2 (AKM) adds codes, modes I/II and launch blocking, none of which are in the Osa-AK sources;
+  not modelled.
+
+In SAM3D:
+
+- `sensors.search.iff`, with the controls `iff.query`, `iff.query_k` and `iff.gate` placed from the game's photo of
+  OP81-16M, and a lamp lit while interrogating.
+- A press interrogates for 1 s; friendly targets (`"iff": "friend"` in a scenario) within 30 km reply. In КЛАПАН only
+  those on the scope reply.
+- The PPI paints replies as arcs as the sweep passes them.
+- The acquisition drill interrogates once the echo shows. Firing at a friend is logged as a crew mistake.
+
