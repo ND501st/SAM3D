@@ -34,14 +34,14 @@ In play:
 |---|---|
 | W / S, A / D, Space | Drive, steer, brake. Stopping tells the sim the vehicle is at a halt. |
 | Right mouse + drag | Orbit the camera |
-| 1 | Driver: start the GTA (`power_up`) |
+| 1 | Power up: driver starts the GTA (`power_up`), operator switches on the equipment (`equipment_on`) |
 | 2 | Senior operator: search on the march (waits for power) |
-| 3 | Come into action at a halt: commander unlocks the АПУ, driver puts the generator on line |
+| 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line |
 | 4 | Acquire: senior operator with the SOC, deputy commander readies ЦУ АЗ, operator switches on the SSC |
 | 5, 6 | Deputy commander: prepare for firing; launch (both queued) |
 | 7 | TV-only engagement: senior operator turns the azimuth, deputy commander does the rest |
-| 8 | Stow for the march: operator, deputy commander, driver, then the commander locks the АПУ |
-| 9 | Stow for transport: senior operator stops the SOC, commander folds the antenna, driver shuts down the GTA (queued) |
+| 8 | Stow for the march: operator (SSC off, drives off, АПУ locked), deputy commander, driver |
+| 9 | Shut down: senior operator stops the SOC, operator switches the equipment off, driver shuts down the GTA (queued) |
 | C | Enter or leave the 3D cabin |
 
 In the cabin (placeholder shapes from `data/cabins/osa_ak.json`):

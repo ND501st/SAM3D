@@ -30,11 +30,12 @@ std::string Engage(const std::string& target, const std::string& triggers = "", 
            target + R"( ],
       "triggers": [
         { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Driver" },
-                                           { "order": "deploy_at_halt", "crew": "Commander" },
                                            { "queue": "pto_on_line", "crew": "Driver" },
+                                           { "order": "equipment_on", "crew": "Operator" },
+                                           { "queue": "deploy_at_halt", "crew": "Operator" },
                                            { "order": "search_on_march", "crew": "Senior operator" } ] } )" +
            triggers + R"( ],
-      "end": { "time_limit_s": 400 } })";
+      "end": { "time_limit_s": 700 } })";
 }
 
 const char* kAcquireAndFire = R"(,
@@ -47,7 +48,7 @@ std::string Target(double north_m, double up_m, const std::string& extra = "") {
     return R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": )" +
            std::to_string(north_m) + R"(, "up_m": )" + std::to_string(up_m) +
            R"( }, "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": )" + std::to_string(up_m) +
-           R"( } ], "speed_mps": 150)" + extra + " }";
+           R"( } ], "speed_mps": 150, "appear_at_s": 230)" + extra + " }";  // after the crew's 4 min to readiness
 }
 
 struct Run {
@@ -56,7 +57,7 @@ struct Run {
     bool loaded = false;
 };
 
-Run Play(const std::string& text, double max_s = 400.0) {
+Run Play(const std::string& text, double max_s = 700.0) {
     Run r;
     ScenarioDef def;
     ConsoleData console;
@@ -155,7 +156,7 @@ SC_TEST("engagement: a target too low for the radar lights НЛЦ and is never r
     ScenarioRunner runner(std::move(def), std::move(console));
     bool too_low = false;
     bool radar_tracked = false;
-    for (int i = 0; i < 2000 && !runner.Finished(); ++i) {
+    for (int i = 0; i < 5000 && !runner.Finished(); ++i) {
         runner.Step(0.1);
         too_low = too_low || runner.Console().equipment.GetInput("target_too_low");
         radar_tracked = radar_tracked || runner.Engagement().Method() == TrackMethod::Radar;
@@ -166,7 +167,7 @@ SC_TEST("engagement: a target too low for the radar lights НЛЦ and is never r
 
 SC_TEST("engagement: TV-only engagement tracks with the camera and uses the TV factor") {
     const std::string emcon = R"(,
-        { "id": "tv", "when": { "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+        { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
           "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
                   { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
     // No search: the senior operator's emissions-control order replaces the search order (still waiting for power).
@@ -178,7 +179,7 @@ SC_TEST("engagement: TV-only engagement tracks with the camera and uses the TV f
 
 SC_TEST("engagement: launching beyond reach runs out of flight time") {
     const std::string emcon = R"(,
-        { "id": "tv", "when": { "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+        { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
           "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
                   { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
     const Run r = Play(Engage(Target(19000, 800), emcon));
@@ -197,7 +198,7 @@ SC_TEST("engagement: swapped-in terrain masks a target; moving the unit moves th
     const GridTerrain ridge(-15000.0, -15000.0, 500.0, 61, 61, heights);
     runner.SetTerrain(&ridge);
     bool seen = false;
-    for (int i = 0; i < 1200; ++i) {  // 120 s: powered, searching, target still behind the ridge
+    for (int i = 0; i < 2800; ++i) {  // 280 s: powered, searching, target (launched at 230 s) behind the ridge
         runner.Step(0.1);
         seen = seen || !runner.Engagement().SearchPicture().empty();
     }
@@ -228,8 +229,8 @@ SC_TEST("engagement: after a launch ПУСК ГОТОВ goes out until the next 
     runner.Step(0.1);
     const Equipment& eq = runner.Console().equipment;
     SC_EXPECT(!eq.IsReady("launch_armed") && eq.State("missile_prep") == SubsystemState::Starting);
-    // Lit again after the 15 s preparation (data/procedures/osa_ak.json), while the missile is still flying.
+    // Lit again after the 13 s preparation (data/procedures/osa_ak.json), while the missile is still flying.
     const double t0 = runner.Time();
     while (!runner.Finished() && !eq.IsReady("launch_armed") && runner.Time() < t0 + 60.0) runner.Step(0.1);
-    SC_EXPECT_NEAR(runner.Time() - t0, 15.0, 0.3);
+    SC_EXPECT_NEAR(runner.Time() - t0, 13.0, 0.3);
 }

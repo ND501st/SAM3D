@@ -90,8 +90,9 @@ ASimOsaVehicle::ASimOsaVehicle()
 	// belongs to one seat, so a key that starts a drill gives each seat involved its part.
 	CrewHotkeys = {
 		Hotkey(EKeys::One, TEXT("Driver"), TEXT("power_up")),
+		Hotkey(EKeys::One, TEXT("Operator"), TEXT("equipment_on")),
 		Hotkey(EKeys::Two, TEXT("Senior operator"), TEXT("search_on_march")),
-		Hotkey(EKeys::Three, TEXT("Commander"), TEXT("deploy_at_halt")),
+		Hotkey(EKeys::Three, TEXT("Operator"), TEXT("deploy_at_halt"), true),
 		Hotkey(EKeys::Three, TEXT("Driver"), TEXT("pto_on_line")),
 		Hotkey(EKeys::Four, TEXT("Senior operator"), TEXT("acquire_with_soc")),
 		Hotkey(EKeys::Four, TEXT("Deputy commander"), TEXT("ready_capture")),
@@ -103,9 +104,8 @@ ASimOsaVehicle::ASimOsaVehicle()
 		Hotkey(EKeys::Eight, TEXT("Operator"), TEXT("stow_ssc")),
 		Hotkey(EKeys::Eight, TEXT("Deputy commander"), TEXT("stow_launch_console")),
 		Hotkey(EKeys::Eight, TEXT("Driver"), TEXT("pto_off_line")),
-		Hotkey(EKeys::Eight, TEXT("Commander"), TEXT("stow_for_march")),
 		Hotkey(EKeys::Nine, TEXT("Senior operator"), TEXT("stop_search")),
-		Hotkey(EKeys::Nine, TEXT("Commander"), TEXT("stow_for_transport"), true),
+		Hotkey(EKeys::Nine, TEXT("Operator"), TEXT("equipment_off"), true),
 		Hotkey(EKeys::Nine, TEXT("Driver"), TEXT("power_down"), true),
 	};
 }

@@ -110,11 +110,11 @@ SC_TEST("cabin: red dots mark a control's working position, only where the layou
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
     double du = 0.0;
     double dv = 0.0;
-    // РОД РАБОТЫ starts at ТР (position 1 of 2, up) but its dot is at БР (position 0): below the switch.
+    // РОД РАБОТЫ starts at ТР (position 1 of 4) but its dot is at БР (position 0): 45 degrees left of up.
     SC_EXPECT(console.panel.Find("fo.mode")->initial == 1);
     SC_EXPECT(CabinLayout::RedDot(*layout.FindControl("fo.mode"), *console.panel.Find("fo.mode"), du, dv));
-    SC_EXPECT_NEAR(du, 0.0, 1e-12);
-    SC_EXPECT_NEAR(dv, -0.03, 1e-12);
+    SC_EXPECT_NEAR(du, -0.032 * std::sin(DegToRad(45.0)), 1e-12);
+    SC_EXPECT_NEAR(dv, 0.032 * std::cos(DegToRad(45.0)), 1e-12);
     // КАНАЛЫ starts on its dot at СОВМ. (position 2 of 3): 30 degrees right of up.
     SC_EXPECT(console.panel.Find("msl.channels")->initial == 2);
     SC_EXPECT(CabinLayout::RedDot(*layout.FindControl("msl.channels"), *console.panel.Find("msl.channels"), du, dv));
@@ -136,7 +136,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 5);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 6);
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
@@ -172,7 +172,7 @@ SC_TEST("cabin: lamps light from subsystem states and inputs") {
     SC_EXPECT(CabinLayout::LampLit(*gta, console.panel, console.equipment));
 }
 
-SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back (as in the running game)") {
+SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back; РУ needs the hatches closed") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));
     CabinLayout layout;
@@ -188,22 +188,35 @@ SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back
         console.panel.ReleaseMomentaries();
     };
     console.panel.Set("pwr.gta", 1);
-    for (int i = 0; i < 3000 && !console.equipment.IsReady("power"); ++i) step();
+    console.panel.Set("pwr.equipment", 1);
+    for (int i = 0; i < 3000 && !console.equipment.IsReady("hv_ready"); ++i) step();
     SC_EXPECT(lit("ru") && !lit("cu") && !lit("az") && lit("beam_1") && lit("soc_gotov") && !lit("br"));
+    SC_EXPECT(lit("stowed") && lit("soc_rot_locked") && lit("apu_locked") && lit("gotov_spk_1"));
     console.panel.Set("fo.cu_az", 1);
     step();
     step();
     SC_EXPECT(!lit("ru") && lit("cu") && lit("az"));
-    console.panel.Set("fo.az", 1);  // does nothing by itself
+    console.panel.Set("fo.az", 1);  // already armed by ЦУ
     step();
     SC_EXPECT(lit("cu") && lit("az"));
     console.panel.Set("fo.ru", 1);
     step();
     step();
     SC_EXPECT(lit("ru") && !lit("cu") && !lit("az"));
+    console.panel.Set("fo.az", 1);  // АЗ alone arms auto-capture (voenizdat p99)
+    step();
+    step();
+    SC_EXPECT(lit("az") && !lit("cu") && !lit("ru"));
+    console.panel.Set("fo.ru", 1);
+    step();
+    step();
+    console.panel.Set("veh.hatches", 0);  // РУ only lights with the hatches closed (voenizdat p99)
+    step();
+    SC_EXPECT(!lit("ru") && !lit("luki_zakr"));
+    console.panel.Set("veh.hatches", 1);
     console.panel.Set("fo.mode", 0);  // РОД РАБОТЫ to БР
     step();
-    SC_EXPECT(lit("br"));
+    SC_EXPECT(lit("br") && lit("ru"));
 }
 
 SC_TEST("cabin: the loader rejects bad layouts with a path to the problem") {
@@ -291,12 +304,12 @@ SC_TEST("cabin: player moves go through a procedure tracker into the debrief") {
     SC_EXPECT(deviations == 2);
 
     // A one-step procedure done right is reported complete.
-    SC_EXPECT(runner.SetPlayerProcedure("power_up"));
-    SC_EXPECT(runner.PlayerSet("pwr.gta", 1) == StepResult::Accepted);
+    SC_EXPECT(runner.SetPlayerProcedure("lower_search_antenna"));
+    SC_EXPECT(runner.PlayerSet("apu.stow", 0) == StepResult::Accepted);
     bool completed = false;
     for (const DebriefEntry& e : runner.Log().Entries()) {
         completed = completed || (e.kind == DebriefEntry::Kind::Completed && e.who == ScenarioRunner::kPlayerName &&
-                                  e.what == "power_up");
+                                  e.what == "lower_search_antenna");
     }
     SC_EXPECT(completed);
 }

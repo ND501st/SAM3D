@@ -81,10 +81,11 @@ int main(int argc, char** argv) {
                 s.console.stations.size(), s.console.panel.Controls().size(), s.console.procedures.size());
     for (const ConsoleStation& st : s.console.stations) s.crew.emplace_back(st.label, st.id, 1.0);
 
-    // On the march: power up and search while moving.
+    // On the march: power up, switch the equipment on and search while moving (about 4 min to readiness).
     s.Order(s.Proc("power_up"));
+    s.Order(s.Proc("equipment_on"));
     s.Order(s.Proc("search_on_march"));
-    s.RunFor(90.0);
+    s.RunFor(270.0);
 
     // Halt and come into action. The radars stay silent: the senior operator turns to the
     // plotting-board azimuth instead of searching.
@@ -127,7 +128,7 @@ int main(int argc, char** argv) {
     s.console.panel.Set("fo.key", 0);
     s.Order(s.Proc("stow_launch_console"));
     s.Order(s.Proc("pto_off_line"));
-    s.Order(s.Proc("stow_for_march"));
+    s.Order(s.Proc("stow_ssc"));  // the operator: drives off, АПУ locked
     s.RunUntil([&] { return !s.Busy(); }, 60.0);
     s.RunFor(1.0);
     s.console.equipment.SetInput("vehicle_stopped", false);

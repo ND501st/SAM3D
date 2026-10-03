@@ -89,15 +89,16 @@ bool AnyFault(ConsoleData& c) {
     return fault;
 }
 
-// From the march: stop, start the GTA and come into action. Returns once the GTA is running (the engine
-// generator powers the equipment until then) and leaves the crew idle.
+// From the march: stop, start the GTA, switch the equipment on and come into action. Returns once the
+// transmitters can take high voltage (the three-minute relay) and leaves the crew idle.
 void PowerUpAndDeploy(ConsoleData& c, Seats& seats) {
     c.equipment.SetInput("vehicle_stopped", true);
     seats.Order("power_up");
-    seats.Queue("pto_on_line");  // both the driver's (PU-303)
-    seats.Order("deploy_at_halt");
+    seats.Queue("pto_on_line");     // both the driver's (PU-303)
+    seats.Order("equipment_on");
+    seats.Queue("deploy_at_halt");  // both the operator's (cabinet 0096-9M1)
     seats.RunUntilIdle();
-    for (int i = 0; i < 1000 && !c.equipment.IsReady("gta"); ++i) seats.Tick();
+    for (int i = 0; i < 3000 && !c.equipment.IsReady("hv_ready"); ++i) seats.Tick();
     seats.ClearReports();
 }
 
@@ -270,8 +271,9 @@ SC_TEST("osa data: loads, with the manual's covers, key, wheels and buttons") {
     SC_EXPECT(!c.panel.SetValue("ssc.az_wheel", 10.0));  // locked until right-clicked
     SC_EXPECT(c.panel.Find("fo.launch")->kind == ControlKind::Momentary);
     SC_EXPECT(c.panel.Find("soc.range")->position_labels[2] == "10–45 km");
-    // The march starts with the search antenna up, like its switch; each launch restarts missile preparation.
-    SC_EXPECT(c.panel.Get("apu.stow") == 1 && c.equipment.IsReady("search_antenna"));
+    // The search antenna starts stowed until the equipment and stabilisation are on (voenizdat p53), with its
+    // ПРОХОД ПОД МОСТОМ switch allowing it up; each launch restarts missile preparation.
+    SC_EXPECT(c.panel.Get("apu.stow") == 1 && !c.equipment.IsReady("search_antenna"));
     SC_EXPECT(c.launch_restarts == "missile_prep");
 }
 
@@ -281,20 +283,22 @@ SC_TEST("osa data: start positions as measured in the running game; unknown cont
     // samsim_game (console map §12): 0-35 km, beam I, ТР, missile selector ОТКЛ., channels СОВМ., ЦЕЛЬ centre.
     SC_EXPECT(c.panel.Get("soc.range") == 1 && c.panel.Get("soc.beam") == 0);
     SC_EXPECT(c.panel.Get("fo.mode") == 1 && c.panel.Find("fo.mode")->position_labels[1] == "ТР");
-    SC_EXPECT(c.panel.Get("msl.select") == 3 && c.panel.Find("msl.select")->positions == 7);
+    SC_EXPECT(c.panel.Get("msl.emergency_select") == 3 && c.panel.Find("msl.emergency_select")->positions == 7);
     SC_EXPECT(c.panel.Get("msl.channels") == 2 && c.panel.Get("ssc.target_select") == 1);
     SC_EXPECT(c.panel.Get("ssc.check_mode") == 1);  // away from РАБОТА
-    // СМЕНА РКТ is one stepwise control: the latch opens before the knob turns.
-    SC_EXPECT(c.panel.Find("msl.change")->stepwise && c.panel.IsBlocked("msl.change", 2));
+    // СМЕНА ЛИТ. is one stepwise control: the latch opens before the knob turns.
+    SC_EXPECT(c.panel.Find("spk.letter")->stepwise && c.panel.IsBlocked("spk.letter", 2));
+    SC_EXPECT(c.panel.Find("fo.mode")->positions == 4 && c.panel.Get("veh.hatches") == 1);  // БР ТР РР ФК; closed
     SC_EXPECT(c.panel.IsBlocked("msl.emergency", 1));  // under its guard
-    // Elevation travel −12° to +78° (flak11).
+    // Elevation travel −12° to +78° (flak11, voenizdat_osa_1991 p66).
     SC_EXPECT_NEAR(c.panel.Find("ssc.el_wheel")->min_value, -12.0, 1e-12);
     SC_EXPECT_NEAR(c.panel.Find("ssc.el_wheel")->max_value, 78.0, 1e-12);
     // Inert: no subsystem depends on them, so working them changes nothing.
     c.panel.Set("pwr.gta", 1);
     for (int i = 0; i < 700; ++i) c.equipment.Update(0.1, c.panel);
     const std::vector<SubsystemTransition> before = c.equipment.TakeTransitions();
-    c.panel.Set("fo.az", 1);
+    c.panel.Set("msl.emergency_select", 0);
+    c.panel.Set("svr.beam", 1);
     c.panel.Set("msl.channels", 0);
     c.panel.Set("ssc.target_select", 0);
     c.panel.Set("ssc.check_mode", 0);
@@ -315,9 +319,11 @@ SC_TEST("osa data: a crew of five; every control and procedure belongs to one se
     const std::pair<const char*, const char*> owners[] = {
         {"power_up", "driver"},
         {"power_down", "driver"},
-        {"deploy_at_halt", "commander"},
-        {"stow_for_march", "commander"},
-        {"stow_for_transport", "commander"},
+        {"equipment_on", "operator"},
+        {"equipment_off", "operator"},
+        {"deploy_at_halt", "operator"},
+        {"lower_search_antenna", "commander"},
+        {"raise_search_antenna", "commander"},
         {"pto_on_line", "driver"},
         {"pto_off_line", "driver"},
         {"search_on_march", "senior_operator"},
@@ -380,19 +386,27 @@ SC_TEST("crew: a crew member refuses another seat's procedure and touches nothin
     SC_EXPECT(driver.IsBusy());
 }
 
-SC_TEST("osa data: nothing works without power, and switching on unpowered isn't a fault") {
+SC_TEST("osa data: nothing works without power; transmitters wait for the three-minute relay") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    c.panel.Set("soc.search", 1);
-    c.panel.Set("soc.hv_cover", 1);
-    c.panel.Set("soc.hv", 1);
-    c.panel.Set("tov.power", 1);
+    for (const char* id : {"pwr.equipment", "stab.power", "soc.rotation_lock", "tov.supply", "soc.search", "soc.hv_cover",
+                           "soc.hv", "tov.power"}) {
+        c.panel.Set(id, 1);
+    }
     for (int i = 0; i < 50; ++i) c.equipment.Update(0.1, c.panel);
     SC_EXPECT(!c.equipment.IsReady("soc_antenna") && !c.equipment.IsReady("soc_transmitter"));
     SC_EXPECT(!c.equipment.IsReady("tov_camera") && !AnyFault(c));
     c.panel.Set("pwr.gta", 1);
     for (int i = 0; i < 605; ++i) c.equipment.Update(0.1, c.panel);  // GTA start (60 s, estimate)
-    SC_EXPECT(c.equipment.IsReady("power") && c.equipment.IsReady("soc_transmitter") && c.equipment.IsReady("tov_camera"));
+    SC_EXPECT(c.equipment.IsReady("power") && c.equipment.IsReady("tov_camera"));
+    SC_EXPECT(!c.equipment.IsReady("equipment_warm") && !c.equipment.IsReady("soc_transmitter"));
+    for (int i = 0; i < 605; ++i) c.equipment.Update(0.1, c.panel);  // anode supplies after 1 min (voenizdat p165)
+    SC_EXPECT(c.equipment.IsReady("equipment_warm") && !c.equipment.IsReady("hv_ready"));
+    for (int i = 0; i < 1205; ++i) c.equipment.Update(0.1, c.panel);  // the three-minute relay
+    SC_EXPECT(c.equipment.IsReady("hv_ready") && c.equipment.IsReady("soc_transmitter") &&
+              c.equipment.IsReady("stabilisation"));
+    for (int i = 0; i < 105; ++i) c.equipment.Update(0.1, c.panel);  // the antenna rises (10 s, estimate)
+    SC_EXPECT(c.equipment.IsReady("search_antenna") && c.equipment.IsReady("soc_antenna") && !AnyFault(c));
 }
 
 SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ unlocked") {
@@ -400,11 +414,13 @@ SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ un
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     Seats seats(c);
     seats.Order("power_up");
-    seats.Order("search_on_march");  // the senior operator waits for power
+    seats.Order("equipment_on");     // the operator waits for power
+    seats.Order("search_on_march");  // the senior operator waits for the raised, stabilised antenna
     const double t = seats.RunUntilIdle();
     seats.Tick();
     SC_EXPECT(c.equipment.IsReady("soc_antenna") && c.equipment.IsReady("soc_transmitter"));  // while moving
-    SC_EXPECT(t > 60.0 && t < 70.0);  // GTA start dominates
+    // GTA (60 s, estimate) + stabilisation (3 min) + raising (10 s, estimate): the documented 4 min to readiness.
+    SC_EXPECT(t > 245.0 && t < 265.0);
     c.panel.Set("tov.power", 1);
     c.panel.Set("fo.pa", 1);
     seats.Tick();
@@ -413,12 +429,12 @@ SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ un
     seats.Order("deploy_at_halt");
     seats.Order("pto_on_line");
     seats.RunUntilIdle(5.0);
-    SC_EXPECT(seats.At("commander").Status() == CrewStatus::Waiting);  // both wait for the vehicle to stop
+    SC_EXPECT(seats.At("operator").Status() == CrewStatus::Waiting);  // both wait for the vehicle to stop
     SC_EXPECT(seats.At("driver").Status() == CrewStatus::Waiting);
     c.equipment.SetInput("vehicle_stopped", true);
     seats.RunUntilIdle();
     seats.Tick();
-    SC_EXPECT(c.equipment.IsReady("apu_free") && c.equipment.IsReady("pto_generator"));
+    SC_EXPECT(c.equipment.IsReady("apu_free") && c.equipment.IsReady("antenna_drives") && c.equipment.IsReady("pto_generator"));
     SC_EXPECT(!AnyFault(c));
 }
 
@@ -431,11 +447,10 @@ SC_TEST("osa data: stow for the march, then driving off is safe; driving unlocke
     seats.Order("stow_ssc");
     seats.Order("stow_launch_console");
     seats.Order("pto_off_line");
-    seats.Order("stow_for_march");
     seats.RunUntilIdle();
-    const CrewMember& commander = seats.At("commander");
-    SC_EXPECT(commander.Tracker().GetProcedure().id == "stow_for_march");
-    SC_EXPECT(commander.Tracker().IsComplete() && commander.Tracker().Deviations() == 0);
+    const CrewMember& op = seats.At("operator");
+    SC_EXPECT(op.Tracker().GetProcedure().id == "stow_ssc");
+    SC_EXPECT(op.Tracker().IsComplete() && op.Tracker().Deviations() == 0);
     seats.Tick();
     SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Off && c.panel.Get("pwr.pto") == 0);
     c.equipment.SetInput("vehicle_stopped", false);
@@ -452,21 +467,22 @@ SC_TEST("osa data: stow for the march, then driving off is safe; driving unlocke
     SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Fault);
 }
 
-SC_TEST("osa data: stow for transport folds the antenna and shuts down the GTA") {
+SC_TEST("osa data: shutting down stows the search antenna before the GTA stops") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     Seats seats(c);
     PowerUpAndDeploy(c, seats);
     seats.Order("search_on_march");
-    seats.Queue("stop_search");
+    seats.RunUntilIdle();
+    SC_EXPECT(c.equipment.IsReady("soc_antenna"));
+    seats.Order("stop_search");
     seats.Order("pto_off_line");
-    seats.Order("stow_for_march");
-    seats.Queue("stow_for_transport");  // waits until the senior operator has stopped the SOC
-    seats.Queue("power_down");          // the driver waits until the antenna is folded
+    seats.Order("equipment_off");  // waits until the senior operator has stopped the SOC
+    seats.Queue("power_down");     // the driver waits until the antenna is stowed
     seats.RunUntilIdle();
     for (int i = 0; i < 20; ++i) seats.Tick();
-    const CrewMember& commander = seats.At("commander");
-    SC_EXPECT(commander.Tracker().GetProcedure().id == "stow_for_transport" && commander.Tracker().Deviations() == 0);
+    const CrewMember& op = seats.At("operator");
+    SC_EXPECT(op.Tracker().GetProcedure().id == "equipment_off" && op.Tracker().Deviations() == 0);
     SC_EXPECT(seats.At("senior_operator").Tracker().GetProcedure().id == "stop_search");
     SC_EXPECT(seats.At("driver").Tracker().GetProcedure().id == "power_down" && seats.At("driver").Tracker().IsComplete());
     SC_EXPECT(c.equipment.State("search_antenna") == SubsystemState::Off && c.panel.Get("pwr.gta") == 0);
@@ -487,7 +503,7 @@ SC_TEST("osa data: three operators acquire with the SOC, then the SSC locks on w
     }
     seats.Tick();
     SC_EXPECT(c.equipment.IsReady("soc_transmitter") && c.equipment.IsReady("ssc_transmitter"));
-    SC_EXPECT(c.equipment.IsReady("auto_acquisition"));  // latched by the ЦУ АЗ press
+    SC_EXPECT(c.equipment.IsReady("auto_acquisition") && c.equipment.IsReady("auto_capture"));  // ЦУ arms АЗ too
     SC_EXPECT(!c.equipment.IsReady("auto_tracking"));
     c.equipment.SetInput("target_captured", true);
     seats.Tick();
@@ -542,14 +558,14 @@ SC_TEST("osa data: TV-only engagement with the radars silent") {
     SC_EXPECT(launched && crew.Tracker().Deviations() == 0);
     SC_EXPECT(c.equipment.IsReady("tv_angle_track"));
     SC_EXPECT(!c.equipment.IsReady("soc_transmitter") && !c.equipment.IsReady("ssc_transmitter"));
-    SC_EXPECT(t > 20.0 && t < 35.0);  // ~7 s of switches, 15 s preparation, then key and launch
+    SC_EXPECT(t > 15.0 && t < 30.0);  // ~7 s of switches, 13 s preparation, then key and launch
     SC_EXPECT(crew.TakeReports().back().kind == CrewReport::Kind::Completed);
 }
 
 SC_TEST("debrief: crew reports, faults and player deviations on one timeline") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Commander", "commander", 1.0);
+    CrewMember crew("Operator", "operator", 1.0);
     SessionLog log;
     double t = 0.0;
     auto step = [&] {
