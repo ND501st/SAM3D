@@ -449,7 +449,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// A round tube (OS81-10M) with a square raster area inside it: range across, elevation up.
 	const FVector2D C = Size * 0.5;
 	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
-	Disc(Canvas, C, R, bOn ? Phosphor * 0.03f : FLinearColor(0.01f, 0.01f, 0.01f));
+	Disc(Canvas, C, R, bOn ? Phosphor * 0.06f : FLinearColor(0.01f, 0.01f, 0.01f));
 	const simcore::ConsoleData& Console = Runner.Console();
 	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||
 		ElevRaster >= static_cast<int32>(Console.track.beams_deg.size()))
@@ -475,30 +475,30 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// The raster: faint horizontal lines over the beam's band, with its outline.
 	for (double Y = Top; Y <= Bottom; Y += 4.0)
 	{
-		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.12f);
+		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.3f);
 	}
-	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 1.0f, Phosphor * 0.3f);
-	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.0f, Phosphor * 0.3f);
-	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 1.0f, Phosphor * 0.3f);
-	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 1.0f, Phosphor * 0.3f);
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 2.0f, Phosphor * 0.7f);
 	// The range gate sits in the middle of the range window.
 	Canvas->K2_DrawLine(FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
 
 	// Where the antenna points now: a brighter line while the tracking radar radiates.
 	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
 	const double AntennaY = YOfEl(Runner.Engagement().AntennaElevationDeg());
-	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * (bRadiating ? 0.6f : 0.25f));
+	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 3.0f, Phosphor * (bRadiating ? 1.0f : 0.45f));
 
 	// Target marks: bright spots fading with the afterglow.
 	for (const simcore::ElevationScope::Mark& M : ElevScope->Marks())
 	{
 		const float Glow = static_cast<float>(M.brightness);
 		const FVector2D P(XOfOffset(M.range_offset_m), YOfEl(M.elevation_deg));
-		Disc(Canvas, P, 6.0, Phosphor * (0.35f * Glow));
-		Disc(Canvas, P, 3.5, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+		Disc(Canvas, P, 9.0, Phosphor * (0.5f * Glow));
+		Disc(Canvas, P, 5.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
 	}
 	Text(Canvas, FString::Printf(TEXT("%.0f..%.0f°"), ElLow, ElHigh),
-		FVector2D(C.X, C.Y + 0.85 * R), Phosphor * 0.5f, 0.9f);
+		FVector2D(C.X, C.Y + 0.85 * R), Phosphor * 0.8f, 1.2f);
 }
 
 // ---------------------------------------------------------------------------------------------- instruments

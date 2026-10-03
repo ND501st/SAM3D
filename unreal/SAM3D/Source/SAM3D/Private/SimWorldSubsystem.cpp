@@ -452,6 +452,11 @@ void USimWorldSubsystem::SetUnitHeading(double HeadingDeg)
 	}
 }
 
+double USimWorldSubsystem::GetUnitHeading() const
+{
+	return Runner ? Runner->Engagement().UnitHeadingDeg() : 0.0;
+}
+
 double USimWorldSubsystem::IndicatedToTrueAzimuth(double IndicatedDeg) const
 {
 	return Runner ? Runner->Engagement().IndicatedToTrueDeg(IndicatedDeg) : IndicatedDeg;

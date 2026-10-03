@@ -197,6 +197,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Scenario")
 	void SetUnitHeading(double HeadingDeg);
 
+	/** The hull's heading the sim has: the scenario's own_unit.heading_deg until the vehicle drives. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
+	double GetUnitHeading() const;
+
 	/**
 	 * An azimuth in the crew's frame (the azimuth wheel, the search scope) as true azimuth from north. They differ
 	 * until the crew has oriented the vehicle's gyro half-compass.
