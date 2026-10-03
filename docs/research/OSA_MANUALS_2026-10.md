@@ -392,13 +392,15 @@ sending АВТОМАТ to OS81-18M and ТСЦ to OS52-14M.
 
 In SAM3D (`feature/cabin-bench`):
 
+- Console data: `sensors.track.elevation_search` in `data/procedures/osa_ak.json` (the beams' elevations from Fig.
+  2.37, the ЛУЧ position for each beam, scan period 2 s (estimate), tracking beam 1° (`korovin_tiv_2010`)).
+- Engagement model: during ЦУ the antenna scans the selected beam (in the automatic programmes, the beam the search
+  radar sees the target in near the azimuth line) and drives the elevation wheel; otherwise it points where the wheel
+  is. The radar captures only when azimuth and range hold and the antenna's beam is on the target in elevation, so
+  the wrong beam never captures. The NPC deputy commander aims elevation by the indicator once the target shows on it.
+  The crew drill now leaves the search radar on АВТ. I–III (an NPC can't pick the beam the echo appeared in).
 - Display kind `elevation_scope` (`data/cabins/README.md`); the Osa's `elev_search` sits where the round screen is in
-  the game's photo (right of the TV). The ЛУЧ selector picks the raster; in the automatic beam programmes the raster
-  holding the antenna's elevation is shown.
-- `simcore::ElevationScope` (scopes.hpp): during ЦУ the antenna sweeps the raster's elevations (period 2 s, an
-  estimate); a target under the azimuth line, inside the 2 km window and within half a beam width (1°,
-  `korovin_tiv_2010`) of the sweep lights a mark that fades (1.5 s, an estimate). Outside ЦУ the line sits at the
-  elevation wheel, which the tracking servo holds on the target, so a tracked target shows a steady mark.
-- Not yet: the engagement model still captures on azimuth and range alone, so the elevation scan doesn't gate the
-  capture. Raster heights on the screen are read off the figure and approximate.
+  the game's photo (right of the TV), with one raster per beam placed as in Fig. 2.37 (approximate).
+  `simcore::ElevationScope` keeps the fading marks (1.5 s afterglow, an estimate) of targets inside the 2 km window that
+  the antenna's beam passed over.
 

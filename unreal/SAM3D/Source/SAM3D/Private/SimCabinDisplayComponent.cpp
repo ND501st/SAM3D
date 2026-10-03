@@ -78,7 +78,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	}
 	if (Kind == simcore::CabinDisplayKind::ElevationScope)
 	{
-		ElevScope = MakeUnique<simcore::ElevationScope>(Display.scan_period_s, Display.afterglow_s, Display.beam_width_deg);
+		ElevScope = MakeUnique<simcore::ElevationScope>(Display.afterglow_s, Sim->GetScenarioRunner() != nullptr
+			? Sim->GetScenarioRunner()->Console().track.beam_width_deg : 1.0);
 	}
 	const double WidthCm = Display.width_m * 100.0;
 	const double HeightCm = Display.height_m * 100.0;
@@ -221,19 +222,14 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		const double Now = Runner->Time();
 		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
 		LastSimTimeSeconds = Now;
-		// The raster of the beam the target was found in; the antenna scans through it during target designation,
-		// otherwise it points where the elevation wheel (or the tracking servo) puts it.
+		// The engagement model scans the antenna (target designation) or points it; the indicator shows the beam it
+		// searches and paints what the antenna's beam passed over.
 		const simcore::TrackSensorDef& Track = Console.track;
-		const double WheelEl = Console.panel.GetValue(Track.el_wheel);
-		ElevRaster = simcore::CabinLayout::ElevationRasterFor(Display, Console.panel, WheelEl);
-		if (ElevRaster >= 0)
-		{
-			const simcore::ElevationRaster& R = Display.rasters[ElevRaster];
-			const bool bScanning = simcore::CabinLayout::ElevationScanOn(Display, Console.panel, Console.equipment);
-			ElevScope->Update(Dt, bOn && Console.equipment.IsReady(Track.transmitter), bScanning, WheelEl, R.el_low_deg,
-				R.el_high_deg, Console.panel.GetValue(Track.range_wheel), Display.range_window_m,
-				Runner->Engagement().TrackReturns());
-		}
+		const simcore::EngagementModel& Engagement = Runner->Engagement();
+		ElevRaster = Engagement.ElevationBeam();
+		ElevScope->Update(Dt, bOn && Console.equipment.IsReady(Track.transmitter), Engagement.SweptElevationLowDeg(),
+			Engagement.SweptElevationHighDeg(), Console.panel.GetValue(Track.range_wheel), Display.range_window_m,
+			Engagement.TrackReturns());
 	}
 
 	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
@@ -252,7 +248,7 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			DrawRangeScope(Canvas, Size, *Runner, bOn);
 			break;
 		case simcore::CabinDisplayKind::ElevationScope:
-			DrawElevationScope(Canvas, Size, Display, Console, bOn);
+			DrawElevationScope(Canvas, Size, Display, *Runner, bOn);
 			break;
 		case simcore::CabinDisplayKind::Dial:
 			DrawDial(Canvas, Size, Display, Console, bOn, simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
@@ -430,17 +426,21 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 // ---------------------------------------------------------------------------------------------- elevation search
 
 void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
-	const simcore::ConsoleData& Console, bool bOn)
+	simcore::ScenarioRunner& Runner, bool bOn)
 {
 	// A round tube (OS81-10M) with a square raster area inside it: range across, elevation up.
 	const FVector2D C = Size * 0.5;
 	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
 	Disc(Canvas, C, R, bOn ? Phosphor * 0.03f : FLinearColor(0.01f, 0.01f, 0.01f));
-	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()))
+	const simcore::ConsoleData& Console = Runner.Console();
+	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||
+		ElevRaster >= static_cast<int32>(Console.track.beams_deg.size()))
 	{
 		return;
 	}
 	const simcore::ElevationRaster& Raster = Display.rasters[ElevRaster];
+	const double ElLow = Console.track.beams_deg[ElevRaster].first;
+	const double ElHigh = Console.track.beams_deg[ElevRaster].second;
 	const double Half = 0.66 * R;  // the square fits inside the round screen
 	const double Left = C.X - Half;
 	const double Right = C.X + Half;
@@ -449,7 +449,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	const double Bottom = YOfScreen(Raster.screen_low);
 	auto YOfEl = [&](double El)
 	{
-		const double F = (El - Raster.el_low_deg) / (Raster.el_high_deg - Raster.el_low_deg);
+		const double F = (El - ElLow) / (ElHigh - ElLow);
 		return Bottom + (Top - Bottom) * FMath::Clamp(F, 0.0, 1.0);
 	};
 	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
@@ -468,7 +468,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 
 	// Where the antenna points now: a brighter line while the tracking radar radiates.
 	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
-	const double AntennaY = YOfEl(ElevScope->AntennaElevationDeg());
+	const double AntennaY = YOfEl(Runner.Engagement().AntennaElevationDeg());
 	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * (bRadiating ? 0.6f : 0.25f));
 
 	// Target marks: bright spots fading with the afterglow.
@@ -479,7 +479,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		Disc(Canvas, P, 6.0, Phosphor * (0.35f * Glow));
 		Disc(Canvas, P, 3.5, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
 	}
-	Text(Canvas, FString::Printf(TEXT("%.0f..%.0f°"), Raster.el_low_deg, Raster.el_high_deg),
+	Text(Canvas, FString::Printf(TEXT("%.0f..%.0f°"), ElLow, ElHigh),
 		FVector2D(C.X, C.Y + 0.85 * R), Phosphor * 0.5f, 0.9f);
 }
 

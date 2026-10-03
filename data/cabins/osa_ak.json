@@ -247,11 +247,9 @@
       "notes": "Measured target distance, 10 V = 10 km. Reads while the SSC tracks in range (the range wheel follows the target then); rests at 0 otherwise. Full scale 30 V: SAM3D estimate." },
     { "id": "elev_search", "label": "Elevation-search indicator OS81-10M", "kind": "elevation_scope", "panel": "fo_panel", "at_m": [0.21, 0.351], "size_m": [0.1, 0.1],
       "on_when": [ { "subsystem": "equipment_warm", "is": "ready" } ],
-      "rasters": [ { "el_deg": [-1, 5], "screen": [0.06, 0.74] }, { "el_deg": [3, 9], "screen": [0.47, 1.0] }, { "el_deg": [6, 30], "screen": [0.16, 1.0] } ],
-      "beam_control": "soc.beam", "raster_by_position": [0, 1, 2, -1, -1],
-      "range_window_m": 2000, "scan_period_s": 2.0, "afterglow_s": 1.5, "beam_width_deg": 1.0,
-      "scan_when": [ { "subsystem": "auto_acquisition", "is": "ready" } ],
-      "source": "voenizdat_osa_1991 p95 (two-coordinate sector indicator, rectangular raster, brightness mark; 31° of elevation and 2 km of range centred on the tracking radar's range gate; three ranges for search beams I, II, III; the antenna scans in elevation within the beam during ЦУ), Fig. 2.37 p97 (beam I −1° to 5°, II 3° to 9°, III 6° to 30°); samsim_panels (position: the round screen right of the TV monitor); korovin_tiv_2010 (tracking beam 1°)", "confidence": "medium",
-      "notes": "Shows the raster of the selected search beam; in the automatic beam programmes, the raster holding the antenna's elevation. Raster heights on the screen are read off Fig. 2.37 (approximate). Scan period 2 s and afterglow 1.5 s are SAM3D estimates. The engagement model still captures on azimuth and range alone, so the scan is drawn but doesn't gate the capture." }
+      "rasters": [ { "screen": [0.06, 0.74] }, { "screen": [0.47, 1.0] }, { "screen": [0.16, 1.0] } ],
+      "range_window_m": 2000, "afterglow_s": 1.5,
+      "source": "voenizdat_osa_1991 p95 (two-coordinate sector indicator, rectangular raster, brightness mark; 31° of elevation and 2 km of range centred on the tracking radar's range gate; three ranges for search beams I, II, III; the antenna scans in elevation within the beam during ЦУ), Fig. 2.37 p97 (beam I −1° to 5°, II 3° to 9°, III 6° to 30°); samsim_panels (position: the round screen right of the TV monitor)", "confidence": "medium",
+      "notes": "One raster per search beam of the console's elevation_search (I, II, III), placed as in Fig. 2.37 (approximate); it shows the beam the antenna searches, and the antenna's sweep and target marks come from the engagement model. Afterglow 1.5 s: SAM3D estimate." }
   ]
 }

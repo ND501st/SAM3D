@@ -120,6 +120,13 @@
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
+      "elevation_search": {
+        "mode": "auto_acquisition", "beam_control": "soc.beam",
+        "beams_deg": [ [-1, 5], [3, 9], [6, 30] ], "beam_by_position": [0, 1, 2, -1, -1],
+        "scan_period_s": 2.0, "beam_width_deg": 1.0,
+        "source": "voenizdat_osa_1991 p95 (in ЦУ the SSC antenna searches in elevation within the search beam the target was detected in; the OS81-10M auto-capture circuit, armed by ЦУ and АЗ, fires when the target is in the antenna's beam and the range gate is on it), p86 (the scan comes from self-oscillation of the elevation drive; beam commands I, II, III from the search radar), Fig. 2.37 p97 (beam I −1° to 5°, II 3° to 9°, III 6° to 30°); korovin_tiv_2010 (tracking beam 1°)", "confidence": "medium",
+        "notes": "Scan period: SAM3D estimate. In the automatic beam programmes (АВТ. I–III, I–II) SAM3D searches the beam the search radar sees the target in nearest the azimuth line (the real scan follows the search radar's beam commands). mon_2112_80 p21 gives I–II as 0–8° and I–III as 0–28°: the textbook's figure is used."
+      },
       "notes": "SSC displayed range 28 km (p16); ±330° azimuth (p14, p16; voenizdat_osa_1991 p66; mon_2112_80 p25 gives ±342° for the turret). TV fields 00-60 x 00-80 (3.6 x 4.8°) wide and 00-18 x 00-24 (1.08 x 1.44°) narrow (voenizdat_osa_1991 p101; an operator on samsim_thread gives the same); the larger figure is used. SAM Simulator's manual gives 5° / 1.5°."
     }
   },
@@ -428,14 +435,13 @@
     {
       "id": "acquire_with_soc", "name": "Autonomous target acquisition with the SOC radar",
       "source": "samsim_osa p21–24; seats: flak11 (9A33-3)", "confidence": "high",
-      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator).",
+      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator). The manual then selects the beam the echo appeared in; SAM3D's crew leaves АВТ. I–III on, where target designation searches the beam the echo is seen in.",
       "steps": [
         { "control": "soc.search", "position": 1, "description": "When the target nears 50 km on the plotting board: ПОИСК ВКЛ, SOC antenna rotation on" },
         { "control": "soc.hv_cover", "position": 1, "description": "Remove the guard over ВЫСОКОЕ" },
         { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, SOC transmitter on" },
         { "control": "soc.beam", "position": 3, "description": "АВТ. I–III ЛУЧ, scan all three height beams" },
         { "control": "soc.range", "position": 2, "description": "ДАЛЬНОСТЬ 10–45 km" },
-        { "control": "soc.beam", "position": 0, "description": "When the echo shows, select the beam it appeared in (beam I in the manual's example)" },
         { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel" },
         { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
         { "control": "soc.range", "position": 1, "description": "At about 35 km: ДАЛЬНОСТЬ 0–35 km. Then turn the azimuth wheel until the SSC line crosses the target mark" }

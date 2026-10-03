@@ -8,13 +8,17 @@
 //   * Search radar picture: contacts inside the selected range scale, with line of
 //     sight, and either above the clutter height or with MTI on (within its range).
 //   * Tracking radar: locks when its acquisition mode is on and the operator has put
-//     the azimuth line and range gate on a target; TV tracking locks when its mode is
+//     the azimuth line and range gate on a target, and (with an elevation search) the
+//     antenna's beam is on it in elevation: during target designation the antenna scans
+//     the search beam the target was found in, otherwise it points where the elevation
+//     wheel is. TV tracking locks when its mode is
 //     on and the target is inside the lens's field of view. Once locked it follows the
 //     target (drives the wheels) until line of sight, altitude, crossing rate or the
 //     equipment breaks the lock. It sets the console's capture / too-low / zone inputs.
 //   * Crew aiming: each wheel has its own seat (azimuth, elevation, range); the crew
 //     member in that seat turns it onto the nearest search-radar contact (or the
-//     plotting-board track when the radars are off).
+//     plotting-board track when the radars are off); elevation by the TV, or by the
+//     elevation-search indicator once the target shows on it.
 //   * Outcome: a launch starts a shot with a flight time from the game's pacing speed.
 //     Guidance is by command from the ground, so losing the track loses the missile.
 //     At the end, the chance of a hit is the product of plain factors — target class,
@@ -375,6 +379,13 @@ public:
     // the radar measures their range even when it can't hold them in angle.
     const std::vector<Contact>& TrackReturns() const { return track_returns_; }
     TrackMethod Method() const { return method_; }
+    // The tracking antenna's elevation now, the elevations its beam centre passed over in the last step (a span
+    // while it scans during target designation), and the search beam it searches (-1 if the console has no
+    // elevation search).
+    double AntennaElevationDeg() const { return antenna_el_deg_; }
+    double SweptElevationLowDeg() const { return swept_low_deg_; }
+    double SweptElevationHighDeg() const { return swept_high_deg_; }
+    int ElevationBeam() const { return el_beam_; }
     const std::string& TrackedTarget() const { return tracked_; }
     const EngagementTuning& Tuning() const { return tuning_; }
     int Hits() const { return hits_; }
@@ -576,10 +587,14 @@ private:
         if (!crew.azimuth && !crew.elevation && !crew.range) return;
         const TrackSensorDef& d = console.track;
         const Geometry* best = nullptr;
+        std::string best_id;
         bool range_known = false;
         for (const Contact& c : picture_) {
             const Geometry& g = geo_.at(c.target_id);
-            if (best == nullptr || g.range_m < best->range_m) best = &g;
+            if (best == nullptr || g.range_m < best->range_m) {
+                best = &g;
+                best_id = c.target_id;
+            }
             range_known = true;
         }
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
@@ -603,7 +618,13 @@ private:
             const double wheel_r = console.panel.GetValue(d.range_wheel);
             console.panel.SetValue(d.range_wheel, Toward(wheel_r, best->range_m, tuning_.aim_range_rate_mps * dt));
         }
-        if (crew.elevation && tv_search) {
+        // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
+        // (under the azimuth line while the tracking radar radiates).
+        bool on_indicator = false;
+        if (d.beam_width_deg > 0.0) {
+            for (const Contact& c : track_returns_) on_indicator = on_indicator || c.target_id == best_id;
+        }
+        if (crew.elevation && (tv_search || on_indicator)) {
             const double wheel_el = console.panel.GetValue(d.el_wheel);
             console.panel.SetValue(d.el_wheel, Toward(wheel_el, best->el_deg, tuning_.aim_el_rate_deg_s * dt));
         }
@@ -662,6 +683,7 @@ private:
                                        WheelAzimuth(g.az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
                 console.panel.SetValue(d.el_wheel, g.el_deg);
                 if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, g.range_m);
+                antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = g.el_deg;
                 return;
             }
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
@@ -669,6 +691,7 @@ private:
             tracked_.clear();
         }
         // Looking for a lock: radar first, then TV. Targets are checked in id order (deterministic).
+        UpdateElevationSearch(dt, console);
         const double wheel_az = console.panel.GetValue(d.az_wheel);
         const double wheel_el = console.panel.GetValue(d.el_wheel);
         const double wheel_r = console.panel.GetValue(d.range_wheel);
@@ -700,6 +723,9 @@ private:
             candidate_time_s_ += dt;
         }
         if (found.empty() || candidate_time_s_ + 1e-9 < tuning_.lock_time_s) return;
+        // The radar captures when the antenna's beam is on the target in elevation as well (the OS81-10M
+        // auto-capture circuit fires as the scan crosses it, voenizdat_osa_1991 p95).
+        if (candidate_method_ == TrackMethod::Radar && !BeamOnTarget(d, geo_.at(candidate_))) return;
         method_ = candidate_method_;
         tracked_ = candidate_;
         candidate_.clear();
@@ -710,6 +736,83 @@ private:
         std::snprintf(detail, sizeof(detail), "%s track, %.1f km, azimuth %.0f deg", ToString(method_),
                       g.range_m / 1000.0, g.az_deg);
         log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
+    }
+
+    // A triangle wave over [low, high]: low at phase 0, high at 0.5, low again at 1.
+    static double ScanAt(double phase, double low, double high) {
+        double p = std::fmod(phase, 1.0);
+        if (p < 0.0) p += 1.0;
+        return low + (high - low) * (p < 0.5 ? 2.0 * p : 2.0 - 2.0 * p);
+    }
+
+    // The search beam the elevation search uses: the beam selector's, or in the automatic programmes the lowest
+    // beam holding the target the search radar sees nearest the azimuth line (else the first beam).
+    int SelectBeam(const ConsoleData& console) const {
+        const TrackSensorDef& d = console.track;
+        if (d.beams_deg.empty()) return -1;
+        const int pos = console.panel.Get(d.beam_control);
+        if (pos >= 0 && pos < static_cast<int>(d.beam_by_position.size()) &&
+            d.beam_by_position[static_cast<std::size_t>(pos)] >= 0) {
+            return d.beam_by_position[static_cast<std::size_t>(pos)];
+        }
+        const double wheel_az = console.panel.GetValue(d.az_wheel);
+        double best_err = 1e9;
+        double el_deg = 0.0;
+        for (const Contact& c : picture_) {
+            const double err = std::fabs(WheelAzimuth(c.azimuth_deg, wheel_az, d.az_limit_deg) - wheel_az);
+            if (err <= 5.0 && err < best_err) {
+                best_err = err;
+                el_deg = c.elevation_deg;
+            }
+        }
+        // No echo near the azimuth line: the programme's first beam (not the scan's own angle, which would chase itself).
+        if (best_err > 5.0) return 0;
+        int best = 0;
+        double best_gap = 1e9;
+        for (std::size_t i = 0; i < d.beams_deg.size(); ++i) {
+            const double low = d.beams_deg[i].first;
+            const double high = d.beams_deg[i].second;
+            const double gap = el_deg < low ? low - el_deg : el_deg > high ? el_deg - high : 0.0;
+            if (gap < best_gap) {
+                best = static_cast<int>(i);
+                best_gap = gap;
+            }
+        }
+        return best;
+    }
+
+    // Where the tracking antenna points in elevation while no target is tracked: scanning the search beam during
+    // target designation (it drives the elevation wheel then), otherwise wherever the wheel is.
+    void UpdateElevationSearch(double dt, ConsoleData& console) {
+        const TrackSensorDef& d = console.track;
+        const double wheel_el = console.panel.GetValue(d.el_wheel);
+        el_beam_ = SelectBeam(console);
+        const bool scanning = el_beam_ >= 0 && console.equipment.IsReady(d.el_search_mode);
+        if (!scanning || dt <= 0.0) {
+            antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = wheel_el;
+            return;
+        }
+        const double low = d.beams_deg[static_cast<std::size_t>(el_beam_)].first;
+        const double high = d.beams_deg[static_cast<std::size_t>(el_beam_)].second;
+        // Sample the sweep finely enough that it can't jump over a beam width.
+        const int samples = 1 + static_cast<int>(std::ceil(dt / (d.scan_period_s / 64.0)));
+        swept_low_deg_ = swept_high_deg_ = ScanAt(scan_phase_, low, high);
+        for (int i = 1; i <= samples; ++i) {
+            const double e = ScanAt(scan_phase_ + dt / d.scan_period_s * i / samples, low, high);
+            swept_low_deg_ = std::fmin(swept_low_deg_, e);
+            swept_high_deg_ = std::fmax(swept_high_deg_, e);
+        }
+        scan_phase_ = std::fmod(scan_phase_ + dt / d.scan_period_s, 1.0);
+        antenna_el_deg_ = ScanAt(scan_phase_, low, high);
+        console.panel.SetValue(d.el_wheel, antenna_el_deg_);
+    }
+
+    // Whether the antenna's beam passed over the target's elevation in the last step (always, without an
+    // elevation search).
+    bool BeamOnTarget(const TrackSensorDef& d, const Geometry& g) const {
+        if (!(d.beam_width_deg > 0.0)) return true;
+        const double half = 0.5 * d.beam_width_deg;
+        return g.el_deg >= swept_low_deg_ - half && g.el_deg <= swept_high_deg_ + half;
     }
 
     void SetInputs(ConsoleData& console) {
@@ -765,6 +868,11 @@ private:
     std::string candidate_;
     TrackMethod candidate_method_ = TrackMethod::None;
     double candidate_time_s_ = 0.0;
+    double antenna_el_deg_ = 0.0;
+    double swept_low_deg_ = 0.0;
+    double swept_high_deg_ = 0.0;
+    double scan_phase_ = 0.0;
+    int el_beam_ = -1;
     std::vector<Shot> shots_;
     int hits_ = 0;
     int misses_ = 0;

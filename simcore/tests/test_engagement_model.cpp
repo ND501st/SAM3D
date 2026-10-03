@@ -1,3 +1,8 @@
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -233,4 +238,105 @@ SC_TEST("engagement: after a launch ПУСК ГОТОВ goes out until the next 
     const double t0 = runner.Time();
     while (!runner.Finished() && !eq.IsReady("launch_armed") && runner.Time() < t0 + 60.0) runner.Step(0.1);
     SC_EXPECT_NEAR(runner.Time() - t0, 13.0, 0.3);
+}
+
+namespace {
+
+// Runs an Osa acquisition until target designation (ЦУ) is engaged; false if it never is.
+bool RunToDesignation(ScenarioRunner& runner) {
+    while (!runner.Finished() && !runner.Console().equipment.IsReady("auto_acquisition")) runner.Step(0.1);
+    return runner.Console().equipment.IsReady("auto_acquisition");
+}
+
+std::unique_ptr<ScenarioRunner> Acquisition(double north_m, double up_m) {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    if (!LoadScenario(Engage(Target(north_m, up_m), kAcquireAndFire), kData, def, console, &error)) {
+        std::printf("    load: %s\n", error.c_str());
+        return nullptr;
+    }
+    return std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
+}
+
+}  // namespace
+
+SC_TEST("engagement: in ЦУ the tracking antenna scans the search beam and captures as it crosses the target") {
+    std::unique_ptr<ScenarioRunner> runner = Acquisition(24000, 1000);
+    SC_EXPECT(runner != nullptr && RunToDesignation(*runner));
+    if (runner == nullptr) return;
+    const ConsoleData& c = runner->Console();
+    const EngagementModel& e = runner->Engagement();
+    // Once the senior operator has the automatic programme (АВТ. I–III) on and the azimuth line near the echo, the
+    // antenna searches beam I (-1 to 5 deg), which holds the target (about 2-3 deg up).
+    double low = 1e9;
+    double high = -1e9;
+    int samples = 0;
+    bool wheel_follows = true;
+    bool was_auto = false;  // the model sees a selector change on the step after the crew makes it
+    while (!runner->Finished() && e.TrackedTarget().empty()) {
+        runner->Step(0.1);
+        const bool sample = was_auto && e.TrackedTarget().empty() &&
+                            std::fabs(c.panel.GetValue(c.track.az_wheel) - 3.6) <= 5.0;
+        was_auto = c.panel.Get("soc.beam") == 3;
+        if (!sample) continue;
+        ++samples;
+        SC_EXPECT(e.ElevationBeam() == 0);
+        low = std::fmin(low, e.AntennaElevationDeg());
+        high = std::fmax(high, e.AntennaElevationDeg());
+        wheel_follows = wheel_follows && std::fabs(c.panel.GetValue(c.track.el_wheel) - e.AntennaElevationDeg()) < 1e-9;
+    }
+    SC_EXPECT(samples > 0);
+    SC_EXPECT(wheel_follows);  // the antenna drives the elevation wheel while it scans
+    SC_EXPECT(low >= -1.0 - 1e-9 && high <= 5.0 + 1e-9);
+    SC_EXPECT(e.TrackedTarget() == "t1" && e.Method() == TrackMethod::Radar);
+    // At the capture the antenna was on the target: it now follows it.
+    SC_EXPECT_NEAR(e.AntennaElevationDeg(), c.panel.GetValue(c.track.el_wheel), 1e-9);
+}
+
+SC_TEST("engagement: searching the wrong beam in ЦУ never captures; the right beam does") {
+    std::unique_ptr<ScenarioRunner> runner = Acquisition(24000, 1000);
+    SC_EXPECT(runner != nullptr && RunToDesignation(*runner));
+    if (runner == nullptr) return;
+    ConsoleData& c = runner->Console();
+    const EngagementModel& e = runner->Engagement();
+    // Beam III (6 to 30 deg) is above a target 2-3 deg up: the scan never crosses it.
+    for (int i = 0; i < 400 && !runner->Finished(); ++i) {
+        c.panel.Set("soc.beam", 2);
+        runner->Step(0.1);
+    }
+    SC_EXPECT(e.TrackedTarget().empty());
+    SC_EXPECT(e.ElevationBeam() == 2 && e.AntennaElevationDeg() >= 6.0 - 1e-9);
+    c.panel.Set("soc.beam", 0);  // beam I
+    for (int i = 0; i < 100 && e.TrackedTarget().empty(); ++i) runner->Step(0.1);
+    SC_EXPECT(e.TrackedTarget() == "t1");
+}
+
+SC_TEST("engagement: the console's elevation search is checked when it loads") {
+    std::ifstream f(kData + "/procedures/osa_ak.json", std::ios::binary);
+    std::stringstream text;
+    text << f.rdbuf();
+    const std::string osa = text.str();
+    ConsoleData console;
+    SC_EXPECT(LoadConsole(osa, console));
+    SC_EXPECT(console.track.beams_deg.size() == 3 && console.track.beam_width_deg > 0.0);
+    auto Error = [&](const std::string& from, const std::string& to) {
+        std::string t = osa;
+        const std::size_t at = t.find(from);
+        if (at == std::string::npos) return std::string("pattern not found: ") + from;
+        t.replace(at, from.size(), to);
+        ConsoleData c;
+        std::string error;
+        return LoadConsole(t, c, &error) ? std::string("loaded") : error;
+    };
+    const auto Has = [](const std::string& error, const std::string& want) {
+        if (error.find(want) == std::string::npos) std::printf("    got: %s\n", error.c_str());
+        return error.find(want) != std::string::npos;
+    };
+    SC_EXPECT(Has(Error(R"("beam_by_position": [0, 1, 2, -1, -1])", R"("beam_by_position": [0, 1])"),
+                  "elevation_search.beam_by_position: needs one entry per position"));
+    SC_EXPECT(Has(Error(R"("beam_by_position": [0, 1, 2, -1, -1])", R"("beam_by_position": [0, 1, 3, -1, -1])"),
+                  "beam_by_position[2]"));
+    SC_EXPECT(Has(Error(R"([ [-1, 5], [3, 9], [6, 30] ])", R"([ [5, -1], [3, 9], [6, 30] ])"), "beams_deg[0]"));
+    SC_EXPECT(Has(Error(R"("beam_width_deg": 1.0)", R"("beam_width_deg": 0)"), "beam_width_deg"));
 }

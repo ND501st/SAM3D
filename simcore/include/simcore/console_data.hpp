@@ -6,6 +6,7 @@
 // (e.g. "controls[4].guard: unknown control 'x'"). Nothing is partially loaded on failure.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <initializer_list>
@@ -52,6 +53,16 @@ struct TrackSensorDef {
     std::string too_low_input;
     std::string near_zone_input;
     std::string in_zone_input;
+    // Elevation search (optional; beam_width_deg 0 = absent): while `el_search_mode` is ready the antenna scans in
+    // elevation through one search-radar beam, and the radar only captures when the antenna's beam is on the
+    // target in elevation. `beam_by_position` gives the beam for each position of `beam_control`; -1 = the beam
+    // the search radar sees the target under the azimuth line in.
+    std::string el_search_mode;
+    std::string beam_control;
+    std::vector<std::pair<double, double>> beams_deg;
+    std::vector<int> beam_by_position;
+    double scan_period_s = 2.0;
+    double beam_width_deg = 0.0;
 };
 
 // A crew seat that owns controls (e.g. "senior_operator"). Crew roles name these.
@@ -468,7 +479,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
                             "el_wheel", "range_wheel", "lock_control", "fov_control", "fov_deg", "max_range_m",
                             "az_limit_deg", "captured_input", "too_low_input", "near_zone_input", "in_zone_input",
-                            "notes"}) ||
+                            "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -500,7 +511,50 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!track.tv_mode.empty() && (track.tv_camera.empty() || track.fov_wide_deg <= 0.0)) {
             return Fail(tp, "tv_mode needs tv_camera and fov_deg");
         }
+        if (const json::Value* es = tr->Find("elevation_search")) {
+            if (!LoadElevationSearch(*es, Join(tp, "elevation_search"), panel, eq, track)) return false;
+        }
         out.has_sensors = true;
+        return true;
+    }
+
+    bool LoadElevationSearch(const json::Value& es, const std::string& ep, const ControlPanel& panel,
+                             const Equipment& eq, TrackSensorDef& track) {
+        if (!Keys(es, ep, {"mode", "beam_control", "beams_deg", "beam_by_position", "scan_period_s", "beam_width_deg",
+                           "source", "confidence", "notes"}) ||
+            !Provenance(es, ep) || !RefSubsystem(es, ep, "mode", eq, true, track.el_search_mode) ||
+            !RefControl(es, ep, "beam_control", panel, ControlKind::Discrete, true, track.beam_control) ||
+            !OptionalNumber(es, ep, "scan_period_s", track.scan_period_s) ||
+            !OptionalNumber(es, ep, "beam_width_deg", track.beam_width_deg)) {
+            return false;
+        }
+        if (!(track.scan_period_s > 0.0)) return Fail(Join(ep, "scan_period_s"), "must be > 0");
+        if (!(track.beam_width_deg > 0.0)) return Fail(Join(ep, "beam_width_deg"), "required, > 0");
+        const json::Value* beams = OptionalArray(es, ep, "beams_deg");
+        if (beams == nullptr) return message_.empty() ? Fail(Join(ep, "beams_deg"), "required") : false;
+        for (std::size_t i = 0; i < beams->items.size(); ++i) {
+            const json::Value& pair = beams->items[i];
+            if (!pair.Is(json::Type::Array) || pair.items.size() != 2 || !pair.items[0].Is(json::Type::Number) ||
+                !pair.items[1].Is(json::Type::Number) || !(pair.items[1].number > pair.items[0].number)) {
+                return Fail(Index(Join(ep, "beams_deg"), i), "expected [low, high] in degrees");
+            }
+            track.beams_deg.emplace_back(pair.items[0].number, pair.items[1].number);
+        }
+        if (track.beams_deg.empty()) return Fail(Join(ep, "beams_deg"), "needs at least one beam");
+        const json::Value* map = OptionalArray(es, ep, "beam_by_position");
+        if (map == nullptr) return message_.empty() ? Fail(Join(ep, "beam_by_position"), "required") : false;
+        if (static_cast<int>(map->items.size()) != panel.Find(track.beam_control)->positions) {
+            return Fail(Join(ep, "beam_by_position"), "needs one entry per position of " + track.beam_control);
+        }
+        const double beam_count = static_cast<double>(track.beams_deg.size());
+        for (std::size_t i = 0; i < map->items.size(); ++i) {
+            const json::Value& v = map->items[i];
+            if (!v.Is(json::Type::Number) || v.number != std::floor(v.number) || v.number < -1.0 ||
+                v.number >= beam_count) {
+                return Fail(Index(Join(ep, "beam_by_position"), i), "must be -1 or a beam index");
+            }
+            track.beam_by_position.push_back(static_cast<int>(v.number));
+        }
         return true;
     }
 

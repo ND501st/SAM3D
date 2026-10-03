@@ -59,7 +59,7 @@ inside the panel), says when it is powered (`on_when`, `on_when_any`, console co
 |---|---|---|
 | `ppi` | The search radar's picture on a rotating sweep with fading echoes, on the scale the range selector picks; the tracking radar's azimuth line and range gate | `sweep_period_s`, `afterglow_s` |
 | `range_scope` | The tracking radar's range indicator: an upper sweep over its whole range with echoes as spikes, a lower sweep magnified around the range gate, and the range counter | `magnified_window_m` |
-| `elevation_scope` | The tracking radar's elevation-search indicator: a rectangular raster (elevation up, range across) for the search beam `beam_control` selects (`raster_by_position`, one raster index per position, -1 = the raster holding the antenna's elevation), `range_window_m` of range centred on the range gate, the antenna's elevation as a line, and targets as fading marks when the antenna's beam (`beam_width_deg`) passes them. While `scan_when` holds the antenna scans the raster's elevations once per `scan_period_s`. Each raster is `{ "el_deg": [low, high], "screen": [bottom, top] }` with screen heights 0..1 | `rasters`, `beam_control`, `raster_by_position`, `range_window_m`, `scan_period_s`, `beam_width_deg`, `scan_when`, `afterglow_s` |
+| `elevation_scope` | The tracking radar's elevation-search indicator: a rectangular raster (elevation up, range across) for the search beam the antenna searches, `range_window_m` of range centred on the range gate, the antenna's elevation as a line, and targets as fading marks when the antenna's beam passes them. The beams, the scan and the antenna's position are the console's (`sensors.track.elevation_search`, run by the engagement model); the layout gives one raster per beam, `{ "screen": [bottom, top] }` with screen heights 0..1 | `rasters`, `range_window_m`, `afterglow_s` |
 | `tv` | The TV sight's picture, looking along the tracking radar's azimuth and elevation with the selected lens, and a crosshair | none |
 | `dial` | A needle turning with a control's value (one turn = `value_per_turn`), scale `0..labels_per_turn` in `marks` divisions; `lit_when` for its backlight | `control`, `marks`, `value_per_turn`, `labels_per_turn` |
 | `meter` | A needle swinging with `value x scale`, full deflection at `full_scale` `unit`; rests at 0 when not powered | `control`, `marks`, `scale`, `full_scale`, `unit` |
@@ -72,7 +72,7 @@ inside the panel), says when it is powered (`on_when`, `on_when_any`, console co
 ```
 
 What the radars see comes from the engagement model (`EngagementModel::SearchPicture`, `TrackReturns`); a display
-only shows it. `ppi`, `range_scope`, `elevation_scope` and `tv` need the console's `sensors` block.
+only shows it. `ppi`, `range_scope` and `tv` need the console's `sensors` block, `elevation_scope` its track `elevation_search`.
 
 Rules the loader checks:
 

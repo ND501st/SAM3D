@@ -146,10 +146,9 @@ inline const char* ToString(CabinDisplayKind k) {
     return "?";
 }
 
-// One raster of an elevation_scope: the elevations it covers and where it sits on the screen (0 = bottom, 1 = top).
+// Where one search beam's raster sits on an elevation_scope's screen (0 = bottom, 1 = top). The beam's elevations
+// are the console's (TrackSensorDef::beams_deg).
 struct ElevationRaster {
-    double el_low_deg = 0.0;
-    double el_high_deg = 0.0;
     double screen_low = 0.0;
     double screen_high = 1.0;
 };
@@ -181,16 +180,10 @@ struct CabinDisplay {
     double afterglow_s = 3.0;
     // range_scope: span of the magnified lower sweep, centred on the range gate
     double magnified_window_m = 1500.0;
-    // elevation_scope (also uses afterglow_s): the rasters; which one each position of `beam_control` shows (-1 =
-    // the one holding the antenna's elevation); the range window across the screen, centred on the range gate; the
-    // antenna's scan period and beam width; when the antenna scans (target designation).
+    // elevation_scope (also uses afterglow_s): one raster per search beam of the console's elevation search, and
+    // the range window across the screen, centred on the range gate
     std::vector<ElevationRaster> rasters;
-    std::string beam_control;
-    std::vector<int> raster_by_position;
     double range_window_m = 2000.0;
-    double scan_period_s = 2.0;
-    double beam_width_deg = 1.0;
-    std::vector<Condition> scan_when;
 };
 
 struct CabinLayout {
@@ -276,37 +269,6 @@ struct CabinLayout {
     }
     static bool DisplayLit(const CabinDisplay& d, const ControlPanel& panel, const Equipment& equipment) {
         return DisplayOn(d, panel, equipment) && equipment.AllHold(d.lit_when, panel);
-    }
-
-    // elevation_scope: whether the antenna is scanning (powered and every scan_when condition holds).
-    static bool ElevationScanOn(const CabinDisplay& d, const ControlPanel& panel, const Equipment& equipment) {
-        return !d.scan_when.empty() && DisplayOn(d, panel, equipment) && equipment.AllHold(d.scan_when, panel);
-    }
-
-    // elevation_scope: the raster shown now (index into d.rasters; -1 if it has none). The beam selector picks it;
-    // a position mapped to -1 (or no selector) shows the first raster holding `antenna_el_deg`, else the nearest.
-    static int ElevationRasterFor(const CabinDisplay& d, const ControlPanel& panel, double antenna_el_deg) {
-        if (d.rasters.empty()) return -1;
-        if (!d.beam_control.empty()) {
-            const int pos = panel.Get(d.beam_control);
-            if (pos >= 0 && pos < static_cast<int>(d.raster_by_position.size()) &&
-                d.raster_by_position[static_cast<std::size_t>(pos)] >= 0) {
-                return d.raster_by_position[static_cast<std::size_t>(pos)];
-            }
-        }
-        int best = 0;
-        double best_gap = 1e9;
-        for (std::size_t i = 0; i < d.rasters.size(); ++i) {
-            const ElevationRaster& r = d.rasters[i];
-            const double gap = antenna_el_deg < r.el_low_deg    ? r.el_low_deg - antenna_el_deg
-                               : antenna_el_deg > r.el_high_deg ? antenna_el_deg - r.el_high_deg
-                                                                : 0.0;
-            if (gap < best_gap) {
-                best = static_cast<int>(i);
-                best_gap = gap;
-            }
-        }
-        return best;
     }
 
     // Console controls the layout doesn't place (a cabin should usually place them all).
@@ -561,8 +523,7 @@ private:
             const json::Value& d = arr->items[i];
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
-                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "beam_control",
-                                "raster_by_position", "range_window_m", "scan_period_s", "beam_width_deg", "scan_when",
+                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
                                 "source", "confidence", "notes"})) {
                 return false;
             }
@@ -609,10 +570,9 @@ private:
             if (!console.has_sensors) return Fail(Join(path, "kind"), "a range_scope needs the console's sensors block");
         } else if (kind == "elevation_scope") {
             disp.kind = CabinDisplayKind::ElevationScope;
-            allowed = {"afterglow_s",   "rasters",       "beam_control",   "raster_by_position",
-                       "range_window_m", "scan_period_s", "beam_width_deg", "scan_when"};
-            if (!console.has_sensors) {
-                return Fail(Join(path, "kind"), "an elevation_scope needs the console's sensors block");
+            allowed = {"afterglow_s", "rasters", "range_window_m"};
+            if (!console.has_sensors || console.track.beams_deg.empty()) {
+                return Fail(Join(path, "kind"), "an elevation_scope needs the console's track elevation_search");
             }
         } else if (kind == "tv") {
             disp.kind = CabinDisplayKind::Tv;
@@ -629,9 +589,8 @@ private:
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial or meter");
         }
         for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
-                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "beam_control",
-                                "raster_by_position", "range_window_m", "scan_period_s", "beam_width_deg",
-                                "scan_when"}) {
+                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
+                                "range_window_m"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
@@ -649,17 +608,15 @@ private:
             !OptionalNumber(d, path, "sweep_period_s", disp.sweep_period_s) ||
             !OptionalNumber(d, path, "afterglow_s", disp.afterglow_s) ||
             !OptionalNumber(d, path, "magnified_window_m", disp.magnified_window_m) ||
-            !OptionalNumber(d, path, "range_window_m", disp.range_window_m) ||
-            !OptionalNumber(d, path, "scan_period_s", disp.scan_period_s) ||
-            !OptionalNumber(d, path, "beam_width_deg", disp.beam_width_deg)) {
+            !OptionalNumber(d, path, "range_window_m", disp.range_window_m)) {
             return false;
         }
         if (disp.marks < 1) return Fail(Join(path, "marks"), "must be at least 1");
         for (double v : {disp.value_per_turn, disp.full_scale, disp.sweep_period_s, disp.afterglow_s,
-                         disp.magnified_window_m, disp.range_window_m, disp.scan_period_s, disp.beam_width_deg}) {
+                         disp.magnified_window_m, disp.range_window_m}) {
             if (!(v > 0.0)) {
-                return Fail(path, "value_per_turn, full_scale, sweep_period_s, afterglow_s, magnified_window_m, "
-                                  "range_window_m, scan_period_s and beam_width_deg must be positive");
+                return Fail(path, "value_per_turn, full_scale, sweep_period_s, afterglow_s, magnified_window_m and "
+                                  "range_window_m must be positive");
             }
         }
         if (disp.kind == CabinDisplayKind::ElevationScope && !LoadElevationScope(d, path, console, disp)) return false;
@@ -670,44 +627,21 @@ private:
                             CabinDisplay& disp) {
         const json::Value* arr = OptionalArray(d, path, "rasters");
         if (arr == nullptr) return message_.empty() ? Fail(Join(path, "rasters"), "required") : false;
-        if (arr->items.empty()) return Fail(Join(path, "rasters"), "needs at least one raster");
+        if (arr->items.size() != console.track.beams_deg.size()) {
+            return Fail(Join(path, "rasters"), "needs one raster per beam of the console's elevation_search");
+        }
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string rpath = Index(Join(path, "rasters"), i);
             const json::Value& r = arr->items[i];
-            if (!Keys(r, rpath, {"el_deg", "screen"})) return false;
+            if (!Keys(r, rpath, {"screen"})) return false;
             ElevationRaster raster;
-            if (!Number2(r, rpath, "el_deg", raster.el_low_deg, raster.el_high_deg) ||
-                !Number2(r, rpath, "screen", raster.screen_low, raster.screen_high)) {
-                return false;
-            }
-            if (!(raster.el_low_deg < raster.el_high_deg)) return Fail(Join(rpath, "el_deg"), "must be [low, high]");
+            if (!Number2(r, rpath, "screen", raster.screen_low, raster.screen_high)) return false;
             if (!(raster.screen_low >= 0.0 && raster.screen_low < raster.screen_high && raster.screen_high <= 1.0)) {
                 return Fail(Join(rpath, "screen"), "must be [low, high] within 0..1");
             }
             disp.rasters.push_back(raster);
         }
-        if (!OptionalString(d, path, "beam_control", disp.beam_control)) return false;
-        const json::Value* map = OptionalArray(d, path, "raster_by_position");
-        if (map == nullptr && !message_.empty()) return false;
-        if (map != nullptr) {
-            const ControlDef* def = disp.beam_control.empty() ? nullptr : console.panel.Find(disp.beam_control);
-            if (def == nullptr) return Fail(Join(path, "beam_control"), "raster_by_position needs a known beam_control");
-            if (static_cast<int>(map->items.size()) != def->positions) {
-                return Fail(Join(path, "raster_by_position"), "needs one entry per position of " + disp.beam_control);
-            }
-            const double rasters = static_cast<double>(disp.rasters.size());
-            for (std::size_t i = 0; i < map->items.size(); ++i) {
-                const json::Value& v = map->items[i];
-                if (!v.Is(json::Type::Number) || v.number != std::floor(v.number) || v.number < -1.0 ||
-                    v.number >= rasters) {
-                    return Fail(Index(Join(path, "raster_by_position"), i), "must be -1 or a raster index");
-                }
-                disp.raster_by_position.push_back(static_cast<int>(v.number));
-            }
-        } else if (!disp.beam_control.empty()) {
-            return Fail(Join(path, "raster_by_position"), "required with beam_control");
-        }
-        return LoadConditions(d, path, "scan_when", console.panel, console.equipment, disp.scan_when);
+        return true;
     }
 };
 
