@@ -36,8 +36,8 @@ In play:
 | Right mouse + drag | Orbit the camera |
 | 1 | Power up: driver starts the GTA (`power_up`), operator switches on the equipment (`equipment_on`) |
 | 2 | Senior operator: search on the march (waits for power) |
-| 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line |
-| 4 | Acquire: senior operator with the SOC, deputy commander readies ЦУ АЗ, operator switches on the SSC |
+| 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line, deputy commander orients the vehicle (gyro to the crew chief's Qc, `orient_vehicle`) |
+| 4 | Acquire: senior operator with the SOC, deputy commander readies ЦУ АЗ (queued after orienting), operator switches on the SSC |
 | 5, 6 | Deputy commander: prepare for firing; launch (both queued) |
 | 7 | TV-only engagement: senior operator turns the azimuth, deputy commander does the rest |
 | 8 | Stow for the march: operator (SSC off, drives off, АПУ locked), deputy commander, driver |
