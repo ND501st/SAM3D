@@ -37,6 +37,22 @@
       "notes": "Copy-numbered; used by the project owner's decision (docs/SOURCES.md). Describes the AKM (9A33BM3), so block suffixes differ (e.g. OP81-16M2 for the AK's OP81-16M); differences from the AK are noted. Kept in reference/sources/, not in git. Summary: docs/research/OSA_MANUALS_2026-10.md."
     },
     {
+      "id": "grezicki_wzu",
+      "title": "M. Gręzicki, J. Walczak (WZU SA, Grudziądz), Modernizacja i modyfikacja jako determinanty rozwoju przeciwlotniczych zestawów rakietowych",
+      "notes": "Camera views of a Polish Osa-PM crew (Fig. 4): seat order and crew titles only. docs/SOURCES.md."
+    },
+    {
+      "id": "cabin_photos",
+      "title": "Photographs of real 9A33BM2/BM3 cabins: opisybroni.pl '9K33 Osa' (museum vehicle, 2021), US Air Force photo 170120-F-DV125-019 (2017), Ukrainian 39th brigade crew photos on Instagram (devinsanluis, 2026), a photo with English tape labels supplied by the user",
+      "url": "https://opisybroni.pl/9k33-osa/",
+      "notes": "Block order of the three console columns and where scopes, wheels and the launch block sit. Labels are mostly too small to read; positions inside a block are estimates. Copies in reference/sources/photos/ (not in git)."
+    },
+    {
+      "id": "samsim_panels",
+      "title": "SAM Simulator v930.2 console art: photographs of the range, search and guidance columns of the main console, embedded in sam.exe (the game's Form56 / Form57 backgrounds)",
+      "notes": "Straight-on photos of a real vehicle's panels with readable block plates and labels. Used for the position of every operator control in data/cabins/osa_ak.json (1 mm per pixel). Extracted locally to reference/samsim/exe_img/ (not in git; the art belongs to the game's creator)."
+    },
+    {
       "id": "flak11",
       "title": "R. Wagner, Fla-Raketenkomplex 9K33 (flak11.de, pages 9K33-3 and 9A33-3; NVA Fla-Raketen-Regiment 11 veterans' site, 2005)",
       "url": "http://www.flak11.de/9K33-Start.htm",

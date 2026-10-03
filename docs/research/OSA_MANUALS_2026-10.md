@@ -314,3 +314,67 @@ meters (КАНАЛ Ц, КАНАЛ Р), ЧАСТОТА. The function check must n
   in the middle and the operator (range) at the rear; the power cabinet is behind the bench. The cabin's status now
   cites the two sources. Distances and panel sizes remain estimates.
 - Test: `cabin: the Osa operators share the left-wall bench, guidance in front, then search, then range`.
+
+## Cabin photos (`cabin_photos`, 3 Oct 2026, later)
+
+Five sets of real-cabin photos, read for layout (labels are mostly too small):
+
+- **Cab and bench** (opisybroni forward view; USAF photo looking aft; Instagram): driver front left at the wheel,
+  commander front right; one bench along the left wall facing three tall console columns; the operators' seats are
+  chairs on that bench. Confirms `mon_2112_80` Fig. 3.
+- **Front column (guidance)**, top to bottom, matching Fig. 3's list 0004-14M, WPU-44 + OS81-10M, 0004-11M,
+  OS52-14M1, OK51-6M:
+  1. meter block: four meters (ε and β of the target channel, ε and β of the missile channel), a selector (target and
+     missile error signals, compensation, two PJ test positions), INJECT and FREQ (from the photo with English tape
+     labels);
+  2. TV monitor, and to its right the **round elevation-search indicator OS81-10M** with three knobs below it;
+  3. launch block 0004-11M (label readable): two КАНАЛЫ button groups with three lamps above each, a vertical numbered
+     list beside a selector (ИЗДЕЛИЯ), a small square meter, **РОД РАБОТЫ** (label readable) and a second rotary
+     beside it, red push buttons, a guarded **АВАРИЙНЫЙ ПУСК** (label readable);
+  4. elevation block with jacks, an amber lamp and the hand wheel on the right;
+  5. a bottom block.
+- **Middle column (search)**: a row of eight round lamps; the search indicator OP81-16M (in the Ukrainian photos it
+  has an added 0–360° azimuth bezel and a rotating cursor of parallel lines, and shows the tracking radar's azimuth
+  line); a block with a printed diagram; the azimuth block with a cranked hand wheel; a bottom block.
+- **Rear column (range)**: a block of three meters; the range indicator with a small rectangular screen; two blocks
+  with printed diagrams; the range block (АВТОМАТ, ПОЛУАВТОМАТ, ТСЦ, РУЧНОЕ along the top with lit push buttons,
+  СКОРОСТЬ, a large hand wheel on the right with a range window above it); a bottom block.
+
+### SAM Simulator's panel photos (`samsim_panels`)
+
+The game's two console forms are built on three straight-on photographs of a real vehicle's main console, one per
+column, embedded in `sam.exe` (610 × 982, 670 × 982 and 610 × 982 px; extracted to `reference/samsim/exe_img/`, not in
+git). Their block plates are readable and match `mon_2112_80` Fig. 3 exactly:
+
+- Range (rear): 0062-6M (generator currents, modes), **OS81-9M** range indicator (ГОТОВ, ВКЛ. ВЫСОК., ПЕРЕДАТЧИК
+  ВКЛ. / ОТКЛ., РЧЧМ / АПЧМ, РАБОТА / КОНТРОЛЬ / КАЛИБР., ЯРКОСТЬ СТРОБА, ЦЕЛЬ Р I — Р II, astigmatism and shift
+  knobs), **OK62-5M**, **OS61-5M** (wind compensation ГРУБО / ТОЧНО, СДЦ / ШТ., УВС), **OS81-18M** range block
+  (АВТОМАТ, ПОЛУАВТОМАТ, ТСЦ, РУЧНОЕ, range window 1 division = 1000 m / 5 m, hand wheel, СКОРОСТЬ П А, ПЕЛЕНГ),
+  0051-7M.
+- Search (middle): the azimuth readout strip (ΔД, Δε, β and ε of the tracking radar), **OP81-16M** (ГОТОВ / ВЫСОК.
+  window, ВЫСОКОЕ and ПОИСК ВКЛ. / ВЫКЛ. button pairs, ДАЛЬНОСТЬ, beam lamps I–III ЛУЧ and their buttons, ОСВЕЩ.
+  ШКАЛЫ, IFF ЗАПРОС, РЧЧМ / АПЧМ, brightness knobs), **OP63-6M2** (РРУ, СДЦ / ШТ., wind compensation, СА, СДЦ ВНЕШН. /
+  ВНУТР.), **OS52-12M** azimuth block (ПОДСВЕТКА, БАЛАНС ПА, ВЛЕВО / ВПРАВО lever, βс dial, АЗИМУТ hand wheel, ЭМУ
+  ОТКЛ. / ВКЛ.), OK81-4M.
+- Guidance (front): the meter strip (ЧАСТОТА, КАНАЛ Ц, КАНАЛ Р), the TV block (РАБ. РЕЖ. ВКЛ., УГОЛ ЗРЕНИЯ ШИРОК. /
+  УЗКИЙ, КОНТРОЛЬ / РАБОТА, contrast and brightness) with **OS81-10M** to its right, the launch block (КАНАЛ II and
+  КАНАЛ I lamp-button groups: СХОД, ЗАХВАТ, СР.Л., УЗКИЙ ЛУЧ, К.З., ГОТОВ СПК, ВКЛ. ВЫС., 1–3; centre МЕТОД, ЦЕЛЬ В
+  ЗОНЕ, ПУСК ГОТОВ, ВНИМАНИЕ, БР; МЦ, the ШР list, СМЕНА ЛИТ. — НОРМ., КАНАЛЫ, БОРТ СПК, ПОМЕХА, СР.Л. / ШИР., the ДЦ
+  meter, ЛЮКИ ЗАКР., ОТКАЗ СРП, РОД РАБОТЫ, ИЗДЕЛИЯ, ПУСК, the ЗАПРЕТ ПУСКА key, АВАР. ПУСК ОБЕСТОЧ. / ГОТОВ and the
+  guarded АВАРИЙНЫЙ ПУСК), **OS52-14M** (ПА, ТСЦ, НЛЦ lamps; ПА and ТСЦ buttons; ПОДСВЕТКА; ЦУ, АЗ, РУ lamps and
+  buttons; БАЛАНС ПА; εс dial; elevation hand wheel on the right edge), OK51-6M.
+
+The game's sprites match these photos at 0.96–1.00, which gives exact positions for 20 controls; the rest were read
+off the labels.
+
+### What changed in SAM3D's data
+
+- `data/cabins/osa_ak.json`: each operator panel is the game's photo of its column at 1 mm per pixel (0.61, 0.67 and
+  0.61 m wide, 0.982 m high, side by side along the left wall, centred 1.35 m above the ground so the search screen
+  is at eye height). Every control, lamp and screen is at its position in the photo. The wheel locks have no picture
+  (the game unlocks a wheel by right-clicking it), so they sit just below their wheels. Space is left for OS81-10M.
+  An overlay of the placements on the photos was checked by eye (`reference/samsim/overlay_check.jpg`).
+- `data/procedures/osa_ak.json`: sources `grezicki_wzu`, `cabin_photos` and `samsim_panels`.
+- Test: the bench test also checks that the columns are taller than wide and that screens sit above wheels and the
+  launch block between the TV and elevation blocks.
+- Next: the elevation-search indicator OS81-10M as a display.

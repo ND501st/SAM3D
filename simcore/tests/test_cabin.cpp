@@ -175,6 +175,24 @@ SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, 
         const CabinPanel* rear = layout.FindPanel(consoles[i + 1]);
         SC_EXPECT(front->centre_m.y - 0.5 * front->width_m >= rear->centre_m.y + 0.5 * rear->width_m);
     }
+    // Each column is a tall stack of blocks (samsim_panels, cabin photos): the screen above the hand wheel, and in the front column
+    // the launch block between the TV block and the elevation block.
+    auto v_of = [&](const char* id) {
+        for (const CabinControl& c : layout.controls) {
+            if (c.control_id == id) return c.v_m;
+        }
+        for (const CabinDisplay& d : layout.displays) {
+            if (d.id == id) return d.v_m;
+        }
+        return 0.0;
+    };
+    for (const char* id : consoles) {
+        const CabinPanel* panel = layout.FindPanel(id);
+        SC_EXPECT(panel->height_m > panel->width_m);
+    }
+    SC_EXPECT(v_of("tov_monitor") > v_of("msl.emergency") && v_of("msl.emergency") > v_of("ssc.el_wheel"));
+    SC_EXPECT(v_of("soc_ppi") > v_of("ssc.az_wheel"));
+    SC_EXPECT(v_of("ssc_range") > v_of("ssc.range_wheel"));
     // Driver front left, commander front right.
     SC_EXPECT(layout.FindStation("driver")->eye_m.x < 0.0 && layout.FindStation("commander")->eye_m.x > 0.0);
 }
