@@ -8,7 +8,7 @@ the engine, so nothing to install.
     python tools/ue_remote.py -f tools/ue/pie_start.py
 
 The code runs as a script in the editor's Python (the `unreal` module is imported for you). Exit codes: 0 ok,
-1 the code raised, 2 no editor found. Set UE_ROOT if the engine isn't at D:\\UE_5.7.
+1 the code raised, 2 no editor found. Set UE_ROOT if the engine isn't at D:\\UE_5.8.
 
 From other scripts:
 
@@ -22,7 +22,7 @@ import os
 import sys
 import time
 
-UE_ROOT = os.environ.get("UE_ROOT", r"D:\UE_5.7")
+UE_ROOT = os.environ.get("UE_ROOT", r"D:\UE_5.8")
 sys.path.insert(0, os.path.join(UE_ROOT, "Engine", "Plugins", "Experimental", "PythonScriptPlugin", "Content", "Python"))
 import remote_execution  # noqa: E402  (ships with the engine)
 
