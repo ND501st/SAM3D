@@ -65,6 +65,15 @@ def default_style(control, controls):
     return "rotary" if len(control.get("position_labels", [])) > 2 else "toggle"
 
 
+def look_size(entry, default):
+    """An item's footprint: the size its "look" gives (a diameter or [width, height], as the cabin draws it), or the
+    style's default."""
+    size = entry.get("look", {}).get("size_m")
+    if size is None:
+        return default
+    return (size, size) if isinstance(size, (int, float)) else tuple(size)
+
+
 def build_items(console, cabin):
     """Everything drawn on the panels: a list of dicts with panel, kind, centre and size in metres.
 
@@ -83,7 +92,8 @@ def build_items(console, cabin):
         placed[control["id"]] = entry
         items.append({
             "what": "control", "id": control["id"], "label": control.get("label", ""), "style": style,
-            "panel": entry["panel"], "at": tuple(entry["at_m"]), "size": FOOTPRINT_M[style],
+            "panel": entry["panel"], "at": tuple(entry["at_m"]),
+            "size": look_size(entry, FOOTPRINT_M[style]),
             "confidence": control.get("confidence", ""), "launch": control["id"] == launch_button,
             "positions": len(control.get("position_labels", [])), "guards": None,
         })
@@ -103,7 +113,7 @@ def build_items(console, cabin):
     for lamp in cabin.get("lamps", []):
         items.append({
             "what": "lamp", "id": lamp["id"], "label": lamp.get("label", ""), "style": "lamp",
-            "panel": lamp["panel"], "at": tuple(lamp["at_m"]), "size": FOOTPRINT_M["lamp"],
+            "panel": lamp["panel"], "at": tuple(lamp["at_m"]), "size": look_size(lamp, FOOTPRINT_M["lamp"]),
             "confidence": lamp.get("confidence", ""), "color": lamp.get("color", "white"),
         })
     for display in cabin.get("displays", []):
@@ -119,7 +129,10 @@ def _overlap(a, b):
     """True if two footprints overlap. Round items are tested as circles, the rest as rectangles."""
     dx = abs(a["at"][0] - b["at"][0])
     dy = abs(a["at"][1] - b["at"][1])
-    if a["style"] in ROUND and b["style"] in ROUND:
+    def round_(item):
+        return item["style"] in ROUND and abs(item["size"][0] - item["size"][1]) < 1e-9
+
+    if round_(a) and round_(b):
         return math.hypot(dx, dy) < (a["size"][0] + b["size"][0]) / 2.0 - 1e-9
     return dx < (a["size"][0] + b["size"][0]) / 2.0 - 1e-9 and dy < (a["size"][1] + b["size"][1]) / 2.0 - 1e-9
 
@@ -133,21 +146,22 @@ def find_problems(console, cabin):
     for control in console.get("controls", []):
         if control["id"] not in drawn:
             problems.append(f"control '{control['id']}' is not placed on any panel")
+    # Covers are flaps hinged 4.5 cm in front of the face (SimCabinComponent), so they may hang past a column's edge
+    # or over a neighbour, as the guards in the samsim_panels photos do; only items on the face are checked.
+    on_face = [i for i in items if i["style"] != "cover"]
     for item in items:
         panel = panels.get(item["panel"])
         if panel is None:
             problems.append(f"{item['what']} '{item['id']}' is on unknown panel '{item['panel']}'")
             continue
         half_w, half_h = panel["size_m"][0] / 2.0, panel["size_m"][1] / 2.0
-        if (abs(item["at"][0]) + item["size"][0] / 2.0 > half_w + 1e-9 or
+        if item["style"] != "cover" and (abs(item["at"][0]) + item["size"][0] / 2.0 > half_w + 1e-9 or
                 abs(item["at"][1]) + item["size"][1] / 2.0 > half_h + 1e-9):
             problems.append(f"{item['what']} '{item['id']}' reaches over the edge of panel '{item['panel']}'")
-    for n, a in enumerate(items):
-        for b in items[n + 1:]:
+    for n, a in enumerate(on_face):
+        for b in on_face[n + 1:]:
             if a["panel"] != b["panel"]:
                 continue
-            if a.get("guards") == b["id"] or b.get("guards") == a["id"]:
-                continue  # a cover over the control it guards
             if _overlap(a, b):
                 problems.append(f"'{a['id']}' and '{b['id']}' overlap on panel '{a['panel']}'")
     return problems
