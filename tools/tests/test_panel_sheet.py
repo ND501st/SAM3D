@@ -82,6 +82,25 @@ def test_item_over_the_panel_edge_is_reported():
     assert any("'wheel' reaches over the edge" in p for p in problems)
 
 
+def test_look_size_sets_the_footprint():
+    cabin = _cabin()
+    cabin["controls"][2]["look"] = {"size_m": 0.08}                  # a smaller wheel
+    cabin["lamps"][0]["look"] = {"kind": "legend", "size_m": [0.05, 0.02], "label": "READY"}
+    items = {i["id"]: i for i in panel_sheet.build_items(_console(), cabin)}
+    assert items["wheel"]["size"] == (0.08, 0.08)
+    assert items["ready"]["size"] == (0.05, 0.02)
+    cabin["controls"][2]["at_m"] = [-0.455, -0.1]  # inside the edge at 8 cm, over it at the default 12 cm
+    assert panel_sheet.find_problems(_console(), cabin) == []
+
+
+def test_covers_stand_off_the_face():
+    # A closed guard hangs in front of the panel, so it may reach past the edge or over a neighbour.
+    cabin = _cabin()
+    cabin["controls"][0]["at_m"] = [-0.48, 0.2]  # the guarded switch at the edge: its cover reaches past it
+    cabin["lamps"][0]["at_m"] = [-0.44, 0.2]     # and over the lamp beside it
+    assert panel_sheet.find_problems(_console(), cabin) == []
+
+
 def test_unplaced_control_is_reported():
     cabin = _cabin()
     del cabin["controls"][5]

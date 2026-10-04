@@ -108,7 +108,7 @@
     { "control": "ssc.el_light", "panel": "fo_panel", "at_m": [-0.114, -0.237],
       "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "ПОДСВЕТКА"} },
     { "control": "ssc.el_lock", "panel": "fo_panel", "at_m": [0.26, -0.329] },
-    { "control": "ssc.el_wheel", "panel": "fo_panel", "at_m": [0.26, -0.244], "units_per_turn": 20,
+    { "control": "ssc.el_wheel", "panel": "fo_panel", "at_m": [0.257, -0.244], "units_per_turn": 20,
       "notes": "One turn = 20 degrees of elevation (SAM3D estimate, for playability).", "look": {"size_m": 0.095, "color": "black"} },
     { "control": "fo.key", "panel": "fo_panel", "at_m": [0.165, -0.099], "look": {"label": "ЗАПРЕТ ПУСКА"} },
     { "control": "fo.launch", "panel": "fo_panel", "at_m": [0.113, -0.089],
