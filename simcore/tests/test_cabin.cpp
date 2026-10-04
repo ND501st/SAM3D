@@ -94,7 +94,7 @@ SC_TEST("cabin: default styles and click targets follow the control") {
     SC_EXPECT(CabinClickTarget(*panel.Find("ssc.az_wheel"), 0, 1) == -1);
 }
 
-SC_TEST("cabin: red dots mark each toggle's and rotary's starting position") {
+SC_TEST("cabin: red dots mark a control's working position, only where the layout gives one") {
     // Hand calculations: toggles point up for on, down for off; a 3-way rotary spreads 30 degrees apart about up,
     // a 5-way one too (240 / 4 = 60 is capped at 30).
     SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Toggle, 2, 0), 180.0, 1e-12);
@@ -110,23 +110,22 @@ SC_TEST("cabin: red dots mark each toggle's and rotary's starting position") {
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
     double du = 0.0;
     double dv = 0.0;
-    // ПОИСК starts off: the dot is below the switch.
-    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("soc.search"), *console.panel.Find("soc.search"), du, dv));
+    // РОД РАБОТЫ starts at ТР (position 1 of 2, up) but its dot is at БР (position 0): below the switch.
+    SC_EXPECT(console.panel.Find("fo.mode")->initial == 1);
+    SC_EXPECT(CabinLayout::RedDot(*layout.FindControl("fo.mode"), *console.panel.Find("fo.mode"), du, dv));
     SC_EXPECT_NEAR(du, 0.0, 1e-12);
     SC_EXPECT_NEAR(dv, -0.03, 1e-12);
-    // РОД РАБОТЫ starts at "other" (position 1 of 2): up.
-    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("fo.mode"), *console.panel.Find("fo.mode"), du, dv));
-    SC_EXPECT_NEAR(dv, 0.03, 1e-12);
-    // ДАЛЬНОСТЬ starts at 0-15 km (position 0 of 3): 30 degrees left of up.
-    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("soc.range"), *console.panel.Find("soc.range"), du, dv));
-    SC_EXPECT_NEAR(du, -0.016, 1e-12);
+    // КАНАЛЫ starts on its dot at СОВМ. (position 2 of 3): 30 degrees right of up.
+    SC_EXPECT(console.panel.Find("msl.channels")->initial == 2);
+    SC_EXPECT(CabinLayout::RedDot(*layout.FindControl("msl.channels"), *console.panel.Find("msl.channels"), du, dv));
+    SC_EXPECT_NEAR(du, 0.016, 1e-12);
     SC_EXPECT_NEAR(dv, 0.032 * std::cos(DegToRad(30.0)), 1e-12);
-    // ЛУЧ starts at I (position 0 of 5): 60 degrees left of up.
-    SC_EXPECT(CabinLayout::StartMark(*layout.FindControl("soc.beam"), *console.panel.Find("soc.beam"), du, dv));
-    SC_EXPECT_NEAR(du, -0.032 * std::sin(DegToRad(60.0)), 1e-12);
-    SC_EXPECT_NEAR(dv, 0.032 * std::cos(DegToRad(60.0)), 1e-12);
-    for (const char* none : {"fo.key", "fo.launch", "ssc.az_wheel", "soc.hv_cover"}) {
-        SC_EXPECT(!CabinLayout::StartMark(*layout.FindControl(none), *console.panel.Find(none), du, dv));
+    // РАБОТА / КОНТРОЛЬ starts at КОНТРОЛЬ; the dot is at РАБОТА (position 0 of 3): 30 degrees left of up.
+    SC_EXPECT(CabinLayout::RedDot(*layout.FindControl("ssc.check_mode"), *console.panel.Find("ssc.check_mode"), du, dv));
+    SC_EXPECT_NEAR(du, -0.016, 1e-12);
+    // No dot where none is known (ДАЛЬНОСТЬ has none on the photos), nor on keys, buttons, wheels and covers.
+    for (const char* none : {"soc.range", "soc.search", "fo.key", "fo.launch", "ssc.az_wheel", "soc.hv_cover"}) {
+        SC_EXPECT(!CabinLayout::RedDot(*layout.FindControl(none), *console.panel.Find(none), du, dv));
     }
 }
 
@@ -173,6 +172,40 @@ SC_TEST("cabin: lamps light from subsystem states and inputs") {
     SC_EXPECT(CabinLayout::LampLit(*gta, console.panel, console.equipment));
 }
 
+SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back (as in the running game)") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    auto lit = [&](const char* id) {
+        for (const CabinLamp& l : layout.lamps) {
+            if (l.id == id) return CabinLayout::LampLit(l, console.panel, console.equipment);
+        }
+        return false;
+    };
+    auto step = [&] {
+        console.equipment.Update(0.1, console.panel);
+        console.panel.ReleaseMomentaries();
+    };
+    console.panel.Set("pwr.gta", 1);
+    for (int i = 0; i < 3000 && !console.equipment.IsReady("power"); ++i) step();
+    SC_EXPECT(lit("ru") && !lit("cu") && !lit("az") && lit("beam_1") && lit("soc_gotov") && !lit("br"));
+    console.panel.Set("fo.cu_az", 1);
+    step();
+    step();
+    SC_EXPECT(!lit("ru") && lit("cu") && lit("az"));
+    console.panel.Set("fo.az", 1);  // does nothing by itself
+    step();
+    SC_EXPECT(lit("cu") && lit("az"));
+    console.panel.Set("fo.ru", 1);
+    step();
+    step();
+    SC_EXPECT(lit("ru") && !lit("cu") && !lit("az"));
+    console.panel.Set("fo.mode", 0);  // РОД РАБОТЫ to БР
+    step();
+    SC_EXPECT(lit("br"));
+}
+
 SC_TEST("cabin: the loader rejects bad layouts with a path to the problem") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));
@@ -207,6 +240,14 @@ SC_TEST("cabin: the loader rejects bad layouts with a path to the problem") {
     SC_EXPECT(ErrorContains(
         Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0], "units_per_turn": 5 } ])"),
         "for wheels only"));
+    SC_EXPECT(ErrorContains(
+        Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0], "red_dot": 3 } ])"),
+        "controls[0].red_dot: not a position of 'soc.range'"));
+    SC_EXPECT(ErrorContains(
+        Small(R"(, "controls": [ { "control": "ssc.az_wheel", "panel": "p", "at_m": [0, 0], "red_dot": 0 } ])"),
+        "for toggles and rotaries only"));
+    SC_EXPECT(LoadCabin(Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0], "red_dot": 1 } ])"),
+                        console, layout));
     SC_EXPECT(ErrorContains(Small(R"(, "lamps": [ { "id": "l", "label": "L", "panel": "p", "at_m": [0, 0],
         "color": "blue", "lit_when": [ { "input": "target_in_zone", "is": true } ], "source": "s", "confidence": "high" } ])"),
                             "lamps[0].color"));

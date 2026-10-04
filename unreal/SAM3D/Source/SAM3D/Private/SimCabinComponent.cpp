@@ -27,7 +27,7 @@ namespace
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
 	const FLinearColor ChromeColor(0.7f, 0.7f, 0.72f);
 	const FLinearColor CoverColor(0.6f, 0.03f, 0.02f);
-	const FLinearColor StartMarkColor(0.75f, 0.0f, 0.0f);
+	const FLinearColor RedDotColor(0.75f, 0.0f, 0.0f);
 	const FLinearColor BrassColor(0.6f, 0.45f, 0.1f);
 	const FLinearColor HighlightColor(1.0f, 0.85f, 0.2f);
 
@@ -293,10 +293,10 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	const simcore::ControlDef* Def = Sim->GetScenarioRunner()->Console().panel.Find(Control.control_id);
 	double MarkU = 0.0;
 	double MarkV = 0.0;
-	if (Def != nullptr && simcore::CabinLayout::StartMark(Control, *Def, MarkU, MarkV))
+	if (Def != nullptr && simcore::CabinLayout::RedDot(Control, *Def, MarkU, MarkV))
 	{
 		// A flat red dot on the panel face (m to cm), clear of the collar.
-		Item.Mark = AddMesh(CylinderMesh, StartMarkColor);
+		Item.Mark = AddMesh(CylinderMesh, RedDotColor);
 		Item.Mark->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Place(Item.Mark, Item.Location + (Item.Right * MarkU + Item.Up * MarkV) * 100.0 + Item.Normal * 0.15,
 			FRotationMatrix::MakeFromZ(Item.Normal).Rotator(), FVector(0.007, 0.007, 0.002));

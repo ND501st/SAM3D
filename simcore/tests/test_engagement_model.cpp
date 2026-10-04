@@ -29,9 +29,9 @@ std::string Engage(const std::string& target, const std::string& triggers = "", 
       "targets": [ )" +
            target + R"( ],
       "triggers": [
-        { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Commander" },
-                                           { "queue": "deploy_at_halt", "crew": "Commander" },
-                                           { "order": "pto_on_line", "crew": "Driver" },
+        { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Driver" },
+                                           { "order": "deploy_at_halt", "crew": "Commander" },
+                                           { "queue": "pto_on_line", "crew": "Driver" },
                                            { "order": "search_on_march", "crew": "Senior operator" } ] } )" +
            triggers + R"( ],
       "end": { "time_limit_s": 400 } })";

@@ -48,7 +48,7 @@ struct SAM3D_API FSimCabinItem
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Pointer;
 
-	/** Red dot beside the control marking its starting position (simcore::CabinLayout::StartMark). May be null. */
+	/** Red dot beside the control marking its working position (simcore::CabinLayout::RedDot). May be null. */
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Mark;
 

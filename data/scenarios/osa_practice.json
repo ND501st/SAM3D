@@ -32,7 +32,7 @@
   ],
   "triggers": [
     { "id": "on_the_march", "when": { "after_s": 0 },
-      "do": [ { "order": "power_up", "crew": "Commander" }, { "order": "search_on_march", "crew": "Senior operator" } ] },
+      "do": [ { "order": "power_up", "crew": "Driver" }, { "order": "search_on_march", "crew": "Senior operator" } ] },
     { "id": "halt", "when": { "target": "t1", "target_within_m": 40000 },
       "do": [ { "set_input": "vehicle_stopped", "value": true }, { "order": "deploy_at_halt", "crew": "Commander" },
               { "order": "pto_on_line", "crew": "Driver" } ] },

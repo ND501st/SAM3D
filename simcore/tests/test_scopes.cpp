@@ -70,9 +70,9 @@ SC_TEST("scopes: the tracking radar's range indicator shows targets in its beam 
       "targets": [ { "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 30000, "up_m": 1000 },
                      "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150 } ],
       "triggers": [
-        { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Commander" },
-                                           { "queue": "deploy_at_halt", "crew": "Commander" },
-                                           { "order": "pto_on_line", "crew": "Driver" },
+        { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Driver" },
+                                           { "order": "deploy_at_halt", "crew": "Commander" },
+                                           { "queue": "pto_on_line", "crew": "Driver" },
                                            { "order": "search_on_march", "crew": "Senior operator" } ] },
         { "id": "acq", "when": { "conditions": [ { "subsystem": "soc_transmitter", "is": "ready" } ] },
           "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy" },

@@ -8,10 +8,10 @@ The rules in `data/systems/README.md` apply: public material only, best source t
 `source` and a `confidence` (`high` / `medium` / `low` / `estimate`). Use `low` or `estimate` for anything inferred
 rather than read in a source, and say why in `notes`.
 
-**Planned change to the Osa file (roadmap 6.1, 6.3):** stations become the real five-man crew (commander, deputy
-commander, senior operator, operator, driver) instead of SAM Simulator's three operator panels, and the missile
-channels get their own lamps and missile containers. `docs/re/osa.md` → "Corrections from operators" has the
-details.
+**The Osa file** has the real five-man crew (6.1) and, since the eyes-on pass (6.0), every control seen on SAM
+Simulator's panels with its start position as measured in the running game. Controls whose function isn't known
+are present but inert (no subsystem uses them). Still planned (6.3): missile channels with their own lamps and
+missile containers (`docs/re/osa.md` → "Corrections from operators").
 
 ## Format
 
