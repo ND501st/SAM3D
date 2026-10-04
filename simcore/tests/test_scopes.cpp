@@ -67,17 +67,18 @@ SC_TEST("scopes: the tracking radar's range indicator shows targets in its beam 
       "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
                 { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
                 { "name": "Driver", "role": "driver" } ],
-      "targets": [ { "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 30000, "up_m": 1000 },
+      "targets": [ { "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 30000, "up_m": 1000 }, "appear_at_s": 230,
                      "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150 } ],
       "triggers": [
         { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Driver" },
-                                           { "order": "deploy_at_halt", "crew": "Commander" },
                                            { "queue": "pto_on_line", "crew": "Driver" },
+                                           { "order": "equipment_on", "crew": "Operator" },
+                                           { "queue": "deploy_at_halt", "crew": "Operator" },
                                            { "order": "search_on_march", "crew": "Senior operator" } ] },
         { "id": "acq", "when": { "conditions": [ { "subsystem": "soc_transmitter", "is": "ready" } ] },
           "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy" },
                   { "order": "capture_with_ssc", "crew": "Operator" } ] } ],
-      "end": { "time_limit_s": 300 } })";
+      "end": { "time_limit_s": 600 } })";
     ScenarioDef def;
     ConsoleData console;
     std::string error;

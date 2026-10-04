@@ -26,15 +26,16 @@
       "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
       "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },
       "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
-      "speed_mps": 150, "rcs_m2": 0.5,
-      "notes": "Placeholder numbers."
+      "speed_mps": 150, "rcs_m2": 0.5, "appear_at_s": 200,
+      "notes": "Placeholder numbers. Launched 200 s into the exercise, so the crew has its 4 min to readiness (mon_2112_80 p11–12)."
     }
   ],
   "triggers": [
     { "id": "on_the_march", "when": { "after_s": 0 },
-      "do": [ { "order": "power_up", "crew": "Driver" }, { "order": "search_on_march", "crew": "Senior operator" } ] },
+      "do": [ { "order": "power_up", "crew": "Driver" }, { "order": "equipment_on", "crew": "Operator" },
+              { "order": "search_on_march", "crew": "Senior operator" } ] },
     { "id": "halt", "when": { "target": "t1", "target_within_m": 40000 },
-      "do": [ { "set_input": "vehicle_stopped", "value": true }, { "order": "deploy_at_halt", "crew": "Commander" },
+      "do": [ { "set_input": "vehicle_stopped", "value": true }, { "order": "deploy_at_halt", "crew": "Operator" },
               { "order": "pto_on_line", "crew": "Driver" } ] },
     { "id": "acquire", "when": { "target": "t1", "target_within_m": 35000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
       "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy commander" },

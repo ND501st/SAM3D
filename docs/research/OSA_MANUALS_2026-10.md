@@ -1,0 +1,271 @@
+# 9K33M2 Osa-AK: what the Polish 1981 manual and the Soviet 1991 textbook say (October 2026)
+
+Two documents read on 3 Oct 2026 (files in `reference/sources/`, git-ignored; text extracted with
+`reference/tools/pdf_extract.py`, figures with `figure_prep.py`). Facts only, paraphrased, with page numbers. Page
+numbers are the documents' printed numbers unless marked "PDF p".
+
+| Key | Document | Status | Use |
+|---|---|---|---|
+| `mon_2112_80` | *Przeciwlotniczy zestaw rakietowy 9K33M2 OSA-AK. Wiadomości ogólne. Użytkowanie zestawu*, MON, Szefostwo Służby Uzbrojenia i Elektroniki, Uzbr. 2112/80, Warszawa 1981 (introduced by order pf. 48/Uzbr., 2 Dec 1980). 87 PDF pages, typewritten, Polish | Marked **JAWNE** (unclassified) | Tier 1: an operator country's official manual for exactly the Osa-AK |
+| `voenizdat_osa_1991` | *Автономный войсковой зенитный ракетный комплекс «Оса»*, USSR MoD, Voenizdat, Moscow 1991; textbook approved by the C-in-C Ground Forces for PVO SV troops; about the 9K33M3 Osa-AKM (9A33BM3), "all modifications" in scope. 272 pp | Copy-numbered (Экз. №), a marking above it blacked out; imprint Изд. № 13/8918с, Зак. 2278с (the "с" suffix usually marks a secret edition). **Used by the project owner's decision (3 Oct 2026)**, against the public-only rule | Tier 1 for content; describes the AKM, so differences from the AK are marked |
+
+## Polish manual (mon_2112_80): the Osa-AK as a whole
+
+### Data (pp. 10–12)
+
+- Fire zone against aircraft and helicopters at 300 m/s (1100 km/h): height 25–5000 m, range 1.5–10 km, crossing
+  parameter up to 6 km; at 500 m/s (1800 km/h): height 100–5000 m, range 1.5–10 km, parameter up to 4 km.
+- Detection of a MiG-21-size target by the search radar: 20–35 km depending on height.
+- One missile or a salvo of two; command guidance by the three-point method. Low targets (ε 0–30): three-point in
+  azimuth, in elevation three-point with a lead above the line, removed as the missile closes (ΔD → 0).
+- TV-optical tracking channel; switching from radar auto-tracking to the TV is possible when visibility is 20–35 km.
+- March to combat: **at most 4 min, including starting the gas-turbine generator** (p. 11–12).
+- Speed: road 60 km/h, dirt roads 30, cross-country 10, water 8 km/h.
+- Use from −40 to +50 °C, humidity to 98 %, ground wind to 20 m/s. Radio range ≥ 12 km (R-123M).
+- Transport by rail, Il-76, water; the antenna-launcher unit must be folded for rail gauge 02-1 and air transport.
+
+### Vehicle composition (pp. 13–15)
+
+Search radar (RSWP = СОЦ) with antenna-waveguide, transmitter, magnetron AFC (АПЧМ), receiver, a moving-target
+canceller (CzPK = ЧПК) shared with the tracking radar, and the PPI; IFF interrogator (NRZ); tracking radar (SSC = СОЦ's
+pair, СОЦ/ССЦ) with error-signal and antenna-control channels and a range unit shared with the missile tracker;
+two-channel missile tracking radar (SSR = СВР); two-channel command transmitter (SPK = СПК) with encoders; launch
+automation; computer (SRP: launch and command units); TV-optical sight (TOW = ТОВ); launcher 9P35M2; **search-antenna
+stabilisation 9W611BM2**; function-check system; **gas-turbine generator 9I120**. Six missiles in containers.
+
+### Functional description (pp. 15–20)
+
+- Search antenna turns at **33 rpm**; the beam steps **once per turn** (I, II, III) to cover the chosen elevation
+  sector. MTI (TES = СДЦ) with external or internal coherence; signals pass through the canceller (ЧПК).
+- IFF: the interrogator's antenna is built into the search antenna; replies go to the PPI.
+- The search platform is stabilised (amplifier 0009-5M, two hydraulic drives) so search works on the move; error
+  sources: artificial horizon OGW-10P and gyro azimuth GA-3.
+- Tracking radar: aimed in azimuth from the search radar's data, in elevation roughly to the **centre of the search
+  beam**, then **searches automatically in elevation within that beam**. Monopulse, two channels (main and
+  auxiliary) against angle deception; range to the elevation-search indicator, range indicator and range counter.
+- НЛЦ (low targets): tracking and missile antennas held at a fixed elevation; **switches on automatically** when the
+  target (or missile) reaches that angle; in the tracking radar it switches off automatically when the elevation
+  rises 00-01.5 above the fixed value, in the missile tracker on the ВОЗВРАТ signal (p. 21–23).
+- Missile tracker (SSR): when the tracking radar starts auto-tracking, the SSR goes to **ЦУ** (start position for
+  capture), captures the missile in the **wide beam at 30–50 m**, switches to the **medium beam at 100–150 m**
+  automatically, and to the **narrow beam** (guidance) on the computer's signal. Two identical channels; two
+  missiles can be guided at once (different carrier frequencies and codes).
+- Computer: from the tracking radar's data the launch unit works out the launch zone and sends **launch permission
+  to block 0004-11M (the launch console)**; then the command unit forms K1, K2 (steering) and **K3 (fuse arming)** at
+  a closing range ΔD that depends on the closing speed.
+- **Function check: at most 10 min**: transmitters, receiver sensitivity, antenna-control limits, range units,
+  commands K1–K3, a static problem in the computer.
+- TV sight: optical head with the camera on the tracking antenna, **monitor on the main console**; tracking is
+  **semi-automatic**: the operator keeps the crosshair on the target mark.
+- Power: **on the march from the gas-turbine generator (GTA); at a halt from the GTA or the engine-driven generator
+  (GOM), or an external supply** (≥ 35 kW, 3-phase 220 V ± 3.5 %, 400 Hz ± 2.5 %, ≤ 180 A per phase; cable in the
+  ZCzZ-2 vehicle; up to 80 m away). Vehicle supply 3 × 220 V, 400 ± 10 Hz.
+- On the march: search and identification. Pointing the tracking radar, auto-tracking, launch and guidance **only
+  after the vehicle stops**.
+
+### Operating modes (pp. 21–23)
+
+| Mode | What it does |
+|---|---|
+| Search | Antenna turns at 33 rpm; beams **I–II** for the low sector (0–8°) or **I–II–III** for the whole (0–28°), chosen by the commander |
+| Identification | General interrogation (ЗАПРОС and ЗАПРОС К): reply shown as a **20° arc** on the PPI; or ПРОПУСКНОЙ (gated) mode: the reply is gated by the search echo, so the mark is much narrower |
+| Fast azimuth slew | ("przerzut w azymucie", переброс по азимуту) for large differences between the target bearing and the tracking antenna |
+| **ЦУ** (tracking radar) | Rough pointing in elevation: antenna to the **centre of the search beam (I, II or III)** and sector search in elevation within it |
+| **АЗ** (автозахват, automatic capture) | Switches on automatic tracking in angles and range; **capture happens when the tracking radar is on the target in all three coordinates** (azimuth, elevation, range) |
+| **ТСЦ** (точное сопровождение) | Automatic angle tracking; on after the radar is on the target in angles and range |
+| **ПА** (semi-automatic) | Angle tracking with the TV sight |
+| SSR "0" | Missile antennas held parallel to the tracking antenna |
+| SSR ЦУ | On the **ТСЦ signal**: missile antennas to their start position for capture |
+| ШИРОКИЙ / СРЕДНИЙ / УЗКИЙ ЛУЧ | Missile capture (30–50 m), lead-in (automatic at 100–150 m), guidance (on the computer's signal). Commands go out through the wide-beam СПК antenna at capture, then the medium-beam antenna |
+| ВОЗВРАТ | Missile antennas and range units back to the start after guidance |
+| Stabilisation **ДЕЖУРНЫЙ** (standby) | At a halt: antenna levelled, hydraulic drives off, axes locked. **After the АПУ is unlocked the system switches itself to БОЕВАЯ РАБОТА**, hydraulics on |
+| СДЦ (TES) | Separately in search and tracking radars; shared canceller. In the tracking radar's range channel only the **1.5 km around the tracked target** is shown; in the search radar everything except that 1.5 km |
+| НЛЦ | As above |
+
+### Layout (Fig. 3, pp. 24–25; text p. 23–24)
+
+Plan, A-A (right wall) and B-B (left wall) views:
+
+- Front cab: **driver front left**, with the **gas-turbine control panel ("pulpit sterowniczy 9I120") beside
+  him**; **commander front right**, with the **antenna-lowering board ("tablica opuszczania")** and DP-3B; an R-123M
+  radio at each.
+- At the front of the left rack: **launch-prohibit lock ("zamek zakazu startu") and a signalling board ("tablica
+  sygnalizacji")**.
+- **Three operators on one bench along the left wall facing rack SŁ-2M (the main console)**; front to rear:
+  **senior (guidance) operator, search operator, range operator**. Telephone TA-57 at the front seat.
+- Left wall, front to rear: **SŁ-1M** (stabilisation amplifier, function-check block, gyro control panel: 0004-12M,
+  0005-8M, OS51-8M, OK81-4M-II, 0009-5M), **SŁ-2M main console** (three columns, front to rear: 0004-14M,
+  WPU-44 + OS81-10M, 0004-11M, OS52-14M1, OK51-6M | 0094-9, OP81-16M, OP63-6M2, OS52-12M, OK81-4M-I | 0062-6M, OS81-9M,
+  OK62-5M, OS61-5M, OS81-18M, 0051-7M), **SŁ-3M** (power: 0093-28, 0092-8, 0092-10M, OS94-10, 0096-10M, 0092-4M).
+- Right wall: SP-1M (encoder, canceller, power), SP-2M (computer: nine blocks, OR-31M and five control blocks),
+  SP-3M-2 (IFF and power 0095-11M). Power cabinet 0096-9M angled behind the bench; gyros OGW-10P, GA-3.
+- Engine compartment right front: the 9I120 generator. Antenna-launcher (0004-20M) turns **±342°** in azimuth.
+- All antennas have electric and **hand-operated locks for the travel position**. Cooling **LATO / ZIMA** (summer:
+  fans; winter: hatches closed, heater OV-65).
+
+### Operating rules (pp. 63–68)
+
+- RF safety: search transmitter: outside cover ≤ 15 min within 50 m; tracking transmitter: a 15–20 m wide sector,
+  ≤ 15 min at 80 m.
+- **Hatches must not be opened in БОЕВАЯ РАБОТА**; leave the vehicle only after the readiness is changed.
+- Switch equipment on and off **exactly in the order of the operating instructions**.
+- In a battery, the crew orients the vehicle mutually before combat work; **orientation is lost when the equipment is
+  switched off** and must be redone.
+- Reloading six missiles with the TZM: **5–8 min**, vehicle fully de-energised, chassis switch off.
+- March: target found beyond 20 km → pull 30–50 m off the road; within 20 km → stop at once and carry on.
+- Site: level, radius ≥ 10 m; ≥ 500 m from large objects; vehicles ≥ 200 m apart.
+- Command-transmitter frequencies interleaved per vehicle (1st: 3 and 1, 2nd: 4 and 2, 3rd: 7 and 5, 4th: 8 and 6);
+  missile-tracker receivers on carrier B (A only by special permission).
+
+## Soviet 1991 textbook (voenizdat_osa_1991): controls, timers and the crew drill
+
+Describes the Osa-AKM (9A33BM3); block names carry later suffixes (OP81-16M2 for the AK's OP81-16M, 0096-9M1 for
+0096-9M). Page numbers are the book's.
+
+### Power and switching on (pp. 163–166, 51–53, 99–100)
+
+- Power system: gas-turbine unit 9I120 (GTD 9I56-3 + generator; **50 kW**, 67 kg/h of fuel; started from the 24 V
+  batteries), engine power take-off generator (**35 kW**, at a halt only), external supply. Controlled from the
+  driver's additional instrument panel, **PU-303** and the indication panel (АВАР. ОТКЛ. СЭП button). A frequency
+  monitor sheds the load below 360 Hz.
+- **Distribution cabinet 0096-9M1** in the operators' compartment: voltmeter; **АППАРАТУРА ВКЛ. / ОТКЛ.**;
+  СИСТЕМА СТАБ. ВКЛ. / ОТКЛ. (+ lamp); ПРИВОД βн ВКЛ. / ОТКЛ.; ПРИВОДЫ εн, СВР-I, СВР-II ВКЛ. / ОТКЛ. (+ lamps);
+  РАССТОПОР. — СТОПОР. (search antenna rotation) with lamp АНТЕННА СОЦ ЗАСТОПОРЕНА; АНТЕННА — ЭКВИВАЛЕНТ for each
+  radar (+ ЭКВИВАЛЕНТ lamps); ТОВ — ОТКЛ.; РЕЛЕ ТЕПЛ. (start ВКЛ.); lamps РАССТОПОРЕНО Δε, εн and РАССТОПОРЕНО βн;
+  ОБРЫВ ФАЗЫ lamps; maintenance switches under a cover; the IFF's ДР НРЗ and БР НРЗ switches.
+- **Timers after АППАРАТУРА ВКЛ.:** filaments and fans at once → 40 s: −150 V → **1 min: anode supplies of all
+  systems** (sweeps appear) → **3 min: the three-minute relay** readies the transmitters' high voltage and powers the
+  receivers' inputs (ГОТОВ lamps on both radars and ГОТОВ СПК-I, -II). **3 min after switching on, the stabilisation
+  drives come on and the search antenna rises and levels**; УКЛАДКА ПРОИЗВ. goes out. АППАРАТУРА ОТКЛ. switches all off
+  but the turret fans (10 min more).
+- Lamps lit right after АППАРАТУРА ВКЛ.: АНТЕННА СОЦ ЗАСТОПОРЕНА, ЭКВИВАЛЕНТ (each radar), УКЛАДКА ПРОИЗВ., I ЛУЧ,
+  НАКАЛ lamps, РАССТОПОРЕНО Δε, εн; **РУ on the elevation block, but only if ЛЮКИ ЗАКР. is lit on the commander's
+  console**; βн ЗАСТОПОР. on the stowing panel while the АПУ is locked.
+
+### Search radar (pp. 49–53)
+
+- OP81-16M2: buttons **ЛУЧ I, II, III, АВТ. I–II ЛУЧ, АВТ. I–III ЛУЧ** and lamps I/II/III ЛУЧ; ВЫСОКОЕ ВКЛ. / ВЫКЛ.;
+  **ГОТОВ** (ready for high voltage) and **ВЫСОК.** (on; ГОТОВ goes out); ПОИСК ВКЛ. / ВЫКЛ.; РПЧМ — АПЧМ, РЕГ. РПЧМ;
+  PPI knobs ЯРКОСТЬ, ФОКУС, ЯРКОСТЬ ВИЗИРА, ЯРКОСТЬ МЕТОК, КОНТРАСТНОСТЬ, ОСВЕЩЕНИЕ ШКАЛЫ; ДАЛЬНОСТЬ 0–15 / 0–35 /
+  10–45 km (seven range rings on 0–35 and 10–45, three on 0–15).
+- OP63-6M3: РРУ (full gain for combat), ШТ — СДЦ, СДЦ ВНЕШН. — ВНУТР., КОМПЕНС. ВЕТРА — ОТКЛ., wind compensation
+  ГРУБО / ТОЧНО, СА — ОТКЛ. (protection against strong pulse jamming). 0091-18: ТРЕНИРОВКА — РАБОТА СОЦ (magnetron
+  training at reduced voltage), lamp НАКАЛ СОЦ. 0062-6M1: ТОК, МОЩНОСТЬ meters and switch. 0065-2M (canceller): АРУ —
+  РРУ, gains.
+- **Stowing panel:** ПРОХОД ПОД МОСТОМ ВКЛ. / ВЫКЛ. lower and raise the search antenna on the move without stopping
+  the stabilisation; lamps УКЛАДКА ПРОИЗВ., ПРЕД. УГОЛ, ГАБАРИТ 3800 (antenna stowed, tracking radar locked, launchers
+  lowered).
+- Gyro panel 0005-8M: ПИТАНИЕ СЕТЬ — ПТ (start СЕТЬ), РЕЛЕ — Qc (start РЕЛЕ), РЕЛЕ — Ψ, Θ, КОРРЕКЦИЯ ВКЛ. switches
+  (start ВКЛ.), ОБОГРЕВ, φ АВТ. — РУЧН. (start РУЧН.), МК — ГПК — АК (at ГПК), **АРРЕТИР.**, latitude knob; lamps
+  ОТКАЗ Ψ, Θ (lit while arresting) and ОТКАЗ Qc.
+
+### IFF 1L24-2 (pp. 53–66; AKM equipment)
+
+Switches ДР НРЗ — ОТКЛ., БР НРЗ — МЕСТ. on the cabinet; on OP81-16M2: ПОНИЖ., ДИАПАЗОН — РЕЖИМ, **КОНТР. ИНД.**,
+**ЗАПРОС** (1 s per press), **ЗАПРОС К** (special order). Launch blocking (switch and lamp БЛОКИР. ПУСКА on the launch
+console): a friendly reply from the tracked target breaks the launch circuit.
+
+### Tracking radar (pp. 66, 96–101)
+
+- Limits: azimuth 330°, elevation −12° to +78°, range 28 km; auto or manual capture; НЛЦ antenna angle 00-10.
+- OS81-9M (range indicator): **ПЕРЕДАТЧИК ВКЛ. / ОТКЛ.**, lamps **ГОТОВ** and **ВКЛ. ВЫСОКОЕ**; РПЧМ — АПЧМ;
+  **Р I — ЦЕЛЬ — Р II** (fine sweep from the target or missile channel I / II range unit); **РАБОТА — КОНТРОЛЬ —
+  КАЛИБРОВКА** (combat at РАБОТА); ЯРКОСТЬ СТРОБА (missile-tracker gate on the coarse sweep).
+- OS61-5M1: СДЦ — ШТ, КОМПЕНС. ВЕТРА — ОТКЛ., УВ. ПОМЕХА — ОТКЛ. (range-gate pull-off protection), wind compensation,
+  ДОП. УСИЛ. — ОТКЛ.
+- OS81-18M (range): **АВТОМАТ** (+ lamp), **ТСЦ** (parallel to the elevation block's), **РУЧНОЕ**, the range wheel
+  with a revolution lever (coarse / fine), range dial. 0051-7M: repetition-frequency switch АВТ., РУЧН. F1–F3, F3, F.
+- OS81-10M (elevation-search indicator): КОНТРАСТ, ЯРКОСТЬ, ФОКУС; trims. **Fig. 2.37: elevation on the vertical
+  axis, range on the horizontal; a raster band per search beam (about −1° to 30°); the target as a mark.**
+- OS52-12M1 (azimuth): АЗИМУТ wheel (РУ and ПА modes); **ВЛЕВО — ВПРАВО (fast slew of the АПУ)**; **ЭМУ ОТКЛ. — ВКЛ.**
+  (cuts the amplifier's control winding to stop the АПУ turning).
+- OS52-14M2 (elevation): УГОЛ МЕСТА wheel; buttons and lamps **ПА, ТСЦ, ЦУ, РУ**; lamp **НЛЦ**; button and lamp **АЗ**
+  (auto-capture circuit). Pressing ТСЦ lights ТСЦ and НЛЦ (at elevation below 00-06); РУ puts them out and lights РУ.
+- Range indicator, Fig. 2.36: coarse sweep with the transmitted pulse and ground return, the **"pedestal"** (range
+  gate), target and missile spikes; fine sweep with the dark "hole" sight and the missile-tracker gate.
+
+### TV sight 9Sh38-2 (pp. 100–104)
+
+Camera KT-101 on the tracking radar's elevation housing; monitor VPU-55 on the main console. Fields **00-60 x 00-80
+wide, 00-18 x 00-24 narrow** (lenses 150 / 500 mm; switch within 1 s, УГОЛ ЗРЕНИЯ ШИРОКИЙ — УЗКИЙ); not within 16° of
+the sun. РАБ. РЕЖ. ВКЛ. — ВЫКЛ. opens the lens cover; КОНТРОЛЬ — РАБОТА (test chart / crosshair); СВЕТОФИЛЬТР cycles
+blue → clear → orange; ЯРКОСТЬ ПЕРЕКРЕСТ., КОНТРАСТ., ЯРКОСТЬ. The narrow lens shows a larger crosshair.
+
+### Missile tracker, computer, command transmitter (pp. 104, 119–121, 137, 150)
+
+- Missile tracker: two missiles **at least 4 s apart**; ±15° from the tracking antenna; to 14 km; capture **0.8 s
+  after the missile leaves** (angles) and at **150 m** (range); ЦУ angle 22.8° (3-80). Launch console: lamps
+  **ЗАХВАТ** (missile tracker in automatic), **СР. Л.** (range capture, medium beam); switch **ШИР. — СРЕДН.** (medium
+  beam in РР mode); button **СХОД** (ФК mode); OK81-4M: ВОЗВРАТ, БАЛАНС; 0004-14M: error meters.
+- Computer 9S456M3: ready **100 s** after power-on; combat mode **3 s** after the target is tracked; methods three-point,
+  and for low targets "Горка", Н, Ф; lamp **ОТКАЗ СРП** on the launch console.
+- Command transmitter: launch console buttons **БОРТ СПК ВКЛ. / ОТКЛ.** (high voltage), lamps **ГОТОВ СПК** (3 min
+  after switching on) and **ВКЛ. ВЫС.** (on; ГОТОВ goes out), switch **КАНАЛЫ**, switch **СМЕНА ЛИТЕРЫ — НОРМА**
+  (changes the transmitter's frequency letter), lamps **ЗАХВ. АПЧ-I, -II** (out and back within 1 s on a letter
+  change).
+
+### Launch automation (pp. 150–156)
+
+- Pre-launch cycle starts on **ВНИМАНИЕ** from the computer or by hand with **БОРТ СПК ВКЛ.**; two missiles prepared,
+  one per channel; done in **12.8 s**. **ПУСК ГОТОВ needs:** command transmitters on and locked (ЗАХВ. АПЧ), missile
+  range units and timers reset, **hatches closed**, preparation complete; not with БЛОКИРОВКА ПУСКА lit.
+- The launch cycle starts when the **key removes the prohibition**; ПУСК fires; no departure → power cut after 2.5 s;
+  СХОД puts out ПУСК ГОТОВ; the automation switches to the other channel within 3.7 s and ПУСК ГОТОВ lights again.
+- Launch console: **РОД РАБОТЫ** (the automation works only in **БР**, lamp БР), **КАНАЛЫ**, БОРТ СПК, **ПУСК**,
+  ЗАПРЕТ ПУСКА lock, **АВАРИЙНЫЙ ПУСК** (lamps АВАРИЙНЫЙ ПУСК ОБЕСТОЧЕН, АВАРИЙНЫЙ ПУСК ГОТОВ), **ИЗДЕЛИЯ (missile for
+  the emergency launch)**, missile lamps 1-I … 3-II (blinking = faulty), ПУСК ГОТОВ, БЛОКИРОВКА ПУСКА. Emergency
+  launch from the batteries: the missile flies with locked fins and climbs 24–27 s until it self-destructs.
+- The book calls the launch console block (0004-11M1) the **commander's console** ("пульт командира").
+
+### Function check (pp. 157–163)
+
+Block 0004-12M1: АНОД ВКЛ., КОНТРОЛЬ СИСТЕМ, К3 (+ lamp), СМЕНА ЗНАКА, УРОВНИ КОМАНД, meters ИП1, ИП2, ПРОВЕРКА
+ПЕРЕХОДНЫХ ХАРАКТЕРИСТИК, ПРОВЕРКА СМЕНЫ ЛИТЕРА, ПУСК — ИСХ. ПОЛОЖ. Block 0004-14M: РЕЖИМЫ, ВЫВОД — НАВЕДЕНИЕ, four
+meters (КАНАЛ Ц, КАНАЛ Р), ЧАСТОТА. The function check must not delay opening fire (p. 251).
+
+### The crew drill "К бою" (pp. 246–248) and firing (pp. 250–258)
+
+- **Crew chief:** "К бою, включить ГТА (ГОМ)"; tunes the R-123M radios; checks the IFF codes; "Выключить двигатель" at a
+  halt; reports to the battery command post "к бою готов" with channels and missiles.
+- **Operators:** uncover the АПУ, **unlock the search, tracking and missile-tracker antennas by hand**; with the deputy,
+  inspect, set all controls to their start positions, check the intercom, report "первый (второй, третий) готов".
+- **Driver:** controls to their start positions; starts the GTA (GOM): "Питание подано"; starts the engine: "К маршу
+  готов"; **holds АРРЕТИР. 40 s**; stops the engine on order.
+- **Deputy crew chief:** checks АВАР. ПУСК ОБЕСТОЧ. and ДВЕРЬ ЗАКРЫТА; at a halt orients the vehicle (АК — ЗК to ЗК,
+  course angle on the setter ЗК-4, РЕЛЕ — Qc to Qc, hold СОГЛАСОВАНИЕ, then back to АК and РЕЛЕ); orders "Расстопорить
+  АПУ"; presses ТСЦ then РУ and checks the target-channel error meters (≤ 2 divisions); orders "Включить приводы";
+  checks ГОТОВ СПК-I, -II: "Готов СПК"; presses БОРТ СПК ВКЛ., checks ВКЛ. ВЫС. and ЗАХВАТ АПЧМ, no blinking missile
+  lamps, ОТКАЗ СРП dark: "СПК, СРП, ракеты готовы".
+- **Operator:** checks 220 V 400 Hz on the cabinet, presses **АППАРАТУРА ВКЛ.** and **СИСТЕМА СТАБ. ВКЛ.**, switches
+  the TV on; at the deputy's orders **unlocks the АПУ and switches on the drives**; ГОТОВ on the range indicator:
+  reports ready.
+- **Senior operator:** ГОТОВ on the search scope: "Готов СОЦ".
+- Missile preparation 10–12 s; a prepared missile is held at most 10 min, then the next is prepared (a missile can be
+  prepared again after 10 min; three cycles, then a 1 h break). With one channel faulty: КАНАЛЫ to the good channel,
+  single missiles, then СМЕНА ЛИТ.
+- Firing preparation: search with beam I (I–II) for low targets; stop on detection on the march (> 20 km: leave the
+  column to the side away from the target; < 20 km: stop in the column); **unlock and slew the АПУ only after a full
+  stop**; **tracking-radar high voltage once the azimuth line is on the target mark**; choose tracking and capture;
+  launch range from tables; first missile to meet the target at the far edge of the zone; re-engage if ЦЕЛЬ В ЗОНЕ
+  stays lit; a second engagement possible up to 300 m/s if the target spends ≥ 25 s in the launch zone.
+- Network chart (Fig. 7.2): tracking radar on the target 10 s, capture 6–7 s, computer 3 s, missile preparation 15 s,
+  launch 1.2 s, salvo interval 4 s, watching the result 10 s.
+
+## What changed in SAM3D's data (3 Oct 2026)
+
+`data/procedures/osa_ak.json` and `data/cabins/osa_ak.json` (branch `feature/osa-sources-revision`):
+
+- New controls: the power cabinet's АППАРАТУРА, СИСТЕМА СТАБ., РАССТОПОР. — СТОПОР., drive switches and ТОВ (operator);
+  hatches (commander); АРРЕТИР. (driver); ТСЦ (deputy commander); ШИР. — СРЕДН. (deputy commander, inert).
+- Corrected: ЦЕЛЬ → Р I — ЦЕЛЬ — Р II; СМЕНА РКТ → СМЕНА ЛИТ. — НОРМА (`spk.letter`); the 7-position selector →
+  ИЗДЕЛИЯ for the emergency launch (`msl.emergency_select`); РОД РАБОТЫ has БР, ТР, РР, ФК; the antenna-lowering control
+  is ПРОХОД ПОД МОСТОМ (air-transport folding uses a lifting device); the АПУ lock is the operator's; АЗ arms
+  auto-capture (as ЦУ does in the game); TV fields 4.8° / 1.44°; missile preparation 13 s.
+- New subsystems: the 1 min warm-up and 3 min high-voltage relay; stabilisation (3 min) before the search antenna rises
+  and search starts; drives (with the АПУ unlocked) before the radar can turn and track; auto-capture and manual
+  capture as the radar's capture mode; hatches closed for ПУСК ГОТОВ and РУ.
+- Procedures follow the drill: driver (power_up with АРРЕТИР., power_down), operator (equipment_on, deploy_at_halt,
+  stow_ssc, equipment_off), commander (lower / raise the search antenna). The practice scenario now launches its drone
+  200 s in, giving the crew its 4 min to readiness.
+- Not done yet: the vehicle orientation (АК — ЗК, СОГЛАСОВАНИЕ), the IFF controls, the function check, the
+  elevation-search indicator display (axes now known), and the real cabin layout from Fig. 3 (next step).
