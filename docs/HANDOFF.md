@@ -25,7 +25,7 @@ PU-12, and NPC crew work the *same* controls the player does.
 | Repo | **`ND501st/SAM3D`** (private) |
 | Branches and PRs | Everything is on **`main`**: stacked PRs #1–#8 were merged in order with merge commits on 2 Oct 2026 and their branches deleted. New work: one branch per task from `main` (next: phase 6.1). |
 | PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
-| Unreal | UE 5.7.4 at `D:\UE_5.7`, Cesium for Unreal 2.29+; level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
+| Unreal | UE 5.8.3 at `D:\UE_5.8` (5.7.4 kept at `D:\UE_5.7`), Cesium for Unreal; Unreal MCP (`.mcp.json`, see `unreal/README.md`); level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
 | Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
 | Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions), `docs/research/OSA_CONSOLE_MAP_2026-10.md` (control and feature map by seat; proposals, not adopted yet; checked against `reference/` in §12, open items in §11) |
 
@@ -33,13 +33,13 @@ PU-12, and NPC crew work the *same* controls the player does.
 
 | Machine | Role |
 |---|---|
-| **Windows PC** (32 GB, RTX 3060 Ti) | Main workstation: UE 5.7, VS 2022, Git + LFS, Python, `gh` (signed in) |
+| **Windows PC** (32 GB, RTX 3060 Ti) | Main workstation: UE 5.8, VS 2022, Git + LFS, Python, `gh` (signed in) |
 | **Mac M3 Pro** | Remote access (Moonlight, Tailscale), simcore/prototype work over SSH |
 
 What Claude can do on the PC:
 - **Build simcore and run everything:** `.\tools\verify.ps1` from a VS developer shell.
 - **Build the Unreal module** from the command line when the editor is closed:
-  `D:\UE_5.7\Engine\Build\BatchFiles\Build.bat SAM3DEditor Win64 Development -Project=C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject -WaitMutex -NoHotReload`.
+  `D:\UE_5.8\Engine\Build\BatchFiles\Build.bat SAM3DEditor Win64 Development -Project=C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject -WaitMutex -NoHotReload`.
   With the editor open, compile through Live Coding from a script (`LiveCoding.Compile`, see below); header changes
   need the editor closed.
 - **Drive the open editor by script** (Python remote execution is on): `python tools/ue_remote.py "<python>"`
@@ -63,7 +63,7 @@ Gotchas seen so far:
 | `simcore/` | **Header-only C++17 sim core.** Physics side: `vec3`, `geo`, `atmosphere`, `terrain`, `radar`, `aircraft`, `missile`, `world`, `acmi`. Game side: `panel`, `equipment` (incl. `start_ready`, `Restart`), `procedures`, `json` + `console_data`, `debrief`, `scenario` + `scenario_runner` (incl. the player's tracker, launch restarts), `engagement` (gameplay-level picture, lock, outcomes, `TrackReturns`), `cabin` (layout, lamps, displays), `scopes` (search-scope sweep and afterglow) |
 | `simcore/tests/` | 88 tests + `header_check.cpp` |
 | `prototype/` | Python mirror of the physics side (13 tests) |
-| `unreal/SAM3D/` | UE 5.7 project: `USimWorldSubsystem`, `ASimScenarioDirector` (incl. cabin tour switch), `ASimOsaVehicle` (placeholder, cabin mode, tour), `USimCabinComponent`, `USimCabinDisplayComponent`, `ASimCabinHUD`, `ASimEntityActor`. See `unreal/README.md` |
+| `unreal/SAM3D/` | UE 5.8 project: `USimWorldSubsystem`, `ASimScenarioDirector` (incl. cabin tour switch), `ASimOsaVehicle` (placeholder, cabin mode, tour), `USimCabinComponent`, `USimCabinDisplayComponent`, `ASimCabinHUD`, `ASimEntityActor`. See `unreal/README.md` |
 | `data/` | `procedures/osa_ak.json` (console), `cabins/osa_ak.json` (cabin), `systems/osa.json` (cited system data), `scenarios/osa_practice.json`, `gameplay/osa_ak.json` (game balance) |
 | `docs/` | `BRIEFING_2026-10.md`, `research/`, `DEVELOPMENT_ROADMAP.md`, `PROJECT_PLAN.md`, `ARCHITECTURE.md`, `SOURCES.md`, `DEV_SETUP.md`, `REVERSE_ENGINEERING.md`, `re/osa.md` |
 | `tools/` | setup and verify scripts; `ue_remote.py`, `ue_cabin_check.py`; `build_overview_pdf.py` |

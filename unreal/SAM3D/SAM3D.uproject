@@ -1,6 +1,6 @@
 {
   "FileVersion": 3,
-  "EngineAssociation": "5.7",
+  "EngineAssociation": "5.8",
   "Category": "",
   "Description": "SAM3D - first-person 3D air-defence simulator built on the simcore library.",
   "Modules": [
@@ -20,6 +20,14 @@
     },
     {
       "Name": "ProceduralMeshComponent",
+      "Enabled": true
+    },
+    {
+      "Name": "ModelContextProtocol",
+      "Enabled": true
+    },
+    {
+      "Name": "AllToolsets",
       "Enabled": true
     },
     {

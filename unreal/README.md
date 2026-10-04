@@ -1,7 +1,7 @@
 # Unreal project (`unreal/SAM3D`)
 
-A C++ Unreal Engine 5.7 project that links the header-only `simcore` library from the repo root. It uses the
-Cesium for Unreal plugin (2.29+) for real terrain.
+A C++ Unreal Engine 5.8 project that links the header-only `simcore` library from the repo root. It uses the
+Cesium for Unreal plugin (the 5.8 build from Fab) for real terrain.
 
 ## Build
 
@@ -9,10 +9,22 @@ The module builds from the command line without opening the editor (close any ru
 blocks command-line builds):
 
 ```
-D:\UE_5.7\Engine\Build\BatchFiles\Build.bat SAM3DEditor Win64 Development -Project=C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject -WaitMutex -NoHotReload
+D:\UE_5.8\Engine\Build\BatchFiles\Build.bat SAM3DEditor Win64 Development -Project=C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject -WaitMutex -NoHotReload
 ```
 
 Or double-click `SAM3D.uproject` and let Unreal compile it.
+
+## Unreal MCP (for Claude Code)
+
+The project enables Epic's **Unreal MCP** (`ModelContextProtocol`, experimental, UE 5.8+) and **All Toolsets**
+plugins. With the editor open, the MCP server listens on `http://127.0.0.1:8000/mcp` (this PC only, no
+authentication) and Claude Code connects to it through `.mcp.json` at the repo root. Python remote execution
+(`tools/ue_remote.py`) stays on alongside it.
+
+Once per machine, start the server with the editor: **Edit → Editor Preferences → General → Model Context Protocol →
+Auto Start Server** (stored per user in `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`, not in git),
+or run `ModelContextProtocol.StartServer` in the editor console. Start Claude Code from the repo root after the
+editor is up.
 
 ## First level: Osa practice scenario on Cesium terrain
 
@@ -80,7 +92,7 @@ keyboard. C stops it.
 
 ```
 set SAM3D_CABIN_TOUR=6
-D:\UE_5.7\Engine\Binaries\Win64\UnrealEditor.exe C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject
+D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject
 ```
 
 ## Cabin parts library
