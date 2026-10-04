@@ -33,4 +33,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pytest
-      - run: python -m pytest prototype -q
+      - run: python -m pytest prototype tools -q

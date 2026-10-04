@@ -1,6 +1,6 @@
 # SAM3D — Handoff for the next AI model
 
-*Written 30 Sep 2026 (Australia/Sydney); last updated 2 Oct 2026 at the end of the session that did the research review. Read this first, then
+*Written 30 Sep 2026 (Australia/Sydney); last updated 3 Oct 2026 at the end of the session that played the running game for 6.0. Read this first, then
 `docs/BRIEFING_2026-10.md`, the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*
 
 ---
@@ -27,7 +27,7 @@ PU-12, and NPC crew work the *same* controls the player does.
 | PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
 | Unreal | UE 5.8.3 at `D:\UE_5.8` (5.7.4 kept at `D:\UE_5.7`), Cesium for Unreal; Unreal MCP (`.mcp.json`, see `unreal/README.md`); level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
 | Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
-| Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions) |
+| Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions), `docs/research/OSA_CONSOLE_MAP_2026-10.md` (control and feature map by seat; proposals, not adopted yet; checked against `reference/` in §12, open items in §11) |
 
 ## 3. Machines and tooling
 
@@ -157,13 +157,26 @@ physics stays unscheduled.
 
 1. **User:** review and send `docs/outreach/creator_message_draft.md`; name the video (title/channel) so
    `video_osa` can be cited properly; acquire the BSU textbook / GDR handbooks if possible.
-2. **Phase 6.1 (done, PR open):** the console lists five `stations`; every control belongs to one and every
-   procedure stays at one (the loader enforces it; a `CrewMember` refuses another seat's procedure); multi-seat
-   drills are one procedure per seat ordered together (`acquire_with_soc` + `ready_capture` + `capture_with_ssc`;
-   stowing likewise). The gameplay file names a role per wheel (`azimuth_role`, `elevation_role`, `range_role`).
-   The cabin has five seats (senior operator and operator share the left wall); toggles and rotaries get a red dot
-   at their starting position. The two extra crew members draw from the random stream, so the practice scenario's
-   seed moved from 4 to 1 to keep its hit (launch ~235 s, hit ~258 s).
+2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
+   one PR, branched from `main` (in review as PR #10). Then **phase 6.0:** the eyes-on pass. **First half done**
+   (branch `docs/eyes-on-pass`, stacked on PR #11): every §11 item of `docs/research/OSA_CONSOLE_MAP_2026-10.md`
+   checked against `reference/` (the SAM Simulator manual's panel photos and the Osa sprites), the map corrected,
+   findings in its §12. Main results: the 7-position knob is the missile selector; "БОРТ" sprites are the КАНАЛЫ
+   channel selector; the "+27 V selector" is test socket Ш7 beside a guarded СМЕНА РКТ switch; the "β / ε lamps" are
+   the dials' backlight; ЦУ and АЗ are separate buttons; **red dots mark working positions, not start positions**
+   (this affects 6.1's red-dot plan). The `rwd_mb3` photos are now in `reference/photos/rwd_mb3/` and checked (map §12):
+   seat columns and the seat row confirmed, labels too small to read. **Running game done (3 Oct 2026, map §12)**,
+   except anything needing a tracked target: start positions measured for every sprite-backed control (ДАЛЬНОСТЬ
+   starts at 0–35 km, not the data's 0–15; РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their red dots, КАНАЛЫ on
+   its dot); ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; wrong orders are ignored
+   or accepted, never faulted. **Still to do for 6.0:** with a target, the elevation screen's axes and what ЦЕЛЬ /
+   КАНАЛЫ / СМЕНА РКТ do. A second try saw targets at Ustka and NAMFI (scope bursts, map §12) and a player's video
+   showed a full engagement, but capture failed on input limits (no right-button hold; wheels ignore synthetic drags):
+   best done by a person at NAMFI, or asked of the creator. **Data step part 1 done (3 Oct 2026, PR #13 on top of
+   #10):** start positions, labels, new inert controls, elevation limits, power to the driver, red dots as working
+   positions (`red_dot`), the game's lamps. **Next:** the real cabinet layout (panels named after the SL-2M2 blocks, positions
+   from the panel photos), then the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
+   `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
 
@@ -174,12 +187,33 @@ physics stays unscheduled.
 - C++ and Python kept matching, with tests, for any model both implement.
 - Prefers Claude to test in Unreal itself (scripts, screenshots) and to explain findings plainly.
 
-## 15. State at the end of the last session (2 Oct 2026)
+## 15. State at the end of the last session (3 Oct 2026, running-game checks)
 
-- **Everything is merged to `main`** (PRs #1–#8, merge commits, branches deleted); `main` checked out. Working tree
-  clean except the editor's uncommitted lines in `unreal/SAM3D/Config/DefaultEngine.ini` (leave them out of commits).
-- Decisions in briefing §5 adopted; phase 6.1 is the next task.
-- Unreal: all packages saved and the editor told to quit by script (`SystemLibrary.quit_editor`); it logged
-  "Exiting." (it can linger a minute after that). Next session: start it with `SAM3D_CABIN_TOUR=6` if you want the
-  scripted checks.
-- CI was green on all eight PRs (Ubuntu/GCC, macOS/Clang, Windows/MSVC, prototype) before merging.
+- **Open PRs, stacked:** #9 `docs/osa-console-map` → #11 `tools/panel-sheet` → #12 `docs/eyes-on-pass` (docs only:
+  map, `docs/re/osa.md`, `SOURCES.md`, creator draft; this session added the running-game results to it). #10
+  `feature/five-man-crew` (6.1) is separate, from `main`. Merge in that order; retarget the next PR to `main` before
+  deleting a merged base branch.
+- Work happens in a separate worktree, `C:\dev\SAM3D-eyeson`, so the main checkout (`C:\dev\SAM3D`, on
+  `feature/five-man-crew` with the editor's uncommitted `DefaultEngine.ini` lines) is not touched. Remove the
+  worktree with `git worktree remove ../SAM3D-eyeson` once #12 is merged.
+- **Playing SAM Simulator from a session:** it is installed at `C:\Program Files (x86)\SAM Simulator\sam.exe` and
+  can be driven with desktop control (grant "SAM Simulator"). Hints: the game needs keyboard focus (click an empty
+  part of the board before pressing Z / X / C); hold push-buttons about 0.4 s; wheels need a drag that starts on the
+  wheel. Escape at the end of a session left the game stuck on a map, so close the process instead. For exact
+  states, capture each console form with `PrintWindow` (the forms are `ThunderRT6FormDC` windows, drawn at 1.25× on
+  screen) and template-match the sprites in `reference/samsim/osa_view/` with OpenCV (installed into the session
+  scratchpad, not the system). `PrintWindow` returns a stale picture of the search scope, so read scopes from live
+  screenshots.
+- No target was captured. Ashuluk's drone never showed on the scope; Ustka's P-15 and NAMFI's Iris drone did. At
+  NAMFI the session got the azimuth line on the drone, ЦУ, the tracking transmitter on and the target spike into the
+  range gate, but no capture. The desktop-control tools can't hold the right mouse button (fast slew only turns
+  anticlockwise, no coarse range wheel) and the wheels barely move with synthetic drags. To see echoes, capture the
+  scope region ~25 times over one turn and take the per-pixel maximum (`burst.ps1` / `maxc.py` style, in the scratchpad).
+- A player's video of a full engagement: `video_samsim_osa` (`docs/SOURCES.md`). In a browser pane, YouTube frames
+  can be drawn from the `<video>` element into a canvas for crops; the embed player is blocked.
+- Data step part 1 is PR #13 (`feature/console-accuracy`, worktree `C:\dev\SAM3D-console`, stacked on #10): simcore
+  tests pass (90); its Unreal changes (red-dot call renamed, power hotkeys to the driver) still need a build.
+  Merge order: #9 → #11 → #12, and #10 → #13.
+- Approach note: playing SAM Simulator by desktop control is slow and limited by input; the game is tier 3. Prefer
+  the data step, the creator's answers and the NVA documents; use the game only for specific questions.
+- Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.

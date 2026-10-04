@@ -29,7 +29,22 @@ A few questions, if you have time:
    - The middle search scale: 0–35 km (your manual) or 0–30 km (an NVA source)?
    - Missile preparation: 15 s (manual), 13 s (NVA) or 12 s?
    - The TV lens fields: 1.5° / 5° (manual) or 1 × 1.4° / 3.5 × 4.7° (an operator on your forum)?
-4. **Operators.** Would any of the Osa operators you worked with be willing to look at SAM3D's Osa and tell me what's
+4. **Controls I can't identify.** From your manual's panel photos and a photo catalogue of the NVA's vehicles:
+   - On the launch console: what do СМЕНА РКТ (under the latch), КАНАЛЫ (КАН. I / КАН. II / СОВМ.) and the
+     СР.Л. / ШИР. toggle do, and are РР and ФК the other РОД РАБОТЫ positions (ФК for the function check)?
+   - On the elevation block: what does the АЗ button do, next to ЦУ and РУ? In your game ЦУ lights both ЦУ and АЗ,
+     and pressing АЗ on its own does nothing.
+   - On the range indicator: what does the ЦЕЛЬ selector do, and on the range-tracking block the two ПЕЛЕНГ buttons?
+   - The red dots: do they mark each switch's working position for combat, rather than where it starts? (In your
+     game РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their dots, and КАНАЛЫ starts on its dot at СОВМ.)
+   - What does the elevation indicator (by the TV monitor) show? In your game its trace sits low until the tracking
+     transmitter comes on, then centred, with the target as a bright mark: is the vertical position the elevation
+     error, and when does the operator use it?
+   - The switch-on panels to the left of the range operator, which you left out on purpose: do you have their
+     labels and the switch-on order, and which crew member works them?
+   - Where is the launcher's (АПУ) travel lock, and who works it? What does the commander have in front of him
+     besides the radio?
+5. **Operators.** Would any of the Osa operators you worked with be willing to look at SAM3D's Osa and tell me what's
    wrong?
 
 Thank you for SAM Simulator, and for any help you can give.
