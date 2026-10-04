@@ -220,6 +220,7 @@
       "confidence": "high", "look": {"kind": "legend", "size_m": 0.024, "label": "ВКЛ. ВЫС."} },
     { "id": "pusk_gotov", "label": "ПУСК ГОТОВ", "panel": "fo_panel", "at_m": [0.057, 0.066], "color": "green",
       "lit_when": [{"subsystem": "launch_armed", "is": "ready"}], "source": "samsim_osa p29–30", "confidence": "medium",
+      "notes": "Sources disagree on the colour: samsim_osa gives green; the samsim_panels photo shows the letters lit red. Green is used (a written source over game art, project owner's decision, 4 Oct 2026).",
       "look": {"kind": "legend", "size_m": [0.051, 0.018], "label": "ПУСК ГОТОВ"} },
     { "id": "nlc", "label": "НЛЦ", "panel": "fo_panel", "at_m": [-0.11, -0.191], "color": "red",
       "lit_when": [{"input": "target_too_low", "is": true}], "source": "samsim_osa p25", "confidence": "high",
