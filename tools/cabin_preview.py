@@ -77,6 +77,18 @@ def draw_panel(cab, controls, panel_id, k):
                 circle(c, sw * 0.45, INK)
             if kind == 'latch':
                 d.rectangle([c[0] - hw * 0.25, c[1] - hw * 0.6, c[0] + hw * 0.25, c[1] + hw * 0.6], fill=INK)
+        elif kind == 'legend':
+            # Black glass with the label on it, drawn unlit (white letters).
+            if abs(sw - sh) > 1e-6:
+                d.rounded_rectangle([c[0] - hw, c[1] - hh, c[0] + hw, c[1] + hh], radius=4 * k, fill=INK)
+            else:
+                circle(c, sw, INK)
+            text = look.get('label', '')
+            lines = text.split(' ', 1) if len(text) > 6 and ' ' in text else [text]
+            f = font(max(6, round(min(hh, 5 * k) * 1.3 / len(lines))))
+            d.multiline_text(c, '\n'.join(lines), fill=COLORS['white'], font=f,
+                             anchor='mm', align='center', spacing=0)
+            return
         elif kind in ('lamp_button', 'button'):
             circle(c, sw, ring or COLORS['chrome'])
             circle(c, sw * 0.65, col)

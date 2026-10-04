@@ -388,6 +388,14 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
                             "fixtures[0].color: unknown colour 'purple'"));
     SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "nameplate", "size_m": [0.05, 0.01] } ])"),
                             "fixtures[0].label: required"));
+    // A legend lamp shows its label on the glass, so it needs one.
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "legend", "size_m": 0.024 } ])"),
+                            "fixtures[0].label: required"));
+    CabinLayout legend;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "legend", "size_m": 0.024,
+                                                   "color": "red", "label": "СХОД" } ])"), console, legend, &error));
+    SC_EXPECT(legend.fixtures.size() == 1 && legend.fixtures[0].look.kind == CabinLookKind::Legend &&
+              std::string(ToString(CabinLookKind::Legend)) == "legend");
     SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [1.5, 0.5] } ])"),
                             "blocks[0].at_m: block doesn't fit"));
     // The Osa layout has every column's blocks and fixtures from SAM Simulator's panel photos.

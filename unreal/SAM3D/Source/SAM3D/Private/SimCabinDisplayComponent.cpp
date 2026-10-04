@@ -2,6 +2,7 @@
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -84,19 +85,33 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	}
 	const double WidthCm = Display.width_m * 100.0;
 	const double HeightCm = Display.height_m * 100.0;
+	// Cathode-ray tubes and dials are round (the search indicator OP81-16M, OS81-10M, the βс / εс dials in the
+	// samsim_panels photos); the TV monitor, range indicator and meters rectangular.
+	const bool bRound = Kind == simcore::CabinDisplayKind::Ppi || Kind == simcore::CabinDisplayKind::ElevationScope ||
+		Kind == simcore::CabinDisplayKind::Dial;
+	UStaticMesh* Cylinder = bRound ? LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")) : nullptr;
 
-	// Bezel: a dark box just behind the screen, a little larger.
+	// Bezel: a dark box (or ring) just behind the screen, a little larger.
 	if (Cube != nullptr)
 	{
 		UStaticMeshComponent* Bezel = NewObject<UStaticMeshComponent>(GetOwner());
-		Bezel->SetStaticMesh(Cube);
+		Bezel->SetStaticMesh(Cylinder != nullptr ? Cylinder : Cube);
 		Bezel->SetupAttachment(GetAttachParent());
 		Bezel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Bezel->SetCastShadow(false);
 		USimCabinComponent::UseCabinLighting(Bezel);
 		Bezel->RegisterComponent();
-		Bezel->SetRelativeLocationAndRotation(Centre + Normal * 0.5, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
-		Bezel->SetRelativeScale3D(FVector(0.012, Display.width_m + 0.02, Display.height_m + 0.02));
+		if (Cylinder != nullptr)
+		{
+			// The cylinder's axis out of the face.
+			Bezel->SetRelativeLocationAndRotation(Centre + Normal * 0.6, FRotationMatrix::MakeFromZX(Normal, Up).Rotator());
+			Bezel->SetRelativeScale3D(FVector(Display.height_m + 0.012, Display.width_m + 0.012, 0.012));
+		}
+		else
+		{
+			Bezel->SetRelativeLocationAndRotation(Centre + Normal * 0.5, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
+			Bezel->SetRelativeScale3D(FVector(0.012, Display.width_m + 0.02, Display.height_m + 0.02));
+		}
 		if (ShapeMaterial != nullptr)
 		{
 			Bezel->CreateDynamicMaterialInstance(0, ShapeMaterial)->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.01f, 0.01f, 0.01f));
@@ -104,8 +119,9 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		Parts.Add(Bezel);
 	}
 
-	// The screen: a quad 1.3 cm out from the panel with texture (0,0) at the operator's top left. Both windings, so
-	// it shows whichever way the material culls.
+	// The screen, 1.3 cm out from the panel with texture (0,0) at the operator's top left: a quad, or a disc for a
+	// round tube (a fan, the texture mapped flat across it). Both windings, so it shows whichever way the material
+	// culls.
 	Screen = NewObject<UProceduralMeshComponent>(GetOwner());
 	Screen->SetupAttachment(GetAttachParent());
 	Screen->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -115,10 +131,28 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	const FVector C = Centre + Normal * 1.3;
 	const FVector Hr = Right * (0.5 * WidthCm);
 	const FVector Hu = Up * (0.5 * HeightCm);
-	const TArray<FVector> Vertices = {C - Hr + Hu, C + Hr + Hu, C - Hr - Hu, C + Hr - Hu};
-	const TArray<FVector2D> Uv = {FVector2D(0, 0), FVector2D(1, 0), FVector2D(0, 1), FVector2D(1, 1)};
-	const TArray<int32> Triangles = {0, 1, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1};
-	const TArray<FVector> Normals = {Normal, Normal, Normal, Normal};
+	TArray<FVector> Vertices = {C - Hr + Hu, C + Hr + Hu, C - Hr - Hu, C + Hr - Hu};
+	TArray<FVector2D> Uv = {FVector2D(0, 0), FVector2D(1, 0), FVector2D(0, 1), FVector2D(1, 1)};
+	TArray<int32> Triangles = {0, 1, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1};
+	if (bRound)
+	{
+		constexpr int32 Segments = 64;
+		Vertices = {C};
+		Uv = {FVector2D(0.5, 0.5)};
+		Triangles.Reset();
+		for (int32 I = 0; I < Segments; ++I)
+		{
+			const double A = UE_DOUBLE_TWO_PI * I / Segments;
+			const double X = FMath::Sin(A);
+			const double Y = FMath::Cos(A);
+			Vertices.Add(C + Hr * X + Hu * Y);
+			Uv.Add(FVector2D(0.5 + 0.5 * X, 0.5 - 0.5 * Y));
+			const int32 Next = 1 + (I + 1) % Segments;
+			Triangles.Append({0, 1 + I, Next, 0, Next, 1 + I});
+		}
+	}
+	TArray<FVector> Normals;
+	Normals.Init(Normal, Vertices.Num());
 	Screen->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Uv, {}, {}, false);
 
 	const double Long = FMath::Max(WidthCm, HeightCm);
@@ -272,14 +306,28 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
 	simcore::ScenarioRunner& Runner, bool bOn)
 {
+	const FVector2D C = Size * 0.5;
+	const double S = FMath::Min(Size.X, Size.Y);
+	const double R = 0.43 * S;
+	// The azimuth scale around the tube, as on OP81-16M (samsim_panels): 0 to 59 clockwise from the top (hundreds of
+	// thousandths, 6000 to the circle), light marks on a dark ring, with a tick every half division.
+	const FLinearColor ScaleInk(0.32f, 0.32f, 0.3f);
+	Disc(Canvas, C, 0.5 * S, FLinearColor(0.012f, 0.012f, 0.012f));
+	for (int32 I = 0; I < 120; ++I)
+	{
+		const double A = UE_DOUBLE_TWO_PI * I / 120.0;
+		Canvas->K2_DrawLine(Polar(C, A, 0.437 * S), Polar(C, A, (I % 2 == 0 ? 0.452 : 0.446) * S), 1.0f, ScaleInk);
+	}
+	for (int32 I = 0; I < 60; ++I)
+	{
+		Text(Canvas, FString::FromInt(I), Polar(C, UE_DOUBLE_TWO_PI * I / 60.0, 0.474 * S), ScaleInk, 0.8f);
+	}
 	if (!bOn)
 	{
 		return;
 	}
 	const simcore::ConsoleData& Console = Runner.Console();
 	const simcore::SearchSensorDef& Search = Console.search;
-	const FVector2D C = Size * 0.5;
-	const double R = 0.46 * FMath::Min(Size.X, Size.Y);
 	Disc(Canvas, C, R, Phosphor * 0.04f);
 
 	// Displayed range window from the ДАЛЬНОСТЬ selector; the 10-45 km scale starts at the centre with 10 km.
@@ -375,8 +423,8 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 			Canvas->K2_DrawLine(Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber);
 		}
 	}
-	Text(Canvas, FString::Printf(TEXT("%.0f-%.0f km"), MinM / 1000.0, MaxM / 1000.0), FVector2D(Size.X - 52.0, 18.0),
-		Phosphor * 0.7f, 1.0f);
+	Text(Canvas, FString::Printf(TEXT("%.0f-%.0f km"), MinM / 1000.0, MaxM / 1000.0), FVector2D(C.X, C.Y + 0.8 * R),
+		Phosphor * 0.5f, 0.9f);
 }
 
 // ---------------------------------------------------------------------------------------------- range indicator

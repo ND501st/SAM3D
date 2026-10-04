@@ -11,6 +11,8 @@ class USimCabinDisplayComponent;
 class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
+class UMeshComponent;
+class UProceduralMeshComponent;
 
 /** One control or lamp built in the cabin, with the meshes that show it. */
 USTRUCT()
@@ -52,6 +54,10 @@ struct SAM3D_API FSimCabinItem
 	/** Red dot beside the control marking its working position (simcore::CabinLayout::RedDot). May be null. */
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Mark;
+
+	/** A legend lamp's letters on its glass (simcore::CabinLookKind::Legend), lit in the lamp's colour. May be null. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMeshComponent> Legend;
 
 	FLinearColor BaseColor = FLinearColor::Black;
 	FLinearColor MovingColor = FLinearColor::Black;
@@ -142,9 +148,17 @@ private:
 	UStaticMeshComponent* AddDecor(UStaticMesh* Mesh, const FLinearColor& Color);
 	/** A mesh of the cabin parts library (/Game/SAM3D/Cabin/Parts/<Name>), or null if it isn't imported. */
 	UStaticMesh* PartMesh(const TCHAR* Name);
-	/** A flat quad on the face showing Text (drawn once into a small texture with a font that has Cyrillic). */
-	void AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double WidthM,
-		double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved = false);
+	/**
+	 * A flat quad on the face showing Text (drawn once into a small texture with a font that has Cyrillic), shrunk to
+	 * fit its width; "
+" starts a new line. Unlit, dark ink on Paper (light ink on a dark paper), or engraved: dark
+	 * letters only, lit like the plate.
+	 */
+	UProceduralMeshComponent* AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
+		double WidthM, double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved = false);
+	/** A legend lamp's black glass with Text on it (round, or rectangular for W != H); returns the letters' quad. */
+	UProceduralMeshComponent* AddLegend(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
+		double WidthM, double HeightM, const FString& Text);
 	/** An item's engraved label just above it (an item ItemHeightM tall at Centre); nothing for an empty text. */
 	void AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double ItemHeightM,
 		const FString& Text);
@@ -155,7 +169,7 @@ private:
 	/** AnimateControl for an item drawn with parts library meshes; false if its style isn't handled that way. */
 	bool AnimatePart(const simcore::ControlPanel& Panel, const simcore::CabinControl& Control, const simcore::ControlDef& Def,
 		int32 Position, FSimCabinItem& Item);
-	void Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color) const;
+	void Paint(UMeshComponent* Mesh, const FLinearColor& Color) const;
 	USimWorldSubsystem* GetSim() const;
 
 	UPROPERTY(Transient)

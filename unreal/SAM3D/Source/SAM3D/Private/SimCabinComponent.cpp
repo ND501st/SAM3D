@@ -34,7 +34,8 @@ namespace
 	const FLinearColor MetalColor(0.25f, 0.25f, 0.27f);
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
 	const FLinearColor ChromeColor(0.7f, 0.7f, 0.72f);
-	const FLinearColor CoverColor(0.6f, 0.03f, 0.02f);
+	const FLinearColor CoverColor(0.5f, 0.49f, 0.43f);   // guards: painted metal like the plates (samsim_panels)
+	const FLinearColor LegendUnlit(0.22f, 0.22f, 0.21f); // a legend lamp's letters when dark: white glass, unlit
 	const FLinearColor RedDotColor(0.75f, 0.0f, 0.0f);
 	const FLinearColor BrassColor(0.6f, 0.45f, 0.1f);
 	const FLinearColor HighlightColor(1.0f, 0.85f, 0.2f);
@@ -169,7 +170,7 @@ UStaticMeshComponent* USimCabinComponent::AddMesh(UStaticMesh* Mesh, const FLine
 	return Part;
 }
 
-void USimCabinComponent::Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color) const
+void USimCabinComponent::Paint(UMeshComponent* Mesh, const FLinearColor& Color) const
 {
 	if (Mesh == nullptr)
 	{
@@ -489,6 +490,28 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 	const FRotator Facing = FRotationMatrix::MakeFromZ(Item.Normal).Rotator();
 	const double W = Lamp.look.width_m > 0.0 ? Lamp.look.width_m : 0.022;
 	const double H = Lamp.look.height_m > 0.0 ? Lamp.look.height_m : W;
+	if (Lamp.look.kind == simcore::CabinLookKind::Legend)
+	{
+		// A legend lamp: black glass 1.2 cm proud (clear of the housings it sits in), with the letters on it, which
+		// light up in the lamp's colour (Animate).
+		Item.BaseColor = DarkColor;
+		if (FMath::Abs(W - H) > 1e-6)
+		{
+			Item.Base->SetStaticMesh(CubeMesh);
+			Place(Item.Base, Item.Location + Item.Normal * 0.6, FRotationMatrix::MakeFromXZ(Item.Normal, Item.Up).Rotator(),
+				FVector(0.012, W, H));
+		}
+		else
+		{
+			Place(Item.Base, Item.Location + Item.Normal * 0.6, Facing, FVector(W, W, 0.012));
+		}
+		Paint(Item.Base, Item.BaseColor);
+		Item.Legend = AddLegend(Item.Location + Item.Normal * 1.24, Item.Normal, Item.Right, Item.Up, W, H,
+			ToF(Lamp.look.label.empty() ? Lamp.label : Lamp.look.label));
+		Paint(Item.Legend, LegendUnlit);
+		Items.Add(Item);
+		return;
+	}
 	if (Lamp.look.kind == simcore::CabinLookKind::LampButton && PartMesh(TEXT("SM_ButtonRing")) && PartMesh(TEXT("SM_ButtonCap")))
 	{
 		// An illuminated push-button from the parts library: the glass cap in its ring.
@@ -571,14 +594,14 @@ UStaticMeshComponent* USimCabinComponent::AddDecor(UStaticMesh* Mesh, const FLin
 	return Part;
 }
 
-void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
-	double WidthM, double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved)
+UProceduralMeshComponent* USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right,
+	const FVector& Up, double WidthM, double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved)
 {
 	static UFont* Font = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
 	UMaterialInterface* Material = bEngraved ? LabelMaterial.Get() : ScreenMaterial.Get();
 	if (Material == nullptr || Font == nullptr)
 	{
-		return;
+		return nullptr;
 	}
 	// The texture: 1 px per 0.25 mm, dark text on the plate's colour.
 	const int32 Tw = FMath::Clamp(FMath::RoundToInt32(WidthM * 4000.0), 16, 512);
@@ -592,9 +615,27 @@ void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Norm
 	UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(this, Target, Canvas, Size, Context);
 	if (Canvas != nullptr)
 	{
-		const float Scale = static_cast<float>(Size.Y) / 30.0f;  // Roboto's default size is about 24 px high
-		Canvas->K2_DrawText(Font, Text, Size * 0.5, FVector2D(Scale, Scale), bEngraved ? FLinearColor::White : FLinearColor(0.02f, 0.02f, 0.02f), 0.0f,
-			FLinearColor::Transparent, FVector2D::ZeroVector, true, true);
+		TArray<FString> Lines;
+		Text.ParseIntoArray(Lines, TEXT("\n"), true);
+		const int32 Count = FMath::Max(1, Lines.Num());
+		// Roboto's default size is about 24 px high: the lines share the height, shrunk to fit the width.
+		float Scale = static_cast<float>(Size.Y) / (30.0f * Count);
+		for (const FString& Line : Lines)
+		{
+			const FVector2D Extent = Canvas->K2_TextSize(Font, Line, FVector2D(1.0, 1.0));
+			if (Extent.X > 0.0)
+			{
+				Scale = FMath::Min(Scale, static_cast<float>(0.95 * Size.X / Extent.X));
+			}
+		}
+		const bool bLightInk = bEngraved || Paper.GetLuminance() < 0.2f;
+		for (int32 I = 0; I < Lines.Num(); ++I)
+		{
+			const FVector2D At(0.5 * Size.X, Size.Y * (I + 0.5) / Count);
+			Canvas->K2_DrawText(Font, Lines[I], At, FVector2D(Scale, Scale),
+				bLightInk ? FLinearColor::White : FLinearColor(0.02f, 0.02f, 0.02f), 0.0f, FLinearColor::Transparent,
+				FVector2D::ZeroVector, true, true);
+		}
 	}
 	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
 
@@ -619,6 +660,23 @@ void USimCabinComponent::AddTextPlate(const FVector& Centre, const FVector& Norm
 	Mid->SetScalarParameterValue(TEXT("OpacityFromTexture"), 1.0f);
 	Quad->SetMaterial(0, Mid);
 	DecorParts.Add(Quad);
+	return Quad;
+}
+
+UProceduralMeshComponent* USimCabinComponent::AddLegend(const FVector& Centre, const FVector& Normal, const FVector& Right,
+	const FVector& Up, double WidthM, double HeightM, const FString& Text)
+{
+	// A long label with a space goes on two lines, as on the caps (e.g. УЗКИЙ / ЛУЧ). The letters keep inside the
+	// glass: a round cap's text area is a rectangle inside its circle.
+	FString Shown = Text;
+	int32 Space = INDEX_NONE;
+	if (Text.Len() > 6 && Text.FindChar(TEXT(' '), Space))
+	{
+		Shown = Text.Left(Space) + TEXT("\n") + Text.Mid(Space + 1);
+	}
+	const bool bRound = FMath::Abs(WidthM - HeightM) < 1e-6;
+	return AddTextPlate(Centre, Normal, Right, Up, bRound ? 0.74 * WidthM : 0.9 * WidthM, bRound ? 0.5 * WidthM : 0.7 * HeightM,
+		Shown, FLinearColor::Black);
 }
 
 void USimCabinComponent::AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
@@ -628,9 +686,9 @@ void USimCabinComponent::AddLabel(const FVector& Centre, const FVector& Normal, 
 	{
 		return;
 	}
-	// Letters about 3.5 mm high, 4 mm above the item.
-	constexpr double LetterM = 0.0035;
-	const double WidthM = FMath::Min(0.09, 0.0022 * Text.Len() + 0.004);
+	// Letters about 4 mm high (as engraved on the samsim_panels photos), 4 mm above the item.
+	constexpr double LetterM = 0.004;
+	const double WidthM = FMath::Min(0.11, 0.0026 * Text.Len() + 0.004);
 	AddTextPlate(Centre + Up * (100.0 * (0.5 * ItemHeightM + 0.004 + 0.5 * LetterM)) + Normal * 0.05, Normal, Right, Up, WidthM,
 		LetterM * 1.4, Text, FLinearColor::Transparent, true);
 }
@@ -722,9 +780,10 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Place(M, At + N * (BaseCm + 0.5 * DepthCm), Flat, FVector(0.01 * DepthCm, Bw, Bh));
 		return M;
 	};
-	// The engraved label above the item (nameplates show their own text; big surrounds and diagrams have none).
+	// The engraved label above the item (nameplates and legend lamps show their own text; big surrounds and diagrams
+	// have none).
 	if (Look.kind != CabinLookKind::Nameplate && Look.kind != CabinLookKind::Bezel && Look.kind != CabinLookKind::Diagram &&
-		Look.kind != CabinLookKind::Window)
+		Look.kind != CabinLookKind::Window && Look.kind != CabinLookKind::Legend)
 	{
 		AddLabel(L, N, R, U, Look.kind == CabinLookKind::Oval ? H : FMath::Max(W, H), ToF(Look.label));
 	}
@@ -831,7 +890,20 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Box(L, W, H, 0.8, Color);
 		break;
 	case CabinLookKind::Oval:
-		Disc(W, H, 0.8, Color);
+		// A low mount: the buttons and lamps on it stand out of it.
+		Disc(W, H, 0.3, Color);
+		break;
+	case CabinLookKind::Legend:
+		// Black glass 1.2 cm proud with its letters, never lit (the lamps the console doesn't model).
+		if (FMath::Abs(W - H) > 1e-6)
+		{
+			Box(L, W, H, 1.2, DarkColor);
+		}
+		else
+		{
+			Disc(W, W, 1.2, DarkColor);
+		}
+		Paint(AddLegend(L + N * 1.24, N, R, U, W, H, ToF(Look.label)), LegendUnlit);
 		break;
 	case CabinLookKind::Diagram:
 	{
@@ -861,6 +933,11 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		if (!Item.LampId.IsEmpty())
 		{
 			const bool bLit = simcore::CabinLayout::LampLit(Layout.lamps[Item.LayoutIndex], Console.panel, Console.equipment);
+			if (Item.Legend != nullptr)
+			{
+				const FLinearColor Letters = bLit ? Item.MovingColor : LegendUnlit;
+				Paint(Item.Legend, bHighlighted ? FMath::Lerp(Letters, HighlightColor, 0.4f) : Letters);
+			}
 			const FLinearColor Glass = bLit ? Item.MovingColor : Item.MovingColor * 0.04f;
 			Paint(Item.Moving, bHighlighted ? FMath::Lerp(Glass, HighlightColor, 0.4f) : Glass);
 			Paint(Item.Base, bHighlighted ? HighlightColor : Item.BaseColor);

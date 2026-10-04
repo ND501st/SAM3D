@@ -62,7 +62,9 @@ reference picture kept in `reference/`).
 - `look` on a control or lamp placement: `{ "kind", "size_m", "color", "ring", "label" }`, all optional.
 
 `kind`: `knob`, `pointer_knob`, `trim`, `toggle`, `lever`, `lamp`, `lamp_button` (cap `color` in a `ring`), `button`,
-`jack`, `socket`, `latch`, `nameplate` (needs `label`), `bezel`, `window`, `diagram`, `oval`. `size_m` is a diameter
+`jack`, `socket`, `latch`, `nameplate` (needs `label`), `bezel`, `window`, `diagram`, `oval`, `legend` (a
+legend lamp: black glass with its `label` on it, the letters lit in the lamp's colour; needs `label`; round, or
+rectangular for `[width, height]`). `size_m` is a diameter
 or `[width, height]`. Colours: black, white, grey, chrome, brass, red, green, amber, yellow, orange.
 
 ## Shell
@@ -78,6 +80,9 @@ lit only by its own lamps (a lighting channel of its own), so the sun outside ne
 The instruments the crew reads. Each sits on a panel (`at_m` is its centre, `size_m` its width and height, all of it
 inside the panel), says when it is powered (`on_when`, `on_when_any`, console conditions; empty = always) and needs a
 `source` and `confidence`.
+
+The search indicator (`ppi`), the elevation-search indicator (`elevation_scope`) and `dial`s are round tubes or
+dials (a disc `size_m` across); the others are rectangular.
 
 | `kind` | Shows | Extra keys |
 |---|---|---|
