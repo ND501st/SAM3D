@@ -25,7 +25,7 @@ PU-12, and NPC crew work the *same* controls the player does.
 | Repo | **`ND501st/SAM3D`** (private) |
 | Branches and PRs | Everything is on **`main`**: stacked PRs #1–#8 were merged in order with merge commits on 2 Oct 2026 and their branches deleted. New work: one branch per task from `main` (next: phase 6.1). |
 | PC checkout | `C:\dev\SAM3D` (out of OneDrive) |
-| Unreal | UE 5.8.3 at `D:\UE_5.8` (5.7.4 kept at `D:\UE_5.7`), Cesium for Unreal; Unreal MCP (`.mcp.json`, see `unreal/README.md`); level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
+| Unreal | UE 5.8.3 at `D:\UE_5.8`, Cesium for Unreal; Unreal MCP (`.mcp.json`, see `unreal/README.md`); level `Content/Maps/OsaPractice` (Git LFS), opened on startup |
 | Local reference | `reference/` (git-ignored): SAM Simulator install and data, the creator's documentation set (`manuals/`, incl. `SA-8B_English.pdf` and its text) |
 | Research | `docs/research/OSA_RESEARCH_2026-10.md` (findings and sources), `docs/BRIEFING_2026-10.md` (decisions), `docs/research/OSA_CONSOLE_MAP_2026-10.md` (control and feature map by seat; proposals, not adopted yet; checked against `reference/` in §12, open items in §11) |
 
