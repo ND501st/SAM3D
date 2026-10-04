@@ -97,7 +97,8 @@ enum class CabinLookKind {
     Bezel,        // a screen's surround
     Window,       // a counter or dial window
     Diagram,      // printed outline diagram
-    Oval          // raised oval mount
+    Oval,         // raised oval mount
+    Legend        // legend lamp: black glass with its `label` on it, the letters lit in `color` (lamps only)
 };
 
 inline const char* ToString(CabinLookKind k) {
@@ -119,6 +120,7 @@ inline const char* ToString(CabinLookKind k) {
         case CabinLookKind::Window: return "window";
         case CabinLookKind::Diagram: return "diagram";
         case CabinLookKind::Oval: return "oval";
+        case CabinLookKind::Legend: return "legend";
     }
     return "?";
 }
@@ -626,7 +628,7 @@ private:
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
         if (!kind.empty()) {
             bool found = false;
-            for (int k = 0; k <= static_cast<int>(CabinLookKind::Oval); ++k) {
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::Legend); ++k) {
                 if (kind == ToString(static_cast<CabinLookKind>(k))) {
                     out.kind = static_cast<CabinLookKind>(k);
                     found = true;
@@ -659,7 +661,9 @@ private:
             }
             if (!ok) return Fail(Join(path, c == &out.color ? "color" : "ring"), "unknown colour '" + *c + "'");
         }
-        if (out.kind == CabinLookKind::Nameplate && out.label.empty()) return Fail(Join(path, "label"), "required");
+        if ((out.kind == CabinLookKind::Nameplate || out.kind == CabinLookKind::Legend) && out.label.empty()) {
+            return Fail(Join(path, "label"), "required");
+        }
         return true;
     }
 
