@@ -6,6 +6,7 @@
 // (e.g. "controls[4].guard: unknown control 'x'"). Nothing is partially loaded on failure.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <initializer_list>
@@ -30,6 +31,33 @@ struct SearchSensorDef {
     std::vector<std::pair<double, double>> range_scales_m;  // [min, max] per position
     std::string mti_control;   // switch: moving-target indicator (1 = on); may be empty
     double mti_max_range_m = 0.0;
+    // IFF interrogator (optional; query empty = none): each press of `query` (or `control_query`) interrogates for
+    // query_time_s; friendly aircraft within max_range_m reply. With `gate_control` at 1 the replies are gated by the
+    // search radar's echoes (only targets it sees reply on the scope). `interrogating_input` is set while it runs.
+    std::string iff_query;
+    std::string iff_control_query;
+    std::string iff_gate_control;
+    std::string iff_ready;           // subsystem the interrogator needs
+    std::string iff_interrogating_input;
+    double iff_query_time_s = 1.0;
+    double iff_max_range_m = 0.0;
+};
+
+// The vehicle's heading reference (optional): a gyro half-compass that holds the hull's heading once it has been
+// oriented. While `mode_control` is at `set_position` and `relay_control` at `relay_position`, the gyro is slaved
+// to the course setter (a wheel, degrees) and turns towards it; a press of `sync_button` makes it turn fast until
+// they agree. The gyro runs while `gyro` is ready and loses its orientation when it stops.
+struct OrientationDef {
+    std::string gyro;
+    std::string setter;
+    std::string mode_control;
+    int set_position = 1;
+    std::string relay_control;
+    int relay_position = 1;
+    std::string sync_button;
+    double slew_rate_deg_s = 1.0;
+    double sync_rate_deg_s = 10.0;
+    std::string synced_input;  // set while slaved and agreeing with the setter
 };
 
 struct TrackSensorDef {
@@ -52,6 +80,16 @@ struct TrackSensorDef {
     std::string too_low_input;
     std::string near_zone_input;
     std::string in_zone_input;
+    // Elevation search (optional; beam_width_deg 0 = absent): while `el_search_mode` is ready the antenna scans in
+    // elevation through one search-radar beam, and the radar only captures when the antenna's beam is on the
+    // target in elevation. `beam_by_position` gives the beam for each position of `beam_control`; -1 = the beam
+    // the search radar sees the target under the azimuth line in.
+    std::string el_search_mode;
+    std::string beam_control;
+    std::vector<std::pair<double, double>> beams_deg;
+    std::vector<int> beam_by_position;
+    double scan_period_s = 2.0;
+    double beam_width_deg = 0.0;
 };
 
 // A crew seat that owns controls (e.g. "senior_operator"). Crew roles name these.
@@ -73,6 +111,8 @@ struct ConsoleData {
     bool has_sensors = false;
     SearchSensorDef search;
     TrackSensorDef track;
+    bool has_orientation = false;
+    OrientationDef orientation;
 
     const Procedure* FindProcedure(const std::string& id) const {
         for (const Procedure& p : procedures) {
@@ -430,7 +470,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadSensors(const json::Value& root, ConsoleData& out) {
         const json::Value* s = root.Find("sensors");
         if (s == nullptr) return true;
-        if (!Keys(*s, "sensors", {"search", "track", "source", "confidence", "notes"}) || !Provenance(*s, "sensors")) {
+        if (!Keys(*s, "sensors", {"search", "track", "orientation", "source", "confidence", "notes"}) ||
+            !Provenance(*s, "sensors")) {
             return false;
         }
         const ControlPanel& panel = out.panel;
@@ -441,7 +482,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string sp = "sensors.search";
         SearchSensorDef& search = out.search;
         if (!Keys(*se, sp, {"antenna", "transmitter", "range_control", "range_scales_m", "mti_control",
-                            "mti_max_range_m", "notes"}) ||
+                            "mti_max_range_m", "iff", "notes"}) ||
             !RefSubsystem(*se, sp, "antenna", eq, true, search.antenna) ||
             !RefSubsystem(*se, sp, "transmitter", eq, true, search.transmitter) ||
             !RefControl(*se, sp, "range_control", panel, ControlKind::Discrete, true, search.range_control) ||
@@ -462,13 +503,30 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (static_cast<int>(search.range_scales_m.size()) != panel.Find(search.range_control)->positions) {
             return Fail(Join(sp, "range_scales_m"), "needs one scale per position of " + search.range_control);
         }
+        if (const json::Value* iff = se->Find("iff")) {
+            const std::string ip = Join(sp, "iff");
+            if (!Keys(*iff, ip, {"query", "control_query", "gate_control", "ready", "interrogating_input",
+                                 "query_time_s", "max_range_m", "source", "confidence", "notes"}) ||
+                !Provenance(*iff, ip) ||
+                !RefControl(*iff, ip, "query", panel, ControlKind::Momentary, true, search.iff_query) ||
+                !RefControl(*iff, ip, "control_query", panel, ControlKind::Momentary, false, search.iff_control_query) ||
+                !RefControl(*iff, ip, "gate_control", panel, ControlKind::Discrete, false, search.iff_gate_control) ||
+                !RefSubsystem(*iff, ip, "ready", eq, true, search.iff_ready) ||
+                !RefInput(*iff, ip, "interrogating_input", eq, search.iff_interrogating_input) ||
+                !OptionalNumber(*iff, ip, "query_time_s", search.iff_query_time_s) ||
+                !OptionalNumber(*iff, ip, "max_range_m", search.iff_max_range_m)) {
+                return false;
+            }
+            if (!(search.iff_query_time_s > 0.0)) return Fail(Join(ip, "query_time_s"), "must be > 0");
+            if (!(search.iff_max_range_m > 0.0)) return Fail(Join(ip, "max_range_m"), "required, > 0");
+        }
 
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
                             "el_wheel", "range_wheel", "lock_control", "fov_control", "fov_deg", "max_range_m",
                             "az_limit_deg", "captured_input", "too_low_input", "near_zone_input", "in_zone_input",
-                            "notes"}) ||
+                            "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -500,7 +558,83 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!track.tv_mode.empty() && (track.tv_camera.empty() || track.fov_wide_deg <= 0.0)) {
             return Fail(tp, "tv_mode needs tv_camera and fov_deg");
         }
+        if (const json::Value* es = tr->Find("elevation_search")) {
+            if (!LoadElevationSearch(*es, Join(tp, "elevation_search"), panel, eq, track)) return false;
+        }
+        if (const json::Value* o = s->Find("orientation")) {
+            if (!LoadOrientation(*o, "sensors.orientation", panel, eq, out.orientation)) return false;
+            out.has_orientation = true;
+        }
         out.has_sensors = true;
+        return true;
+    }
+
+    bool LoadOrientation(const json::Value& o, const std::string& op, const ControlPanel& panel, const Equipment& eq,
+                         OrientationDef& def) {
+        if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
+                          "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "source", "confidence",
+                          "notes"}) ||
+            !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
+            !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
+            !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
+            !RefControl(o, op, "relay_control", panel, ControlKind::Discrete, true, def.relay_control) ||
+            !RefControl(o, op, "sync_button", panel, ControlKind::Momentary, true, def.sync_button) ||
+            !OptionalInt(o, op, "set_position", def.set_position) ||
+            !OptionalInt(o, op, "relay_position", def.relay_position) ||
+            !OptionalNumber(o, op, "slew_rate_deg_s", def.slew_rate_deg_s) ||
+            !OptionalNumber(o, op, "sync_rate_deg_s", def.sync_rate_deg_s) ||
+            !RefInput(o, op, "synced_input", eq, def.synced_input)) {
+            return false;
+        }
+        if (def.set_position < 0 || def.set_position >= panel.Find(def.mode_control)->positions) {
+            return Fail(Join(op, "set_position"), "not a position of " + def.mode_control);
+        }
+        if (def.relay_position < 0 || def.relay_position >= panel.Find(def.relay_control)->positions) {
+            return Fail(Join(op, "relay_position"), "not a position of " + def.relay_control);
+        }
+        if (!(def.slew_rate_deg_s > 0.0) || !(def.sync_rate_deg_s > 0.0)) {
+            return Fail(op, "slew_rate_deg_s and sync_rate_deg_s must be > 0");
+        }
+        return true;
+    }
+
+    bool LoadElevationSearch(const json::Value& es, const std::string& ep, const ControlPanel& panel,
+                             const Equipment& eq, TrackSensorDef& track) {
+        if (!Keys(es, ep, {"mode", "beam_control", "beams_deg", "beam_by_position", "scan_period_s", "beam_width_deg",
+                           "source", "confidence", "notes"}) ||
+            !Provenance(es, ep) || !RefSubsystem(es, ep, "mode", eq, true, track.el_search_mode) ||
+            !RefControl(es, ep, "beam_control", panel, ControlKind::Discrete, true, track.beam_control) ||
+            !OptionalNumber(es, ep, "scan_period_s", track.scan_period_s) ||
+            !OptionalNumber(es, ep, "beam_width_deg", track.beam_width_deg)) {
+            return false;
+        }
+        if (!(track.scan_period_s > 0.0)) return Fail(Join(ep, "scan_period_s"), "must be > 0");
+        if (!(track.beam_width_deg > 0.0)) return Fail(Join(ep, "beam_width_deg"), "required, > 0");
+        const json::Value* beams = OptionalArray(es, ep, "beams_deg");
+        if (beams == nullptr) return message_.empty() ? Fail(Join(ep, "beams_deg"), "required") : false;
+        for (std::size_t i = 0; i < beams->items.size(); ++i) {
+            const json::Value& pair = beams->items[i];
+            if (!pair.Is(json::Type::Array) || pair.items.size() != 2 || !pair.items[0].Is(json::Type::Number) ||
+                !pair.items[1].Is(json::Type::Number) || !(pair.items[1].number > pair.items[0].number)) {
+                return Fail(Index(Join(ep, "beams_deg"), i), "expected [low, high] in degrees");
+            }
+            track.beams_deg.emplace_back(pair.items[0].number, pair.items[1].number);
+        }
+        if (track.beams_deg.empty()) return Fail(Join(ep, "beams_deg"), "needs at least one beam");
+        const json::Value* map = OptionalArray(es, ep, "beam_by_position");
+        if (map == nullptr) return message_.empty() ? Fail(Join(ep, "beam_by_position"), "required") : false;
+        if (static_cast<int>(map->items.size()) != panel.Find(track.beam_control)->positions) {
+            return Fail(Join(ep, "beam_by_position"), "needs one entry per position of " + track.beam_control);
+        }
+        const double beam_count = static_cast<double>(track.beams_deg.size());
+        for (std::size_t i = 0; i < map->items.size(); ++i) {
+            const json::Value& v = map->items[i];
+            if (!v.Is(json::Type::Number) || v.number != std::floor(v.number) || v.number < -1.0 ||
+                v.number >= beam_count) {
+                return Fail(Index(Join(ep, "beam_by_position"), i), "must be -1 or a beam index");
+            }
+            track.beam_by_position.push_back(static_cast<int>(v.number));
+        }
         return true;
     }
 

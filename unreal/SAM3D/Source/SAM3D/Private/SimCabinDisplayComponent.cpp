@@ -9,6 +9,7 @@
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
+#include "SimCabinComponent.h"
 #include "SimWorldSubsystem.h"
 
 namespace
@@ -76,6 +77,11 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	{
 		Scope = MakeUnique<simcore::SearchScope>(Display.sweep_period_s, Display.afterglow_s);
 	}
+	if (Kind == simcore::CabinDisplayKind::ElevationScope)
+	{
+		ElevScope = MakeUnique<simcore::ElevationScope>(Display.afterglow_s, Sim->GetScenarioRunner() != nullptr
+			? Sim->GetScenarioRunner()->Console().track.beam_width_deg : 1.0);
+	}
 	const double WidthCm = Display.width_m * 100.0;
 	const double HeightCm = Display.height_m * 100.0;
 
@@ -87,6 +93,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		Bezel->SetupAttachment(GetAttachParent());
 		Bezel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Bezel->SetCastShadow(false);
+		USimCabinComponent::UseCabinLighting(Bezel);
 		Bezel->RegisterComponent();
 		Bezel->SetRelativeLocationAndRotation(Centre + Normal * 0.5, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
 		Bezel->SetRelativeScale3D(FVector(0.012, Display.width_m + 0.02, Display.height_m + 0.02));
@@ -103,6 +110,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	Screen->SetupAttachment(GetAttachParent());
 	Screen->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Screen->SetCastShadow(false);
+	USimCabinComponent::UseCabinLighting(Screen);
 	Screen->RegisterComponent();
 	const FVector C = Centre + Normal * 1.3;
 	const FVector Hr = Right * (0.5 * WidthCm);
@@ -149,6 +157,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			Line->SetupAttachment(GetAttachParent());
 			Line->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Line->SetCastShadow(false);
+			USimCabinComponent::UseCabinLighting(Line);
 			Line->RegisterComponent();
 			Line->SetRelativeLocationAndRotation(Centre + Normal * 1.4, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
 			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.003) : FVector(0.001, 0.003, 0.4 * Display.height_m));
@@ -210,7 +219,21 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
 		LastSimTimeSeconds = Now;
 		const bool bRotating = Console.has_sensors && Console.equipment.IsReady(Console.search.antenna);
-		Scope->Update(Dt, bRotating, Runner->Engagement().SearchPicture());
+		Scope->Update(Dt, bRotating, Runner->Engagement().SearchPicture(), Runner->Engagement().IffReplies());
+	}
+	if (Kind == simcore::CabinDisplayKind::ElevationScope && Console.has_sensors)
+	{
+		const double Now = Runner->Time();
+		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
+		LastSimTimeSeconds = Now;
+		// The engagement model scans the antenna (target designation) or points it; the indicator shows the beam it
+		// searches and paints what the antenna's beam passed over.
+		const simcore::TrackSensorDef& Track = Console.track;
+		const simcore::EngagementModel& Engagement = Runner->Engagement();
+		ElevRaster = Engagement.ElevationBeam();
+		ElevScope->Update(Dt, bOn && Console.equipment.IsReady(Track.transmitter), Engagement.SweptElevationLowDeg(),
+			Engagement.SweptElevationHighDeg(), Console.panel.GetValue(Track.range_wheel), Display.range_window_m,
+			Engagement.TrackReturns());
 	}
 
 	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
@@ -227,6 +250,9 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			break;
 		case simcore::CabinDisplayKind::RangeScope:
 			DrawRangeScope(Canvas, Size, *Runner, bOn);
+			break;
+		case simcore::CabinDisplayKind::ElevationScope:
+			DrawElevationScope(Canvas, Size, Display, *Runner, bOn);
 			break;
 		case simcore::CabinDisplayKind::Dial:
 			DrawDial(Canvas, Size, Display, Console, bOn, simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
@@ -293,11 +319,29 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		}
 	}
 
-	// Fading echoes.
+	// Fading echoes, and IFF replies as arcs just beyond the echo: 20 degrees wide in open reception, narrow when
+	// gated by the echo (mon_2112_80 p21); a second arc for a control interrogation (ЗАПРОС К).
+	const bool bGated = !Search.iff_gate_control.empty() && Console.panel.Get(Search.iff_gate_control) == 1;
 	for (const simcore::SearchScope::Blip& B : Scope->Blips())
 	{
 		if (B.range_m < MinM || B.range_m > MaxM)
 		{
+			continue;
+		}
+		if (B.iff_reply)
+		{
+			const double Half = FMath::DegreesToRadians(bGated ? 2.0 : 10.0);
+			const float Glow = static_cast<float>(B.brightness);
+			for (int32 Arc = 0; Arc < (B.control_reply ? 2 : 1); ++Arc)
+			{
+				const double Rr = RadiusOf(B.range_m) + 9.0 + 5.0 * Arc;
+				for (int32 I = 0; I < 8; ++I)
+				{
+					const double A0 = B.azimuth_rad - Half + 2.0 * Half * I / 8.0;
+					const double A1 = B.azimuth_rad - Half + 2.0 * Half * (I + 1) / 8.0;
+					Canvas->K2_DrawLine(Polar(C, A0, Rr), Polar(C, A1, Rr), 2.0f, Phosphor * Glow);
+				}
+			}
 			continue;
 		}
 		// A bright arc-shaped smear when fresh, fading with the afterglow.
@@ -401,6 +445,66 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	Text(Canvas, FString::Printf(TEXT("%05.0f m"), FMath::Max(0.0, Gate)), FVector2D(0.5 * Size.X, 0.1 * Size.Y), Amber, 1.6f);
 }
 
+// ---------------------------------------------------------------------------------------------- elevation search
+
+void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
+	simcore::ScenarioRunner& Runner, bool bOn)
+{
+	// A round tube (OS81-10M) with a square raster area inside it: range across, elevation up.
+	const FVector2D C = Size * 0.5;
+	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
+	Disc(Canvas, C, R, bOn ? Phosphor * 0.06f : FLinearColor(0.01f, 0.01f, 0.01f));
+	const simcore::ConsoleData& Console = Runner.Console();
+	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||
+		ElevRaster >= static_cast<int32>(Console.track.beams_deg.size()))
+	{
+		return;
+	}
+	const simcore::ElevationRaster& Raster = Display.rasters[ElevRaster];
+	const double ElLow = Console.track.beams_deg[ElevRaster].first;
+	const double ElHigh = Console.track.beams_deg[ElevRaster].second;
+	const double Half = 0.66 * R;  // the square fits inside the round screen
+	const double Left = C.X - Half;
+	const double Right = C.X + Half;
+	auto YOfScreen = [&](double Fraction) { return C.Y + Half - 2.0 * Half * Fraction; };  // 0 bottom, 1 top
+	const double Top = YOfScreen(Raster.screen_high);
+	const double Bottom = YOfScreen(Raster.screen_low);
+	auto YOfEl = [&](double El)
+	{
+		const double F = (El - ElLow) / (ElHigh - ElLow);
+		return Bottom + (Top - Bottom) * FMath::Clamp(F, 0.0, 1.0);
+	};
+	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
+
+	// The raster: faint horizontal lines over the beam's band, with its outline.
+	for (double Y = Top; Y <= Bottom; Y += 4.0)
+	{
+		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.3f);
+	}
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 2.0f, Phosphor * 0.7f);
+	// The range gate sits in the middle of the range window.
+	Canvas->K2_DrawLine(FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
+
+	// Where the antenna points now: a brighter line while the tracking radar radiates.
+	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
+	const double AntennaY = YOfEl(Runner.Engagement().AntennaElevationDeg());
+	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 3.0f, Phosphor * (bRadiating ? 1.0f : 0.45f));
+
+	// Target marks: bright spots fading with the afterglow.
+	for (const simcore::ElevationScope::Mark& M : ElevScope->Marks())
+	{
+		const float Glow = static_cast<float>(M.brightness);
+		const FVector2D P(XOfOffset(M.range_offset_m), YOfEl(M.elevation_deg));
+		Disc(Canvas, P, 9.0, Phosphor * (0.5f * Glow));
+		Disc(Canvas, P, 5.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+	}
+	Text(Canvas, FString::Printf(TEXT("%.0f..%.0f°"), ElLow, ElHigh),
+		FVector2D(C.X, C.Y + 0.85 * R), Phosphor * 0.8f, 1.2f);
+}
+
 // ---------------------------------------------------------------------------------------------- instruments
 
 void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
@@ -477,9 +581,10 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 		return;
 	}
 	bTvWasOn = true;
-	// The camera sits on the antenna unit and looks along the tracking radar's azimuth (from north) and elevation.
+	// The camera sits on the antenna unit and looks along the tracking radar's azimuth and elevation (the wheel's
+	// azimuth is in the crew's frame; the camera needs it from true north).
 	const simcore::ConsoleData& Console = Runner.Console();
-	const double Az = FMath::DegreesToRadians(Console.panel.GetValue(Console.track.az_wheel));
+	const double Az = FMath::DegreesToRadians(Runner.Engagement().IndicatedToTrueDeg(Console.panel.GetValue(Console.track.az_wheel)));
 	const double El = FMath::DegreesToRadians(Console.panel.GetValue(Console.track.el_wheel));
 	const simcore::Vec3 Dir{FMath::Sin(Az) * FMath::Cos(El), FMath::Cos(Az) * FMath::Cos(El), FMath::Sin(El)};
 	const simcore::Vec3& Unit = Runner.UnitPosition();

@@ -27,6 +27,7 @@ the readiness state they start in (march, deployed, powered).
     "console": "procedures/osa_ak.json",              // relative to data/
     "tuning": "gameplay/osa_ak.json",                 // optional: turns on the gameplay engagement model
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
     "inputs": { "vehicle_stopped": false }            // starting values of console inputs
   },
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
@@ -34,6 +35,7 @@ the readiness state they start in (march, deployed, powered).
   "targets": [
     { "id": "t1", "name": "...", "type": "Air+FixedWing", "class": "drone", "appear_at_s": 0,
       "evade_on_launch": false, "evade_turn_rate_deg_s": 12,          // optional: break away when fired at
+      "iff": "none",                                                  // optional: "friend" replies to IFF
       "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },   // or { "lat_deg", "lon_deg", "alt_m" }
       "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
       "speed_mps": 150, "max_turn_rate_deg_s": 6, "rcs_m2": 0.5 }

@@ -15,9 +15,10 @@
 // the face.
 //
 // Displays are the instruments the crew reads: the search radar's scope ("ppi"), the
-// tracking radar's range indicator ("range_scope"), the TV sight's monitor ("tv"), and
-// needle instruments showing a control's value ("dial" turns, "meter" swings). Each
-// has conditions for when it is powered and (dials) when its backlight is on.
+// tracking radar's range indicator ("range_scope"), its elevation-search indicator
+// ("elevation_scope"), the TV sight's monitor ("tv"), and needle instruments showing a
+// control's value ("dial" turns, "meter" swings). Each has conditions for when it is
+// powered and (dials) when its backlight is on.
 //
 // Loading checks every reference against the console: each control placed at most
 // once, on a panel of its own station, inside the panel. A guard (cover or lock) that
@@ -77,6 +78,92 @@ inline int CabinClickTarget(const ControlDef& def, int current, int direction) {
     return target >= def.positions ? def.positions - 1 : target;
 }
 
+// What an item looks like on the panel, so a cabin can resemble the real one: its shape, size and colours. Fixtures
+// (items the console doesn't model: plates, nameplates, knobs, jacks...) always have one; controls and lamps may.
+enum class CabinLookKind {
+    Default,      // the control's or lamp's own style
+    Knob,         // round knob (color: black, white, brass, chrome)
+    PointerKnob,  // knob with a pointer over a scale
+    Trim,         // slotted screwdriver trim
+    Toggle,       // toggle lever
+    Lever,        // flat lever
+    Lamp,         // indicator lamp cap
+    LampButton,   // illuminated push-button: cap `color` in a `ring`
+    Button,       // plain push-button
+    Jack,         // test jack
+    Socket,       // round connector or coaxial socket
+    Latch,        // block lock (ОТКР. / ЗАКР.)
+    Nameplate,    // block type plate with `label`
+    Bezel,        // a screen's surround
+    Window,       // a counter or dial window
+    Diagram,      // printed outline diagram
+    Oval          // raised oval mount
+};
+
+inline const char* ToString(CabinLookKind k) {
+    switch (k) {
+        case CabinLookKind::Default: return "default";
+        case CabinLookKind::Knob: return "knob";
+        case CabinLookKind::PointerKnob: return "pointer_knob";
+        case CabinLookKind::Trim: return "trim";
+        case CabinLookKind::Toggle: return "toggle";
+        case CabinLookKind::Lever: return "lever";
+        case CabinLookKind::Lamp: return "lamp";
+        case CabinLookKind::LampButton: return "lamp_button";
+        case CabinLookKind::Button: return "button";
+        case CabinLookKind::Jack: return "jack";
+        case CabinLookKind::Socket: return "socket";
+        case CabinLookKind::Latch: return "latch";
+        case CabinLookKind::Nameplate: return "nameplate";
+        case CabinLookKind::Bezel: return "bezel";
+        case CabinLookKind::Window: return "window";
+        case CabinLookKind::Diagram: return "diagram";
+        case CabinLookKind::Oval: return "oval";
+    }
+    return "?";
+}
+
+struct CabinLook {
+    CabinLookKind kind = CabinLookKind::Default;
+    double width_m = 0.0;   // round items: diameter (height = width)
+    double height_m = 0.0;
+    std::string color;      // black, white, grey, chrome, brass, red, green, amber, yellow, orange
+    std::string ring;       // lamp_button: the ring's colour
+    std::string label;      // nameplate text, or the item's engraved label
+};
+
+// A block (one instrument unit of a console column): its plate on the panel and its type plate.
+struct CabinBlock {
+    std::string id;
+    std::string panel_id;
+    std::string label;      // e.g. "ОС81-9М"
+    double u_m = 0.0;       // centre
+    double v_m = 0.0;
+    double width_m = 0.0;
+    double height_m = 0.0;
+};
+
+// An item on a panel the console doesn't model; drawn, not operated.
+struct CabinFixture {
+    std::string panel_id;
+    double u_m = 0.0;
+    double v_m = 0.0;
+    CabinLook look;
+};
+
+// A piece of the cabin's shell in the body frame: floor, walls, ceiling, bench, racks ("box"), a window ("glass"), or
+// an interior lamp ("light", its size the light's reach).
+enum class CabinShellKind { Box, Glass, Light };
+
+struct CabinShellPart {
+    std::string id;
+    std::string label;
+    CabinShellKind kind = CabinShellKind::Box;
+    Vec3 centre_m;
+    Vec3 size_m;       // x (right), y (forward), z (up)
+    std::string color; // a look colour (CabinLook), or "paint" (the cabin's grey-green), "floor"
+};
+
 struct CabinStation {
     std::string id;           // a station id used by the console's controls, e.g. "senior_operator"
     std::string label;
@@ -118,6 +205,7 @@ struct CabinControl {
     double units_per_turn = 360.0;  // wheels: value change for one full turn of the hand wheel
     bool auto_placed = false;       // a guard placed over the control it guards
     int red_dot = -1;               // toggles and rotaries: the position a red dot marks on the panel, or -1
+    CabinLook look;                 // optional appearance (kind Default = by style)
 };
 
 struct CabinLamp {
@@ -129,20 +217,29 @@ struct CabinLamp {
     std::string color;                   // "green", "red", "amber" or "white"
     std::vector<Condition> lit_when;     // all must hold
     std::vector<Condition> lit_when_any; // if not empty, at least one must also hold
+    CabinLook look;                      // optional appearance (kind Default = a plain lamp cap)
 };
 
-enum class CabinDisplayKind { Ppi, RangeScope, Tv, Dial, Meter };
+enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter };
 
 inline const char* ToString(CabinDisplayKind k) {
     switch (k) {
         case CabinDisplayKind::Ppi: return "ppi";
         case CabinDisplayKind::RangeScope: return "range_scope";
+        case CabinDisplayKind::ElevationScope: return "elevation_scope";
         case CabinDisplayKind::Tv: return "tv";
         case CabinDisplayKind::Dial: return "dial";
         case CabinDisplayKind::Meter: return "meter";
     }
     return "?";
 }
+
+// Where one search beam's raster sits on an elevation_scope's screen (0 = bottom, 1 = top). The beam's elevations
+// are the console's (TrackSensorDef::beams_deg).
+struct ElevationRaster {
+    double screen_low = 0.0;
+    double screen_high = 1.0;
+};
 
 struct CabinDisplay {
     std::string id;
@@ -171,6 +268,10 @@ struct CabinDisplay {
     double afterglow_s = 3.0;
     // range_scope: span of the magnified lower sweep, centred on the range gate
     double magnified_window_m = 1500.0;
+    // elevation_scope (also uses afterglow_s): one raster per search beam of the console's elevation search, and
+    // the range window across the screen, centred on the range gate
+    std::vector<ElevationRaster> rasters;
+    double range_window_m = 2000.0;
 };
 
 struct CabinLayout {
@@ -180,6 +281,9 @@ struct CabinLayout {
     std::vector<CabinControl> controls;
     std::vector<CabinLamp> lamps;
     std::vector<CabinDisplay> displays;
+    std::vector<CabinBlock> blocks;
+    std::vector<CabinFixture> fixtures;
+    std::vector<CabinShellPart> shell;
 
     const CabinStation* FindStation(const std::string& id) const {
         for (const CabinStation& s : stations) {
@@ -273,7 +377,8 @@ namespace detail {
 class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "stations", "panels", "controls", "lamps", "displays"})) {
+        if (!Keys(root, "", {"system_id", "status", "notes", "stations", "panels", "controls", "lamps", "displays",
+                             "blocks", "fixtures", "shell"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -281,7 +386,8 @@ public:
             return Fail("system_id", "'" + out.system_id + "' doesn't match the console's '" + console.system_id + "'");
         }
         return LoadSeats(root, console, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
-               PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out);
+               PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out) &&
+               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out);
     }
 
 private:
@@ -408,7 +514,9 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
-            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "notes"})) return false;
+            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "look", "notes"})) {
+                return false;
+            }
             CabinControl item;
             if (!RequireString(c, path, "control", item.control_id)) return false;
             const ControlDef* def = console_panel.Find(item.control_id);
@@ -446,6 +554,9 @@ private:
                     return Fail(Join(path, "red_dot"), "not a position of '" + item.control_id + "'");
                 }
             }
+            if (const json::Value* look = c.Find("look")) {
+                if (!LoadLook(*look, Join(path, "look"), false, item.look)) return false;
+            }
             out.controls.push_back(std::move(item));
         }
         return true;
@@ -463,6 +574,7 @@ private:
             cover.units_per_turn = 360.0;
             cover.auto_placed = true;
             cover.red_dot = -1;
+            cover.look = CabinLook{};  // a cover keeps its own look, not the guarded control's
             out.controls.push_back(std::move(cover));
         }
         return true;
@@ -474,7 +586,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("lamps", i);
             const json::Value& l = arr->items[i];
-            if (!Keys(l, path, {"id", "label", "panel", "at_m", "color", "lit_when", "lit_when_any", "source",
+            if (!Keys(l, path, {"id", "label", "panel", "at_m", "color", "lit_when", "lit_when_any", "look", "source",
                                 "confidence", "notes"})) {
                 return false;
             }
@@ -497,7 +609,142 @@ private:
             if (lamp.lit_when.empty() && lamp.lit_when_any.empty()) {
                 return Fail(path, "needs lit_when or lit_when_any");
             }
+            if (const json::Value* look = l.Find("look")) {
+                if (!LoadLook(*look, Join(path, "look"), false, lamp.look)) return false;
+            }
             out.lamps.push_back(std::move(lamp));
+        }
+        return true;
+    }
+
+    // A look: "kind", "size_m" (a diameter, or [width, height]), "color", "ring", "label". Fixtures carry the same keys
+    // inline and need a kind; a control's or lamp's "look" may leave it out (kind default).
+    bool LoadLook(const json::Value& v, const std::string& path, bool inline_keys, CabinLook& out) {
+        if (!inline_keys && !Keys(v, path, {"kind", "size_m", "color", "ring", "label"})) return false;
+        std::string kind;
+        if (!OptionalString(v, path, "kind", kind)) return false;
+        if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
+        if (!kind.empty()) {
+            bool found = false;
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::Oval); ++k) {
+                if (kind == ToString(static_cast<CabinLookKind>(k))) {
+                    out.kind = static_cast<CabinLookKind>(k);
+                    found = true;
+                }
+            }
+            if (!found || (inline_keys && out.kind == CabinLookKind::Default)) {
+                return Fail(Join(path, "kind"), "unknown look '" + kind + "'");
+            }
+        }
+        if (const json::Value* size = v.Find("size_m")) {
+            if (size->Is(json::Type::Number)) {
+                out.width_m = out.height_m = size->number;
+            } else if (!Number2(v, path, "size_m", out.width_m, out.height_m)) {
+                return false;
+            }
+            if (!(out.width_m > 0.0) || !(out.height_m > 0.0)) return Fail(Join(path, "size_m"), "must be positive");
+        } else if (inline_keys) {
+            return Fail(Join(path, "size_m"), "required");
+        }
+        if (!OptionalString(v, path, "color", out.color) || !OptionalString(v, path, "ring", out.ring) ||
+            !OptionalString(v, path, "label", out.label)) {
+            return false;
+        }
+        for (const std::string* c : {&out.color, &out.ring}) {
+            if (c->empty()) continue;
+            bool ok = false;
+            for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow",
+                                      "orange"}) {
+                ok = ok || *c == known;
+            }
+            if (!ok) return Fail(Join(path, c == &out.color ? "color" : "ring"), "unknown colour '" + *c + "'");
+        }
+        if (out.kind == CabinLookKind::Nameplate && out.label.empty()) return Fail(Join(path, "label"), "required");
+        return true;
+    }
+
+    bool LoadBlocks(const json::Value& root, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "blocks");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("blocks", i);
+            const json::Value& b = arr->items[i];
+            if (!Keys(b, path, {"id", "panel", "label", "at_m", "size_m", "notes"})) return false;
+            CabinBlock block;
+            if (!RequireString(b, path, "id", block.id) || !RequireString(b, path, "label", block.label) ||
+                !Placement(b, path, out, block.panel_id, block.u_m, block.v_m) ||
+                !Number2(b, path, "size_m", block.width_m, block.height_m)) {
+                return false;
+            }
+            if (!(block.width_m > 0.0) || !(block.height_m > 0.0)) return Fail(Join(path, "size_m"), "must be positive");
+            const CabinPanel* panel = out.FindPanel(block.panel_id);
+            if (!panel->Contains(block.u_m - 0.5 * block.width_m, block.v_m - 0.5 * block.height_m) ||
+                !panel->Contains(block.u_m + 0.5 * block.width_m, block.v_m + 0.5 * block.height_m)) {
+                return Fail(Join(path, "at_m"), "block doesn't fit inside panel '" + block.panel_id + "'");
+            }
+            for (const CabinBlock& other : out.blocks) {
+                if (other.id == block.id) return Fail(Join(path, "id"), "duplicate block '" + block.id + "'");
+            }
+            out.blocks.push_back(std::move(block));
+        }
+        return true;
+    }
+
+    bool LoadShell(const json::Value& root, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "shell");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("shell", i);
+            const json::Value& v = arr->items[i];
+            if (!Keys(v, path, {"id", "label", "kind", "centre_m", "size_m", "color", "source", "confidence", "notes"})) {
+                return false;
+            }
+            CabinShellPart part;
+            std::string kind;
+            if (!RequireString(v, path, "id", part.id) || !RequireString(v, path, "label", part.label) ||
+                !RequireString(v, path, "kind", kind) || !Number3(v, path, "centre_m", part.centre_m) ||
+                !Number3(v, path, "size_m", part.size_m) || !OptionalString(v, path, "color", part.color) ||
+                !Provenance(v, path)) {
+                return false;
+            }
+            if (kind == "box") {
+                part.kind = CabinShellKind::Box;
+            } else if (kind == "glass") {
+                part.kind = CabinShellKind::Glass;
+            } else if (kind == "light") {
+                part.kind = CabinShellKind::Light;
+            } else {
+                return Fail(Join(path, "kind"), "must be box, glass or light");
+            }
+            if (!(part.size_m.x > 0.0) || !(part.size_m.y > 0.0) || !(part.size_m.z > 0.0)) {
+                return Fail(Join(path, "size_m"), "must be positive");
+            }
+            bool known = part.color.empty() || part.color == "paint" || part.color == "floor";
+            for (const char* c : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange"}) {
+                known = known || part.color == c;
+            }
+            if (!known) return Fail(Join(path, "color"), "unknown colour '" + part.color + "'");
+            for (const CabinShellPart& other : out.shell) {
+                if (other.id == part.id) return Fail(Join(path, "id"), "duplicate shell part '" + part.id + "'");
+            }
+            out.shell.push_back(std::move(part));
+        }
+        return true;
+    }
+
+    bool LoadFixtures(const json::Value& root, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "fixtures");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("fixtures", i);
+            const json::Value& f = arr->items[i];
+            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "notes"})) return false;
+            CabinFixture fixture;
+            if (!Placement(f, path, out, fixture.panel_id, fixture.u_m, fixture.v_m) ||
+                !LoadLook(f, path, true, fixture.look)) {
+                return false;
+            }
+            out.fixtures.push_back(std::move(fixture));
         }
         return true;
     }
@@ -510,8 +757,8 @@ private:
             const json::Value& d = arr->items[i];
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
-                                "sweep_period_s", "afterglow_s", "magnified_window_m", "source", "confidence",
-                                "notes"})) {
+                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
+                                "source", "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -555,6 +802,12 @@ private:
             disp.kind = CabinDisplayKind::RangeScope;
             allowed = {"magnified_window_m"};
             if (!console.has_sensors) return Fail(Join(path, "kind"), "a range_scope needs the console's sensors block");
+        } else if (kind == "elevation_scope") {
+            disp.kind = CabinDisplayKind::ElevationScope;
+            allowed = {"afterglow_s", "rasters", "range_window_m"};
+            if (!console.has_sensors || console.track.beams_deg.empty()) {
+                return Fail(Join(path, "kind"), "an elevation_scope needs the console's track elevation_search");
+            }
         } else if (kind == "tv") {
             disp.kind = CabinDisplayKind::Tv;
             if (!console.has_sensors || console.track.tv_camera.empty()) {
@@ -567,10 +820,11 @@ private:
             disp.kind = CabinDisplayKind::Meter;
             allowed = {"control", "marks", "scale", "full_scale", "unit"};
         } else {
-            return Fail(Join(path, "kind"), "must be ppi, range_scope, tv, dial or meter");
+            return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial or meter");
         }
         for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
-                                "sweep_period_s", "afterglow_s", "magnified_window_m"}) {
+                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
+                                "range_window_m"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
@@ -587,16 +841,39 @@ private:
             !OptionalString(d, path, "unit", disp.unit) ||
             !OptionalNumber(d, path, "sweep_period_s", disp.sweep_period_s) ||
             !OptionalNumber(d, path, "afterglow_s", disp.afterglow_s) ||
-            !OptionalNumber(d, path, "magnified_window_m", disp.magnified_window_m)) {
+            !OptionalNumber(d, path, "magnified_window_m", disp.magnified_window_m) ||
+            !OptionalNumber(d, path, "range_window_m", disp.range_window_m)) {
             return false;
         }
         if (disp.marks < 1) return Fail(Join(path, "marks"), "must be at least 1");
         for (double v : {disp.value_per_turn, disp.full_scale, disp.sweep_period_s, disp.afterglow_s,
-                         disp.magnified_window_m}) {
+                         disp.magnified_window_m, disp.range_window_m}) {
             if (!(v > 0.0)) {
-                return Fail(path, "value_per_turn, full_scale, sweep_period_s, afterglow_s and magnified_window_m "
-                                  "must be positive");
+                return Fail(path, "value_per_turn, full_scale, sweep_period_s, afterglow_s, magnified_window_m and "
+                                  "range_window_m must be positive");
             }
+        }
+        if (disp.kind == CabinDisplayKind::ElevationScope && !LoadElevationScope(d, path, console, disp)) return false;
+        return true;
+    }
+
+    bool LoadElevationScope(const json::Value& d, const std::string& path, const ConsoleData& console,
+                            CabinDisplay& disp) {
+        const json::Value* arr = OptionalArray(d, path, "rasters");
+        if (arr == nullptr) return message_.empty() ? Fail(Join(path, "rasters"), "required") : false;
+        if (arr->items.size() != console.track.beams_deg.size()) {
+            return Fail(Join(path, "rasters"), "needs one raster per beam of the console's elevation_search");
+        }
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string rpath = Index(Join(path, "rasters"), i);
+            const json::Value& r = arr->items[i];
+            if (!Keys(r, rpath, {"screen"})) return false;
+            ElevationRaster raster;
+            if (!Number2(r, rpath, "screen", raster.screen_low, raster.screen_high)) return false;
+            if (!(raster.screen_low >= 0.0 && raster.screen_low < raster.screen_high && raster.screen_high <= 1.0)) {
+                return Fail(Join(rpath, "screen"), "must be [low, high] within 0..1");
+            }
+            disp.rasters.push_back(raster);
         }
         return true;
     }

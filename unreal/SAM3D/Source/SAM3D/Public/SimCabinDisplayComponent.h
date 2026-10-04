@@ -17,7 +17,7 @@ class USimWorldSubsystem;
 
 /**
  * One instrument of the cabin (simcore::CabinDisplay): the search radar's scope, the tracking radar's range
- * indicator, the TV sight's monitor, or a needle dial or meter. Draws into its own render target every frame
+ * indicator and elevation-search indicator, the TV sight's monitor, or a needle dial or meter. Draws into its own render target every frame
  * from the simulation's state and shows it on a quad on the panel. The TV films the 3D world with a scene
  * capture looking along the tracking radar's wheels.
  *
@@ -49,6 +49,8 @@ private:
 	USimWorldSubsystem* GetSim() const;
 	void DrawPpi(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, simcore::ScenarioRunner& Runner, bool bOn);
 	void DrawRangeScope(UCanvas* Canvas, const FVector2D& Size, simcore::ScenarioRunner& Runner, bool bOn);
+	void DrawElevationScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
+		simcore::ScenarioRunner& Runner, bool bOn);
 	void DrawDial(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, bool bLit);
 	void DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn);
 	void UpdateTv(const USimWorldSubsystem* Sim, simcore::ScenarioRunner& Runner, bool bOn);
@@ -56,6 +58,8 @@ private:
 	int32 LayoutIndex = INDEX_NONE;
 	simcore::CabinDisplayKind Kind = simcore::CabinDisplayKind::Dial;
 	TUniquePtr<simcore::SearchScope> Scope;
+	TUniquePtr<simcore::ElevationScope> ElevScope;
+	int32 ElevRaster = INDEX_NONE;
 	double LastSimTimeSeconds = -1.0;
 	bool bTvWasOn = false;
 	FRandomStream Noise;

@@ -110,7 +110,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 6);
+    SC_EXPECT(layout.displays.size() == 8);
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {
@@ -176,4 +176,95 @@ SC_TEST("scopes: the loader rejects bad displays") {
                   "must be positive"));
     SC_EXPECT(Has(Error(R"({ "id": "d", "label": "D", "kind": "tv", "panel": "p", "at_m": [0, 0], "size_m": [0.1, 0.1] })"),
                   "displays[0].source"));
+}
+
+
+namespace {
+
+Contact Up(const std::string& id, double range_m, double el_deg) { return {id, range_m, 0.0, el_deg}; }
+
+}  // namespace
+
+SC_TEST("scopes: the elevation-search indicator paints targets the antenna's beam passes over") {
+    ElevationScope scope(1.5, 1.0);  // beam 1 deg
+    const std::vector<Contact> returns = {Up("near", 10300.0, 4.0), Up("far", 12000.0, 4.0)};
+    // Gate at 10 km, 2 km window: "far" (+2 km) is off the screen. The antenna swept 0..3 deg: below 4 - 0.5.
+    scope.Update(0.5, true, 0.0, 3.0, 10000.0, 2000.0, returns);
+    SC_EXPECT(scope.Marks().empty());
+    scope.Update(0.25, true, 3.0, 4.5, 10000.0, 2000.0, returns);  // passes 4 deg
+    const std::vector<ElevationScope::Mark> marks = scope.Marks();
+    SC_EXPECT(marks.size() == 1);
+    if (marks.size() != 1) return;
+    SC_EXPECT(marks[0].target_id == "near");
+    SC_EXPECT_NEAR(marks[0].range_offset_m, 300.0, 1e-9);
+    SC_EXPECT_NEAR(marks[0].elevation_deg, 4.0, 1e-9);
+    SC_EXPECT_NEAR(marks[0].brightness, 1.0, 1e-9);
+    // Pointing still at 6.6 deg: a target at 7 deg is within half a beam width and is repainted every step.
+    for (int i = 0; i < 30; ++i) scope.Update(0.1, true, 6.6, 6.6, 10000.0, 2000.0, {Up("near", 10300.0, 7.0)});
+    SC_EXPECT(scope.Marks().size() == 1 && scope.Marks()[0].brightness > 0.99);
+    // Transmitter off: nothing new, the mark fades out.
+    for (int i = 0; i < 20; ++i) scope.Update(0.1, false, 6.6, 6.6, 10000.0, 2000.0, returns);
+    SC_EXPECT(scope.Marks().empty());
+}
+
+SC_TEST("scopes: the Osa's elevation-search indicator has a raster for each search beam") {
+    ConsoleData console;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinDisplay* elev = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.id == "elev_search") elev = &d;
+    }
+    SC_EXPECT(elev != nullptr);
+    if (elev == nullptr) return;
+    SC_EXPECT(elev->kind == CabinDisplayKind::ElevationScope && elev->rasters.size() == console.track.beams_deg.size());
+    SC_EXPECT_NEAR(elev->range_window_m, 2000.0, 1e-12);  // voenizdat_osa_1991 p95
+    // Fig. 2.37: beam I's raster is the lowest on the screen, beam II's the highest band.
+    SC_EXPECT(elev->rasters[0].screen_low < elev->rasters[2].screen_low && elev->rasters[1].screen_low > elev->rasters[2].screen_low);
+    SC_EXPECT(!CabinLayout::DisplayOn(*elev, console.panel, console.equipment));  // dark until warmed up
+}
+
+SC_TEST("scopes: the loader checks an elevation scope's rasters") {
+    ConsoleData console;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console));
+    auto Error = [&](const std::string& extra) {
+        const std::string text = R"({ "system_id": "osa_ak",
+          "stations": [ { "id": "senior_operator", "label": "SO", "eye_m": [0, 0, 1.5] },
+                        { "id": "operator", "label": "O", "eye_m": [0, 1, 1.5] },
+                        { "id": "deputy_commander", "label": "DC", "eye_m": [1, 0, 1.5] },
+                        { "id": "commander", "label": "C", "eye_m": [1, 3, 1.5] },
+                        { "id": "driver", "label": "D", "eye_m": [-1, 3, 1.5] } ],
+          "panels": [ { "id": "p", "label": "P", "station": "senior_operator", "centre_m": [-1, 0, 1.3],
+                        "facing_deg": 90, "size_m": [1.0, 0.6] } ],
+          "displays": [ { "id": "e", "label": "E", "kind": "elevation_scope", "panel": "p", "at_m": [0, 0],
+                          "size_m": [0.1, 0.1], "source": "s", "confidence": "low")" + extra + " } ] }";
+        CabinLayout layout;
+        std::string error;
+        if (LoadCabin(text, console, layout, &error)) return std::string("loaded");
+        return error;
+    };
+    const auto Has = [](const std::string& error, const std::string& want) {
+        if (error.find(want) == std::string::npos) std::printf("    got: %s\n", error.c_str());
+        return error.find(want) != std::string::npos;
+    };
+    const std::string three = R"(, "rasters": [ { "screen": [0, 0.7] }, { "screen": [0.4, 1] }, { "screen": [0.1, 1] } ])";
+    SC_EXPECT(Error(three) == "loaded");
+    SC_EXPECT(Has(Error(""), "displays[0].rasters: required"));
+    SC_EXPECT(Has(Error(R"(, "rasters": [ { "screen": [0, 0.7] } ])"), "one raster per beam"));
+    SC_EXPECT(Has(Error(R"(, "rasters": [ { "screen": [0, 0.7] }, { "screen": [0.4, 1.2] }, { "screen": [0.1, 1] } ])"),
+                  "rasters[1].screen"));
+    SC_EXPECT(Has(Error(three + R"(, "magnified_window_m": 100)"), "not used by a elevation_scope"));
+}
+
+SC_TEST("scopes: the search scope paints IFF replies as the sweep passes them") {
+    SearchScope scope(2.0, 3.0);
+    Contact reply = At("f", 90.0, 20000.0);
+    reply.control_reply = true;
+    scope.Update(0.6, true, {At("f", 90.0, 20000.0)}, {reply});  // sweep 0 -> 108 deg passes 90
+    const std::vector<SearchScope::Blip> blips = scope.Blips();
+    SC_EXPECT(blips.size() == 2);
+    if (blips.size() != 2) return;
+    SC_EXPECT(!blips[0].iff_reply && blips[1].iff_reply && blips[1].control_reply);
+    SC_EXPECT_NEAR(blips[1].azimuth_rad, DegToRad(90.0), 1e-9);
 }

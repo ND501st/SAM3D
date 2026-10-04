@@ -45,6 +45,7 @@ struct ScenarioTarget {
     std::string target_class = "default";  // picks the hit chance in the gameplay tuning
     bool evade_on_launch = false;          // breaks away onto a beam heading when a missile is launched at it
     double evade_turn_rate_rad_s = DegToRad(12.0);
+    bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
 };
 
 struct TriggerAction {
@@ -78,6 +79,7 @@ struct ScenarioDef {
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
     Vec3 unit_position;            // ENU [m]
+    double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
     std::vector<std::pair<std::string, bool>> initial_inputs;
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
@@ -170,10 +172,19 @@ private:
         return RequireNumber(*t, "terrain", "height_m", out.ground_height_m);
     }
 
+    // A target's "iff": "friend" (replies to interrogation) or "none" (the default).
+    bool LoadIff(const json::Value& t, const std::string& p, bool& friendly) {
+        std::string iff;
+        if (!OptionalString(t, p, "iff", iff)) return false;
+        if (!iff.empty() && iff != "friend" && iff != "none") return Fail(Join(p, "iff"), "must be friend or none");
+        friendly = iff == "friend";
+        return true;
+    }
+
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "position", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -198,7 +209,8 @@ private:
         }
         const json::Value* pos = nullptr;
         if (!RequireObject(*u, "own_unit", "position", pos) ||
-            !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position)) {
+            !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position) ||
+            !OptionalNumber(*u, "own_unit", "heading_deg", out.unit_heading_deg)) {
             return false;
         }
         if (const json::Value* in = u->Find("inputs")) {
@@ -249,14 +261,14 @@ private:
             const std::string p = Index("targets", i);
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
-                             "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "notes"})) {
+                             "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
             double turn_deg_s = RadToDeg(tg.max_turn_rate_rad_s);
             double evade_deg_s = RadToDeg(tg.evade_turn_rate_rad_s);
             if (!OptionalString(t, p, "class", tg.target_class) ||
-                !OptionalBool(t, p, "evade_on_launch", tg.evade_on_launch) ||
+                !OptionalBool(t, p, "evade_on_launch", tg.evade_on_launch) || !LoadIff(t, p, tg.friendly) ||
                 !OptionalNumber(t, p, "evade_turn_rate_deg_s", evade_deg_s)) {
                 return false;
             }

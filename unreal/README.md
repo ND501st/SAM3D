@@ -36,8 +36,8 @@ In play:
 | Right mouse + drag | Orbit the camera |
 | 1 | Power up: driver starts the GTA (`power_up`), operator switches on the equipment (`equipment_on`) |
 | 2 | Senior operator: search on the march (waits for power) |
-| 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line |
-| 4 | Acquire: senior operator with the SOC, deputy commander readies ЦУ АЗ, operator switches on the SSC |
+| 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line, deputy commander orients the vehicle (gyro to the crew chief's Qc, `orient_vehicle`) |
+| 4 | Acquire: senior operator with the SOC, deputy commander readies ЦУ АЗ (queued after orienting), operator switches on the SSC |
 | 5, 6 | Deputy commander: prepare for firing; launch (both queued) |
 | 7 | TV-only engagement: senior operator turns the azimuth, deputy commander does the rest |
 | 8 | Stow for the march: operator (SSC off, drives off, АПУ locked), deputy commander, driver |
@@ -81,6 +81,19 @@ keyboard. C stops it.
 ```
 set SAM3D_CABIN_TOUR=6
 D:\UE_5.7\Engine\Binaries\Win64\UnrealEditor.exe C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject
+```
+
+## Cabin parts library
+
+The cabin's knobs, toggles, lamps, buttons, jacks, sockets, latches and hand wheels are meshes built from code in
+Blender: `tools/blender/build_cabin_parts.py` writes `art/cabin_parts/*.fbx` and `cabin_parts.blend`, and
+`tools/ue_import_cabin_parts.py` imports them into the open editor as `/Game/SAM3D/Cabin/Parts/SM_*` (all through Git
+LFS). Each part is 1 m across at unit scale; the cabin scales and tints it from `data/cabins/<system>.json`, and falls
+back to engine basic shapes for any part that isn't imported.
+
+```
+"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe" --background --python tools/blender/build_cabin_parts.py -- --preview out/parts_preview.png
+python tools/ue_import_cabin_parts.py
 ```
 
 ## Scripting the open editor

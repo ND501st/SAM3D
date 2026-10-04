@@ -49,6 +49,30 @@ reference point. Angles are in degrees in the file.
 }
 ```
 
+## Blocks, fixtures and looks
+
+So the cabin resembles the real consoles, a layout can carry what the sim doesn't model, and say what every item looks
+like. The Osa's operator columns are copied from SAM Simulator's panel photos at 1 mm per pixel (`samsim_panels`),
+checked with `tools/cabin_preview.py` (draws a panel from this file alone, optionally beside and blended over a
+reference picture kept in `reference/`).
+
+- `blocks`: the instrument blocks of a column, `{ "id", "panel", "label" (type plate, e.g. "ОС81-9М"), "at_m",
+  "size_m": [w, h] }`, inside their panel.
+- `fixtures`: items drawn but not operated, `{ "panel", "at_m", "kind", "size_m", "color", "ring", "label" }`.
+- `look` on a control or lamp placement: `{ "kind", "size_m", "color", "ring", "label" }`, all optional.
+
+`kind`: `knob`, `pointer_knob`, `trim`, `toggle`, `lever`, `lamp`, `lamp_button` (cap `color` in a `ring`), `button`,
+`jack`, `socket`, `latch`, `nameplate` (needs `label`), `bezel`, `window`, `diagram`, `oval`. `size_m` is a diameter
+or `[width, height]`. Colours: black, white, grey, chrome, brass, red, green, amber, yellow, orange.
+
+## Shell
+
+`shell` is the room around the consoles: floor, ceiling, walls, seats, racks and windows as boxes in the body frame,
+plus the interior lamps. Each part is `{ "id", "label", "kind", "centre_m", "size_m": [x, y, z], "color", "source",
+"confidence" }`. `kind` is `box`, `glass` (a window) or `light` (an interior lamp reaching as far as `size_m`). `color`
+takes the look colours above, plus `paint` (the cabin's grey-green, the default) and `floor`. In Unreal the cabin is
+lit only by its own lamps (a lighting channel of its own), so the sun outside never reaches the panels.
+
 ## Displays
 
 The instruments the crew reads. Each sits on a panel (`at_m` is its centre, `size_m` its width and height, all of it
@@ -59,6 +83,7 @@ inside the panel), says when it is powered (`on_when`, `on_when_any`, console co
 |---|---|---|
 | `ppi` | The search radar's picture on a rotating sweep with fading echoes, on the scale the range selector picks; the tracking radar's azimuth line and range gate | `sweep_period_s`, `afterglow_s` |
 | `range_scope` | The tracking radar's range indicator: an upper sweep over its whole range with echoes as spikes, a lower sweep magnified around the range gate, and the range counter | `magnified_window_m` |
+| `elevation_scope` | The tracking radar's elevation-search indicator: a rectangular raster (elevation up, range across) for the search beam the antenna searches, `range_window_m` of range centred on the range gate, the antenna's elevation as a line, and targets as fading marks when the antenna's beam passes them. The beams, the scan and the antenna's position are the console's (`sensors.track.elevation_search`, run by the engagement model); the layout gives one raster per beam, `{ "screen": [bottom, top] }` with screen heights 0..1 | `rasters`, `range_window_m`, `afterglow_s` |
 | `tv` | The TV sight's picture, looking along the tracking radar's azimuth and elevation with the selected lens, and a crosshair | none |
 | `dial` | A needle turning with a control's value (one turn = `value_per_turn`), scale `0..labels_per_turn` in `marks` divisions; `lit_when` for its backlight | `control`, `marks`, `value_per_turn`, `labels_per_turn` |
 | `meter` | A needle swinging with `value x scale`, full deflection at `full_scale` `unit`; rests at 0 when not powered | `control`, `marks`, `scale`, `full_scale`, `unit` |
@@ -71,7 +96,7 @@ inside the panel), says when it is powered (`on_when`, `on_when_any`, console co
 ```
 
 What the radars see comes from the engagement model (`EngagementModel::SearchPicture`, `TrackReturns`); a display
-only shows it. `ppi`, `range_scope` and `tv` need the console's `sensors` block.
+only shows it. `ppi`, `range_scope` and `tv` need the console's `sensors` block, `elevation_scope` its track `elevation_search`.
 
 Rules the loader checks:
 

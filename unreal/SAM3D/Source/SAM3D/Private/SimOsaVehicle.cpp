@@ -83,6 +83,12 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);
 	CabinCamera->bAutoActivate = false;
+	// A fixed exposure for the closed cabin (EV100, the project's default units): auto exposure would adapt to the
+	// dark compartment and burn out everything its lamps light.
+	CabinCamera->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
+	CabinCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
+	CabinCamera->PostProcessSettings.AutoExposureMinBrightness = CabinExposureEv100;
+	CabinCamera->PostProcessSettings.AutoExposureMaxBrightness = CabinExposureEv100;
 	CabinHUDClass = ASimCabinHUD::StaticClass();
 
 	// Placeholder crew orders until the order menu exists (phase 8). Crew names and procedures are the
@@ -94,8 +100,9 @@ ASimOsaVehicle::ASimOsaVehicle()
 		Hotkey(EKeys::Two, TEXT("Senior operator"), TEXT("search_on_march")),
 		Hotkey(EKeys::Three, TEXT("Operator"), TEXT("deploy_at_halt"), true),
 		Hotkey(EKeys::Three, TEXT("Driver"), TEXT("pto_on_line")),
+		Hotkey(EKeys::Three, TEXT("Deputy commander"), TEXT("orient_vehicle")),
 		Hotkey(EKeys::Four, TEXT("Senior operator"), TEXT("acquire_with_soc")),
-		Hotkey(EKeys::Four, TEXT("Deputy commander"), TEXT("ready_capture")),
+		Hotkey(EKeys::Four, TEXT("Deputy commander"), TEXT("ready_capture"), true),
 		Hotkey(EKeys::Four, TEXT("Operator"), TEXT("capture_with_ssc")),
 		Hotkey(EKeys::Five, TEXT("Deputy commander"), TEXT("prepare_firing"), true),
 		Hotkey(EKeys::Six, TEXT("Deputy commander"), TEXT("launch"), true),
@@ -199,14 +206,15 @@ void ASimOsaVehicle::UpdateSim(USimWorldSubsystem* Sim)
 {
 	// The sim unit sits about 3 m above the ground, where the antennas are.
 	Sim->SetUnitLocation(GetActorLocation() + GetActorUpVector() * 300.0);
+	Sim->SetUnitHeading(HeadingDeg);
 	Sim->SetSimInput(StoppedInput, FMath::Abs(SpeedMps) < StoppedBelowMps);
 }
 
 void ASimOsaVehicle::AnimateFromSim(const USimWorldSubsystem* Sim)
 {
-	// The sim treats the hull as facing north (engagement.hpp): turret yaw is the wheel's azimuth from north,
-	// minus the hull's heading, so it points the right way whichever way the hull faces.
-	const double AzimuthFromNorth = Sim->GetWheelValue(TurretAzimuthWheel);
+	// The wheel's azimuth is in the crew's frame (the gyro half-compass, engagement.hpp): as true azimuth from north,
+	// minus the hull's heading, it is the turret's yaw on the hull.
+	const double AzimuthFromNorth = Sim->IndicatedToTrueAzimuth(Sim->GetWheelValue(TurretAzimuthWheel));
 	TurretPivot->SetRelativeRotation(FRotator(0.0, AzimuthFromNorth - HeadingDeg, 0.0));
 	// 1 = raised (upright), 0 = folded back 90 degrees for transport.
 	const double Raised = Sim->GetSubsystemProgress(SearchAntennaSubsystem);

@@ -65,9 +65,11 @@ public:
             e.target_class = t.target_class;
             e.evade_on_launch = t.evade_on_launch;
             e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
+            e.friendly = t.friendly;
             eng_targets_.push_back(e);
         }
         fired_.assign(def_.triggers.size(), false);
+        engagement_.SetUnitHeading(def_.unit_heading_deg);
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -128,6 +130,11 @@ public:
         engagement_.SetUnitPosition(enu);
     }
     const Vec3& UnitPosition() const { return def_.unit_position; }
+    // The hull turned (e.g. the player drove it): degrees clockwise from north.
+    void SetUnitHeading(double heading_deg) {
+        def_.unit_heading_deg = heading_deg;
+        engagement_.SetUnitHeading(heading_deg);
+    }
 
     // Replace the scenario's flat ground, e.g. with heights sampled from Cesium. Null restores the flat ground.
     // The terrain must outlive the runner or be replaced first.

@@ -136,7 +136,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 6);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 7);
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
@@ -147,6 +147,54 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     const CabinControl* wheel = layout.FindControl("ssc.az_wheel");
     SC_EXPECT(wheel != nullptr && wheel->style == CabinStyle::Wheel);
     SC_EXPECT_NEAR(wheel != nullptr ? wheel->units_per_turn : 0.0, 60.0, 1e-12);
+}
+
+SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, then search, then range") {
+    // mon_2112_80 Fig. 3 (cabin plan) and the WZU crew photos (grezicki_wzu Fig. 4).
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const char* bench[] = {"deputy_commander", "senior_operator", "operator"};
+    const char* consoles[] = {"fo_panel", "so_panel", "op_panel"};
+    double previous_y = 1e9;
+    for (int i = 0; i < 3; ++i) {
+        const CabinStation* seat = layout.FindStation(bench[i]);
+        const CabinPanel* panel = layout.FindPanel(consoles[i]);
+        SC_EXPECT(seat != nullptr && panel != nullptr);
+        if (seat == nullptr || panel == nullptr) return;
+        SC_EXPECT(seat->eye_m.x < 0.0 && panel->centre_m.x < seat->eye_m.x);    // left wall, panel in front of the seat
+        SC_EXPECT_NEAR(seat->yaw_rad, DegToRad(-90.0), 1e-12);                  // facing the wall
+        SC_EXPECT_NEAR(panel->centre_m.y, seat->eye_m.y, 1e-9);                 // panel straight ahead
+        SC_EXPECT(seat->eye_m.y < previous_y);                                   // front to rear
+        previous_y = seat->eye_m.y;
+    }
+    // The three columns of the main console don't overlap along the wall.
+    for (int i = 0; i + 1 < 3; ++i) {
+        const CabinPanel* front = layout.FindPanel(consoles[i]);
+        const CabinPanel* rear = layout.FindPanel(consoles[i + 1]);
+        SC_EXPECT(front->centre_m.y - 0.5 * front->width_m >= rear->centre_m.y + 0.5 * rear->width_m);
+    }
+    // Each column is a tall stack of blocks (samsim_panels, cabin photos): the screen above the hand wheel, and in the front column
+    // the launch block between the TV block and the elevation block.
+    auto v_of = [&](const char* id) {
+        for (const CabinControl& c : layout.controls) {
+            if (c.control_id == id) return c.v_m;
+        }
+        for (const CabinDisplay& d : layout.displays) {
+            if (d.id == id) return d.v_m;
+        }
+        return 0.0;
+    };
+    for (const char* id : consoles) {
+        const CabinPanel* panel = layout.FindPanel(id);
+        SC_EXPECT(panel->height_m > panel->width_m);
+    }
+    SC_EXPECT(v_of("tov_monitor") > v_of("msl.emergency") && v_of("msl.emergency") > v_of("ssc.el_wheel"));
+    SC_EXPECT(v_of("soc_ppi") > v_of("ssc.az_wheel"));
+    SC_EXPECT(v_of("ssc_range") > v_of("ssc.range_wheel"));
+    // Driver front left, commander front right.
+    SC_EXPECT(layout.FindStation("driver")->eye_m.x < 0.0 && layout.FindStation("commander")->eye_m.x > 0.0);
 }
 
 SC_TEST("cabin: lamps light from subsystem states and inputs") {
@@ -312,4 +360,55 @@ SC_TEST("cabin: player moves go through a procedure tracker into the debrief") {
                                   e.what == "lower_search_antenna");
     }
     SC_EXPECT(completed);
+}
+
+SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    const std::string ok = Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0],
+                                                      "look": { "kind": "toggle", "size_m": 0.014, "color": "chrome" } } ],
+          "blocks": [ { "id": "b", "panel": "p", "label": "ОП63-6М2", "at_m": [0, 0], "size_m": [0.9, 0.5] } ],
+          "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "lamp_button", "size_m": 0.044, "color": "red",
+                          "ring": "yellow", "label": "ТСЦ" },
+                        { "panel": "p", "at_m": [0.2, 0.1], "kind": "nameplate", "size_m": [0.05, 0.013], "label": "ОС81-9М" } ])");
+    std::string error;
+    SC_EXPECT(LoadCabin(ok, console, layout, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(layout.blocks.size() == 1 && layout.fixtures.size() == 2);
+    SC_EXPECT(layout.fixtures.size() == 2 && layout.fixtures[0].look.kind == CabinLookKind::LampButton &&
+              layout.fixtures[0].look.ring == "yellow");
+    SC_EXPECT_NEAR(layout.fixtures.empty() ? 0.0 : layout.fixtures[0].look.width_m, 0.044, 1e-12);
+    SC_EXPECT(!layout.controls.empty() && layout.controls[0].look.kind == CabinLookKind::Toggle);
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gizmo", "size_m": 0.02 } ])"),
+                            "fixtures[0].kind: unknown look 'gizmo'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob" } ])"),
+                            "fixtures[0].size_m: required"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "color": "purple" } ])"),
+                            "fixtures[0].color: unknown colour 'purple'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "nameplate", "size_m": [0.05, 0.01] } ])"),
+                            "fixtures[0].label: required"));
+    SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [1.5, 0.5] } ])"),
+                            "blocks[0].at_m: block doesn't fit"));
+    // The Osa layout has every column's blocks and fixtures from SAM Simulator's panel photos.
+    CabinLayout osa;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, osa));
+    int per_panel[3] = {0, 0, 0};
+    for (const CabinFixture& f : osa.fixtures) {
+        per_panel[0] += f.panel_id == "op_panel";
+        per_panel[1] += f.panel_id == "so_panel";
+        per_panel[2] += f.panel_id == "fo_panel";
+    }
+    SC_EXPECT(per_panel[0] > 50 && per_panel[1] > 50 && per_panel[2] > 50);
+    SC_EXPECT(osa.blocks.size() >= 15);
+    // The shell: floor, walls, bench and racks, two dome lamps.
+    int lights = 0;
+    for (const CabinShellPart& part : osa.shell) lights += part.kind == CabinShellKind::Light;
+    SC_EXPECT(osa.shell.size() >= 15 && lights == 2);
+    SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "wall", "centre_m": [0, 0, 1],
+                                                   "size_m": [1, 1, 1], "source": "s", "confidence": "low" } ])"),
+                            "shell[0].kind: must be box, glass or light"));
+    SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "box", "centre_m": [0, 0, 1],
+                                                   "size_m": [1, 0, 1], "source": "s", "confidence": "low" } ])"),
+                            "shell[0].size_m: must be positive"));
 }

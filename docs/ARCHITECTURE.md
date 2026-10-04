@@ -120,8 +120,14 @@ roadmap phase 6:
 - Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
 - Missiles: no missile load, selection or second channel; ЗАХВАТ / ВКЛ ВЫС lamps mapped to preparation. (6.3)
 - Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)
-- Heading: the engagement model takes the hull to face north (`engagement.hpp`); the real vehicle is oriented with
-  its navigation set. (6.5)
+- Tracking radar capture: azimuth, range and elevation (the antenna's 1° beam on the target; during ЦУ it scans the
+  search beam). The scan period is an estimate, and in the automatic beam programmes the beam searched is the one the
+  echo is seen in, not the real search radar's beam commands. Manual capture has no slow elevation scan of its own:
+  the elevation wheel has to be on the target. (6.4)
+- Heading: the gyro half-compass and its orientation drill are modelled (the crew's azimuths are in the gyro's
+  frame); gyro drift, the OR-31M Qc scale and the crew chief's compass work are not, and the player deputy reads
+  the commanded Qc from the log. (6.5)
+- IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
 - Engagement zone: one box; no pursuit or optical zones, no guidance-method selection. (6.7)
 - No PU-12 or battery yet: targets are found by the vehicle's own radar only. (phase 7)

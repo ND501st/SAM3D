@@ -444,6 +444,24 @@ FVector USimWorldSubsystem::GetUnitLocation() const
 	return Runner ? ToUnreal(Runner->UnitPosition()) : FVector::ZeroVector;
 }
 
+void USimWorldSubsystem::SetUnitHeading(double HeadingDeg)
+{
+	if (Runner)
+	{
+		Runner->SetUnitHeading(HeadingDeg);
+	}
+}
+
+double USimWorldSubsystem::GetUnitHeading() const
+{
+	return Runner ? Runner->Engagement().UnitHeadingDeg() : 0.0;
+}
+
+double USimWorldSubsystem::IndicatedToTrueAzimuth(double IndicatedDeg) const
+{
+	return Runner ? Runner->Engagement().IndicatedToTrueDeg(IndicatedDeg) : IndicatedDeg;
+}
+
 // ---------------------------------------------------------------------------------------------- console
 
 int32 USimWorldSubsystem::GetControlPosition(const FString& ControlId) const

@@ -78,7 +78,9 @@ void ASimScenarioDirector::SpawnPlayerVehicle(USimWorldSubsystem* Sim)
 	UClass* Class = PlayerVehicleClass ? PlayerVehicleClass.Get() : ASimOsaVehicle::StaticClass();
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	ASimOsaVehicle* Vehicle = GetWorld()->SpawnActor<ASimOsaVehicle>(Class, Sim->GetUnitLocation(), FRotator::ZeroRotator, Params);
+	// At the scenario's position, facing its heading (Unreal yaw is clockwise from north, X = north).
+	const FRotator Facing(0.0, Sim->GetUnitHeading(), 0.0);
+	ASimOsaVehicle* Vehicle = GetWorld()->SpawnActor<ASimOsaVehicle>(Class, Sim->GetUnitLocation(), Facing, Params);
 	APlayerController* Pc = UGameplayStatics::GetPlayerController(this, 0);
 	if (Vehicle != nullptr && Pc != nullptr)
 	{

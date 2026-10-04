@@ -268,4 +268,181 @@ meters (КАНАЛ Ц, КАНАЛ Р), ЧАСТОТА. The function check must n
   stow_ssc, equipment_off), commander (lower / raise the search antenna). The practice scenario now launches its drone
   200 s in, giving the crew its 4 min to readiness.
 - Not done yet: the vehicle orientation (АК — ЗК, СОГЛАСОВАНИЕ), the IFF controls, the function check, the
-  elevation-search indicator display (axes now known), and the real cabin layout from Fig. 3 (next step).
+  elevation-search indicator display (axes now known). The cabin seats followed in `feature/cabin-bench` (below).
+
+## Two more documents (3 Oct 2026, later)
+
+| Key | Document | Use |
+|---|---|---|
+| `korovin_tiv_2010` | `OSA_Entw_geschichte_RU.pdf`: a 2012 Word compilation (52 pp.) of Korovin's «Зенитный ракетный комплекс «Оса»» from the ser-sarajkin.narod2.ru mirror of «Техника и вооружение», with its photos and a summary table (PDF p. 51) | Already a source; this copy has all three parts in one file |
+| `grezicki_wzu` | M. Gręzicki, J. Walczak (Wojskowe Zakłady Uzbrojenia SA, Grudziądz), *Modernizacja i modyfikacja jako determinanty rozwoju przeciwlotniczych zestawów rakietowych*, journal pp. 217–232 (after 2018; PDF made Jan 2025). Polish | Tier 2, for seat order and crew titles only: the vehicles shown are the modernised Osa-P/PM, not the 1980s console |
+
+### Korovin: what wasn't in our notes yet
+
+- Summary table (PDF p. 51), Osa / Osa-AK / Osa-AKM: range 2–9 / 1.5–10 / 1.5–10 km; height 50–5000 / 25–5000 /
+  25–5000 m; parameter 4 / 6 km; target speed 420 / 500 / 500 m/s; target manoeuvre 5 / 8 g; missiles 4 / 6 / 6;
+  **reaction time 26–34 / 27–39 / 27–39 s**.
+- Firing at low targets: the tracking radar's antenna was locked (стопорилась), so at the 1970 trials the crew could
+  not judge the target's height and used a height-to-range table to pick the launch range (PDF p. 26). Agrees with the
+  НЛЦ mode already in the data (`voenizdat_osa_1991` p. 100: antennas held at a fixed elevation).
+- In heavy jamming: angles from the TV sight, range from the search radar, three-point guidance (PDF p. 24). Matches
+  `emcon_tv_engagement` and `track_range_semi_auto`.
+- Osa-A work (from 1971): light front panels and **red dots beside the knobs, toggles and switches that are set to
+  their starting position** before live firing (PDF p. 31). Supports the `red_dot` placements.
+- 9M33M2 (Osa-AK missile): wings fold in pairs to fit the square container; better radiation hardness; 5-year storage
+  guarantee (PDF p. 35). The Osa-AK's 27 m floor came from a dual-mode fuse receiver that checks height at arming.
+- OKR «Мара» (from Nov 1975, the Osa-AKM): helicopters needed a changed guidance method, a sharper ИКО, multi-mode
+  warhead control and fuse-delay correction; semi-automatic TV angle tracking was proposed for them (PDF p. 36).
+- Organisation: a battery is four vehicles and a battery command post; the regiment's control battery holds the
+  PU-12 (PU-12M) and a P-15 (P-19) (PDF p. 40–41). Recorded in `OSA_RESEARCH_2026-10.md` §7.
+- Nothing in it changes the console: it is a development history with exterior photos only.
+
+### WZU paper: seats and crew titles
+
+- Fig. 4 (camera views of a live firing, Polish Osa-PM): the **guidance operator (operator naprowadzania, ON)** sits
+  beside the **search operator (operator poszukiwania, OP)** on the forward side, and the **range operator (operator
+  odległości, OO)** beside OP on the rear side; a safety officer (OB) supervises. This is the same order as
+  `mon_2112_80` Fig. 3: guidance, search, range, front to rear, on the left-wall bench.
+- Fig. 3: the 9F632.M1 trainer (cabin imitator of the 9A33BM2/3 upgraded to Osa-PM standard, five crews at once).
+- The upgrade replaced the PPI with a digital one (OP81-16PM) and added an EO head with laser rangefinder (100–30 000 m)
+  and video tracker (BZK01). Not 1980s equipment; not used.
+
+### What changed in SAM3D's data (`feature/cabin-bench`)
+
+- `data/cabins/osa_ak.json`: the deputy commander moves from the right wall to the front seat of the left bench, with
+  the deputy commander's panel (TV monitor, elevation, launch) as the front column of the main console; the senior operator (search) sits
+  in the middle and the operator (range) at the rear; the power cabinet is behind the bench. The cabin's status now
+  cites the two sources. Distances and panel sizes remain estimates.
+- Test: `cabin: the Osa operators share the left-wall bench, guidance in front, then search, then range`.
+
+## Cabin photos (`cabin_photos`, 3 Oct 2026, later)
+
+Five sets of real-cabin photos, read for layout (labels are mostly too small):
+
+- **Cab and bench** (opisybroni forward view; USAF photo looking aft; Instagram): driver front left at the wheel,
+  commander front right; one bench along the left wall facing three tall console columns; the operators' seats are
+  chairs on that bench. Confirms `mon_2112_80` Fig. 3.
+- **Front column (guidance)**, top to bottom, matching Fig. 3's list 0004-14M, WPU-44 + OS81-10M, 0004-11M,
+  OS52-14M1, OK51-6M:
+  1. meter block: four meters (ε and β of the target channel, ε and β of the missile channel), a selector (target and
+     missile error signals, compensation, two PJ test positions), INJECT and FREQ (from the photo with English tape
+     labels);
+  2. TV monitor, and to its right the **round elevation-search indicator OS81-10M** with three knobs below it;
+  3. launch block 0004-11M (label readable): two КАНАЛЫ button groups with three lamps above each, a vertical numbered
+     list beside a selector (ИЗДЕЛИЯ), a small square meter, **РОД РАБОТЫ** (label readable) and a second rotary
+     beside it, red push buttons, a guarded **АВАРИЙНЫЙ ПУСК** (label readable);
+  4. elevation block with jacks, an amber lamp and the hand wheel on the right;
+  5. a bottom block.
+- **Middle column (search)**: a row of eight round lamps; the search indicator OP81-16M (in the Ukrainian photos it
+  has an added 0–360° azimuth bezel and a rotating cursor of parallel lines, and shows the tracking radar's azimuth
+  line); a block with a printed diagram; the azimuth block with a cranked hand wheel; a bottom block.
+- **Rear column (range)**: a block of three meters; the range indicator with a small rectangular screen; two blocks
+  with printed diagrams; the range block (АВТОМАТ, ПОЛУАВТОМАТ, ТСЦ, РУЧНОЕ along the top with lit push buttons,
+  СКОРОСТЬ, a large hand wheel on the right with a range window above it); a bottom block.
+
+### SAM Simulator's panel photos (`samsim_panels`)
+
+The game's two console forms are built on three straight-on photographs of a real vehicle's main console, one per
+column, embedded in `sam.exe` (610 × 982, 670 × 982 and 610 × 982 px; extracted to `reference/samsim/exe_img/`, not in
+git). Their block plates are readable and match `mon_2112_80` Fig. 3 exactly:
+
+- Range (rear): 0062-6M (generator currents, modes), **OS81-9M** range indicator (ГОТОВ, ВКЛ. ВЫСОК., ПЕРЕДАТЧИК
+  ВКЛ. / ОТКЛ., РЧЧМ / АПЧМ, РАБОТА / КОНТРОЛЬ / КАЛИБР., ЯРКОСТЬ СТРОБА, ЦЕЛЬ Р I — Р II, astigmatism and shift
+  knobs), **OK62-5M**, **OS61-5M** (wind compensation ГРУБО / ТОЧНО, СДЦ / ШТ., УВС), **OS81-18M** range block
+  (АВТОМАТ, ПОЛУАВТОМАТ, ТСЦ, РУЧНОЕ, range window 1 division = 1000 m / 5 m, hand wheel, СКОРОСТЬ П А, ПЕЛЕНГ),
+  0051-7M.
+- Search (middle): the azimuth readout strip (ΔД, Δε, β and ε of the tracking radar), **OP81-16M** (ГОТОВ / ВЫСОК.
+  window, ВЫСОКОЕ and ПОИСК ВКЛ. / ВЫКЛ. button pairs, ДАЛЬНОСТЬ, beam lamps I–III ЛУЧ and their buttons, ОСВЕЩ.
+  ШКАЛЫ, IFF ЗАПРОС, РЧЧМ / АПЧМ, brightness knobs), **OP63-6M2** (РРУ, СДЦ / ШТ., wind compensation, СА, СДЦ ВНЕШН. /
+  ВНУТР.), **OS52-12M** azimuth block (ПОДСВЕТКА, БАЛАНС ПА, ВЛЕВО / ВПРАВО lever, βс dial, АЗИМУТ hand wheel, ЭМУ
+  ОТКЛ. / ВКЛ.), OK81-4M.
+- Guidance (front): the meter strip (ЧАСТОТА, КАНАЛ Ц, КАНАЛ Р), the TV block (РАБ. РЕЖ. ВКЛ., УГОЛ ЗРЕНИЯ ШИРОК. /
+  УЗКИЙ, КОНТРОЛЬ / РАБОТА, contrast and brightness) with **OS81-10M** to its right, the launch block (КАНАЛ II and
+  КАНАЛ I lamp-button groups: СХОД, ЗАХВАТ, СР.Л., УЗКИЙ ЛУЧ, К.З., ГОТОВ СПК, ВКЛ. ВЫС., 1–3; centre МЕТОД, ЦЕЛЬ В
+  ЗОНЕ, ПУСК ГОТОВ, ВНИМАНИЕ, БР; МЦ, the ШР list, СМЕНА ЛИТ. — НОРМ., КАНАЛЫ, БОРТ СПК, ПОМЕХА, СР.Л. / ШИР., the ДЦ
+  meter, ЛЮКИ ЗАКР., ОТКАЗ СРП, РОД РАБОТЫ, ИЗДЕЛИЯ, ПУСК, the ЗАПРЕТ ПУСКА key, АВАР. ПУСК ОБЕСТОЧ. / ГОТОВ and the
+  guarded АВАРИЙНЫЙ ПУСК), **OS52-14M** (ПА, ТСЦ, НЛЦ lamps; ПА and ТСЦ buttons; ПОДСВЕТКА; ЦУ, АЗ, РУ lamps and
+  buttons; БАЛАНС ПА; εс dial; elevation hand wheel on the right edge), OK51-6M.
+
+The game's sprites match these photos at 0.96–1.00, which gives exact positions for 20 controls; the rest were read
+off the labels.
+
+### What changed in SAM3D's data
+
+- `data/cabins/osa_ak.json`: each operator panel is the game's photo of its column at 1 mm per pixel (0.61, 0.67 and
+  0.61 m wide, 0.982 m high, side by side along the left wall, centred 1.35 m above the ground so the search screen
+  is at eye height). Every control, lamp and screen is at its position in the photo. The wheel locks have no picture
+  (the game unlocks a wheel by right-clicking it), so they sit just below their wheels. Space is left for OS81-10M.
+  An overlay of the placements on the photos was checked by eye (`reference/samsim/overlay_check.jpg`).
+- `data/procedures/osa_ak.json`: sources `grezicki_wzu`, `cabin_photos` and `samsim_panels`.
+- Test: the bench test also checks that the columns are taller than wide and that screens sit above wheels and the
+  launch block between the TV and elevation blocks.
+
+## Elevation-search indicator OS81-10M (display added)
+
+`voenizdat_osa_1991` p95 and Fig. 2.37 (p97): a two-coordinate sector indicator with a rectangular raster and a
+brightness mark, for pointing the tracking antenna in elevation from the search radar's designation. It covers 31° of
+elevation and 2 km of range; the middle of the range span is tied to the tracking radar's range gate (the "visir" on
+the range indicator). The sector is split into three ranges for search beams I, II and III, and the raster sits in a
+different place on the screen for each (Fig. 2.37: beam I −1° to 5°, beam II 3° to 9°, beam III 6° to 30°). During ЦУ
+the antenna oscillates in elevation through the beam the target was found in (p86: the elevation channel's scan
+circuit; the tracking servo drives the indicator's elevation sweep). The block holds the auto-capture circuit: armed by
+ЦУ and АЗ, it fires when the target is in the antenna's beam (a mark appears) and the range gate is on the target,
+sending АВТОМАТ to OS81-18M and ТСЦ to OS52-14M.
+
+In SAM3D (`feature/cabin-bench`):
+
+- Console data: `sensors.track.elevation_search` in `data/procedures/osa_ak.json` (the beams' elevations from Fig.
+  2.37, the ЛУЧ position for each beam, scan period 2 s (estimate), tracking beam 1° (`korovin_tiv_2010`)).
+- Engagement model: during ЦУ the antenna scans the selected beam (in the automatic programmes, the beam the search
+  radar sees the target in near the azimuth line) and drives the elevation wheel; otherwise it points where the wheel
+  is. The radar captures only when azimuth and range hold and the antenna's beam is on the target in elevation, so
+  the wrong beam never captures. The NPC deputy commander aims elevation by the indicator once the target shows on it.
+  The crew drill now leaves the search radar on АВТ. I–III (an NPC can't pick the beam the echo appeared in).
+- Display kind `elevation_scope` (`data/cabins/README.md`); the Osa's `elev_search` sits where the round screen is in
+  the game's photo (right of the TV), with one raster per beam placed as in Fig. 2.37 (approximate).
+  `simcore::ElevationScope` keeps the fading marks (1.5 s afterglow, an estimate) of targets inside the 2 km window that
+  the antenna's beam passed over.
+
+## Vehicle orientation and IFF (added to the data)
+
+**Orientation** (`voenizdat_osa_1991` p48, p50–52, p246, p249; `mon_2112_80` p65):
+
+- The stabilisation system measures the vehicle's heading **Qc** (clockwise from north to the hull's axis) with the
+  gyro half-compass **GA-3**, which only holds north once oriented.
+- The crew chief finds Qc with an artillery compass (PAB) and the TV sight by mutual sighting, and commands it.
+- The deputy crew chief, at a halt, sets **АК — ЗК** to ЗК and the Qc on the course setter **ЗК-4** (block 0005-8M,
+  panel ПУ-11), sets **РЕЛЕ — Qc** to Qc (azimuth correction), and holds **СОГЛАСОВАНИЕ** until the Qc scale on OR-31M
+  stops. Then АК — ЗК goes back to АК and РЕЛЕ — Qc to РЕЛЕ. The orientation is lost when the equipment is switched
+  off.
+
+In SAM3D: `sensors.orientation` and the controls `orient.ak_zk`, `orient.relay`, `orient.qc`, `orient.sync` on a new
+gyro panel at the front of the bench (its layout is an estimate); the drill `orient_vehicle` (deputy commander). The
+engagement model keeps the gyro's heading:
+
+- It turns with the hull, and it is slaved to the setter in ЗК + Qc (1°/s, or 15°/s after СОГЛАСОВАНИЕ until they
+  agree; rates estimated).
+- Without power it restarts taking the hull to face north.
+- Every azimuth the crew sees and sets (scope, azimuth wheel) is in the gyro's frame. An unoriented vehicle shows the
+  picture turned by its error, and plotting-board designations (true azimuth) point the antenna wrong.
+- The crew chief's Qc is logged when ЗК is selected; an NPC deputy turns the setter to it.
+
+**IFF** (`mon_2112_80` p14, p21; `voenizdat_osa_1991` p17, p53–56):
+
+- The interrogator's antenna is built into the search antenna.
+- General interrogation (**ЗАПРОС**, **ЗАПРОС К**): a friend's reply is a 20° arc on the PPI beside its echo.
+- In the gated mode (КЛАПАН) the echo gates the reply, which keeps the mark narrow and suppresses replies from
+  aircraft the radar can't see.
+- ЗАПРОС К is a control interrogation confirming a friend.
+- The 1991 book's 1L24-2 (AKM) adds codes, modes I/II and launch blocking, none of which are in the Osa-AK sources;
+  not modelled.
+
+In SAM3D:
+
+- `sensors.search.iff`, with the controls `iff.query`, `iff.query_k` and `iff.gate` placed from the game's photo of
+  OP81-16M, and a lamp lit while interrogating.
+- A press interrogates for 1 s; friendly targets (`"iff": "friend"` in a scenario) within 30 km reply. In КЛАПАН only
+  those on the scope reply.
+- The PPI paints replies as arcs as the sweep passes them.
+- The acquisition drill interrogates once the echo shows. Firing at a friend is logged as a crew mistake.
+

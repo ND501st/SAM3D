@@ -6,6 +6,7 @@
 #include "SimCabinComponent.generated.h"
 
 class UMaterialInstanceDynamic;
+class UPrimitiveComponent;
 class USimCabinDisplayComponent;
 class UMaterialInterface;
 class UStaticMesh;
@@ -54,6 +55,14 @@ struct SAM3D_API FSimCabinItem
 
 	FLinearColor BaseColor = FLinearColor::Black;
 	FLinearColor MovingColor = FLinearColor::Black;
+
+	/** simcore::CabinLookKind from the layout's "look" (Default = by style), and its size (m, 0 = the style's). */
+	uint8 LookKind = 0;
+	double LookWidthM = 0.0;
+	double LookHeightM = 0.0;
+
+	/** Shown with the cabin parts library's meshes (art/cabin_parts) rather than engine basic shapes. */
+	bool bParts = false;
 };
 
 /**
@@ -98,6 +107,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	int32 TraceItem(const FVector& WorldStart, const FVector& WorldEnd) const;
 
+	/** Puts a cabin part on the cabin's own lighting channel (1), lit by the cabin lamps and never by the sun: the thin
+	 * shell doesn't shadow a low sun reliably, and a sunlit patch burns white at the cabin's fixed indoor exposure.
+	 * Call before registering the component. */
+	static void UseCabinLighting(UPrimitiveComponent* Part);
+
 	/** Label and current state, e.g. "ПОИСК: ВКЛ". */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString DescribeItem(int32 Item) const;
@@ -121,10 +135,26 @@ private:
 	bool Build(const USimWorldSubsystem* Sim);
 	void BuildControl(const USimWorldSubsystem* Sim, int32 LayoutIndex);
 	void BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIndex);
+	void BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block);
+	void BuildShell(const simcore::CabinShellPart& Part);
+	void BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture);
+	/** A static part of the panel decoration (no collision); kept for DestroyParts. */
+	UStaticMeshComponent* AddDecor(UStaticMesh* Mesh, const FLinearColor& Color);
+	/** A mesh of the cabin parts library (/Game/SAM3D/Cabin/Parts/<Name>), or null if it isn't imported. */
+	UStaticMesh* PartMesh(const TCHAR* Name);
+	/** A flat quad on the face showing Text (drawn once into a small texture with a font that has Cyrillic). */
+	void AddTextPlate(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double WidthM,
+		double HeightM, const FString& Text, const FLinearColor& Paper, bool bEngraved = false);
+	/** An item's engraved label just above it (an item ItemHeightM tall at Centre); nothing for an empty text. */
+	void AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double ItemHeightM,
+		const FString& Text);
 	void DestroyParts();
 	UStaticMeshComponent* AddMesh(UStaticMesh* Mesh, const FLinearColor& Color);
 	void Animate(const USimWorldSubsystem* Sim, float DeltaTime);
 	void AnimateControl(const USimWorldSubsystem* Sim, FSimCabinItem& Item);
+	/** AnimateControl for an item drawn with parts library meshes; false if its style isn't handled that way. */
+	bool AnimatePart(const simcore::ControlPanel& Panel, const simcore::CabinControl& Control, const simcore::ControlDef& Def,
+		int32 Position, FSimCabinItem& Item);
 	void Paint(UStaticMeshComponent* Mesh, const FLinearColor& Color) const;
 	USimWorldSubsystem* GetSim() const;
 
@@ -133,6 +163,14 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PanelMeshes;
+
+	/** Parts library meshes loaded so far, by name (null entries: not imported). */
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UStaticMesh>> PartMeshes;
+
+	/** Blocks, fixtures and nameplate texts: drawn, not operated. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UPrimitiveComponent>> DecorParts;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USimCabinDisplayComponent>> Displays;
@@ -149,6 +187,15 @@ private:
 	/** Engine basic-shape material; its "Color" parameter tints each part. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ShapeMaterial;
+
+	/** The cabin's master material (/Game/SAM3D/Cabin/Materials/M_CabinSurface: Color, Roughness, Metallic); null =
+	 * engine basic-shape material. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> SurfaceMaterial;
+
+	/** Engraved labels: /Game/SAM3D/Cabin/Materials/M_CabinLabel (a texture's red channel masks dark, lit letters). */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> LabelMaterial;
 
 	/** Engine material that shows a texture ("SlateUI") unlit: the displays' screens. */
 	UPROPERTY()

@@ -37,6 +37,22 @@
       "notes": "Copy-numbered; used by the project owner's decision (docs/SOURCES.md). Describes the AKM (9A33BM3), so block suffixes differ (e.g. OP81-16M2 for the AK's OP81-16M); differences from the AK are noted. Kept in reference/sources/, not in git. Summary: docs/research/OSA_MANUALS_2026-10.md."
     },
     {
+      "id": "grezicki_wzu",
+      "title": "M. Gręzicki, J. Walczak (WZU SA, Grudziądz), Modernizacja i modyfikacja jako determinanty rozwoju przeciwlotniczych zestawów rakietowych",
+      "notes": "Camera views of a Polish Osa-PM crew (Fig. 4): seat order and crew titles only. docs/SOURCES.md."
+    },
+    {
+      "id": "cabin_photos",
+      "title": "Photographs of real 9A33BM2/BM3 cabins: opisybroni.pl '9K33 Osa' (museum vehicle, 2021), US Air Force photo 170120-F-DV125-019 (2017), Ukrainian 39th brigade crew photos on Instagram (devinsanluis, 2026), a photo with English tape labels supplied by the user",
+      "url": "https://opisybroni.pl/9k33-osa/",
+      "notes": "Block order of the three console columns and where scopes, wheels and the launch block sit. Labels are mostly too small to read; positions inside a block are estimates. Copies in reference/sources/photos/ (not in git)."
+    },
+    {
+      "id": "samsim_panels",
+      "title": "SAM Simulator v930.2 console art: photographs of the range, search and guidance columns of the main console, embedded in sam.exe (the game's Form56 / Form57 backgrounds)",
+      "notes": "Straight-on photos of a real vehicle's panels with readable block plates and labels. Used for the position of every operator control in data/cabins/osa_ak.json (1 mm per pixel). Extracted locally to reference/samsim/exe_img/ (not in git; the art belongs to the game's creator)."
+    },
+    {
       "id": "flak11",
       "title": "R. Wagner, Fla-Raketenkomplex 9K33 (flak11.de, pages 9K33-3 and 9A33-3; NVA Fla-Raketen-Regiment 11 veterans' site, 2005)",
       "url": "http://www.flak11.de/9K33-Start.htm",
@@ -94,6 +110,12 @@
       "antenna": "soc_antenna", "transmitter": "soc_transmitter",
       "range_control": "soc.range", "range_scales_m": [[0, 15000], [0, 35000], [10000, 45000]],
       "mti_control": "soc.mti", "mti_max_range_m": 35000,
+      "iff": {
+        "query": "iff.query", "control_query": "iff.query_k", "gate_control": "iff.gate", "ready": "soc_transmitter",
+        "interrogating_input": "iff_interrogating", "query_time_s": 1.0, "max_range_m": 30000,
+        "source": "mon_2112_80 p21 (general interrogation ЗАПРОС and ЗАПРОС К: the reply is a 20° arc on the PPI; or the gated mode, where the search echo gates the reply and the mark is much narrower), p14 (the interrogator NRZ's antenna is built into the search antenna); voenizdat_osa_1991 p17 (a reply puts a «свой» mark beside the echo), p55 (ЗАПРОС К is a control interrogation confirming a friend), p53 (identification range at least 30 km, 1L24-2), p56 (1 s per press)", "confidence": "medium",
+        "notes": "The interrogator works with the search radar radiating (SAM3D). Range and query time are the 1991 textbook's for the AKM's 1L24-2; the Osa-AK's interrogator may differ. Gated mode: КЛАПАН."
+      },
       "notes": "Scales p15 item 5; СДЦ works to 35 km, p15 item 12."
     },
     "track": {
@@ -104,11 +126,27 @@
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
+      "elevation_search": {
+        "mode": "auto_acquisition", "beam_control": "soc.beam",
+        "beams_deg": [ [-1, 5], [3, 9], [6, 30] ], "beam_by_position": [0, 1, 2, -1, -1],
+        "scan_period_s": 2.0, "beam_width_deg": 1.0,
+        "source": "voenizdat_osa_1991 p95 (in ЦУ the SSC antenna searches in elevation within the search beam the target was detected in; the OS81-10M auto-capture circuit, armed by ЦУ and АЗ, fires when the target is in the antenna's beam and the range gate is on it), p86 (the scan comes from self-oscillation of the elevation drive; beam commands I, II, III from the search radar), Fig. 2.37 p97 (beam I −1° to 5°, II 3° to 9°, III 6° to 30°); korovin_tiv_2010 (tracking beam 1°)", "confidence": "medium",
+        "notes": "Scan period: SAM3D estimate. In the automatic beam programmes (АВТ. I–III, I–II) SAM3D searches the beam the search radar sees the target in nearest the azimuth line (the real scan follows the search radar's beam commands). mon_2112_80 p21 gives I–II as 0–8° and I–III as 0–28°: the textbook's figure is used."
+      },
       "notes": "SSC displayed range 28 km (p16); ±330° azimuth (p14, p16; voenizdat_osa_1991 p66; mon_2112_80 p25 gives ±342° for the turret). TV fields 00-60 x 00-80 (3.6 x 4.8°) wide and 00-18 x 00-24 (1.08 x 1.44°) narrow (voenizdat_osa_1991 p101; an operator on samsim_thread gives the same); the larger figure is used. SAM Simulator's manual gives 5° / 1.5°."
+    },
+    "orientation": {
+      "gyro": "power", "setter": "orient.qc", "mode_control": "orient.ak_zk", "set_position": 1,
+      "relay_control": "orient.relay", "relay_position": 1, "sync_button": "orient.sync",
+      "slew_rate_deg_s": 1.0, "sync_rate_deg_s": 15.0, "synced_input": "heading_synced",
+      "source": "voenizdat_osa_1991 p48 (gyro half-compass GA-3 measures the vehicle's heading Qc once oriented; the Qc found with an artillery compass and the TV sight by mutual sighting is set on the setter ЗК-4; with АК — ЗК at ЗК and РЕЛЕ — Qc at Qc the setter is connected and the correction motor turns the GA-3; СОГЛАСОВАНИЕ speeds it up; agreement is checked on the Qc scale of OR-31M, which stops), p50–52 (block 0005-8M), p246 (the deputy crew chief orients the vehicle at a halt), p249 (Qc: clockwise from north to the vehicle's axis); mon_2112_80 pp. 63–68 (orientation is lost when the equipment is switched off)", "confidence": "medium",
+      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Gyro drift is not modelled."
     }
   },
 
   "inputs": [
+    { "id": "heading_synced", "description": "The gyro half-compass agrees with the course setter ЗК-4 (the Qc scale has stopped)", "source": "voenizdat_osa_1991 p48, p246", "confidence": "high" },
+    { "id": "iff_interrogating", "description": "The IFF interrogator is interrogating (about 1 s per press)", "source": "voenizdat_osa_1991 p56", "confidence": "medium" },
     { "id": "vehicle_stopped", "description": "The vehicle is stationary (a short halt or a firing position)", "source": "wrk; mis (tracking and launch only from a short halt or stationary)", "confidence": "high" },
     { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
     { "id": "target_in_zone", "description": "Target is within the firing zone (ЦЕЛЬ В ЗОНЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
@@ -135,6 +173,15 @@
     { "id": "gyro.arrest", "label": "АРРЕТИР.", "station": "driver", "kind": "button",
       "source": "voenizdat_osa_1991 p247 (the driver erects the gyro by holding АРРЕТИР. on block 0005-8M for 40 s), p51–52", "confidence": "medium",
       "notes": "Block 0005-8M is on rack SŁ-1M at the front of the operators' compartment (mon_2112_80 Fig. 3). SAM3D: one press starts the 40 s erection." },
+    { "id": "orient.ak_zk", "label": "АК — ЗК", "station": "deputy_commander", "kind": "switch", "position_labels": ["АК", "ЗК"], "initial": 0,
+      "source": "voenizdat_osa_1991 p48, p246 (ЗК connects the course setter ЗК-4 to the gyro for orientation; back to АК afterwards)", "confidence": "high" },
+    { "id": "orient.relay", "label": "РЕЛЕ — Qc", "station": "deputy_commander", "kind": "switch", "position_labels": ["РЕЛЕ", "Qc"], "initial": 0,
+      "source": "voenizdat_osa_1991 p51 (switches on azimuth correction for orienting with ЗК-4; start position РЕЛЕ), p246", "confidence": "high" },
+    { "id": "orient.qc", "label": "ЗАДАТЧИК КУРСА ЗК-4 (Qc)", "station": "deputy_commander", "kind": "wheel", "min": 0, "max": 360, "initial_value": 0, "unit": "deg",
+      "source": "voenizdat_osa_1991 p48 (course setter ЗК-4 on block 0005-8M: the vehicle's heading Qc is set on its scale), p249 (Qc from north, clockwise, to the vehicle's axis)", "confidence": "high",
+      "notes": "Degrees here; the real scale is probably in Russian mils (not seen)." },
+    { "id": "orient.sync", "label": "СОГЛАСОВАНИЕ", "station": "deputy_commander", "kind": "button",
+      "source": "voenizdat_osa_1991 p48 (on panel ПУ-11 in block 0005-8M: speeds up orienting the GA-3; held until the Qc scale stops), p246", "confidence": "high" },
     { "id": "pwr.equipment", "label": "АППАРАТУРА ВКЛ. — ОТКЛ.", "station": "operator", "kind": "switch", "position_labels": ["ОТКЛ.", "ВКЛ."],
       "source": "voenizdat_osa_1991 p165 (buttons on distribution cabinet 0096-9M1: filaments and fans at once, anode supplies after 1 min, high voltage possible after 3 min), p247 (the operator checks 220 V 400 Hz on the cabinet's voltmeter and presses АППАРАТУРА ВКЛ.)", "confidence": "high",
       "notes": "Two push-buttons modelled as one switch. ОТКЛ. switches everything off except the turret fans, which run 10 min more (not modelled)." },
@@ -165,6 +212,13 @@
       "notes": "Five buttons with an illuminated indicator in the game; modelled as one selector since only one can be active. Starts on beam I (I ЛУЧ lit, samsim_game). In I–III the lit lamp steps from beam to beam as the antenna scans (not modelled)." },
     { "id": "soc.mti", "label": "СДЦ / ШТ. (SOC)", "station": "senior_operator", "kind": "switch", "position_labels": ["ШТ.", "СДЦ"],
       "source": "samsim_osa p15 (item 12); start: samsim_game", "confidence": "high", "notes": "Moving target indicator, works to 35 km. On OP63-6M2 below the scope. Starts at ШТ. (normal video)." },
+    { "id": "iff.query", "label": "ЗАПРОС", "station": "senior_operator", "kind": "button",
+      "source": "mon_2112_80 p21; voenizdat_osa_1991 p56 (1 s per press); position: samsim_panels (OP81-16M, left of the scope)", "confidence": "high" },
+    { "id": "iff.query_k", "label": "ЗАПРОС К", "station": "senior_operator", "kind": "button",
+      "source": "mon_2112_80 p21; voenizdat_osa_1991 p55 (control interrogation, on order, confirms a friend found in mode I); position: samsim_panels", "confidence": "high" },
+    { "id": "iff.gate", "label": "ОТКР. ПРИЕМ — КЛАПАН", "station": "senior_operator", "kind": "switch", "position_labels": ["ОТКР. ПРИЕМ", "КЛАПАН"], "initial": 0,
+      "source": "mon_2112_80 p21 (general interrogation, or the gated mode where the search echo gates the reply); voenizdat_osa_1991 p56 («Клапан» and «Открытый прием»); label and position: samsim_panels", "confidence": "high",
+      "notes": "Start position not known (SAM3D: ОТКР. ПРИЕМ)." },
     { "id": "ssc.tx_cover", "label": "guard over ПЕРЕДАТЧИК", "station": "operator", "kind": "switch", "position_labels": ["closed", "open"],
       "source": "samsim_osa p16", "confidence": "high" },
     { "id": "ssc.tx", "label": "ПЕРЕДАТЧИК", "station": "operator", "kind": "switch", "guard": "ssc.tx_cover", "position_labels": ["ОТКЛ", "ВКЛ"],
@@ -412,14 +466,14 @@
     {
       "id": "acquire_with_soc", "name": "Autonomous target acquisition with the SOC radar",
       "source": "samsim_osa p21–24; seats: flak11 (9A33-3)", "confidence": "high",
-      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator).",
+      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator). The manual then selects the beam the echo appeared in; SAM3D's crew leaves АВТ. I–III on, where target designation searches the beam the echo is seen in.",
       "steps": [
         { "control": "soc.search", "position": 1, "description": "When the target nears 50 km on the plotting board: ПОИСК ВКЛ, SOC antenna rotation on" },
         { "control": "soc.hv_cover", "position": 1, "description": "Remove the guard over ВЫСОКОЕ" },
         { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, SOC transmitter on" },
         { "control": "soc.beam", "position": 3, "description": "АВТ. I–III ЛУЧ, scan all three height beams" },
         { "control": "soc.range", "position": 2, "description": "ДАЛЬНОСТЬ 10–45 km" },
-        { "control": "soc.beam", "position": 0, "description": "When the echo shows, select the beam it appeared in (beam I in the manual's example)" },
+        { "control": "iff.query", "position": 1, "description": "When the echo shows: ЗАПРОС, interrogate it (a friend's reply is a 20° arc beside the mark)" },
         { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel" },
         { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
         { "control": "soc.range", "position": 1, "description": "At about 35 km: ДАЛЬНОСТЬ 0–35 km. Then turn the azimuth wheel until the SSC line crosses the target mark" }
@@ -594,6 +648,20 @@
       "steps": [
         { "control": "pwr.gta", "position": 0, "description": "Search antenna stowed: shut down the ГТА",
           "wait_for": [ { "subsystem": "search_antenna", "is": "off" } ] }
+      ]
+    },
+    {
+      "id": "orient_vehicle", "name": "Orient the vehicle (gyro half-compass to the crew chief's Qc)",
+      "source": "voenizdat_osa_1991 p246 (drill: the deputy crew chief sets АК — ЗК to ЗК, the commanded Qc on ЗК-4, РЕЛЕ — Qc to Qc, holds СОГЛАСОВАНИЕ until the Qc scale on OR-31M stops, then АК and РЕЛЕ), p48, p249 (the crew chief finds Qc with an artillery compass)", "confidence": "high",
+      "notes": "Deputy commander, at a halt, once the gyros are up (the driver's АРРЕТИР.). The crew chief's Qc goes on the setter after ЗК (an NPC deputy sets it there; the player is told it in the log). Orientation is lost when the equipment is switched off.",
+      "steps": [
+        { "control": "orient.ak_zk", "position": 1, "description": "АК — ЗК to ЗК, then set the crew chief's Qc on the course setter ЗК-4",
+          "wait_for": [ { "subsystem": "gyro_erected", "is": "ready" } ] },
+        { "control": "orient.relay", "position": 1, "description": "РЕЛЕ — Qc to Qc" },
+        { "control": "orient.sync", "position": 1, "description": "Press and hold СОГЛАСОВАНИЕ until the Qc scale on OR-31M stops", "min_wait_s": 3 },
+        { "control": "orient.ak_zk", "position": 0, "description": "Scales agree: АК — ЗК back to АК",
+          "wait_for": [ { "input": "heading_synced", "is": true } ] },
+        { "control": "orient.relay", "position": 0, "description": "РЕЛЕ — Qc back to РЕЛЕ" }
       ]
     }
   ]
