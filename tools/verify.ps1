@@ -23,14 +23,14 @@ $demo = if (Test-Path simcore/build/Release/engagement_demo.exe) { 'simcore/buil
 & $demo out/engagement_demo.acmi
 if ($LASTEXITCODE -ne 0) { throw 'demo failed' }
 
-Write-Host '==> prototype: pytest' -ForegroundColor Cyan
+Write-Host '==> prototype and tools: pytest' -ForegroundColor Cyan
 $py = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
 # Windows PowerShell 5.1 turns native stderr into a terminating error under 'Stop'; relax it for the probe.
 $ErrorActionPreference = 'Continue'
 & $py -m pytest --version *> $null
 if ($LASTEXITCODE -ne 0) { & $py -m pip install --user pytest *> $null }
 $ErrorActionPreference = 'Stop'
-& $py -m pytest prototype -q
-if ($LASTEXITCODE -ne 0) { throw 'prototype tests failed' }
+& $py -m pytest prototype tools -q
+if ($LASTEXITCODE -ne 0) { throw 'prototype or tools tests failed' }
 
 Write-Host "`nAll checks passed. Tacview replay: out\engagement_demo.acmi" -ForegroundColor Green

@@ -29,7 +29,14 @@ A few questions, if you have time:
    - The middle search scale: 0–35 km (your manual) or 0–30 km (an NVA source)?
    - Missile preparation: 15 s (manual), 13 s (NVA) or 12 s?
    - The TV lens fields: 1.5° / 5° (manual) or 1 × 1.4° / 3.5 × 4.7° (an operator on your forum)?
-4. **Operators.** Would any of the Osa operators you worked with be willing to look at SAM3D's Osa and tell me what's
+4. **Controls I can't identify.** From your panels and a photo catalogue of the NVA's vehicles:
+   - The 7-position selector with ОТКЛ. in the centre: is it the missile selector (three containers each side)?
+   - What do БОРТ (3 positions), the selector by ГОРИЗ. СМЕЩ. and the β / ε lamps do?
+   - РОД РАБОТЫ: is БР the start position (the red dot), and is the other position ТР, for the 9Ф632 trainer?
+   - What does the elevation indicator (by the TV monitor) show, and when does the operator use it?
+   - The switch-on panels to the left of the range operator, which you left out on purpose: do you have their
+     labels and the switch-on order, and which crew member works them?
+5. **Operators.** Would any of the Osa operators you worked with be willing to look at SAM3D's Osa and tell me what's
    wrong?
 
 Thank you for SAM Simulator, and for any help you can give.
