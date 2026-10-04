@@ -84,3 +84,11 @@ Rules the loader checks:
   or white.
 
 The tests check that the Osa layout places every control of the console.
+
+## Looking at a layout without Unreal
+
+`python tools/panel_sheet.py [system]` draws every panel flat and to scale, seat by seat, into
+`out/panel_sheets/<system>.html`, with a table of each control's label, positions, start position, source and
+confidence. It lists layout problems the loader doesn't catch (items that overlap or reach over a panel edge);
+`--check` makes those fail the run. `--refs reference/panel_refs.json` (a `{"panel id": "photo path"}` file, kept
+out of git) shows a reference photo under each panel for side-by-side comparison.
