@@ -35,12 +35,13 @@ In play:
 | W / S, A / D, Space | Drive, steer, brake. Stopping tells the sim the vehicle is at a halt. |
 | Right mouse + drag | Orbit the camera |
 | 1 | Commander: start the GTA (`power_up`) |
-| 2 | Commander: search on the march (queued) |
-| 3 | Commander: come into action at a halt (unlock the АПУ) |
-| 4 | Range officer: acquire with the SOC |
-| 5, 6 | Firing officer: prepare for firing; launch (queued) |
-| 7 | Firing officer: TV-only engagement |
-| 8, 9 | Commander: stow for the march; stow for transport |
+| 2 | Senior operator: search on the march (waits for power) |
+| 3 | Come into action at a halt: commander unlocks the АПУ, driver puts the generator on line |
+| 4 | Acquire: senior operator with the SOC, deputy commander readies ЦУ АЗ, operator switches on the SSC |
+| 5, 6 | Deputy commander: prepare for firing; launch (both queued) |
+| 7 | TV-only engagement: senior operator turns the azimuth, deputy commander does the rest |
+| 8 | Stow for the march: operator, deputy commander, driver, then the commander locks the АПУ |
+| 9 | Stow for transport: senior operator stops the SOC, commander folds the antenna (queued) |
 | C | Enter or leave the 3D cabin |
 
 In the cabin (placeholder shapes from `data/cabins/osa_ak.json`):
@@ -48,7 +49,7 @@ In the cabin (placeholder shapes from `data/cabins/osa_ak.json`):
 | Input | Action |
 |---|---|
 | Mouse | Look around the seat |
-| Tab | Next seat: driver, commander, range officer, firing officer |
+| Tab | Next seat: driver, commander, senior operator, operator, deputy commander |
 | Left click | Flip a switch or cover, step a selector or key forward, press a button |
 | Right click | Step a selector or key back |
 | Left drag / scroll on a hand wheel | Turn it (a wheel lock must be released first) |
@@ -74,7 +75,7 @@ never reaches the repository.
 Tick **Cabin Tour** on the Sim Scenario Director, or start the editor with the environment variable
 `SAM3D_CABIN_TOUR=<seconds per view>`. On Play the camera enters the cabin and steps through every seat and a
 close-up of every instrument while the scenario plays itself, logging each view (`LogSAM3D: Cabin tour view 4/10 at
-t=78 s: Range officer - SOC indicator`). A run can then be checked from screenshots and the log without the
+t=78 s: Senior operator - SOC indicator`). A run can then be checked from screenshots and the log without the
 keyboard. C stops it.
 
 ```

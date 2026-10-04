@@ -27,12 +27,16 @@ details.
   // "restarts" (optional): a subsystem each launch sends back to the start of its warm-up (the next missile's preparation).
   "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "...", "confidence": "high" },
 
+  // Optional: the crew seats. With this list every control needs a "station" from it, and crew roles
+  // (scenarios, the gameplay file's aim roles) must be one of these ids.
+  "stations": [ { "id": "senior_operator", "label": "Senior operator", "source": "flak11 (9A33-3)", "confidence": "high" } ],
+
   // Yes/no signals the sim sets (target geometry etc.), so lamps and automatic sequences can use them.
   "inputs": [ { "id": "target_in_zone", "description": "...", "source": "...", "confidence": "high" } ],
 
   // In dependency order: a guard (cover or lock) before the control it guards.
   "controls": [
-    { "id": "soc.hv_cover", "label": "...", "station": "range_officer", "kind": "switch",
+    { "id": "soc.hv_cover", "label": "...", "station": "senior_operator", "kind": "switch",
       "position_labels": ["closed", "open"], "initial": 0, "source": "...", "confidence": "high" },
     { "id": "soc.hv", "label": "ВЫСОКОЕ", "kind": "switch", "guard": "soc.hv_cover",
       "position_labels": ["ВЫКЛ", "ВКЛ"], "source": "...", "confidence": "high" },
@@ -75,5 +79,11 @@ Conditions: `{ "control": id, "is": n }`, `{ "control": id, "at_least": n }`,
 
 Procedure steps name a discrete control or button and a position. Wheel work (turning onto a target, setting the
 range gate) is described in the step before which it happens; it isn't a step of its own.
+
+**One seat per procedure.** All the controls a procedure touches must belong to one station; the loader names that
+station on the procedure, and only a crew member in that seat will carry it out (others refuse it and report
+`Aborted`, "station ..."). Work that needs several seats (acquisition, stowing) is one procedure per seat, ordered
+together; a step can `wait_for` what another seat does (e.g. the operator waits for `auto_acquisition`, which the
+deputy commander's ЦУ АЗ starts).
 
 (The block above uses comments for explanation; real files are plain JSON.)

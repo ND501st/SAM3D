@@ -12,8 +12,9 @@
 //     on and the target is inside the lens's field of view. Once locked it follows the
 //     target (drives the wheels) until line of sight, altitude, crossing rate or the
 //     equipment breaks the lock. It sets the console's capture / too-low / zone inputs.
-//   * Crew aiming: the crew member with the aiming role turns the wheels onto the
-//     nearest search-radar contact (or plotting-board track when the radars are off).
+//   * Crew aiming: each wheel has its own seat (azimuth, elevation, range); the crew
+//     member in that seat turns it onto the nearest search-radar contact (or the
+//     plotting-board track when the radars are off).
 //   * Outcome: a launch starts a shot with a flight time from the game's pacing speed.
 //     Guidance is by command from the ground, so losing the track loses the missile.
 //     At the end, the chance of a hit is the product of plain factors — target class,
@@ -62,8 +63,10 @@ struct EngagementTuning {
     double track_min_altitude_m = 0.0;
     double tv_max_range_m = 0.0;
     double max_angular_rate_deg_s = 0.0;
-    // Crew aiming.
-    std::string aim_role;
+    // Crew aiming: the crew role (console station) that turns each wheel.
+    std::string aim_az_role;
+    std::string aim_el_role;
+    std::string aim_range_role;
     double aim_az_rate_deg_s = 0.0;
     double aim_el_rate_deg_s = 0.0;
     double aim_range_rate_mps = 0.0;
@@ -122,9 +125,12 @@ public:
             !Num(*g, "track", "max_angular_rate_deg_s", t.max_angular_rate_deg_s, 0.1)) {
             return false;
         }
-        if (!Group(root, "aim", {"crew_role", "az_rate_deg_s", "el_rate_deg_s", "range_rate_mps", "plotting_board_range_m"},
+        if (!Group(root, "aim", {"azimuth_role", "elevation_role", "range_role", "az_rate_deg_s", "el_rate_deg_s",
+                                 "range_rate_mps", "plotting_board_range_m"},
                    g) ||
-            !RequireString(*g, "aim", "crew_role", t.aim_role) ||
+            !RequireString(*g, "aim", "azimuth_role", t.aim_az_role) ||
+            !RequireString(*g, "aim", "elevation_role", t.aim_el_role) ||
+            !RequireString(*g, "aim", "range_role", t.aim_range_role) ||
             !Num(*g, "aim", "az_rate_deg_s", t.aim_az_rate_deg_s, 0.1) ||
             !Num(*g, "aim", "el_rate_deg_s", t.aim_el_rate_deg_s, 0.1) ||
             !Num(*g, "aim", "range_rate_mps", t.aim_range_rate_mps, 1.0) ||
@@ -262,6 +268,13 @@ inline double TvFieldOfViewDeg(const ConsoleData& console) {
 // One number from [0, 1) drawn from a std::mt19937, the same on every platform.
 inline double Uniform01(std::mt19937& rng) { return static_cast<double>(rng()) / 4294967296.0; }
 
+// Which aiming seats have an NPC in them. A seat the player sits in (or nobody) is left alone.
+struct AimCrew {
+    bool azimuth = false;
+    bool elevation = false;
+    bool range = false;
+};
+
 class EngagementModel {
 public:
     EngagementModel(EngagementTuning tuning, Vec3 unit_position)
@@ -269,12 +282,12 @@ public:
 
     // One step, after the World has moved the targets and before triggers and equipment run.
     void Step(double t, double dt, World& world, ConsoleData& console, std::vector<EngagementTarget>& targets,
-              SessionLog& log, std::mt19937& rng, bool aim_crew_present) {
+              SessionLog& log, std::mt19937& rng, const AimCrew& aim_crew) {
         if (!console.has_sensors) return;
         Measure(dt, world, targets);
         ResolveShots(t, world, targets, log, rng);
         UpdateSearch(t, console, log);
-        if (aim_crew_present && method_ == TrackMethod::None) Aim(dt, console);
+        if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
         UpdateTrack(t, dt, console, log);
         UpdateTrackReturns(console);
         SetInputs(console);
@@ -558,10 +571,10 @@ private:
         return std::fabs(d) <= max_step ? to : from + (d > 0.0 ? max_step : -max_step);
     }
 
-    // The aiming crew member turns the wheels toward the nearest contact.
-    void Aim(double dt, ConsoleData& console) {
+    // The aiming crew turn their wheels toward the nearest contact. A locked wheel doesn't turn.
+    void Aim(double dt, ConsoleData& console, const AimCrew& crew) {
+        if (!crew.azimuth && !crew.elevation && !crew.range) return;
         const TrackSensorDef& d = console.track;
-        if (!d.lock_control.empty() && console.panel.Get(d.lock_control) < 1) return;
         const Geometry* best = nullptr;
         bool range_known = false;
         for (const Contact& c : picture_) {
@@ -580,14 +593,17 @@ private:
             }
         }
         if (best == nullptr) return;
-        const double wheel_az = console.panel.GetValue(d.az_wheel);
-        const double want_az = WheelAzimuth(best->az_deg, wheel_az, d.az_limit_deg);
-        console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * dt));
-        if (range_known) {
+        const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
+        if (crew.azimuth && !az_locked) {
+            const double wheel_az = console.panel.GetValue(d.az_wheel);
+            const double want_az = WheelAzimuth(best->az_deg, wheel_az, d.az_limit_deg);
+            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * dt));
+        }
+        if (crew.range && range_known) {
             const double wheel_r = console.panel.GetValue(d.range_wheel);
             console.panel.SetValue(d.range_wheel, Toward(wheel_r, best->range_m, tuning_.aim_range_rate_mps * dt));
         }
-        if (tv_search) {
+        if (crew.elevation && tv_search) {
             const double wheel_el = console.panel.GetValue(d.el_wheel);
             console.panel.SetValue(d.el_wheel, Toward(wheel_el, best->el_deg, tuning_.aim_el_rate_deg_s * dt));
         }

@@ -57,7 +57,7 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     std::string error;
     SC_EXPECT(LoadScenarioFile(PracticePath(), kData, def, console, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(def.crew.size() == 3 && def.targets.size() == 1 && def.triggers.size() == 4);
+    SC_EXPECT(def.crew.size() == 5 && def.targets.size() == 1 && def.triggers.size() == 4);
     ScenarioRunner runner(std::move(def), std::move(console));
     SC_EXPECT(runner.RunToEnd(0.1));
     SC_EXPECT(runner.EndReason() == "all targets gone");
@@ -67,7 +67,7 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     SC_EXPECT(s.procedures_aborted == 0 && s.procedures_completed >= 6);
     const std::string text = runner.Debrief();
     SC_EXPECT(text.find("LAUNCH") != std::string::npos && text.find("t1") != std::string::npos);
-    // Resolved by the gameplay engagement model; the scenario's seed (4) gives a hit, so the practice ends well.
+    // Resolved by the gameplay engagement model; the scenario's seed (1) gives a hit, so the practice ends well.
     SC_EXPECT(s.hits == 1 && s.misses == 0);
     SC_EXPECT(runner.Acmi().Text().find("Name=9K33M2 Osa-AK") != std::string::npos);
     // Ends when the drone goes down: launch at about 235 s, about 22 s of flight.
@@ -96,6 +96,16 @@ SC_TEST("scenario: loader checks references against the console") {
                             "unknown procedure 'dance'"));
     SC_EXPECT(ErrorContains(Small(R"(, "triggers": [ { "id": "x", "when": {}, "do": [ { "order": "launch", "crew": "Bob" } ] } ])"),
                             "unknown crew member 'Bob'"));
+    // Orders go to the seat that has the controls; crew roles are the console's stations, one each.
+    SC_EXPECT(ErrorContains(Small(R"(, "triggers": [ { "id": "x", "when": {}, "do": [ { "order": "launch", "crew": "Cmdr" } ] } ])"),
+                            "triggers[0].do[0].crew: 'launch' is done at station 'deputy_commander', Cmdr sits at 'commander'"));
+    std::string loader = Small();
+    loader.replace(loader.find(R"("role": "commander")"), 19, R"("role": "loader")");
+    SC_EXPECT(ErrorContains(loader, "crew[0].role: 'loader' is not a station of the console"));
+    std::string twice = Small();
+    twice.replace(twice.find(R"({ "name": "Cmdr", "role": "commander" })"), 39,
+                  R"({ "name": "Cmdr", "role": "commander" }, { "name": "Cmdr 2", "role": "commander" })");
+    SC_EXPECT(ErrorContains(twice, "crew[1].role: 'commander' already has a crew member"));
     SC_EXPECT(ErrorContains(Small(R"(, "triggers": [ { "id": "x", "when": { "target": "t9", "target_within_m": 5 }, "do": [ { "end": "e" } ] } ])"),
                             "unknown target 't9'"));
     SC_EXPECT(ErrorContains(Small(R"(, "triggers": [ { "id": "x", "when": { "target": "t1" }, "do": [ { "end": "e" } ] } ])"),

@@ -57,23 +57,26 @@ SC_TEST("scopes: a step longer than a turn paints everything once") {
 }
 
 SC_TEST("scopes: the tracking radar's range indicator shows targets in its beam while it radiates") {
-    // Range officer acquires; once the SSC tracks the target, its echo is on the range indicator.
+    // The operators acquire; once the SSC tracks the target, its echo is on the range indicator.
     const std::string text = R"({
       "scenario_id": "e", "name": "E", "source": "sam3d", "confidence": "estimate", "seed": 1,
       "origin": { "lat_deg": 45, "lon_deg": 25, "alt_m": 0 },
       "terrain": { "type": "flat", "height_m": 0 },
       "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json",
                     "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
-      "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Range officer", "role": "range_officer" },
-                { "name": "Firing officer", "role": "firing_officer" } ],
+      "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
+                { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
+                { "name": "Driver", "role": "driver" } ],
       "targets": [ { "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 30000, "up_m": 1000 },
                      "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150 } ],
       "triggers": [
         { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Commander" },
                                            { "queue": "deploy_at_halt", "crew": "Commander" },
-                                           { "queue": "search_on_march", "crew": "Commander" } ] },
+                                           { "order": "pto_on_line", "crew": "Driver" },
+                                           { "order": "search_on_march", "crew": "Senior operator" } ] },
         { "id": "acq", "when": { "conditions": [ { "subsystem": "soc_transmitter", "is": "ready" } ] },
-          "do": [ { "order": "acquire_with_soc", "crew": "Range officer" } ] } ],
+          "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy" },
+                  { "order": "capture_with_ssc", "crew": "Operator" } ] } ],
       "end": { "time_limit_s": 300 } })";
     ScenarioDef def;
     ConsoleData console;
@@ -135,8 +138,12 @@ SC_TEST("scopes: the loader rejects bad displays") {
     SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console));
     auto Error = [&](const std::string& display) {
         const std::string text = R"({ "system_id": "osa_ak",
-          "stations": [ { "id": "range_officer", "label": "RO", "eye_m": [0, 0, 1.5] } ],
-          "panels": [ { "id": "p", "label": "P", "station": "range_officer", "centre_m": [-1, 0, 1.3],
+          "stations": [ { "id": "senior_operator", "label": "SO", "eye_m": [0, 0, 1.5] },
+                        { "id": "operator", "label": "O", "eye_m": [0, 1, 1.5] },
+                        { "id": "deputy_commander", "label": "DC", "eye_m": [1, 0, 1.5] },
+                        { "id": "commander", "label": "C", "eye_m": [1, 3, 1.5] },
+                        { "id": "driver", "label": "D", "eye_m": [-1, 3, 1.5] } ],
+          "panels": [ { "id": "p", "label": "P", "station": "senior_operator", "centre_m": [-1, 0, 1.3],
                         "facing_deg": 90, "size_m": [1.0, 0.6] } ],
           "displays": [ )" + display + " ] }";
         CabinLayout layout;

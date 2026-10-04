@@ -58,14 +58,17 @@ Everything in simcore is deterministic for a given sequence of inputs, which mak
   prerequisites are ready, or losing a prerequisite while it runs, faults it. Latching subsystems are modes a
   button engages until a release condition. Inputs are yes/no signals the sim sets (e.g. "target in zone") so
   lamps and automatic sequences can use them. Lamps and animations read these states.
-- Console data (`console_data.hpp`, `json.hpp`): each system's controls, subsystems and procedures are loaded from
-  `data/procedures/<system>.json` by a strict loader that requires a source and confidence on every item.
+- Console data (`console_data.hpp`, `json.hpp`): each system's crew stations, controls, subsystems and procedures
+  are loaded from `data/procedures/<system>.json` by a strict loader that requires a source and confidence on every
+  item. Every control belongs to a station (the Osa-AK has five: commander, deputy commander, senior operator,
+  operator, driver), and every procedure stays at one station, so each order goes to one seat.
 - `Procedure`: an ordered list of steps `{control, position, min_wait_s, description, wait_for}`. `wait_for` is
   what the operator should see first (e.g. a READY lamp).
 - `ProcedureTracker`: judges each action. It accepts correct steps, refuses ones before `min_wait_s`, and logs
   deviations with times: out-of-order actions, and "early" steps done before their `wait_for` held (these still
   count as done; `Equipment` decides the consequence). Physically blocked moves aren't judged.
-- `CrewMember`: an NPC that works through ordered and queued procedures on the **same** panel. It waits for
+- `CrewMember`: an NPC in one seat (its role is a station id) that works through ordered and queued procedures on
+  the **same** panel, refusing another seat's procedures. It waits for
   `wait_for`, reacts with a delay once a lamp comes on, and reports started / completed / waiting / equipment fault /
   aborted for voice lines and the order UI.
 
@@ -94,8 +97,8 @@ The player's 3D cabin clicks call the same functions, so the player and the crew
   radar or missile physics. The console's `sensors` block maps the search radar, tracking radar and TV sight onto
   its controls. The model builds the search picture (range scale, line of sight, clutter/MTI), locks the tracking
   radar when the operator has the azimuth line and range gate on a target in acquisition mode (or the TV has it in
-  view), follows it until the lock breaks, sets the capture / too-low / zone inputs, lets the aiming crew member turn
-  the wheels, and resolves each launch: losing the track loses the missile, otherwise the hit chance is a product
+  view), follows it until the lock breaks, sets the capture / too-low / zone inputs, lets the aiming crew turn
+  their wheels (azimuth, elevation and range each have their own seat), and resolves each launch: losing the track loses the missile, otherwise the hit chance is a product
   of plain, tunable factors printed in the debrief, decided by one draw from the scenario seed.
 
 Per step: `Equipment::Update`, then `ControlPanel::ReleaseMomentaries`, then crew. Crew see this step's lamps, and
@@ -114,7 +117,6 @@ Generic simcore models (used by the demo, not by the Osa's outcomes):
 Osa model gaps found by the October 2026 research review (`docs/research/OSA_RESEARCH_2026-10.md`), scheduled as
 roadmap phase 6:
 
-- Crew: four seats; the real vehicle has five (the senior operator and the operator are merged). (6.1)
 - Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
 - Missiles: no missile load, selection or second channel; ЗАХВАТ / ВКЛ ВЫС lamps mapped to preparation. (6.3)
 - Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)

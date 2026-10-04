@@ -78,7 +78,7 @@ inline int CabinClickTarget(const ControlDef& def, int current, int direction) {
 }
 
 struct CabinStation {
-    std::string id;           // a station id used by the console's controls, e.g. "range_officer"
+    std::string id;           // a station id used by the console's controls, e.g. "senior_operator"
     std::string label;
     Vec3 eye_m;               // body frame
     double yaw_rad = 0.0;     // view heading, clockwise from forward
@@ -203,6 +203,45 @@ struct CabinLayout {
     Vec3 PositionOf(const CabinControl& c) const { return FindPanel(c.panel_id)->PointAt(c.u_m, c.v_m); }
     Vec3 PositionOf(const CabinLamp& l) const { return FindPanel(l.panel_id)->PointAt(l.u_m, l.v_m); }
 
+    // Which way a toggle's lever, a rotary's pointer or a key points in a position: degrees on the panel face
+    // from "up the face", clockwise (towards the operator's right). Toggles: up for on (>= 1), down for off.
+    // Rotaries: positions spread symmetrically about up, at most 30 degrees apart. Keys: upright when
+    // inserted, a quarter turn right when turned. 0 for other styles.
+    static double PositionAngleDeg(CabinStyle style, int positions, int position) {
+        switch (style) {
+            case CabinStyle::Toggle:
+                return position >= 1 ? 0.0 : 180.0;
+            case CabinStyle::Rotary: {
+                const int count = positions < 2 ? 2 : positions;
+                const double step = std::fmin(30.0, 240.0 / (count - 1));
+                return (position - 0.5 * (count - 1)) * step;
+            }
+            case CabinStyle::Key:
+                return position >= 2 ? 90.0 : 0.0;
+            default:
+                return 0.0;
+        }
+    }
+
+    // The red dot beside a toggle or rotary that marks its starting position (korovin_tiv_2010: red dots by the
+    // knobs and switches for quick preparation before firing): its offset on the panel from the control's
+    // centre (u right, v up the face, metres). The starting position is the control's initial one. False for
+    // keys, buttons, wheels and covers, which have none.
+    static bool StartMark(const CabinControl& c, const ControlDef& def, double& du_m, double& dv_m) {
+        double radius_m = 0.0;
+        if (c.style == CabinStyle::Toggle) {
+            radius_m = 0.03;
+        } else if (c.style == CabinStyle::Rotary) {
+            radius_m = 0.032;
+        } else {
+            return false;
+        }
+        const double a = DegToRad(PositionAngleDeg(c.style, def.positions, def.initial));
+        du_m = radius_m * std::sin(a);
+        dv_m = radius_m * std::cos(a);
+        return true;
+    }
+
     static bool LampLit(const CabinLamp& lamp, const ControlPanel& panel, const Equipment& equipment) {
         if (!equipment.AllHold(lamp.lit_when, panel)) return false;
         return lamp.lit_when_any.empty() || equipment.AnyHolds(lamp.lit_when_any, panel);
@@ -238,7 +277,7 @@ public:
         if (out.system_id != console.system_id) {
             return Fail("system_id", "'" + out.system_id + "' doesn't match the console's '" + console.system_id + "'");
         }
-        return LoadStations(root, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
+        return LoadSeats(root, console, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
                PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out);
     }
 
@@ -275,7 +314,8 @@ private:
         return true;
     }
 
-    bool LoadStations(const json::Value& root, CabinLayout& out) {
+    // With a station list in the console, the cabin has exactly one seat for each of its stations.
+    bool LoadSeats(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
         const json::Value* arr = OptionalArray(root, "", "stations");
         if (arr == nullptr) return message_.empty() ? Fail("stations", "required") : false;
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
@@ -289,7 +329,13 @@ private:
                 return false;
             }
             if (out.FindStation(st.id) != nullptr) return Fail(Join(path, "id"), "duplicate station '" + st.id + "'");
+            if (!console.stations.empty() && console.FindStation(st.id) == nullptr) {
+                return Fail(Join(path, "id"), "'" + st.id + "' is not a station of the console");
+            }
             out.stations.push_back(std::move(st));
+        }
+        for (const ConsoleStation& cs : console.stations) {
+            if (out.FindStation(cs.id) == nullptr) return Fail("stations", "no seat for the console's '" + cs.id + "'");
         }
         return true;
     }

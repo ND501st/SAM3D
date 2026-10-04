@@ -61,7 +61,7 @@ Gotchas seen so far:
 | Path | Contents |
 |---|---|
 | `simcore/` | **Header-only C++17 sim core.** Physics side: `vec3`, `geo`, `atmosphere`, `terrain`, `radar`, `aircraft`, `missile`, `world`, `acmi`. Game side: `panel`, `equipment` (incl. `start_ready`, `Restart`), `procedures`, `json` + `console_data`, `debrief`, `scenario` + `scenario_runner` (incl. the player's tracker, launch restarts), `engagement` (gameplay-level picture, lock, outcomes, `TrackReturns`), `cabin` (layout, lamps, displays), `scopes` (search-scope sweep and afterglow) |
-| `simcore/tests/` | 84 tests + `header_check.cpp` |
+| `simcore/tests/` | 88 tests + `header_check.cpp` |
 | `prototype/` | Python mirror of the physics side (13 tests) |
 | `unreal/SAM3D/` | UE 5.7 project: `USimWorldSubsystem`, `ASimScenarioDirector` (incl. cabin tour switch), `ASimOsaVehicle` (placeholder, cabin mode, tour), `USimCabinComponent`, `USimCabinDisplayComponent`, `ASimCabinHUD`, `ASimEntityActor`. See `unreal/README.md` |
 | `data/` | `procedures/osa_ak.json` (console), `cabins/osa_ak.json` (cabin), `systems/osa.json` (cited system data), `scenarios/osa_practice.json`, `gameplay/osa_ak.json` (game balance) |
@@ -104,7 +104,7 @@ a `ProcedureTracker` so the debrief records early and out-of-order actions.
 | 4 Unreal bring-up | Done except Chaos Vehicles (needs a real mesh), the real model, the performance check |
 | 5 3D cabin | Done: layout data, controls, lamps (glowing), instruments (search scope, range indicator, TV with a black-and-white scene capture, βс/εс dials, ДЦ voltmeter), hands-free tour, scripted checks. The practice shoot runs end to end in Unreal: lock at ~28 km, launch at 235 s, **hit** at 257 s (seed 4) |
 | Research review | Done (PR #8): research file, briefing, re-plan; the user's video transcript analysed (Korovin's «Техника и вооружение» series added as a tier-1 source) |
-| **6 Accuracy pass** | **Next, after the user answers the briefing's decisions.** See below |
+| **6 Accuracy pass** | **6.1 done** (branch `feature/five-man-crew`): five seats, one seat per procedure, aiming split per wheel, red start-position dots. Next: 6.2 |
 
 ## 9. The research review (2 Oct 2026) and what it changed
 

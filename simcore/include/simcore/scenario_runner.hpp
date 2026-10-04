@@ -15,7 +15,7 @@
 //
 // If the scenario names a gameplay tuning file, the EngagementModel (engagement.hpp)
 // runs the search and tracking picture, sets the console's capture and zone inputs,
-// lets the aiming crew member turn the wheels, and resolves each launch as a hit or
+// lets the aiming crew turn their wheels, and resolves each launch as a hit or
 // a miss (step 1b, and on launch). Without one, launches are only recorded.
 #pragma once
 
@@ -51,7 +51,11 @@ public:
             const double u = Uniform01(rng_);
             const double reaction = c.reaction_time_s + (2.0 * u - 1.0) * c.reaction_jitter_s;
             crew_.emplace_back(c.name, c.role, reaction);
-            if (engagement_on_ && c.role == def_.tuning.aim_role) aim_crew_present_ = true;
+            if (engagement_on_) {
+                aim_crew_.azimuth = aim_crew_.azimuth || c.role == def_.tuning.aim_az_role;
+                aim_crew_.elevation = aim_crew_.elevation || c.role == def_.tuning.aim_el_role;
+                aim_crew_.range = aim_crew_.range || c.role == def_.tuning.aim_range_role;
+            }
         }
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
         targets_.resize(def_.targets.size());
@@ -75,7 +79,7 @@ public:
         time_ += dt;
         UpdateTargets(dt);
         if (engagement_on_) {
-            engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_present_);
+            engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
@@ -341,7 +345,7 @@ private:
     std::mt19937 rng_;
     bool engagement_on_;
     EngagementModel engagement_;
-    bool aim_crew_present_ = false;
+    AimCrew aim_crew_;
     std::vector<EngagementTarget> eng_targets_;
     std::vector<CrewMember> crew_;
     ProcedureTracker player_;  // empty procedure = free play

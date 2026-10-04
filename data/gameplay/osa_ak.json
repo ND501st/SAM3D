@@ -22,9 +22,10 @@
   },
 
   "aim": {
-    "crew_role": "range_officer", "az_rate_deg_s": 20, "el_rate_deg_s": 8, "range_rate_mps": 4000,
+    "azimuth_role": "senior_operator", "elevation_role": "deputy_commander", "range_role": "operator",
+    "az_rate_deg_s": 20, "el_rate_deg_s": 8, "range_rate_mps": 4000,
     "plotting_board_range_m": 50000,
-    "notes": "Game values: how fast an NPC operator turns the wheels onto a contact. plotting_board_range_m: the PU-12 board is watched from 50 km (manual p21)."
+    "notes": "Roles: who turns each wheel (flak11, 9A33-3); they are console stations. The rest are game values: how fast an NPC turns each wheel onto a contact. plotting_board_range_m: the PU-12 board is watched from 50 km (manual p21)."
   },
 
   "missile": {

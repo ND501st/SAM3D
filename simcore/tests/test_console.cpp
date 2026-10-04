@@ -1,4 +1,5 @@
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/console_data.hpp"
@@ -23,12 +24,59 @@ void Tick(ConsoleData& c, CrewMember& crew, double dt = 0.1) {
     crew.Update(dt, c.panel, &c.equipment);
 }
 
-// Run the crew until it has nothing left to do (or a time limit). Returns the time taken.
-double RunUntilIdle(ConsoleData& c, CrewMember& crew, double limit_s = 600.0) {
-    double t = 0.0;
-    for (; crew.IsBusy() && t < limit_s; t += 0.1) Tick(c, crew);
-    return t;
-}
+// The whole crew: one member per console station. Orders go to the seat that owns the procedure.
+class Seats {
+public:
+    explicit Seats(ConsoleData& c) : c_(c) {
+        for (const ConsoleStation& st : c.stations) crew_.emplace_back(st.label, st.id, 1.0);
+    }
+
+    CrewMember& At(const std::string& station) {
+        for (CrewMember& m : crew_) {
+            if (m.Role() == station) return m;
+        }
+        return crew_.front();
+    }
+
+    void Order(const char* id) {
+        const Procedure& p = *c_.FindProcedure(id);
+        At(p.station).Order(p);
+    }
+
+    void Queue(const char* id) {
+        const Procedure& p = *c_.FindProcedure(id);
+        At(p.station).Queue(p);
+    }
+
+    // One sim step in the documented order: equipment, then let go of buttons, then crew.
+    void Tick(double dt = 0.1) {
+        c_.equipment.Update(dt, c_.panel);
+        c_.panel.ReleaseMomentaries();
+        for (CrewMember& m : crew_) m.Update(dt, c_.panel, &c_.equipment);
+    }
+
+    bool Busy() const {
+        for (const CrewMember& m : crew_) {
+            if (m.IsBusy()) return true;
+        }
+        return false;
+    }
+
+    // Run until nobody has anything left to do (or a time limit). Returns the time taken.
+    double RunUntilIdle(double limit_s = 600.0) {
+        double t = 0.0;
+        for (; Busy() && t < limit_s; t += 0.1) Tick();
+        return t;
+    }
+
+    void ClearReports() {
+        for (CrewMember& m : crew_) m.TakeReports();
+    }
+
+private:
+    ConsoleData& c_;
+    std::vector<CrewMember> crew_;
+};
 
 bool AnyFault(ConsoleData& c) {
     bool fault = false;
@@ -43,13 +91,14 @@ bool AnyFault(ConsoleData& c) {
 
 // From the march: stop, start the GTA and come into action. Returns once the GTA is running (the engine
 // generator powers the equipment until then) and leaves the crew idle.
-void PowerUpAndDeploy(ConsoleData& c, CrewMember& crew) {
+void PowerUpAndDeploy(ConsoleData& c, Seats& seats) {
     c.equipment.SetInput("vehicle_stopped", true);
-    crew.Order(*c.FindProcedure("power_up"));
-    crew.Queue(*c.FindProcedure("deploy_at_halt"));
-    RunUntilIdle(c, crew);
-    for (int i = 0; i < 1000 && !c.equipment.IsReady("gta"); ++i) Tick(c, crew);
-    crew.TakeReports();
+    seats.Order("power_up");
+    seats.Queue("deploy_at_halt");
+    seats.Order("pto_on_line");
+    seats.RunUntilIdle();
+    for (int i = 0; i < 1000 && !c.equipment.IsReady("gta"); ++i) seats.Tick();
+    seats.ClearReports();
 }
 
 bool LoadErrorContains(const std::string& text, const std::string& expected) {
@@ -224,10 +273,83 @@ SC_TEST("osa data: loads, with the manual's covers, key, wheels and buttons") {
     // The march starts with the search antenna up, like its switch; each launch restarts missile preparation.
     SC_EXPECT(c.panel.Get("apu.stow") == 1 && c.equipment.IsReady("search_antenna"));
     SC_EXPECT(c.launch_restarts == "missile_prep");
-    for (const char* id : {"power_up", "search_on_march", "deploy_at_halt", "acquire_with_soc", "track_low_target",
-                           "prepare_firing", "launch", "emcon_tv_engagement", "stow_for_march", "stow_for_transport"}) {
-        SC_EXPECT(c.FindProcedure(id) != nullptr);
+}
+
+SC_TEST("osa data: a crew of five; every control and procedure belongs to one seat") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    SC_EXPECT(c.stations.size() == 5);
+    for (const char* id : {"commander", "deputy_commander", "senior_operator", "operator", "driver"}) {
+        SC_EXPECT(c.FindStation(id) != nullptr);
     }
+    for (const ControlDef& def : c.panel.Controls()) SC_EXPECT(c.FindStation(def.station) != nullptr);
+    for (const Procedure& p : c.procedures) SC_EXPECT(c.FindStation(p.station) != nullptr);
+    // Who does what (flak11, 9A33-3).
+    const std::pair<const char*, const char*> owners[] = {
+        {"power_up", "commander"},
+        {"deploy_at_halt", "commander"},
+        {"stow_for_march", "commander"},
+        {"stow_for_transport", "commander"},
+        {"pto_on_line", "driver"},
+        {"pto_off_line", "driver"},
+        {"search_on_march", "senior_operator"},
+        {"acquire_with_soc", "senior_operator"},
+        {"emcon_tv_azimuth", "senior_operator"},
+        {"stop_search", "senior_operator"},
+        {"capture_with_ssc", "operator"},
+        {"track_range_semi_auto", "operator"},
+        {"stow_ssc", "operator"},
+        {"ready_capture", "deputy_commander"},
+        {"track_low_target", "deputy_commander"},
+        {"prepare_firing", "deputy_commander"},
+        {"launch", "deputy_commander"},
+        {"emcon_tv_engagement", "deputy_commander"},
+        {"stow_launch_console", "deputy_commander"}};
+    for (const auto& o : owners) {
+        const Procedure* p = c.FindProcedure(o.first);
+        SC_EXPECT(p != nullptr && p->station == o.second);
+    }
+    SC_EXPECT(c.panel.Find("ssc.az_wheel")->station == "senior_operator");
+    SC_EXPECT(c.panel.Find("ssc.range_wheel")->station == "operator");
+    SC_EXPECT(c.panel.Find("ssc.el_wheel")->station == "deputy_commander");
+}
+
+SC_TEST("console loader: stations own controls, and a procedure stays at one station") {
+    const std::string head = R"({"system_id":"t","display_name":"T",
+      "stations":[{"id":"a","label":"A","source":"s","confidence":"low"},{"id":"b","label":"B","source":"s","confidence":"low"}],
+      "controls":[{"id":"x","label":"X","station":"a","kind":"switch","source":"s","confidence":"low"},
+                  {"id":"y","label":"Y","station":"b","kind":"switch","source":"s","confidence":"low"}])";
+    ConsoleData c;
+    std::string error;
+    SC_EXPECT(LoadConsole(head + R"(,"procedures":[{"id":"p","name":"P","source":"s","confidence":"low",
+      "steps":[{"control":"y","position":1,"description":"d"}]}]})", c, &error));
+    SC_EXPECT(c.FindProcedure("p")->station == "b" && c.FindStation("a")->label == "A");
+    SC_EXPECT(LoadErrorContains(head + R"(,"procedures":[{"id":"p","name":"P","source":"s","confidence":"low",
+      "steps":[{"control":"x","position":1,"description":"d"},{"control":"y","position":1,"description":"d"}]}]})",
+                                "procedures[0].steps[1]: control 'y' is at station 'b'"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","stations":[{"id":"a","label":"A","source":"s","confidence":"low"}],
+      "controls":[{"id":"x","label":"X","station":"c","kind":"switch","source":"s","confidence":"low"}]})",
+                                "controls[0].station: unknown station 'c'"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","stations":[{"id":"a","label":"A","source":"s","confidence":"low"}],
+      "controls":[{"id":"x","label":"X","kind":"switch","source":"s","confidence":"low"}]})",
+                                "controls[0].station: required"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","stations":[{"id":"a","label":"A","source":"s","confidence":"low"},
+      {"id":"a","label":"A2","source":"s","confidence":"low"}]})", "stations[1].id: duplicate station 'a'"));
+}
+
+SC_TEST("crew: a crew member refuses another seat's procedure and touches nothing") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    CrewMember driver("Driver", "driver", 1.0);
+    driver.Order(*c.FindProcedure("prepare_firing"));
+    SC_EXPECT(!driver.IsBusy());
+    for (int i = 0; i < 50; ++i) Tick(c, driver);
+    SC_EXPECT(c.panel.Get("fo.key") == 0);
+    const std::vector<CrewReport> reports = driver.TakeReports();
+    SC_EXPECT(reports.size() == 1 && reports[0].kind == CrewReport::Kind::Aborted);
+    SC_EXPECT(reports[0].procedure_id == "prepare_firing" && reports[0].detail == "station deputy_commander");
+    driver.Queue(*c.FindProcedure("pto_on_line"));  // its own seat's procedure is fine
+    SC_EXPECT(driver.IsBusy());
 }
 
 SC_TEST("osa data: nothing works without power, and switching on unpowered isn't a fault") {
@@ -248,24 +370,26 @@ SC_TEST("osa data: nothing works without power, and switching on unpowered isn't
 SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ unlocked") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Commander", "commander", 1.0);
-    crew.Order(*c.FindProcedure("power_up"));
-    crew.Queue(*c.FindProcedure("search_on_march"));
-    const double t = RunUntilIdle(c, crew);
-    Tick(c, crew);
+    Seats seats(c);
+    seats.Order("power_up");
+    seats.Order("search_on_march");  // the senior operator waits for power
+    const double t = seats.RunUntilIdle();
+    seats.Tick();
     SC_EXPECT(c.equipment.IsReady("soc_antenna") && c.equipment.IsReady("soc_transmitter"));  // while moving
     SC_EXPECT(t > 60.0 && t < 70.0);  // GTA start dominates
     c.panel.Set("tov.power", 1);
     c.panel.Set("fo.pa", 1);
-    Tick(c, crew);
-    Tick(c, crew);
+    seats.Tick();
+    seats.Tick();
     SC_EXPECT(!c.equipment.IsReady("tv_angle_track"));  // АПУ still locked for the march
-    crew.Order(*c.FindProcedure("deploy_at_halt"));
-    RunUntilIdle(c, crew, 5.0);
-    SC_EXPECT(crew.Status() == CrewStatus::Waiting);  // waits for the vehicle to stop
+    seats.Order("deploy_at_halt");
+    seats.Order("pto_on_line");
+    seats.RunUntilIdle(5.0);
+    SC_EXPECT(seats.At("commander").Status() == CrewStatus::Waiting);  // both wait for the vehicle to stop
+    SC_EXPECT(seats.At("driver").Status() == CrewStatus::Waiting);
     c.equipment.SetInput("vehicle_stopped", true);
-    RunUntilIdle(c, crew);
-    Tick(c, crew);
+    seats.RunUntilIdle();
+    seats.Tick();
     SC_EXPECT(c.equipment.IsReady("apu_free") && c.equipment.IsReady("pto_generator"));
     SC_EXPECT(!AnyFault(c));
 }
@@ -273,70 +397,84 @@ SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ un
 SC_TEST("osa data: stow for the march, then driving off is safe; driving unlocked faults the АПУ") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Commander", "commander", 1.0);
-    PowerUpAndDeploy(c, crew);
+    Seats seats(c);
+    PowerUpAndDeploy(c, seats);
     SC_EXPECT(c.equipment.IsReady("apu_free"));
-    crew.Order(*c.FindProcedure("stow_for_march"));
-    RunUntilIdle(c, crew);
-    SC_EXPECT(crew.Tracker().IsComplete() && crew.Tracker().Deviations() == 0);
-    Tick(c, crew);
-    SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Off);
+    seats.Order("stow_ssc");
+    seats.Order("stow_launch_console");
+    seats.Order("pto_off_line");
+    seats.Order("stow_for_march");
+    seats.RunUntilIdle();
+    const CrewMember& commander = seats.At("commander");
+    SC_EXPECT(commander.Tracker().GetProcedure().id == "stow_for_march");
+    SC_EXPECT(commander.Tracker().IsComplete() && commander.Tracker().Deviations() == 0);
+    seats.Tick();
+    SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Off && c.panel.Get("pwr.pto") == 0);
     c.equipment.SetInput("vehicle_stopped", false);
-    Tick(c, crew);
+    seats.Tick();
     SC_EXPECT(!AnyFault(c) && c.equipment.IsReady("power"));  // GTA keeps powering on the move
     SC_EXPECT(!c.equipment.IsReady("pto_generator"));
 
     c.equipment.SetInput("vehicle_stopped", true);
-    crew.Order(*c.FindProcedure("deploy_at_halt"));
-    RunUntilIdle(c, crew);
-    Tick(c, crew);
+    seats.Order("deploy_at_halt");
+    seats.RunUntilIdle();
+    seats.Tick();
     c.equipment.SetInput("vehicle_stopped", false);  // drives off without locking the АПУ
-    Tick(c, crew);
+    seats.Tick();
     SC_EXPECT(c.equipment.State("apu_free") == SubsystemState::Fault);
 }
 
 SC_TEST("osa data: stow for transport folds the antenna and shuts down the GTA") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Commander", "commander", 1.0);
-    PowerUpAndDeploy(c, crew);
-    crew.Order(*c.FindProcedure("search_on_march"));
-    crew.Queue(*c.FindProcedure("stow_for_march"));
-    crew.Queue(*c.FindProcedure("stow_for_transport"));
-    RunUntilIdle(c, crew);
-    for (int i = 0; i < 20; ++i) Tick(c, crew);
-    SC_EXPECT(crew.Tracker().GetProcedure().id == "stow_for_transport" && crew.Tracker().Deviations() == 0);
+    Seats seats(c);
+    PowerUpAndDeploy(c, seats);
+    seats.Order("search_on_march");
+    seats.Queue("stop_search");
+    seats.Order("pto_off_line");
+    seats.Order("stow_for_march");
+    seats.Queue("stow_for_transport");  // waits until the senior operator has stopped the SOC
+    seats.RunUntilIdle();
+    for (int i = 0; i < 20; ++i) seats.Tick();
+    const CrewMember& commander = seats.At("commander");
+    SC_EXPECT(commander.Tracker().GetProcedure().id == "stow_for_transport" && commander.Tracker().Deviations() == 0);
+    SC_EXPECT(seats.At("senior_operator").Tracker().GetProcedure().id == "stop_search");
     SC_EXPECT(c.equipment.State("search_antenna") == SubsystemState::Off && c.panel.Get("pwr.gta") == 0);
     SC_EXPECT(!c.equipment.IsReady("power") && !AnyFault(c));
 }
 
-SC_TEST("osa data: crew acquires with the SOC, then the SSC locks on when the target is captured") {
+SC_TEST("osa data: three operators acquire with the SOC, then the SSC locks on when the target is captured") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Range officer", "range_officer", 1.0);
-    PowerUpAndDeploy(c, crew);
-    crew.Order(*c.FindProcedure("acquire_with_soc"));
-    for (int i = 0; i < 1000 && crew.IsBusy(); ++i) Tick(c, crew);
-    SC_EXPECT(crew.Tracker().IsComplete() && crew.Tracker().Deviations() == 0);
-    Tick(c, crew);
+    Seats seats(c);
+    PowerUpAndDeploy(c, seats);
+    seats.Order("acquire_with_soc");
+    seats.Order("ready_capture");
+    seats.Order("capture_with_ssc");  // waits for ЦУ АЗ before the transmitter goes on
+    seats.RunUntilIdle(100.0);
+    for (const char* station : {"senior_operator", "deputy_commander", "operator"}) {
+        SC_EXPECT(seats.At(station).Tracker().IsComplete() && seats.At(station).Tracker().Deviations() == 0);
+    }
+    seats.Tick();
     SC_EXPECT(c.equipment.IsReady("soc_transmitter") && c.equipment.IsReady("ssc_transmitter"));
     SC_EXPECT(c.equipment.IsReady("auto_acquisition"));  // latched by the ЦУ АЗ press
     SC_EXPECT(!c.equipment.IsReady("auto_tracking"));
     c.equipment.SetInput("target_captured", true);
-    Tick(c, crew);
+    seats.Tick();
     SC_EXPECT(c.equipment.IsReady("auto_tracking"));
 }
 
 SC_TEST("osa data: prepare, then launch waits for ПУСК ГОТОВ and ЦЕЛЬ В ЗОНЕ") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Firing officer", "firing_officer", 1.0);
-    PowerUpAndDeploy(c, crew);
-    crew.Order(*c.FindProcedure("prepare_firing"));
-    crew.Queue(*c.FindProcedure("launch"));
+    Seats seats(c);
+    PowerUpAndDeploy(c, seats);
+    seats.Order("prepare_firing");
+    seats.Queue("launch");
+    const CrewMember& crew = seats.At("deputy_commander");
     double t = 0.0;
     auto run = [&](double seconds) {
-        for (double end = t + seconds; t < end - 1e-9; t += 0.1) Tick(c, crew);
+        for (double end = t + seconds; t < end - 1e-9; t += 0.1) seats.Tick();
     };
     run(20.0);
     SC_EXPECT(crew.Tracker().GetProcedure().id == "launch" && crew.Status() == CrewStatus::Waiting);
@@ -349,7 +487,7 @@ SC_TEST("osa data: prepare, then launch waits for ПУСК ГОТОВ and ЦЕЛ
     c.equipment.SetInput("target_in_zone", true);
     bool launched = false;
     for (int i = 0; i < 100 && !launched; ++i) {
-        Tick(c, crew);
+        seats.Tick();
         launched = c.panel.Get("fo.launch") == 1;
     }
     SC_EXPECT(launched && c.equipment.IsReady("launch_armed"));
@@ -359,19 +497,22 @@ SC_TEST("osa data: prepare, then launch waits for ПУСК ГОТОВ and ЦЕЛ
 SC_TEST("osa data: TV-only engagement with the radars silent") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
-    CrewMember crew("Firing officer", "firing_officer", 1.0);
-    PowerUpAndDeploy(c, crew);
-    crew.Order(*c.FindProcedure("emcon_tv_engagement"));
+    Seats seats(c);
+    PowerUpAndDeploy(c, seats);
+    seats.Order("emcon_tv_azimuth");
+    seats.Order("emcon_tv_engagement");
+    CrewMember& crew = seats.At("deputy_commander");
     bool launched = false;
     double t = 0.0;
     for (; t < 120.0 && !launched; t += 0.1) {
-        Tick(c, crew);
+        seats.Tick();
         launched = c.panel.Get("fo.launch") == 1;
     }
+    SC_EXPECT(seats.At("senior_operator").Tracker().IsComplete() && c.panel.Get("ssc.az_lock") == 1);
     SC_EXPECT(launched && crew.Tracker().Deviations() == 0);
     SC_EXPECT(c.equipment.IsReady("tv_angle_track"));
     SC_EXPECT(!c.equipment.IsReady("soc_transmitter") && !c.equipment.IsReady("ssc_transmitter"));
-    SC_EXPECT(t > 20.0 && t < 35.0);  // ~9 s of switches, 15 s preparation, then key and launch
+    SC_EXPECT(t > 20.0 && t < 35.0);  // ~7 s of switches, 15 s preparation, then key and launch
     SC_EXPECT(crew.TakeReports().back().kind == CrewReport::Kind::Completed);
 }
 
