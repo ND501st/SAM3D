@@ -730,7 +730,7 @@ void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const si
 	const FVector N = BodyDir(Panel.Normal());
 	const FVector U = BodyDir(Panel.Up());
 	// The plate's front face on the panel's plane, a little smaller than its outline so neighbours show a gap.
-	UStaticMeshComponent* Plate = AddDecor(CubeMesh, PlateColor);
+	UStaticMeshComponent* Plate = AddDecor(CubeMesh, LookColor(Block.color, PlateColor));
 	Place(Plate, BodyPoint(Panel.PointAt(Block.u_m, Block.v_m)) - N * (0.5 * PlateDepthCm),
 		FRotationMatrix::MakeFromXZ(N, U).Rotator(), FVector(0.01 * PlateDepthCm, Block.width_m - 0.004, Block.height_m - 0.004));
 	// Fixing screws 1 cm in from the corners, and along the long edges (decoration, not from the photos).
@@ -905,6 +905,23 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		}
 		Paint(AddLegend(L + N * 1.24, N, R, U, W, H, ToF(Look.label)), LegendUnlit);
 		break;
+	case CabinLookKind::Gauge:
+	{
+		// A dark rim, a light face (the look's colour, white by default) and a needle at rest, round or square.
+		const FLinearColor Face = LookColor(Look.color.empty() ? std::string("white") : Look.color, DarkColor);
+		if (FMath::Abs(W - H) > 1e-6)
+		{
+			Box(L, W, H, 1.0, DarkColor);
+			Box(L, 0.84 * W, 0.84 * H, 0.2, Face, 1.0);
+		}
+		else
+		{
+			Disc(W, W, 1.0, DarkColor);
+			Disc(0.84 * W, 0.84 * W, 0.2, Face, 1.0);
+		}
+		Box(L + U * (12.0 * H) - R * (8.0 * W), 0.0025, 0.36 * H, 0.1, DarkColor, 1.2);
+		break;
+	}
 	case CabinLookKind::Diagram:
 	{
 		// A printed outline: four thin lines.
