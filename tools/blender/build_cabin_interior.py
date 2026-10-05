@@ -50,7 +50,8 @@ BOW_X = 1.14            # half-width at the bow (plan: 2.27 m across at the fron
 DASH_TOP_Z = 1.62       # dashboard top, under the windscreens (estimate, from rwd_mb3 9a33_31/32)
 SCREEN_BOTTOM_Y = 4.80  # windscreen panel: bottom edge (y, z = DASH_TOP_Z) to top edge (y, z = ROOF_Z); the
 SCREEN_TOP_Y = 4.55     # lean (28 degrees from vertical) is an estimate from the exterior photos (opisybroni)
-THICK = 0.06            # hull lining thickness (estimate; thick enough for Lumen's distance fields)
+THICK = 0.12            # hull lining and plate (estimate), outwards from the faces given; Lumen's distance fields
+                        # need walls this thick to keep the sky out
 
 
 def window_x(sign):
@@ -343,8 +344,8 @@ def finish(b, bevel=0.0, sharp_deg=35.0, reuse=False):
     """Turn a Builder into an object: UVs (box projection, 1 unit = 1 m), smoothing, an optional edge bevel, origin at
     the centre of its bounding box. Returns the object; its body-frame centre and size go in the manifest."""
     bm = b.bm
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
-    # every part is a closed shell: face normals outwards
+    # every part is a closed shell (no welding: two solids that touch would share a four-face edge, which upsets the
+    # distance-field builder); face normals outwards
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     # n-gons (caps, filled plates) to triangles, so the FBX carries tangents and Unreal gets plain polygons
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
@@ -418,68 +419,83 @@ def build_hull():
     W, T = WALL_X, THICK
     # Floor: steel plates the full length, under the racks too.
     floor = [(-W, REAR_Y), (W, REAR_Y), (W, CAB_Y), (BOW_X, BOW_Y), (-BOW_X, BOW_Y), (-W, CAB_Y)]
-    b.slab((0, 0, FLOOR_Z), Vector((1, 0, 0)), Vector((0, 1, 0)), floor, [], T, 'Floor_Steel')
+    b.slab((0, 0, FLOOR_Z), Vector((1, 0, 0)), Vector((0, 1, 0)),
+           [(x + (T if x > 0 else -T), y + (T if y > 1 else -T)) for x, y in floor], [], T, 'Floor_Steel')
     # Roof lining with the two crew hatches above the cab seats (positions and size: estimate; usaf_shaw_2017 -036
     # shows a rounded rectangular hatch about 0.55 x 0.6 m).
-    front_x = W - (W - BOW_X) * (SCREEN_TOP_Y - CAB_Y) / (BOW_Y - CAB_Y)
-    roof = [(-W, REAR_Y), (-W, CAB_Y), (-front_x, SCREEN_TOP_Y), (front_x, SCREEN_TOP_Y), (W, CAB_Y), (W, REAR_Y)]
-    hatches = [rrect(x, HATCH_Y, 0.55, 0.60, 0.07, 5) for x in (-0.36, 0.33)]
-    # the roof's face looks down: build it in a frame whose normal is -z (u = +x, v = -y)
-    roof_m = [(x, -y) for x, y in roof]
-    hatches_m = [[(x, -y) for x, y in h] for h in hatches]
-    b.slab((0, 0, ROOF_Z), Vector((1, 0, 0)), Vector((0, -1, 0)), list(reversed(roof_m)),
-           [list(reversed(h)) for h in hatches_m], T, 'Paint_Interior')
+    # The roof is built of closed boxes round the two hatch openings: Unreal's distance-field builder tells inside
+    # from outside by counting crossings, and a holed plate with a stray open edge vanished from Lumen's view
+    # (daylight then poured in through it).
+    front_x = W - (W - BOW_X) * (SCREEN_TOP_Y - CAB_Y) / (BOW_Y - CAB_Y) + T
+    hx, hy = 0.55 / 2, 0.60 / 2
+    y0, y1 = HATCH_Y - hy, HATCH_Y + hy
+    z0, z1 = ROOF_Z, ROOF_Z + T
+    b.box(-W - T, W + T, REAR_Y - T, y0, z0, z1, 'Paint_Interior')                    # behind the hatches
+    b.prism([(y1, z0), (CAB_Y, z0), (SCREEN_TOP_Y + T, z0), (SCREEN_TOP_Y + T, z1), (y1, z1)],
+            -front_x, front_x, 'Paint_Interior')                                       # ahead of them, to the screens
+    b.box(-W - T, -front_x, CAB_Y - 0.01, SCREEN_TOP_Y + T, z0, z1, 'Paint_Interior')  # over the front corners
+    b.box(front_x, W + T, CAB_Y - 0.01, SCREEN_TOP_Y + T, z0, z1, 'Paint_Interior')
+    if y1 < CAB_Y:
+        b.box(-W - T, W + T, y1, CAB_Y, z0, z1, 'Paint_Interior')
+    xs = sorted([-0.36 - hx, -0.36 + hx, 0.33 - hx, 0.33 + hx])
+    for a, c in ((-W - T, xs[0]), (xs[1], xs[2]), (xs[3], W + T)):                 # beside and between them
+        b.box(a, c, y0 - 0.001, y1 + 0.001, z0, z1, 'Paint_Interior')
     for x in (-0.36, 0.33):
         build_hatch(b, x, HATCH_Y)
+    # Every wall below is a slab whose face, the plane given, is the inside of the lining (u x v looks into the
+    # cabin) and whose thickness goes outwards; the walls run past each other at the corners so the cabin is closed
+    # for Lumen's sky light (a gap would let daylight in).
+    up_z = Vector((0, 0, 1))
+    tall = ROOF_Z - FLOOR_Z + T
     # Side walls, rear part (behind the racks for most of their length).
     for s in (-1, 1):
         x = s * W
-        # face looks inwards (-s x): u along +y for s=+1 (so u x v points -x), v up
-        u = Vector((0, 1, 0)) if s > 0 else Vector((0, -1, 0))
-        outline = [(0, 0), (CAB_Y - REAR_Y, 0), (CAB_Y - REAR_Y, ROOF_Z - FLOOR_Z), (0, ROOF_Z - FLOOR_Z)]
-        if s < 0:
-            outline = [(-a, h) for a, h in outline]
-            outline = list(reversed(outline))
-        b.slab((x, REAR_Y, FLOOR_Z), u, Vector((0, 0, 1)), outline, [], T, 'Paint_Interior')
+        length = CAB_Y - REAR_Y + T
+        if s > 0:     # u backwards: u x z looks to -x, into the cabin
+            b.slab((x, CAB_Y, FLOOR_Z - T), Vector((0, -1, 0)), up_z, [(0, 0), (length, 0), (length, tall), (0, tall)],
+                   [], T, 'Paint_Interior')
+        else:         # u forwards: u x z looks to +x
+            b.slab((x, REAR_Y - T, FLOOR_Z - T), Vector((0, 1, 0)), up_z,
+                   [(0, 0), (length, 0), (length, tall), (0, tall)], [], T, 'Paint_Interior')
         # The turned-in front corner, with the side window (exterior photos: a window on each front corner;
-        # size and place on the corner: estimate).
+        # size and place on the corner: estimate). The window sits 42 % of the way from the back of the corner.
         a0 = Vector((x, CAB_Y, FLOOR_Z))
         a1 = Vector((s * BOW_X, BOW_Y, FLOOR_Z))
         along = (a1 - a0)
         length = along.length
         along.normalize()
-        uu = along if s > 0 else -along
-        origin = a0 if s > 0 else a1
-        win = rrect(length * (0.42 if s > 0 else 0.58), 1.86 - FLOOR_Z, 0.44, 0.36, 0.06, 5)
-        corner = [(0, 0), (length, 0), (length, ROOF_Z - FLOOR_Z), (0, ROOF_Z - FLOOR_Z)]
-        b.slab(origin, uu, Vector((0, 0, 1)), corner, [win], T, 'Paint_Interior')
-        seal(b, origin, uu, Vector((0, 0, 1)), win, 'Rubber_Black')
+        uu, origin, at = (-along, a1, 0.58) if s > 0 else (along, a0, 0.42)
+        win = rrect(length * at, 1.86 - FLOOR_Z, 0.44, 0.36, 0.06, 5)
+        corner = [(-0.06, -T), (length + 0.06, -T), (length + 0.06, ROOF_Z - FLOOR_Z + T), (-0.06, ROOF_Z - FLOOR_Z + T)]
+        b.slab(origin, uu, up_z, corner, [win], T, 'Paint_Interior')
+        seal(b, origin, uu, up_z, win, 'Rubber_Black')
     # Rear bulkhead with the door to the engine compartment (plan: door opening at x 0 .. 0.59, hinged on the
-    # centreline side; height: estimate).
+    # centreline side; height: estimate). u = -x: u x z looks forwards, into the cabin.
     door = rrect(0.31, 0.56, 0.56, 1.06, 0.08, 5)
-    rear = [(-W, 0), (-W, ROOF_Z - FLOOR_Z), (W, ROOF_Z - FLOOR_Z), (W, 0)]
-    b.slab((0, REAR_Y, FLOOR_Z), Vector((-1, 0, 0)), Vector((0, 0, 1)), [(-x, h) for x, h in rear],
+    rear = [(-W - T, -T), (-W - T, tall), (W + T, tall), (W + T, -T)]
+    b.slab((0, REAR_Y, FLOOR_Z), Vector((-1, 0, 0)), up_z, [(-x, h) for x, h in rear],
            [[(-x, h) for x, h in reversed(door)]], T, 'Paint_Interior')
     build_door(b, door)
     # Dashboard across the cab: its rear face leans back like the instrument panels on it (20 degrees, layout
-    # file), 3.5 cm behind their plane; the footwell runs under it to the bow.
+    # file), 3.5 cm behind their plane; the footwell runs under it to the bow. It runs into the corner walls.
     dash = [(BOW_Y, 1.15), (4.521, 1.15), (4.692, DASH_TOP_Z), (SCREEN_BOTTOM_Y + 0.02, DASH_TOP_Z),
             (BOW_Y, 1.40)]
-    b.prism(dash, -BOW_X - 0.02, BOW_X + 0.02, 'Paint_Interior')
-    # Bow lining below the dashboard (the footwell's front).
-    b.slab((0, BOW_Y, FLOOR_Z), Vector((-1, 0, 0)), Vector((0, 0, 1)),
-           [(-BOW_X, 0), (-BOW_X, 0.6), (BOW_X, 0.6), (BOW_X, 0)], [], T, 'Paint_Interior')
-    # Windscreen panel with the two screens (opisybroni exterior: two wide screens with rounded corners).
+    b.prism(dash, -WALL_X, WALL_X, 'Paint_Interior')
+    # Bow lining below the dashboard (the footwell's front); u = +x: u x z looks backwards, into the cabin.
+    b.slab((0, BOW_Y, FLOOR_Z), Vector((1, 0, 0)), up_z,
+           [(-WALL_X, -T), (-WALL_X, 0.62), (WALL_X, 0.62), (WALL_X, -T)], [], T, 'Paint_Interior')
+    # Windscreen panel with the two screens (opisybroni exterior: two wide screens with rounded corners);
+    # u = +x, v up the screen: u x v looks back and down into the cab.
     o = Vector((0, SCREEN_BOTTOM_Y, DASH_TOP_Z))
     up = (Vector((0, SCREEN_TOP_Y, ROOF_Z)) - o)
     slant = up.length
     up.normalize()
-    left = Vector((-1, 0, 0))   # u = -x, v = up the screen: u x v looks backwards into the cab
-    screens = [rrect(-window_x(s), 0.255, 0.90, 0.36, 0.08, 6) for s in (-1, 1)]
-    b.slab(o, left, up, [(-BOW_X - 0.02, 0), (-BOW_X - 0.02, slant), (BOW_X + 0.02, slant), (BOW_X + 0.02, 0)],
+    right = Vector((1, 0, 0))
+    screens = [rrect(window_x(s), 0.255, 0.90, 0.36, 0.08, 6) for s in (-1, 1)]
+    b.slab(o, right, up, [(-WALL_X, -0.05), (-WALL_X, slant + T), (WALL_X, slant + T), (WALL_X, -0.05)],
            screens, T, 'Paint_Interior')
     for sc in screens:
-        seal(b, o, left, up, sc, 'Rubber_Black')
+        seal(b, o, right, up, sc, 'Rubber_Black')
     # Floor mats in the cab (opisybroni forward view: ribbed mats under the cab seats' feet).
     for x in (-0.36, 0.33):
         b.box(x - 0.30, x + 0.30, 4.12, BOW_Y - 0.02, FLOOR_Z, FLOOR_Z + 0.008, 'Rubber_Mat')
@@ -500,7 +516,7 @@ def build_hatch(b, x, y):
            'Metal_Steel')
     b.box(x - 0.2, x + 0.2, y + 0.12, y + 0.14, ROOF_Z + THICK - 0.012, ROOF_Z + THICK + 0.01, 'Metal_Dark')
     for hx in (x - 0.18, x + 0.18):
-        b.box(hx - 0.04, hx + 0.04, y + 0.27, y + 0.33, ROOF_Z - 0.01, ROOF_Z + THICK + 0.01, 'Metal_Dark')
+        b.box(hx - 0.04, hx + 0.04, y + 0.27, y + 0.33, ROOF_Z + 0.03, ROOF_Z + THICK + 0.01, 'Metal_Dark')
     ring = rrect(x, -y, 0.55, 0.60, 0.07, 5)
     seal(b, Vector((0, 0, ROOF_Z + THICK + 0.012)), Vector((1, 0, 0)), Vector((0, -1, 0)), ring, 'Rubber_Black',
          width=0.018, depth=0.015)
@@ -510,12 +526,11 @@ def build_door(b, door):
     """The door to the engine compartment, closed in its opening: a plate, two hinges on the centreline side, the
     handle (estimate)."""
     inner = [(-x, h) for x, h in reversed(rrect(0.31, 0.56, 0.545, 1.045, 0.075, 5))]
-    b.slab((0, REAR_Y - THICK + 0.02, FLOOR_Z), Vector((-1, 0, 0)), Vector((0, 0, 1)), inner, [], 0.025,
-           'Paint_Interior')
+    b.slab((0, REAR_Y - 0.03, FLOOR_Z), Vector((-1, 0, 0)), Vector((0, 0, 1)), inner, [], 0.03, 'Paint_Interior')
     for z in (FLOOR_Z + 0.25, FLOOR_Z + 0.85):
-        b.cylinder((0.045, REAR_Y + 0.012, z - 0.06), (0.045, REAR_Y + 0.012, z + 0.06), 0.012, 'Metal_Dark')
-    b.tube([(0.50, REAR_Y - 0.02, FLOOR_Z + 0.62), (0.50, REAR_Y + 0.05, FLOOR_Z + 0.62),
-            (0.50, REAR_Y + 0.05, FLOOR_Z + 0.44), (0.50, REAR_Y - 0.02, FLOOR_Z + 0.44)], 0.011, 'Metal_Steel')
+        b.cylinder((0.045, REAR_Y - 0.018, z - 0.06), (0.045, REAR_Y - 0.018, z + 0.06), 0.012, 'Metal_Dark')
+    b.tube([(0.50, REAR_Y - 0.035, FLOOR_Z + 0.62), (0.50, REAR_Y + 0.03, FLOOR_Z + 0.62),
+            (0.50, REAR_Y + 0.03, FLOOR_Z + 0.44), (0.50, REAR_Y - 0.035, FLOOR_Z + 0.44)], 0.011, 'Metal_Steel')
 
 
 def seal(b, origin, u, v, outline, mat, width=0.022, depth=0.012):
@@ -537,22 +552,21 @@ def build_glass():
     b = Builder('SM_OsaGlass')
     o = Vector((0, SCREEN_BOTTOM_Y, DASH_TOP_Z))
     up = (Vector((0, SCREEN_TOP_Y, ROOF_Z)) - o).normalized()
-    left = Vector((-1, 0, 0))
-    n = left.cross(up).normalized()
+    right = Vector((1, 0, 0))
+    n = right.cross(up).normalized()          # into the cab; the panes sit halfway through the lining
     for s in (-1, 1):
-        pane = rrect(-window_x(s), 0.255, 0.92, 0.38, 0.09, 6)
-        b.slab(o - n * (THICK * 0.6), left, up, pane, [], 0.008, 'Glass')
+        pane = rrect(window_x(s), 0.255, 0.92, 0.38, 0.09, 6)
+        b.slab(o - n * (THICK * 0.5), right, up, pane, [], 0.008, 'Glass')
     for s in (-1, 1):
         a0 = Vector((s * WALL_X, CAB_Y, FLOOR_Z))
         a1 = Vector((s * BOW_X, BOW_Y, FLOOR_Z))
         along = (a1 - a0)
         length = along.length
         along.normalize()
-        uu = along if s > 0 else -along
-        origin = a0 if s > 0 else a1
+        uu, origin, at = (-along, a1, 0.58) if s > 0 else (along, a0, 0.42)
         nn = uu.cross(Vector((0, 0, 1))).normalized()
-        pane = rrect(length * (0.42 if s > 0 else 0.58), 1.86 - FLOOR_Z, 0.46, 0.38, 0.07, 5)
-        b.slab(origin - nn * (THICK * 0.6), uu, Vector((0, 0, 1)), pane, [], 0.008, 'Glass')
+        pane = rrect(length * at, 1.86 - FLOOR_Z, 0.46, 0.38, 0.07, 5)
+        b.slab(origin - nn * (THICK * 0.5), uu, Vector((0, 0, 1)), pane, [], 0.008, 'Glass')
     return finish(b)
 
 

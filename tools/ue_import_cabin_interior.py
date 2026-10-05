@@ -64,6 +64,8 @@ TEX = '/Game/SAM3D/Cabin/Textures'
 MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
+DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,
+            'SM_RackSP2M': 2.0, 'SM_RackSP3M': 2.0, 'SM_OperatorBench': 2.0}
 MATERIALS = %(materials)r
 
 
@@ -296,6 +298,14 @@ def meshes():
             ns = sm.get_editor_property('nanite_settings')
             ns.enabled = False
             sm.set_editor_property('nanite_settings', ns)
+        # Lumen sees the cabin through the meshes' distance fields: the hull's 12 cm lining on a 6 m mesh needs a
+        # finer one than the default, or the sky leaks in through the walls
+        scale = DF_SCALE.get(name, 1.0)
+        if scale != 1.0:
+            sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+            bs = sub.get_lod_build_settings(sm, 0)
+            bs.set_editor_property('distance_field_resolution_scale', scale)
+            sub.set_lod_build_settings(sm, 0, bs)
         lib.save_asset(sm.get_path_name())
     print('meshes', len(files) - len(missing), 'missing', missing)
 

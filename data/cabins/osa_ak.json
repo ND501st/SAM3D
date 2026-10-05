@@ -759,10 +759,10 @@
   ],
 
   "shell": [
-    {"id": "hull", "label": "Compartment lining: floor, side walls, roof with the two crew hatches, windscreens, dashboard, rear bulkhead and door", "kind": "mesh", "mesh": "SM_OsaHull", "centre_m": [0.0, 1.9495, 1.38], "size_m": [2.64, 5.901, 1.64],
+    {"id": "hull", "label": "Compartment lining: floor, side walls, roof with the two crew hatches, windscreens, dashboard, rear bulkhead and door", "kind": "mesh", "mesh": "SM_OsaHull", "centre_m": [0.0, 1.982, 1.3809], "size_m": [2.8998, 6.076, 1.7619],
       "source": "mon_2112_80 Fig. 3 (plan and wall views of the 9A33BM2, scaled from SŁ-2M = 1.89 m, 4.785 mm per pixel); front and windows: opisybroni exterior photos (two windscreens, a window on each front corner); hatch: usaf_shaw_2017 -036", "confidence": "medium",
       "notes": "Walls 2.64 m apart at rack height, the front narrowing to 2.27 m (plan); floor 0.62 m and roof 2.10 m above the ground (estimates; the racks reach the roof in sections A-A and B-B). Windscreen size and lean, the dashboard's height, the hatches' and the door's sizes and places are estimates."},
-    {"id": "glass", "label": "Windscreens and side windows", "kind": "mesh", "mesh": "SM_OsaGlass", "centre_m": [0.0, 4.4584, 1.8537], "size_m": [2.5148, 0.5594, 0.3927],
+    {"id": "glass", "label": "Windscreens and side windows", "kind": "mesh", "mesh": "SM_OsaGlass", "centre_m": [0.0, 4.5154, 1.86], "size_m": [2.7182, 0.6298, 0.38],
       "source": "opisybroni exterior photos", "confidence": "low",
       "notes": "Panes in the hull's window openings; sizes estimated from the photos."},
     {"id": "rack_sl1m", "label": "Rack SŁ-1M carcass", "kind": "mesh", "mesh": "SM_RackSL1M", "centre_m": [-0.9075, 3.2825, 1.36], "size_m": [0.825, 1.555, 1.48],
