@@ -73,8 +73,9 @@ struct SAM3D_API FSimCabinItem
 
 /**
  * The 3D cabin of the player's vehicle, built from the cabin layout the world subsystem loaded
- * (data/cabins/<system>.json, simcore/cabin.hpp): panels, controls and lamps from engine basic shapes, and the
- * instruments (scopes, TV, dials) as USimCabinDisplayComponent screens.
+ * (data/cabins/<system>.json, simcore/cabin.hpp): the modelled compartment (the shell's "mesh" parts, art/cabin_interior),
+ * panels with their baked faces (art/cabin_textures), controls and lamps from the parts library or engine basic shapes,
+ * the interior lamps, and the instruments (scopes, TV, dials) as USimCabinDisplayComponent screens.
  *
  * Presentation only. Every control shows the console's state each frame (switch throw, knob angle, cover open,
  * key turned, wheel angle, lamp lit), and player actions go to USimWorldSubsystem::PlayerSetControl /
@@ -113,9 +114,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	int32 TraceItem(const FVector& WorldStart, const FVector& WorldEnd) const;
 
-	/** Puts a cabin part on the cabin's own lighting channel (1), lit by the cabin lamps and never by the sun: the thin
-	 * shell doesn't shadow a low sun reliably, and a sunlit patch burns white at the cabin's fixed indoor exposure.
-	 * Call before registering the component. */
+	/** Puts a cabin part on the cabin's own lighting channel (1), lit by the cabin lamps and never directly by the sun:
+	 * a sunlit patch would burn white at the cabin's fixed indoor exposure. Daylight still comes in through the windows
+	 * as Lumen's sky light, which the shell's meshes shade. Call before registering the component. */
 	static void UseCabinLighting(UPrimitiveComponent* Part);
 
 	/** Label and current state, e.g. "ПОИСК: ВКЛ". */
@@ -144,6 +145,17 @@ private:
 	void BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block);
 	void BuildShell(const simcore::CabinShellPart& Part);
 	void BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture);
+	/**
+	 * The panel's baked face (/Game/SAM3D/Cabin/Textures/T_Panel_<panel>, tools/cabin_textures.py: plates, wear and
+	 * every label), as a quad over each block plate (or over the whole panel when it has no blocks), mapped onto the
+	 * texture's panel rectangle. False if the panel has no baked face; the cabin then draws the labels itself.
+	 */
+	bool BuildPanelFace(const simcore::CabinLayout& Layout, const simcore::CabinPanel& Panel);
+	/** A flat quad (centre, axes, size in m) showing the rectangle [UvMin, UvMax] of a texture, 0.2 mm out of the face. */
+	UProceduralMeshComponent* AddFaceQuad(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
+		double WidthM, double HeightM, const FVector2D& UvMin, const FVector2D& UvMax, UMaterialInterface* Material);
+	/** True when the panel shows its baked face, which carries the labels of everything on it. */
+	bool HasBakedFace(const std::string& PanelId) const { return FacedPanels.Contains(FString(UTF8_TO_TCHAR(PanelId.c_str()))); }
 	/** A static part of the panel decoration (no collision); kept for DestroyParts. */
 	UStaticMeshComponent* AddDecor(UStaticMesh* Mesh, const FLinearColor& Color);
 	/** A mesh of the cabin parts library (/Game/SAM3D/Cabin/Parts/<Name>), or null if it isn't imported. */
@@ -214,6 +226,14 @@ private:
 	/** Engine material that shows a texture ("SlateUI") unlit: the displays' screens. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ScreenMaterial;
+
+	/** The baked panel faces' material (/Game/SAM3D/Cabin/Materials/MI_Cabin_PanelFace; its "BaseTexture" is set per
+	 * panel); null = no faces, the cabin draws labels itself. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> PanelFaceMaterial;
+
+	/** Panels showing a baked face (their labels are in it). */
+	TSet<FString> FacedPanels;
 
 	/** The layout the parts were built from; rebuilt when the subsystem loads another. */
 	const simcore::CabinLayout* BuiltLayout = nullptr;

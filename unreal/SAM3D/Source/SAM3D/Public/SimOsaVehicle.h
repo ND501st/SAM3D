@@ -162,6 +162,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsTouringCabin() const { return bTouring; }
 
+	/**
+	 * For scripted checks and screenshots: enter the cabin with the camera at a point of the layout's body frame
+	 * (metres: x right, y forward, z up) looking along Rotation (yaw clockwise from forward, pitch up), with this field
+	 * of view. Seats, mouse look and the tour are suspended until ClearCabinViewOverride.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void SetCabinViewOverride(FVector BodyLocationM, FRotator Rotation, float FovDeg = 80.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void ClearCabinViewOverride();
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USceneComponent> Root;
@@ -223,6 +234,10 @@ private:
 	FString HoverText;
 	FString FeedbackText;
 	float FeedbackSecondsLeft = 0.0f;
+
+	bool bViewOverride = false;
+	FVector OverrideLocation = FVector::ZeroVector;
+	FRotator OverrideRotation = FRotator::ZeroRotator;
 
 	bool bTouring = false;
 	float TourSecondsPerView = 6.0f;

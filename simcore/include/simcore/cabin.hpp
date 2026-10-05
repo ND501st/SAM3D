@@ -156,17 +156,21 @@ struct CabinFixture {
     CabinLook look;
 };
 
-// A piece of the cabin's shell in the body frame: floor, walls, ceiling, bench, racks ("box"), a window ("glass"), or
-// an interior lamp ("light", its size the light's reach).
-enum class CabinShellKind { Box, Glass, Light };
+// A piece of the cabin's shell in the body frame: floor, walls, ceiling, bench, racks ("box"), a window ("glass"), an
+// interior lamp ("light", its size the light's reach), or a modelled part ("mesh": a mesh of the cabin's art,
+// art/cabin_interior, with its origin at the centre of its bounding box, placed at centre_m and turned by yaw).
+enum class CabinShellKind { Box, Glass, Light, Mesh };
 
 struct CabinShellPart {
     std::string id;
     std::string label;
     CabinShellKind kind = CabinShellKind::Box;
     Vec3 centre_m;
-    Vec3 size_m;       // x (right), y (forward), z (up)
-    std::string color; // a look colour (CabinLook), or "paint" (the cabin's grey-green), "floor"
+    Vec3 size_m;          // x (right), y (forward), z (up); a mesh's bounding box before it is turned
+    std::string color;    // a look colour (CabinLook), or "paint" (the cabin's grey-green), "floor"; lights: also blue
+    std::string mesh;     // mesh parts: the mesh's name, e.g. "SM_OsaHull"
+    double yaw_rad = 0.0; // mesh parts: turned clockwise from forward (seen from above)
+    double lumens = 0.0;  // lights: brightness; 0 = the cabin's default
 };
 
 struct CabinStation {
@@ -710,7 +714,8 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("shell", i);
             const json::Value& v = arr->items[i];
-            if (!Keys(v, path, {"id", "label", "kind", "centre_m", "size_m", "color", "source", "confidence", "notes"})) {
+            if (!Keys(v, path, {"id", "label", "kind", "centre_m", "size_m", "color", "mesh", "yaw_deg", "lumens", "source",
+                                "confidence", "notes"})) {
                 return false;
             }
             CabinShellPart part;
@@ -718,7 +723,8 @@ private:
             if (!RequireString(v, path, "id", part.id) || !RequireString(v, path, "label", part.label) ||
                 !RequireString(v, path, "kind", kind) || !Number3(v, path, "centre_m", part.centre_m) ||
                 !Number3(v, path, "size_m", part.size_m) || !OptionalString(v, path, "color", part.color) ||
-                !Provenance(v, path)) {
+                !OptionalString(v, path, "mesh", part.mesh) || !Degrees(v, path, "yaw_deg", part.yaw_rad) ||
+                !OptionalNumber(v, path, "lumens", part.lumens) || !Provenance(v, path)) {
                 return false;
             }
             if (kind == "box") {
@@ -727,13 +733,25 @@ private:
                 part.kind = CabinShellKind::Glass;
             } else if (kind == "light") {
                 part.kind = CabinShellKind::Light;
+            } else if (kind == "mesh") {
+                part.kind = CabinShellKind::Mesh;
             } else {
-                return Fail(Join(path, "kind"), "must be box, glass or light");
+                return Fail(Join(path, "kind"), "must be box, glass, light or mesh");
             }
             if (!(part.size_m.x > 0.0) || !(part.size_m.y > 0.0) || !(part.size_m.z > 0.0)) {
                 return Fail(Join(path, "size_m"), "must be positive");
             }
-            bool known = part.color.empty() || part.color == "paint" || part.color == "floor";
+            const bool mesh = part.kind == CabinShellKind::Mesh;
+            if (mesh && part.mesh.empty()) return Fail(Join(path, "mesh"), "required for a mesh part");
+            if (!mesh && !part.mesh.empty()) return Fail(Join(path, "mesh"), "for mesh parts only");
+            if (!mesh && v.Find("yaw_deg") != nullptr) return Fail(Join(path, "yaw_deg"), "for mesh parts only");
+            if (mesh && !part.color.empty()) return Fail(Join(path, "color"), "a mesh part has the mesh's own colours");
+            if (part.kind != CabinShellKind::Light && v.Find("lumens") != nullptr) {
+                return Fail(Join(path, "lumens"), "for lights only");
+            }
+            if (part.lumens < 0.0) return Fail(Join(path, "lumens"), "must not be negative");
+            bool known = part.color.empty() || part.color == "paint" || part.color == "floor" ||
+                         (part.kind == CabinShellKind::Light && part.color == "blue");
             for (const char* c : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange"}) {
                 known = known || part.color == c;
             }

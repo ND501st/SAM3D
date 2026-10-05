@@ -6,6 +6,7 @@
 #include "ProceduralMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "Kismet/KismetRenderingLibrary.h"
@@ -232,6 +233,7 @@ void USimCabinComponent::DestroyParts()
 	Items.Reset();
 	PanelMeshes.Reset();
 	Displays.Reset();
+	FacedPanels.Reset();
 	HighlightedItem = INDEX_NONE;
 	BuiltLayout = nullptr;
 }
@@ -249,6 +251,11 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	{
 		LabelMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Cabin/Materials/M_CabinLabel.M_CabinLabel"),
 			nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+	if (PanelFaceMaterial == nullptr)
+	{
+		PanelFaceMaterial = LoadObject<UMaterialInterface>(nullptr,
+			TEXT("/Game/SAM3D/Cabin/Materials/MI_Cabin_PanelFace.MI_Cabin_PanelFace"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 	}
 	if (Layout == nullptr || CubeMesh == nullptr || CylinderMesh == nullptr || SphereMesh == nullptr)
 	{
@@ -279,6 +286,13 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	{
 		BuildBlock(*Layout, Block);
 	}
+	for (const simcore::CabinPanel& Panel : Layout->panels)
+	{
+		if (BuildPanelFace(*Layout, Panel))
+		{
+			FacedPanels.Add(ToF(Panel.id));
+		}
+	}
 	for (const simcore::CabinShellPart& Part : Layout->shell)
 	{
 		BuildShell(Part);
@@ -287,15 +301,17 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	{
 		BuildFixture(*Layout, Fixture);
 	}
-	// A dim lamp above each seat, so the panels read when the sun is outside.
+	// A faint fill above each seat (no source: it stands in for the panels' scale lights and the light the screens
+	// throw), so a console reads even with the dome lamps' shadows on it.
 	for (const simcore::CabinStation& Station : Layout->stations)
 	{
 		UPointLightComponent* Light = NewObject<UPointLightComponent>(GetOwner());
 		Light->SetupAttachment(this);
 		Light->ComponentTags.Add(CabinLightTag);
 		Light->SetIntensityUnits(ELightUnits::Lumens);
-		Light->SetIntensity(150.0f);
-		Light->SetAttenuationRadius(180.0f);
+		Light->SetIntensity(40.0f);
+		Light->SetAttenuationRadius(120.0f);
+		Light->SetSourceRadius(15.0f);
 		Light->SetLightColor(FLinearColor(1.0f, 0.92f, 0.8f));
 		Light->SetCastShadows(false);
 		Light->LightingChannels.bChannel0 = false;  // the cabin's channel only (UseCabinLighting)
@@ -323,8 +339,9 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		Displays.Add(Display);
 	}
 	BuiltLayout = Layout;
-	UE_LOG(LogSAM3D, Log, TEXT("Cabin built: %d panels, %d blocks, %d fixtures, %d items, %d displays"), PanelMeshes.Num(),
-		static_cast<int32>(Layout->blocks.size()), static_cast<int32>(Layout->fixtures.size()), Items.Num(), Displays.Num());
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin built: %d panels (%d with baked faces), %d blocks, %d fixtures, %d shell parts, %d items, %d displays"),
+		PanelMeshes.Num(), FacedPanels.Num(), static_cast<int32>(Layout->blocks.size()), static_cast<int32>(Layout->fixtures.size()),
+		static_cast<int32>(Layout->shell.size()), Items.Num(), Displays.Num());
 	return true;
 }
 
@@ -450,7 +467,7 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Place(Item.Base, Item.Location + Item.Normal * (50.0 * Collar.Y), FRotationMatrix::MakeFromZ(Item.Normal).Rotator(),
 			FVector(Collar.X, Collar.X, Collar.Y));
 	}
-	if (!Control.auto_placed)
+	if (!Control.auto_placed && !HasBakedFace(Control.panel_id))
 	{
 		AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up,
 			Control.look.width_m > 0.0 ? Control.look.width_m : (Control.style == simcore::CabinStyle::Wheel ? 0.12 : 0.03),
@@ -557,7 +574,10 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Item.Moving = AddMesh(SphereMesh, Item.MovingColor * 0.08f);
 		Place(Item.Moving, Item.Location + Item.Normal * 0.8, FRotator::ZeroRotator, FVector(W));
 	}
-	AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up, FMath::Max(W, H) * (Item.bParts ? 1.4 : 1.0), ToF(Lamp.look.label));
+	if (!HasBakedFace(Lamp.panel_id))
+	{
+		AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up, FMath::Max(W, H) * (Item.bParts ? 1.4 : 1.0), ToF(Lamp.look.label));
+	}
 	// The glass glows by itself (unlit), so lit and dark lamps read the same in sun or shade: the screens'
 	// unlit material showing a white texture, tinted with the lamp's colour.
 	if (ScreenMaterial != nullptr)
@@ -698,20 +718,51 @@ void USimCabinComponent::BuildShell(const simcore::CabinShellPart& Part)
 	const FVector Centre = BodyPoint(Part.centre_m);
 	if (Part.kind == simcore::CabinShellKind::Light)
 	{
-		// An interior lamp: warm, soft, reaching as far as the part's size.
+		// An interior lamp reaching as far as the part's size: an incandescent bulb's warm white, or a blackout lamp's
+		// blue. It casts shadows (the racks, seats and crew shade each other), softened by the bulb's size.
 		UPointLightComponent* Light = NewObject<UPointLightComponent>(GetOwner());
 		Light->SetupAttachment(this);
 		Light->ComponentTags.Add(CabinLightTag);
 		Light->SetIntensityUnits(ELightUnits::Lumens);
-		Light->SetIntensity(400.0f);
+		Light->SetIntensity(Part.lumens > 0.0 ? static_cast<float>(Part.lumens) : 400.0f);
 		Light->SetAttenuationRadius(static_cast<float>(100.0 * Part.size_m.x));
-		Light->SetSourceRadius(8.0f);
-		Light->SetLightColor(FLinearColor(1.0f, 0.9f, 0.75f));
-		Light->SetCastShadows(false);
+		Light->SetSourceRadius(4.0f);
+		Light->SetSoftSourceRadius(6.0f);
+		Light->SetLightColor(Part.color == "blue" ? FLinearColor(0.25f, 0.45f, 1.0f) : FLinearColor(1.0f, 0.82f, 0.62f));
+		Light->SetCastShadows(Part.color != "blue");
 		Light->LightingChannels.bChannel0 = false;  // the cabin's channel only (UseCabinLighting)
 		Light->LightingChannels.bChannel1 = true;
 		Light->RegisterComponent();
 		Light->SetRelativeLocation(Centre);
+		return;
+	}
+	if (Part.kind == simcore::CabinShellKind::Mesh)
+	{
+		// A modelled part (art/cabin_interior, imported to /Game/SAM3D/Cabin/Interior with its own materials): its
+		// origin is the centre of its bounding box, turned about the vertical by the part's yaw (clockwise from forward,
+		// as Unreal's yaw from +X). Without the mesh, a box of its size stands in for it.
+		const FString Name = ToF(Part.mesh);
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("/Game/SAM3D/Cabin/Interior/%s.%s"), *Name, *Name),
+			nullptr, LOAD_NoWarn | LOAD_Quiet);
+		const FRotator Yaw(0.0, FMath::RadiansToDegrees(Part.yaw_rad), 0.0);
+		if (Mesh == nullptr)
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Cabin: mesh %s isn't imported (tools/ue_import_cabin_interior.py); a box stands in"), *Name);
+			UStaticMeshComponent* Box = AddDecor(CubeMesh, CabinPaint);
+			Place(Box, Centre, Yaw, FVector(Part.size_m.y, Part.size_m.x, Part.size_m.z));
+			return;
+		}
+		UStaticMeshComponent* Part3D = NewObject<UStaticMeshComponent>(GetOwner());
+		Part3D->SetStaticMesh(Mesh);
+		Part3D->SetMobility(EComponentMobility::Movable);
+		Part3D->SetupAttachment(this);
+		Part3D->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// The shell and furniture shade the cabin lamps' light and block the sky's (Lumen) outside the windows.
+		Part3D->SetCastShadow(true);
+		UseCabinLighting(Part3D);
+		Part3D->RegisterComponent();
+		Part3D->SetRelativeLocationAndRotation(Centre, Yaw);
+		DecorParts.Add(Part3D);
 		return;
 	}
 	FLinearColor Color = LookColor(Part.color, CabinPaint);
@@ -722,6 +773,77 @@ void USimCabinComponent::BuildShell(const simcore::CabinShellPart& Part)
 	UStaticMeshComponent* Box = AddDecor(CubeMesh, Color);
 	// Body frame (x right, y forward, z up) to this component (X forward, Y right, Z up); a cube is 1 m across.
 	Place(Box, Centre, FRotator::ZeroRotator, FVector(Part.size_m.y, Part.size_m.x, Part.size_m.z));
+}
+
+UProceduralMeshComponent* USimCabinComponent::AddFaceQuad(const FVector& Centre, const FVector& Normal, const FVector& Right,
+	const FVector& Up, double WidthM, double HeightM, const FVector2D& UvMin, const FVector2D& UvMax, UMaterialInterface* Material)
+{
+	UProceduralMeshComponent* Quad = NewObject<UProceduralMeshComponent>(GetOwner());
+	Quad->SetupAttachment(this);
+	Quad->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Quad->SetCastShadow(false);
+	UseCabinLighting(Quad);
+	Quad->RegisterComponent();
+	const FVector C = Centre + Normal * 0.02;
+	const FVector Hr = Right * (50.0 * WidthM);
+	const FVector Hu = Up * (50.0 * HeightM);
+	// Texture (0, 0) at the reader's top left; both windings, like the text plates (the back one is culled). Tangents
+	// along the reader's right, so the material's detail normal map lies the right way.
+	const TArray<FVector> Vertices = {C - Hr + Hu, C + Hr + Hu, C - Hr - Hu, C + Hr - Hu};
+	const TArray<FVector2D> Uv = {FVector2D(UvMin.X, UvMin.Y), FVector2D(UvMax.X, UvMin.Y), FVector2D(UvMin.X, UvMax.Y),
+		FVector2D(UvMax.X, UvMax.Y)};
+	const TArray<int32> Triangles = {0, 1, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1};
+	const TArray<FVector> Normals = {Normal, Normal, Normal, Normal};
+	const FProcMeshTangent Tangent(Right, false);
+	Quad->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Uv, {}, {Tangent, Tangent, Tangent, Tangent}, false);
+	Quad->SetMaterial(0, Material);
+	DecorParts.Add(Quad);
+	return Quad;
+}
+
+bool USimCabinComponent::BuildPanelFace(const simcore::CabinLayout& Layout, const simcore::CabinPanel& Panel)
+{
+	if (PanelFaceMaterial == nullptr)
+	{
+		return false;
+	}
+	const FString Name = TEXT("T_Panel_") + ToF(Panel.id);
+	UTexture* Face = LoadObject<UTexture>(nullptr, *FString::Printf(TEXT("/Game/SAM3D/Cabin/Textures/%s.%s"), *Name, *Name),
+		nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (Face == nullptr)
+	{
+		return false;
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(PanelFaceMaterial, this);
+	Mid->SetTextureParameterValue(TEXT("BaseTexture"), Face);
+	const FVector N = BodyDir(Panel.Normal());
+	const FVector R = BodyDir(Panel.Right());
+	const FVector U = BodyDir(Panel.Up());
+	// Panel (u, v) to the texture: u right from the left edge, v down from the top edge, both 0..1.
+	auto ToUv = [&](double Um, double Vm)
+	{
+		return FVector2D((Um + 0.5 * Panel.width_m) / Panel.width_m, (0.5 * Panel.height_m - Vm) / Panel.height_m);
+	};
+	bool bAny = false;
+	for (const simcore::CabinBlock& Block : Layout.blocks)
+	{
+		if (Block.panel_id != Panel.id)
+		{
+			continue;
+		}
+		// Over the plate's face (the plates are 4 mm smaller than their outline, BuildBlock).
+		const double W = Block.width_m - 0.004;
+		const double H = Block.height_m - 0.004;
+		AddFaceQuad(BodyPoint(Panel.PointAt(Block.u_m, Block.v_m)), N, R, U, W, H,
+			ToUv(Block.u_m - 0.5 * W, Block.v_m + 0.5 * H), ToUv(Block.u_m + 0.5 * W, Block.v_m - 0.5 * H), Mid);
+		bAny = true;
+	}
+	if (!bAny)
+	{
+		// A panel without blocks is one plate: the whole face.
+		AddFaceQuad(BodyPoint(Panel.centre_m), N, R, U, Panel.width_m, Panel.height_m, FVector2D(0.0, 0.0), FVector2D(1.0, 1.0), Mid);
+	}
+	return true;
 }
 
 void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const simcore::CabinBlock& Block)
@@ -781,9 +903,14 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		return M;
 	};
 	// The engraved label above the item (nameplates and legend lamps show their own text; big surrounds and diagrams
-	// have none).
-	if (Look.kind != CabinLookKind::Nameplate && Look.kind != CabinLookKind::Bezel && Look.kind != CabinLookKind::Diagram &&
-		Look.kind != CabinLookKind::Window && Look.kind != CabinLookKind::Legend)
+	// have none). A baked panel face has the labels and the printed diagrams in it.
+	const bool bFaced = HasBakedFace(Fixture.panel_id);
+	if (bFaced && Look.kind == CabinLookKind::Diagram)
+	{
+		return;
+	}
+	if (!bFaced && Look.kind != CabinLookKind::Nameplate && Look.kind != CabinLookKind::Bezel &&
+		Look.kind != CabinLookKind::Diagram && Look.kind != CabinLookKind::Window && Look.kind != CabinLookKind::Legend)
 	{
 		AddLabel(L, N, R, U, Look.kind == CabinLookKind::Oval ? H : FMath::Max(W, H), ToF(Look.label));
 	}
