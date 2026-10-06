@@ -749,6 +749,28 @@ def build_pedals():
     return finish(b, reuse=False)
 
 
+def build_cab_levers():
+    """The gear lever and the handbrake between the cab seats (rwd_mb3 9a33_13: a tall black lever with a ball knob in
+    the middle of the cab; 9a33_31: a second black lever low at the right of the driver). Positions, heights and
+    the handbrake's throw are estimates: the plan doesn't draw them. Built in place."""
+    b = Builder('SM_CabLevers')
+    # gear lever: rubber boot, steel shaft leaning slightly forward, ball knob
+    base = Vector((-0.02, 4.17, FLOOR_Z))
+    b.lathe(base, Vector((0, 0, 1)), [(0.0, 0.0), (0.06, 0.0), (0.06, 0.02), (0.03, 0.09), (0.0, 0.09)], 'Rubber_Black',
+            seg=20)
+    top = Vector((-0.02, 4.185, 1.0))
+    b.tube([base + Vector((0, 0, 0.08)), top], 0.009, 'Metal_Steel', seg=10)
+    b.lathe(top, Vector((0, 0.04, 1.0)).normalized(), [(0.0, -0.01), (0.022, 0.0), (0.028, 0.03), (0.018, 0.06), (0.0, 0.065)],
+            'Bakelite_Black', seg=20)
+    # handbrake: a ratchet plate on the floor, a lever leaning back to the driver, a rubber grip
+    foot = Vector((0.06, 4.0, FLOOR_Z))
+    b.box(0.05, 0.07, foot.y - 0.05, foot.y + 0.05, FLOOR_Z, FLOOR_Z + 0.07, 'Metal_Dark')
+    tip = Vector((0.06, 3.86, 0.98))
+    b.tube([foot + Vector((0, 0, 0.05)), tip], 0.011, 'Metal_Dark', seg=10)
+    b.tube([tip, tip + Vector((0, -0.05, 0.03))], 0.017, 'Rubber_Black', seg=12)
+    return finish(b, reuse=False)
+
+
 # ---------------------------------------------------------------------------------------------- equipment
 
 def knob(b, centre, normal, r, mat='Bakelite_Black'):
@@ -921,7 +943,7 @@ def build_all(layout):
         objs.append(build_rack('SM_RackSP2M', layout, ['sp2m_panel'], 1, [], 'doors'))
     if 'sp3m_panel' in have:
         objs.append(build_rack('SM_RackSP3M', layout, ['sp3m_panel'], 1, [(0.485, 0.605), (REAR_Y, -0.83)], 'doors'))
-    objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_r123m(),
+    objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_cab_levers(), build_r123m(),
              build_ta57(), build_spare_box(), build_ga3(), build_capsule(), build_awo(), build_cabinet_0096(),
              build_dome_lamp(), build_wall_lamp_blue(), build_duct()]
     return objs
