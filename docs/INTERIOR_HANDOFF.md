@@ -202,5 +202,9 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
   the dash top left of the wheel, a bent drive pipe and two spindle posts; positions estimated).
 - Commander dash: a 2 x 12 matrix of dark indicator windows (24 `window` fixtures, v 0.107 and 0.133, from rwd_mb3
   9a33_13 and opisybroni 54335; count and pitch estimated, none lit, no function in the console data). Not done from
-  that photo: the A-pillar brackets.
+  that photo: the A-pillar brackets (now done, below).
+- Pillars (in `SM_CabFittings`; opisybroni 54335 crops): a two-cable bundle clipped down the left pillar beside the left
+  screen with three clips and two mounting tabs; on the centre pillar a raised seam, a cable and the screen latch
+  (box, lever, loop) low on it. Positions and sizes are estimates, in the windscreen plane's frame. Seen in the photo
+  but not modelled: the two round ports high on the left corner wall and the pillar's rounded flares.
 
