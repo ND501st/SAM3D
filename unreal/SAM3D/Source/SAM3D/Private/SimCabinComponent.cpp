@@ -1036,17 +1036,20 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 	{
 		// A dark rim, a light face (the look's colour, white by default) and a needle at rest, round or square.
 		const FLinearColor Face = LookColor(Look.color.empty() ? std::string("white") : Look.color, DarkColor);
+		// The vehicle's instruments have black faces with white markings and a chrome rim (rwd_mb3 9a33_31, 9a33_32).
+		const bool bBlackFace = Look.color == "black";
+		const FLinearColor Rim = bBlackFace ? ChromeColor * 0.5f : DarkColor;
 		if (FMath::Abs(W - H) > 1e-6)
 		{
-			Box(L, W, H, 1.0, DarkColor);
+			Box(L, W, H, 1.0, Rim);
 			Box(L, 0.84 * W, 0.84 * H, 0.2, Face, 1.0);
 		}
 		else
 		{
-			Disc(W, W, 1.0, DarkColor);
+			Disc(W, W, 1.0, Rim);
 			Disc(0.84 * W, 0.84 * W, 0.2, Face, 1.0);
 		}
-		Box(L + U * (12.0 * H) - R * (8.0 * W), 0.0025, 0.36 * H, 0.1, DarkColor, 1.2);
+		Box(L + U * (12.0 * H) - R * (8.0 * W), 0.0025, 0.36 * H, 0.1, bBlackFace ? FLinearColor(0.75f, 0.75f, 0.7f) : DarkColor, 1.2);
 		break;
 	}
 	case CabinLookKind::Diagram:

@@ -39,7 +39,7 @@ PLATE = (196, 194, 182)      # the blocks' enamel (sRGB), from samsim_panels and
 INK = (24, 24, 22)           # engraved letters filled black
 INK_ON_BLACK = (205, 203, 192)
 DIAGRAM_INK = (70, 66, 56)
-LOOK_COLOURS = {'black': (22, 22, 21), 'white': PLATE, 'grey': (120, 121, 118)}
+LOOK_COLOURS = {'black': (22, 22, 21), 'white': PLATE, 'grey': (150, 153, 146)}   # grey: the cab dashboards (rwd_mb3 9a33_31/32)
 CAP_HEIGHT_M = 0.0034        # letter height (samsim_panels at 1 mm per pixel: 3-4 mm)
 GAP_M = 0.003                # between an item and its label
 
@@ -234,7 +234,7 @@ class Face:
     def ink_at(self, u, v):
         x, y = self.px(u, v)
         r, g, b = self.img.getpixel((int(min(max(x, 0), self.w - 1)), int(min(max(y, 0), self.h - 1))))
-        return INK_ON_BLACK if r + g + b < 200 else INK
+        return INK_ON_BLACK if r + g + b < 330 else INK
 
     def text(self, u, v, s, cap_m=CAP_HEIGHT_M, max_w_m=0.12, anchor='mm', bold=False):
         """Text centred on (u, v) (anchor 'mm'), on two lines if long, shrunk to fit max_w_m."""

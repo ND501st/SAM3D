@@ -33,8 +33,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Each interior material: (linear base colour, roughness, metallic, grime 0..1, detail normal, normal strength,
 # detail tiling per metre, emissive). Colours from the cabin photos (usaf_shaw_2017, opisybroni, rwd_mb3).
 MATERIALS = {
-    'Paint_Interior': ((0.46, 0.47, 0.43), 0.62, 0.0, 0.35, 'PaintN', 0.35, 1.5, None),   # light grey lining
-    'Paint_Rack': ((0.38, 0.39, 0.37), 0.55, 0.0, 0.30, 'PaintN', 0.30, 1.5, None),       # rack frames and posts
+    'Paint_Interior': ((0.16, 0.168, 0.15), 0.62, 0.0, 0.30, 'PaintN', 0.35, 1.5, None),  # grey-green lining
+    'Paint_Rack': ((0.095, 0.1, 0.095), 0.55, 0.0, 0.30, 'PaintN', 0.30, 1.5, None),      # dark grey rack frames, posts
     'Paint_Bench': ((0.062, 0.076, 0.055), 0.62, 0.0, 0.55, 'PaintN', 0.45, 1.5, None),   # dark green bench
     'Paint_Equipment': ((0.105, 0.125, 0.075), 0.58, 0.0, 0.45, 'PaintN', 0.40, 2.0, None),
     'Paint_Radio': ((0.08, 0.105, 0.072), 0.5, 0.0, 0.35, 'PaintN', 0.35, 2.0, None),
@@ -42,8 +42,8 @@ MATERIALS = {
     'Floor_Steel': ((0.14, 0.14, 0.13), 0.72, 0.15, 0.75, 'PaintN', 0.6, 1.0, None),
     'Rubber_Mat': ((0.018, 0.018, 0.018), 0.85, 0.0, 0.5, 'RibN', 1.0, 1.0, None),
     'Rubber_Black': ((0.012, 0.012, 0.012), 0.72, 0.0, 0.2, 'PaintN', 0.2, 3.0, None),
-    'Vinyl_Olive': ((0.09, 0.098, 0.036), 0.5, 0.0, 0.4, 'VinylN', 0.7, 4.0, None),
-    'Vinyl_Brown': ((0.12, 0.042, 0.022), 0.55, 0.0, 0.5, 'VinylN', 0.7, 4.0, None),
+    'Vinyl_Olive': ((0.052, 0.054, 0.03), 0.5, 0.0, 0.4, 'VinylN', 0.7, 4.0, None),
+    'Vinyl_Brown': ((0.06, 0.042, 0.03), 0.55, 0.0, 0.5, 'VinylN', 0.7, 4.0, None),
     'Metal_Steel': ((0.42, 0.42, 0.43), 0.33, 1.0, 0.25, 'PaintN', 0.1, 4.0, None),
     'Metal_Dark': ((0.03, 0.03, 0.03), 0.5, 0.0, 0.3, 'PaintN', 0.2, 3.0, None),
     'Bakelite_Black': ((0.012, 0.012, 0.012), 0.28, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),

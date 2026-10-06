@@ -17,7 +17,8 @@ Merge #19 first, then retarget this branch's PR to `main`.
 | Unreal C++ | Builds the `mesh` shell parts, maps panel faces onto blocks (runtime text labels skipped where a face exists), shadowing dome lamps with lumens/colour from data, exterior placeholder hidden in the cabin, `SetCabinViewOverride` for scripted shots, look clamp ±135° |
 | simcore | Shell kind `mesh` (`mesh`, `yaw_deg`), lights `lumens` and `blue`; 104 tests pass |
 | Python tools tests | 13 pass (incl. `tools/tests/test_cabin_interior.py`: layout ↔ manifest) |
-| **Lighting** | **Not finished: daylight floods the cabin (§6).** Lamp-lit view (sun below the horizon, as the level ships) is fine |
+| Lighting | **Fixed 6 Oct 2026 (§6):** the white-out was the cabin camera's fixed exposure (3 cd/m², four stops too bright for the dome lamps), not the sky light. `CabinExposureBrightness` is now 12 |
+| Look vs photos (6 Oct) | Lining grey-green and rack frames dark grey (opisybroni 54334/54335); dash plates grey with black-faced gauges (rwd_mb3 9a33_31/32; blocks `d_dash`, `c_dash`); dead search/elevation tubes amber with filter wires, dead TV glass pale grey-green (`SimCabinDisplayComponent`, screen gain 6, TV 4); seat vinyls muted olive/dark brown |
 
 Uncommitted on purpose: `unreal/SAM3D/Config/DefaultEngine.ini` (someone switched the project to SM6 and ray-tracing
 mode Full in the editor; not this session's change; ask the user before committing) and `blender/SAM3D.blend`
@@ -90,13 +91,29 @@ cabin and thickness goes outwards. Material slots are named `MI_Cabin_<name>` so
 - Don't weld vertices across solids in the Blender builder: touching solids then share four-face edges, and Unreal's
   distance-field builder dropped the whole roof from Lumen's view.
 - **Exposure units:** `r.DefaultFeature.AutoExposure.ExtendDefaultLuminanceRange = 0`, so the cabin camera's
-  `AutoExposureMin/MaxBrightness` are luminance, not EV100. The comment on `ASimOsaVehicle::CabinExposureEv100` is
-  wrong; the value 3 is a brightness. `AutoExposureBias` (EV) works as expected.
+  `AutoExposureMin/MaxBrightness` are luminance, not EV100 (now `CabinExposureBrightness` = 12). Setting
+  `auto_exposure_bias` from Python without its override flag changes nothing; set the brightness instead.
+- The sun and sky light live inside `CesiumSunSky_0` (components `DirectionalLight`, `SkyLight`), not as separate
+  actors: `get_all_actors_of_class(world, unreal.SkyLight)` finds nothing.
+- `simcore_tests` segfaults (rather than failing) if `data/cabins/osa_ak.json` doesn't load, e.g. a block with an empty
+  `label`: `RequireString` rejects empty strings.
 - The level's Cesium sun is at 13:00 **UTC−5**, which is dusk in Hungary: the pink light. Daytime is UTC+2 (CEST).
   That is a level setting; ask before changing it.
 - Git Bash heredocs mangle backslashes and quotes in Python; write scripts with the file tool.
 
-## 6. Open issue: daylight in the cabin
+## 6. Daylight in the cabin: resolved (6 Oct 2026), history kept below
+
+**Resolution:** with the sun and the sky light both set to 0 the cabin looked exactly as bright, so neither was the cause.
+The lamps were being exposed at `AutoExposureMin/MaxBrightness` = 3 (cd/m²). Raising it to 12 (now
+`ASimOsaVehicle::CabinExposureBrightness`; renamed from `CabinExposureEv100`, which was a misnomer) gives the
+photographs' cream enamel, visible labels and real shadows, and the windows simply read bright. Because the unlit
+screen material is dimmed by exposure too, `USimCabinDisplayComponent` multiplies it (tint gain 6, TV 4); the render
+target stops at 1.0 so off-state glass colours are chosen against that gain. Tune the value in the editor first:
+`cabin_camera.post_process_settings` via `tools/ue_remote.py -f` takes effect immediately in Play. Whether the sky
+light still needs lowering with a midday sun has not been re-tested at the new exposure (the level's Cesium sun is at
+dusk, UTC−5).
+
+Original notes follow.
 
 With a midday sun the interior washes out white with cool, blotchy light, even far from the windows. Findings:
 

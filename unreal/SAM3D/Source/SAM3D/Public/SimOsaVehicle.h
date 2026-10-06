@@ -92,9 +92,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sim")
 	FString TurretAzimuthWheel = TEXT("ssc.az_wheel");
 
-	/** The cabin camera's fixed exposure (EV100): the compartment lit by its dome lamps. */
+	/**
+	 * The cabin camera's fixed exposure as a scene luminance (cd/m2): the project runs without the extended
+	 * luminance range, so auto exposure's min/max are luminance, not EV100. Tuned by eye against the cabin photos with
+	 * the dome lamps lit (3 left the panels burnt out white, 12 gives the photographs' cream enamel and shadows).
+	 */
 	UPROPERTY(EditAnywhere, Category = "SAM3D|Cabin")
-	float CabinExposureEv100 = 3.0f;
+	float CabinExposureBrightness = 12.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sim")
 	FString SearchAntennaSubsystem = TEXT("search_antenna");
