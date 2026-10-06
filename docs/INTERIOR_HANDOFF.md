@@ -197,4 +197,7 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
   height; positions are estimates.
 - Looked at and left alone: floor tread (the photos show plain dark plates with seams and a corrugated mat, which the
   cab footwell already has), the open white tray right of the commander's seat in 54335 (no plan position), seat bags.
+- `SM_CabFittings` (built in place): a pale sun visor above each windscreen and a three-cable run with clips along the
+  header (opisybroni 54335; sizes, tilt and route are estimates). Not done from that photo: the wiper pivot, the
+  A-pillar brackets and the dash's lamp matrix at the right end.
 

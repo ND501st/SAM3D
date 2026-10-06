@@ -778,6 +778,33 @@ def build_cab_levers():
     return finish(b, reuse=False)
 
 
+def build_cab_fittings():
+    """Fittings along the windscreen header, from opisybroni 54335: a pale sun visor hinged above each screen and
+    the cable run along the header with its clips. Sizes, tilt and the cable's route are estimates. Built in place."""
+    b = Builder('SM_CabFittings')
+    a = math.radians(25)
+    v = Vector((0, -math.cos(a), -math.sin(a)))           # down and back from the hinge
+    n = Vector((0, -math.sin(a), math.cos(a)))
+    hinge = Vector((0, SCREEN_TOP_Y - 0.04, ROOF_Z - 0.03))
+    for s in (-1, 1):
+        c = hinge + v * 0.10
+        c.x = window_x(s)
+        b.obox(c, Vector((1, 0, 0)), v, n, (0.56, 0.20, 0.014), 'Paint_Panel')
+        for dx in (-0.22, 0.22):                          # the two hinge lugs
+            b.box(window_x(s) + dx - 0.02, window_x(s) + dx + 0.02, hinge.y - 0.01, hinge.y + 0.01, hinge.z - 0.02,
+                  hinge.z + 0.005, 'Metal_Dark')
+    # the cable run: three black cables sagging between clips
+    clips = [x / 10.0 for x in range(-10, 11, 4)]
+    for k, dz in enumerate((0.0, 0.016, 0.032)):
+        pts = []
+        for i, x in enumerate(clips):
+            pts.append((x, SCREEN_TOP_Y - 0.075, ROOF_Z - 0.035 - dz + (0.012 if i % 2 else 0.0)))
+        b.tube(pts, 0.006, 'Rubber_Black', seg=8)
+    for x in clips:
+        b.box(x - 0.008, x + 0.008, SCREEN_TOP_Y - 0.085, SCREEN_TOP_Y - 0.065, ROOF_Z - 0.07, ROOF_Z - 0.02, 'Metal_Steel')
+    return finish(b, reuse=False)
+
+
 # ---------------------------------------------------------------------------------------------- equipment
 
 def knob(b, centre, normal, r, mat='Bakelite_Black'):
@@ -950,7 +977,7 @@ def build_all(layout):
         objs.append(build_rack('SM_RackSP2M', layout, ['sp2m_panel'], 1, [], 'doors'))
     if 'sp3m_panel' in have:
         objs.append(build_rack('SM_RackSP3M', layout, ['sp3m_panel'], 1, [(0.485, 0.605), (REAR_Y, -0.83)], 'doors'))
-    objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_cab_levers(), build_r123m(),
+    objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_cab_levers(), build_cab_fittings(), build_r123m(),
              build_ta57(), build_spare_box(), build_ga3(), build_capsule(), build_awo(), build_cabinet_0096(),
              build_dome_lamp(), build_wall_lamp_blue(), build_duct()]
     return objs
