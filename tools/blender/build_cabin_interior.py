@@ -802,6 +802,17 @@ def build_cab_fittings():
         b.tube(pts, 0.006, 'Rubber_Black', seg=8)
     for x in clips:
         b.box(x - 0.008, x + 0.008, SCREEN_TOP_Y - 0.085, SCREEN_TOP_Y - 0.065, ROOF_Z - 0.07, ROOF_Z - 0.02, 'Metal_Steel')
+    # the wiper drive on the dash top (opisybroni 54335: a motor and a bent pipe left of the wheel): a motor can on a
+    # bracket, a drive pipe up to the spindle post at the left screen's lower edge, a second spindle post at the
+    # right screen (positions: estimate)
+    mx, my, mz = -0.80, 4.73, DASH_TOP_Z
+    b.box(mx - 0.05, mx + 0.05, my - 0.04, my + 0.04, mz, mz + 0.012, 'Metal_Dark')
+    b.cylinder((mx - 0.04, my, mz + 0.045), (mx + 0.04, my, mz + 0.045), 0.032, 'Paint_Equipment', seg=20)
+    b.tube([(mx + 0.04, my, mz + 0.045), (mx + 0.10, my, mz + 0.05), (mx + 0.16, my + 0.04, mz + 0.07),
+            (mx + 0.16, my + 0.07, mz + 0.12)], 0.007, 'Metal_Steel', seg=10)
+    for sx in (-0.70, 0.46):
+        b.cylinder((sx, 4.795, mz), (sx, 4.795, mz + 0.07), 0.012, 'Metal_Steel', seg=12)
+        b.cylinder((sx, 4.795, mz + 0.07), (sx, 4.795, mz + 0.085), 0.02, 'Metal_Dark', seg=12)
     return finish(b, reuse=False)
 
 
