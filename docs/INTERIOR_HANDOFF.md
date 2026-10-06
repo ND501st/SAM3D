@@ -208,3 +208,19 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
   (box, lever, loop) low on it. Positions and sizes are estimates, in the windscreen plane's frame. Seen in the photo
   but not modelled: the two round ports high on the left corner wall and the pillar's rounded flares.
 
+## 11. Modernised-console reference (6 Oct 2026, `reference/sources/photos/user_modernised_2.webp`)
+
+A Polish-modernised Osa console (labels in Polish; **CWOO-1** flat display, **BZK01** TV monitor with soft-key columns).
+The vehicle this project models is the 1980s Osa-AK, so none of the new hardware is in the cabin. What carries over,
+because those units are unchanged, was used to refine the originals:
+- `0094-5` (SOC/SSC readout): a pale window with **eight round amber-lit digit counters** and a lamp at the right end
+  -> `scale: "counters"` gauge fixture on `so_panel` (was a plain white window).
+- `0004-14M`: **four white-faced meters in black cases**, faces about 0.075 x 0.058 m at 0.1 m pitch -> four rectangular
+  gauges on `fo_panel` (were flat black slits).
+- Also seen and already modelled: the legend-lamp clusters and ПУСК buttons, the yellow elevation-search lamp, rack
+  frames lighter grey in this exposure.
+- Not drawn: the printed captions under the counters, a loose cable with a plug above the strip, the rack's `СЛ-2М2`
+  plate on its top rail (it would need a mesh decal; the label is the rack's name, SŁ-2M).
+- **For a later variant** (Osa-AKM-P1/modernised): replace the `soc_ppi` display with a flat panel and the `tov_monitor`
+  with a monitor whose bezels carry soft-key columns (the photo shows 7 and 4 keys beside CWOO-1, 5 beside BZK01);
+  keep everything else.

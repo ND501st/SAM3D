@@ -437,6 +437,10 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.12],
                                                    "color": "black", "scale": "compass" } ])"), console, scaled, &error));
     SC_EXPECT(scaled.fixtures.size() == 1 && scaled.fixtures[0].look.scale == "compass");
+    CabinLayout counters;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.05],
+                                                   "scale": "counters" } ])"), console, counters, &error));
+    SC_EXPECT(counters.fixtures.size() == 1 && counters.fixtures[0].look.scale == "counters");
     SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.05, "scale": "log" } ])"),
                             "fixtures[0].scale: unknown scale 'log'"));
     SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "scale": "linear" } ])"),
