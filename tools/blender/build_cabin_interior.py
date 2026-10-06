@@ -603,6 +603,13 @@ def build_rack(name, layout, panel_ids, side, posts, lower, extra=None):
     ys = sorted(p['centre_m'][1] - p['size_m'][0] / 2 for p in panels)[1:]
     for yy in ys:
         b.box(fr0, X(-0.002), yy - 0.006, yy + 0.006, zb, zt, 'Paint_Rack')
+    # hinge plates on the end posts: the racks swing out on hinges (opisybroni 54334 shows three grey plates on the
+    # console's side post); two per end here, at a quarter and three quarters of the panel height (positions: estimate)
+    for yy in (ylo + 0.02, yhi - 0.02):
+        for f in (0.2, 0.8):
+            zz = zb + f * (zt - zb)
+            b.box(fr0, X(0.006), yy - 0.03, yy + 0.03, zz - 0.04, zz + 0.04, 'Metal_Steel')
+            b.cylinder((X(0.006), yy, zz - 0.045), (X(0.006), yy, zz + 0.045), 0.007, 'Metal_Dark', seg=10)
     if lower == 'kick':
         # knee room under the console: the kick panel 13 cm back, a plinth, the foot grating out to the bench
         b.box(X(-0.13), wall, ylo, yhi, FLOOR_Z, zb - 0.03, 'Paint_Rack')
