@@ -802,6 +802,32 @@ def build_cab_fittings():
         b.tube(pts, 0.006, 'Rubber_Black', seg=8)
     for x in clips:
         b.box(x - 0.008, x + 0.008, SCREEN_TOP_Y - 0.085, SCREEN_TOP_Y - 0.065, ROOF_Z - 0.07, ROOF_Z - 0.02, 'Metal_Steel')
+    # Pillars (opisybroni 54335): a cable bundle clipped down the left pillar beside the left screen with two mounting
+    # tabs, and the centre pillar's raised seam, its cable and the screen latch low on it. In the windscreen plane's
+    # frame (u across, v up the slant, d out of the panel into the cab). Positions and sizes: estimates.
+    o = Vector((0, SCREEN_BOTTOM_Y, DASH_TOP_Z))
+    up = (Vector((0, SCREEN_TOP_Y, ROOF_Z)) - o).normalized()
+    right = Vector((1, 0, 0))
+    nrm = right.cross(up).normalized()
+
+    def at(u, v, d=0.0):
+        return o + right * u + up * v + nrm * d
+
+    for du in (-1.025, -1.05):
+        b.tube([at(du, 0.45, 0.018), at(du + 0.004, 0.30, 0.02), at(du - 0.003, 0.16, 0.018), at(du, 0.03, 0.018)],
+               0.006, 'Rubber_Black', seg=8)
+    for v in (0.12, 0.26, 0.40):
+        b.obox(at(-1.037, v, 0.026), right, up, nrm, (0.07, 0.03, 0.01), 'Metal_Steel')
+        b.cylinder(at(-1.037, v, 0.02), at(-1.037, v, 0.04), 0.006, 'Metal_Dark', seg=8)
+    for v in (0.18, 0.33):
+        b.obox(at(-0.975, v, 0.012), right, up, nrm, (0.04, 0.07, 0.01), 'Metal_Dark')
+        b.cylinder(at(-0.975, v + 0.02, 0.012), at(-0.975, v + 0.02, 0.026), 0.005, 'Metal_Steel', seg=8)
+    b.obox(at(0.0, 0.25, 0.006), right, up, nrm, (0.012, 0.40, 0.008), 'Metal_Dark')
+    b.tube([at(0.07, 0.45, 0.014), at(0.072, 0.30, 0.016), at(0.066, 0.18, 0.014), at(0.07, 0.12, 0.014)], 0.005,
+           'Rubber_Black', seg=8)
+    b.obox(at(0.05, 0.09, 0.02), right, up, nrm, (0.06, 0.07, 0.03), 'Metal_Dark')
+    b.obox(at(0.05, 0.095, 0.04), right, up, nrm, (0.012, 0.06, 0.012), 'Metal_Steel')
+    b.torus(at(0.05, 0.15, 0.03), nrm, 0.014, 0.003, 'Metal_Steel', seg=20, rseg=6)
     # the wiper drive on the dash top (opisybroni 54335: a motor and a bent pipe left of the wheel): a motor can on a
     # bracket, a drive pipe up to the spindle post at the left screen's lower edge, a second spindle post at the
     # right screen (positions: estimate)
