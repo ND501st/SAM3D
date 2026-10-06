@@ -18,6 +18,10 @@ namespace
 	const FLinearColor Phosphor(0.3f, 1.0f, 0.4f);
 	const FLinearColor TraceGreen(0.4f, 1.0f, 0.5f);
 	const FLinearColor Amber(1.0f, 0.65f, 0.15f);
+	// The tubes of the search and elevation indicators sit behind an amber filter, which is all that shows while
+	// they are off (the museum photographs, opisybroni 54334/54539); the TOV monitor's dead glass is a pale grey-green.
+	const FLinearColor AmberGlass(0.8f, 0.3f, 0.02f);
+	const FLinearColor MonitorGlass(0.7f, 0.74f, 0.62f);
 
 	// Screen point at Angle (clockwise from up) and Radius from Centre; screen Y grows downward.
 	FVector2D Polar(const FVector2D& Centre, double AngleRad, double Radius)
@@ -163,7 +167,11 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	{
 		ScreenMaterial = UMaterialInstanceDynamic::Create(ScreenMaterialBase, this);
 		ScreenMaterial->SetTextureParameterValue(TEXT("SlateUI"), Target);
-		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"), FLinearColor::White);
+		// The unlit glass is dimmed by the cabin camera's fixed exposure like everything else, but a lit tube is the
+		// brightest thing in the compartment, and the render target stops at 1: the gain lifts it back. The TV's
+		// picture is already a daylight image, so it needs less.
+		const float Gain = Kind == simcore::CabinDisplayKind::Tv ? 4.0f : 6.0f;
+		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"), FLinearColor(Gain, Gain, Gain, 1.0f));
 		ScreenMaterial->SetVectorParameterValue(TEXT("BackColor"), FLinearColor::Black);
 		ScreenMaterial->SetScalarParameterValue(TEXT("OpacityFromTexture"), 1.0f);
 		Screen->SetMaterial(0, ScreenMaterial);
@@ -270,7 +278,8 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			Engagement.TrackReturns());
 	}
 
-	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
+	// The range indicator's dead glass is pale like the TV's (opisybroni 54539); the tubes and dials paint their own.
+	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, Kind == simcore::CabinDisplayKind::RangeScope && !bOn ? MonitorGlass : FLinearColor::Black);
 	UCanvas* Canvas = nullptr;
 	FVector2D Size;
 	FDrawToRenderTargetContext Context;
@@ -324,6 +333,19 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	}
 	if (!bOn)
 	{
+		// Darker towards the rim, with the faint vertical wires of the filter's mesh (the museum photographs).
+		constexpr int32 Steps = 14;
+		for (int32 I = 0; I < Steps; ++I)
+		{
+			const float T = static_cast<float>(I) / (Steps - 1);
+			Disc(Canvas, C, R * (1.0 - 0.45 * T), AmberGlass * (0.55f + 0.45f * FMath::Sqrt(T)));
+		}
+		for (int32 I = -3; I <= 3; ++I)
+		{
+			const double X = C.X + I * 0.085 * R;
+			const double Half = FMath::Sqrt(FMath::Max(0.0, R * R - (X - C.X) * (X - C.X))) * 0.96;
+			Canvas->K2_DrawLine(FVector2D(X, C.Y - Half), FVector2D(X, C.Y + Half), 1.0f, AmberGlass * 0.6f);
+		}
 		return;
 	}
 	const simcore::ConsoleData& Console = Runner.Console();
@@ -501,7 +523,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// A round tube (OS81-10M) with a square raster area inside it: range across, elevation up.
 	const FVector2D C = Size * 0.5;
 	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
-	Disc(Canvas, C, R, bOn ? Phosphor * 0.06f : FLinearColor(0.01f, 0.01f, 0.01f));
+	Disc(Canvas, C, R, bOn ? Phosphor * 0.06f : AmberGlass);
 	const simcore::ConsoleData& Console = Runner.Console();
 	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||
 		ElevRaster >= static_cast<int32>(Console.track.beams_deg.size()))
@@ -623,7 +645,7 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	{
 		// A dark screen. Cleared every frame, not just when switched off: a capture can land in the target
 		// before the first update (found by tools/ue_cabin_check.py: a picture on a TV that was never on).
-		UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
+		UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, MonitorGlass);
 		bTvWasOn = false;
 		Capture->bCaptureEveryFrame = false;
 		return;

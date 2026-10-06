@@ -71,10 +71,15 @@ or `[width, height]`. Colours: black, white, grey, chrome, brass, red, green, am
 
 ## Shell
 
-`shell` is the room around the consoles: floor, ceiling, walls, seats, racks and windows as boxes in the body frame,
-plus the interior lamps. Each part is `{ "id", "label", "kind", "centre_m", "size_m": [x, y, z], "color", "source",
-"confidence" }`. `kind` is `box`, `glass` (a window) or `light` (an interior lamp reaching as far as `size_m`). `color`
-takes the look colours above, plus `paint` (the cabin's grey-green, the default) and `floor`. In Unreal the cabin is
+`shell` is the room around the consoles: the modelled compartment, furniture and equipment, plus the interior lamps.
+Each part is `{ "id", "label", "kind", "centre_m", "size_m": [x, y, z], "color", "source", "confidence" }`. `kind` is
+`mesh` (a mesh of `art/cabin_interior`, built by `tools/blender/build_cabin_interior.py`: `"mesh": "SM_..."`, its
+origin the centre of its bounding box, so `centre_m` is that centre and `size_m` the box; optional `"yaw_deg"`,
+clockwise from forward; no `color`, the mesh has its own materials), `box`, `glass` (a window) or `light` (an interior
+lamp reaching as far as `size_m`; optional `"lumens"`, and `"color": "blue"` for a blackout lamp). `color` takes the
+look colours above, plus `paint` (the cabin's grey-green, the default) and `floor`. After rebuilding the meshes,
+`python tools/cabin_mesh_sync.py` brings sizes (and the centres of meshes built in place) in line with
+`art/cabin_interior/manifest.json`; `tools/tests/test_cabin_interior.py` checks they agree. In Unreal the cabin is
 lit only by its own lamps (a lighting channel of its own), so the sun outside never reaches the panels.
 
 ## Displays

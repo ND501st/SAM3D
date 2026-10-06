@@ -136,7 +136,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 9);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 12);
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
@@ -168,6 +168,10 @@ SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, 
         SC_EXPECT_NEAR(panel->centre_m.y, seat->eye_m.y, 1e-9);                 // panel straight ahead
         SC_EXPECT(seat->eye_m.y < previous_y);                                   // front to rear
         previous_y = seat->eye_m.y;
+        // Close to the console: Fig. 3 leaves 0.19 m between the bench and SŁ-2M (the operators' knees touch the
+        // console in usaf_shaw_2017 -019), so the eyes are about 0.4 m from its face.
+        const double reach = seat->eye_m.x - panel->centre_m.x;
+        SC_EXPECT(reach > 0.3 && reach < 0.5);
     }
     // The three columns of the main console don't overlap along the wall.
     for (int i = 0; i + 1 < 3; ++i) {
@@ -209,6 +213,17 @@ SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, 
     const CabinStation* driver = layout.FindStation("driver");
     SC_EXPECT(std::fabs(driver->eye_m.y - sl1m->centre_m.y) < 0.5 * sl1m->width_m + 0.1);
     SC_EXPECT(pu303->centre_m.x < driver->eye_m.x && pu303->centre_m.y > driver->eye_m.y);
+    // Across the aisle, the right wall's racks SP-1M, SP-2M and SP-3M-2 face SŁ-1M, SŁ-2M and SŁ-3M (Fig. 3).
+    const char* left[] = {"gyro_panel", "so_panel", "sl3m_panel"};
+    const char* right[] = {"sp1m_panel", "sp2m_panel", "sp3m_panel"};
+    for (int i = 0; i < 3; ++i) {
+        const CabinPanel* l = layout.FindPanel(left[i]);
+        const CabinPanel* r = layout.FindPanel(right[i]);
+        SC_EXPECT(r != nullptr);
+        if (r == nullptr) return;
+        SC_EXPECT(r->centre_m.x > 0.0 && Dot(r->Normal(), Vec3{-1.0, 0.0, 0.0}) > 0.99);   // right wall, facing the aisle
+        SC_EXPECT(std::fabs(r->centre_m.y - l->centre_m.y) < 0.05);
+    }
 }
 
 SC_TEST("cabin: lamps light from subsystem states and inputs") {
@@ -417,6 +432,15 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
           "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": 0.06 } ])"), console, extra, &error));
     SC_EXPECT(extra.blocks.size() == 1 && extra.blocks[0].color == "black" && extra.fixtures.size() == 1 &&
               extra.fixtures[0].look.kind == CabinLookKind::Gauge);
+    // A gauge's printed scale: compass or linear, for gauges only.
+    CabinLayout scaled;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.12],
+                                                   "color": "black", "scale": "compass" } ])"), console, scaled, &error));
+    SC_EXPECT(scaled.fixtures.size() == 1 && scaled.fixtures[0].look.scale == "compass");
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.05, "scale": "log" } ])"),
+                            "fixtures[0].scale: unknown scale 'log'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "scale": "linear" } ])"),
+                            "fixtures[0].scale: for gauges only"));
     SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [0.3, 0.2],
                                                      "color": "purple" } ])"),
                             "blocks[0].color: unknown colour 'purple'"));
@@ -433,14 +457,50 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
     }
     SC_EXPECT(per_panel[0] > 50 && per_panel[1] > 50 && per_panel[2] > 50);
     SC_EXPECT(osa.blocks.size() >= 15);
-    // The shell: floor, walls, bench and racks, two dome lamps.
+    // The shell: the modelled compartment (hull, six racks, bench, seats, cab, equipment) and its lamps.
     int lights = 0;
-    for (const CabinShellPart& part : osa.shell) lights += part.kind == CabinShellKind::Light;
-    SC_EXPECT(osa.shell.size() >= 15 && lights == 2);
+    int meshes = 0;
+    bool hull = false;
+    for (const CabinShellPart& part : osa.shell) {
+        lights += part.kind == CabinShellKind::Light;
+        meshes += part.kind == CabinShellKind::Mesh;
+        hull = hull || part.mesh == "SM_OsaHull";
+    }
+    SC_EXPECT(hull && meshes >= 20 && lights >= 3);
     SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "wall", "centre_m": [0, 0, 1],
                                                    "size_m": [1, 1, 1], "source": "s", "confidence": "low" } ])"),
-                            "shell[0].kind: must be box, glass or light"));
+                            "shell[0].kind: must be box, glass, light or mesh"));
     SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "box", "centre_m": [0, 0, 1],
                                                    "size_m": [1, 0, 1], "source": "s", "confidence": "low" } ])"),
                             "shell[0].size_m: must be positive"));
+}
+
+SC_TEST("cabin: shell mesh parts name their mesh, turn by yaw and take no colour; lights can be dim or blue") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    std::string error;
+    SC_EXPECT(LoadCabin(Small(R"(, "shell": [
+        { "id": "s", "label": "Seat", "kind": "mesh", "mesh": "SM_Seat", "centre_m": [0, 1, 1], "size_m": [0.5, 0.4, 0.9],
+          "yaw_deg": -90, "source": "s", "confidence": "low" },
+        { "id": "l", "label": "Lamp", "kind": "light", "centre_m": [0, 1, 2], "size_m": [1, 1, 1], "color": "blue",
+          "lumens": 15, "source": "s", "confidence": "low" } ])"), console, layout, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(layout.shell.size() == 2 && layout.shell[0].kind == CabinShellKind::Mesh && layout.shell[0].mesh == "SM_Seat");
+    SC_EXPECT_NEAR(layout.shell.size() == 2 ? layout.shell[0].yaw_rad : 0.0, DegToRad(-90.0), 1e-12);
+    SC_EXPECT_NEAR(layout.shell.size() == 2 ? layout.shell[1].lumens : 0.0, 15.0, 1e-12);
+    auto shell = [](const char* part) { return Small(std::string(R"(, "shell": [ )") + part + " ]"); };
+    SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "mesh", "centre_m": [0, 0, 1], "size_m": [1, 1, 1],
+                                       "source": "s", "confidence": "low" })"), "shell[0].mesh: required for a mesh part"));
+    SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "box", "mesh": "SM_X", "centre_m": [0, 0, 1],
+                                       "size_m": [1, 1, 1], "source": "s", "confidence": "low" })"), "shell[0].mesh: for mesh parts only"));
+    SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "box", "yaw_deg": 10, "centre_m": [0, 0, 1],
+                                       "size_m": [1, 1, 1], "source": "s", "confidence": "low" })"), "shell[0].yaw_deg: for mesh parts only"));
+    SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "mesh", "mesh": "SM_X", "color": "red", "centre_m": [0, 0, 1],
+                                       "size_m": [1, 1, 1], "source": "s", "confidence": "low" })"),
+                            "shell[0].color: a mesh part has the mesh's own colours"));
+    SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "box", "lumens": 10, "centre_m": [0, 0, 1],
+                                       "size_m": [1, 1, 1], "source": "s", "confidence": "low" })"), "shell[0].lumens: for lights only"));
+    SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "box", "color": "blue", "centre_m": [0, 0, 1],
+                                       "size_m": [1, 1, 1], "source": "s", "confidence": "low" })"), "shell[0].color: unknown colour 'blue'"));
 }

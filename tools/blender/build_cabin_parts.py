@@ -38,7 +38,7 @@ def new_object(name, bm):
     return obj
 
 
-def lathe(bm, profile, seg=SEG, ribs=0, rib_depth=0.0, rib_rows=()):
+def lathe(bm, profile, seg=SEG, ribs=0, rib_depth=0.0, rib_rows=(), cap=True):
     """Revolve a profile [(r, z), ...] (from the axis out and back) around Z. Rows listed in rib_rows get `ribs`
     knurling ridges (radius modulated by rib_depth). Returns the new vertices row by row."""
     rows = []
@@ -56,7 +56,9 @@ def lathe(bm, profile, seg=SEG, ribs=0, rib_depth=0.0, rib_rows=()):
             a, b = rows[i][k], rows[i][(k + 1) % seg]
             c, d = rows[i + 1][(k + 1) % seg], rows[i + 1][k]
             bm.faces.new((a, b, c, d))
-    # Close the ends: a fan to a centre vertex where the profile touches the axis.
+    # Close the ends: a fan to a centre vertex unless the profile touches the axis already or cap is off (a ring).
+    if not cap:
+        return rows
     for row, z, flip in ((rows[0], profile[0][1], True), (rows[-1], profile[-1][1], False)):
         if profile[0 if flip else -1][0] < 1e-6:
             continue
@@ -107,8 +109,17 @@ def knob(bm):
 
 
 def knob_pointer(bm):
-    knob(bm)
-    box(bm, 0.0, 0.2, 0.635, 0.07, 0.36, 0.04)    # raised pointer bar up the face
+    # The bar ("chicken-head") pointer knob of the Soviet consoles (usaf_shaw_2017 -024, opisybroni 54539): a low
+    # skirt, a short collar and a flat wedge that tapers to a point, reaching a little past the skirt.
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.1), (0.44, 0.15), (0.34, 0.17), (0.3, 0.3), (0.0, 0.3)])
+    outline = [(-0.27, -0.3), (0.27, -0.3), (0.2, 0.2), (0.07, 0.66), (-0.07, 0.66), (-0.2, 0.2)]
+    low = [bm.verts.new((x, y, 0.3)) for x, y in outline]
+    top = [bm.verts.new((x, y, 0.5)) for x, y in outline]
+    bm.faces.new(list(reversed(low)))
+    bm.faces.new(top)
+    n = len(outline)
+    for k in range(n):
+        bm.faces.new((low[k], low[(k + 1) % n], top[(k + 1) % n], top[k]))
 
 
 def trim(bm):
@@ -121,7 +132,9 @@ def toggle_base(bm):
     # Hex nut on a threaded bushing.
     m = Matrix.Translation((0, 0, 0.08))
     bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.5, radius2=0.5, depth=0.16, matrix=m)
-    cylinder(bm, 0.27, 0.16, 0.42)
+    # the knurled ring nut that locks it in the panel, and the threaded bushing above
+    lathe(bm, [(0.0, 0.16), (0.36, 0.16), (0.36, 0.3), (0.0, 0.3)], ribs=24, rib_depth=0.05, rib_rows=(1, 2))
+    cylinder(bm, 0.2, 0.3, 0.46)
 
 
 def toggle_lever(bm):
@@ -137,7 +150,18 @@ def lamp_bezel(bm):
 
 def lamp_lens(bm):
     # The glass dome (tinted and lit by the cabin).
-    lathe(bm, [(0.0, 0.0), (0.36, 0.0), (0.36, 0.14), (0.3, 0.26), (0.17, 0.32), (0.0, 0.34)])
+    # Faceted: the signal lamps' glass is cut in flats (usaf_shaw_2017 -024), so few segments, not a smooth dome.
+    lathe(bm, [(0.0, 0.0), (0.36, 0.0), (0.36, 0.14), (0.3, 0.26), (0.17, 0.32), (0.0, 0.34)], seg=10)
+
+
+def gauge_bezel(bm):
+    # The instrument's chrome rim: a ring with a rolled lip, open in the middle so the printed dial shows.
+    lathe(bm, [(0.425, 0.0), (0.5, 0.0), (0.5, 0.09), (0.47, 0.15), (0.44, 0.13), (0.425, 0.06)], cap=False)
+
+
+def meter_housing(bm):
+    # The black bakelite flange of a round panel meter, round the chrome bezel (a ring: the dial stays open).
+    lathe(bm, [(0.49, 0.0), (0.58, 0.0), (0.58, 0.05), (0.52, 0.09), (0.49, 0.09)], cap=False)
 
 
 def button_ring(bm):
@@ -204,6 +228,8 @@ PARTS = [
     ('SM_LampLens', lamp_lens, 0.0), ('SM_ButtonRing', button_ring, 0.01), ('SM_ButtonCap', button_cap, 0.0),
     ('SM_Jack', jack, 0.01), ('SM_Socket', socket, 0.01), ('SM_Latch', latch, 0.01), ('SM_WheelDish', wheel_dish, 0.0),
     ('SM_WheelHandle', wheel_handle, 0.0), ('SM_Screw', screw, 0.0),
+    ('SM_GaugeBezel', gauge_bezel, 0.006),
+    ('SM_MeterHousing', meter_housing, 0.006),
 ]
 
 

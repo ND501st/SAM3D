@@ -92,9 +92,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sim")
 	FString TurretAzimuthWheel = TEXT("ssc.az_wheel");
 
-	/** The cabin camera's fixed exposure (EV100): the compartment lit by its dome lamps. */
+	/**
+	 * The cabin camera's fixed exposure as a scene luminance (cd/m2): the project runs without the extended
+	 * luminance range, so auto exposure's min/max are luminance, not EV100. Tuned by eye against the cabin photos with
+	 * the dome lamps lit (3 left the panels burnt out white, 12 gives the photographs' cream enamel and shadows).
+	 */
 	UPROPERTY(EditAnywhere, Category = "SAM3D|Cabin")
-	float CabinExposureEv100 = 3.0f;
+	float CabinExposureBrightness = 12.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sim")
 	FString SearchAntennaSubsystem = TEXT("search_antenna");
@@ -162,6 +166,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsTouringCabin() const { return bTouring; }
 
+	/**
+	 * For scripted checks and screenshots: enter the cabin with the camera at a point of the layout's body frame
+	 * (metres: x right, y forward, z up) looking along Rotation (yaw clockwise from forward, pitch up), with this field
+	 * of view. Seats, mouse look and the tour are suspended until ClearCabinViewOverride.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void SetCabinViewOverride(FVector BodyLocationM, FRotator Rotation, float FovDeg = 80.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void ClearCabinViewOverride();
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USceneComponent> Root;
@@ -223,6 +238,10 @@ private:
 	FString HoverText;
 	FString FeedbackText;
 	float FeedbackSecondsLeft = 0.0f;
+
+	bool bViewOverride = false;
+	FVector OverrideLocation = FVector::ZeroVector;
+	FRotator OverrideRotation = FRotator::ZeroRotator;
 
 	bool bTouring = false;
 	float TourSecondsPerView = 6.0f;

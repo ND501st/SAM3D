@@ -83,12 +83,12 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);
 	CabinCamera->bAutoActivate = false;
-	// A fixed exposure for the closed cabin (EV100, the project's default units): auto exposure would adapt to the
-	// dark compartment and burn out everything its lamps light.
+	// A fixed exposure for the closed cabin (a luminance, see CabinExposureBrightness): auto exposure would adapt to
+	// the dark compartment and burn out everything its lamps light.
 	CabinCamera->PostProcessSettings.bOverride_AutoExposureMinBrightness = true;
 	CabinCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
-	CabinCamera->PostProcessSettings.AutoExposureMinBrightness = CabinExposureEv100;
-	CabinCamera->PostProcessSettings.AutoExposureMaxBrightness = CabinExposureEv100;
+	CabinCamera->PostProcessSettings.AutoExposureMinBrightness = CabinExposureBrightness;
+	CabinCamera->PostProcessSettings.AutoExposureMaxBrightness = CabinExposureBrightness;
 	CabinHUDClass = ASimCabinHUD::StaticClass();
 
 	// Placeholder crew orders until the order menu exists (phase 8). Crew names and procedures are the
@@ -256,6 +256,15 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 	bInCabin = bEnter;
 	Camera->SetActive(!bEnter);
 	CabinCamera->SetActive(bEnter);
+	// The placeholder hull's boxes enclose the cabin: from inside they would close the windows to Lumen's sky light
+	// (a closed mesh is solid to its distance fields), so they are hidden while the camera is in the cabin.
+	for (UStaticMeshComponent* Outside : {Hull.Get(), Turret.Get(), SearchAntenna.Get()})
+	{
+		if (Outside != nullptr)
+		{
+			Outside->SetVisibility(!bEnter);
+		}
+	}
 	DraggedWheel = INDEX_NONE;
 	HoveredItem = INDEX_NONE;
 	HoverText.Reset();
@@ -268,8 +277,35 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 	return true;
 }
 
+void ASimOsaVehicle::SetCabinViewOverride(FVector BodyLocationM, FRotator Rotation, float FovDeg)
+{
+	if (!bInCabin && !SetInCabin(true))
+	{
+		return;
+	}
+	bTouring = false;
+	bViewOverride = true;
+	// The layout's body frame (x right, y forward, z up, m) to the vehicle's (X forward, Y right, Z up, cm).
+	OverrideLocation = FVector(BodyLocationM.Y, BodyLocationM.X, BodyLocationM.Z) * 100.0;
+	OverrideRotation = Rotation;
+	CabinCamera->SetFieldOfView(FovDeg);
+	ApplyStationView();
+}
+
+void ASimOsaVehicle::ClearCabinViewOverride()
+{
+	bViewOverride = false;
+	CabinCamera->SetFieldOfView(80.0f);
+	ApplyStationView();
+}
+
 void ASimOsaVehicle::ApplyStationView()
 {
+	if (bViewOverride)
+	{
+		CabinCamera->SetRelativeLocationAndRotation(OverrideLocation, OverrideRotation);
+		return;
+	}
 	FVector Eye;
 	FRotator View;
 	if (Cabin->GetStationView(Station, Eye, View, StationLabel))
@@ -324,6 +360,12 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	if (!bInCabin)
 	{
+		bViewOverride = false;
+		return;
+	}
+	if (bViewOverride)
+	{
+		ApplyStationView();
 		return;
 	}
 	if (Pc->WasInputKeyJustPressed(NextStationKey))
@@ -352,7 +394,8 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	else
 	{
-		LookYawDeg = FMath::Clamp(LookYawDeg + Dx * CabinLookDegPerMouseUnit, -110.0, 110.0);
+		// Head and shoulders: far enough round to reach the distribution cabinet behind the rear seat.
+		LookYawDeg = FMath::Clamp(LookYawDeg + Dx * CabinLookDegPerMouseUnit, -135.0, 135.0);
 		LookPitchDeg = FMath::Clamp(LookPitchDeg + Dy * CabinLookDegPerMouseUnit, -70.0, 60.0);
 	}
 	ApplyStationView();
