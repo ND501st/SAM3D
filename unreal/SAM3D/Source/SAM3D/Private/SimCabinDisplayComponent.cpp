@@ -278,7 +278,8 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			Engagement.TrackReturns());
 	}
 
-	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Black);
+	// The range indicator's dead glass is pale like the TV's (opisybroni 54539); the tubes and dials paint their own.
+	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, Kind == simcore::CabinDisplayKind::RangeScope && !bOn ? MonitorGlass : FLinearColor::Black);
 	UCanvas* Canvas = nullptr;
 	FVector2D Size;
 	FDrawToRenderTargetContext Context;

@@ -145,7 +145,7 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
    the commander panel as fixtures; the 0004-14M meters and 0062-6M meters are windows only.
 5. Cables and looms along racks and roof (photos show braided cables, 9a33_45); gas-mask bags, headsets; only with
    a photo to place them.
-6. `docs/SOURCES.md`: add `usaf_shaw_2017`; record the Fig. 3 measurements in `docs/research/OSA_MANUALS_2026-10.md`.
+6. (`usaf_shaw_2017` is now in `docs/SOURCES.md`.) Still to do: record the Fig. 3 measurements in `docs/research/OSA_MANUALS_2026-10.md`.
 7. Unresolved data conflict: Fig. 3 draws the launch-prohibit lock ("Zamek zakazu startu") on the post between SŁ-1M
    and SŁ-2M; the data keeps the ЗАПРЕТ ПУСКА key on block 0004-11M (samsim_panels). The signal board on that post is
    not modelled.

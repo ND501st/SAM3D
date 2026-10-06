@@ -107,8 +107,17 @@ def knob(bm):
 
 
 def knob_pointer(bm):
-    knob(bm)
-    box(bm, 0.0, 0.2, 0.635, 0.07, 0.36, 0.04)    # raised pointer bar up the face
+    # The bar ("chicken-head") pointer knob of the Soviet consoles (usaf_shaw_2017 -024, opisybroni 54539): a low
+    # skirt, a short collar and a flat wedge that tapers to a point, reaching a little past the skirt.
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.1), (0.44, 0.15), (0.34, 0.17), (0.3, 0.3), (0.0, 0.3)])
+    outline = [(-0.27, -0.3), (0.27, -0.3), (0.2, 0.2), (0.07, 0.66), (-0.07, 0.66), (-0.2, 0.2)]
+    low = [bm.verts.new((x, y, 0.3)) for x, y in outline]
+    top = [bm.verts.new((x, y, 0.5)) for x, y in outline]
+    bm.faces.new(list(reversed(low)))
+    bm.faces.new(top)
+    n = len(outline)
+    for k in range(n):
+        bm.faces.new((low[k], low[(k + 1) % n], top[(k + 1) % n], top[k]))
 
 
 def trim(bm):
