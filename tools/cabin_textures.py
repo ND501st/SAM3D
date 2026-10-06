@@ -299,7 +299,7 @@ class Face:
                     half = (x1 - x0) / cols * rng.uniform(0.15, 0.35)
                     self.draw.line([(cx - half, cy), (cx + half, cy)], fill=DIAGRAM_INK, width=lw)
 
-    def dial(self, u, v, w, h, black):
+    def dial(self, u, v, w, h, black, scale=None):
         """An instrument face under the cabin's bezel: a black (or white) face with a printed scale, its needle at rest
         and a hub. Round when w == h (a 270 degree scale, 0 to 10, as on the vehicle's dash gauges in rwd_mb3
         9a33_31/32), else a rectangular meter with a 100 degree arc. The scale itself is generic: no source gives
@@ -308,6 +308,8 @@ class Face:
         ink = (226, 224, 214) if black else (28, 28, 26)
         lw = max(1, int(round(0.0006 * self.ppm)))
         d = self.draw
+        if scale == 'compass':
+            return self.compass(u, v, w, h, face, ink, lw)
         round_dial = abs(w - h) < 1e-6
         if round_dial:
             cx, cy = self.px(u, v)
@@ -339,6 +341,35 @@ class Face:
         hx, hy = self.px(*pivot)
         hr = (0.05 * w if round_dial else 0.07 * h) * self.ppm
         d.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(70, 70, 68) if black else (60, 60, 58))
+
+    def compass(self, u, v, w, h, face, ink, lw):
+        """A gyro-compass repeater's card: a rotating ring graduated every 5 degrees with the tens of degrees
+        (0 to 35) every 30, a lubber mark at the top and a hub, on a face of w x h (the card fits the shorter side).
+        Generic: the unit's real card is not legible in rwd_mb3 9a33_52."""
+        d = self.draw
+        (x0, y0), (x1, y1) = self.px(u - 0.5 * w, v + 0.5 * h), self.px(u + 0.5 * w, v - 0.5 * h)
+        d.rectangle([x0, y0, x1, y1], fill=face)
+        r = 0.44 * min(w, h)
+        cx, cy = self.px(u, v)
+        d.ellipse([cx - r * self.ppm, cy - r * self.ppm, cx + r * self.ppm, cy + r * self.ppm], outline=ink, width=lw)
+
+        def at(deg, rad):
+            a = math.radians(deg)
+            return self.px(u + math.sin(a) * rad, v + math.cos(a) * rad)
+
+        for k in range(72):
+            deg = 5.0 * k
+            major = k % 6 == 0
+            d.line([at(deg, r * (0.84 if major else 0.92)), at(deg, r)], fill=ink, width=lw * (2 if major else 1))
+        f = self.font(0.1 * min(w, h))
+        for k in range(12):
+            x, y = at(30.0 * k, r * 0.68)
+            d.text((x, y), str(3 * k), fill=ink, font=f, anchor='mm')
+        top = self.px(u, v + r + 0.004)
+        tri = 0.012 * min(w, h) / 0.12 * self.ppm
+        d.polygon([(top[0] - tri, top[1] - tri * 1.6), (top[0] + tri, top[1] - tri * 1.6), (top[0], top[1])], fill=(190, 40, 30))
+        hr = 0.04 * min(w, h) * self.ppm
+        d.ellipse([cx - hr, cy - hr, cx + hr, cy + hr], fill=(70, 70, 68))
 
     def red_ring(self, u, v, radius_m):
         """Nothing: the red working-position dots are modelled by the cabin."""
@@ -439,7 +470,7 @@ def bake_panel(layout, console, panel, ppm, seed):
         if kind in ('nameplate', 'bezel', 'window', 'legend'):
             continue
         if kind == 'gauge':
-            face.dial(u, v, w, h, fx.get('color') == 'black')
+            face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'))
         if kind in ('knob', 'pointer_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):
             face.handled(u, v, max(w, h), 0.025)
         label = fx.get('label', '')

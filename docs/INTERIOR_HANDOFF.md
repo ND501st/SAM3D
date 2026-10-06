@@ -176,7 +176,14 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
   helper fans a disc across any ring's hole, which hid the dials).
 - **Not done:** cables and looms, gas-mask bags and headsets (rwd_mb3 9a33_45/50 show braided hose and
   54335 shows bags on the seats, but no photo fixes where they lie in this layout, and bags on the seats would clip
-  the crew who sit there). The gyro rack's compass-card dial and the 0009-5M lamp/toggle pairs are still simplified.
+  the crew who sit there).
+- **Compass card (third pass):** gauge fixtures take an optional `scale` ("linear" default, "compass"); the gyro rack's
+  black window on 0005-8M is now a compass-card gauge (a generic 0-35 card: the real one isn't legible). The three
+  orientation toggles moved right of it (positions are estimates either way), a flush cover plate with a latch
+  replaced the grey slab on OK81-4M-II, and 0009-5M has a second row of small red lamps. Still plain on purpose:
+  CGW-10P, AWO-5M1, GA-3, the pedals and the radios' front panels (no source for them).
+- **Cold start:** after an editor restart the panel textures stream in slowly; for shots run
+  `r.Streaming.FullyLoadUsedTextures 1` and wait ~25 s or the dials look blurred.
 - **Tool gotcha:** `tools/ue_cabin_shots.py` leaves Play running and `ue_import_*` then refuses with "stop Play first";
   stop Play (`editor_request_end_play`) before each import. An editor start can also crash once in Niagara's type
   registry (engine assertion, unrelated); a second launch worked.

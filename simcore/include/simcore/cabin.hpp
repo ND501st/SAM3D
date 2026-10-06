@@ -134,6 +134,7 @@ struct CabinLook {
     std::string color;      // black, white, grey, chrome, brass, red, green, amber, yellow, orange
     std::string ring;       // lamp_button: the ring's colour
     std::string label;      // nameplate text, or the item's engraved label
+    std::string scale;      // gauge: the printed dial, "linear" (default, 0-10) or "compass" (a 0-35 card)
 };
 
 // A block (one instrument unit of a console column): its plate on the panel and its type plate.
@@ -636,7 +637,7 @@ private:
     // A look: "kind", "size_m" (a diameter, or [width, height]), "color", "ring", "label". Fixtures carry the same keys
     // inline and need a kind; a control's or lamp's "look" may leave it out (kind default).
     bool LoadLook(const json::Value& v, const std::string& path, bool inline_keys, CabinLook& out) {
-        if (!inline_keys && !Keys(v, path, {"kind", "size_m", "color", "ring", "label"})) return false;
+        if (!inline_keys && !Keys(v, path, {"kind", "size_m", "color", "ring", "label", "scale"})) return false;
         std::string kind;
         if (!OptionalString(v, path, "kind", kind)) return false;
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
@@ -663,8 +664,14 @@ private:
             return Fail(Join(path, "size_m"), "required");
         }
         if (!OptionalString(v, path, "color", out.color) || !OptionalString(v, path, "ring", out.ring) ||
-            !OptionalString(v, path, "label", out.label)) {
+            !OptionalString(v, path, "label", out.label) || !OptionalString(v, path, "scale", out.scale)) {
             return false;
+        }
+        if (!out.scale.empty()) {
+            if (out.kind != CabinLookKind::Gauge) return Fail(Join(path, "scale"), "for gauges only");
+            if (out.scale != "linear" && out.scale != "compass") {
+                return Fail(Join(path, "scale"), "unknown scale '" + out.scale + "' (linear or compass)");
+            }
         }
         for (const std::string* c : {&out.color, &out.ring}) {
             if (!c->empty() && !KnownColour(*c)) {
@@ -770,7 +777,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("fixtures", i);
             const json::Value& f = arr->items[i];
-            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "notes"})) return false;
+            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "scale", "notes"})) return false;
             CabinFixture fixture;
             if (!Placement(f, path, out, fixture.panel_id, fixture.u_m, fixture.v_m) ||
                 !LoadLook(f, path, true, fixture.look)) {
