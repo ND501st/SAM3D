@@ -11,6 +11,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 #include "SimCabinComponent.h"
+#include "simcore/readouts.hpp"
 #include "SimWorldSubsystem.h"
 
 namespace
@@ -107,8 +108,9 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		Kind == simcore::CabinDisplayKind::Dial;
 	UStaticMesh* Cylinder = bRound ? LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")) : nullptr;
 
-	// Bezel: a dark box (or ring) just behind the screen, a little larger.
-	if (Cube != nullptr)
+	// Bezel: a dark box (or ring) just behind the screen, a little larger. (Not for the readout strip: its frame is
+	// baked into the panel face.)
+	if (Cube != nullptr && Kind != simcore::CabinDisplayKind::Counters)
 	{
 		UStaticMeshComponent* Bezel = NewObject<UStaticMeshComponent>(GetOwner());
 		Bezel->SetStaticMesh(Cylinder != nullptr ? Cylinder : Cube);
@@ -185,7 +187,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		// brightest thing in the compartment, and the render target stops at 1: the gain lifts it back. The TV's
 		// picture is already a daylight image, so it needs less.
 		const bool bTv = Kind == simcore::CabinDisplayKind::Tv;
-		const float Gain = bTv ? 4.0f : 6.0f;
+		const float Gain = bTv ? 4.0f : (Kind == simcore::CabinDisplayKind::Counters ? 10.0f : 6.0f);
 		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
 			bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f));
 		// The tube's character (M_CabinCRT): curvature, halo (amount, radius), raster lines (strength, count), noise
@@ -345,6 +347,9 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			break;
 		case simcore::CabinDisplayKind::Meter:
 			DrawMeter(Canvas, Size, Display, Console, bOn);
+			break;
+		case simcore::CabinDisplayKind::Counters:
+			DrawCounters(Canvas, Size, Display, *Runner, bOn);
 			break;
 		case simcore::CabinDisplayKind::Tv:
 			break;
@@ -682,6 +687,34 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 	const double Fraction = FMath::Clamp(Reading / Display.full_scale, 0.0, 1.0);
 	const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * Fraction);
 	Canvas->K2_DrawLine(Pivot, Polar(Pivot, A, 0.95 * R), 2.5f, FLinearColor(0.7f, 0.05f, 0.02f));
+}
+
+// ---------------------------------------------------------------------------------------------- readout strip
+
+void USimCabinDisplayComponent::DrawCounters(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
+	simcore::ScenarioRunner& Runner, bool bOn)
+{
+	// Eight round amber-lit digit counters in a pale window (unit 0094-5, as baked into the panel face by
+	// tools/cabin_textures.py), each reading its place's value (simcore/readouts.hpp). Unpowered, the lamps are dark and
+	// the digits unreadable.
+	const simcore::ConsoleData& Console = Runner.Console();
+	Canvas->K2_DrawLine(FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y),
+		FLinearColor(0.74f, 0.72f, 0.66f));
+	const double Pitch = 0.88 * Size.X / 8.0;
+	const double Dia = FMath::Min(0.84 * Size.Y, 0.8 * Pitch);
+	for (int32 K = 0; K < 8; ++K)
+	{
+		const FVector2D At(0.03 * Size.X + Pitch * (K + 0.5), 0.5 * Size.Y);
+		Disc(Canvas, At, 0.5 * Dia, FLinearColor(0.16f, 0.13f, 0.1f));
+		Disc(Canvas, At, 0.42 * Dia, bOn ? FLinearColor(0.9f, 0.36f, 0.05f) : FLinearColor(0.32f, 0.18f, 0.07f));
+		if (bOn && K < static_cast<int32>(Display.readouts.size()))
+		{
+			const int32 Value = simcore::CounterReading(Display.readouts[K], Console, Runner.Engagement());
+			Text(Canvas, FString::Printf(TEXT("%03d"), Value), At, FLinearColor(0.12f, 0.04f, 0.0f), 1.1f);
+		}
+	}
+	// the lamp at the right end of the strip
+	Disc(Canvas, FVector2D(Size.X - 0.045 * Size.X, 0.5 * Size.Y), 0.1 * Size.Y, bOn ? FLinearColor(0.7f, 0.25f, 0.04f) : FLinearColor(0.3f, 0.2f, 0.1f));
 }
 
 // ---------------------------------------------------------------------------------------------- TV

@@ -230,7 +230,16 @@ struct CabinLamp {
     CabinLook look;                      // optional appearance (kind Default = a plain lamp cap)
 };
 
-enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter };
+// The readouts a "counters" display's digit counters can show (their values: readouts.hpp).
+inline bool KnownReadout(const std::string& name) {
+    for (const char* known : {"none", "range_error", "elevation_error", "azimuth_coarse", "azimuth_fine",
+                              "elevation_coarse", "elevation_fine"}) {
+        if (name == known) return true;
+    }
+    return false;
+}
+
+enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters };
 
 inline const char* ToString(CabinDisplayKind k) {
     switch (k) {
@@ -240,6 +249,7 @@ inline const char* ToString(CabinDisplayKind k) {
         case CabinDisplayKind::Tv: return "tv";
         case CabinDisplayKind::Dial: return "dial";
         case CabinDisplayKind::Meter: return "meter";
+        case CabinDisplayKind::Counters: return "counters";
     }
     return "?";
 }
@@ -282,6 +292,8 @@ struct CabinDisplay {
     // the range window across the screen, centred on the range gate
     std::vector<ElevationRaster> rasters;
     double range_window_m = 2000.0;
+    // counters: what each lit digit counter reads (simcore/readouts.hpp), left to right
+    std::vector<std::string> readouts;
 };
 
 struct CabinLayout {
@@ -797,7 +809,7 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "source", "confidence", "notes"})) {
+                                "readouts", "source", "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -858,12 +870,16 @@ private:
         } else if (kind == "meter") {
             disp.kind = CabinDisplayKind::Meter;
             allowed = {"control", "marks", "scale", "full_scale", "unit"};
+        } else if (kind == "counters") {
+            disp.kind = CabinDisplayKind::Counters;
+            allowed = {"readouts"};
+            if (!console.has_sensors) return Fail(Join(path, "kind"), "counters need the console's sensors block");
         } else {
-            return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial or meter");
+            return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter or counters");
         }
         for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
-                                "range_window_m"}) {
+                                "range_window_m", "readouts"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
@@ -893,6 +909,21 @@ private:
             }
         }
         if (disp.kind == CabinDisplayKind::ElevationScope && !LoadElevationScope(d, path, console, disp)) return false;
+        if (disp.kind == CabinDisplayKind::Counters && !LoadCounters(d, path, disp)) return false;
+        return true;
+    }
+
+    bool LoadCounters(const json::Value& d, const std::string& path, CabinDisplay& disp) {
+        const json::Value* arr = OptionalArray(d, path, "readouts");
+        if (arr == nullptr) return message_.empty() ? Fail(Join(path, "readouts"), "required") : false;
+        if (arr->items.size() != 8) return Fail(Join(path, "readouts"), "needs eight counters");
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& r = arr->items[i];
+            if (!r.Is(json::Type::String) || !KnownReadout(r.string)) {
+                return Fail(Index(Join(path, "readouts"), i), "unknown readout");
+            }
+            disp.readouts.push_back(r.string);
+        }
         return true;
     }
 

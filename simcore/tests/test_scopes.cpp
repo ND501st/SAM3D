@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "simcore/cabin.hpp"
+#include "simcore/readouts.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "simcore/scopes.hpp"
@@ -110,7 +111,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 8);
+    SC_EXPECT(layout.displays.size() == 9);
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {
@@ -267,4 +268,97 @@ SC_TEST("scopes: the search scope paints IFF replies as the sweep passes them") 
     if (blips.size() != 2) return;
     SC_EXPECT(!blips[0].iff_reply && blips[1].iff_reply && blips[1].control_reply);
     SC_EXPECT_NEAR(blips[1].azimuth_rad, DegToRad(90.0), 1e-9);
+}
+
+SC_TEST("readouts: angles in mils, rough and fine counters") {
+    SC_EXPECT_NEAR(MilsFromDegrees(360.0), 6000.0, 1e-9);
+    SC_EXPECT_NEAR(MilsFromDegrees(90.0), 1500.0, 1e-9);
+    SC_EXPECT(CoarseCounter(1234.6) == 12 && FineCounter(1234.6) == 34);   // 12-34
+    SC_EXPECT(CoarseCounter(59.9) == 0 && FineCounter(59.9) == 59);
+    SC_EXPECT_NEAR(WrapMils(-100.0), 5900.0, 1e-9);                          // west of north wraps to 59-00
+    SC_EXPECT_NEAR(WrapMils(6050.0), 50.0, 1e-9);
+    SC_EXPECT(CoarseCounter(WrapMils(MilsFromDegrees(-6.0))) == 59 && FineCounter(WrapMils(MilsFromDegrees(-6.0))) == 0);
+    SC_EXPECT(KnownReadout("azimuth_fine") && !KnownReadout("azimuth"));
+}
+
+SC_TEST("readouts: the counters follow the SSC's wheels and the echo in the gate") {
+    const std::string text = R"({
+      "scenario_id": "e", "name": "E", "source": "sam3d", "confidence": "estimate", "seed": 1,
+      "origin": { "lat_deg": 45, "lon_deg": 25, "alt_m": 0 },
+      "terrain": { "type": "flat", "height_m": 0 },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json",
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
+                { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
+                { "name": "Driver", "role": "driver" } ],
+      "targets": [ { "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 30000, "up_m": 1000 }, "appear_at_s": 230,
+                     "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150 } ],
+      "triggers": [
+        { "id": "up", "when": {}, "do": [ { "order": "power_up", "crew": "Driver" },
+                                           { "queue": "pto_on_line", "crew": "Driver" },
+                                           { "order": "equipment_on", "crew": "Operator" },
+                                           { "queue": "deploy_at_halt", "crew": "Operator" },
+                                           { "order": "search_on_march", "crew": "Senior operator" } ] },
+        { "id": "acq", "when": { "conditions": [ { "subsystem": "soc_transmitter", "is": "ready" } ] },
+          "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "order": "ready_capture", "crew": "Deputy" },
+                  { "order": "capture_with_ssc", "crew": "Operator" } ] } ],
+      "end": { "time_limit_s": 600 } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    // Before anything is tracked, the deviations read zero.
+    SC_EXPECT(CounterReading("range_error", runner.Console(), runner.Engagement()) == 0);
+    SC_EXPECT(CounterReading("elevation_error", runner.Console(), runner.Engagement()) == 0);
+    while (!runner.Finished() && runner.Engagement().TrackedTarget().empty()) runner.Step(0.1);
+    runner.Step(0.1);
+    SC_EXPECT(runner.Engagement().TrackedTarget() == "t1");
+    const ConsoleData& c = runner.Console();
+    // The azimuth counters are the azimuth wheel in mils: rough * 100 + fine is its whole mils.
+    const double az_mils = WrapMils(MilsFromDegrees(c.panel.GetValue(c.track.az_wheel)));
+    const int az = 100 * CounterReading("azimuth_coarse", c, runner.Engagement()) +
+                   CounterReading("azimuth_fine", c, runner.Engagement());
+    SC_EXPECT(az == static_cast<int>(std::floor(az_mils)));
+    const double el_mils = std::fabs(MilsFromDegrees(c.panel.GetValue(c.track.el_wheel)));
+    const int el = 100 * CounterReading("elevation_coarse", c, runner.Engagement()) +
+                   CounterReading("elevation_fine", c, runner.Engagement());
+    SC_EXPECT(el == static_cast<int>(std::floor(el_mils)));
+    // Tracking in range: the gate sits on the echo (within 50 m), so ΔД is small; Δε is bounded by the beam.
+    SC_EXPECT(CounterReading("range_error", c, runner.Engagement()) <= 50);
+    SC_EXPECT(CounterReading("elevation_error", c, runner.Engagement()) <= 100);
+    SC_EXPECT(CounterReading("none", c, runner.Engagement()) == 0);
+}
+
+SC_TEST("readouts: the loader checks a counters display's readouts") {
+    ConsoleData console;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console));
+    auto Error = [&](const std::string& display) {
+        const std::string text = R"({ "system_id": "osa_ak",
+          "stations": [ { "id": "senior_operator", "label": "SO", "eye_m": [0, 0, 1.5] },
+                        { "id": "operator", "label": "O", "eye_m": [0, 1, 1.5] },
+                        { "id": "deputy_commander", "label": "DC", "eye_m": [1, 0, 1.5] },
+                        { "id": "commander", "label": "C", "eye_m": [1, 3, 1.5] },
+                        { "id": "driver", "label": "D", "eye_m": [-1, 3, 1.5] } ],
+          "panels": [ { "id": "p", "label": "P", "station": "senior_operator", "centre_m": [-1, 0, 1.3],
+                        "facing_deg": 90, "size_m": [1.0, 0.6] } ],
+          "displays": [ )" + display + " ] }";
+        CabinLayout layout;
+        std::string error;
+        if (LoadCabin(text, console, layout, &error)) return std::string("loaded");
+        return error;
+    };
+    const std::string head = R"({ "id": "c", "label": "C", "kind": "counters", "panel": "p", "at_m": [0, 0], "size_m": [0.5, 0.05],
+                                  "source": "s", "confidence": "low", "readouts": )";
+    SC_EXPECT(Error(head + R"(["none", "none", "none", "none", "none", "none", "none", "none"] })") == "loaded");
+    const auto Has = [](const std::string& error, const std::string& want) {
+        if (error.find(want) == std::string::npos) std::printf("    got: %s\n", error.c_str());
+        return error.find(want) != std::string::npos;
+    };
+    SC_EXPECT(Has(Error(head + R"(["none", "none"] })"), "displays[0].readouts: needs eight counters"));
+    SC_EXPECT(Has(Error(head + R"(["none", "none", "none", "none", "none", "none", "none", "volts"] })"),
+                  "displays[0].readouts[7]: unknown readout"));
+    SC_EXPECT(Has(Error(R"({ "id": "c", "label": "C", "kind": "counters", "panel": "p", "at_m": [0, 0], "size_m": [0.5, 0.05],
+                             "source": "s", "confidence": "low" })"),
+                  "displays[0].readouts: required"));
 }
