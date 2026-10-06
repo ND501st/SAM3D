@@ -227,6 +227,11 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ScreenMaterial;
 
+	/** The displays' cathode-ray material (/Game/SAM3D/Cabin/Materials/M_CabinCRT, tools/ue_make_crt_material.py): glass
+	 * curvature, phosphor glow, raster lines, noise, vignette and a reflection. Null = the plain ScreenMaterial. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> CrtMaterial;
+
 	/** The baked panel faces' material (/Game/SAM3D/Cabin/Materials/MI_Cabin_PanelFace; its "BaseTexture" is set per
 	 * panel); null = no faces, the cabin draws labels itself. */
 	UPROPERTY(Transient)

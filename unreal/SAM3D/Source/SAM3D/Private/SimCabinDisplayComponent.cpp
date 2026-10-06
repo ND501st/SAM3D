@@ -15,13 +15,25 @@
 
 namespace
 {
-	const FLinearColor Phosphor(0.3f, 1.0f, 0.4f);
-	const FLinearColor TraceGreen(0.4f, 1.0f, 0.5f);
+	// The search and elevation tubes are seen through an amber filter and use a long-persistence phosphor: yellow-orange
+	// light on a dark amber face, not the saturated green of a modern display. The range indicator and TV are plain
+	// tubes, a pale yellow-green and a bluish white.
+	const FLinearColor Phosphor(1.0f, 0.78f, 0.22f);
+	const FLinearColor TraceGreen(0.55f, 0.95f, 0.5f);
 	const FLinearColor Amber(1.0f, 0.65f, 0.15f);
 	// The tubes of the search and elevation indicators sit behind an amber filter, which is all that shows while
 	// they are off (the museum photographs, opisybroni 54334/54539); the TOV monitor's dead glass is a pale grey-green.
 	const FLinearColor AmberGlass(0.8f, 0.3f, 0.02f);
-	const FLinearColor MonitorGlass(0.7f, 0.74f, 0.62f);
+	// The TV's dead glass is dark (the user's cabin photo, crop_user_front; the pale glass in the daylight museum photos
+	// is the windows reflected in it, which the CRT material adds as a soft highlight).
+	const FLinearColor MonitorGlass(0.04f, 0.045f, 0.042f);
+
+	// A beam on a phosphor: the bright core and a faint wide halo round it.
+	void Beam(UCanvas* Canvas, const FVector2D& A, const FVector2D& B, float Thickness, const FLinearColor& Color)
+	{
+		Canvas->K2_DrawLine(A, B, Thickness * 3.0f, Color * 0.16f);
+		Canvas->K2_DrawLine(A, B, Thickness, Color);
+	}
 
 	// Screen point at Angle (clockwise from up) and Radius from Centre; screen Y grows downward.
 	FVector2D Polar(const FVector2D& Centre, double AngleRad, double Radius)
@@ -31,7 +43,7 @@ namespace
 
 	void Circle(UCanvas* Canvas, const FVector2D& Centre, double Radius, const FLinearColor& Color, float Thickness = 1.0f)
 	{
-		constexpr int32 Segments = 72;
+		constexpr int32 Segments = 180;
 		for (int32 I = 0; I < Segments; ++I)
 		{
 			const double A0 = UE_DOUBLE_TWO_PI * I / Segments;
@@ -160,8 +172,10 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	Screen->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, Uv, {}, {}, false);
 
 	const double Long = FMath::Max(WidthCm, HeightCm);
-	const int32 W = FMath::Max(16, FMath::RoundToInt32(PixelsPerLongSide * WidthCm / Long));
-	const int32 H = FMath::Max(16, FMath::RoundToInt32(PixelsPerLongSide * HeightCm / Long));
+	// The TV picture is coarse (a 1970s monitor's raster), the others are drawn sharp and softened by the material.
+	const int32 Pixels = Kind == simcore::CabinDisplayKind::Tv ? 256 : PixelsPerLongSide;
+	const int32 W = FMath::Max(16, FMath::RoundToInt32(Pixels * WidthCm / Long));
+	const int32 H = FMath::Max(16, FMath::RoundToInt32(Pixels * HeightCm / Long));
 	Target = UKismetRenderingLibrary::CreateRenderTarget2D(this, W, H, RTF_RGBA8, FLinearColor::Black);
 	if (ScreenMaterialBase != nullptr && Target != nullptr)
 	{
@@ -170,8 +184,32 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		// The unlit glass is dimmed by the cabin camera's fixed exposure like everything else, but a lit tube is the
 		// brightest thing in the compartment, and the render target stops at 1: the gain lifts it back. The TV's
 		// picture is already a daylight image, so it needs less.
-		const float Gain = Kind == simcore::CabinDisplayKind::Tv ? 4.0f : 6.0f;
-		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"), FLinearColor(Gain, Gain, Gain, 1.0f));
+		const bool bTv = Kind == simcore::CabinDisplayKind::Tv;
+		const float Gain = bTv ? 4.0f : 6.0f;
+		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
+			bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f));
+		// The tube's character (M_CabinCRT): curvature, halo (amount, radius), raster lines (strength, count), noise
+		// (strength, grain), flicker, vignette, reflection of the cabin lamps. Dials and meters are flat glass.
+		struct FCrt { float Curve, Glow, GlowR, Scan, Lines, Noise, Grain, Flick, Vig, Refl; };
+		FCrt Crt{0.0f, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 100.0f, 0.0f, 0.0f, 0.25f};
+		switch (Kind)
+		{
+		case simcore::CabinDisplayKind::Ppi:
+		case simcore::CabinDisplayKind::ElevationScope: Crt = {0.05f, 0.6f, 0.009f, 0.0f, 100.0f, 0.05f, 120.0f, 0.03f, 0.4f, 0.55f}; break;
+		case simcore::CabinDisplayKind::RangeScope: Crt = {0.07f, 0.5f, 0.007f, 0.15f, 200.0f, 0.07f, 140.0f, 0.03f, 0.45f, 0.5f}; break;
+		case simcore::CabinDisplayKind::Tv: Crt = {0.08f, 0.3f, 0.004f, 0.4f, 150.0f, 0.16f, 220.0f, 0.05f, 0.5f, 0.8f}; break;
+		default: break;
+		}
+		ScreenMaterial->SetScalarParameterValue(TEXT("Curvature"), Crt.Curve);
+		ScreenMaterial->SetScalarParameterValue(TEXT("GlowAmount"), Crt.Glow);
+		ScreenMaterial->SetScalarParameterValue(TEXT("GlowRadius"), Crt.GlowR);
+		ScreenMaterial->SetScalarParameterValue(TEXT("ScanStrength"), Crt.Scan);
+		ScreenMaterial->SetScalarParameterValue(TEXT("ScanLines"), Crt.Lines);
+		ScreenMaterial->SetScalarParameterValue(TEXT("NoiseStrength"), Crt.Noise);
+		ScreenMaterial->SetScalarParameterValue(TEXT("NoiseScale"), Crt.Grain);
+		ScreenMaterial->SetScalarParameterValue(TEXT("FlickerStrength"), Crt.Flick);
+		ScreenMaterial->SetScalarParameterValue(TEXT("VignetteStrength"), Crt.Vig);
+		ScreenMaterial->SetScalarParameterValue(TEXT("ReflectStrength"), Crt.Refl);
 		ScreenMaterial->SetVectorParameterValue(TEXT("BackColor"), FLinearColor::Black);
 		ScreenMaterial->SetScalarParameterValue(TEXT("OpacityFromTexture"), 1.0f);
 		Screen->SetMaterial(0, ScreenMaterial);
@@ -188,6 +226,11 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		// A black-and-white picture, as on the TOV monitor.
 		Capture->PostProcessSettings.bOverride_ColorSaturation = true;
 		Capture->PostProcessSettings.ColorSaturation = FVector4(0.0, 0.0, 0.0, 1.0);
+		// Crushed shadows and bright highlights, as on a worn video tube.
+		Capture->PostProcessSettings.bOverride_ColorContrast = true;
+		Capture->PostProcessSettings.ColorContrast = FVector4(1.35, 1.35, 1.35, 1.0);
+		Capture->PostProcessSettings.bOverride_AutoExposureBias = true;
+		Capture->PostProcessSettings.AutoExposureBias = -1.2f;
 		Capture->PostProcessBlendWeight = 1.0f;
 		Capture->HideActorComponents(GetOwner());
 		Capture->RegisterComponent();
@@ -202,7 +245,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			USimCabinComponent::UseCabinLighting(Line);
 			Line->RegisterComponent();
 			Line->SetRelativeLocationAndRotation(Centre + Normal * 1.4, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
-			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.003) : FVector(0.001, 0.003, 0.4 * Display.height_m));
+			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.0012) : FVector(0.001, 0.0012, 0.4 * Display.height_m));
 			if (ShapeMaterial != nullptr)
 			{
 				// Black reads against the bright sky the camera mostly sees.
@@ -350,7 +393,7 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	}
 	const simcore::ConsoleData& Console = Runner.Console();
 	const simcore::SearchSensorDef& Search = Console.search;
-	Disc(Canvas, C, R, Phosphor * 0.04f);
+	Disc(Canvas, C, R, AmberGlass * 0.12f);   // the dark tube seen through the amber filter
 
 	// Displayed range window from the ДАЛЬНОСТЬ selector; the 10-45 km scale starts at the centre with 10 km.
 	double MinM = 0.0;
@@ -368,7 +411,7 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	const double Ring = Span > 20000.0 ? 10000.0 : 5000.0;
 	for (double K = FMath::CeilToDouble((MinM + 1.0) / Ring) * Ring; K <= MaxM + 1.0; K += Ring)
 	{
-		Circle(Canvas, C, RadiusOf(K), Phosphor * 0.25f);
+		Circle(Canvas, C, RadiusOf(K), Phosphor * 0.3f, 1.6f);
 	}
 	for (int32 I = 0; I < 12; ++I)
 	{
@@ -428,7 +471,7 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		for (int32 I = 6; I >= 0; --I)
 		{
 			const double A = Sweep - FMath::DegreesToRadians(2.5 * I);
-			Canvas->K2_DrawLine(C, Polar(C, A, R), 2.0f, Phosphor * (I == 0 ? 0.9f : 0.25f / I));
+			Beam(Canvas, C, Polar(C, A, R), 2.0f, Phosphor * (I == 0 ? 0.9f : 0.25f / I));
 		}
 	}
 
@@ -445,8 +488,6 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 			Canvas->K2_DrawLine(Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber);
 		}
 	}
-	Text(Canvas, FString::Printf(TEXT("%.0f-%.0f km"), MinM / 1000.0, MaxM / 1000.0), FVector2D(C.X, C.Y + 0.8 * R),
-		Phosphor * 0.5f, 0.9f);
 }
 
 // ---------------------------------------------------------------------------------------------- range indicator
@@ -473,15 +514,25 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	const double X1 = 0.95 * Size.X;
 
 	// One sweep: baseline, grass while radiating, echo spikes, gate marks. [FromM, ToM] maps to X0..X1.
-	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH)
+	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM)
 	{
 		auto XOf = [&](double M) { return X0 + (M - FromM) / (ToM - FromM) * (X1 - X0); };
+		// The graticule: a division every TickM, longer every fifth (op_panel's legend: "1 div = 1000 m" on the rough
+		// sweep, "1 div = 5 m" on the precise one).
+		if ((ToM - FromM) / TickM < 300.0)
+		{
+			for (double M = FMath::CeilToDouble(FromM / TickM) * TickM; M <= ToM; M += TickM)
+			{
+				const bool bMajor = FMath::Fmod(FMath::RoundToDouble(M / TickM), 5.0) < 0.5;
+				Canvas->K2_DrawLine(FVector2D(XOf(M), Y + 3.0), FVector2D(XOf(M), Y + (bMajor ? 11.0 : 7.0)), 1.0f, TraceGreen * 0.4f);
+			}
+		}
 		double PrevX = X0;
 		double PrevY = Y;
 		for (double X = X0; X <= X1; X += 3.0)
 		{
 			const double Ny = bRadiating ? Noise.FRandRange(0.0, 3.0) : 0.0;
-			Canvas->K2_DrawLine(FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.5f, TraceGreen * 0.8f);
+			Beam(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.2f, TraceGreen * 0.8f);
 			PrevX = X;
 			PrevY = Y - Ny;
 		}
@@ -492,8 +543,8 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 				continue;
 			}
 			const double X = XOf(Echo.range_m);
-			Canvas->K2_DrawLine(FVector2D(X - 3.0, Y), FVector2D(X, Y - SpikeH), 2.0f, TraceGreen);
-			Canvas->K2_DrawLine(FVector2D(X, Y - SpikeH), FVector2D(X + 3.0, Y), 2.0f, TraceGreen);
+			Beam(Canvas, FVector2D(X - 3.0, Y), FVector2D(X, Y - SpikeH), 1.6f, TraceGreen);
+			Beam(Canvas, FVector2D(X, Y - SpikeH), FVector2D(X + 3.0, Y), 1.6f, TraceGreen);
 		}
 		// The range gate: a notch under the trace.
 		for (double M : {Gate - HalfGate, Gate + HalfGate})
@@ -504,15 +555,24 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			}
 		}
 	};
-	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y);
+	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0);
 	const double Half = 0.5 * Display.magnified_window_m;
-	Sweep(0.85 * Size.Y, Gate - Half, Gate + Half, 0.25 * Size.Y);
+	Sweep(0.85 * Size.Y, Gate - Half, Gate + Half, 0.25 * Size.Y, 5.0);
 	Canvas->K2_DrawLine(FVector2D(0.5 * Size.X, 0.6 * Size.Y), FVector2D(0.5 * Size.X, 0.88 * Size.Y), 1.0f, Amber * 0.5f);
 
-	Text(Canvas, TEXT("0"), FVector2D(X0, 0.48 * Size.Y), TraceGreen * 0.6f, 1.0f);
-	Text(Canvas, FString::Printf(TEXT("%.0f km"), MaxM / 1000.0), FVector2D(X1 - 12.0, 0.48 * Size.Y), TraceGreen * 0.6f, 1.0f);
-	// The range counter: where the gate is (it follows the target while tracking in range).
-	Text(Canvas, FString::Printf(TEXT("%05.0f m"), FMath::Max(0.0, Gate)), FVector2D(0.5 * Size.X, 0.1 * Size.Y), Amber, 1.6f);
+	// The range counter: where the gate is (it follows the target while tracking in range), as five lit drum digits
+	// like the readout strip's, not a text line painted on the picture.
+	const FString Digits = FString::Printf(TEXT("%05.0f"), FMath::Max(0.0, Gate));
+	const double CellW = 0.055 * Size.X;
+	const double CellH = 0.13 * Size.Y;
+	for (int32 I = 0; I < 5; ++I)
+	{
+		// each digit in its own lit cell: a vertical bar CellW wide, with a gap to the next
+		const FVector2D At(0.5 * Size.X + (I - 2) * CellW * 1.4, 0.1 * Size.Y);
+		Canvas->K2_DrawLine(At - FVector2D(0.0, 0.5 * (CellH - CellW)), At + FVector2D(0.0, 0.5 * (CellH - CellW)),
+			static_cast<float>(CellW), Amber * 0.85f);
+		Text(Canvas, Digits.Mid(I, 1), At, FLinearColor(0.12f, 0.05f, 0.01f), 2.0f);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------- elevation search
@@ -523,7 +583,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// A round tube (OS81-10M) with a square raster area inside it: range across, elevation up.
 	const FVector2D C = Size * 0.5;
 	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
-	Disc(Canvas, C, R, bOn ? Phosphor * 0.06f : AmberGlass);
+	Disc(Canvas, C, R, bOn ? AmberGlass * 0.12f : AmberGlass);
 	const simcore::ConsoleData& Console = Runner.Console();
 	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||
 		ElevRaster >= static_cast<int32>(Console.track.beams_deg.size()))
@@ -549,12 +609,12 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	// The raster: faint horizontal lines over the beam's band, with its outline.
 	for (double Y = Top; Y <= Bottom; Y += 4.0)
 	{
-		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.3f);
+		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.1f);
 	}
-	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 2.0f, Phosphor * 0.7f);
-	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 2.0f, Phosphor * 0.7f);
-	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 2.0f, Phosphor * 0.7f);
-	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 2.0f, Phosphor * 0.7f);
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
+	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
+	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
 	// The range gate sits in the middle of the range window.
 	Canvas->K2_DrawLine(FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
 
@@ -571,8 +631,6 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 		Disc(Canvas, P, 9.0, Phosphor * (0.5f * Glow));
 		Disc(Canvas, P, 5.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
 	}
-	Text(Canvas, FString::Printf(TEXT("%.0f..%.0f°"), ElLow, ElHigh),
-		FVector2D(C.X, C.Y + 0.85 * R), Phosphor * 0.8f, 1.2f);
 }
 
 // ---------------------------------------------------------------------------------------------- instruments
