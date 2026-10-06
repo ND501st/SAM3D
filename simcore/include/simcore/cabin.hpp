@@ -98,7 +98,8 @@ enum class CabinLookKind {
     Window,       // a counter or dial window
     Diagram,      // printed outline diagram
     Oval,         // raised oval mount
-    Legend        // legend lamp: black glass with its `label` on it, the letters lit in `color` (lamps only)
+    Legend,       // legend lamp: black glass with its `label` on it, the letters lit in `color` (lamps only)
+    Gauge         // an instrument the console doesn't model: dark rim, light face, needle (round, or square for [w, h])
 };
 
 inline const char* ToString(CabinLookKind k) {
@@ -121,6 +122,7 @@ inline const char* ToString(CabinLookKind k) {
         case CabinLookKind::Diagram: return "diagram";
         case CabinLookKind::Oval: return "oval";
         case CabinLookKind::Legend: return "legend";
+        case CabinLookKind::Gauge: return "gauge";
     }
     return "?";
 }
@@ -143,6 +145,7 @@ struct CabinBlock {
     double v_m = 0.0;
     double width_m = 0.0;
     double height_m = 0.0;
+    std::string color;      // the plate's paint, a look colour; empty = the console's cream
 };
 
 // An item on a panel the console doesn't model; drawn, not operated.
@@ -619,6 +622,13 @@ private:
         return true;
     }
 
+    static bool KnownColour(const std::string& c) {
+        for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange"}) {
+            if (c == known) return true;
+        }
+        return false;
+    }
+
     // A look: "kind", "size_m" (a diameter, or [width, height]), "color", "ring", "label". Fixtures carry the same keys
     // inline and need a kind; a control's or lamp's "look" may leave it out (kind default).
     bool LoadLook(const json::Value& v, const std::string& path, bool inline_keys, CabinLook& out) {
@@ -628,7 +638,7 @@ private:
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
         if (!kind.empty()) {
             bool found = false;
-            for (int k = 0; k <= static_cast<int>(CabinLookKind::Legend); ++k) {
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::Gauge); ++k) {
                 if (kind == ToString(static_cast<CabinLookKind>(k))) {
                     out.kind = static_cast<CabinLookKind>(k);
                     found = true;
@@ -653,13 +663,9 @@ private:
             return false;
         }
         for (const std::string* c : {&out.color, &out.ring}) {
-            if (c->empty()) continue;
-            bool ok = false;
-            for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow",
-                                      "orange"}) {
-                ok = ok || *c == known;
+            if (!c->empty() && !KnownColour(*c)) {
+                return Fail(Join(path, c == &out.color ? "color" : "ring"), "unknown colour '" + *c + "'");
             }
-            if (!ok) return Fail(Join(path, c == &out.color ? "color" : "ring"), "unknown colour '" + *c + "'");
         }
         if ((out.kind == CabinLookKind::Nameplate || out.kind == CabinLookKind::Legend) && out.label.empty()) {
             return Fail(Join(path, "label"), "required");
@@ -673,7 +679,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("blocks", i);
             const json::Value& b = arr->items[i];
-            if (!Keys(b, path, {"id", "panel", "label", "at_m", "size_m", "notes"})) return false;
+            if (!Keys(b, path, {"id", "panel", "label", "at_m", "size_m", "color", "notes"})) return false;
             CabinBlock block;
             if (!RequireString(b, path, "id", block.id) || !RequireString(b, path, "label", block.label) ||
                 !Placement(b, path, out, block.panel_id, block.u_m, block.v_m) ||
@@ -681,6 +687,10 @@ private:
                 return false;
             }
             if (!(block.width_m > 0.0) || !(block.height_m > 0.0)) return Fail(Join(path, "size_m"), "must be positive");
+            if (!OptionalString(b, path, "color", block.color)) return false;
+            if (!block.color.empty() && !KnownColour(block.color)) {
+                return Fail(Join(path, "color"), "unknown colour '" + block.color + "'");
+            }
             const CabinPanel* panel = out.FindPanel(block.panel_id);
             if (!panel->Contains(block.u_m - 0.5 * block.width_m, block.v_m - 0.5 * block.height_m) ||
                 !panel->Contains(block.u_m + 0.5 * block.width_m, block.v_m + 0.5 * block.height_m)) {

@@ -136,7 +136,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 7);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 9);
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
@@ -195,6 +195,20 @@ SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, 
     SC_EXPECT(v_of("ssc_range") > v_of("ssc.range_wheel"));
     // Driver front left, commander front right.
     SC_EXPECT(layout.FindStation("driver")->eye_m.x < 0.0 && layout.FindStation("commander")->eye_m.x > 0.0);
+    // mon_2112_80 Fig. 3: on the left wall SŁ-1M stands ahead of the main console and SŁ-3M behind it; the driver
+    // and the commander sit at the front of the same compartment, the driver beside SŁ-1M with PU-303 at his left.
+    const CabinPanel* sl1m = layout.FindPanel("gyro_panel");
+    const CabinPanel* sl3m = layout.FindPanel("sl3m_panel");
+    const CabinPanel* pu303 = layout.FindPanel("pu303_panel");
+    const CabinPanel* guidance = layout.FindPanel("fo_panel");
+    const CabinPanel* range = layout.FindPanel("op_panel");
+    SC_EXPECT(sl1m != nullptr && sl3m != nullptr && pu303 != nullptr);
+    if (sl1m == nullptr || sl3m == nullptr || pu303 == nullptr) return;
+    SC_EXPECT(sl1m->centre_m.y - 0.5 * sl1m->width_m >= guidance->centre_m.y + 0.5 * guidance->width_m);
+    SC_EXPECT(sl3m->centre_m.y + 0.5 * sl3m->width_m <= range->centre_m.y - 0.5 * range->width_m);
+    const CabinStation* driver = layout.FindStation("driver");
+    SC_EXPECT(std::fabs(driver->eye_m.y - sl1m->centre_m.y) < 0.5 * sl1m->width_m + 0.1);
+    SC_EXPECT(pu303->centre_m.x < driver->eye_m.x && pu303->centre_m.y > driver->eye_m.y);
 }
 
 SC_TEST("cabin: lamps light from subsystem states and inputs") {
@@ -396,6 +410,16 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
                                                    "color": "red", "label": "СХОД" } ])"), console, legend, &error));
     SC_EXPECT(legend.fixtures.size() == 1 && legend.fixtures[0].look.kind == CabinLookKind::Legend &&
               std::string(ToString(CabinLookKind::Legend)) == "legend");
+    // Gauges, and block plates in a colour of their own (PU-303 is black).
+    CabinLayout extra;
+    SC_EXPECT(LoadCabin(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "ПУ-303", "at_m": [0, 0], "size_m": [0.3, 0.2],
+                                                 "color": "black" } ],
+          "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": 0.06 } ])"), console, extra, &error));
+    SC_EXPECT(extra.blocks.size() == 1 && extra.blocks[0].color == "black" && extra.fixtures.size() == 1 &&
+              extra.fixtures[0].look.kind == CabinLookKind::Gauge);
+    SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [0.3, 0.2],
+                                                     "color": "purple" } ])"),
+                            "blocks[0].color: unknown colour 'purple'"));
     SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [1.5, 0.5] } ])"),
                             "blocks[0].at_m: block doesn't fit"));
     // The Osa layout has every column's blocks and fixtures from SAM Simulator's panel photos.

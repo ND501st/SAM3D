@@ -57,14 +57,16 @@ checked with `tools/cabin_preview.py` (draws a panel from this file alone, optio
 reference picture kept in `reference/`).
 
 - `blocks`: the instrument blocks of a column, `{ "id", "panel", "label" (type plate, e.g. "ОС81-9М"), "at_m",
-  "size_m": [w, h] }`, inside their panel.
+  "size_m": [w, h], "color" }`, inside their panel. `color` (a look colour) paints the plate, e.g. the black PU-303;
+  without it the plate is the consoles' cream.
 - `fixtures`: items drawn but not operated, `{ "panel", "at_m", "kind", "size_m", "color", "ring", "label" }`.
 - `look` on a control or lamp placement: `{ "kind", "size_m", "color", "ring", "label" }`, all optional.
 
 `kind`: `knob`, `pointer_knob`, `trim`, `toggle`, `lever`, `lamp`, `lamp_button` (cap `color` in a `ring`), `button`,
 `jack`, `socket`, `latch`, `nameplate` (needs `label`), `bezel`, `window`, `diagram`, `oval`, `legend` (a
 legend lamp: black glass with its `label` on it, the letters lit in the lamp's colour; needs `label`; round, or
-rectangular for `[width, height]`). `size_m` is a diameter
+rectangular for `[width, height]`), `gauge` (an instrument the console doesn't model: dark rim, face in `color`,
+white by default, and a needle; round, or rectangular for `[width, height]`). `size_m` is a diameter
 or `[width, height]`. Colours: black, white, grey, chrome, brass, red, green, amber, yellow, orange.
 
 ## Shell

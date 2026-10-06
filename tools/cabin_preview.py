@@ -77,6 +77,15 @@ def draw_panel(cab, controls, panel_id, k):
                 circle(c, sw * 0.45, INK)
             if kind == 'latch':
                 d.rectangle([c[0] - hw * 0.25, c[1] - hw * 0.6, c[0] + hw * 0.25, c[1] + hw * 0.6], fill=INK)
+        elif kind == 'gauge':
+            face = COLORS.get(look.get('color', 'white'), COLORS['white'])
+            if abs(sw - sh) > 1e-6:
+                d.rectangle([c[0] - hw, c[1] - hh, c[0] + hw, c[1] + hh], fill=INK)
+                d.rectangle([c[0] - 0.84 * hw, c[1] - 0.84 * hh, c[0] + 0.84 * hw, c[1] + 0.84 * hh], fill=face)
+            else:
+                circle(c, sw, INK)
+                circle(c, sw * 0.84, face)
+            d.line([(c[0], c[1] + 0.2 * hh), (c[0] - 0.3 * hw, c[1] - 0.55 * hh)], fill=INK, width=max(1, round(k)))
         elif kind == 'legend':
             # Black glass with the label on it, drawn unlit (white letters).
             if abs(sw - sh) > 1e-6:
@@ -119,7 +128,8 @@ def draw_panel(cab, controls, panel_id, k):
             continue
         c = px(*b['at_m'])
         hw, hh = b['size_m'][0] * 500 * k, b['size_m'][1] * 500 * k
-        d.rounded_rectangle([c[0] - hw, c[1] - hh, c[0] + hw, c[1] + hh], radius=6 * k, fill=PLATE, outline=PLATE_EDGE,
+        plate = COLORS.get(b.get('color', ''), PLATE)
+        d.rounded_rectangle([c[0] - hw, c[1] - hh, c[0] + hw, c[1] + hh], radius=6 * k, fill=plate, outline=PLATE_EDGE,
                             width=max(1, round(2 * k)))
     order = {'bezel': 0, 'window': 0, 'oval': 0, 'diagram': 0}
     for f in sorted([f for f in cab.get('fixtures', []) if f['panel'] == panel_id], key=lambda f: order.get(f['kind'], 1)):
