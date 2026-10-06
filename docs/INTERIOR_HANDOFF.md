@@ -246,6 +246,27 @@ bezelled glass CRT monitor), `user_modernised_2` and rwd_mb3 9a33_81 (modernised
 - Seeing them live: power the equipment through `sim.order_crew(...)` (power_up, equipment_on, search_on_march,
   acquire_with_soc, ready_capture, capture_with_ssc) and `sim.set_control_position('tov.power', 1)`, wait for sim time
   ~170 s, then `tools/ue_cabin_shots.py`.
-- Not done: the counters on the readout strip still show "000" (they could show ΔД, Δε, azimuth and elevation of the
-  SSC); the PPI's range rings are still slightly stair-stepped (the 512-pixel canvas); no per-tube focus/brightness
+- Not done: (the readout strip's counters are live now, §13); the PPI's range rings are still slightly stair-stepped (the 512-pixel canvas); no per-tube focus/brightness
   controls change the picture.
+
+## 13. The readout strip's counters are live (6 Oct 2026)
+
+`0094-5` on `so_panel` has a `soc_counters` display (kind `counters`, simcore `CabinDisplayKind::Counters`) drawn over the
+baked strip by `SimCabinDisplayComponent::DrawCounters`. Its eight lit digit counters read, left to right (`readouts` in
+`data/cabins/osa_ak.json`; values in `simcore/readouts.hpp`, tested in `test_scopes.cpp`):
+
+| # | Reading | Meaning |
+|---|---|---|
+| 1 | `range_error` ΔД | metres between the SSC range gate and the echo in it (0 with no echo) |
+| 2 | `elevation_error` Δε | mils between the antenna's elevation and that echo's |
+| 3, 4 | `azimuth_coarse`, `azimuth_fine` | the SSC azimuth wheel in mils, hundreds then the rest (123.4 deg = 20-56) |
+| 5, 6 | `elevation_coarse`, `elevation_fine` | the SSC elevation wheel the same way, sign not shown (17.3 deg = 2-88) |
+| 7, 8 | `none` | the two СВР (missile channel) places: nothing reads them yet |
+
+Angles are in mils, 6000 to the circle, written XX-YY as the βс dial's notes give (samsim_osa p16). The counters light with
+the vehicle's power; unpowered they are dark. **Confidence is low:** the manual says only "ΔД, Δε, β and ε of the tracking
+radar", and the photographs show eight counters with captions I could not fully read, so which counter shows which, and
+what exactly the two deviations are, is our reading (the data's `notes` say so). The CRT-style gain of the display is
+10 (it draws a pale window as well as the lamps); the baked strip beneath is the fallback look.
+
+Verified live by driving `ssc.az_wheel` and `ssc.el_wheel` (the elevation wheel needs `ssc.el_lock` = 1 first).
