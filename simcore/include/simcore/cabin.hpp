@@ -134,7 +134,7 @@ struct CabinLook {
     std::string color;      // black, white, grey, chrome, brass, red, green, amber, yellow, orange
     std::string ring;       // lamp_button: the ring's colour
     std::string label;      // nameplate text, or the item's engraved label
-    std::string scale;      // gauge: the printed dial, "linear" (default, 0-10) or "compass" (a 0-35 card)
+    std::string scale;      // gauge: the printed dial, "linear" (default, 0-10), "compass" (a 0-35 card) or "counters" (a row of lit digit windows)
 };
 
 // A block (one instrument unit of a console column): its plate on the panel and its type plate.
@@ -669,8 +669,8 @@ private:
         }
         if (!out.scale.empty()) {
             if (out.kind != CabinLookKind::Gauge) return Fail(Join(path, "scale"), "for gauges only");
-            if (out.scale != "linear" && out.scale != "compass") {
-                return Fail(Join(path, "scale"), "unknown scale '" + out.scale + "' (linear or compass)");
+            if (out.scale != "linear" && out.scale != "compass" && out.scale != "counters") {
+                return Fail(Join(path, "scale"), "unknown scale '" + out.scale + "' (linear, compass or counters)");
             }
         }
         for (const std::string* c : {&out.color, &out.ring}) {

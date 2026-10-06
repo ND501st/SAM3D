@@ -310,6 +310,8 @@ class Face:
         d = self.draw
         if scale == 'compass':
             return self.compass(u, v, w, h, face, ink, lw)
+        if scale == 'counters':
+            return self.counters(u, v, w, h)
         round_dial = abs(w - h) < 1e-6
         if round_dial:
             cx, cy = self.px(u, v)
@@ -341,6 +343,30 @@ class Face:
         hx, hy = self.px(*pivot)
         hr = (0.05 * w if round_dial else 0.07 * h) * self.ppm
         d.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(70, 70, 68) if black else (60, 60, 58))
+
+    def counters(self, u, v, w, h):
+        """The SOC/SSC readout strip (0094-5; opisybroni 54539, and a Polish-modernised console in user_modernised_2,
+        where this unit is unchanged): a pale window holding eight round amber-lit digit counters, each in a dark
+        bezel, with a lamp at the right end. The digits shown are placeholders ("000"); the captions printed under
+        the real counters are not drawn (the unit is too short for them here)."""
+        d = self.draw
+        (x0, y0), (x1, y1) = self.px(u - 0.5 * w, v + 0.5 * h), self.px(u + 0.5 * w, v - 0.5 * h)
+        d.rounded_rectangle([x0, y0, x1, y1], radius=0.2 * (y1 - y0), fill=(206, 204, 194), outline=(60, 58, 52),
+                            width=max(1, int(round(0.0007 * self.ppm))))
+        usable = 0.88 * w
+        pitch = usable / 8.0
+        dia = min(0.84 * h, 0.8 * pitch)
+        f = self.font(0.3 * dia)
+        for k in range(8):
+            cx, cy = self.px(u - 0.5 * w + 0.03 * w + pitch * (k + 0.5), v)
+            r = 0.5 * dia * self.ppm
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(40, 32, 26))
+            r2 = 0.84 * r
+            d.ellipse([cx - r2, cy - r2, cx + r2, cy + r2], fill=(232, 152, 52))
+            d.text((cx, cy), '000', fill=(70, 34, 8), font=f, anchor='mm')
+        lx, ly = self.px(u + 0.5 * w - 0.045 * w, v)
+        lr = 0.2 * dia * self.ppm
+        d.ellipse([lx - lr, ly - lr, lx + lr, ly + lr], fill=(150, 90, 40), outline=(60, 58, 52))
 
     def compass(self, u, v, w, h, face, ink, lw):
         """A gyro-compass repeater's card: a rotating ring graduated every 5 degrees with the tens of degrees
@@ -471,6 +497,8 @@ def bake_panel(layout, console, panel, ppm, seed):
             continue
         if kind == 'gauge':
             face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'))
+            if fx.get('scale') == 'counters':
+                continue
         if kind in ('knob', 'pointer_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):
             face.handled(u, v, max(w, h), 0.025)
         label = fx.get('label', '')
