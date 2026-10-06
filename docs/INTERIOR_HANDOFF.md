@@ -187,3 +187,20 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
 - **Tool gotcha:** `tools/ue_cabin_shots.py` leaves Play running and `ue_import_*` then refuses with "stop Play first";
   stop Play (`editor_request_end_play`) before each import. An editor start can also crash once in Niagara's type
   registry (engine assertion, unrelated); a second launch worked.
+
+## 10. Fourth pass (6 Oct 2026, branch `feature/osa-interior-refine`)
+
+- Paint normals on the lining and racks cut (strength 0.12, 3 per metre): the ceiling looked like popcorn.
+- `SM_CabLevers` (built in place): gear lever with ball knob and handbrake between the cab seats, from rwd_mb3
+  9a33_13/31; positions and heights are estimates (confidence low). They are dark on dark in the dim cab.
+- Hinge plates with pins on every rack's end posts (opisybroni 54334), two per end at 20% and 80% of the panel
+  height; positions are estimates.
+- Looked at and left alone: floor tread (the photos show plain dark plates with seams and a corrugated mat, which the
+  cab footwell already has), the open white tray right of the commander's seat in 54335 (no plan position), seat bags.
+- `SM_CabFittings` (built in place): a pale sun visor above each windscreen and a three-cable run with clips along the
+  header (opisybroni 54335; sizes, tilt and route are estimates). The same mesh has the wiper drive (a motor can on
+  the dash top left of the wheel, a bent drive pipe and two spindle posts; positions estimated).
+- Commander dash: a 2 x 12 matrix of dark indicator windows (24 `window` fixtures, v 0.107 and 0.133, from rwd_mb3
+  9a33_13 and opisybroni 54335; count and pitch estimated, none lit, no function in the console data). Not done from
+  that photo: the A-pillar brackets.
+

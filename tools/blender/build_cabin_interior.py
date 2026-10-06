@@ -603,6 +603,13 @@ def build_rack(name, layout, panel_ids, side, posts, lower, extra=None):
     ys = sorted(p['centre_m'][1] - p['size_m'][0] / 2 for p in panels)[1:]
     for yy in ys:
         b.box(fr0, X(-0.002), yy - 0.006, yy + 0.006, zb, zt, 'Paint_Rack')
+    # hinge plates on the end posts: the racks swing out on hinges (opisybroni 54334 shows three grey plates on the
+    # console's side post); two per end here, at a quarter and three quarters of the panel height (positions: estimate)
+    for yy in (ylo + 0.02, yhi - 0.02):
+        for f in (0.2, 0.8):
+            zz = zb + f * (zt - zb)
+            b.box(fr0, X(0.006), yy - 0.03, yy + 0.03, zz - 0.04, zz + 0.04, 'Metal_Steel')
+            b.cylinder((X(0.006), yy, zz - 0.045), (X(0.006), yy, zz + 0.045), 0.007, 'Metal_Dark', seg=10)
     if lower == 'kick':
         # knee room under the console: the kick panel 13 cm back, a plinth, the foot grating out to the bench
         b.box(X(-0.13), wall, ylo, yhi, FLOOR_Z, zb - 0.03, 'Paint_Rack')
@@ -746,6 +753,66 @@ def build_pedals():
         b.obox(Vector((x, 4.72, 0.80)), Vector((1, 0, 0)), Vector((0, 0.5, 0.866)), Vector((0, -0.866, 0.5)),
                (w, 0.13, 0.015), 'Rubber_Black')
         b.cylinder((x, 4.74, 0.80), (x, 4.86, 1.05), 0.01, 'Metal_Dark', seg=10)
+    return finish(b, reuse=False)
+
+
+def build_cab_levers():
+    """The gear lever and the handbrake between the cab seats (rwd_mb3 9a33_13: a tall black lever with a ball knob in
+    the middle of the cab; 9a33_31: a second black lever low at the right of the driver). Positions, heights and
+    the handbrake's throw are estimates: the plan doesn't draw them. Built in place."""
+    b = Builder('SM_CabLevers')
+    # gear lever: rubber boot, steel shaft leaning slightly forward, ball knob
+    base = Vector((-0.02, 4.17, FLOOR_Z))
+    b.lathe(base, Vector((0, 0, 1)), [(0.0, 0.0), (0.06, 0.0), (0.06, 0.02), (0.03, 0.09), (0.0, 0.09)], 'Rubber_Black',
+            seg=20)
+    top = Vector((-0.02, 4.185, 1.0))
+    b.tube([base + Vector((0, 0, 0.08)), top], 0.009, 'Metal_Steel', seg=10)
+    b.lathe(top, Vector((0, 0.04, 1.0)).normalized(), [(0.0, -0.01), (0.022, 0.0), (0.028, 0.03), (0.018, 0.06), (0.0, 0.065)],
+            'Bakelite_Black', seg=20)
+    # handbrake: a ratchet plate on the floor, a lever leaning back to the driver, a rubber grip
+    foot = Vector((0.06, 4.0, FLOOR_Z))
+    b.box(0.05, 0.07, foot.y - 0.05, foot.y + 0.05, FLOOR_Z, FLOOR_Z + 0.07, 'Metal_Dark')
+    tip = Vector((0.06, 3.86, 0.98))
+    b.tube([foot + Vector((0, 0, 0.05)), tip], 0.011, 'Metal_Dark', seg=10)
+    b.tube([tip, tip + Vector((0, -0.05, 0.03))], 0.017, 'Rubber_Black', seg=12)
+    return finish(b, reuse=False)
+
+
+def build_cab_fittings():
+    """Fittings along the windscreen header, from opisybroni 54335: a pale sun visor hinged above each screen and
+    the cable run along the header with its clips. Sizes, tilt and the cable's route are estimates. Built in place."""
+    b = Builder('SM_CabFittings')
+    a = math.radians(25)
+    v = Vector((0, -math.cos(a), -math.sin(a)))           # down and back from the hinge
+    n = Vector((0, -math.sin(a), math.cos(a)))
+    hinge = Vector((0, SCREEN_TOP_Y - 0.04, ROOF_Z - 0.03))
+    for s in (-1, 1):
+        c = hinge + v * 0.10
+        c.x = window_x(s)
+        b.obox(c, Vector((1, 0, 0)), v, n, (0.56, 0.20, 0.014), 'Paint_Panel')
+        for dx in (-0.22, 0.22):                          # the two hinge lugs
+            b.box(window_x(s) + dx - 0.02, window_x(s) + dx + 0.02, hinge.y - 0.01, hinge.y + 0.01, hinge.z - 0.02,
+                  hinge.z + 0.005, 'Metal_Dark')
+    # the cable run: three black cables sagging between clips
+    clips = [x / 10.0 for x in range(-10, 11, 4)]
+    for k, dz in enumerate((0.0, 0.016, 0.032)):
+        pts = []
+        for i, x in enumerate(clips):
+            pts.append((x, SCREEN_TOP_Y - 0.075, ROOF_Z - 0.035 - dz + (0.012 if i % 2 else 0.0)))
+        b.tube(pts, 0.006, 'Rubber_Black', seg=8)
+    for x in clips:
+        b.box(x - 0.008, x + 0.008, SCREEN_TOP_Y - 0.085, SCREEN_TOP_Y - 0.065, ROOF_Z - 0.07, ROOF_Z - 0.02, 'Metal_Steel')
+    # the wiper drive on the dash top (opisybroni 54335: a motor and a bent pipe left of the wheel): a motor can on a
+    # bracket, a drive pipe up to the spindle post at the left screen's lower edge, a second spindle post at the
+    # right screen (positions: estimate)
+    mx, my, mz = -0.80, 4.73, DASH_TOP_Z
+    b.box(mx - 0.05, mx + 0.05, my - 0.04, my + 0.04, mz, mz + 0.012, 'Metal_Dark')
+    b.cylinder((mx - 0.04, my, mz + 0.045), (mx + 0.04, my, mz + 0.045), 0.032, 'Paint_Equipment', seg=20)
+    b.tube([(mx + 0.04, my, mz + 0.045), (mx + 0.10, my, mz + 0.05), (mx + 0.16, my + 0.04, mz + 0.07),
+            (mx + 0.16, my + 0.07, mz + 0.12)], 0.007, 'Metal_Steel', seg=10)
+    for sx in (-0.70, 0.46):
+        b.cylinder((sx, 4.795, mz), (sx, 4.795, mz + 0.07), 0.012, 'Metal_Steel', seg=12)
+        b.cylinder((sx, 4.795, mz + 0.07), (sx, 4.795, mz + 0.085), 0.02, 'Metal_Dark', seg=12)
     return finish(b, reuse=False)
 
 
@@ -921,7 +988,7 @@ def build_all(layout):
         objs.append(build_rack('SM_RackSP2M', layout, ['sp2m_panel'], 1, [], 'doors'))
     if 'sp3m_panel' in have:
         objs.append(build_rack('SM_RackSP3M', layout, ['sp3m_panel'], 1, [(0.485, 0.605), (REAR_Y, -0.83)], 'doors'))
-    objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_r123m(),
+    objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_cab_levers(), build_cab_fittings(), build_r123m(),
              build_ta57(), build_spare_box(), build_ga3(), build_capsule(), build_awo(), build_cabinet_0096(),
              build_dome_lamp(), build_wall_lamp_blue(), build_duct()]
     return objs
