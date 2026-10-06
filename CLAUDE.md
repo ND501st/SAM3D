@@ -22,7 +22,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
-| `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash); `panel_sheet.py` draws the cabin layout as a page. |
+| `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash); `panel_sheet.py` draws the cabin layout as a page; `button_map.py` draws every control's flow to subsystems, lamps and launch. |
 
 ## Commands
 
@@ -39,6 +39,7 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 python -m pytest prototype tools -q
 python prototype/scripts/run_demo.py out/demo_py.acmi
 python tools/panel_sheet.py                       # draw the cabin panels flat: out/panel_sheets/osa_ak.html
+python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
 
 # Everything at once
 ./tools/verify.sh          # Mac/Linux
