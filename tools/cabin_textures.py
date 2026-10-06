@@ -38,7 +38,7 @@ FALLBACK_FONTS = ['/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf', '/
 PLATE = (196, 194, 182)      # the blocks' enamel (sRGB), from samsim_panels and the cabin photos in daylight
 INK = (24, 24, 22)           # engraved letters filled black
 INK_ON_BLACK = (205, 203, 192)
-DIAGRAM_INK = (70, 66, 56)
+DIAGRAM_INK = (52, 48, 40)
 LOOK_COLOURS = {'black': (22, 22, 21), 'white': PLATE, 'grey': (150, 153, 146)}   # grey: the cab dashboards (rwd_mb3 9a33_31/32)
 CAP_HEIGHT_M = 0.0034        # letter height (samsim_panels at 1 mm per pixel: 3-4 mm)
 GAP_M = 0.003                # between an item and its label
@@ -280,11 +280,65 @@ class Face:
         (x0, y0), (x1, y1) = self.px(u - w / 2, v + h / 2), self.px(u + w / 2, v - h / 2)
         lw = max(1, int(0.0005 * self.ppm))
         self.draw.rectangle([x0, y0, x1, y1], outline=DIAGRAM_INK, width=lw)
-        rows = 4 if h > 0.08 else 3
+        # A ruled table (the racks' printed tables, rwd_mb3 9a33_41/45: grids of small print); what the cells say
+        # can't be read in any source, so each holds a short dash of "text" instead.
+        rows = max(3, int(round(h / 0.012)))
+        cols = max(2, int(round(w / 0.022)))
         for k in range(1, rows):
             y = y0 + (y1 - y0) * k / rows
             self.draw.line([(x0, y), (x1, y)], fill=DIAGRAM_INK, width=lw)
-        self.draw.line([(x0 + (x1 - x0) * 0.42, y0), (x0 + (x1 - x0) * 0.42, y1)], fill=DIAGRAM_INK, width=lw)
+        for k in range(1, cols):
+            x = x0 + (x1 - x0) * k / cols
+            self.draw.line([(x, y0), (x, y1)], fill=DIAGRAM_INK, width=lw)
+        rng = np.random.default_rng(int(abs(u * 1000) + abs(v * 1000) * 7))
+        for r in range(rows):
+            for c in range(cols):
+                if rng.random() < 0.8:
+                    cx = x0 + (x1 - x0) * (c + 0.5) / cols
+                    cy = y0 + (y1 - y0) * (r + 0.5) / rows
+                    half = (x1 - x0) / cols * rng.uniform(0.15, 0.35)
+                    self.draw.line([(cx - half, cy), (cx + half, cy)], fill=DIAGRAM_INK, width=lw)
+
+    def dial(self, u, v, w, h, black):
+        """An instrument face under the cabin's bezel: a black (or white) face with a printed scale, its needle at rest
+        and a hub. Round when w == h (a 270 degree scale, 0 to 10, as on the vehicle's dash gauges in rwd_mb3
+        9a33_31/32), else a rectangular meter with a 100 degree arc. The scale itself is generic: no source gives
+        the dial markings, only that the faces are black with white print."""
+        face = (22, 22, 21) if black else (222, 220, 208)
+        ink = (226, 224, 214) if black else (28, 28, 26)
+        lw = max(1, int(round(0.0006 * self.ppm)))
+        d = self.draw
+        round_dial = abs(w - h) < 1e-6
+        if round_dial:
+            cx, cy = self.px(u, v)
+            r = 0.43 * w * self.ppm
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=face)
+            pivot, radius, start, span, n_major = (u, v), 0.36 * w, -135.0, 270.0, 10
+        else:
+            (x0, y0), (x1, y1) = self.px(u - 0.46 * w, v + 0.46 * h), self.px(u + 0.46 * w, v - 0.46 * h)
+            d.rectangle([x0, y0, x1, y1], fill=face)
+            pivot, radius, start, span, n_major = (u, v - 0.32 * h), 0.78 * h, -50.0, 100.0, 5
+
+        def at(angle_deg, rad):
+            a = math.radians(angle_deg)
+            return self.px(pivot[0] + math.sin(a) * rad, pivot[1] + math.cos(a) * rad)
+
+        steps = n_major * 5
+        for k in range(steps + 1):
+            a = start + span * k / steps
+            major = k % 5 == 0
+            d.line([at(a, radius * (0.78 if major else 0.89)), at(a, radius)], fill=ink, width=lw * (2 if major else 1))
+        f = self.font((0.07 * w) if round_dial else (0.1 * h))
+        for k in range(n_major + 1):
+            a = start + span * k / n_major
+            x, y = at(a, radius * 0.5)
+            d.text((x, y), str(k * (2 if n_major == 5 else 1)), fill=ink, font=f, anchor='mm')
+        # needle at rest, a little off zero, and the hub
+        a = start + 0.18 * span
+        d.line([at(a, 0), at(a, radius * 0.92)], fill=ink if black else (150, 30, 20), width=lw * 2)
+        hx, hy = self.px(*pivot)
+        hr = (0.05 * w if round_dial else 0.07 * h) * self.ppm
+        d.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(70, 70, 68) if black else (60, 60, 58))
 
     def red_ring(self, u, v, radius_m):
         """Nothing: the red working-position dots are modelled by the cabin."""
@@ -384,6 +438,8 @@ def bake_panel(layout, console, panel, ppm, seed):
             continue
         if kind in ('nameplate', 'bezel', 'window', 'legend'):
             continue
+        if kind == 'gauge':
+            face.dial(u, v, w, h, fx.get('color') == 'black')
         if kind in ('knob', 'pointer_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):
             face.handled(u, v, max(w, h), 0.025)
         label = fx.get('label', '')

@@ -66,6 +66,7 @@ the radios' front panels, the hatches' and door's exact sizes, the blue wall lam
 ```bash
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --factory-startup --python tools/blender/build_cabin_interior.py -- --preview out/interior_preview
 python tools/cabin_mesh_sync.py            # sizes/centres in the layout <- art/cabin_interior/manifest.json
+python tools/cabin_rack_fill.py            # (re)generate the filler fixtures on the SP racks and gyro rack (§9)
 python tools/cabin_textures.py             # panel faces + detail maps (re-run after any layout label change)
 python tools/ue_import_cabin_interior.py   # textures, materials, meshes (steps can be named); Play must be stopped
 python -m pytest tools -q && ctest --test-dir simcore/build -C Release
@@ -157,3 +158,25 @@ The user said not to spend more time on lighting for now: keep lamps, colours an
 - Look at it: `python tools/ue_cabin_shots.py out/shots` and read the PNGs; the editor log line
   `Cabin built: 12 panels (12 with baked faces) … 33 shell parts` and no `Cabin: mesh … isn't imported` warnings.
 - `python tools/ue_cabin_check.py` (cabin tour) still works for the procedure side.
+
+## 9. Added 6 Oct 2026 (second session): dials, rack content, parts
+
+- **Dials:** round and rectangular `gauge` fixtures are printed into their panel's baked face
+  (`Face.dial` in `tools/cabin_textures.py`: black or white face, scale, needle at rest, hub) and the cabin builds only
+  a rim (`SM_GaugeBezel`, ring; `SM_MeterHousing` flange). The scale is generic (0–10): no source gives the markings,
+  only that the vehicle's dash gauges are black with white print (rwd_mb3 9a33_31/32).
+- **Rack filler (`tools/cabin_rack_fill.py`):** the right-wall racks (SP-1M, SP-2M, SP-3M-2) and the gyro rack had no
+  controls in the data. The script writes ~300 fixtures tagged `notes: "rack fill …"` (bronze knobs over coax sockets,
+  lamps over toggles, printed tables) in rows, clear of each unit's latches and nameplate, chosen from the block id.
+  They show the kinds of parts rwd_mb3 9a33_41/45/46/51/52 show; **no position is measured and nothing in the
+  procedures refers to them**. Rerunning replaces them; `--check` verifies the file is current. Do not hand-edit them.
+- **Printed tables** are ruled grids with a dash per cell: what they say is not legible in any source.
+- **Parts:** `SM_KnobPointer` is the bar ("chicken-head") pointer knob; toggles have a knurled ring nut; lamp lenses
+  are faceted (10 sides); `SM_GaugeBezel`, `SM_MeterHousing` are open rings (`lathe(..., cap=False)`: without it the
+  helper fans a disc across any ring's hole, which hid the dials).
+- **Not done:** cables and looms, gas-mask bags and headsets (rwd_mb3 9a33_45/50 show braided hose and
+  54335 shows bags on the seats, but no photo fixes where they lie in this layout, and bags on the seats would clip
+  the crew who sit there). The gyro rack's compass-card dial and the 0009-5M lamp/toggle pairs are still simplified.
+- **Tool gotcha:** `tools/ue_cabin_shots.py` leaves Play running and `ue_import_*` then refuses with "stop Play first";
+  stop Play (`editor_request_end_play`) before each import. An editor start can also crash once in Niagara's type
+  registry (engine assertion, unrelated); a second launch worked.

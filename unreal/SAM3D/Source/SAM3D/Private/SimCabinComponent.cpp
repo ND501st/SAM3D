@@ -1039,6 +1039,29 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		// The vehicle's instruments have black faces with white markings and a chrome rim (rwd_mb3 9a33_31, 9a33_32).
 		const bool bBlackFace = Look.color == "black";
 		const FLinearColor Rim = bBlackFace ? ChromeColor * 0.5f : DarkColor;
+		if (bFaced)
+		{
+			// The dial (face, scale, needle, hub) is printed in the panel's baked face (tools/cabin_textures.py):
+			// only the rim stands proud, open in the middle.
+			if (FMath::Abs(W - H) > 1e-6)
+			{
+				const double T = 0.08 * FMath::Min(W, H);
+				Box(L + U * (50.0 * (H - T)), W, T, 0.8, Rim);
+				Box(L - U * (50.0 * (H - T)), W, T, 0.8, Rim);
+				Box(L + R * (50.0 * (W - T)), T, H, 0.8, Rim);
+				Box(L - R * (50.0 * (W - T)), T, H, 0.8, Rim);
+			}
+			else if (!Part(TEXT("SM_GaugeBezel"), W, Rim))
+			{
+				Disc(W, W, 0.4, Rim);
+			}
+			else
+			{
+				Part(TEXT("SM_MeterHousing"), 1.16 * W, DarkColor);
+			}
+			bDone = true;
+			break;
+		}
 		if (FMath::Abs(W - H) > 1e-6)
 		{
 			Box(L, W, H, 1.0, Rim);
