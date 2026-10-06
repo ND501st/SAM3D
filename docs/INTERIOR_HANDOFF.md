@@ -69,6 +69,7 @@ python tools/cabin_mesh_sync.py            # sizes/centres in the layout <- art/
 python tools/cabin_rack_fill.py            # (re)generate the filler fixtures on the SP racks and gyro rack (§9)
 python tools/cabin_textures.py             # panel faces + detail maps (re-run after any layout label change)
 python tools/ue_import_cabin_interior.py   # textures, materials, meshes (steps can be named); Play must be stopped
+python tools/ue_remote.py --timeout 120 "exec(open(r'C:/dev/SAM3D/tools/ue_make_crt_material.py', encoding='utf-8').read())"   # M_CabinCRT (once)
 python -m pytest tools -q && ctest --test-dir simcore/build -C Release
 python tools/ue_cabin_shots.py out/cabin_shots   # Play + photographs from body-frame views
 ```
@@ -224,3 +225,27 @@ because those units are unchanged, was used to refine the originals:
 - **For a later variant** (Osa-AKM-P1/modernised): replace the `soc_ppi` display with a flat panel and the `tov_monitor`
   with a monitor whose bezels carry soft-key columns (the photo shows 7 and 4 keys beside CWOO-1, 5 beside BZK01);
   keep everything else.
+
+## 12. Displays as Soviet cathode-ray tubes, not modern screens (6 Oct 2026)
+
+References: opisybroni 54334/54539 and `crop_user_front` (original Osa-AK consoles: amber-filtered round tubes, a thick-
+bezelled glass CRT monitor), `user_modernised_2` and rwd_mb3 9a33_81 (modernised flat panels: **not** the model).
+- **`M_CabinCRT`** (`tools/ue_make_crt_material.py`; run once in the editor, Play stopped; the `exec(open(...))` form,
+  because the editor's file mode mis-parses a script path and its first lines): the displays' unlit material with barrel
+  curvature, a four-tap phosphor halo, raster lines, per-frame noise, flicker, vignette and a soft reflection of the
+  lamps. `SimCabinDisplayComponent::Setup` sets its parameters per display kind (`FCrt`); dials and meters get flat
+  glass. The cabin falls back to the engine pass-through material if the asset is missing. Lamp glass still uses the
+  plain material.
+- **Search and elevation tubes:** yellow-orange persistence light (`Phosphor` 1.0, 0.78, 0.22) on a dark amber face,
+  seen through the amber filter; sweep and blips are drawn as beams with a halo. **Range indicator:** pale yellow-green
+  A-scope with a graticule (a division per 1000 m on the rough sweep, per 5 m on the precise one, from op_panel's legend)
+  and the range as five lit drum digits, not text. **TV:** 256-pixel monochrome picture, crushed contrast, raster lines,
+  noise, bluish white; its dead glass is dark charcoal (crop_user_front), the pale glass in the daylight museum photos
+  being reflected windows.
+- Removed the on-screen UI text: the "10-45 km" and "x km" labels, the elevation band label and the "00000 m" readout.
+- Seeing them live: power the equipment through `sim.order_crew(...)` (power_up, equipment_on, search_on_march,
+  acquire_with_soc, ready_capture, capture_with_ssc) and `sim.set_control_position('tov.power', 1)`, wait for sim time
+  ~170 s, then `tools/ue_cabin_shots.py`.
+- Not done: the counters on the readout strip still show "000" (they could show ΔД, Δε, azimuth and elevation of the
+  SSC); the PPI's range rings are still slightly stair-stepped (the 512-pixel canvas); no per-tube focus/brightness
+  controls change the picture.

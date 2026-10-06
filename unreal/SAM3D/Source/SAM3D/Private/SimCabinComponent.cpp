@@ -252,6 +252,11 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		LabelMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Cabin/Materials/M_CabinLabel.M_CabinLabel"),
 			nullptr, LOAD_NoWarn | LOAD_Quiet);
 	}
+	if (CrtMaterial == nullptr)
+	{
+		CrtMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Cabin/Materials/M_CabinCRT.M_CabinCRT"), nullptr,
+			LOAD_NoWarn | LOAD_Quiet);
+	}
 	if (PanelFaceMaterial == nullptr)
 	{
 		PanelFaceMaterial = LoadObject<UMaterialInterface>(nullptr,
@@ -335,7 +340,7 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 		Display->SetupAttachment(this);
 		Display->RegisterComponent();
 		Display->Setup(Sim, I, BodyPoint(Panel.PointAt(D.u_m, D.v_m)), BodyDir(Panel.Normal()), BodyDir(Panel.Right()),
-			BodyDir(Panel.Up()), ScreenMaterial, CubeMesh, ShapeMaterial);
+			BodyDir(Panel.Up()), CrtMaterial != nullptr ? CrtMaterial.Get() : ScreenMaterial.Get(), CubeMesh, ShapeMaterial);
 		Displays.Add(Display);
 	}
 	BuiltLayout = Layout;
