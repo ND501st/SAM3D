@@ -118,6 +118,7 @@ void USimWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void USimWorldSubsystem::Deinitialize()
 {
+	EmLayer.Reset();
 	Runner.Reset();
 	SampledTerrain.Reset();
 	SimWorld.Reset();
@@ -136,6 +137,14 @@ TStatId USimWorldSubsystem::GetStatId() const
 
 void USimWorldSubsystem::Tick(float DeltaTime)
 {
+	if (EmLayer && EmLayer->IsRunning())
+	{
+		if (!bPaused)
+		{
+			EmLayer->Advance(DeltaTime);
+		}
+		EmLayer->Draw(GetWorld(), [this](const simcore::Vec3& Enu) { return ToUnreal(Enu); });
+	}
 	if (bPaused)
 	{
 		return;
@@ -178,6 +187,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 
 void USimWorldSubsystem::ResetSimulation(double OriginLatitudeDeg, double OriginLongitudeDeg, double OriginAltitudeM)
 {
+	StopEmDemo();  // it runs on the old world's frame and terrain
 	Runner.Reset();
 	SampledTerrain.Reset();
 	// Flat ground at the origin's altitude.
@@ -298,6 +308,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 		UE_LOG(LogSAM3D, Error, TEXT("Scenario failed to load: %s"), *OutError);
 		return false;
 	}
+	StopEmDemo();  // it runs on the old world's frame and terrain
 	SimWorld.Reset();
 	bDemoActive = false;
 	SampledTerrain.Reset();
@@ -583,6 +594,11 @@ bool USimWorldSubsystem::RequestCesiumTerrain(ACesium3DTileset* Tileset, double 
 				TUniquePtr<simcore::GridTerrain> Grid = MakeUnique<simcore::GridTerrain>(
 					-HalfSizeMeters, -HalfSizeMeters, SpacingMeters, Count, Count, std::move(Heights));
 				Runner->SetTerrain(Grid.Get());  // point the sim at the new grid before the old one goes away
+				if (EmLayer && EmLayer->IsRunning())
+				{
+					UE_LOG(LogSAM3D, Log, TEXT("Terrain replaced: EM layer stopped (sam3d.em.Start to restart on it)"));
+					EmLayer->Stop();
+				}
 				SampledTerrain = MoveTemp(Grid);
 			}
 			UE_LOG(LogSAM3D, Log, TEXT("Cesium terrain %s: %d samples, %d failed"), bOk ? TEXT("ready") : TEXT("failed"),
@@ -590,6 +606,46 @@ bool USimWorldSubsystem::RequestCesiumTerrain(ACesium3DTileset* Tileset, double 
 			OnTerrainReady.Broadcast(bOk);
 		}));
 	return true;
+}
+
+// ---------------------------------------------------------------------------------------------- electromagnetic layer
+
+bool USimWorldSubsystem::StartEmDemo(FString& OutError)
+{
+	const simcore::World* W = ActiveWorld();
+	if (W == nullptr)
+	{
+		OutError = TEXT("no sim world: load a scenario or reset the simulation first");
+		return false;
+	}
+	if (!EmLayer)
+	{
+		EmLayer = MakeUnique<FSimEmLayer>();
+	}
+	return EmLayer->StartDemo(ResolveDataDirectory(), W->Frame().Origin(), &W->GetTerrain(), OutError);
+}
+
+void USimWorldSubsystem::StopEmDemo()
+{
+	if (EmLayer)
+	{
+		EmLayer->Stop();
+	}
+}
+
+bool USimWorldSubsystem::IsEmDemoRunning() const
+{
+	return EmLayer && EmLayer->IsRunning();
+}
+
+double USimWorldSubsystem::GetEmTimeSeconds() const
+{
+	return EmLayer ? EmLayer->GetTimeSeconds() : 0.0;
+}
+
+FString USimWorldSubsystem::GetEmStatusText() const
+{
+	return EmLayer ? EmLayer->GetStatusText() : FString(TEXT("EM layer not running"));
 }
 
 // ---------------------------------------------------------------------------------------------- entities

@@ -104,6 +104,15 @@ The player's 3D cabin clicks call the same functions, so the player and the crew
 Per step: `Equipment::Update`, then `ControlPanel::ReleaseMomentaries`, then crew. Crew see this step's lamps, and
 Equipment sees every button press exactly once.
 
+## Electromagnetic layer
+
+`simcore/include/simcore/em/` (namespace `simcore::em`) models radar detection and tracking, passive receivers
+(RWR, ESM, ELINT, TDOA), triangulation, noise and deception jamming, chaff, radio nets and command posts, and each
+unit's knowledge kept apart from truth, from one propagation model over the terrain. Radars and radios are fitted to
+published ranges; data in `data/em/`. It runs at 10 Hz (`EmWorld::Step`), deterministically, and produces debug
+overlay primitives drawn by Unreal (`FSimEmLayer`, `sam3d.em.Debug`) and by `tools/em_view.py`. It is not yet linked
+to the Osa scenario's engagement model (roadmap E2). Full design: `docs/EM_ARCHITECTURE.md`.
+
 ## Known limitations (deliberate, for now)
 
 Generic simcore models (used by the demo, not by the Osa's outcomes):

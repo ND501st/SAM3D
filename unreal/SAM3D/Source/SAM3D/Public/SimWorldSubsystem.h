@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "SimCoreIncludes.h"
+#include "SimEmLayer.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "SimWorldSubsystem.generated.h"
 
@@ -295,6 +296,31 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "SAM3D|Cesium")
 	FOnSimTerrainReady OnTerrainReady;
 
+	// ------------------------------------------------------------------ electromagnetic layer
+
+	/**
+	 * Start the electromagnetic-layer demo (simcore::em: radar, ESM, jamming, C2, knowledge) at the current sim
+	 * origin and terrain. Overlays: console variable sam3d.em.Debug. Console: sam3d.em.Start / sam3d.em.Stop.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|EM")
+	bool StartEmDemo(FString& OutError);
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|EM")
+	void StopEmDemo();
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|EM")
+	bool IsEmDemoRunning() const;
+
+	/** Simulated time of the EM layer (s). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|EM")
+	double GetEmTimeSeconds() const;
+
+	/** Nodes (C2 status, knowledge size) and radars (on/off, tracks), one per line. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|EM")
+	FString GetEmStatusText() const;
+
+	const FSimEmLayer* GetEmLayer() const { return EmLayer.Get(); }
+
 	// ------------------------------------------------------------------ both modes
 
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
@@ -366,4 +392,7 @@ private:
 
 	TWeakObjectPtr<ACesiumGeoreference> Georeference;
 	int32 TerrainRequestSerial = 0;
+
+	// Electromagnetic layer (runs on the active sim world's origin and terrain; stopped when they change).
+	TUniquePtr<FSimEmLayer> EmLayer;
 };

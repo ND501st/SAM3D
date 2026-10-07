@@ -1,0 +1,179 @@
+{
+  "library_id": "osa_ak",
+  "display_name": "9K33M2 Osa-AK (9A33BM2): radars, radio, and NATO's view of them",
+  "status": "First electromagnetic data set for the Osa-AK (October 2026). Performance anchors and geometry come from operator-country sources; internals that no public source gives (pulse width, PRF, noise figure, antenna gain) are labelled estimates derived from the published numbers. Calibration fits each radar's loop gain to its published detection range, so the estimates change ESM and jamming behaviour, not the published ranges. See docs/research/OSA_EM_SPEC_2026-10.md.",
+  "provenance": "per_value",
+  "notes": "Source ids are those of docs/SOURCES.md. Frequencies: operator sources say only 'centimetre band'; the values used are the centres of the bands Western sources report, for propagation only.",
+
+  "sources": [
+    { "id": "korovin_tiv_2010", "title": "V. Korovin, 'Зенитный ракетный комплекс «Оса» — история создания', Техника и вооружение 2010, part 2", "tier": "1",
+      "notes": "Original 9A33B: search radar 250 kW pulse power, ~1e-13 W sensitivity, 1 deg azimuth beam, 4/4/19 deg elevation beams switched each turn at 33 rpm, fighter at 40 km (5 km altitude) / 27 km (50 m); tracking radar 200 kW, 2e-13 W, 1 deg beam, capture 23 km (5 km) / 14 km (50 m); both centimetre band; MTI; under strong jamming angles from the TV sight and range from the search radar." },
+    { "id": "mon_2112_80", "title": "Przeciwlotniczy zestaw rakietowy 9K33M2 OSA-AK, MON Uzbr. 2112/80, Warszawa 1981 (JAWNE)", "tier": "1",
+      "notes": "Printed page numbers. p10: MiG-21-type detection 20-35 km depending on altitude. p12-13: radio range at least 12 km with the radars on, 15 km off. p13-17: magnetron with AFC, TWT front end, TES (MTI) with internal or external coherence, double canceller; monopulse two-channel tracking radar resistant to repeater angle jamming; NLC low-target mode fixes the antenna elevation against ground reflection. p23: in TES only a 1.5 km segment around the tracked target is shown; NLC mode. p26: two R-123M radios. p66-67: siting rules, frequency plan, dummy-load checks." },
+    { "id": "flak11", "title": "R. Wagner, flak11.de, 9K33 pages (NVA Fla-Raketen-Regiment 11)", "tier": "1",
+      "notes": "Search radar coverage 45 km, 0-30 deg; beams I 0-4, II 4-8, III 8-28 deg; tracking radar 0-28 km, -12 to +78 deg, slew 15 deg/s." },
+    { "id": "western_bands", "title": "9K33 Osa, English Wikipedia (citing Western references): Land Roll search radar H band (6-8 GHz), tracking radar J band (14.5 GHz)", "url": "https://en.wikipedia.org/wiki/9K33_Osa", "tier": "4/5",
+      "notes": "Only used for the band centre (propagation, ESM band checks) and for NATO's threat-library view. Its 'frequency-agile' claim is not adopted: mon_2112_80 describes fixed working frequencies on a channel grid." },
+    { "id": "r123_refs", "title": "R-123 'Magnolia': English Wikipedia; greenradio.de Eastern Mobiles R-123M page", "url": "https://en.wikipedia.org/wiki/R-123", "tier": "4",
+      "notes": "20-51.5 MHz in two sub-bands, 4 preset channels, 25 kHz spacing, ~20 W, 2.5 uV sensitivity." }
+  ],
+
+  "radars": [
+    {
+      "id": "osa_ak_soc", "name": "Osa-AK search radar (СОЦ; Polish RSWP)", "role": "search",
+      "emitter": {
+        "freq_hz": { "value": 7.0e9, "source": "western_bands; korovin_tiv_2010 (centimetre band)", "confidence": "low",
+                     "notes": "Band centre only. Operator sources: 'см-диапазон'." },
+        "prf_hz": { "value": 2000, "source": "estimate", "confidence": "estimate",
+                    "notes": "No public value. Chosen so the unambiguous range c/(2 PRF) = 75 km exceeds the 45 km coverage." },
+        "pulse_width_s": { "value": 0.4e-6, "source": "estimate from korovin_tiv_2010 sensitivity", "confidence": "estimate",
+                           "notes": "1e-13 W sensitivity with a ~10 dB noise figure implies ~2.5 MHz bandwidth, i.e. ~0.4 us pulses." },
+        "peak_power_w": { "value": 250000, "source": "korovin_tiv_2010 ('импульсной мощности излучения 250 кВт')", "confidence": "medium",
+                          "notes": "Original 9A33B; the AK's is not published." },
+        "tx_loss_db": { "value": 1.5, "source": "estimate", "confidence": "estimate" },
+        "antenna": {
+          "gain_db": { "value": 37.9, "source": "derived from korovin_tiv_2010 beamwidths", "confidence": "estimate",
+                       "notes": "G = 0.6 x 4 pi / (1 deg x 4 deg); 0.6 is a typical reflector efficiency." },
+          "beamwidth_az_deg": { "value": 1.0, "source": "korovin_tiv_2010 ('ширине луча по азимуту 1°')", "confidence": "high" },
+          "beamwidth_el_deg": { "value": 4.0, "source": "korovin_tiv_2010 (4 deg in the two lower positions)", "confidence": "high" },
+          "sidelobe_db": { "value": -25, "source": "estimate", "confidence": "estimate" }
+        },
+        "scan": "circular",
+        "scan_period_s": { "value": 1.818, "source": "korovin_tiv_2010, flak11, mon_2112_80 p15 (33 rpm)", "confidence": "high" },
+        "beams": [
+          { "name": "I", "centre_deg": { "value": 2.0, "source": "flak11 (0-4 deg), korovin_tiv_2010", "confidence": "high" },
+            "height_deg": { "value": 4.0, "source": "korovin_tiv_2010", "confidence": "high" } },
+          { "name": "II", "centre_deg": { "value": 6.0, "source": "flak11 (4-8 deg), korovin_tiv_2010", "confidence": "high" },
+            "height_deg": { "value": 4.0, "source": "korovin_tiv_2010", "confidence": "high" } },
+          { "name": "III", "centre_deg": { "value": 17.5, "source": "korovin_tiv_2010 (27 deg in all); flak11 gives 8-28", "confidence": "medium" },
+            "height_deg": { "value": 19.0, "source": "korovin_tiv_2010 ('до 19° в верхнем положении')", "confidence": "high" } }
+        ],
+        "agility": "channels",
+        "notes": "One beam per turn, switched each revolution (korovin_tiv_2010; mon_2112_80 p15). Working frequency chosen from a fixed grid per vehicle (mon_2112_80 p67): channel numbers are not public, so no channel list is given."
+      },
+      "noise_figure_db": { "value": 10, "source": "estimate consistent with korovin_tiv_2010 sensitivity", "confidence": "estimate",
+                           "notes": "TWT front end (mon_2112_80 p15); 10 dB with 2.5 MHz gives ~1e-13 W noise." },
+      "pfa": { "value": 1e-6, "source": "assumption", "confidence": "estimate" },
+      "calibration": { "range_m": 40000, "rcs_m2": 3.0, "target_altitude_m": 5000, "pd": 0.5,
+                       "source": "korovin_tiv_2010 ('истребитель на дальности 40 км при высоте полета 5 км')", "confidence": "medium",
+                       "notes": "Original 9A33B. RCS 3 m2 and Pd 0.5 per scan are assumptions for 'fighter-type'. mon_2112_80 p10 gives 20-35 km for a MiG-21-type target on the Osa-AK, consistent with a higher Pd: the calibrated model gives Pd 0.8 near 30 km." },
+      "low_altitude_check": { "range_m": 27000, "rcs_m2": 3.0, "target_altitude_m": 50, "pd": 0.5,
+                              "source": "korovin_tiv_2010 ('27 км на высоте 50 м')", "confidence": "medium",
+                              "notes": "Not fitted: reported by the calibration check against the propagation model." },
+      "antenna_height_m": { "value": 5.0, "source": "estimate (antenna on the turret roof of the deployed vehicle)", "confidence": "estimate" },
+      "min_range_m": { "value": 1000, "source": "estimate", "confidence": "estimate" },
+      "max_range_m": { "value": 45000, "source": "flak11 (coverage 45 km); samsim_osa display 10-45 km", "confidence": "high" },
+      "min_elevation_deg": { "value": -1, "source": "estimate", "confidence": "estimate" },
+      "max_elevation_deg": { "value": 30, "source": "flak11 (0-30 deg)", "confidence": "high" },
+      "range_sigma_floor_m": { "value": 75, "source": "estimate", "confidence": "estimate" },
+      "angle_sigma_floor_deg": { "value": 0.2, "source": "estimate", "confidence": "estimate" },
+      "range_resolution_m": { "value": 75, "source": "derived from the 0.4 us pulse estimate", "confidence": "estimate" },
+      "mti": {
+        "improvement_db": { "value": 25, "source": "estimate; mon_2112_80 p15, p23 (TES, double inter-period subtraction)", "confidence": "estimate" },
+        "notch_mps": { "value": 15, "source": "estimate", "confidence": "estimate" },
+        "notch_attenuation_db": { "value": 30, "source": "estimate", "confidence": "estimate" },
+        "notes": "Internal or external coherence (mon_2112_80 p15): external takes the phase reference from the chaff, cancelling wind-blown chaff (MtiMode::External)."
+      },
+      "clutter": {
+        "cnr_db_at_10km": { "value": 45, "source": "estimate", "confidence": "estimate" },
+        "max_elevation_deg": { "value": 1.5, "source": "estimate", "confidence": "estimate" }
+      },
+      "tracker": { "confirm_hits": 2, "confirm_window": 3, "drop_confirmed_misses": 3, "process_noise_accel": 30,
+                   "notes": "Processing choices for the operator's mental track on the PPI, not system data." },
+      "iff": { "reply_probability": 0.9, "source": "mon_2112_80 p14, p16 (NRZ interrogator, antenna integrated with the search antenna); probability is an estimate", "confidence": "medium" },
+      "eccm": { "strobe_jn_threshold_db": 6, "source": "estimate", "confidence": "estimate" },
+      "source": "korovin_tiv_2010; mon_2112_80; flak11; estimates as marked", "confidence": "medium",
+      "notes": "Detection is calibrated to korovin's 40 km; the 27 km low-altitude figure is checked, not fitted (tests/test_em_data.cpp)."
+    },
+    {
+      "id": "osa_ak_ssc", "name": "Osa-AK tracking radar (ССЦ; Polish SSC)", "role": "track",
+      "emitter": {
+        "freq_hz": { "value": 14.5e9, "source": "western_bands; korovin_tiv_2010 (centimetre band)", "confidence": "low",
+                     "notes": "Band centre only." },
+        "prf_hz": { "value": 3000, "source": "estimate", "confidence": "estimate",
+                    "notes": "Unambiguous range 50 km > 28 km tracking range." },
+        "pulse_width_s": { "value": 0.2e-6, "source": "estimate from korovin_tiv_2010 sensitivity", "confidence": "estimate",
+                           "notes": "2e-13 W with ~10 dB noise figure implies ~5 MHz bandwidth." },
+        "peak_power_w": { "value": 200000, "source": "korovin_tiv_2010 ('200 кВт')", "confidence": "medium",
+                          "notes": "Conflict: 180 kW (SAM Simulator), 18 kW (a flak11 page). Original 9A33B." },
+        "tx_loss_db": { "value": 1.5, "source": "estimate", "confidence": "estimate" },
+        "antenna": {
+          "gain_db": { "value": 43.9, "source": "derived from korovin_tiv_2010 beamwidth", "confidence": "estimate",
+                       "notes": "0.6 x 4 pi / (1 deg x 1 deg)." },
+          "beamwidth_az_deg": { "value": 1.0, "source": "korovin_tiv_2010 ('ширине луча 1°')", "confidence": "high" },
+          "beamwidth_el_deg": { "value": 1.0, "source": "korovin_tiv_2010", "confidence": "high" },
+          "sidelobe_db": { "value": -28, "source": "estimate (monopulse antenna, mon_2112_80 p16)", "confidence": "estimate" }
+        },
+        "scan": "tracking",
+        "agility": "channels"
+      },
+      "noise_figure_db": { "value": 10, "source": "estimate consistent with korovin_tiv_2010 sensitivity", "confidence": "estimate" },
+      "pfa": { "value": 1e-6, "source": "assumption", "confidence": "estimate" },
+      "calibration": { "range_m": 23000, "rcs_m2": 3.0, "target_altitude_m": 5000, "pd": 0.5,
+                       "source": "korovin_tiv_2010 (capture to automatic tracking at 23 km at 5 km altitude)", "confidence": "medium",
+                       "notes": "The article prints '5000 км', an obvious misprint for 5000 m." },
+      "low_altitude_check": { "range_m": 14000, "rcs_m2": 3.0, "target_altitude_m": 50, "pd": 0.5,
+                              "source": "korovin_tiv_2010 ('14 км при высоте полета 50 м')", "confidence": "medium" },
+      "antenna_height_m": { "value": 4.5, "source": "estimate", "confidence": "estimate" },
+      "min_range_m": { "value": 1000, "source": "estimate", "confidence": "estimate" },
+      "max_range_m": { "value": 28000, "source": "flak11 (0-28 km)", "confidence": "medium" },
+      "min_elevation_deg": { "value": -12, "source": "flak11", "confidence": "medium" },
+      "max_elevation_deg": { "value": 78, "source": "flak11", "confidence": "medium" },
+      "range_sigma_floor_m": { "value": 10, "source": "estimate", "confidence": "estimate" },
+      "angle_sigma_floor_deg": { "value": 0.05, "source": "estimate", "confidence": "estimate" },
+      "range_resolution_m": { "value": 30, "source": "derived from the 0.2 us pulse estimate", "confidence": "estimate" },
+      "mti": {
+        "improvement_db": { "value": 25, "source": "estimate; korovin_tiv_2010 (SSC had MTI against chaff)", "confidence": "estimate" },
+        "notch_mps": { "value": 10, "source": "estimate", "confidence": "estimate" }
+      },
+      "clutter": {
+        "cnr_db_at_10km": { "value": 35, "source": "estimate", "confidence": "estimate" },
+        "max_elevation_deg": { "value": 1.0, "source": "estimate", "confidence": "estimate" }
+      },
+      "tracker": { "confirm_hits": 3, "confirm_window": 4, "drop_confirmed_misses": 10, "process_noise_accel": 60 },
+      "track_gate_m": { "value": 750, "source": "mon_2112_80 p23 (TES shows a 1.5 km segment around the tracked target); samsim_osa p24", "confidence": "high" },
+      "max_slew_deg_s": { "value": 15, "source": "flak11 (azimuth 15 deg/s)", "confidence": "medium" },
+      "low_target_elevation_deg": { "value": 0.48, "source": "flak11, samsim_osa p25 (НЛЦ lamp at 0-06...0-10 mils); mon_2112_80 p17 (NLC: antennas held at a set angle above the horizon against ground-reflection distortion)", "confidence": "medium",
+                                    "notes": "8 Soviet mils (6000 per turn), the middle of 0-06...0-10. Below it the tracking antenna stops following the target down." },
+      "eccm": { "angle_track_on_jam": true, "rgpo_susceptibility": 0.5,
+                "source": "angle_track_on_jam: samsim_thread (method 'Н': three-point guidance on the jammer's angles), korovin_tiv_2010 (angles from the TV sight, range from the search radar, under strong jamming); rgpo_susceptibility is an estimate",
+                "confidence": "low",
+                "notes": "mon_2112_80 p16-17: the two-channel monopulse resists repeater *angle* jamming; nothing public on range-gate pull-off." },
+      "source": "korovin_tiv_2010; mon_2112_80; flak11; estimates as marked", "confidence": "medium"
+    }
+  ],
+
+  "radios": [
+    {
+      "id": "r123m", "name": "R-123M VHF radio (two on each 9A33BM2)",
+      "freq_min_hz": { "value": 20.0e6, "source": "r123_refs", "confidence": "medium" },
+      "freq_max_hz": { "value": 51.5e6, "source": "r123_refs", "confidence": "medium" },
+      "power_w": { "value": 20, "source": "r123_refs", "confidence": "medium" },
+      "antenna_gain_db": { "value": 1.0, "source": "estimate (vehicle whip over the hull)", "confidence": "estimate" },
+      "antenna_height_m": { "value": 3.5, "source": "estimate", "confidence": "estimate" },
+      "sensitivity_dbw": { "value": -131, "source": "derived from r123_refs (2.5 uV into an assumed 75 ohm)", "confidence": "estimate" },
+      "required_snr_db": { "value": 12, "source": "estimate", "confidence": "estimate" },
+      "bandwidth_hz": { "value": 25000, "source": "r123_refs (25 kHz channel spacing)", "confidence": "medium" },
+      "voice": true,
+      "message_s": { "value": 8, "source": "estimate (one designation read out: number, azimuth, range)", "confidence": "estimate" },
+      "operator_delay_s": { "value": 4, "source": "estimate", "confidence": "estimate" },
+      "tracks_per_message": { "value": 1, "source": "flak11 (designations to each vehicle by voice, azimuth and range)", "confidence": "medium" },
+      "range_anchor": { "range_m": 15000, "antenna_height_m": 3.5, "cosite_range_m": 12000,
+                        "source": "mon_2112_80 p12-13 (radio range at least 12 km with the vehicle's radar transmitters working, at least 15 km with them off)",
+                        "confidence": "high",
+                        "notes": "System loss and co-site desense are fitted to these two ranges over flat open ground." },
+      "source": "mon_2112_80 p12-13, p26 (two R-123M); r123_refs", "confidence": "medium"
+    }
+  ],
+
+  "threat_libraries": [
+    { "id": "nato_rwr_sa8", "name": "NATO RWR view of the SA-8 (Western-reported bands)", "owner": "blue",
+      "notes": "What the blue side believed: band letters from Western sources. Wider than the truth on purpose; PRF and pulse width are unknown to us, so not constrained.",
+      "entries": [
+        { "id": "sa8_land_roll_search", "name": "SA-8 search (Land Roll)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "western_bands", "confidence": "low" },
+        { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 14.0e9, "freq_max_hz": 15.0e9, "source": "western_bands", "confidence": "low" }
+      ] }
+  ]
+}

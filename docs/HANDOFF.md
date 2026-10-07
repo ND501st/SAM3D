@@ -1,6 +1,7 @@
 # SAM3D — Handoff for the next AI model
 
 *3D interior work (5 Oct 2026): see `docs/INTERIOR_HANDOFF.md` first.*
+*Electromagnetic layer — radar, ESM, EW, C2 (7 Oct 2026, branch `feature/em-environment`): see `docs/EM_HANDOFF.md`.*
 
 *Written 30 Sep 2026 (Australia/Sydney); last updated 3 Oct 2026 at the end of the session that played the running game for 6.0. Read this first, then
 `docs/BRIEFING_2026-10.md`, the repo's `CLAUDE.md`, `docs/DEVELOPMENT_ROADMAP.md` and `docs/ARCHITECTURE.md`.*

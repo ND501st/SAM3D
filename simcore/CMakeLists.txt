@@ -45,7 +45,10 @@ add_executable(simcore_tests
   tests/test_scenario.cpp
   tests/test_engagement_model.cpp
   tests/test_cabin.cpp
-  tests/test_scopes.cpp)
+  tests/test_scopes.cpp
+  tests/test_em_models.cpp
+  tests/test_em_data.cpp
+  tests/test_em_scenarios.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -72,3 +75,15 @@ simcore_configure_target(scenario_demo)
 add_test(NAME scenario_demo
          COMMAND scenario_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/osa_practice.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/osa_practice.acmi")
+
+# Electromagnetic layer MVP: radar, ESM, triangulation, jamming, C2 on a synthetic battlefield.
+# Prints the timeline and the eleven MVP checks; also run as a test.
+add_executable(em_demo examples/em_demo.cpp)
+simcore_configure_target(em_demo)
+add_test(NAME em_demo
+         COMMAND em_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/em_demo.json"
+                 "${CMAKE_CURRENT_BINARY_DIR}/em_demo.acmi")
+
+# Scaling benchmark for the electromagnetic layer (not a test: timing depends on the machine).
+add_executable(em_bench examples/em_bench.cpp)
+simcore_configure_target(em_bench)
