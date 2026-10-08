@@ -224,6 +224,22 @@ public:
         return true;
     }
 
+    // The lock is firm enough for the auto-capture circuit to take it: the radar has had it for kCaptureLooks looks and
+    // echoed on at least kCaptureHits of them (a local Pd of about one half). A lock can start on a lucky echo
+    // far out, where Swerling I detection is still a few tenths; the circuit waits for the target to come into
+    // the range where the published capture figure (Pd 0.5) holds. An existing lock is kept by Locked() alone.
+    static constexpr int kCaptureLooks = 20;
+    static constexpr int kCaptureHits = 11;
+    bool Captured(std::string* target_id, Contact* estimate = nullptr) const {
+        if (!Locked(target_id, estimate)) return false;
+        const em::RadarState* r = Radar(track_);
+        const em::SensorTrack* t = r->tracker.Find(r->locked_track);
+        if (t->looks < kCaptureLooks) return false;
+        int hits = 0;
+        for (int i = 0; i < kCaptureLooks; ++i) hits += static_cast<int>((t->history >> i) & 1u);
+        return hits >= kCaptureHits;
+    }
+
     // Whether the tracking radar's beam would show this target's echo on its range indicator now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates.

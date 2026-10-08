@@ -76,4 +76,4 @@ detect, once per revolution), and the tracking radar is pointed by the azimuth, 
 on a detected echo in its beam and range gate. The tuning still supplies the zone lamps, the crew's aiming speeds
 and the outcome of each launch. `osa_practice_em.json` is `osa_practice.json` with the EM layer on. Target `rcs_m2`
 becomes the radar cross-section from every aspect, so give real values: a 0.5 m2 drone at 1 km is first shown on the
-scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking radar takes it at 16 to 22 km.
+scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking radar captures it at 13 to 15 km (its 50 % range is 14.8 km).

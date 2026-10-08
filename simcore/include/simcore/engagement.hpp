@@ -817,7 +817,7 @@ private:
             std::string locked;
             if (aiming) {
                 em_->Designate(IndicatedToTrueDeg(wheel_az), antenna_el_deg_, wheel_r);
-                const auto it = em_->Locked(&locked) ? geo_.find(locked) : geo_.end();
+                const auto it = em_->Captured(&locked) ? geo_.find(locked) : geo_.end();
                 if (it != geo_.end() && it->second.alive) {
                     found = locked;
                     found_method = TrackMethod::Radar;

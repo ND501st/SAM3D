@@ -187,11 +187,11 @@ frequency changes are data-only.
    whatever the selector says), IFF replies from the EM radar's transponder model, and the scope's sweep
    in step with the radar's. Roadmap 6.4 (beam indicator, low-target ranges, blind cone, MTI against normal
    video) can now be done against the EM radar instead of by rules.
-   **Findings to read before building on it:** (a) a tracking radar captures on the first echo in its gate,
-   and Swerling I Pd falls slowly (0.24 at 28 km for the Korovin target), so capture lands at about 27 km,
-   not his 23 km: define capture as Pd 0.5 or better over a dwell, or add an integration requirement to the
-   lock; a fresh fluctuation draw per look is not the cause (a 1 s correlation time moved it by 0.4 km and
-   was dropped); (b) a target above about 8 degrees elevation is only in beam III (19 degrees tall, 13.6 dB
+   **Findings to read before building on it:** (a) a tracking radar locks on the first echo in its gate, and Swerling I Pd falls slowly (0.24 at 28 km
+   for the Korovin target), so the raw lock came at 27 km, not his 23 km. The engagement model now takes the
+   lock only once the radar has echoed on 11 of its last 20 looks (`EmSensorLink::Captured`), which gives 23 to
+   25 km. The 11-of-20 rule is my model choice, not a published figure; a 1 s echo-fading correlation time
+   was tried and moved the raw lock by 0.4 km, so it was dropped; (b) a target above about 8 degrees elevation is only in beam III (19 degrees tall, 13.6 dB
    less two-way gain), so a 3 m2 target at 5 km shows at 16 to 35 km depending on the seed instead of
    at 40 km; (c) both radars cancel radial speeds under 15 m/s as clutter, so a hovering target is
    invisible to them.

@@ -379,9 +379,10 @@ Co-operative crews share one node.
 * Doctrine is minimal (one SAM rule set); no ARM detection or relocation yet.
 * The Osa's two radars are connected (§23); its IFF replies, TV channel, missiles and the crew's jamming
   response are not.
-* A tracking radar captures on the first echo in its gate and Swerling I detection falls off slowly, so an
-  inbound target is captured between the radar's R50 and its range limit (27 km for a 3 m2 target against
-  Korovin's 23 km): see `docs/EM_HANDOFF.md`, open question 3.
+* The tracking radar locks on the first echo in its gate, and Swerling I detection falls off slowly (Pd 0.24 at
+  28 km for the Korovin target), so the raw lock comes at 27 km. The Osa's auto-capture is modelled as waiting for
+  11 hits in the last 20 looks (`EmSensorLink::Captured`), which puts it at 23 to 25 km (Korovin: 23 km). The
+  window and count are a model choice, not published.
 
 ## 23. The Osa's radars (phase E2)
 
@@ -397,7 +398,7 @@ Co-operative crews share one node.
   revolution (1.8 s), from the radar's measurement, and high targets are seen at shorter range (beam III). The
   console's range-scale window still decides what is displayed. The scenario's target id is the truth platform the
   track came from; positions the crew sees are the measured ones.
-* **Tracking radar**: with the acquisition mode engaged, the transmitter ready and the antenna free to turn, the
+* **Tracking radar** (the engagement model takes a lock once `Captured()`: 11 hits in 20 looks): with the acquisition mode engaged, the transmitter ready and the antenna free to turn, the
   engagement model puts a designation at the wheels' azimuth (true, through the gyro), the antenna elevation (the
   elevation search's scan, or the elevation wheel) and the range wheel. The antenna slews there, looks only in its
   beam and range gate, and locks on a detected echo; the model accepts the lock after `lock_time_s`, then the servo
@@ -410,7 +411,8 @@ Co-operative crews share one node.
   the zone lamps, the НЛЦ lamp, the crew's aiming speeds and the hit/miss outcome are unchanged.
 * **Bands** (`simcore/tests/test_em_link.cpp`): for the practice drone (0.5 m2 at 1 km) first contact lies between
   the search radar's R50 (28 km) and R10 (37.5 km) minus the revolution it takes to confirm (25 to 34 km over 10
-  seeds); the tracking radar takes it at 16 to 22 km. A 3 m2 target at 5 km is captured at about 27 km with a perfect
+  seeds); the tracking radar captures it at 13.5 to 15.4 km (its R50 is 14.8 km). A 3 m2 target at 5 km is
+  locked at 27 km and auto-captured at 23 to 25 km with a perfect
   designation.
 * **Not synchronised**: the scope's own sweep (`SearchScope`) paints the picture on its own phase; the EM radar's
   sweep decides when a track is updated.

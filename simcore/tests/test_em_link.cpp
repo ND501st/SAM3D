@@ -280,33 +280,39 @@ SC_TEST("em link: the range indicator shows echoes in the beam, not just in the 
     SC_EXPECT(!b.link->EchoVisible("t"));
 }
 
-SC_TEST("em link: the tracking radar captures a 3 m2 target at 5 km inside the published band (Korovin: 23 km)") {
+SC_TEST("em link: the auto-capture takes a 3 m2 target at 5 km near the published range (Korovin: 23 km)") {
     // data/em/osa_ak.json fits Pd 0.5 at 23 km; the radar's own range limit is 28 km. The designation is on the
-    // target's true position (a perfect search picture) so this tests the tracking radar alone. Capture happens on
-    // the first echo in the gate, and Swerling I detection falls off slowly (Pd 0.24 at 28 km), so an inbound
-    // target is captured between R50 and the range limit, not at R50 (docs/EM_HANDOFF.md, open question 3).
+    // target's true position (a perfect search picture) so this tests the tracking radar alone. The radar locks on
+    // the first echo in the gate, and Swerling I detection falls off slowly (Pd 0.24 at 28 km), so that happens
+    // far out; the auto-capture waits for a local Pd of one half (11 hits in 20 looks), which is the figure Korovin
+    // gives.
     const em::RadarDef ssc = OsaRadar("osa_ak_ssc");
     SC_EXPECT_NEAR(em::DetectionRangeAt(ssc, em::Environment(), 5000.0, 3.0, 0.5), 23000.0, 400.0);
-    std::vector<double> locks;
+    std::vector<double> locks, captures;
     for (unsigned seed = 1; seed <= 12; ++seed) {
         Bench b(seed);
         SC_EXPECT(b.ok);
         b.link->SetTrack(true);
         b.height_m = 5000.0;
         b.north_m = 40000.0;
-        double lock_m = -1.0;
-        for (int i = 0; i < 2000 && lock_m < 0.0; ++i) {
+        double lock_m = -1.0, capture_m = -1.0;
+        for (int i = 0; i < 2000 && capture_m < 0.0; ++i) {
             b.Tick(true);
-            if (b.link->Locked(nullptr)) lock_m = b.north_m;
+            if (lock_m < 0.0 && b.link->Locked(nullptr)) lock_m = b.north_m;
+            if (b.link->Captured(nullptr)) capture_m = b.north_m;
         }
         locks.push_back(lock_m);
+        captures.push_back(capture_m);
     }
     std::sort(locks.begin(), locks.end());
-    std::printf("    locks %.1f .. %.1f km (median %.1f)\n", locks.front() / 1000.0, locks.back() / 1000.0,
-                locks[locks.size() / 2] / 1000.0);
-    SC_EXPECT(locks.front() > 0.0);                // every seed captured
-    SC_EXPECT(locks.back() <= 28100.0);            // never beyond the radar's range limit
-    SC_EXPECT(locks[locks.size() / 2] > 21000.0);  // and at least as far out as the published capture range
+    std::sort(captures.begin(), captures.end());
+    std::printf("    first lock %.1f .. %.1f km; auto-capture %.1f .. %.1f km (median %.1f)\n", locks.front() / 1000.0,
+                locks.back() / 1000.0, captures.front() / 1000.0, captures.back() / 1000.0,
+                captures[captures.size() / 2] / 1000.0);
+    SC_EXPECT(captures.front() > 0.0);  // every seed captured
+    SC_EXPECT(locks.back() <= 28100.0);  // never beyond the radar's range limit
+    SC_EXPECT(captures[captures.size() / 2] > 20000.0 && captures[captures.size() / 2] < 25500.0);  // about 23 km
+    SC_EXPECT(captures.back() < locks.front());  // the lock always comes first
 }
 
 SC_TEST("em practice: the Osa plays the practice scenario on EM radars, from contact to a resolved launch") {
@@ -345,8 +351,9 @@ SC_TEST("em practice: contact and lock ranges sit in the bands the radars' calib
                 ssc_10 / 1000.0, locks.front() / 1000.0, locks.back() / 1000.0);
     // A confirmed contact needs two hits in three looks: it appears between where Pd is 0.1 and where it is high.
     SC_EXPECT(contacts.front() > 0.75 * soc_50 && contacts.back() < 1.1 * soc_10);
-    // The tracking radar captures from about R50 out toward R10 (the crew sets the gate on the contact first).
-    SC_EXPECT(locks.front() > 0.7 * ssc_50 && locks.back() < 1.25 * ssc_10);
+    // The auto-capture takes it at about the tracking radar's R50 (the crew sets the gate on the contact first).
+    SC_EXPECT(locks.front() > 0.85 * ssc_50 && locks.back() < 1.15 * ssc_50);
+    SC_EXPECT(ssc_10 > ssc_50);
     // And the search radar always shows the target before the tracking radar holds it.
     for (std::size_t i = 0; i < contacts.size(); ++i) SC_EXPECT(contacts[i] > locks[0]);
 }
