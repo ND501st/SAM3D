@@ -26,6 +26,7 @@ the readiness state they start in (march, deployed, powered).
   "own_unit": {
     "console": "procedures/osa_ak.json",              // relative to data/
     "tuning": "gameplay/osa_ak.json",                 // optional: turns on the gameplay engagement model
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },  // optional, see below
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
     "inputs": { "vehicle_stopped": false }            // starting values of console inputs
@@ -67,3 +68,12 @@ is left alone.
 Each launch is resolved as a hit or a miss from the target's `class` and the factors listed in the tuning file; the
 debrief prints them. Heights given as `up_m` are in the flat local frame: far from the origin the true height is
 higher (about 45 m at 24 km), so give low targets in `lat_deg`/`lon_deg`/`alt_m` or keep them close.
+
+With `"em"` (needs `"tuning"`), the unit's search and tracking radars come from the electromagnetic layer
+(`simcore/em_link.hpp`, library in `data/em/`, `docs/EM_ARCHITECTURE.md` §23) instead of the tuning's rules: the search
+scope shows the search radar's own tracks (what the calibrated radar equation, terrain, MTI and clutter let it
+detect, once per revolution), and the tracking radar is pointed by the azimuth, elevation and range wheels and locks
+on a detected echo in its beam and range gate. The tuning still supplies the zone lamps, the crew's aiming speeds
+and the outcome of each launch. `osa_practice_em.json` is `osa_practice.json` with the EM layer on. Target `rcs_m2`
+becomes the radar cross-section from every aspect, so give real values: a 0.5 m2 drone at 1 km is first shown on the
+scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking radar takes it at 16 to 22 km.

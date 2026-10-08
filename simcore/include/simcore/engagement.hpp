@@ -31,6 +31,11 @@
 //     error, and designations given in true azimuth (the plotting board) point wrong.
 //     Without an orientation block the frame is true north.
 //   * IFF: an interrogation makes friendly aircraft reply on the search scope.
+//
+// With an EmSensorLink (em_link.hpp; the scenario's "em" block) the search picture and the radar lock come from
+// the electromagnetic layer instead of the rules above: the search scope shows the search radar's tracks, and
+// the tracking radar is pointed at the wheels' designation and locks on a detected echo in its beam and gate.
+// TV tracking, IFF, the zone lamps and the outcome stay as described.
 #pragma once
 
 #include <cmath>
@@ -49,6 +54,7 @@
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
+#include "simcore/em_link.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/world.hpp"
 
@@ -298,6 +304,7 @@ public:
         UpdateOrientation(t, dt, console, log, aim_crew.elevation);
         Measure(dt, world, targets);
         ResolveShots(t, world, targets, log, rng);
+        if (em_ != nullptr) StepEm(dt, world, console, targets);
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
         if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
@@ -378,6 +385,11 @@ public:
             s.acmi_shown = true;
         }
     }
+
+    // Use the electromagnetic layer for the search picture and the radar lock (null = the gameplay rules). The link
+    // must outlive the model.
+    void SetEmLink(EmSensorLink* link) { em_ = link; }
+    bool EmActive() const { return em_ != nullptr; }
 
     // The unit moved (driven by the player or an AI driver).
     void SetUnitPosition(const Vec3& unit_position) { unit_ = unit_position; }
@@ -513,6 +525,23 @@ private:
         }
     }
 
+    // Hand the EM layer this step's world: where the unit and the targets are, which radars radiate and whether the
+    // search radar's MTI is selected; then let it run to now.
+    void StepEm(double dt, World& world, const ConsoleData& console, const std::vector<EngagementTarget>& targets) {
+        em_->SetUnit(unit_);
+        for (const EngagementTarget& tg : targets) {
+            if (tg.world_id < 0) continue;
+            const Aircraft* a = world.FindAircraft(tg.world_id);
+            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly);
+        }
+        const SearchSensorDef& s = console.search;
+        const Equipment& eq = console.equipment;
+        const bool mti = !s.mti_control.empty() && console.panel.Get(s.mti_control) == 1;
+        em_->SetSearch(eq.IsReady(s.antenna) && eq.IsReady(s.transmitter), mti);
+        em_->SetTrack(eq.IsReady(console.track.transmitter));
+        em_->Advance(dt);
+    }
+
     bool InZone(const Geometry& g) const {
         return g.range_m >= tuning_.zone_min_range_m && g.range_m <= tuning_.zone_max_range_m &&
                g.agl_m >= tuning_.zone_min_alt_m && g.agl_m <= tuning_.zone_max_alt_m;
@@ -589,6 +618,19 @@ private:
         if (scale < 0 || scale >= static_cast<int>(d.range_scales_m.size())) return;
         const std::pair<double, double>& window = d.range_scales_m[static_cast<std::size_t>(scale)];
         const bool mti = !d.mti_control.empty() && console.panel.Get(d.mti_control) == 1;
+        if (em_ != nullptr) {  // the search radar's own tracks, in the crew's heading frame
+            for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
+                if (c.range_m < window.first || c.range_m > window.second) continue;
+                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+                picture_.push_back({c.target_id, c.range_m, az, c.el_deg});
+                if (seen_by_search_.insert(c.target_id).second) {
+                    char detail[96];
+                    std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
+                    log.Record({t, DebriefEntry::Kind::Scenario, "SOC", c.target_id, detail});
+                }
+            }
+            return;
+        }
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
             if (!g.alive || !g.los || g.range_m < window.first || g.range_m > window.second) continue;
@@ -607,44 +649,57 @@ private:
         return std::fabs(d) <= max_step ? to : from + (d > 0.0 ? max_step : -max_step);
     }
 
-    // The aiming crew turn their wheels toward the nearest contact. A locked wheel doesn't turn.
+    // The aiming crew turn their wheels toward the nearest contact, as the scope shows it. A locked wheel doesn't turn.
     void Aim(double dt, ConsoleData& console, const AimCrew& crew) {
         if (!crew.azimuth && !crew.elevation && !crew.range) return;
         const TrackSensorDef& d = console.track;
-        const Geometry* best = nullptr;
+        struct Aimpoint {
+            double range_m = 0.0;
+            double az_deg = 0.0;  // the crew's frame
+            double el_deg = 0.0;
+        };
+        Aimpoint best;
+        bool have = false;
         std::string best_id;
         bool range_known = false;
         for (const Contact& c : picture_) {
-            const Geometry& g = geo_.at(c.target_id);
-            if (best == nullptr || g.range_m < best->range_m) {
-                best = &g;
+            if (!have || c.range_m < best.range_m) {
+                best = {c.range_m, c.azimuth_deg, c.elevation_deg};
                 best_id = c.target_id;
+                have = true;
             }
             range_known = true;
         }
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
         bool from_board = false;
-        if (best == nullptr && tv_search) {  // radars silent: azimuth from the plotting board
+        double board_true_az = 0.0;
+        if (!have && tv_search) {  // radars silent: azimuth from the plotting board
+            const Geometry* near_g = nullptr;
             for (const auto& kv : geo_) {
                 const Geometry& g = kv.second;
                 if (g.alive && g.range_m <= tuning_.plotting_board_range_m &&
-                    (best == nullptr || g.range_m < best->range_m)) {
-                    best = &g;
-                    from_board = true;
+                    (near_g == nullptr || g.range_m < near_g->range_m)) {
+                    near_g = &g;
                 }
             }
+            if (near_g != nullptr) {
+                best = {near_g->range_m, near_g->az_deg, near_g->el_deg};
+                board_true_az = near_g->true_az_deg;
+                have = true;
+                from_board = true;
+            }
         }
-        if (best == nullptr) return;
+        if (!have) return;
         const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
         if (crew.azimuth && !az_locked) {
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             // The board gives true azimuth, set on the wheel as it is: right only if the vehicle is oriented.
-            const double want_az = WheelAzimuth(from_board ? best->true_az_deg : best->az_deg, wheel_az, d.az_limit_deg);
+            const double want_az = WheelAzimuth(from_board ? board_true_az : best.az_deg, wheel_az, d.az_limit_deg);
             console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * dt));
         }
         if (crew.range && range_known) {
             const double wheel_r = console.panel.GetValue(d.range_wheel);
-            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best->range_m, tuning_.aim_range_rate_mps * dt));
+            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best.range_m, tuning_.aim_range_rate_mps * dt));
         }
         // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
         // (under the azimuth line while the tracking radar radiates).
@@ -654,7 +709,7 @@ private:
         }
         if (crew.elevation && (tv_search || on_indicator)) {
             const double wheel_el = console.panel.GetValue(d.el_wheel);
-            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best->el_deg, tuning_.aim_el_rate_deg_s * dt));
+            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * dt));
         }
     }
 
@@ -664,6 +719,18 @@ private:
         track_returns_.clear();
         const TrackSensorDef& d = console.track;
         if (!console.equipment.IsReady(d.transmitter)) return;
+        if (em_ != nullptr) {  // echoes the antenna's beam really picks up, wherever the range gate is
+            std::string locked;
+            const bool is_locked = method_ == TrackMethod::Radar && em_->Locked(&locked);
+            for (const auto& kv : geo_) {
+                const Geometry& g = kv.second;
+                if (!g.alive || g.range_m > d.max_range_m) continue;
+                if ((is_locked && kv.first == locked) || em_->EchoVisible(kv.first)) {
+                    track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
+                }
+            }
+            return;
+        }
         const double wheel_az = console.panel.GetValue(d.az_wheel);
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
@@ -682,6 +749,10 @@ private:
         const Equipment& eq = console.equipment;
         if (!g.alive) return "target down";
         if (!eq.IsReady(d.slew)) return "antenna not free to turn";
+        if (method == TrackMethod::Radar && em_ != nullptr) {  // the radar equation decides, not these rules
+            if (!eq.IsReady(d.transmitter)) return "transmitter off";
+            return nullptr;
+        }
         if (!g.los) return "no line of sight";
         if (g.angular_rate_deg_s > tuning_.max_angular_rate_deg_s) return "target crossing too fast";
         if (method == TrackMethod::Radar) {
@@ -706,15 +777,26 @@ private:
         if (method_ != TrackMethod::None) {
             const Geometry& g = geo_.at(tracked_);
             const char* problem = LockProblem(console, g, method_);
+            // The radar's own lock: the filter's estimate drives the servo, and a lock that has gone is lost.
+            const bool radar_em = method_ == TrackMethod::Radar && em_ != nullptr;
+            EmSensorLink::Contact estimate;
+            if (problem == nullptr && radar_em) {
+                std::string id;
+                if (!em_->Locked(&id, &estimate) || id != tracked_) problem = "radar lost the echo";
+            }
             if (problem == nullptr) {  // the tracking servo follows the target
-                console.panel.SetValue(d.az_wheel,
-                                       WheelAzimuth(g.az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
-                console.panel.SetValue(d.el_wheel, g.el_deg);
-                if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, g.range_m);
-                antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = g.el_deg;
+                const double az_deg = radar_em ? Wrap180(estimate.true_az_deg - unit_heading_deg_ + gyro_heading_deg_) : g.az_deg;
+                const double el_deg = radar_em ? estimate.el_deg : g.el_deg;
+                const double range_m = radar_em ? estimate.range_m : g.range_m;
+                console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
+                console.panel.SetValue(d.el_wheel, el_deg);
+                if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, range_m);
+                antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = el_deg;
+                if (em_ != nullptr && method_ == TrackMethod::Tv) em_->ClearDesignation();
                 return;
             }
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+            if (radar_em) em_->ClearLock();
             method_ = TrackMethod::None;
             tracked_.clear();
         }
@@ -727,11 +809,29 @@ private:
         const double half_fov = d.tv_mode.empty() ? 0.0 : TvHalfFov(console);
         std::string found;
         TrackMethod found_method = TrackMethod::None;
+        if (em_ != nullptr) {
+            // Point the tracking radar where the wheels say (the acquisition mode must be engaged and the antenna free
+            // to turn); it finds the target itself. The beam's elevation is the scan's, or the elevation wheel's.
+            const Equipment& eq = console.equipment;
+            const bool aiming = radar_mode && eq.IsReady(d.transmitter) && eq.IsReady(d.slew);
+            std::string locked;
+            if (aiming) {
+                em_->Designate(IndicatedToTrueDeg(wheel_az), antenna_el_deg_, wheel_r);
+                const auto it = em_->Locked(&locked) ? geo_.find(locked) : geo_.end();
+                if (it != geo_.end() && it->second.alive) {
+                    found = locked;
+                    found_method = TrackMethod::Radar;
+                }
+            } else {
+                em_->ClearLock();
+            }
+        }
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
             if (!g.alive) continue;
+            if (!found.empty() && em_ != nullptr) break;  // the radar has it; TV only looks when the radar has nothing
             const double az_err = std::fabs(WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az);
-            if (radar_mode && az_err <= tuning_.az_tolerance_deg && std::fabs(g.range_m - wheel_r) <= tuning_.range_gate_m &&
+            if (em_ == nullptr && radar_mode && az_err <= tuning_.az_tolerance_deg && std::fabs(g.range_m - wheel_r) <= tuning_.range_gate_m &&
                 LockProblem(console, g, TrackMethod::Radar) == nullptr) {
                 found = kv.first;
                 found_method = TrackMethod::Radar;
@@ -753,7 +853,7 @@ private:
         if (found.empty() || candidate_time_s_ + 1e-9 < tuning_.lock_time_s) return;
         // The radar captures when the antenna's beam is on the target in elevation as well (the OS81-10M
         // auto-capture circuit fires as the scan crosses it, voenizdat_osa_1991 p95).
-        if (candidate_method_ == TrackMethod::Radar && !BeamOnTarget(d, geo_.at(candidate_))) return;
+        if (em_ == nullptr && candidate_method_ == TrackMethod::Radar && !BeamOnTarget(d, geo_.at(candidate_))) return;
         method_ = candidate_method_;
         tracked_ = candidate_;
         candidate_.clear();
@@ -977,6 +1077,7 @@ private:
     }
 
     EngagementTuning tuning_;
+    EmSensorLink* em_ = nullptr;  // not owned
     Vec3 unit_;
     std::map<std::string, Geometry> geo_;  // ordered by id: deterministic iteration
     std::vector<Contact> picture_;

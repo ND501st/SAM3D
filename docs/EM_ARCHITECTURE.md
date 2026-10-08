@@ -331,8 +331,8 @@ advanced at a fixed 10 Hz from `USimWorldSubsystem::Tick`, and draws its overlay
 `DrawDebug*` (primitives rebuilt only after an EM step). It uses the active sim world's origin and
 terrain, and is stopped when either changes. API: `StartEmDemo`, `StopEmDemo`, `IsEmDemoRunning`,
 `GetEmTimeSeconds`, `GetEmStatusText`; console `sam3d.em.Start`, `sam3d.em.Stop`, `sam3d.em.Debug`,
-`sam3d.em.Owner`. Linking the EM layer to the Osa scenario (its console, scopes and crew) is roadmap
-phase E3.
+`sam3d.em.Owner`. The Osa scenario's own radars use the EM layer through `EmSensorLink` (§23); the Unreal
+demo of §18 is still a separate synthetic battlefield.
 
 ## 19. Networking (design, not built)
 
@@ -377,4 +377,40 @@ Co-operative crews share one node.
   yet; frequency-channel changes are data-only (no crew action).
 * Comms: no message priorities, encryption or interception value; relays forward everything.
 * Doctrine is minimal (one SAM rule set); no ARM detection or relocation yet.
-* The EM layer is not yet connected to the Osa scenario's console and scopes (phase E3).
+* The Osa's two radars are connected (§23); its IFF replies, TV channel, missiles and the crew's jamming
+  response are not.
+* A tracking radar captures on the first echo in its gate and Swerling I detection falls off slowly, so an
+  inbound target is captured between the radar's R50 and its range limit (27 km for a 3 m2 target against
+  Korovin's 23 km): see `docs/EM_HANDOFF.md`, open question 3.
+
+## 23. The Osa's radars (phase E2)
+
+`simcore/em_link.hpp`: `EmSensorLink` owns an `EmWorld` for one scenario unit. A scenario turns it on with an
+`own_unit.em` block (`data/scenarios/README.md`); everything else keeps the gameplay model.
+
+* **Each step** (`EngagementModel::StepEm`): the unit's position, each target's position, velocity, RCS and
+  alive flag go in as platforms; the console says whether the search radar radiates (antenna rotating and
+  transmitter ready) and whether MTI is selected, and whether the tracking radar radiates; the EM layer runs in
+  fixed 0.1 s ticks.
+* **Search picture** (`SearchPicture`): the search radar's confirmed tracks whose last look was a hit, one per
+  target. The search radar runs its three elevation beams one per revolution, so a blip is refreshed once per
+  revolution (1.8 s), from the radar's measurement, and high targets are seen at shorter range (beam III). The
+  console's range-scale window still decides what is displayed. The scenario's target id is the truth platform the
+  track came from; positions the crew sees are the measured ones.
+* **Tracking radar**: with the acquisition mode engaged, the transmitter ready and the antenna free to turn, the
+  engagement model puts a designation at the wheels' azimuth (true, through the gyro), the antenna elevation (the
+  elevation search's scan, or the elevation wheel) and the range wheel. The antenna slews there, looks only in its
+  beam and range gate, and locks on a detected echo; the model accepts the lock after `lock_time_s`, then the servo
+  follows the radar's filtered estimate. Losing the echo (four missed looks, terrain, a hole in the multipath
+  lobing) breaks the lock after ten missed looks (one second): "track lost: radar lost the echo".
+* **Range indicator** (`EchoVisible`): the tracking radar's echoes are the targets its beam really picks up
+  (pattern, range, Pd), whatever the gate, so the elevation seat sees a target appear as the scan crosses it.
+* **What changes, what does not**: the clutter height and the angular-rate, minimum-altitude and beam-crossing
+  rules are replaced by the radar equation, MTI/clutter and the antenna pattern. TV tracking, the IFF replies,
+  the zone lamps, the НЛЦ lamp, the crew's aiming speeds and the hit/miss outcome are unchanged.
+* **Bands** (`simcore/tests/test_em_link.cpp`): for the practice drone (0.5 m2 at 1 km) first contact lies between
+  the search radar's R50 (28 km) and R10 (37.5 km) minus the revolution it takes to confirm (25 to 34 km over 10
+  seeds); the tracking radar takes it at 16 to 22 km. A 3 m2 target at 5 km is captured at about 27 km with a perfect
+  designation.
+* **Not synchronised**: the scope's own sweep (`SearchScope`) paints the picture on its own phase; the EM radar's
+  sweep decides when a track is updated.

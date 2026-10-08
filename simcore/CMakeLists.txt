@@ -48,7 +48,8 @@ add_executable(simcore_tests
   tests/test_scopes.cpp
   tests/test_em_models.cpp
   tests/test_em_data.cpp
-  tests/test_em_scenarios.cpp)
+  tests/test_em_scenarios.cpp
+  tests/test_em_link.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -75,6 +76,11 @@ simcore_configure_target(scenario_demo)
 add_test(NAME scenario_demo
          COMMAND scenario_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/osa_practice.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/osa_practice.acmi")
+
+# The same practice scenario with the Osa's radars driven by the EM layer (own_unit.em).
+add_test(NAME scenario_demo_em
+         COMMAND scenario_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/osa_practice_em.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/osa_practice_em.acmi")
 
 # Electromagnetic layer MVP: radar, ESM, triangulation, jamming, C2 on a synthetic battlefield.
 # Prints the timeline and the eleven MVP checks; also run as a test.
