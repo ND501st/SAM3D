@@ -183,10 +183,11 @@ frequency changes are data-only.
    look at beams, strobes, ellipses and C2 links over the practice area. Report anything odd.
 3. **E2 (done, `docs/EM_ARCHITECTURE.md` §23):** the Osa's search and tracking radars run on the EM
    layer in scenarios with an `own_unit.em` block, and the practice scenario plays end to end. Left of it:
-   drive the search radar's beam program from the console (it cycles beams I, II, III one per revolution
-   whatever the selector says), IFF replies from the EM radar's transponder model, and the scope's sweep
-   in step with the radar's. Roadmap 6.4 (beam indicator, low-target ranges, blind cone, MTI against normal
-   video) can now be done against the EM radar instead of by rules.
+   IFF replies from the EM radar's transponder model, and the scope's sweep in step with the radar's.
+3b. **Roadmap 6.4 on the EM radar (done, branch `feature/osa-search-radar`, `docs/EM_ARCHITECTURE.md` §24):**
+   the beam selector, the beam lamps, per-contact beam, range rings, and tests of the low-target ranges, the
+   blind cone and MTI against normal video. Not done: MTI's 35 km limit in the EM path, the ring drawing
+   in Unreal (the data and `ConsoleData::search.range_rings_m` are there), and the open 50 m capture item below.
    **Findings to read before building on it:** (a) a tracking radar locks on the first echo in its gate, and Swerling I Pd falls slowly (0.24 at 28 km
    for the Korovin target), so the raw lock came at 27 km, not his 23 km. The engagement model now takes the
    lock only once the radar has echoed on 11 of its last 20 looks (`EmSensorLink::Captured`), which gives 23 to
@@ -194,7 +195,9 @@ frequency changes are data-only.
    was tried and moved the raw lock by 0.4 km, so it was dropped; (b) a target above about 8 degrees elevation is only in beam III (19 degrees tall, 13.6 dB
    less two-way gain), so a 3 m2 target at 5 km shows at 16 to 35 km depending on the seed instead of
    at 40 km; (c) both radars cancel radial speeds under 15 m/s as clutter, so a hovering target is
-   invisible to them.
+   invisible to them; (d) the tracking radar's auto-capture of a 50 m target comes at 22 to 23 km, not Korovin's 14 km:
+   his 14 km is the Pd 0.8 range (`test_em_data.cpp`), and at Pd 0.5 the Ku-band first multipath lobe lifts the target out
+   to 25 km. Whether the capture rule should wait for Pd 0.8 (which would pull the 5 km capture in below Korovin's 23 km, where the model was fitted at Pd 0.5) is the owner's call.
 4. **E1 data:** read FM 100-2-3 for the blue library; period NATO aircraft radars, RWRs and pods as
    generic-but-plausible entries with sources.
 

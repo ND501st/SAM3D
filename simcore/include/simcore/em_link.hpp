@@ -79,6 +79,7 @@ public:
         double range_m = 0.0;
         double true_az_deg = 0.0;  // -180..180
         double el_deg = 0.0;
+        int beam = -1;  // the search radar's elevation beam its last echo came in (-1 unknown)
     };
 
     EmSensorLink(const GeoPoint& origin, const Terrain* terrain, unsigned seed, const EmLinkDef& def, const Vec3& unit_position)
@@ -145,6 +146,26 @@ public:
         r->mti = d.has_mti && mti ? em::MtiMode::Internal : em::MtiMode::Off;
     }
 
+    // The elevation beams the search antenna steps through, one per revolution (indices into the radar's beams).
+    // A new programme takes effect at the next revolution.
+    void SetSearchBeamProgram(const std::vector<int>& program) {
+        em::RadarState* r = Radar(search_);
+        if (r == nullptr) return;
+        const int count = static_cast<int>(DefOf(*r).emitter.beams.size());
+        std::vector<int> valid;
+        for (int b : program)
+            if (b >= 0 && b < count) valid.push_back(b);
+        if (valid.empty() || valid == r->beam_program) return;
+        r->beam_program = valid;
+    }
+
+    // The beam the search antenna is radiating this revolution (-1 if it has none).
+    int ActiveSearchBeam() const {
+        const em::RadarState* r = Radar(search_);
+        const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
+        return e != nullptr && !DefOf(*r).emitter.beams.empty() ? e->beam_index : -1;
+    }
+
     void SetTrack(bool radiating) {
         em::RadarState* r = Radar(track_);
         if (r == nullptr) return;
@@ -186,22 +207,31 @@ public:
                 last_unit_ = unit_;
             }
             world_.Step(kStepS);
+            NoteBeams();
         }
     }
 
-    // The search radar's picture: confirmed tracks whose last look was a hit, one per target, nearest first.
+    // The search radar's picture: confirmed tracks whose last look was a hit, one per target, nearest first. A blip
+    // is held for one full beam programme (a target seen only in beam I, in the automatic programme, is refreshed
+    // every third turn); a target that leaves the radar's coverage, such as overhead, drops off the scope.
     std::vector<Contact> SearchPicture() const {
         std::vector<Contact> out;
         const em::RadarState* r = Radar(search_);
         if (r == nullptr || !r->on) return out;
+        const em::RadarDef& d = DefOf(*r);
+        const double turns = r->beam_program.empty() ? 1.0 : static_cast<double>(r->beam_program.size());
+        const double hold_s = turns * d.emitter.scan_period_s + 0.3;
         for (const em::SensorTrack& t : r->tracker.Tracks()) {
             if (t.status != em::TrackStatus::Confirmed || t.consecutive_misses != 0) continue;
+            if (world_.Time() - t.last_update_s > hold_s) continue;
             const std::string id = TargetOf(t.debug_truth_platform);
             if (id.empty()) continue;
             bool dup = false;
             for (const Contact& c : out) dup = dup || c.target_id == id;
             if (dup) continue;
-            out.push_back(MakeContact(id, t.Position()));
+            Contact c = MakeContact(id, t.Position());
+            c.beam = BeamOf(id);
+            out.push_back(c);
         }
         std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
@@ -297,6 +327,30 @@ private:
         return world_.Scene().lib.radars[static_cast<std::size_t>(r.def_index)];
     }
 
+    // Remember which beam each target's echo came in this tick.
+    void NoteBeams() {
+        const em::RadarState* r = Radar(search_);
+        const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
+        if (e == nullptr || r->last_plots.empty()) return;
+        for (const em::RadarPlot& p : r->last_plots) {
+            const std::string id = TargetOf(p.debug_truth_platform);
+            if (id.empty()) continue;
+            bool found = false;
+            for (auto& b : beam_of_) {
+                if (b.first == id) {
+                    b.second = e->beam_index;
+                    found = true;
+                }
+            }
+            if (!found) beam_of_.emplace_back(id, e->beam_index);
+        }
+    }
+    int BeamOf(const std::string& id) const {
+        for (const auto& b : beam_of_)
+            if (b.first == id) return b.second;
+        return -1;
+    }
+
     int PlatformOf(const std::string& id) const {
         for (const auto& t : targets_)
             if (t.first == id) return t.second;
@@ -331,6 +385,7 @@ private:
     Vec3 last_unit_;
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
+    std::vector<std::pair<std::string, int>> beam_of_;  // target id -> the search beam of its latest echo
 };
 
 }  // namespace simcore

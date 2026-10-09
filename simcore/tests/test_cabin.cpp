@@ -267,6 +267,8 @@ SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back
     console.panel.Set("pwr.gta", 1);
     console.panel.Set("pwr.equipment", 1);
     for (int i = 0; i < 3000 && !console.equipment.IsReady("hv_ready"); ++i) step();
+    SC_EXPECT(!lit("beam_1"));  // the beam lamps follow the engagement model's inputs, not the selector
+    console.equipment.SetInput("search_beam_1", true);
     SC_EXPECT(lit("ru") && !lit("cu") && !lit("az") && lit("beam_1") && lit("soc_gotov") && !lit("br"));
     SC_EXPECT(lit("stowed") && lit("soc_rot_locked") && lit("apu_locked") && lit("gotov_spk_1"));
     console.panel.Set("fo.cu_az", 1);

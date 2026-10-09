@@ -416,3 +416,32 @@ Co-operative crews share one node.
   designation.
 * **Not synchronised**: the scope's own sweep (`SearchScope`) paints the picture on its own phase; the EM radar's
   sweep decides when a track is updated.
+
+## 24. The search radar's beams, rings and coverage (roadmap 6.4)
+
+* **Beam selector.** `sensors.search.beams` in the console file maps each position of `soc.beam` to a programme (beam
+  indices, one per antenna turn): I, II, III hold a beam, АВТ. I-III steps through all three, АВТ. I-II through
+  the lower two. With the EM layer the search radar really steps through it
+  (`EmSensorLink::SetSearchBeamProgram`; a new programme takes effect at the next turn); without it the engagement
+  model steps the same programme by the antenna's turns (`rotation_period_s`). `Engagement().SearchBeam()` is the beam
+  radiating now.
+* **Beam lamps.** The cabin's `beam_1..3` lamps are lit by the inputs `search_beam_1..3`, which the engagement model
+  sets from the active beam: they step with the antenna in the automatic programmes.
+* **Which beam an echo came in.** `Contact::beam` (EM only). A blip is held on the picture for one full programme
+  (three turns in АВТ. I-III), so a target seen only in beam I is refreshed every third turn; it drops off when it
+  leaves coverage.
+* **What the beams do** (tests in `test_em_link.cpp`, 3 m2 target inbound): beam I shows a 1 km target from over
+  35 km and nothing at 5 km altitude; beam II shows the 5 km target from over 35 km and a 50 m one not at all
+  until it is close; beam III is tall and weak, so everything it shows is inside 28 km. Nothing in the practice
+  scenario needs the operator to pick: the crew starts in beam II on the march and goes to АВТ. I-III to acquire.
+* **Low targets.** First contact on a 3 m2 target is 42 km at 5 km altitude and 21 km at 50 m (Korovin: 40 and 27;
+  the 50 m R50 is 26 km). The tracking radar's auto-capture of a 50 m target is 22 to 23 km, not Korovin's 14 km:
+  14 km is the Pd 0.8 range, and at Pd 0.5 the Ku-band first multipath lobe lifts a 50 m target out to 25 km
+  (an open item since E0, now pinned by a test).
+* **Overhead blind cone.** The search radar's elevation limit (30 degrees) makes it: a target at 4 km altitude is not
+  shown within 6.9 km of the unit and comes back out the far side (test).
+* **Normal video and MTI.** The EM clutter model hides a 30 m target from 12 km in on normal video; with MTI on it is shown
+  2.5 times as long over the same pass (test). The 35 km limit of the console's MTI is not applied in the EM path.
+* **Range rings.** `sensors.search.range_rings_m`: per scale, 2, 7 and 12 km on 0-15 km, multiples of 5 km inside the
+  others (ePap, `samsim_thread`). The data is loaded; drawing it is up to the display.
+

@@ -110,6 +110,14 @@
       "antenna": "soc_antenna", "transmitter": "soc_transmitter",
       "range_control": "soc.range", "range_scales_m": [[0, 15000], [0, 35000], [10000, 45000]],
       "mti_control": "soc.mti", "mti_max_range_m": 35000,
+      "range_rings_m": [ [2000, 7000, 12000], [5000, 10000, 15000, 20000, 25000, 30000], [15000, 20000, 25000, 30000, 35000, 40000] ],
+      "beams": {
+        "control": "soc.beam", "programs": [ [0], [1], [2], [0, 1, 2], [0, 1] ],
+        "inputs": [ "search_beam_1", "search_beam_2", "search_beam_3" ], "rotation_period_s": 1.818,
+        "source": "flak11 and korovin_tiv_2010 (33 rpm; the beam is switched to one of three positions each turn); samsim_osa p15 (selector: ЛУЧ I, II, III, АВТ. I-III, АВТ. I-II); mon_2112_80 p15, p21",
+        "confidence": "high",
+        "notes": "Positions of soc.beam: I, II, III hold one beam; АВТ. I-III steps through all three, one per turn, and АВТ. I-II through the lower two. The rings are the ePap rings (samsim_thread): the 0-15 km scale has them at 2, 7 and 12 km, the others every 5 km from the origin (SAM3D reads that as multiples of 5 km inside the window)."
+      },
       "iff": {
         "query": "iff.query", "control_query": "iff.query_k", "gate_control": "iff.gate", "ready": "soc_transmitter",
         "interrogating_input": "iff_interrogating", "query_time_s": 1.0, "max_range_m": 30000,
@@ -146,6 +154,9 @@
 
   "inputs": [
     { "id": "heading_synced", "description": "The gyro half-compass agrees with the course setter ЗК-4 (the Qc scale has stopped)", "source": "voenizdat_osa_1991 p48, p246", "confidence": "high" },
+    { "id": "search_beam_1", "description": "The search radar is radiating its beam I (0-4 degrees) this turn: the I ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
+    { "id": "search_beam_2", "description": "The search radar is radiating its beam II (4-8 degrees) this turn: the II ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
+    { "id": "search_beam_3", "description": "The search radar is radiating its beam III (8-28 degrees) this turn: the III ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "iff_interrogating", "description": "The IFF interrogator is interrogating (about 1 s per press)", "source": "voenizdat_osa_1991 p56", "confidence": "medium" },
     { "id": "vehicle_stopped", "description": "The vehicle is stationary (a short halt or a firing position)", "source": "wrk; mis (tracking and launch only from a short halt or stationary)", "confidence": "high" },
     { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },

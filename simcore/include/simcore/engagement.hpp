@@ -272,6 +272,7 @@ struct Contact {
     double azimuth_deg = 0.0;  // -180..180 in the vehicle's heading-reference frame (true north once oriented)
     double elevation_deg = 0.0;
     bool control_reply = false;  // IFF replies only: to a control interrogation (ЗАПРОС К)
+    int beam = -1;               // search echoes with the EM layer: the elevation beam it came in (0 = I ...), else -1
 };
 
 // Full width of the TV sight's field of view for the lens selected now (0 if the console has no TV).
@@ -302,6 +303,7 @@ public:
               SessionLog& log, std::mt19937& rng, const AimCrew& aim_crew) {
         if (!console.has_sensors) return;
         UpdateOrientation(t, dt, console, log, aim_crew.elevation);
+        UpdateBeams(dt, console);
         Measure(dt, world, targets);
         ResolveShots(t, world, targets, log, rng);
         if (em_ != nullptr) StepEm(dt, world, console, targets);
@@ -407,6 +409,8 @@ public:
     const Vec3& UnitPosition() const { return unit_; }
 
     const std::vector<Contact>& SearchPicture() const { return picture_; }
+    // The search antenna's elevation beam this turn (0 = I, 1 = II, 2 = III), -1 if the console has no beam selector.
+    int SearchBeam() const { return search_beam_; }
     // Echoes on the tracking radar's range indicator: targets inside its beam (the azimuth line, within the
     // tracking tolerance) up to its displayed range, with line of sight, while it radiates. Low targets still show:
     // the radar measures their range even when it can't hold them in angle.
@@ -525,6 +529,36 @@ private:
         }
     }
 
+    // The beam selector: each position is a programme of beams, one per turn. With the EM layer the search radar
+    // steps through it for real and this reads back the beam it radiates; without, the programme is stepped by
+    // the antenna's turns. Sets the beam lamps' inputs.
+    void UpdateBeams(double dt, ConsoleData& console) {
+        const SearchSensorDef& d = console.search;
+        if (d.beam_control.empty()) return;
+        const int pos = console.panel.Get(d.beam_control);
+        if (pos < 0 || pos >= static_cast<int>(d.beam_programs.size())) return;
+        const std::vector<int>& program = d.beam_programs[static_cast<std::size_t>(pos)];
+        const Equipment& eq = console.equipment;
+        const bool turning = eq.IsReady(d.antenna);
+        const bool radiating = turning && eq.IsReady(d.transmitter);
+        if (em_ != nullptr) em_->SetSearchBeamProgram(program);
+        if (em_ != nullptr && radiating) {
+            search_beam_ = em_->ActiveSearchBeam();
+        } else {
+            if (turning) {
+                beam_turn_ += dt / d.rotation_period_s;
+                while (beam_turn_ >= 1.0) {
+                    beam_turn_ -= 1.0;
+                    ++beam_step_;
+                }
+            }
+            search_beam_ = program[beam_step_ % program.size()];
+        }
+        for (std::size_t i = 0; i < d.beam_inputs.size(); ++i) {
+            console.equipment.SetInput(d.beam_inputs[i], static_cast<int>(i) == search_beam_);
+        }
+    }
+
     // Hand the EM layer this step's world: where the unit and the targets are, which radars radiate and whether the
     // search radar's MTI is selected; then let it run to now.
     void StepEm(double dt, World& world, const ConsoleData& console, const std::vector<EngagementTarget>& targets) {
@@ -622,7 +656,9 @@ private:
             for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
                 if (c.range_m < window.first || c.range_m > window.second) continue;
                 const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
-                picture_.push_back({c.target_id, c.range_m, az, c.el_deg});
+                Contact blip{c.target_id, c.range_m, az, c.el_deg};
+                blip.beam = c.beam;
+                picture_.push_back(blip);
                 if (seen_by_search_.insert(c.target_id).second) {
                     char detail[96];
                     std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
@@ -1102,6 +1138,9 @@ private:
     double swept_high_deg_ = 0.0;
     double scan_phase_ = 0.0;
     int el_beam_ = -1;
+    int search_beam_ = -1;
+    double beam_turn_ = 0.0;
+    std::size_t beam_step_ = 0;
     std::vector<Shot> shots_;
     int hits_ = 0;
     int misses_ = 0;
