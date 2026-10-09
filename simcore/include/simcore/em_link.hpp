@@ -208,6 +208,7 @@ public:
             }
             world_.Step(kStepS);
             NoteBeams();
+            NoteLooks();
         }
     }
 
@@ -254,19 +255,20 @@ public:
         return true;
     }
 
-    // The lock is firm enough for the auto-capture circuit to take it: the radar has had it for kCaptureLooks looks and
-    // echoed on at least kCaptureHits of them (a local Pd of about one half). A lock can start on a lucky echo
-    // far out, where Swerling I detection is still a few tenths; the circuit waits for the target to come into
-    // the range where the published capture figure (Pd 0.5) holds. An existing lock is kept by Locked() alone.
-    static constexpr int kCaptureLooks = 20;
-    static constexpr int kCaptureHits = 11;
+    // The lock is firm enough for the auto-capture circuit to take it: over the last kCaptureLooks looks (4 s) the radar
+    // echoed on at least kCaptureHits (a local Pd of about 0.55). A lock can start on a lucky echo far out, where
+    // Swerling I detection is still a few tenths; the circuit waits for the target to come into the range where the
+    // radar holds it. The rule is tied to the one calibration that is fitted (Korovin's 23 km at 5 km altitude, Pd 0.5):
+    // it captures a 3 m2 target there at 21 to 25 km. Raising the Pd does not help his 14 km at 50 m: the full-path
+    // Pd of a 50 m target is smooth (0.5 at 22 km, 0.8 at 18 km), so any rule that fits the 5 km figure also captures
+    // it at 22 km. An existing lock is kept by Locked() alone.
+    static constexpr int kCaptureLooks = 40;
+    static constexpr int kCaptureHits = 22;
     bool Captured(std::string* target_id, Contact* estimate = nullptr) const {
         if (!Locked(target_id, estimate)) return false;
-        const em::RadarState* r = Radar(track_);
-        const em::SensorTrack* t = r->tracker.Find(r->locked_track);
-        if (t->looks < kCaptureLooks) return false;
+        if (static_cast<int>(look_record_.size()) < kCaptureLooks) return false;
         int hits = 0;
-        for (int i = 0; i < kCaptureLooks; ++i) hits += static_cast<int>((t->history >> i) & 1u);
+        for (char hit : look_record_) hits += hit;
         return hits >= kCaptureHits;
     }
 
@@ -327,6 +329,28 @@ private:
         return world_.Scene().lib.radars[static_cast<std::size_t>(r.def_index)];
     }
 
+    // Keep the last kCaptureLooks looks (hit or miss) of the tracking radar's locked track.
+    void NoteLooks() {
+        const em::RadarState* r = Radar(track_);
+        const em::SensorTrack* t = r != nullptr && r->locked_track != 0 ? r->tracker.Find(r->locked_track) : nullptr;
+        if (t == nullptr) {
+            look_record_.clear();
+            recorded_track_ = 0;
+            recorded_looks_ = 0;
+            return;
+        }
+        if (r->locked_track != recorded_track_) {
+            look_record_.clear();
+            recorded_track_ = r->locked_track;
+            recorded_looks_ = 0;
+        }
+        if (t->looks > recorded_looks_) {
+            look_record_.push_back(static_cast<char>(t->history & 1u));
+            recorded_looks_ = t->looks;
+            if (static_cast<int>(look_record_.size()) > kCaptureLooks) look_record_.erase(look_record_.begin());
+        }
+    }
+
     // Remember which beam each target's echo came in this tick.
     void NoteBeams() {
         const em::RadarState* r = Radar(search_);
@@ -385,6 +409,9 @@ private:
     Vec3 last_unit_;
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
+    std::vector<char> look_record_;  // 1 = the locked track's look was a hit, newest last
+    int recorded_track_ = 0;
+    int recorded_looks_ = 0;
     std::vector<std::pair<std::string, int>> beam_of_;  // target id -> the search beam of its latest echo
 };
 

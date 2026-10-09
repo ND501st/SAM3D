@@ -286,7 +286,7 @@ SC_TEST("em link: the auto-capture takes a 3 m2 target at 5 km near the publishe
     // data/em/osa_ak.json fits Pd 0.5 at 23 km; the radar's own range limit is 28 km. The designation is on the
     // target's true position (a perfect search picture) so this tests the tracking radar alone. The radar locks on
     // the first echo in the gate, and Swerling I detection falls off slowly (Pd 0.24 at 28 km), so that happens
-    // far out; the auto-capture waits for a local Pd of one half (11 hits in 20 looks), which is the figure Korovin
+    // far out; the auto-capture waits for a local Pd of about one half (22 hits in 40 looks), which is the figure Korovin
     // gives.
     const em::RadarDef ssc = OsaRadar("osa_ak_ssc");
     SC_EXPECT_NEAR(em::DetectionRangeAt(ssc, em::Environment(), 5000.0, 3.0, 0.5), 23000.0, 400.0);
@@ -456,10 +456,12 @@ SC_TEST("em 6.4: a target at 50 m is seen at the shorter range the calibration c
     SC_EXPECT(low < 0.7 * high);
 }
 
-SC_TEST("em 6.4: the tracking radar's capture of a 50 m target follows its multipath lobing (open item: Korovin gives 14 km)") {
-    // At Pd 0.5 the Ku-band first multipath lobe lifts a 50 m target to about 25 km (tests/test_em_data.cpp,
-    // docs/research/OSA_EM_SPEC_2026-10.md); Korovin's 14 km is the Pd 0.8 range. The auto-capture here waits for a
-    // local Pd of one half, so it takes the lobe: pinned so a change to the model or the rule shows up.
+SC_TEST("em 6.4: the tracking radar captures a 50 m target at about 22 km (open item: Korovin gives 14 km)") {
+    // The full-path Pd of a 50 m target is smooth: 0.5 at 22 km, 0.8 at 18 km (measured in a bench run). The E0 check
+    // that reads Korovin's 14 km as a Pd 0.8 range (tests/test_em_data.cpp) only gets 14 km from a deep multipath
+    // null in its own simplified path at 17 km. So a rule that fits the fitted 5 km figure also captures the 50 m
+    // target at 22 km; fitting 14 km would take a rougher surface or another trials-site effect. Pinned here so a
+    // change to the model or the rule shows up.
     const em::RadarDef ssc = OsaRadar("osa_ak_ssc");
     const double r50 = em::DetectionRangeAt(ssc, em::Environment(), 50.0, 3.0, 0.5);
     const double r80 = em::SustainedDetectionRange(ssc, em::Environment(), 50.0, 3.0, 0.8);
@@ -479,7 +481,7 @@ SC_TEST("em 6.4: the tracking radar's capture of a 50 m target follows its multi
     std::sort(caps.begin(), caps.end());
     std::printf("    SSC auto-capture of a 50 m target: %.1f .. %.1f km (Pd 0.5 first %.1f km, Pd 0.8 held %.1f km; published 14)\n",
                 caps.front() / 1000.0, caps.back() / 1000.0, r50 / 1000.0, r80 / 1000.0);
-    SC_EXPECT_NEAR(r80, 14000.0, 2800.0);
+    SC_EXPECT_NEAR(r80, 14000.0, 2800.0);  // the check path's number (E0), kept for the record
     SC_EXPECT(caps.front() > 0.0);
     SC_EXPECT(caps[caps.size() / 2] > 0.7 * r50 && caps[caps.size() / 2] < 1.1 * r50);
 }

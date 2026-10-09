@@ -190,14 +190,17 @@ frequency changes are data-only.
    in Unreal (the data and `ConsoleData::search.range_rings_m` are there), and the open 50 m capture item below.
    **Findings to read before building on it:** (a) a tracking radar locks on the first echo in its gate, and Swerling I Pd falls slowly (0.24 at 28 km
    for the Korovin target), so the raw lock came at 27 km, not his 23 km. The engagement model now takes the
-   lock only once the radar has echoed on 11 of its last 20 looks (`EmSensorLink::Captured`), which gives 23 to
-   25 km. The 11-of-20 rule is my model choice, not a published figure; a 1 s echo-fading correlation time
+   lock only once the radar has echoed on 22 of its last 40 looks (`EmSensorLink::Captured`), which gives 21 to
+   25 km. The 22-of-40 rule is my model choice, not a published figure; a 1 s echo-fading correlation time
    was tried and moved the raw lock by 0.4 km, so it was dropped; (b) a target above about 8 degrees elevation is only in beam III (19 degrees tall, 13.6 dB
    less two-way gain), so a 3 m2 target at 5 km shows at 16 to 35 km depending on the seed instead of
    at 40 km; (c) both radars cancel radial speeds under 15 m/s as clutter, so a hovering target is
-   invisible to them; (d) the tracking radar's auto-capture of a 50 m target comes at 22 to 23 km, not Korovin's 14 km:
-   his 14 km is the Pd 0.8 range (`test_em_data.cpp`), and at Pd 0.5 the Ku-band first multipath lobe lifts the target out
-   to 25 km. Whether the capture rule should wait for Pd 0.8 (which would pull the 5 km capture in below Korovin's 23 km, where the model was fitted at Pd 0.5) is the owner's call.
+   invisible to them; (d) the tracking radar's auto-capture of a 50 m target comes at 22 km, not Korovin's 14 km, and no capture
+   rule can fix that: the full-path Pd of that target is smooth (0.5 at 22 km, 0.8 at 18 km), and E0's "Pd 0.8 held
+   14 km" comes from a deep multipath null at 17 km in the calibration-check path (`AnchorLook`) that the real path
+   does not have. I chose the capture rule that reproduces the fitted 5 km figure (a Pd of about 0.55); a Pd of 0.7
+   would put it at 19 km (-17 %) and move the 50 m case by nothing. Closing the 50 m gap needs a rougher
+   surface or another trials-site effect.
 4. **E1 data:** read FM 100-2-3 for the blue library; period NATO aircraft radars, RWRs and pods as
    generic-but-plausible entries with sources.
 
