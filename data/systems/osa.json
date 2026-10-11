@@ -1,7 +1,7 @@
 {
   "system_id": "osa_ak",
   "display_name": "9K33M2 Osa-AK (SA-8B Gecko)",
-  "status": "Vehicle and crew filled from public sources, re-cited after the October 2026 research review (docs/research/OSA_RESEARCH_2026-10.md). Radar and missile sections stay empty: outcomes come from the gameplay-level model (data/gameplay/osa_ak.json), not from per-system performance data. Tier-5 citations (gs, apa) are kept only where no better source exists yet (roadmap 6.8).",
+  "status": "Vehicle and crew filled from public sources, re-cited after the October 2026 research review (docs/research/OSA_RESEARCH_2026-10.md). Radar and missile sections stay empty: outcomes come from the gameplay-level model (data/gameplay/osa_ak.json), not from per-system performance data. No value cites a tier-5 source (roadmap 6.8; tools/check_citations.py checks it).",
   "sources": {
     "mon_2112_80": "Tier 1. Polish MoD manual for the Osa-AK, Uzbr. 2112/80, Warszawa 1981, marked JAWNE (docs/SOURCES.md)",
     "voenizdat_osa_1991": "Tier 1, restricted edition used by the project owner's decision. Soviet textbook on the Osa-AKM, Voenizdat 1991 (docs/SOURCES.md)",
@@ -16,9 +16,7 @@
     "ru_wiki": "Tier 4. Russian Wikipedia, Оса (зенитный ракетный комплекс)",
     "mis": "Tier 4. missilery.info, 9K33M3 Osa-AKM",
     "nuou": "Tier 4. Ukrainian National Defence University museum page, 9A33BM Osa",
-    "video_osa": "Tier 4. YouTube documentary on the 9K33 Osa (transcript supplied by the user, 2 Oct 2026); retells korovin_tiv_2010; tactics unverified",
-    "gs": "Tier 5. GlobalSecurity.org, SA-8 GECKO / 9K33M3 Osa-AKM (to be replaced)",
-    "apa": "Tier 5. Air Power Australia, 9K33 Osa/Romb ... SA-8 Gecko (to be replaced)"
+    "video_osa": "Tier 4. YouTube documentary on the 9K33 Osa (transcript supplied by the user, 2 Oct 2026); retells korovin_tiv_2010; tactics unverified"
   },
   "crew": [
     { "role": "commander", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
