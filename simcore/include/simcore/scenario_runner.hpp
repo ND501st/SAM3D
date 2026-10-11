@@ -33,6 +33,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/launcher.hpp"
+#include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/world.hpp"
@@ -76,6 +77,10 @@ public:
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
+        if (!def_.command_post_file.empty()) {
+            board_ = std::make_unique<PlottingBoard>(def_.board, def_.unit_position, def_.seed);
+            engagement_.SetPlottingBoard(board_.get());
+        }
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
             if (em_link_->Ok()) {
@@ -94,6 +99,7 @@ public:
         if (finished_) return;
         time_ += dt;
         UpdateTargets(dt);
+        UpdateBoard();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
@@ -143,6 +149,7 @@ public:
     void SetUnitPosition(const Vec3& enu) {
         def_.unit_position = enu;
         engagement_.SetUnitPosition(enu);
+        if (board_) board_->SetCentre(enu);
     }
     const Vec3& UnitPosition() const { return def_.unit_position; }
     // The hull turned (e.g. the player drove it): degrees clockwise from north.
@@ -157,6 +164,9 @@ public:
         world_.SetTerrain(terrain != nullptr ? terrain : &ground_);
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
     }
+
+    // The battery command post's plotting board (null when the scenario has no "command_post").
+    const PlottingBoard* Board() const { return board_.get(); }
 
     // The missile load and guidance channels (null when the console has no "launcher" block).
     Launcher* GetLauncher() { return launcher_.get(); }
@@ -341,6 +351,33 @@ private:
         }
     }
 
+    // The regiment's picture onto the board, once a minute; the first mark of each target goes in the log.
+    void UpdateBoard() {
+        if (!board_) return;
+        std::vector<BoardContact> contacts;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            const ScenarioTarget& t = def_.targets[i];
+            BoardContact c;
+            c.target_id = t.id;
+            c.position = a->position;
+            c.altitude_m = world_.Frame().AltitudeOf(a->position);
+            c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
+            c.formation = t.formation;
+            contacts.push_back(c);
+        }
+        const std::size_t before = board_->Marks().size();
+        if (!board_->Update(time_, contacts)) return;
+        for (std::size_t k = before; k < board_->Marks().size(); ++k) {
+            const BoardMark& m = board_->Marks()[k];
+            bool first = true;
+            for (std::size_t j = 0; j < before && first; ++j) first = board_->Marks()[j].target_id != m.target_id;
+            if (first) log_.Record({time_, DebriefEntry::Kind::Scenario, "PU-12", m.target_id, "on the board: " + board_->Describe(m)});
+        }
+    }
+
     // The missile load and channels: shots the outcome model has finished free their channel; then selection at
     // ВНИМАНИЕ and every lamp.
     void UpdateLauncher() {
@@ -427,6 +464,7 @@ private:
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
+    std::unique_ptr<PlottingBoard> board_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
     std::vector<EngagementTarget> eng_targets_;
