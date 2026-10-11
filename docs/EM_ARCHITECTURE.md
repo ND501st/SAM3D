@@ -381,8 +381,8 @@ Co-operative crews share one node.
   response are not.
 * The tracking radar locks on the first echo in its gate, and Swerling I detection falls off slowly (Pd 0.24 at
   28 km for the Korovin target), so the raw lock comes at 27 km. The Osa's auto-capture is modelled as waiting for
-  11 hits in the last 20 looks (`EmSensorLink::Captured`), which puts it at 23 to 25 km (Korovin: 23 km). The
-  window and count are a model choice, not published.
+  22 hits in the last 40 looks (`EmSensorLink::Captured`, a local Pd of about 0.55), which puts it at 21 to 25 km,
+  median 23 km (Korovin: 23 km). The window and count are a model choice, not published.
 
 ## 23. The Osa's radars (phase E2)
 
@@ -398,7 +398,7 @@ Co-operative crews share one node.
   revolution (1.8 s), from the radar's measurement, and high targets are seen at shorter range (beam III). The
   console's range-scale window still decides what is displayed. The scenario's target id is the truth platform the
   track came from; positions the crew sees are the measured ones.
-* **Tracking radar** (the engagement model takes a lock once `Captured()`: 11 hits in 20 looks): with the acquisition mode engaged, the transmitter ready and the antenna free to turn, the
+* **Tracking radar** (the engagement model takes a lock once `Captured()`: 22 hits in 40 looks): with the acquisition mode engaged, the transmitter ready and the antenna free to turn, the
   engagement model puts a designation at the wheels' azimuth (true, through the gyro), the antenna elevation (the
   elevation search's scan, or the elevation wheel) and the range wheel. The antenna slews there, looks only in its
   beam and range gate, and locks on a detected echo; the model accepts the lock after `lock_time_s`, then the servo
@@ -411,8 +411,38 @@ Co-operative crews share one node.
   the zone lamps, the НЛЦ lamp, the crew's aiming speeds and the hit/miss outcome are unchanged.
 * **Bands** (`simcore/tests/test_em_link.cpp`): for the practice drone (0.5 m2 at 1 km) first contact lies between
   the search radar's R50 (28 km) and R10 (37.5 km) minus the revolution it takes to confirm (25 to 34 km over 10
-  seeds); the tracking radar captures it at 13.5 to 15.4 km (its R50 is 14.8 km). A 3 m2 target at 5 km is
-  locked at 27 km and auto-captured at 23 to 25 km with a perfect
+  seeds); the tracking radar captures it at 13.3 to 15.2 km (its R50 is 14.8 km). A 3 m2 target at 5 km is
+  locked at 27 km and auto-captured at 21 to 25 km with a perfect
   designation.
 * **Not synchronised**: the scope's own sweep (`SearchScope`) paints the picture on its own phase; the EM radar's
   sweep decides when a track is updated.
+
+## 24. The search radar's beams, rings and coverage (roadmap 6.4)
+
+* **Beam selector.** `sensors.search.beams` in the console file maps each position of `soc.beam` to a programme (beam
+  indices, one per antenna turn): I, II, III hold a beam, АВТ. I-III steps through all three, АВТ. I-II through
+  the lower two. With the EM layer the search radar really steps through it
+  (`EmSensorLink::SetSearchBeamProgram`; a new programme takes effect at the next turn); without it the engagement
+  model steps the same programme by the antenna's turns (`rotation_period_s`). `Engagement().SearchBeam()` is the beam
+  radiating now.
+* **Beam lamps.** The cabin's `beam_1..3` lamps are lit by the inputs `search_beam_1..3`, which the engagement model
+  sets from the active beam: they step with the antenna in the automatic programmes.
+* **Which beam an echo came in.** `Contact::beam` (EM only). A blip is held on the picture for one full programme
+  (three turns in АВТ. I-III), so a target seen only in beam I is refreshed every third turn; it drops off when it
+  leaves coverage.
+* **What the beams do** (tests in `test_em_link.cpp`, 3 m2 target inbound): beam I shows a 1 km target from over
+  35 km and nothing at 5 km altitude; beam II shows the 5 km target from over 35 km and a 50 m one not at all
+  until it is close; beam III is tall and weak, so everything it shows is inside 28 km. Nothing in the practice
+  scenario needs the operator to pick: the crew starts in beam II on the march and goes to АВТ. I-III to acquire.
+* **Low targets.** First contact on a 3 m2 target is 42 km at 5 km altitude and 21 km at 50 m (Korovin: 40 and 27;
+  the 50 m R50 is 26 km). The tracking radar's auto-capture of a 50 m target is 22 km, not Korovin's 14 km. The full-path Pd of that
+  target is smooth (0.5 at 22 km, 0.8 at 18 km); E0's calibration check gets 14 km at Pd 0.8 only from a deep
+  multipath null in its own simplified path at 17 km, so reading his figure as a Pd 0.8 range does not hold. An
+  open item, pinned by a test: closing it needs a rougher surface or another trials-site effect.
+* **Overhead blind cone.** The search radar's elevation limit (30 degrees) makes it: a target at 4 km altitude is not
+  shown within 6.9 km of the unit and comes back out the far side (test).
+* **Normal video and MTI.** The EM clutter model hides a 30 m target from 12 km in on normal video; with MTI on it is shown
+  2.5 times as long over the same pass (test). The 35 km limit of the console's MTI is not applied in the EM path.
+* **Range rings.** `sensors.search.range_rings_m`: per scale, 2, 7 and 12 km on 0-15 km, multiples of 5 km inside the
+  others (ePap, `samsim_thread`). The data is loaded; drawing it is up to the display.
+

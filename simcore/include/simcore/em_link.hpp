@@ -79,6 +79,7 @@ public:
         double range_m = 0.0;
         double true_az_deg = 0.0;  // -180..180
         double el_deg = 0.0;
+        int beam = -1;  // the search radar's elevation beam its last echo came in (-1 unknown)
     };
 
     EmSensorLink(const GeoPoint& origin, const Terrain* terrain, unsigned seed, const EmLinkDef& def, const Vec3& unit_position)
@@ -145,6 +146,26 @@ public:
         r->mti = d.has_mti && mti ? em::MtiMode::Internal : em::MtiMode::Off;
     }
 
+    // The elevation beams the search antenna steps through, one per revolution (indices into the radar's beams).
+    // A new programme takes effect at the next revolution.
+    void SetSearchBeamProgram(const std::vector<int>& program) {
+        em::RadarState* r = Radar(search_);
+        if (r == nullptr) return;
+        const int count = static_cast<int>(DefOf(*r).emitter.beams.size());
+        std::vector<int> valid;
+        for (int b : program)
+            if (b >= 0 && b < count) valid.push_back(b);
+        if (valid.empty() || valid == r->beam_program) return;
+        r->beam_program = valid;
+    }
+
+    // The beam the search antenna is radiating this revolution (-1 if it has none).
+    int ActiveSearchBeam() const {
+        const em::RadarState* r = Radar(search_);
+        const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
+        return e != nullptr && !DefOf(*r).emitter.beams.empty() ? e->beam_index : -1;
+    }
+
     void SetTrack(bool radiating) {
         em::RadarState* r = Radar(track_);
         if (r == nullptr) return;
@@ -186,22 +207,32 @@ public:
                 last_unit_ = unit_;
             }
             world_.Step(kStepS);
+            NoteBeams();
+            NoteLooks();
         }
     }
 
-    // The search radar's picture: confirmed tracks whose last look was a hit, one per target, nearest first.
+    // The search radar's picture: confirmed tracks whose last look was a hit, one per target, nearest first. A blip
+    // is held for one full beam programme (a target seen only in beam I, in the automatic programme, is refreshed
+    // every third turn); a target that leaves the radar's coverage, such as overhead, drops off the scope.
     std::vector<Contact> SearchPicture() const {
         std::vector<Contact> out;
         const em::RadarState* r = Radar(search_);
         if (r == nullptr || !r->on) return out;
+        const em::RadarDef& d = DefOf(*r);
+        const double turns = r->beam_program.empty() ? 1.0 : static_cast<double>(r->beam_program.size());
+        const double hold_s = turns * d.emitter.scan_period_s + 0.3;
         for (const em::SensorTrack& t : r->tracker.Tracks()) {
             if (t.status != em::TrackStatus::Confirmed || t.consecutive_misses != 0) continue;
+            if (world_.Time() - t.last_update_s > hold_s) continue;
             const std::string id = TargetOf(t.debug_truth_platform);
             if (id.empty()) continue;
             bool dup = false;
             for (const Contact& c : out) dup = dup || c.target_id == id;
             if (dup) continue;
-            out.push_back(MakeContact(id, t.Position()));
+            Contact c = MakeContact(id, t.Position());
+            c.beam = BeamOf(id);
+            out.push_back(c);
         }
         std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
@@ -224,19 +255,20 @@ public:
         return true;
     }
 
-    // The lock is firm enough for the auto-capture circuit to take it: the radar has had it for kCaptureLooks looks and
-    // echoed on at least kCaptureHits of them (a local Pd of about one half). A lock can start on a lucky echo
-    // far out, where Swerling I detection is still a few tenths; the circuit waits for the target to come into
-    // the range where the published capture figure (Pd 0.5) holds. An existing lock is kept by Locked() alone.
-    static constexpr int kCaptureLooks = 20;
-    static constexpr int kCaptureHits = 11;
+    // The lock is firm enough for the auto-capture circuit to take it: over the last kCaptureLooks looks (4 s) the radar
+    // echoed on at least kCaptureHits (a local Pd of about 0.55). A lock can start on a lucky echo far out, where
+    // Swerling I detection is still a few tenths; the circuit waits for the target to come into the range where the
+    // radar holds it. The rule is tied to the one calibration that is fitted (Korovin's 23 km at 5 km altitude, Pd 0.5):
+    // it captures a 3 m2 target there at 21 to 25 km. Raising the Pd does not help his 14 km at 50 m: the full-path
+    // Pd of a 50 m target is smooth (0.5 at 22 km, 0.8 at 18 km), so any rule that fits the 5 km figure also captures
+    // it at 22 km. An existing lock is kept by Locked() alone.
+    static constexpr int kCaptureLooks = 40;
+    static constexpr int kCaptureHits = 22;
     bool Captured(std::string* target_id, Contact* estimate = nullptr) const {
         if (!Locked(target_id, estimate)) return false;
-        const em::RadarState* r = Radar(track_);
-        const em::SensorTrack* t = r->tracker.Find(r->locked_track);
-        if (t->looks < kCaptureLooks) return false;
+        if (static_cast<int>(look_record_.size()) < kCaptureLooks) return false;
         int hits = 0;
-        for (int i = 0; i < kCaptureLooks; ++i) hits += static_cast<int>((t->history >> i) & 1u);
+        for (char hit : look_record_) hits += hit;
         return hits >= kCaptureHits;
     }
 
@@ -297,6 +329,52 @@ private:
         return world_.Scene().lib.radars[static_cast<std::size_t>(r.def_index)];
     }
 
+    // Keep the last kCaptureLooks looks (hit or miss) of the tracking radar's locked track.
+    void NoteLooks() {
+        const em::RadarState* r = Radar(track_);
+        const em::SensorTrack* t = r != nullptr && r->locked_track != 0 ? r->tracker.Find(r->locked_track) : nullptr;
+        if (t == nullptr) {
+            look_record_.clear();
+            recorded_track_ = 0;
+            recorded_looks_ = 0;
+            return;
+        }
+        if (r->locked_track != recorded_track_) {
+            look_record_.clear();
+            recorded_track_ = r->locked_track;
+            recorded_looks_ = 0;
+        }
+        if (t->looks > recorded_looks_) {
+            look_record_.push_back(static_cast<char>(t->history & 1u));
+            recorded_looks_ = t->looks;
+            if (static_cast<int>(look_record_.size()) > kCaptureLooks) look_record_.erase(look_record_.begin());
+        }
+    }
+
+    // Remember which beam each target's echo came in this tick.
+    void NoteBeams() {
+        const em::RadarState* r = Radar(search_);
+        const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
+        if (e == nullptr || r->last_plots.empty()) return;
+        for (const em::RadarPlot& p : r->last_plots) {
+            const std::string id = TargetOf(p.debug_truth_platform);
+            if (id.empty()) continue;
+            bool found = false;
+            for (auto& b : beam_of_) {
+                if (b.first == id) {
+                    b.second = e->beam_index;
+                    found = true;
+                }
+            }
+            if (!found) beam_of_.emplace_back(id, e->beam_index);
+        }
+    }
+    int BeamOf(const std::string& id) const {
+        for (const auto& b : beam_of_)
+            if (b.first == id) return b.second;
+        return -1;
+    }
+
     int PlatformOf(const std::string& id) const {
         for (const auto& t : targets_)
             if (t.first == id) return t.second;
@@ -331,6 +409,10 @@ private:
     Vec3 last_unit_;
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
+    std::vector<char> look_record_;  // 1 = the locked track's look was a hit, newest last
+    int recorded_track_ = 0;
+    int recorded_looks_ = 0;
+    std::vector<std::pair<std::string, int>> beam_of_;  // target id -> the search beam of its latest echo
 };
 
 }  // namespace simcore

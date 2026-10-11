@@ -98,6 +98,7 @@ struct Bench {
     double north_m = 0.0;
     double height_m = 0.0;
     double rcs_m2 = 3.0;
+    double altitude_m = -1.0;  // >= 0: fly at this true altitude (the ENU height follows the Earth's curvature)
 
     explicit Bench(unsigned seed = 7u) {
         ok = LoadEmLinkDef(kData, "em/osa_ak.json", "osa_ak_soc", "osa_ak_ssc", def);
@@ -110,6 +111,7 @@ struct Bench {
     // One tick: the target moves, the radar designation (if `designate`) is put on its true position.
     void Tick(bool designate, bool alive = true) {
         north_m -= 150.0 * 0.1;
+        if (altitude_m >= 0.0) height_m = altitude_m - north_m * north_m / (2.0 * wgs84::kMeanRadius);
         link->SyncTarget("t", alive, Target(), {0.0, -150.0, 0.0}, rcs_m2, false);
         if (designate) {
             const Vec3 rel = Target() - unit;
@@ -284,7 +286,7 @@ SC_TEST("em link: the auto-capture takes a 3 m2 target at 5 km near the publishe
     // data/em/osa_ak.json fits Pd 0.5 at 23 km; the radar's own range limit is 28 km. The designation is on the
     // target's true position (a perfect search picture) so this tests the tracking radar alone. The radar locks on
     // the first echo in the gate, and Swerling I detection falls off slowly (Pd 0.24 at 28 km), so that happens
-    // far out; the auto-capture waits for a local Pd of one half (11 hits in 20 looks), which is the figure Korovin
+    // far out; the auto-capture waits for a local Pd of about one half (22 hits in 40 looks), which is the figure Korovin
     // gives.
     const em::RadarDef ssc = OsaRadar("osa_ak_ssc");
     SC_EXPECT_NEAR(em::DetectionRangeAt(ssc, em::Environment(), 5000.0, 3.0, 0.5), 23000.0, 400.0);
@@ -387,4 +389,221 @@ SC_TEST("em practice: the gameplay path is untouched when a scenario has no em b
     SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_practice.json", kData, def, console));
     ScenarioRunner runner(std::move(def), std::move(console));
     SC_EXPECT(runner.Em() == nullptr && !runner.Engagement().EmActive());
+}
+
+// First range at which the search radar shows a 3 m2 target flying inbound at `altitude_m` (a negative number if it
+// never does before 5 km), with the beam programme given, and the beam the echo came in.
+struct FirstContact {
+    double range_m = -1.0;
+    int beam = -1;
+};
+
+FirstContact SearchFirst(const std::vector<int>& program, double altitude_m, unsigned seed, bool mti = false,
+                         double rcs_m2 = 3.0) {
+    Bench b(seed);
+    b.link->SetSearch(true, mti);
+    b.link->SetSearchBeamProgram(program);
+    b.rcs_m2 = rcs_m2;
+    b.altitude_m = altitude_m;
+    b.north_m = 60000.0;
+    FirstContact f;
+    while (b.north_m > 5000.0 && f.range_m < 0.0) {
+        b.Tick(false);
+        const std::vector<EmSensorLink::Contact> pic = b.link->SearchPicture();
+        if (!pic.empty()) {
+            f.range_m = b.north_m;
+            f.beam = pic.front().beam;
+        }
+    }
+    return f;
+}
+
+double MedianFirst(const std::vector<int>& program, double altitude_m, int* beam = nullptr) {
+    std::vector<double> r;
+    for (unsigned seed = 1; seed <= 5; ++seed) {
+        const FirstContact f = SearchFirst(program, altitude_m, seed);
+        r.push_back(f.range_m);
+        if (beam != nullptr) *beam = f.beam;
+    }
+    std::sort(r.begin(), r.end());
+    return r[r.size() / 2];
+}
+
+SC_TEST("em 6.4: the beam programme decides what the search radar sees, and the contact says which beam") {
+    int beam = -1;
+    // Beam I (0-4 degrees): a low or middle-height target far out, nothing high.
+    SC_EXPECT(MedianFirst({0}, 1000.0, &beam) > 35000.0 && beam == 0);
+    SC_EXPECT(MedianFirst({0}, 5000.0) < 0.0);
+    // Beam II (4-8 degrees): a 5 km target far out, a 50 m one not at all until it is close.
+    SC_EXPECT(MedianFirst({1}, 5000.0, &beam) > 35000.0 && beam == 1);
+    SC_EXPECT(MedianFirst({1}, 50.0) < 0.0);
+    // Beam III (8-28 degrees) is tall and weak: everything it shows is close.
+    SC_EXPECT(MedianFirst({2}, 5000.0, &beam) < 28000.0 && beam == 2);
+    SC_EXPECT(MedianFirst({2}, 1000.0) < 16000.0);
+    // The automatic programme finds all three, each in its own beam.
+    SC_EXPECT(MedianFirst({0, 1, 2}, 1000.0, &beam) > 35000.0 && beam == 0);
+    SC_EXPECT(MedianFirst({0, 1, 2}, 5000.0, &beam) > 35000.0 && beam == 1);
+}
+
+SC_TEST("em 6.4: a target at 50 m is seen at the shorter range the calibration check gives (Korovin: 27 km)") {
+    const em::RadarDef soc = OsaRadar("osa_ak_soc");
+    const double r50 = em::DetectionRangeAt(soc, em::Environment(), 50.0, 3.0, 0.5);
+    const double high = MedianFirst({0, 1, 2}, 5000.0);
+    const double low = MedianFirst({0, 1, 2}, 50.0);
+    std::printf("    SOC first contact %.1f km at 5 km altitude, %.1f km at 50 m (R50 at 50 m: %.1f km; published 40 and 27)\n",
+                high / 1000.0, low / 1000.0, r50 / 1000.0);
+    SC_EXPECT(low > 0.75 * r50 && low < 1.1 * r50);
+    SC_EXPECT(low < 0.7 * high);
+}
+
+SC_TEST("em 6.4: the tracking radar captures a 50 m target at about 22 km (open item: Korovin gives 14 km)") {
+    // The full-path Pd of a 50 m target is smooth: 0.5 at 22 km, 0.8 at 18 km (measured in a bench run). The E0 check
+    // that reads Korovin's 14 km as a Pd 0.8 range (tests/test_em_data.cpp) only gets 14 km from a deep multipath
+    // null in its own simplified path at 17 km. So a rule that fits the fitted 5 km figure also captures the 50 m
+    // target at 22 km; fitting 14 km would take a rougher surface or another trials-site effect. Pinned here so a
+    // change to the model or the rule shows up.
+    const em::RadarDef ssc = OsaRadar("osa_ak_ssc");
+    const double r50 = em::DetectionRangeAt(ssc, em::Environment(), 50.0, 3.0, 0.5);
+    const double r80 = em::SustainedDetectionRange(ssc, em::Environment(), 50.0, 3.0, 0.8);
+    std::vector<double> caps;
+    for (unsigned seed = 1; seed <= 8; ++seed) {
+        Bench b(seed);
+        b.link->SetTrack(true);
+        b.altitude_m = 50.0;
+        b.north_m = 30000.0;
+        double cap = -1.0;
+        while (b.north_m > 3000.0 && cap < 0.0) {
+            b.Tick(true);
+            if (b.link->Captured(nullptr)) cap = b.north_m;
+        }
+        caps.push_back(cap);
+    }
+    std::sort(caps.begin(), caps.end());
+    std::printf("    SSC auto-capture of a 50 m target: %.1f .. %.1f km (Pd 0.5 first %.1f km, Pd 0.8 held %.1f km; published 14)\n",
+                caps.front() / 1000.0, caps.back() / 1000.0, r50 / 1000.0, r80 / 1000.0);
+    SC_EXPECT_NEAR(r80, 14000.0, 2800.0);  // the check path's number (E0), kept for the record
+    SC_EXPECT(caps.front() > 0.0);
+    SC_EXPECT(caps[caps.size() / 2] > 0.7 * r50 && caps[caps.size() / 2] < 1.1 * r50);
+}
+
+SC_TEST("em 6.4: overhead there is a blind cone; the target comes back out of it") {
+    Bench b;
+    b.link->SetSearch(true, false);
+    b.link->SetSearchBeamProgram({0, 1, 2});
+    b.altitude_m = 4000.0;
+    b.north_m = 30000.0;
+    bool seen_before = false, seen_inside = false, seen_after = false;
+    // Elevation 30 degrees (the search radar's limit) at 4 km is a ground distance of 6.9 km.
+    while (b.north_m > -30000.0) {
+        b.Tick(false);
+        const bool shown = !b.link->SearchPicture().empty();
+        if (b.north_m > 9000.0 && b.north_m < 14000.0) seen_before = seen_before || shown;
+        if (std::fabs(b.north_m) < 4500.0) seen_inside = seen_inside || shown;
+        if (b.north_m < -9000.0 && b.north_m > -14000.0) seen_after = seen_after || shown;
+    }
+    SC_EXPECT(seen_before && !seen_inside && seen_after);
+}
+
+SC_TEST("em 6.4: MTI brings a low target out of the ground clutter that normal video drowns it in") {
+    // A target 30 m up, crossing the 4 to 12 km where the clutter is. Count the ticks the scope shows it.
+    auto visible_ticks = [&](bool mti) {
+        int ticks = 0;
+        for (unsigned seed = 1; seed <= 4; ++seed) {
+            Bench b(seed);
+            b.link->SetSearch(true, mti);
+            b.link->SetSearchBeamProgram({0});
+            b.altitude_m = 30.0;
+            b.north_m = 16000.0;
+            while (b.north_m > 4000.0) {
+                b.Tick(false);
+                if (b.north_m < 12000.0 && !b.link->SearchPicture().empty()) ++ticks;
+            }
+        }
+        return ticks;
+    };
+    const int normal = visible_ticks(false);
+    const int moving = visible_ticks(true);
+    std::printf("    low target in clutter: shown for %d ticks on normal video, %d with MTI%s", normal, moving, "\n");
+    SC_EXPECT(moving > normal + 100);
+}
+
+SC_TEST("em 6.4: the console's beam selector, range rings and beam lamps load and bad ones are refused") {
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console, &error));
+    const SearchSensorDef& d = console.search;
+    SC_EXPECT(d.beam_control == "soc.beam" && d.beam_programs.size() == 5 && d.beam_inputs.size() == 3);
+    SC_EXPECT(d.beam_programs[3] == std::vector<int>({0, 1, 2}) && d.beam_programs[4] == std::vector<int>({0, 1}));
+    SC_EXPECT(d.range_rings_m.size() == 3 && d.range_rings_m[0] == std::vector<double>({2000.0, 7000.0, 12000.0}));
+    SC_EXPECT_NEAR(d.rotation_period_s, 1.818, 1e-9);
+    const std::string text = ReadFile(kData + "/procedures/osa_ak.json");
+    auto bad = [&](const std::string& from, const std::string& to, const std::string& expect) {
+        ConsoleData c;
+        std::string e;
+        const bool ok = LoadConsole(ReplaceAll(text, from, to), c, &e);
+        if (ok || e.find(expect) == std::string::npos) std::printf("    expected \"%s\", got ok=%d \"%s\"\n", expect.c_str(), ok ? 1 : 0, e.c_str());
+        return !ok && e.find(expect) != std::string::npos;
+    };
+    SC_EXPECT(bad("[ [0], [1], [2], [0, 1, 2], [0, 1] ]", "[ [0], [1], [2], [0, 1, 2] ]", "needs one programme per position"));
+    SC_EXPECT(bad("[ [0], [1], [2], [0, 1, 2], [0, 1] ]", "[ [0], [1], [2], [0, 1, 2], [0, 3] ]", "names a beam that has no input"));
+    SC_EXPECT(bad("\"inputs\": [ \"search_beam_1\"", "\"inputs\": [ \"search_beam_9\"", "expected the id of an input"));
+    SC_EXPECT(bad("[ [2000, 7000, 12000], ", "[ ", "needs one list per range scale"));
+}
+
+namespace {
+
+// Plays the practice scenario to a time when the search antenna is turning, then records the search beam for a while.
+std::vector<int> BeamsOver(const std::string& scenario_text, int selector_position, double seconds, std::vector<bool>* lamps_ok) {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    std::vector<int> beams;
+    if (!LoadScenario(scenario_text, kData, def, console, &error)) {
+        std::printf("    load: %s\n", error.c_str());
+        return beams;
+    }
+    ScenarioRunner runner(std::move(def), std::move(console));
+    while (runner.Time() < 290.0) runner.Step(0.1);  // powered, searching, the crew's procedures done
+    runner.Console().panel.Set("soc.beam", selector_position);
+    for (int i = 0; i < static_cast<int>(seconds / 0.1); ++i) {
+        runner.Step(0.1);
+        const int beam = runner.Engagement().SearchBeam();
+        beams.push_back(beam);
+        if (lamps_ok != nullptr) {
+            bool ok = beam >= 0;
+            for (int k = 0; k < 3; ++k) {
+                ok = ok && runner.Console().equipment.GetInput("search_beam_" + std::to_string(k + 1)) == (k == beam);
+            }
+            lamps_ok->push_back(ok);
+        }
+    }
+    return beams;
+}
+
+}  // namespace
+
+SC_TEST("em 6.4: the beam selector holds a beam or steps through the programme, one beam per turn, and lights the lamps") {
+    for (const std::string& text : {PracticeEm(), ReadFile(kData + "/scenarios/osa_practice.json")}) {
+        std::vector<bool> lamps;
+        const std::vector<int> fixed = BeamsOver(text, 2, 8.0, &lamps);
+        SC_EXPECT(!fixed.empty());
+        for (std::size_t i = 20; i < fixed.size(); ++i) SC_EXPECT(fixed[i] == 2);  // beam III held, from the next turn
+        for (std::size_t i = 20; i < lamps.size(); ++i) SC_EXPECT(lamps[i]);
+
+        const std::vector<int> lower = BeamsOver(text, 4, 16.0, nullptr);  // АВТ. I-II
+        int steps = 0;
+        bool saw[3] = {false, false, false};
+        for (std::size_t i = 25; i < lower.size(); ++i) {  // after the programme has settled
+            if (lower[i] >= 0 && lower[i] < 3) saw[lower[i]] = true;
+            if (lower[i] != lower[i - 1]) ++steps;
+        }
+        SC_EXPECT(saw[0] && saw[1] && !saw[2]);
+        SC_EXPECT(steps >= 6 && steps <= 9);  // about one step per 1.82 s turn over 14 s
+
+        const std::vector<int> all = BeamsOver(text, 3, 16.0, nullptr);  // АВТ. I-III
+        bool seen_all[3] = {false, false, false};
+        for (std::size_t i = 25; i < all.size(); ++i)
+            if (all[i] >= 0 && all[i] < 3) seen_all[all[i]] = true;
+        SC_EXPECT(seen_all[0] && seen_all[1] && seen_all[2]);
+    }
 }

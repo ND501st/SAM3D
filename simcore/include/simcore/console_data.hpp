@@ -31,6 +31,15 @@ struct SearchSensorDef {
     std::vector<std::pair<double, double>> range_scales_m;  // [min, max] per position
     std::string mti_control;   // switch: moving-target indicator (1 = on); may be empty
     double mti_max_range_m = 0.0;
+    // Range rings on the scope, in metres, for each position of range_control (empty = the display's own).
+    std::vector<std::vector<double>> range_rings_m;
+    // Elevation beams (optional; beam_control empty = none). Each position of `beam_control` selects a programme: the
+    // beams (indices into the radar's elevation beams) the antenna uses, one per turn, in turn. `beam_inputs` are
+    // inputs set while that beam is the one radiating, for the beam lamps. `rotation_period_s` is one turn.
+    std::string beam_control;
+    std::vector<std::vector<int>> beam_programs;
+    std::vector<std::string> beam_inputs;
+    double rotation_period_s = 0.0;
     // IFF interrogator (optional; query empty = none): each press of `query` (or `control_query`) interrogates for
     // query_time_s; friendly aircraft within max_range_m reply. With `gate_control` at 1 the replies are gated by the
     // search radar's echoes (only targets it sees reply on the scope). `interrogating_input` is set while it runs.
@@ -481,8 +490,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (se == nullptr || tr == nullptr) return Fail("sensors", "needs search and track");
         const std::string sp = "sensors.search";
         SearchSensorDef& search = out.search;
-        if (!Keys(*se, sp, {"antenna", "transmitter", "range_control", "range_scales_m", "mti_control",
-                            "mti_max_range_m", "iff", "notes"}) ||
+        if (!Keys(*se, sp, {"antenna", "transmitter", "range_control", "range_scales_m", "range_rings_m", "mti_control",
+                            "mti_max_range_m", "beams", "iff", "notes"}) ||
             !RefSubsystem(*se, sp, "antenna", eq, true, search.antenna) ||
             !RefSubsystem(*se, sp, "transmitter", eq, true, search.transmitter) ||
             !RefControl(*se, sp, "range_control", panel, ControlKind::Discrete, true, search.range_control) ||
@@ -502,6 +511,72 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         }
         if (static_cast<int>(search.range_scales_m.size()) != panel.Find(search.range_control)->positions) {
             return Fail(Join(sp, "range_scales_m"), "needs one scale per position of " + search.range_control);
+        }
+        if (const json::Value* rings = OptionalArray(*se, sp, "range_rings_m")) {
+            for (std::size_t i = 0; i < rings->items.size(); ++i) {
+                const json::Value& list = rings->items[i];
+                const std::string rp = Index(Join(sp, "range_rings_m"), i);
+                if (!list.Is(json::Type::Array)) return Fail(rp, "expected a list of distances in metres");
+                std::vector<double> distances;
+                for (const json::Value& d : list.items) {
+                    if (!d.Is(json::Type::Number) || !(d.number > 0.0)) return Fail(rp, "distances must be numbers > 0");
+                    distances.push_back(d.number);
+                }
+                search.range_rings_m.push_back(std::move(distances));
+            }
+            if (search.range_rings_m.size() != search.range_scales_m.size()) {
+                return Fail(Join(sp, "range_rings_m"), "needs one list per range scale");
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* beams = se->Find("beams")) {
+            const std::string bp = Join(sp, "beams");
+            if (!Keys(*beams, bp, {"control", "programs", "inputs", "rotation_period_s", "source", "confidence", "notes"}) ||
+                !Provenance(*beams, bp) ||
+                !RefControl(*beams, bp, "control", panel, ControlKind::Discrete, true, search.beam_control) ||
+                !OptionalNumber(*beams, bp, "rotation_period_s", search.rotation_period_s)) {
+                return false;
+            }
+            if (!(search.rotation_period_s > 0.0)) return Fail(Join(bp, "rotation_period_s"), "required, > 0");
+            const json::Value* programs = OptionalArray(*beams, bp, "programs");
+            if (programs == nullptr) return message_.empty() ? Fail(Join(bp, "programs"), "required") : false;
+            for (std::size_t i = 0; i < programs->items.size(); ++i) {
+                const json::Value& list = programs->items[i];
+                const std::string pp = Index(Join(bp, "programs"), i);
+                if (!list.Is(json::Type::Array) || list.items.empty()) return Fail(pp, "expected a non-empty list of beam indices");
+                std::vector<int> beams_used;
+                for (const json::Value& b : list.items) {
+                    if (!b.Is(json::Type::Number) || b.number < 0.0 || b.number != std::floor(b.number)) {
+                        return Fail(pp, "beam indices must be whole numbers >= 0");
+                    }
+                    beams_used.push_back(static_cast<int>(b.number));
+                }
+                search.beam_programs.push_back(std::move(beams_used));
+            }
+            if (static_cast<int>(search.beam_programs.size()) != panel.Find(search.beam_control)->positions) {
+                return Fail(Join(bp, "programs"), "needs one programme per position of " + search.beam_control);
+            }
+            if (const json::Value* ins = OptionalArray(*beams, bp, "inputs")) {
+                for (std::size_t i = 0; i < ins->items.size(); ++i) {
+                    const std::string ip = Index(Join(bp, "inputs"), i);
+                    if (!ins->items[i].Is(json::Type::String) || !eq.HasInput(ins->items[i].string)) {
+                        return Fail(ip, "expected the id of an input");
+                    }
+                    search.beam_inputs.push_back(ins->items[i].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            for (const std::vector<int>& prog : search.beam_programs) {
+                for (int b : prog) {
+                    if (!search.beam_inputs.empty() && b >= static_cast<int>(search.beam_inputs.size())) {
+                        return Fail(Join(bp, "programs"), "names a beam that has no input");
+                    }
+                }
+            }
+        } else if (!message_.empty()) {
+            return false;
         }
         if (const json::Value* iff = se->Find("iff")) {
             const std::string ip = Join(sp, "iff");
