@@ -41,6 +41,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <initializer_list>
 #include <map>
@@ -69,6 +70,24 @@ struct EngagementTuning {
     double zone_min_alt_m = 0.0;
     double zone_max_alt_m = 0.0;
     double zone_warning_s = 0.0;
+    // Firing zones by approach and speed (optional: without them the box above is the zone for every target).
+    // The box's range limits are the head-on zone's; an altitude band applies up to its speed.
+    struct SpeedBand {
+        double max_speed_mps = 0.0;
+        double min_alt_m = 0.0;
+        double max_alt_m = 0.0;
+    };
+    bool has_zones = false;
+    std::vector<SpeedBand> head_on;  // ascending speed
+    SpeedBand pursuit;               // a receding target
+    double pursuit_max_range_m = 0.0;
+    SpeedBand optical;               // slow or hovering targets close to the ground ("F"); needs its own range
+    double optical_min_range_m = 0.0;
+    double optical_max_range_m = 0.0;
+    // Guidance methods, chosen by the target's height, elevation and speed (optional).
+    bool has_methods = false;
+    double low_target_elevation_deg = 0.0;  // below it a low target needs a low-target method
+    double gorka_max_agl_m = 0.0;           // the zoom-climb method is used at or below this height
     // Search radar.
     double clutter_altitude_m = 0.0;
     // Tracking.
@@ -97,10 +116,84 @@ struct EngagementTuning {
     double manoeuvre_factor_min = 1.0;
     double deviation_penalty = 0.0;
     double deviation_factor_min = 1.0;
+    // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
+    // By class; "default" is used for a class without its own.
+    std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
 
     double HitChanceFor(const std::string& target_class) const {
         const auto it = hit_chance.find(target_class);
         return it != hit_chance.end() ? it->second : hit_chance.at("default");
+    }
+
+    // The low-altitude factor for a class at a height above the ground: linear between the points, flat beyond them.
+    double LowAltitudeFactor(const std::string& target_class, double agl_m) const {
+        auto it = low_altitude.find(target_class);
+        if (it == low_altitude.end()) it = low_altitude.find("default");
+        if (it == low_altitude.end() || it->second.empty()) return 1.0;
+        const std::vector<std::pair<double, double>>& pts = it->second;
+        if (agl_m <= pts.front().first) return pts.front().second;
+        for (std::size_t i = 1; i < pts.size(); ++i) {
+            if (agl_m <= pts[i].first) {
+                const double f = (agl_m - pts[i - 1].first) / (pts[i].first - pts[i - 1].first);
+                return pts[i - 1].second + f * (pts[i].second - pts[i - 1].second);
+            }
+        }
+        return pts.back().second;
+    }
+
+    enum class ZoneKind { None, HeadOn, Pursuit, Optical };
+    static const char* ToString(ZoneKind k) {
+        switch (k) {
+            case ZoneKind::None: return "none";
+            case ZoneKind::HeadOn: return "head-on";
+            case ZoneKind::Pursuit: return "pursuit";
+            case ZoneKind::Optical: return "optical";
+        }
+        return "?";
+    }
+
+    // Which firing zone a target is in (None = outside them all). `closing_mps` > 0 means it is coming toward the unit.
+    ZoneKind ZoneFor(double range_m, double agl_m, double speed_mps, double closing_mps) const {
+        if (!has_zones) {
+            const bool in = range_m >= zone_min_range_m && range_m <= zone_max_range_m && agl_m >= zone_min_alt_m &&
+                            agl_m <= zone_max_alt_m;
+            return in ? ZoneKind::HeadOn : ZoneKind::None;
+        }
+        if (speed_mps <= optical.max_speed_mps && range_m >= optical_min_range_m && range_m <= optical_max_range_m &&
+            agl_m >= optical.min_alt_m && agl_m <= optical.max_alt_m) {
+            return ZoneKind::Optical;
+        }
+        if (closing_mps > 0.0) {
+            if (range_m < zone_min_range_m || range_m > zone_max_range_m) return ZoneKind::None;
+            for (const SpeedBand& b : head_on) {
+                if (speed_mps <= b.max_speed_mps) {
+                    return agl_m >= b.min_alt_m && agl_m <= b.max_alt_m ? ZoneKind::HeadOn : ZoneKind::None;
+                }
+            }
+            return ZoneKind::None;
+        }
+        const bool in = speed_mps <= pursuit.max_speed_mps && range_m >= zone_min_range_m && range_m <= pursuit_max_range_m &&
+                        agl_m >= pursuit.min_alt_m && agl_m <= pursuit.max_alt_m;
+        return in ? ZoneKind::Pursuit : ZoneKind::None;
+    }
+
+    enum class GuidanceMethod { ThreePoint, ZoomClimb, Optical };
+    static const char* ToString(GuidanceMethod m) {
+        switch (m) {
+            case GuidanceMethod::ThreePoint: return "T/T";
+            case GuidanceMethod::ZoomClimb: return "Gorka";
+            case GuidanceMethod::Optical: return "F";
+        }
+        return "?";
+    }
+
+    // The guidance method the system picks: the optical one for slow or hovering targets near the ground, the zoom
+    // climb for fast low targets below the elevation limit, otherwise the ordinary one.
+    GuidanceMethod MethodFor(double agl_m, double elevation_deg, double speed_mps) const {
+        if (!has_methods) return GuidanceMethod::ThreePoint;
+        if (has_zones && speed_mps <= optical.max_speed_mps && agl_m <= optical.max_alt_m) return GuidanceMethod::Optical;
+        if (elevation_deg < low_target_elevation_deg && agl_m <= gorka_max_agl_m) return GuidanceMethod::ZoomClimb;
+        return GuidanceMethod::ThreePoint;
     }
 };
 
@@ -109,7 +202,7 @@ namespace detail {
 class TuningLoader : public ConsoleLoader {
 public:
     bool LoadTuning(const json::Value& root, EngagementTuning& t) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "search", "track", "aim", "missile", "outcome"}) ||
+        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "search", "track", "aim", "missile", "outcome"}) ||
             !RequireString(root, "", "system_id", t.system_id)) {
             return false;
         }
@@ -123,6 +216,15 @@ public:
             !Num(*g, "zone", "max_altitude_m", t.zone_max_alt_m, t.zone_min_alt_m + 1.0) ||
             !Num(*g, "zone", "warning_s", t.zone_warning_s, 0.0)) {
             return false;
+        }
+        if (root.Find("zones") != nullptr && !LoadZones(root, t)) return false;
+        if (root.Find("methods") != nullptr) {
+            if (!Group(root, "methods", {"low_target_elevation_deg", "gorka_max_agl_m"}, g) ||
+                !Num(*g, "methods", "low_target_elevation_deg", t.low_target_elevation_deg, 0.0) ||
+                !Num(*g, "methods", "gorka_max_agl_m", t.gorka_max_agl_m, 0.0)) {
+                return false;
+            }
+            t.has_methods = true;
         }
         if (!Group(root, "search", {"clutter_altitude_m"}, g) ||
             !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0)) {
@@ -158,7 +260,7 @@ public:
             return false;
         }
         if (!Group(root, "outcome",
-                   {"hit_chance", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
+                   {"hit_chance", "low_altitude", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
                     "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min"},
                    g) ||
             !Factor(*g, "tv_factor", t.tv_factor) || !Factor(*g, "outside_zone_factor", t.outside_zone_factor) ||
@@ -180,10 +282,77 @@ public:
             t.hit_chance[hc->keys[i]] = v.number;
         }
         if (t.hit_chance.count("default") == 0) return Fail("outcome.hit_chance", "needs a \"default\" entry");
-        return true;
+        return LoadLowAltitude(*g, t);
     }
 
 private:
+    bool LoadSpeedBand(const json::Value& v, const std::string& path, EngagementTuning::SpeedBand& b) {
+        return Num(v, path.c_str(), "max_speed_mps", b.max_speed_mps, 0.0) &&
+               Num(v, path.c_str(), "min_altitude_m", b.min_alt_m, 0.0) &&
+               Num(v, path.c_str(), "max_altitude_m", b.max_alt_m, b.min_alt_m + 1.0);
+    }
+
+    bool LoadZones(const json::Value& root, EngagementTuning& t) {
+        const json::Value* z = nullptr;
+        if (!Group(root, "zones", {"head_on", "pursuit", "optical"}, z)) return false;
+        const json::Value* ho = z->Find("head_on");
+        if (ho == nullptr || !ho->Is(json::Type::Array) || ho->items.empty()) {
+            return Fail("zones.head_on", "expected a non-empty list of speed bands");
+        }
+        double last = 0.0;
+        for (std::size_t i = 0; i < ho->items.size(); ++i) {
+            const std::string p = Index("zones.head_on", i);
+            EngagementTuning::SpeedBand b;
+            if (!Keys(ho->items[i], p, {"max_speed_mps", "min_altitude_m", "max_altitude_m"}) ||
+                !LoadSpeedBand(ho->items[i], p, b)) {
+                return false;
+            }
+            if (!(b.max_speed_mps > last)) return Fail(p, "speed bands must be in ascending order of max_speed_mps");
+            last = b.max_speed_mps;
+            t.head_on.push_back(b);
+        }
+        const json::Value* pu = z->Find("pursuit");
+        const json::Value* op = z->Find("optical");
+        if (pu == nullptr || op == nullptr) return Fail("zones", "needs head_on, pursuit and optical");
+        if (!Keys(*pu, "zones.pursuit", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "max_range_m"}) ||
+            !LoadSpeedBand(*pu, "zones.pursuit", t.pursuit) ||
+            !Num(*pu, "zones.pursuit", "max_range_m", t.pursuit_max_range_m, t.zone_min_range_m + 1.0) ||
+            !Keys(*op, "zones.optical", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "min_range_m", "max_range_m"}) ||
+            !LoadSpeedBand(*op, "zones.optical", t.optical) ||
+            !Num(*op, "zones.optical", "min_range_m", t.optical_min_range_m, 0.0) ||
+            !Num(*op, "zones.optical", "max_range_m", t.optical_max_range_m, t.optical_min_range_m + 1.0)) {
+            return false;
+        }
+        t.has_zones = true;
+        return true;
+    }
+
+    bool LoadLowAltitude(const json::Value& outcome, EngagementTuning& t) {
+        const json::Value* la = outcome.Find("low_altitude");
+        if (la == nullptr) return true;
+        if (!la->Is(json::Type::Object)) {
+            return Fail("outcome.low_altitude", "expected an object of class: [[height_m, factor], ...]");
+        }
+        for (std::size_t i = 0; i < la->keys.size(); ++i) {
+            const std::string p = Join("outcome.low_altitude", la->keys[i]);
+            const json::Value& list = la->items[i];
+            if (!list.Is(json::Type::Array) || list.items.empty()) {
+                return Fail(p, "expected a non-empty list of [height_m, factor]");
+            }
+            std::vector<std::pair<double, double>> pts;
+            for (const json::Value& pt : list.items) {
+                if (!pt.Is(json::Type::Array) || pt.items.size() != 2 || !pt.items[0].Is(json::Type::Number) ||
+                    !pt.items[1].Is(json::Type::Number) || pt.items[1].number < 0.0 || pt.items[1].number > 1.0 ||
+                    (!pts.empty() && !(pt.items[0].number > pts.back().first))) {
+                    return Fail(p, "expected ascending [height_m, factor] pairs with factors from 0 to 1");
+                }
+                pts.emplace_back(pt.items[0].number, pt.items[1].number);
+            }
+            t.low_altitude[la->keys[i]] = std::move(pts);
+        }
+        return true;
+    }
+
     bool Group(const json::Value& root, const char* key, std::initializer_list<const char*> fields,
                const json::Value*& out) {
         out = root.Find(key);
@@ -333,13 +502,20 @@ public:
         if (g.friendly) log.Record({t, DebriefEntry::Kind::Deviation, who, tracked_, "fired at a friendly aircraft"});
         s.target_id = tracked_;
         s.method = method_;
-        s.in_zone = InZone(g);
+        s.zone = ZoneOf(g);
+        s.in_zone = s.zone != EngagementTuning::ZoneKind::None;
+        s.guidance = tuning_.MethodFor(g.agl_m, g.el_deg, g.speed_mps);
         s.flight_time_s = g.range_m / tuning_.missile_average_speed_mps;
         s.out_of_reach = s.flight_time_s > tuning_.missile_max_flight_time_s;
         if (s.out_of_reach) s.flight_time_s = tuning_.missile_max_flight_time_s;
-        char detail[160];
+        char detail[220];
         std::snprintf(detail, sizeof(detail), "guided at %s, %.1f km, %s track%s", tracked_.c_str(), g.range_m / 1000.0,
                       ToString(method_), s.in_zone ? ", in the zone" : ", OUTSIDE the zone");
+        if (tuning_.has_zones || tuning_.has_methods) {
+            const std::size_t n = std::strlen(detail);
+            std::snprintf(detail + n, sizeof(detail) - n, " (%s zone, %s method, %.0f m up, %.0f m/s)",
+                          EngagementTuning::ToString(s.zone), EngagementTuning::ToString(s.guidance), g.agl_m, g.speed_mps);
+        }
         log.Record({t, DebriefEntry::Kind::Scenario, who, tracked_, detail});
         shots_.push_back(s);
         for (EngagementTarget& tg : targets) {
@@ -446,6 +622,7 @@ private:
         double true_az_deg = 0.0;  // from north; az_deg is in the crew's frame
         bool friendly = false;
         double closing_mps = 0.0;
+        double speed_mps = 0.0;
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
         bool los = false;
@@ -467,6 +644,8 @@ private:
         bool done = false;
         bool acmi_shown = false;
         double max_turn_deg_s = 0.0;
+        EngagementTuning::ZoneKind zone = EngagementTuning::ZoneKind::None;
+        EngagementTuning::GuidanceMethod guidance = EngagementTuning::GuidanceMethod::ThreePoint;
     };
 
     static double Wrap180(double deg) {
@@ -519,6 +698,7 @@ private:
             g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
             const Vec3 dir = los.Normalized();
             g.closing_mps = -Dot(a->velocity, dir);
+            g.speed_mps = a->velocity.Length();
             if (g.has_prev && dt > 0.0) {
                 g.angular_rate_deg_s = RadToDeg(AngleBetween(g.prev_los_dir, dir)) / dt;
                 g.turn_rate_deg_s = RadToDeg(AngleBetween(g.prev_velocity, a->velocity)) / dt;
@@ -576,10 +756,10 @@ private:
         em_->Advance(dt);
     }
 
-    bool InZone(const Geometry& g) const {
-        return g.range_m >= tuning_.zone_min_range_m && g.range_m <= tuning_.zone_max_range_m &&
-               g.agl_m >= tuning_.zone_min_alt_m && g.agl_m <= tuning_.zone_max_alt_m;
+    EngagementTuning::ZoneKind ZoneOf(const Geometry& g) const {
+        return tuning_.ZoneFor(g.range_m, g.agl_m, g.speed_mps, g.closing_mps);
     }
+    bool InZone(const Geometry& g) const { return ZoneOf(g) != EngagementTuning::ZoneKind::None; }
 
     static int Mistakes(const SessionLog& log) {
         const DebriefSummary s = log.Summary();
@@ -617,15 +797,16 @@ private:
                 std::fmax(tuning_.manoeuvre_factor_min, 1.0 - tuning_.manoeuvre_penalty_per_deg_s * s.max_turn_deg_s);
             const int mistakes = Mistakes(log);
             const double crew = std::fmax(tuning_.deviation_factor_min, 1.0 - tuning_.deviation_penalty * mistakes);
-            const double p = base * method * zone * manoeuvre * crew;
+            const double altitude = tuning_.LowAltitudeFactor(g.target_class, g.agl_m);
+            const double p = base * method * zone * manoeuvre * crew * altitude;
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
-            char detail[256];
+            char detail[300];
             std::snprintf(detail, sizeof(detail),
                           "%s: chance %.2f = %s %.2f x %s track %.2f x zone %.2f x manoeuvre %.2f (%.0f deg/s) x "
-                          "crew %.2f (%d mistakes); draw %.2f",
+                          "crew %.2f (%d mistakes) x height %.2f (%.0f m up); draw %.2f",
                           hit ? "HIT" : "MISS", p, g.target_class.c_str(), base, ToString(s.method), method, zone,
-                          manoeuvre, s.max_turn_deg_s, crew, mistakes, draw);
+                          manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, draw);
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
             if (hit) {

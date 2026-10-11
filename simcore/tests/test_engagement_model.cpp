@@ -445,3 +445,126 @@ SC_TEST("engagement: the loaders check a target's iff and the console's orientat
     SC_EXPECT(!LoadConsole(osa, c, &error));
     SC_EXPECT(error.find("sensors.orientation.set_position") != std::string::npos);
 }
+
+// ---- Roadmap 6.7: firing zones by approach and speed, guidance methods, and hit chances against low targets.
+
+namespace {
+
+EngagementTuning OsaTuning() {
+    EngagementTuning t;
+    std::string error;
+    if (!LoadEngagementTuningFile(kData + "/gameplay/osa_ak.json", t, &error)) std::printf("    tuning: %s\n", error.c_str());
+    return t;
+}
+
+}  // namespace
+
+SC_TEST("zones: the Osa's zones, methods and low-altitude points load; bad ones are refused with paths") {
+    const EngagementTuning t = OsaTuning();
+    SC_EXPECT(t.has_zones && t.has_methods && t.head_on.size() == 2);
+    SC_EXPECT_NEAR(t.pursuit_max_range_m, 6500.0, 1e-9);
+    SC_EXPECT_NEAR(t.low_target_elevation_deg, 1.8, 1e-9);
+    SC_EXPECT(t.low_altitude.count("default") == 1 && t.low_altitude.count("helicopter") == 1);
+
+    std::string text;
+    {
+        std::ifstream f(kData + "/gameplay/osa_ak.json", std::ios::binary);
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        text = ss.str();
+    }
+    auto broken = [&](const std::string& from, const std::string& to) {
+        std::string s = text;
+        const std::size_t at = s.find(from);
+        if (at == std::string::npos) return std::string("{}");
+        return s.replace(at, from.size(), to);
+    };
+    EngagementTuning out;
+    std::string error;
+    SC_EXPECT(!LoadEngagementTuning(broken("{ \"max_speed_mps\": 500,", "{ \"max_speed_mps\": 200,"), out, &error) &&
+              error.find("zones.head_on[1]: speed bands must be in ascending order") != std::string::npos);
+    SC_EXPECT(!LoadEngagementTuning(broken("[50, 0.70]", "[50, 1.70]"), out, &error) &&
+              error.find("outcome.low_altitude.default") != std::string::npos);
+    SC_EXPECT(!LoadEngagementTuning(broken("[10, 0.45], [50, 0.70]", "[10, 0.45], [5, 0.70]"), out, &error) &&
+              error.find("outcome.low_altitude.default") != std::string::npos);
+    SC_EXPECT(!LoadEngagementTuning(broken("\"gorka_max_agl_m\": 100", "\"gorka_max_agl\": 100"), out, &error) &&
+              error.find("methods.gorka_max_agl: unknown key") != std::string::npos);
+}
+
+SC_TEST("zones: head-on, pursuit and optical zones follow the NVA's limits") {
+    const EngagementTuning t = OsaTuning();
+    using Z = EngagementTuning::ZoneKind;
+    // Head-on: 25-5000 m up to 300 m/s, 100-5000 m up to 500 m/s, 1.5-10.3 km.
+    SC_EXPECT(t.ZoneFor(8000.0, 30.0, 250.0, 250.0) == Z::HeadOn);
+    SC_EXPECT(t.ZoneFor(8000.0, 20.0, 250.0, 250.0) == Z::None);    // below 25 m
+    SC_EXPECT(t.ZoneFor(8000.0, 50.0, 400.0, 400.0) == Z::None);    // fast and below 100 m
+    SC_EXPECT(t.ZoneFor(8000.0, 150.0, 400.0, 400.0) == Z::HeadOn);
+    SC_EXPECT(t.ZoneFor(8000.0, 150.0, 600.0, 600.0) == Z::None);   // faster than 500 m/s
+    SC_EXPECT(t.ZoneFor(11000.0, 1000.0, 200.0, 200.0) == Z::None);  // beyond 10.3 km
+    SC_EXPECT(t.ZoneFor(1000.0, 1000.0, 200.0, 200.0) == Z::None);   // inside 1.5 km
+    // Pursuit: a receding target to 6.5 km, 100-5000 m, up to 300 m/s.
+    SC_EXPECT(t.ZoneFor(6000.0, 500.0, 200.0, -200.0) == Z::Pursuit);
+    SC_EXPECT(t.ZoneFor(7000.0, 500.0, 200.0, -200.0) == Z::None);
+    SC_EXPECT(t.ZoneFor(6000.0, 500.0, 400.0, -400.0) == Z::None);
+    SC_EXPECT(t.ZoneFor(6000.0, 50.0, 200.0, -200.0) == Z::None);    // low and receding
+    // Optical: slow or hovering, 2-6.5 km, 10-25 m.
+    SC_EXPECT(t.ZoneFor(3000.0, 15.0, 0.0, 0.0) == Z::Optical);
+    SC_EXPECT(t.ZoneFor(3000.0, 15.0, 90.0, 90.0) == Z::Optical);
+    SC_EXPECT(t.ZoneFor(7000.0, 15.0, 0.0, 0.0) == Z::None);
+    SC_EXPECT(t.ZoneFor(3000.0, 40.0, 0.0, 0.0) == Z::None);
+    SC_EXPECT(t.ZoneFor(3000.0, 15.0, 150.0, 150.0) == Z::None);     // too fast for the optical zone, too low for head-on
+    // Without the zones block the one box is every target's zone.
+    EngagementTuning plain = t;
+    plain.has_zones = false;
+    SC_EXPECT(plain.ZoneFor(8000.0, 30.0, 600.0, 600.0) == Z::HeadOn);
+    SC_EXPECT(plain.ZoneFor(6000.0, 500.0, 200.0, -200.0) == Z::HeadOn);
+}
+
+SC_TEST("zones: the guidance method follows height, elevation and speed") {
+    const EngagementTuning t = OsaTuning();
+    using M = EngagementTuning::GuidanceMethod;
+    SC_EXPECT(t.MethodFor(1000.0, 5.0, 200.0) == M::ThreePoint);
+    SC_EXPECT(t.MethodFor(60.0, 0.5, 250.0) == M::ZoomClimb);    // fast and low, under 00-30 elevation
+    SC_EXPECT(t.MethodFor(60.0, 3.0, 250.0) == M::ThreePoint);   // low but up in elevation
+    SC_EXPECT(t.MethodFor(400.0, 0.5, 250.0) == M::ThreePoint);  // low in elevation but not low
+    SC_EXPECT(t.MethodFor(15.0, 0.3, 0.0) == M::Optical);        // hovering near the ground
+    SC_EXPECT(t.MethodFor(15.0, 0.3, 90.0) == M::Optical);
+    SC_EXPECT(t.MethodFor(15.0, 0.3, 200.0) == M::ZoomClimb);
+}
+
+SC_TEST("zones: hit chances against low targets sit in the published kill-probability ranges") {
+    const EngagementTuning t = OsaTuning();
+    auto chance = [&](const char* cls, double agl_m) { return t.HitChanceFor(cls) * t.LowAltitudeFactor(cls, agl_m); };
+    // flak11: manoeuvring targets 0.55-0.85 (taken as the high-level chance).
+    for (const char* cls : {"fighter", "drone", "bomber", "helicopter"}) {
+        SC_EXPECT(chance(cls, 2000.0) >= 0.55 && chance(cls, 2000.0) <= 0.85);
+    }
+    // korovin_tiv_2010 (original 9K33 against an F-4C): 0.35-0.4 at 50 m, 0.42-0.85 above 100 m.
+    SC_EXPECT(chance("fighter", 50.0) >= 0.35 && chance("fighter", 50.0) <= 0.40);
+    SC_EXPECT(chance("fighter", 100.0) >= 0.42 && chance("fighter", 100.0) <= 0.85);
+    SC_EXPECT(chance("fighter", 300.0) >= 0.42 && chance("fighter", 300.0) <= 0.85);
+    // flak11 at 10 m: strike aircraft 0.12-0.55, helicopters 0.07-0.12, cruise missiles 0.12-0.38.
+    SC_EXPECT(chance("bomber", 10.0) >= 0.12 && chance("bomber", 10.0) <= 0.55);
+    SC_EXPECT(chance("helicopter", 10.0) >= 0.07 && chance("helicopter", 10.0) <= 0.12);
+    SC_EXPECT(chance("cruise_missile", 10.0) >= 0.12 && chance("cruise_missile", 10.0) <= 0.38);
+    // It rises with height and is flat outside the points.
+    SC_EXPECT(chance("fighter", 5.0) <= chance("fighter", 30.0) && chance("fighter", 30.0) < chance("fighter", 70.0));
+    SC_EXPECT_NEAR(t.LowAltitudeFactor("fighter", 3.0), t.LowAltitudeFactor("fighter", 10.0), 1e-12);
+    SC_EXPECT_NEAR(t.LowAltitudeFactor("fighter", 5000.0), 1.0, 1e-12);
+    SC_EXPECT_NEAR(t.LowAltitudeFactor("fighter", 30.0), 0.45 + 0.25 * 20.0 / 40.0, 1e-12);  // halfway from 10 m to 50 m
+}
+
+SC_TEST("zones: a low target's shot is printed with its zone, method and height factor") {
+    const std::string emcon = R"(,
+        { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+          "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
+                  { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
+    // 60 m up in the flat frame at 9 km: about 70 m above the ground, 0.4 degrees up: Gorka, factor about 0.76.
+    const Run r = Play(Engage(Target(9000, 60), emcon));
+    SC_EXPECT(Has(r, "head-on zone, Gorka method"));
+    SC_EXPECT(Has(r, "x height 0.7"));
+    // A high target is the ordinary method at full height factor.
+    const Run high = Play(Engage(Target(24000, 1000), kAcquireAndFire));
+    SC_EXPECT(Has(high, "head-on zone, T/T method"));
+    SC_EXPECT(Has(high, "x height 1.00"));
+}
