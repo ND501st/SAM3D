@@ -109,6 +109,7 @@ struct EngagementTuning {
     double range_gate_m = 0.0;
     double lock_time_s = 0.0;
     double track_min_altitude_m = 0.0;
+    double track_clutter_altitude_m = 0.0;  // below it the tracking radar needs СДЦ to hold a target (0 = never)
     double tv_max_range_m = 0.0;
     double max_angular_rate_deg_s = 0.0;
     // With the EM layer: the auto-capture circuit takes the lock once the tracking radar has echoed on `hits` of its
@@ -195,21 +196,24 @@ struct EngagementTuning {
         return in ? ZoneKind::Pursuit : ZoneKind::None;
     }
 
-    enum class GuidanceMethod { ThreePoint, ZoomClimb, Optical };
+    enum class GuidanceMethod { ThreePoint, ZoomClimb, Optical, Jammer };
     static const char* ToString(GuidanceMethod m) {
         switch (m) {
             case GuidanceMethod::ThreePoint: return "T/T";
             case GuidanceMethod::ZoomClimb: return "Gorka";
             case GuidanceMethod::Optical: return "F";
+            case GuidanceMethod::Jammer: return "N";
         }
         return "?";
     }
 
-    // The guidance method the system picks: the optical one for slow or hovering targets near the ground, the zoom
-    // climb for fast low targets below the elevation limit, otherwise the ordinary one.
-    GuidanceMethod MethodFor(double agl_m, double elevation_deg, double speed_mps) const {
+    // The guidance method the system picks: the optical one for slow or hovering targets near the ground (the crew
+    // doesn't use ПОМЕХА there), method Н when the ПОМЕХА switch is on (firing at a jammer, or with the range tracked
+    // by hand), the zoom climb for fast low targets below the elevation limit, otherwise the ordinary one.
+    GuidanceMethod MethodFor(double agl_m, double elevation_deg, double speed_mps, bool jam_switch = false) const {
         if (!has_methods) return GuidanceMethod::ThreePoint;
         if (has_zones && speed_mps <= optical.max_speed_mps && agl_m <= optical.max_alt_m) return GuidanceMethod::Optical;
+        if (jam_switch) return GuidanceMethod::Jammer;
         if (elevation_deg < low_target_elevation_deg && agl_m <= gorka_max_agl_m) return GuidanceMethod::ZoomClimb;
         return GuidanceMethod::ThreePoint;
     }
@@ -260,13 +264,14 @@ public:
             return false;
         }
         if (!Group(root, "track",
-                   {"az_tolerance_deg", "range_gate_m", "lock_time_s", "min_altitude_m", "tv_max_range_m",
-                    "max_angular_rate_deg_s", "em_capture_looks", "em_capture_hits"},
+                   {"az_tolerance_deg", "range_gate_m", "lock_time_s", "min_altitude_m", "clutter_altitude_m",
+                    "tv_max_range_m", "max_angular_rate_deg_s", "em_capture_looks", "em_capture_hits"},
                    g) ||
             !Num(*g, "track", "az_tolerance_deg", t.az_tolerance_deg, 0.01) ||
             !Num(*g, "track", "range_gate_m", t.range_gate_m, 1.0) ||
             !Num(*g, "track", "lock_time_s", t.lock_time_s, 0.0) ||
             !Num(*g, "track", "min_altitude_m", t.track_min_altitude_m, 0.0) ||
+            !OptionalNumber(*g, "track", "clutter_altitude_m", t.track_clutter_altitude_m) ||
             !Num(*g, "track", "tv_max_range_m", t.tv_max_range_m, 1.0) ||
             !Num(*g, "track", "max_angular_rate_deg_s", t.max_angular_rate_deg_s, 0.1) ||
             !OptionalInt(*g, "track", "em_capture_looks", t.em_capture_looks) ||
@@ -521,7 +526,9 @@ public:
     }
 
     // Call when the launch button fires with the circuit armed.
-    void OnLaunch(double t, int number, World& world, std::vector<EngagementTarget>& targets, SessionLog& log) {
+    // `jam_switch`: the ПОМЕХА toggle is on, so the guidance commands are formed by method Н.
+    void OnLaunch(double t, int number, World& world, std::vector<EngagementTarget>& targets, SessionLog& log,
+                  bool jam_switch = false) {
         Shot s;
         s.number = number;
         s.launch_t = t;
@@ -540,7 +547,7 @@ public:
         s.method = method_;
         s.zone = ZoneOf(g);
         s.in_zone = s.zone != EngagementTuning::ZoneKind::None;
-        s.guidance = tuning_.MethodFor(g.agl_m, g.el_deg, g.speed_mps);
+        s.guidance = tuning_.MethodFor(g.agl_m, g.el_deg, g.speed_mps, jam_switch);
         s.flight_time_s = g.range_m / tuning_.missile_average_speed_mps;
         s.out_of_reach = s.flight_time_s > tuning_.missile_max_flight_time_s;
         if (s.out_of_reach) s.flight_time_s = tuning_.missile_max_flight_time_s;
@@ -1065,6 +1072,9 @@ private:
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
             if (g.range_m > d.max_range_m) return "beyond tracking range";
             if (g.agl_m < tuning_.track_min_altitude_m) return "target too low for the radar";
+            if (g.agl_m < tuning_.track_clutter_altitude_m && !d.mti_control.empty() && console.panel.Get(d.mti_control) != 1) {
+                return "target lost in ground clutter (СДЦ off)";
+            }
             return nullptr;
         }
         if (d.tv_mode.empty() || !eq.IsReady(d.tv_mode) || !eq.IsReady(d.tv_camera)) return "TV tracking off";

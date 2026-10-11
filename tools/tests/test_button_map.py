@@ -91,7 +91,7 @@ def test_osa_map_is_clean(tmp_path):
     assert "__DATA__" not in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\nconst N =", 1)[0])
     ids = {n["id"] for n in data["nodes"]}
-    assert "c:fo.launch" in ids and "e:launch" in ids and "p:rangech" in ids and "m:launcher" in ids
+    assert "c:fo.launch" in ids and "e:launch" in ids and "p:jammer" in ids and "m:launcher" in ids
     assert data["counts"]["controls"] == len(json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))["controls"])
 
 

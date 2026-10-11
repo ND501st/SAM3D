@@ -38,11 +38,11 @@
   },
 
   "track": {
-    "az_tolerance_deg": 1.5, "range_gate_m": 750, "lock_time_s": 1.0, "min_altitude_m": 50,
+    "az_tolerance_deg": 1.5, "range_gate_m": 750, "lock_time_s": 1.0, "min_altitude_m": 50, "clutter_altitude_m": 100,
     "tv_max_range_m": 20000, "max_angular_rate_deg_s": 30,
     "em_capture_looks": 40, "em_capture_hits": 22,
-    "source": "range_gate_m: half the 1.5 km magnified sweep, SAM Simulator Osa-AK manual p24. The rest are game values.",
-    "notes": "How close the operator must set the azimuth line and range gate for ЦУ АЗ to capture; below min_altitude_m the radar can't hold angles (НЛЦ) and the TV must be used. em_capture_*: with the EM layer the auto-capture circuit takes the lock once the tracking radar has echoed on 22 of its last 40 looks (4 s; a local Pd of about 0.55). A raw lock starts on a lucky echo far out where Swerling I detection is still a few tenths (27 km for a 3 m2 target at 5 km altitude); this rule is tied to the one fitted calibration (Korovin's 23 km at 5 km altitude, Pd 0.5): it captures that target at 21 to 25 km. Raising the Pd does not help his 14 km at 50 m (the full-path Pd of a 50 m target is smooth: 0.5 at 22 km, 0.8 at 18 km). A model choice, not a published figure."
+    "source": "range_gate_m: half the 1.5 km magnified sweep, SAM Simulator Osa-AK manual p24. The rest are game values; clutter_altitude_m rests on the SSC range channel sharing the MTI canceller (mon_2112_80 p15, p23) and is an estimate.",
+    "notes": "How close the operator must set the azimuth line and range gate for ЦУ АЗ to capture; below min_altitude_m the radar can't hold angles (НЛЦ) and the TV must be used; below clutter_altitude_m it can't hold the target in the ground clutter unless the operator has СДЦ on (ssc.mti). em_capture_*: with the EM layer the auto-capture circuit takes the lock once the tracking radar has echoed on 22 of its last 40 looks (4 s; a local Pd of about 0.55). A raw lock starts on a lucky echo far out where Swerling I detection is still a few tenths (27 km for a 3 m2 target at 5 km altitude); this rule is tied to the one fitted calibration (Korovin's 23 km at 5 km altitude, Pd 0.5): it captures that target at 21 to 25 km. Raising the Pd does not help his 14 km at 50 m (the full-path Pd of a 50 m target is smooth: 0.5 at 22 km, 0.8 at 18 km). A model choice, not a published figure."
   },
 
   "aim": {

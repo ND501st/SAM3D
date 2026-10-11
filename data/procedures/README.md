@@ -47,7 +47,7 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // runner. At the attention input (ВНИМАНИЕ) or once pair_preparation is running, one missile is picked per channel the
   // channel_control allows (lowest "order" first), and the channel's transmitter input comes on. A launch takes the
   // first free channel in the selector's order; its inputs then follow the missile: away, captured (capture_s),
-  // medium (medium_s), narrow (narrow_s), fuse (fuse_range_m from the target, or with narrow when jam_control is on).
+  // medium (medium_s), narrow (narrow_s), fuse (fuse_range_m from the target, or with medium when jam_control is on: method Н, voenizdat_osa_1991 p136).
   // Reloading from the TZM (roadmap 7.3): while reload_input is set and stopped_input is set, one missile goes into an
   // empty container every reload_s_per_missile, once the pair is spent and no channel is guiding.
   // Launches are min_interval_s apart: hold_input is set while the next must wait (make the armed subsystem need it
@@ -61,6 +61,20 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
     "attention_input": "target_near_zone", "jam_control": "fo.pomekha", "pair_preparation": "missile_prep",
     "hold_input": "launch_hold",
     "capture_s": 0.8, "medium_s": 2.0, "narrow_s": 4.0, "fuse_range_m": 120, "min_interval_s": 4, "nominal_flight_s": 20,
+    // Optional. Entering change_position of the control changes the command transmitters' letter: both lock inputs
+    // (channel I, II) go out for relock_s and the next launch waits.
+    "letter": { "control": "spk.letter", "change_position": 2, "lock_inputs": [ "ch1_apch_lock", "ch2_apch_lock" ], "relock_s": 1.0,
+                "source": "...", "confidence": "medium" },
+    // Optional. select_control picks a container per position ("" = off); fire_control throws it off unguided for
+    // flight_s (no channel, no outcome); ready_input is set while the selector is on a loaded container.
+    "emergency": { "select_control": "msl.emergency_select", "select_containers": [ "3-II", "", "3-I" ],
+                   "fire_control": "msl.emergency", "ready_input": "emerg_ready", "flight_s": 25.5,
+                   "source": "...", "confidence": "medium" },
+    // Optional. A prepared pair is held at most hold_s; then its gyros have overheated (the container's hot_input is
+    // set, its lamp flashes), the next pair is prepared, and the hot missile rests rest_s (long_rest_s after `cycles` holds).
+    "prep_hold": { "hold_s": 600, "rest_s": 600, "cycles": 3, "long_rest_s": 3600, "source": "...", "confidence": "medium" },
+    // Optional. Per position of the control, the channel whose missile the range indicator follows (0 = the target).
+    "range_sweep": { "control": "ssc.target_select", "channels": [ 1, 0, 2 ], "source": "...", "confidence": "medium" },
     "source": "...", "confidence": "medium", "notes": "..."
   },
 

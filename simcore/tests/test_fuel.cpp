@@ -137,3 +137,93 @@ SC_TEST("fuel: the TZM refuels the vehicle at a halt, and the power can be start
     Run(*r, 200.0);  // the crew's turbine and generator come back on their switches
     SC_EXPECT(eq.IsReady("power"));
 }
+
+SC_TEST("fuel: an external supply powers the equipment at a halt, burns no fuel and is cut when the vehicle moves") {
+    // Deployed, the turbine running; the crew shuts both generators down and the external supply carries the load.
+    auto r = Load(Osa("", R"({ "id": "plug", "when": {}, "do": [ { "set_input": "external_power", "value": true } ] })"));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Equipment& eq = r->Console().equipment;
+    Run(*r, 2.0);
+    SC_EXPECT(eq.IsReady("external_supply") && eq.IsReady("power"));
+    r->Console().panel.Set("pwr.gta", 0);
+    r->Console().panel.Set("pwr.pto", 0);
+    Run(*r, 2.0);
+    SC_EXPECT(!eq.IsReady("gta") && !eq.IsReady("pto_generator") && eq.IsReady("power"));
+    const double level = r->Fuel()->LevelL();
+    Run(*r, 3600.0);
+    SC_EXPECT_NEAR(r->Fuel()->LevelL(), level, 0.05);  // nothing burns
+    SC_EXPECT(!r->Fuel()->PowerCut() && eq.IsReady("power"));
+    eq.SetInput("vehicle_stopped", false);  // driving off: the cable comes out
+    Run(*r, 2.0);
+    SC_EXPECT(!eq.IsReady("external_supply") && !eq.IsReady("power"));
+}
+
+// ---- Roadmap 7.6: a prepared position's grid and diesel set.
+
+namespace {
+
+std::unique_ptr<ScenarioRunner> Prepared(const std::string& block) {
+    auto r = Load(Osa(R"("position_power": )" + block + ", ", ""));
+    if (r) {  // the vehicle's own generators are off: the position carries the load
+        r->Console().panel.Set("pwr.gta", 0);
+        r->Console().panel.Set("pwr.pto", 0);
+    }
+    return r;
+}
+
+}  // namespace
+
+SC_TEST("position power: the grid carries the vehicle, then the diesel set after the cut and its start delay") {
+    auto r = Prepared(R"({ "grid": true, "grid_cut_s": 600, "diesel_start_s": 30, "diesel_hours": 1,
+                           "source": "video_osa", "confidence": "low" })");
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    const Equipment& eq = r->Console().equipment;
+    Run(*r, 10.0);
+    SC_EXPECT(eq.IsReady("external_supply") && eq.IsReady("power") && !eq.IsReady("gta"));
+    Run(*r, 580.0);  // t = 590
+    SC_EXPECT(eq.IsReady("power"));
+    Run(*r, 15.0);  // t = 605: the grid is cut, the diesel set is still starting
+    SC_EXPECT(!eq.IsReady("power") && !eq.GetInput("external_power"));
+    Run(*r, 30.0);  // t = 635
+    SC_EXPECT(eq.IsReady("power") && eq.GetInput("external_power"));
+    Run(*r, 3500.0);  // t = 4135: still within the hour (630 to 4230)
+    SC_EXPECT(eq.IsReady("power"));
+    Run(*r, 200.0);  // t = 4335: the diesel's tank is empty
+    SC_EXPECT(!eq.IsReady("power"));
+    const std::string d = r->Debrief();
+    SC_EXPECT(d.find("grid power on") != std::string::npos);
+    SC_EXPECT(d.find("the grid is cut: the diesel set carries the position") != std::string::npos);
+    SC_EXPECT(d.find("no external power") != std::string::npos);
+}
+
+SC_TEST("position power: with no diesel set the cut leaves the position dark, and a moving vehicle drops the cable") {
+    auto r = Prepared(R"({ "grid": true, "grid_cut_s": 100, "source": "video_osa", "confidence": "low" })");
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    const Equipment& eq = r->Console().equipment;
+    Run(*r, 50.0);
+    SC_EXPECT(eq.IsReady("power"));
+    r->Console().equipment.SetInput("vehicle_stopped", false);  // driving away from the position
+    Run(*r, 2.0);
+    SC_EXPECT(!eq.IsReady("external_supply") && !eq.IsReady("power"));
+    r->Console().equipment.SetInput("vehicle_stopped", true);
+    Run(*r, 2.0);
+    SC_EXPECT(eq.IsReady("power"));  // back on the grid
+    Run(*r, 100.0);
+    SC_EXPECT(!eq.IsReady("power"));  // cut, and nothing else runs
+    SC_EXPECT(r->Debrief().find("no diesel set runs") != std::string::npos);
+}
+
+SC_TEST("position power: the block's values are checked with paths") {
+    auto r = Prepared(R"({ "grid": true, "diesel_hours": -1, "source": "video_osa", "confidence": "low" })");
+    SC_EXPECT(r == nullptr);
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    const std::string text = Osa(R"("position_power": { "grid": true, "diesel_start_s": -5, "source": "x", "confidence": "low" }, )", "");
+    SC_EXPECT(!LoadScenario(text, kData, def, console, &error) && error.find("own_unit.position_power.diesel_start_s") != std::string::npos);
+    const std::string no_source = Osa(R"("position_power": { "grid": true }, )", "");
+    SC_EXPECT(!LoadScenario(no_source, kData, def, console, &error) && error.find("own_unit.position_power") != std::string::npos);
+}

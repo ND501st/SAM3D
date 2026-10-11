@@ -39,7 +39,7 @@ COL_GAP = 58
 # m: model, i: signal.
 DISPLAY_SOURCES = {
     "osa_ak": {
-        "soc_ppi": ["m:search", "m:iff"], "ssc_range": ["m:track"], "beta_c": ["c:ssc.az_wheel", "c:ssc.az_light"],
+        "soc_ppi": ["m:search", "m:iff"], "ssc_range": ["m:track", "m:launcher"], "beta_c": ["c:ssc.az_wheel", "c:ssc.az_light"],
         "soc_counters": ["m:track"], "tov_monitor": ["m:track", "c:tov.fov"],
         "epsilon_c": ["c:ssc.el_wheel", "c:ssc.el_light"], "dts_voltmeter": ["m:track"], "qc_setter": ["c:orient.qc"],
         "elev_search": ["m:elev"],
@@ -50,18 +50,12 @@ DISPLAY_SOURCES = {
 # Phases follow docs/DEVELOPMENT_ROADMAP.md; notes follow the controls' notes and docs/ARCHITECTURE.md.
 PLANNED = {
     "osa_ak": [
-        ("p:cmdtx", "Command transmitter letter change (СМЕНА ЛИТ.)", "6.3", "The transmitter comes on at ВНИМАНИЕ (built); СМЕНА ЛИТ. should change its frequency letter, and no model reads it.", ["c:spk.letter"], "missing"),
-        ("p:rangech", "Range indicator: missile sweeps Р I / Р II", "6.3", "Р I — ЦЕЛЬ — Р II should switch the range scope to a missile channel's sweep; it always shows the target today.", ["c:ssc.target_select", "m:launcher"], "missing"),
-        ("p:emerg", "Emergency launch (unguided throw-off)", "6.3", "ИЗДЕЛИЯ picks the container, АВАРИЙНЫЙ ПУСК throws it off when the launcher has lost power.", ["c:msl.emergency_select", "c:msl.emergency", "m:launcher"], "missing"),
-        ("p:rr", "РР mode and СВР beam width", "later", "РОД РАБОТЫ РР and ШИР. — СРЕДН. are not modelled (the game has only БР and ТР).", ["c:svr.beam"], "missing"),
-        ("p:fk", "Function check ФК and real cold start (≈ 6.8 min)", "6.2", "Switch-on cycle, computer 9S456 warm-up (100 s), function check; readiness states.", [], "missing"),
-        ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. Function not known from any source yet.", ["c:fo.mc"], "unknown"),
-        ("p:sscmti", "SSC moving-target filter", "6.4", "СДЦ / ШТ. on the range indicator is placed but the tracking model doesn't read it.", ["c:ssc.mti"], "missing"),
-        ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale.", ["m:orient"], "missing"),
-        ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it.", ["s:tv_angle_track"], "missing"),
-        ("p:zones", "Guidance method Н and the zone parameter", "6.7", "Head-on, pursuit and optical zones and the T/T, Горка and Ф methods are built; Н (against jammers, no range) and the NVA's crossing-offset 'parameter' limit are not.", ["e:launch"], "missing"),
-        ("p:pu12", "PU-12 battery designations to the commander", "phase 7", "Designations by voice: azimuth and range. Targets are found by the vehicle's own radar only today.", [], "missing"),
-        ("p:extpower", "External power supply", "later", "The external supply isn't modelled; power comes from the ГТА or the take-off generator.", [], "missing"),
+        ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
+        ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale. No source gives a drift or a measurement error.", ["m:orient"], "missing"),
+        ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
+        ("p:jammer", "Jamming targets: range lost in noise, method Н outcome", "6.7 / E5", "ПОМЕХА already selects method Н and arms К3 with the medium beam, but no target jams yet, so the range is never lost and Н has no effect on the hit chance. Needs noise jammers from the EM layer (E5) and the NVA's crossing-offset 'parameter' limit.", ["c:fo.pomekha", "e:launch"], "missing"),
+        ("p:pu12feed", "PU-12 fed by the regiment's radars", "7.1", "The board and the voice designations are built; the board still plots the scenario's targets directly instead of a regiment radar picture.", [], "missing"),
+        ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
     ],
 }
 
@@ -249,7 +243,7 @@ class MapBuilder:
             self.add_node("m:track", t="model", label="Tracking radar and TV channel", notes=track.get("notes"),
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:track", [("s:", k, track, k) for k in ("transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode")]
-                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control")])
+                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control")])
             if es:
                 self.add_edge("m:elev", "m:track", "feed", "elevation search")
             for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input"):
@@ -271,7 +265,14 @@ class MapBuilder:
             feeds("m:launcher", [("c:", "channel_control", launcher, "channels"), ("c:", "jam_control", launcher, "jamming target"),
                                  ("i:", "attention_input", launcher, "selects missiles"),
                                  ("s:", "pair_preparation", launcher, "prepared")])
-            outs = [launcher.get("hold_input")] + [c.get("input") for c in launcher.get("containers", [])]
+            letter, emergency = launcher.get("letter") or {}, launcher.get("emergency") or {}
+            sweep = launcher.get("range_sweep") or {}
+            feeds("m:launcher", [("c:", "control", letter, "letter change"), ("c:", "select_control", emergency, "emergency: container"),
+                                 ("c:", "fire_control", emergency, "emergency launch"),
+                                 ("c:", "control", sweep, "range sweep: channel")])
+            outs = [launcher.get("hold_input"), emergency.get("ready_input")] + list(letter.get("lock_inputs", []))
+            outs += [c.get("input") for c in launcher.get("containers", [])]
+            outs += [c.get("hot_input") for c in launcher.get("containers", [])]
             for ch in launcher.get("channels", []):
                 outs += list(ch.values())
             for inp in outs:

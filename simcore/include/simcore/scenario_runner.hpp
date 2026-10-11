@@ -116,9 +116,11 @@ public:
         }
         UpdateLauncher();
         UpdateFuel(dt);
+        UpdatePositionPower();
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
+        CheckEmergencyLaunch();
         console_.panel.ReleaseMomentaries();
         for (CrewMember& c : crew_) c.Update(dt, console_.panel, &console_.equipment);
         player_.Update(dt);
@@ -407,6 +409,25 @@ private:
 
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
     // sources are cut so the rest stays for driving (roadmap 7.4).
+    // A prepared position's supply (roadmap 7.6): the grid, then after a cut the diesel set once it has started.
+    void UpdatePositionPower() {
+        const PositionPowerDef& p = def_.position_power;
+        if (!p.present) return;
+        const bool cut = p.grid_cut_s >= 0.0 && time_ >= p.grid_cut_s;
+        const bool grid = p.grid && !cut;
+        const double diesel_from = p.grid_cut_s + p.diesel_start_s;
+        const bool diesel = cut && p.diesel_hours > 0.0 && time_ >= diesel_from && time_ < diesel_from + p.diesel_hours * 3600.0;
+        const bool supplied = grid || diesel;
+        console_.equipment.SetInput("external_power", supplied);
+        if (supplied != power_supplied_) {
+            power_supplied_ = supplied;
+            const char* what = grid ? "grid power on" : diesel ? "the grid is cut: the diesel set carries the position"
+                                                               : cut ? "the grid is cut and no diesel set runs: no external power"
+                                                                    : "no external power";
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Driver", "position power", what});
+        }
+    }
+
     void UpdateFuel(double dt) {
         if (!fuel_) return;
         const FuelModel::Events ev = fuel_->Step(dt, console_);
@@ -447,7 +468,10 @@ private:
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
-            if (engagement_on_) engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_);
+            if (engagement_on_) {
+                const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
+                engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
+            }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
                 launcher_->Launch(time_, console_, launches_, flight_s,
@@ -464,6 +488,23 @@ private:
         } else {
             Event(console_.launch_button, "pressed, but " + console_.launch_armed + " is not ready: no launch");
         }
+    }
+
+    // АВАРИЙНЫЙ ПУСК: the missile ИЗДЕЛИЯ is set to goes off unguided and self-destructs; no channel, no outcome.
+    void CheckEmergencyLaunch() {
+        if (!launcher_ || !console_.launcher.has_emergency) return;
+        const std::string& button = console_.launcher.emergency.fire_control;
+        if (console_.panel.Get(button) != 1) return;
+        const std::string container = launcher_->EmergencyLaunch(time_, console_);
+        if (container.empty()) {
+            Event(button, "pressed, but ИЗДЕЛИЯ is not on a missile: nothing thrown off");
+            return;
+        }
+        Event(button, "missile " + container + " thrown off unguided; it climbs " +
+                          std::to_string(static_cast<int>(console_.launcher.emergency.flight_s + 0.5)) + " s, then self-destructs");
+        if (launcher_->PairSpent()) console_.equipment.Restart(console_.launcher.pair_preparation);
+        launcher_->Step(time_, console_);
+        console_.equipment.Update(0.0, console_.panel);
     }
 
     void WriteAcmiFrame() {
@@ -504,6 +545,7 @@ private:
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
+    bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;
     std::unique_ptr<EmC2LinkModel> c2_link_;
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor

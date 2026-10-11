@@ -99,6 +99,14 @@ check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) sp
 
 A trigger can set the console input `tzm_alongside` (`{ "set_input": "tzm_alongside", "value": true }`) to bring the
 transport-loader vehicle up: with the vehicle stopped, the launcher reloads one missile a minute (roadmap 7.3).
+`external_power` connects an external 220 V 400 Hz supply (a cable, not a console control): at a halt it powers the
+equipment without the turbine or the take-off generator and burns no fuel; it drops out when the vehicle moves.
+
+`own_unit.position_power` (optional, roadmap 7.6) is a prepared position's supply, and sets `external_power` itself every
+step: `{ "grid": true, "grid_cut_s": 900, "diesel_start_s": 30, "diesel_hours": 24, "source": "...", "confidence": "low" }`.
+The civil grid carries the vehicle until it is cut (omit `grid_cut_s` for never); the diesel set takes over `diesel_start_s`
+after the cut (the equipment is dark meanwhile) and runs `diesel_hours` (0 or absent: no diesel set). The debrief logs
+each change. The 24 h is the only figure a source gives (`video_osa`, unverified); the start delay is an estimate.
 
 `"command_post": "command/pu12.json"` (top level, optional) adds the battery command post's plotting board
 (`simcore/pu12.hpp`, `data/command/README.md`): it plots every target once a minute with the manual's notation, off by the
