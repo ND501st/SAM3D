@@ -206,16 +206,16 @@ void ASimOsaVehicle::UpdateSim(USimWorldSubsystem* Sim)
 {
 	// The sim unit sits about 3 m above the ground, where the antennas are.
 	Sim->SetUnitLocation(GetActorLocation() + GetActorUpVector() * 300.0);
-	Sim->SetUnitHeading(HeadingDeg);
+	Sim->SetUnitHeading(Sim->YawToHeadingDeg(GetActorLocation(), HeadingDeg));  // HeadingDeg is the Unreal yaw
 	Sim->SetSimInput(StoppedInput, FMath::Abs(SpeedMps) < StoppedBelowMps);
 }
 
 void ASimOsaVehicle::AnimateFromSim(const USimWorldSubsystem* Sim)
 {
 	// The wheel's azimuth is in the crew's frame (the gyro half-compass, engagement.hpp): as true azimuth from north,
-	// minus the hull's heading, it is the turret's yaw on the hull.
+	// minus the hull's true heading, it is the turret's yaw on the hull (relative, so the same in either mapping).
 	const double AzimuthFromNorth = Sim->IndicatedToTrueAzimuth(Sim->GetWheelValue(TurretAzimuthWheel));
-	TurretPivot->SetRelativeRotation(FRotator(0.0, AzimuthFromNorth - HeadingDeg, 0.0));
+	TurretPivot->SetRelativeRotation(FRotator(0.0, AzimuthFromNorth - Sim->GetUnitHeading(), 0.0));
 	// 1 = raised (upright), 0 = folded back 90 degrees for transport.
 	const double Raised = Sim->GetSubsystemProgress(SearchAntennaSubsystem);
 	AntennaHinge->SetRelativeRotation(FRotator(-90.0 * (1.0 - Raised), 0.0, 0.0));

@@ -198,6 +198,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Scenario")
 	void SetUnitHeading(double HeadingDeg);
 
+	/** True heading (degrees clockwise from north) of an Unreal yaw at a place. Unreal yaw is only clockwise from north
+	 *  in the flat mapping (X = north); with the Cesium georeference X points east at the origin and the frame turns
+	 *  with the Earth, so convert through here. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
+	double YawToHeadingDeg(const FVector& Location, double YawDeg) const;
+
+	/** The Unreal yaw at a place that points along a true heading (degrees clockwise from north). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
+	double HeadingToYawDeg(const FVector& Location, double HeadingDeg) const;
+
 	/** The hull's heading the sim has: the scenario's own_unit.heading_deg until the vehicle drives. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
 	double GetUnitHeading() const;

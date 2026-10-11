@@ -684,3 +684,21 @@ SC_TEST("engagement: a two-missile salvo, one missile on each channel, both guid
     SC_EXPECT(r.summary.hits + r.summary.misses == 2);
     SC_EXPECT(r.summary.early_actions == 0 && r.summary.out_of_order_actions == 0);
 }
+
+SC_TEST("engagement: an unoriented vehicle points board designations wrong, so the TV finds nothing") {
+    // Radars silent: the azimuth comes from the plotting board, in true azimuth, set on the wheel as it is. Only an
+    // oriented vehicle's wheel frame is true north (flak11: the vehicle must be oriented for correct designations).
+    for (double heading : {0.0, 40.0}) {
+        std::unique_ptr<ScenarioRunner> runner = Heading(heading, Target(12000, 800), kTvOnly);
+        SC_EXPECT(runner != nullptr);
+        if (runner == nullptr) return;
+        bool tv = false;
+        while (!runner->Finished() && runner->Time() < 400.0 && !tv) {
+            runner->Step(0.1);
+            tv = runner->Engagement().Method() == TrackMethod::Tv;
+        }
+        // Facing north the frames agree and the TV takes the target; 40 degrees off, the wheel puts it far outside
+        // the lens field.
+        SC_EXPECT(tv == (heading == 0.0));
+    }
+}

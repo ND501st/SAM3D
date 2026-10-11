@@ -176,8 +176,10 @@ every frame. Design: `docs/EM_ARCHITECTURE.md`; handover: `docs/EM_HANDOFF.md`.
   georeference. This matches Cesium's frame (at the origin, +X east, +Y south) and handles Earth curvature.
 - **Without one**: a flat mapping, Unreal X = North, Y = East, Z = Up (cm) (`EnuToUnreal` / `UnrealToEnu`).
 
-The sim treats the vehicle's hull as facing north when it measures azimuths; the placeholder turret subtracts the
-hull heading so it still points the right way.
+Headings go through `YawToHeadingDeg` / `HeadingToYawDeg`: Unreal yaw is clockwise from north only in the flat
+mapping; with the Cesium georeference Unreal X points east at the origin. The vehicle reports its true heading to the
+sim each tick, the director spawns it facing the scenario's heading, and the turret turns by the wheel's true azimuth
+minus the hull's true heading.
 
 ## Not done yet
 
@@ -187,7 +189,7 @@ hull heading so it still points the right way.
   see-through from inside), real instrument faces.
 - Corrections from the October 2026 research (roadmap phase 6): a fifth seat (the cabin has four; the real vehicle
   has commander, deputy commander, senior operator, operator and driver), missile containers and per-channel guidance
-  lamps, the elevation display, a TV channel tracked by hand, and the vehicle's heading instead of "hull faces north".
+  lamps, the elevation display and a TV channel tracked by hand (simcore has these now; the cabin shows some).
 - The PU-12 command post and plotting board (phase 7), and the crew order menu (phase 8); crew orders are number keys
   for now.
 - The electromagnetic layer drives no scope or lamp yet; it runs as a separate demo with overlays (roadmap E2/E3).
