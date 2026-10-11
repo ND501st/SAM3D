@@ -486,6 +486,24 @@ void USimWorldSubsystem::SetUnitHeading(double HeadingDeg)
 	}
 }
 
+double USimWorldSubsystem::YawToHeadingDeg(const FVector& Location, double YawDeg) const
+{
+	// The direction 100 m ahead, in ENU: its bearing is the heading.
+	const FVector Ahead = Location + FRotator(0.0, YawDeg, 0.0).Vector() * 10000.0;
+	const simcore::Vec3 A = ToEnu(Location);
+	const simcore::Vec3 B = ToEnu(Ahead);
+	return FMath::RadiansToDegrees(FMath::Atan2(B.x - A.x, B.y - A.y));
+}
+
+double USimWorldSubsystem::HeadingToYawDeg(const FVector& Location, double HeadingDeg) const
+{
+	const double H = FMath::DegreesToRadians(HeadingDeg);
+	const simcore::Vec3 A = ToEnu(Location);
+	const FVector From = ToUnreal(A);
+	const FVector To = ToUnreal(A + simcore::Vec3{100.0 * FMath::Sin(H), 100.0 * FMath::Cos(H), 0.0});
+	return (To - From).Rotation().Yaw;
+}
+
 double USimWorldSubsystem::GetUnitHeading() const
 {
 	return Runner ? Runner->Engagement().UnitHeadingDeg() : 0.0;
