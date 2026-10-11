@@ -31,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/c2_sources.hpp"
 #include "simcore/em/data.hpp"
 #include "simcore/em/world.hpp"
 #include "simcore/geo.hpp"
@@ -171,6 +172,38 @@ public:
             const int pid = world_.AddPlatform(sp);
             AddScriptedJammer(i, pid);
         }
+    }
+
+    // A radio source (a PU-12, an EWR site, a neighbour) on the ground at `enu`, on a two-member net with the unit using
+    // library radio `radio_id`. Its link to the unit is then decided by propagation, terrain, jamming and the unit's own
+    // radars (co-site), as for any radio in the EM layer. Returns false if the radio is not in the library.
+    bool AddRadioSource(const std::string& id, const Vec3& enu, const std::string& radio_id) {
+        em::EmScene& s = world_.Scene();
+        const int rd = s.lib.Radio(radio_id);
+        if (!Ok() || rd < 0) return false;
+        const em::RadioDef& r = s.lib.radios[static_cast<std::size_t>(rd)];
+        const int pid = world_.AddGroundPlatform(id, em::Side::Red, enu.x, enu.y, r.antenna_height_m);
+        const int node = world_.AddNode(id, pid, em::Side::Red);
+        const double f = 0.5 * (r.freq_min_hz + r.freq_max_hz);
+        const int net = world_.AddNet("net " + id, radio_id, f, {node, node_});
+        if (net == 0) return false;
+        radio_sources_.push_back({id, node, net});
+        return true;
+    }
+
+    // Chance a transmission from radio source `id` reaches the unit now (the EM layer's own delivery law); -1: unknown.
+    double RadioDeliveryProbability(const std::string& id) {
+        em::EmScene& s = world_.Scene();
+        for (const RadioSource& rs : radio_sources_) {
+            if (rs.id != id) continue;
+            const em::NetState* net = s.FindNet(rs.net);
+            const em::NodeState* a = s.FindNode(rs.node);
+            const em::NodeState* b = s.FindNode(node_);
+            if (net == nullptr || a == nullptr || b == nullptr) return -1.0;
+            const em::LinkState l = em::EvaluateLink(s, *net, *a, *b);
+            return l.up ? 1.0 / (1.0 + std::exp(-l.margin_db / 2.0)) : 0.0;
+        }
+        return -1.0;
     }
 
     // The antenna's place: the unit's x/y at the height above the ground the radar was calibrated for.
@@ -567,6 +600,12 @@ private:
     EmLinkDef effects_;  // scripted jammers and chaff (the loaded library inside is not used again)
     std::string error_;
     int unit_id_ = 0;
+    struct RadioSource {
+        std::string id;
+        int node;
+        int net;
+    };
+    std::vector<RadioSource> radio_sources_;
     int node_ = 0;
     double antenna_height_m_ = 0.0;
     int capture_looks_ = 40;
@@ -583,6 +622,19 @@ private:
     int recorded_track_ = 0;
     int recorded_looks_ = 0;
     std::vector<std::pair<int, int>> beam_of_track_;  // search track id -> the search beam of its latest update
+};
+
+// The EM layer as the C2 network's link model: sources with a radio link are carried or lost by the link budget.
+class EmC2LinkModel : public C2LinkModel {
+public:
+    explicit EmC2LinkModel(EmSensorLink* link) : link_(link) {}
+    double DeliveryProbability(const C2SourceDef& source, const Vec3&, double) override {
+        const double p = link_->RadioDeliveryProbability(source.id);
+        return p < 0.0 ? 1.0 : p;  // a source without an EM radio is not affected
+    }
+
+private:
+    EmSensorLink* link_;
 };
 
 }  // namespace simcore

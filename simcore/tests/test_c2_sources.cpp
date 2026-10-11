@@ -519,3 +519,27 @@ SC_TEST("c2: the shipped scenario loses the PU-12 and ends on the EWR net") {
     for (int i = 0; i < 4000; ++i) runner.Step(0.1);  // 400 s
     SC_EXPECT(runner.C2() != nullptr && runner.C2()->ActiveId() == "ewr_north");
 }
+
+SC_TEST("c2: with the EM layer a source's link is decided by propagation: near carries, far does not") {
+    std::string text = C2ScenarioText(R"({ "library": "command/c2_sources.json", "primary": "pu12", "fallback_order": ["near", "far"],
+        "sources": [ { "id": "near", "type": "ewr_voice", "position": { "east_m": 0, "north_m": 4000, "up_m": 0 }, "link_range_m": 200000 },
+                     { "id": "far", "type": "ewr_voice", "position": { "east_m": 0, "north_m": 60000, "up_m": 0 }, "link_range_m": 200000 } ] })", "");
+    const std::string from = "\"readiness\": \"deployed\",";
+    text.replace(text.find(from), from.size(),
+                 from + " \"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\" },");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(Load(text, def, console, error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner runner(std::move(def), std::move(console));
+    SC_EXPECT(runner.Em() != nullptr && runner.C2() != nullptr);
+    if (runner.Em() == nullptr) return;
+    for (int i = 0; i < 20; ++i) runner.Step(0.1);
+    const double pn = runner.Em()->RadioDeliveryProbability("near");
+    const double pf = runner.Em()->RadioDeliveryProbability("far");
+    std::printf("    delivery probability: near %.3f, far %.3f\n", pn, pf);
+    SC_EXPECT(pn > 0.9);
+    SC_EXPECT(pf < 0.05);
+    SC_EXPECT(runner.Em()->RadioDeliveryProbability("pu12") < 0.0);  // no place, no EM radio: unaffected
+}

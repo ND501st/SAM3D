@@ -518,7 +518,7 @@ private:
                 const json::Value& e = list->items[i];
                 std::string id;
                 std::string type;
-                if (!Keys(e, p, {"id", "type", "name", "position", "net", "link_range_m", "outages", "notes"}) ||
+                if (!Keys(e, p, {"id", "type", "name", "position", "net", "radio", "link_range_m", "outages", "notes"}) ||
                     !RequireString(e, p, "id", id) || !OptionalString(e, p, "type", type)) {
                     return false;
                 }
@@ -541,7 +541,7 @@ private:
                     def->board.id = id;
                 }
                 std::string name;
-                if (!OptionalString(e, p, "name", name) || !OptionalString(e, p, "net", def->net) ||
+                if (!OptionalString(e, p, "name", name) || !OptionalString(e, p, "net", def->net) || !OptionalString(e, p, "radio", def->radio) ||
                     !OptionalNumber(e, p, "link_range_m", def->link_range_m)) {
                     return false;
                 }

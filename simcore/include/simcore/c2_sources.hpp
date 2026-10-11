@@ -101,6 +101,7 @@ struct C2SourceDef {
     double antenna_height_m = 0.0; // radar sites: for the radar horizon
     double link_range_m = 0.0;     // beyond this from the vehicle the link is down (0: no limit)
     std::string net;               // a voice net shared with other sources ("" : its own)
+    std::string radio = "r123m";   // the EM library radio its link uses when the scenario has the EM layer (a source with a position)
     bool has_position = false;
     Vec3 position;                 // ENU (east, north); the site of a radar or post
     std::vector<C2Outage> outages;

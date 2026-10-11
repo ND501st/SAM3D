@@ -93,6 +93,13 @@ public:
                 em_link_.reset();  // the loader checked the radars; fall back to the gameplay rules rather than crash
             }
         }
+        if (c2_ && em_link_) {  // sources with a place talk to the unit over EM radio links
+            c2_link_ = std::make_unique<EmC2LinkModel>(em_link_.get());
+            for (const C2SourceDef& s : def_.c2_sources) {
+                if (s.has_position) em_link_->AddRadioSource(s.id, s.position, s.radio);
+            }
+            c2_->SetLinkModel(c2_link_.get());
+        }
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -498,6 +505,7 @@ private:
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
     std::unique_ptr<FuelModel> fuel_;
+    std::unique_ptr<EmC2LinkModel> c2_link_;
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
