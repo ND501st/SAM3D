@@ -83,6 +83,7 @@ struct TrackSensorDef {
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
     double fov_wide_deg = 0.0;
     double fov_narrow_deg = 0.0;
+    double fov_height_ratio = 1.0;  // the lens field's height over its width (a 4:3 raster: 0.75)
     double max_range_m = 0.0;
     double az_limit_deg = 360.0;  // wheel limits already enforce this; used to pick the reachable angle
     std::string captured_input;   // inputs the model sets (may be empty)
@@ -599,7 +600,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "fov_control", "fov_deg", "max_range_m",
+                            "el_wheel", "range_wheel", "lock_control", "fov_control", "fov_deg", "fov_height_ratio", "max_range_m",
                             "az_limit_deg", "captured_input", "too_low_input", "near_zone_input", "in_zone_input",
                             "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
@@ -629,6 +630,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             }
             track.fov_wide_deg = fov->items[0].number;
             track.fov_narrow_deg = fov->items[1].number;
+        }
+        if (!OptionalNumber(*tr, tp, "fov_height_ratio", track.fov_height_ratio)) return false;
+        if (!(track.fov_height_ratio > 0.0 && track.fov_height_ratio <= 1.0)) {
+            return Fail(Join(tp, "fov_height_ratio"), "must be > 0 and <= 1");
         }
         if (!track.tv_mode.empty() && (track.tv_camera.empty() || track.fov_wide_deg <= 0.0)) {
             return Fail(tp, "tv_mode needs tv_camera and fov_deg");

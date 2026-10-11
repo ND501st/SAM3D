@@ -31,6 +31,9 @@
 //     error, and designations given in true azimuth (the plotting board) point wrong.
 //     Without an orientation block the frame is true north.
 //   * IFF: an interrogation makes friendly aircraft reply on the search scope.
+//   * Manual TV tracking (tuning "tv" group): the TV channel follows the wheels. The target must stay inside the lens
+//     field around them; NPC seats follow it with a lag, the player turns the wheels; a masked target is carried on in
+//     memory; the mean aim error over a flight costs hit chance.
 //
 // With an EmSensorLink (em_link.hpp; the scenario's "em" block) the search picture and the radar lock come from
 // the electromagnetic layer instead of the rules above: the search scope shows the search radar's tracks, and
@@ -38,6 +41,7 @@
 // TV tracking, IFF, the zone lamps and the outcome stay as described.
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -88,6 +92,14 @@ struct EngagementTuning {
     bool has_methods = false;
     double low_target_elevation_deg = 0.0;  // below it a low target needs a low-target method
     double gorka_max_agl_m = 0.0;           // the zoom-climb method is used at or below this height
+    // Manual TV tracking (optional): the TV channel follows the wheels. Without it the servo drives the wheels onto the
+    // target by itself once the TV has locked.
+    bool has_tv_manual = false;
+    double tv_reticle_deg = 0.0;          // the crosshair: aim error is counted in reticles
+    double tv_npc_delay_s = 0.0;          // how far behind the target an NPC operator's wheel is
+    double tv_memory_s = 0.0;             // a masked target is carried on at the last rates for this long
+    double tv_error_penalty = 0.0;        // loss of hit chance per reticle of mean aim error during the flight
+    double tv_error_factor_min = 1.0;
     // Search radar.
     double clutter_altitude_m = 0.0;
     // Tracking.
@@ -202,7 +214,7 @@ namespace detail {
 class TuningLoader : public ConsoleLoader {
 public:
     bool LoadTuning(const json::Value& root, EngagementTuning& t) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "search", "track", "aim", "missile", "outcome"}) ||
+        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome"}) ||
             !RequireString(root, "", "system_id", t.system_id)) {
             return false;
         }
@@ -218,6 +230,17 @@ public:
             return false;
         }
         if (root.Find("zones") != nullptr && !LoadZones(root, t)) return false;
+        if (root.Find("tv") != nullptr) {
+            if (!Group(root, "tv", {"reticle_deg", "npc_delay_s", "memory_s", "error_penalty_per_reticle", "error_factor_min"}, g) ||
+                !Num(*g, "tv", "reticle_deg", t.tv_reticle_deg, 0.01) || !Num(*g, "tv", "npc_delay_s", t.tv_npc_delay_s, 0.0) ||
+                !Num(*g, "tv", "memory_s", t.tv_memory_s, 0.0) ||
+                !Num(*g, "tv", "error_penalty_per_reticle", t.tv_error_penalty, 0.0) ||
+                !Num(*g, "tv", "error_factor_min", t.tv_error_factor_min, 0.0)) {
+                return false;
+            }
+            if (t.tv_error_factor_min > 1.0) return Fail("tv.error_factor_min", "must be from 0 to 1");
+            t.has_tv_manual = true;
+        }
         if (root.Find("methods") != nullptr) {
             if (!Group(root, "methods", {"low_target_elevation_deg", "gorka_max_agl_m"}, g) ||
                 !Num(*g, "methods", "low_target_elevation_deg", t.low_target_elevation_deg, 0.0) ||
@@ -471,6 +494,7 @@ public:
     void Step(double t, double dt, World& world, ConsoleData& console, std::vector<EngagementTarget>& targets,
               SessionLog& log, std::mt19937& rng, const AimCrew& aim_crew) {
         if (!console.has_sensors) return;
+        time_ = t;
         UpdateOrientation(t, dt, console, log, aim_crew.elevation);
         UpdateBeams(dt, console);
         Measure(dt, world, targets);
@@ -479,7 +503,7 @@ public:
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
         if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
-        UpdateTrack(t, dt, console, log);
+        UpdateTrack(t, dt, console, log, aim_crew);
         UpdateTrackReturns(console);
         SetInputs(console);
     }
@@ -626,6 +650,7 @@ private:
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
         bool los = false;
+        std::vector<std::array<double, 3>> history;  // (time, az, el) of the last few seconds, for a lagging operator
         Vec3 prev_velocity;
         Vec3 prev_los_dir;
         bool has_prev = false;
@@ -646,6 +671,8 @@ private:
         double max_turn_deg_s = 0.0;
         EngagementTuning::ZoneKind zone = EngagementTuning::ZoneKind::None;
         EngagementTuning::GuidanceMethod guidance = EngagementTuning::GuidanceMethod::ThreePoint;
+        double tv_error_sum_deg_s = 0.0;  // manual TV tracking: aim error integrated over the flight
+        double tv_time_s = 0.0;
     };
 
     static double Wrap180(double deg) {
@@ -699,6 +726,8 @@ private:
             const Vec3 dir = los.Normalized();
             g.closing_mps = -Dot(a->velocity, dir);
             g.speed_mps = a->velocity.Length();
+            g.history.push_back({time_, g.az_deg, g.el_deg});
+            while (g.history.size() > 2 && g.history[1][0] < time_ - 3.0) g.history.erase(g.history.begin());
             if (g.has_prev && dt > 0.0) {
                 g.angular_rate_deg_s = RadToDeg(AngleBetween(g.prev_los_dir, dir)) / dt;
                 g.turn_rate_deg_s = RadToDeg(AngleBetween(g.prev_velocity, a->velocity)) / dt;
@@ -798,15 +827,22 @@ private:
             const int mistakes = Mistakes(log);
             const double crew = std::fmax(tuning_.deviation_factor_min, 1.0 - tuning_.deviation_penalty * mistakes);
             const double altitude = tuning_.LowAltitudeFactor(g.target_class, g.agl_m);
-            const double p = base * method * zone * manoeuvre * crew * altitude;
+            double aim = 1.0;
+            double aim_error_deg = 0.0;
+            if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
+                aim_error_deg = s.tv_time_s > 0.0 ? s.tv_error_sum_deg_s / s.tv_time_s : 0.0;
+                aim = std::fmax(tuning_.tv_error_factor_min,
+                                1.0 - tuning_.tv_error_penalty * aim_error_deg / tuning_.tv_reticle_deg);
+            }
+            const double p = base * method * zone * manoeuvre * crew * altitude * aim;
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
-            char detail[300];
+            char detail[360];
             std::snprintf(detail, sizeof(detail),
                           "%s: chance %.2f = %s %.2f x %s track %.2f x zone %.2f x manoeuvre %.2f (%.0f deg/s) x "
-                          "crew %.2f (%d mistakes) x height %.2f (%.0f m up); draw %.2f",
+                          "crew %.2f (%d mistakes) x height %.2f (%.0f m up) x TV aim %.2f (%.2f deg off the crosshair); draw %.2f",
                           hit ? "HIT" : "MISS", p, g.target_class.c_str(), base, ToString(s.method), method, zone,
-                          manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, draw);
+                          manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim, aim_error_deg, draw);
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
             if (hit) {
@@ -989,9 +1025,97 @@ private:
         return method_ == TrackMethod::Tv && !d.range_only_mode.empty() && console.equipment.IsReady(d.range_only_mode);
     }
 
-    void UpdateTrack(double t, double dt, ConsoleData& console, SessionLog& log) {
+    // Manual TV tracking: the target has to stay in the lens field around where the wheels point. An NPC in a wheel's seat
+    // follows the target a little behind it and no faster than the wheel turns; a wheel in the player's hands stays
+    // where the player puts it. A target masked by terrain is carried on at the last rates until the memory runs out.
+    // Returns false (and logs why) when the lock is lost.
+    bool TrackTvByHand(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
         const TrackSensorDef& d = console.track;
-        if (method_ != TrackMethod::None) {
+        const Equipment& eq = console.equipment;
+        const Geometry& g = geo_.at(tracked_);
+        const char* problem = nullptr;
+        if (!g.alive) {
+            problem = "target down";
+        } else if (!eq.IsReady(d.slew)) {
+            problem = "antenna not free to turn";
+        } else if (d.tv_mode.empty() || !eq.IsReady(d.tv_mode) || !eq.IsReady(d.tv_camera)) {
+            problem = "TV tracking off";
+        } else if (g.range_m > tuning_.tv_max_range_m) {
+            problem = "beyond TV range";
+        }
+        const double wheel_az = console.panel.GetValue(d.az_wheel);
+        const double wheel_el = console.panel.GetValue(d.el_wheel);
+        double error_deg = 0.0;
+        if (problem == nullptr) {
+            if (!g.los) {
+                tv_masked_s_ += dt;
+                if (tv_masked_s_ > tuning_.tv_memory_s) {
+                    problem = "masked: the memory ran out";
+                } else {  // memory: on at the last angular rates
+                    console.panel.SetValue(d.az_wheel, wheel_az + tv_rate_az_deg_s_ * dt);
+                    console.panel.SetValue(d.el_wheel, wheel_el + tv_rate_el_deg_s_ * dt);
+                }
+            } else {
+                tv_masked_s_ = 0.0;
+                const double az_err = WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az;
+                const double el_err = g.el_deg - wheel_el;
+                const double half = TvHalfFov(console);
+                if (std::fabs(az_err) > half || std::fabs(el_err) > half * d.fov_height_ratio) {
+                    problem = "target left the TV field";
+                } else {
+                    error_deg = std::sqrt(az_err * az_err + el_err * el_err);
+                }
+            }
+        }
+        if (problem != nullptr) {
+            log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+            method_ = TrackMethod::None;
+            tracked_.clear();
+            tv_masked_s_ = 0.0;
+            return false;
+        }
+        if (g.los) {
+            // The NPC seats follow the target as it was a moment ago.
+            double az = g.az_deg, el = g.el_deg;
+            const double want_t = time_ - tuning_.tv_npc_delay_s;
+            for (const std::array<double, 3>& smp : g.history) {
+                if (smp[0] <= want_t) {
+                    az = smp[1];
+                    el = smp[2];
+                }
+            }
+            const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
+            if (crew.azimuth && !az_locked) {
+                console.panel.SetValue(d.az_wheel, Toward(wheel_az, WheelAzimuth(az, wheel_az, d.az_limit_deg),
+                                                           tuning_.aim_az_rate_deg_s * dt));
+            }
+            if (crew.elevation) {
+                console.panel.SetValue(d.el_wheel, Toward(wheel_el, el, tuning_.aim_el_rate_deg_s * dt));
+            }
+            // What the memory would carry on with: the wheels' recent angular rates.
+            if (dt > 0.0) {
+                const double k = 0.3;
+                tv_rate_az_deg_s_ += k * ((console.panel.GetValue(d.az_wheel) - wheel_az) / dt - tv_rate_az_deg_s_);
+                tv_rate_el_deg_s_ += k * ((console.panel.GetValue(d.el_wheel) - wheel_el) / dt - tv_rate_el_deg_s_);
+            }
+            for (Shot& s : shots_) {
+                if (!s.done && s.method == TrackMethod::Tv && s.target_id == tracked_) {
+                    s.tv_error_sum_deg_s += error_deg * dt;
+                    s.tv_time_s += dt;
+                }
+            }
+        }
+        if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, g.range_m);
+        antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = console.panel.GetValue(d.el_wheel);
+        if (em_ != nullptr) em_->ClearDesignation();
+        return true;
+    }
+
+    void UpdateTrack(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
+        const TrackSensorDef& d = console.track;
+        if (method_ == TrackMethod::Tv && tuning_.has_tv_manual) {
+            if (TrackTvByHand(t, dt, console, log, crew)) return;
+        } else if (method_ != TrackMethod::None) {
             const Geometry& g = geo_.at(tracked_);
             const char* problem = LockProblem(console, g, method_);
             // The radar's own lock: the filter's estimate drives the servo, and a lock that has gone is lost.
@@ -1320,6 +1444,10 @@ private:
     double scan_phase_ = 0.0;
     int el_beam_ = -1;
     int search_beam_ = -1;
+    double time_ = 0.0;
+    double tv_masked_s_ = 0.0;
+    double tv_rate_az_deg_s_ = 0.0;
+    double tv_rate_el_deg_s_ = 0.0;
     double beam_turn_ = 0.0;
     std::size_t beam_step_ = 0;
     std::vector<Shot> shots_;

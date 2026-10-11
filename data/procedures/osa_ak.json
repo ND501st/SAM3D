@@ -130,7 +130,7 @@
       "transmitter": "ssc_transmitter", "slew": "antenna_drives", "radar_mode": "capture_mode",
       "tv_camera": "tov_camera", "tv_mode": "tv_angle_track", "range_only_mode": "range_semi_auto",
       "az_wheel": "ssc.az_wheel", "el_wheel": "ssc.el_wheel", "range_wheel": "ssc.range_wheel",
-      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "fov_deg": [4.8, 1.44],
+      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
@@ -141,7 +141,7 @@
         "source": "voenizdat_osa_1991 p95 (in ЦУ the SSC antenna searches in elevation within the search beam the target was detected in; the OS81-10M auto-capture circuit, armed by ЦУ and АЗ, fires when the target is in the antenna's beam and the range gate is on it), p86 (the scan comes from self-oscillation of the elevation drive; beam commands I, II, III from the search radar), Fig. 2.37 p97 (beam I −1° to 5°, II 3° to 9°, III 6° to 30°); korovin_tiv_2010 (tracking beam 1°)", "confidence": "medium",
         "notes": "Scan period: SAM3D estimate. In the automatic beam programmes (АВТ. I–III, I–II) SAM3D searches the beam the search radar sees the target in nearest the azimuth line (the real scan follows the search radar's beam commands). mon_2112_80 p21 gives I–II as 0–8° and I–III as 0–28°: the textbook's figure is used."
       },
-      "notes": "SSC displayed range 28 km (p16); ±330° azimuth (p14, p16; voenizdat_osa_1991 p66; mon_2112_80 p25 gives ±342° for the turret). TV fields 00-60 x 00-80 (3.6 x 4.8°) wide and 00-18 x 00-24 (1.08 x 1.44°) narrow (voenizdat_osa_1991 p101; an operator on samsim_thread gives the same); the larger figure is used. SAM Simulator's manual gives 5° / 1.5°."
+      "notes": "SSC displayed range 28 km (p16); ±330° azimuth (p14, p16; voenizdat_osa_1991 p66; mon_2112_80 p25 gives ±342° for the turret). TV fields 00-60 x 00-80 (3.6 x 4.8°) wide and 00-18 x 00-24 (1.08 x 1.44°) narrow (voenizdat_osa_1991 p101; an operator on samsim_thread gives the same); the larger figure is used. SAM Simulator's manual gives 5° / 1.5°. fov_height_ratio 0.75 is the height over the width of those fields (00-60 over 00-80), used for the lens field in manual TV tracking."
     },
     "orientation": {
       "gyro": "power", "setter": "orient.qc", "mode_control": "orient.ak_zk", "set_position": 1,

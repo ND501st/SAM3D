@@ -20,6 +20,12 @@
     "notes": "The head-on range limits are the 'zone' box above (1.5-10.3 km: the SAM Simulator manual's 10.3 km against the NVA's 10 km; the manual's was kept). The NVA's 'parameter' limit (6 km / 4 km of crossing offset) is not modelled. A target is 'approaching' when its closing speed is positive; otherwise it is in the pursuit zone or outside."
   },
 
+  "tv": {
+    "reticle_deg": 0.18, "npc_delay_s": 0.4, "memory_s": 5, "error_penalty_per_reticle": 0.08, "error_factor_min": 0.4,
+    "source": "reticle_deg: ePap (samsim_thread): the TV sight is tracked by hand with a 3-mil reticle, 3 thousandths on the 6000-division circle = 0.18 degrees; memory_s follows ePap's memory mode (it carries on at the last angular rates when the target is masked). The rest are game values.",
+    "notes": "Manual TV tracking. The TV channel follows the wheels: the target has to stay in the lens field (data/procedures/osa_ak.json, sensors.track.fov_deg) around where the azimuth and elevation wheels point, or the track is lost. An NPC in a wheel's seat follows the target npc_delay_s behind it and no faster than the aim rates; the player turns the wheels. The mean distance of the target from the crosshair during a missile's flight costs hit chance: factor = max(error_factor_min, 1 - error_penalty_per_reticle x mean error / reticle). Without this group the servo drives the wheels onto the target by itself once the TV has locked."
+  },
+
   "methods": {
     "low_target_elevation_deg": 1.8, "gorka_max_agl_m": 100,
     "source": "samsim_thread (creator, ePap: T/T above elevation 00-30, the 'Gorka' zoom climb or 'F' for low targets); korovin_tiv_2010 (Gorka against targets at 50-100 m, so the fuse is not set off by the ground).",
