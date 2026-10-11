@@ -90,6 +90,10 @@ show on the scope as ghost contacts `T<n>`. `osa_practice_em_ew.json` is the EM 
 chaff drop. The auto-capture rule (`em_capture_looks`, `em_capture_hits`) is in the tuning file's `track` group.
 
 `"c2"` adds early-warning and command sources beside the PU-12 (`command_post`), with outages and the commander's fallback policy; triggers `c2_source`, `c2_fail`, `c2_restore` change them (`data/command/README.md`). `osa_practice_c2.json` loses the PU-12 at 60 s.
+`"c2.regiment": { "library": "command/regiment_radars.json", "radars": [ { "id": "p19_a", "type": "p19", "position": { "east_m": 0, "north_m": 60000, "up_m": 0 } } ] }`
+makes the PU-12's picture the regiment radars' (roadmap 7.1): a target is plotted only when some radar covers it. Without the block the board sees every
+target. `"c2.presets": ["pu12", "ewr_north", "", "division"]` says which source each of the R-123M's four presets is tuned to
+(default: the main source, the fall-back order, then the rest); the cabin's two radio selectors and the listening switch use it (roadmap 7.8).
 
 `"readiness"` starts the unit warm instead of cold (roadmap 6.2): one of the console's `readiness` states
 (`data/procedures/README.md`). The Osa has `powered` (on the march: turbine running, equipment and stabilisation warm,

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "simcore/c2_sources.hpp"
+#include "simcore/cabin.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "test_framework.hpp"
@@ -730,4 +731,111 @@ SC_TEST("regiment: in a scenario the PU-12 plots the target once a radar of the 
     SC_EXPECT(covered.find("on the board") != std::string::npos);
     const std::string uncovered = run(R"({ "id": "p19_far", "type": "p19", "position": { "east_m": 600000, "north_m": 600000, "up_m": 0 } })");
     SC_EXPECT(uncovered.find("on the board") == std::string::npos);
+}
+
+// ---- Roadmap 7.8: the two R-123M sets in the cabin.
+
+namespace {
+
+const char* kRadioC2 = R"({ "library": "command/c2_sources.json", "primary": "pu12", "auto_fallback": false,
+        "presets": ["pu12", "ewr_north", "", "division"], "switch_s": 6,
+        "sources": [ { "id": "ewr_north", "type": "ewr_voice", "position": { "east_m": 0, "north_m": 25000, "up_m": 0 }, "net": "battery_net" },
+                     { "id": "division", "type": "division_ew_net" },
+                     { "id": "pu12", "net": "battery_net" } ] })";
+
+std::unique_ptr<ScenarioRunner> RadioRunner(const std::string& c2 = kRadioC2) {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    if (!LoadScenario(C2ScenarioText(c2, ""), kData, def, console, &error)) {
+        std::printf("    load: %s\n", error.c_str());
+        return nullptr;
+    }
+    return std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
+}
+
+void Steps(ScenarioRunner& r, double seconds, double dt = 0.5) {
+    for (double end = r.Time() + seconds; r.Time() < end - 1e-9;) r.Step(dt);
+}
+
+}  // namespace
+
+SC_TEST("radios: the Osa's radios block loads and the cabin has both sets' selectors and the listening switch") {
+    ConsoleData c;
+    std::string error;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", c, &error));
+    SC_EXPECT(c.has_radios && c.radios.listen == "rad.listen" && c.radios.sets.size() == 2);
+    SC_EXPECT(c.panel.Find("rad1.preset")->positions == 4 && c.panel.Find("rad2.preset")->positions == 4);
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", c, layout, &error));
+}
+
+SC_TEST("radios: the knobs start on the main source and the one on watch; turning the listening set changes the source") {
+    auto r = RadioRunner();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    Steps(*r, 2.0);
+    SC_EXPECT(c.panel.Get("rad.listen") == 0 && c.panel.Get("rad1.preset") == 0 && c.panel.Get("rad2.preset") == 1);  // PU-12; EWR on watch
+    SC_EXPECT(r->C2()->ActiveId() == "pu12");
+    c.panel.Set("rad1.preset", 1);  // the commander tunes the listening set to preset 2 (the EWR net)
+    Steps(*r, 2.0);
+    SC_EXPECT(r->C2()->Switching() && r->C2()->PendingId() == "ewr_north");
+    Steps(*r, 8.0);
+    SC_EXPECT(r->C2()->ActiveId() == "ewr_north" && !r->C2()->Switching());
+    SC_EXPECT(r->Debrief().find("R-123M I on preset 2") != std::string::npos);
+    c.panel.Set("rad.listen", 1);  // listen on the second set instead: preset 2 as well, nothing changes
+    Steps(*r, 2.0);
+    SC_EXPECT(!r->C2()->Switching() && r->C2()->ActiveId() == "ewr_north");
+    c.panel.Set("rad2.preset", 3);  // set II to preset 4: the division net
+    Steps(*r, 10.0);
+    SC_EXPECT(r->C2()->ActiveId() == "division");
+}
+
+SC_TEST("radios: a preset with nothing on it takes the vehicle off the net, and turning off a watching set changes nothing") {
+    auto r = RadioRunner();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    Steps(*r, 2.0);
+    c.panel.Set("rad2.preset", 3);  // the watch set: the listening one is untouched
+    Steps(*r, 8.0);
+    SC_EXPECT(r->C2()->ActiveId() == "pu12" && !r->C2()->Switching());
+    c.panel.Set("rad1.preset", 2);  // preset 3 is empty
+    Steps(*r, 8.0);
+    SC_EXPECT(r->C2()->ActiveId().empty() && !r->C2()->Switching());
+    SC_EXPECT(r->Debrief().find("takes the vehicle off the net") != std::string::npos);
+}
+
+SC_TEST("radios: when the NPC commander falls back on his own, the listening set's knob follows") {
+    const std::string c2 = R"({ "library": "command/c2_sources.json", "primary": "pu12", "auto_fallback": true,
+        "fallback_order": ["ewr_north"], "presets": ["pu12", "ewr_north"], "switch_s": 6,
+        "sources": [ { "id": "ewr_north", "type": "ewr_voice", "position": { "east_m": 0, "north_m": 25000, "up_m": 0 }, "net": "battery_net" },
+                     { "id": "pu12", "net": "battery_net", "outages": [ { "from_s": 30, "reason": "destroyed" } ] } ] })";
+    auto r = RadioRunner(c2);
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    Steps(*r, 5.0);
+    SC_EXPECT(c.panel.Get("rad1.preset") == 0 && r->C2()->ActiveId() == "pu12");
+    Steps(*r, 400.0);  // the PU-12 goes silent; the commander changes to the EWR
+    SC_EXPECT(r->C2()->ActiveId() == "ewr_north");
+    SC_EXPECT(c.panel.Get("rad1.preset") == 1);  // the knob shows it
+    Steps(*r, 5.0);
+    SC_EXPECT(r->C2()->ActiveId() == "ewr_north");  // the mirrored knob isn't mistaken for the player's hand
+}
+
+SC_TEST("radios: the presets of the c2 block are checked with paths") {
+    auto bad = [&](const std::string& presets, const std::string& part) {
+        ScenarioDef d;
+        ConsoleData c;
+        std::string e;
+        const std::string c2 = R"({ "library": "command/c2_sources.json", "presets": )" + presets + R"(, "sources": [ { "id": "pu12" } ] })";
+        const bool ok = LoadScenario(C2ScenarioText(c2, ""), kData, d, c, &e);
+        if (ok || e.find(part) == std::string::npos) std::printf("    expected '%s', got '%s'\n", part.c_str(), e.c_str());
+        return !ok && e.find(part) != std::string::npos;
+    };
+    SC_EXPECT(bad(R"(["pu12", "a", "b", "c", "d"])", "c2.presets: the R-123M has four presets"));
+    SC_EXPECT(bad(R"(["ghost"])", "c2.presets[0]: unknown source 'ghost'"));
+    SC_EXPECT(bad(R"([7])", "c2.presets[0]"));
 }

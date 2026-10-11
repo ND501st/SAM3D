@@ -143,6 +143,6 @@ roadmap phase 6:
   no target jams yet (E5), and the NVA's crossing-offset limit is missing. (6.7)
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario
   block (7.6). No emplacements, nets or dummy positions yet.
-- PU-12 board and voice designations are built (7.1, 7.2); the board still plots the scenario's targets, not a regiment radar picture.
+- PU-12 board and voice designations are built (7.1, 7.2); the board's picture is the regiment radars' (P-19, P-40: range and horizon only; no clutter, terrain or blind cone) when the scenario lists them.
 
 Command sources: `simcore/c2_sources.hpp` (`C2Network`) gives the engagement model the crew's air picture from the active of several sources; the PU-12 board is one of them (`docs/research/EM_C2_SOURCES_2026-10.md`).

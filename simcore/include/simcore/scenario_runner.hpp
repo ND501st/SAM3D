@@ -21,6 +21,8 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <random>
 #include <string>
@@ -111,6 +113,7 @@ public:
         time_ += dt;
         UpdateTargets(dt);
         UpdateC2();
+        UpdateRadios();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
@@ -407,6 +410,76 @@ private:
         }
     }
 
+    // The two R-123M sets (roadmap 7.8): the commander listens on the set `radios.listen` points at, tuned to the preset
+    // its selector shows; the scenario's c2.presets say which source each preset is. Turning a knob (the player's hands)
+    // asks the network for that source; a change the network makes itself (the NPC commander falling back, a trigger)
+    // is mirrored onto the listening set's knob, so the cabin always shows what the crew has on the air.
+    std::vector<std::string> RadioPresets() const {
+        std::vector<std::string> out = def_.c2_policy.presets;
+        if (out.empty()) {  // not set: the main source, the fall-back order, then the rest
+            auto add = [&](const std::string& id) {
+                if (out.size() < 4 && !id.empty() && std::find(out.begin(), out.end(), id) == out.end()) out.push_back(id);
+            };
+            add(def_.c2_policy.primary);
+            for (const std::string& id : def_.c2_policy.fallback_order) add(id);
+            for (const C2SourceDef& s : def_.c2_sources) add(s.id);
+        }
+        return out;
+    }
+
+    std::array<int, 3> ReadRadios() const {
+        const RadiosDef& r = console_.radios;
+        return {console_.panel.Get(r.listen), console_.panel.Get(r.sets[0]), console_.panel.Get(r.sets[1])};
+    }
+
+    void UpdateRadios() {
+        if (!c2_ || !console_.has_radios) return;
+        const RadiosDef& r = console_.radios;
+        if (!radio_started_) {
+            radio_started_ = true;
+            radio_presets_ = RadioPresets();
+            const std::string start = def_.c2_policy.active.empty() ? def_.c2_policy.primary : def_.c2_policy.active;
+            auto index_of = [&](const std::string& id) {
+                for (std::size_t i = 0; i < radio_presets_.size(); ++i) {
+                    if (radio_presets_[i] == id) return static_cast<int>(i);
+                }
+                return -1;
+            };
+            std::string other;  // the second set watches the next source down the list
+            for (const std::string& id : radio_presets_) {
+                if (id != start && other.empty()) other = id;
+            }
+            const int listening = index_of(start);
+            const int watching = other.empty() ? -1 : index_of(other);
+            if (listening >= 0) console_.panel.Set(r.sets[0], listening);
+            if (watching >= 0) console_.panel.Set(r.sets[1], watching);
+            radio_last_ = ReadRadios();
+            radio_mirrored_ = start;
+            return;
+        }
+        const std::array<int, 3> now = ReadRadios();
+        if (now != radio_last_) {  // somebody turned a knob
+            radio_last_ = now;
+            const int set = now[0];
+            const int preset = now[static_cast<std::size_t>(1 + set)];
+            const std::string wanted = preset < static_cast<int>(radio_presets_.size()) ? radio_presets_[static_cast<std::size_t>(preset)] : std::string();
+            const std::string why = std::string("R-123M ") + (set == 0 ? "I" : "II") + " on preset " + std::to_string(preset + 1);
+            c2_->RequestSource(wanted.empty() ? std::string("none") : wanted, time_, "Commander", why);
+            radio_mirrored_ = wanted;
+            return;
+        }
+        const std::string& active = c2_->ActiveId();
+        if (c2_->Switching() || active.empty() || active == radio_mirrored_) return;
+        radio_mirrored_ = active;  // the network changed source on its own
+        for (std::size_t i = 0; i < radio_presets_.size(); ++i) {
+            if (radio_presets_[i] != active) continue;
+            const std::size_t set = static_cast<std::size_t>(now[0]);
+            if (console_.panel.Get(r.sets[set]) != static_cast<int>(i)) console_.panel.Set(r.sets[set], static_cast<int>(i));
+            radio_last_ = ReadRadios();
+            break;
+        }
+    }
+
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
     // sources are cut so the rest stays for driving (roadmap 7.4).
     // A prepared position's supply (roadmap 7.6): the grid, then after a cut the diesel set once it has started.
@@ -546,6 +619,10 @@ private:
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
+    bool radio_started_ = false;
+    std::vector<std::string> radio_presets_;
+    std::array<int, 3> radio_last_{{0, 0, 0}};
+    std::string radio_mirrored_;
     std::unique_ptr<FuelModel> fuel_;
     std::unique_ptr<EmC2LinkModel> c2_link_;
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor

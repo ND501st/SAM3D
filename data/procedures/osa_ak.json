@@ -98,6 +98,9 @@
   "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "samsim_osa p30", "confidence": "high",
               "notes": "Restarts: after a launch ПУСК ГОТОВ goes out and lights again when the next missile can be launched (p30). The manual gives no time; SAM3D repeats missile preparation (the 15 s spin-up), confidence estimate." },
 
+  "radios": { "listen": "rad.listen", "sets": [ "rad1.preset", "rad2.preset" ],
+              "source": "mon_2112_80 p26, Fig. 3 (two R-123M); EM_C2_SOURCES_2026-10 (the commander can keep a second net on watch)", "confidence": "low",
+              "notes": "The commander listens on one set at a time. Retuning the listening set asks the command network for the source that preset is tuned to (scenario c2.presets); a change of source the network makes itself is shown on the listening set's selector." },
   "launcher": {
     "containers": [
       { "id": "3-I", "channel": 1, "order": 1, "input": "ammo_3_i", "hot_input": "hot_3_i" }, { "id": "2-I", "channel": 1, "order": 2, "input": "ammo_2_i", "hot_input": "hot_2_i" },
@@ -276,6 +279,15 @@
     { "id": "veh.hatches", "label": "люки (hatches)", "station": "commander", "kind": "switch", "position_labels": ["open", "closed"], "initial": 1,
       "source": "voenizdat_osa_1991 p99 (РУ lights only with ЛЮКИ ЗАКР. lit on the commander's console), p154 (ПУСК ГОТОВ needs the hatches closed); mon_2112_80 p64 (hatches must not be opened in combat work)", "confidence": "medium",
       "notes": "The hatches have a powered opening and closing system (voenizdat_osa_1991 p163). One control stands for all of them; starts closed." },
+    { "id": "rad1.preset", "label": "R-123M I", "station": "commander", "kind": "switch", "position_labels": ["1", "2", "3", "4"], "initial": 0,
+      "source": "mon_2112_80 p26, Fig. 3 (two R-123M radio sets in the fighting compartment); r123_refs (R-123M: four preset frequencies)", "confidence": "medium",
+      "notes": "The first radio's preset selector. Which source each preset is tuned to comes from the scenario's c2.presets; the set the commander listens on is rad.listen. The real set's own controls and labels are not in any source found: one selector stands for tuning to a preset." },
+    { "id": "rad2.preset", "label": "R-123M II", "station": "commander", "kind": "switch", "position_labels": ["1", "2", "3", "4"], "initial": 1,
+      "source": "mon_2112_80 p26, Fig. 3 (two R-123M radio sets in the fighting compartment); r123_refs (R-123M: four preset frequencies)", "confidence": "medium",
+      "notes": "The second radio's preset selector: the set on watch (EM_C2_SOURCES: a second net kept on watch)." },
+    { "id": "rad.listen", "label": "ПРИЁМ R-123M I — II", "station": "commander", "kind": "switch", "position_labels": ["I", "II"], "initial": 0,
+      "source": "sam3d", "confidence": "estimate",
+      "notes": "Which of the two sets the commander listens on. A SAM3D control: the real vehicle's intercom and headset switching (R-124) is not described in any source found." },
     { "id": "gyro.arrest", "label": "АРРЕТИР.", "station": "driver", "kind": "button",
       "source": "voenizdat_osa_1991 p247 (the driver erects the gyro by holding АРРЕТИР. on block 0005-8M for 40 s), p51–52", "confidence": "medium",
       "notes": "Block 0005-8M is on rack SŁ-1M at the front of the operators' compartment (mon_2112_80 Fig. 3). SAM3D: one press starts the 40 s erection." },

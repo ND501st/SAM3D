@@ -70,6 +70,11 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
     "emergency": { "select_control": "msl.emergency_select", "select_containers": [ "3-II", "", "3-I" ],
                    "fire_control": "msl.emergency", "ready_input": "emerg_ready", "flight_s": 25.5,
                    "source": "...", "confidence": "medium" },
+    // Optional, top level (next to "launcher"): the two R-123M sets (roadmap 7.8). `sets` are the preset selectors of radio
+    // I and II (positions = presets 1..4), `listen` the 2-position switch for the set the commander listens on. Turning a
+    // knob asks the command network for the source the scenario's c2.presets give that preset; a change the network makes
+    // itself is shown on the listening set's selector.
+    //   "radios": { "listen": "rad.listen", "sets": [ "rad1.preset", "rad2.preset" ], "source": "...", "confidence": "low" }
     // Optional. A prepared pair is held at most hold_s; then its gyros have overheated (the container's hot_input is
     // set, its lamp flashes), the next pair is prepared, and the hot missile rests rest_s (long_rest_s after `cycles` holds).
     "prep_hold": { "hold_s": 600, "rest_s": 600, "cycles": 3, "long_rest_s": 3600, "source": "...", "confidence": "medium" },

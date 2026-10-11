@@ -54,7 +54,6 @@ PLANNED = {
         ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale. No source gives a drift or a measurement error.", ["m:orient"], "missing"),
         ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
         ("p:jammer", "Jamming targets: range lost in noise, method Н outcome", "6.7 / E5", "ПОМЕХА already selects method Н and arms К3 with the medium beam, but no target jams yet, so the range is never lost and Н has no effect on the hit chance. Needs noise jammers from the EM layer (E5) and the NVA's crossing-offset 'parameter' limit.", ["c:fo.pomekha", "e:launch"], "missing"),
-        ("p:pu12feed", "PU-12 fed by the regiment's radars", "7.1", "The board and the voice designations are built; the board still plots the scenario's targets directly instead of a regiment radar picture.", [], "missing"),
         ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
     ],
 }
@@ -257,6 +256,14 @@ class MapBuilder:
                                ("c:", "sync_button", orient, "fast sync")])
             if orient.get("synced_input"):
                 self.add_edge("m:orient", "i:" + orient["synced_input"], "signal", "sets this signal")
+
+        radios = self.con.get("radios")
+        if radios:  # the two R-123M sets: the commander's source selection (roadmap 7.8)
+            self.add_node("m:radios", t="model", label="R-123M sets and the command network", notes=radios.get("notes"),
+                          source=radios.get("source"), conf=radios.get("confidence"))
+            feeds("m:radios", [("c:", "listen", radios, "set listened on")])
+            for cid in radios.get("sets", []):
+                self.add_edge("c:" + cid, "m:radios", "feed", "preset")
 
         launcher = self.con.get("launcher")
         if launcher:  # the missile load and the guidance channels (roadmap 6.3, simcore/launcher.hpp)
