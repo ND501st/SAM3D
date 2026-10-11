@@ -60,6 +60,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
+#include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/world.hpp"
 
@@ -591,6 +592,9 @@ public:
     // Use the electromagnetic layer for the search picture and the radar lock (null = the gameplay rules). The link
     // must outlive the model.
     void SetEmLink(EmSensorLink* link) { em_ = link; }
+    // Aim by the battery command post's plotting board when the radars are silent (null = by the truth, within
+    // plotting_board_range_m). The board must outlive the model.
+    void SetPlottingBoard(const PlottingBoard* board) { board_ = board; }
     bool EmActive() const { return em_ != nullptr; }
 
     // The unit moved (driven by the player or an AI driver).
@@ -949,7 +953,18 @@ private:
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
         bool from_board = false;
         double board_true_az = 0.0;
-        if (!have && tv_search) {  // radars silent: azimuth from the plotting board
+        if (!have && tv_search && board_ != nullptr) {  // radars silent: the board's last marks, a minute old at worst
+            double best_r = tuning_.plotting_board_range_m;
+            for (const BoardMark& m : board_->Current()) {
+                const PlottingBoard::Designation des = board_->DesignationFor(m, unit_);
+                if (des.range_m > best_r) continue;
+                best_r = des.range_m;
+                best = {des.range_m, Wrap180(des.azimuth_deg), des.elevation_deg};
+                board_true_az = Wrap180(des.azimuth_deg);
+                have = true;
+                from_board = true;
+            }
+        } else if (!have && tv_search) {  // radars silent: azimuth from the plotting board (no board: the truth)
             const Geometry* near_g = nullptr;
             for (const auto& kv : geo_) {
                 const Geometry& g = kv.second;
@@ -1442,6 +1457,7 @@ private:
 
     EngagementTuning tuning_;
     EmSensorLink* em_ = nullptr;  // not owned
+    const PlottingBoard* board_ = nullptr;  // not owned
     Vec3 unit_;
     std::map<std::string, Geometry> geo_;  // ordered by id: deterministic iteration
     std::vector<Contact> picture_;

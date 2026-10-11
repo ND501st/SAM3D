@@ -1,0 +1,252 @@
+// simcore/pu12.hpp — the battery command post's plotting board (PU-12M; roadmap 7.1).
+//
+// The regiment's radars feed the battery command post an air picture, which the crew writes on a glass plotting
+// board once a minute (samsim_osa p20). Each target gets a mark: a four-digit number (the tactical number of the
+// radar battery that found it, then a sequence number), its height in hectometres over a two-digit code (the tens
+// digit is the target's type, e.g. 1 friend, 7 practice target, 9 no IFF; the ones digit is the formation size),
+// and a minute stamp. Positions carry the PU-12M's navigation error (flak11: up to 5 degrees and 3 km), drawn once
+// per board from the scenario's seed.
+//
+// The board is what the vehicle crews aim by when their radars are silent: a minute old at worst, and off by the
+// navigation error. It only reads the world; it decides nothing.
+#pragma once
+
+#include <cmath>
+#include <cstddef>
+#include <cstdio>
+#include <fstream>
+#include <random>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "simcore/console_data.hpp"
+#include "simcore/geo.hpp"
+#include "simcore/json.hpp"
+#include "simcore/vec3.hpp"
+
+namespace simcore {
+
+struct PlottingBoardDef {
+    std::string id;
+    std::string display_name;
+    double update_period_s = 60.0;
+    double max_range_m = 200000.0;      // the outer range ring: targets beyond aren't plotted
+    std::vector<double> range_rings_m;  // for the display
+    int radar_battery_number = 0;       // first two digits of every target number
+    double navigation_error_deg = 0.0;  // up to this much in azimuth ...
+    double navigation_error_m = 0.0;    // ... and this much in position
+};
+
+// One plotted position of one target.
+struct BoardMark {
+    std::string target_id;  // the scenario's id (who it really is; the crew sees `number`)
+    int number = 0;         // e.g. 6201
+    int stamp = 0;          // the minute it was plotted: 1, 2, ...
+    double time_s = 0.0;
+    Vec3 position;          // where the board puts it (ENU, with the navigation error)
+    int height_hm = 0;      // height above sea level in hectometres
+    int type = 9;           // tens digit of the code: 0 jamming, 1 friend, ..., 7 practice, 8 enemy, 9 no IFF
+    int formation = 1;      // ones digit: aircraft in the formation
+
+    // The code under the height, as written on the board (e.g. 71: practice target, one aircraft).
+    int Code() const { return type * 10 + (formation > 9 ? 9 : formation); }
+};
+
+// A target as the regiment's radars report it.
+struct BoardContact {
+    std::string target_id;
+    Vec3 position;     // true, ENU
+    double altitude_m = 0.0;
+    int type = 9;
+    int formation = 1;
+};
+
+namespace detail {
+
+class BoardLoader : public ConsoleLoader {
+public:
+    bool LoadBoard(const json::Value& root, PlottingBoardDef& d) {
+        if (!Keys(root, "", {"board_id", "display_name", "status", "notes", "board"}) ||
+            !RequireString(root, "", "board_id", d.id) || !OptionalString(root, "", "display_name", d.display_name)) {
+            return false;
+        }
+        const json::Value* b = root.Find("board");
+        if (b == nullptr || !b->Is(json::Type::Object)) return Fail("board", "required, an object");
+        if (!Keys(*b, "board", {"update_period_s", "max_range_m", "range_rings_m", "radar_battery_number",
+                                "navigation_error_deg", "navigation_error_m"})) {
+            return false;
+        }
+        for (const auto& f : {std::make_pair("update_period_s", &d.update_period_s), std::make_pair("max_range_m", &d.max_range_m),
+                              std::make_pair("navigation_error_deg", &d.navigation_error_deg),
+                              std::make_pair("navigation_error_m", &d.navigation_error_m)}) {
+            if (!Cited(*b, f.first, *f.second)) return false;
+        }
+        double number = 0.0;
+        if (!Cited(*b, "radar_battery_number", number)) return false;
+        if (number < 0.0 || number > 99.0 || number != std::floor(number)) {
+            return Fail("board.radar_battery_number", "a two-digit tactical number");
+        }
+        d.radar_battery_number = static_cast<int>(number);
+        if (!(d.update_period_s > 0.0)) return Fail("board.update_period_s", "must be > 0");
+        if (const json::Value* rings = b->Find("range_rings_m")) {
+            const json::Value* list = rings->Find("value");
+            if (list == nullptr || !list->Is(json::Type::Array)) return Fail("board.range_rings_m.value", "expected a list");
+            if (!Provenance(*rings, "board.range_rings_m")) return false;
+            for (const json::Value& r : list->items) {
+                if (!r.Is(json::Type::Number) || !(r.number > 0.0)) return Fail("board.range_rings_m", "distances > 0");
+                d.range_rings_m.push_back(r.number);
+            }
+        }
+        return true;
+    }
+
+private:
+    // A cited value: {"value": n, "source": "...", "confidence": "..."}.
+    bool Cited(const json::Value& g, const char* key, double& out) {
+        const std::string p = Join("board", key);
+        const json::Value* v = g.Find(key);
+        if (v == nullptr) return Fail(p, "required");
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected {\"value\", \"source\", \"confidence\"}");
+        if (!Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+        const json::Value* n = v->Find("value");
+        if (n == nullptr || !n->Is(json::Type::Number)) return Fail(Join(p, "value"), "expected a number");
+        out = n->number;
+        if (out < 0.0) return Fail(Join(p, "value"), "must be >= 0");
+        return true;
+    }
+};
+
+}  // namespace detail
+
+inline bool LoadPlottingBoardFile(const std::string& path, PlottingBoardDef& out, std::string* error = nullptr) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) *error = "cannot open " + path;
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text.str(), root, &parse_error)) {
+        if (error != nullptr) *error = path + ": " + parse_error;
+        return false;
+    }
+    PlottingBoardDef d;
+    detail::BoardLoader loader;
+    if (!loader.LoadBoard(root, d)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = std::move(d);
+    return true;
+}
+
+class PlottingBoard {
+public:
+    // `centre`: the battery's position (ranges and designations are from it). `seed` draws the navigation error.
+    PlottingBoard(PlottingBoardDef def, const Vec3& centre, unsigned seed) : def_(std::move(def)), centre_(centre) {
+        std::mt19937 rng(seed ^ 0x9e3779b9u);
+        auto u = [&rng] { return static_cast<double>(rng()) / 4294967296.0; };
+        az_error_rad_ = DegToRad(def_.navigation_error_deg) * (2.0 * u() - 1.0);
+        const double r = def_.navigation_error_m * std::sqrt(u());
+        const double a = 2.0 * kPi * u();
+        offset_ = Vec3{r * std::sin(a), r * std::cos(a), 0.0};
+    }
+
+    // Plot the contacts if a minute has passed since the last time (the first plot is at the first call).
+    // Returns true when it plotted.
+    bool Update(double t, const std::vector<BoardContact>& contacts) {
+        if (plotted_ && t + 1e-9 < next_s_) return false;
+        plotted_ = true;
+        next_s_ = t + def_.update_period_s;
+        ++stamp_;
+        for (const BoardContact& c : contacts) {
+            const Vec3 rel = c.position - centre_;
+            if (rel.HorizontalLength() > def_.max_range_m) continue;
+            BoardMark m;
+            m.target_id = c.target_id;
+            m.number = NumberFor(c.target_id);
+            m.stamp = stamp_;
+            m.time_s = t;
+            m.position = centre_ + Rotate(Vec3{rel.x, rel.y, 0.0}, az_error_rad_) + offset_ + Vec3{0.0, 0.0, rel.z};
+            m.height_hm = static_cast<int>(std::lround(c.altitude_m / 100.0));
+            m.type = c.type;
+            m.formation = c.formation;
+            marks_.push_back(m);
+        }
+        return true;
+    }
+
+    const std::vector<BoardMark>& Marks() const { return marks_; }
+    const PlottingBoardDef& Def() const { return def_; }
+    int Stamp() const { return stamp_; }
+
+    // The latest mark of each target plotted at the last update (what the crew reads off the board now).
+    std::vector<BoardMark> Current() const {
+        std::vector<BoardMark> out;
+        for (const BoardMark& m : marks_) {
+            if (m.stamp == stamp_) out.push_back(m);
+        }
+        return out;
+    }
+
+    // A designation as the battery commander gives it by voice: azimuth (degrees from north and mils) and range.
+    struct Designation {
+        double azimuth_deg = 0.0;
+        int azimuth_mils = 0;  // of 60-00
+        double range_m = 0.0;
+        double elevation_deg = 0.0;
+    };
+    Designation DesignationFor(const BoardMark& m, const Vec3& from) const {
+        Designation d;
+        const Vec3 rel = m.position - from;
+        double az = RadToDeg(AzimuthOf(rel));
+        if (az < 0.0) az += 360.0;
+        d.azimuth_deg = az;
+        d.azimuth_mils = static_cast<int>(std::lround(az / 360.0 * 6000.0)) % 6000;
+        d.range_m = rel.HorizontalLength();
+        d.elevation_deg = RadToDeg(std::atan2(rel.z, d.range_m > 1.0 ? d.range_m : 1.0));
+        return d;
+    }
+
+    // "6201 16/71 at 35 km, 15-50" as the board reads (number, height / code, range from the centre, azimuth in mils).
+    std::string Describe(const BoardMark& m) const {
+        const Designation d = DesignationFor(m, centre_);
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "%04d %d/%02d at %.0f km, %02d-%02d", m.number, m.height_hm, m.Code(),
+                      d.range_m / 1000.0, d.azimuth_mils / 100, d.azimuth_mils % 100);
+        return buf;
+    }
+
+    void SetCentre(const Vec3& centre) { centre_ = centre; }
+
+private:
+    static Vec3 Rotate(const Vec3& v, double rad) {  // clockwise, as an azimuth error
+        const double c = std::cos(rad), s = std::sin(rad);
+        return Vec3{v.x * c + v.y * s, -v.x * s + v.y * c, v.z};
+    }
+
+    int NumberFor(const std::string& id) {
+        for (const auto& n : numbers_) {
+            if (n.first == id) return n.second;
+        }
+        const int number = def_.radar_battery_number * 100 + static_cast<int>(numbers_.size() % 99) + 1;
+        numbers_.emplace_back(id, number);
+        return number;
+    }
+
+    PlottingBoardDef def_;
+    Vec3 centre_;
+    double az_error_rad_ = 0.0;
+    Vec3 offset_;
+    bool plotted_ = false;
+    double next_s_ = 0.0;
+    int stamp_ = 0;
+    std::vector<BoardMark> marks_;
+    std::vector<std::pair<std::string, int>> numbers_;
+};
+
+}  // namespace simcore

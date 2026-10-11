@@ -84,3 +84,10 @@ scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking 
 search possible on the move) and `deployed` (at a halt on the take-off generator, launcher unlocked, drives on,
 vehicle oriented, radars silent). A cold start takes the documented 3.8 min switch-on cycle and the 3.0 min function
 check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) speeds the sim up so that stays playable.
+
+`"command_post": "command/pu12.json"` (top level, optional) adds the battery command post's plotting board
+(`simcore/pu12.hpp`, `data/command/README.md`): it plots every target once a minute with the manual's notation, off by the
+post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are
+silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
+`"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/71 at 45 km, 00-71").
+

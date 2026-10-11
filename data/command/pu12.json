@@ -1,0 +1,18 @@
+{
+  "board_id": "pu12m",
+  "display_name": "PU-12M battery command post (9С482М): plotting board",
+  "status": "System data for the battery command post's plotting board (simcore/pu12.hpp, roadmap 7.1). Every value cited.",
+  "notes": "The board is fed by the regiment's radars over a data link and written up by hand once a minute (samsim_osa p20). Targets are designated to the vehicles by voice, azimuth and range (flak11).",
+  "board": {
+    "update_period_s": { "value": 60, "source": "samsim_osa p20 (the location of the target is updated every minute, and a timestamp is noted: 01, 02, ...)", "confidence": "medium" },
+    "max_range_m": { "value": 200000, "source": "samsim_osa p20 (range circles at 50, 100, 150 and 200 km from the battery)", "confidence": "medium",
+      "notes": "Taken as the board's extent; how far the regiment's picture really reaches depends on its radars (P-19, P-40), not modelled." },
+    "range_rings_m": { "value": [50000, 100000, 150000, 200000], "source": "samsim_osa p20", "confidence": "medium" },
+    "radar_battery_number": { "value": 62, "source": "samsim_osa p20 (target 6201: '62' is the tactical number of the radar battery that detected it first)", "confidence": "estimate",
+      "notes": "The manual's example number; any two-digit tactical number would do." },
+    "navigation_error_deg": { "value": 5, "source": "flak11 (PU-12M navigation errors up to 5 degrees and 3 km)", "confidence": "high",
+      "notes": "Drawn once per board, uniformly up to this much (the distribution is a sam3d estimate)." },
+    "navigation_error_m": { "value": 3000, "source": "flak11 (PU-12M navigation errors up to 5 degrees and 3 km)", "confidence": "high",
+      "notes": "Drawn once per board, uniformly over a disc of this radius (sam3d estimate)." }
+  }
+}

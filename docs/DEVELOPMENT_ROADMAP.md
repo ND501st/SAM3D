@@ -69,7 +69,7 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 
 | # | Task |
 |---|---|
-| 7.1 | PU-12 command post in simcore: air picture from the regiment, updated once a minute; SAM Simulator's plotting-board notation (target number, height, type, formation) |
+| 7.1 | **Done in simcore (`simcore/pu12.hpp`, `data/command/pu12.json`, scenario `command_post`).** The board plots once a minute with the manual's notation (number, height in hectometres over type and formation, minute stamp), carries the PU-12M's navigation error (5 degrees, 3 km), and the crews aim by it when the radars are silent. Left: the regiment's own radars as the feed (the board plots the scenario's targets directly), the plotting board in Unreal (7.7). PU-12 command post in simcore: air picture from the regiment, updated once a minute; SAM Simulator's plotting-board notation (target number, height, type, formation) |
 | 7.2 | Target designation by radio: the battery commander (NPC or player) gives "azimuth, range" to each vehicle; the vehicle commander passes it on |
 | 7.3 | Four vehicles per battery (others NPC-crewed) and the TZM: reload 6 missiles in about 6 min |
 | 7.4 | Fuel: turbine and take-off generator consumption, the half-tank rule, refuelling from the TZM |

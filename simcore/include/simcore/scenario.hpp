@@ -20,6 +20,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/pu12.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -47,6 +48,8 @@ struct ScenarioTarget {
     bool evade_on_launch = false;          // breaks away onto a beam heading when a missile is launched at it
     double evade_turn_rate_rad_s = DegToRad(12.0);
     bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
+    int board_type = -1;                   // its type on the PU-12 board (0-9; -1: 1 if a friend, else 9, no IFF)
+    int formation = 1;                     // aircraft in its formation, as the board notes it
 };
 
 struct TriggerAction {
@@ -88,6 +91,8 @@ struct ScenarioDef {
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
     std::vector<ScenarioTrigger> triggers;
+    std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
+    PlottingBoardDef board;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
 };
@@ -98,7 +103,7 @@ class ScenarioLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "own_unit", "crew", "targets", "triggers", "end"})) {
+                             "terrain", "command_post", "own_unit", "crew", "targets", "triggers", "end"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -111,6 +116,13 @@ public:
         out.seed = static_cast<unsigned>(seed);
         if (!LoadOrigin(root, out) || !LoadTerrain(root, out)) return false;
         if (!LoadOwnUnit(root, data_dir, out, console)) return false;
+        if (!OptionalString(root, "", "command_post", out.command_post_file)) return false;
+        if (!out.command_post_file.empty()) {
+            std::string error;
+            if (!LoadPlottingBoardFile(data_dir + "/" + out.command_post_file, out.board, &error)) {
+                return Fail("command_post", error);
+            }
+        }
         if (!LoadCrew(root, out, console)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
@@ -284,7 +296,8 @@ private:
             const std::string p = Index("targets", i);
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
-                             "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "notes"})) {
+                             "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
+                             "formation", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -296,6 +309,11 @@ private:
                 return false;
             }
             if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
+            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation)) return false;
+            if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
+                return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
+            }
+            if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
             tg.evade_turn_rate_rad_s = DegToRad(evade_deg_s);
             const json::Value* start = nullptr;
             if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||
