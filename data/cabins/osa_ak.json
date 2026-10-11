@@ -62,7 +62,7 @@
     { "control": "gyro.arrest", "panel": "driver_panel", "at_m": [0.15, 0.05] },
     { "control": "apu.stow", "panel": "commander_panel", "at_m": [0.05, 0.05] },
     { "control": "veh.hatches", "panel": "commander_panel", "at_m": [-0.25, 0.05] },
-    { "control": "rad.listen", "panel": "commander_panel", "at_m": [0.3, -0.06], "look": {"label": "ПРИЁМ R-123M"} },
+    { "control": "rad.listen", "panel": "commander_panel", "at_m": [0.15, -0.01], "look": {"label": "ПРИЁМ R-123M"} },
     { "control": "rad1.preset", "panel": "radio_i_panel", "at_m": [0.0, 0.0], "look": {"kind": "pointer_knob", "size_m": 0.04, "color": "black", "label": "R-123M I"} },
     { "control": "rad2.preset", "panel": "radio_ii_panel", "at_m": [0.0, 0.0], "look": {"kind": "pointer_knob", "size_m": 0.04, "color": "black", "label": "R-123M II"} },
     { "control": "soc.search", "panel": "so_panel", "at_m": [-0.235, 0.296],
