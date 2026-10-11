@@ -1,0 +1,22 @@
+{
+  "library_id": "regiment_radars",
+  "display_name": "Radars of the regiment's control battery that feed the PU-12M",
+  "status": "Library of radar TYPES (simcore/c2_sources.hpp, roadmap 7.1). A scenario's \"c2.regiment\" block places instances of them; the PU-12M's board then only holds the targets some radar of the list covers. Every number cited; both radars' heights are estimates.",
+  "notes": "Coverage is the simplest honest model: a target is seen when it is within the radar's range and above its radar horizon, 4.12 (sqrt(antenna height) + sqrt(target height)) km. No clutter, terrain or blind cone; that is the EM layer's job.",
+  "radars": [
+    {
+      "id": "p19",
+      "display_name": "P-19 (Flat Face) early-warning radar",
+      "notes": "The control battery's radar in the Soviet regiment (korovin_tiv_2010) and two of the NVA regiment's (flak11).",
+      "max_range_m": { "value": 250000, "source": "fm100_2_3 p. 5-138 (Flat Face, UHF, 250 km: the US Army's view in 1991); nato_radar_refs (P-19 instrumented range 260 km)", "confidence": "low" },
+      "antenna_height_m": { "value": 8, "source": "estimate (a truck- or trailer-mounted UHF early-warning antenna stands a few metres up)", "confidence": "estimate" }
+    },
+    {
+      "id": "p40",
+      "display_name": "P-40 (Long Track) early-warning radar",
+      "notes": "In the NVA regiment's headquarters battery (flak11).",
+      "max_range_m": { "value": 150000, "source": "fm100_2_3 p. 5-138 (Long Track, over 150 km: a lower bound)", "confidence": "low" },
+      "antenna_height_m": { "value": 10, "source": "estimate (a tracked-vehicle mast antenna)", "confidence": "estimate" }
+    }
+  ]
+}

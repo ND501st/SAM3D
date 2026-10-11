@@ -88,6 +88,28 @@ struct C2Outage {
     std::string reason;
 };
 
+// A radar of the regiment's control battery that feeds the PU-12M (roadmap 7.1): a target is on the PU-12's board only if
+// some radar of its feed covers it (within range, above that radar's horizon). No feed: the board sees every target.
+struct RegimentRadar {
+    std::string id;       // the instance: "p19_a"
+    std::string type;     // the library entry: "p19"
+    std::string name;
+    Vec3 position;        // ENU (east, north)
+    double max_range_m = 0.0;
+    double antenna_height_m = 0.0;
+};
+
+struct RegimentRadarLibrary {
+    std::string id;
+    std::vector<RegimentRadar> types;  // position unset
+    const RegimentRadar* Find(const std::string& type_id) const {
+        for (const RegimentRadar& r : types) {
+            if (r.id == type_id) return &r;
+        }
+        return nullptr;
+    }
+};
+
 struct C2SourceDef {
     std::string id;            // the instance: "pu12", "ewr_north"
     std::string type;          // the library entry it came from ("" for the built-in PU-12)
@@ -105,6 +127,7 @@ struct C2SourceDef {
     bool has_position = false;
     Vec3 position;                 // ENU (east, north); the site of a radar or post
     std::vector<C2Outage> outages;
+    std::vector<RegimentRadar> feed;  // a relayed source (the PU-12): the radars whose picture it holds; empty = all targets
 };
 
 struct C2Library {
@@ -124,6 +147,7 @@ struct C2Policy {
     std::string active;                  // who he listens to at the start ("" : the primary)
     bool auto_fallback = true;           // an NPC commander changes source when the active one goes silent
     std::vector<std::string> fallback_order;  // after the primary, in this order
+    std::vector<std::string> presets;    // the R-123M's presets 1..4: the source each is tuned to ("" = nothing heard)
     double switch_s = 6.0;               // changing source: re-tuning the set, the call-up, until the first word (an estimate)
     double primary_stable_s = 60.0;      // the main source must have been heard this long before he goes back to it
     double heard_life_s = 0.0;           // a designation older than this (from its plot) is forgotten (0: never)
@@ -189,7 +213,61 @@ private:
     bool CitedField(const json::Value& e, const char* key, double& out) { return Cited(e, key, out); }
 };
 
+// The library of regiment radar types (data/command/regiment_radars.json).
+class RegimentRadarLoader : public BoardLoader {
+public:
+    bool Load(const json::Value& root, RegimentRadarLibrary& lib) {
+        if (!Keys(root, "", {"library_id", "display_name", "status", "notes", "radars"}) ||
+            !RequireString(root, "", "library_id", lib.id)) {
+            return false;
+        }
+        const json::Value* list = root.Find("radars");
+        if (list == nullptr || !list->Is(json::Type::Array)) return Fail("radars", "required, a list");
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const json::Value& e = list->items[i];
+            const std::string p = "radars[" + std::to_string(i) + "]";
+            RegimentRadar r;
+            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "notes"}) || !RequireString(e, p, "id", r.id) ||
+                !RequireString(e, p, "display_name", r.name)) {
+                return false;
+            }
+            for (const RegimentRadar& other : lib.types) {
+                if (other.id == r.id) return Fail(p, "duplicate radar type '" + r.id + "'");
+            }
+            cite_path_ = p;
+            if (!Cited(e, "max_range_m", r.max_range_m) || !Cited(e, "antenna_height_m", r.antenna_height_m)) return false;
+            if (r.max_range_m <= 0.0) return Fail(Join(p, "max_range_m"), "must be > 0");
+            lib.types.push_back(std::move(r));
+        }
+        return true;
+    }
+};
+
 }  // namespace detail
+
+inline bool LoadRegimentRadarsFile(const std::string& path, RegimentRadarLibrary& out, std::string* error = nullptr) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) *error = "cannot open " + path;
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text.str(), root, &parse_error)) {
+        if (error != nullptr) *error = path + ": " + parse_error;
+        return false;
+    }
+    RegimentRadarLibrary lib;
+    detail::RegimentRadarLoader loader;
+    if (!loader.Load(root, lib)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = std::move(lib);
+    return true;
+}
 
 inline bool LoadC2LibraryFile(const std::string& path, C2Library& out, std::string* error = nullptr) {
     std::ifstream file(path, std::ios::binary);
@@ -489,8 +567,25 @@ private:
         return p >= 1.0 || Draw(s) < p;
     }
 
+    // The regiment's radars hold a target: within some radar's range and above its horizon.
+    static bool Covered(const std::vector<RegimentRadar>& feed, const BoardContact& c) {
+        const double h = c.height_agl_m >= 0.0 ? c.height_agl_m : c.altitude_m;
+        for (const RegimentRadar& r : feed) {
+            const double d = (c.position - r.position).HorizontalLength();
+            if (d <= r.max_range_m && d <= RadarHorizonM(r.antenna_height_m, h)) return true;
+        }
+        return false;
+    }
+
     std::vector<BoardContact> Sees(const Source& s, const std::vector<BoardContact>& truth) const {
-        if (s.def.sense == C2Sense::Relayed) return truth;
+        if (s.def.sense == C2Sense::Relayed) {
+            if (s.def.feed.empty()) return truth;
+            std::vector<BoardContact> covered;
+            for (const BoardContact& c : truth) {
+                if (Covered(s.def.feed, c)) covered.push_back(c);
+            }
+            return covered;
+        }
         std::vector<BoardContact> out;
         for (const BoardContact& c : truth) {
             const double d = (c.position - s.def.position).HorizontalLength();

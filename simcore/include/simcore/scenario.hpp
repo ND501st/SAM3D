@@ -483,7 +483,7 @@ private:
         if (c == nullptr) return true;
         if (!c->Is(json::Type::Object) ||
             !Keys(*c, "c2", {"library", "primary", "active", "auto_fallback", "fallback_order", "switch_s", "primary_stable_s",
-                             "heard_life_s", "sources", "notes"})) {
+                             "heard_life_s", "sources", "regiment", "presets", "notes"})) {
             return message_.empty() ? Fail("c2", "expected an object") : false;
         }
         out.c2_policy.heard_life_s = 180.0;  // with a network the crew forgets stale designations
@@ -574,6 +574,16 @@ private:
         } else if (!message_.empty()) {
             return false;
         }
+        if (!LoadRegiment(*c, data_dir, out)) return false;
+        if (const json::Value* presets = OptionalArray(*c, "c2", "presets")) {
+            if (presets->items.size() > 4) return Fail("c2.presets", "the R-123M has four presets");
+            for (std::size_t i = 0; i < presets->items.size(); ++i) {
+                if (!presets->items[i].Is(json::Type::String)) return Fail(Index("c2.presets", i), "expected a source id or \"\"");
+                out.c2_policy.presets.push_back(presets->items[i].string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
         if (out.c2_sources.empty()) return Fail("c2", "needs sources (or a command_post for the PU-12)");
         auto known = [&](const std::string& id) {
             for (const C2SourceDef& d : out.c2_sources) {
@@ -590,6 +600,61 @@ private:
         }
         for (const std::string& id : out.c2_policy.fallback_order) {
             if (!known(id)) return Fail("c2.fallback_order", "unknown source '" + id + "'");
+        }
+        for (std::size_t i = 0; i < out.c2_policy.presets.size(); ++i) {
+            if (!out.c2_policy.presets[i].empty() && !known(out.c2_policy.presets[i])) {
+                return Fail(Index("c2.presets", i), "unknown source '" + out.c2_policy.presets[i] + "'");
+            }
+        }
+        return true;
+    }
+
+    // The regiment's radars that feed the PU-12M: "regiment": { "library": "command/regiment_radars.json",
+    //   "radars": [ { "id": "p19_a", "type": "p19", "position": { "east_m": ..., "north_m": ... } } ] }.
+    // The PU-12's board then holds only the targets some radar covers; without the block it sees them all.
+    bool LoadRegiment(const json::Value& c2, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* r = c2.Find("regiment");
+        if (r == nullptr) return true;
+        const std::string rp = "c2.regiment";
+        if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"library", "radars", "notes"})) {
+            return message_.empty() ? Fail(rp, "expected an object") : false;
+        }
+        C2SourceDef* pu = nullptr;
+        for (C2SourceDef& d : out.c2_sources) {
+            if (d.id == "pu12") pu = &d;
+        }
+        if (pu == nullptr) return Fail(rp, "the regiment feeds the PU-12M: the scenario needs a command_post");
+        std::string library_file;
+        if (!RequireString(*r, rp, "library", library_file)) return false;
+        RegimentRadarLibrary lib;
+        std::string error;
+        if (!LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail(Join(rp, "library"), error);
+        const json::Value* list = OptionalArray(*r, rp, "radars");
+        if (list == nullptr || list->items.empty()) {
+            return message_.empty() ? Fail(Join(rp, "radars"), "needs at least one radar") : false;
+        }
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index(Join(rp, "radars"), i);
+            const json::Value& e = list->items[i];
+            std::string id;
+            std::string type;
+            if (!Keys(e, p, {"id", "type", "position", "notes"}) || !RequireString(e, p, "id", id) ||
+                !RequireString(e, p, "type", type)) {
+                return false;
+            }
+            const RegimentRadar* t = lib.Find(type);
+            if (t == nullptr) return Fail(Join(p, "type"), "unknown radar type '" + type + "'");
+            for (const RegimentRadar& other : pu->feed) {
+                if (other.id == id) return Fail(Join(p, "id"), "duplicate radar '" + id + "'");
+            }
+            RegimentRadar radar = *t;
+            radar.id = id;
+            radar.type = type;
+            const json::Value* pos = e.Find("position");
+            if (pos == nullptr || !pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(p, "position"), frame_, radar.position)) {
+                return message_.empty() ? Fail(Join(p, "position"), "required, an object") : false;
+            }
+            pu->feed.push_back(std::move(radar));
         }
         return true;
     }

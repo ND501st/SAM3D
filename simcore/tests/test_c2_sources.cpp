@@ -605,3 +605,129 @@ SC_TEST("c2: designations on an EM radio go on the air as voice messages: radiat
     SC_EXPECT(runner.C2()->BoardOf("pu12")->LostCount() >= 1);
     SC_EXPECT(runner.Debrief().find("PU-12") != std::string::npos);
 }
+
+// ---- Roadmap 7.1: the PU-12M is fed by the regiment's radars, so it only holds what they cover.
+
+namespace {
+
+RegimentRadarLibrary RegimentLibrary() {
+    RegimentRadarLibrary lib;
+    std::string error;
+    if (!LoadRegimentRadarsFile(kData + "/command/regiment_radars.json", lib, &error)) std::printf("    regiment: %s\n", error.c_str());
+    return lib;
+}
+
+C2SourceDef FedPu12(const Vec3& radar_at, const char* type = "p19") {
+    C2SourceDef d = Pu12();
+    const RegimentRadarLibrary lib = RegimentLibrary();
+    RegimentRadar r = lib.types.empty() ? RegimentRadar() : *lib.Find(type);
+    r.id = "radar";
+    r.position = radar_at;
+    d.feed.push_back(r);
+    return d;
+}
+
+// Which targets the PU-12 has plotted by t = 130 s.
+std::vector<std::string> Plotted(const C2SourceDef& pu, const std::vector<BoardContact>& truth) {
+    C2Network n(C2Policy(), 1);
+    n.AddSource(pu, Vec3{});
+    Run(n, 0.0, 130.0, truth, Vec3{}, 1.0);
+    std::vector<std::string> out;
+    for (const BoardMark& m : n.BoardOf("pu12")->Marks()) {
+        bool seen = false;
+        for (const std::string& s : out) seen = seen || s == m.target_id;
+        if (!seen) out.push_back(m.target_id);
+    }
+    return out;
+}
+
+bool Has(const std::vector<std::string>& v, const std::string& id) {
+    for (const std::string& s : v) {
+        if (s == id) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+SC_TEST("regiment: the radar library loads with every value cited; bad files are refused") {
+    const RegimentRadarLibrary lib = RegimentLibrary();
+    SC_EXPECT(lib.types.size() == 2 && lib.Find("p19") != nullptr && lib.Find("p40") != nullptr);
+    SC_EXPECT_NEAR(lib.Find("p19")->max_range_m, 250000.0, 1e-9);
+    SC_EXPECT(lib.Find("p19")->antenna_height_m > 0.0 && lib.Find("p19")->antenna_height_m < 30.0);
+    RegimentRadarLibrary out;
+    std::string error;
+    SC_EXPECT(!LoadRegimentRadarsFile(kData + "/command/nonexistent.json", out, &error) && error.find("cannot open") != std::string::npos);
+}
+
+SC_TEST("regiment: with a feed the PU-12 holds a target only inside a radar's range and above its horizon") {
+    const BoardContact high = At("hi", 0.0, 90000.0, 5000.0, 5000.0);    // 5 km up, 90 km from the radar at the origin
+    const BoardContact low = At("lo", 0.0, 80000.0, 100.0, 100.0);       // 100 m up: horizon 4.12 (sqrt 8 + sqrt 100) = 53 km
+    const BoardContact near_low = At("nl", 0.0, 40000.0, 100.0, 100.0);  // 100 m up but 40 km out
+    const BoardContact far = At("far", 0.0, 300000.0, 9000.0, 9000.0);   // beyond 250 km
+    const std::vector<BoardContact> truth{high, low, near_low, far};
+    const std::vector<std::string> fed = Plotted(FedPu12(Vec3{}), truth);
+    SC_EXPECT(Has(fed, "hi") && Has(fed, "nl") && !Has(fed, "lo") && !Has(fed, "far"));
+    // No feed: the picture is everything the board's own extent allows (200 km).
+    const std::vector<std::string> all = Plotted(Pu12(), truth);
+    SC_EXPECT(Has(all, "hi") && Has(all, "lo") && Has(all, "nl"));
+    // A second radar closer to the low target covers it.
+    C2SourceDef two = FedPu12(Vec3{});
+    RegimentRadar near_radar = two.feed[0];
+    near_radar.id = "radar2";
+    near_radar.position = Vec3{0.0, 60000.0, 0.0};
+    two.feed.push_back(near_radar);
+    SC_EXPECT(Has(Plotted(two, truth), "lo"));  // 20 km from the second radar
+}
+
+SC_TEST("regiment: a scenario's c2.regiment block feeds the PU-12; mistakes in it are refused with a path") {
+    const std::string c2 = R"({ "regiment": { "library": "command/regiment_radars.json",
+        "radars": [ { "id": "p19_a", "type": "p19", "position": { "east_m": 0, "north_m": 20000, "up_m": 0 } },
+                    { "id": "p40_a", "type": "p40", "position": { "east_m": 5000, "north_m": -10000, "up_m": 0 } } ] } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(C2ScenarioText(c2, ""), kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.c2_sources.size() == 1 && def.c2_sources[0].id == "pu12" && def.c2_sources[0].feed.size() == 2);
+    SC_EXPECT(def.c2_sources[0].feed[1].type == "p40" && def.c2_sources[0].feed[1].position.x == 5000.0);
+    auto bad = [&](const std::string& block, const std::string& part) {
+        ScenarioDef d;
+        ConsoleData c;
+        std::string e;
+        const bool ok = LoadScenario(C2ScenarioText(block, ""), kData, d, c, &e);
+        if (ok || e.find(part) == std::string::npos) std::printf("    expected '%s', got '%s'\n", part.c_str(), e.c_str());
+        return !ok && e.find(part) != std::string::npos;
+    };
+    const std::string head = R"({ "regiment": { "library": "command/regiment_radars.json", "radars": [ )";
+    SC_EXPECT(bad(head + R"({ "id": "a", "type": "p99", "position": { "east_m": 0, "north_m": 0, "up_m": 0 } } ] } })",
+                  "c2.regiment.radars[0].type: unknown radar type 'p99'"));
+    SC_EXPECT(bad(head + R"({ "id": "a", "type": "p19" } ] } })", "c2.regiment.radars[0].position"));
+    SC_EXPECT(bad(head + R"({ "id": "a", "type": "p19", "position": { "east_m": 0, "north_m": 0, "up_m": 0 } },
+                           { "id": "a", "type": "p40", "position": { "east_m": 0, "north_m": 0, "up_m": 0 } } ] } })",
+                  "duplicate radar 'a'"));
+    SC_EXPECT(bad(R"({ "regiment": { "library": "command/regiment_radars.json", "radars": [] } })", "c2.regiment.radars: needs at least one radar"));
+    SC_EXPECT(bad(R"({ "regiment": { "library": "command/missing.json", "radars": [] } })", "c2.regiment.library"));
+}
+
+SC_TEST("regiment: in a scenario the PU-12 plots the target once a radar of the feed covers it, and the debrief shows it") {
+    // A radar 70 km north of the unit; the drone flies at 1000 m from 45 km north to 30 km south. The radar's horizon
+    // over 1000 m is 4.12 (sqrt 8 + sqrt 1000) = 142 km: it covers the whole route. A second, 4 m high radar far away doesn't.
+    auto run = [](const std::string& radars) {
+        const std::string c2 = std::string(R"({ "regiment": { "library": "command/regiment_radars.json", "radars": [ )") + radars + " ] } }";
+        ScenarioDef def;
+        ConsoleData console;
+        std::string error;
+        if (!LoadScenario(C2ScenarioText(c2, ""), kData, def, console, &error)) {
+            std::printf("    load: %s\n", error.c_str());
+            return std::string("LOAD FAILED");
+        }
+        ScenarioRunner runner(std::move(def), std::move(console));
+        for (int i = 0; i < 1200; ++i) runner.Step(0.5);
+        return runner.Debrief();
+    };
+    const std::string covered = run(R"({ "id": "p19_n", "type": "p19", "position": { "east_m": 0, "north_m": 70000, "up_m": 0 } })");
+    SC_EXPECT(covered.find("on the board") != std::string::npos);
+    const std::string uncovered = run(R"({ "id": "p19_far", "type": "p19", "position": { "east_m": 600000, "north_m": 600000, "up_m": 0 } })");
+    SC_EXPECT(uncovered.find("on the board") == std::string::npos);
+}
