@@ -32,6 +32,7 @@
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/launcher.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/world.hpp"
@@ -72,6 +73,7 @@ public:
         }
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
+        if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
             if (em_link_->Ok()) {
@@ -93,6 +95,7 @@ public:
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
+        UpdateLauncher();
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
@@ -152,6 +155,9 @@ public:
         world_.SetTerrain(terrain != nullptr ? terrain : &ground_);
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
     }
+
+    // The missile load and guidance channels (null when the console has no "launcher" block).
+    Launcher* GetLauncher() { return launcher_.get(); }
 
     // The electromagnetic layer behind the unit's radars (null when the scenario has no "em" block).
     EmSensorLink* Em() { return em_link_.get(); }
@@ -316,16 +322,49 @@ private:
         }
     }
 
+    // The missile load and channels: shots the outcome model has finished free their channel; then selection at
+    // ВНИМАНИЕ and every lamp.
+    void UpdateLauncher() {
+        if (!launcher_) return;
+        if (engagement_on_) {
+            for (int n : launcher_->ShotsFlying()) {
+                if (engagement_.ShotDone(n)) launcher_->ShotDone(n);
+            }
+        }
+        launcher_->Step(time_, console_);
+    }
+
     void CheckLaunch() {
         if (console_.launch_button.empty() || console_.panel.Get(console_.launch_button) != 1) return;
         if (console_.equipment.IsReady(console_.launch_armed)) {
+            std::string from;
+            if (launcher_) {
+                const std::string why = launcher_->WhyNot(time_, console_);
+                if (!why.empty()) {
+                    Event(console_.launch_button, "pressed, but " + why + ": no launch");
+                    return;
+                }
+                const int ch = launcher_->NextChannel(time_, console_);
+                from = " from " + launcher_->Selected(ch) + ", channel " + Launcher::ChannelName(ch);
+            }
             ++launches_;
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
-                         "missile " + std::to_string(launches_) +
+                         "missile " + std::to_string(launches_) + from +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
             if (engagement_on_) engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_);
-            // The next missile has to be prepared before the circuit is armed again (ПУСК ГОТОВ goes out).
-            if (!console_.launch_restarts.empty()) console_.equipment.Restart(console_.launch_restarts);
+            if (launcher_) {
+                const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
+                launcher_->Launch(time_, console_, launches_, flight_s,
+                                  engagement_on_ ? def_.tuning.missile_average_speed_mps : 0.0);
+                // The next pair has to be selected and prepared before the circuit is armed again; a pair's second
+                // missile only waits for the interval between launches.
+                if (launcher_->PairSpent()) console_.equipment.Restart(console_.launcher.pair_preparation);
+                launcher_->Step(time_, console_);  // the lamps follow at once (СХОД; the hold puts ПУСК ГОТОВ out)
+                console_.equipment.Update(0.0, console_.panel);
+            } else if (!console_.launch_restarts.empty()) {
+                // The next missile has to be prepared before the circuit is armed again (ПУСК ГОТОВ goes out).
+                console_.equipment.Restart(console_.launch_restarts);
+            }
         } else {
             Event(console_.launch_button, "pressed, but " + console_.launch_armed + " is not ready: no launch");
         }
@@ -368,6 +407,7 @@ private:
     std::mt19937 rng_;
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
+    std::unique_ptr<Launcher> launcher_;
     EngagementModel engagement_;
     AimCrew aim_crew_;
     std::vector<EngagementTarget> eng_targets_;

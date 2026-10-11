@@ -525,12 +525,12 @@ SC_TEST("osa data: prepare, then launch waits for ПУСК ГОТОВ and ЦЕЛ
     run(20.0);
     SC_EXPECT(crew.Tracker().GetProcedure().id == "launch" && crew.Status() == CrewStatus::Waiting);
     SC_EXPECT(c.panel.Get("fo.key") == 1);
-    c.equipment.SetInput("target_near_zone", true);  // ВНИМАНИЕ starts missile preparation
+    c.equipment.SetInput("target_near_zone", true);  // ВНИМАНИЕ: missiles selected, transmitters on (flak11)
     run(10.0);
-    SC_EXPECT(c.equipment.State("missile_prep") == SubsystemState::Starting);
-    run(6.0);
-    SC_EXPECT(c.equipment.IsReady("missile_prep") && crew.IsBusy());  // ПУСК ГОТОВ, but not yet in the zone
+    SC_EXPECT(c.equipment.State("missile_prep") == SubsystemState::Off);  // preparation waits for the zone
     c.equipment.SetInput("target_in_zone", true);
+    run(10.0);
+    SC_EXPECT(c.equipment.State("missile_prep") == SubsystemState::Starting && crew.IsBusy());
     bool launched = false;
     for (int i = 0; i < 100 && !launched; ++i) {
         seats.Tick();

@@ -27,6 +27,25 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // "restarts" (optional): a subsystem each launch sends back to the start of its warm-up (the next missile's preparation).
   "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "...", "confidence": "high" },
 
+  // Optional: the missile load and the two guidance channels (simcore/launcher.hpp, roadmap 6.3), run by the scenario
+  // runner. At the attention input (ВНИМАНИЕ) or once pair_preparation is running, one missile is picked per channel the
+  // channel_control allows (lowest "order" first), and the channel's transmitter input comes on. A launch takes the
+  // first free channel in the selector's order; its inputs then follow the missile: away, captured (capture_s),
+  // medium (medium_s), narrow (narrow_s), fuse (fuse_range_m from the target, or with narrow when jam_control is on).
+  // Launches are min_interval_s apart: hold_input is set while the next must wait (make the armed subsystem need it
+  // false, so ПУСК ГОТОВ goes out and the crew waits); when the picked missiles are spent pair_preparation is
+  // restarted (instead of "launch.restarts"). Each container's input is its ammunition lamp.
+  "launcher": {
+    "containers": [ { "id": "3-I", "channel": 1, "order": 1, "input": "ammo_3_i" } ],
+    "channels": [ { "transmitter": "ch1_vkl_vys", "away": "ch1_skhod", "captured": "ch1_zakhvat", "medium": "ch1_sr_l",
+                    "narrow": "ch1_uzkiy_luch", "fuse": "ch1_k3" }, { } ],
+    "channel_control": "msl.channels", "channel_positions": [ [2], [1], [1, 2] ],  // per position: channels, firing order
+    "attention_input": "target_near_zone", "jam_control": "fo.pomekha", "pair_preparation": "missile_prep",
+    "hold_input": "launch_hold",
+    "capture_s": 0.8, "medium_s": 2.0, "narrow_s": 4.0, "fuse_range_m": 120, "min_interval_s": 4, "nominal_flight_s": 20,
+    "source": "...", "confidence": "medium", "notes": "..."
+  },
+
   // Optional: the crew seats. With this list every control needs a "station" from it, and crew roles
   // (scenarios, the gameplay file's aim roles) must be one of these ids.
   "stations": [ { "id": "senior_operator", "label": "Senior operator", "source": "flak11 (9A33-3)", "confidence": "high" } ],

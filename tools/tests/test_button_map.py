@@ -91,7 +91,7 @@ def test_osa_map_is_clean(tmp_path):
     assert "__DATA__" not in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\nconst N =", 1)[0])
     ids = {n["id"] for n in data["nodes"]}
-    assert "c:fo.launch" in ids and "e:launch" in ids and "p:channels" in ids
+    assert "c:fo.launch" in ids and "e:launch" in ids and "p:rangech" in ids and "m:launcher" in ids
     assert data["counts"]["controls"] == len(json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))["controls"])
 
 
@@ -105,3 +105,15 @@ def test_osa_beam_selector_feeds_the_search_picture_and_lights_the_beam_lamps():
         assert ("m:search", f"i:search_beam_{n}") in edges
     planned = {p[0] for p in button_map.PLANNED["osa_ak"]}
     assert "p:beams" not in planned and "p:manualtv" not in planned  # built (roadmap 6.4, 6.6)
+
+
+def test_osa_launcher_reads_the_channel_selector_and_lights_the_channel_lamps():
+    console = json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))
+    cabin = json.loads((ROOT / "data/cabins/osa_ak.json").read_text(encoding="utf-8"))
+    b = button_map.build(console, cabin)
+    edges = {(e["s"], e["t"]) for e in b.edges}
+    assert ("c:msl.channels", "m:launcher") in edges and ("i:target_near_zone", "m:launcher") in edges
+    for inp in ("ch1_zakhvat", "ch2_k3", "ammo_3_i", "launch_hold"):
+        assert ("m:launcher", "i:" + inp) in edges
+    planned = {p[0] for p in button_map.PLANNED["osa_ak"]}
+    assert not planned & {"p:containers", "p:select", "p:channels", "p:chanlamps", "p:fuse"}  # built in 6.3

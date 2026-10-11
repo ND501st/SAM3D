@@ -102,6 +102,47 @@ struct TrackSensorDef {
     double beam_width_deg = 0.0;
 };
 
+// The missile load and the guidance channels (optional; roadmap 6.3). Containers belong to a channel (1 = I, 2 = II);
+// at ВНИМАНИЕ (`attention_input`) the launcher picks one missile per usable channel, lowest `order` first, and the
+// channel's command transmitter comes on. After a launch the channel's lamps follow the missile: СХОД at once,
+// ЗАХВАТ after `capture_s`, СР.Л after `medium_s`, УЗКИЙ ЛУЧ after `narrow_s`, К3 when it is `fuse_range_m` from the
+// target (with `jam_control` on, together with УЗКИЙ ЛУЧ). Launches are at least `min_interval_s` apart:
+// `hold_input` is set while the next one must wait (the console's armed subsystem should require it false, so
+// ПУСК ГОТОВ goes out and the crew waits; with no launcher running it stays false). When the selected missiles are spent, `pair_preparation` is
+// restarted for the next ones (instead of the console's launch "restarts" after every launch).
+struct LauncherContainerDef {
+    std::string id;           // e.g. "1-I"
+    int channel = 1;          // 1 = channel I, 2 = channel II
+    int order = 0;            // selection order within the channel, lowest first
+    std::string loaded_input; // input set while a missile is in it (its ammunition lamp)
+};
+
+struct LauncherChannelDef {
+    std::string transmitter_input;  // ВКЛ ВЫС
+    std::string away_input;         // СХОД
+    std::string captured_input;     // ЗАХВАТ
+    std::string medium_input;       // СР.Л
+    std::string narrow_input;       // УЗКИЙ ЛУЧ
+    std::string fuse_input;         // К3
+};
+
+struct LauncherDef {
+    std::vector<LauncherContainerDef> containers;
+    std::vector<LauncherChannelDef> channels;  // [0] = channel I, [1] = channel II
+    std::string channel_control;               // КАНАЛЫ
+    std::vector<std::vector<int>> channel_positions;  // per position: the channels in use, in firing order
+    std::string attention_input;
+    std::string jam_control;
+    std::string pair_preparation;
+    double capture_s = 0.0;
+    double medium_s = 0.0;
+    double narrow_s = 0.0;
+    double fuse_range_m = 0.0;
+    double nominal_flight_s = 0.0;  // how long a channel is busy when no outcome model times the flight
+    double min_interval_s = 0.0;    // between two launches
+    std::string hold_input;         // set while the next launch must wait (too soon, or no missile on a free channel)
+};
+
 // A crew seat that owns controls (e.g. "senior_operator"). Crew roles name these.
 struct ConsoleStation {
     std::string id;
@@ -123,6 +164,8 @@ struct ConsoleData {
     TrackSensorDef track;
     bool has_orientation = false;
     OrientationDef orientation;
+    bool has_launcher = false;
+    LauncherDef launcher;
 
     const Procedure* FindProcedure(const std::string& id) const {
         for (const Procedure& p : procedures) {
@@ -145,7 +188,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -157,6 +200,7 @@ public:
         if (!LoadSubsystems(root, out.panel, out.equipment)) return false;
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
         if (!LoadLaunch(root, out)) return false;
+        if (!LoadLauncher(root, out)) return false;
         return LoadSensors(root, out);
     }
 
@@ -450,6 +494,90 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!out.launch_restarts.empty() && !out.equipment.Has(out.launch_restarts)) {
             return Fail("launch.restarts", "unknown subsystem '" + out.launch_restarts + "'");
         }
+        return true;
+    }
+
+    bool LoadLauncher(const json::Value& root, ConsoleData& out) {
+        const json::Value* l = root.Find("launcher");
+        if (l == nullptr) return true;
+        const std::string lp = "launcher";
+        LauncherDef& d = out.launcher;
+        const Equipment& eq = out.equipment;
+        if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
+                           "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
+                           "nominal_flight_s", "min_interval_s", "hold_input", "source", "confidence", "notes"}) ||
+            !Provenance(*l, lp) ||
+            !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
+            !RefControl(*l, lp, "jam_control", out.panel, ControlKind::Discrete, false, d.jam_control) ||
+            !RefInput(*l, lp, "attention_input", eq, d.attention_input) ||
+            !RefInput(*l, lp, "hold_input", eq, d.hold_input) ||
+            !RefSubsystem(*l, lp, "pair_preparation", eq, true, d.pair_preparation)) {
+            return false;
+        }
+        if (d.attention_input.empty()) return Fail(Join(lp, "attention_input"), "required");
+        for (const auto& t : {std::make_pair("capture_s", &d.capture_s), std::make_pair("medium_s", &d.medium_s),
+                              std::make_pair("narrow_s", &d.narrow_s), std::make_pair("fuse_range_m", &d.fuse_range_m),
+                              std::make_pair("nominal_flight_s", &d.nominal_flight_s),
+                              std::make_pair("min_interval_s", &d.min_interval_s)}) {
+            if (l->Find(t.first) == nullptr) return Fail(Join(lp, t.first), "required");
+            if (!OptionalNumber(*l, lp, t.first, *t.second)) return false;
+            if (*t.second < 0.0) return Fail(Join(lp, t.first), "must be >= 0");
+        }
+        if (!(d.capture_s <= d.medium_s && d.medium_s <= d.narrow_s)) {
+            return Fail(lp, "capture_s <= medium_s <= narrow_s: the beams follow one another");
+        }
+        const json::Value* chans = OptionalArray(*l, lp, "channels");
+        if (chans == nullptr || chans->items.size() != 2) {
+            return message_.empty() ? Fail(Join(lp, "channels"), "expected two channels (I, II)") : false;
+        }
+        for (std::size_t i = 0; i < chans->items.size(); ++i) {
+            const std::string cp = Index(Join(lp, "channels"), i);
+            const json::Value& c = chans->items[i];
+            LauncherChannelDef ch;
+            if (!Keys(c, cp, {"transmitter", "away", "captured", "medium", "narrow", "fuse"}) ||
+                !RefInput(c, cp, "transmitter", eq, ch.transmitter_input) || !RefInput(c, cp, "away", eq, ch.away_input) ||
+                !RefInput(c, cp, "captured", eq, ch.captured_input) || !RefInput(c, cp, "medium", eq, ch.medium_input) ||
+                !RefInput(c, cp, "narrow", eq, ch.narrow_input) || !RefInput(c, cp, "fuse", eq, ch.fuse_input)) {
+                return false;
+            }
+            d.channels.push_back(ch);
+        }
+        const json::Value* cons = OptionalArray(*l, lp, "containers");
+        if (cons == nullptr || cons->items.empty()) {
+            return message_.empty() ? Fail(Join(lp, "containers"), "expected a list of containers") : false;
+        }
+        for (std::size_t i = 0; i < cons->items.size(); ++i) {
+            const std::string cp = Index(Join(lp, "containers"), i);
+            const json::Value& c = cons->items[i];
+            LauncherContainerDef con;
+            if (!Keys(c, cp, {"id", "channel", "order", "input"}) || !RequireString(c, cp, "id", con.id) ||
+                !OptionalInt(c, cp, "channel", con.channel) || !OptionalInt(c, cp, "order", con.order) ||
+                !RefInput(c, cp, "input", eq, con.loaded_input)) {
+                return false;
+            }
+            if (con.channel != 1 && con.channel != 2) return Fail(Join(cp, "channel"), "must be 1 (I) or 2 (II)");
+            for (const LauncherContainerDef& other : d.containers) {
+                if (other.id == con.id) return Fail(Join(cp, "id"), "duplicate container '" + con.id + "'");
+            }
+            d.containers.push_back(con);
+        }
+        const json::Value* pos = OptionalArray(*l, lp, "channel_positions");
+        if (pos == nullptr) return message_.empty() ? Fail(Join(lp, "channel_positions"), "required") : false;
+        for (std::size_t i = 0; i < pos->items.size(); ++i) {
+            const std::string pp = Index(Join(lp, "channel_positions"), i);
+            const json::Value& list = pos->items[i];
+            if (!list.Is(json::Type::Array) || list.items.empty()) return Fail(pp, "expected a non-empty list of channels");
+            std::vector<int> chs;
+            for (const json::Value& c : list.items) {
+                if (!c.Is(json::Type::Number) || (c.number != 1.0 && c.number != 2.0)) return Fail(pp, "channels are 1 or 2");
+                chs.push_back(static_cast<int>(c.number));
+            }
+            d.channel_positions.push_back(std::move(chs));
+        }
+        if (static_cast<int>(d.channel_positions.size()) != out.panel.Find(d.channel_control)->positions) {
+            return Fail(Join(lp, "channel_positions"), "needs one entry per position of " + d.channel_control);
+        }
+        out.has_launcher = true;
         return true;
     }
 
