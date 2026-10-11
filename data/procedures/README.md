@@ -27,6 +27,14 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // "restarts" (optional): a subsystem each launch sends back to the start of its warm-up (the next missile's preparation).
   "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "...", "confidence": "high" },
 
+  // Optional: the vehicle's fuel (roadmap 7.4, simcore/fuel.hpp): a tank, the power-source subsystems that burn it (litres an
+  // hour stationary and moving), a reserve fraction kept for driving, and refuelling from the TZM. At the reserve the
+  // power_cut_input is set; make the power sources' enable conditions require it false.
+  "fuel": { "tank_l": 300, "reserve_fraction": 0.5,
+            "sources": [ { "subsystem": "gta", "stationary_lph": 75, "moving_lph": 100 } ],
+            "stopped_input": "vehicle_stopped", "refuel_input": "tzm_alongside", "refuel_lpm": 60, "power_cut_input": "fuel_power_cut",
+            "source": "...", "confidence": "medium" },
+
   // Optional: states a session can start in instead of cold (roadmap 6.2; a scenario's own_unit.readiness picks one):
   // controls already set, inputs, subsystems warmed up at once (in dependency order: each must be commanded on by then),
   // and whether the vehicle is already oriented. "cold" is the default and has no entry.

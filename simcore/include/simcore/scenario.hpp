@@ -82,6 +82,7 @@ struct ScenarioDef {
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
+    double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
@@ -200,7 +201,7 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "position", "heading_deg", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -223,6 +224,8 @@ private:
                 }
             }
         }
+        if (!OptionalNumber(*u, "own_unit", "fuel_fraction", out.fuel_fraction)) return false;
+        if (out.fuel_fraction < 0.0 || out.fuel_fraction > 1.0) return Fail("own_unit.fuel_fraction", "from 0 to 1");
         if (!OptionalString(*u, "own_unit", "readiness", out.readiness)) return false;
         if (out.readiness == "cold") out.readiness.clear();
         if (!out.readiness.empty() && console.FindReadiness(out.readiness) == nullptr) {

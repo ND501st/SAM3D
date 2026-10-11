@@ -148,6 +148,25 @@ struct LauncherDef {
     double reload_s_per_missile = 0.0;
 };
 
+// The vehicle's fuel (optional; roadmap 7.4, simcore/fuel.hpp): one tank, the power sources burning it, a reserve kept
+// for driving (the power sources are cut at it, through `power_cut_input`), and refuelling from the TZM.
+struct FuelSource {
+    std::string subsystem;  // running (not off) = burning
+    double stationary_lph = 0.0;
+    double moving_lph = 0.0;
+};
+
+struct FuelDef {
+    double tank_l = 0.0;
+    double reserve_fraction = 0.0;
+    std::vector<FuelSource> sources;
+    std::string stopped_input;
+    std::string refuel_input;  // the TZM alongside
+    double refuel_lpm = 0.0;
+    std::string power_cut_input;
+    double refuel_hysteresis_l = 5.0;  // the crew asks again once refuelled this far above the reserve
+};
+
 // A state a session can start in instead of cold (roadmap 6.2): controls already set, inputs, subsystems already
 // warmed up (in dependency order), and whether the vehicle is already oriented.
 struct ReadinessState {
@@ -182,6 +201,8 @@ struct ConsoleData {
     OrientationDef orientation;
     bool has_launcher = false;
     LauncherDef launcher;
+    bool has_fuel = false;
+    FuelDef fuel;
     std::vector<ReadinessState> readiness;
 
     const ReadinessState* FindReadiness(const std::string& id) const {
@@ -212,7 +233,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "readiness", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "fuel", "readiness", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -225,6 +246,7 @@ public:
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
         if (!LoadLaunch(root, out)) return false;
         if (!LoadLauncher(root, out)) return false;
+        if (!LoadFuel(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
     }
@@ -519,6 +541,53 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!out.launch_restarts.empty() && !out.equipment.Has(out.launch_restarts)) {
             return Fail("launch.restarts", "unknown subsystem '" + out.launch_restarts + "'");
         }
+        return true;
+    }
+
+    // A number the file must give (loaders in this class otherwise treat numbers as optional).
+    bool NumberOf(const json::Value& obj, const std::string& path, const char* key, double& out) {
+        if (obj.Find(key) == nullptr) return Fail(Join(path, key), "required");
+        return OptionalNumber(obj, path, key, out);
+    }
+
+    bool LoadFuel(const json::Value& root, ConsoleData& out) {
+        const json::Value* f = root.Find("fuel");
+        if (f == nullptr) return true;
+        const std::string fp = "fuel";
+        FuelDef& d = out.fuel;
+        const Equipment& eq = out.equipment;
+        if (!Keys(*f, fp, {"tank_l", "reserve_fraction", "sources", "stopped_input", "refuel_input", "refuel_lpm",
+                           "power_cut_input", "source", "confidence", "notes"}) ||
+            !Provenance(*f, fp) || !RefInput(*f, fp, "stopped_input", eq, d.stopped_input) ||
+            !RefInput(*f, fp, "refuel_input", eq, d.refuel_input) || !RefInput(*f, fp, "power_cut_input", eq, d.power_cut_input) ||
+            !OptionalNumber(*f, fp, "refuel_lpm", d.refuel_lpm)) {
+            return false;
+        }
+        if (d.stopped_input.empty()) return Fail(Join(fp, "stopped_input"), "required");
+        if (!NumberOf(*f, fp, "tank_l", d.tank_l) || !NumberOf(*f, fp, "reserve_fraction", d.reserve_fraction)) {
+            return false;
+        }
+        if (!(d.tank_l > 0.0)) return Fail(Join(fp, "tank_l"), "must be > 0");
+        if (d.reserve_fraction < 0.0 || d.reserve_fraction >= 1.0) return Fail(Join(fp, "reserve_fraction"), "from 0 up to (not including) 1");
+        if (d.refuel_lpm < 0.0) return Fail(Join(fp, "refuel_lpm"), "must be >= 0");
+        if (d.refuel_lpm > 0.0 && d.refuel_input.empty()) return Fail(Join(fp, "refuel_lpm"), "needs refuel_input");
+        const json::Value* srcs = OptionalArray(*f, fp, "sources");
+        if (srcs == nullptr || srcs->items.empty()) {
+            return message_.empty() ? Fail(Join(fp, "sources"), "expected a list of power sources") : false;
+        }
+        for (std::size_t i = 0; i < srcs->items.size(); ++i) {
+            const std::string sp = Index(Join(fp, "sources"), i);
+            const json::Value& v = srcs->items[i];
+            FuelSource s;
+            if (!Keys(v, sp, {"subsystem", "stationary_lph", "moving_lph"}) ||
+                !RefSubsystem(v, sp, "subsystem", eq, true, s.subsystem) || !NumberOf(v, sp, "stationary_lph", s.stationary_lph) ||
+                !NumberOf(v, sp, "moving_lph", s.moving_lph)) {
+                return false;
+            }
+            if (s.stationary_lph < 0.0 || s.moving_lph < 0.0) return Fail(sp, "burn rates must be >= 0");
+            d.sources.push_back(s);
+        }
+        out.has_fuel = true;
         return true;
     }
 
