@@ -81,6 +81,7 @@ struct TrackSensorDef {
     std::string range_wheel;
     std::string lock_control;    // lock that must be open before the aiming crew can turn the azimuth wheel
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
+    std::string mti_control;     // tracking radar СДЦ / ШТ.: 1 = moving-target indication (may be empty)
     double fov_wide_deg = 0.0;
     double fov_narrow_deg = 0.0;
     double fov_height_ratio = 1.0;  // the lens field's height over its width (a 4:3 raster: 0.75)
@@ -126,7 +127,32 @@ struct LauncherChannelDef {
     std::string fuse_input;         // К3
 };
 
+// The command transmitter's frequency letter (roadmap 6.3, optional): moving `control` to `change_position` changes the
+// letter. Both channels' ЗАХВ. АПЧ lamps (`lock_inputs`, [0] = I, [1] = II) go out for `relock_s` and the next launch
+// waits until they are back.
+struct LauncherLetterDef {
+    std::string control;
+    int change_position = 0;
+    std::vector<std::string> lock_inputs;
+    double relock_s = 0.0;
+};
+
+// The emergency launch (roadmap 6.3, optional): `select_control` (ИЗДЕЛИЯ) picks a container per position (an empty id
+// is ОТКЛ.); `fire_control` throws that missile off unguided, and it climbs for `flight_s` before it self-destructs.
+// `ready_input` is set while the selector is on a loaded container (АВАР. ПУСК ГОТОВ).
+struct LauncherEmergencyDef {
+    std::string select_control;
+    std::vector<std::string> select_containers;  // per position of select_control
+    std::string fire_control;
+    std::string ready_input;
+    double flight_s = 0.0;
+};
+
 struct LauncherDef {
+    // What the tracking radar's range indicator shows (Р I — ЦЕЛЬ — Р II, roadmap 6.3): per position of
+    // `range_sweep_control`, the channel whose missile it follows (1, 2), or 0 for the target.
+    std::string range_sweep_control;
+    std::vector<int> range_sweep_channels;
     std::vector<LauncherContainerDef> containers;
     std::vector<LauncherChannelDef> channels;  // [0] = channel I, [1] = channel II
     std::string channel_control;               // КАНАЛЫ
@@ -146,6 +172,10 @@ struct LauncherDef {
     std::string reload_input;
     std::string stopped_input;
     double reload_s_per_missile = 0.0;
+    bool has_letter = false;
+    LauncherLetterDef letter;
+    bool has_emergency = false;
+    LauncherEmergencyDef emergency;
 };
 
 // The vehicle's fuel (optional; roadmap 7.4, simcore/fuel.hpp): one tank, the power sources burning it, a reserve kept
@@ -657,7 +687,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
                            "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
                            "nominal_flight_s", "min_interval_s", "hold_input", "reload_input", "stopped_input",
-                           "reload_s_per_missile", "source", "confidence", "notes"}) ||
+                           "reload_s_per_missile", "letter", "emergency", "range_sweep", "source", "confidence", "notes"}) ||
             !Provenance(*l, lp) ||
             !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
             !RefControl(*l, lp, "jam_control", out.panel, ControlKind::Discrete, false, d.jam_control) ||
@@ -735,7 +765,97 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (static_cast<int>(d.channel_positions.size()) != out.panel.Find(d.channel_control)->positions) {
             return Fail(Join(lp, "channel_positions"), "needs one entry per position of " + d.channel_control);
         }
+        if (!LoadLauncherLetter(*l, lp, out, d) || !LoadLauncherEmergency(*l, lp, out, d) ||
+            !LoadLauncherRangeSweep(*l, lp, out, d)) {
+            return false;
+        }
         out.has_launcher = true;
+        return true;
+    }
+
+    bool LoadLauncherLetter(const json::Value& l, const std::string& lp, const ConsoleData& out, LauncherDef& d) {
+        const json::Value* v = l.Find("letter");
+        if (v == nullptr) return true;
+        const std::string p = Join(lp, "letter");
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        if (!Keys(*v, p, {"control", "change_position", "lock_inputs", "relock_s", "source", "confidence", "notes"}) ||
+            !Provenance(*v, p) || !RefControl(*v, p, "control", out.panel, ControlKind::Discrete, true, d.letter.control) ||
+            !OptionalInt(*v, p, "change_position", d.letter.change_position) ||
+            !OptionalNumber(*v, p, "relock_s", d.letter.relock_s)) {
+            return false;
+        }
+        if (d.letter.change_position < 0 || d.letter.change_position >= out.panel.Find(d.letter.control)->positions) {
+            return Fail(Join(p, "change_position"), "not a position of " + d.letter.control);
+        }
+        if (d.letter.relock_s < 0.0) return Fail(Join(p, "relock_s"), "must be >= 0");
+        const json::Value* locks = OptionalArray(*v, p, "lock_inputs");
+        if (locks == nullptr || locks->items.size() != 2) {
+            return message_.empty() ? Fail(Join(p, "lock_inputs"), "expected two inputs (channel I, II)") : false;
+        }
+        for (std::size_t i = 0; i < 2; ++i) {
+            const json::Value& e = locks->items[i];
+            if (!e.Is(json::Type::String) || !out.equipment.HasInput(e.string)) {
+                return Fail(Index(Join(p, "lock_inputs"), i), "unknown input");
+            }
+            d.letter.lock_inputs.push_back(e.string);
+        }
+        d.has_letter = true;
+        return true;
+    }
+
+    bool LoadLauncherRangeSweep(const json::Value& l, const std::string& lp, const ConsoleData& out, LauncherDef& d) {
+        const json::Value* v = l.Find("range_sweep");
+        if (v == nullptr) return true;
+        const std::string p = Join(lp, "range_sweep");
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        if (!Keys(*v, p, {"control", "channels", "source", "confidence", "notes"}) || !Provenance(*v, p) ||
+            !RefControl(*v, p, "control", out.panel, ControlKind::Discrete, true, d.range_sweep_control)) {
+            return false;
+        }
+        const json::Value* list = OptionalArray(*v, p, "channels");
+        if (list == nullptr) return message_.empty() ? Fail(Join(p, "channels"), "required") : false;
+        if (static_cast<int>(list->items.size()) != out.panel.Find(d.range_sweep_control)->positions) {
+            return Fail(Join(p, "channels"), "needs one entry per position of " + d.range_sweep_control);
+        }
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const json::Value& c = list->items[i];
+            if (!c.Is(json::Type::Number) || c.number < 0.0 || c.number > 2.0) {
+                return Fail(Index(Join(p, "channels"), i), "0 (the target), 1 or 2");
+            }
+            d.range_sweep_channels.push_back(static_cast<int>(c.number));
+        }
+        return true;
+    }
+
+    bool LoadLauncherEmergency(const json::Value& l, const std::string& lp, const ConsoleData& out, LauncherDef& d) {
+        const json::Value* v = l.Find("emergency");
+        if (v == nullptr) return true;
+        const std::string p = Join(lp, "emergency");
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        LauncherEmergencyDef& e = d.emergency;
+        if (!Keys(*v, p, {"select_control", "select_containers", "fire_control", "ready_input", "flight_s", "source",
+                          "confidence", "notes"}) ||
+            !Provenance(*v, p) ||
+            !RefControl(*v, p, "select_control", out.panel, ControlKind::Discrete, true, e.select_control) ||
+            !RefControl(*v, p, "fire_control", out.panel, ControlKind::Momentary, true, e.fire_control) ||
+            !RefInput(*v, p, "ready_input", out.equipment, e.ready_input) || !OptionalNumber(*v, p, "flight_s", e.flight_s)) {
+            return false;
+        }
+        if (e.flight_s <= 0.0) return Fail(Join(p, "flight_s"), "must be > 0");
+        const json::Value* list = OptionalArray(*v, p, "select_containers");
+        if (list == nullptr) return message_.empty() ? Fail(Join(p, "select_containers"), "required") : false;
+        if (static_cast<int>(list->items.size()) != out.panel.Find(e.select_control)->positions) {
+            return Fail(Join(p, "select_containers"), "needs one entry per position of " + e.select_control);
+        }
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const json::Value& c = list->items[i];
+            if (!c.Is(json::Type::String)) return Fail(Index(Join(p, "select_containers"), i), "expected a container id or \"\"");
+            bool known = c.string.empty();
+            for (const LauncherContainerDef& con : d.containers) known = known || con.id == c.string;
+            if (!known) return Fail(Index(Join(p, "select_containers"), i), "unknown container '" + c.string + "'");
+            e.select_containers.push_back(c.string);
+        }
+        d.has_emergency = true;
         return true;
     }
 
@@ -886,7 +1006,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "fov_control", "fov_deg", "fov_height_ratio", "max_range_m",
+                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "fov_deg", "fov_height_ratio", "max_range_m",
                             "az_limit_deg", "captured_input", "too_low_input", "near_zone_input", "in_zone_input",
                             "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
@@ -900,6 +1020,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefControl(*tr, tp, "range_wheel", panel, ControlKind::Continuous, true, track.range_wheel) ||
             !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
             !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
+            !RefControl(*tr, tp, "mti_control", panel, ControlKind::Discrete, false, track.mti_control) ||
             !OptionalNumber(*tr, tp, "max_range_m", track.max_range_m) ||
             !OptionalNumber(*tr, tp, "az_limit_deg", track.az_limit_deg) ||
             !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||

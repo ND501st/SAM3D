@@ -110,6 +110,7 @@ public:
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
+        CheckEmergencyLaunch();
         console_.panel.ReleaseMomentaries();
         for (CrewMember& c : crew_) c.Update(dt, console_.panel, &console_.equipment);
         player_.Update(dt);
@@ -439,7 +440,10 @@ private:
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
-            if (engagement_on_) engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_);
+            if (engagement_on_) {
+                const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
+                engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
+            }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
                 launcher_->Launch(time_, console_, launches_, flight_s,
@@ -456,6 +460,23 @@ private:
         } else {
             Event(console_.launch_button, "pressed, but " + console_.launch_armed + " is not ready: no launch");
         }
+    }
+
+    // АВАРИЙНЫЙ ПУСК: the missile ИЗДЕЛИЯ is set to goes off unguided and self-destructs; no channel, no outcome.
+    void CheckEmergencyLaunch() {
+        if (!launcher_ || !console_.launcher.has_emergency) return;
+        const std::string& button = console_.launcher.emergency.fire_control;
+        if (console_.panel.Get(button) != 1) return;
+        const std::string container = launcher_->EmergencyLaunch(time_, console_);
+        if (container.empty()) {
+            Event(button, "pressed, but ИЗДЕЛИЯ is not on a missile: nothing thrown off");
+            return;
+        }
+        Event(button, "missile " + container + " thrown off unguided; it climbs " +
+                          std::to_string(static_cast<int>(console_.launcher.emergency.flight_s + 0.5)) + " s, then self-destructs");
+        if (launcher_->PairSpent()) console_.equipment.Restart(console_.launcher.pair_preparation);
+        launcher_->Step(time_, console_);
+        console_.equipment.Update(0.0, console_.panel);
     }
 
     void WriteAcmiFrame() {

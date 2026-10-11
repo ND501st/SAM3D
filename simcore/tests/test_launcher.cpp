@@ -117,17 +117,17 @@ SC_TEST("launcher: a missile's lamps follow it through the beams in the NVA's or
     SC_EXPECT(l.MissilesLeft() == 5);
 }
 
-SC_TEST("launcher: against a jamming target (ПОМЕХА) К3 comes with the narrow beam") {
+SC_TEST("launcher: against a jamming target (ПОМЕХА) К3 comes with the medium beam, method Н (1991 textbook p23-24)") {
     ConsoleData c = Osa();
     c.panel.Set("fo.pomekha", 1);
     Launcher l(c.launcher);
     c.equipment.SetInput("target_near_zone", true);
     l.Step(0.0, c);
     l.Launch(0.0, c, 1, 20.0, 450.0);
-    l.Step(3.9, c);
-    SC_EXPECT(Lamps(c, 1) == "111100");
-    l.Step(4.1, c);
-    SC_EXPECT(Lamps(c, 1) == "111111");  // 16 s and 7 km to go: К3 already
+    l.Step(1.9, c);
+    SC_EXPECT(Lamps(c, 1) == "111000");  // captured, not yet the medium beam
+    l.Step(2.1, c);
+    SC_EXPECT(Lamps(c, 1) == "111101");  // СР.Л and К3 together: 18 s and 8 km to go
 }
 
 SC_TEST("launcher: launches are 4 s apart, a busy channel takes no missile, and six missiles is all there is") {
@@ -225,4 +225,114 @@ SC_TEST("launcher: the crane waits while a pair is selected or a channel is guid
     SC_EXPECT(l.MissilesLeft() == 2 && !l.Loaded("1-I"));
     for (double end = t + 70.0; t < end; t += 0.1) l.Step(t, c);  // flights over, pair spent: the crane gets to work
     SC_EXPECT(l.MissilesLeft() == 3);
+}
+
+SC_TEST("launcher: СМЕНА ЛИТ. blanks ЗАХВ. АПЧ for 1 s on both channels and holds the launch until they relock") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    c.equipment.SetInput("target_near_zone", true);
+    l.Step(0.0, c);
+    SC_EXPECT(c.equipment.GetInput("ch1_apch_lock") && c.equipment.GetInput("ch2_apch_lock"));
+    SC_EXPECT(!c.equipment.GetInput("launch_hold"));
+    c.panel.Set("spk.letter", 1);  // the latch opens: НОРМА, no change yet
+    l.Step(1.0, c);
+    SC_EXPECT(l.LetterChanges() == 0 && c.equipment.GetInput("ch1_apch_lock"));
+    c.panel.Set("spk.letter", 2);  // СМЕНА ЛИТ.
+    l.Step(2.0, c);
+    SC_EXPECT(l.LetterChanges() == 1 && l.Relocking(2.5));
+    SC_EXPECT(!c.equipment.GetInput("ch1_apch_lock") && !c.equipment.GetInput("ch2_apch_lock"));
+    SC_EXPECT(c.equipment.GetInput("launch_hold") && l.NextChannel(2.5, c) == 0);
+    SC_EXPECT(l.WhyNot(2.5, c).find("relocking") != std::string::npos);
+    l.Step(3.1, c);  // back within 1 s
+    SC_EXPECT(c.equipment.GetInput("ch1_apch_lock") && c.equipment.GetInput("ch2_apch_lock") && !c.equipment.GetInput("launch_hold"));
+    l.Step(4.0, c);  // staying on СМЕНА ЛИТ. is not a second change
+    SC_EXPECT(l.LetterChanges() == 1);
+    c.panel.Set("spk.letter", 1);
+    l.Step(5.0, c);
+    c.panel.Set("spk.letter", 2);
+    l.Step(6.0, c);
+    SC_EXPECT(l.LetterChanges() == 2);
+}
+
+SC_TEST("launcher: the lock lamp only lights for a channel whose transmitter is on") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    l.Step(0.0, c);
+    SC_EXPECT(!c.equipment.GetInput("ch1_vkl_vys") && !c.equipment.GetInput("ch1_apch_lock"));
+    c.equipment.SetInput("target_near_zone", true);
+    l.Step(1.0, c);
+    SC_EXPECT(c.equipment.GetInput("ch1_vkl_vys") && c.equipment.GetInput("ch1_apch_lock"));
+}
+
+SC_TEST("launcher: the emergency launch throws the ИЗДЕЛИЯ missile off unguided, for 25.5 s, using no channel") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    l.Step(0.0, c);
+    SC_EXPECT(l.EmergencySelected(c).empty() && !c.equipment.GetInput("emerg_ready"));  // ОТКЛ.
+    SC_EXPECT(l.EmergencyLaunch(1.0, c).empty() && l.MissilesLeft() == 6);
+    c.panel.Set("msl.emergency_select", 6);  // 3-I
+    l.Step(2.0, c);
+    SC_EXPECT(l.EmergencySelected(c) == "3-I" && c.equipment.GetInput("emerg_ready"));
+    SC_EXPECT(l.EmergencyLaunch(3.0, c) == "3-I");
+    l.Step(3.0, c);
+    SC_EXPECT(l.MissilesLeft() == 5 && !l.Loaded("3-I") && !c.equipment.GetInput("ammo_3_i"));
+    SC_EXPECT(l.EmergencyThrown() == 1 && l.EmergencyInFlight(20.0) == 1 && l.EmergencyInFlight(28.6) == 0);
+    SC_EXPECT(!c.equipment.GetInput("ch1_skhod") && !c.equipment.GetInput("ch2_skhod"));  // no channel is busy
+    SC_EXPECT(!c.equipment.GetInput("emerg_ready"));  // the container is empty now
+    SC_EXPECT(l.EmergencyLaunch(4.0, c).empty());     // nothing left to throw from it
+}
+
+SC_TEST("launcher: an emergency launch of a selected missile leaves the channel to pick another at the next ВНИМАНИЕ") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    c.equipment.SetInput("target_near_zone", true);
+    l.Step(0.0, c);
+    SC_EXPECT(l.Selected(1) == "3-I");
+    c.panel.Set("msl.emergency_select", 6);
+    SC_EXPECT(l.EmergencyLaunch(1.0, c) == "3-I");
+    SC_EXPECT(l.Selected(1).empty() && !l.PairSpent());  // channel II still has its missile
+    l.Step(1.1, c);
+    SC_EXPECT(l.Selected(1) == "2-I");                   // ВНИМАНИЕ still on: the next outer missile
+}
+
+SC_TEST("launcher: the letter and emergency blocks are refused with paths when they are wrong") {
+    const std::string text = ReadFile(kData + "/procedures/osa_ak.json");
+    auto bad = [&](const std::string& from, const std::string& to, const std::string& expect) {
+        std::string s = text;
+        const std::size_t at = s.find(from);
+        if (at == std::string::npos) return false;
+        s.replace(at, from.size(), to);
+        ConsoleData d;
+        std::string e;
+        const bool ok = LoadConsole(s, d, &e);
+        if (ok || e.find(expect) == std::string::npos) std::printf("    expected \"%s\", got \"%s\"\n", expect.c_str(), e.c_str());
+        return !ok && e.find(expect) != std::string::npos;
+    };
+    SC_EXPECT(bad("\"change_position\": 2", "\"change_position\": 5", "launcher.letter.change_position"));
+    SC_EXPECT(bad("\"lock_inputs\": [ \"ch1_apch_lock\", \"ch2_apch_lock\" ]", "\"lock_inputs\": [ \"ch1_apch_lock\" ]", "launcher.letter.lock_inputs"));
+    SC_EXPECT(bad("\"3-II\", \"2-II\", \"1-II\", \"\"", "\"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.emergency.select_containers[2]"));
+    SC_EXPECT(bad("\"fire_control\": \"msl.emergency\"", "\"fire_control\": \"msl.channels\"", "launcher.emergency.fire_control"));
+    SC_EXPECT(bad("\"flight_s\": 25.5", "\"flight_s\": 0", "launcher.emergency.flight_s"));
+}
+
+SC_TEST("launcher: Р I — ЦЕЛЬ — Р II picks the channel whose missile the range indicator follows") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    c.equipment.SetInput("target_near_zone", true);
+    l.Step(0.0, c);
+    SC_EXPECT(c.panel.Get("ssc.target_select") == 1 && l.RangeSweepChannel(c) == 0);  // ЦЕЛЬ
+    c.panel.Set("ssc.target_select", 0);
+    SC_EXPECT(l.RangeSweepChannel(c) == 1);
+    c.panel.Set("ssc.target_select", 2);
+    SC_EXPECT(l.RangeSweepChannel(c) == 2);
+    SC_EXPECT(l.MissileRangeM(1, 0.0) < 0.0);  // nothing in flight yet
+    l.Launch(10.0, c, 1, 20.0, 450.0);         // channel I, a 20 s flight at 450 m/s
+    SC_EXPECT_NEAR(l.MissileRangeM(1, 10.0), 0.0, 1e-9);
+    SC_EXPECT_NEAR(l.MissileRangeM(1, 14.0), 1800.0, 1e-9);
+    SC_EXPECT_NEAR(l.MissileRangeM(1, 100.0), 9000.0, 1e-9);  // the flight ends at the target
+    SC_EXPECT(l.MissileRangeM(2, 14.0) < 0.0);
+    l.ShotDone(1);
+    SC_EXPECT(l.MissileRangeM(1, 14.0) < 0.0);
+    l.Launch(20.0, c, 2, 0.0, 0.0);  // no outcome model: the flight has no speed
+    SC_EXPECT(l.MissileRangeM(1, 21.0) < 0.0 && l.MissileRangeM(2, 21.0) < 0.0);
 }

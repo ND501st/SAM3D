@@ -88,6 +88,8 @@ check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) sp
 
 A trigger can set the console input `tzm_alongside` (`{ "set_input": "tzm_alongside", "value": true }`) to bring the
 transport-loader vehicle up: with the vehicle stopped, the launcher reloads one missile a minute (roadmap 7.3).
+`external_power` connects an external 220 V 400 Hz supply (a cable, not a console control): at a halt it powers the
+equipment without the turbine or the take-off generator and burns no fuel; it drops out when the vehicle moves.
 
 `"command_post": "command/pu12.json"` (top level, optional) adds the battery command post's plotting board
 (`simcore/pu12.hpp`, `data/command/README.md`): it plots every target once a minute with the manual's notation, off by the

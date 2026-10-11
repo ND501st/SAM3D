@@ -38,10 +38,10 @@
   },
 
   "track": {
-    "az_tolerance_deg": 1.5, "range_gate_m": 750, "lock_time_s": 1.0, "min_altitude_m": 50,
+    "az_tolerance_deg": 1.5, "range_gate_m": 750, "lock_time_s": 1.0, "min_altitude_m": 50, "clutter_altitude_m": 100,
     "tv_max_range_m": 20000, "max_angular_rate_deg_s": 30,
-    "source": "range_gate_m: half the 1.5 km magnified sweep, SAM Simulator Osa-AK manual p24. The rest are game values.",
-    "notes": "How close the operator must set the azimuth line and range gate for ЦУ АЗ to capture; below min_altitude_m the radar can't hold angles (НЛЦ) and the TV must be used."
+    "source": "range_gate_m: half the 1.5 km magnified sweep, SAM Simulator Osa-AK manual p24. The rest are game values; clutter_altitude_m rests on the SSC range channel sharing the MTI canceller (mon_2112_80 p15, p23) and is an estimate.",
+    "notes": "How close the operator must set the azimuth line and range gate for ЦУ АЗ to capture; below min_altitude_m the radar can't hold angles (НЛЦ) and the TV must be used; below clutter_altitude_m it can't hold the target in the ground clutter unless the operator has СДЦ on (ssc.mti)."
   },
 
   "aim": {

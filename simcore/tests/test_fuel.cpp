@@ -137,3 +137,24 @@ SC_TEST("fuel: the TZM refuels the vehicle at a halt, and the power can be start
     Run(*r, 200.0);  // the crew's turbine and generator come back on their switches
     SC_EXPECT(eq.IsReady("power"));
 }
+
+SC_TEST("fuel: an external supply powers the equipment at a halt, burns no fuel and is cut when the vehicle moves") {
+    // Deployed, the turbine running; the crew shuts both generators down and the external supply carries the load.
+    auto r = Load(Osa("", R"({ "id": "plug", "when": {}, "do": [ { "set_input": "external_power", "value": true } ] })"));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Equipment& eq = r->Console().equipment;
+    Run(*r, 2.0);
+    SC_EXPECT(eq.IsReady("external_supply") && eq.IsReady("power"));
+    r->Console().panel.Set("pwr.gta", 0);
+    r->Console().panel.Set("pwr.pto", 0);
+    Run(*r, 2.0);
+    SC_EXPECT(!eq.IsReady("gta") && !eq.IsReady("pto_generator") && eq.IsReady("power"));
+    const double level = r->Fuel()->LevelL();
+    Run(*r, 3600.0);
+    SC_EXPECT_NEAR(r->Fuel()->LevelL(), level, 0.05);  // nothing burns
+    SC_EXPECT(!r->Fuel()->PowerCut() && eq.IsReady("power"));
+    eq.SetInput("vehicle_stopped", false);  // driving off: the cable comes out
+    Run(*r, 2.0);
+    SC_EXPECT(!eq.IsReady("external_supply") && !eq.IsReady("power"));
+}
