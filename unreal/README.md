@@ -194,4 +194,4 @@ minus the hull's true heading.
   for now.
 - The electromagnetic layer drives no scope or lamp yet; it runs as a separate demo with overlays (roadmap E2/E3).
 
-Pending Unreal work (not built): expose `ScenarioRunner::RequestC2Source` / `C2()` views through `USimWorldSubsystem` so the player can change early-warning source (roadmap 7.8).
+Early-warning source (roadmap 7.8): `USimWorldSubsystem::RequestC2Source`, `GetActiveC2Source`, `GetC2SourceIds` (Blueprint, category SAM3D|Command) written 11 Oct 2026, NOT YET BUILT (editor was open). Still to do: a UI/cabin control for it.

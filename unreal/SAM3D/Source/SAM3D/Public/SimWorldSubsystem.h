@@ -229,6 +229,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Console")
 	bool SetControlPosition(const FString& ControlId, int32 Position);
 
+	/** Change the early-warning / command source the crew listens to (a source id from the scenario's command network,
+	 *  or "none" for the vehicle's own radar alone). The PU-12 is "pu12". False if unknown or already listened to. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Command")
+	bool RequestC2Source(const FString& SourceId, const FString& Why);
+
+	/** The source the crew listens to now ("" while changing or off the net). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	FString GetActiveC2Source() const;
+
+	/** Ids of the scenario's early-warning / command sources (PU-12 first). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	TArray<FString> GetC2SourceIds() const;
+
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Console")
 	double GetWheelValue(const FString& ControlId) const;
 

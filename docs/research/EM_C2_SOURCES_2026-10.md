@@ -34,7 +34,7 @@ Implementation: `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, scenar
 
 ## Not done / open
 
-* Done 11 Oct: with an `own_unit.em` block, every source that has a `position` gets an EM radio (`radio`, default `r123m`) on a two-member net with the unit (`EmSensorLink::AddRadioSource`, `EmC2LinkModel`). Its words get through with the EM layer's delivery law (propagation, terrain, noise jamming, co-site desense from the unit's radars): in the test a source 4 km away carries (p = 1.00) and one 60 km away does not (p = 0.00). Still open: a VHF comms jammer scenario, and sources without a position (the PU-12 by default) are unaffected.
+* Done 11 Oct: with an `own_unit.em` block, every source that has a `position` gets an EM radio (`radio`, default `r123m`) on a two-member net with the unit (`EmSensorLink::AddRadioSource`, `EmC2LinkModel`). Its words get through with the EM layer's delivery law (propagation, terrain, noise jamming, co-site desense from the unit's radars): in the test a source 4 km away carries (p = 1.00) and one 60 km away does not (p = 0.00). A VHF barrage jammer 1.6 km from the vehicle takes a PU-12 given a `position` from p = 1.0 to 0.0 (test). Sources without a position (the PU-12 by default) are unaffected: give it one in the scenario's `c2.sources` entry for `pu12`.
 * A cabin control for the R-123M presets, and the Unreal UI for switching.
 * Observation-post and EWR timings are estimates; a tier 1-2 source for VNOS practice and EWR voice procedure is still to find
   (Bogdanov 2020, Yugoslav air defence in 1999, unread).

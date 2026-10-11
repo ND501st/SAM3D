@@ -543,3 +543,31 @@ SC_TEST("c2: with the EM layer a source's link is decided by propagation: near c
     SC_EXPECT(pf < 0.05);
     SC_EXPECT(runner.Em()->RadioDeliveryProbability("pu12") < 0.0);  // no place, no EM radio: unaffected
 }
+
+SC_TEST("c2: a VHF barrage jammer cuts a source's EM link; a PU-12 with a place is subject to it too") {
+    std::string text = C2ScenarioText(R"({ "library": "command/c2_sources.json", "primary": "pu12",
+        "sources": [ { "id": "pu12", "position": { "east_m": 0, "north_m": 6000, "up_m": 0 } } ] })", "");
+    const std::string from = "\"readiness\": \"deployed\",";
+    text.replace(text.find(from), from.size(),
+                 from + " \"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\","
+                        " \"extra_libraries\": [\"em/generic.json\"],"
+                        " \"jammers\": [ { \"jammer\": \"generic_vhf_barrage\", \"position\": { \"east_m\": 500, \"north_m\": 1500, \"up_m\": 0 },"
+                        " \"on_at_s\": 5 } ] },");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(Load(text, def, console, error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner runner(std::move(def), std::move(console));
+    if (runner.Em() == nullptr) {
+        SC_EXPECT(false);
+        return;
+    }
+    for (int i = 0; i < 20; ++i) runner.Step(0.1);  // 2 s: jammer still off
+    const double before = runner.Em()->RadioDeliveryProbability("pu12");
+    for (int i = 0; i < 100; ++i) runner.Step(0.1);  // 12 s: on
+    const double after = runner.Em()->RadioDeliveryProbability("pu12");
+    std::printf("    PU-12 link: %.3f jammer off, %.3f jammer on\n", before, after);
+    SC_EXPECT(before > 0.9);
+    SC_EXPECT(after < 0.5);
+}

@@ -344,6 +344,40 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	return true;
 }
 
+bool USimWorldSubsystem::RequestC2Source(const FString& SourceId, const FString& Why)
+{
+	simcore::ScenarioRunner* Runner = GetScenarioRunner();
+	if (Runner == nullptr)
+	{
+		return false;
+	}
+	return Runner->RequestC2Source(std::string(TCHAR_TO_UTF8(*SourceId)), "Player", std::string(TCHAR_TO_UTF8(*Why)));
+}
+
+FString USimWorldSubsystem::GetActiveC2Source() const
+{
+	const simcore::ScenarioRunner* Runner = GetScenarioRunner();
+	if (Runner == nullptr || Runner->C2() == nullptr)
+	{
+		return FString();
+	}
+	return FString(UTF8_TO_TCHAR(Runner->C2()->ActiveId().c_str()));
+}
+
+TArray<FString> USimWorldSubsystem::GetC2SourceIds() const
+{
+	TArray<FString> Ids;
+	const simcore::ScenarioRunner* Runner = GetScenarioRunner();
+	if (Runner != nullptr && Runner->C2() != nullptr)
+	{
+		for (size_t i = 0; i < Runner->C2()->Size(); ++i)
+		{
+			Ids.Add(FString(UTF8_TO_TCHAR(Runner->C2()->Def(i).id.c_str())));
+		}
+	}
+	return Ids;
+}
+
 bool USimWorldSubsystem::LoadCabin(const FString& CabinFile, FString& OutError)
 {
 	if (!Runner)
