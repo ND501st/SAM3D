@@ -89,6 +89,8 @@ puts a jammer on a target (self-screening) or at a stand-off point, aimed at the
 show on the scope as ghost contacts `T<n>`. `osa_practice_em_ew.json` is the EM practice scenario with a noise pod and a
 chaff drop. The auto-capture rule (`em_capture_looks`, `em_capture_hits`) is in the tuning file's `track` group.
 
+`"c2"` adds early-warning and command sources beside the PU-12 (`command_post`), with outages and the commander's fallback policy; triggers `c2_source`, `c2_fail`, `c2_restore` change them (`data/command/README.md`). `osa_practice_c2.json` loses the PU-12 at 60 s.
+
 `"readiness"` starts the unit warm instead of cold (roadmap 6.2): one of the console's `readiness` states
 (`data/procedures/README.md`). The Osa has `powered` (on the march: turbine running, equipment and stabilisation warm,
 search possible on the move) and `deployed` (at a halt on the take-off generator, launcher unlocked, drives on,

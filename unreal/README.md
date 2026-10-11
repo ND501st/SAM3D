@@ -193,3 +193,5 @@ minus the hull's true heading.
 - The PU-12 command post and plotting board (phase 7), and the crew order menu (phase 8); crew orders are number keys
   for now.
 - The electromagnetic layer drives no scope or lamp yet; it runs as a separate demo with overlays (roadmap E2/E3).
+
+Pending Unreal work (not built): expose `ScenarioRunner::RequestC2Source` / `C2()` views through `USimWorldSubsystem` so the player can change early-warning source (roadmap 7.8).

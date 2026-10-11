@@ -204,3 +204,5 @@ physics stays unscheduled.
 - Approach note: playing SAM Simulator by desktop control is slow and limited by input; the game is tier 3. Prefer
   the data step, the creator's answers and the NVA documents; use the game only for specific questions.
 - Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.
+
+Early-warning/command sources (E4, roadmap 7.8): `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, `docs/research/EM_C2_SOURCES_2026-10.md`. PU-12 is the main source; the crew can switch (`RequestC2Source`) and an NPC commander falls back on silence.

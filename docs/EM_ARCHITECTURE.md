@@ -488,3 +488,7 @@ jamming (E6), codes and modes.
 Two smaller observations that needed no change: `beam_of_track_` and the capture look record live in the link rather
 than in the EM scene (rebuilt per run, deterministic, but not in the overlays); and nothing contradicts determinism,
 the update rates or the data rules.
+
+## 26. Command sources (E4, started 11 October 2026)
+
+The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C2Network`) holds selectable sources, each with its own plotting board: the PU-12 (main, from `command_post`), and library types (EWR voice net, division early-warning net, neighbouring battery, observation post, data link; `data/command/c2_sources.json`). Sources share voice nets (one message at a time), go down (outages, `c2_fail`, link range, a `C2LinkModel`), and the crew listens to one at a time: `RequestSource` (player/UI/trigger) or the NPC commander's fallback on silence (2.5 / 5 periods, as the EM C2 status) and return to the main source. The EM link budget as `C2LinkModel` and voice designations as EM messages are still to do. Evidence: `docs/research/EM_C2_SOURCES_2026-10.md`.

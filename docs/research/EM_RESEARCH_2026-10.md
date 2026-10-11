@@ -666,3 +666,7 @@ Games, simulations and tools:
 - Stone Soup: [github.com/dstl/Stone-Soup](https://github.com/dstl/Stone-Soup).
 - Sea Power EMCON notes: [sea-power.pmctactical.org](https://sea-power.pmctactical.org/emcon.php).
 - Command: Modern Operations: Matrix Games / Warfare Sims documentation (behaviour summarised from the game's manuals and play; not independently verified here).
+
+## Command sources addendum
+
+Research on non-PU-12 early-warning and datalink sources: `docs/research/EM_C2_SOURCES_2026-10.md`.

@@ -327,3 +327,7 @@ python tools/em_view.py                                                    # the
 ```
 
 In Unreal: play the level, open the console (`~`), type `sam3d.em.Start`, then `sam3d.em.Debug -1`.
+
+## Where does the Osa get its early warning?
+
+Mostly from its battery's PU-12, but not only: an early-warning radar site on a radio net, a division broadcast, a neighbouring battery, or a man with binoculars can feed it too. The crew listens to one at a time and can change; if the main one goes silent the commander tries the next. See `docs/research/EM_C2_SOURCES_2026-10.md`.

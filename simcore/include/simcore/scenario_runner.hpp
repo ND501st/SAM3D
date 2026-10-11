@@ -34,6 +34,7 @@
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
+#include "simcore/c2_sources.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
@@ -79,9 +80,10 @@ public:
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
-        if (!def_.command_post_file.empty()) {
-            board_ = std::make_unique<PlottingBoard>(def_.board, def_.unit_position, def_.seed);
-            engagement_.SetPlottingBoard(board_.get());
+        if (!def_.c2_sources.empty()) {
+            c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
+            for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
+            engagement_.SetAirPicture(c2_.get());
         }
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
@@ -101,7 +103,7 @@ public:
         if (finished_) return;
         time_ += dt;
         UpdateTargets(dt);
-        UpdateBoard();
+        UpdateC2();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
@@ -152,7 +154,6 @@ public:
     void SetUnitPosition(const Vec3& enu) {
         def_.unit_position = enu;
         engagement_.SetUnitPosition(enu);
-        if (board_) board_->SetCentre(enu);
     }
     const Vec3& UnitPosition() const { return def_.unit_position; }
     // The hull turned (e.g. the player drove it): degrees clockwise from north.
@@ -169,7 +170,14 @@ public:
     }
 
     // The battery command post's plotting board (null when the scenario has no "command_post").
-    const PlottingBoard* Board() const { return board_.get(); }
+    const PlottingBoard* Board() const { return c2_ ? c2_->BoardOf("pu12") : nullptr; }
+
+    // The battery's early-warning and command sources, and which one the crew listens to (null: no command network).
+    // `RequestSource` is how a player (or the UI) changes it.
+    const C2Network* C2() const { return c2_.get(); }
+    bool RequestC2Source(const std::string& id, const std::string& by = "Commander", const std::string& why = std::string()) {
+        return c2_ && c2_->RequestSource(id, time_, by, why);
+    }
 
     // The vehicle's fuel (null when the console has no "fuel" block).
     const FuelModel* Fuel() const { return fuel_.get(); }
@@ -354,12 +362,21 @@ private:
             case TriggerAction::Kind::End:
                 Finish(a.reason);
                 return;
+            case TriggerAction::Kind::C2Source:
+                if (c2_) c2_->RequestSource(a.c2_id, time_, "Scenario");
+                return;
+            case TriggerAction::Kind::C2Fail:
+                if (c2_) c2_->SetFailed(a.c2_id, true, time_, a.reason);
+                return;
+            case TriggerAction::Kind::C2Restore:
+                if (c2_) c2_->SetFailed(a.c2_id, false, time_);
+                return;
         }
     }
 
     // The regiment's picture onto the board, once a minute; the first mark of each target goes in the log.
-    void UpdateBoard() {
-        if (!board_) return;
+    void UpdateC2() {
+        if (!c2_) return;
         std::vector<BoardContact> contacts;
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
@@ -370,20 +387,15 @@ private:
             c.target_id = t.id;
             c.position = a->position;
             c.altitude_m = world_.Frame().AltitudeOf(a->position);
+            c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
             c.formation = t.formation;
             contacts.push_back(c);
         }
-        const std::size_t before = board_->Marks().size();
-        if (board_->Update(time_, contacts)) {
-            for (std::size_t k = before; k < board_->Marks().size(); ++k) {
-                const BoardMark& m = board_->Marks()[k];
-                bool first = true;
-                for (std::size_t j = 0; j < before && first; ++j) first = board_->Marks()[j].target_id != m.target_id;
-                if (first) log_.Record({time_, DebriefEntry::Kind::Scenario, "PU-12", m.target_id, "on the board: " + board_->Describe(m)});
-            }
+        c2_->Update(time_, contacts, def_.unit_position);
+        for (const C2Network::Event& e : c2_->TakeEvents()) {
+            log_.Record({e.t, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
         }
-        UpdateDesignations();
     }
 
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
@@ -397,17 +409,6 @@ private:
             log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "fuel", detail});
         }
         if (ev.refuelled) log_.Record({time_, DebriefEntry::Kind::Scenario, "Driver", "fuel", "tank full"});
-    }
-
-    // The battery commander's voice designations reaching the vehicle's crew (roadmap 7.2).
-    void UpdateDesignations() {
-        for (const BoardMark& m : board_->PollHeard(time_)) {
-            const PlottingBoard::Designation d = board_->DesignationFor(m, def_.unit_position);
-            char detail[96];
-            std::snprintf(detail, sizeof(detail), "designation %04d: azimuth %02d-%02d, range %.0f km, height %d hm", m.number,
-                          d.azimuth_mils / 100, d.azimuth_mils % 100, d.range_m / 1000.0, m.height_hm);
-            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", m.target_id, detail});
-        }
     }
 
     // The missile load and channels: shots the outcome model has finished free their channel; then selection at
@@ -497,7 +498,7 @@ private:
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
     std::unique_ptr<FuelModel> fuel_;
-    std::unique_ptr<PlottingBoard> board_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
+    std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
     std::vector<EngagementTarget> eng_targets_;

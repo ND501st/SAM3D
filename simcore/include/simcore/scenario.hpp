@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/c2_sources.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
@@ -53,13 +54,14 @@ struct ScenarioTarget {
 };
 
 struct TriggerAction {
-    enum class Kind { SetInput, Order, Queue, End };
+    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore };
     Kind kind = Kind::SetInput;
     std::string input;      // SetInput
     bool value = true;      // SetInput
     std::string crew;       // Order, Queue
     std::string procedure;  // Order, Queue
-    std::string reason;     // End
+    std::string reason;     // End, C2Fail
+    std::string c2_id;      // C2Source (a source id or "none"), C2Fail, C2Restore
 };
 
 struct ScenarioTrigger {
@@ -94,6 +96,10 @@ struct ScenarioDef {
     std::vector<ScenarioTrigger> triggers;
     std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
     PlottingBoardDef board;
+    // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
+    // scenario's "c2" block. Empty: no command network.
+    C2Policy c2_policy;
+    std::vector<C2SourceDef> c2_sources;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
 };
@@ -104,7 +110,7 @@ class ScenarioLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "command_post", "own_unit", "crew", "targets", "triggers", "end"})) {
+                             "terrain", "command_post", "c2", "own_unit", "crew", "targets", "triggers", "end"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -124,6 +130,7 @@ public:
                 return Fail("command_post", error);
             }
         }
+        if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadCrew(root, out, console)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
@@ -405,10 +412,25 @@ private:
 
     bool LoadAction(const json::Value& a, const std::string& p, const ScenarioDef& def, const ConsoleData& console,
                     TriggerAction& out) {
-        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end"})) return false;
+        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason"})) {
+            return false;
+        }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
-                          (a.Find("end") != nullptr);
-        if (kinds != 1) return Fail(p, "needs exactly one of set_input, order, queue or end");
+                          (a.Find("end") != nullptr) + (a.Find("c2_source") != nullptr) + (a.Find("c2_fail") != nullptr) +
+                          (a.Find("c2_restore") != nullptr);
+        if (kinds != 1) return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail or c2_restore");
+        for (const char* key : {"c2_source", "c2_fail", "c2_restore"}) {
+            if (a.Find(key) == nullptr) continue;
+            out.kind = key[3] == 's' ? TriggerAction::Kind::C2Source
+                       : key[3] == 'f' ? TriggerAction::Kind::C2Fail
+                                       : TriggerAction::Kind::C2Restore;
+            if (!RequireString(a, p, key, out.c2_id) || !OptionalString(a, p, "reason", out.reason)) return false;
+            if (def.c2_sources.empty()) return Fail(Join(p, key), "the scenario has no command network (command_post or c2)");
+            bool found = out.c2_id == "none" && out.kind == TriggerAction::Kind::C2Source;
+            for (const C2SourceDef& d : def.c2_sources) found = found || d.id == out.c2_id;
+            if (!found) return Fail(Join(p, key), "unknown source '" + out.c2_id + "'");
+            return true;
+        }
         if (a.Find("set_input") != nullptr) {
             out.kind = TriggerAction::Kind::SetInput;
             if (!RequireString(a, p, "set_input", out.input) || !OptionalBool(a, p, "value", out.value)) return false;
@@ -437,6 +459,139 @@ private:
             return true;
         }
         return Fail(Join(p, "crew"), "unknown crew member '" + out.crew + "'");
+    }
+
+    // The command network: the PU-12 (when there is a command post) and the other sources the crew can switch to.
+    //   "c2": { "library": "command/c2_sources.json", "primary": "pu12", "active": "pu12", "auto_fallback": true,
+    //           "fallback_order": ["ewr_north"], "switch_s": 6, "primary_stable_s": 60, "heard_life_s": 180,
+    //           "sources": [ { "id": "ewr_north", "type": "ewr_voice", "position": {...}, "net": "battery_net",
+    //                          "link_range_m": 30000, "outages": [ { "from_s": 300, "to_s": 420, "reason": "jammed" } ] },
+    //                        { "id": "pu12", "outages": [...] } ] }
+    bool LoadC2(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        if (!out.command_post_file.empty()) {
+            C2SourceDef pu;
+            pu.id = "pu12";
+            pu.display_name = out.board.display_name.empty() ? std::string("PU-12M") : out.board.display_name;
+            pu.short_name = "PU-12";
+            pu.kind = C2Kind::BatteryPost;
+            pu.medium = "voice";
+            pu.sense = C2Sense::Relayed;
+            pu.board = out.board;
+            out.c2_sources.push_back(pu);
+        }
+        const json::Value* c = root.Find("c2");
+        if (c == nullptr) return true;
+        if (!c->Is(json::Type::Object) ||
+            !Keys(*c, "c2", {"library", "primary", "active", "auto_fallback", "fallback_order", "switch_s", "primary_stable_s",
+                             "heard_life_s", "sources", "notes"})) {
+            return message_.empty() ? Fail("c2", "expected an object") : false;
+        }
+        out.c2_policy.heard_life_s = 180.0;  // with a network the crew forgets stale designations
+        std::string library_file;
+        if (!OptionalString(*c, "c2", "library", library_file) || !OptionalString(*c, "c2", "primary", out.c2_policy.primary) ||
+            !OptionalString(*c, "c2", "active", out.c2_policy.active) ||
+            !OptionalBool(*c, "c2", "auto_fallback", out.c2_policy.auto_fallback) ||
+            !OptionalNumber(*c, "c2", "switch_s", out.c2_policy.switch_s) ||
+            !OptionalNumber(*c, "c2", "primary_stable_s", out.c2_policy.primary_stable_s) ||
+            !OptionalNumber(*c, "c2", "heard_life_s", out.c2_policy.heard_life_s)) {
+            return false;
+        }
+        if (out.c2_policy.switch_s < 0.0) return Fail("c2.switch_s", "must be >= 0");
+        if (out.c2_policy.primary_stable_s < 0.0) return Fail("c2.primary_stable_s", "must be >= 0");
+        if (out.c2_policy.heard_life_s < 0.0) return Fail("c2.heard_life_s", "must be >= 0");
+        C2Library lib;
+        if (!library_file.empty()) {
+            std::string error;
+            if (!LoadC2LibraryFile(data_dir + "/" + library_file, lib, &error)) return Fail("c2.library", error);
+        }
+        if (const json::Value* order = OptionalArray(*c, "c2", "fallback_order")) {
+            for (std::size_t i = 0; i < order->items.size(); ++i) {
+                if (!order->items[i].Is(json::Type::String)) return Fail(Index("c2.fallback_order", i), "expected a source id");
+                out.c2_policy.fallback_order.push_back(order->items[i].string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* list = OptionalArray(*c, "c2", "sources")) {
+            for (std::size_t i = 0; i < list->items.size(); ++i) {
+                const std::string p = Index("c2.sources", i);
+                const json::Value& e = list->items[i];
+                std::string id;
+                std::string type;
+                if (!Keys(e, p, {"id", "type", "name", "position", "net", "link_range_m", "outages", "notes"}) ||
+                    !RequireString(e, p, "id", id) || !OptionalString(e, p, "type", type)) {
+                    return false;
+                }
+                C2SourceDef* def = nullptr;
+                for (C2SourceDef& d : out.c2_sources) {
+                    if (d.id == id) def = &d;
+                }
+                if (type.empty()) {
+                    if (def == nullptr || id != "pu12") {
+                        return Fail(Join(p, "type"), "a source other than the PU-12 needs a library \"type\" (and \"c2.library\")");
+                    }
+                } else {
+                    if (def != nullptr) return Fail(Join(p, "id"), "duplicate source '" + id + "'");
+                    const C2SourceDef* t = lib.Find(type);
+                    if (t == nullptr) return Fail(Join(p, "type"), "unknown source type '" + type + "' (c2.library names the file)");
+                    out.c2_sources.push_back(*t);
+                    def = &out.c2_sources.back();
+                    def->id = id;
+                    def->type = type;
+                    def->board.id = id;
+                }
+                std::string name;
+                if (!OptionalString(e, p, "name", name) || !OptionalString(e, p, "net", def->net) ||
+                    !OptionalNumber(e, p, "link_range_m", def->link_range_m)) {
+                    return false;
+                }
+                if (!name.empty()) def->display_name = name;
+                if (def->link_range_m < 0.0) return Fail(Join(p, "link_range_m"), "must be >= 0");
+                if (const json::Value* pos = e.Find("position")) {
+                    if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(p, "position"), frame_, def->position)) {
+                        return message_.empty() ? Fail(Join(p, "position"), "expected an object") : false;
+                    }
+                    def->has_position = true;
+                }
+                if (def->sense != C2Sense::Relayed && !def->has_position) {
+                    return Fail(Join(p, "position"), "a radar or observation source needs the place of its site");
+                }
+                if (const json::Value* outs = OptionalArray(e, p, "outages")) {
+                    for (std::size_t j = 0; j < outs->items.size(); ++j) {
+                        const std::string op = Index(Join(p, "outages"), j);
+                        C2Outage o;
+                        if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
+                            !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason)) {
+                            return false;
+                        }
+                        if (o.to_s <= o.from_s) return Fail(Join(op, "to_s"), "must be after from_s");
+                        def->outages.push_back(o);
+                    }
+                } else if (!message_.empty()) {
+                    return false;
+                }
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (out.c2_sources.empty()) return Fail("c2", "needs sources (or a command_post for the PU-12)");
+        auto known = [&](const std::string& id) {
+            for (const C2SourceDef& d : out.c2_sources) {
+                if (d.id == id) return true;
+            }
+            return false;
+        };
+        if (!known(out.c2_policy.primary)) {
+            if (out.c2_policy.primary != "pu12") return Fail("c2.primary", "unknown source '" + out.c2_policy.primary + "'");
+            out.c2_policy.primary = out.c2_sources.front().id;  // no PU-12: the first source is the main one
+        }
+        if (!out.c2_policy.active.empty() && !known(out.c2_policy.active)) {
+            return Fail("c2.active", "unknown source '" + out.c2_policy.active + "'");
+        }
+        for (const std::string& id : out.c2_policy.fallback_order) {
+            if (!known(id)) return Fail("c2.fallback_order", "unknown source '" + id + "'");
+        }
+        return true;
     }
 
     bool LoadTriggers(const json::Value& root, ScenarioDef& out, const ConsoleData& console) {

@@ -7,6 +7,10 @@ with its top-level `"command_post"` (e.g. `"command/pu12.json"`).
 |---|---|
 | `pu12.json` | PU-12M battery command post: the plotting board's update period, range rings, the radar battery's tactical number and the post's navigation errors |
 
+| `c2_sources.json` | Library of other early-warning and command sources (EWR voice net, division early-warning net, neighbouring battery, observation post, data link) the crew can switch to; the PU-12 stays the main source |
+
+A scenario's `"c2"` block makes instances (`id`, library `type`, `position`, `net`, `link_range_m`, `outages`) and sets the commander's policy (`primary`, `active`, `auto_fallback`, `fallback_order`, `switch_s`, `primary_stable_s`, `heard_life_s`). Triggers: `c2_source` (change source, or `"none"`), `c2_fail`, `c2_restore`. A player changes source with `ScenarioRunner::RequestC2Source`. See `docs/research/EM_C2_SOURCES_2026-10.md`.
+
 Every value is `{"value": ..., "source": "...", "confidence": "..."}`, cited like `data/systems/` (`docs/SOURCES.md`).
 
 The board (`samsim_osa` p20) writes each target once a minute as a four-digit number (the radar battery's tactical

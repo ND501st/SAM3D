@@ -140,3 +140,5 @@ roadmap phase 6:
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
 - Engagement zone: one box; no pursuit or optical zones, no guidance-method selection. (6.7)
 - No PU-12 or battery yet: targets are found by the vehicle's own radar only. (phase 7)
+
+Command sources: `simcore/c2_sources.hpp` (`C2Network`) gives the engagement model the crew's air picture from the active of several sources; the PU-12 board is one of them (`docs/research/EM_C2_SOURCES_2026-10.md`).

@@ -223,3 +223,7 @@ frequency changes are data-only.
 ## 14. References
 
 The bibliography is `docs/research/EM_RESEARCH_2026-10.md` §14; source ids and tiers in `docs/SOURCES.md`.
+
+## 15. Command sources (E4)
+
+Done: `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, scenario `c2` block and triggers `c2_source`/`c2_fail`/`c2_restore`, `osa_practice_c2.json`, tests in `simcore/tests/test_c2_sources.cpp`. The PU-12 is source `pu12`, always main. Next: write the `C2LinkModel` adapter on `EmSensorLink` (radio nodes per source, `EvaluateLink`), move voice designations onto EM messages, four-vehicle battery net, an R-123M preset control and Unreal switching UI (`USimWorldSubsystem` -> `ScenarioRunner::RequestC2Source`). Known idealisation: the commander knows every listed source's state (two R-123M sets are the real limit).

@@ -60,6 +60,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
+#include "simcore/c2_sources.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/world.hpp"
@@ -605,6 +606,9 @@ public:
     // Aim by the battery command post's designations when the radars are silent (null = by the truth, within
     // plotting_board_range_m): what the battery commander has told the crew by radio. The board must outlive the model.
     void SetPlottingBoard(const PlottingBoard* board) { board_ = board; }
+    // The battery's command network (c2_sources.hpp): the crew aims by what the source it listens to has told it. Takes
+    // the place of a plotting board. The network must outlive the model.
+    void SetAirPicture(const C2Network* c2) { c2_ = c2; }
     bool EmActive() const { return em_ != nullptr; }
 
     // The unit moved (driven by the player or an AI driver).
@@ -964,10 +968,10 @@ private:
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
         bool from_board = false;
         double board_true_az = 0.0;
-        if (!have && tv_search && board_ != nullptr) {  // radars silent: the board's last marks, a minute old at worst
+        if (!have && tv_search && (board_ != nullptr || c2_ != nullptr)) {  // radars silent: the last designations, a minute old at worst
             double best_r = tuning_.plotting_board_range_m;
-            for (const BoardMark& m : board_->Known(time_)) {
-                const PlottingBoard::Designation des = board_->DesignationFor(m, unit_);
+            for (const BoardMark& m : c2_ != nullptr ? c2_->Known(time_) : board_->Known(time_)) {
+                const PlottingBoard::Designation des = PlottingBoard::Designate(m, unit_);
                 if (des.range_m > best_r) continue;
                 best_r = des.range_m;
                 best = {des.range_m, Wrap180(des.azimuth_deg), des.elevation_deg};
@@ -1483,6 +1487,7 @@ private:
     EngagementTuning tuning_;
     EmSensorLink* em_ = nullptr;  // not owned
     const PlottingBoard* board_ = nullptr;  // not owned
+    const C2Network* c2_ = nullptr;         // not owned; takes the board's place when set
     Vec3 unit_;
     std::map<std::string, Geometry> geo_;  // ordered by id: deterministic iteration
     std::vector<Contact> picture_;
