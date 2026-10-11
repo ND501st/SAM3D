@@ -54,6 +54,26 @@ Prefer the highest tier. When tiers disagree, use the higher one and record the 
 | `apa` | 5 | Air Power Australia, 9K33 Osa/Romb; [Soviet SAM System Simulator](https://www.ausairpower.net/APA-Sov-SAM-Simulator.html) (review of SAM Simulator) | To be replaced in `data/`; the review stays useful for SAM Simulator's history |
 | `janes` | 5 | *Jane's Land-Based Air Defence* (as quoted by the SAM Simulator creator) | Combat claims only, to be confirmed |
 
+## Electromagnetic-layer sources (added 7 October 2026)
+
+Used by `simcore/em/`, `data/em/` and `docs/research/EM_RESEARCH_2026-10.md`. Tiers as above; for a
+*threat library* (one side's belief about the other's emitters) Western sources are the right tier,
+because that is what the Western side believed.
+
+| Id | Tier | Source | Used for |
+|---|---|---|---|
+| `vr_1985_plss` | 1 | V. Lhotský et al., «Možnosti ničení systému PLSS a ochrana vlastních vojsk», *Vojenské rozhledy* 1985/6, pp. 43–49 ([PDF](https://www.vojenskerozhledy.cz/pdfs/vor/1985/06/08.pdf)) | Czechoslovak army view of TDOA emitter location (PLSS/TR-1): "every newly switched-on source detected within seconds"; passive countermeasures: transmitter discipline, dummy loads, night moves, active dummies on the same parameters, roaming decoy transmitters; radar gaps → decentralised warning and autonomous combat; ARMs listed (Shrike, Standard ARM, HARM) |
+| `vr_1989_tr1` | 1 | M. Janošek, «Možnosti příletu stíhacích letounů do prostoru činnosti letounu TR-1», *Vojenské rozhledy* 1989/3, pp. 48–53 ([PDF](https://vojenskerozhledy.cz/pdfs/vor/1989/03/10.pdf)) | Radio horizon R = 4.12 √H; detection-range scaling D = D_ref (σ/σ_ref)^¼; Ramona detecting emitters at 500–600 km; RCS fluctuation of 20 dB causing intermittent tracking |
+| `western_bands` | 4/5 | 9K33 Osa, [English Wikipedia](https://en.wikipedia.org/wiki/9K33_Osa) (Western references): Land Roll search radar H band (6–8 GHz), tracking radar J band (14.5 GHz), "frequency agile" | Osa band centres (propagation only) and the NATO threat library; the "agile" claim is not adopted (`mon_2112_80` p67 describes fixed working frequencies) |
+| `r123_refs` | 4 | R-123: [Wikipedia](https://en.wikipedia.org/wiki/R-123); [greenradio.de](https://greenradio.de/e_r123.htm) | R-123M: 20–51.5 MHz, 4 presets, 25 kHz, ~20 W, 2.5 µV |
+| `czech_tdoa` | 4 | [Ramona](https://en.wikipedia.org/wiki/Ramona_passive_sensor), [Tamara](https://en.wikipedia.org/wiki/Tamara_passive_sensor) (Wikipedia); [KRTP-81 Ramona](https://www.armedconflicts.com/-t12985) (ArmedConflicts) | KRTP-81 (1979) and KRTP-86 (1987) TDOA systems: sites, band, capacity |
+| `avtobaza` | 4 | [1L222 Avtobaza](https://en.wikipedia.org/wiki/Avtobaza) (Wikipedia) | Soviet ground ELINT against airborne radars (8–17.5 GHz) — a future red ESM entry |
+| `soviet_iff` | 4 | [Kremniy-2](https://mil-airfields.de/equipment/soviet-iff-kremniy.htm), [Parol](https://mil-airfields.de/equipment/soviet-russian-iff-parol.htm) (mil-airfields.de); [Crypto Museum](https://cryptomuseum.com/radar/kremnij2/index.htm) | IFF families and dates (Parol in Soviet service 1977, NVA late 1980s) |
+| `fh_radios` | 4 | [HAVE QUICK](https://en.wikipedia.org/wiki/Have_Quick) (Wikipedia; [Crypto Museum](https://cryptomuseum.com/radio/havequick)); [SINCGARS](https://cryptomuseum.com/radio/sincgars) (Crypto Museum) | HAVE QUICK introduced 1980 (225–400 MHz); SINCGARS RT-1439 fielded 1988 (30–88 MHz) |
+| `decoys` | 4 | [ADM-141 TALD](https://en.wikipedia.org/wiki/ADM-141_TALD); [Operation Mole Cricket 19](https://en.wikipedia.org/wiki/Operation_Mole_Cricket_19) (Wikipedia) | TALD in US Navy service 1987; 1982 Bekaa decoys, RPVs and EW (secondary accounts) |
+| `fm100_2_3` | 4 | US Army FM 100-2-3, *The Soviet Army: Troops, Organization and Equipment* (1991), [FAS copy](https://irp.fas.org/doddir/army/fm100-2-3.pdf) | **To read**: the NATO view for blue threat libraries |
+| `games_ew` | — | [Skynet IADS](https://github.com/walder/Skynet-IADS); [MIXR](https://github.com/doughodson/mixr) and Garland et al., CSCI 2020 ([record](https://scholar.afit.edu/facpub/1857)); [Stone Soup](https://github.com/dstl/Stone-Soup); [DCS ECM analysis](https://flyandwire.com/2022/11/11/electronic-countermeasures-f-14-avionics/); [Sea Power EMCON](https://sea-power.pmctactical.org/emcon.php) | Design lessons only (`EM_RESEARCH` §12) |
+
 ## Physics textbooks (for simcore's generic models)
 
 | Topic | Reference |
@@ -65,6 +85,13 @@ Prefer the highest tier. When tiers disagree, use the higher one and record the 
 | Missile flyout, aerodynamics, propulsion | E. Fleeman, *Missile Design and System Engineering* (AIAA) |
 | Standard atmosphere | ISO 2533:1975; U.S. Standard Atmosphere 1976 |
 | Geodesy | NIMA TR8350.2 (WGS-84) |
+| Detection statistics, measurement accuracy | M. A. Richards, *Fundamentals of Radar Signal Processing*; D. K. Barton, *Radar System Analysis and Modeling* |
+| Low-angle propagation, multipath | L. V. Blake, *Radar Range-Performance Analysis*; J. D. Parsons, *The Mobile Radio Propagation Channel* (plane earth) |
+| Diffraction, gases, rain | ITU-R P.526 (eq. 31, knife edge), P.676, P.838 |
+| Electronic warfare | D. Adamy, *EW 101*, *EW 102*; D. C. Schleher, *Electronic Warfare in the Information Age*; R. G. Wiley, *ELINT* |
+| Emitter location | R. G. Stansfield, J. IEE 94 IIIA (1947); W. H. Foy, IEEE TAES 12 (1976); D. J. Torrieri, IEEE TAES 20 (1984); R. A. Poisel, *Electronic Warfare Target Location Methods* |
+| Tracking and fusion | S. Blackman, R. Popoli, *Design and Analysis of Modern Tracking Systems*; Y. Bar-Shalom et al., *Estimation with Applications to Tracking and Navigation*; S. Julier, J. Uhlmann, ACC 1997 (covariance intersection); W. Niehsen, FUSION 2002 |
+| Random numbers | G. Steele, D. Lea, C. Flood, OOPSLA 2014 (SplitMix64) |
 
 These cover the generic simcore models (geodesy, line of sight, the demo flyout). The Osa's outcomes are decided by
 the gameplay-level model, not by physics (`DEVELOPMENT_ROADMAP.md`, "Decision").

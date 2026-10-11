@@ -31,3 +31,4 @@
 #include "simcore/readouts.hpp"
 #include "simcore/world.hpp"
 #include "simcore/acmi.hpp"
+#include "simcore/em.hpp"
