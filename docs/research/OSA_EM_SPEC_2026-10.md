@@ -112,8 +112,8 @@ Fitted to Korovin's high-altitude figures with the default environment; low-alti
 | SOC, Pd 0.8, 100–3000 m altitude | 27–33 km | 20–35 km "depending on altitude" (`mon_2112_80` p10) | consistent if the manual quotes a high Pd |
 | SOC, Pd 0.8 at 5 km altitude | 15 km | — | beam III (19° tall, ~7 dB less gain) covers high, close targets; the coverage gap is real for a stacked-beam radar |
 | SSC, fighter at 5 km, Pd 0.5 | 23.0 km | 23 km | fitted |
-| SSC, fighter at 50 m, Pd 0.8 held | 14.2 km | 14 km | matches if "capture" means reliable detection (lock needs consecutive hits) |
-| SSC, fighter at 50 m, Pd 0.5 held | 24.6 km | 14 km | **open item**: over smooth ground the Ku-band first multipath lobe (< 0.1°) enhances a 50 m target; rough terrain, vegetation, clutter in the 1.5 km gate or a Pd-0.8 definition of capture would close the gap |
+| SSC, fighter at 50 m, Pd 0.8 held | 14.2 km (an artefact: one deep multipath null at 17 km in the flat-ground check path; on the real path Pd is 0.5 at 22 km and 0.8 at 18 km) | 14 km | **does not match** (corrected in the E2 review) |
+| SSC, fighter at 50 m, Pd 0.5 held | 24.6 km | 14 km | **open item**: over smooth ground the Ku-band first multipath lobe (< 0.1°) enhances a 50 m target; closing the gap needs a rougher surface, vegetation, clutter in the 1.5 km gate or another trials-site effect, not a different definition of capture |
 | R-123M between two vehicles (3.5 m antennas), radars off | system loss fitted to 15 km: 0.7 dB | ≥ 15 km (`mon_2112_80` p12–13) | fitted; small loss = plausible |
 | R-123M with the radars on | co-site desense fitted: 3.9 dB | ≥ 12 km | fitted (= 40 log 15/12, plane-earth law) |
 

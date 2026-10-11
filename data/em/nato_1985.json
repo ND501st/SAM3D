@@ -1,0 +1,141 @@
+{
+  "library_id": "nato_1985",
+  "display_name": "NATO-side emitters, receivers and jammers of the 1980s, and each side's threat library",
+  "status": "E1 data set (October 2026). Band and year facts come from public encyclopaedic pages (tier 4: for NATO equipment these are the operator-country reference tier available online); everything numeric that no source gives (power, gain, sensitivity, bearing accuracy, PRF windows) is a labelled estimate of the system CLASS from the textbooks in docs/SOURCES.md, not a measurement of a particular set. Sources that were not reachable (US Army FM 100-2-3, Soviet and NATO threat handbooks) are listed in docs/research/EM_E1_NATO_DATA_2026-10.md with what to read for.",
+  "provenance": "per_value",
+  "notes": "Used with data/em/osa_ak.json: the red ESM library 'red_esm_nato_view' is what the Warsaw Pact side believed about NATO emitters; the blue RWR library 'blue_rwr_nato_view' is what NATO believed about Soviet ones (including the SA-8). Both are beliefs, deliberately wider than the truth.",
+
+  "sources": [
+    { "id": "nato_radar_refs", "title": "Encyclopaedic pages: AN/APG-63 (X band, in service 1973 on the F-15A/B), AN/APG-66 (X band 6.2-10.9 GHz; mechanically scanned; ±10/30/60 deg; low PRF uplook, medium PRF downlook; 80 nmi), P-19 'Flat Face B' (UHF 830-875 MHz, 900 kW, 360 deg, 260 km, 1974)", "url": "https://en.wikipedia.org/wiki/AN/APG-66", "tier": "4", "notes": "Wikipedia. Read 11 Oct 2026; no power or PRF values are given for the APG-63/66, so those are estimates." },
+    { "id": "nato_ew_refs", "title": "Encyclopaedic pages: AN/ALR-46 RWR (2-18 GHz; flown in Southeast Asia from January 1973), AN/ALQ-99 tactical jamming system (10 bands from 64 MHz to 20 GHz; band 8 4-7.8 GHz, band 9 7.8-11 GHz, band 10 11-20 GHz; three under-wing transmit pods and a tail receive pod; maximum output 10.8 kW older, 6.8 kW newer; AN/ALQ-99A 1972; EA-6B, EF-111A)", "url": "https://en.wikipedia.org/wiki/AN/ALQ-99", "tier": "4", "notes": "Wikipedia. Read 11 Oct 2026." },
+    { "id": "ew_textbooks", "title": "D. Adamy, EW 101 and EW 102 (Artech); R. Wiley, ELINT (Artech); D. Schleher, Electronic Warfare in the Information Age: class values for receiver sensitivity, bearing accuracy, ERP and PRF ranges", "tier": "textbook", "notes": "Used only for labelled estimates of a system class." }
+  ],
+
+  "emitters": [
+    {
+      "id": "nato_fighter_fcr_x", "name": "NATO fighter fire-control radar, X band (APG-63/66 class)",
+      "kind": "tracking_radar",
+      "freq_hz": { "value": 9.4e9, "source": "nato_radar_refs", "confidence": "medium",
+                   "notes": "Middle of the X band; the APG-66 covers 6.2-10.9 GHz." },
+      "prf_hz": { "value": 5000, "source": "estimate (ew_textbooks): pulse-Doppler radars switch between low, medium and high PRF; nato_radar_refs names low (uplook) and medium (downlook)", "confidence": "estimate" },
+      "pulse_width_s": { "value": 2.0e-6, "source": "estimate (ew_textbooks)", "confidence": "estimate" },
+      "peak_power_w": { "value": 8000, "source": "estimate (ew_textbooks): class value for a 1970s fighter X-band radar", "confidence": "estimate" },
+      "tx_loss_db": { "value": 2.0, "source": "estimate", "confidence": "estimate" },
+      "antenna": {
+        "gain_db": { "value": 33, "source": "estimate (ew_textbooks): ~0.7 m planar array", "confidence": "estimate" },
+        "beamwidth_az_deg": { "value": 3.5, "source": "estimate (ew_textbooks)", "confidence": "estimate" },
+        "beamwidth_el_deg": { "value": 3.5, "source": "estimate (ew_textbooks)", "confidence": "estimate" },
+        "sidelobe_db": { "value": -25, "source": "estimate", "confidence": "estimate" }
+      },
+      "scan": "sector",
+      "scan_period_s": { "value": 2.0, "source": "estimate", "confidence": "estimate" },
+      "sector_width_deg": { "value": 120, "source": "nato_radar_refs (APG-66: azimuth coverage ±60 deg)", "confidence": "medium" },
+      "source": "nato_radar_refs; estimates as marked", "confidence": "low"
+    }
+  ],
+
+  "esm": [
+    {
+      "id": "nato_alr46_class_rwr", "name": "NATO radar warning receiver, 2-18 GHz (AN/ALR-46 class)", "kind": "rwr",
+      "freq_min_hz": { "value": 2.0e9, "source": "nato_ew_refs", "confidence": "medium" },
+      "freq_max_hz": { "value": 18.0e9, "source": "nato_ew_refs", "confidence": "medium" },
+      "sensitivity_dbw": { "value": -95, "source": "estimate (ew_textbooks): -65 dBm, crystal-video class", "confidence": "estimate" },
+      "antenna_gain_db": { "value": 0, "source": "estimate", "confidence": "estimate" },
+      "bearing_sigma_deg": { "value": 10, "source": "estimate (ew_textbooks): four-quadrant amplitude comparison, 10-15 deg", "confidence": "estimate" },
+      "freq_sigma_fraction": { "value": 0.01, "source": "estimate", "confidence": "estimate" },
+      "pri_sigma_fraction": { "value": 0.02, "source": "estimate", "confidence": "estimate" },
+      "pw_sigma_fraction": { "value": 0.1, "source": "estimate", "confidence": "estimate" },
+      "line_interval_s": { "value": 5.0, "source": "estimate", "confidence": "estimate" },
+      "contact_timeout_s": { "value": 8.0, "source": "estimate", "confidence": "estimate" },
+      "threat_library": "blue_rwr_nato_view",
+      "source": "nato_ew_refs; estimates as marked", "confidence": "medium"
+    },
+    {
+      "id": "red_ground_esm_class", "name": "Warsaw Pact ground ESM/DF station, class estimate", "kind": "esm",
+      "freq_min_hz": { "value": 0.8e9, "source": "estimate (czech_tdoa: KRTP-81 Ramona covers 0.8-18 GHz)", "confidence": "low" },
+      "freq_max_hz": { "value": 18.0e9, "source": "czech_tdoa (KRTP-81 Ramona 0.8-18 GHz)", "confidence": "low" },
+      "sensitivity_dbw": { "value": -110, "source": "estimate (ew_textbooks): -80 dBm, tactical ESM class", "confidence": "estimate" },
+      "antenna_gain_db": { "value": 6, "source": "estimate", "confidence": "estimate" },
+      "bearing_sigma_deg": { "value": 1.5, "source": "estimate (ew_textbooks): ground DF 1-2 deg", "confidence": "estimate" },
+      "freq_sigma_fraction": { "value": 0.002, "source": "estimate", "confidence": "estimate" },
+      "pri_sigma_fraction": { "value": 0.01, "source": "estimate", "confidence": "estimate" },
+      "pw_sigma_fraction": { "value": 0.05, "source": "estimate", "confidence": "estimate" },
+      "line_interval_s": { "value": 2.0, "source": "estimate", "confidence": "estimate" },
+      "contact_timeout_s": { "value": 10.0, "source": "estimate", "confidence": "estimate" },
+      "threat_library": "red_esm_nato_view",
+      "source": "czech_tdoa (band); estimates as marked", "confidence": "low"
+    }
+  ],
+
+  "jammers": [
+    {
+      "id": "nato_alq99_band8", "name": "AN/ALQ-99 class stand-off noise jammer, band 8 (4-7.8 GHz: the Osa's search radar band)", "technique": "barrage",
+      "emitter": {
+        "freq_hz": { "value": 5.9e9, "source": "nato_ew_refs (band 8: 4-7.8 GHz, centre)", "confidence": "medium" },
+        "bandwidth_hz": { "value": 3.8e9, "source": "nato_ew_refs (band 8 width)", "confidence": "medium",
+                          "notes": "A barrage jammer spreads over the whole band; the part inside a radar's bandwidth is a small fraction (the model's overlap factor)." },
+        "peak_power_w": { "value": 3600, "source": "derived from nato_ew_refs: 10.8 kW maximum over three transmit pods", "confidence": "low",
+                          "notes": "Assumes each pod's transmitter works one band at 3.6 kW; the per-band split is not public." },
+        "tx_loss_db": { "value": 2.0, "source": "estimate", "confidence": "estimate" },
+        "antenna": { "gain_db": { "value": 14, "source": "estimate (ew_textbooks): pod antenna", "confidence": "estimate" },
+                     "beamwidth_az_deg": { "value": 40, "source": "estimate", "confidence": "estimate" },
+                     "beamwidth_el_deg": { "value": 40, "source": "estimate", "confidence": "estimate" },
+                     "sidelobe_db": { "value": -20, "source": "estimate", "confidence": "estimate" } }
+      },
+      "source": "nato_ew_refs; estimates as marked", "confidence": "low"
+    },
+    {
+      "id": "nato_alq99_band9", "name": "AN/ALQ-99 class stand-off noise jammer, band 9 (7.8-11 GHz: X band, fighter radars)", "technique": "barrage",
+      "emitter": {
+        "freq_hz": { "value": 9.4e9, "source": "nato_ew_refs (band 9: 7.8-11 GHz, centre)", "confidence": "medium" },
+        "bandwidth_hz": { "value": 3.2e9, "source": "nato_ew_refs (band 9 width)", "confidence": "medium" },
+        "peak_power_w": { "value": 3600, "source": "derived from nato_ew_refs: 10.8 kW maximum over three transmit pods", "confidence": "low" },
+        "tx_loss_db": { "value": 2.0, "source": "estimate", "confidence": "estimate" },
+        "antenna": { "gain_db": { "value": 14, "source": "estimate (ew_textbooks): pod antenna", "confidence": "estimate" },
+                     "beamwidth_az_deg": { "value": 40, "source": "estimate", "confidence": "estimate" },
+                     "beamwidth_el_deg": { "value": 40, "source": "estimate", "confidence": "estimate" },
+                     "sidelobe_db": { "value": -20, "source": "estimate", "confidence": "estimate" } }
+      },
+      "source": "nato_ew_refs; estimates as marked", "confidence": "low"
+    },
+    {
+      "id": "nato_alq99_band10", "name": "AN/ALQ-99 class stand-off noise jammer, band 10 (11-20 GHz: the Osa's tracking radar band)", "technique": "barrage",
+      "emitter": {
+        "freq_hz": { "value": 15.5e9, "source": "nato_ew_refs (band 10: 11-20 GHz, centre)", "confidence": "medium" },
+        "bandwidth_hz": { "value": 9.0e9, "source": "nato_ew_refs (band 10 width)", "confidence": "medium" },
+        "peak_power_w": { "value": 3600, "source": "derived from nato_ew_refs: 10.8 kW maximum over three transmit pods", "confidence": "low" },
+        "tx_loss_db": { "value": 2.0, "source": "estimate", "confidence": "estimate" },
+        "antenna": { "gain_db": { "value": 14, "source": "estimate (ew_textbooks): pod antenna", "confidence": "estimate" },
+                     "beamwidth_az_deg": { "value": 40, "source": "estimate", "confidence": "estimate" },
+                     "beamwidth_el_deg": { "value": 40, "source": "estimate", "confidence": "estimate" },
+                     "sidelobe_db": { "value": -20, "source": "estimate", "confidence": "estimate" } }
+      },
+      "source": "nato_ew_refs; estimates as marked", "confidence": "low"
+    }
+  ],
+
+  "threat_libraries": [
+    { "id": "blue_rwr_nato_view", "name": "What NATO RWRs believed about Soviet emitters", "owner": "blue",
+      "notes": "Bands from Western references. Wider than the truth on purpose. PRF and pulse width are not constrained: not public.",
+      "entries": [
+        { "id": "sa8_land_roll_search", "name": "SA-8 search (Land Roll)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "western_bands", "confidence": "low" },
+        { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 14.0e9, "freq_max_hz": 15.0e9, "source": "western_bands", "confidence": "low" }
+      ] },
+    { "id": "red_esm_nato_view", "name": "What the Warsaw Pact side believed about NATO emitters", "owner": "red",
+      "notes": "Bands from the NATO equipment's public descriptions. A Czechoslovak 1985 analysis expected every newly switched-on source to be located within seconds (vr_1985_plss); this is the library such a station would match against.",
+      "entries": [
+        { "id": "nato_x_band_fcr", "name": "NATO fighter fire-control radar (X band)", "kind": "fire_control", "owner": "blue", "platform": "air",
+          "freq_min_hz": 6.2e9, "freq_max_hz": 10.9e9, "prf_min_hz": 1000, "prf_max_hz": 300000,
+          "source": "nato_radar_refs (band); estimate (PRF window: low to high PRF modes, ew_textbooks)", "confidence": "low" },
+        { "id": "nato_noise_jammer", "name": "NATO noise jammer (wideband)", "kind": "jammer", "owner": "blue", "platform": "air", "cw": true,
+          "freq_min_hz": 0.064e9, "freq_max_hz": 20.0e9,
+          "source": "nato_ew_refs (ALQ-99 covers 64 MHz-20 GHz)", "confidence": "medium" },
+        { "id": "pact_uhf_surveillance", "name": "UHF surveillance radar (Flat Face class)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 0.83e9, "freq_max_hz": 0.875e9,
+          "source": "nato_radar_refs (P-19 Flat Face B 830-875 MHz)", "confidence": "medium",
+          "notes": "Own side's radar as the Pact's own library sees it: listed so an ESM station does not call it an unknown." }
+      ] }
+  ]
+}

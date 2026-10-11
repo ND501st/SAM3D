@@ -96,11 +96,11 @@ SC_TEST("em data: Osa-AK radars reproduce the published ranges") {
     SC_EXPECT_NEAR(ssc_high, 23000.0, 1000.0);
     // Not fitted: the propagation model must land within 20 % of the published low-altitude figures.
     SC_EXPECT_NEAR(soc_low, 27000.0, 5400.0);
-    // The tracking radar's capture needs consecutive detections (lock logic), so its published
-    // 14 km at 50 m is compared with the Pd 0.8 range. At Pd 0.5 the Ku-band first multipath lobe
-    // (below 0.1 deg over smooth ground) lifts the 50 m target to ~25 km: recorded as an open
-    // calibration item in the spec, and pinned here so a model change shows up.
-    SC_EXPECT_NEAR(SustainedDetectionRange(ssc, env, 50.0, 3.0, 0.8), 14000.0, 2800.0);
+    // The tracking radar's published 14 km at 50 m is NOT reproduced: at Pd 0.5 the Ku-band first
+    // multipath lobe (below 0.1 deg over smooth ground) lifts the 50 m target to ~25 km. An older
+    // "Pd 0.8 gives 14 km" reading came from one deep multipath null in this flat-ground path and
+    // is not asserted. Recorded as an open calibration item in the spec; this pins the gap so a
+    // model change shows up.
     SC_EXPECT(ssc_low > 20000.0);
     // Osa-AK manual: MiG-21-type target detected at 20-35 km depending on altitude (taken as Pd 0.8).
     for (double alt : {100.0, 300.0, 1000.0, 3000.0}) {
@@ -112,4 +112,51 @@ SC_TEST("em data: Osa-AK radars reproduce the published ranges") {
     std::printf("    R-123M: fitted system loss %.1f dB, co-site desense %.1f dB\n", r123.system_loss_db, r123.cosite_desense_db);
     SC_EXPECT(r123.system_loss_db > -6.0 && r123.system_loss_db < 10.0);
     SC_EXPECT_NEAR(r123.cosite_desense_db, 3.9, 0.5);
+}
+
+// E1: the NATO-era library. Each side identifies the other's emitters from its own belief, and the
+// Osa's real (calibrated) radars are heard by a NATO RWR through the NATO view of the SA-8.
+SC_TEST("em data: NATO-era library loads with provenance and each side identifies the other") {
+    EmLibrary lib;
+    const EmLoadResult nato = LoadEmLibraryFile(DataPath("em/nato_1985.json"), lib);
+    if (!nato.ok) std::printf("    %s\n", nato.error.c_str());
+    SC_EXPECT(nato.ok);
+    SC_EXPECT(nato.values.size() > 40);
+    SC_EXPECT(LoadEmLibraryFile(DataPath("em/osa_ak.json"), lib).ok);
+    SC_EXPECT(lib.Esm("nato_alr46_class_rwr") >= 0 && lib.Esm("red_ground_esm_class") >= 0 && lib.Jammer("nato_alq99_band9") >= 0);
+
+    EmWorld w(GeoPoint::FromDegrees(49.5, 17.0, 0.0), nullptr, 5);
+    SC_EXPECT(w.SetLibrary(lib));
+    EmScene& s = w.Scene();
+    // Red side: an Osa search radar (search radar on) and a ground ESM station.
+    const int sam = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+    w.AddRadar(sam, "osa_ak_soc", true);
+    const int esm_site = w.AddGroundPlatform("ESM", Side::Red, 3000.0, 0.0, 20.0);
+    const int red_esm = w.AddEsm(esm_site, "red_ground_esm_class");
+    // Blue side: a fighter 90 km out with its X-band radar, a noise pod, and an RWR.
+    Platform p;
+    p.name = "strike";
+    p.side = Side::Blue;
+    p.kind = PlatformKind::FixedWing;
+    const double alt = 6000.0, north = 90000.0;
+    p.position = {0.0, north, alt - north * north / (2.0 * wgs84::kMeanRadius)};
+    const int jet = w.AddPlatform(p);
+    const int fcr = w.AddEmitter(jet, lib.emitters[static_cast<std::size_t>(lib.Emitter("nato_fighter_fcr_x"))]);
+    s.FindEmitter(fcr)->radiating = true;
+    const int pod = w.AddJammer(jet, "nato_alq99_band9", true);
+    s.FindJammer(pod)->aim_at_point = true;
+    s.FindJammer(pod)->aim_point = s.FindPlatform(sam)->position;
+    const int rwr = w.AddEsm(jet, "nato_alr46_class_rwr");
+    for (int i = 0; i < 100; ++i) w.Step(0.1);
+
+    bool fcr_id = false, jammer_id = false;
+    for (const EsmContact& c : s.FindEsm(red_esm)->contacts) {
+        fcr_id = fcr_id || (c.sig.library_id == "nato_x_band_fcr" && c.sig.hostile);
+        jammer_id = jammer_id || (c.sig.library_id == "nato_noise_jammer" && c.sig.hostile);
+    }
+    SC_EXPECT(fcr_id);
+    SC_EXPECT(jammer_id);
+    bool saw_sa8 = false;
+    for (const EsmContact& c : s.FindEsm(rwr)->contacts) saw_sa8 = saw_sa8 || (c.sig.library_id == "sa8_land_roll_search" && c.sig.hostile);
+    SC_EXPECT(saw_sa8);
 }
