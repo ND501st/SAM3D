@@ -1,0 +1,157 @@
+{
+  "library_id": "generic",
+  "display_name": "Generic placeholder emitters, receivers, jammers and radios",
+  "status": "PLACEHOLDER. Round, generic numbers for tests, demos and the debug viewer. They describe no real system and must never be cited as system data. Real systems live in their own files with per-value sources (data/em/osa_ak.json).",
+  "provenance": "placeholder",
+  "notes": "Frequencies in Hz, powers in W, levels in dBW (dBm = dBW + 30), angles in degrees (converted on load), ranges in metres.",
+
+  "radars": [
+    {
+      "id": "generic_search_c", "name": "Generic C-band search radar", "role": "search",
+      "emitter": {
+        "freq_hz": 6.0e9, "prf_hz": 2000, "pulse_width_s": 1.0e-6, "peak_power_w": 200000, "tx_loss_db": 1.0,
+        "antenna": { "gain_db": 34.0, "beamwidth_az_deg": 1.5, "beamwidth_el_deg": 4.0, "sidelobe_db": -25 },
+        "scan": "circular", "scan_period_s": 3.0,
+        "beams": [ { "name": "low", "centre_deg": 3.0, "height_deg": 6.0 },
+                   { "name": "high", "centre_deg": 13.0, "height_deg": 14.0 } ],
+        "agility": "channels", "channels_hz": [5.9e9, 6.0e9, 6.1e9]
+      },
+      "noise_figure_db": 5.0, "pfa": 1e-6,
+      "calibration": { "range_m": 40000, "rcs_m2": 2.0, "target_altitude_m": 3000, "pd": 0.5,
+                       "source": "PLACEHOLDER", "confidence": "estimate" },
+      "antenna_height_m": 5.0, "min_range_m": 500, "max_range_m": 60000, "min_elevation_deg": -2, "max_elevation_deg": 30,
+      "range_sigma_floor_m": 30, "angle_sigma_floor_deg": 0.1, "range_resolution_m": 150,
+      "mti": { "improvement_db": 25, "notch_mps": 15, "notch_attenuation_db": 30 },
+      "clutter": { "cnr_db_at_10km": 45, "max_elevation_deg": 1.5 },
+      "tracker": { "confirm_hits": 2, "confirm_window": 3, "drop_confirmed_misses": 4, "process_noise_accel": 20 },
+      "iff": { "reply_probability": 0.9 },
+      "eccm": { "strobe_jn_threshold_db": 6 },
+      "source": "PLACEHOLDER", "confidence": "estimate"
+    },
+    {
+      "id": "generic_track_ku", "name": "Generic Ku-band tracking radar", "role": "track",
+      "emitter": {
+        "freq_hz": 15.0e9, "prf_hz": 4000, "pulse_width_s": 0.5e-6, "peak_power_w": 50000, "tx_loss_db": 1.0,
+        "antenna": { "gain_db": 40.0, "beamwidth_az_deg": 1.2, "beamwidth_el_deg": 1.2, "sidelobe_db": -28 },
+        "scan": "tracking"
+      },
+      "noise_figure_db": 6.0, "pfa": 1e-6,
+      "calibration": { "range_m": 25000, "rcs_m2": 2.0, "target_altitude_m": 3000, "pd": 0.5,
+                       "source": "PLACEHOLDER", "confidence": "estimate" },
+      "antenna_height_m": 4.5, "min_range_m": 500, "max_range_m": 32000, "min_elevation_deg": -5, "max_elevation_deg": 80,
+      "range_sigma_floor_m": 10, "angle_sigma_floor_deg": 0.03, "range_resolution_m": 75,
+      "mti": { "improvement_db": 25, "notch_mps": 10 },
+      "clutter": { "cnr_db_at_10km": 35, "max_elevation_deg": 1.0 },
+      "tracker": { "confirm_hits": 3, "confirm_window": 4, "drop_confirmed_misses": 10, "process_noise_accel": 40 },
+      "track_gate_m": 600, "max_slew_deg_s": 20,
+      "eccm": { "rgpo_susceptibility": 0.7, "angle_track_on_jam": true },
+      "source": "PLACEHOLDER", "confidence": "estimate"
+    }
+  ],
+
+  "emitters": [
+    {
+      "id": "generic_airborne_fcr_x", "name": "Generic airborne X-band fire-control radar",
+      "kind": "tracking_radar", "freq_hz": 9.6e9, "prf_hz": 1500, "pulse_width_s": 1.5e-6, "peak_power_w": 5000,
+      "tx_loss_db": 1.0, "antenna": { "gain_db": 33.0, "beamwidth_az_deg": 3.5, "beamwidth_el_deg": 3.5, "sidelobe_db": -25 },
+      "scan": "sector", "scan_period_s": 2.0, "sector_width_deg": 120,
+      "source": "PLACEHOLDER", "confidence": "estimate"
+    },
+    {
+      "id": "generic_decoy_emitter_x", "name": "Generic ground decoy emitter (mimics the fighter radar)",
+      "kind": "decoy", "freq_hz": 9.6e9, "prf_hz": 1500, "pulse_width_s": 1.5e-6, "peak_power_w": 2000,
+      "antenna": { "gain_db": 3.0 }, "scan": "omni",
+      "source": "PLACEHOLDER", "confidence": "estimate"
+    }
+  ],
+
+  "esm": [
+    { "id": "generic_rwr", "name": "Generic radar warning receiver", "kind": "rwr",
+      "freq_min_hz": 2.0e9, "freq_max_hz": 18.0e9, "sensitivity_dbw": -95, "antenna_gain_db": 0,
+      "bearing_sigma_deg": 10, "freq_sigma_fraction": 0.01, "pri_sigma_fraction": 0.02, "pw_sigma_fraction": 0.1,
+      "line_interval_s": 5.0, "contact_timeout_s": 8.0, "threat_library": "blue_rwr_generic",
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_esm_pod", "name": "Generic airborne ESM pod", "kind": "esm",
+      "freq_min_hz": 2.0e9, "freq_max_hz": 18.0e9, "sensitivity_dbw": -105, "antenna_gain_db": 3,
+      "bearing_sigma_deg": 2, "freq_sigma_fraction": 0.003, "pri_sigma_fraction": 0.01, "pw_sigma_fraction": 0.05,
+      "line_interval_s": 5.0, "contact_timeout_s": 10.0, "threat_library": "blue_rwr_generic",
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_esm_site", "name": "Generic ground ESM direction finder", "kind": "esm",
+      "freq_min_hz": 0.5e9, "freq_max_hz": 18.0e9, "sensitivity_dbw": -110, "antenna_gain_db": 6,
+      "bearing_sigma_deg": 1.5, "freq_sigma_fraction": 0.002, "pri_sigma_fraction": 0.01, "pw_sigma_fraction": 0.05,
+      "line_interval_s": 2.0, "contact_timeout_s": 10.0, "threat_library": "red_esm_generic",
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_tdoa_site", "name": "Generic TDOA receiving site", "kind": "tdoa_site",
+      "freq_min_hz": 0.8e9, "freq_max_hz": 18.0e9, "sensitivity_dbw": -110, "antenna_gain_db": 6,
+      "bearing_sigma_deg": 3, "time_sigma_s": 30e-9, "line_interval_s": 2.0, "contact_timeout_s": 10.0,
+      "threat_library": "red_esm_generic", "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_comms_intercept", "name": "Generic VHF intercept and DF receiver", "kind": "comms_intercept",
+      "freq_min_hz": 20.0e6, "freq_max_hz": 100.0e6, "sensitivity_dbw": -140, "antenna_gain_db": 2,
+      "bearing_sigma_deg": 3, "line_interval_s": 2.0, "contact_timeout_s": 30.0, "threat_library": "blue_comint_generic",
+      "source": "PLACEHOLDER", "confidence": "estimate" }
+  ],
+
+  "jammers": [
+    { "id": "generic_soj_barrage_c", "name": "Generic stand-off barrage jammer (C band)", "technique": "barrage",
+      "emitter": { "freq_hz": 6.0e9, "bandwidth_hz": 500.0e6, "peak_power_w": 1500, "tx_loss_db": 1.0,
+                   "antenna": { "gain_db": 15.0, "beamwidth_az_deg": 30, "beamwidth_el_deg": 30, "sidelobe_db": -20 } },
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_selfscreen_spot_c", "name": "Generic self-screening noise pod (C band, weak)", "technique": "spot",
+      "emitter": { "freq_hz": 6.0e9, "bandwidth_hz": 100.0e6, "peak_power_w": 1.0, "tx_loss_db": 1.0,
+                   "antenna": { "gain_db": 3.0, "beamwidth_az_deg": 60, "beamwidth_el_deg": 60, "sidelobe_db": -15 } },
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_rgpo_ku", "name": "Generic range-gate pull-off repeater (Ku band)", "technique": "rgpo",
+      "emitter": { "freq_hz": 15.0e9, "bandwidth_hz": 50.0e6, "peak_power_w": 50, "tx_loss_db": 1.0,
+                   "antenna": { "gain_db": 6.0, "beamwidth_az_deg": 60, "beamwidth_el_deg": 60, "sidelobe_db": -15 } },
+      "rgpo_walk_mps": 150, "rgpo_max_m": 1500, "rgpo_off_s": 4, "rgpo_js_needed_db": 3,
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_vhf_barrage", "name": "Generic VHF communications barrage jammer", "technique": "barrage",
+      "emitter": { "freq_hz": 50.0e6, "bandwidth_hz": 40.0e6, "peak_power_w": 1000, "tx_loss_db": 1.0,
+                   "antenna": { "gain_db": 3.0 } },
+      "source": "PLACEHOLDER", "confidence": "estimate" }
+  ],
+
+  "radios": [
+    { "id": "generic_vhf_fm", "name": "Generic VHF FM voice radio", "freq_min_hz": 30.0e6, "freq_max_hz": 76.0e6,
+      "power_w": 20, "antenna_gain_db": 0, "antenna_height_m": 3.0, "sensitivity_dbw": -131, "required_snr_db": 12,
+      "bandwidth_hz": 25000, "voice": true,
+      "message_s": 8, "operator_delay_s": 4, "tracks_per_message": 1,
+      "range_anchor": { "range_m": 20000, "antenna_height_m": 3.0, "cosite_range_m": 16000,
+                        "source": "PLACEHOLDER", "confidence": "estimate" },
+      "source": "PLACEHOLDER", "confidence": "estimate" },
+    { "id": "generic_telecode", "name": "Generic VHF telecode data link", "freq_min_hz": 30.0e6, "freq_max_hz": 76.0e6,
+      "power_w": 50, "antenna_gain_db": 3, "antenna_height_m": 10.0, "sensitivity_dbw": -128, "required_snr_db": 10,
+      "bandwidth_hz": 25000, "system_loss_db": 0, "voice": false,
+      "message_s": 2, "operator_delay_s": 0, "tracks_per_message": 10,
+      "source": "PLACEHOLDER", "confidence": "estimate" }
+  ],
+
+  "threat_libraries": [
+    { "id": "blue_rwr_generic", "name": "Blue RWR library (generic)", "owner": "blue",
+      "notes": "What the blue side believes the red emitters look like. Deliberately a little off the truth.",
+      "entries": [
+        { "id": "red_sam_search", "name": "SAM search radar", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 5.8e9, "freq_max_hz": 6.3e9, "prf_min_hz": 1800, "prf_max_hz": 2200,
+          "pw_min_s": 0.8e-6, "pw_max_s": 1.2e-6, "source": "PLACEHOLDER", "confidence": "estimate" },
+        { "id": "red_sam_track", "name": "SAM tracking radar", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 14.5e9, "freq_max_hz": 15.5e9, "prf_min_hz": 3500, "prf_max_hz": 4500,
+          "pw_min_s": 0.4e-6, "pw_max_s": 0.6e-6, "source": "PLACEHOLDER", "confidence": "estimate" }
+      ] },
+    { "id": "red_esm_generic", "name": "Red ESM library (generic)", "owner": "red",
+      "entries": [
+        { "id": "blue_fighter_fcr", "name": "fighter fire-control radar", "kind": "fire_control", "owner": "blue", "platform": "air",
+          "freq_min_hz": 9.0e9, "freq_max_hz": 10.0e9, "prf_min_hz": 1000, "prf_max_hz": 3000,
+          "pw_min_s": 1.0e-6, "pw_max_s": 2.0e-6, "source": "PLACEHOLDER", "confidence": "estimate" },
+        { "id": "blue_noise_jammer", "name": "noise jammer", "kind": "jammer", "owner": "blue", "platform": "air", "cw": true,
+          "freq_min_hz": 2.0e9, "freq_max_hz": 18.0e9, "source": "PLACEHOLDER", "confidence": "estimate" },
+        { "id": "red_sam_search", "name": "own SAM search radar", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 5.9e9, "freq_max_hz": 6.1e9, "prf_min_hz": 1900, "prf_max_hz": 2100,
+          "source": "PLACEHOLDER", "confidence": "estimate" }
+      ] },
+    { "id": "blue_comint_generic", "name": "Blue COMINT library (generic)", "owner": "blue",
+      "entries": [
+        { "id": "red_vhf_voice", "name": "VHF FM voice net", "kind": "comms", "owner": "red", "platform": "ground", "cw": true,
+          "freq_min_hz": 30.0e6, "freq_max_hz": 76.0e6, "source": "PLACEHOLDER", "confidence": "estimate" }
+      ] }
+  ]
+}

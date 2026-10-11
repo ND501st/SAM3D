@@ -11,6 +11,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | Path | What |
 |---|---|
 | `simcore/` | **Header-only C++17 sim core** (radar, missile, aircraft, procedures, crew, world). Engine-agnostic. |
+| `simcore/include/simcore/em/` | **Electromagnetic layer** (`simcore::em`): propagation, calibrated radar, ESM/TDOA, jamming, tracking, knowledge, comms/C2, doctrine, debug overlays. See `docs/EM_ARCHITECTURE.md`, `docs/EM_HANDOFF.md`. |
 | `simcore/tests/` | Dependency-free unit tests (`SC_TEST`, `SC_EXPECT_NEAR`). |
 | `simcore/examples/` | `engagement_demo`: one radar vs one target, writes a Tacview `.acmi`. |
 | `prototype/` | Pure-Python mirror of simcore for fast experiments (runs on the Mac too). |
@@ -20,6 +21,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
+| `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
 | `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash); `panel_sheet.py` draws the cabin layout as a page; `button_map.py` draws every control's flow to subsystems, lamps and launch. |
@@ -34,12 +36,15 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/engagement_demo out/demo.acmi     # Windows: simcore\build\Release\engagement_demo.exe
 ./simcore/build/procedure_demo                    # Osa console session + debrief (run from the repo root)
 ./simcore/build/scenario_demo                     # play data/scenarios/osa_practice.json, print the debrief, write .acmi
+./simcore/build/em_demo data out/em_demo.json out/em_demo.acmi   # EM layer MVP: timeline + 11 checks
+./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Python prototype and tools
 python -m pytest prototype tools -q
 python prototype/scripts/run_demo.py out/demo_py.acmi
 python tools/panel_sheet.py                       # draw the cabin panels flat: out/panel_sheets/osa_ak.html
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
+python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
 
 # Everything at once
 ./tools/verify.sh          # Mac/Linux

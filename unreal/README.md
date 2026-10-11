@@ -21,10 +21,17 @@ plugins. With the editor open, the MCP server listens on `http://127.0.0.1:8000/
 authentication) and Claude Code connects to it through `.mcp.json` at the repo root. Python remote execution
 (`tools/ue_remote.py`) stays on alongside it.
 
-Once per machine, start the server with the editor: **Edit → Editor Preferences → General → Model Context Protocol →
-Auto Start Server** (stored per user in `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`, not in git),
-or run `ModelContextProtocol.StartServer` in the editor console. Start Claude Code from the repo root after the
-editor is up.
+The server starts with the editor: `Config/DefaultEditorPerProjectUserSettings.ini` (in git) sets
+`bAutoStartServer=True`, so every checkout and worktree has it. (The same switch is **Edit → Editor Preferences →
+General → Model Context Protocol → Auto Start Server**; a user's own choice there overrides the default. It is
+read once at editor start-up, so change it, then restart the editor.) If the server is ever off, run
+`ModelContextProtocol.StartServer` in the editor console.
+
+Order matters for Claude Code: it reads `.mcp.json` and connects when the session starts, and does not retry. Open
+the editor first, then start Claude Code from the repo root. If the session came first, or the editor was restarted,
+type `/mcp` in the session and reconnect `unreal-mcp`. Only one editor can hold port 8000, and a session talks to
+whichever project's editor owns it: check the editor is the checkout you mean (a worktree has its own `Binaries/`
+and `Saved/`; the Cesium ion token is also per checkout and not in git).
 
 ## First level: Osa practice scenario on Cesium terrain
 
@@ -135,6 +142,24 @@ must run with the tour on), records sim time, equipment, lamps, the track and a 
 | `SimCabinHUD` | Crosshair, hover text, feedback and key help while in the cabin. |
 | `SimEntityActor` | Visual proxy for one target or missile. Subclass in Blueprint for real meshes and effects. |
 
+## Electromagnetic layer (radar, ESM, jamming, C2)
+
+`FSimEmLayer` (`Public/SimEmLayer.h`) runs simcore's electromagnetic layer inside `USimWorldSubsystem::Tick` at a
+fixed 10 Hz and draws its debug overlays with `DrawDebug*`. For now it runs the MVP demo scenario
+(`simcore/em/demo_scenario.hpp`, generic placeholder equipment) at the current sim origin and terrain; linking it to
+the Osa scenario's console and scopes is roadmap phase E2/E3. Console (PIE or game):
+
+| Command | Effect |
+|---|---|
+| `sam3d.em.Start` / `sam3d.em.Stop` | start / stop the EM demo |
+| `sam3d.em.Debug <mask>` | overlays: 0 none, -1 all; 1 truth, 2 emitters, 4 beams, 8 coverage, 16 line of sight, 32 signal paths, 64 bearings, 128 fixes, 256 uncertainty, 512 tracks, 1024 C2 links, 2048 comms traffic, 4096 jamming, 8192 status, 16384 detection |
+| `sam3d.em.Owner <node>` | whose knowledge the overlays show: 0 command posts, -1 every node |
+
+Blueprint/C++: `StartEmDemo`, `StopEmDemo`, `IsEmDemoRunning`, `GetEmTimeSeconds`, `GetEmStatusText` on
+`USimWorldSubsystem`. The layer is stopped when the scenario, the demo world or the sampled Cesium terrain is
+replaced (it holds a pointer to the active world's terrain). Overlays are rebuilt after each EM step and redrawn
+every frame. Design: `docs/EM_ARCHITECTURE.md`; handover: `docs/EM_HANDOFF.md`.
+
 ## Coordinates
 
 `simcore` works in ENU metres (x=East, y=North, z=Up) at the scenario origin. Convert only through
@@ -158,3 +183,4 @@ hull heading so it still points the right way.
   lamps, the elevation display, a TV channel tracked by hand, and the vehicle's heading instead of "hull faces north".
 - The PU-12 command post and plotting board (phase 7), and the crew order menu (phase 8); crew orders are number keys
   for now.
+- The electromagnetic layer drives no scope or lamp yet; it runs as a separate demo with overlays (roadmap E2/E3).

@@ -21,7 +21,32 @@ chance = hit_chance[target class]
        x (in the zone at launch ? 1 : outside_zone_factor)
        x max(manoeuvre_factor_min, 1 - manoeuvre_penalty_per_deg_s x target turn rate)
        x max(deviation_factor_min, 1 - deviation_penalty x crew mistakes)
+       x low_altitude[target class](height above the ground at impact)
+       x (TV track ? max(error_factor_min, 1 - error_penalty_per_reticle x mean aim error / reticle) : 1)
 ```
+
+**Zones and methods (roadmap 6.7).** `zones` gives the NVA's firing zones (`flak11`): head-on for an approaching target
+(the `zone` box's range limits, with an altitude band that depends on the target's speed: 25-5000 m up to 300 m/s,
+100-5000 m up to 500 m/s), pursuit for a receding one (to 6.5 km, 100-5000 m, up to 300 m/s), and the optical "F"
+zone for slow or hovering targets near the ground (up to 100 m/s, 2-6.5 km, 10-25 m). The ЦЕЛЬ В ЗОНЕ lamp and the
+zone factor use them; without a `zones` block the one `zone` box applies to every target. `methods` picks the guidance
+method the way the creator describes it: "F" for slow or hovering targets in the optical zone, "Gorka" (zoom climb) for
+a low target (at or below `gorka_max_agl_m`) under `low_target_elevation_deg` (00-30 thousandths = 1.8 degrees),
+"T/T" otherwise. The method is shown in the debrief; its effect on the chance is in `low_altitude`, which is calibrated
+to the published single-missile kill probabilities listed above (fighter 0.39 at 50 m, strike aircraft 0.32 and
+helicopter 0.10 at 10 m with the class chances in the file). "N" (against jammers) is not modelled, and neither is
+the NVA's "parameter" limit on crossing offset.
+
+**Manual TV tracking (roadmap 6.6).** With a `tv` group the TV channel follows the wheels instead of driving them
+(`ePap`: "only manual tracking"). A TV track holds while the target stays inside the lens field around where the
+azimuth and elevation wheels point (the console's `fov_deg`, with the height `fov_height_ratio` of the width: a 4:3
+raster); outside it the track is lost ("target left the TV field"). An NPC in a wheel's seat follows the target
+`npc_delay_s` behind it, no faster than the aim rates; a wheel in the player's hands stays where the player puts it. A
+target hidden by terrain is carried on at the wheels' last angular rates for `memory_s` ("memory tracking"), then lost.
+The mean distance of the target from the crosshair (the 3-mil reticle, 0.18 degrees) over a missile's flight costs hit
+chance, and the debrief prints it ("TV aim"). Close crossing targets are the hard case: at 1.5 km abeam a 150 m/s
+target outruns the operators' lag. Not done: drawing the reticle, and the range read from the target's size in it, in
+the TV view (Unreal). Without the group the old behaviour stays: the servo drives the wheels onto the target.
 
 Losing the track during the flight loses the missile (command guidance), and a shot whose flight time would exceed
 `missile.max_flight_time_s` runs out. The debrief prints every factor and the random draw for each shot, and the

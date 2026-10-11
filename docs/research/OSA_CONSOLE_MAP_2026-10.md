@@ -606,3 +606,31 @@ Still open from the game: the elevation indicator's vertical axis, and what ЦЕ
 target or missile is in play. A person playing NAMFI with the right mouse button would get there quickly. A newly
 seen control: a toggle beside the azimuth wheel on OS52-12M, read as ЗРП ОТКЛ. / ВКЛ. at low resolution, not in this
 file before.
+
+## 13. Close-out of task 6.0 (8 October 2026)
+
+The data half of 6.0 was done by later PRs, not by one eyes-on PR: #13 (start positions, labels, inert controls), #14
+(controls and subsystems from the Polish 1981 manual and the 1991 textbook), #15 (the cabin laid out on the game's
+three panel photos at 1 mm per pixel, seats in the Fig. 3 order), #16 (legend lamps and guards, photo comparison) and
+#19–#25 (the 3D interior). The seat check with `tools/panel_sheet.py` runs clean (`--check`: every control placed,
+nothing overlapping, nothing over a panel edge). The three operator columns *are* the game's photos, so they match them
+by construction; the driver, commander and power-cabinet panels are estimates for want of a readable picture.
+
+§11 status after those PRs (sources in `OSA_MANUALS_2026-10.md`):
+
+| # | Status | Closed by |
+|---|---|---|
+| 3 | Closed | §12 |
+| 4 АПУ lock | **Closed**: the operator's control | PR #14 |
+| 5 switch-on panels | **Closed**: the operator works the power cabinet (АППАРАТУРА, СИСТЕМА СТАБ., drives); the drill is in the data | PR #14, `voenizdat_osa_1991` pp. 163–166 |
+| 10 ЦЕЛЬ, АЗ, СМЕНА РКТ, КАНАЛЫ | **Closed**: ЦЕЛЬ selects range channel Р I / Р II; АЗ arms auto-capture (as ЦУ does in the game); СМЕНА РКТ is СМЕНА ЛИТ. — НОРМА (the missile's frequency letter); КАНАЛЫ selects the missile channel(s) | PR #14, #15 |
+| 11 elevation indicator axes | **Closed**: OS81-10M, a two-coordinate sector indicator (31° of elevation by 2 km of range, one raster per beam); the "low trace / middle trace" seen in the game is its time base | `voenizdat_osa_1991` p95, Fig. 2.37; display added in `feature/cabin-bench` |
+| 1 positions | **Mostly closed**: block order and seat row known; side wall, distances and the antenna-lowering panel are estimates | PR #15 |
+| 2 labels on PU-303, OO96-9M, OO05-8M, function-check blocks | **Open** | Needs a sharper picture: WWP *SA-8 Gecko in Detail* or the NVA regulations (§10) |
+| 7 commander's controls | **Partly closed**: hatches and ПРОХОД ПОД МОСТОМ are in; the radio and intercom panel has no readable label | PR #14 |
+| 8 driver's controls | **Partly closed**: АРРЕТИР. and the power-up drill are in; the BAZ-5937 dashboard is not modelled (the driver's job is to drive) | PR #14 |
+
+**Handed on, not blocking 6.2:** (a) a person playing NAMFI with both mouse buttons can check what ЗРП ОТКЛ. / ВКЛ.
+(the toggle beside the azimuth wheel) and the lock graphics do with a target in play; (b) the creator's answers
+(`docs/outreach/creator_message_draft.md` §4, to be sent by the user); (c) items 2 and 7 wait on better photographs.
+None of them changes the console's structure, so phase 6.2 starts from the data as it is.

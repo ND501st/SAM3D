@@ -7,9 +7,13 @@ review (`docs/BRIEFING_2026-10.md`).
 **Status (2 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check),
 merged to `main` on 2 Oct 2026 (PRs ND501st/SAM3D#1–#8). **The briefing's decisions were all adopted (five-man
 crew, real timings with time compression, manual TV tracking, calibrated hit chances, Osa-AK, Osa scenarios). Next:
-phase 6, the accuracy pass: 6.1 is in review (PR #10); 6.0 (the eyes-on pass) comes next, before 6.2.** The old "crew and mission"
+phase 6, the accuracy pass: 6.0 and 6.1 are done (8 Oct 2026); 6.2 (real start-up and readiness states) is next.** The old "crew and mission"
 phase is now phase 8, after the battery (phase 7), because the real Osa got most of its targets from the battery's
 PU-12 and the crew changes ripple through everything after them.
+
+**Electromagnetic layer (7 Oct 2026):** phase E0 of the new EM track is done on branch `feature/em-environment`
+(research, architecture, `simcore::em`, MVP scenario, tests, Unreal overlays): see the EM track section below and
+`docs/EM_HANDOFF.md`. E1–E2 are proposed to run alongside 6.4, which they largely implement.
 
 ## Principles
 
@@ -48,7 +52,7 @@ cabinet).
 
 | # | Task | Research |
 |---|---|---|
-| 6.0 | **Eyes-on pass** (needs a session linked to the PC, for `reference/`). Go through the cabin photos and layout drawings (`rwd_mb3`), SAM Simulator manual p14–18, the control sprites and the running game. Record every control in the console and cabin files: label, kind, positions, start position, place on its panel; controls whose function isn't known go in as visible but inert. Check each seat with `tools/panel_sheet.py` against the photos. Closes or hands to the creator the open items in the console map §11 | console map §9, §11 |
+| 6.0 | **Done (PRs #12–#16, closed out in console map §13).** **Eyes-on pass** (needs a session linked to the PC, for `reference/`). Go through the cabin photos and layout drawings (`rwd_mb3`), SAM Simulator manual p14–18, the control sprites and the running game. Record every control in the console and cabin files: label, kind, positions, start position, place on its panel; controls whose function isn't known go in as visible but inert. Check each seat with `tools/panel_sheet.py` against the photos. Closes or hands to the creator the open items in the console map §11 | console map §9, §11 |
 | 6.1 | **Done (PR #10).** **Five-man crew and seats.** Split the "range officer" into the senior operator (search radar, IFF, azimuth) and the operator (range); the "firing officer" becomes the deputy commander (elevation, TV, launch); the commander receives designations and gives orders; the driver. Console `station` fields, cabin layout (five seats, operators' cabin behind the driver's cab), procedures, scenario crews, aim roles. Panel detail: red dots marking each control's starting position | §2, §6 |
 | 6.2 | **Real start-up and readiness states.** Switch-on cycle and a function-check procedure (about 3.8 + 3.0 min cold), computer warm-up (100 s), march-to-combat ≤ 4 min, reaction 26–40 s as test targets; scenarios start cold, powered on the march, or deployed (a powered battery stops and deploys fast); crew-skill timing for NPCs (next target 40–120 s, unverified); time compression so it stays playable | §3, §10, §12 |
 | 6.3 | **Missile load, selection and channels.** Six containers (1–3 I, 1–3 II) with ammunition lamps; automatic selection, outer first; selector switch; two channels, ≥ 4 s between launches; per-channel lamp sequence СХОД → ЗАХВАТ → СР.Л → УЗКИЙ ЛУЧ → К3; command transmitter on at ВНИМАНИЕ; preparation at "target in zone"; fix the ЗАХВАТ / ВКЛ ВЫС mapping | §6 |
@@ -88,10 +92,10 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 
 | # | Task |
 |---|---|
-| 9.1 | Jamming at gameplay level: range-gate pull-off on the search scope, noise jammers, method Н, the ПОМЕХА switch |
-| 9.2 | Anti-radiation missiles and the drills (stop emitting, relocate; TV-first tracking, the search radar on for two turns, brief tracking-radar bursts); EMCON TV engagement as a full mission |
-| 9.4 | ECCM at gameplay level: mixed (semi-automatic/automatic) tracking, the external-coherence MTI mode against chaff, counter-jamming only while firing |
-| 9.3 | Target behaviour: pop-up helicopters, low strike runs, evasion, terrain masking |
+| 9.1 | Jamming: noise jammers and range-gate pull-off now come from the EM layer (E0 done; scopes in E3); remaining: method Н and the ПОМЕХА switch in the engagement layer |
+| 9.2 | Anti-radiation missiles and the drills (stop emitting, relocate; TV-first tracking, the search radar on for two turns, brief tracking-radar bursts); EMCON TV engagement as a full mission → EM phase E6 |
+| 9.4 | ECCM: the external-coherence MTI mode against chaff exists in the EM layer (E0); mixed tracking and counter-jamming only while firing → E5/E6 |
+| 9.3 | Target behaviour: pop-up helicopters, low strike runs, evasion, terrain masking (masking and multipath are in the EM layer) |
 
 ## Phase 10 - Scenarios and training
 
@@ -100,6 +104,29 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 | 10.1 | Training-range scenarios in the style of Ashuluk / Kapustin Yar / Ustka / NAMFI (drones, P-15 targets) |
 | 10.2 | Angola 1983–88 (dug-in Osa-AK unit, night moves, night bombers; Cuito Cuanavale) and Lebanon, 24 July 1982 |
 | 10.3 | Instructor mode modelled on the 9Ф632 trainer: a second player changes target behaviour live |
+
+## Electromagnetic (EM) track
+
+Radar, passive sensing, EW, communications and command as one simulated environment
+(`simcore/include/simcore/em/`, `docs/EM_ARCHITECTURE.md`). Phases chosen from the research
+(`docs/research/EM_RESEARCH_2026-10.md`): the order is "get the Osa's own radar picture from the
+physics first, then the battery's C2, then missiles and optics, then threats and deception", because
+each later phase needs the earlier one's knowledge model to be right. Difficulty S/M/L; cost per
+tick at the 500-aircraft benchmark (14 ms mean today on one core).
+
+| Phase | Objective | Systems | Depends on | Difficulty | Perf cost | Testing | Done when |
+|---|---|---|---|---|---|---|---|
+| **E0** (done, 7 Oct 2026) | Research, architecture and a minimum viable EM layer | Propagation, calibrated radar, ESM, triangulation, TDOA, noise jamming, strobes, RGPO, chaff/MTI, tracking, knowledge/fusion, comms/C2, doctrine, overlays, Unreal demo mode | — | L | baseline | 47 new C++ tests (154 in all), 11 MVP checks, Python mirror | merged; Unreal demo visible with `sam3d.em.Start` |
+| **E1** | Data hardening | Blue threat library from period sources (FM 100-2-3 etc.); generic-but-period NATO aircraft radars, RWRs, pods; Osa open items where sources appear; ESM band plans | E0 | S | none | data tests with provenance | every library value cited or labelled |
+| **E2** | The Osa's radar picture from physics | `ScenarioRunner` owns an `EmWorld`; console controls drive EM state (`soc.hv`, `soc.beam`, `soc.mti`, `iff.*`, `ssc.tx`, `fo.cu_az`); the engagement model's search picture and lock read EM plots and tracks instead of fixed thresholds; outcome resolver unchanged | E0, 6.1 | M | +1–2 ms | practice scenario: lock ranges in the published bands; procedure demos unchanged | practice scenario plays with EM-driven scopes and lock (this is most of 6.4) |
+| **E3** | Unreal presentation | PPI echoes from plots (brightness from SINR), strobes, IFF replies, range indicator from the SSC; overlays on real Cesium terrain; Gameplay Debugger category; antenna rotation from the emitter state | E2 | M | GPU only | scripted `ue_cabin_check.py` views | the cabin scopes show EM output |
+| **E4** | Battery C2 and PU-12 | PU-12 node and plotting board fed by a regiment link and a P-19/P-40; voice designations "azimuth, range" as messages to commanders; battery net; four vehicles | E2, phase 7 | M | +0.5 ms | C2 scenarios: latency, saturation, loss of the PU-12 | phase 7 runs on EM messages |
+| **E5** | Missiles and optics | Missile platforms with responders (ССР), the command transmitter (СПК) as an emitter, the TV sight as a passive optical sensor (angles, visibility), method Н | E2, 6.3, 6.6 | M | small | guidance-channel lamp sequence from EM states | launches visible to ESM; TV tracking without emission |
+| **E6** | Threats | ARMs homing on emitters (with memory after shutdown), decoy drones, self-protection pods, SOJ escorts; doctrine: ARM detection, blink, relocate | E5 | M | small | scenarios: Lebanon-style decoys, HARM drill | phase 9.2 |
+| **E7** | Deception and EMCON depth | Decoy emitters on the same parameters (Czechoslovak doctrine), dummy positions, frequency changes vs spot jammers, repeater false targets, VGPO, comms deception and the intercept value of voice | E6 | M | small | deception scenarios produce ghost fixes / misidentifications | phase 9 complete |
+| **E8** | Scale | Threads for ESM/radar systems, time-sliced cold paths, hierarchical max-height grid, level of detail for distant units | any | M | goal: 500 aircraft ≤ 5 ms mean | `em_bench` in CI as a trend | goal met with identical results single- and multi-threaded |
+| **E9** | Environment depth | Deygout multi-edge diffraction, forest/urban obstacle heights from land cover, rain at Ku band, sea areas | E2 | M | +10–30 % path cost | propagation tests vs ITU-R examples | — |
+| **E10** | Multiplayer knowledge | Server-side simcore; replicate each player's knowledge, never truth | multiplayer crew | L | network | soak tests | later |
 
 ## Later
 

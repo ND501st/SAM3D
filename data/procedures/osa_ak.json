@@ -110,6 +110,14 @@
       "antenna": "soc_antenna", "transmitter": "soc_transmitter",
       "range_control": "soc.range", "range_scales_m": [[0, 15000], [0, 35000], [10000, 45000]],
       "mti_control": "soc.mti", "mti_max_range_m": 35000,
+      "range_rings_m": [ [2000, 7000, 12000], [5000, 10000, 15000, 20000, 25000, 30000], [15000, 20000, 25000, 30000, 35000, 40000] ],
+      "beams": {
+        "control": "soc.beam", "programs": [ [0], [1], [2], [0, 1, 2], [0, 1] ],
+        "inputs": [ "search_beam_1", "search_beam_2", "search_beam_3" ], "rotation_period_s": 1.818,
+        "source": "flak11 and korovin_tiv_2010 (33 rpm; the beam is switched to one of three positions each turn); samsim_osa p15 (selector: ЛУЧ I, II, III, АВТ. I-III, АВТ. I-II); mon_2112_80 p15, p21",
+        "confidence": "high",
+        "notes": "Positions of soc.beam: I, II, III hold one beam; АВТ. I-III steps through all three, one per turn, and АВТ. I-II through the lower two. The rings are the ePap rings (samsim_thread): the 0-15 km scale has them at 2, 7 and 12 km, the others every 5 km from the origin (SAM3D reads that as multiples of 5 km inside the window)."
+      },
       "iff": {
         "query": "iff.query", "control_query": "iff.query_k", "gate_control": "iff.gate", "ready": "soc_transmitter",
         "interrogating_input": "iff_interrogating", "query_time_s": 1.0, "max_range_m": 30000,
@@ -122,7 +130,7 @@
       "transmitter": "ssc_transmitter", "slew": "antenna_drives", "radar_mode": "capture_mode",
       "tv_camera": "tov_camera", "tv_mode": "tv_angle_track", "range_only_mode": "range_semi_auto",
       "az_wheel": "ssc.az_wheel", "el_wheel": "ssc.el_wheel", "range_wheel": "ssc.range_wheel",
-      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "fov_deg": [4.8, 1.44],
+      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
@@ -133,7 +141,7 @@
         "source": "voenizdat_osa_1991 p95 (in ЦУ the SSC antenna searches in elevation within the search beam the target was detected in; the OS81-10M auto-capture circuit, armed by ЦУ and АЗ, fires when the target is in the antenna's beam and the range gate is on it), p86 (the scan comes from self-oscillation of the elevation drive; beam commands I, II, III from the search radar), Fig. 2.37 p97 (beam I −1° to 5°, II 3° to 9°, III 6° to 30°); korovin_tiv_2010 (tracking beam 1°)", "confidence": "medium",
         "notes": "Scan period: SAM3D estimate. In the automatic beam programmes (АВТ. I–III, I–II) SAM3D searches the beam the search radar sees the target in nearest the azimuth line (the real scan follows the search radar's beam commands). mon_2112_80 p21 gives I–II as 0–8° and I–III as 0–28°: the textbook's figure is used."
       },
-      "notes": "SSC displayed range 28 km (p16); ±330° azimuth (p14, p16; voenizdat_osa_1991 p66; mon_2112_80 p25 gives ±342° for the turret). TV fields 00-60 x 00-80 (3.6 x 4.8°) wide and 00-18 x 00-24 (1.08 x 1.44°) narrow (voenizdat_osa_1991 p101; an operator on samsim_thread gives the same); the larger figure is used. SAM Simulator's manual gives 5° / 1.5°."
+      "notes": "SSC displayed range 28 km (p16); ±330° azimuth (p14, p16; voenizdat_osa_1991 p66; mon_2112_80 p25 gives ±342° for the turret). TV fields 00-60 x 00-80 (3.6 x 4.8°) wide and 00-18 x 00-24 (1.08 x 1.44°) narrow (voenizdat_osa_1991 p101; an operator on samsim_thread gives the same); the larger figure is used. SAM Simulator's manual gives 5° / 1.5°. fov_height_ratio 0.75 is the height over the width of those fields (00-60 over 00-80), used for the lens field in manual TV tracking."
     },
     "orientation": {
       "gyro": "power", "setter": "orient.qc", "mode_control": "orient.ak_zk", "set_position": 1,
@@ -146,6 +154,9 @@
 
   "inputs": [
     { "id": "heading_synced", "description": "The gyro half-compass agrees with the course setter ЗК-4 (the Qc scale has stopped)", "source": "voenizdat_osa_1991 p48, p246", "confidence": "high" },
+    { "id": "search_beam_1", "description": "The search radar is radiating its beam I (0-4 degrees) this turn: the I ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
+    { "id": "search_beam_2", "description": "The search radar is radiating its beam II (4-8 degrees) this turn: the II ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
+    { "id": "search_beam_3", "description": "The search radar is radiating its beam III (8-28 degrees) this turn: the III ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "iff_interrogating", "description": "The IFF interrogator is interrogating (about 1 s per press)", "source": "voenizdat_osa_1991 p56", "confidence": "medium" },
     { "id": "vehicle_stopped", "description": "The vehicle is stationary (a short halt or a firing position)", "source": "wrk; mis (tracking and launch only from a short halt or stationary)", "confidence": "high" },
     { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
