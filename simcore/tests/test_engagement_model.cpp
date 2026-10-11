@@ -568,3 +568,94 @@ SC_TEST("zones: a low target's shot is printed with its zone, method and height 
     SC_EXPECT(Has(high, "head-on zone, T/T method"));
     SC_EXPECT(Has(high, "x height 1.00"));
 }
+
+// ---- Roadmap 6.6: manual TV tracking.
+
+namespace {
+
+const char* kTvOnly = R"(,
+        { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+          "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
+                  { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
+
+}  // namespace
+
+SC_TEST("tv: the manual-tracking group and the lens field's shape load; bad ones are refused with paths") {
+    EngagementTuning t = OsaTuning();
+    SC_EXPECT(t.has_tv_manual);
+    SC_EXPECT_NEAR(t.tv_reticle_deg, 0.18, 1e-12);
+    SC_EXPECT_NEAR(t.tv_memory_s, 5.0, 1e-12);
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console, &error));
+    SC_EXPECT_NEAR(console.track.fov_height_ratio, 0.75, 1e-12);
+
+    std::string text;
+    {
+        std::ifstream f(kData + "/gameplay/osa_ak.json", std::ios::binary);
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        text = ss.str();
+    }
+    auto broken = [&](const std::string& from, const std::string& to) {
+        std::string s = text;
+        const std::size_t at = s.find(from);
+        if (at == std::string::npos) return std::string("{}");
+        return s.replace(at, from.size(), to);
+    };
+    EngagementTuning out;
+    SC_EXPECT(!LoadEngagementTuning(broken("\"reticle_deg\": 0.18", "\"reticle\": 0.18"), out, &error) &&
+              error.find("tv.reticle: unknown key") != std::string::npos);
+    SC_EXPECT(!LoadEngagementTuning(broken("\"error_factor_min\": 0.4", "\"error_factor_min\": 1.4"), out, &error) &&
+              error.find("tv.error_factor_min") != std::string::npos);
+}
+
+SC_TEST("tv: without the tv group the servo still drives the wheels onto the target itself") {
+    std::string text;
+    {
+        std::ifstream f(kData + "/gameplay/osa_ak.json", std::ios::binary);
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        text = ss.str();
+    }
+    const std::size_t a = text.find("\"tv\": {");
+    const std::size_t b = text.find("\"methods\": {");
+    SC_EXPECT(a != std::string::npos && b != std::string::npos && a < b);
+    EngagementTuning t;
+    std::string error;
+    SC_EXPECT(LoadEngagementTuning(text.substr(0, a) + text.substr(b), t, &error));
+    SC_EXPECT(!t.has_tv_manual);
+}
+
+SC_TEST("tv: a distant target is tracked by the NPC operators, and the shot is charged for their aim") {
+    const Run r = Play(Engage(Target(12000, 800), kTvOnly));
+    SC_EXPECT(Has(r, "TV track"));
+    SC_EXPECT(r.summary.launches == 1 && r.summary.hits + r.summary.misses == 1);
+    SC_EXPECT(!(r.debrief.find("target left the TV field") != std::string::npos));
+    SC_EXPECT(Has(r, "x TV aim 0."));
+    SC_EXPECT(Has(r, "deg off the crosshair"));
+}
+
+SC_TEST("tv: a target crossing close in leaves the lens field faster than the operators can follow") {
+    const Run r = Play(Engage(Target(6000, 800), kTvOnly));
+    SC_EXPECT(Has(r, "track lost: target left the TV field"));
+}
+
+SC_TEST("tv: terrain hiding the target is carried on in memory for a few seconds, then the track is lost") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenario(Engage(Target(12000, 800), kTvOnly), kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    while (!runner.Finished() && runner.Engagement().Method() != TrackMethod::Tv) runner.Step(0.1);
+    SC_EXPECT(runner.Engagement().Method() == TrackMethod::Tv);
+    // A 3 km-high ridge between the unit and the target (grid covers 30 x 30 km).
+    std::vector<double> heights(61 * 61, 0.0);
+    for (int col = 0; col < 61; ++col) heights[static_cast<std::size_t>(40 * 61 + col)] = 3000.0;
+    const GridTerrain ridge(-15000.0, -15000.0, 500.0, 61, 61, heights);
+    runner.SetTerrain(&ridge);
+    for (int i = 0; i < 30; ++i) runner.Step(0.1);  // 3 s masked: still held
+    SC_EXPECT(runner.Engagement().Method() == TrackMethod::Tv);
+    for (int i = 0; i < 40; ++i) runner.Step(0.1);  // 7 s masked: the 5 s of memory ran out
+    SC_EXPECT(runner.Engagement().Method() == TrackMethod::None);
+    SC_EXPECT(runner.Debrief().find("track lost: masked: the memory ran out") != std::string::npos);
+}
