@@ -71,8 +71,8 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     SC_EXPECT(s.hits == 1 && s.misses == 0);
     SC_EXPECT(runner.Acmi().Text().find("Name=9K33M2 Osa-AK") != std::string::npos);
     // Ends when the drone goes down: it is launched at 200 s (after the crew's 4 min to readiness); our launch at
-    // about 435 s, about 22 s of flight.
-    SC_EXPECT(runner.Time() > 450.0 && runner.Time() < 465.0);
+    // about 448 s (13 s of preparation from "target in zone"), about 18 s of flight.
+    SC_EXPECT(runner.Time() > 460.0 && runner.Time() < 475.0);
 }
 
 SC_TEST("scenario: same seed, same run; another seed changes crew timing") {

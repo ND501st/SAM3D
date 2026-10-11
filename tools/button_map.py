@@ -50,14 +50,9 @@ DISPLAY_SOURCES = {
 # Phases follow docs/DEVELOPMENT_ROADMAP.md; notes follow the controls' notes and docs/ARCHITECTURE.md.
 PLANNED = {
     "osa_ak": [
-        ("p:containers", "Missile containers 1–3 I, 1–3 II", "6.3", "Six containers with ammunition lamps 1/2/3-I and -II (flash if a gyro overheats).", [], "missing"),
-        ("p:select", "Automatic missile selection", "6.3", "Two missiles chosen at ВНИМАНИЕ, outer ones first; ≥ 4 s between launches.", ["p:containers"], "missing"),
-        ("p:channels", "Two guidance channels I / II", "6.3", "КАНАЛЫ picks channel I, II or both (СОВМ.). Today one shot is resolved by the outcome model.", ["c:msl.channels", "p:select"], "missing"),
-        ("p:cmdtx", "Command transmitter (СПК) and letter change", "6.3", "Transmitter on automatically at ВНИМАНИЕ; СМЕНА ЛИТ. changes its frequency letter.", ["c:spk.letter"], "missing"),
-        ("p:chanlamps", "Per-channel lamps СХОД → ЗАХВАТ → СР.Л → УЗКИЙ ЛУЧ → К3", "6.3", "Missile leaves the container, captured in wide beam, medium beam, narrow beam, fuse armed ~120 m out. ЗАХВАТ / ВКЛ ВЫС are mapped to preparation today.", ["p:channels", "p:cmdtx"], "missing"),
-        ("p:rangech", "Range indicator: missile sweeps Р I / Р II", "6.3", "Р I — ЦЕЛЬ — Р II should switch the range scope to a missile channel's sweep; it always shows the target today.", ["c:ssc.target_select", "p:channels"], "missing"),
-        ("p:emerg", "Emergency launch (unguided throw-off)", "6.3", "ИЗДЕЛИЯ picks the container, АВАРИЙНЫЙ ПУСК throws it off when the launcher has lost power.", ["c:msl.emergency_select", "c:msl.emergency", "p:containers"], "missing"),
-        ("p:fuse", "Jamming-target fuse arming (ПОМЕХА)", "6.3 / 6.7", "ПОМЕХА should arm the proximity fuse right after launch; the switch is placed but no model reads it.", ["c:fo.pomekha"], "missing"),
+        ("p:cmdtx", "Command transmitter letter change (СМЕНА ЛИТ.)", "6.3", "The transmitter comes on at ВНИМАНИЕ (built); СМЕНА ЛИТ. should change its frequency letter, and no model reads it.", ["c:spk.letter"], "missing"),
+        ("p:rangech", "Range indicator: missile sweeps Р I / Р II", "6.3", "Р I — ЦЕЛЬ — Р II should switch the range scope to a missile channel's sweep; it always shows the target today.", ["c:ssc.target_select", "m:launcher"], "missing"),
+        ("p:emerg", "Emergency launch (unguided throw-off)", "6.3", "ИЗДЕЛИЯ picks the container, АВАРИЙНЫЙ ПУСК throws it off when the launcher has lost power.", ["c:msl.emergency_select", "c:msl.emergency", "m:launcher"], "missing"),
         ("p:rr", "РР mode and СВР beam width", "later", "РОД РАБОТЫ РР and ШИР. — СРЕДН. are not modelled (the game has only БР and ТР).", ["c:svr.beam"], "missing"),
         ("p:fk", "Function check ФК and real cold start (≈ 6.8 min)", "6.2", "Switch-on cycle, computer 9S456 warm-up (100 s), function check; readiness states.", [], "missing"),
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. Function not known from any source yet.", ["c:fo.mc"], "unknown"),
@@ -268,6 +263,20 @@ class MapBuilder:
                                ("c:", "sync_button", orient, "fast sync")])
             if orient.get("synced_input"):
                 self.add_edge("m:orient", "i:" + orient["synced_input"], "signal", "sets this signal")
+
+        launcher = self.con.get("launcher")
+        if launcher:  # the missile load and the guidance channels (roadmap 6.3, simcore/launcher.hpp)
+            self.add_node("m:launcher", t="model", label="Missiles and guidance channels I / II", notes=launcher.get("notes"),
+                          source=launcher.get("source"), conf=launcher.get("confidence"))
+            feeds("m:launcher", [("c:", "channel_control", launcher, "channels"), ("c:", "jam_control", launcher, "jamming target"),
+                                 ("i:", "attention_input", launcher, "selects missiles"),
+                                 ("s:", "pair_preparation", launcher, "prepared")])
+            outs = [launcher.get("hold_input")] + [c.get("input") for c in launcher.get("containers", [])]
+            for ch in launcher.get("channels", []):
+                outs += list(ch.values())
+            for inp in outs:
+                if inp:
+                    self.add_edge("m:launcher", "i:" + inp, "signal", "sets this signal")
 
     def clean_edges(self):
         seen, kept = set(), []

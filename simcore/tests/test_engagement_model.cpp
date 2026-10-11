@@ -224,7 +224,7 @@ SC_TEST("engagement: an evading target breaks away and the manoeuvre lowers the 
     SC_EXPECT(Has(r, "manoeuvre 0.52 (12 deg/s)"));
 }
 
-SC_TEST("engagement: after a launch ПУСК ГОТОВ goes out until the next missile is prepared") {
+SC_TEST("engagement: a pair's second missile waits the launch interval; the next pair waits for its preparation") {
     ScenarioDef def;
     ConsoleData console;
     SC_EXPECT(LoadScenario(Engage(Target(24000, 1000), kAcquireAndFire), kData, def, console));
@@ -233,11 +233,25 @@ SC_TEST("engagement: after a launch ПУСК ГОТОВ goes out until the next 
     SC_EXPECT(runner.Launches() == 1);
     runner.Step(0.1);
     const Equipment& eq = runner.Console().equipment;
-    SC_EXPECT(!eq.IsReady("launch_armed") && eq.State("missile_prep") == SubsystemState::Starting);
-    // Lit again after the 13 s preparation (data/procedures/osa_ak.json), while the missile is still flying.
-    const double t0 = runner.Time();
+    // The pair's second missile (channel II) is still prepared: only the 4 s between launches.
+    SC_EXPECT(eq.IsReady("missile_prep") && eq.GetInput("launch_hold") && !eq.IsReady("launch_armed"));
+    double t0 = runner.Time();
     while (!runner.Finished() && !eq.IsReady("launch_armed") && runner.Time() < t0 + 60.0) runner.Step(0.1);
-    SC_EXPECT_NEAR(runner.Time() - t0, 13.0, 0.3);
+    SC_EXPECT_NEAR(runner.Time() - t0, 3.9, 0.3);
+    runner.Console().panel.Set("fo.launch", 1);  // the second missile, by hand
+    runner.Step(0.1);
+    SC_EXPECT(runner.Launches() == 2);
+    // The pair is spent: the next one is selected and prepared again (13 s, data/procedures/osa_ak.json).
+    SC_EXPECT(eq.State("missile_prep") == SubsystemState::Starting && !eq.IsReady("launch_armed"));
+    t0 = runner.Time();
+    while (!runner.Finished() && !eq.IsReady("launch_armed") && runner.Time() < t0 + 60.0) runner.Step(0.1);
+    // Ready again once the 13 s preparation is done and a channel is free: both are guiding their missiles, so
+    // the third waits for the first shot to end as well.
+    SC_EXPECT(runner.Time() - t0 >= 12.9);
+    SC_EXPECT(eq.IsReady("missile_prep") && runner.Engagement().ShotDone(1));
+    const std::string text = runner.Debrief();
+    SC_EXPECT(text.find("missile 1 from 3-I, channel I") != std::string::npos);
+    SC_EXPECT(text.find("missile 2 from 3-II, channel II") != std::string::npos);
 }
 
 namespace {
@@ -658,4 +672,15 @@ SC_TEST("tv: terrain hiding the target is carried on in memory for a few seconds
     for (int i = 0; i < 40; ++i) runner.Step(0.1);  // 7 s masked: the 5 s of memory ran out
     SC_EXPECT(runner.Engagement().Method() == TrackMethod::None);
     SC_EXPECT(runner.Debrief().find("track lost: masked: the memory ran out") != std::string::npos);
+}
+
+SC_TEST("engagement: a two-missile salvo, one missile on each channel, both guided and resolved") {
+    const std::string salvo = std::string(kAcquireAndFire) + R"(,
+        { "id": "salvo", "when": { "launches_at_least": 1 }, "do": [ { "queue": "launch", "crew": "Deputy" } ] })";
+    const Run r = Play(Engage(Target(24000, 1000), salvo));
+    SC_EXPECT(r.summary.launches == 2);
+    SC_EXPECT(Has(r, "missile 1 from 3-I, channel I"));
+    SC_EXPECT(Has(r, "missile 2 from 3-II, channel II"));
+    SC_EXPECT(r.summary.hits + r.summary.misses == 2);
+    SC_EXPECT(r.summary.early_actions == 0 && r.summary.out_of_order_actions == 0);
 }

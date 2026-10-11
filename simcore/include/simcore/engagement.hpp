@@ -627,6 +627,20 @@ public:
     const EngagementTuning& Tuning() const { return tuning_; }
     int Hits() const { return hits_; }
     int Misses() const { return misses_; }
+    // A shot by its launch number: resolved (hit, miss or lost), and how long it was given to fly (0 if unknown).
+    bool ShotDone(int number) const {
+        for (const Shot& s : shots_) {
+            if (s.number == number) return s.done;
+        }
+        return true;
+    }
+    double ShotFlightTime(int number) const {
+        for (const Shot& s : shots_) {
+            if (s.number == number) return s.done ? 0.0 : s.flight_time_s;
+        }
+        return 0.0;
+    }
+
     bool ShotsInFlight() const {
         for (const Shot& s : shots_) {
             if (!s.done) return true;
@@ -835,14 +849,18 @@ private:
                                 1.0 - tuning_.tv_error_penalty * aim_error_deg / tuning_.tv_reticle_deg);
             }
             const double p = base * method * zone * manoeuvre * crew * altitude * aim;
+            char aim_text[80] = "";  // only a TV shot is aimed by hand
+            if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
+                std::snprintf(aim_text, sizeof(aim_text), " x TV aim %.2f (%.2f deg off the crosshair)", aim, aim_error_deg);
+            }
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
             char detail[360];
             std::snprintf(detail, sizeof(detail),
                           "%s: chance %.2f = %s %.2f x %s track %.2f x zone %.2f x manoeuvre %.2f (%.0f deg/s) x "
-                          "crew %.2f (%d mistakes) x height %.2f (%.0f m up) x TV aim %.2f (%.2f deg off the crosshair); draw %.2f",
+                          "crew %.2f (%d mistakes) x height %.2f (%.0f m up)%s; draw %.2f",
                           hit ? "HIT" : "MISS", p, g.target_class.c_str(), base, ToString(s.method), method, zone,
-                          manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim, aim_error_deg, draw);
+                          manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim_text, draw);
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
             if (hit) {
