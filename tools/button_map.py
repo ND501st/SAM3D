@@ -62,10 +62,9 @@ PLANNED = {
         ("p:fk", "Function check ФК and real cold start (≈ 6.8 min)", "6.2", "Switch-on cycle, computer 9S456 warm-up (100 s), function check; readiness states.", [], "missing"),
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. Function not known from any source yet.", ["c:fo.mc"], "unknown"),
         ("p:sscmti", "SSC moving-target filter", "6.4", "СДЦ / ШТ. on the range indicator is placed but the tracking model doesn't read it.", ["c:ssc.mti"], "missing"),
-        ("p:beams", "Search beams decide what the SOC sees", "6.4", "Beams I/II/III (4°, 4°, 19° high), 33 rpm, low-target detection ranges. Today the beam only steers the ЦУ elevation search.", ["c:soc.beam", "m:search"], "missing"),
         ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale.", ["m:orient"], "missing"),
-        ("p:manualtv", "Manual TV tracking with the wheels", "6.6", "The TV channel locks and follows by itself today; the real one is tracked by hand (3-mil reticle).", ["s:tv_angle_track"], "missing"),
-        ("p:zones", "Zones and guidance methods T/T, Горка, Ф, Н", "6.7", "One zone box today; no pursuit or optical zones, no method choice.", ["e:launch"], "missing"),
+        ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it.", ["s:tv_angle_track"], "missing"),
+        ("p:zones", "Guidance method Н and the zone parameter", "6.7", "Head-on, pursuit and optical zones and the T/T, Горка and Ф methods are built; Н (against jammers, no range) and the NVA's crossing-offset 'parameter' limit are not.", ["e:launch"], "missing"),
         ("p:pu12", "PU-12 battery designations to the commander", "phase 7", "Designations by voice: azimuth and range. Targets are found by the vehicle's own radar only today.", [], "missing"),
         ("p:extpower", "External power supply", "later", "The external supply isn't modelled; power comes from the ГТА or the take-off generator.", [], "missing"),
     ],
@@ -233,6 +232,11 @@ class MapBuilder:
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:search", [("s:", "antenna", search, "antenna"), ("s:", "transmitter", search, "transmitter"),
                                ("c:", "range_control", search, "range scale"), ("c:", "mti_control", search, "MTI")])
+            beams = search.get("beams")
+            if beams:  # the beam selector's programme, and the beam lamps it lights (roadmap 6.4)
+                feeds("m:search", [("c:", "control", beams, "beam programme")])
+                for inp in beams.get("inputs", []):
+                    self.add_edge("m:search", "i:" + inp, "signal", "sets this signal")
             iff = search.get("iff")
             if iff:
                 self.add_node("m:iff", t="model", label="IFF interrogator", notes=iff.get("notes"),

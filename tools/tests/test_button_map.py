@@ -93,3 +93,15 @@ def test_osa_map_is_clean(tmp_path):
     ids = {n["id"] for n in data["nodes"]}
     assert "c:fo.launch" in ids and "e:launch" in ids and "p:channels" in ids
     assert data["counts"]["controls"] == len(json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))["controls"])
+
+
+def test_osa_beam_selector_feeds_the_search_picture_and_lights_the_beam_lamps():
+    console = json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))
+    cabin = json.loads((ROOT / "data/cabins/osa_ak.json").read_text(encoding="utf-8"))
+    b = button_map.build(console, cabin)
+    edges = {(e["s"], e["t"]) for e in b.edges}
+    assert ("c:soc.beam", "m:search") in edges
+    for n in (1, 2, 3):
+        assert ("m:search", f"i:search_beam_{n}") in edges
+    planned = {p[0] for p in button_map.PLANNED["osa_ak"]}
+    assert "p:beams" not in planned and "p:manualtv" not in planned  # built (roadmap 6.4, 6.6)
