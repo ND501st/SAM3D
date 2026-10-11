@@ -338,6 +338,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
 	bool IsSimPaused() const { return bPaused; }
 
+	/** Time compression: how fast sim time runs against real time, 0.25 to 32 (1 = real time). The same value is the
+	 *  console variable sam3d.TimeScale. A cold start takes minutes of sim time (roadmap 6.2). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
+	void SetTimeScale(float Scale);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
+	float GetTimeScale() const;
+
 	/** Fired for every simcore World event in demo mode (launch, detonation, kill...). */
 	UPROPERTY(BlueprintAssignable, Category = "SAM3D|Sim")
 	FOnSimEvent OnSimEvent;

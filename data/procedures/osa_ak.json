@@ -123,6 +123,28 @@
     "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Gyro overheating (flashing ammunition lamps) and the emergency launch are not modelled."
   },
 
+  "readiness": {
+    "powered": {
+      "description": "powered on the march: turbine running, equipment and stabilisation warm, search possible on the move",
+      "controls": { "pwr.gta": 1, "gyro.arrest": 1, "pwr.equipment": 1, "stab.power": 1, "soc.rotation_lock": 1, "tov.supply": 1 },
+      "inputs": { "vehicle_stopped": false },
+      "ready": [ "gta", "power", "gyro_erected", "equipment_warm", "hv_ready", "stabilisation", "search_antenna", "fire_control_computer" ],
+      "source": "wrk (search possible on the move); mon_2112_80 p11-12 (readiness within 4 min); video_osa (a powered battery deploys in 35-50 s, unverified)", "confidence": "medium",
+      "notes": "What a battery on the march with the equipment already running looks like. The function check is not counted as done."
+    },
+    "deployed": {
+      "description": "deployed at a halt: on the take-off generator, launcher unlocked, drives on, vehicle oriented",
+      "controls": { "pwr.gta": 1, "pwr.pto": 1, "gyro.arrest": 1, "pwr.equipment": 1, "stab.power": 1, "soc.rotation_lock": 1, "tov.supply": 1,
+                    "apu.lock": 1, "drv.az": 1, "drv.el": 1 },
+      "inputs": { "vehicle_stopped": true },
+      "ready": [ "gta", "pto_generator", "power", "gyro_erected", "equipment_warm", "hv_ready", "stabilisation", "search_antenna", "apu_free",
+                 "antenna_drives", "fire_control_computer" ],
+      "oriented": true,
+      "source": "voenizdat_osa_1991 p246-247 (readiness drill: power, deploy, orientation); flak11", "confidence": "medium",
+      "notes": "A vehicle in a firing position, waiting for targets with the radars silent."
+    }
+  },
+
   "sensors": {
     "source": "samsim_osa p14–18, p21–26", "confidence": "high",
     "notes": "Maps the SOC, SSC and TOV onto this console for the gameplay engagement model (simcore/engagement.hpp). Gameplay thresholds live in data/gameplay/osa_ak.json.",
@@ -443,8 +465,23 @@
       "enable": [ { "control": "ro.semi_auto", "is": 1 }, { "subsystem": "ssc_transmitter", "is": "ready" } ],
       "latching": true, "release": [ { "control": "ssc.tx", "is": 0 } ],
       "source": "samsim_osa p26", "confidence": "low", "notes": "Release when the SSC transmitter goes off is a guess." },
+    { "id": "fire_control_computer", "name": "Fire-control computer 9С456М3 switched on",
+      "enable": [ { "control": "pwr.equipment", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
+      "start_time_s": { "value": 100, "source": "flak11 (9С456М3, analogue: 100 s to switch on, 3 s to change mode)", "confidence": "high" },
+      "source": "flak11", "confidence": "high",
+      "notes": "Missile preparation needs it (the launch automation runs on it). Inside the 3 min high-voltage warm-up, so it only shows if the equipment is switched on in a hurry. The 3 s mode change is not modelled." },
+    { "id": "function_check", "name": "Function check (ФК) running",
+      "enable": [ { "control": "fo.mode", "is": 3 }, { "subsystem": "hv_ready", "is": "ready" } ],
+      "start_time_s": { "value": 180, "source": "flak11 (preliminary preparation: 3.8 min switch-on cycle plus 3.0 min function check = 6.8 min)", "confidence": "medium" },
+      "source": "flak11; voenizdat_osa_1991 p119 (the ФК mode of РОД РАБОТЫ)", "confidence": "medium",
+      "notes": "РОД РАБОТЫ at ФК once the equipment is warm. What the check exercises inside the equipment is not modelled; it takes its 3 min and is then done (function_checked)." },
+    { "id": "function_checked", "name": "Function check done",
+      "enable": [ { "subsystem": "function_check", "is": "ready" } ],
+      "latching": true, "release": [ { "subsystem": "power", "is": "off" } ],
+      "source": "flak11", "confidence": "medium",
+      "notes": "Stays done until the power is lost. Nothing requires it to fire (a crew under attack can skip it); the debrief shows whether it was done." },
     { "id": "missile_prep", "name": "Missile, SPK and SVR preparation (ВКЛ ВЫС, then ПУСК ГОТОВ)",
-      "enable": [ { "subsystem": "hv_ready", "is": "ready" } ],
+      "enable": [ { "subsystem": "hv_ready", "is": "ready" }, { "subsystem": "fire_control_computer", "is": "ready" } ],
       "enable_any": [ { "control": "fo.bort_spk", "is": 1 }, { "input": "target_in_zone", "is": true } ],
       "start_time_s": { "value": 13, "source": "flak11 (NVA Osa-AK: ПУСК ГОТОВ after 13 s); voenizdat_osa_1991 p154 (pre-launch cycle 12.8 s), p248 (preparation 10–12 s)", "confidence": "high",
                         "notes": "SAM Simulator's manual gives 15 s." },
@@ -578,6 +615,17 @@
       "steps": [
         { "control": "fo.mode", "position": 0, "description": "РОД РАБОТЫ to БР, live firing" },
         { "control": "fo.key", "position": 1, "description": "Insert the launch authorization key (ЗАПРЕТ ПУСКА)" }
+      ]
+    },
+    {
+      "id": "function_check", "name": "Function check (ФК)",
+      "source": "flak11 (preliminary preparation: 3.0 min function check after the 3.8 min switch-on cycle); voenizdat_osa_1991 p119 (ФК mode)", "confidence": "medium",
+      "notes": "Deputy commander, once the equipment is warm (ГОТОВ). Part of the preliminary preparation (6.8 min from cold); skipped when the vehicle starts warm.",
+      "steps": [
+        { "control": "fo.mode", "position": 3, "description": "РОД РАБОТЫ to ФК, function check",
+          "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] },
+        { "control": "fo.mode", "position": 1, "description": "Check done (3 min): РОД РАБОТЫ back to ТР",
+          "wait_for": [ { "subsystem": "function_checked", "is": "ready" } ] }
       ]
     },
     {

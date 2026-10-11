@@ -27,6 +27,7 @@ the readiness state they start in (march, deployed, powered).
     "console": "procedures/osa_ak.json",              // relative to data/
     "tuning": "gameplay/osa_ak.json",                 // optional: turns on the gameplay engagement model
     "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },  // optional, see below
+    "readiness": "deployed",                          // optional: "cold" (default) or a console readiness state
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
     "inputs": { "vehicle_stopped": false }            // starting values of console inputs
@@ -77,3 +78,9 @@ on a detected echo in its beam and range gate. The tuning still supplies the zon
 and the outcome of each launch. `osa_practice_em.json` is `osa_practice.json` with the EM layer on. Target `rcs_m2`
 becomes the radar cross-section from every aspect, so give real values: a 0.5 m2 drone at 1 km is first shown on the
 scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking radar captures it at 13 to 15 km (its 50 % range is 14.8 km).
+
+`"readiness"` starts the unit warm instead of cold (roadmap 6.2): one of the console's `readiness` states
+(`data/procedures/README.md`). The Osa has `powered` (on the march: turbine running, equipment and stabilisation warm,
+search possible on the move) and `deployed` (at a halt on the take-off generator, launcher unlocked, drives on,
+vehicle oriented, radars silent). A cold start takes the documented 3.8 min switch-on cycle and the 3.0 min function
+check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) speeds the sim up so that stays playable.

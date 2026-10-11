@@ -3,6 +3,7 @@
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 
@@ -135,13 +136,33 @@ TStatId USimWorldSubsystem::GetStatId() const
 	RETURN_QUICK_DECLARE_CYCLE_STAT(USimWorldSubsystem, STATGROUP_Tickables);
 }
 
+namespace
+{
+TAutoConsoleVariable<float> CVarSimTimeScale(TEXT("sam3d.TimeScale"), 1.0f,
+	TEXT("Time compression: how fast sim time runs against real time, 0.25 to 32 (1 = real time)."), ECVF_Default);
+
+constexpr float MinTimeScale = 0.25f;
+constexpr float MaxTimeScale = 32.0f;
+}
+
+float USimWorldSubsystem::GetTimeScale() const
+{
+	return FMath::Clamp(CVarSimTimeScale.GetValueOnGameThread(), MinTimeScale, MaxTimeScale);
+}
+
+void USimWorldSubsystem::SetTimeScale(float Scale)
+{
+	CVarSimTimeScale->Set(FMath::Clamp(Scale, MinTimeScale, MaxTimeScale), ECVF_SetByCode);
+}
+
 void USimWorldSubsystem::Tick(float DeltaTime)
 {
+	const double Scale = GetTimeScale();
 	if (EmLayer && EmLayer->IsRunning())
 	{
 		if (!bPaused)
 		{
-			EmLayer->Advance(DeltaTime);
+			EmLayer->Advance(DeltaTime * Scale);
 		}
 		EmLayer->Draw(GetWorld(), [this](const simcore::Vec3& Enu) { return ToUnreal(Enu); });
 	}
@@ -149,13 +170,15 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 	{
 		return;
 	}
-	// Fixed-step simulation, decoupled from frame rate. Clamp to avoid a spiral of death after hitches.
-	Accumulator += FMath::Min(static_cast<double>(DeltaTime), 0.25);
+	// Fixed-step simulation, decoupled from frame rate and sped up by the time scale. Clamp the frame time to avoid a
+	// spiral of death after hitches; the step caps grow with the scale so compression isn't lost to them.
+	Accumulator += FMath::Min(static_cast<double>(DeltaTime), 0.25) * Scale;
+	const int32 ScaleSteps = FMath::CeilToInt32(FMath::Max(1.0, Scale));
 
 	if (Runner)
 	{
 		int32 Steps = 0;
-		while (Accumulator >= ScenarioStepSeconds && Steps < 20 && !Runner->Finished())
+		while (Accumulator >= ScenarioStepSeconds && Steps < 20 * ScaleSteps && !Runner->Finished())
 		{
 			Runner->Step(ScenarioStepSeconds);
 			Accumulator -= ScenarioStepSeconds;
@@ -170,7 +193,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		return;
 	}
 	int32 Steps = 0;
-	while (Accumulator >= FixedStepSeconds && Steps < 100)
+	while (Accumulator >= FixedStepSeconds && Steps < 100 * ScaleSteps)
 	{
 		if (bDemoActive)
 		{
