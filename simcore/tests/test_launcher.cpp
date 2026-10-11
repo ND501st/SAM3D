@@ -336,3 +336,106 @@ SC_TEST("launcher: Р I — ЦЕЛЬ — Р II picks the channel whose missile t
     l.Launch(20.0, c, 2, 0.0, 0.0);  // no outcome model: the flight has no speed
     SC_EXPECT(l.MissileRangeM(1, 21.0) < 0.0 && l.MissileRangeM(2, 21.0) < 0.0);
 }
+
+// ---- Prepared missiles are held at most 10 min (voenizdat_osa_1991 p248): the gyro overheats, the pair is prepared again.
+
+#include <memory>
+
+#include "simcore/scenario.hpp"
+#include "simcore/scenario_runner.hpp"
+
+namespace {
+
+std::unique_ptr<ScenarioRunner> HeldPair() {
+    const std::string text = R"({
+      "scenario_id": "h", "name": "H", "source": "sam3d", "confidence": "estimate", "seed": 1,
+      "origin": { "lat_deg": 45, "lon_deg": 25, "alt_m": 0 }, "terrain": { "type": "flat", "height_m": 0 },
+      "own_unit": { "console": "procedures/osa_ak.json", "readiness": "deployed",
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
+                { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
+                { "name": "Driver", "role": "driver" } ],
+      "triggers": [ { "id": "near", "when": {}, "do": [ { "set_input": "target_near_zone", "value": true }, { "set_input": "target_in_zone", "value": true } ] } ],
+      "end": { "time_limit_s": 100000, "when_targets_gone": false } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    if (!LoadScenario(text, kData, def, console, &error)) {
+        std::printf("    load: %s\n", error.c_str());
+        return nullptr;
+    }
+    return std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
+}
+
+void RunFor(ScenarioRunner& r, double seconds) {
+    for (double end = r.Time() + seconds; r.Time() < end - 1e-9;) r.Step(1.0);
+}
+
+}  // namespace
+
+SC_TEST("launcher: a pair held prepared for 10 min overheats, the next pair is prepared, the hot ones flash and rest") {
+    auto r = HeldPair();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Launcher& l = *r->GetLauncher();
+    const Equipment& eq = r->Console().equipment;
+    RunFor(*r, 30.0);
+    SC_EXPECT(eq.IsReady("missile_prep") && l.Selected(1) == "3-I" && l.Selected(2) == "3-II");
+    SC_EXPECT(!eq.GetInput("hot_3_i") && l.Overheats() == 0);
+    RunFor(*r, 560.0);  // 590 s: still holding
+    SC_EXPECT(l.Selected(1) == "3-I" && l.Overheats() == 0);
+    RunFor(*r, 40.0);   // past 10 min of being prepared (it was ready at about 13 s)
+    SC_EXPECT(l.Overheats() == 2 && l.Overheated("3-I") && l.Overheated("3-II"));
+    SC_EXPECT(eq.GetInput("hot_3_i") && eq.GetInput("hot_3_ii") && eq.GetInput("ammo_3_i"));  // flashes, still in its container
+    SC_EXPECT(l.Selected(1) == "2-I" && l.Selected(2) == "2-II");                              // the next pair
+    SC_EXPECT(l.MissilesLeft() == 6);
+    RunFor(*r, 20.0);
+    SC_EXPECT(eq.IsReady("missile_prep"));  // the second pair is prepared
+    // After the first rest (10 min from the overheat) the hot missiles are usable again.
+    RunFor(*r, 600.0);
+    SC_EXPECT(!l.Overheated("3-I") && !eq.GetInput("hot_3_i"));
+}
+
+SC_TEST("launcher: after three holds a missile rests for an hour") {
+    auto r = HeldPair();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Launcher& l = *r->GetLauncher();
+    // Keep the pair in the outer containers: take the other missiles away, so 3-I and 3-II are the only choice.
+    for (const char* c : {"2-I", "1-I", "2-II", "1-II"}) l.Unload(c);
+    RunFor(*r, 30.0);
+    SC_EXPECT(l.Selected(1) == "3-I");
+    for (int hold = 1; hold <= 3; ++hold) {
+        RunFor(*r, 640.0);  // 600 s prepared (plus the 13 s preparation) and over
+        SC_EXPECT(l.Overheated("3-I"));
+        if (hold < 3) {
+            RunFor(*r, 620.0);  // the 10 min rest
+            SC_EXPECT(!l.Overheated("3-I"));
+            RunFor(*r, 30.0);
+            SC_EXPECT(l.Selected(1) == "3-I");  // prepared again
+        }
+    }
+    RunFor(*r, 3000.0);  // the long rest: still hot after 50 min
+    SC_EXPECT(l.Overheated("3-I"));
+    RunFor(*r, 700.0);
+    SC_EXPECT(!l.Overheated("3-I"));
+}
+
+SC_TEST("launcher: the prep_hold block and the container hot inputs are checked") {
+    const std::string text = ReadFile(kData + "/procedures/osa_ak.json");
+    auto bad = [&](const std::string& from, const std::string& to, const std::string& expect) {
+        std::string s = text;
+        const std::size_t at = s.find(from);
+        if (at == std::string::npos) return false;
+        s.replace(at, from.size(), to);
+        ConsoleData d;
+        std::string e;
+        const bool ok = LoadConsole(s, d, &e);
+        if (ok || e.find(expect) == std::string::npos) std::printf("    expected \"%s\", got \"%s\"\n", expect.c_str(), e.c_str());
+        return !ok && e.find(expect) != std::string::npos;
+    };
+    SC_EXPECT(bad("\"hold_s\": 600", "\"hold_s\": 0", "launcher.prep_hold.hold_s"));
+    SC_EXPECT(bad("\"cycles\": 3", "\"cycles\": 0", "launcher.prep_hold.cycles"));
+    SC_EXPECT(bad("\"long_rest_s\": 3600", "\"long_rest_s\": 60", "launcher.prep_hold.long_rest_s"));
+    SC_EXPECT(bad("\"hot_input\": \"hot_3_i\"", "\"hot_input\": \"hot_nothing\"", "launcher.containers[0].hot_input"));
+}

@@ -51,7 +51,6 @@ DISPLAY_SOURCES = {
 PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
-        ("p:overheat", "Missile gyro overheating (flashing ammunition lamps)", "6.3", "A container's lamp flashes when its missile's gyro overheats. The lamps are steady today.", ["m:launcher"], "missing"),
         ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale. No source gives a drift or a measurement error.", ["m:orient"], "missing"),
         ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
         ("p:jammer", "Jamming targets: range lost in noise, method Н outcome", "6.7 / E5", "ПОМЕХА already selects method Н and arms К3 with the medium beam, but no target jams yet, so the range is never lost and Н has no effect on the hit chance. Needs noise jammers from the EM layer (E5) and the NVA's crossing-offset 'parameter' limit.", ["c:fo.pomekha", "e:launch"], "missing"),
@@ -273,6 +272,7 @@ class MapBuilder:
                                  ("c:", "control", sweep, "range sweep: channel")])
             outs = [launcher.get("hold_input"), emergency.get("ready_input")] + list(letter.get("lock_inputs", []))
             outs += [c.get("input") for c in launcher.get("containers", [])]
+            outs += [c.get("hot_input") for c in launcher.get("containers", [])]
             for ch in launcher.get("channels", []):
                 outs += list(ch.values())
             for inp in outs:

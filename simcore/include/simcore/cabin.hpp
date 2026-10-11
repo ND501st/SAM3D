@@ -227,6 +227,7 @@ struct CabinLamp {
     std::string color;                   // "green", "red", "amber" or "white"
     std::vector<Condition> lit_when;     // all must hold
     std::vector<Condition> lit_when_any; // if not empty, at least one must also hold
+    std::vector<Condition> flash_when;   // optional: while all hold, the lamp flashes instead of burning steadily
     CabinLook look;                      // optional appearance (kind Default = a plain lamp cap)
 };
 
@@ -374,6 +375,11 @@ struct CabinLayout {
     static bool LampLit(const CabinLamp& lamp, const ControlPanel& panel, const Equipment& equipment) {
         if (!equipment.AllHold(lamp.lit_when, panel)) return false;
         return lamp.lit_when_any.empty() || equipment.AnyHolds(lamp.lit_when_any, panel);
+    }
+
+    // A lamp that is lit and flashes (a missile whose gyro has overheated): the renderer alternates it.
+    static bool LampFlashing(const CabinLamp& lamp, const ControlPanel& panel, const Equipment& equipment) {
+        return !lamp.flash_when.empty() && equipment.AllHold(lamp.flash_when, panel) && LampLit(lamp, panel, equipment);
     }
 
     static bool DisplayOn(const CabinDisplay& d, const ControlPanel& panel, const Equipment& equipment) {
@@ -608,8 +614,8 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("lamps", i);
             const json::Value& l = arr->items[i];
-            if (!Keys(l, path, {"id", "label", "panel", "at_m", "color", "lit_when", "lit_when_any", "look", "source",
-                                "confidence", "notes"})) {
+            if (!Keys(l, path, {"id", "label", "panel", "at_m", "color", "lit_when", "lit_when_any", "flash_when", "look",
+                                "source", "confidence", "notes"})) {
                 return false;
             }
             CabinLamp lamp;
@@ -625,7 +631,8 @@ private:
                 if (other.id == lamp.id) return Fail(Join(path, "id"), "duplicate lamp '" + lamp.id + "'");
             }
             if (!LoadConditions(l, path, "lit_when", console.panel, console.equipment, lamp.lit_when) ||
-                !LoadConditions(l, path, "lit_when_any", console.panel, console.equipment, lamp.lit_when_any)) {
+                !LoadConditions(l, path, "lit_when_any", console.panel, console.equipment, lamp.lit_when_any) ||
+                !LoadConditions(l, path, "flash_when", console.panel, console.equipment, lamp.flash_when)) {
                 return false;
             }
             if (lamp.lit_when.empty() && lamp.lit_when_any.empty()) {

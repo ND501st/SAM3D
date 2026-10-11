@@ -44,6 +44,7 @@ reference point. Angles are in degrees in the file.
     { "id": "in_zone", "label": "ЦЕЛЬ В ЗОНЕ", "panel": "fo_panel", "at_m": [0.42, 0.2], "color": "green",
       "lit_when": [ { "input": "target_in_zone", "is": true } ],     // all must hold
       // optional "lit_when_any": [ ... ]                             // at least one must also hold
+      // optional "flash_when": [ ... ]                                // while all hold (and the lamp is lit) it flashes
       "source": "samsim_osa p29", "confidence": "high" }
   ]
 }
