@@ -47,7 +47,7 @@ performance, extensibility, ease of development, visuals.
 | Osa-AK data | Search and tracking radars and the R-123M, every value cited or labelled; calibration checks recorded (spec §4) |
 | Performance | 500 aircraft / 60 search radars / 24 ESM sites: 14 ms per 10 Hz tick on one Ryzen 5 3600 core |
 | Unreal | `FSimEmLayer` builds (UE 5.8, command line, no warnings); not yet run in the editor by Claude (project rule: the owner runs the editor) |
-| Linked to the Osa scenario/console | **No** — next step (E2) |
+| Linked to the Osa scenario/console | **Search and tracking radars: yes (E2, branch `feature/em-osa-link`, stacked on E0)**: `simcore/em_link.hpp`, scenario `own_unit.em`, `osa_practice_em.json`, 11 tests in `test_em_link.cpp` (165 simcore tests, 5/5 CTest). IFF, TV, missiles and the Unreal scope are not on it yet |
 | Environment | Nothing new installed: VS 2022, CMake, Python 3.12 + pytest, UE 5.8, Git were all present. numpy is present but not required; matplotlib is not installed and not needed |
 
 ## 4. How to build, run and test
@@ -181,13 +181,20 @@ frequency changes are data-only.
 1. **Review and merge** `feature/em-environment` (the owner pushes and opens the PR).
 2. **Owner checks in Unreal:** open the project, PIE, console `sam3d.em.Start`, `sam3d.em.Debug -1`;
    look at beams, strobes, ellipses and C2 links over the practice area. Report anything odd.
-3. **E2 (recommended next code task):** give `ScenarioRunner` an `EmWorld` built from the scenario's
-   unit (the Osa from `data/em/osa_ak.json`) and targets (`simcore::World` aircraft synced each step
-   with `EmWorld::SetPlatformState`); drive `RadarState` from the console (`soc.hv`, `soc.beam`,
-   `soc.mti`, `iff.*`, `ssc.tx`, `fo.cu_az`); replace the engagement model's search picture and lock
-   rules with EM plots and the SSC's lock; keep the outcome resolver. Done when the practice scenario
-   plays end to end with EM-driven lock ranges inside the published bands. This implements most of
-   roadmap 6.4.
+3. **E2 (done, `docs/EM_ARCHITECTURE.md` §23):** the Osa's search and tracking radars run on the EM
+   layer in scenarios with an `own_unit.em` block, and the practice scenario plays end to end. Left of it:
+   drive the search radar's beam program from the console (it cycles beams I, II, III one per revolution
+   whatever the selector says), IFF replies from the EM radar's transponder model, and the scope's sweep
+   in step with the radar's. Roadmap 6.4 (beam indicator, low-target ranges, blind cone, MTI against normal
+   video) can now be done against the EM radar instead of by rules.
+   **Findings to read before building on it:** (a) a tracking radar locks on the first echo in its gate, and Swerling I Pd falls slowly (0.24 at 28 km
+   for the Korovin target), so the raw lock came at 27 km, not his 23 km. The engagement model now takes the
+   lock only once the radar has echoed on 11 of its last 20 looks (`EmSensorLink::Captured`), which gives 23 to
+   25 km. The 11-of-20 rule is my model choice, not a published figure; a 1 s echo-fading correlation time
+   was tried and moved the raw lock by 0.4 km, so it was dropped; (b) a target above about 8 degrees elevation is only in beam III (19 degrees tall, 13.6 dB
+   less two-way gain), so a 3 m2 target at 5 km shows at 16 to 35 km depending on the seed instead of
+   at 40 km; (c) both radars cancel radial speeds under 15 m/s as clutter, so a hovering target is
+   invisible to them.
 4. **E1 data:** read FM 100-2-3 for the blue library; period NATO aircraft radars, RWRs and pods as
    generic-but-plausible entries with sources.
 

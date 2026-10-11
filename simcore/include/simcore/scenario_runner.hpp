@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <memory>
 #include <random>
 #include <string>
 #include <utility>
@@ -29,6 +30,7 @@
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
+#include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
@@ -70,6 +72,14 @@ public:
         }
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
+        if (def_.has_em && engagement_on_) {
+            em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
+            if (em_link_->Ok()) {
+                engagement_.SetEmLink(em_link_.get());
+            } else {
+                em_link_.reset();  // the loader checked the radars; fall back to the gameplay rules rather than crash
+            }
+        }
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -138,7 +148,13 @@ public:
 
     // Replace the scenario's flat ground, e.g. with heights sampled from Cesium. Null restores the flat ground.
     // The terrain must outlive the runner or be replaced first.
-    void SetTerrain(const Terrain* terrain) { world_.SetTerrain(terrain != nullptr ? terrain : &ground_); }
+    void SetTerrain(const Terrain* terrain) {
+        world_.SetTerrain(terrain != nullptr ? terrain : &ground_);
+        if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
+    }
+
+    // The electromagnetic layer behind the unit's radars (null when the scenario has no "em" block).
+    EmSensorLink* Em() { return em_link_.get(); }
 
     CrewMember* Crew(const std::string& name) {
         for (CrewMember& c : crew_) {
@@ -351,6 +367,7 @@ private:
     AcmiWriter acmi_;
     std::mt19937 rng_;
     bool engagement_on_;
+    std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     EngagementModel engagement_;
     AimCrew aim_crew_;
     std::vector<EngagementTarget> eng_targets_;

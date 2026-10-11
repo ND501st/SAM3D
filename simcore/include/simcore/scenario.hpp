@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
@@ -78,6 +79,8 @@ struct ScenarioDef {
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
+    bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
+    EmLinkDef em;
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
     std::vector<std::pair<std::string, bool>> initial_inputs;
@@ -184,7 +187,7 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "position", "heading_deg", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "em", "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -206,6 +209,18 @@ private:
                     return Fail("own_unit.tuning", "aim role '" + *role + "' is not a station of the console");
                 }
             }
+        }
+        if (const json::Value* em = u->Find("em")) {
+            if (out.tuning_file.empty()) return Fail("own_unit.em", "needs own_unit.tuning: the EM layer replaces its sensors");
+            std::string library, search, track;
+            if (!em->Is(json::Type::Object) || !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "notes"}) ||
+                !RequireString(*em, "own_unit.em", "library", library) ||
+                !RequireString(*em, "own_unit.em", "search_radar", search) ||
+                !RequireString(*em, "own_unit.em", "track_radar", track)) {
+                return message_.empty() ? Fail("own_unit.em", "expected an object") : false;
+            }
+            if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error)) return Fail("own_unit.em", error);
+            out.has_em = true;
         }
         const json::Value* pos = nullptr;
         if (!RequireObject(*u, "own_unit", "position", pos) ||
