@@ -510,3 +510,27 @@ SC_TEST("cabin: shell mesh parts name their mesh, turn by yaw and take no colour
     SC_EXPECT(ErrorContains(shell(R"({ "id": "s", "label": "S", "kind": "box", "color": "blue", "centre_m": [0, 0, 1],
                                        "size_m": [1, 1, 1], "source": "s", "confidence": "low" })"), "shell[0].color: unknown colour 'blue'"));
 }
+
+SC_TEST("cabin: an ammunition lamp flashes while its missile's gyro is overheated, and only then") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinLamp* ammo = nullptr;
+    const CabinLamp* gta = nullptr;
+    for (const CabinLamp& l : layout.lamps) {
+        if (l.id == "ammo_3_i") ammo = &l;
+        if (l.id == "gta_on") gta = &l;
+    }
+    SC_EXPECT(ammo != nullptr && gta != nullptr);
+    if (ammo == nullptr || gta == nullptr) return;
+    SC_EXPECT(!CabinLayout::LampFlashing(*ammo, console.panel, console.equipment));  // empty container: dark
+    console.equipment.SetInput("ammo_3_i", true);
+    SC_EXPECT(CabinLayout::LampLit(*ammo, console.panel, console.equipment));
+    SC_EXPECT(!CabinLayout::LampFlashing(*ammo, console.panel, console.equipment));  // steady
+    console.equipment.SetInput("hot_3_i", true);
+    SC_EXPECT(CabinLayout::LampFlashing(*ammo, console.panel, console.equipment));
+    console.equipment.SetInput("ammo_3_i", false);  // no missile: nothing to flash
+    SC_EXPECT(!CabinLayout::LampFlashing(*ammo, console.panel, console.equipment));
+    SC_EXPECT(!CabinLayout::LampFlashing(*gta, console.panel, console.equipment));  // a lamp without flash_when never does
+}

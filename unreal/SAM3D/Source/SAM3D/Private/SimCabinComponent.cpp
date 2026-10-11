@@ -1107,7 +1107,11 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		const bool bHighlighted = I == HighlightedItem;
 		if (!Item.LampId.IsEmpty())
 		{
-			const bool bLit = simcore::CabinLayout::LampLit(Layout.lamps[Item.LayoutIndex], Console.panel, Console.equipment);
+			const simcore::CabinLamp& LampDef = Layout.lamps[Item.LayoutIndex];
+			// A flashing lamp (an overheated missile gyro) alternates twice a second while its condition holds.
+			const bool bFlashing = simcore::CabinLayout::LampFlashing(LampDef, Console.panel, Console.equipment);
+			const bool bLit = bFlashing ? FMath::Fmod(GetWorld()->GetTimeSeconds() * 2.0, 1.0) < 0.5
+			                            : simcore::CabinLayout::LampLit(LampDef, Console.panel, Console.equipment);
 			if (Item.Legend != nullptr)
 			{
 				const FLinearColor Letters = bLit ? Item.MovingColor : LegendUnlit;

@@ -12,6 +12,8 @@
 //   * Reload (roadmap 7.3): with the TZM alongside and the vehicle stopped, one missile goes into an empty container
 //     every reload_s_per_missile; nothing is loaded while a channel is guiding or a pair is selected.
 //   * PairSpent(): no selected missile is left, so the next ones need preparing again.
+//   * Prepared missiles are held at most prep_hold.hold_s; then the gyro has overheated (the lamp flashes), the pair is
+//     prepared again with the next missiles, and the hot one rests (rest_s, or long_rest_s after `cycles` holds).
 //   * Letter change: СМЕНА ЛИТ. changes the command transmitters' frequency letter; ЗАХВ. АПЧ goes out for relock_s on
 //     both channels and the next launch waits for it.
 //   * Emergency launch: ИЗДЕЛИЯ picks a container and АВАРИЙНЫЙ ПУСК throws that missile off unguided; it climbs for
@@ -36,7 +38,9 @@ public:
         std::string container;
     };
 
-    explicit Launcher(const LauncherDef& def) : def_(def), loaded_(def.containers.size(), true) {}
+    explicit Launcher(const LauncherDef& def)
+        : def_(def), loaded_(def.containers.size(), true), rest_until_s_(def.containers.size(), -1e9),
+          cycles_(def.containers.size(), 0) {}
 
     // Empty the given containers (a scenario that starts with fewer than six missiles).
     void Unload(const std::string& container_id) {
@@ -48,7 +52,9 @@ public:
     // Once per step: selection at ВНИМАНИЕ, the end of finished flights, and every lamp input.
     void Step(double t, ConsoleData& console) {
         Equipment& eq = console.equipment;
+        now_s_ = t;
         Reload(t, console);
+        StepHold(t, console);
         // Missiles are picked at ВНИМАНИЕ, or when preparation is started by hand (БОРТ СПК, e.g. with no radar range).
         const bool attention = eq.GetInput(def_.attention_input) || eq.State(def_.pair_preparation) != SubsystemState::Off;
         if (attention) {
@@ -65,6 +71,7 @@ public:
         Set(eq, def_.hold_input, NextChannel(t, console) == 0);
         for (std::size_t i = 0; i < def_.containers.size(); ++i) {
             if (!def_.containers[i].loaded_input.empty()) eq.SetInput(def_.containers[i].loaded_input, loaded_[i]);
+            Set(eq, def_.containers[i].hot_input, loaded_[i] && Resting(i));
         }
         for (std::size_t k = 0; k < channels_.size() && k < def_.channels.size(); ++k) {
             const Channel& c = channels_[k];
@@ -101,6 +108,15 @@ public:
         if (!c.flying || c.speed_mps <= 0.0 || t < c.launch_s) return -1.0;
         return c.speed_mps * std::min(t - c.launch_s, c.end_s - c.launch_s);
     }
+
+    // The container's missile has an overheated gyro: it rests before it can be prepared again.
+    bool Overheated(const std::string& container_id) const {
+        for (std::size_t i = 0; i < def_.containers.size(); ++i) {
+            if (def_.containers[i].id == container_id) return loaded_[i] && Resting(i);
+        }
+        return false;
+    }
+    int Overheats() const { return overheats_; }
 
     // The letter has been changed this many times (the command transmitters' frequency letter).
     int LetterChanges() const { return letter_changes_; }
@@ -222,7 +238,37 @@ private:
         double launch_s = 0.0;
         double end_s = 0.0;
         double speed_mps = 0.0;
+        double held_s = 0.0;  // how long the selected missile has been prepared and waiting
     };
+
+    bool Resting(std::size_t i) const { return now_s_ < rest_until_s_[i]; }
+
+    // A prepared missile is held at most hold_s (voenizdat_osa_1991 p248): then its gyro has overheated, it rests, and
+    // the pair is prepared again with the next missiles. After `cycles` such holds the rest is the long one.
+    void StepHold(double t, ConsoleData& console) {
+        if (!def_.has_prep_hold) return;
+        const double dt = hold_t_ < 0.0 ? 0.0 : t - hold_t_;
+        hold_t_ = t;
+        const bool ready = console.equipment.IsReady(def_.pair_preparation);
+        bool restart = false;
+        for (Channel& c : channels_) {
+            if (c.selected < 0 || c.flying || !ready) {
+                if (c.selected < 0) c.held_s = 0.0;
+                continue;
+            }
+            c.held_s += dt;
+            if (c.held_s + 1e-9 < def_.prep_hold.hold_s) continue;
+            const std::size_t i = static_cast<std::size_t>(c.selected);
+            const bool long_rest = ++cycles_[i] >= def_.prep_hold.cycles;
+            if (long_rest) cycles_[i] = 0;
+            rest_until_s_[i] = t + (long_rest ? def_.prep_hold.long_rest_s : def_.prep_hold.rest_s);
+            c.selected = -1;
+            c.held_s = 0.0;
+            ++overheats_;
+            restart = true;
+        }
+        if (restart) console.equipment.Restart(def_.pair_preparation);
+    }
 
     // The letter change is the control entering its change position, once.
     void StepLetter(double t, const ConsoleData& console) {
@@ -256,7 +302,7 @@ private:
         int best = -1;
         for (std::size_t i = 0; i < def_.containers.size(); ++i) {
             const LauncherContainerDef& c = def_.containers[i];
-            if (c.channel != channel || !loaded_[i]) continue;
+            if (c.channel != channel || !loaded_[i] || Resting(i)) continue;
             if (best < 0 || c.order < def_.containers[static_cast<std::size_t>(best)].order) best = static_cast<int>(i);
         }
         return best;
@@ -294,6 +340,8 @@ private:
         reload_progress_s_ += dt;
         if (reload_progress_s_ >= def_.reload_s_per_missile - 1e-9) {
             loaded_[static_cast<std::size_t>(empty)] = true;
+            rest_until_s_[static_cast<std::size_t>(empty)] = -1e9;  // a fresh missile
+            cycles_[static_cast<std::size_t>(empty)] = 0;
             reload_progress_s_ = 0.0;
             reloading_ = -1;
         }
@@ -306,6 +354,11 @@ private:
     LauncherDef def_;
     std::vector<bool> loaded_;
     double last_launch_s_ = -1e9;
+    double now_s_ = 0.0;
+    double hold_t_ = -1.0;
+    std::vector<double> rest_until_s_;  // per container: its missile can't be prepared before this time
+    std::vector<int> cycles_;           // per container: holds so far since the last long rest
+    int overheats_ = 0;
     int letter_pos_ = -1;
     int letter_changes_ = 0;
     double relock_until_s_ = -1e9;

@@ -116,6 +116,7 @@ struct LauncherContainerDef {
     int channel = 1;          // 1 = channel I, 2 = channel II
     int order = 0;            // selection order within the channel, lowest first
     std::string loaded_input; // input set while a missile is in it (its ammunition lamp)
+    std::string hot_input;    // input set while its missile's gyro is overheated (the lamp flashes; may be empty)
 };
 
 struct LauncherChannelDef {
@@ -148,7 +149,19 @@ struct LauncherEmergencyDef {
     double flight_s = 0.0;
 };
 
+// How long a prepared missile may be held (roadmap 6.3, optional): after `hold_s` ready with a missile selected its gyro
+// overheats, the pair is prepared again with the next missiles, and the overheated one rests for `rest_s` before it can
+// be prepared again; after `cycles` such holds it rests `long_rest_s` instead.
+struct LauncherPrepHoldDef {
+    double hold_s = 0.0;
+    double rest_s = 0.0;
+    int cycles = 0;
+    double long_rest_s = 0.0;
+};
+
 struct LauncherDef {
+    bool has_prep_hold = false;
+    LauncherPrepHoldDef prep_hold;
     // What the tracking radar's range indicator shows (Р I — ЦЕЛЬ — Р II, roadmap 6.3): per position of
     // `range_sweep_control`, the channel whose missile it follows (1, 2), or 0 for the target.
     std::string range_sweep_control;
@@ -687,7 +700,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
                            "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
                            "nominal_flight_s", "min_interval_s", "hold_input", "reload_input", "stopped_input",
-                           "reload_s_per_missile", "letter", "emergency", "range_sweep", "source", "confidence", "notes"}) ||
+                           "reload_s_per_missile", "letter", "emergency", "range_sweep", "prep_hold", "source", "confidence", "notes"}) ||
             !Provenance(*l, lp) ||
             !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
             !RefControl(*l, lp, "jam_control", out.panel, ControlKind::Discrete, false, d.jam_control) ||
@@ -738,9 +751,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string cp = Index(Join(lp, "containers"), i);
             const json::Value& c = cons->items[i];
             LauncherContainerDef con;
-            if (!Keys(c, cp, {"id", "channel", "order", "input"}) || !RequireString(c, cp, "id", con.id) ||
+            if (!Keys(c, cp, {"id", "channel", "order", "input", "hot_input"}) || !RequireString(c, cp, "id", con.id) ||
                 !OptionalInt(c, cp, "channel", con.channel) || !OptionalInt(c, cp, "order", con.order) ||
-                !RefInput(c, cp, "input", eq, con.loaded_input)) {
+                !RefInput(c, cp, "input", eq, con.loaded_input) || !RefInput(c, cp, "hot_input", eq, con.hot_input)) {
                 return false;
             }
             if (con.channel != 1 && con.channel != 2) return Fail(Join(cp, "channel"), "must be 1 (I) or 2 (II)");
@@ -766,7 +779,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return Fail(Join(lp, "channel_positions"), "needs one entry per position of " + d.channel_control);
         }
         if (!LoadLauncherLetter(*l, lp, out, d) || !LoadLauncherEmergency(*l, lp, out, d) ||
-            !LoadLauncherRangeSweep(*l, lp, out, d)) {
+            !LoadLauncherRangeSweep(*l, lp, out, d) || !LoadLauncherPrepHold(*l, lp, d)) {
             return false;
         }
         out.has_launcher = true;
@@ -800,6 +813,24 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             d.letter.lock_inputs.push_back(e.string);
         }
         d.has_letter = true;
+        return true;
+    }
+
+    bool LoadLauncherPrepHold(const json::Value& l, const std::string& lp, LauncherDef& d) {
+        const json::Value* v = l.Find("prep_hold");
+        if (v == nullptr) return true;
+        const std::string p = Join(lp, "prep_hold");
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        LauncherPrepHoldDef& h = d.prep_hold;
+        if (!Keys(*v, p, {"hold_s", "rest_s", "cycles", "long_rest_s", "source", "confidence", "notes"}) || !Provenance(*v, p) ||
+            !OptionalNumber(*v, p, "hold_s", h.hold_s) || !OptionalNumber(*v, p, "rest_s", h.rest_s) ||
+            !OptionalInt(*v, p, "cycles", h.cycles) || !OptionalNumber(*v, p, "long_rest_s", h.long_rest_s)) {
+            return false;
+        }
+        if (h.hold_s <= 0.0) return Fail(Join(p, "hold_s"), "must be > 0");
+        if (h.rest_s < 0.0 || h.long_rest_s < h.rest_s) return Fail(Join(p, "long_rest_s"), "rests must be >= 0 and the long one the longer");
+        if (h.cycles < 1) return Fail(Join(p, "cycles"), "must be >= 1");
+        d.has_prep_hold = true;
         return true;
     }
 

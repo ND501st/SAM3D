@@ -100,10 +100,10 @@
 
   "launcher": {
     "containers": [
-      { "id": "3-I", "channel": 1, "order": 1, "input": "ammo_3_i" }, { "id": "2-I", "channel": 1, "order": 2, "input": "ammo_2_i" },
-      { "id": "1-I", "channel": 1, "order": 3, "input": "ammo_1_i" },
-      { "id": "3-II", "channel": 2, "order": 1, "input": "ammo_3_ii" }, { "id": "2-II", "channel": 2, "order": 2, "input": "ammo_2_ii" },
-      { "id": "1-II", "channel": 2, "order": 3, "input": "ammo_1_ii" }
+      { "id": "3-I", "channel": 1, "order": 1, "input": "ammo_3_i", "hot_input": "hot_3_i" }, { "id": "2-I", "channel": 1, "order": 2, "input": "ammo_2_i", "hot_input": "hot_2_i" },
+      { "id": "1-I", "channel": 1, "order": 3, "input": "ammo_1_i", "hot_input": "hot_1_i" },
+      { "id": "3-II", "channel": 2, "order": 1, "input": "ammo_3_ii", "hot_input": "hot_3_ii" }, { "id": "2-II", "channel": 2, "order": 2, "input": "ammo_2_ii", "hot_input": "hot_2_ii" },
+      { "id": "1-II", "channel": 2, "order": 3, "input": "ammo_1_ii", "hot_input": "hot_1_ii" }
     ],
     "channels": [
       { "transmitter": "ch1_vkl_vys", "away": "ch1_skhod", "captured": "ch1_zakhvat", "medium": "ch1_sr_l", "narrow": "ch1_uzkiy_luch", "fuse": "ch1_k3" },
@@ -117,6 +117,10 @@
                 "source": "voenizdat_osa_1991 p150 (СМЕНА ЛИТЕРЫ — НОРМА changes the transmitter's frequency letter; ЗАХВ. АПЧ-I, -II go out and back within 1 s); mon_2112_80 (a faulty channel: КАНАЛЫ to the good one, single missiles, then СМЕНА ЛИТ.)",
                 "confidence": "medium",
                 "notes": "Entering СМЕНА ЛИТ. is one change. ПУСК ГОТОВ waits for the transmitters to lock again. The number of letters and what the letter does against interference are not in any source found, so the letter itself is only counted." },
+    "prep_hold": { "hold_s": 600, "rest_s": 600, "cycles": 3, "long_rest_s": 3600,
+                   "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min, then the next is prepared; a missile can be prepared again after 10 min; three cycles, then a 1 h break); samsim_thread (ePap: the ammunition lamp flashes if the gyro overheats)",
+                   "confidence": "medium",
+                   "notes": "Read as: after 10 min prepared and waiting the gyro has overheated, the lamp flashes while it rests, 10 min after each hold and 1 h after the third. The textbook doesn't say what the lamp does; the flash is the forum's." },
     "range_sweep": { "control": "ssc.target_select", "channels": [ 1, 0, 2 ],
                      "source": "voenizdat_osa_1991 p98, p120 (switch on the range indicator: the fine range sweep is driven by the target range unit at ЦЕЛЬ, or by missile channel I or II's range unit); samsim_sprites osa014-016",
                      "confidence": "medium",
@@ -240,6 +244,12 @@
     { "id": "ch1_apch_lock", "description": "Channel I command transmitter is on and locked (ЗАХВ. АПЧ-I lamp); it goes out for a moment when the letter is changed", "source": "voenizdat_osa_1991 p150 (ЗАХВ. АПЧ-I, -II go out and back within 1 s on a letter change)", "confidence": "medium" },
     { "id": "ch2_apch_lock", "description": "Channel II command transmitter is on and locked (ЗАХВ. АПЧ-II lamp); it goes out for a moment when the letter is changed", "source": "voenizdat_osa_1991 p150 (ЗАХВ. АПЧ-I, -II go out and back within 1 s on a letter change)", "confidence": "medium" },
     { "id": "emerg_ready", "description": "ИЗДЕЛИЯ is set to a container that holds a missile: the emergency launch is ready (АВАРИЙНЫЙ ПУСК ГОТОВ lamp)", "source": "voenizdat_osa_1991 p155 (lamps АВАРИЙНЫЙ ПУСК ОБЕСТОЧЕН and ГОТОВ; ИЗДЕЛИЯ picks the missile)", "confidence": "medium" },
+    { "id": "hot_3_i", "description": "The missile in container 3-I has an overheated gyro (it was held prepared too long) and rests: its ammunition lamp flashes", "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min; prepared again after 10 min; three cycles, then 1 h); samsim_thread (ePap: the lamp flashes if its gyro overheats)", "confidence": "medium" },
+    { "id": "hot_2_i", "description": "The missile in container 2-I has an overheated gyro (it was held prepared too long) and rests: its ammunition lamp flashes", "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min; prepared again after 10 min; three cycles, then 1 h); samsim_thread (ePap: the lamp flashes if its gyro overheats)", "confidence": "medium" },
+    { "id": "hot_1_i", "description": "The missile in container 1-I has an overheated gyro (it was held prepared too long) and rests: its ammunition lamp flashes", "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min; prepared again after 10 min; three cycles, then 1 h); samsim_thread (ePap: the lamp flashes if its gyro overheats)", "confidence": "medium" },
+    { "id": "hot_3_ii", "description": "The missile in container 3-II has an overheated gyro (it was held prepared too long) and rests: its ammunition lamp flashes", "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min; prepared again after 10 min; three cycles, then 1 h); samsim_thread (ePap: the lamp flashes if its gyro overheats)", "confidence": "medium" },
+    { "id": "hot_2_ii", "description": "The missile in container 2-II has an overheated gyro (it was held prepared too long) and rests: its ammunition lamp flashes", "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min; prepared again after 10 min; three cycles, then 1 h); samsim_thread (ePap: the lamp flashes if its gyro overheats)", "confidence": "medium" },
+    { "id": "hot_1_ii", "description": "The missile in container 1-II has an overheated gyro (it was held prepared too long) and rests: its ammunition lamp flashes", "source": "voenizdat_osa_1991 p248 (a prepared missile is held at most 10 min; prepared again after 10 min; three cycles, then 1 h); samsim_thread (ePap: the lamp flashes if its gyro overheats)", "confidence": "medium" },
     { "id": "launch_hold", "description": "The launcher holds the next launch: too soon after the last one (3-5 s), or no missile selected on a free channel; ПУСК ГОТОВ is out meanwhile", "source": "samsim_osa p30 (ПУСК ГОТОВ lights again for the second missile); korovin_tiv_2010 (launches 3-5 s apart)", "confidence": "medium" },
     { "id": "search_beam_3", "description": "The search radar is radiating its beam III (8-28 degrees) this turn: the III ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "iff_interrogating", "description": "The IFF interrogator is interrogating (about 1 s per press)", "source": "voenizdat_osa_1991 p56", "confidence": "medium" },
