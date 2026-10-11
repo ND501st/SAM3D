@@ -201,8 +201,14 @@ frequency changes are data-only.
    does not have. I chose the capture rule that reproduces the fitted 5 km figure (a Pd of about 0.55); a Pd of 0.7
    would put it at 19 km (-17 %) and move the 50 m case by nothing. Closing the 50 m gap needs a rougher
    surface or another trials-site effect.
-4. **E1 data:** read FM 100-2-3 for the blue library; period NATO aircraft radars, RWRs and pods as
-   generic-but-plausible entries with sources.
+4. **E1 data (first pass done, 11 Oct 2026):** `data/em/nato_1985.json` (NATO fighter radar, RWR, ESM station and
+   ALQ-99-class jammer classes, and both sides' threat libraries; FM 100-2-3 read for 13 Soviet radars, low confidence;
+   `docs/research/EM_E1_NATO_DATA_2026-10.md`). Still to do: named period NATO aircraft radars/RWRs/pods when a source
+   gives distinct values, ZSU-23-4/SA-9/13 and Soviet radios from FM 100-2-3, ARM seeker data for E6.
+5. **E2 review fixes (done):** the review's findings 1-5 are fixed (`docs/EM_ARCHITECTURE.md` §25): no truth reads in
+   the link (ghost contacts for chaff and false echoes), antenna at the calibrated height, capture rule as data,
+   scripted jammers and chaff in scenarios, the unit as a node with knowledge; IFF replies now come from the EM layer.
+   Next EM code: E3 (Unreal scopes from EM output) or E4 (PU-12 node, voice designations as messages).
 
 ## 13. Open questions for the owner
 

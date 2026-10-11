@@ -80,6 +80,15 @@ and the outcome of each launch. `osa_practice_em.json` is `osa_practice.json` wi
 becomes the radar cross-section from every aspect, so give real values: a 0.5 m2 drone at 1 km is first shown on the
 scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking radar captures it at 13 to 15 km (its 50 % range is 14.8 km).
 
+`own_unit.em` also takes the electromagnetic environment's scripted effects (`docs/EM_ARCHITECTURE.md` §25):
+`"extra_libraries": ["em/nato_1985.json"]` merges more library files (jammers, threat libraries);
+`"jammers": [ { "jammer": "<library id>", "target": "<target id>" | "position": {...}, "on_at_s": 270, "off_at_s": 400 } ]`
+puts a jammer on a target (self-screening) or at a stand-off point, aimed at the unit; `"chaff": [ { "target": "<id>",
+"at_s": 235, "rcs_m2": 300, "lifetime_s": 90 } ]` drops a cloud at a target's position; `"wind_mps": { "east": 0,
+"north": -30 }` drifts it (the Osa's internal-coherence MTI cancels clouds slower than 15 m/s). Chaff and false echoes
+show on the scope as ghost contacts `T<n>`. `osa_practice_em_ew.json` is the EM practice scenario with a noise pod and a
+chaff drop. The auto-capture rule (`em_capture_looks`, `em_capture_hits`) is in the tuning file's `track` group.
+
 `"readiness"` starts the unit warm instead of cold (roadmap 6.2): one of the console's `readiness` states
 (`data/procedures/README.md`). The Osa has `powered` (on the march: turbine running, equipment and stabilisation warm,
 search possible on the move) and `deployed` (at a halt on the take-off generator, launcher unlocked, drives on,

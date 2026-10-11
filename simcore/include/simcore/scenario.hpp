@@ -236,13 +236,67 @@ private:
         if (const json::Value* em = u->Find("em")) {
             if (out.tuning_file.empty()) return Fail("own_unit.em", "needs own_unit.tuning: the EM layer replaces its sensors");
             std::string library, search, track;
-            if (!em->Is(json::Type::Object) || !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "notes"}) ||
+            if (!em->Is(json::Type::Object) ||
+                !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps",
+                                           "jammers", "chaff", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
                 !RequireString(*em, "own_unit.em", "track_radar", track)) {
                 return message_.empty() ? Fail("own_unit.em", "expected an object") : false;
             }
-            if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error)) return Fail("own_unit.em", error);
+            std::vector<std::string> extras;
+            if (const json::Value* ex = OptionalArray(*em, "own_unit.em", "extra_libraries")) {
+                for (std::size_t i = 0; i < ex->items.size(); ++i) {
+                    if (!ex->items[i].Is(json::Type::String)) return Fail(Index("own_unit.em.extra_libraries", i), "expected a file name");
+                    extras.push_back(ex->items[i].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error, extras)) return Fail("own_unit.em", error);
+            if (const json::Value* w = em->Find("wind_mps")) {
+                if (!Keys(*w, "own_unit.em.wind_mps", {"east", "north", "notes"}) ||
+                    !OptionalNumber(*w, "own_unit.em.wind_mps", "east", out.em.wind_mps.x) ||
+                    !OptionalNumber(*w, "own_unit.em.wind_mps", "north", out.em.wind_mps.y)) {
+                    return false;
+                }
+            }
+            if (const json::Value* jm = OptionalArray(*em, "own_unit.em", "jammers")) {
+                for (std::size_t i = 0; i < jm->items.size(); ++i) {
+                    const std::string jp = Index("own_unit.em.jammers", i);
+                    const json::Value& j = jm->items[i];
+                    if (!Keys(j, jp, {"jammer", "target", "position", "on_at_s", "off_at_s", "notes"})) return false;
+                    EmJammerDef jd;
+                    if (!RequireString(j, jp, "jammer", jd.jammer_id) || !OptionalString(j, jp, "target", jd.target_id) ||
+                        !OptionalNumber(j, jp, "on_at_s", jd.on_at_s) || !OptionalNumber(j, jp, "off_at_s", jd.off_at_s)) {
+                        return false;
+                    }
+                    if (out.em.library.Jammer(jd.jammer_id) < 0) return Fail(Join(jp, "jammer"), "unknown jammer '" + jd.jammer_id + "' (add its file to extra_libraries)");
+                    const json::Value* jpos = j.Find("position");
+                    if (jd.target_id.empty() == (jpos == nullptr)) return Fail(jp, "give either a target (self-screening) or a position (stand-off)");
+                    if (jpos != nullptr && !LoadPosition(*jpos, Join(jp, "position"), frame_, jd.position)) return false;
+                    out.em.jammers.push_back(jd);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (const json::Value* ch = OptionalArray(*em, "own_unit.em", "chaff")) {
+                for (std::size_t i = 0; i < ch->items.size(); ++i) {
+                    const std::string cp = Index("own_unit.em.chaff", i);
+                    const json::Value& c = ch->items[i];
+                    if (!Keys(c, cp, {"target", "at_s", "rcs_m2", "lifetime_s", "notes"})) return false;
+                    EmChaffDef cd;
+                    if (!RequireString(c, cp, "target", cd.target_id) || !RequireNumber(c, cp, "at_s", cd.at_s) ||
+                        !OptionalNumber(c, cp, "rcs_m2", cd.rcs_m2) || !OptionalNumber(c, cp, "lifetime_s", cd.lifetime_s)) {
+                        return false;
+                    }
+                    if (cd.rcs_m2 <= 0.0) return Fail(Join(cp, "rcs_m2"), "must be > 0");
+                    if (cd.lifetime_s <= 0.0) return Fail(Join(cp, "lifetime_s"), "must be > 0");
+                    out.em.chaff.push_back(cd);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
             out.has_em = true;
         }
         const json::Value* pos = nullptr;

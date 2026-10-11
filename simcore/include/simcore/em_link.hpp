@@ -12,8 +12,15 @@
 // reflection, MTI and clutter: not from a table. The outcome of a launch (hit or miss) stays with the gameplay
 // model. TV tracking and the IFF replies are not electromagnetic here and stay as they were.
 //
-// The target identity of a track is the truth platform it came from (the plots carry it for debugging). The
-// game needs the scenario's target id to resolve a launch; positions the crew see are the radar's measured ones.
+// Identity: the crew's picture never reads the debug truth fields of the EM layer. A confirmed track becomes a
+// contact whose label is the scenario target it lines up with in angle (a referee-side association, ResolveTarget:
+// the game needs the scenario's target id to resolve a launch); a track that lines up with no target (chaff, a
+// repeater's false echo, a ghost) is shown as a ghost contact "T<n>", so deception reaches the scope. Positions
+// the crew sees are always the radar's measured ones. A radar lock on a ghost is not a capture.
+//
+// Also in the link's world: the unit is a node whose knowledge base holds its own radar tracks and can take reports
+// from elsewhere (E4's PU-12); scripted jammers and chaff clouds (the scenario's em.jammers / em.chaff); the
+// antenna stands at the radar definition's height above the ground, the height the radar was calibrated at.
 #pragma once
 
 #include <algorithm>
@@ -32,17 +39,39 @@
 
 namespace simcore {
 
+// A scripted jammer: on a scenario target (self-screening) or at a fixed point (stand-off), aimed at the unit.
+struct EmJammerDef {
+    std::string jammer_id;  // id in the library (jammers[])
+    std::string target_id;  // scenario target carrying it; empty = stand-off at `position`
+    Vec3 position;          // stand-off position (ENU)
+    double on_at_s = 0.0;
+    double off_at_s = -1.0;  // < 0: stays on
+};
+
+// A scripted chaff drop: a cloud at the target's position at a time.
+struct EmChaffDef {
+    std::string target_id;
+    double at_s = 0.0;
+    double rcs_m2 = 30.0;
+    double lifetime_s = 60.0;
+};
+
 // What a scenario asks for: the library file and which of its radars are the unit's search and tracking radars.
 struct EmLinkDef {
     std::string library_file;  // relative to the data folder, e.g. "em/osa_ak.json"
     std::string search_radar;  // id in the library, role "search"
     std::string track_radar;   // id in the library, role "track"
+    std::vector<std::string> extra_libraries;  // more files merged in (jammers, threat libraries): "em/nato_1985.json"
+    std::vector<EmJammerDef> jammers;
+    std::vector<EmChaffDef> chaff;
+    Vec3 wind_mps;  // chaff drift
     em::EmLibrary library;
 };
 
 // Loads the library and checks the two radars exist, have the right roles and calibrate.
 inline bool LoadEmLinkDef(const std::string& data_dir, const std::string& library_file, const std::string& search_id,
-                          const std::string& track_id, EmLinkDef& out, std::string* error = nullptr) {
+                          const std::string& track_id, EmLinkDef& out, std::string* error = nullptr,
+                          const std::vector<std::string>& extra_libraries = {}) {
     auto fail = [&](const std::string& what) {
         if (error != nullptr) *error = what;
         return false;
@@ -50,6 +79,10 @@ inline bool LoadEmLinkDef(const std::string& data_dir, const std::string& librar
     em::EmLibrary lib;
     const em::EmLoadResult res = em::LoadEmLibraryFile(data_dir + "/" + library_file, lib);
     if (!res.ok) return fail(res.error);
+    for (const std::string& extra : extra_libraries) {
+        const em::EmLoadResult more = em::LoadEmLibraryFile(data_dir + "/" + extra, lib);
+        if (!more.ok) return fail(more.error);
+    }
     const em::Environment env;
     for (const auto& want : {std::make_pair(&search_id, em::RadarRole::Search), std::make_pair(&track_id, em::RadarRole::Track)}) {
         const int idx = lib.Radar(*want.first);
@@ -63,6 +96,7 @@ inline bool LoadEmLinkDef(const std::string& data_dir, const std::string& librar
     out.library_file = library_file;
     out.search_radar = search_id;
     out.track_radar = track_id;
+    out.extra_libraries = extra_libraries;
     out.library = std::move(lib);
     return true;
 }
@@ -72,10 +106,19 @@ public:
     // One EM tick. The search radar sweeps a few degrees per tick at 33 rpm, the tracking radar looks once.
     static constexpr double kStepS = 0.1;
 
+    // The auto-capture circuit takes the lock once the radar has echoed `hits` times in its last `looks` looks (set
+    // from the scenario's tuning, data/gameplay/<system>.json).
+    void SetCaptureRule(int looks, int hits) {
+        capture_looks_ = looks > 1 ? looks : 1;
+        capture_hits_ = hits < capture_looks_ ? hits : capture_looks_;
+    }
+
     // What the search radar shows for one target: where it measured it (true azimuth from north) and how far.
     struct Contact {
         std::string target_id;
         Vec3 position;  // the track's estimate, ENU
+        bool ghost = false;  // lines up with no target: chaff, a false echo (target_id is "T<track number>")
+        bool iff = false;    // a friendly reply came back with this track's echo within the last revolution or so
         double range_m = 0.0;
         double true_az_deg = 0.0;  // -180..180
         double el_deg = 0.0;
@@ -83,22 +126,60 @@ public:
     };
 
     EmSensorLink(const GeoPoint& origin, const Terrain* terrain, unsigned seed, const EmLinkDef& def, const Vec3& unit_position)
-        : world_(origin, terrain, seed) {
+        : world_(origin, terrain, seed), effects_(def) {
         std::string err;
         if (!world_.SetLibrary(def.library, &err)) {
             error_ = err;
             return;
         }
+        if (def.wind_mps.LengthSquared() > 0.0) {
+            em::Environment env = world_.Scene().env;
+            env.wind_mps = def.wind_mps;
+            world_.SetEnvironment(env);
+        }
+        const int search_def = world_.Scene().lib.Radar(def.search_radar);
+        antenna_height_m_ = search_def >= 0 ? world_.Scene().lib.radars[static_cast<std::size_t>(search_def)].antenna_height_m : 0.0;
+        unit_ = last_unit_ = unit_position;
         em::Platform unit;
         unit.name = "Own unit";
         unit.side = em::Side::Red;
         unit.kind = em::PlatformKind::Ground;
-        unit.position = unit_position;
+        unit.position = Antenna();
         unit_id_ = world_.AddPlatform(unit);
-        unit_ = last_unit_ = unit_position;
         search_ = world_.AddRadar(unit_id_, def.search_radar, false);
         track_ = world_.AddRadar(unit_id_, def.track_radar, false);
-        if (search_ == 0 || track_ == 0) error_ = "radar not found in the library";
+        if (search_ == 0 || track_ == 0) {
+            error_ = "radar not found in the library";
+            return;
+        }
+        // The unit is a node: its radars are cabled to it, so its own tracks become knowledge it can fuse with
+        // reports from elsewhere (the battery's PU-12, roadmap phase 7 / E4).
+        node_ = world_.AddNode("Own unit", unit_id_, em::Side::Red);
+        world_.AttachSensor(node_, search_);
+        world_.AttachSensor(node_, track_);
+        if (em::RadarState* sr = Radar(search_)) sr->iff_interrogating = false;  // until the console interrogates
+        jammer_ids_.assign(def.jammers.size(), 0);
+        chaff_done_.assign(def.chaff.size(), 0);
+        for (std::size_t i = 0; i < def.jammers.size(); ++i) {
+            if (!def.jammers[i].target_id.empty()) continue;  // on a target: made when the target first appears
+            em::Platform sp;
+            sp.name = "Stand-off jammer";
+            sp.side = em::Side::Blue;
+            sp.kind = em::PlatformKind::FixedWing;
+            sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
+            sp.position = def.jammers[i].position;
+            const int pid = world_.AddPlatform(sp);
+            AddScriptedJammer(i, pid);
+        }
+    }
+
+    // The antenna's place: the unit's x/y at the height above the ground the radar was calibrated for.
+    Vec3 Antenna() const { return AntennaAt(unit_); }
+    Vec3 AntennaAt(const Vec3& hull) const {
+        const em::EmScene& s = world_.Scene();
+        const double ground = s.GetTerrain().HeightAt(hull.x, hull.y);
+        const double d2 = hull.x * hull.x + hull.y * hull.y;
+        return {hull.x, hull.y, ground + antenna_height_m_ - s.frame.Origin().alt_m - d2 / (2.0 * wgs84::kMeanRadius)};
     }
 
     bool Ok() const { return error_.empty(); }
@@ -166,6 +247,12 @@ public:
         return e != nullptr && !DefOf(*r).emitter.beams.empty() ? e->beam_index : -1;
     }
 
+    // The IFF interrogator (built into the search antenna) is transmitting: friendly transponders in the beam reply
+    // with the echo, and the reply shows on that track (Contact::iff). Off, nobody replies.
+    void SetInterrogating(bool on) {
+        if (em::RadarState* r = Radar(search_)) r->iff_interrogating = on;
+    }
+
     void SetTrack(bool radiating) {
         em::RadarState* r = Radar(track_);
         if (r == nullptr) return;
@@ -179,7 +266,7 @@ public:
         em::RadarState* r = Radar(track_);
         if (r == nullptr) return;
         r->has_designation = true;
-        r->designation = unit_ + DirectionFromAzEl(DegToRad(true_az_deg), DegToRad(el_deg)) * range_m;
+        r->designation = Antenna() + DirectionFromAzEl(DegToRad(true_az_deg), DegToRad(el_deg)) * range_m;
     }
 
     void ClearDesignation() {
@@ -198,23 +285,26 @@ public:
     }
 
     void Advance(double dt) {
+        if (!Ok()) return;  // a link that failed to build does nothing (the scenario falls back to the gameplay rules)
         accum_ += dt;
         while (accum_ + 1e-9 >= kStepS) {
             accum_ -= kStepS;
             em::Platform* u = world_.Scene().FindPlatform(unit_id_);
             if (u != nullptr) {
-                world_.SetPlatformState(unit_id_, unit_, (unit_ - last_unit_) / kStepS);
+                world_.SetPlatformState(unit_id_, Antenna(), (unit_ - last_unit_) / kStepS);
                 last_unit_ = unit_;
             }
+            RunEffects();
             world_.Step(kStepS);
             NoteBeams();
             NoteLooks();
         }
     }
 
-    // The search radar's picture: confirmed tracks whose last look was a hit, one per target, nearest first. A blip
-    // is held for one full beam programme (a target seen only in beam I, in the automatic programme, is refreshed
-    // every third turn); a target that leaves the radar's coverage, such as overhead, drops off the scope.
+    // The search radar's picture: confirmed tracks whose last look was a hit, nearest first. A blip is held for one
+    // full beam programme (a target seen only in beam I, in the automatic programme, is refreshed every third turn);
+    // a target that leaves the radar's coverage, such as overhead, drops off the scope. A track that lines up with a
+    // scenario target carries its id (once: a second track of the same target is a ghost); any other is a ghost.
     std::vector<Contact> SearchPicture() const {
         std::vector<Contact> out;
         const em::RadarState* r = Radar(search_);
@@ -222,16 +312,21 @@ public:
         const em::RadarDef& d = DefOf(*r);
         const double turns = r->beam_program.empty() ? 1.0 : static_cast<double>(r->beam_program.size());
         const double hold_s = turns * d.emitter.scan_period_s + 0.3;
+        std::vector<std::string> claimed;
         for (const em::SensorTrack& t : r->tracker.Tracks()) {
             if (t.status != em::TrackStatus::Confirmed || t.consecutive_misses != 0) continue;
             if (world_.Time() - t.last_update_s > hold_s) continue;
-            const std::string id = TargetOf(t.debug_truth_platform);
-            if (id.empty()) continue;
-            bool dup = false;
-            for (const Contact& c : out) dup = dup || c.target_id == id;
-            if (dup) continue;
+            std::string id = ResolveTarget(t.Position(), true, claimed);
+            const bool ghost = id.empty();
+            if (ghost) {
+                id = "T" + std::to_string(t.id);
+            } else {
+                claimed.push_back(id);
+            }
             Contact c = MakeContact(id, t.Position());
-            c.beam = BeamOf(id);
+            c.ghost = ghost;
+            c.iff = !ghost && t.iff_replies > 0 && world_.Time() - t.last_iff_s <= kIffHoldS;
+            c.beam = BeamOfTrack(t.id);
             out.push_back(c);
         }
         std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
@@ -244,7 +339,8 @@ public:
         if (r == nullptr || !r->on || r->locked_track == 0) return false;
         const em::SensorTrack* t = r->tracker.Find(r->locked_track);
         if (t == nullptr) return false;
-        const std::string id = TargetOf(t->debug_truth_platform);
+        // By angle only: a repeater walking the range gate off must not make the lock look like a ghost.
+        const std::string id = ResolveTarget(t->Position(), false, std::vector<std::string>());
         if (id.empty()) return false;
         if (target_id != nullptr) *target_id = id;
         if (estimate != nullptr) {
@@ -255,26 +351,30 @@ public:
         return true;
     }
 
-    // The lock is firm enough for the auto-capture circuit to take it: over the last kCaptureLooks looks (4 s) the radar
-    // echoed on at least kCaptureHits (a local Pd of about 0.55). A lock can start on a lucky echo far out, where
-    // Swerling I detection is still a few tenths; the circuit waits for the target to come into the range where the
-    // radar holds it. The rule is tied to the one calibration that is fitted (Korovin's 23 km at 5 km altitude, Pd 0.5):
-    // it captures a 3 m2 target there at 21 to 25 km. Raising the Pd does not help his 14 km at 50 m: the full-path
-    // Pd of a 50 m target is smooth (0.5 at 22 km, 0.8 at 18 km), so any rule that fits the 5 km figure also captures
-    // it at 22 km. An existing lock is kept by Locked() alone.
-    static constexpr int kCaptureLooks = 40;
-    static constexpr int kCaptureHits = 22;
+    // The lock is firm enough for the auto-capture circuit to take it: the radar has echoed on at least capture_hits_ of
+    // its last capture_looks_ looks (the scenario's tuning; Osa: 22 of 40, a local Pd of about 0.55, reasoning in
+    // data/gameplay/osa_ak.json). An existing lock is kept by Locked() alone.
     bool Captured(std::string* target_id, Contact* estimate = nullptr) const {
         if (!Locked(target_id, estimate)) return false;
-        if (static_cast<int>(look_record_.size()) < kCaptureLooks) return false;
+        if (static_cast<int>(look_record_.size()) < capture_looks_) return false;
         int hits = 0;
         for (char hit : look_record_) hits += hit;
-        return hits >= kCaptureHits;
+        return hits >= capture_hits_;
     }
 
-    // Whether the tracking radar's beam would show this target's echo on its range indicator now: inside the beam
+    // The unit as a node of the EM world: its radars' tracks as knowledge, fused with whatever else reaches it.
+    const em::KnowledgeBase& Knowledge() const { return world_.Scene().FindNode(node_)->kb; }
+    std::vector<em::FusedTrack> UnitPicture() const { return Knowledge().Picture(world_.Time()); }
+    // A report from another node (a PU-12 designation, a neighbour's track) joins the unit's knowledge.
+    void ReceiveReport(em::KnowledgeTrack report) {
+        report.source = em::InfoSource::Network;
+        report.received_s = world_.Time();
+        if (em::NodeState* n = world_.Scene().FindNode(node_)) n->kb.Upsert(report);
+    }
+
+    // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
-    // indicator integrates.
+    // indicator integrates. Chaff echoes are not drawn here yet.
     bool EchoVisible(const std::string& target_id) {
         em::RadarState* r = Radar(track_);
         const int pid = PlatformOf(target_id);
@@ -329,7 +429,7 @@ private:
         return world_.Scene().lib.radars[static_cast<std::size_t>(r.def_index)];
     }
 
-    // Keep the last kCaptureLooks looks (hit or miss) of the tracking radar's locked track.
+    // Keep the last capture_looks_ looks (hit or miss) of the tracking radar's locked track.
     void NoteLooks() {
         const em::RadarState* r = Radar(track_);
         const em::SensorTrack* t = r != nullptr && r->locked_track != 0 ? r->tracker.Find(r->locked_track) : nullptr;
@@ -347,32 +447,68 @@ private:
         if (t->looks > recorded_looks_) {
             look_record_.push_back(static_cast<char>(t->history & 1u));
             recorded_looks_ = t->looks;
-            if (static_cast<int>(look_record_.size()) > kCaptureLooks) look_record_.erase(look_record_.begin());
+            if (static_cast<int>(look_record_.size()) > capture_looks_) look_record_.erase(look_record_.begin());
         }
     }
 
-    // Remember which beam each target's echo came in this tick.
+    // Remember which beam each search track was updated in this tick.
     void NoteBeams() {
         const em::RadarState* r = Radar(search_);
         const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
-        if (e == nullptr || r->last_plots.empty()) return;
-        for (const em::RadarPlot& p : r->last_plots) {
-            const std::string id = TargetOf(p.debug_truth_platform);
-            if (id.empty()) continue;
+        if (e == nullptr) return;
+        for (const em::SensorTrack& t : r->tracker.Tracks()) {
+            if (t.last_update_s < world_.Time() - 1e-9) continue;
             bool found = false;
-            for (auto& b : beam_of_) {
-                if (b.first == id) {
+            for (auto& b : beam_of_track_) {
+                if (b.first == t.id) {
                     b.second = e->beam_index;
                     found = true;
                 }
             }
-            if (!found) beam_of_.emplace_back(id, e->beam_index);
+            if (!found) beam_of_track_.emplace_back(t.id, e->beam_index);
         }
     }
-    int BeamOf(const std::string& id) const {
-        for (const auto& b : beam_of_)
-            if (b.first == id) return b.second;
+    int BeamOfTrack(int track_id) const {
+        for (const auto& b : beam_of_track_)
+            if (b.first == track_id) return b.second;
         return -1;
+    }
+
+    // Scripted jammers and chaff (the scenario's em.jammers / em.chaff), applied at their times.
+    void RunEffects() {
+        const double now = world_.Time();
+        for (std::size_t i = 0; i < effects_.jammers.size(); ++i) {
+            const EmJammerDef& j = effects_.jammers[i];
+            if (jammer_ids_[i] == 0 && !j.target_id.empty()) {
+                const int pid = PlatformOf(j.target_id);
+                const em::Platform* p = pid != 0 ? world_.Scene().FindPlatform(pid) : nullptr;
+                if (p != nullptr && p->alive) AddScriptedJammer(i, pid);
+            }
+            if (jammer_ids_[i] == 0) continue;
+            em::JammerState* js = world_.Scene().FindJammer(jammer_ids_[i]);
+            if (js == nullptr) continue;
+            const bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            if (on != js->on) {
+                js->on = on;
+                world_.Scene().Log(on ? em::EmEventKind::JammerOn : em::EmEventKind::JammerOff, js->id, 0, j.jammer_id);
+            }
+            js->aim_at_point = true;
+            js->aim_point = Antenna();
+        }
+        for (std::size_t i = 0; i < effects_.chaff.size(); ++i) {
+            const EmChaffDef& c = effects_.chaff[i];
+            if (chaff_done_[i] != 0 || now < c.at_s) continue;
+            const int pid = PlatformOf(c.target_id);
+            const em::Platform* p = pid != 0 ? world_.Scene().FindPlatform(pid) : nullptr;
+            if (p == nullptr || !p->alive) continue;  // wait until the dropper exists
+            chaff_done_[i] = 1;
+            world_.AddChaff(p->position, c.rcs_m2, c.lifetime_s);
+        }
+    }
+
+    void AddScriptedJammer(std::size_t index, int platform_id) {
+        const int id = world_.AddJammer(platform_id, effects_.jammers[index].jammer_id, false);
+        jammer_ids_[index] = id;
     }
 
     int PlatformOf(const std::string& id) const {
@@ -380,17 +516,44 @@ private:
             if (t.first == id) return t.second;
         return 0;
     }
-    std::string TargetOf(int platform_id) const {
-        for (const auto& t : targets_)
-            if (t.second == platform_id) return t.first;
-        return std::string();
+    // Referee-side association of a radar track with a scenario target by angle from the antenna (and, for the search
+    // radar, by range): the nearest target inside the gates that no better track has claimed. It reads the targets'
+    // true positions, because the game needs to know which target a lock or a launch is about; the crew's picture
+    // only gets the label, never the truth, and a track with no target near it stays a ghost.
+    std::string ResolveTarget(const Vec3& track_position, bool use_range, const std::vector<std::string>& claimed) const {
+        const Vec3 a = Antenna();
+        const Vec3 tr = track_position - a;
+        const double tr_az = RadToDeg(AzimuthOf(tr)), tr_el = RadToDeg(ElevationOf(tr));
+        std::string best;
+        double best_score = 1e18;
+        for (const auto& t : targets_) {
+            if (std::find(claimed.begin(), claimed.end(), t.first) != claimed.end()) continue;
+            const em::Platform* p = world_.Scene().FindPlatform(t.second);
+            if (p == nullptr || !p->alive) continue;
+            const Vec3 rel = p->position - a;
+            double daz = std::fabs(RadToDeg(AzimuthOf(rel)) - tr_az);
+            if (daz > 180.0) daz = 360.0 - daz;
+            const double del = std::fabs(RadToDeg(ElevationOf(rel)) - tr_el);
+            if (daz > kResolveAzDeg || del > kResolveElDeg) continue;
+            if (use_range && std::fabs(rel.Length() - tr.Length()) > kResolveRangeM) continue;
+            const double score = daz * daz + (del / 5.0) * (del / 5.0);
+            if (score < best_score) {
+                best_score = score;
+                best = t.first;
+            }
+        }
+        return best;
     }
+    static constexpr double kIffHoldS = 2.5;  // a reply is shown for a bit more than one revolution
+    static constexpr double kResolveAzDeg = 2.5;
+    static constexpr double kResolveElDeg = 10.0;  // a search track's height is only known to its beam
+    static constexpr double kResolveRangeM = 1500.0;
 
     Contact MakeContact(const std::string& id, const Vec3& position) const {
         Contact c;
         c.target_id = id;
         c.position = position;
-        const Vec3 rel = position - unit_;
+        const Vec3 rel = position - Antenna();
         c.range_m = rel.Length();
         double az = RadToDeg(AzimuthOf(rel));
         az = std::fmod(az + 180.0, 360.0);
@@ -401,8 +564,15 @@ private:
     }
 
     em::EmWorld world_;
+    EmLinkDef effects_;  // scripted jammers and chaff (the loaded library inside is not used again)
     std::string error_;
     int unit_id_ = 0;
+    int node_ = 0;
+    double antenna_height_m_ = 0.0;
+    int capture_looks_ = 40;
+    int capture_hits_ = 22;
+    std::vector<int> jammer_ids_;
+    std::vector<char> chaff_done_;
     int search_ = 0;
     int track_ = 0;
     Vec3 unit_;
@@ -412,7 +582,7 @@ private:
     std::vector<char> look_record_;  // 1 = the locked track's look was a hit, newest last
     int recorded_track_ = 0;
     int recorded_looks_ = 0;
-    std::vector<std::pair<std::string, int>> beam_of_;  // target id -> the search beam of its latest echo
+    std::vector<std::pair<int, int>> beam_of_track_;  // search track id -> the search beam of its latest update
 };
 
 }  // namespace simcore

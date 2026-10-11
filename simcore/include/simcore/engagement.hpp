@@ -110,6 +110,10 @@ struct EngagementTuning {
     double track_min_altitude_m = 0.0;
     double tv_max_range_m = 0.0;
     double max_angular_rate_deg_s = 0.0;
+    // With the EM layer: the auto-capture circuit takes the lock once the tracking radar has echoed on `hits` of its
+    // last `looks` looks (em_link.hpp).
+    int em_capture_looks = 40;
+    int em_capture_hits = 22;
     // Crew aiming: the crew role (console station) that turns each wheel.
     std::string aim_az_role;
     std::string aim_el_role;
@@ -256,15 +260,21 @@ public:
         }
         if (!Group(root, "track",
                    {"az_tolerance_deg", "range_gate_m", "lock_time_s", "min_altitude_m", "tv_max_range_m",
-                    "max_angular_rate_deg_s"},
+                    "max_angular_rate_deg_s", "em_capture_looks", "em_capture_hits"},
                    g) ||
             !Num(*g, "track", "az_tolerance_deg", t.az_tolerance_deg, 0.01) ||
             !Num(*g, "track", "range_gate_m", t.range_gate_m, 1.0) ||
             !Num(*g, "track", "lock_time_s", t.lock_time_s, 0.0) ||
             !Num(*g, "track", "min_altitude_m", t.track_min_altitude_m, 0.0) ||
             !Num(*g, "track", "tv_max_range_m", t.tv_max_range_m, 1.0) ||
-            !Num(*g, "track", "max_angular_rate_deg_s", t.max_angular_rate_deg_s, 0.1)) {
+            !Num(*g, "track", "max_angular_rate_deg_s", t.max_angular_rate_deg_s, 0.1) ||
+            !OptionalInt(*g, "track", "em_capture_looks", t.em_capture_looks) ||
+            !OptionalInt(*g, "track", "em_capture_hits", t.em_capture_hits)) {
             return false;
+        }
+        if (t.em_capture_looks < 1) return Fail("track.em_capture_looks", "must be >= 1");
+        if (t.em_capture_hits < 1 || t.em_capture_hits > t.em_capture_looks) {
+            return Fail("track.em_capture_hits", "must be from 1 to em_capture_looks");
         }
         if (!Group(root, "aim", {"azimuth_role", "elevation_role", "range_role", "az_rate_deg_s", "el_rate_deg_s",
                                  "range_rate_mps", "plotting_board_range_m"},
@@ -794,6 +804,7 @@ private:
     // Hand the EM layer this step's world: where the unit and the targets are, which radars radiate and whether the
     // search radar's MTI is selected; then let it run to now.
     void StepEm(double dt, World& world, const ConsoleData& console, const std::vector<EngagementTarget>& targets) {
+        em_->SetCaptureRule(tuning_.em_capture_looks, tuning_.em_capture_hits);
         em_->SetUnit(unit_);
         for (const EngagementTarget& tg : targets) {
             if (tg.world_id < 0) continue;
@@ -1316,7 +1327,21 @@ private:
         }
         const bool active = ready && t < iff_until_s_ + 1e-9;
         if (!d.iff_interrogating_input.empty()) console.equipment.SetInput(d.iff_interrogating_input, active);
+        if (em_ != nullptr) em_->SetInterrogating(active);
         if (!active) return;
+        if (em_ != nullptr) {  // replies ride on the search radar's own tracks, from the transponder that answered
+            for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
+                if (!c.iff || c.range_m > d.iff_max_range_m) continue;
+                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+                iff_replies_.push_back({c.target_id, c.range_m, az, c.el_deg, iff_control_});
+                if (replied_.insert(c.target_id).second) {
+                    char detail[96];
+                    std::snprintf(detail, sizeof(detail), "IFF reply: friend, %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
+                    log.Record({t, DebriefEntry::Kind::Scenario, "IFF", c.target_id, detail});
+                }
+            }
+            return;
+        }
         const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;

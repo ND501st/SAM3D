@@ -1,0 +1,57 @@
+{
+  "scenario_id": "osa_practice_em_ew",
+  "name": "Osa-AK practice (EM radars, jamming and chaff): one drone with a noise pod, crew only",
+  "description": "A fictional practice shoot. The Osa is on the march with its crew of five; a single target drone comes in from the north. The crew powers up, searches on the march, halts, deploys and orients the vehicle (the hull faces 35 degrees), acquires with the SOC and captures with the SSC, prepares and launches. No player actions: this is a regression and demo scenario.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. The place is a flat plain chosen for convenience. The target's speed, height, route and RCS are PLACEHOLDER numbers for exercising the pipeline. Capture and zone lamps come from the gameplay engagement model (data/gameplay/osa_ak.json), not from this file.",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
+      "extra_libraries": ["em/nato_1985.json"],
+      "wind_mps": { "east": 0, "north": -30, "notes": "A strong wind from the north: the cloud drifts at 30 m/s towards the radar, outside the internal-coherence MTI notch." },
+      "jammers": [ { "jammer": "nato_alq99_band8", "target": "t1", "on_at_s": 360,
+                     "notes": "A self-screening pod (placeholder: an ALQ-99-class band-8 jammer, far stronger than a real pod) from 360 s, while it is being tracked: the radar loses it until it burns through." } ],
+      "chaff": [ { "target": "t1", "at_s": 330, "rcs_m2": 300, "lifetime_s": 90,
+                   "notes": "A chaff drop before the pod comes on: ghost contacts on the scope that no target owns." } ]
+    },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 35,
+    "inputs": { "vehicle_stopped": false }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Deputy commander", "role": "deputy_commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Senior operator", "role": "senior_operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Operator", "role": "operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Driver", "role": "driver", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
+      "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },
+      "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
+      "speed_mps": 150, "rcs_m2": 0.5, "appear_at_s": 200,
+      "notes": "Placeholder numbers. Launched 200 s into the exercise, so the crew has its 4 min to readiness (mon_2112_80 p11–12)."
+    }
+  ],
+  "triggers": [
+    { "id": "on_the_march", "when": { "after_s": 0 },
+      "do": [ { "order": "power_up", "crew": "Driver" }, { "order": "equipment_on", "crew": "Operator" },
+              { "order": "search_on_march", "crew": "Senior operator" } ] },
+    { "id": "halt", "when": { "target": "t1", "target_within_m": 40000 },
+      "do": [ { "set_input": "vehicle_stopped", "value": true }, { "order": "deploy_at_halt", "crew": "Operator" },
+              { "order": "pto_on_line", "crew": "Driver" }, { "order": "orient_vehicle", "crew": "Deputy commander" } ] },
+    { "id": "acquire", "when": { "target": "t1", "target_within_m": 35000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+      "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "queue": "ready_capture", "crew": "Deputy commander" },
+              { "order": "capture_with_ssc", "crew": "Operator" } ] },
+    { "id": "prepare", "when": { "target": "t1", "target_within_m": 30000 },
+      "do": [ { "queue": "prepare_firing", "crew": "Deputy commander" }, { "queue": "launch", "crew": "Deputy commander" } ] }
+  ],
+  "end": { "time_limit_s": 700, "when_targets_gone": true }
+}

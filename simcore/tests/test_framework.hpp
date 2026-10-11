@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <utility>
@@ -34,9 +35,12 @@ inline void ReportFailure(const char* file, int line, const std::string& msg) {
     ++FailureCount();
 }
 
-inline int RunAll() {
+inline int RunAll(const char* filter = nullptr) {
     int failed_tests = 0;
+    // simcore_tests <text> runs only the tests whose name contains it (flushing as it goes, to find a crash).
     for (const TestCase& t : Registry()) {
+        if (filter != nullptr && std::strstr(t.name, filter) == nullptr) continue;
+        if (filter != nullptr) std::fflush(stdout);
         const int before = FailureCount();
         t.fn();
         const bool ok = FailureCount() == before;
