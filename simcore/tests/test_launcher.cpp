@@ -172,3 +172,57 @@ SC_TEST("launcher: a unit with empty containers takes the next loaded one") {
     SC_EXPECT(partial.Selected(1) == "1-I" && partial.Selected(2) == "3-II" && partial.MissilesLeft() == 4);
     SC_EXPECT(!c.equipment.GetInput("ammo_3_i") && c.equipment.GetInput("ammo_1_i"));
 }
+
+SC_TEST("launcher: the TZM reloads six missiles in 6 min, one container per minute, only at a halt with the pair spent") {
+    ConsoleData c = Osa();
+    SC_EXPECT_NEAR(c.launcher.reload_s_per_missile, 60.0, 1e-12);
+    Launcher l(c.launcher);
+    for (const char* id : {"3-I", "2-I", "1-I", "3-II", "2-II", "1-II"}) l.Unload(id);
+    SC_EXPECT(l.MissilesLeft() == 0);
+    double t = 0.0;
+    auto run = [&](double seconds) {
+        for (double end = t + seconds; t < end - 1e-9; t += 0.1) l.Step(t, c);
+    };
+    // The TZM isn't there: nothing loads.
+    c.equipment.SetInput("vehicle_stopped", true);
+    run(120.0);
+    SC_EXPECT(l.MissilesLeft() == 0 && l.Reloading() < 0);
+    // It arrives, but the vehicle is moving: nothing loads.
+    c.equipment.SetInput("tzm_alongside", true);
+    c.equipment.SetInput("vehicle_stopped", false);
+    run(120.0);
+    SC_EXPECT(l.MissilesLeft() == 0);
+    // At a halt: one a minute, outer containers first (firing order).
+    c.equipment.SetInput("vehicle_stopped", true);
+    run(30.0);
+    SC_EXPECT(l.MissilesLeft() == 0 && l.Reloading() >= 0);
+    run(31.0);
+    SC_EXPECT(l.MissilesLeft() == 1 && l.Loaded("3-I"));
+    run(60.0);
+    SC_EXPECT(l.MissilesLeft() == 2 && l.Loaded("3-II"));
+    run(240.0 + 1.0);
+    SC_EXPECT(l.MissilesLeft() == 6);
+    SC_EXPECT(l.Reloading() < 0);
+    // Six missiles, 6 min from the first minute at the halt: flak11.
+    SC_EXPECT(t > 120.0 + 120.0 + 360.0 - 5.0);
+}
+
+SC_TEST("launcher: the crane waits while a pair is selected or a channel is guiding") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    l.Unload("1-I");
+    l.Unload("1-II");
+    c.equipment.SetInput("tzm_alongside", true);
+    c.equipment.SetInput("vehicle_stopped", true);
+    c.equipment.SetInput("target_near_zone", true);  // ВНИМАНИЕ: a pair is selected
+    double t = 0.0;
+    for (; t < 200.0; t += 0.1) l.Step(t, c);
+    SC_EXPECT(l.MissilesLeft() == 4 && !l.Loaded("1-I"));
+    l.Launch(t, c, 1, 20.0, 450.0);
+    l.Launch(t + 4.0, c, 2, 20.0, 450.0);
+    c.equipment.SetInput("target_near_zone", false);
+    for (; t < 200.0 + 24.0; t += 0.1) l.Step(t, c);  // both flying
+    SC_EXPECT(l.MissilesLeft() == 2 && !l.Loaded("1-I"));
+    for (double end = t + 70.0; t < end; t += 0.1) l.Step(t, c);  // flights over, pair spent: the crane gets to work
+    SC_EXPECT(l.MissilesLeft() == 3);
+}

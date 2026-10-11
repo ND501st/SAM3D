@@ -141,6 +141,11 @@ struct LauncherDef {
     double nominal_flight_s = 0.0;  // how long a channel is busy when no outcome model times the flight
     double min_interval_s = 0.0;    // between two launches
     std::string hold_input;         // set while the next launch must wait (too soon, or no missile on a free channel)
+    // Reloading from the transport-loader vehicle (TZM; roadmap 7.3): while `reload_input` is set and the vehicle is
+    // stopped (`stopped_input`), the crane puts one missile into an empty container every `reload_s_per_missile`.
+    std::string reload_input;
+    std::string stopped_input;
+    double reload_s_per_missile = 0.0;
 };
 
 // A state a session can start in instead of cold (roadmap 6.2): controls already set, inputs, subsystems already
@@ -582,12 +587,15 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const Equipment& eq = out.equipment;
         if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
                            "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
-                           "nominal_flight_s", "min_interval_s", "hold_input", "source", "confidence", "notes"}) ||
+                           "nominal_flight_s", "min_interval_s", "hold_input", "reload_input", "stopped_input",
+                           "reload_s_per_missile", "source", "confidence", "notes"}) ||
             !Provenance(*l, lp) ||
             !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
             !RefControl(*l, lp, "jam_control", out.panel, ControlKind::Discrete, false, d.jam_control) ||
             !RefInput(*l, lp, "attention_input", eq, d.attention_input) ||
-            !RefInput(*l, lp, "hold_input", eq, d.hold_input) ||
+            !RefInput(*l, lp, "hold_input", eq, d.hold_input) || !RefInput(*l, lp, "reload_input", eq, d.reload_input) ||
+            !RefInput(*l, lp, "stopped_input", eq, d.stopped_input) ||
+            !OptionalNumber(*l, lp, "reload_s_per_missile", d.reload_s_per_missile) ||
             !RefSubsystem(*l, lp, "pair_preparation", eq, true, d.pair_preparation)) {
             return false;
         }
@@ -599,6 +607,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (l->Find(t.first) == nullptr) return Fail(Join(lp, t.first), "required");
             if (!OptionalNumber(*l, lp, t.first, *t.second)) return false;
             if (*t.second < 0.0) return Fail(Join(lp, t.first), "must be >= 0");
+        }
+        if (d.reload_s_per_missile < 0.0) return Fail(Join(lp, "reload_s_per_missile"), "must be >= 0");
+        if (d.reload_s_per_missile > 0.0 && (d.reload_input.empty() || d.stopped_input.empty())) {
+            return Fail(Join(lp, "reload_s_per_missile"), "needs reload_input and stopped_input");
         }
         if (!(d.capture_s <= d.medium_s && d.medium_s <= d.narrow_s)) {
             return Fail(lp, "capture_s <= medium_s <= narrow_s: the beams follow one another");

@@ -85,6 +85,9 @@ search possible on the move) and `deployed` (at a halt on the take-off generator
 vehicle oriented, radars silent). A cold start takes the documented 3.8 min switch-on cycle and the 3.0 min function
 check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) speeds the sim up so that stays playable.
 
+A trigger can set the console input `tzm_alongside` (`{ "set_input": "tzm_alongside", "value": true }`) to bring the
+transport-loader vehicle up: with the vehicle stopped, the launcher reloads one missile a minute (roadmap 7.3).
+
 `"command_post": "command/pu12.json"` (top level, optional) adds the battery command post's plotting board
 (`simcore/pu12.hpp`, `data/command/README.md`): it plots every target once a minute with the manual's notation, off by the
 post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are

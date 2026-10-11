@@ -9,6 +9,8 @@
 //     armed near the target, or with the narrow beam against a jamming target).
 //   * The channel is busy until the shot is over (the outcome model says so, or the nominal flight time passes).
 //   * Launches are at least min_interval_s apart; the hold input is set while the next one must wait.
+//   * Reload (roadmap 7.3): with the TZM alongside and the vehicle stopped, one missile goes into an empty container
+//     every reload_s_per_missile; nothing is loaded while a channel is guiding or a pair is selected.
 //   * PairSpent(): no selected missile is left, so the next ones need preparing again.
 // Deterministic; it reads the console and sets the console's inputs, nothing else.
 #pragma once
@@ -41,6 +43,7 @@ public:
     // Once per step: selection at ВНИМАНИЕ, the end of finished flights, and every lamp input.
     void Step(double t, ConsoleData& console) {
         Equipment& eq = console.equipment;
+        Reload(t, console);
         // Missiles are picked at ВНИМАНИЕ, or when preparation is started by hand (БОРТ СПК, e.g. with no radar range).
         const bool attention = eq.GetInput(def_.attention_input) || eq.State(def_.pair_preparation) != SubsystemState::Off;
         if (attention) {
@@ -71,6 +74,10 @@ public:
             Set(eq, in.fuse_input, c.flying && (near_target || (jamming && narrow)));
         }
     }
+
+    // The container being filled right now (-1 if none): the first empty one, outer ones last.
+    int Reloading() const { return reloading_; }
+    double ReloadProgress() const { return reload_progress_s_; }
 
     // The channel the next launch would use (0 = none: no selected missile on a free channel, or too soon).
     int NextChannel(double t, const ConsoleData& console) const {
@@ -175,6 +182,43 @@ private:
         return best;
     }
 
+    void Reload(double t, const ConsoleData& console) {
+        const Equipment& eq = console.equipment;
+        const double dt = last_t_ < 0.0 ? 0.0 : t - last_t_;
+        last_t_ = t;
+        reloading_ = -1;
+        if (def_.reload_s_per_missile <= 0.0 || !eq.GetInput(def_.reload_input) || !eq.GetInput(def_.stopped_input)) {
+            reload_progress_s_ = 0.0;
+            return;
+        }
+        for (const Channel& c : channels_) {
+            if (c.flying || c.selected >= 0) {  // the crane waits until the pair is spent and the missiles are away
+                reload_progress_s_ = 0.0;
+                return;
+            }
+        }
+        int empty = -1;  // loading order: firing order, so the missiles that go next are the first ones back
+        for (std::size_t i = 0; i < def_.containers.size(); ++i) {
+            if (loaded_[i]) continue;
+            if (empty < 0 || def_.containers[i].order < def_.containers[static_cast<std::size_t>(empty)].order ||
+                (def_.containers[i].order == def_.containers[static_cast<std::size_t>(empty)].order &&
+                 def_.containers[i].channel < def_.containers[static_cast<std::size_t>(empty)].channel)) {
+                empty = static_cast<int>(i);
+            }
+        }
+        if (empty < 0) {
+            reload_progress_s_ = 0.0;
+            return;
+        }
+        reloading_ = empty;
+        reload_progress_s_ += dt;
+        if (reload_progress_s_ >= def_.reload_s_per_missile - 1e-9) {
+            loaded_[static_cast<std::size_t>(empty)] = true;
+            reload_progress_s_ = 0.0;
+            reloading_ = -1;
+        }
+    }
+
     static void Set(Equipment& eq, const std::string& input, bool value) {
         if (!input.empty()) eq.SetInput(input, value);
     }
@@ -182,6 +226,9 @@ private:
     LauncherDef def_;
     std::vector<bool> loaded_;
     double last_launch_s_ = -1e9;
+    double last_t_ = -1.0;
+    int reloading_ = -1;
+    double reload_progress_s_ = 0.0;
     std::array<Channel, 2> channels_{};
 };
 
