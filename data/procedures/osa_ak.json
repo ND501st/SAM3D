@@ -111,11 +111,11 @@
     ],
     "channel_control": "msl.channels", "channel_positions": [ [2], [1], [1, 2] ],
     "attention_input": "target_near_zone", "jam_control": "fo.pomekha", "pair_preparation": "missile_prep",
-    "hold_input": "launch_hold",
+    "hold_input": "launch_hold", "reload_input": "tzm_alongside", "stopped_input": "vehicle_stopped", "reload_s_per_missile": 60,
     "capture_s": 0.8, "medium_s": 2.0, "narrow_s": 4.0, "fuse_range_m": 120, "min_interval_s": 4, "nominal_flight_s": 20,
     "source": "flak11 (NVA Osa-AK: at ВНИМАНИЕ the command transmitter comes on and two missiles are selected automatically, outer ones first, left and right; K3 about 120 m before the target); samsim_thread (creator: ЗАХВАТ about 0.8 s / 60 m after launch; ePap: the lamp sequence, К3 with УЗКИЙ ЛУЧ against a jamming target); korovin_tiv_2010 (the two missiles launched 3-5 s apart, each captured by its own wide- and medium-beam antennas); samsim_osa p30 (ПУСК ГОТОВ again for the second missile)",
     "confidence": "medium",
-    "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Gyro overheating (flashing ammunition lamps) and the emergency launch are not modelled."
+    "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Reloading: with tzm_alongside set and the vehicle stopped, one missile goes into an empty container every reload_s_per_missile (60 s: flak11's 6 min for six), outer containers first, only once the pair is spent and no channel is guiding; the 60 s per missile is the 6 min divided by six (the crane's three-container traverse is not modelled), the loading order is a sam3d estimate. Gyro overheating (flashing ammunition lamps) and the emergency launch are not modelled."
   },
 
   "readiness": {
@@ -211,6 +211,7 @@
     { "id": "ammo_1_ii", "description": "A missile is in container 1-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
     { "id": "ammo_2_ii", "description": "A missile is in container 2-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
     { "id": "ammo_3_ii", "description": "A missile is in container 3-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
+    { "id": "tzm_alongside", "description": "The transport-loader vehicle (TZM 9Т217) is alongside, its crane over the launcher", "source": "flak11 (reloading six missiles from the TZM takes 6 min; the crane traverse holds up to 3 containers)", "confidence": "medium" },
     { "id": "launch_hold", "description": "The launcher holds the next launch: too soon after the last one (3-5 s), or no missile selected on a free channel; ПУСК ГОТОВ is out meanwhile", "source": "samsim_osa p30 (ПУСК ГОТОВ lights again for the second missile); korovin_tiv_2010 (launches 3-5 s apart)", "confidence": "medium" },
     { "id": "search_beam_3", "description": "The search radar is radiating its beam III (8-28 degrees) this turn: the III ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "iff_interrogating", "description": "The IFF interrogator is interrogating (about 1 s per press)", "source": "voenizdat_osa_1991 p56", "confidence": "medium" },

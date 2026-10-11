@@ -40,6 +40,8 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // channel_control allows (lowest "order" first), and the channel's transmitter input comes on. A launch takes the
   // first free channel in the selector's order; its inputs then follow the missile: away, captured (capture_s),
   // medium (medium_s), narrow (narrow_s), fuse (fuse_range_m from the target, or with narrow when jam_control is on).
+  // Reloading from the TZM (roadmap 7.3): while reload_input is set and stopped_input is set, one missile goes into an
+  // empty container every reload_s_per_missile, once the pair is spent and no channel is guiding.
   // Launches are min_interval_s apart: hold_input is set while the next must wait (make the armed subsystem need it
   // false, so ПУСК ГОТОВ goes out and the crew waits); when the picked missiles are spent pair_preparation is
   // restarted (instead of "launch.restarts"). Each container's input is its ammunition lamp.
