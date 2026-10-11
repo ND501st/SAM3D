@@ -8,7 +8,10 @@
 // per board from the scenario's seed.
 //
 // The board is what the vehicle crews aim by when their radars are silent: a minute old at worst, and off by the
-// navigation error. It only reads the world; it decides nothing.
+// navigation error. The battery commander gives each target inside `designation_range_m` to the vehicle by voice
+// radio, azimuth and range, one message at a time (roadmap 7.2): the operator's delay, then the message, then the
+// vehicle commander passes it on to his crew. The vehicle only knows a designation from the moment it is passed on.
+// It only reads the world; it decides nothing.
 #pragma once
 
 #include <cmath>
@@ -37,6 +40,10 @@ struct PlottingBoardDef {
     int radar_battery_number = 0;       // first two digits of every target number
     double navigation_error_deg = 0.0;  // up to this much in azimuth ...
     double navigation_error_m = 0.0;    // ... and this much in position
+    double designation_range_m = 0.0;   // targets nearer than this are designated to the vehicle (0 = none are)
+    double operator_delay_s = 0.0;      // the radio operator's delay before a message
+    double message_s = 0.0;             // reading one designation out: number, azimuth, range
+    double pass_on_s = 0.0;             // the vehicle commander passing it on to his crew
 };
 
 // One plotted position of one target.
@@ -75,12 +82,16 @@ public:
         const json::Value* b = root.Find("board");
         if (b == nullptr || !b->Is(json::Type::Object)) return Fail("board", "required, an object");
         if (!Keys(*b, "board", {"update_period_s", "max_range_m", "range_rings_m", "radar_battery_number",
-                                "navigation_error_deg", "navigation_error_m"})) {
+                                "navigation_error_deg", "navigation_error_m", "designation_range_m", "operator_delay_s",
+                                "message_s", "pass_on_s"})) {
             return false;
         }
         for (const auto& f : {std::make_pair("update_period_s", &d.update_period_s), std::make_pair("max_range_m", &d.max_range_m),
                               std::make_pair("navigation_error_deg", &d.navigation_error_deg),
-                              std::make_pair("navigation_error_m", &d.navigation_error_m)}) {
+                              std::make_pair("navigation_error_m", &d.navigation_error_m),
+                              std::make_pair("designation_range_m", &d.designation_range_m),
+                              std::make_pair("operator_delay_s", &d.operator_delay_s),
+                              std::make_pair("message_s", &d.message_s), std::make_pair("pass_on_s", &d.pass_on_s)}) {
             if (!Cited(*b, f.first, *f.second)) return false;
         }
         double number = 0.0;
@@ -156,8 +167,8 @@ public:
         offset_ = Vec3{r * std::sin(a), r * std::cos(a), 0.0};
     }
 
-    // Plot the contacts if a minute has passed since the last time (the first plot is at the first call).
-    // Returns true when it plotted.
+    // Plot the contacts if a minute has passed since the last time (the first plot is at the first call), and queue
+    // a voice designation for each target in range. Returns true when it plotted.
     bool Update(double t, const std::vector<BoardContact>& contacts) {
         if (plotted_ && t + 1e-9 < next_s_) return false;
         plotted_ = true;
@@ -176,9 +187,40 @@ public:
             m.type = c.type;
             m.formation = c.formation;
             marks_.push_back(m);
+            if (def_.designation_range_m > 0.0 && rel.HorizontalLength() <= def_.designation_range_m) Queue(t, m);
         }
         return true;
     }
+
+    // Designations the vehicle's crew has been told since the last call (oldest first).
+    std::vector<BoardMark> PollHeard(double t) {
+        std::vector<BoardMark> out;
+        for (Message& m : messages_) {
+            if (!m.reported && t + 1e-9 >= m.known_s) {
+                m.reported = true;
+                out.push_back(m.mark);
+            }
+        }
+        return out;
+    }
+
+    // What the vehicle knows about each target at time t: the latest designation passed on to the crew.
+    std::vector<BoardMark> Known(double t) const {
+        std::vector<BoardMark> out;
+        for (const Message& m : messages_) {
+            if (t + 1e-9 < m.known_s) continue;
+            bool replaced = false;
+            for (BoardMark& k : out) {
+                if (k.target_id == m.mark.target_id) {
+                    k = m.mark;  // later messages are later in the list
+                    replaced = true;
+                }
+            }
+            if (!replaced) out.push_back(m.mark);
+        }
+        return out;
+    }
+    std::size_t MessageCount() const { return messages_.size(); }
 
     const std::vector<BoardMark>& Marks() const { return marks_; }
     const PlottingBoardDef& Def() const { return def_; }
@@ -229,6 +271,22 @@ private:
         return Vec3{v.x * c + v.y * s, -v.x * s + v.y * c, v.z};
     }
 
+    struct Message {
+        BoardMark mark;
+        double known_s = 0.0;  // when the vehicle's crew has it
+        bool reported = false;
+    };
+
+    // The radio carries one message at a time: each waits for the one before it.
+    void Queue(double t, const BoardMark& m) {
+        const double start = (t > voice_free_s_ ? t : voice_free_s_) + def_.operator_delay_s;
+        voice_free_s_ = start + def_.message_s;
+        Message msg;
+        msg.mark = m;
+        msg.known_s = voice_free_s_ + def_.pass_on_s;
+        messages_.push_back(msg);
+    }
+
     int NumberFor(const std::string& id) {
         for (const auto& n : numbers_) {
             if (n.first == id) return n.second;
@@ -246,6 +304,8 @@ private:
     double next_s_ = 0.0;
     int stamp_ = 0;
     std::vector<BoardMark> marks_;
+    std::vector<Message> messages_;
+    double voice_free_s_ = 0.0;
     std::vector<std::pair<std::string, int>> numbers_;
 };
 

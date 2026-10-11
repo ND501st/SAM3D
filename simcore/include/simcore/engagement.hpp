@@ -592,8 +592,8 @@ public:
     // Use the electromagnetic layer for the search picture and the radar lock (null = the gameplay rules). The link
     // must outlive the model.
     void SetEmLink(EmSensorLink* link) { em_ = link; }
-    // Aim by the battery command post's plotting board when the radars are silent (null = by the truth, within
-    // plotting_board_range_m). The board must outlive the model.
+    // Aim by the battery command post's designations when the radars are silent (null = by the truth, within
+    // plotting_board_range_m): what the battery commander has told the crew by radio. The board must outlive the model.
     void SetPlottingBoard(const PlottingBoard* board) { board_ = board; }
     bool EmActive() const { return em_ != nullptr; }
 
@@ -955,7 +955,7 @@ private:
         double board_true_az = 0.0;
         if (!have && tv_search && board_ != nullptr) {  // radars silent: the board's last marks, a minute old at worst
             double best_r = tuning_.plotting_board_range_m;
-            for (const BoardMark& m : board_->Current()) {
+            for (const BoardMark& m : board_->Known(time_)) {
                 const PlottingBoard::Designation des = board_->DesignationFor(m, unit_);
                 if (des.range_m > best_r) continue;
                 best_r = des.range_m;
