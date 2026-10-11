@@ -515,11 +515,17 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	const double Gate = Console.panel.GetValue(Track.range_wheel);
 	const double HalfGate = Runner.EngagementOn() ? Runner.Engagement().Tuning().range_gate_m : 500.0;
 	const std::vector<simcore::Contact>& Returns = Runner.Engagement().TrackReturns();
+	// Р I — ЦЕЛЬ — Р II: the fine sweep follows the target, or the missile of channel I or II (its range unit drives it).
+	const simcore::Launcher* Launch = Runner.GetLauncher();
+	const int32 SweepChannel = Launch != nullptr ? Launch->RangeSweepChannel(Console) : 0;
+	const double MissileRange = SweepChannel != 0 ? Launch->MissileRangeM(SweepChannel, Runner.Time()) : -1.0;
+	const bool bFollowMissile = SweepChannel != 0 && MissileRange >= 0.0;
+	const double FineCentre = SweepChannel != 0 ? (bFollowMissile ? MissileRange : Gate) : Gate;
 	const double X0 = 0.05 * Size.X;
 	const double X1 = 0.95 * Size.X;
 
 	// One sweep: baseline, grass while radiating, echo spikes, gate marks. [FromM, ToM] maps to X0..X1.
-	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM)
+	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM, bool bMissileSweep)
 	{
 		auto XOf = [&](double M) { return X0 + (M - FromM) / (ToM - FromM) * (X1 - X0); };
 		// The graticule: a division every TickM, longer every fifth (op_panel's legend: "1 div = 1000 m" on the rough
@@ -541,28 +547,42 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			PrevX = X;
 			PrevY = Y - Ny;
 		}
-		for (const simcore::Contact& Echo : Returns)
+		auto Spike = [&](double RangeM)
 		{
-			if (Echo.range_m < FromM || Echo.range_m > ToM)
+			if (RangeM < FromM || RangeM > ToM)
 			{
-				continue;
+				return;
 			}
-			const double X = XOf(Echo.range_m);
+			const double X = XOf(RangeM);
 			Beam(Canvas, FVector2D(X - 3.0, Y), FVector2D(X, Y - SpikeH), 1.6f, TraceGreen);
 			Beam(Canvas, FVector2D(X, Y - SpikeH), FVector2D(X + 3.0, Y), 1.6f, TraceGreen);
+		};
+		if (bMissileSweep)
+		{
+			if (bFollowMissile)
+			{
+				Spike(MissileRange);  // the missile's echo, centred in the window
+			}
 		}
-		// The range gate: a notch under the trace.
+		else
+		{
+			for (const simcore::Contact& Echo : Returns)
+			{
+				Spike(Echo.range_m);
+			}
+		}
+		// The range gate: a notch under the trace (not on a missile's sweep: it has its own range unit).
 		for (double M : {Gate - HalfGate, Gate + HalfGate})
 		{
-			if (M >= FromM && M <= ToM)
+			if (!bMissileSweep && M >= FromM && M <= ToM)
 			{
 				Canvas->K2_DrawLine(FVector2D(XOf(M), Y + 2.0), FVector2D(XOf(M), Y + 12.0), 2.0f, Amber);
 			}
 		}
 	};
-	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0);
+	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false);
 	const double Half = 0.5 * Display.magnified_window_m;
-	Sweep(0.85 * Size.Y, Gate - Half, Gate + Half, 0.25 * Size.Y, 5.0);
+	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0);
 	Canvas->K2_DrawLine(FVector2D(0.5 * Size.X, 0.6 * Size.Y), FVector2D(0.5 * Size.X, 0.88 * Size.Y), 1.0f, Amber * 0.5f);
 
 	// The range counter: where the gate is (it follows the target while tracking in range), as five lit drum digits

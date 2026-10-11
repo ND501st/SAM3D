@@ -127,7 +127,8 @@ Osa model gaps found by the October 2026 research review (`docs/research/OSA_RES
 roadmap phase 6:
 
 - Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
-- Missiles: no missile load, selection or second channel; ЗАХВАТ / ВКЛ ВЫС lamps mapped to preparation. (6.3)
+- Missiles: load, selection, two channels, letter change, emergency launch and the range indicator's missile sweeps
+  are modelled; not modelled: gyro overheating (flashing ammunition lamps). (6.3)
 - Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)
 - Tracking radar capture: azimuth, range and elevation (the antenna's 1° beam on the target; during ЦУ it scans the
   search beam). The scan period is an estimate, and in the automatic beam programmes the beam searched is the one the
@@ -138,5 +139,7 @@ roadmap phase 6:
   the commanded Qc from the log. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
-- Engagement zone: one box; no pursuit or optical zones, no guidance-method selection. (6.7)
-- No PU-12 or battery yet: targets are found by the vehicle's own radar only. (phase 7)
+- Engagement: zones and the methods T/T, Горка, Ф and Н are selected; Н (ПОМЕХА on) is a label with К3 timing only, since
+  no target jams yet (E5), and the NVA's crossing-offset limit is missing. (6.7)
+- Power: GTA, take-off generator and an external supply (a scenario input); no grid or diesel set yet. (7.6)
+- PU-12 board and voice designations are built (7.1, 7.2); the board still plots the scenario's targets, not a regiment radar picture.

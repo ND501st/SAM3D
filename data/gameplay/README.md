@@ -45,7 +45,9 @@ raster); outside it the track is lost ("target left the TV field"). An NPC in a 
 target hidden by terrain is carried on at the wheels' last angular rates for `memory_s` ("memory tracking"), then lost.
 The mean distance of the target from the crosshair (the 3-mil reticle, 0.18 degrees) over a missile's flight costs hit
 chance, and the debrief prints it ("TV aim"). Close crossing targets are the hard case: at 1.5 km abeam a 150 m/s
-target outruns the operators' lag. Not done: drawing the reticle, and the range read from the target's size in it, in
+target outruns the operators' lag. `track.clutter_altitude_m` (optional, 100 m, an estimate): a target lower than this
+can't be held by the tracking radar unless the operator has its СДЦ on (`ssc.mti`; the capture drill switches it on).
+Not done: drawing the reticle, and the range read from the target's size in it, in
 the TV view (Unreal). Without the group the old behaviour stays: the servo drives the wheels onto the target.
 
 Losing the track during the flight loses the missile (command guidance), and a shot whose flight time would exceed

@@ -544,6 +544,10 @@ SC_TEST("zones: the guidance method follows height, elevation and speed") {
     SC_EXPECT(t.MethodFor(15.0, 0.3, 0.0) == M::Optical);        // hovering near the ground
     SC_EXPECT(t.MethodFor(15.0, 0.3, 90.0) == M::Optical);
     SC_EXPECT(t.MethodFor(15.0, 0.3, 200.0) == M::ZoomClimb);
+    SC_EXPECT(t.MethodFor(1000.0, 5.0, 200.0, true) == M::Jammer);  // ПОМЕХА on: method Н, whatever the height
+    SC_EXPECT(t.MethodFor(15.0, 0.3, 0.0, true) == M::Optical);  // a hovering helicopter: Ф, ПОМЕХА isn't used there
+    SC_EXPECT(t.MethodFor(60.0, 0.5, 250.0, true) == M::Jammer);  // otherwise it replaces Горка
+    SC_EXPECT(std::string(EngagementTuning::ToString(M::Jammer)) == "N");
 }
 
 SC_TEST("zones: hit chances against low targets sit in the published kill-probability ranges") {
@@ -573,9 +577,10 @@ SC_TEST("zones: a low target's shot is printed with its zone, method and height 
         { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
           "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
                   { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
-    // 60 m up in the flat frame at 9 km: about 70 m above the ground, 0.4 degrees up: Gorka, factor about 0.76.
+    // 60 m up in the flat frame at 9 km: about 70 m above the ground, 0.4 degrees up: factor about 0.76. The TV
+    // drill switches ПОМЕХА on (the range is tracked by hand), so the commands come from method Н, not Горка.
     const Run r = Play(Engage(Target(9000, 60), emcon));
-    SC_EXPECT(Has(r, "head-on zone, Gorka method"));
+    SC_EXPECT(Has(r, "head-on zone, N method"));
     SC_EXPECT(Has(r, "x height 0.7"));
     // A high target is the ordinary method at full height factor.
     const Run high = Play(Engage(Target(24000, 1000), kAcquireAndFire));
@@ -701,4 +706,44 @@ SC_TEST("engagement: an unoriented vehicle points board designations wrong, so t
         // the lens field.
         SC_EXPECT(tv == (heading == 0.0));
     }
+}
+
+SC_TEST("engagement: a low target holds on the tracking radar only with its СДЦ on") {
+    // At 0 m in the local frame the target's true height is about 50-90 m at 20-35 km (Earth curvature): over the
+    // radar's 50 m limit, under the 100 m clutter height.
+    auto run = [](bool mti_forced_off, bool& radar_tracked, bool& lost_in_clutter) {
+        ScenarioDef def;
+        ConsoleData console;
+        if (!LoadScenario(Engage(Target(40000, 0), kAcquireAndFire), kData, def, console)) return false;
+        ScenarioRunner runner(std::move(def), std::move(console));
+        radar_tracked = lost_in_clutter = false;
+        for (int i = 0; i < 6000 && !runner.Finished(); ++i) {
+            runner.Step(0.1);
+            if (mti_forced_off) runner.Console().panel.Set("ssc.mti", 0);
+            radar_tracked = radar_tracked || runner.Engagement().Method() == TrackMethod::Radar;
+        }
+        lost_in_clutter = runner.Debrief().find("clutter") != std::string::npos;
+        return true;
+    };
+    bool tracked = false, clutter = false;
+    SC_EXPECT(run(false, tracked, clutter));
+    SC_EXPECT(tracked);  // the drill switches СДЦ on
+    SC_EXPECT(run(true, tracked, clutter));
+    SC_EXPECT(!tracked);
+}
+
+SC_TEST("tuning: the tracking radar's clutter height is optional and the sensors' mti_control is checked") {
+    EngagementTuning t;
+    std::string error;
+    SC_EXPECT(LoadEngagementTuningFile(kData + "/gameplay/osa_ak.json", t, &error));
+    SC_EXPECT_NEAR(t.track_clutter_altitude_m, 100.0, 1e-12);
+    std::ifstream f(kData + "/procedures/osa_ak.json", std::ios::binary);
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    std::string text = ss.str();
+    const std::size_t at = text.find("\"mti_control\": \"ssc.mti\"");
+    SC_EXPECT(at != std::string::npos);
+    text.replace(at, std::string("\"mti_control\": \"ssc.mti\"").size(), "\"mti_control\": \"ssc.nothing\"");
+    ConsoleData c;
+    SC_EXPECT(!LoadConsole(text, c, &error) && error.find("sensors.track.mti_control") != std::string::npos);
 }
