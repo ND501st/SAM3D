@@ -118,6 +118,16 @@
     "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Reloading: with tzm_alongside set and the vehicle stopped, one missile goes into an empty container every reload_s_per_missile (60 s: flak11's 6 min for six), outer containers first, only once the pair is spent and no channel is guiding; the 60 s per missile is the 6 min divided by six (the crane's three-container traverse is not modelled), the loading order is a sam3d estimate. Gyro overheating (flashing ammunition lamps) and the emergency launch are not modelled."
   },
 
+  "fuel": {
+    "tank_l": 300, "reserve_fraction": 0.5,
+    "sources": [ { "subsystem": "gta", "stationary_lph": 75, "moving_lph": 100 },
+                 { "subsystem": "pto_generator", "stationary_lph": 25, "moving_lph": 25 } ],
+    "stopped_input": "vehicle_stopped", "refuel_input": "tzm_alongside", "refuel_lpm": 60, "power_cut_input": "fuel_power_cut",
+    "source": "samsim_thread (ePap: about 300 l tank; turbine about 75 l/h stationary and 100 l/h moving; take-off generator about 25 l/h; half the tank is kept for driving, and the crew asks for fuel at half)",
+    "confidence": "medium",
+    "notes": "Burning = the power source's subsystem is not off (it burns while starting). The take-off generator is taken as 25 l/h whether or not the vehicle moves (it only runs at a halt). At the reserve the crew asks for fuel (debrief) and both power sources are cut so the rest stays for driving; this reads 'half the tank is kept for driving' as a hard limit on the power sources. refuel_lpm 60 is a sam3d estimate (no source gives a refuelling rate): a full tank from the reserve in 2.5 min."
+  },
+
   "readiness": {
     "powered": {
       "description": "powered on the march: turbine running, equipment and stabilisation warm, search possible on the move",
@@ -211,6 +221,7 @@
     { "id": "ammo_1_ii", "description": "A missile is in container 1-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
     { "id": "ammo_2_ii", "description": "A missile is in container 2-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
     { "id": "ammo_3_ii", "description": "A missile is in container 3-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
+    { "id": "fuel_power_cut", "description": "The tank is down to the half kept for driving: the turbine and the take-off generator are shut down", "source": "samsim_thread (ePap: half the tank is kept for driving, and the crew asks for fuel at half)", "confidence": "medium" },
     { "id": "tzm_alongside", "description": "The transport-loader vehicle (TZM 9Т217) is alongside, its crane over the launcher", "source": "flak11 (reloading six missiles from the TZM takes 6 min; the crane traverse holds up to 3 containers)", "confidence": "medium" },
     { "id": "launch_hold", "description": "The launcher holds the next launch: too soon after the last one (3-5 s), or no missile selected on a free channel; ПУСК ГОТОВ is out meanwhile", "source": "samsim_osa p30 (ПУСК ГОТОВ lights again for the second missile); korovin_tiv_2010 (launches 3-5 s apart)", "confidence": "medium" },
     { "id": "search_beam_3", "description": "The search radar is radiating its beam III (8-28 degrees) this turn: the III ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
@@ -376,12 +387,12 @@
 
   "subsystems": [
     { "id": "gta", "name": "Gas-turbine power unit (9И120) running",
-      "enable": [ { "control": "pwr.gta", "is": 1 } ],
+      "enable": [ { "control": "pwr.gta", "is": 1 } , { "input": "fuel_power_cut", "is": false } ],
       "start_time_s": { "value": 60, "source": "wrk, mon_2112_80 p11–12 (readiness within 4 min including the GTA start); split: sam3d", "confidence": "estimate",
                         "notes": "No source gives the GTA start alone. 60 s plus the 3 min equipment warm-up is the documented 4 min." },
       "source": "wrk, mis; voenizdat_osa_1991 p163 (9И120: 50 kW, started from the 24 V batteries)", "confidence": "medium" },
     { "id": "pto_generator", "name": "Engine power take-off generator on line",
-      "enable": [ { "control": "pwr.pto", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
+      "enable": [ { "control": "pwr.pto", "is": 1 }, { "input": "vehicle_stopped", "is": true } , { "input": "fuel_power_cut", "is": false } ],
       "source": "wrk; mon_2112_80 p20; voenizdat_osa_1991 p163–164 (35 kW, at a halt only)", "confidence": "high", "notes": "Drops out as soon as the vehicle moves." },
     { "id": "power", "name": "Equipment power available (220 V 400 Hz)",
       "enable_any": [ { "subsystem": "gta", "is": "ready" }, { "subsystem": "pto_generator", "is": "ready" } ],

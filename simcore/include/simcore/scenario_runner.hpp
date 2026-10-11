@@ -32,6 +32,7 @@
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
@@ -77,6 +78,7 @@ public:
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
+        if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
         if (!def_.command_post_file.empty()) {
             board_ = std::make_unique<PlottingBoard>(def_.board, def_.unit_position, def_.seed);
             engagement_.SetPlottingBoard(board_.get());
@@ -104,6 +106,7 @@ public:
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
         UpdateLauncher();
+        UpdateFuel(dt);
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
@@ -167,6 +170,9 @@ public:
 
     // The battery command post's plotting board (null when the scenario has no "command_post").
     const PlottingBoard* Board() const { return board_.get(); }
+
+    // The vehicle's fuel (null when the console has no "fuel" block).
+    const FuelModel* Fuel() const { return fuel_.get(); }
 
     // The missile load and guidance channels (null when the console has no "launcher" block).
     Launcher* GetLauncher() { return launcher_.get(); }
@@ -380,6 +386,19 @@ private:
         UpdateDesignations();
     }
 
+    // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
+    // sources are cut so the rest stays for driving (roadmap 7.4).
+    void UpdateFuel(double dt) {
+        if (!fuel_) return;
+        const FuelModel::Events ev = fuel_->Step(dt, console_);
+        char detail[128];
+        if (ev.requested) {
+            std::snprintf(detail, sizeof(detail), "asks for fuel: %.0f l left, the rest is kept for driving (power cut)", fuel_->LevelL());
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "fuel", detail});
+        }
+        if (ev.refuelled) log_.Record({time_, DebriefEntry::Kind::Scenario, "Driver", "fuel", "tank full"});
+    }
+
     // The battery commander's voice designations reaching the vehicle's crew (roadmap 7.2).
     void UpdateDesignations() {
         for (const BoardMark& m : board_->PollHeard(time_)) {
@@ -477,6 +496,7 @@ private:
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
+    std::unique_ptr<FuelModel> fuel_;
     std::unique_ptr<PlottingBoard> board_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
