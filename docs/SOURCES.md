@@ -15,6 +15,9 @@ Prefer the highest tier. When tiers disagree, use the higher one and record the 
 | 4 | Encyclopaedic and press pages from operator countries; contemporary press reports of events | `vpvo`, `ru_wiki`, `mis`, `wapo_1982` |
 | 5 | Western "facts and stats" pages | `gs`, `apa`, `janes`. **Not used for new decisions**; existing citations are being replaced (roadmap 6.8) |
 
+`tools/check_citations.py` checks `data/`: every `source` names a source registered here (or is a SAM3D
+estimate, placeholder or a derivation in `docs/`), and none is tier 5. Its test runs with the tools tests.
+
 ## Osa sources
 
 | Id | Tier | Source | Notes |
@@ -50,8 +53,8 @@ Prefer the highest tier. When tiers disagree, use the higher one and record the 
 | `nuou` | 4 | Ukrainian National Defence University museum page, 9A33BM Osa | Crew, water speed |
 | `video_osa` | 4 | YouTube documentary on the 9K33 Osa (title and channel not recorded; transcript supplied by the user, 2 Oct 2026; analysis in `docs/research/OSA_RESEARCH_2026-10.md` §12) | History and figures retell `korovin_tiv_2010`; battery tactics and ARM/ECCM drills from unnamed manuals, **unverified** |
 | `wapo_1982` | 4 | "Missile Sites Hit in Bekaa", *The Washington Post*, 25 July 1982 ([archive](https://www.washingtonpost.com/archive/politics/1982/07/25/missile-sites-hit-in-bekaa/6dfe0793-6bba-4654-a1f1-852d3787f234/)) | Syrian SA-8 shoots down an Israeli F-4, 24 July 1982 |
-| `gs` | 5 | GlobalSecurity.org, SA-8 GECKO | To be replaced in `data/` |
-| `apa` | 5 | Air Power Australia, 9K33 Osa/Romb; [Soviet SAM System Simulator](https://www.ausairpower.net/APA-Sov-SAM-Simulator.html) (review of SAM Simulator) | To be replaced in `data/`; the review stays useful for SAM Simulator's history |
+| `gs` | 5 | GlobalSecurity.org, SA-8 GECKO | No longer cited in `data/` (roadmap 6.8, Oct 2026) |
+| `apa` | 5 | Air Power Australia, 9K33 Osa/Romb; [Soviet SAM System Simulator](https://www.ausairpower.net/APA-Sov-SAM-Simulator.html) (review of SAM Simulator) | No longer cited in `data/` (roadmap 6.8); the review stays useful for SAM Simulator's history |
 | `janes` | 5 | *Jane's Land-Based Air Defence* (as quoted by the SAM Simulator creator) | Combat claims only, to be confirmed |
 
 ## Electromagnetic-layer sources (added 7 October 2026)
