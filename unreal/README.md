@@ -21,10 +21,17 @@ plugins. With the editor open, the MCP server listens on `http://127.0.0.1:8000/
 authentication) and Claude Code connects to it through `.mcp.json` at the repo root. Python remote execution
 (`tools/ue_remote.py`) stays on alongside it.
 
-Once per machine, start the server with the editor: **Edit → Editor Preferences → General → Model Context Protocol →
-Auto Start Server** (stored per user in `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`, not in git),
-or run `ModelContextProtocol.StartServer` in the editor console. Start Claude Code from the repo root after the
-editor is up.
+The server starts with the editor: `Config/DefaultEditorPerProjectUserSettings.ini` (in git) sets
+`bAutoStartServer=True`, so every checkout and worktree has it. (The same switch is **Edit → Editor Preferences →
+General → Model Context Protocol → Auto Start Server**; a user's own choice there overrides the default. It is
+read once at editor start-up, so change it, then restart the editor.) If the server is ever off, run
+`ModelContextProtocol.StartServer` in the editor console.
+
+Order matters for Claude Code: it reads `.mcp.json` and connects when the session starts, and does not retry. Open
+the editor first, then start Claude Code from the repo root. If the session came first, or the editor was restarted,
+type `/mcp` in the session and reconnect `unreal-mcp`. Only one editor can hold port 8000, and a session talks to
+whichever project's editor owns it: check the editor is the checkout you mean (a worktree has its own `Binaries/`
+and `Saved/`; the Cesium ion token is also per checkout and not in git).
 
 ## First level: Osa practice scenario on Cesium terrain
 
