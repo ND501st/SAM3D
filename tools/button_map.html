@@ -1,0 +1,701 @@
+<title>Button Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=PT+Mono&family=PT+Sans+Narrow:wght@400;700&family=PT+Sans:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: a console-room wiring chart. Controls on the left by crew seat, causality flowing right through
+   subsystems and the sim's models to lamps, displays and the launch. Missing work is marked in redline. */
+:root {
+  --bg: #e9ece5;          /* panel paint, pale grey-green */
+  --surface: #f7f8f4;
+  --surface-2: #dfe4dc;
+  --ink: #1d2721;
+  --muted: #5a675f;
+  --line: #bcc5bb;
+  --accent: #2c6650;      /* console green */
+  --accent-soft: #d3e3da;
+  --redline: #b3302a;     /* drafting redline for missing work */
+  --redline-soft: #f6dcd8;
+  --amber: #c98a12; --red: #c23a2e; --green: #2f8a43; --white-lamp: #8a8f86;
+  --st-driver: #8c6a2c; --st-operator: #2f6ea3; --st-senior_operator: #6d4fa0; --st-deputy_commander: #1f877a; --st-commander: #9b456f; --st-world: #6b6b6b;
+  --edge: #6f7d73;
+  --hatch: #c9cfc6;
+  --font-display: "Oswald", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "PT Sans", "Segoe UI", system-ui, sans-serif;
+  --font-narrow: "PT Sans Narrow", "Arial Narrow", "Segoe UI", sans-serif;
+  --font-mono: "PT Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141916; --surface: #1d2420; --surface-2: #26302a; --ink: #e2e8e0; --muted: #98a59b; --line: #36423b;
+  --accent: #7fc4a5; --accent-soft: #23392f; --redline: #ff7f6e; --redline-soft: #3d2320;
+  --amber: #f0b23c; --red: #f0624f; --green: #5fc56f; --white-lamp: #b8bdb3;
+  --st-driver: #d2a54f; --st-operator: #6fa9de; --st-senior_operator: #ab8ce0; --st-deputy_commander: #4fc2b2; --st-commander: #d982ad; --st-world: #a5a5a5;
+  --edge: #8c9a90; --hatch: #2b342f; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #141916; --surface: #1d2420; --surface-2: #26302a; --ink: #e2e8e0; --muted: #98a59b; --line: #36423b;
+  --accent: #7fc4a5; --accent-soft: #23392f; --redline: #ff7f6e; --redline-soft: #3d2320;
+  --amber: #f0b23c; --red: #f0624f; --green: #5fc56f; --white-lamp: #b8bdb3;
+  --st-driver: #d2a54f; --st-operator: #6fa9de; --st-senior_operator: #ab8ce0; --st-deputy_commander: #4fc2b2; --st-commander: #d982ad; --st-world: #a5a5a5;
+  --edge: #8c9a90; --hatch: #2b342f; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+.wrap { max-width: 1480px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: .01em; }
+h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.05; text-transform: uppercase; }
+h2 { font-size: 24px; text-transform: uppercase; }
+h3 { font-size: 17px; font-weight: 500; }
+.eyebrow { font: 12px/1.3 var(--font-mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+p { margin: 0; }
+.lede { max-width: 72ch; color: var(--muted); }
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { display: grid; gap: 12px; padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+.tally { display: flex; flex-wrap: wrap; gap: 6px 22px; font: 13px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+.tally b { font-family: var(--font-display); font-size: 20px; font-weight: 500; margin-right: 4px; }
+.tally .miss b { color: var(--redline); }
+.tally .sub { color: var(--muted); }
+
+section { padding-top: 34px; display: grid; gap: 14px; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.sec-head p { color: var(--muted); max-width: 80ch; }
+
+/* toolbar */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 3px; padding: 3px 9px; cursor: pointer; font: 13px/1.4 var(--font-narrow); display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip .sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.search { position: relative; }
+.search input { width: 220px; max-width: 60vw; padding: 5px 9px; border: 1px solid var(--line); background: var(--surface); border-radius: 3px; }
+.search ul { position: absolute; z-index: 5; left: 0; top: 100%; margin: 2px 0 0; padding: 4px 0; list-style: none; width: 320px; max-width: 86vw; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0,0,0,.15); }
+.search li { padding: 4px 10px; cursor: pointer; font-size: 13px; display: flex; gap: 8px; justify-content: space-between; }
+.search li:hover, .search li[aria-selected="true"] { background: var(--accent-soft); }
+.search li span { color: var(--muted); font: 11px var(--font-mono); white-space: nowrap; }
+label.tog { font: 13px var(--font-narrow); display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.zoom { display: inline-flex; gap: 4px; margin-left: auto; }
+.zoom button { border: 1px solid var(--line); background: var(--surface); width: 30px; height: 28px; border-radius: 3px; cursor: pointer; }
+.zoom button.wide { width: auto; padding: 0 9px; font: 13px var(--font-narrow); }
+
+/* legend */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 12.5px/1.3 var(--font-narrow); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { overflow: visible; }
+
+/* map + details */
+.mapgrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+.mapbox { position: relative; height: min(78vh, 920px); min-height: 480px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; touch-action: none; cursor: grab; border-radius: 2px; }
+.mapbox.dragging { cursor: grabbing; }
+.mapbox svg { width: 100%; height: 100%; display: block; user-select: none; }
+.hint { position: absolute; left: 10px; bottom: 8px; font: 11px var(--font-mono); color: var(--muted); background: var(--surface); padding: 2px 6px; pointer-events: none; }
+.details { background: var(--surface); border: 1px solid var(--line); padding: 16px; display: grid; gap: 12px; max-height: min(78vh, 920px); overflow: auto; position: sticky; top: env(safe-area-inset-top, 0px); min-width: 0; }
+.details .kind { font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.details h3 { font-size: 20px; }
+.details .cid { font: 12px var(--font-mono); color: var(--muted); word-break: break-all; }
+.details dl { margin: 0; display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; font-size: 13px; }
+.details dt { color: var(--muted); font-family: var(--font-narrow); }
+.details dd { margin: 0; min-width: 0; }
+.details h4 { margin: 0 0 4px; font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.details ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13px; }
+.details li { display: flex; gap: 6px; align-items: baseline; }
+.details li .k { font: 10.5px var(--font-mono); color: var(--muted); min-width: 52px; text-transform: uppercase; }
+.details .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.details .notes { font-size: 13px; color: var(--muted); }
+.positions { display: flex; flex-wrap: wrap; gap: 4px; }
+.positions span { border: 1px solid var(--line); padding: 0 6px; font: 12px var(--font-narrow); border-radius: 2px; }
+.positions span.init { border-color: var(--red); box-shadow: inset 3px 0 0 var(--red); }
+.pill { font: 10.5px/1.6 var(--font-mono); padding: 0 6px; border-radius: 2px; text-transform: uppercase; letter-spacing: .05em; border: 1px solid currentColor; }
+.pill.wired { color: var(--accent); }
+.pill.model { color: var(--st-operator); }
+.pill.indicator { color: var(--amber); }
+.pill.inert { color: var(--muted); border-style: dashed; }
+.pill.missing, .pill.unknown { color: var(--redline); border-style: dashed; }
+.empty { color: var(--muted); font-size: 14px; }
+
+/* SVG */
+.g-col text.colhead { font: 600 13px var(--font-display); fill: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.colband { fill: var(--surface-2); opacity: .45; }
+.grp-label { font: 600 12px var(--font-display); text-transform: uppercase; letter-spacing: .08em; }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.2; opacity: .26; }
+.edge.any { stroke-dasharray: 5 3; }
+.edge.prereq { stroke-dasharray: 1.5 3; stroke-width: 1.6; }
+.edge.release { stroke: var(--red); stroke-dasharray: 7 3 1.5 3; }
+.edge.guard { stroke: var(--muted); stroke-width: 1.4; }
+.edge.lit, .edge.litany, .edge.draws { stroke: var(--amber); stroke-width: 1; opacity: .16; }
+.edge.litany { stroke-dasharray: 5 3; }
+.edge.feed, .edge.signal { stroke: var(--st-operator); }
+.edge.restart { stroke: var(--accent); stroke-dasharray: 2 3; stroke-width: 1.5; opacity: .6; }
+.edge.planned { stroke: var(--redline); stroke-dasharray: 6 4; opacity: .5; }
+svg.hide-lit .edge.lit, svg.hide-lit .edge.litany, svg.hide-lit .edge.draws { display: none; }
+svg.hide-ind .n-lamp, svg.hide-ind .n-display { display: none; }
+svg.hide-plan .n-planned, svg.hide-plan .edge.planned { display: none; }
+svg.focus .edge { opacity: .05; }
+svg.focus .edge.hl { opacity: .95; stroke-width: 1.8; }
+svg.focus .node { opacity: .22; }
+svg.focus .node.hl { opacity: 1; }
+.node { cursor: pointer; }
+.node rect.box { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.node:hover rect.box, .node:focus-visible rect.box { stroke: var(--ink); }
+.node.sel rect.box { stroke: var(--ink); stroke-width: 2.2; }
+.node text { fill: var(--ink); }
+.node .l1 { font: 700 12.5px var(--font-narrow); }
+.node .l2 { font: 10.5px var(--font-mono); fill: var(--muted); }
+.node .lt { font: 12px var(--font-narrow); }
+.n-control .tab { stroke: none; }
+.n-control.inert rect.box { fill: url(#hatch); stroke-dasharray: 3 2; }
+.n-control.inert .l1 { fill: var(--muted); }
+.n-control.indicator rect.box { stroke-dasharray: 3 2; }
+.n-signal rect.box { fill: var(--surface-2); }
+.n-signal .lt { font-style: italic; }
+.n-subsystem rect.box { fill: var(--accent-soft); stroke: var(--accent); }
+.n-model rect.box { fill: var(--surface); stroke: var(--st-operator); stroke-width: 1.2; }
+.n-model rect.inner { fill: none; stroke: var(--st-operator); stroke-width: .8; }
+.n-event rect.box { fill: var(--accent); stroke: var(--accent); }
+.n-event text { fill: var(--bg); }
+.n-lamp rect.box { fill: var(--surface); }
+.n-display rect.box { fill: var(--surface-2); }
+.n-planned rect.box { fill: var(--redline-soft); stroke: var(--redline); stroke-dasharray: 6 3; stroke-width: 1.3; }
+.n-planned text { fill: var(--redline); }
+.n-planned .l2 { fill: var(--redline); opacity: .8; }
+.badge rect { fill: var(--surface); stroke: var(--accent); }
+.badge text { font: 10px var(--font-mono); fill: var(--accent); }
+.lampdot { stroke: rgba(0,0,0,.25); }
+.glyph { fill: none; stroke: var(--muted); stroke-width: 1.3; }
+
+/* procedures */
+.phases { display: grid; gap: 22px; }
+.phase h3 { margin-bottom: 8px; display: flex; gap: 10px; align-items: baseline; }
+.phase h3 small { font: 12px var(--font-mono); color: var(--muted); }
+.procs { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.proc { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--st, var(--line)); padding: 12px 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.proc.flash { outline: 2px solid var(--accent); }
+.proc header { display: grid; gap: 2px; }
+.proc .who { font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--st); }
+.proc h4 { margin: 0; font: 700 15px/1.25 var(--font-narrow); }
+.proc ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 13px; }
+.proc li::marker { font: 11px var(--font-mono); color: var(--muted); }
+.step-ctl { background: none; border: 0; padding: 0; cursor: pointer; font: 700 13px var(--font-narrow); color: var(--ink); border-bottom: 1px dotted var(--muted); }
+.step-ctl:hover { color: var(--accent); }
+.step-pos { font: 12px var(--font-mono); color: var(--accent); }
+.step-d { color: var(--muted); display: block; }
+.step-w { display: block; font: 11.5px var(--font-mono); color: var(--amber); }
+
+/* missing */
+.missing { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.mcard { border: 1.3px dashed var(--redline); background: var(--redline-soft); padding: 12px 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.mcard .ph { font: 11px var(--font-mono); color: var(--redline); text-transform: uppercase; letter-spacing: .06em; }
+.mcard h4 { margin: 0; font: 700 15px/1.25 var(--font-narrow); }
+.mcard p { font-size: 13px; color: var(--muted); }
+.mcard .from { font-size: 12.5px; }
+.mcard .from button { background: none; border: 0; padding: 0; font: 700 12.5px var(--font-narrow); color: var(--ink); cursor: pointer; border-bottom: 1px dotted var(--muted); }
+
+/* index table */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 860px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--surface-2); position: sticky; top: 0; }
+td.lbl button { background: none; border: 0; padding: 0; font: 700 13px var(--font-narrow); color: var(--ink); cursor: pointer; text-align: left; }
+td.lbl button:hover { color: var(--accent); }
+td.mono { font: 11.5px var(--font-mono); color: var(--muted); }
+tr.st-row td:first-child { box-shadow: inset 3px 0 0 var(--st); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+
+footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; }
+
+@media (max-width: 1080px) {
+  .mapgrid { grid-template-columns: minmax(0, 1fr); }
+  .details { position: static; max-height: none; }
+}
+@media (max-width: 560px) {
+  .wrap { padding-inline: 16px; }
+  .zoom { margin-left: 0; }
+  .mapbox { height: 64vh; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow" id="eyebrow">SAM3D · console and cabin data as built</div>
+    <h1 id="h1">Button Map</h1>
+    <p class="lede">Every control in the console, traced to what it switches on, what that feeds, and which lamp, display or launch it ends in. Drawn by <code>tools/button_map.py</code> from the <span id="files">console and cabin files</span> and the engagement model's sensor mapping. Work that isn't built yet is marked in red.</p>
+    <div class="tally" id="tally"></div>
+  </header>
+
+  <section id="map">
+    <div class="sec-head">
+      <h2>Signal flow</h2>
+      <p>Read left to right. Click any box to trace its chain upstream and downstream; click empty space to clear.</p>
+    </div>
+    <div class="toolbar">
+      <div class="search">
+        <input id="q" type="search" placeholder="Find a control, lamp, subsystem…" autocomplete="off" aria-label="Find a node" aria-controls="qlist">
+        <ul id="qlist" role="listbox" hidden></ul>
+      </div>
+      <div id="stations" class="filters" role="group" aria-label="Crew seats"></div>
+      <label class="tog"><input type="checkbox" id="t-ind" checked> Lamps &amp; displays</label>
+      <label class="tog"><input type="checkbox" id="t-lit" checked> Lamp wiring</label>
+      <label class="tog"><input type="checkbox" id="t-plan" checked> Missing work</label>
+      <div class="zoom">
+        <button type="button" id="z-out" aria-label="Zoom out">−</button>
+        <button type="button" id="z-in" aria-label="Zoom in">+</button>
+        <button type="button" id="z-fit" class="wide">Fit</button>
+        <button type="button" id="z-start" class="wide">Controls</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="mapgrid">
+      <div class="mapbox" id="mapbox">
+        <svg id="svg" aria-label="Control flow chart"></svg>
+        <div class="hint">drag to pan · wheel or pinch to zoom</div>
+      </div>
+      <aside class="details" id="details" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section id="drill">
+    <div class="sec-head">
+      <h2>Crew drill</h2>
+      <p>The procedures the NPC crew and the tutor follow, one seat each. Steps are in order; amber lines are what a step waits for. Click a control to find it on the map.</p>
+    </div>
+    <div class="phases" id="phases"></div>
+  </section>
+
+  <section id="missing">
+    <div class="sec-head">
+      <h2>Missing and incomplete</h2>
+      <p>Placed in the cabin but not wired, or not built at all. Phases refer to <code>docs/DEVELOPMENT_ROADMAP.md</code>.</p>
+    </div>
+    <div class="missing" id="missinglist"></div>
+  </section>
+
+  <section id="index">
+    <div class="sec-head">
+      <h2>Control index</h2>
+      <p>All controls with their seat, panel, start position and state.</p>
+    </div>
+    <div class="filters" id="ixfilter"></div>
+    <div class="tablewrap"><table id="ix"></table></div>
+  </section>
+
+  <footer>
+    <p id="status"></p>
+    <p>States: <b>wired</b> drives a subsystem or the launch; <b>model</b> is read by the engagement model (radars, IFF, TV, wheels, orientation); <b>indicator</b> only lights a lamp or turns on a display; <b>inert</b> is placed in the cabin with no function yet. Guards with no own entry in the cabin file are drawn over the control they cover.</p>
+  </footer>
+</div>
+
+<script>
+const DATA = __DATA__;
+const N = new Map(DATA.nodes.map(n => [n.id, n]));
+const svgNS = "http://www.w3.org/2000/svg";
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(svgNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const h = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const k in attrs) { if (k === "class") e.className = attrs[k]; else if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]); else if (k === "style") e.setAttribute("style", attrs[k]); else e.setAttribute(k, attrs[k]); } for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c)); return e; };
+const stColor = st => `var(--st-${st || "world"})`;
+const ST_LABEL = Object.fromEntries(DATA.stations.map(s => [s.id, s.label]));
+ST_LABEL.world = "World";
+const KIND_TEXT = { enable: "needs", any: "any of", prereq: "must hold", release: "released by", guard: "guard", lit: "lit when", litany: "lit if any", draws: "shows", feed: "feeds", signal: "sets", restart: "restarts", planned: "would drive" };
+const TYPE_TEXT = { control: "Control", signal: "Sim signal", subsystem: "Subsystem", model: "Engagement model", event: "Event", lamp: "Lamp", display: "Display", planned: "Not built" };
+const LAMP = { amber: "var(--amber)", red: "var(--red)", green: "var(--green)", white: "var(--white-lamp)" };
+
+/* ---------- tally ---------- */
+const C = DATA.counts;
+$("#tally").append(
+  h("span", {}, h("b", {}, C.controls), "controls ", h("span", { class: "sub" }, `(${C.wired} wired · ${C.model} model · ${C.indicator} indicator · ${C.inert} inert)`)),
+  h("span", {}, h("b", {}, C.subsystems), "subsystems"),
+  h("span", {}, h("b", {}, C.models), "sim models"),
+  h("span", {}, h("b", {}, C.signals), "sim signals"),
+  h("span", {}, h("b", {}, C.lamps), "lamps"),
+  h("span", {}, h("b", {}, C.displays), "displays"),
+  h("span", {}, h("b", {}, C.procedures), "procedures"),
+  h("span", { class: "miss" }, h("b", {}, C.planned + C.inert), "missing or inert"),
+);
+$("#status").textContent = "Console file status: " + DATA.status;
+const SHORT = DATA.system === "osa_ak" ? "Osa-AK" : DATA.display_name;
+document.title = SHORT + " Button Map";
+$("#h1").textContent = SHORT + " Button Map";
+$("#eyebrow").textContent = "SAM3D · " + DATA.display_name + " · console and cabin data as built";
+$("#files").replaceChildren(h("code", {}, `data/procedures/${DATA.system}.json`), ", ", h("code", {}, `data/cabins/${DATA.system}.json`));
+
+/* ---------- graph ---------- */
+const out = new Map(), inn = new Map();
+DATA.edges.forEach((e, i) => { e.i = i; (out.get(e.s) || out.set(e.s, []).get(e.s)).push(e); (inn.get(e.t) || inn.set(e.t, []).get(e.t)).push(e); });
+
+const svg = $("#svg");
+const defs = el("defs", {}, svg);
+const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+el("rect", { width: 6, height: 6, fill: "var(--surface)" }, pat);
+el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--hatch)", "stroke-width": 3 }, pat);
+const vp = el("g", { id: "vp" }, svg);
+
+const PADX = 60, PADY = 54;
+const colX = c => PADX + c * (DATA.col_w + DATA.col_gap);
+const COLNAMES = ["Controls by crew seat"];
+// column headers from content
+const colTypes = {};
+DATA.nodes.forEach(n => { (colTypes[n.col] ||= new Set()).add(n.t); });
+const gCols = el("g", { class: "g-col" }, vp);
+for (let c = 0; c < DATA.ncols; c++) {
+  if (c % 2 === 1) el("rect", { class: "colband", x: colX(c) - DATA.col_gap / 2, y: 0, width: DATA.col_w + DATA.col_gap, height: DATA.H + PADY + 40 }, gCols);
+  const t = colTypes[c] || new Set();
+  let name = c === 0 ? "Controls by seat" : t.has("event") ? "Launch" : t.has("subsystem") ? `Subsystems · stage ${c}` : t.has("model") ? "Sim models" : t.has("signal") ? "Sim signals" : `Stage ${c}`;
+  if (c > 0 && t.has("model") && t.has("subsystem")) name = `Subsystems + models · ${c}`;
+  if (c > 0 && t.has("signal") && !t.has("subsystem")) name = "Sim signals";
+  const tx = el("text", { class: "colhead", x: colX(c), y: 22 }, gCols); tx.textContent = name;
+}
+// station group bands in column 0
+for (const g of DATA.groups) {
+  el("rect", { x: PADX - 26, y: PADY + g.y0 + 4, width: 4, height: g.y1 - g.y0 - 4, fill: stColor(g.station), rx: 2 }, vp);
+  const t = el("text", { class: "grp-label", x: PADX, y: PADY + g.y0 + 16, fill: stColor(g.station) }, vp); t.textContent = g.label;
+}
+
+const gE = el("g", {}, vp), gN = el("g", {}, vp);
+const P = n => ({ x: PADX + n.x, y: PADY + n.y, w: n.w, h: n.h });
+const edgeEls = [];
+for (const e of DATA.edges) {
+  const a = P(N.get(e.s)), b = P(N.get(e.t));
+  let d;
+  const sameCol = N.get(e.s).col === N.get(e.t).col;
+  if (e.k === "restart" || N.get(e.t).col < N.get(e.s).col) {
+    const sx = a.x + a.w / 2, sy = a.y + a.h, tx = b.x + b.w / 2, ty = b.y + b.h;
+    const low = Math.max(sy, ty) + 70;
+    d = `M${sx},${sy} C${sx},${low} ${tx},${low} ${tx},${ty}`;
+  } else if (sameCol) {
+    const sy = a.y + a.h / 2, ty = b.y + b.h / 2, x = a.x, bend = 16 + Math.min(40, Math.abs(ty - sy) / 6);
+    d = `M${x},${sy} C${x - bend},${sy} ${x - bend},${ty} ${x},${ty}`;
+  } else {
+    const sx = a.x + a.w, sy = a.y + a.h / 2, tx = b.x, ty = b.y + b.h / 2;
+    const dx = Math.max(40, Math.min(170, (tx - sx) * 0.45));
+    d = `M${sx},${sy} C${sx + dx},${sy} ${tx - dx},${ty} ${tx},${ty}`;
+  }
+  const p = el("path", { class: "edge " + e.k, d }, gE);
+  edgeEls[e.i] = p;
+}
+
+function wrap(text, max, lines) {
+  const words = String(text).split(/\s+/); const outL = []; let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length <= max) cur = (cur + " " + w).trim();
+    else { if (cur) outL.push(cur); cur = w; }
+  }
+  if (cur) outL.push(cur);
+  if (outL.length > lines) { const keep = outL.slice(0, lines); keep[lines - 1] = keep[lines - 1].slice(0, max - 1).replace(/\s+\S*$/, "") + "…"; return keep; }
+  return outL.map(l => l.length > max ? l.slice(0, max - 1) + "…" : l);
+}
+function glyph(g, kind, x, y) {
+  if (kind === "button") { el("circle", { class: "glyph", cx: x, cy: y, r: 5 }, g); el("circle", { cx: x, cy: y, r: 2, fill: "var(--muted)" }, g); }
+  else if (kind === "wheel") { el("circle", { class: "glyph", cx: x, cy: y, r: 6 }, g); el("path", { class: "glyph", d: `M${x - 6},${y}H${x + 6}M${x},${y - 6}V${y + 6}` }, g); }
+  else if (kind === "key") { el("circle", { class: "glyph", cx: x - 2.5, cy: y, r: 3.2 }, g); el("path", { class: "glyph", d: `M${x + .7},${y}H${x + 7}M${x + 5},${y}V${y + 3}` }, g); }
+  else { el("rect", { class: "glyph", x: x - 6, y: y + 1, width: 12, height: 4, rx: 1 }, g); el("path", { class: "glyph", d: `M${x},${y + 1}L${x + 4},${y - 6}` }, g); }
+}
+const nodeEls = new Map();
+for (const n of DATA.nodes) {
+  const p = P(n);
+  const cls = ["node", "n-" + n.t]; if (n.status) cls.push(n.status);
+  const g = el("g", { class: cls.join(" "), transform: `translate(${p.x},${p.y})`, tabindex: 0, role: "button", "aria-label": `${TYPE_TEXT[n.t]}: ${n.label}` }, gN);
+  g.dataset.id = n.id;
+  nodeEls.set(n.id, g);
+  el("rect", { class: "box", width: p.w, height: p.h, rx: n.t === "signal" ? p.h / 2 : n.t === "lamp" ? p.h / 2 : 2 }, g);
+  if (n.t === "control") {
+    el("rect", { class: "tab", width: 4, height: p.h, fill: stColor(n.station) }, g);
+    glyph(g, n.kind, 16, p.h / 2 - 1);
+    const [l1] = wrap(n.label, 29, 1);
+    const t1 = el("text", { class: "l1", x: 30, y: 15 }, g); t1.textContent = l1;
+    const st = n.status === "wired" ? "" : n.status === "model" ? " · model" : n.status === "indicator" ? " · lamp only" : " · INERT";
+    const t2 = el("text", { class: "l2", x: 30, y: 28 }, g); t2.textContent = (n.cid + st).slice(0, 34);
+  } else if (n.t === "lamp") {
+    el("circle", { class: "lampdot", cx: 15, cy: p.h / 2, r: 6.5, fill: LAMP[n.color] || "var(--muted)" }, g);
+    const t1 = el("text", { class: "l1", x: 28, y: p.h / 2 + 4 }, g); t1.textContent = wrap(n.label, 20, 1)[0];
+    const t2 = el("text", { class: "l2", x: p.w - 10, y: p.h / 2 + 4, "text-anchor": "end", fill: stColor(n.station) }, g); t2.textContent = n.panel.replace("_panel", "").slice(0, 10);
+  } else if (n.t === "display") {
+    el("rect", { x: 9, y: p.h / 2 - 7, width: 16, height: 12, rx: 2, fill: "none", stroke: "var(--amber)", "stroke-width": 1.4 }, g);
+    const t1 = el("text", { class: "l1", x: 32, y: 15 }, g); t1.textContent = wrap(n.label, 28, 1)[0];
+    const t2 = el("text", { class: "l2", x: 32, y: 28 }, g); t2.textContent = (n.dkind + " · " + n.panel).slice(0, 32);
+  } else {
+    if (n.t === "model") el("rect", { class: "inner", x: 3, y: 3, width: p.w - 6, height: p.h - 6, rx: 1 }, g);
+    const lines = wrap(n.label, n.t === "event" ? 32 : 34, n.t === "event" ? 1 : 2);
+    const right = [];
+    if (n.t === "subsystem") { if (n.start_s) right.push(n.start_s + " s"); if (n.latching) right.push("latch"); }
+    if (n.t === "planned") right.push(n.phase);
+    const top = n.t === "event" ? p.h / 2 + 4 : lines.length === 1 ? p.h / 2 + 4 : 18;
+    lines.forEach((l, i) => { const t = el("text", { class: "lt", x: 10, y: top + i * 15 }, g); t.textContent = l; if (n.t === "event") t.setAttribute("class", "l1"); });
+    let bx = p.w - 4;
+    for (const r of right.reverse()) {
+      const w = r.length * 6.2 + 8; bx -= w;
+      const b = el("g", { class: "badge", transform: `translate(${bx},${-7})` }, g);
+      el("rect", { width: w, height: 14, rx: 2, style: n.t === "planned" ? "stroke: var(--redline)" : "" }, b);
+      const t = el("text", { x: w / 2, y: 10.5, "text-anchor": "middle", style: n.t === "planned" ? "fill: var(--redline)" : "" }, b); t.textContent = r;
+      bx -= 4;
+    }
+  }
+  const title = el("title", {}, g); title.textContent = n.label;
+}
+
+/* ---------- pan / zoom ---------- */
+const box = $("#mapbox");
+const VIEW = { k: 1, x: 0, y: 0 };
+const W = DATA.W + PADX * 2, H = DATA.H + PADY + 60;
+const apply = () => vp.setAttribute("transform", `translate(${VIEW.x},${VIEW.y}) scale(${VIEW.k})`);
+const clampK = k => Math.min(2.4, Math.max(0.12, k));
+function zoomAt(f, cx, cy) { const k = clampK(VIEW.k * f); VIEW.x = cx - (cx - VIEW.x) * (k / VIEW.k); VIEW.y = cy - (cy - VIEW.y) * (k / VIEW.k); VIEW.k = k; apply(); }
+function fit() { const r = box.getBoundingClientRect(); VIEW.k = clampK(Math.min(r.width / W, r.height / H)); VIEW.x = (r.width - W * VIEW.k) / 2; VIEW.y = 6; apply(); }
+function startView() { const r = box.getBoundingClientRect(); VIEW.k = clampK(Math.min(1, r.width / (colX(4) + 40))); VIEW.x = 8; VIEW.y = 4; apply(); }
+function centerOn(id, k) {
+  const n = N.get(id), p = P(n), r = box.getBoundingClientRect();
+  VIEW.k = clampK(k || Math.max(VIEW.k, 0.85));
+  VIEW.x = r.width / 2 - (p.x + p.w / 2) * VIEW.k; VIEW.y = r.height / 2 - (p.y + p.h / 2) * VIEW.k; apply();
+}
+box.addEventListener("wheel", ev => { ev.preventDefault(); const r = box.getBoundingClientRect(); zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX - r.left, ev.clientY - r.top); }, { passive: false });
+const ptrs = new Map(); let moved = 0, pinch0 = null;
+box.addEventListener("pointerdown", ev => { ptrs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); moved = 0; if (ptrs.size === 1) box.classList.add("dragging"); if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
+box.addEventListener("pointermove", ev => {
+  if (!ptrs.has(ev.pointerId)) return;
+  const prev = ptrs.get(ev.pointerId); const cur = { x: ev.clientX, y: ev.clientY };
+  if (ptrs.size === 1) { const dx = cur.x - prev.x, dy = cur.y - prev.y; moved += Math.abs(dx) + Math.abs(dy); if (moved > 4 && !box.hasPointerCapture(ev.pointerId)) box.setPointerCapture(ev.pointerId); VIEW.x += dx; VIEW.y += dy; apply(); }
+  ptrs.set(ev.pointerId, cur);
+  if (ptrs.size === 2 && pinch0) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); const r = box.getBoundingClientRect(); zoomAt(d / pinch0, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); pinch0 = d; moved = 99; }
+});
+const endPtr = ev => { ptrs.delete(ev.pointerId); if (ptrs.size < 2) pinch0 = null; if (!ptrs.size) box.classList.remove("dragging"); };
+box.addEventListener("pointerup", endPtr); box.addEventListener("pointercancel", endPtr);
+$("#z-in").onclick = () => { const r = box.getBoundingClientRect(); zoomAt(1.25, r.width / 2, r.height / 2); };
+$("#z-out").onclick = () => { const r = box.getBoundingClientRect(); zoomAt(0.8, r.width / 2, r.height / 2); };
+$("#z-fit").onclick = fit;
+$("#z-start").onclick = startView;
+
+/* ---------- selection ---------- */
+let selected = null;
+function trace(id) {
+  const nodes = new Set([id]), es = new Set();
+  const walk = (start, map, key) => { const st = [start]; const seen = new Set([start]); while (st.length) { const c = st.pop(); for (const e of map.get(c) || []) { if (e.k === "restart") { if (c === start) { es.add(e.i); nodes.add(e[key]); } continue; } es.add(e.i); const nx = e[key]; nodes.add(nx); if (!seen.has(nx)) { seen.add(nx); st.push(nx); } } } };
+  walk(id, out, "t"); walk(id, inn, "s");
+  return { nodes, es };
+}
+function highlight(set) {
+  svg.classList.toggle("focus", !!set);
+  nodeEls.forEach((g, id) => g.classList.toggle("hl", !!set && set.nodes.has(id)));
+  edgeEls.forEach((p, i) => p.classList.toggle("hl", !!set && set.es.has(i)));
+}
+function select(id, opts = {}) {
+  if (selected) nodeEls.get(selected)?.classList.remove("sel");
+  selected = id;
+  if (!id) { highlight(null); renderDetails(null); stationBtns.forEach(b => b.setAttribute("aria-pressed", "false")); return; }
+  nodeEls.get(id).classList.add("sel");
+  highlight(trace(id));
+  renderDetails(id);
+  if (opts.center) centerOn(id);
+  if (opts.scroll) $("#map").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+gN.addEventListener("click", ev => { const g = ev.target.closest(".node"); if (g && moved < 5) { ev.stopPropagation(); select(g.dataset.id); } });
+gN.addEventListener("keydown", ev => { if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest(".node")) { ev.preventDefault(); select(ev.target.closest(".node").dataset.id); } });
+svg.addEventListener("click", ev => { if (!ev.target.closest(".node") && moved < 5) select(null); });
+
+/* ---------- station filter ---------- */
+const stationBtns = [];
+for (const s of DATA.stations) {
+  const b = h("button", { type: "button", class: "chip", "aria-pressed": "false" }, h("span", { class: "sw", style: `background:${stColor(s.id)}` }), s.label);
+  b.onclick = () => {
+    const on = b.getAttribute("aria-pressed") !== "true";
+    stationBtns.forEach(x => x.setAttribute("aria-pressed", "false"));
+    if (selected) { nodeEls.get(selected)?.classList.remove("sel"); selected = null; }
+    if (!on) { highlight(null); renderDetails(null); return; }
+    b.setAttribute("aria-pressed", "true");
+    const all = { nodes: new Set(), es: new Set() };
+    DATA.nodes.filter(n => n.t === "control" && n.station === s.id).forEach(n => { const t = trace(n.id); const down = { nodes: new Set([n.id]), es: new Set() };
+      // downstream only, so the seat's reach shows
+      const st = [n.id]; while (st.length) { const c = st.pop(); for (const e of out.get(c) || []) { if (e.k === "restart") continue; down.es.add(e.i); if (!down.nodes.has(e.t)) { down.nodes.add(e.t); st.push(e.t); } } }
+      down.nodes.forEach(x => all.nodes.add(x)); down.es.forEach(x => all.es.add(x)); });
+    highlight(all);
+    renderStation(s.id);
+  };
+  stationBtns.push(b); $("#stations").append(b);
+}
+
+/* ---------- toggles ---------- */
+$("#t-ind").onchange = e => svg.classList.toggle("hide-ind", !e.target.checked);
+$("#t-lit").onchange = e => svg.classList.toggle("hide-lit", !e.target.checked);
+$("#t-plan").onchange = e => svg.classList.toggle("hide-plan", !e.target.checked);
+
+/* ---------- legend ---------- */
+const lg = $("#legend");
+const sw = (draw, text) => { const s = document.createElementNS(svgNS, "svg"); s.setAttribute("width", 30); s.setAttribute("height", 14); draw(s); return h("span", {}, s, text); };
+lg.append(
+  sw(s => { el("rect", { x: 1, y: 1, width: 28, height: 12, rx: 1, fill: "var(--surface)", stroke: "var(--line)" }, s); el("rect", { x: 1, y: 1, width: 3, height: 12, fill: "var(--st-operator)" }, s); }, "control (seat colour)"),
+  sw(s => { el("rect", { x: 1, y: 1, width: 28, height: 12, fill: "url(#hatch)", stroke: "var(--line)", "stroke-dasharray": "3 2" }, s); }, "inert control"),
+  sw(s => { el("rect", { x: 1, y: 1, width: 28, height: 12, rx: 1, fill: "var(--accent-soft)", stroke: "var(--accent)" }, s); }, "subsystem"),
+  sw(s => { el("rect", { x: 1, y: 1, width: 28, height: 12, fill: "none", stroke: "var(--st-operator)" }, s); el("rect", { x: 3, y: 3, width: 24, height: 8, fill: "none", stroke: "var(--st-operator)", "stroke-width": .8 }, s); }, "sim model"),
+  sw(s => { el("rect", { x: 1, y: 1, width: 28, height: 12, rx: 6, fill: "var(--surface-2)", stroke: "var(--line)" }, s); }, "sim signal"),
+  sw(s => { el("circle", { cx: 8, cy: 7, r: 5, fill: "var(--green)" }, s); el("circle", { cx: 22, cy: 7, r: 5, fill: "var(--amber)" }, s); }, "lamp"),
+  sw(s => { el("rect", { x: 1, y: 1, width: 28, height: 12, fill: "var(--redline-soft)", stroke: "var(--redline)", "stroke-dasharray": "5 3" }, s); }, "not built"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--edge)", "stroke-width": 1.6, fill: "none" }, s), "needs"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--edge)", "stroke-width": 1.6, fill: "none", "stroke-dasharray": "5 3" }, s), "any of"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--edge)", "stroke-width": 2, fill: "none", "stroke-dasharray": "1.5 3" }, s), "must hold"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--red)", "stroke-width": 1.6, fill: "none", "stroke-dasharray": "7 3 1.5 3" }, s), "released by"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--amber)", "stroke-width": 1.6, fill: "none" }, s), "lights / shows"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--st-operator)", "stroke-width": 1.6, fill: "none" }, s), "model input / output"),
+  sw(s => el("path", { d: "M0,7H30", stroke: "var(--redline)", "stroke-width": 1.6, fill: "none", "stroke-dasharray": "6 4" }, s), "would drive"),
+);
+
+/* ---------- details ---------- */
+const det = $("#details");
+const procById = Object.fromEntries(DATA.procs.map(p => [p.id, p]));
+const linkTo = id => h("button", { type: "button", class: "link", onclick: () => select(id, { center: true }) }, N.get(id).label);
+function statusPill(n) {
+  if (n.t === "control") return h("span", { class: "pill " + n.status }, n.status);
+  if (n.t === "planned") return h("span", { class: "pill " + n.status }, n.status === "unknown" ? "function unknown" : "not built · " + n.phase);
+  return null;
+}
+function renderDetails(id) {
+  det.replaceChildren();
+  if (!id) {
+    det.append(
+      h("div", { class: "kind" }, "Nothing selected"),
+      h("h3", {}, "Pick a box on the map"),
+      h("p", { class: "empty" }, "Its conditions, what it drives, its procedures and its source appear here. Try ПУСК, ВЫСОКОЕ or the ЦУ button."),
+      h("div", {}, h("h4", {}, "Quick picks"), h("ul", {}, ...["c:fo.launch", "c:soc.hv", "c:fo.cu_az", "s:launch_armed", "l:pusk_gotov", "p:channels"].filter(x => N.has(x)).map(x => h("li", {}, linkTo(x))))),
+    );
+    return;
+  }
+  const n = N.get(id);
+  det.append(h("div", { class: "kind" }, h("span", {}, TYPE_TEXT[n.t]), statusPill(n)));
+  det.append(h("h3", {}, n.label));
+  if (n.cid) det.append(h("div", { class: "cid" }, n.cid));
+  const dl = h("dl", {});
+  const row = (k, v) => { if (v != null && v !== "") dl.append(h("dt", {}, k), h("dd", {}, v)); };
+  if (n.station) row("Seat", h("span", { style: `color:${stColor(n.station)};font-weight:700` }, ST_LABEL[n.station]));
+  if (n.panel_label) row("Panel", n.panel_label + (n.cover_auto ? " (drawn over the guarded control)" : ""));
+  if (n.t === "control") row("Kind", n.kind + (n.minv != null ? ` · ${n.minv} to ${n.maxv}${n.unit ? " " + n.unit : ""}` : ""));
+  if (n.positions) { const ps = h("div", { class: "positions" }, ...n.positions.map((l, i) => h("span", { class: i === (n.initial ?? 0) ? "init" : "" }, l))); row("Positions", ps); }
+  if (n.guard) row("Guard", linkTo("c:" + n.guard));
+  if (n.t === "subsystem") { row("Warm-up", n.start_s != null ? n.start_s + " s" : "instant"); if (n.stop_s) row("Stop", n.stop_s + " s"); if (n.latching) row("Latching", "engaged by a press, held until released"); }
+  if (n.t === "lamp") row("Colour", n.color);
+  if (n.t === "display") row("Kind", n.dkind);
+  if (n.conf) row("Confidence", n.conf);
+  if (n.source) row("Source", n.source);
+  det.append(dl);
+  const ins = (inn.get(id) || []);
+  if (ins.length) det.append(h("div", {}, h("h4", {}, "Comes from"), h("ul", {}, ...ins.map(e => h("li", {}, h("span", { class: "k" }, KIND_TEXT[e.k]), h("span", {}, linkTo(e.s), e.v != null ? h("span", { class: "step-pos" }, " = " + e.v) : e.x ? h("span", { class: "notes" }, " — " + e.x) : null))))));
+  const outs = (out.get(id) || []);
+  if (outs.length) det.append(h("div", {}, h("h4", {}, "Drives"), h("ul", {}, ...outs.map(e => h("li", {}, h("span", { class: "k" }, KIND_TEXT[e.k]), h("span", {}, linkTo(e.t), e.v != null ? h("span", { class: "step-pos" }, " when = " + e.v) : null))))));
+  else if (n.t === "control") det.append(h("p", { class: "notes" }, "Nothing reads this control yet."));
+  if (n.procs?.length) det.append(h("div", {}, h("h4", {}, "Used in procedures"), h("ul", {}, ...n.procs.map(pid => h("li", {}, h("button", { type: "button", class: "link", onclick: () => showProc(pid) }, procById[pid].name))))));
+  if (n.notes) det.append(h("div", {}, h("h4", {}, "Notes"), h("p", { class: "notes" }, n.notes)));
+}
+function renderStation(st) {
+  det.replaceChildren();
+  const ctrls = DATA.nodes.filter(n => n.t === "control" && n.station === st);
+  const by = s => ctrls.filter(n => n.status === s).length;
+  det.append(h("div", { class: "kind" }, "Crew seat"), h("h3", { style: `color:${stColor(st)}` }, ST_LABEL[st]),
+    h("p", { class: "notes" }, `${ctrls.length} controls: ${by("wired")} wired, ${by("model")} model, ${by("indicator")} lamp only, ${by("inert")} inert. Highlighted: everything this seat can reach.`),
+    h("div", {}, h("h4", {}, "Controls"), h("ul", {}, ...ctrls.map(n => h("li", {}, h("span", { class: "k" }, n.status), linkTo(n.id))))),
+    h("div", {}, h("h4", {}, "Procedures"), h("ul", {}, ...DATA.procs.filter(p => p.station === st).map(p => h("li", {}, h("button", { type: "button", class: "link", onclick: () => showProc(p.id) }, p.name))))));
+}
+
+/* ---------- search ---------- */
+const q = $("#q"), ql = $("#qlist");
+let qItems = [], qi = -1;
+const norm = s => String(s || "").toLowerCase();
+function runSearch() {
+  const v = norm(q.value).trim(); ql.replaceChildren(); qi = -1;
+  if (!v) { ql.hidden = true; return; }
+  qItems = DATA.nodes.filter(n => norm(n.label).includes(v) || norm(n.cid).includes(v)).slice(0, 10);
+  qItems.forEach((n, i) => { const li = h("li", { role: "option", id: "qo" + i, "aria-selected": "false" }, n.label, h("span", {}, TYPE_TEXT[n.t])); li.onmousedown = ev => { ev.preventDefault(); pick(i); }; ql.append(li); });
+  ql.hidden = !qItems.length;
+}
+function pick(i) { const n = qItems[i]; if (!n) return; ql.hidden = true; q.value = n.label; select(n.id, { center: true }); }
+q.addEventListener("input", runSearch);
+q.addEventListener("keydown", ev => {
+  if (ql.hidden) return;
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); qi = (qi + (ev.key === "ArrowDown" ? 1 : -1) + qItems.length) % qItems.length; [...ql.children].forEach((li, i) => li.setAttribute("aria-selected", i === qi)); }
+  else if (ev.key === "Enter") { ev.preventDefault(); pick(qi < 0 ? 0 : qi); }
+  else if (ev.key === "Escape") ql.hidden = true;
+});
+q.addEventListener("blur", () => setTimeout(() => ql.hidden = true, 120));
+
+/* ---------- procedures ---------- */
+const PHASES = [
+  ["Power and come into action", ["power_up", "equipment_on", "deploy_at_halt", "pto_on_line", "orient_vehicle"]],
+  ["Search and acquire", ["search_on_march", "acquire_with_soc", "ready_capture", "capture_with_ssc"]],
+  ["Track", ["track_low_target", "track_range_semi_auto"]],
+  ["Fire", ["prepare_firing", "launch"]],
+  ["Silent engagement (TV only, radars off)", ["emcon_tv_azimuth", "emcon_tv_engagement"]],
+  ["March and stow", ["lower_search_antenna", "raise_search_antenna", "stop_search", "stow_ssc", "stow_launch_console", "pto_off_line", "equipment_off", "power_down"]],
+];
+const listed = new Set(PHASES.flatMap(p => p[1]));
+const extra = DATA.procs.filter(p => !listed.has(p.id)).map(p => p.id);
+if (extra.length) PHASES.push(["Other", extra]);
+const procEls = {};
+for (const [name, all] of PHASES) {
+  const ids = all.filter(pid => procById[pid]);
+  if (!ids.length) continue;
+  const grid = h("div", { class: "procs" });
+  for (const pid of ids) {
+    const p = procById[pid]; if (!p) continue;
+    const card = h("article", { class: "proc", id: "proc-" + p.id, style: `--st:${stColor(p.station)}` },
+      h("header", {}, h("span", { class: "who" }, ST_LABEL[p.station]), h("h4", {}, p.name)),
+      h("ol", {}, ...p.steps.map(s => h("li", {},
+        h("button", { type: "button", class: "step-ctl", onclick: () => select("c:" + s.c, { center: true, scroll: true }) }, s.label), " → ", h("span", { class: "step-pos" }, s.pos),
+        s.w.length ? h("span", { class: "step-w" }, "waits: " + s.w.join(" · ")) : null,
+        h("span", { class: "step-d" }, s.d)))));
+    procEls[pid] = card; grid.append(card);
+  }
+  $("#phases").append(h("div", { class: "phase" }, h("h3", {}, name, h("small", {}, ids.length + " procedures")), grid));
+}
+function showProc(pid) { const c = procEls[pid]; if (!c) return; c.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }); c.classList.add("flash"); setTimeout(() => c.classList.remove("flash"), 1600); }
+
+/* ---------- missing ---------- */
+const ml = $("#missinglist");
+const PH_ORDER = ["6.2", "6.3", "6.3 / 6.7", "6.4", "6.5", "6.6", "6.7", "phase 7", "later", "unknown"];
+DATA.nodes.filter(n => n.t === "planned").sort((a, b) => PH_ORDER.indexOf(a.phase) - PH_ORDER.indexOf(b.phase)).forEach(n => {
+  const from = (inn.get(n.id) || []).map(e => e.s);
+  ml.append(h("article", { class: "mcard" },
+    h("span", { class: "ph" }, n.status === "unknown" ? "function unknown" : "roadmap " + n.phase),
+    h("h4", {}, n.label), h("p", {}, n.notes),
+    from.length ? h("div", { class: "from" }, "Hooks into: ", ...from.flatMap((s, i) => [i ? ", " : "", h("button", { type: "button", onclick: () => select(s, { center: true, scroll: true }) }, N.get(s).label)])) : null,
+    h("div", { class: "from" }, h("button", { type: "button", onclick: () => select(n.id, { center: true, scroll: true }) }, "Show on map"))));
+});
+const inert = DATA.nodes.filter(n => n.t === "control" && (n.status === "inert" || n.status === "indicator"));
+ml.append(h("article", { class: "mcard" },
+  h("span", { class: "ph" }, "placed, not wired"),
+  h("h4", {}, `${inert.length} controls in the cabin with no function`),
+  h("p", {}, "They can be clicked and hold a position, but no subsystem or model reads them (two only light a lamp or switch a display)."),
+  h("div", { class: "from" }, ...inert.flatMap((n, i) => [i ? ", " : "", h("button", { type: "button", onclick: () => select(n.id, { center: true, scroll: true }) }, n.label)]))));
+
+/* ---------- index ---------- */
+const ix = $("#ix");
+const ctrls = DATA.nodes.filter(n => n.t === "control");
+let ixFilter = "all";
+function renderIx() {
+  ix.replaceChildren(h("thead", {}, h("tr", {}, ...["Control", "Id", "Seat", "Panel", "Kind", "Start", "State", "Drives", "Procedures"].map(t => h("th", {}, t)))));
+  const tb = h("tbody");
+  const order = ["driver", "operator", "senior_operator", "deputy_commander", "commander"];
+  ctrls.filter(n => ixFilter === "all" || n.status === ixFilter).sort((a, b) => order.indexOf(a.station) - order.indexOf(b.station)).forEach(n => {
+    const drives = (out.get(n.id) || []).filter(e => e.k !== "planned").map(e => N.get(e.t).label);
+    const plan = (out.get(n.id) || []).filter(e => e.k === "planned").map(e => N.get(e.t).label);
+    tb.append(h("tr", { class: "st-row", style: `--st:${stColor(n.station)}` },
+      h("td", { class: "lbl" }, h("button", { type: "button", onclick: () => select(n.id, { center: true, scroll: true }) }, n.label)),
+      h("td", { class: "mono" }, n.cid),
+      h("td", {}, ST_LABEL[n.station]),
+      h("td", {}, n.panel ? n.panel.replace(/_/g, " ") : "—"),
+      h("td", {}, n.kind),
+      h("td", {}, n.positions ? n.positions[n.initial ?? 0] : n.kind === "wheel" ? "—" : "released"),
+      h("td", {}, h("span", { class: "pill " + n.status }, n.status)),
+      h("td", {}, drives.length ? `${drives.length}: ` + drives.slice(0, 3).join(", ") + (drives.length > 3 ? "…" : "") : plan.length ? h("span", { style: "color:var(--redline)" }, "planned: " + plan.join(", ")) : "—"),
+      h("td", {}, (n.procs || []).length || "—")));
+  });
+  ix.append(tb);
+}
+const fBtns = [];
+[["all", "All"], ["wired", "Wired"], ["model", "Model"], ["indicator", "Indicator only"], ["inert", "Inert"]].forEach(([k, l]) => {
+  const n = k === "all" ? ctrls.length : ctrls.filter(c => c.status === k).length;
+  const b = h("button", { type: "button", class: "chip", "aria-pressed": String(k === "all") }, `${l} · ${n}`);
+  b.onclick = () => { ixFilter = k; fBtns.forEach(x => x.setAttribute("aria-pressed", String(x === b))); renderIx(); };
+  fBtns.push(b); $("#ixfilter").append(b);
+});
+renderIx();
+
+/* ---------- start ---------- */
+renderDetails(null);
+requestAnimationFrame(startView);
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (!selected) startView(); }, 150); });
+</script>
