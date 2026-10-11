@@ -601,6 +601,11 @@ public:
     // The heading the gyro holds (its idea of the hull's heading), and the frame conversion: an azimuth in the
     // crew's frame (wheels, scope) to true azimuth from north.
     double GyroHeadingDeg() const { return gyro_heading_deg_; }
+    // The vehicle was oriented before the session began: the gyro holds the hull's true heading.
+    void SetOriented() {
+        gyro_heading_deg_ = Wrap360(unit_heading_deg_);
+        last_unit_heading_deg_ = unit_heading_deg_;
+    }
     double IndicatedToTrueDeg(double indicated_deg) const {
         return Wrap180(indicated_deg + unit_heading_deg_ - gyro_heading_deg_);
     }

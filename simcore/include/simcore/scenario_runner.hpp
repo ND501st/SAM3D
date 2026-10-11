@@ -61,6 +61,7 @@ public:
             }
         }
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
+        const ReadinessState* ready_state = console_.FindReadiness(def_.readiness);
         targets_.resize(def_.targets.size());
         for (const ScenarioTarget& t : def_.targets) {
             EngagementTarget e;
@@ -73,6 +74,7 @@ public:
         }
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
+        if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
@@ -232,6 +234,23 @@ private:
         bool gone = false;
         int world_id = -1;
     };
+
+    // Start warm: set the state's controls and inputs, warm its subsystems up in order (each sees those before it),
+    // orient the vehicle if the state says so. The scenario's own inputs win over the state's.
+    void ApplyReadiness(const ReadinessState& st) {
+        for (const auto& c : st.controls) console_.panel.Set(c.first, c.second);
+        for (const auto& in : st.inputs) console_.equipment.SetInput(in.first, in.second);
+        for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
+        console_.equipment.Update(0.0, console_.panel);
+        for (const std::string& id : st.ready) {
+            if (!console_.equipment.Warm(id, console_.panel)) {
+                Event(id, "not commanded on in readiness '" + st.id + "': left cold");
+            }
+            console_.equipment.Update(0.0, console_.panel);
+        }
+        if (st.oriented) engagement_.SetOriented();
+        Event(def_.id, "starts " + st.id + (st.description.empty() ? std::string() : ": " + st.description));
+    }
 
     void Event(const std::string& what, const std::string& detail) {
         log_.Record({time_, DebriefEntry::Kind::Scenario, std::string(), what, detail});

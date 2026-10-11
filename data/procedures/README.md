@@ -27,6 +27,14 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // "restarts" (optional): a subsystem each launch sends back to the start of its warm-up (the next missile's preparation).
   "launch": { "button": "fo.launch", "armed": "launch_armed", "restarts": "missile_prep", "source": "...", "confidence": "high" },
 
+  // Optional: states a session can start in instead of cold (roadmap 6.2; a scenario's own_unit.readiness picks one):
+  // controls already set, inputs, subsystems warmed up at once (in dependency order: each must be commanded on by then),
+  // and whether the vehicle is already oriented. "cold" is the default and has no entry.
+  "readiness": {
+    "deployed": { "description": "...", "controls": { "pwr.gta": 1, "apu.lock": 1 }, "inputs": { "vehicle_stopped": true },
+                  "ready": [ "gta", "power", "equipment_warm" ], "oriented": true, "source": "...", "confidence": "medium" }
+  },
+
   // Optional: the missile load and the two guidance channels (simcore/launcher.hpp, roadmap 6.3), run by the scenario
   // runner. At the attention input (ВНИМАНИЕ) or once pair_preparation is running, one missile is picked per channel the
   // channel_control allows (lowest "order" first), and the channel's transmitter input comes on. A launch takes the

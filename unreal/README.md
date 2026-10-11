@@ -33,6 +33,13 @@ type `/mcp` in the session and reconnect `unreal-mcp`. Only one editor can hold 
 whichever project's editor owns it: check the editor is the checkout you mean (a worktree has its own `Binaries/`
 and `Saved/`; the Cesium ion token is also per checkout and not in git).
 
+## Time compression
+
+`sam3d.TimeScale <x>` (console variable; also `USimWorldSubsystem::SetTimeScale`) runs sim time faster or slower than
+real time, from 0.25 to 32. A cold start takes minutes (roadmap 6.2: 3.8 min switch-on, 3.0 min function check), so
+`sam3d.TimeScale 8` gets through it in under a minute. The sim stays on its fixed step; only how many steps a frame
+runs changes.
+
 ## First level: Osa practice scenario on Cesium terrain
 
 The level is in the repository (`Content/Maps/OsaPractice`, stored with Git LFS: run `git lfs install` once per

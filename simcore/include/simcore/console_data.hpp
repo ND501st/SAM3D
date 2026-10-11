@@ -143,6 +143,17 @@ struct LauncherDef {
     std::string hold_input;         // set while the next launch must wait (too soon, or no missile on a free channel)
 };
 
+// A state a session can start in instead of cold (roadmap 6.2): controls already set, inputs, subsystems already
+// warmed up (in dependency order), and whether the vehicle is already oriented.
+struct ReadinessState {
+    std::string id;  // e.g. "powered", "deployed"
+    std::string description;
+    std::vector<std::pair<std::string, int>> controls;
+    std::vector<std::pair<std::string, bool>> inputs;
+    std::vector<std::string> ready;
+    bool oriented = false;
+};
+
 // A crew seat that owns controls (e.g. "senior_operator"). Crew roles name these.
 struct ConsoleStation {
     std::string id;
@@ -166,6 +177,14 @@ struct ConsoleData {
     OrientationDef orientation;
     bool has_launcher = false;
     LauncherDef launcher;
+    std::vector<ReadinessState> readiness;
+
+    const ReadinessState* FindReadiness(const std::string& id) const {
+        for (const ReadinessState& r : readiness) {
+            if (r.id == id) return &r;
+        }
+        return nullptr;
+    }
 
     const Procedure* FindProcedure(const std::string& id) const {
         for (const Procedure& p : procedures) {
@@ -188,7 +207,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "readiness", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -201,6 +220,7 @@ public:
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
         if (!LoadLaunch(root, out)) return false;
         if (!LoadLauncher(root, out)) return false;
+        if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
     }
 
@@ -493,6 +513,63 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!out.equipment.Has(out.launch_armed)) return Fail("launch.armed", "unknown subsystem '" + out.launch_armed + "'");
         if (!out.launch_restarts.empty() && !out.equipment.Has(out.launch_restarts)) {
             return Fail("launch.restarts", "unknown subsystem '" + out.launch_restarts + "'");
+        }
+        return true;
+    }
+
+    bool LoadReadiness(const json::Value& root, ConsoleData& out) {
+        const json::Value* r = root.Find("readiness");
+        if (r == nullptr) return true;
+        if (!r->Is(json::Type::Object)) return Fail("readiness", "expected an object of state: {...}");
+        for (std::size_t i = 0; i < r->keys.size(); ++i) {
+            const std::string p = Join("readiness", r->keys[i]);
+            const json::Value& v = r->items[i];
+            ReadinessState st;
+            st.id = r->keys[i];
+            if (st.id == "cold") return Fail(p, "\"cold\" is the default and needs no entry");
+            if (!Keys(v, p, {"description", "controls", "inputs", "ready", "oriented", "source", "confidence", "notes"}) ||
+                !Provenance(v, p) || !OptionalString(v, p, "description", st.description)) {
+                return false;
+            }
+            if (const json::Value* o = v.Find("oriented")) {
+                if (!o->Is(json::Type::Bool)) return Fail(Join(p, "oriented"), "expected true or false");
+                st.oriented = o->boolean;
+            }
+            if (const json::Value* cs = v.Find("controls")) {
+                if (!cs->Is(json::Type::Object)) return Fail(Join(p, "controls"), "expected an object of control: position");
+                for (std::size_t k = 0; k < cs->keys.size(); ++k) {
+                    const std::string cp = Join(Join(p, "controls"), cs->keys[k]);
+                    const ControlDef* c = out.panel.Find(cs->keys[k]);
+                    if (c == nullptr) return Fail(cp, "unknown control");
+                    const json::Value& pos = cs->items[k];
+                    if (!pos.Is(json::Type::Number) || pos.number < 0.0 || pos.number >= c->positions ||
+                        pos.number != static_cast<double>(static_cast<int>(pos.number))) {
+                        return Fail(cp, "not a position of the control");
+                    }
+                    st.controls.emplace_back(cs->keys[k], static_cast<int>(pos.number));
+                }
+            }
+            if (const json::Value* is = v.Find("inputs")) {
+                if (!is->Is(json::Type::Object)) return Fail(Join(p, "inputs"), "expected an object of input: true/false");
+                for (std::size_t k = 0; k < is->keys.size(); ++k) {
+                    const std::string ip = Join(Join(p, "inputs"), is->keys[k]);
+                    if (!out.equipment.HasInput(is->keys[k])) return Fail(ip, "unknown input");
+                    if (!is->items[k].Is(json::Type::Bool)) return Fail(ip, "expected true or false");
+                    st.inputs.emplace_back(is->keys[k], is->items[k].boolean);
+                }
+            }
+            if (const json::Value* rs = OptionalArray(v, p, "ready")) {
+                for (std::size_t k = 0; k < rs->items.size(); ++k) {
+                    const std::string rp = Index(Join(p, "ready"), k);
+                    if (!rs->items[k].Is(json::Type::String) || !out.equipment.Has(rs->items[k].string)) {
+                        return Fail(rp, "expected the id of a subsystem");
+                    }
+                    st.ready.push_back(rs->items[k].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            out.readiness.push_back(std::move(st));
         }
         return true;
     }

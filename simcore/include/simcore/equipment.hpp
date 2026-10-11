@@ -177,6 +177,19 @@ public:
 
     bool Has(const std::string& id) const { return index_.count(id) != 0; }
 
+    // Ready at once, skipping the warm-up, if it is commanded on now (a session that starts with the equipment already
+    // running). False if it isn't commanded on. Call in dependency order with Update(0) between, so each one sees
+    // the states upstream of it.
+    bool Warm(const std::string& id, const ControlPanel& panel) {
+        const auto it = index_.find(id);
+        if (it == index_.end()) return false;
+        Unit& u = units_[it->second];
+        if (!Commanded(u, panel)) return false;
+        u.progress = 1.0;
+        if (u.state != SubsystemState::Ready) Go(u, SubsystemState::Ready);
+        return true;
+    }
+
     // Back to the start of the warm-up, if it is ready or warming up; false otherwise (off, stopping, fault).
     bool Restart(const std::string& id) {
         const auto it = index_.find(id);

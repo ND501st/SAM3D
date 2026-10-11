@@ -79,6 +79,7 @@ struct ScenarioDef {
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
+    std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
     Vec3 unit_position;            // ENU [m]
@@ -187,7 +188,7 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "em", "position", "heading_deg", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -209,6 +210,13 @@ private:
                     return Fail("own_unit.tuning", "aim role '" + *role + "' is not a station of the console");
                 }
             }
+        }
+        if (!OptionalString(*u, "own_unit", "readiness", out.readiness)) return false;
+        if (out.readiness == "cold") out.readiness.clear();
+        if (!out.readiness.empty() && console.FindReadiness(out.readiness) == nullptr) {
+            std::string known;
+            for (const ReadinessState& r : console.readiness) known += (known.empty() ? "" : ", ") + r.id;
+            return Fail("own_unit.readiness", "unknown state '" + out.readiness + "' (cold" + (known.empty() ? "" : ", ") + known + ")");
         }
         if (const json::Value* em = u->Find("em")) {
             if (out.tuning_file.empty()) return Fail("own_unit.em", "needs own_unit.tuning: the EM layer replaces its sensors");
