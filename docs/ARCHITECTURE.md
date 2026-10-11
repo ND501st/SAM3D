@@ -128,7 +128,7 @@ roadmap phase 6:
 
 - Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
 - Missiles: load, selection, two channels, letter change, emergency launch and the range indicator's missile sweeps
-  are modelled (the sweep drawing in Unreal is unbuilt); not modelled: gyro overheating (flashing ammunition lamps). (6.3)
+  are modelled; not modelled: gyro overheating (flashing ammunition lamps). (6.3)
 - Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)
 - Tracking radar capture: azimuth, range and elevation (the antenna's 1° beam on the target; during ЦУ it scans the
   search beam). The scan period is an estimate, and in the automatic beam programmes the beam searched is the one the
