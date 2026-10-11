@@ -159,26 +159,10 @@ physics stays unscheduled.
 
 1. **User:** review and send `docs/outreach/creator_message_draft.md`; name the video (title/channel) so
    `video_osa` can be cited properly; acquire the BSU textbook / GDR handbooks if possible.
-2. **Phase 6.1:** five-man crew and seats (console stations, cabin, procedures, scenario crews). Breaking data change;
-   one PR, branched from `main` (in review as PR #10). Then **phase 6.0:** the eyes-on pass. **First half done**
-   (branch `docs/eyes-on-pass`, stacked on PR #11): every §11 item of `docs/research/OSA_CONSOLE_MAP_2026-10.md`
-   checked against `reference/` (the SAM Simulator manual's panel photos and the Osa sprites), the map corrected,
-   findings in its §12. Main results: the 7-position knob is the missile selector; "БОРТ" sprites are the КАНАЛЫ
-   channel selector; the "+27 V selector" is test socket Ш7 beside a guarded СМЕНА РКТ switch; the "β / ε lamps" are
-   the dials' backlight; ЦУ and АЗ are separate buttons; **red dots mark working positions, not start positions**
-   (this affects 6.1's red-dot plan). The `rwd_mb3` photos are now in `reference/photos/rwd_mb3/` and checked (map §12):
-   seat columns and the seat row confirmed, labels too small to read. **Running game done (3 Oct 2026, map §12)**,
-   except anything needing a tracked target: start positions measured for every sprite-backed control (ДАЛЬНОСТЬ
-   starts at 0–35 km, not the data's 0–15; РОД РАБОТЫ and РАБОТА / КОНТРОЛЬ start away from their red dots, КАНАЛЫ on
-   its dot); ЦУ lights ЦУ and АЗ, АЗ alone does nothing; СМЕНА РКТ is one three-step control; wrong orders are ignored
-   or accepted, never faulted. **Still to do for 6.0:** with a target, the elevation screen's axes and what ЦЕЛЬ /
-   КАНАЛЫ / СМЕНА РКТ do. A second try saw targets at Ustka and NAMFI (scope bursts, map §12) and a player's video
-   showed a full engagement, but capture failed on input limits (no right-button hold; wheels ignore synthetic drags):
-   best done by a person at NAMFI, or asked of the creator. **Data step part 1 done (3 Oct 2026, PR #13 on top of
-   #10):** start positions, labels, new inert controls, elevation limits, power to the driver, red dots as working
-   positions (`red_dot`), the game's lamps. **Next:** the real cabinet layout (panels named after the SL-2M2 blocks, positions
-   from the panel photos), then the creator's answers (questions now in `docs/outreach/creator_message_draft.md` §4), then put the corrections into `data/procedures/osa_ak.json` and
-   `data/cabins/osa_ak.json` on top of 6.1 and check each seat with `tools/panel_sheet.py`.
+2. **Phase 6.0 and 6.1: done** (6.1 in PR #10; 6.0 across PRs #12–#16, closed out in `docs/research/OSA_CONSOLE_MAP_2026-10.md` §13 on
+   8 Oct 2026). Left open and handed on: a person with both mouse buttons at NAMFI (ЗРП toggle, lock graphics with a target
+   in play), the creator's answers (`docs/outreach/creator_message_draft.md` §4), and labels on PU-303 / OO96-9M / OO05-8M,
+   which need sharper photographs. **Next: 6.2.**
 3. Then 6.2–6.8 in order, each its own PR with tests and a scripted Unreal check where it shows.
 4. Creator message: drafted (`docs/outreach/creator_message_draft.md`); send is the user's.
 
