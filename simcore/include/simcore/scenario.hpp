@@ -72,6 +72,17 @@ struct ScenarioTrigger {
     std::vector<TriggerAction> actions;
 };
 
+// A prepared position's power (roadmap 7.6, own_unit.position_power): the civil grid feeds the vehicle's external
+// supply; when it is cut a diesel set takes over after `diesel_start_s` and runs for `diesel_hours` (no diesel: 0).
+// The scenario sets the console input "external_power" from this every step.
+struct PositionPowerDef {
+    bool present = false;
+    bool grid = true;
+    double grid_cut_s = -1.0;     // < 0: the grid is never cut
+    double diesel_start_s = 0.0;
+    double diesel_hours = 0.0;
+};
+
 struct ScenarioDef {
     std::string id;
     std::string name;
@@ -83,6 +94,7 @@ struct ScenarioDef {
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
+    PositionPowerDef position_power;
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
@@ -102,6 +114,23 @@ namespace detail {
 
 class ScenarioLoader : public ConsoleLoader {
 public:
+    bool LoadPositionPower(const json::Value& unit, const ConsoleData& console, PositionPowerDef& out) {
+        const json::Value* v = unit.Find("position_power");
+        if (v == nullptr) return true;
+        const std::string p = "own_unit.position_power";
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        if (!Keys(*v, p, {"grid", "grid_cut_s", "diesel_start_s", "diesel_hours", "source", "confidence", "notes"}) ||
+            !Provenance(*v, p) || !OptionalBool(*v, p, "grid", out.grid) || !OptionalNumber(*v, p, "grid_cut_s", out.grid_cut_s) ||
+            !OptionalNumber(*v, p, "diesel_start_s", out.diesel_start_s) || !OptionalNumber(*v, p, "diesel_hours", out.diesel_hours)) {
+            return false;
+        }
+        if (out.diesel_start_s < 0.0) return Fail(Join(p, "diesel_start_s"), "must be >= 0");
+        if (out.diesel_hours < 0.0) return Fail(Join(p, "diesel_hours"), "must be >= 0");
+        if (!console.equipment.HasInput("external_power")) return Fail(p, "the console has no external_power input");
+        out.present = true;
+        return true;
+    }
+
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "own_unit", "crew", "targets", "triggers", "end"})) {
@@ -201,7 +230,7 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position", "heading_deg", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position_power", "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -226,6 +255,7 @@ private:
         }
         if (!OptionalNumber(*u, "own_unit", "fuel_fraction", out.fuel_fraction)) return false;
         if (out.fuel_fraction < 0.0 || out.fuel_fraction > 1.0) return Fail("own_unit.fuel_fraction", "from 0 to 1");
+        if (!LoadPositionPower(*u, console, out.position_power)) return false;
         if (!OptionalString(*u, "own_unit", "readiness", out.readiness)) return false;
         if (out.readiness == "cold") out.readiness.clear();
         if (!out.readiness.empty() && console.FindReadiness(out.readiness) == nullptr) {

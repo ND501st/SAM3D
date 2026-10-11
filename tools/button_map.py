@@ -55,7 +55,7 @@ PLANNED = {
         ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
         ("p:jammer", "Jamming targets: range lost in noise, method Н outcome", "6.7 / E5", "ПОМЕХА already selects method Н and arms К3 with the medium beam, but no target jams yet, so the range is never lost and Н has no effect on the hit chance. Needs noise jammers from the EM layer (E5) and the NVA's crossing-offset 'parameter' limit.", ["c:fo.pomekha", "e:launch"], "missing"),
         ("p:pu12feed", "PU-12 fed by the regiment's radars", "7.1", "The board and the voice designations are built; the board still plots the scenario's targets directly instead of a regiment radar picture.", [], "missing"),
-        ("p:prepared", "Prepared positions: grid and diesel supplies", "7.6", "Peacetime grid and a diesel set would feed the external_power input; today a scenario sets it.", ["s:external_supply"], "missing"),
+        ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
     ],
 }
 

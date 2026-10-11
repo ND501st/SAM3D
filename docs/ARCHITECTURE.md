@@ -141,5 +141,6 @@ roadmap phase 6:
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
 - Engagement: zones and the methods T/T, Горка, Ф and Н are selected; Н (ПОМЕХА on) is a label with К3 timing only, since
   no target jams yet (E5), and the NVA's crossing-offset limit is missing. (6.7)
-- Power: GTA, take-off generator and an external supply (a scenario input); no grid or diesel set yet. (7.6)
+- Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario
+  block (7.6). No emplacements, nets or dummy positions yet.
 - PU-12 board and voice designations are built (7.1, 7.2); the board still plots the scenario's targets, not a regiment radar picture.
