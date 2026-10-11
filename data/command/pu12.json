@@ -12,6 +12,11 @@
       "notes": "The manual's example number; any two-digit tactical number would do." },
     "navigation_error_deg": { "value": 5, "source": "flak11 (PU-12M navigation errors up to 5 degrees and 3 km)", "confidence": "high",
       "notes": "Drawn once per board, uniformly up to this much (the distribution is a sam3d estimate)." },
+    "designation_range_m": { "value": 50000, "source": "samsim_osa p21 (the crew waits until the target track approaches the 50 km range circle, then starts)", "confidence": "medium",
+      "notes": "Targets inside this range of the battery are designated to the vehicle by voice." },
+    "operator_delay_s": { "value": 4, "source": "estimate (the same as the R-123M's operator delay in data/em/osa_ak.json)", "confidence": "estimate" },
+    "message_s": { "value": 8, "source": "estimate (one designation read out: number, azimuth, range; the same as the R-123M's message time in data/em/osa_ak.json); flak11 (designations by voice radio, azimuth and range, to each vehicle)", "confidence": "estimate" },
+    "pass_on_s": { "value": 2, "source": "estimate (the vehicle commander passing the designation to his crew)", "confidence": "estimate" },
     "navigation_error_m": { "value": 3000, "source": "flak11 (PU-12M navigation errors up to 5 degrees and 3 km)", "confidence": "high",
       "notes": "Drawn once per board, uniformly over a disc of this radius (sam3d estimate)." }
   }

@@ -369,12 +369,25 @@ private:
             contacts.push_back(c);
         }
         const std::size_t before = board_->Marks().size();
-        if (!board_->Update(time_, contacts)) return;
-        for (std::size_t k = before; k < board_->Marks().size(); ++k) {
-            const BoardMark& m = board_->Marks()[k];
-            bool first = true;
-            for (std::size_t j = 0; j < before && first; ++j) first = board_->Marks()[j].target_id != m.target_id;
-            if (first) log_.Record({time_, DebriefEntry::Kind::Scenario, "PU-12", m.target_id, "on the board: " + board_->Describe(m)});
+        if (board_->Update(time_, contacts)) {
+            for (std::size_t k = before; k < board_->Marks().size(); ++k) {
+                const BoardMark& m = board_->Marks()[k];
+                bool first = true;
+                for (std::size_t j = 0; j < before && first; ++j) first = board_->Marks()[j].target_id != m.target_id;
+                if (first) log_.Record({time_, DebriefEntry::Kind::Scenario, "PU-12", m.target_id, "on the board: " + board_->Describe(m)});
+            }
+        }
+        UpdateDesignations();
+    }
+
+    // The battery commander's voice designations reaching the vehicle's crew (roadmap 7.2).
+    void UpdateDesignations() {
+        for (const BoardMark& m : board_->PollHeard(time_)) {
+            const PlottingBoard::Designation d = board_->DesignationFor(m, def_.unit_position);
+            char detail[96];
+            std::snprintf(detail, sizeof(detail), "designation %04d: azimuth %02d-%02d, range %.0f km, height %d hm", m.number,
+                          d.azimuth_mils / 100, d.azimuth_mils % 100, d.range_m / 1000.0, m.height_hm);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", m.target_id, detail});
         }
     }
 
