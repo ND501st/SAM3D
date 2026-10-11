@@ -187,8 +187,50 @@ public:
         const double f = 0.5 * (r.freq_min_hz + r.freq_max_hz);
         const int net = world_.AddNet("net " + id, radio_id, f, {node, node_});
         if (net == 0) return false;
-        radio_sources_.push_back({id, node, net});
+        radio_sources_.push_back({id, node, net, {}});
         return true;
+    }
+
+    // A voice message from radio source `id` goes on the air from start_s to end_s (times the sender worked out). `tag`
+    // names it to VoiceOutcome. It radiates (ESM can hear it) and the link budget decides at its end whether the unit got it.
+    void SendVoice(const std::string& id, long long tag, double start_s, double end_s) {
+        em::EmScene& s = world_.Scene();
+        for (RadioSource& rs : radio_sources_) {
+            if (rs.id != id) continue;
+            em::NetState* net = s.FindNet(rs.net);
+            const em::NodeState* a = s.FindNode(rs.node);
+            if (net == nullptr || a == nullptr) return;
+            const long long mid = em::SendVoice(s, *net, *a, node_, start_s, end_s);
+            rs.voice.emplace_back(tag, mid);
+            return;
+        }
+    }
+
+    bool HasRadioSource(const std::string& id) const {
+        for (const RadioSource& rs : radio_sources_) {
+            if (rs.id == id) return true;
+        }
+        return false;
+    }
+
+    // 1 delivered, 0 lost, -1 not decided yet (or unknown).
+    int VoiceOutcome(const std::string& id, long long tag) {
+        em::EmScene& s = world_.Scene();
+        for (RadioSource& rs : radio_sources_) {
+            if (rs.id != id) continue;
+            for (const auto& v : rs.voice) {
+                if (v.first != tag) continue;
+                for (const em::VoiceResult& r : s.voice_results) {
+                    if (r.message_id == v.second && r.node == node_) {
+                        const int out = r.delivered ? 1 : 0;
+                        s.voice_results.erase(s.voice_results.begin() + (&r - s.voice_results.data()));
+                        rs.voice.erase(rs.voice.begin() + (&v - rs.voice.data()));
+                        return out;
+                    }
+                }
+            }
+        }
+        return -1;
     }
 
     // Chance a transmission from radio source `id` reaches the unit now (the EM layer's own delivery law); -1: unknown.
@@ -604,6 +646,7 @@ private:
         std::string id;
         int node;
         int net;
+        std::vector<std::pair<long long, long long>> voice;  // (sender's tag, EM message id)
     };
     std::vector<RadioSource> radio_sources_;
     int node_ = 0;
@@ -632,6 +675,11 @@ public:
         const double p = link_->RadioDeliveryProbability(source.id);
         return p < 0.0 ? 1.0 : p;  // a source without an EM radio is not affected
     }
+    bool HasRadio(const C2SourceDef& source) override { return link_->HasRadioSource(source.id); }
+    void SendVoice(const C2SourceDef& source, long long tag, double start_s, double end_s) override {
+        link_->SendVoice(source.id, tag, start_s, end_s);
+    }
+    int VoiceOutcome(const C2SourceDef& source, long long tag) override { return link_->VoiceOutcome(source.id, tag); }
 
 private:
     EmSensorLink* link_;

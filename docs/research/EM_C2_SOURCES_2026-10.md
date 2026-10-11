@@ -32,6 +32,12 @@ Implementation: `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, scenar
 * Changing takes `switch_s` (6 s, an estimate): nothing is heard meanwhile; what the other source said meanwhile is lost.
 * Links: outages (scripted or `c2_fail`), link range from the vehicle, and a `C2LinkModel` (the EM link budget plugs in here).
 
+## Voice designations as EM messages (done 11 Oct 2026)
+
+For a source with an EM radio, each designation is an `em::Message` of the new kind `Voice` (`em::SendVoice`): the board works out when the operator starts and stops reading (shared voice net, 4 s delay, 8 s message); the message goes on the air for exactly those times, so it radiates (ESM can hear and DF it), and at its end the EM layer's delivery law decides, with the jammers and co-site interference of that moment, whether the vehicle got it (`EmSensorLink::SendVoice`, `VoiceOutcome`). A lost message is never heard; the commander's fallback sees the silence. Test: a barrage jammer switched on at 100 s makes the later designations fail. Sources without an EM radio keep the earlier draw.
+
+Not done: a transmission cancelled by an outage still radiates in the EM scene.
+
 ## Not done / open
 
 * Done 11 Oct: with an `own_unit.em` block, every source that has a `position` gets an EM radio (`radio`, default `r123m`) on a two-member net with the unit (`EmSensorLink::AddRadioSource`, `EmC2LinkModel`). Its words get through with the EM layer's delivery law (propagation, terrain, noise jamming, co-site desense from the unit's radars): in the test a source 4 km away carries (p = 1.00) and one 60 km away does not (p = 0.00). A VHF barrage jammer 1.6 km from the vehicle takes a PU-12 given a `position` from p = 1.0 to 0.0 (test). Sources without a position (the PU-12 by default) are unaffected: give it one in the scenario's `c2.sources` entry for `pu12`.

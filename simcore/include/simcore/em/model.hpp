@@ -425,7 +425,8 @@ inline const char* C2StatusName(C2Status s) {
     return "?";
 }
 
-enum class MessageKind { TrackReport, Picture };
+// Voice: one spoken message (a designation read out) with no track payload; its timing is set by the sender.
+enum class MessageKind { TrackReport, Picture, Voice };
 
 struct NetState {
     int id = 0;
@@ -471,6 +472,13 @@ struct Message {
     int hops = 0;
     std::vector<KnowledgeTrack> tracks;
     bool done = false;
+};
+
+// The fate of a voice message at its addressee, for whoever sent it.
+struct VoiceResult {
+    long long message_id = 0;
+    int node = 0;
+    bool delivered = false;
 };
 
 struct LinkState {
@@ -625,6 +633,7 @@ struct EmScene {
     std::vector<NodeState> nodes;
     std::vector<NetState> nets;
     std::vector<Message> messages;  // queued or on the air
+    std::vector<VoiceResult> voice_results;  // outcomes of voice messages (the sender collects them)
     std::vector<LinkState> links;
     std::vector<EmEvent> events;
     EmStats stats;

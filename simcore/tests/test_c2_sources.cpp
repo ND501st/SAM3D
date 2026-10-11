@@ -571,3 +571,37 @@ SC_TEST("c2: a VHF barrage jammer cuts a source's EM link; a PU-12 with a place 
     SC_EXPECT(before > 0.9);
     SC_EXPECT(after < 0.5);
 }
+
+SC_TEST("c2: designations on an EM radio go on the air as voice messages: radiated, delayed, and lost to a jammer") {
+    std::string text = C2ScenarioText(R"({ "library": "command/c2_sources.json", "primary": "pu12",
+        "sources": [ { "id": "pu12", "position": { "east_m": 0, "north_m": 6000, "up_m": 0 } } ] })", "");
+    const std::string from = "\"readiness\": \"deployed\",";
+    text.replace(text.find(from), from.size(),
+                 from + " \"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\","
+                        " \"extra_libraries\": [\"em/generic.json\"],"
+                        " \"jammers\": [ { \"jammer\": \"generic_vhf_barrage\", \"position\": { \"east_m\": 500, \"north_m\": 1500, \"up_m\": 0 },"
+                        " \"on_at_s\": 100 } ] },");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(Load(text, def, console, error));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    if (runner.Em() == nullptr) {
+        SC_EXPECT(false);
+        return;
+    }
+    for (int i = 0; i < 300; ++i) runner.Step(0.1);  // 30 s, jammer off
+    // the plot of 0 s was read out 4-12 s (EM message), delivered, and told at 14 s
+    SC_EXPECT(runner.C2()->HeardFrom("t1") == "pu12");
+    int sent = 0, delivered = 0;
+    for (const em::EmEvent& e : runner.Em()->World().Scene().events) {
+        if (e.kind == em::EmEventKind::MessageSent) ++sent;
+        if (e.kind == em::EmEventKind::MessageDelivered) ++delivered;
+    }
+    std::printf("    EM events: %d voice messages sent, %d delivered\n", sent, delivered);
+    SC_EXPECT(sent >= 1 && delivered >= 1);
+    // the plot of 120 s goes out under the jammer: lost
+    for (int i = 0; i < 1500; ++i) runner.Step(0.1);  // to 180 s
+    SC_EXPECT(runner.C2()->BoardOf("pu12")->LostCount() >= 1);
+    SC_EXPECT(runner.Debrief().find("PU-12") != std::string::npos);
+}

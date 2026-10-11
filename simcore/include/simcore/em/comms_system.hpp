@@ -186,6 +186,25 @@ inline std::vector<KnowledgeTrack> PictureItems(const NodeState& n, double now) 
     return out;
 }
 
+// Put a spoken message on a net with the timing its sender worked out (the voice net is shared with other senders
+// the sender knows about). It radiates while it is on the air and is delivered or lost like any other message.
+inline long long SendVoice(EmScene& s, NetState& net, const NodeState& from, int to, double start_s, double end_s) {
+    Message m;
+    m.id = s.next_message_id++;
+    m.kind = MessageKind::Voice;
+    m.net = net.id;
+    m.from_node = from.id;
+    m.origin_node = from.id;
+    m.to_node = to;
+    m.queued_s = s.time_s;
+    m.start_s = start_s;
+    m.end_s = end_s;
+    if (end_s > net.busy_until_s) net.busy_until_s = end_s;
+    s.messages.push_back(m);
+    s.Log(EmEventKind::MessageSent, from.id, static_cast<int>(m.id), from.name + " -> " + std::to_string(to) + " on " + net.name + ": voice");
+    return m.id;
+}
+
 inline void Deliver(EmScene& s, NodeState& b, const Message& m) {
     if (m.to_node != 0 && m.to_node != b.id) {
         // Not for us: a relay passes it on into its other nets.
@@ -284,6 +303,7 @@ inline void RunComms(EmScene& s, bool evaluate_links) {
             const LinkState l = EvaluateLink(s, *net, *from, *b);
             const double p = l.up ? 1.0 / (1.0 + std::exp(-l.margin_db / 2.0)) : 0.0;
             const bool ok = s.rng.Uniform(Stream::CommsDelivery, Key(static_cast<long long>(m.id)), Key(member)) < p;
+            if (m.kind == MessageKind::Voice && m.to_node == member) s.voice_results.push_back({m.id, member, ok});
             if (ok) {
                 s.Log(EmEventKind::MessageDelivered, member, static_cast<int>(m.id),
                       from->name + " -> " + b->name + " (" + std::to_string(static_cast<int>(l.margin_db)) + " dB margin, " +

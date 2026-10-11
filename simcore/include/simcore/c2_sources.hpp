@@ -234,6 +234,13 @@ public:
     virtual ~C2LinkModel() = default;
     // The chance one transmission from `source` reaches the vehicle at time t (0 to 1).
     virtual double DeliveryProbability(const C2SourceDef& source, const Vec3& unit, double t) = 0;
+
+    // A link with a real radio carries a source's voice messages itself (the EM layer: they go on the air for the times
+    // the network worked out, radiate, and are delivered or lost by the link budget at the end of the transmission).
+    virtual bool HasRadio(const C2SourceDef&) { return false; }
+    virtual void SendVoice(const C2SourceDef&, long long /*tag*/, double /*start_s*/, double /*end_s*/) {}
+    // 1 delivered, 0 lost, -1 not decided yet.
+    virtual int VoiceOutcome(const C2SourceDef&, long long /*tag*/) { return -1; }
 };
 
 class C2Network {
@@ -526,10 +533,21 @@ private:
                 }
             }
         }
-        s.board->ResolveMessages(t, [&](const BoardMark&, double ended) {
-            const bool ok = Carried(s, ended, t);
-            if (ok) s.last_contact_s = t > s.last_contact_s ? t : s.last_contact_s;
-            return ok;
+        const bool on_radio = link_model_ != nullptr && link_model_->HasRadio(s.def);
+        if (on_radio) {
+            for (const PlottingBoard::Sent& m : s.board->TakeUnsent()) link_model_->SendVoice(s.def, static_cast<long long>(m.index), m.start_s, m.end_s);
+        }
+        s.board->ResolveMessages(t, [&](const BoardMark&, double ended, std::size_t index) {
+            int r = 1;
+            if (DownAt(s, ended) || !InReach(s)) {
+                r = 0;
+            } else if (on_radio) {
+                r = link_model_->VoiceOutcome(s.def, static_cast<long long>(index));
+            } else {
+                r = Carried(s, ended, t) ? 1 : 0;
+            }
+            if (r > 0) s.last_contact_s = t > s.last_contact_s ? t : s.last_contact_s;
+            return r;
         });
         const double period = s.def.board.update_period_s;
         const double since = t - s.last_contact_s;

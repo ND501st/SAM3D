@@ -264,12 +264,33 @@ public:
 
     // Messages whose voice transmission ended by t and whose fate nobody has decided yet: `deliver(mark, ended_s)`
     // says whether the crew gets it (a gated board only; see SetGated).
+    // `deliver(mark, ended_s, index)` returns 1 delivered, 0 lost, -1 not known yet (asked again next time).
     template <typename F>
     void ResolveMessages(double t, F&& deliver) {
-        for (Message& m : messages_) {
+        for (std::size_t i = 0; i < messages_.size(); ++i) {
+            Message& m = messages_[i];
             if (m.state != Message::State::Pending || m.air_end_s > t + 1e-9) continue;
-            m.state = deliver(m.mark, m.air_end_s) ? Message::State::Delivered : Message::State::Lost;
+            const int r = deliver(m.mark, m.air_end_s, i);
+            if (r >= 0) m.state = r > 0 ? Message::State::Delivered : Message::State::Lost;
         }
+    }
+
+    // Messages queued since the last call, with the times their voice transmission starts and ends (for a radio that
+    // carries them, c2_sources.hpp). `index` identifies the message to `ResolveMessages`.
+    struct Sent {
+        std::size_t index = 0;
+        double start_s = 0.0;
+        double end_s = 0.0;
+    };
+    std::vector<Sent> TakeUnsent() {
+        std::vector<Sent> out;
+        for (std::size_t i = 0; i < messages_.size(); ++i) {
+            if (!messages_[i].sent) {
+                messages_[i].sent = true;
+                out.push_back({i, messages_[i].start_s, messages_[i].air_end_s});
+            }
+        }
+        return out;
     }
 
     // The source went quiet at t: what it had queued but not yet begun to read out is never sent, and the channel is
@@ -370,6 +391,7 @@ private:
         double air_end_s = 0.0;  // the voice transmission ends
         double known_s = 0.0;    // when the vehicle's crew has it
         bool reported = false;
+        bool sent = false;       // handed to a radio (TakeUnsent)
         State state = State::Pending;  // an ungated board treats Pending as delivered
     };
 
