@@ -17,6 +17,10 @@
   ],
 
   "panels": [
+    { "id": "radio_left_panel", "label": "R-123M (left)", "station": "driver", "centre_m": [-0.533, 3.28, 1.24], "facing_deg": 90, "tilt_deg": 0, "size_m": [0.48, 0.24],
+      "notes": "The front of the left R-123M set (shell radio_left), facing into the cabin. Preset selector: sam3d placement; the set itself: mon_2112_80 Fig. 3." },
+    { "id": "radio_right_panel", "label": "R-123M (right)", "station": "commander", "centre_m": [0.553, 3.215, 0.8], "facing_deg": -90, "tilt_deg": 0, "size_m": [0.48, 0.24],
+      "notes": "The front of the right R-123M set (shell radio_right), to the commander's right (mon_2112_80 Fig. 3), with the headset selector. Placement: sam3d." },
     { "id": "driver_panel", "label": "Driver", "station": "driver", "centre_m": [-0.36, 4.6, 1.47], "facing_deg": 180, "tilt_deg": 20,
       "size_m": [0.5, 0.3], "notes": "Two rows of gauges (rwd_mb3 9a33_31; positions estimated from the photo). Driver's instrument panel ahead of the seat (mon_2112_80 Fig. 3 (plan and wall views of the 9A33BM2, scaled from SŁ-2M = 1.89 m, about 4.7 mm per pixel of the extracted drawing); rwd_mb3 9a33_31). Layout: SAM3D estimate." },
     { "id": "pu303_panel", "label": "Power-supply panel PU-303 (driver)", "station": "driver", "centre_m": [-0.87, 4.44, 1.42],
@@ -53,6 +57,9 @@
   ],
 
   "controls": [
+    { "control": "radio.left.preset", "panel": "radio_left_panel", "at_m": [0.0, 0.0], "style": "rotary" },
+    { "control": "radio.right.preset", "panel": "radio_right_panel", "at_m": [-0.1, 0.0], "style": "rotary" },
+    { "control": "radio.headset", "panel": "radio_right_panel", "at_m": [0.12, 0.0], "style": "toggle" },
     { "control": "pwr.gta", "panel": "pu303_panel", "at_m": [-0.07, 0.05] },
     { "control": "pwr.pto", "panel": "pu303_panel", "at_m": [0.07, 0.05] },
     { "control": "gyro.arrest", "panel": "driver_panel", "at_m": [0.15, 0.05] },

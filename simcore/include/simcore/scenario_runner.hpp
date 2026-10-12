@@ -403,9 +403,43 @@ private:
             contacts.push_back(c);
         }
         c2_->Update(time_, contacts, def_.unit_position);
+        SyncRadios();
         for (const C2Network::Event& e : c2_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
         }
+    }
+
+    // The R-123M controls and the command network (the console's radio.left.preset, radio.right.preset, radio.headset): a
+    // control the crew moves asks the network to tune a set or move the headset (it follows after the select time); a
+    // change the network makes itself (the commander falling back) moves the control. Absent controls are skipped.
+    void SyncRadios() {
+        static const char* const ids[3] = {"radio.left.preset", "radio.right.preset", "radio.headset"};
+        ControlPanel& pan = console_.panel;
+        const auto radios = c2_->Radios();
+        const int now[3] = {radios[0].preset - 1, radios[1].preset - 1, c2_->ListeningSet()};
+        for (int i = 0; i < 3; ++i) {
+            if (pan.Find(ids[i]) == nullptr) continue;
+            const int p = pan.Get(ids[i]);
+            if (!radio_synced_) {
+                pan.Set(ids[i], now[i]);
+            } else if (p != radio_panel_[i]) {
+                radio_want_[i] = p;  // the crew moved it
+            } else if (now[i] != radio_now_[i] && radio_want_[i] < 0) {
+                pan.Set(ids[i], now[i]);  // the network changed it
+            }
+            if (radio_want_[i] >= 0) {
+                if (now[i] == radio_want_[i]) {
+                    radio_want_[i] = -1;
+                } else if (i < 2) {
+                    c2_->TuneSet(i, radio_want_[i] + 1, time_, "Crew");
+                } else {
+                    c2_->ListenToSet(radio_want_[i], time_, "Crew");
+                }
+            }
+            radio_panel_[i] = pan.Get(ids[i]);
+            radio_now_[i] = now[i];
+        }
+        radio_synced_ = true;
     }
 
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
@@ -508,6 +542,10 @@ private:
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
     std::unique_ptr<Launcher> launcher_;
     std::unique_ptr<FuelModel> fuel_;
+    bool radio_synced_ = false;
+    int radio_panel_[3] = {-1, -1, -1};
+    int radio_now_[3] = {-1, -1, -1};
+    int radio_want_[3] = {-1, -1, -1};
     std::unique_ptr<EmC2LinkModel> c2_link_;
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;

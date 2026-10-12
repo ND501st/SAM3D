@@ -326,6 +326,8 @@ public:
         }
         return out;
     }
+    // The set the headset is on (0 left, 1 right).
+    int ListeningSet() const { return listening_; }
     // The source on preset 1..4 ("" : free).
     const std::string& PresetSource(int preset) const {
         static const std::string none;

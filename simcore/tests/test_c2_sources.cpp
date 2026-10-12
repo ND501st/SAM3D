@@ -666,3 +666,38 @@ SC_TEST("c2: a silent source that is on no set is found by turning the standby s
     for (const C2Network::Event& e : n.TakeEvents()) probed = probed || e.text.find("listens for") != std::string::npos;
     SC_EXPECT(probed);
 }
+
+SC_TEST("c2: the R-123M controls in the cabin tune the sets and move the headset, and follow the commander's own changes") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(Load(C2ScenarioText(R"({ "library": "command/c2_sources.json", "primary": "pu12", "fallback_order": ["ewr_north", "obs"],
+        "presets": ["pu12", "ewr_north", "obs"],
+        "sources": [ { "id": "ewr_north", "type": "ewr_voice", "position": { "east_m": 0, "north_m": 25000, "up_m": 0 } },
+                     { "id": "obs", "type": "observation_post", "position": { "east_m": 0, "north_m": 3000, "up_m": 0 } } ] })", ""),
+                   def, console, error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner runner(std::move(def), std::move(console));
+    ControlPanel& panel = runner.Console().panel;
+    SC_EXPECT(panel.Find("radio.left.preset") && panel.Find("radio.right.preset") && panel.Find("radio.headset"));
+    for (int i = 0; i < 5; ++i) runner.Step(0.1);
+    // the panel shows the plan: left on preset 1 (pu12, listening), right on preset 2
+    SC_EXPECT(panel.Get("radio.left.preset") == 0 && panel.Get("radio.right.preset") == 1 && panel.Get("radio.headset") == 0);
+    // the crew turns the right set to preset 3 (the observation post); the sim follows after select_s
+    SC_EXPECT(panel.Set("radio.right.preset", 2));
+    for (int i = 0; i < 20; ++i) runner.Step(0.1);
+    SC_EXPECT(runner.C2()->Radios()[1].preset == 2);  // 2 s: not yet (select_s is 3 s)
+    for (int i = 0; i < 30; ++i) runner.Step(0.1);
+    SC_EXPECT(runner.C2()->Radios()[1].preset == 3 && runner.C2()->Radios()[1].source == "obs");
+    // and takes the headset to the right set
+    SC_EXPECT(panel.Set("radio.headset", 1));
+    for (int i = 0; i < 50; ++i) runner.Step(0.1);
+    SC_EXPECT(runner.C2()->ActiveId() == "obs" && runner.C2()->ListeningSet() == 1);
+    // the player's API changes source: the controls follow
+    SC_EXPECT(runner.RequestC2Source("ewr_north", "Player"));
+    for (int i = 0; i < 60; ++i) runner.Step(0.1);
+    SC_EXPECT(runner.C2()->ActiveId() == "ewr_north");
+    const int shown_set = panel.Get("radio.headset");
+    SC_EXPECT(panel.Get(shown_set == 0 ? "radio.left.preset" : "radio.right.preset") == runner.C2()->Radios()[static_cast<std::size_t>(shown_set)].preset - 1);
+    SC_EXPECT(shown_set == runner.C2()->ListeningSet());
+}

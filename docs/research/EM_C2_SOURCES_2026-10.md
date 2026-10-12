@@ -47,7 +47,7 @@ Source picking now goes through the vehicle's radios, not an abstract switch. Th
 * the commander only knows whether the sources on the two sets are alive; if the listened-to one goes silent and the other is silent too, he turns the standby set to the next on his list (a probe), then moves to it if it answers. This replaces the earlier assumption that he knows every source's state;'
 * by hand: `TuneSet`, `ListenToSet`, `RequestSource`; Unreal: `TuneC2Radio`, `ListenToC2Radio`, `GetC2RadioPreset`, `GetC2PresetSource` (unbuilt).'
 '
-Not done: the cabin controls on the R-123M sets themselves (the cabin has the meshes `radio_left` and `radio_right`, `data/cabins/osa_ak.json`, but no preset knobs as console controls).'
+Cabin controls (done 12 Oct 2026): `radio.left.preset` (driver's side), `radio.right.preset` and `radio.headset` (commander) in `data/procedures/osa_ak.json`, placed on two new panels on the fronts of the R-123M meshes (`radio_left_panel`, `radio_right_panel`, `data/cabins/osa_ak.json`). The runner keeps them in step with the network (`SyncRadios`): a control the crew moves tunes the set or moves the headset after `select_s`; a change the commander makes moves the control. Positions of the panels are estimates (the meshes' fronts are generic). Not done: radio audio and a procedure for NPC crew to use the knobs.'
 '
 ## Not done / open'
 '
