@@ -356,34 +356,34 @@ bool USimWorldSubsystem::RequestC2Source(const FString& SourceId, const FString&
 
 bool USimWorldSubsystem::TuneC2Radio(int32 Set, int32 Preset)
 {
-	simcore::ScenarioRunner* Runner = GetScenarioRunner();
-	return Runner != nullptr && Runner->TuneC2Radio(Set, Preset, "Player");
+	simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	return ActiveRunner != nullptr && ActiveRunner->TuneC2Radio(Set, Preset, "Player");
 }
 
 bool USimWorldSubsystem::ListenToC2Radio(int32 Set)
 {
-	simcore::ScenarioRunner* Runner = GetScenarioRunner();
-	return Runner != nullptr && Runner->ListenToC2Radio(Set, "Player");
+	simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	return ActiveRunner != nullptr && ActiveRunner->ListenToC2Radio(Set, "Player");
 }
 
 int32 USimWorldSubsystem::GetC2RadioPreset(int32 Set) const
 {
-	const simcore::ScenarioRunner* Runner = GetScenarioRunner();
-	if (Runner == nullptr || Runner->C2() == nullptr || Set < 0 || Set > 1)
+	const simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner == nullptr || ActiveRunner->C2() == nullptr || Set < 0 || Set > 1)
 	{
 		return 0;
 	}
-	return Runner->C2()->Radios()[static_cast<size_t>(Set)].preset;
+	return ActiveRunner->C2()->Radios()[static_cast<size_t>(Set)].preset;
 }
 
 FString USimWorldSubsystem::GetC2PresetSource(int32 Preset) const
 {
-	const simcore::ScenarioRunner* Runner = GetScenarioRunner();
-	if (Runner == nullptr || Runner->C2() == nullptr)
+	const simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner == nullptr || ActiveRunner->C2() == nullptr)
 	{
 		return FString();
 	}
-	return FString(UTF8_TO_TCHAR(Runner->C2()->PresetSource(Preset).c_str()));
+	return FString(UTF8_TO_TCHAR(ActiveRunner->C2()->PresetSource(Preset).c_str()));
 }
 
 FString USimWorldSubsystem::GetActiveC2Source() const
