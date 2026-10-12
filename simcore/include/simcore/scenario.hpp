@@ -493,7 +493,7 @@ private:
 
     // The command network: the PU-12 (when there is a command post) and the other sources the crew can switch to.
     //   "c2": { "library": "command/c2_sources.json", "primary": "pu12", "active": "pu12", "auto_fallback": true,
-    //           "fallback_order": ["ewr_north"], "switch_s": 6, "primary_stable_s": 60, "heard_life_s": 180,
+    //           "fallback_order": ["ewr_north"], "presets": ["pu12","ewr_north"], "select_s": 3, "retune_s": 30, "primary_stable_s": 60, "heard_life_s": 180,
     //           "sources": [ { "id": "ewr_north", "type": "ewr_voice", "position": {...}, "net": "battery_net",
     //                          "link_range_m": 30000, "outages": [ { "from_s": 300, "to_s": 420, "reason": "jammed" } ] },
     //                        { "id": "pu12", "outages": [...] } ] }
@@ -512,8 +512,8 @@ private:
         const json::Value* c = root.Find("c2");
         if (c == nullptr) return true;
         if (!c->Is(json::Type::Object) ||
-            !Keys(*c, "c2", {"library", "primary", "active", "auto_fallback", "fallback_order", "switch_s", "primary_stable_s",
-                             "heard_life_s", "sources", "regiment", "presets", "notes"})) {
+            !Keys(*c, "c2", {"library", "primary", "active", "auto_fallback", "fallback_order", "presets", "select_s", "retune_s", "primary_stable_s",
+                             "heard_life_s", "sources", "regiment", "notes"})) {
             return message_.empty() ? Fail("c2", "expected an object") : false;
         }
         out.c2_policy.heard_life_s = 180.0;  // with a network the crew forgets stale designations
@@ -521,12 +521,14 @@ private:
         if (!OptionalString(*c, "c2", "library", library_file) || !OptionalString(*c, "c2", "primary", out.c2_policy.primary) ||
             !OptionalString(*c, "c2", "active", out.c2_policy.active) ||
             !OptionalBool(*c, "c2", "auto_fallback", out.c2_policy.auto_fallback) ||
-            !OptionalNumber(*c, "c2", "switch_s", out.c2_policy.switch_s) ||
+            !OptionalNumber(*c, "c2", "select_s", out.c2_policy.select_s) ||
+            !OptionalNumber(*c, "c2", "retune_s", out.c2_policy.retune_s) ||
             !OptionalNumber(*c, "c2", "primary_stable_s", out.c2_policy.primary_stable_s) ||
             !OptionalNumber(*c, "c2", "heard_life_s", out.c2_policy.heard_life_s)) {
             return false;
         }
-        if (out.c2_policy.switch_s < 0.0) return Fail("c2.switch_s", "must be >= 0");
+        if (out.c2_policy.select_s < 0.0) return Fail("c2.select_s", "must be >= 0");
+        if (out.c2_policy.retune_s < 0.0) return Fail("c2.retune_s", "must be >= 0");
         if (out.c2_policy.primary_stable_s < 0.0) return Fail("c2.primary_stable_s", "must be >= 0");
         if (out.c2_policy.heard_life_s < 0.0) return Fail("c2.heard_life_s", "must be >= 0");
         C2Library lib;
@@ -538,6 +540,15 @@ private:
             for (std::size_t i = 0; i < order->items.size(); ++i) {
                 if (!order->items[i].Is(json::Type::String)) return Fail(Index("c2.fallback_order", i), "expected a source id");
                 out.c2_policy.fallback_order.push_back(order->items[i].string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* pr = OptionalArray(*c, "c2", "presets")) {
+            if (pr->items.size() > 4) return Fail("c2.presets", "the R-123M has four presets");
+            for (std::size_t i = 0; i < pr->items.size(); ++i) {
+                if (!pr->items[i].Is(json::Type::String)) return Fail(Index("c2.presets", i), "expected a source id");
+                out.c2_policy.presets.push_back(pr->items[i].string);
             }
         } else if (!message_.empty()) {
             return false;
@@ -631,10 +642,8 @@ private:
         for (const std::string& id : out.c2_policy.fallback_order) {
             if (!known(id)) return Fail("c2.fallback_order", "unknown source '" + id + "'");
         }
-        for (std::size_t i = 0; i < out.c2_policy.presets.size(); ++i) {
-            if (!out.c2_policy.presets[i].empty() && !known(out.c2_policy.presets[i])) {
-                return Fail(Index("c2.presets", i), "unknown source '" + out.c2_policy.presets[i] + "'");
-            }
+        for (const std::string& id : out.c2_policy.presets) {
+            if (!known(id)) return Fail("c2.presets", "unknown source '" + id + "'");
         }
         return true;
     }

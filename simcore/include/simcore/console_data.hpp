@@ -111,14 +111,6 @@ struct TrackSensorDef {
 // `hold_input` is set while the next one must wait (the console's armed subsystem should require it false, so
 // ПУСК ГОТОВ goes out and the crew waits; with no launcher running it stays false). When the selected missiles are spent, `pair_preparation` is
 // restarted for the next ones (instead of the console's launch "restarts" after every launch).
-// The vehicle's two R-123M radio sets (roadmap 7.8, optional): each has a preset selector (positions = presets 1..4), and
-// `listen` says which set the commander listens on (position 0 = the first set). The scenario's "c2.presets" says which
-// source each preset is tuned to.
-struct RadiosDef {
-    std::string listen;
-    std::vector<std::string> sets;  // one preset control per radio
-};
-
 struct LauncherContainerDef {
     std::string id;           // e.g. "1-I"
     int channel = 1;          // 1 = channel I, 2 = channel II
@@ -252,8 +244,6 @@ struct ConsoleData {
     OrientationDef orientation;
     bool has_launcher = false;
     LauncherDef launcher;
-    bool has_radios = false;
-    RadiosDef radios;
     bool has_fuel = false;
     FuelDef fuel;
     std::vector<ReadinessState> readiness;
@@ -286,7 +276,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "radios", "fuel", "readiness", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "fuel", "readiness", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -298,7 +288,7 @@ public:
         if (!LoadSubsystems(root, out.panel, out.equipment)) return false;
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
         if (!LoadLaunch(root, out)) return false;
-        if (!LoadLauncher(root, out) || !LoadRadios(root, out)) return false;
+        if (!LoadLauncher(root, out)) return false;
         if (!LoadFuel(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
@@ -698,30 +688,6 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             }
             out.readiness.push_back(std::move(st));
         }
-        return true;
-    }
-
-    bool LoadRadios(const json::Value& root, ConsoleData& out) {
-        const json::Value* v = root.Find("radios");
-        if (v == nullptr) return true;
-        const std::string p = "radios";
-        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
-        if (!Keys(*v, p, {"listen", "sets", "source", "confidence", "notes"}) || !Provenance(*v, p) ||
-            !RefControl(*v, p, "listen", out.panel, ControlKind::Discrete, true, out.radios.listen)) {
-            return false;
-        }
-        const json::Value* sets = OptionalArray(*v, p, "sets");
-        if (sets == nullptr || sets->items.size() != 2) {
-            return message_.empty() ? Fail(Join(p, "sets"), "expected two preset controls (radio I, II)") : false;
-        }
-        if (out.panel.Find(out.radios.listen)->positions != 2) return Fail(Join(p, "listen"), "needs two positions (radio I, II)");
-        for (std::size_t i = 0; i < 2; ++i) {
-            const json::Value& e = sets->items[i];
-            const ControlDef* c = e.Is(json::Type::String) ? out.panel.Find(e.string) : nullptr;
-            if (c == nullptr || c->kind != ControlKind::Discrete) return Fail(Index(Join(p, "sets"), i), "expected a discrete control");
-            out.radios.sets.push_back(e.string);
-        }
-        out.has_radios = true;
         return true;
     }
 
