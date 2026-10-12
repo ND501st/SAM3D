@@ -191,6 +191,8 @@ struct CabinPanel {
     double tilt_rad = 0.0;    // leaned back from vertical
     double width_m = 0.0;
     double height_m = 0.0;
+    bool bare = false;        // no plate of its own: the panel is the front of a mesh that has its own (an R-123M's), and only
+                              // carries the controls and lamps at their places on it
 
     // Unit vectors in the body frame: the face's normal, the operator's right along the face, and up the face.
     Vec3 Normal() const {
@@ -483,10 +485,11 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("panels", i);
             const json::Value& p = arr->items[i];
-            if (!Keys(p, path, {"id", "label", "station", "centre_m", "facing_deg", "tilt_deg", "size_m", "notes"})) {
+            if (!Keys(p, path, {"id", "label", "station", "centre_m", "facing_deg", "tilt_deg", "size_m", "bare", "notes"})) {
                 return false;
             }
             CabinPanel panel;
+            if (!OptionalBool(p, path, "bare", panel.bare)) return false;
             if (!RequireString(p, path, "id", panel.id) || !RequireString(p, path, "label", panel.label) ||
                 !RequireString(p, path, "station", panel.station) || !Number3(p, path, "centre_m", panel.centre_m) ||
                 !Degrees(p, path, "facing_deg", panel.facing_rad) || !Degrees(p, path, "tilt_deg", panel.tilt_rad) ||

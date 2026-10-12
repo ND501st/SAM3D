@@ -7,6 +7,7 @@ crash the editor's mesh builder). Run the art builders first:
     python tools/cabin_textures.py
     python tools/ue_import_cabin_interior.py              # everything
     python tools/ue_import_cabin_interior.py textures materials   # or some of: textures materials meshes
+    python tools/ue_import_cabin_interior.py meshes --only SM_RadioR123M   # only the named meshes (comma-separated)
 
 1. textures: art/cabin_textures/*.png -> /Game/SAM3D/Cabin/Textures (normal maps as normal maps, the grime masks
    linear, the panel faces sRGB colour).
@@ -52,6 +53,8 @@ MATERIALS = {
     'Duct_Grey': ((0.19, 0.19, 0.18), 0.78, 0.0, 0.5, 'PaintN', 0.3, 2.0, None),
     'Grate_Rubber': ((0.045, 0.024, 0.014), 0.8, 0.0, 0.5, 'PaintN', 0.3, 2.0, None),
     'Canvas': ((0.14, 0.13, 0.07), 0.9, 0.0, 0.5, 'VinylN', 0.4, 6.0, None),
+    'Paint_Letters': ((0.5, 0.48, 0.42), 0.5, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),   # engraved letters filled cream
+    'Paint_Red': ((0.3, 0.035, 0.012), 0.35, 0.0, 0.05, 'PaintN', 0.05, 4.0, None),
     'PanelFace': ((1.0, 1.0, 1.0), 0.5, 0.0, 0.0, 'PaintN', 0.18, 2.0, None),
 }
 
@@ -64,6 +67,7 @@ TEX = '/Game/SAM3D/Cabin/Textures'
 MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
+ONLY = %(only)r
 DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,
             'SM_RackSP2M': 2.0, 'SM_RackSP3M': 2.0, 'SM_OperatorBench': 2.0}
 MATERIALS = %(materials)r
@@ -261,6 +265,8 @@ def materials():
 
 def meshes():
     files = sorted(glob.glob(os.path.join(%(repo)r, 'art', 'cabin_interior', 'SM_*.fbx')))
+    if ONLY:
+        files = [f for f in files if os.path.splitext(os.path.basename(f))[0] in ONLY]
     pipe = unreal.InterchangeGenericAssetsPipeline()
     mp = pipe.get_editor_property('material_pipeline')
     # no materials from the FBX: the slots are bound to the cabin's instances below, by name
@@ -272,7 +278,11 @@ def meshes():
         except Exception as e:
             print('skip', prop, e)
     mesh_pipe = pipe.get_editor_property('mesh_pipeline')
-    for prop, value in (('collision', False), ('build_nanite', True)):
+    # Nanite builds the fallback mesh LOD0 from a reduced copy: the radio's letters and screws would be gone from it. So
+    # a run that imports only meshes that don't want Nanite builds none; a full run imports them with it, and the code
+    # below turns it off for them (they keep their reduced fallback, fine for glass, wrong for the radio: import it alone).
+    only_plain = bool(files) and all(os.path.splitext(os.path.basename(f))[0] in ('SM_RadioR123M',) for f in files)
+    for prop, value in (('collision', False), ('build_nanite', not only_plain)):
         try:
             mesh_pipe.set_editor_property(prop, value)
         except Exception as e:
@@ -294,7 +304,7 @@ def meshes():
                 sm.set_material(i, mi)
             else:
                 print('no material for slot', name, slot)
-        if name == 'SM_OsaGlass':
+        if name in ('SM_OsaGlass', 'SM_RadioR123M'):   # glass; and the radio, whose letters and screws are millimetres thick: Nanite drops them
             ns = sm.get_editor_property('nanite_settings')
             ns.enabled = False
             sm.set_editor_property('nanite_settings', ns)
@@ -318,14 +328,20 @@ for step in STEPS:
 
 
 def main():
-    steps = sys.argv[1:] or ['textures', 'materials', 'meshes']
+    args = sys.argv[1:]
+    only = []
+    if '--only' in args:
+        i = args.index('--only')
+        only = [n for n in args[i + 1].split(',') if n]
+        args = args[:i] + args[i + 2:]
+    steps = args or ['textures', 'materials', 'meshes']
     for s in steps:
         if s not in ('textures', 'materials', 'meshes'):
             sys.exit('unknown step ' + s)
     if 'meshes' in steps and not glob.glob(os.path.join(REPO, 'art', 'cabin_interior', 'SM_*.fbx')):
         sys.exit('no meshes: run tools/blender/build_cabin_interior.py first')
     with Editor() as ue:
-        ok, out = ue.run(EDITOR % {'steps': steps, 'materials': MATERIALS, 'repo': REPO})
+        ok, out = ue.run(EDITOR % {'steps': steps, 'only': only, 'materials': MATERIALS, 'repo': REPO})
         print(out)
         if not ok:
             sys.exit(1)

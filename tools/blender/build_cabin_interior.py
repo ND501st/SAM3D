@@ -312,6 +312,7 @@ PREVIEW = {
     'Bakelite_Black': (0.02, 0.02, 0.02), 'Glass': (0.2, 0.25, 0.27), 'Lamp_Glass': (1.0, 0.9, 0.7),
     'Lamp_Blue': (0.1, 0.3, 0.6), 'Duct_Grey': (0.35, 0.36, 0.36), 'Grate_Rubber': (0.18, 0.1, 0.06),
     'Paint_Panel': (0.72, 0.71, 0.64), 'Canvas': (0.35, 0.33, 0.22),
+    'Paint_Letters': (0.8, 0.78, 0.7), 'Paint_Red': (0.62, 0.13, 0.05),
 }
 
 
@@ -850,30 +851,13 @@ def knob(b, centre, normal, r, mat='Bakelite_Black'):
 
 
 def build_r123m():
-    """R-123M radio set (mon_2112_80 Fig. 3 draws two, 0.48 x 0.14 m in plan): the transceiver on its shock-mounted
-    frame and the power unit beside it. Built with its front looking forward (+y); the front panel's layout is a
-    generic one (no source here for this vehicle's sets), so only the main features are modelled."""
-    b = Builder('SM_RadioR123M')
-    w, h, d = 0.36, 0.21, 0.13
-    b.box(-0.24, 0.24, -0.075, 0.075, -0.125, -0.105, 'Metal_Dark')               # mounting frame
-    for x in (-0.2, 0.2):
-        b.cylinder((x, 0.0, -0.105), (x, 0.0, -0.095), 0.025, 'Rubber_Black', seg=12)
-    b.box(-0.24, -0.24 + w, -d / 2, d / 2, -0.095, -0.095 + h, 'Paint_Radio')      # transceiver
-    b.box(-0.24 + w + 0.006, 0.24, -d / 2, d / 2, -0.095, -0.095 + 0.17, 'Paint_Radio')  # power unit
-    fx = d / 2
-    # front panel features: frequency scale window, tuning knob, preset switch, small knobs, toggles, handles
-    b.box(-0.21, -0.11, fx, fx + 0.004, 0.01, 0.075, 'Glass')
-    knob(b, (-0.06, fx, 0.04), (0, 1, 0), 0.026)
-    knob(b, (0.035, fx, 0.04), (0, 1, 0), 0.02)
-    for x in (-0.20, -0.15, -0.10, -0.05, 0.0, 0.05):
-        knob(b, (x, fx, -0.05), (0, 1, 0), 0.009)
-    for x in (0.08, 0.10):
-        b.cylinder((x, fx, -0.05), (x, fx + 0.02, -0.04), 0.003, 'Metal_Steel', seg=8)
-    for x in (-0.235, -0.24 + w - 0.005):
-        b.tube([(x, fx, 0.095), (x, fx + 0.03, 0.095), (x, fx + 0.03, -0.075), (x, fx, -0.075)], 0.006,
-               'Metal_Steel', seg=8)
-    b.cylinder((0.18, fx, 0.0), (0.18, fx + 0.02, 0.0), 0.016, 'Metal_Dark', seg=16)   # power unit connector
-    return finish(b, reuse=True)
+    """R-123M radio set, from the traced front panel (tools/blender/r123m_model.py; mon_2112_80 Fig. 3 draws two,
+    0.48 x 0.14 m in plan). Built with its front looking forward (+y). The cabin supplies the knobs of the functions it
+    simulates; the model has the casing, the plate with its wells, the preset drum under its cap, the windows, the plates
+    and the screws."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import r123m_model
+    return r123m_model.build(Builder, finish)
 
 
 def build_ta57():

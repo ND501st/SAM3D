@@ -268,6 +268,10 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	}
 	for (const simcore::CabinPanel& Panel : Layout->panels)
 	{
+		if (Panel.bare)
+		{
+			continue;  // the front of a mesh with a plate of its own (an R-123M): nothing to draw behind its controls
+		}
 		const FVector N = BodyDir(Panel.Normal());
 		const FVector U = BodyDir(Panel.Up());
 		UStaticMeshComponent* Mesh = AddMesh(CubeMesh, PanelColor);
@@ -293,7 +297,7 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	}
 	for (const simcore::CabinPanel& Panel : Layout->panels)
 	{
-		if (BuildPanelFace(*Layout, Panel))
+		if (!Panel.bare && BuildPanelFace(*Layout, Panel))
 		{
 			FacedPanels.Add(ToF(Panel.id));
 		}

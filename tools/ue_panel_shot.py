@@ -6,6 +6,7 @@ screenshot per panel. Stops Play at the end.
 
     python tools/ue_panel_shot.py radio_i_panel radio_ii_panel commander_panel
     python tools/ue_panel_shot.py --out out/panels --distance 0.45 --fov 55 radio_i_panel
+    python tools/ue_panel_shot.py --at -0.12,0.07 --distance 0.2 radio_right_panel      # close on a part of the panel
     python tools/ue_panel_shot.py --set rad1.preset=2 --set rad.listen=1 --wait 8 radio_i_panel
 
 --set moves a control (as a script would) before the shot; --wait is the sim seconds to let pass after the sets.
@@ -24,7 +25,7 @@ from ue_remote import Editor, EditorNotFound  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def camera_for_panel(panel_id, distance_m):
+def camera_for_panel(panel_id, distance_m, at_uv=(0.0, 0.0)):
     """Body-frame camera location (m) and (pitch, yaw) in degrees looking straight at the middle of a panel."""
     with open(os.path.join(REPO, "data", "cabins", "osa_ak.json"), encoding="utf-8") as f:
         cabin = json.load(f)
@@ -32,7 +33,10 @@ def camera_for_panel(panel_id, distance_m):
     facing, tilt = math.radians(panel["facing_deg"]), math.radians(panel["tilt_deg"])
     front = (math.sin(facing), math.cos(facing))
     normal = (front[0] * math.cos(tilt), front[1] * math.cos(tilt), math.sin(tilt))
-    eye = [panel["centre_m"][i] + distance_m * normal[i] for i in range(3)]
+    right = (-math.cos(facing), math.sin(facing), 0.0)
+    up = (-front[0] * math.sin(tilt), -front[1] * math.sin(tilt), math.cos(tilt))
+    point = [panel["centre_m"][i] + at_uv[0] * right[i] + at_uv[1] * up[i] for i in range(3)]
+    eye = [point[i] + distance_m * normal[i] for i in range(3)]
     look = [-n for n in normal]
     return eye, math.degrees(math.asin(look[2])), math.degrees(math.atan2(look[0], look[1]))
 
@@ -43,6 +47,7 @@ def main():
     parser.add_argument("--out", default=os.path.join(REPO, "out", "panel_shots"))
     parser.add_argument("--distance", type=float, default=0.5)
     parser.add_argument("--fov", type=float, default=60.0)
+    parser.add_argument("--at", default="0,0", help="look at this point of the panel, u,v in metres from its centre")
     parser.add_argument("--set", action="append", default=[], metavar="CONTROL=POS")
     parser.add_argument("--wait", type=float, default=3.0, help="sim seconds to pass after the sets")
     args = parser.parse_args()
@@ -69,7 +74,7 @@ def main():
             while query(ue, lamps).get("t", 0) < t0 + args.wait:
                 time.sleep(0.5)
             for panel in args.panels:
-                eye, pitch, yaw = camera_for_panel(panel, args.distance)
+                eye, pitch, yaw = camera_for_panel(panel, args.distance, tuple(float(x) for x in args.at.split(",")))
                 ok, out = ue.run(
                     "world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world()\n"
                     "car = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.SimOsaVehicle)[0]\n"
