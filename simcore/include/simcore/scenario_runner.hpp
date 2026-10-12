@@ -182,6 +182,9 @@ public:
     // The battery's early-warning and command sources, and which one the crew listens to (null: no command network).
     // `RequestSource` is how a player (or the UI) changes it.
     const C2Network* C2() const { return c2_.get(); }
+    // The two R-123M sets (0 left, 1 right): turn one to a preset 1-4, or take the headset to one.
+    bool TuneC2Radio(int set, int preset, const std::string& by = "Commander") { return c2_ && c2_->TuneSet(set, preset, time_, by); }
+    bool ListenToC2Radio(int set, const std::string& by = "Commander") { return c2_ && c2_->ListenToSet(set, time_, by); }
     bool RequestC2Source(const std::string& id, const std::string& by = "Commander", const std::string& why = std::string()) {
         return c2_ && c2_->RequestSource(id, time_, by, why);
     }

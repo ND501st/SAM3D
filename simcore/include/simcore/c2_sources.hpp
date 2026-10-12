@@ -124,7 +124,11 @@ struct C2Policy {
     std::string active;                  // who he listens to at the start ("" : the primary)
     bool auto_fallback = true;           // an NPC commander changes source when the active one goes silent
     std::vector<std::string> fallback_order;  // after the primary, in this order
-    double switch_s = 6.0;               // changing source: re-tuning the set, the call-up, until the first word (an estimate)
+    // The vehicle has two R-123M sets, each with four fixed presets (r123_refs), one frequency plan for both. The
+    // crew listens to one set; the other is the standby and is monitored. Presets name the sources on them ("" : free).
+    std::vector<std::string> presets;    // up to four source ids (empty: the primary, then the fallback list, then the rest)
+    double select_s = 3.0;               // turning a set to another preset, or to the other set, and the call-up (an estimate)
+    double retune_s = 30.0;              // putting a source that is on no preset onto one (an estimate)
     double primary_stable_s = 60.0;      // the main source must have been heard this long before he goes back to it
     double heard_life_s = 0.0;           // a designation older than this (from its plot) is forgotten (0: never)
 };
@@ -261,6 +265,7 @@ public:
         C2State state = C2State::Up;
         bool available = true;  // able to talk at all (not down, in reach)
         bool active = false;
+        bool monitored = false;  // on the preset of one of the two sets, so the commander can hear whether it is alive
         double last_contact_s = 0.0;
         int lost_messages = 0;
     };
@@ -295,26 +300,95 @@ public:
     }
     const C2Policy& Policy() const { return policy_; }
 
-    // The source the crew is listening to ("" while it changes or when it has none) and the one it is changing to.
+    // The source the crew is listening to ("" when off the net) and the one it is changing to.
     const std::string& ActiveId() const { return active_; }
-    bool Switching() const { return switching_; }
+    bool Switching() const { return op_.active; }
     const std::string& PendingId() const { return pending_; }
 
-    // The commander (or the scenario, or the player) changes source. Returns false for an unknown source or one he
-    // already has. "none" puts the vehicle on its own radar alone.
+    static constexpr int kPresets = 4;
+
+    // What a display shows for the two R-123M sets.
+    struct RadioView {
+        std::string name;    // "left" or "right"
+        int preset = 1;      // 1 to 4
+        std::string source;  // the source on that preset ("" : none)
+        bool listening = false;
+    };
+    std::vector<RadioView> Radios() const {
+        std::vector<RadioView> out;
+        for (int i = 0; i < 2; ++i) {
+            RadioView v;
+            v.name = i == 0 ? "left" : "right";
+            v.preset = sets_[i].preset;
+            v.source = presets_[static_cast<std::size_t>(sets_[i].preset - 1)];
+            v.listening = i == listening_ && !off_net_;
+            out.push_back(v);
+        }
+        return out;
+    }
+    // The source on preset 1..4 ("" : free).
+    const std::string& PresetSource(int preset) const {
+        static const std::string none;
+        return preset >= 1 && preset <= kPresets ? presets_[static_cast<std::size_t>(preset - 1)] : none;
+    }
+    // Is the source on the preset of one of the two sets, so that the commander hears whether it is alive?
+    bool Monitored(const std::string& id) const {
+        return !id.empty() && (presets_[static_cast<std::size_t>(sets_[0].preset - 1)] == id ||
+                               presets_[static_cast<std::size_t>(sets_[1].preset - 1)] == id);
+    }
+
+    // Turn a set (0 left, 1 right) to a preset (1..4). Takes select_s. The set's source is heard only if it is the
+    // one listened to. False for a bad set or preset, or a set already there.
+    bool TuneSet(int set, int preset, double t, const std::string& by) {
+        if (set < 0 || set > 1 || preset < 1 || preset > kPresets || op_.active) return false;
+        if (sets_[set].preset == preset) return false;
+        StartOp(set, preset, std::string(), false, t + policy_.select_s);
+        events_.push_back({t, by, "R-123M " + std::string(set == 0 ? "left" : "right"),
+                           "turns to preset " + std::to_string(preset)});
+        return true;
+    }
+    // Take the headset to a set (0 left, 1 right). Takes select_s.
+    bool ListenToSet(int set, double t, const std::string& by) {
+        if (set < 0 || set > 1 || op_.active || (set == listening_ && !off_net_)) return false;
+        StartOp(set, sets_[set].preset, std::string(), true, t + policy_.select_s);
+        events_.push_back({t, by, "R-123M " + std::string(set == 0 ? "left" : "right"), "takes the headset to this set"});
+        return true;
+    }
+
+    // The commander (or the scenario, or the player) changes source. A source on a preset takes select_s (the standby
+    // set is turned to it, or he moves to the set already on it); one on no preset needs the standby set re-tuned onto
+    // it (retune_s). The old source is heard until the change is made. Returns false for an unknown source or one he
+    // already has. "none" turns the vehicle off the net.
     bool RequestSource(const std::string& id, double t, const std::string& by, const std::string& why = std::string()) {
-        const bool autonomous = id == "none";
-        if (!autonomous && Find(id) == nullptr) return false;
-        if (!switching_ && (autonomous ? active_.empty() : active_ == id)) return false;
-        if (switching_ && pending_ == (autonomous ? std::string() : id)) return false;
-        switching_ = true;
-        pending_ = autonomous ? std::string() : id;
-        switch_done_s_ = t + policy_.switch_s;
-        active_.clear();  // listening to neither while the set is retuned
-        const Source* to = Find(pending_);
-        events_.push_back({t, by, autonomous ? "none" : id,
-                           autonomous ? std::string("takes the vehicle off the net: its own radar alone") + (why.empty() ? "" : " (" + why + ")")
-                                      : "changes to " + to->def.short_name + (why.empty() ? "" : " (" + why + ")")});
+        const std::string tail = why.empty() ? std::string() : " (" + why + ")";
+        if (id == "none") {
+            if (off_net_ && !op_.active) return false;
+            off_net_ = true;
+            op_ = Op();
+            pending_.clear();
+            active_.clear();
+            events_.push_back({t, by, "none", "takes the vehicle off the net: its own radar alone" + tail});
+            return true;
+        }
+        const Source* to = Find(id);
+        if (to == nullptr) return false;
+        const int k = PresetOf(id);
+        if (k > 0) {
+            int set = -1;
+            for (int i = 0; i < 2; ++i) {
+                if (sets_[i].preset == k && (set < 0 || i == 1 - listening_)) set = i;
+            }
+            if (set < 0) set = 1 - listening_;
+            if (!op_.active && set == listening_ && !off_net_ && active_ == id) return false;
+            if (op_.active && op_.listen && op_.set == set && op_.preset == k) return false;
+            StartOp(set, k, std::string(), true, t + policy_.select_s);
+        } else {
+            const int set = 1 - listening_;
+            if (op_.active && op_.listen && op_.assign == id) return false;
+            StartOp(set, sets_[set].preset, id, true, t + policy_.retune_s);
+        }
+        pending_ = id;
+        events_.push_back({t, by, id, "changes to " + to->def.short_name + tail});
         return true;
     }
 
@@ -338,25 +412,12 @@ public:
         unit_ = unit;
         if (!started_) {
             started_ = true;
-            if (policy_.active.empty()) policy_.active = policy_.primary;
-            if (Find(policy_.active) != nullptr) {
-                active_ = policy_.active;
-                Source* a = Find(active_);
-                a->board->DiscardHeard(t);
-            }
+            Start(t);
         }
         for (auto& sp : sources_) Run(*sp, t, truth);
-        if (switching_ && t + 1e-9 >= switch_done_s_) {
-            switching_ = false;
-            active_ = pending_;
-            pending_.clear();
-            if (Source* a = Find(active_)) {
-                a->board->DiscardHeard(t);  // what it said while the crew listened to the other is gone
-                events_.push_back({t, "Commander", active_, "has " + a->def.short_name + " on the net"});
-            }
-        }
-        if (!active_.empty()) Hear(*Find(active_), t);
-        if (policy_.auto_fallback && !switching_) Decide(t);
+        if (op_.active && t + 1e-9 >= op_.done_s) Complete(t);
+        if (!active_.empty() && !off_net_) Hear(*Find(active_), t);
+        if (policy_.auto_fallback && !op_.active) Decide(t);
         Expire(t);
     }
 
@@ -388,6 +449,7 @@ public:
             v.state = sp->state;
             v.available = sp->avail;
             v.active = sp->def.id == active_;
+            v.monitored = Monitored(sp->def.id);
             v.last_contact_s = sp->last_contact_s;
             v.lost_messages = sp->board->LostCount();
             out.push_back(v);
@@ -597,13 +659,97 @@ private:
         return out;
     }
 
+    struct Op {
+        bool active = false;
+        int set = 0;
+        int preset = 1;
+        std::string assign;  // a source to write onto the preset first (a re-tune)
+        bool listen = false; // and then listen to that set
+        double done_s = 0.0;
+    };
+
+    int PresetOf(const std::string& id) const {
+        for (int i = 0; i < kPresets; ++i) {
+            if (presets_[static_cast<std::size_t>(i)] == id) return i + 1;
+        }
+        return 0;
+    }
+
+    void StartOp(int set, int preset, const std::string& assign, bool listen, double done_s) {
+        op_.active = true;
+        op_.set = set;
+        op_.preset = preset;
+        op_.assign = assign;
+        op_.listen = listen;
+        op_.done_s = done_s;
+        const std::string& src = assign.empty() ? presets_[static_cast<std::size_t>(preset - 1)] : assign;
+        pending_ = listen ? src : std::string();
+    }
+
+    void Start(double t) {
+        // the frequency plan: the commander's choice first, then the rest
+        std::vector<std::string> plan = policy_.presets;
+        if (plan.empty()) {
+            plan = Preference();
+            for (const auto& sp : sources_) {
+                if (std::find(plan.begin(), plan.end(), sp->def.id) == plan.end()) plan.push_back(sp->def.id);
+            }
+        }
+        for (const std::string& id : plan) {
+            if (Find(id) != nullptr && PresetOf(id) == 0) {
+                for (std::string& slot : presets_) {
+                    if (slot.empty()) {
+                        slot = id;
+                        break;
+                    }
+                }
+            }
+        }
+        if (policy_.active.empty()) policy_.active = policy_.primary;
+        if (Find(policy_.active) != nullptr && PresetOf(policy_.active) == 0) presets_[0] = policy_.active;
+        const int k = Find(policy_.active) != nullptr ? PresetOf(policy_.active) : 0;
+        listening_ = 0;
+        sets_[0].preset = k > 0 ? k : 1;
+        int other = 0;
+        for (int i = 1; i <= kPresets && other == 0; ++i) {
+            if (i != sets_[0].preset && !presets_[static_cast<std::size_t>(i - 1)].empty()) other = i;
+        }
+        sets_[1].preset = other > 0 ? other : sets_[0].preset;
+        if (k > 0) {
+            active_ = policy_.active;
+            Find(active_)->board->DiscardHeard(t);
+        }
+    }
+
+    void Complete(double t) {
+        const Op op = op_;
+        op_ = Op();
+        pending_.clear();
+        if (!op.assign.empty()) presets_[static_cast<std::size_t>(op.preset - 1)] = op.assign;
+        sets_[op.set].preset = op.preset;
+        if (op.listen) {
+            listening_ = op.set;
+            off_net_ = false;
+        }
+        const std::string now = off_net_ ? std::string() : presets_[static_cast<std::size_t>(sets_[listening_].preset - 1)];
+        if (now != active_) {
+            active_ = now;
+            if (Source* a = Find(active_)) {
+                a->board->DiscardHeard(t);  // what it said while the crew listened to the other is gone
+                events_.push_back({t, "Commander", active_, "has " + a->def.short_name + " on the net"});
+            }
+        }
+    }
+
     void Decide(double t) {
+        if (off_net_) return;  // he took the vehicle off the net on purpose
         const Source* a = Find(active_);
         const std::vector<std::string> order = Preference();
-        if (a != nullptr && a->state != C2State::Silent) {
+        if (a == nullptr) return;
+        if (a->state != C2State::Silent) {
             // On a standby: go back to the main source once it has been heard steadily.
             const Source* p = Find(policy_.primary);
-            if (p != nullptr && a != p && p->state == C2State::Up) {
+            if (p != nullptr && a != p && Monitored(p->def.id) && p->state == C2State::Up) {
                 if (primary_up_since_ < 0.0) primary_up_since_ = t;
                 if (t - primary_up_since_ >= policy_.primary_stable_s) {
                     primary_up_since_ = -1.0;
@@ -614,13 +760,26 @@ private:
             }
             return;
         }
-        if (a == nullptr) return;  // he took the vehicle off the net on purpose, or is changing
         primary_up_since_ = -1.0;
+        // one he can hear on the other set
         for (const std::string& id : order) {
             const Source* c = Find(id);
-            if (c == nullptr || id == active_ || c->state == C2State::Silent) continue;
+            if (c == nullptr || id == active_ || !Monitored(id) || c->state == C2State::Silent) continue;
             RequestSource(id, t, "Commander", a->def.short_name + " silent");
             return;
+        }
+        // none on the sets: try the next on his list by turning the standby set to it
+        if (t >= probe_after_s_) {
+            for (const std::string& id : order) {
+                if (id == active_ || Monitored(id)) continue;
+                const int k = PresetOf(id);
+                const int set = 1 - listening_;
+                StartOp(set, k > 0 ? k : sets_[set].preset, k > 0 ? std::string() : id, false,
+                        t + (k > 0 ? policy_.select_s : policy_.retune_s));
+                probe_after_s_ = op_.done_s + 10.0;
+                events_.push_back({t, "Commander", id, "listens for " + Find(id)->def.short_name + " on the other set"});
+                return;
+            }
         }
         if (!told_none_) {
             told_none_ = true;
@@ -636,8 +795,15 @@ private:
     std::vector<std::pair<std::string, std::unique_ptr<VoiceChannel>>> nets_;
     std::string active_;
     std::string pending_;
-    bool switching_ = false;
-    double switch_done_s_ = 0.0;
+    Op op_;
+    struct Set {
+        int preset = 1;
+    };
+    Set sets_[2];
+    int listening_ = 0;
+    bool off_net_ = false;
+    std::vector<std::string> presets_ = std::vector<std::string>(4);
+    double probe_after_s_ = 0.0;
     double primary_up_since_ = -1.0;
     bool told_none_ = false;
     std::vector<Heard> heard_;

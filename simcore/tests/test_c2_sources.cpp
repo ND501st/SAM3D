@@ -208,10 +208,10 @@ SC_TEST("c2: two sources on one voice net delay each other; on separate nets the
     SC_EXPECT(shared.BoardOf("pu12")->Known(14.5).size() == 1);
 }
 
-SC_TEST("c2: the crew changes source: silent while the set is retuned, then it hears the new one only") {
+SC_TEST("c2: the crew changes source: the old one is heard until the sets are changed, then the new one only") {
     C2Policy policy;
     policy.auto_fallback = false;
-    policy.switch_s = 6.0;
+    policy.select_s = 6.0;
     C2Network n(policy, 1);
     n.AddSource(Pu12(), Vec3{});
     n.AddSource(Make("ewr_voice", "ewr", Vec3{0.0, 10000.0, 0.0}), Vec3{});
@@ -221,7 +221,7 @@ SC_TEST("c2: the crew changes source: silent while the set is retuned, then it h
     SC_EXPECT(!n.RequestSource("pu12", 30.0, "Commander"));       // already listening to it
     SC_EXPECT(!n.RequestSource("nobody", 30.0, "Commander"));     // unknown
     SC_EXPECT(n.RequestSource("ewr", 30.0, "Commander", "test"));
-    SC_EXPECT(n.Switching() && n.ActiveId().empty() && n.PendingId() == "ewr");
+    SC_EXPECT(n.Switching() && n.ActiveId() == "pu12" && n.PendingId() == "ewr");  // the old one is heard until the change is made
     Run(n, 30.5, 35.5, truth);
     SC_EXPECT(n.Switching());
     Run(n, 36.0, 36.0, truth);
@@ -604,4 +604,65 @@ SC_TEST("c2: designations on an EM radio go on the air as voice messages: radiat
     for (int i = 0; i < 1500; ++i) runner.Step(0.1);  // to 180 s
     SC_EXPECT(runner.C2()->BoardOf("pu12")->LostCount() >= 1);
     SC_EXPECT(runner.Debrief().find("PU-12") != std::string::npos);
+}
+
+SC_TEST("c2: the two R-123M sets: presets, the standby is monitored, a source on no preset needs a retune") {
+    C2Policy policy;
+    policy.auto_fallback = false;
+    policy.select_s = 3.0;
+    policy.retune_s = 30.0;
+    C2Network n(policy, 1);
+    n.AddSource(Pu12(), Vec3{});
+    n.AddSource(Make("ewr_voice", "ewr", Vec3{0.0, 10000.0, 0.0}), Vec3{});
+    for (const char* id : {"a", "b", "c"}) n.AddSource(Make("observation_post", id, Vec3{0.0, 3000.0, 0.0}), Vec3{});
+    const std::vector<BoardContact> truth = {At("t1", 0.0, 30000.0, 1000.0)};
+    Run(n, 0.0, 1.0, truth);
+    // the plan: pu12, ewr, a, b on presets 1-4; left on 1 (listening), right on 2; "c" is on no preset
+    SC_EXPECT(n.PresetSource(1) == "pu12" && n.PresetSource(2) == "ewr" && n.PresetSource(3) == "a" && n.PresetSource(4) == "b");
+    const std::vector<C2Network::RadioView> r = n.Radios();
+    SC_EXPECT(r[0].preset == 1 && r[0].listening && r[1].preset == 2 && !r[1].listening && r[1].source == "ewr");
+    SC_EXPECT(n.Monitored("pu12") && n.Monitored("ewr") && !n.Monitored("a"));
+    // "ewr" is on the standby set: select_s only
+    SC_EXPECT(n.RequestSource("ewr", 1.0, "Commander"));
+    Run(n, 1.5, 4.5, truth);
+    SC_EXPECT(n.ActiveId() == "ewr" && n.Radios()[1].listening);
+    // "a" is on a preset but on neither set: the standby (now the left set) turns to preset 3: select_s
+    SC_EXPECT(n.RequestSource("a", 5.0, "Commander"));
+    Run(n, 5.5, 8.5, truth);
+    SC_EXPECT(n.ActiveId() == "a" && n.Radios()[0].preset == 3 && n.Radios()[0].listening);
+    // "c" is on no preset: the standby set is re-tuned onto it, 30 s, and the old source is heard meanwhile
+    SC_EXPECT(n.RequestSource("c", 10.0, "Commander"));
+    Run(n, 10.5, 39.5, truth);
+    SC_EXPECT(n.ActiveId() == "a" && n.Switching());
+    Run(n, 40.0, 41.0, truth);
+    SC_EXPECT(n.ActiveId() == "c" && !n.Switching());
+    SC_EXPECT(n.PresetSource(n.Radios()[1].preset) == "c");
+    // the sets can also be turned by hand
+    SC_EXPECT(!n.TuneSet(0, 9, 41.0, "Player") && !n.TuneSet(5, 1, 41.0, "Player"));
+    SC_EXPECT(n.TuneSet(0, 1, 41.0, "Player"));
+    Run(n, 41.5, 45.0, truth);
+    SC_EXPECT(n.Radios()[0].preset == 1 && n.Monitored("pu12") && n.ActiveId() == "c");
+    SC_EXPECT(n.ListenToSet(0, 45.0, "Player"));
+    Run(n, 45.5, 49.0, truth);
+    SC_EXPECT(n.ActiveId() == "pu12");
+}
+
+SC_TEST("c2: a silent source that is on no set is found by turning the standby set to it") {
+    C2Policy policy;
+    policy.fallback_order = {"ewr", "a"};
+    policy.presets = {"pu12", "ewr", "a"};
+    C2SourceDef pu = Pu12();
+    pu.outages.push_back({20.0, 1e18, "destroyed"});
+    C2SourceDef ewr = Make("ewr_voice", "ewr", Vec3{0.0, 10000.0, 0.0});
+    ewr.outages.push_back({20.0, 1e18, "jammed"});
+    C2Network n(policy, 1);
+    n.AddSource(pu, Vec3{});
+    n.AddSource(ewr, Vec3{});
+    n.AddSource(Make("observation_post", "a", Vec3{0.0, 3000.0, 0.0}), Vec3{});
+    Run(n, 0.0, 600.0, {At("t1", 500.0, 2500.0, 500.0)});
+    // pu12 and ewr (the two sets) go silent; the commander turns the standby to preset 3, finds "a" alive and moves to it
+    SC_EXPECT(n.ActiveId() == "a");
+    bool probed = false;
+    for (const C2Network::Event& e : n.TakeEvents()) probed = probed || e.text.find("listens for") != std::string::npos;
+    SC_EXPECT(probed);
 }
