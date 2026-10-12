@@ -102,6 +102,14 @@
         {
           "order": "search_on_march",
           "crew": "Senior operator"
+        },
+        {
+          "order": "radio_right_on",
+          "crew": "Commander"
+        },
+        {
+          "queue": "radio_left_on",
+          "crew": "Driver"
         }
       ]
     },
@@ -207,7 +215,8 @@
           "north_m": 25000,
           "up_m": 0
         },
-        "net": "battery_net"
+        "net": "battery_net",
+        "frequency_mhz": 38.55
       },
       {
         "id": "pu12",

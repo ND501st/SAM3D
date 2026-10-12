@@ -243,6 +243,10 @@ public:
     // Is a plot due at t? (`Update` plots only then.)
     bool Due(double t) const { return !plotted_ || t + 1e-9 >= next_s_; }
 
+    // Extra time the commander needs to pass a designation on (no intercom: he shouts over the cabin noise). Applies to
+    // the messages queued from now on.
+    void SetPassOnExtra(double seconds) { pass_on_extra_s_ = seconds > 0.0 ? seconds : 0.0; }
+
     // Designations the vehicle's crew has been told since the last call (oldest first).
     std::vector<BoardMark> PollHeard(double t) {
         std::vector<BoardMark> out;
@@ -402,6 +406,7 @@ private:
         return m.state == Message::State::Delivered || !gated_;
     }
 
+    double pass_on_extra_s_ = 0.0;
     VoiceChannel* Channel() { return channel_ != nullptr ? channel_ : &own_channel_; }
 
     // The radio carries one message at a time: each waits for the one before it.
@@ -413,7 +418,7 @@ private:
         msg.mark = m;
         msg.start_s = start;
         msg.air_end_s = ch->free_s;
-        msg.known_s = ch->free_s + def_.pass_on_s;
+        msg.known_s = ch->free_s + def_.pass_on_s + pass_on_extra_s_;
         messages_.push_back(msg);
     }
 

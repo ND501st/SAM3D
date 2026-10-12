@@ -31,6 +31,7 @@
 
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/crew_comms.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
@@ -81,6 +82,7 @@ public:
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
+        if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
         if (!def_.c2_sources.empty()) {
             c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
@@ -98,7 +100,7 @@ public:
         if (c2_ && em_link_) {  // sources with a place talk to the unit over EM radio links
             c2_link_ = std::make_unique<EmC2LinkModel>(em_link_.get());
             for (const C2SourceDef& s : def_.c2_sources) {
-                if (s.has_position) em_link_->AddRadioSource(s.id, s.position, s.radio);
+                if (s.has_position) em_link_->AddRadioSource(s.id, s.position, s.radio, s.frequency_hz);
             }
             c2_->SetLinkModel(c2_link_.get());
         }
@@ -112,6 +114,7 @@ public:
         if (finished_) return;
         time_ += dt;
         UpdateTargets(dt);
+        DeliverOrders();
         UpdateC2();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
@@ -182,6 +185,27 @@ public:
 
     // The battery command post's plotting board (null when the scenario has no "command_post").
     const PlottingBoard* Board() const { return c2_ ? c2_->BoardOf("pu12") : nullptr; }
+
+    // The commander's order to a crew member. It goes by the R-124 intercom, so it arrives at once; with the commander's
+    // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
+    // (roadmap 7.8). The same path serves the scenario's triggers and the player's order menu.
+    void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
+        const double delay = comms_ ? comms_->OrderDelayS(crew.Role(), console_) : 0.0;
+        if (delay <= 0.0) {
+            if (queue) {
+                crew.Queue(procedure);
+            } else {
+                crew.Order(procedure);
+            }
+            return;
+        }
+        pending_orders_.push_back({time_ + delay, crew.Name(), &procedure, queue});
+        char detail[160];
+        std::snprintf(detail, sizeof(detail), "'%s' to %s is shouted, it arrives in %.1f s", procedure.id.c_str(), crew.Name().c_str(), delay);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "R-124", detail});
+    }
+    const CrewComms* Comms() const { return comms_.get(); }
+    std::size_t PendingOrders() const { return pending_orders_.size(); }
 
     // The battery's early-warning and command sources, and which one the crew listens to (null: no command network).
     // `RequestSource` is how a player (or the UI) changes it.
@@ -366,11 +390,7 @@ private:
                 CrewMember* c = Crew(a.crew);
                 const Procedure* p = console_.FindProcedure(a.procedure);
                 if (c == nullptr || p == nullptr) return;  // checked when the scenario loaded
-                if (a.kind == TriggerAction::Kind::Order) {
-                    c->Order(*p);
-                } else {
-                    c->Queue(*p);
-                }
+                GiveOrder(*c, *p, a.kind == TriggerAction::Kind::Queue);
                 return;
             }
             case TriggerAction::Kind::End:
@@ -385,6 +405,25 @@ private:
             case TriggerAction::Kind::C2Restore:
                 if (c2_) c2_->SetFailed(a.c2_id, false, time_);
                 return;
+        }
+    }
+
+    // Orders that were shouted reach their crew member after the delay.
+    void DeliverOrders() {
+        for (std::size_t i = 0; i < pending_orders_.size();) {
+            if (pending_orders_[i].at_s > time_ + 1e-9) {
+                ++i;
+                continue;
+            }
+            const PendingOrder o = pending_orders_[i];
+            pending_orders_.erase(pending_orders_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (CrewMember* c = Crew(o.crew)) {
+                if (o.queue) {
+                    c->Queue(*o.procedure);
+                } else {
+                    c->Order(*o.procedure);
+                }
+            }
         }
     }
 
@@ -405,6 +444,11 @@ private:
             c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
             c.formation = t.formation;
             contacts.push_back(c);
+        }
+        if (comms_) {  // the R-123M sets and the R-124 box as the console has them now
+            for (const CrewComms::Event& e : comms_->Step(console_, c2_.get(), c2_link_.get())) {
+                log_.Record({time_, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
+            }
         }
         c2_->Update(time_, contacts, def_.unit_position);
         SyncRadios();
@@ -586,6 +630,14 @@ private:
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;
+    struct PendingOrder {
+        double at_s = 0.0;
+        std::string crew;
+        const Procedure* procedure = nullptr;
+        bool queue = false;
+    };
+    std::vector<PendingOrder> pending_orders_;
+    std::unique_ptr<CrewComms> comms_;
     bool radio_synced_ = false;
     int radio_panel_[3] = {-1, -1, -1};
     int radio_now_[3] = {-1, -1, -1};

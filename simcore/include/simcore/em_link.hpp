@@ -177,14 +177,15 @@ public:
     // A radio source (a PU-12, an EWR site, a neighbour) on the ground at `enu`, on a two-member net with the unit using
     // library radio `radio_id`. Its link to the unit is then decided by propagation, terrain, jamming and the unit's own
     // radars (co-site), as for any radio in the EM layer. Returns false if the radio is not in the library.
-    bool AddRadioSource(const std::string& id, const Vec3& enu, const std::string& radio_id) {
+    // `freq_hz` > 0 puts the source's net on that frequency (the scenario's frequency plan); 0: the middle of the radio's band.
+    bool AddRadioSource(const std::string& id, const Vec3& enu, const std::string& radio_id, double freq_hz = 0.0) {
         em::EmScene& s = world_.Scene();
         const int rd = s.lib.Radio(radio_id);
         if (!Ok() || rd < 0) return false;
         const em::RadioDef& r = s.lib.radios[static_cast<std::size_t>(rd)];
         const int pid = world_.AddGroundPlatform(id, em::Side::Red, enu.x, enu.y, r.antenna_height_m);
         const int node = world_.AddNode(id, pid, em::Side::Red);
-        const double f = 0.5 * (r.freq_min_hz + r.freq_max_hz);
+        const double f = freq_hz > 0.0 ? freq_hz : 0.5 * (r.freq_min_hz + r.freq_max_hz);
         const int net = world_.AddNet("net " + id, radio_id, f, {node, node_});
         if (net == 0) return false;
         radio_sources_.push_back({id, node, net, {}});
@@ -231,6 +232,15 @@ public:
             }
         }
         return -1;
+    }
+
+    // Loss the unit's own receiving chain adds to every radio source's words (squelch, antenna): see em::NodeState.
+    void SetUnitRxLossDb(double db) {
+        if (em::NodeState* n = world_.Scene().FindNode(node_)) n->rx_extra_loss_db = db;
+    }
+    double UnitRxLossDb() const {
+        const em::NodeState* n = world_.Scene().FindNode(node_);
+        return n != nullptr ? n->rx_extra_loss_db : 0.0;
     }
 
     // Chance a transmission from radio source `id` reaches the unit now (the EM layer's own delivery law); -1: unknown.
@@ -680,6 +690,7 @@ public:
         link_->SendVoice(source.id, tag, start_s, end_s);
     }
     int VoiceOutcome(const C2SourceDef& source, long long tag) override { return link_->VoiceOutcome(source.id, tag); }
+    void SetReceiveLossDb(double db) override { link_->SetUnitRxLossDb(db); }
 
 private:
     EmSensorLink* link_;

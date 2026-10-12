@@ -456,6 +456,9 @@ struct NodeState {
     double last_parent_contact_s = -1e9;
     C2Status status = C2Status::Autonomous;
     int radio_emitter_id = 0;
+    // Loss in this node's receiving chain that the link budget does not know (roadmap 7.8: the R-123M's squelch and a
+    // shorter antenna), subtracted from every transmission it receives.
+    double rx_extra_loss_db = 0.0;
     std::vector<long long> forwarded;  // relay: messages already passed on (recent ids)
 };
 

@@ -124,6 +124,7 @@ struct C2SourceDef {
     double link_range_m = 0.0;     // beyond this from the vehicle the link is down (0: no limit)
     std::string net;               // a voice net shared with other sources ("" : its own)
     std::string radio = "r123m";   // the EM library radio its link uses when the scenario has the EM layer (a source with a position)
+    double frequency_hz = 0.0;     // the net's frequency on the frequency plan (0: the middle of the radio's band)
     bool has_position = false;
     Vec3 position;                 // ENU (east, north); the site of a radar or post
     std::vector<C2Outage> outages;
@@ -322,6 +323,8 @@ public:
     virtual void SendVoice(const C2SourceDef&, long long /*tag*/, double /*start_s*/, double /*end_s*/) {}
     // 1 delivered, 0 lost, -1 not decided yet.
     virtual int VoiceOutcome(const C2SourceDef&, long long /*tag*/) { return -1; }
+    // Loss in the vehicle's own receiving chain (the radio's squelch, a shorter antenna) on every source's words.
+    virtual void SetReceiveLossDb(double /*db*/) {}
 };
 
 class C2Network {
@@ -412,8 +415,26 @@ public:
     }
     // Is the source on the preset of one of the two sets, so that the commander hears whether it is alive?
     bool Monitored(const std::string& id) const {
-        return !id.empty() && (presets_[static_cast<std::size_t>(sets_[0].preset - 1)] == id ||
-                               presets_[static_cast<std::size_t>(sets_[1].preset - 1)] == id);
+        return !id.empty() && ((sets_[0].receiving && presets_[static_cast<std::size_t>(sets_[0].preset - 1)] == id) ||
+                               (sets_[1].receiving && presets_[static_cast<std::size_t>(sets_[1].preset - 1)] == id));
+    }
+
+    // The R-123M sets and the commander's headset (roadmap 7.8). A set that is off, still warming up or turned right down
+    // hears nothing (`why` says so in the log); a commander whose intercom box is not on the radio hears no set at all.
+    // What the crew would have been told while it could not hear is lost, as when the set is changed.
+    void SetSetReceiving(int set, bool receiving, const std::string& why = std::string()) {
+        if (set < 0 || set > 1) return;
+        sets_[set].receiving = receiving;
+        sets_[set].why = why;
+    }
+    bool SetReceiving(int set) const { return set >= 0 && set <= 1 && sets_[set].receiving; }
+    void SetCommanderOnRadio(bool on) { commander_on_radio_ = on; }
+    bool CommanderOnRadio() const { return commander_on_radio_; }
+    // Does the crew hear the net now?
+    bool Hearing() const { return !off_net_ && commander_on_radio_ && sets_[listening_].receiving; }
+    // Extra time to pass a designation on (no intercom), for the messages queued from now on.
+    void SetPassOnExtraS(double seconds) {
+        for (auto& s : sources_) s->board->SetPassOnExtra(seconds);
     }
 
     // Turn a set (0 left, 1 right) to a preset (1..4). Takes select_s. The set's source is heard only if it is the
@@ -495,7 +516,14 @@ public:
         }
         for (auto& sp : sources_) Run(*sp, t, truth);
         if (op_.active && t + 1e-9 >= op_.done_s) Complete(t);
-        if (!active_.empty() && !off_net_) Hear(*Find(active_), t);
+        if (!active_.empty() && !off_net_) {
+            if (Hearing()) {
+                Hear(*Find(active_), t);
+            } else {
+                Find(active_)->board->DiscardHeard(t);  // spoken to a crew that could not hear it
+            }
+        }
+        NoteHearing(t);
         if (policy_.auto_fallback && !op_.active) Decide(t);
         Expire(t);
     }
@@ -623,6 +651,32 @@ private:
         return link_model_ != nullptr ? link_model_->DeliveryProbability(s.def, unit_, t) : 1.0;
     }
 
+    // A source on a preset can only be heard by a set that is on and tuned to it; one on no preset is not heard at all but
+    // its words still count as contact, as before (the commander only listens to what is on his two sets).
+    bool Receivable(const Source& s) const {
+        const int k = PresetOf(s.def.id);
+        if (k == 0) return true;
+        for (int i = 0; i < 2; ++i) {
+            if (sets_[i].preset == k && sets_[i].receiving) return true;
+        }
+        return false;
+    }
+
+    // Say once when the crew stops or starts hearing the net, and why.
+    void NoteHearing(double t) {
+        const bool now = Hearing() || off_net_;  // off the net is the commander's own choice, not a fault
+        if (now == was_hearing_) return;
+        was_hearing_ = now;
+        if (now) {
+            events_.push_back({t, "Commander", "net", "hears the net again"});
+            return;
+        }
+        const std::string why = !commander_on_radio_ ? std::string("his intercom box is not on the radio (A-1)")
+                                : sets_[listening_].why.empty() ? std::string("the set he listens on hears nothing")
+                                                                : sets_[listening_].why;
+        events_.push_back({t, "Commander", "net", "cannot hear the net: " + why});
+    }
+
     // Did the words it said reach the vehicle (it was up when they ended, in reach, and the link carried them)?
     bool Carried(Source& s, double ended_s, double t) {
         if (DownAt(s, ended_s) || !InReach(s)) return false;
@@ -682,7 +736,7 @@ private:
         if (s.avail && s.board->Due(t)) {
             const std::size_t before = s.board->Marks().size();
             if (s.board->Update(t, Sees(s, truth))) {
-                if (Carried(s, t, t)) s.last_contact_s = t;  // the routine call that goes with each plot
+                if (Carried(s, t, t) && Receivable(s)) s.last_contact_s = t;  // the routine call that goes with each plot
                 for (std::size_t k = before; k < s.board->Marks().size(); ++k) {
                     const BoardMark& m = s.board->Marks()[k];
                     bool first = true;
@@ -704,7 +758,7 @@ private:
             } else {
                 r = Carried(s, ended, t) ? 1 : 0;
             }
-            if (r > 0) s.last_contact_s = t > s.last_contact_s ? t : s.last_contact_s;
+            if (r > 0 && Receivable(s)) s.last_contact_s = t > s.last_contact_s ? t : s.last_contact_s;
             return r;
         });
         const double period = s.def.board.update_period_s;
@@ -894,10 +948,14 @@ private:
     Op op_;
     struct Set {
         int preset = 1;
+        bool receiving = true;
+        std::string why;
     };
     Set sets_[2];
     int listening_ = 0;
     bool off_net_ = false;
+    bool commander_on_radio_ = true;
+    bool was_hearing_ = true;
     std::vector<std::string> presets_ = std::vector<std::string>(4);
     double probe_after_s_ = 0.0;
     double primary_up_since_ = -1.0;

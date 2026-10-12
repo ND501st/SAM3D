@@ -635,14 +635,8 @@ bool USimWorldSubsystem::OrderCrew(const FString& CrewName, const FString& Proce
 		UE_LOG(LogSAM3D, Warning, TEXT("OrderCrew: unknown crew '%s' or procedure '%s'"), *CrewName, *ProcedureId);
 		return false;
 	}
-	if (bQueue)
-	{
-		Crew->Queue(*Proc);
-	}
-	else
-	{
-		Crew->Order(*Proc);
-	}
+	// Through the runner, so the R-124 intercom decides whether the order arrives at once or is shouted.
+	Runner->GiveOrder(*Crew, *Proc, bQueue);
 	return true;
 }
 

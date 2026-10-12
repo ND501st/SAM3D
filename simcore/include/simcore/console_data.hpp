@@ -111,6 +111,33 @@ struct TrackSensorDef {
 // `hold_input` is set while the next one must wait (the console's armed subsystem should require it false, so
 // ПУСК ГОТОВ goes out and the crew waits; with no launcher running it stays false). When the selected missiles are spent, `pair_preparation` is
 // restarted for the next ones (instead of the console's launch "restarts" after every launch).
+// The R-123M sets and the R-124 intercom (roadmap 7.8, optional). Each radio names its controls and the two
+// subsystems that say whether it can receive (warm) and transmit; `ranges_km` are the published ranges that become
+// losses in the receiving chain; the intercom names the three boxes that matter and the shouting times.
+struct CommsRadioDef {
+    int set = 0;  // 0 left, 1 right (the C2 network's order)
+    std::string name;
+    std::string power, mode, squelch, volume, antenna;  // controls
+    std::string warm, transmit;                         // subsystems
+};
+
+struct CommsDef {
+    std::vector<CommsRadioDef> radios;
+    double range_whip_4m_km = 0.0;           // squelch off: the reference
+    double range_whip_4m_squelch_km = 0.0;   // squelch set
+    double range_whip_1m_km = 0.0;
+    double range_wire_km = 0.0;
+    std::string commander, deputy, driver;   // R-124 boxes A-1, A-2, PV
+    int commander_radio_position = 0;
+    int commander_off_position = 0;
+    int deputy_radio_position = 0;
+    int driver_radio_position = 0;
+    std::string intercom_subsystem;
+    double shout_quiet_s = 0.0;
+    double shout_noisy_s = 0.0;
+    std::vector<std::string> noisy;          // subsystems whose running makes the cabin too loud to talk
+};
+
 struct LauncherContainerDef {
     std::string id;           // e.g. "1-I"
     int channel = 1;          // 1 = channel I, 2 = channel II
@@ -244,6 +271,8 @@ struct ConsoleData {
     OrientationDef orientation;
     bool has_launcher = false;
     LauncherDef launcher;
+    bool has_comms = false;
+    CommsDef comms;
     bool has_fuel = false;
     FuelDef fuel;
     std::vector<ReadinessState> readiness;
@@ -276,7 +305,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "fuel", "readiness", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -288,7 +317,7 @@ public:
         if (!LoadSubsystems(root, out.panel, out.equipment)) return false;
         if (!LoadProcedures(root, out.panel, out.equipment, out.procedures)) return false;
         if (!LoadLaunch(root, out)) return false;
-        if (!LoadLauncher(root, out)) return false;
+        if (!LoadLauncher(root, out) || !LoadComms(root, out)) return false;
         if (!LoadFuel(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
@@ -688,6 +717,100 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             }
             out.readiness.push_back(std::move(st));
         }
+        return true;
+    }
+
+    bool LoadComms(const json::Value& root, ConsoleData& out) {
+        const json::Value* v = root.Find("comms");
+        if (v == nullptr) return true;
+        const std::string p = "comms";
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        if (!Keys(*v, p, {"radios", "ranges_km", "intercom", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+        CommsDef& d = out.comms;
+        const Equipment& eq = out.equipment;
+        const json::Value* radios = OptionalArray(*v, p, "radios");
+        if (radios == nullptr || radios->items.size() != 2) {
+            return message_.empty() ? Fail(Join(p, "radios"), "expected two radios (left, right)") : false;
+        }
+        for (std::size_t i = 0; i < 2; ++i) {
+            const std::string rp = Index(Join(p, "radios"), i);
+            const json::Value& e = radios->items[i];
+            CommsRadioDef r;
+            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit"}) ||
+                !OptionalInt(e, rp, "set", r.set) || !RequireString(e, rp, "name", r.name) ||
+                !RefControl(e, rp, "power", out.panel, ControlKind::Discrete, true, r.power) ||
+                !RefControl(e, rp, "mode", out.panel, ControlKind::Discrete, true, r.mode) ||
+                !RefControl(e, rp, "squelch", out.panel, ControlKind::Discrete, true, r.squelch) ||
+                !RefControl(e, rp, "volume", out.panel, ControlKind::Discrete, true, r.volume) ||
+                !RefControl(e, rp, "antenna", out.panel, ControlKind::Discrete, true, r.antenna) ||
+                !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit)) {
+                return false;
+            }
+            if (r.set != static_cast<int>(i)) return Fail(Join(rp, "set"), "radios are in the order of the C2 network's sets: 0, 1");
+            if (out.panel.Find(r.antenna)->positions != 3) return Fail(Join(rp, "antenna"), "needs three positions (4 m whip, 1 m whip, emergency wire)");
+            d.radios.push_back(std::move(r));
+        }
+        const json::Value* rg = v->Find("ranges_km");
+        const std::string gp = Join(p, "ranges_km");
+        if (rg == nullptr || !rg->Is(json::Type::Object) ||
+            !Keys(*rg, gp, {"whip_4m_squelch_off", "whip_4m_squelch_on", "whip_1m", "emergency_wire"})) {
+            return message_.empty() ? Fail(gp, "required, an object") : false;
+        }
+        struct Range {
+            const char* key;
+            double* value;
+        };
+        for (const Range& r : {Range{"whip_4m_squelch_off", &d.range_whip_4m_km}, Range{"whip_4m_squelch_on", &d.range_whip_4m_squelch_km},
+                               Range{"whip_1m", &d.range_whip_1m_km}, Range{"emergency_wire", &d.range_wire_km}}) {
+            if (rg->Find(r.key) == nullptr) return Fail(Join(gp, r.key), "required");
+            if (!OptionalNumber(*rg, gp, r.key, *r.value)) return false;
+            if (*r.value <= 0.0) return Fail(Join(gp, r.key), "must be > 0");
+        }
+        if (d.range_whip_4m_squelch_km > d.range_whip_4m_km) return Fail(Join(gp, "whip_4m_squelch_on"), "the suppressor can't lengthen the range");
+        const json::Value* ic = v->Find("intercom");
+        const std::string ip = Join(p, "intercom");
+        if (ic == nullptr || !ic->Is(json::Type::Object) ||
+            !Keys(*ic, ip, {"commander", "commander_radio_position", "commander_off_position", "deputy", "deputy_radio_position", "driver",
+                            "driver_radio_position", "subsystem", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
+            return message_.empty() ? Fail(ip, "required, an object") : false;
+        }
+        if (!RefControl(*ic, ip, "commander", out.panel, ControlKind::Discrete, true, d.commander) ||
+            !RefControl(*ic, ip, "deputy", out.panel, ControlKind::Discrete, true, d.deputy) ||
+            !RefControl(*ic, ip, "driver", out.panel, ControlKind::Discrete, true, d.driver) ||
+            !OptionalInt(*ic, ip, "commander_radio_position", d.commander_radio_position) ||
+            !OptionalInt(*ic, ip, "commander_off_position", d.commander_off_position) ||
+            !OptionalInt(*ic, ip, "deputy_radio_position", d.deputy_radio_position) ||
+            !OptionalInt(*ic, ip, "driver_radio_position", d.driver_radio_position) ||
+            !RefSubsystem(*ic, ip, "subsystem", eq, true, d.intercom_subsystem) ||
+            !OptionalNumber(*ic, ip, "shout_quiet_s", d.shout_quiet_s) || !OptionalNumber(*ic, ip, "shout_noisy_s", d.shout_noisy_s)) {
+            return false;
+        }
+        struct Pos {
+            const char* key;
+            const std::string* control;
+            int value;
+        };
+        for (const Pos& pos : {Pos{"commander_radio_position", &d.commander, d.commander_radio_position},
+                               Pos{"commander_off_position", &d.commander, d.commander_off_position},
+                               Pos{"deputy_radio_position", &d.deputy, d.deputy_radio_position},
+                               Pos{"driver_radio_position", &d.driver, d.driver_radio_position}}) {
+            if (pos.value < 0 || pos.value >= out.panel.Find(*pos.control)->positions) {
+                return Fail(Join(ip, pos.key), "not a position of " + *pos.control);
+            }
+        }
+        if (d.shout_quiet_s < 0.0 || d.shout_noisy_s < d.shout_quiet_s) {
+            return Fail(Join(ip, "shout_noisy_s"), "shouting times: >= 0, and louder is not quicker");
+        }
+        if (const json::Value* noisy = OptionalArray(*ic, ip, "noisy")) {
+            for (std::size_t i = 0; i < noisy->items.size(); ++i) {
+                const json::Value& e = noisy->items[i];
+                if (!e.Is(json::Type::String) || !eq.Has(e.string)) return Fail(Index(Join(ip, "noisy"), i), "unknown subsystem");
+                d.noisy.push_back(e.string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        out.has_comms = true;
         return true;
     }
 

@@ -10,6 +10,7 @@
 // (inputs, procedures, subsystems, controls) is checked when the scenario loads.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <sstream>
@@ -559,7 +560,7 @@ private:
                 const json::Value& e = list->items[i];
                 std::string id;
                 std::string type;
-                if (!Keys(e, p, {"id", "type", "name", "position", "net", "radio", "link_range_m", "outages", "notes"}) ||
+                if (!Keys(e, p, {"id", "type", "name", "position", "net", "radio", "frequency_mhz", "link_range_m", "outages", "notes"}) ||
                     !RequireString(e, p, "id", id) || !OptionalString(e, p, "type", type)) {
                     return false;
                 }
@@ -588,6 +589,16 @@ private:
                 }
                 if (!name.empty()) def->display_name = name;
                 if (def->link_range_m < 0.0) return Fail(Join(p, "link_range_m"), "must be >= 0");
+                double mhz = 0.0;
+                if (!OptionalNumber(e, p, "frequency_mhz", mhz)) return false;
+                if (e.Find("frequency_mhz") != nullptr) {
+                    // the R-123M covers 20.00 to 51.50 MHz in 25 kHz steps (r123_refs)
+                    const double steps = (mhz - 20.0) / 0.025;
+                    if (mhz < 20.0 || mhz > 51.5 || std::fabs(steps - std::round(steps)) > 1e-6) {
+                        return Fail(Join(p, "frequency_mhz"), "an R-123M frequency: 20.000 to 51.500 MHz in 25 kHz steps");
+                    }
+                    def->frequency_hz = mhz * 1e6;
+                }
                 if (const json::Value* pos = e.Find("position")) {
                     if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(p, "position"), frame_, def->position)) {
                         return message_.empty() ? Fail(Join(p, "position"), "expected an object") : false;

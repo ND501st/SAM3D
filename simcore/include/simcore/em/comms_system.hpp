@@ -73,7 +73,7 @@ inline LinkState EvaluateLink(EmScene& s, const NetState& net, const NodeState& 
     l.line_of_sight = loss.line_of_sight;
     l.diffraction_db = loss.diffraction_db;
     const double eirp = rd.power_w * DbToLinear(rd.antenna_gain_db);
-    const double pr = OneWayReceivedPowerW(eirp, rd.antenna_gain_db, f, loss.range_m, loss.TotalOneWayDb() + rd.system_loss_db);
+    const double pr = OneWayReceivedPowerW(eirp, rd.antenna_gain_db, f, loss.range_m, loss.TotalOneWayDb() + rd.system_loss_db + b.rx_extra_loss_db);
     l.rx_dbw = pr > 0.0 ? LinearToDb(pr) : -300.0;
     const double cosite = PlatformRadarsRadiating(s, pb->id) ? rd.cosite_desense_db : 0.0;
     // Noise figure implied by the sensitivity and required SNR (for comparing jammer noise).
