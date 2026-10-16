@@ -1,0 +1,38 @@
+{
+  "scenario_id": "osa_crew_practice",
+  "name": "Osa-AK crew practice: the NPC commander runs the crew (take any seat)",
+  "description": "A fictional practice shoot for the crew half of the game (docs/crew/). The vehicle stands at a halt, cold. No triggers give orders: the NPC vehicle commander runs the crew by doctrine (К бою, search, take the target, prepare, launch), the crew speaks its drill on the intercom, and whoever waits on another seat reminds it. Take any seat (the player's seat gets its orders, the others depend on him), or take the commander's seat and give the orders yourself.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. The drone's numbers are PLACEHOLDERS. The crew's tiers are a mixed crew of the kind a campaign starts with (docs/crew/05_SKILL.md).",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class3" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
+      "start": { "east_m": 2000, "north_m": 40000, "up_m": 1000 },
+      "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
+      "speed_mps": 150, "rcs_m2": 0.5, "appear_at_s": 280,
+      "notes": "Placeholder numbers. It appears once the crew has had time to come to readiness from cold."
+    }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 800, "when_targets_gone": true }
+}

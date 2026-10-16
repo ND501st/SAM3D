@@ -93,6 +93,42 @@ struct SAM3D_API FSimRadioMessage
 	FString Text;
 };
 
+/** A seat's best next move from the drill master (docs/crew/06_REFERENCE_PERFORMER.md): the assistance overlay's data. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimDrillAdvice
+{
+	GENERATED_BODY()
+
+	/** False when the seat has nothing to do toward the task (or there is no crew data). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bValid = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Station;
+
+	/** The control to move (highlight it in the cabin) and the position to set. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Control;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	int32 Position = 0;
+
+	/** The drill it belongs to ("" for a single switch). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Procedure;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Description;
+
+	/** When the ideal crew does it, seconds from now (about the reaction time: now). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	double DueInSeconds = 0.0;
+
+	/** Why, nearest reason first, up to the task. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	TArray<FString> Why;
+};
+
 UENUM(BlueprintType)
 enum class ESimEventType : uint8
 {
@@ -338,6 +374,17 @@ public:
 	/** Give a crew member a procedure: bQueue = after current orders, otherwise drop everything. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Console")
 	bool OrderCrew(const FString& CrewName, const FString& ProcedureId, bool bQueue);
+
+	/** Give a whole order of the crew data as the commander (the order menu, docs/crew/07_COMMANDER_MODE.md), e.g.
+	 *  "order_k_boyu": its drills go to their seats and the words are spoken. False if there is no such order. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	bool GiveCrewOrder(const FString& OrderId);
+
+	/** The drill master's best next move for a seat toward a task of the crew data (e.g. "ready_halted"): the
+	 *  training overlay's highlight. Runs the ideal crew on a copy of the console: call it when the state changes or
+	 *  the player asks for help, not every frame. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	FSimDrillAdvice GetDrillAdvice(const FString& Station, const FString& TaskId) const;
 
 	/** Target currently tracked by the tracking radar or TV ("" if none). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Console")

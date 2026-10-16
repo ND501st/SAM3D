@@ -195,6 +195,17 @@ mapping; with the Cesium georeference Unreal X points east at the origin. The ve
 sim each tick, the director spawns it facing the scenario's heading, and the turret turns by the wheel's true azimuth
 minus the hull's true heading.
 
+## Crew and teamwork (phase 8)
+
+The crew pillars (`docs/crew/README.md`) decide what Unreal shows of the crew: in the crew, the player in one seat
+with the drill master's assistance overlay (the best next control highlighted, with why and when: `docs/crew/08_*`);
+in command, the order menu (`docs/crew/07_*`) with honest greying, the crew's callouts as voice and HUD lines, and the
+crew's picture as they reported it. Built so far: `USimWorldSubsystem::OrderCrew` (orders by procedure id), the
+order hotkeys of `ASimOsaVehicle`, `GiveCrewOrder` (a whole order of `data/crew/<system>_crew.json`, e.g.
+`order_k_boyu`: the order menu's backend) and `GetDrillAdvice` (a seat's best next move toward a task, with why and
+when: the overlay's backend). The crew's callouts reach the HUD as radio lines (net "intercom"). To come: 8.7 (the
+overlay itself), 8.8 (the menu itself), 8.10 (bodies and voices).
+
 ## Not done yet
 
 - Chaos Vehicles physics for driving (needs a vehicle mesh with wheel bones); driving is kinematic.

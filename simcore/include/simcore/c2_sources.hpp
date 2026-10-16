@@ -335,6 +335,11 @@ public:
         std::string actor;
         std::string subject;
         std::string text;
+        // A designation heard (actor "Commander"): its number, azimuth in mils, range and height; number 0 otherwise.
+        int number = 0;
+        int azimuth_mils = 0;
+        double range_m = 0.0;
+        int height_hm = 0;
     };
 
     // What a display shows for one source.
@@ -798,7 +803,7 @@ private:
                           d.azimuth_mils / 100, d.azimuth_mils % 100, d.range_m / 1000.0, m.height_hm);
             std::string text = detail;
             if (s.def.id != policy_.primary) text += " [" + s.def.short_name + "]";
-            events_.push_back({t, "Commander", m.target_id, text});
+            events_.push_back({t, "Commander", m.target_id, text, m.number, d.azimuth_mils, d.range_m, m.height_hm});
         }
     }
 

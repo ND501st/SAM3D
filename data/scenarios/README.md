@@ -27,6 +27,7 @@ the readiness state they start in (march, deployed, powered).
                              "height_m": 60, "width_m": 900 } ] },   // optional: straight ridges for cover (9.3)
   "own_unit": {
     "console": "procedures/osa_ak.json",              // relative to data/
+    "crew_data": "crew/osa_ak_crew.json",             // optional: the crew's orders, callouts, tasks (default: crew/<system>_crew.json if it exists)
     "tuning": "gameplay/osa_ak.json",                 // optional: turns on the gameplay engagement model
     "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },  // optional, see below
     "readiness": "deployed",                          // optional: "cold" (default) or a console readiness state
@@ -35,8 +36,9 @@ the readiness state they start in (march, deployed, powered).
     "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
     "inputs": { "vehicle_stopped": false }            // starting values of console inputs
   },
+  "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
-            { "name": "Deputy commander", "role": "deputy_commander" } ],   // role = a console station, one each
+            { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" } ],   // role = a console station, one each; skill: a tier of data/crew/skill_levels.json
   "targets": [
     { "id": "t1", "name": "...", "type": "Air+FixedWing", "class": "drone", "appear_at_s": 0,
       "evade_on_launch": false, "evade_turn_rate_deg_s": 12,          // optional: break away when fired at
@@ -85,6 +87,12 @@ show them.
 no range. The range then comes by hand: the operator keeps the range wheel on the target's blip on the search scope, or
 on the range the PU-12 last gave; ЦЕЛЬ В ЗОНЕ lights from it. The deputy commander's `fire_at_jammer` drill fires with
 ПОМЕХА up (method Н).
+
+**The crew (phase 8, `docs/crew/`).** With crew data the crew speaks (orders, acknowledgements, reports, reminders:
+the radio log and the debrief), and each crew member may have a `skill` tier (recruit, class3, class2, class1, master)
+that sets its pace, slips, omissions and aim. With `"crew_commander": "npc"` no triggers are needed for the crew's
+work: the NPC commander brings the vehicle to readiness and engages by doctrine (`osa_crew_practice.json`). A player
+may take any seat (`ScenarioRunner::TakeSeat`): he gets that seat's orders and is reminded when the crew waits for him.
 
 Each trigger fires once, when every part of `when` holds. Positions: `east_m`/`north_m`/`up_m` are the local frame
 at `origin` (ENU metres); `lat_deg`/`lon_deg`/`alt_m` are converted to it.

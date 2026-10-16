@@ -525,11 +525,35 @@ inline double TvFieldOfViewDeg(const ConsoleData& console) {
 // One number from [0, 1) drawn from a std::mt19937, the same on every platform.
 inline double Uniform01(std::mt19937& rng) { return static_cast<double>(rng()) / 4294967296.0; }
 
+// What happened in the engagement this step, for the crew's callouts (crew_callouts.hpp): who spoke it is the
+// runner's business; the model only says what each instrument showed.
+struct EngagementEvent {
+    enum class Kind { Contact, Track, TrackLost, OnJammer, BurnThrough, IffFriend, Hit, Miss };
+    Kind kind = Kind::Contact;
+    double t = 0.0;
+    std::string target;
+    double az_deg = 0.0;   // the crew's frame
+    double range_m = 0.0;
+    TrackMethod method = TrackMethod::None;
+    std::string detail;
+};
+
 // Which aiming seats have an NPC in them. A seat the player sits in (or nobody) is left alone.
 struct AimCrew {
     bool azimuth = false;
     bool elevation = false;
     bool range = false;
+    // The skill of the NPC in each aiming seat (docs/crew/05_SKILL.md): wheel speed as a factor on the tuning's aim
+    // rates; how far behind the target the TV wheels follow (s; < 0: the tuning's tv npc_delay_s); random aim error
+    // on the TV wheels (deg, per step); the error of a range set by hand (m, one draw per target).
+    double az_rate_factor = 1.0;
+    double el_rate_factor = 1.0;
+    double range_rate_factor = 1.0;
+    double az_lag_s = -1.0;
+    double el_lag_s = -1.0;
+    double az_noise_deg = 0.0;
+    double el_noise_deg = 0.0;
+    double range_error_m = 0.0;
 };
 
 class EngagementModel {
@@ -669,6 +693,8 @@ public:
     double IndicatedToTrueDeg(double indicated_deg) const {
         return Wrap180(indicated_deg + unit_heading_deg_ - gyro_heading_deg_);
     }
+    // A target that has answered the IFF as a friend at some time (the crew remembers it).
+    bool KnownFriend(const std::string& id) const { return replied_.count(id) != 0; }
     // IFF replies painted on the search scope this step.
     const std::vector<Contact>& IffReplies() const { return iff_replies_; }
     const Vec3& UnitPosition() const { return unit_; }
@@ -704,6 +730,13 @@ public:
             if (s.number == number) return s.done ? 0.0 : s.flight_time_s;
         }
         return 0.0;
+    }
+
+    // What the instruments showed since the last call (contacts, captures, losses, results), oldest first.
+    std::vector<EngagementEvent> TakeEvents() {
+        std::vector<EngagementEvent> out;
+        out.swap(events_);
+        return out;
     }
 
     bool ShotsInFlight() const {
@@ -888,12 +921,14 @@ private:
             if (it == geo_.end() || !it->second.alive) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "target already down"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "target already down"});
                 continue;
             }
             const Geometry& g = it->second;
             if (method_ == TrackMethod::None || tracked_ != s.target_id) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "track lost: no guidance commands"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "track lost"});
                 continue;
             }
             if (g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
@@ -901,6 +936,7 @@ private:
             if (s.out_of_reach) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "out of reach: flight time ran out"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "out of reach"});
                 continue;
             }
             const double base = tuning_.HitChanceFor(g.target_class);
@@ -945,6 +981,7 @@ private:
                           manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim_text, draw);
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
+            events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, std::string()});
             if (hit) {
                 Aircraft* a = TargetAircraft(world, targets, s.target_id);
                 if (a != nullptr) a->alive = false;
@@ -977,6 +1014,7 @@ private:
                 blip.beam = c.beam;
                 picture_.push_back(blip);
                 if (seen_by_search_.insert(c.target_id).second) {
+                    events_.push_back({EngagementEvent::Kind::Contact, t, c.target_id, az, c.range_m, TrackMethod::None, std::string()});
                     char detail[96];
                     std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
                     log.Record({t, DebriefEntry::Kind::Scenario, "SOC", c.target_id, detail});
@@ -990,6 +1028,7 @@ private:
             if (mti ? g.range_m > d.mti_max_range_m : g.agl_m < tuning_.clutter_altitude_m) continue;
             picture_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             if (seen_by_search_.insert(kv.first).second) {
+                events_.push_back({EngagementEvent::Kind::Contact, t, kv.first, g.az_deg, g.range_m, TrackMethod::None, std::string()});
                 char detail[96];
                 std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", g.range_m / 1000.0, g.az_deg);
                 log.Record({t, DebriefEntry::Kind::Scenario, "SOC", kv.first, detail});
@@ -1059,11 +1098,11 @@ private:
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             // The board gives true azimuth, set on the wheel as it is: right only if the vehicle is oriented.
             const double want_az = WheelAzimuth(from_board ? board_true_az : best.az_deg, wheel_az, d.az_limit_deg);
-            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * dt));
+            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
         }
         if (crew.range && range_known) {
             const double wheel_r = console.panel.GetValue(d.range_wheel);
-            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best.range_m, tuning_.aim_range_rate_mps * dt));
+            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best.range_m, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
         }
         // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
         // (under the azimuth line while the tracking radar radiates).
@@ -1073,7 +1112,7 @@ private:
         }
         if (crew.elevation && (tv_search || on_indicator)) {
             const double wheel_el = console.panel.GetValue(d.el_wheel);
-            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * dt));
+            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
         }
     }
 
@@ -1178,10 +1217,14 @@ private:
     void FollowRangeByHand(double dt, ConsoleData& console, const AimCrew& crew) {
         const RangeSource source = RangeFrom(console);
         if (!crew.range || !ByHand(source)) return;
-        const double want = source == RangeSource::Search ? SearchContact(tracked_)->range_m : BoardRange(tracked_);
+        if (range_bias_for_ != tracked_) {  // a crewmate's error setting a range by hand, one draw per target
+            range_bias_for_ = tracked_;
+            range_bias_m_ = crew.range_error_m > 0.0 ? crew.range_error_m * AimNormal() : 0.0;
+        }
+        const double want = (source == RangeSource::Search ? SearchContact(tracked_)->range_m : BoardRange(tracked_)) + range_bias_m_;
         const TrackSensorDef& d = console.track;
         const double wheel_r = console.panel.GetValue(d.range_wheel);
-        console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * dt));
+        console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
     }
 
     // Manual TV tracking: the target has to stay in the lens field around where the wheels point. An NPC in a wheel's seat
@@ -1228,28 +1271,30 @@ private:
         }
         if (problem != nullptr) {
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+            events_.push_back({EngagementEvent::Kind::TrackLost, t, tracked_, 0.0, 0.0, method_, problem});
             method_ = TrackMethod::None;
             tracked_.clear();
             tv_masked_s_ = 0.0;
             return false;
         }
         if (g.los) {
-            // The NPC seats follow the target as it was a moment ago.
+            // The NPC seats follow the target as it was a moment ago (each seat's own lag), with their own aim error.
             double az = g.az_deg, el = g.el_deg;
-            const double want_t = time_ - tuning_.tv_npc_delay_s;
+            const double az_t = time_ - (crew.az_lag_s >= 0.0 ? crew.az_lag_s : tuning_.tv_npc_delay_s);
+            const double el_t = time_ - (crew.el_lag_s >= 0.0 ? crew.el_lag_s : tuning_.tv_npc_delay_s);
             for (const std::array<double, 3>& smp : g.history) {
-                if (smp[0] <= want_t) {
-                    az = smp[1];
-                    el = smp[2];
-                }
+                if (smp[0] <= az_t) az = smp[1];
+                if (smp[0] <= el_t) el = smp[2];
             }
+            if (crew.az_noise_deg > 0.0) az += crew.az_noise_deg * AimNormal();
+            if (crew.el_noise_deg > 0.0) el += crew.el_noise_deg * AimNormal();
             const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
             if (crew.azimuth && !az_locked) {
                 console.panel.SetValue(d.az_wheel, Toward(wheel_az, WheelAzimuth(az, wheel_az, d.az_limit_deg),
-                                                           tuning_.aim_az_rate_deg_s * dt));
+                                                           tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
             }
             if (crew.elevation) {
-                console.panel.SetValue(d.el_wheel, Toward(wheel_el, el, tuning_.aim_el_rate_deg_s * dt));
+                console.panel.SetValue(d.el_wheel, Toward(wheel_el, el, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
             }
             // What the memory would carry on with: the wheels' recent angular rates.
             if (dt > 0.0) {
@@ -1285,11 +1330,13 @@ private:
             char detail[96];
             std::snprintf(detail, sizeof(detail), "burn-through: the echo is back in the gate at %.1f km, radar range again", est.range_m / 1000.0);
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
+            events_.push_back({EngagementEvent::Kind::BurnThrough, t, tracked_, 0.0, est.range_m, TrackMethod::Radar, std::string()});
             return true;
         }
         if (problem == nullptr && !(em_->JamTracked(&id, &est) && id == tracked_)) problem = "the jamming stopped: nothing to follow in angle";
         if (problem != nullptr) {
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+            events_.push_back({EngagementEvent::Kind::TrackLost, t, tracked_, 0.0, 0.0, method_, problem});
             em_->ClearLock();
             method_ = TrackMethod::None;
             tracked_.clear();
@@ -1324,6 +1371,7 @@ private:
                         method_ = TrackMethod::RadarOnJam;
                         log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_,
                                     "range lost in the jamming: the radar follows the jammer in angle (ПОМЕХА: method N)"});
+                        events_.push_back({EngagementEvent::Kind::OnJammer, t, tracked_, g.az_deg, 0.0, TrackMethod::RadarOnJam, std::string()});
                         if (TrackJammer(t, dt, console, log, crew)) return;  // false: it logged why and dropped the track
                     } else {
                         problem = "radar lost the echo";
@@ -1344,6 +1392,7 @@ private:
                 return;
             } else {
                 log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+            events_.push_back({EngagementEvent::Kind::TrackLost, t, tracked_, 0.0, 0.0, method_, problem});
                 if (radar_em) em_->ClearLock();
                 method_ = TrackMethod::None;
                 tracked_.clear();
@@ -1420,6 +1469,7 @@ private:
                           g.range_m / 1000.0, g.az_deg);
         }
         log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
+        events_.push_back({EngagementEvent::Kind::Track, t, tracked_, g.az_deg, g.range_m, method_, std::string()});
     }
 
     // The gyro half-compass: it turns with the hull; slaved to the course setter it turns towards the setter's
@@ -1501,6 +1551,7 @@ private:
                 const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
                 iff_replies_.push_back({c.target_id, c.range_m, az, c.el_deg, iff_control_});
                 if (replied_.insert(c.target_id).second) {
+                    events_.push_back({EngagementEvent::Kind::IffFriend, t, c.target_id, az, c.range_m, TrackMethod::None, std::string()});
                     char detail[96];
                     std::snprintf(detail, sizeof(detail), "IFF reply: friend, %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
                     log.Record({t, DebriefEntry::Kind::Scenario, "IFF", c.target_id, detail});
@@ -1519,6 +1570,7 @@ private:
             }
             iff_replies_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg, iff_control_});
             if (replied_.insert(kv.first).second) {
+                events_.push_back({EngagementEvent::Kind::IffFriend, t, kv.first, g.az_deg, g.range_m, TrackMethod::None, std::string()});
                 char detail[96];
                 std::snprintf(detail, sizeof(detail), "IFF reply: friend, %.1f km, azimuth %.0f deg", g.range_m / 1000.0,
                               g.az_deg);
@@ -1697,6 +1749,16 @@ private:
     int hits_ = 0;
     int misses_ = 0;
     bool range_known_now_ = false;  // the system has a range for the tracked target (set each step)
+    std::vector<EngagementEvent> events_;
+    // The crew's aim errors (skill): their own random stream, so the outcome draws don't move when skill is off.
+    std::mt19937 aim_rng_{20261016u};
+    std::string range_bias_for_;
+    double range_bias_m_ = 0.0;
+    double AimNormal() {  // a standard normal draw (Box-Muller), the same on every platform
+        const double u1 = (static_cast<double>(aim_rng_()) + 1.0) / 4294967297.0;
+        const double u2 = static_cast<double>(aim_rng_()) / 4294967296.0;
+        return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * kPi * u2);
+    }
 };
 
 }  // namespace simcore

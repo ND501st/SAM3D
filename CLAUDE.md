@@ -22,8 +22,10 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. |
+| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`) and skill tiers (`skill_levels.json`). See `docs/crew/`. |
 | `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
+| `docs/crew/` | **Crew and teamwork reference** (the design pillars below): roles and knowledge, interdependence, behaviour paths, commands and callouts, skill, the drill master, commander mode, training. `generated/` is written by `tools/crew_map.py`. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
 | `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash); `panel_sheet.py` draws the cabin layout as a page; `button_map.py` draws every control's flow to subsystems, lamps and launch. |
 
@@ -46,6 +48,7 @@ python prototype/scripts/run_demo.py out/demo_py.acmi
 python tools/panel_sheet.py                       # draw the cabin panels flat: out/panel_sheets/osa_ak.html
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
+python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 
@@ -83,6 +86,26 @@ After changing Unreal C++, ask the user to build (or run UnrealBuildTool from th
   1987–88).
 - **Never commit the original SAM Simulator art, sounds, data or `sam.exe`.** They live in `reference/` (git-ignored).
 
+## Crew and teamwork: the design pillars (project owner, 16 Oct 2026)
+
+These govern all crew work; the full reference is `docs/crew/` (start at `docs/crew/README.md`).
+
+1. **Teamwork with NPC crewmates is paramount.**
+2. **Two halves of the game:** *in the crew*, the player is one member of the team, learning the drill and how to operate
+   each role or seat; *in command*, the player gives the orders, first for the single Osa, then for the whole battery.
+3. **Every NPC crewmate can work with every other; every action and command is mapped out and interconnected.** Nothing
+   is done by "the vehicle": every action has an owner seat, preconditions that are other seats' actions or knowledge,
+   and a callout that tells the others. Knowledge moves only through instruments and voice (no NPC acts on the truth).
+4. **Behaviour paths for every operational environment and outcome, with callouts, instructions and commands for every
+   possible action** (`docs/crew/03_*`, `04_*`, `data/crew/<system>_crew.json`).
+5. **Skill levels** set by player progression and quests, affecting reaction times, speeds and accuracy in every facet
+   (`docs/crew/05_SKILL.md`, `data/crew/skill_levels.json`).
+6. **An ideal progression of events**: an (almost) objective perfect performance of every task, the reference for the
+   training overlay. SAM3D's form of it is the **drill master** (`simcore/drill_master.hpp`, `docs/crew/06_*`): a planner
+   over the console's own dependency data that, like a chess engine, gives the best next move for every seat from any state.
+7. **Interdependence is mapped accurately**: to lock a target someone must know where it is (radar, optics, EWR, radio)
+   and someone must have driven the vehicle within reach (`docs/crew/02_INTERDEPENDENCE.md`, the generated action map).
+
 ## Unreal conventions
 
 - Epic coding standard (tabs, `F`/`U`/`A`/`E` prefixes, `b` for bools). Categories `SAM3D|...`.
@@ -104,7 +127,7 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; next phase 8, NPC crewmates and teamwork; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
+See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; next phase 8, NPC crewmates and teamwork, re-planned around the crew pillars in `docs/crew/09_IMPLEMENTATION_PLAN.md`; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 

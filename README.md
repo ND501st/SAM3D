@@ -4,6 +4,10 @@ A first-person, realistic 3D surface-to-air missile simulator. It rebuilds the e
 [SAM Simulator](https://sites.google.com/site/samsimulator1972/home) (with its creator's blessing) in Unreal Engine 5.
 You drive a SAM unit, deploy it, work the consoles, and command an NPC crew.
 
+Teamwork with the NPC crew is the heart of it. You either serve in the crew, learning the drill of each seat while
+your NPC crewmates depend on you and you on them, or you command: first one Osa, then the whole battery. The crew's
+design is in [`docs/crew/`](docs/crew/README.md).
+
 **Status:** early foundation. A tested sim core (radar, terrain line of sight, missile flight with proportional
 navigation, aircraft, procedures and NPC crew, Tacview export), a Python prototype of the same models, and a UE5 C++
 project that runs the sim and shows the entities in 3D.

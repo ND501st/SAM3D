@@ -48,6 +48,16 @@ Everything in simcore is deterministic for a given sequence of inputs, which mak
 
 ## Controls, procedures and crew
 
+**Crew and teamwork (the project owner's design pillars, 16 Oct 2026; `docs/crew/README.md`).** Teamwork with NPC
+crewmates is paramount. The game has two halves: *in the crew*, the player is one member of the team, learning the
+drill and how to operate each seat; *in command*, the player gives the orders, first for the single Osa, then for the
+battery. Every NPC works with every other; every action and command is mapped and interconnected (the generated action
+map), with behaviour paths, callouts and commands for every environment and outcome. NPC skill levels come from player
+progression and quests and affect reaction, speed and accuracy everywhere. An ideal progression of events, the drill
+master's perfect performance, is the reference for the training overlay, like a chess engine that always knows the
+best move. One crewmate's action depends on others' knowledge and actions (someone must know where the target is,
+someone must have driven within reach), and that interdependence is mapped. The crew design is `docs/crew/`; this section describes what is built.
+
 - `ControlPanel` (`panel.hpp`): every physical control and its position. Kinds: discrete (toggles, selectors,
   covers, locks, key switches), continuous (hand wheels, with a range that clamps or wraps) and momentary
   (push-buttons, which read pressed until the step's `ReleaseMomentaries()`). Only physical constraints block a
@@ -71,6 +81,20 @@ Everything in simcore is deterministic for a given sequence of inputs, which mak
   the **same** panel, refusing another seat's procedures. It waits for
   `wait_for`, reacts with a delay once a lamp comes on, and reports started / completed / waiting / equipment fault /
   aborted for voice lines and the order UI.
+
+- Crew data and skill (`crew_data.hpp`, `data/crew/`): seats, the callout catalogue, orders, tasks, world facts,
+  automatic reports, skill tiers. A crew member with a tier (`CrewMember::SetSkill`) reacts per action with jitter,
+  slips (an out-of-order action, logged as a crew mistake) and forgets steps for its patience; NPC aiming takes wheel
+  rates, TV lag and aim noise from the tiers (`AimCrew`).
+- The drill master (`drill_master.hpp`): the reference performer. Backward chaining over the console's own dependency
+  data to each seat's actions, the sourced drills preferred, a ghost run on a copy of the console for the ideal
+  timeline, each seat's best next move and the cost of a move. It drives reminders, the NPC commander's readiness
+  orders and (to come) the training overlay.
+- Callouts (`crew_callouts.hpp`): the crew's voice on the intercom and the battery net, one voice per channel, urgent
+  first; `ScenarioRunner` speaks orders, acknowledgements, automatic reports, engagement events
+  (`EngagementModel::TakeEvents`), designations and reminders, into the radio log and the debrief.
+- The NPC vehicle commander (`ScenarioRunner`, `"crew_commander": "npc"`): readiness by the drill master's plan, the
+  engagement by the crew data's orders, supervision of players' seats; `GiveCrewOrder` is the order menu's backend.
 
 The player's 3D cabin clicks call the same functions, so the player and the crew share one source of truth.
 - Player: `ScenarioRunner::PlayerSet` puts the player's moves through a `ProcedureTracker` (the procedure set with

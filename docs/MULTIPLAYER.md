@@ -4,6 +4,10 @@ Written 16 October 2026. Covers the multiplayer crew (players in the vehicle's s
 E10). Code: `simcore/scenario_runner.hpp` (seats), `simcore/console_sync.hpp`, `simcore/em/replication.hpp`; Unreal:
 `USimCrewSeatComponent`, `USimKnowledgeComponent`, `ASimCrewPlayerController`, `ASimCrewGameMode`, `USimWorldSubsystem`.
 
+Multiplayer serves the crew pillars (`docs/crew/README.md`): players and NPCs share one crew, each seat held by
+either, and the NPCs work with the players exactly as with each other (they wait for, remind and report to a player
+in a seat; a player commander gets the same reports and acknowledgements as an NPC one).
+
 ## The model
 
 * **The server runs the one simulation.** Every machine loads the same scenario (the map's `ASimScenarioDirector` does it
