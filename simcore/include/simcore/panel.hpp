@@ -155,6 +155,17 @@ public:
 
     const std::vector<ControlDef>& Controls() const { return defs_; }
 
+    // The whole panel's state in control order, for a mirror on another machine (console_sync.hpp). ApplyState writes
+    // it as it is (the authority already checked covers and locks); false if the sizes don't match.
+    const std::vector<int>& Positions() const { return values_; }
+    const std::vector<double>& Values() const { return analog_; }
+    bool ApplyState(const std::vector<int>& positions, const std::vector<double>& values) {
+        if (positions.size() != values_.size() || values.size() != analog_.size()) return false;
+        values_ = positions;
+        analog_ = values;
+        return true;
+    }
+
 private:
     bool GuardClosed(const ControlDef& def) const { return !def.guard_id.empty() && Get(def.guard_id) < 1; }
 

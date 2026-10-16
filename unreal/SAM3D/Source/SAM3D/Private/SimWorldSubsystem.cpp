@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
+#include "SimCrewSeatComponent.h"
 #include "SimKnowledgeComponent.h"
 
 namespace
@@ -162,7 +163,11 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 	struct FPumpAfterStep
 	{
 		USimWorldSubsystem* Self;
-		~FPumpAfterStep() { Self->PumpKnowledge(); }
+		~FPumpAfterStep()
+		{
+			Self->PumpKnowledge();
+			Self->PumpConsole();
+		}
 	} PumpAfterStep{this};
 
 	const double Scale = GetTimeScale();
@@ -170,13 +175,16 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 	{
 		if (!bPaused)
 		{
-			EmLayer->Advance(DeltaTime * Scale);
+			if (!IsMirrorOnly())
+			{
+				EmLayer->Advance(DeltaTime * Scale);
+			}
 		}
 		EmLayer->Draw(GetWorld(), [this](const simcore::Vec3& Enu) { return ToUnreal(Enu); });
 	}
-	if (bPaused)
+	if (bPaused || IsMirrorOnly())
 	{
-		return;
+		return;  // a network client mirrors the server's simulation; it never steps its own
 	}
 	// Fixed-step simulation, decoupled from frame rate and sped up by the time scale. Clamp the frame time to avoid a
 	// spiral of death after hitches; the step caps grow with the scale so compression isn't lost to them.
@@ -443,9 +451,45 @@ bool USimWorldSubsystem::LoadCabin(const FString& CabinFile, FString& OutError)
 	return true;
 }
 
+static ESimPlayerActionResult ToActionResult(simcore::StepResult Result)
+{
+	switch (Result)
+	{
+	case simcore::StepResult::Accepted: return ESimPlayerActionResult::Accepted;
+	case simcore::StepResult::AcceptedEarly: return ESimPlayerActionResult::AcceptedEarly;
+	case simcore::StepResult::NotNextStep: return ESimPlayerActionResult::OutOfOrder;
+	case simcore::StepResult::WaitRequired: return ESimPlayerActionResult::NotYet;
+	case simcore::StepResult::Blocked: return ESimPlayerActionResult::Blocked;
+	case simcore::StepResult::ProcedureComplete: return ESimPlayerActionResult::Moved;
+	case simcore::StepResult::UnknownControl:
+	case simcore::StepResult::InvalidPosition: break;
+	}
+	return ESimPlayerActionResult::Invalid;
+}
+
 ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& ControlId, int32 Position)
 {
-	if (!Runner)
+	// Multiplayer crew: a seated player's hands go through the seat (to the server, or straight in on the server).
+	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
+	{
+		if (!Seat->SeatRole.IsEmpty())
+		{
+			if (IsMirrorOnly())
+			{
+				Seat->SetControl(ControlId, Position);
+				return ESimPlayerActionResult::Sent;
+			}
+			if (!Runner)
+			{
+				return ESimPlayerActionResult::Invalid;
+			}
+			std::string Why;
+			const simcore::StepResult R = Runner->SeatSet(ToStd(Seat->SeatRole), ToStd(ControlId), Position, &Why);
+			BroadcastNewDebriefEntries();
+			return ToActionResult(R);
+		}
+	}
+	if (!Runner || IsMirrorOnly())
 	{
 		return ESimPlayerActionResult::Invalid;
 	}
@@ -467,7 +511,20 @@ ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& Contr
 
 bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 {
-	return Runner && Runner->PlayerTurn(ToStd(ControlId), Value);
+	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
+	{
+		if (!Seat->SeatRole.IsEmpty())
+		{
+			if (IsMirrorOnly())
+			{
+				Seat->TurnWheel(ControlId, Value);
+				return true;
+			}
+			std::string Why;
+			return Runner && Runner->SeatTurn(ToStd(Seat->SeatRole), ToStd(ControlId), Value, &Why);
+		}
+	}
+	return Runner && !IsMirrorOnly() && Runner->PlayerTurn(ToStd(ControlId), Value);
 }
 
 bool USimWorldSubsystem::SetPlayerProcedure(const FString& ProcedureId)
@@ -919,6 +976,148 @@ void USimWorldSubsystem::PumpKnowledge()
 		TArray<uint8> Packet;
 		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
 		Client->SendKnowledge(Packet);
+	}
+}
+
+// ------------------------------------------------------------------ multiplayer crew
+
+bool USimWorldSubsystem::IsMirrorOnly() const
+{
+	return GetWorld() != nullptr && GetWorld()->GetNetMode() == NM_Client;
+}
+
+void USimWorldSubsystem::RegisterCrewSeat(USimCrewSeatComponent* Seat)
+{
+	if (Seat != nullptr && !CrewSeats.Contains(Seat))
+	{
+		Seat->SendAccumulator() = 1e9;  // the first snapshot goes out at once
+		CrewSeats.Add(Seat);
+	}
+}
+
+void USimWorldSubsystem::UnregisterCrewSeat(USimCrewSeatComponent* Seat)
+{
+	CrewSeats.Remove(Seat);
+}
+
+void USimWorldSubsystem::SetLocalCrewSeat(USimCrewSeatComponent* Seat)
+{
+	LocalCrewSeat = Seat;
+}
+
+void USimWorldSubsystem::ClearLocalCrewSeat(USimCrewSeatComponent* Seat)
+{
+	if (LocalCrewSeat.Get() == Seat)
+	{
+		LocalCrewSeat.Reset();
+	}
+}
+
+bool USimWorldSubsystem::TakeCrewSeat(const FString& Role, const FString& Player)
+{
+	const bool bOk = Runner && Runner->TakeSeat(ToStd(Role), ToStd(Player));
+	BroadcastNewDebriefEntries();
+	return bOk;
+}
+
+void USimWorldSubsystem::LeaveCrewSeat(const FString& Role)
+{
+	if (Runner)
+	{
+		Runner->LeaveSeat(ToStd(Role));
+		BroadcastNewDebriefEntries();
+	}
+}
+
+bool USimWorldSubsystem::SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why)
+{
+	if (!Runner)
+	{
+		Why = TEXT("no scenario");
+		return false;
+	}
+	std::string W;
+	const simcore::StepResult R = Runner->SeatSet(ToStd(Role), ToStd(ControlId), Position, &W);
+	BroadcastNewDebriefEntries();
+	const ESimPlayerActionResult A = ToActionResult(R);
+	const bool bMoved = A == ESimPlayerActionResult::Accepted || A == ESimPlayerActionResult::AcceptedEarly ||
+		A == ESimPlayerActionResult::OutOfOrder || A == ESimPlayerActionResult::Moved;
+	if (!bMoved)
+	{
+		Why = W.empty() ? FString(StaticEnum<ESimPlayerActionResult>()->GetNameStringByValue(static_cast<int64>(A))) : FString(UTF8_TO_TCHAR(W.c_str()));
+	}
+	return bMoved;
+}
+
+bool USimWorldSubsystem::SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why)
+{
+	std::string W;
+	const bool bOk = Runner && Runner->SeatTurn(ToStd(Role), ToStd(ControlId), Value, &W);
+	Why = UTF8_TO_TCHAR(W.c_str());
+	return bOk;
+}
+
+bool USimWorldSubsystem::ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq)
+{
+	if (!Runner)
+	{
+		return false;  // this machine has not loaded the scenario yet
+	}
+	const std::vector<std::uint8_t> Packet(Bytes.GetData(), Bytes.GetData() + Bytes.Num());
+	std::uint32_t S = Seq;
+	if (!simcore::ApplyConsoleState(Packet, Runner->Console(), &S))
+	{
+		return false;
+	}
+	Seq = S;
+	return true;
+}
+
+FString USimWorldSubsystem::GetSeatHolder(const FString& Role) const
+{
+	return Runner ? FString(UTF8_TO_TCHAR(Runner->SeatHolder(ToStd(Role)).c_str())) : FString();
+}
+
+void USimWorldSubsystem::PumpConsole()
+{
+	if (!Runner || CrewSeats.Num() == 0 || IsMirrorOnly())
+	{
+		return;
+	}
+	double Dt = LastConsoleSimTime >= 0.0 ? Runner->Time() - LastConsoleSimTime : 0.0;
+	if (Dt < 0.0)
+	{
+		Dt = 0.0;  // a new scenario started
+	}
+	LastConsoleSimTime = Runner->Time();
+	CrewSeats.RemoveAll([](const TWeakObjectPtr<USimCrewSeatComponent>& S) { return !S.IsValid(); });
+	for (const TWeakObjectPtr<USimCrewSeatComponent>& Weak : CrewSeats)
+	{
+		USimCrewSeatComponent* Seat = Weak.Get();
+		// The seat's procedure for the player's UI (owner-only replicated properties).
+		FString ProcId;
+		int32 Step = 0;
+		if (!Seat->SeatRole.IsEmpty())
+		{
+			if (const simcore::ProcedureTracker* T = Runner->SeatTracker(ToStd(Seat->SeatRole)))
+			{
+				ProcId = UTF8_TO_TCHAR(T->GetProcedure().id.c_str());
+				Step = T->IsComplete() ? 0 : static_cast<int32>(T->NextIndex()) + 1;
+			}
+		}
+		Seat->SeatProcedureId = ProcId;
+		Seat->SeatProcedureStep = Step;
+		double& Acc = Seat->SendAccumulator();
+		Acc += Dt;
+		if (Acc < Seat->ConsoleSendPeriodSeconds)
+		{
+			continue;
+		}
+		Acc = 0.0;
+		const std::vector<std::uint8_t> Bytes = Runner->ConsoleSnapshot(Seat->NextSnapshotSeq());
+		TArray<uint8> Packet;
+		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
+		Seat->SendConsole(Packet);
 	}
 }
 

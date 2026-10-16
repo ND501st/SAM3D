@@ -28,6 +28,7 @@
 // prerequisites, and a fault clears as soon as the subsystem is commanded off.
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <unordered_map>
@@ -357,6 +358,45 @@ private:
         }
     }
 
+public:
+    // The subsystems' and inputs' state, for a mirror on another machine (console_sync.hpp). Subsystems in their
+    // declaration order; inputs sorted by id.
+    struct UnitStateCopy {
+        SubsystemState state = SubsystemState::Off;
+        double progress = 0.0;
+        bool latched = false;
+    };
+    std::vector<UnitStateCopy> UnitStates() const {
+        std::vector<UnitStateCopy> out;
+        for (const Unit& u : units_) out.push_back({u.state, u.progress, u.latched});
+        return out;
+    }
+    std::vector<std::string> UnitIds() const {
+        std::vector<std::string> out;
+        for (const Unit& u : units_) out.push_back(u.def.id);
+        return out;
+    }
+    std::vector<std::pair<std::string, bool>> Inputs() const {
+        std::vector<std::pair<std::string, bool>> out(inputs_.begin(), inputs_.end());
+        std::sort(out.begin(), out.end());
+        return out;
+    }
+    bool ApplyState(const std::vector<UnitStateCopy>& units, const std::vector<std::pair<std::string, bool>>& inputs) {
+        if (units.size() != units_.size()) return false;
+        for (std::size_t i = 0; i < units.size(); ++i) {
+            units_[i].state = units[i].state;
+            units_[i].progress = units[i].progress;
+            units_[i].latched = units[i].latched;
+        }
+        for (const auto& in : inputs) {
+            const auto it = inputs_.find(in.first);
+            if (it == inputs_.end()) return false;
+            it->second = in.second;
+        }
+        return true;
+    }
+
+private:
     std::unordered_map<std::string, std::size_t> index_;
     std::unordered_map<std::string, bool> inputs_;
     std::vector<Unit> units_;
