@@ -16,6 +16,16 @@ blessing. The first system is the **9K33M2 Osa-AK as fielded in the 1980s**, pla
 - engage over real terrain, against training targets, aircraft, helicopters, jammers and anti-radiation missiles
 - debrief what each crew member did; no points, as in SAM Simulator and in reality
 
+**Crew and teamwork (the project owner's design pillars, 16 Oct 2026; `docs/crew/README.md`).** Teamwork with NPC
+crewmates is paramount. The game has two halves: *in the crew*, the player is one member of the team, learning the
+drill and how to operate each seat; *in command*, the player gives the orders, first for the single Osa, then for the
+battery. Every NPC works with every other; every action and command is mapped and interconnected (the generated action
+map), with behaviour paths, callouts and commands for every environment and outcome. NPC skill levels come from player
+progression and quests and affect reaction, speed and accuracy everywhere. An ideal progression of events, the drill
+master's perfect performance, is the reference for the training overlay, like a chess engine that always knows the
+best move. One crewmate's action depends on others' knowledge and actions (someone must know where the target is,
+someone must have driven within reach), and that interdependence is mapped.
+
 What SAM3D adds to SAM Simulator, in the creator's own words its limit is "a 3~5 crews work, one handed": a crew,
 a battery, driving and deploying, and a 3D world seen through the TV sight.
 

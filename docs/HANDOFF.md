@@ -207,6 +207,18 @@ physics stays unscheduled.
 
 Early-warning/command sources (E4, roadmap 7.8): `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, `docs/research/EM_C2_SOURCES_2026-10.md`. PU-12 is the main source; the crew can switch (`RequestC2Source`) and an NPC commander falls back on silence.
 
+## 0. The crew pillars (read first)
+
+**Crew and teamwork (the project owner's design pillars, 16 Oct 2026; `docs/crew/README.md`).** Teamwork with NPC
+crewmates is paramount. The game has two halves: *in the crew*, the player is one member of the team, learning the
+drill and how to operate each seat; *in command*, the player gives the orders, first for the single Osa, then for the
+battery. Every NPC works with every other; every action and command is mapped and interconnected (the generated action
+map), with behaviour paths, callouts and commands for every environment and outcome. NPC skill levels come from player
+progression and quests and affect reaction, speed and accuracy everywhere. An ideal progression of events, the drill
+master's perfect performance, is the reference for the training overlay, like a chess engine that always knows the
+best move. One crewmate's action depends on others' knowledge and actions (someone must know where the target is,
+someone must have driven within reach), and that interdependence is mapped.
+
 ## 16. State on 16 October 2026 (phase 9 done in simcore)
 
 Sections 8, 13 and 15 above describe early October. Since then (all as stacked PRs, newest last): the accuracy pass
