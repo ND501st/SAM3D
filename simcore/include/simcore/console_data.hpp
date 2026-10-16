@@ -232,6 +232,7 @@ struct FuelDef {
     std::vector<FuelSource> sources;
     std::string stopped_input;
     std::string refuel_input;  // the TZM alongside
+    std::string refuel_input_alt;  // or a fuel truck alongside
     double refuel_lpm = 0.0;
     std::string power_cut_input;
     double refuel_hysteresis_l = 5.0;  // the crew asks again once refuelled this far above the reserve
@@ -628,10 +629,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string fp = "fuel";
         FuelDef& d = out.fuel;
         const Equipment& eq = out.equipment;
-        if (!Keys(*f, fp, {"tank_l", "reserve_fraction", "sources", "stopped_input", "refuel_input", "refuel_lpm",
+        if (!Keys(*f, fp, {"tank_l", "reserve_fraction", "sources", "stopped_input", "refuel_input", "refuel_input_alt", "refuel_lpm",
                            "power_cut_input", "source", "confidence", "notes"}) ||
             !Provenance(*f, fp) || !RefInput(*f, fp, "stopped_input", eq, d.stopped_input) ||
-            !RefInput(*f, fp, "refuel_input", eq, d.refuel_input) || !RefInput(*f, fp, "power_cut_input", eq, d.power_cut_input) ||
+            !RefInput(*f, fp, "refuel_input", eq, d.refuel_input) || !RefInput(*f, fp, "refuel_input_alt", eq, d.refuel_input_alt) || !RefInput(*f, fp, "power_cut_input", eq, d.power_cut_input) ||
             !OptionalNumber(*f, fp, "refuel_lpm", d.refuel_lpm)) {
             return false;
         }

@@ -579,7 +579,21 @@ private:
             battery_->SetAirThreat(close, time_);
         }
         if (!def_.battery_drive_own) battery_->SetOwnPosition(def_.unit_position);
+        ServiceDrills();
         battery_->Step(time_, dt);
+        // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
+        bool has_tzm = false, has_fuel = false;
+        for (const Battery::Vehicle& v : battery_->Vehicles()) {
+            has_tzm = has_tzm || v.def.kind == BatteryVehicleKind::Reload;
+            has_fuel = has_fuel || v.def.kind == BatteryVehicleKind::Fuel;
+        }
+        if (has_tzm) {
+            console_.equipment.SetInput("tzm_alongside", battery_->Alongside("", Battery::Service::Reload) ||
+                                                             battery_->Alongside("", Battery::Service::Refuel));
+        }
+        if (has_fuel && console_.equipment.HasInput("fuel_truck_alongside")) {
+            console_.equipment.SetInput("fuel_truck_alongside", battery_->Alongside("", Battery::Service::Refuel));
+        }
         if (def_.battery_drive_own) {
             if (const Battery::Vehicle* own = battery_->Own()) {
                 SetUnitPosition(Vec3{own->position.x, own->position.y, def_.unit_position.z});
@@ -595,6 +609,25 @@ private:
         for (const Battery::Event& e : battery_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.who, "battery", e.text});
             Radio("battery net", e.who, e.text);
+        }
+    }
+
+    // The reload and refuel drills: an empty launcher calls the TZM; a crew asking for fuel calls the fuel truck (or the
+    // TZM). What goes across is counted off the service vehicle; it goes back when the vehicle is full or it is empty.
+    void ServiceDrills() {
+        if (launcher_) {
+            const int loaded = launcher_->LoadedCount();
+            if (last_loaded_ >= 0 && loaded > last_loaded_) battery_->Consume("", Battery::Service::Reload, loaded - last_loaded_, time_);
+            last_loaded_ = loaded;
+            if (loaded == 0 && launcher_->ShotsFlying().empty()) battery_->RequestService("", Battery::Service::Reload, time_);
+            if (loaded == launcher_->Capacity()) battery_->Done("", Battery::Service::Reload, time_);
+        }
+        if (fuel_) {
+            const double level = fuel_->LevelL();
+            if (last_fuel_l_ >= 0.0 && level > last_fuel_l_) battery_->Consume("", Battery::Service::Refuel, level - last_fuel_l_, time_);
+            last_fuel_l_ = level;
+            if (fuel_->Requested()) battery_->RequestService("", Battery::Service::Refuel, time_);
+            if (level >= fuel_->TankL() - 1e-6) battery_->Done("", Battery::Service::Refuel, time_);
         }
     }
 
@@ -861,6 +894,8 @@ private:
     }
     std::vector<char> battery_orders_done_;
     bool air_threat_forced_ = false;
+    int last_loaded_ = -1;
+    double last_fuel_l_ = -1.0;
 
     Seat* FindSeat(const std::string& role) {
         for (Seat& st : seats_)

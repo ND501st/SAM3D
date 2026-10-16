@@ -122,6 +122,20 @@ back to engine basic shapes for any part that isn't imported.
 python tools/ue_import_cabin_parts.py
 ```
 
+## Battery support vehicles
+
+Placeholder exteriors (no interiors) for the battery's other vehicles: the TZM 9T217 transloader, the ATZ-3.8-131 fuel
+truck and the PU-12M command post, at their published sizes. `tools/blender/build_support_vehicles.py` writes
+`art/support_vehicles/SM_*.fbx` (Git LFS); `tools/ue_import_support_vehicles.py` imports them as
+`/Game/SAM3D/Vehicles/SM_TZM_9T217`, `SM_ATZ_38_131` and `SM_PU12M` (editor closed, through the commandlet).
+`ASimEntityActor::UseVehicleModel` gives battery entities of kind `reload`, `fuel` and `command_post` these meshes and
+falls back to a box when one isn't imported. The PU-12M at full detail, with its interior: `docs/PU12_DEVELOPMENT.md`.
+
+```
+"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe" --background --python tools/blender/build_support_vehicles.py -- --preview out/support_vehicles
+D:/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe C:/dev/SAM3D/unreal/SAM3D/SAM3D.uproject -run=pythonscript -script="C:/dev/SAM3D/tools/ue_import_support_vehicles.py" -unattended -nullrhi
+```
+
 ## Scripting the open editor
 
 Python remote execution is on (`Config/DefaultEngine.ini`), so scripts can drive the open editor: start and stop

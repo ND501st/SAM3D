@@ -47,10 +47,16 @@ struct BatteryTactics {
     double halt_duration_s = 1.5 * 3600.0;
     double night_halt_s = 3600.0;
     double threat_range_m = 50000.0;
+    double water_speed_mps = 2.2;
+    double river_standoff_m = 2000.0;
+    double ambush_dwell_s = 1200.0;
+    double alongside_offset_m = 8.0;
+    double tzm_capacity = 12.0;
+    double fuel_truck_capacity_l = 3800.0;
     double slot_tolerance_m = 15.0;
 };
 
-enum class BatteryVehicleKind { Launcher, Reload, CommandPost, Maintenance };
+enum class BatteryVehicleKind { Launcher, Reload, CommandPost, Maintenance, Fuel };
 
 inline const char* BatteryVehicleKindName(BatteryVehicleKind k) {
     switch (k) {
@@ -58,13 +64,14 @@ inline const char* BatteryVehicleKindName(BatteryVehicleKind k) {
         case BatteryVehicleKind::Reload: return "reload";
         case BatteryVehicleKind::CommandPost: return "command_post";
         case BatteryVehicleKind::Maintenance: return "maintenance";
+        case BatteryVehicleKind::Fuel: return "fuel";
     }
     return "?";
 }
 
 inline bool ParseBatteryVehicleKind(const std::string& s, BatteryVehicleKind& out) {
     for (BatteryVehicleKind k : {BatteryVehicleKind::Launcher, BatteryVehicleKind::Reload, BatteryVehicleKind::CommandPost,
-                                 BatteryVehicleKind::Maintenance}) {
+                                 BatteryVehicleKind::Maintenance, BatteryVehicleKind::Fuel}) {
         if (s == BatteryVehicleKindName(k)) {
             out = k;
             return true;
@@ -82,12 +89,16 @@ struct BatteryVehicleDef {
 };
 
 struct BatteryOrder {
-    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume };
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel };
     Kind kind = Kind::March;
     double at_s = 0.0;
-    std::vector<Vec3> route;  // March: the road, first point to last
-    Vec3 covered;             // CombatFormation: the covered unit's position ...
-    double axis_deg = 0.0;    // ... and its direction of advance (true, clockwise from north)
+    std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
+    Vec3 covered;             // CombatFormation: the covered unit's position. RiverCrossing: the crossing point (near bank)
+    double axis_deg = 0.0;    // direction of advance, or across the river (true, clockwise from north)
+    bool bounding = false;    // CombatFormation: the pairs move one at a time, the others staying deployed
+    bool roving = false;      // Ambush: the pairs move on to the next point every ambush_dwell_s
+    double width_m = 100.0;   // RiverCrossing: the river's width
+    std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
 };
 
 inline const char* BatteryOrderName(BatteryOrder::Kind k) {
@@ -97,13 +108,20 @@ inline const char* BatteryOrderName(BatteryOrder::Kind k) {
         case BatteryOrder::Kind::CombatFormation: return "combat_formation";
         case BatteryOrder::Kind::Halt: return "halt";
         case BatteryOrder::Kind::Resume: return "resume";
+        case BatteryOrder::Kind::Ambush: return "ambush";
+        case BatteryOrder::Kind::RiverCrossing: return "river_crossing";
+        case BatteryOrder::Kind::FarBankHeld: return "far_bank_held";
+        case BatteryOrder::Kind::Reload: return "reload";
+        case BatteryOrder::Kind::Refuel: return "refuel";
     }
     return "?";
 }
 
 inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
     for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
-                                 BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume}) {
+                                 BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume, BatteryOrder::Kind::Ambush,
+                                 BatteryOrder::Kind::RiverCrossing, BatteryOrder::Kind::FarBankHeld, BatteryOrder::Kind::Reload,
+                                 BatteryOrder::Kind::Refuel}) {
         if (s == BatteryOrderName(k)) {
             out = k;
             return true;
@@ -128,7 +146,10 @@ public:
             {"behind_covered_m", &t.behind_covered_m},     {"reload_behind_m", &t.reload_behind_m},
             {"command_post_behind_m", &t.command_post_behind_m}, {"halt_interval_s", &t.halt_interval_s},
             {"halt_duration_s", &t.halt_duration_s},       {"night_halt_s", &t.night_halt_s},
-            {"threat_range_m", &t.threat_range_m}};
+            {"threat_range_m", &t.threat_range_m},         {"water_speed_mps", &t.water_speed_mps},
+            {"river_standoff_m", &t.river_standoff_m},     {"ambush_dwell_s", &t.ambush_dwell_s},
+            {"alongside_offset_m", &t.alongside_offset_m}, {"tzm_capacity", &t.tzm_capacity},
+            {"fuel_truck_capacity_l", &t.fuel_truck_capacity_l}};
         for (const auto& f : fields) {
             const std::string p = Join("tactics", f.first);
             const json::Value* v = b->Find(f.first);
@@ -172,7 +193,8 @@ inline bool LoadBatteryTacticsFile(const std::string& path, BatteryTactics& out,
 
 class Battery {
 public:
-    enum class Mode { Waiting, Forming, Marching, ShortHalt, Formation, Halted };
+    enum class Mode { Waiting, Forming, Marching, ShortHalt, Formation, Halted, Ambush, RiverApproach, RiverCrossing };
+    enum class Service { Reload, Refuel };
 
     struct Vehicle {
         BatteryVehicleDef def;
@@ -182,6 +204,17 @@ public:
         double speed_mps = 0.0;
         bool deployed = false;     // stopped and deployed (short halt or formation slot reached and set up)
         double deploy_done_s = -1.0;
+        double stock = 0.0;        // a TZM: missiles aboard; a fuel truck: litres aboard
+        // A service run (a TZM or fuel truck going alongside another vehicle): the served vehicle, and where to go back to.
+        std::string serving;
+        Service service = Service::Reload;
+        bool alongside = false;
+        bool returning = false;
+        Vec3 home;
+        // Crossing a river: the stages of this vehicle's own crossing.
+        int crossing_stage = 0;  // 0 waiting on the near side, 1 to the water's edge, 2 in the water, 3 to the far slot
+        bool afloat = false;
+        bool waiting = false;    // bounding or crossing: holding until its pair's turn
     };
 
     struct Event {
@@ -196,6 +229,8 @@ public:
             v.def = d;
             v.position = d.start;
             v.goal = d.start;
+            if (d.kind == BatteryVehicleKind::Reload) v.stock = tactics_.tzm_capacity;
+            if (d.kind == BatteryVehicleKind::Fuel) v.stock = tactics_.fuel_truck_capacity_l;
             vehicles_.push_back(v);
         }
     }
@@ -271,8 +306,44 @@ public:
             case BatteryOrder::Kind::CombatFormation:
                 mode_ = Mode::Formation;
                 FormationSlots(o.covered, o.axis_deg);
-                events_.push_back({t, "Battery commander", "combat formation: pairs " + Fmt(tactics_.pair_separation_m) + " m apart, " +
+                bounding_ = o.bounding;
+                if (bounding_) HoldPairsAfterFirst();
+                events_.push_back({t, "Battery commander", std::string(o.bounding ? "bound forward in pairs" : "combat formation") + ": pairs " +
+                                                               Fmt(tactics_.pair_separation_m) + " m apart, " +
                                                                Fmt(tactics_.behind_covered_m) + " m behind the covered unit"});
+                break;
+            case BatteryOrder::Kind::Ambush:
+                if (o.route.empty()) return;
+                mode_ = Mode::Ambush;
+                ambush_points_ = o.route;
+                ambush_roving_ = o.roving;
+                ambush_shift_ = 0;
+                ambush_next_move_s_ = t + tactics_.ambush_dwell_s;
+                AmbushSlots();
+                events_.push_back({t, "Battery commander", "ambush: pairs to " + std::to_string(o.route.size()) + " prepared points" +
+                                                               (o.roving ? ", roving between them" : "")});
+                break;
+            case BatteryOrder::Kind::RiverCrossing:
+                mode_ = Mode::RiverApproach;
+                river_point_ = o.covered;
+                river_axis_deg_ = o.axis_deg;
+                river_width_m_ = o.width_m;
+                RiverApproachSlots();
+                events_.push_back({t, "Battery commander", "river crossing: positions " + Fmt(tactics_.river_standoff_m) +
+                                                               " m from the river; cross in pairs when the far bank is held"});
+                break;
+            case BatteryOrder::Kind::FarBankHeld:
+                if (mode_ != Mode::RiverApproach) return;
+                mode_ = Mode::RiverCrossing;
+                crossing_pair_ = 0;
+                StartCrossingPair(t);
+                events_.push_back({t, "Battery commander", "far bank held: cross in pairs"});
+                break;
+            case BatteryOrder::Kind::Reload:
+                RequestService(o.vehicle, Service::Reload, t);
+                break;
+            case BatteryOrder::Kind::Refuel:
+                RequestService(o.vehicle, Service::Refuel, t);
                 break;
             case BatteryOrder::Kind::Halt:
                 StartHalt(t, night_ ? tactics_.night_halt_s : tactics_.halt_duration_s, "halt ordered");
@@ -320,21 +391,35 @@ public:
                                                                       "scheduled halt: checks, fuel, rest");
             }
         }
-        const double speed = mode_ == Mode::Formation ? tactics_.cross_country_speed_mps
-                             : mode_ == Mode::Forming  ? tactics_.cross_country_speed_mps
-                                                       : tactics_.march_speed_mps * 1.3;  // a little faster to keep up
+        if (mode_ == Mode::Ambush && ambush_roving_ && t >= ambush_next_move_s_) {
+            ++ambush_shift_;
+            ambush_next_move_s_ = t + tactics_.ambush_dwell_s;
+            AmbushSlots();
+            events_.push_back({t, "Battery commander", "ambush: pairs move on to the next point"});
+        }
+        if (mode_ == Mode::RiverCrossing) StepCrossing(t);
+        if (mode_ == Mode::Formation && bounding_) StepBounding(t);
+        const bool on_road = mode_ == Mode::Marching || mode_ == Mode::Forming;
+        const double speed = on_road && mode_ == Mode::Marching ? tactics_.march_speed_mps * 1.3  // a little faster to keep up
+                                                                : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
-            if (mode_ == Mode::Halted || mode_ == Mode::Waiting || t < hold_until_s_) {
+            if (!v.serving.empty()) {  // a service run goes on whatever the battery does
+                StepService(v, t, dt);
+                continue;
+            }
+            if (mode_ == Mode::Halted || mode_ == Mode::Waiting || t < hold_until_s_ || v.waiting) {
                 v.speed_mps = 0.0;
                 continue;
             }
-            Move(v, speed, dt, mode_ == Mode::Marching);
+            Move(v, v.afloat ? tactics_.water_speed_mps : speed, dt, mode_ == Mode::Marching);
         }
-        // Stopped at a short-halt point or a formation slot: deploy.
-        if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation) {
+        // Stopped at a short-halt point, a formation slot, an ambush point or a river position: deploy.
+        if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation || mode_ == Mode::Ambush || mode_ == Mode::RiverApproach ||
+            mode_ == Mode::RiverCrossing) {
             for (Vehicle& v : vehicles_) {
-                if (v.deployed) continue;
+                if (v.deployed || !v.serving.empty() || v.waiting) continue;
+                if (mode_ == Mode::RiverCrossing && v.crossing_stage != 0 && v.crossing_stage != 4) continue;
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) continue;
                 if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
                 if (t >= v.deploy_done_s) {
@@ -343,6 +428,71 @@ public:
                 }
             }
         }
+    }
+
+    // ---- Service runs: a TZM (reload; it carries fuel too) or a fuel truck goes alongside a vehicle ("" : the player's).
+    // Returns false if no free vehicle of that kind has anything left.
+    bool RequestService(const std::string& vehicle, Service kind, double t) {
+        const Vehicle* target = vehicle.empty() ? Own() : Find(vehicle);
+        if (target == nullptr) return false;
+        for (const Vehicle& v : vehicles_)
+            if (v.serving == target->def.id && v.service == kind && !v.returning) return true;  // already on its way
+        Vehicle* best = nullptr;
+        double best_d = 1e18;
+        for (Vehicle& v : vehicles_) {
+            const bool fits = kind == Service::Reload ? v.def.kind == BatteryVehicleKind::Reload
+                                                      : (v.def.kind == BatteryVehicleKind::Fuel || v.def.kind == BatteryVehicleKind::Reload);
+            if (!fits || !v.serving.empty() || v.stock <= 0.0) continue;
+            // a fuel truck is preferred for fuel; a TZM only if no fuel truck can come
+            const double d = Dist(v.position, target->position) + (kind == Service::Refuel && v.def.kind == BatteryVehicleKind::Reload ? 1e7 : 0.0);
+            if (d < best_d) {
+                best_d = d;
+                best = &v;
+            }
+        }
+        const std::string told = target->def.id + (kind == Service::Reload ? "/reload" : "/refuel");
+        if (best == nullptr) {
+            if (std::find(told_nothing_.begin(), told_nothing_.end(), told) == told_nothing_.end()) {
+                told_nothing_.push_back(told);
+                events_.push_back({t, "Battery commander", std::string(kind == Service::Reload ? "reload" : "refuel") + " for " +
+                                                               target->def.callsign + ": nothing left to send"});
+            }
+            return false;
+        }
+        told_nothing_.erase(std::remove(told_nothing_.begin(), told_nothing_.end(), told), told_nothing_.end());
+        best->serving = target->def.id;
+        best->service = kind;
+        best->alongside = false;
+        best->returning = false;
+        best->home = best->position;
+        events_.push_back({t, best->def.callsign, std::string(kind == Service::Reload ? "to reload " : "to refuel ") + target->def.callsign});
+        return true;
+    }
+    // Is a vehicle of this service alongside `vehicle` now?
+    bool Alongside(const std::string& vehicle, Service kind) const {
+        const Vehicle* target = vehicle.empty() ? Own() : Find(vehicle);
+        if (target == nullptr) return false;
+        for (const Vehicle& v : vehicles_)
+            if (v.serving == target->def.id && v.service == kind && v.alongside) return true;
+        return false;
+    }
+    // What the server handed over (missiles, litres); the service vehicle goes back when it is empty.
+    void Consume(const std::string& vehicle, Service kind, double amount, double t) {
+        const Vehicle* target = vehicle.empty() ? Own() : Find(vehicle);
+        if (target == nullptr) return;
+        for (Vehicle& v : vehicles_) {
+            if (v.serving != target->def.id || v.service != kind || !v.alongside) continue;
+            v.stock = std::max(0.0, v.stock - amount);
+            if (v.stock <= 0.0) Release(v, t, "empty");
+            return;
+        }
+    }
+    // The served vehicle is full: the service vehicle goes back.
+    void Done(const std::string& vehicle, Service kind, double t) {
+        const Vehicle* target = vehicle.empty() ? Own() : Find(vehicle);
+        if (target == nullptr) return;
+        for (Vehicle& v : vehicles_)
+            if (v.serving == target->def.id && v.service == kind && !v.returning) Release(v, t, kind == Service::Reload ? "reload done" : "refuelled");
     }
 
     std::vector<Event> TakeEvents() {
@@ -393,6 +543,7 @@ private:
         const Vec3 right{std::cos(a), -std::sin(a), 0.0};
         std::vector<std::size_t> launchers, reloads, others;
         for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+            vehicles_[k].waiting = false;
             switch (vehicles_[k].def.kind) {
                 case BatteryVehicleKind::Launcher: launchers.push_back(k); break;
                 case BatteryVehicleKind::Reload: reloads.push_back(k); break;
@@ -423,6 +574,159 @@ private:
             v.deployed = false;
             v.deploy_done_s = -1.0;
         }
+    }
+
+    std::vector<std::size_t> Launchers() const {
+        std::vector<std::size_t> out;
+        for (std::size_t k = 0; k < vehicles_.size(); ++k)
+            if (vehicles_[k].def.kind == BatteryVehicleKind::Launcher) out.push_back(k);
+        return out;
+    }
+
+    // Bounding: only the first pair moves now; the others wait deployed where they are.
+    void HoldPairsAfterFirst() {
+        const std::vector<std::size_t> l = Launchers();
+        for (std::size_t j = 0; j < l.size(); ++j) vehicles_[l[j]].waiting = j >= 2;
+        bound_pair_ = 0;
+    }
+    void StepBounding(double t) {
+        const std::vector<std::size_t> l = Launchers();
+        const std::size_t pairs = (l.size() + 1) / 2;
+        // the pair that is moving: once both of its vehicles are deployed, the next pair goes
+        bool pair_done = true;
+        for (std::size_t j = 2 * bound_pair_; j < std::min(l.size(), 2 * bound_pair_ + 2); ++j) pair_done = pair_done && vehicles_[l[j]].deployed;
+        if (!pair_done || bound_pair_ + 1 >= pairs) return;
+        ++bound_pair_;
+        for (std::size_t j = 2 * bound_pair_; j < std::min(l.size(), 2 * bound_pair_ + 2); ++j) vehicles_[l[j]].waiting = false;
+        events_.push_back({t, "Battery commander", "pair " + std::to_string(bound_pair_) + " in position: pair " +
+                                                       std::to_string(bound_pair_ + 1) + " bounds forward"});
+    }
+
+    // Ambush: pair p at point (p + shift) mod n, the two vehicles 200 m apart; the others behind the first point.
+    void AmbushSlots() {
+        const std::vector<std::size_t> l = Launchers();
+        const std::size_t n = ambush_points_.size();
+        for (std::size_t j = 0; j < l.size(); ++j) {
+            Vehicle& v = vehicles_[l[j]];
+            const Vec3& p = ambush_points_[(j / 2 + ambush_shift_) % n];
+            v.goal = p + Vec3{(j % 2 == 0 ? -0.5 : 0.5) * tactics_.pair_internal_m, 0.0, 0.0};
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+        }
+        std::size_t k = 0;
+        for (Vehicle& v : vehicles_) {
+            if (v.def.kind == BatteryVehicleKind::Launcher || !v.serving.empty()) continue;
+            v.goal = ambush_points_.front() + Vec3{0.0, -tactics_.reload_behind_m - 300.0 * static_cast<double>(k++), 0.0};
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+        }
+    }
+
+    // River crossing: the battery takes a formation river_standoff_m short of the crossing, facing across.
+    void RiverApproachSlots() {
+        const double a = DegToRad(river_axis_deg_);
+        const Vec3 across{std::sin(a), std::cos(a), 0.0};
+        FormationSlots(river_point_ - across * (tactics_.river_standoff_m - tactics_.behind_covered_m), river_axis_deg_);
+        for (Vehicle& v : vehicles_) {
+            v.crossing_stage = 0;
+            v.afloat = false;
+            v.waiting = false;
+        }
+    }
+    void StartCrossingPair(double t) {
+        const std::vector<std::size_t> l = Launchers();
+        const double a = DegToRad(river_axis_deg_);
+        const Vec3 across{std::sin(a), std::cos(a), 0.0};
+        const Vec3 right{std::cos(a), -std::sin(a), 0.0};
+        std::vector<std::size_t> group;
+        if (2 * crossing_pair_ < l.size()) {
+            for (std::size_t j = 2 * crossing_pair_; j < std::min(l.size(), 2 * crossing_pair_ + 2); ++j) group.push_back(l[j]);
+        } else {
+            for (std::size_t k = 0; k < vehicles_.size(); ++k)  // the rest of the battery crosses last
+                if (vehicles_[k].def.kind != BatteryVehicleKind::Launcher && vehicles_[k].serving.empty()) group.push_back(k);
+        }
+        for (std::size_t g = 0; g < group.size(); ++g) {
+            Vehicle& v = vehicles_[group[g]];
+            v.crossing_stage = 1;
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+            v.goal = river_point_ + right * ((static_cast<double>(g) - 0.5) * 30.0);  // the water's edge
+        }
+        if (!group.empty()) {
+            events_.push_back({t, vehicles_[group.front()].def.callsign, group.size() > 1 && vehicles_[group.front()].def.kind == BatteryVehicleKind::Launcher
+                                                                            ? "pair crossing"
+                                                                            : "the rest of the battery crossing"});
+        }
+        (void)across;
+    }
+    void StepCrossing(double t) {
+        const double a = DegToRad(river_axis_deg_);
+        const Vec3 across{std::sin(a), std::cos(a), 0.0};
+        bool group_moving = false;
+        for (Vehicle& v : vehicles_) {
+            if (v.crossing_stage == 1 && Dist(v.position, v.goal) <= tactics_.slot_tolerance_m) {
+                v.crossing_stage = 2;
+                v.afloat = true;
+                v.goal = v.position + across * river_width_m_;
+                events_.push_back({t, v.def.callsign, "in the water"});
+            } else if (v.crossing_stage == 2 && Dist(v.position, v.goal) <= 1.0) {
+                v.crossing_stage = 3;
+                v.afloat = false;
+                v.goal = v.position + across * tactics_.behind_covered_m;  // a position beyond the far bank
+                events_.push_back({t, v.def.callsign, "on the far bank"});
+            } else if (v.crossing_stage == 3 && Dist(v.position, v.goal) <= tactics_.slot_tolerance_m) {
+                v.crossing_stage = 4;
+            }
+            if (v.crossing_stage == 1 || v.crossing_stage == 2) group_moving = true;
+        }
+        if (group_moving) return;
+        // the group in the water is across: the next one goes
+        const std::vector<std::size_t> l = Launchers();
+        const std::size_t groups = (l.size() + 1) / 2 + 1;
+        bool any_waiting = false;
+        for (const Vehicle& v : vehicles_) any_waiting = any_waiting || (v.crossing_stage == 0 && v.serving.empty());
+        if (any_waiting && crossing_pair_ + 1 < groups) {
+            ++crossing_pair_;
+            StartCrossingPair(t);
+        } else if (!any_waiting && !crossing_done_logged_) {
+            crossing_done_logged_ = true;
+            events_.push_back({t, "Battery commander", "the battery is across"});
+        }
+    }
+
+    void Release(Vehicle& v, double t, const std::string& why) {
+        v.returning = true;
+        v.alongside = false;
+        events_.push_back({t, v.def.callsign, why + ": going back"});
+    }
+    void StepService(Vehicle& v, double t, double dt) {
+        const Vehicle* target = Find(v.serving);
+        if (target == nullptr) {
+            v.serving.clear();
+            return;
+        }
+        if (v.returning) {
+            v.goal = v.home;
+            Move(v, tactics_.cross_country_speed_mps, dt, false);
+            if (Dist(v.position, v.home) <= 1.0) {
+                v.serving.clear();
+                v.returning = false;
+                events_.push_back({t, v.def.callsign, "back in place"});
+            }
+            return;
+        }
+        // alongside: to the target's right, offset_m away, level with it
+        const double hd = DegToRad(target->heading_deg);
+        const Vec3 right{std::cos(hd), -std::sin(hd), 0.0};
+        v.goal = target->position + right * tactics_.alongside_offset_m;
+        if (Dist(v.position, v.goal) <= 2.0 && target->speed_mps <= 0.1) {
+            if (!v.alongside) events_.push_back({t, v.def.callsign, std::string("alongside ") + target->def.callsign});
+            v.alongside = true;
+            v.speed_mps = 0.0;
+            return;
+        }
+        v.alongside = false;
+        Move(v, tactics_.cross_country_speed_mps, dt, false);
     }
 
     void StartHalt(double t, double duration, const std::string& why) {
@@ -471,6 +775,18 @@ private:
     double halt_until_s_ = 0.0;
     bool arrived_logged_ = false;
     double leave_s_ = 0.0;
+    bool bounding_ = false;
+    std::size_t bound_pair_ = 0;
+    std::vector<Vec3> ambush_points_;
+    bool ambush_roving_ = false;
+    std::size_t ambush_shift_ = 0;
+    double ambush_next_move_s_ = 0.0;
+    Vec3 river_point_;
+    double river_axis_deg_ = 0.0;
+    double river_width_m_ = 100.0;
+    std::size_t crossing_pair_ = 0;
+    bool crossing_done_logged_ = false;
+    std::vector<std::string> told_nothing_;
     double hold_until_s_ = -1.0;
     std::vector<Event> events_;
 };

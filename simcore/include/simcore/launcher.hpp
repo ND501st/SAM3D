@@ -150,6 +150,12 @@ public:
 
     // The container being filled right now (-1 if none): the first empty one, outer ones last.
     int Reloading() const { return reloading_; }
+    int LoadedCount() const {
+        int n = 0;
+        for (bool b : loaded_) n += b ? 1 : 0;
+        return n;
+    }
+    int Capacity() const { return static_cast<int>(loaded_.size()); }
     double ReloadProgress() const { return reload_progress_s_; }
 
     // The channel the next launch would use (0 = none: no selected missile on a free channel, or too soon).

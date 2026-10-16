@@ -8,7 +8,7 @@ with its top-level `"command_post"` (e.g. `"command/pu12.json"`).
 | `regiment_radars.json` | Library of the regiment's radar types (P-19, P-40) that feed the PU-12M: range and antenna height, cited. A scenario's `"c2.regiment"` block places them; the PU-12's board then holds only the targets some radar covers (within range, above its horizon) |
 | `pu12.json` | PU-12M battery command post: the plotting board's update period, range rings, the radar battery's tactical number and the post's navigation errors |
 
-| `battery_tactics.json` | The battery's march spacing, threat spacing, short-halt offset, combat formation (pairs), halts and speeds (roadmap 7.5; `video_osa`, unverified, and estimates) |
+| `battery_tactics.json` | The battery's march spacing, threat spacing, short-halt offset, combat formation (pairs), halts and speeds; the drills' numbers (river standoff, speed afloat, ambush dwell), the TZM's 12 missiles and the fuel truck's 3.8 m³ (roadmap 7.3, 7.5; `video_osa`, unverified, and estimates) |
 | `prepared_positions.json` | A prepared position's echo factors (emplacement, nets), the dummies' echo and the time to leave the emplacement (roadmap 7.6; estimates) |
 | `c2_sources.json` | Library of other early-warning and command sources (EWR voice net, division early-warning net, neighbouring battery, observation post, data link) the crew can switch to; the PU-12 stays the main source |
 
