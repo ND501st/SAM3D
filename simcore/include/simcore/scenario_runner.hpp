@@ -1613,13 +1613,13 @@ private:
         // Until something is tracked the senior operator keeps the crew up to date: the nearest echo on his scope,
         // every 15 s (the first report of each contact is spoken when it appears).
         if (engagement_on_ && NpcAt("senior_operator") && engagement_.Method() == TrackMethod::None && time_ >= next_contact_update_s_) {
-            const KnownTarget* near = nullptr;
+            const KnownTarget* nearest = nullptr;
             for (const KnownTarget& k : pictures_["senior_operator"].All()) {
                 if (time_ - k.time_s > 2.0 || !k.has_range || k.friendly) continue;
-                if (near == nullptr || k.range_m < near->range_m) near = &k;
+                if (nearest == nullptr || k.range_m < nearest->range_m) nearest = &k;
             }
-            if (near != nullptr) {
-                KnownTarget k = *near;
+            if (nearest != nullptr) {
+                KnownTarget k = *nearest;
                 char r[16];
                 std::snprintf(r, sizeof(r), "%.0f", k.range_m / 1000.0);
                 Say("contact", "senior_operator", {{"azimuth", MilsText(k.azimuth_deg)}, {"range_km", r}}, &k);
@@ -1923,19 +1923,19 @@ public:
     bool PlayerSay(const std::string& station, const std::string& callout_id) {
         if (!callouts_ || def_.crew_data.FindCallout(callout_id) == nullptr) return false;
         if (callout_id == "contact" && engagement_on_) {
-            const Contact* near = nullptr;
+            const Contact* nearest = nullptr;
             for (const Contact& c : engagement_.SearchPicture()) {
-                if (near == nullptr || c.range_m < near->range_m) near = &c;
+                if (nearest == nullptr || c.range_m < nearest->range_m) nearest = &c;
             }
-            if (near == nullptr) return false;  // nothing on his scope to report
+            if (nearest == nullptr) return false;  // nothing on his scope to report
             KnownTarget k;
-            k.target = near->target_id;
+            k.target = nearest->target_id;
             k.has_azimuth = k.has_range = true;
-            k.azimuth_deg = near->azimuth_deg;
-            k.range_m = near->range_m;
+            k.azimuth_deg = nearest->azimuth_deg;
+            k.range_m = nearest->range_m;
             char r[16];
-            std::snprintf(r, sizeof(r), "%.0f", near->range_m / 1000.0);
-            callouts_->Say(time_, callout_id, station, {{"azimuth", MilsText(near->azimuth_deg)}, {"range_km", r}}, 0.0, &k);
+            std::snprintf(r, sizeof(r), "%.0f", nearest->range_m / 1000.0);
+            callouts_->Say(time_, callout_id, station, {{"azimuth", MilsText(nearest->azimuth_deg)}, {"range_km", r}}, 0.0, &k);
             return true;
         }
         return callouts_->Say(time_, callout_id, station);

@@ -88,6 +88,12 @@ no range. The range then comes by hand: the operator keeps the range wheel on th
 on the range the PU-12 last gave; ЦЕЛЬ В ЗОНЕ lights from it. The deputy commander's `fire_at_jammer` drill fires with
 ПОМЕХА up (method Н).
 
+**The battery's fight (roadmap 8.9).** With a `battery`, the other launchers fight too (`simcore/battery_fire.hpp`).
+`"battery_commander": "npc"` (default) gives them the PU-12's targets on the battery net; `"player"` leaves that to
+the player (`ScenarioRunner::AssignBatteryTarget`); `"none"` lets them fire freely at what is in their reach.
+`osa_battery_fight.json` is a raid on the battery; `osa_mission_march.json` is one mission end to end (the battery on
+the march, a raid, the fight, stowing and marching on).
+
 **The crew (phase 8, `docs/crew/`).** With crew data the crew speaks (orders, acknowledgements, reports, reminders:
 the radio log and the debrief), and each crew member may have a `skill` tier (recruit, class3, class2, class1, master)
 that sets its pace, slips, omissions and aim. With `"crew_commander": "npc"` no triggers are needed for the crew's

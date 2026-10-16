@@ -127,7 +127,7 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; next phase 8, NPC crewmates and teamwork, re-planned around the crew pillars in `docs/crew/09_IMPLEMENTATION_PLAN.md`; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
+See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.9 and 8.11 done in a first pass, next 8.10 (bodies, voices) and playing it on the map; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 

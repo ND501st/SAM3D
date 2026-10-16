@@ -53,6 +53,12 @@ commander, against a fighter appearing inside the zone, mean of five seeds, firs
 class 31.1 s, 2nd class 38.4 s, 3rd class 41.0 s, recruit 81.2 s. The 3rd class was tuned once (reaction 1.6 → 1.4 s,
 perception 2.4 → 2.0 s, launch timing 5 → 4 s) to come near the band.
 
+As built: reaction, jitter, slips, omissions and stress in `CrewMember`; wheel rates, TV lag, aim noise and the range
+error by hand in the engagement (`AimCrew`); perception and callout delay in the callouts; the miss chance in hearing
+reports; judgement as the launch timing on the decision controls (ПУСК), the commander's priority slips and his
+hesitation at a branch; patience in the reminders. Stress comes from the crew's own radars being jammed, or a hostile
+within 10 km with nothing tracked.
+
 ## 4. Per crewmate, per seat
 
 - Each NPC is a person with a name and a **tier per seat** (a senior operator who is 1st class at his own seat may be
