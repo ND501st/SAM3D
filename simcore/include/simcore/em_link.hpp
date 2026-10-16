@@ -465,6 +465,8 @@ public:
     }
 
     // The unit as a node of the EM world: its radars' tracks as knowledge, fused with whatever else reaches it.
+    // The unit's node in the EM scene: what a multiplayer server replicates to this crew (em/replication.hpp).
+    int UnitNodeId() const { return node_; }
     const em::KnowledgeBase& Knowledge() const { return world_.Scene().FindNode(node_)->kb; }
     std::vector<em::FusedTrack> UnitPicture() const { return Knowledge().Picture(world_.Time()); }
     // A report from another node (a PU-12 designation, a neighbour's track) joins the unit's knowledge.
