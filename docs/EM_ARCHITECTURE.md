@@ -509,3 +509,14 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
 * Side effect: path profiles are no longer shared between a site, a radar and the links, so a profile is computed once per cache rather than once; the hit rate is similar.
 * Left: time-slicing cold paths (TDOA, knowledge ageing), a hierarchical grid for the radar candidate queries, level of detail for distant units, `em_bench` in CI as a trend.
 
+## 29. Deception and EMCON depth (E7, done 16 October 2026)
+
+`simcore/em/deception.hpp`, false targets in `radar_system.hpp`, tests in `simcore/tests/test_em_deception.cpp`. All numbers in tests and in `data/em/generic.json` are placeholders.
+
+* **Decoys on the radar's parameters** (`EmWorld::AddDecoy`, `DecoyLink`; scenario `own_unit.em.decoys` copies the Osa's search radar). A decoy copies the radar's transmission (frequency, PRF, pulse width, scan) and follows its frequency; it radiates with the radar, while the radar is off (blinking), or always. The Czechoslovak army's own view was that radio-electronic deception measures should scatter enemy strikes (`vr_1985_plss`). Effect, without any special rule: the receivers identify the decoy as the radar, and because bearings to radar and decoy carry one signature, the enemy's DF net fixes the emitter off the radar (test: 0.5 km from the radar alone, 4.4 km with a decoy 9 km away).
+* **Dummy positions** are a decoy plus a ground platform with the echo the scenario gives it; nothing more is needed in the EM layer.
+* **Frequency change against a spot jammer.** A radar moves to another of its preset channels (`EmWorld::SetEmitterChannel`, `waveform.channels_hz`); a spot jammer set on it (`JammerState::victim_radar`) follows after `JammerDef::retune_s` (0: never). Jammers now jam at their own emitter's frequency, so a re-tune is real. Test: strobes stop at the change and return after the 8 s re-tune. The Osa's own channels are not in its data (no source).
+* **False-target repeaters** (`JamTechnique::FalseTargets`): swept by the main beam and loud enough above the radar's noise, the repeater adds a string of echoes behind itself on its bearing. They are plots like any other, so the tracker builds ghost tracks (test: one real, four ghosts). Repeaters are not noise: no strobe, no J/N. An abstraction (count, spacing, J/N needed), not a waveform model.
+* **Velocity-gate pull-off: not applicable.** No radar here tracks in Doppler; the Osa's tracking radar is a pulse radar with MTI (`mon_2112_80` p15-17).
+* **Dummy radio traffic and the intercept value of voice** (`EmWorld::AddDummyTraffic`). Every transmission radiates, so radio intercept hears and direction-finds it. A silent battery is not found; a dummy station is; once the battery's own voice designations go out on the same net, the two blend into a fix between them. Not modelled: what an intercept reveals by its content.
+

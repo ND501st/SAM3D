@@ -20,6 +20,7 @@
 #include "simcore/em/knowledge_system.hpp"
 #include "simcore/em/comms_system.hpp"
 #include "simcore/em/doctrine.hpp"
+#include "simcore/em/deception.hpp"
 #include "simcore/em/debug_draw.hpp"
 #include "simcore/em/world.hpp"
 #include "simcore/em/data.hpp"

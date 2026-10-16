@@ -308,6 +308,54 @@ inline void UpdateStrobeTracks(const EmScene& s, RadarWork& w, RadarState& r, co
     r.strobe_tracks.swap(kept);
 }
 
+// A false-target repeater swept by the main beam adds a string of echoes behind itself on its bearing: plots that line
+// up with no real target (ghosts), as long as its repeated power is far enough above the radar's noise.
+inline void AddFalseTargetPlots(const EmScene& s, RadarState& r, const RadarDef& d, const EmitterState& e, const Platform& p,
+                                const ElevationBeam& beam, double half_bw) {
+    for (const JammerState& j : s.jammers) {
+        if (!j.on || j.silent_until_s > s.time_s) continue;
+        const JammerDef& jd = s.lib.jammers[static_cast<std::size_t>(j.def_index)];
+        if (jd.technique != JamTechnique::FalseTargets) continue;
+        if (j.victim_radar != 0 && j.victim_radar != r.id) continue;
+        const Platform* jp = s.FindPlatform(j.platform_id);
+        const EmitterState* je = s.FindEmitter(j.emitter_id);
+        if (jp == nullptr || je == nullptr || !jp->alive) continue;
+        const double az_j = AzimuthFromTo(p.position, jp->position);
+        if (!InSweep(e.sweep_start_az_rad, e.swept_rad, az_j, half_bw)) continue;
+        const double f = e.freq_hz > 0.0 ? e.freq_hz : d.emitter.waveform.freq_hz;
+        const double centre = je->freq_hz > 0.0 ? je->freq_hz : jd.emitter.waveform.freq_hz;
+        if (JammerBandOverlap(centre, jd.emitter.waveform.bandwidth_hz, f, d.RxBandwidthHz()) <= 0.0) continue;
+        const double back_az = AzimuthFromTo(jp->position, p.position);
+        const double eirp = EirpW(jd.emitter, WrapPi(back_az - je->pointing_az_rad), 0.0);
+        const LinkLossResult loss = LinkLossCached(s, r.paths, *jp, p, f);
+        const AntennaDef ant = BeamAntenna(d.emitter, beam);
+        const double pj = OneWayReceivedPowerW(eirp, ant.gain_db, f, loss.range_m, loss.TotalOneWayDb());
+        const double jn = JammingToNoise(pj, d.noise_figure_db, d.RxBandwidthHz());
+        if (jn <= 0.0 || LinearToDb(jn) < jd.false_jn_needed_db) continue;
+        const double range_j = (jp->position - p.position).Length();
+        const double el_j = s.ElevationAngle(p, *jp);
+        for (int k = 1; k <= jd.false_targets; ++k) {
+            const double range = range_j + jd.false_spacing_m * static_cast<double>(k);
+            if (range > d.max_range_m) break;
+            const std::uint64_t key = LookKey(r.id, -3000 - 64 * j.id - k, e.revolutions);
+            RadarPlot pl;
+            pl.time_s = s.time_s;
+            pl.sensor_position = p.position;
+            pl.snr_db = LinearToDb(jn);
+            pl.sigma_range_m = MaxOf(d.range_sigma_floor_m, 30.0);
+            pl.sigma_azimuth_rad = AngleSigmaRad(d.emitter.antenna.beamwidth_az_rad, jn, d.monopulse_slope, d.angle_sigma_floor_rad);
+            pl.sigma_elevation_rad = MaxOf(beam.height_rad / std::sqrt(12.0), d.angle_sigma_floor_rad);
+            pl.range_m = range + pl.sigma_range_m * s.rng.NormalOf(Stream::RangeNoise, key);
+            pl.azimuth_rad = WrapTwoPi(az_j + pl.sigma_azimuth_rad * s.rng.NormalOf(Stream::AzimuthNoise, key));
+            pl.elevation_rad = Clamp(el_j, beam.centre_rad - 0.5 * beam.height_rad, beam.centre_rad + 0.5 * beam.height_rad) +
+                               range / (2.0 * s.env.k_factor * wgs84::kMeanRadius) - range / (2.0 * wgs84::kMeanRadius);
+            pl.false_target = true;
+            pl.debug_truth_platform = 0;
+            r.last_plots.push_back(pl);
+        }
+    }
+}
+
 inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const RadarDef& d, EmitterState& e, const Platform& p) {
     if (e.revolutions != r.last_revolution) {
         r.last_revolution = e.revolutions;
@@ -381,7 +429,7 @@ inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const 
     for (const JammerState& j : s.jammers) {
         if (!j.on || j.silent_until_s > s.time_s) continue;
         const JammerDef& jd = s.lib.jammers[static_cast<std::size_t>(j.def_index)];
-        if (jd.technique == JamTechnique::RangeGatePullOff) continue;
+        if (jd.technique == JamTechnique::RangeGatePullOff || jd.technique == JamTechnique::FalseTargets) continue;
         const Platform* jp = s.FindPlatform(j.platform_id);
         if (jp == nullptr || !jp->alive) continue;
         const double az_j = AzimuthFromTo(p.position, jp->position);
@@ -404,6 +452,7 @@ inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const 
         if (s.time_s - st.time_s < 4.0) recent.push_back(st);
     r.strobes.swap(recent);
     UpdateStrobeTracks(s, w, r, p, fresh);
+    AddFalseTargetPlots(s, r, d, e, p, beam, half_bw);
 
     // Track-while-scan: only tracks predicted inside this tick's sweep and beam can miss.
     const double sweep_start = e.sweep_start_az_rad, swept = e.swept_rad;
