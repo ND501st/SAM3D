@@ -16,9 +16,11 @@
 // one Swerling I draw keyed on (radar, target, look), so evaluation order never changes results.
 #pragma once
 
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "simcore/em/detection.hpp"
@@ -158,10 +160,10 @@ struct LookResult {
 };
 
 // One look at a scatterer. `rcs_m2` is already aspect-resolved; `radial_mps` is its radial speed.
-inline LookResult EvaluateLook(EmScene& s, const RadarState& r, const RadarDef& d, const EmitterState& e,
+inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const RadarDef& d, const EmitterState& e,
                                const Platform& p, const Platform& t, double rcs_m2, double radial_mps,
                                const ElevationBeam& beam, double look_az, double look_el, std::uint64_t draw_key,
-                               bool is_chaff = false) {
+                               bool is_chaff = false, int skip_chaff_id = 0) {
     LookResult out;
     LookRecord& rec = out.record;
     rec.platform_id = t.id;
@@ -173,7 +175,8 @@ inline LookResult EvaluateLook(EmScene& s, const RadarState& r, const RadarDef& 
     const double f = e.freq_hz > 0.0 ? e.freq_hz : d.emitter.waveform.freq_hz;
     const AntennaDef ant = d.role == RadarRole::Search ? BeamAntenna(d.emitter, beam) : d.emitter.antenna;
     const double grazing = PairGrazing(s, p, t);
-    const LinkLossResult loss = LinkLoss(s, p, t, f, ReflectionGainRatio(ant, look_el, el, grazing));
+    PathCache& cache = r.paths;  // the radar own cache
+    const LinkLossResult loss = LinkLossCached(s, cache, p, t, f, ReflectionGainRatio(ant, look_el, el, grazing));
     rec.line_of_sight = loss.line_of_sight;
     rec.diffraction_db = loss.diffraction_db;
 
@@ -199,6 +202,7 @@ inline LookResult EvaluateLook(EmScene& s, const RadarState& r, const RadarDef& 
     }
     // Chaff sharing the resolution cell.
     for (const ChaffCloud& c : s.chaff) {
+        if (c.id == skip_chaff_id) continue;
         const double sc = ChaffRcs(c, s.time_s);
         if (sc <= 0.0) continue;
         const Vec3 cl = c.position - p.position;
@@ -220,7 +224,7 @@ inline LookResult EvaluateLook(EmScene& s, const RadarState& r, const RadarDef& 
         }
         cn += chaff_snr;
     }
-    const double jn = NoiseJammingToNoise(s, p, ant, look_az, look_el, f, d.RxBandwidthHz(), d.noise_figure_db);
+    const double jn = NoiseJammingToNoise(s, p, ant, look_az, look_el, f, d.RxBandwidthHz(), d.noise_figure_db, 0.0, &cache);
     const double sinr = snr / (1.0 + jn + cn);
     rec.snr_db = snr > 0.0 ? LinearToDb(snr) : -300.0;
     rec.sinr_db = sinr > 0.0 ? LinearToDb(sinr) : -300.0;
@@ -262,7 +266,13 @@ inline std::uint64_t LookKey(int radar_id, int target_id, long long look) {
     return DrawHash(0, Stream::Detection, Key(radar_id), Key(target_id), Key(look));
 }
 
-inline void UpdateStrobeTracks(EmScene& s, RadarState& r, const Platform& p, const std::vector<JamStrobe>& fresh) {
+// What a search radar's pass produces besides its own state: counters and events, merged in radar order afterwards.
+struct RadarWork {
+    std::vector<EmEvent> events;
+    std::uint64_t looks = 0, culled = 0, plots = 0;
+};
+
+inline void UpdateStrobeTracks(const EmScene& s, RadarWork& w, RadarState& r, const Platform& p, const std::vector<JamStrobe>& fresh) {
     for (const JamStrobe& st : fresh) {
         StrobeTrack* best = nullptr;
         double best_d = 0.06;  // ~3.4 deg
@@ -279,8 +289,8 @@ inline void UpdateStrobeTracks(EmScene& s, RadarState& r, const Platform& p, con
             t.azimuth_rad = st.azimuth_rad;
             r.strobe_tracks.push_back(t);
             best = &r.strobe_tracks.back();
-            s.Log(EmEventKind::Strobe, r.id, t.id,
-                  "jamming strobe at " + std::to_string(static_cast<int>(RadToDeg(st.azimuth_rad) + 0.5)) + " deg");
+            w.events.push_back({s.time_s, EmEventKind::Strobe, r.id, t.id,
+                  "jamming strobe at " + std::to_string(static_cast<int>(RadToDeg(st.azimuth_rad) + 0.5)) + " deg"});
         } else {
             best->azimuth_rad = WrapTwoPi(best->azimuth_rad + 0.5 * WrapPi(st.azimuth_rad - best->azimuth_rad));
         }
@@ -298,7 +308,7 @@ inline void UpdateStrobeTracks(EmScene& s, RadarState& r, const Platform& p, con
     r.strobe_tracks.swap(kept);
 }
 
-inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterState& e, const Platform& p) {
+inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const RadarDef& d, EmitterState& e, const Platform& p) {
     if (e.revolutions != r.last_revolution) {
         r.last_revolution = e.revolutions;
         if (!r.beam_program.empty()) {
@@ -317,7 +327,7 @@ inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, Emitter
         if (t.id == p.id || !t.alive) continue;
         const double range = (t.position - p.position).Length();
         if (range > d.max_range_m || range < d.min_range_m) {
-            ++s.stats.radar_candidates_culled;
+            ++w.culled;
             continue;
         }
         const double az = AzimuthFromTo(p.position, t.position);
@@ -325,7 +335,7 @@ inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, Emitter
         const double el = s.ElevationAngle(p, t);
         if (el < d.min_elevation_rad || el > d.max_elevation_rad) continue;
         if (el < beam.centre_rad - beam.height_rad || el > beam.centre_rad + beam.height_rad) continue;
-        ++s.stats.radar_looks;
+        ++w.looks;
         const Vec3 to_radar = (p.position - t.position).Normalized();
         const double rcs = RcsToward(t.rcs, t.velocity, to_radar);
         const double vr = RadialSpeed(p.position, p.velocity, t.position, t.velocity);
@@ -359,14 +369,8 @@ inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, Emitter
         if (el < beam.centre_rad - beam.height_rad || el > beam.centre_rad + beam.height_rad) continue;
         const double vr = RadialSpeed(p.position, p.velocity, c.position, c.velocity);
         // Evaluate the cloud without itself in the cell.
-        LookResult lr;
-        {
-            std::vector<ChaffCloud> saved;
-            saved.swap(s.chaff);
-            lr = EvaluateLook(s, r, d, e, p, ghost, sc, vr, beam, az, beam.centre_rad,
-                              LookKey(r.id, -c.id, e.revolutions), true);
-            saved.swap(s.chaff);
-        }
+        LookResult lr = EvaluateLook(s, r, d, e, p, ghost, sc, vr, beam, az, beam.centre_rad,
+                                           LookKey(r.id, -c.id, e.revolutions), true, c.id);
         if (lr.detected) {
             lr.plot.false_target = true;
             r.last_plots.push_back(lr.plot);
@@ -384,7 +388,7 @@ inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, Emitter
         if (!InSweep(e.sweep_start_az_rad, e.swept_rad, az_j, half_bw)) continue;
         const AntennaDef ant = BeamAntenna(d.emitter, beam);
         const double jn = NoiseJammingToNoise(s, p, ant, az_j, beam.centre_rad, e.freq_hz, d.RxBandwidthHz(),
-                                              d.noise_figure_db);
+                                              d.noise_figure_db, 0.0, &r.paths);
         if (jn <= 0.0 || LinearToDb(jn) < d.strobe_jn_threshold_db) continue;
         JamStrobe st;
         st.time_s = s.time_s;
@@ -399,7 +403,7 @@ inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, Emitter
     for (const JamStrobe& st : r.strobes)
         if (s.time_s - st.time_s < 4.0) recent.push_back(st);
     r.strobes.swap(recent);
-    UpdateStrobeTracks(s, r, p, fresh);
+    UpdateStrobeTracks(s, w, r, p, fresh);
 
     // Track-while-scan: only tracks predicted inside this tick's sweep and beam can miss.
     const double sweep_start = e.sweep_start_az_rad, swept = e.swept_rad;
@@ -417,13 +421,13 @@ inline void RunSearchRadar(EmScene& s, RadarState& r, const RadarDef& d, Emitter
             return rel.Length() <= max_range && InSweep(sweep_start, swept, AzimuthOf(rel), half_bw) && el >= el_lo &&
                    el <= el_hi;
         });
-    s.stats.plots += r.last_plots.size();
+    w.plots += r.last_plots.size();
     for (int id : changed) {
         const SensorTrack* t = r.tracker.Find(id);
         if (t != nullptr && t->status == TrackStatus::Confirmed) {
-            s.Log(EmEventKind::TrackConfirmed, r.id, id, "track " + std::to_string(id) + " confirmed");
+            w.events.push_back({s.time_s, EmEventKind::TrackConfirmed, r.id, id, "track " + std::to_string(id) + " confirmed"});
         } else {
-            s.Log(EmEventKind::TrackDropped, r.id, id, "track " + std::to_string(id) + " dropped");
+            w.events.push_back({s.time_s, EmEventKind::TrackDropped, r.id, id, "track " + std::to_string(id) + " dropped"});
         }
     }
 }
@@ -508,7 +512,7 @@ inline void RunTrackRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterS
             // Repeater-to-skin ratio: one-way repeated power vs the two-way echo, both relative to noise.
             const double back_az = AzimuthFromTo(jp->position, p.position);
             const double eirp = EirpW(jd.emitter, WrapPi(back_az - je->pointing_az_rad), 0.0);
-            const LinkLossResult loss = LinkLoss(s, *jp, p, e.freq_hz);
+            const LinkLossResult loss = LinkLossCached(s, r.paths, *jp, p, e.freq_hz);
             const double pj = OneWayReceivedPowerW(eirp, d.emitter.antenna.gain_db, e.freq_hz, loss.range_m,
                                                    loss.TotalOneWayDb());
             const double jn = JammingToNoise(pj, d.noise_figure_db, d.RxBandwidthHz());
@@ -553,25 +557,67 @@ inline void RunTrackRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterS
     }
 }
 
+// Prepare a radar for this tick; false if it does nothing (no platform, off, not radiating).
+inline bool PrepareRadar(EmScene& s, RadarState& r) {
+    r.last_looks.clear();
+    r.last_plots.clear();
+    const Platform* p = s.FindPlatform(r.platform_id);
+    EmitterState* e = s.FindEmitter(r.emitter_id);
+    if (p == nullptr || e == nullptr) return false;
+    if (!p->alive) r.on = false;
+    e->radiating = r.on;
+    if (!r.on || !e->InAir()) {
+        r.tracker.PredictAll(s.time_s);
+        return false;
+    }
+    return true;
+}
+
+// Search radars first (independent of each other: each has its own tracker, path profiles, counters and event list, so
+// they can run on `s.threads` threads with the same result at any count), then the tracking radars in order (a
+// repeater's gate pull-off changes a jammer all radars see).
 inline void RunRadars(EmScene& s, double dt) {
-    for (RadarState& r : s.radars) {
-        r.last_looks.clear();
-        r.last_plots.clear();
-        const Platform* p = s.FindPlatform(r.platform_id);
-        EmitterState* e = s.FindEmitter(r.emitter_id);
-        if (p == nullptr || e == nullptr) continue;
-        if (!p->alive) r.on = false;
-        e->radiating = r.on;
-        if (!r.on || !e->InAir()) {
-            r.tracker.PredictAll(s.time_s);
-            continue;
+    std::vector<std::size_t> search, track;
+    for (std::size_t i = 0; i < s.radars.size(); ++i) {
+        if (!PrepareRadar(s, s.radars[i])) continue;
+        const RadarDef& d = s.lib.radars[static_cast<std::size_t>(s.radars[i].def_index)];
+        (d.role == RadarRole::Search ? search : track).push_back(i);
+    }
+    const EmScene& cs = s;
+    std::vector<RadarWork> work(search.size());
+    auto one = [&](std::size_t k) {
+        RadarState& r = s.radars[search[k]];
+        const RadarDef& d = cs.lib.radars[static_cast<std::size_t>(r.def_index)];
+        RunSearchRadar(cs, work[k], r, d, *s.FindEmitter(r.emitter_id), *cs.FindPlatform(r.platform_id));
+    };
+    const unsigned threads = s.threads < 1 ? 1u : s.threads;
+    if (threads <= 1 || search.size() < 2) {
+        for (std::size_t k = 0; k < search.size(); ++k) one(k);
+    } else {
+        std::atomic<std::size_t> next{0};
+        std::vector<std::thread> pool;
+        const unsigned count = threads < search.size() ? threads : static_cast<unsigned>(search.size());
+        for (unsigned t = 0; t < count; ++t) {
+            pool.emplace_back([&]() {
+                for (;;) {
+                    const std::size_t k = next.fetch_add(1);
+                    if (k >= search.size()) break;
+                    one(k);
+                }
+            });
         }
-        const RadarDef& d = s.lib.radars[static_cast<std::size_t>(r.def_index)];
-        if (d.role == RadarRole::Search) {
-            RunSearchRadar(s, r, d, *e, *p);
-        } else {
-            RunTrackRadar(s, r, d, *e, *p, dt);
-        }
+        for (std::thread& th : pool) th.join();
+    }
+    for (const RadarWork& w : work) {
+        s.stats.radar_looks += w.looks;
+        s.stats.radar_candidates_culled += w.culled;
+        s.stats.plots += w.plots;
+        s.events.insert(s.events.end(), w.events.begin(), w.events.end());
+    }
+    for (std::size_t i : track) {
+        RadarState& r = s.radars[i];
+        RunTrackRadar(s, r, s.lib.radars[static_cast<std::size_t>(r.def_index)], *s.FindEmitter(r.emitter_id),
+                      *s.FindPlatform(r.platform_id), dt);
     }
 }
 

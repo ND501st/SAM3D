@@ -499,3 +499,13 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
 * **Rain.** `Environment::rain_rate_mmh` (scenario `own_unit.em.rain_mmh`) adds ITU-R P.838-3 specific attenuation (k R^alpha, horizontal polarisation, 1-40 GHz table; f^2 below 1 GHz) times the P.530 distance factor to a path's atmospheric loss, for radars and radios. Radar and radio calibration always uses the dry environment (`EmWorld::Dry`), so rain lowers ranges instead of being fitted away. 10 GHz, 50 mm/h: 1.66 dB/km; over 30 km 17.7 dB.
 * Left: forest and urban obstacle heights (needs a land-cover layer), sea areas and ducting.
 
+## 28. Scale (E8, started 16 October 2026)
+
+`em_bench data 500 60 24 [threads]` now prints the time per phase of `EmWorld::Step` (`EmRates::profile`) and a checksum of the result. At the start of E8 the mean tick was 16 ms on one core, 10 ms of it the ESM sites (every site evaluates every emitter, none culled) and 4 ms the radars.
+
+* **Lookups.** `EmScene::FindIn` is a binary search (ids are added in increasing order and never reordered; a miss falls back to a scan).
+* **Per-site passes.** `RunEsm` runs each ESM site as an independent unit and `RunRadars` each search radar: a site or radar owns its tracker or contacts, its own `PathCache` (`EsmState::paths`, `RadarState::paths`, `LinkLossCached`), its counters and its event list; counters and events are merged in site order afterwards. Chaff no longer needs the scene mutated for a look (`skip_chaff_id`). Tracking radars run after the search radars, in order, on one thread (a repeater's gate pull-off changes a jammer all radars see). `EmRates::threads` (default 1) sets the worker count; the result is **identical** at any count (test `em scale`, and the bench checksum `eee3c1357697d113` at 1, 4 and 8 threads).
+* **Result.** 14.7 ms per tick on one core, 5.7 ms on 4 threads, 4.2 ms on 8 (goal: 5 ms).
+* Side effect: path profiles are no longer shared between a site, a radar and the links, so a profile is computed once per cache rather than once; the hit rate is similar.
+* Left: time-slicing cold paths (TDOA, knowledge ageing), a hierarchical grid for the radar candidate queries, level of detail for distant units, `em_bench` in CI as a trend.
+

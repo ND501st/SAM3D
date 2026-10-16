@@ -12,6 +12,7 @@
 // Everything is deterministic for a given seed and input sequence.
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,6 +34,8 @@ struct EmRates {
     double knowledge_period_s = 0.5;
     double link_period_s = 1.0;
     double age_period_s = 1.0;
+    unsigned threads = 1;             // worker threads for the ESM sites (identical results at any count)
+    bool profile = false;             // count wall-clock time per phase in EmStats (em_bench)
 };
 
 class EmWorld {
@@ -59,7 +62,7 @@ public:
 
     void SetTerrain(const Terrain* terrain) {
         s_.terrain = terrain;
-        s_.paths.Clear();
+        s_.ClearPaths();
     }
 
     // Install the definitions and calibrate every radar to its anchor. Fails if a radar has none.
@@ -82,7 +85,7 @@ public:
         const Environment dry = Dry(env);
         for (RadarDef& d : s_.lib.radars) Calibrate(d, dry);
         for (RadioDef& r : s_.lib.radios) CalibrateRadio(r, dry);
-        s_.paths.Clear();
+        s_.ClearPaths();
     }
 
     int AddPlatform(Platform p) {
@@ -260,9 +263,19 @@ public:
     }
 
     void Step(double dt) {
+        using Clock = std::chrono::steady_clock;
+        Clock::time_point t0;
+        auto lap = [&](std::uint64_t& bucket) {
+            if (!rates_.profile) return;
+            const Clock::time_point t1 = Clock::now();
+            bucket += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+            t0 = t1;
+        };
+        if (rates_.profile) t0 = Clock::now();
         s_.time_s += dt;
         ++s_.tick;
         UpdatePlatforms(s_);
+        lap(s_.stats.ns_platforms);
         ApplyEmconSteps(s_, emcon_);
         for (SamDoctrine& d : doctrines_) RunSamDoctrine(s_, d);
         UpdateEmitters(s_, dt);
@@ -274,17 +287,25 @@ public:
         for (const ChaffCloud& c : s_.chaff)
             if (s_.time_s - c.created_s <= c.lifetime_s) live.push_back(c);
         s_.chaff.swap(live);
+        lap(s_.stats.ns_emitters);
+        s_.threads = rates_.threads < 1 ? 1 : rates_.threads;
         RunRadars(s_, dt);
+        lap(s_.stats.ns_radars);
         if (s_.time_s + 1e-9 >= next_esm_s_) {
             const double window = rates_.esm_period_s > dt ? rates_.esm_period_s : dt;
             next_esm_s_ = s_.time_s + window;
+            s_.threads = rates_.threads < 1 ? 1 : rates_.threads;
             RunEsm(s_, window);
+            lap(s_.stats.ns_esm);
             RunTdoa(s_);
+            lap(s_.stats.ns_tdoa);
         }
+        lap(s_.stats.ns_esm);
         if (s_.time_s + 1e-9 >= next_knowledge_s_) {
             next_knowledge_s_ = s_.time_s + rates_.knowledge_period_s;
             for (NodeState& n : s_.nodes) IngestOwnSensors(s_, n);
         }
+        lap(s_.stats.ns_knowledge);
         const bool links = s_.time_s + 1e-9 >= next_links_s_;
         if (links) next_links_s_ = s_.time_s + rates_.link_period_s;
         RunComms(s_, links);
@@ -293,6 +314,7 @@ public:
             for (NodeState& n : s_.nodes)
                 if (n.alive) n.kb.Age(s_.time_s);
         }
+        lap(s_.stats.ns_comms);
     }
 
 private:

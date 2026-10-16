@@ -166,10 +166,6 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     if (n < 2) n = 2;
     g.samples = n - 1;
     const double inv_n = 1.0 / static_cast<double>(n);
-    // The profile with the Earth's bulge added: straight lines stay straight in it, so the main ray and every
-    // sub-path's ray are lines in these coordinates.
-    std::vector<double> prof_s(static_cast<std::size_t>(n - 1));
-    std::vector<double> prof_e(static_cast<std::size_t>(n - 1));
     int worst_i = -1;
     for (int i = 1; i < n; ++i) {
         const double t = static_cast<double>(i) * inv_n;
@@ -182,18 +178,23 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
         if (-h < g.min_clearance_m) g.min_clearance_m = -h;
         if (h >= 0.0) g.line_of_sight = false;
         const double vg = h * std::sqrt(1.0 / s + 1.0 / rest);
-        prof_s[static_cast<std::size_t>(i - 1)] = s;
-        prof_e[static_cast<std::size_t>(i - 1)] = ground;
         if (vg > g.worst_v_geometry) {
             g.worst_v_geometry = vg;
             worst_i = i;
         }
     }
     // Deygout: if the main edge blocks the ray, look for the worst edge on each side of it against the line to its top.
+    // The profile with the Earth's bulge added is used: straight lines stay straight in it, so the main ray and every
+    // sub-path's ray are lines in these coordinates. (Recomputed here, only for blocked paths.)
     if (worst_i > 0 && g.worst_v_geometry >= 0.0) {
-        const std::size_t m = static_cast<std::size_t>(worst_i - 1);
-        const double sm = prof_s[m];
-        const double em = prof_e[m];
+        auto pos = [&](int i) { return static_cast<double>(i) * inv_n * g.ground_range_m; };
+        auto ground_at = [&](int i) {
+            const double t = static_cast<double>(i) * inv_n;
+            const double s = t * g.ground_range_m;
+            return terrain.HeightAt(a_enu.x + dx * t, a_enu.y + dy * t) + s * (g.ground_range_m - s) / (2.0 * re);
+        };
+        const double sm = pos(worst_i);
+        const double em = ground_at(worst_i);
         // A sub-edge must be a crest of its own, with a valley of at least kValleyM between it and the main edge:
         // the flat top of one wide ridge is one edge, not many.
         constexpr double kValleyM = 20.0;
@@ -207,16 +208,15 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
             if (len < 1.0) continue;
             double low = 1e18;  // lowest ground between the candidate and the main edge
             double& slot = before ? g.sub_v_geometry_a : g.sub_v_geometry_b;
-            const std::ptrdiff_t step = before ? -1 : 1;
-            std::ptrdiff_t i = static_cast<std::ptrdiff_t>(m) + step;
-            for (; i >= 0 && i < static_cast<std::ptrdiff_t>(prof_s.size()); i += step) {
-                const std::size_t u = static_cast<std::size_t>(i);
-                const double ground_here = prof_e[u];
+            const int step = before ? -1 : 1;
+            for (int i = worst_i + step; i >= 1 && i < n; i += step) {
+                const double ground_here = ground_at(i);
                 const double lower_of_crests = ground_here < em ? ground_here : em;
                 if (low < lower_of_crests - kValleyM) {
-                    const double line = e0 + (e1 - e0) * (prof_s[u] - s0) / len;
-                    const double d0 = prof_s[u] - s0;
-                    const double d1 = s1 - prof_s[u];
+                    const double si = pos(i);
+                    const double line = e0 + (e1 - e0) * (si - s0) / len;
+                    const double d0 = si - s0;
+                    const double d1 = s1 - si;
                     if (d0 >= 1.0 && d1 >= 1.0) {
                         const double vg = (ground_here - line) * std::sqrt(1.0 / d0 + 1.0 / d1);
                         if (vg > slot) slot = vg;
