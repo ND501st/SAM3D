@@ -573,6 +573,7 @@ public:
         return out;
     }
 
+    const std::vector<Event>& PeekEvents() const { return events_; }
     std::vector<Event> TakeEvents() {
         std::vector<Event> out;
         out.swap(events_);

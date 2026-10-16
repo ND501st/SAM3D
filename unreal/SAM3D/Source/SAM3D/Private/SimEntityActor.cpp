@@ -19,10 +19,25 @@ ASimEntityActor::ASimEntityActor()
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));  // cone tip (+Z) -> +X
 
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh.Succeeded())
+	{
+		BoxMesh = CubeMesh.Object;
+	}
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
 	if (ConeMesh.Succeeded())
 	{
 		Mesh->SetStaticMesh(ConeMesh.Object);
+	}
+}
+
+void ASimEntityActor::UseGroundStandIn()
+{
+	if (BoxMesh != nullptr)
+	{
+		Mesh->SetStaticMesh(BoxMesh);
+		Mesh->SetRelativeRotation(FRotator::ZeroRotator);
+		Mesh->SetRelativeLocation(FVector(0.0, 0.0, 50.0));  // the box stands on the ground
 	}
 }
 

@@ -13,6 +13,7 @@ namespace
 {
 	constexpr double MetersToCm = 100.0;
 	constexpr int32 MissileIdBase = 100000;  // display ids for engagement-model missiles
+	constexpr int32 GroundIdBase = 200000;   // display ids for the battery's vehicles and dummy positions
 
 	ESimEventType ToUnrealEventType(simcore::EventType Type)
 	{
@@ -846,7 +847,23 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 	{
 		Out.Add(MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity));
 	}
-	if (Runner)
+	// The battery's other vehicles and the dummy positions (roadmap 7.7).
+	{
+		simcore::em::ViewExtras Scratch;
+		if (const simcore::em::ViewExtras* X = GetViewExtras(Scratch))
+		{
+			for (int32 I = 0; I < static_cast<int32>(X->battery.size()); ++I)
+			{
+				const simcore::em::ViewVehicle& V = X->battery[static_cast<size_t>(I)];
+				FSimEntityState S = MakeState(GroundIdBase + I, UTF8_TO_TCHAR(V.id.c_str()), false, true, V.position, simcore::Vec3{});
+				S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
+				S.bIsGround = true;
+				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
+				Out.Add(S);
+			}
+		}
+	}
+	if (Runner && !IsMirrorOnly())
 	{
 		for (const simcore::EngagementModel::MissileView& M : Runner->MissilesInFlight())
 		{
@@ -1001,6 +1018,10 @@ void USimWorldSubsystem::PumpKnowledge()
 			{
 				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time()), Keys);
 			}
+			if (R != nullptr)
+			{
+				V.extras = R->ViewExtrasNow(16);
+			}
 		});
 		TArray<uint8> Packet;
 		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
@@ -1148,5 +1169,98 @@ void USimWorldSubsystem::PumpConsole()
 		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
 		Seat->SendConsole(Packet);
 	}
+}
+
+// ------------------------------------------------------------------ battery, board and radio (roadmap 7.7)
+
+const simcore::em::ViewExtras* USimWorldSubsystem::GetViewExtras(simcore::em::ViewExtras& Scratch) const
+{
+	if (IsMirrorOnly())
+	{
+		const USimKnowledgeComponent* K = LocalKnowledge.Get();
+		return K != nullptr && K->GetView().extras.valid ? &K->GetView().extras : nullptr;
+	}
+	if (!Runner)
+	{
+		return nullptr;
+	}
+	Scratch = Runner->ViewExtrasNow(16);
+	return &Scratch;
+}
+
+simcore::Vec3 USimWorldSubsystem::BatteryCentreEnu() const
+{
+	if (IsMirrorOnly())
+	{
+		if (const simcore::em::ViewScope* Sc = GetMirroredScope())
+		{
+			return Sc->unit_position;
+		}
+	}
+	return Runner ? Runner->UnitPosition() : simcore::Vec3{};
+}
+
+TArray<FSimBoardMark> USimWorldSubsystem::GetBoardMarks() const
+{
+	TArray<FSimBoardMark> Out;
+	simcore::em::ViewExtras Scratch;
+	const simcore::em::ViewExtras* X = GetViewExtras(Scratch);
+	if (X == nullptr)
+	{
+		return Out;
+	}
+	const simcore::Vec3 Centre = BatteryCentreEnu();
+	for (const simcore::em::ViewBoardMark& M : X->board)
+	{
+		FSimBoardMark B;
+		B.Number = M.number;
+		B.Stamp = M.stamp;
+		B.HeightHm = M.height_hm;
+		B.Code = M.code;
+		B.EastNorthMeters = FVector2D(M.position.x - Centre.x, M.position.y - Centre.y);
+		Out.Add(B);
+	}
+	return Out;
+}
+
+TArray<float> USimWorldSubsystem::GetBoardRangeRings() const
+{
+	TArray<float> Out;
+	const simcore::PlottingBoard* Board = Runner ? Runner->Board() : nullptr;
+	if (Board != nullptr)
+	{
+		for (double R : Board->Def().range_rings_m)
+		{
+			Out.Add(static_cast<float>(R));
+		}
+	}
+	if (Out.Num() == 0)
+	{
+		Out = {50000.f, 100000.f, 150000.f, 200000.f};
+	}
+	return Out;
+}
+
+TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) const
+{
+	TArray<FSimRadioMessage> Out;
+	simcore::em::ViewExtras Scratch;
+	const simcore::em::ViewExtras* X = GetViewExtras(Scratch);
+	if (X == nullptr)
+	{
+		return Out;
+	}
+	const int32 N = static_cast<int32>(X->radio.size());
+	for (int32 I = FMath::Max(0, N - MaxCount); I < N; ++I)
+	{
+		const simcore::em::ViewRadio& R = X->radio[static_cast<size_t>(I)];
+		FSimRadioMessage M;
+		M.TimeSeconds = R.time_s;
+		M.Net = UTF8_TO_TCHAR(R.net.c_str());
+		M.From = UTF8_TO_TCHAR(R.from.c_str());
+		M.Text = UTF8_TO_TCHAR(R.text.c_str());
+		Out.Add(M);
+	}
+	return Out;
 }
 

@@ -250,3 +250,42 @@ SC_TEST("prepared position: emplacement and nets shrink the vehicle's echo; dumm
     SC_EXPECT(r.Debrief().find("climb out") != std::string::npos);
     SC_EXPECT(r.Acmi().Text().find("Dummy position") != std::string::npos);
 }
+
+SC_TEST("battery view: the board's marks, the radio traffic and the battery's vehicles reach a player through the stream") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(BatteryScenario(""), kData, def, console, &error));
+    ScenarioRunner r(std::move(def), std::move(console));
+    for (int i = 0; i < 1300; ++i) r.Step(0.1);  // 130 s: three plots, the column formed and marching
+    const em::ViewExtras x = r.ViewExtrasNow();
+    std::printf("    %zu board marks, %zu radio messages, %zu battery vehicles\n", x.board.size(), x.radio.size(), x.battery.size());
+    SC_EXPECT(!x.board.empty());
+    SC_EXPECT(!x.radio.empty());
+    SC_EXPECT(x.battery.size() == 3);
+    bool column = false;
+    for (const em::ViewRadio& m : x.radio) column = column || m.text.find("column formed") != std::string::npos;
+    SC_EXPECT(column);
+    em::KnowledgeView v;
+    v.extras = x;
+    em::KnowledgeView back;
+    SC_EXPECT(em::DecodeView(em::EncodeView(v), back));
+    SC_EXPECT(back.extras.valid && back.extras.board.size() == x.board.size() && back.extras.radio.size() == x.radio.size());
+    SC_EXPECT(back.extras.battery[0].kind == "launcher" && std::fabs(back.extras.battery[0].position.y - x.battery[0].position.y) < 1.0);
+    SC_EXPECT(back.extras.board[0].number == x.board[0].number && back.extras.board[0].code == x.board[0].code);
+}
+
+SC_TEST("battery practice: the shipped scenario loads and runs with its battery, board, radio and prepared position") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_practice.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    for (int i = 0; i < 20 * 330; ++i) r.Step(0.05);
+    const em::ViewExtras x = r.ViewExtrasNow(16);
+    std::printf("    at %.0f s: %zu board marks, %zu radio messages, %zu vehicles and dummies\n", r.Time(), x.board.size(), x.radio.size(), x.battery.size());
+    SC_EXPECT(x.battery.size() == 7);
+    SC_EXPECT(!x.board.empty() && !x.radio.empty());
+    SC_EXPECT(r.Em() != nullptr && r.Em()->DummyPlatforms().size() == 2);
+}

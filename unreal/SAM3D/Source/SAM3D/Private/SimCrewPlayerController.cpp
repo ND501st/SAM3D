@@ -77,6 +77,17 @@ void ASimCrewPlayerController::LogSmoke()
 		*CrewSeat->SeatRole, *CrewSeat->SeatProcedureId, CrewSeat->SeatProcedureStep, CrewSeat->GetConsoleSnapshotsApplied(), Gta,
 		Sim != nullptr && Sim->IsMirrorOnly() ? 1 : 0, *Knowledge->GetKnowledgeSummary(), Sc.valid ? 1 : 0,
 		static_cast<int32>(Sc.search.size()), static_cast<int32>(Sc.track_returns.size()), Sc.antenna_el_deg);
+	int32 Ground = 0;
+	if (Sim != nullptr)
+	{
+		for (const FSimEntityState& E : Sim->GetEntityStates())
+		{
+			Ground += E.bIsGround ? 1 : 0;
+		}
+		const TArray<FSimRadioMessage> Radio = Sim->GetRadioMessages(3);
+		UE_LOG(LogSAM3D, Display, TEXT("SIMCREW BATTERY client: %d board marks, %d ground entities, last radio: %s"),
+			Sim->GetBoardMarks().Num(), Ground, Radio.Num() > 0 ? *(Radio.Last().From + TEXT(": ") + Radio.Last().Text) : TEXT("-"));
+	}
 	FGenericPlatformMisc::RequestExit(false);
 }
 

@@ -40,6 +40,7 @@
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
+#include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
@@ -205,6 +206,7 @@ public:
             return;
         }
         pending_orders_.push_back({time_ + delay, crew.Name(), &procedure, queue});
+        Radio("cabin (shouted)", "Commander", crew.Name() + ": " + procedure.id);
         char detail[160];
         std::snprintf(detail, sizeof(detail), "'%s' to %s is shouted, it arrives in %.1f s", procedure.id.c_str(), crew.Name().c_str(), delay);
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "R-124", detail});
@@ -272,6 +274,42 @@ public:
     bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
 
     const ProcedureTracker& PlayerTracker() const { return player_; }
+    // Radio and intercom traffic the crew heard, oldest first (the last kRadioKept): the command net (designations, source
+    // changes), the battery net (the battery commander's orders) and orders shouted in the cabin.
+    struct RadioMessage {
+        double time_s = 0.0;
+        std::string net;
+        std::string from;
+        std::string text;
+    };
+    static constexpr std::size_t kRadioKept = 64;
+    const std::vector<RadioMessage>& RadioLog() const { return radio_; }
+
+    // What the player's crew has in front of it besides its knowledge (roadmap 7.7): the PU-12 board's marks of the last
+    // five plots, the last `radio_count` radio messages, and the battery's other vehicles and dummy positions.
+    em::ViewExtras ViewExtrasNow(std::size_t radio_count = 8) const {
+        em::ViewExtras x;
+        x.valid = true;
+        if (const PlottingBoard* b = Board()) {
+            for (const BoardMark& m : b->Marks()) {
+                if (m.stamp + 4 < b->Stamp()) continue;
+                x.board.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
+            }
+        }
+        const std::size_t from = radio_.size() > radio_count ? radio_.size() - radio_count : 0;
+        for (std::size_t i = from; i < radio_.size(); ++i) x.radio.push_back({radio_[i].time_s, radio_[i].net, radio_[i].from, radio_[i].text});
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (v.def.own) continue;
+                x.battery.push_back({v.def.callsign, BatteryVehicleKindName(v.def.kind), v.position, v.heading_deg, v.deployed});
+            }
+        }
+        for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
+            x.battery.push_back({"dummy " + std::to_string(i + 1), "dummy", def_.prepared.dummies[i].position, 0.0, true});
+        }
+        return x;
+    }
+
     // The prepared position the unit stands in (present = false: none).
     const PreparedPositionDef& Prepared() const { return def_.prepared; }
 
@@ -556,6 +594,7 @@ private:
         }
         for (const Battery::Event& e : battery_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.who, "battery", e.text});
+            Radio("battery net", e.who, e.text);
         }
     }
 
@@ -596,6 +635,7 @@ private:
             }
         }
         c2_->Update(time_, contacts, def_.unit_position);
+        for (const C2Network::Event& e : c2_->PeekEvents()) Radio("command net", e.actor, e.subject + ": " + e.text);
         SyncRadios();
         for (const C2Network::Event& e : c2_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
@@ -814,6 +854,11 @@ private:
     };
     std::vector<Seat> seats_;
     std::unique_ptr<Battery> battery_;
+    std::vector<RadioMessage> radio_;
+    void Radio(const std::string& net, const std::string& from, const std::string& text) {
+        radio_.push_back({time_, net, from, text});
+        if (radio_.size() > kRadioKept) radio_.erase(radio_.begin());
+    }
     std::vector<char> battery_orders_done_;
     bool air_threat_forced_ = false;
 

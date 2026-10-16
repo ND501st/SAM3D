@@ -6,6 +6,7 @@
 
 class USceneComponent;
 class UStaticMeshComponent;
+class UStaticMesh;
 
 /**
  * Visual stand-in for one simcore entity (aircraft or missile).
@@ -30,6 +31,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D")
 	bool bHideWhenInactive = true;
 
+	/** Swap the placeholder cone for a box (a battery vehicle or a dummy position). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D")
+	void UseGroundStandIn();
+
 	/** Called once when the entity stops being alive (shot down, missile detonated...). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "SAM3D")
 	void OnEntityInactive();
@@ -44,4 +49,7 @@ protected:
 
 private:
 	bool bReportedInactive = false;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> BoxMesh;
 };
