@@ -195,3 +195,6 @@ minus the hull's true heading.
 - The electromagnetic layer drives no scope or lamp yet; it runs as a separate demo with overlays (roadmap E2/E3).
 
 Early-warning source (roadmap 7.8): `USimWorldSubsystem::RequestC2Source`, `GetActiveC2Source`, `GetC2SourceIds` (Blueprint, category SAM3D|Command) written 11 Oct 2026, NOT YET BUILT (editor was open). Still to do: a UI/cabin control for it.
+
+Multiplayer knowledge (roadmap E10): add a `SimKnowledge` component (`USimKnowledgeComponent`) to the PlayerController. The server sends that player its node's view (NodeId 0 = the scenario unit's own node) twice a second; read it with `GetPictureTracks`, `GetEsmContacts`, `GetSensorTracks` or bind `OnKnowledgeUpdated`. Headless test: `UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.Knowledge;Quit" -unattended -nullrhi`.
+

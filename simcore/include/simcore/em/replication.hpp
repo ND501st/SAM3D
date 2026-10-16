@@ -444,6 +444,12 @@ public:
         return bytes;
     }
 
+    // The player now sees another node (a different vehicle or post). The stream goes on: the next delta simply carries
+    // the difference, as the bases are byte-level views.
+    void SetNode(int client, int node_id) { clients_[static_cast<std::size_t>(client)].node = node_id; }
+    int Node(int client) const { return clients_[static_cast<std::size_t>(client)].node; }
+    int ClientCount() const { return static_cast<int>(clients_.size()); }
+
     // The client says it holds view `seq` (acknowledgements may arrive late or out of order: the newest wins).
     void Ack(int client, std::uint32_t seq) {
         Client& c = clients_[static_cast<std::size_t>(client)];
