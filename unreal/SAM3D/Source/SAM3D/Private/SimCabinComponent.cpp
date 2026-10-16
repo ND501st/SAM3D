@@ -1133,8 +1133,14 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		}
 		Item.PressedFor = FMath::Max(0.0f, Item.PressedFor - DeltaTime);
 		AnimateControl(Sim, Item);
-		Paint(Item.Base, bHighlighted ? FMath::Lerp(Item.BaseColor, HighlightColor, 0.6f) : Item.BaseColor);
-		Paint(Item.Moving, bHighlighted ? FMath::Lerp(Item.MovingColor, HighlightColor, 0.6f) : Item.MovingColor);
+		// The drill master's next control pulses green (the pointer's highlight wins while it is on it).
+		const bool bAdvised = !bHighlighted && !AdvisedControl.IsEmpty() && Item.ControlId == AdvisedControl;
+		const float Pulse = bAdvised ? 0.35f + 0.3f * FMath::Sin(GetWorld()->GetTimeSeconds() * 6.0f) : 0.0f;
+		const FLinearColor AdviceColor(0.2f, 1.0f, 0.35f);
+		Paint(Item.Base, bHighlighted ? FMath::Lerp(Item.BaseColor, HighlightColor, 0.6f)
+		                              : bAdvised ? FMath::Lerp(Item.BaseColor, AdviceColor, Pulse) : Item.BaseColor);
+		Paint(Item.Moving, bHighlighted ? FMath::Lerp(Item.MovingColor, HighlightColor, 0.6f)
+		                                : bAdvised ? FMath::Lerp(Item.MovingColor, AdviceColor, Pulse) : Item.MovingColor);
 	}
 }
 
@@ -1279,6 +1285,17 @@ int32 USimCabinComponent::GetNumStations() const
 	const USimWorldSubsystem* Sim = GetSim();
 	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
 	return Layout != nullptr ? static_cast<int32>(Layout->stations.size()) : 0;
+}
+
+FString USimCabinComponent::GetStationId(int32 Station) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	if (Layout == nullptr || Station < 0 || Station >= static_cast<int32>(Layout->stations.size()))
+	{
+		return FString();
+	}
+	return ToF(Layout->stations[Station].id);
 }
 
 bool USimCabinComponent::GetStationView(int32 Station, FVector& OutLocation, FRotator& OutRotation, FString& OutLabel) const

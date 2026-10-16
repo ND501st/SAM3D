@@ -129,6 +129,26 @@ struct SAM3D_API FSimDrillAdvice
 	TArray<FString> Why;
 };
 
+/** One line of the crew menu: an order (the commander's seat) or a report (any other seat), from the crew data. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimCrewMenuEntry
+{
+	GENERATED_BODY()
+
+	/** The callout id (GiveCrewOrder for an order, PlayerSay for a report). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Ru;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString En;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bOrder = false;
+};
+
 UENUM(BlueprintType)
 enum class ESimEventType : uint8
 {
@@ -385,6 +405,22 @@ public:
 	 *  the player asks for help, not every frame. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	FSimDrillAdvice GetDrillAdvice(const FString& Station, const FString& TaskId) const;
+
+	/** Whether a task of the crew data holds now (e.g. "ready_halted"). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	bool IsCrewTaskDone(const FString& TaskId) const;
+
+	/** The crew menu for a seat: the orders of the crew data at the commander's seat, else the seat's own reports. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	TArray<FSimCrewMenuEntry> GetCrewMenu(const FString& Station) const;
+
+	/** A player in a seat speaks a report (filled from his own instruments: a contact from his scope). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	bool PlayerSay(const FString& Station, const FString& CalloutId);
+
+	/** Who holds a seat ("" for the NPC). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetCrewSeatHolder(const FString& Station) const;
 
 	/** Target currently tracked by the tracking radar or TV ("" if none). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Console")

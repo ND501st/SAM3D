@@ -675,3 +675,27 @@ SC_TEST("grading: the debrief grades К бою against the drill master's ideal 
     SC_EXPECT(d.find("First echo to launch") != std::string::npos);
     SC_EXPECT(d.find("operator           Operator         tier class3") != std::string::npos);
 }
+
+// ------------------------------------------------------------------------------------------ the player in the crew
+
+SC_TEST("in the crew: a player in the operator's seat who does what he's ordered, with what he's told, fights with the crew") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->TakeSeat("operator", "Player"));
+    while (!r->Finished() && r->Time() < 800.0) {
+        r->Step(0.1);
+        // The player works his orders step by step when each step's lamps allow ...
+        const ProcedureTracker* t = r->SeatTracker("operator");
+        const ProcedureStep* next = t != nullptr && !t->GetProcedure().id.empty() ? t->NextStep() : nullptr;
+        if (next != nullptr && r->Console().equipment.AllHold(next->wait_for, r->Console().panel)) {
+            r->SeatSet("operator", next->control_id, next->value);
+        }
+        // ... and turns his range wheel onto the range he was told or sees on his indicator (never the truth).
+        const CrewPicture* p = r->PictureOf("operator");
+        const KnownTarget* k = p != nullptr && !r->AssignedTarget().empty() ? p->Find(r->AssignedTarget()) : nullptr;
+        if (k != nullptr && k->has_range && r->Engagement().Method() == TrackMethod::None) r->SeatTurn("operator", "ssc.range_wheel", k->range_m);
+    }
+    const std::string d = r->Debrief();
+    SC_EXPECT(r->Launches() >= 1);
+    SC_EXPECT(d.find("HIT") != std::string::npos || d.find("MISS") != std::string::npos);
+    SC_EXPECT(d.find("operator           Player (player)") != std::string::npos);
+}

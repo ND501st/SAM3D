@@ -138,6 +138,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	void SetHighlightedItem(int32 Item) { HighlightedItem = Item; }
 
+	/** The training overlay (docs/crew/08_TRAINING_AND_ASSISTANCE.md): the control the drill master advises next pulses
+	 *  green ("" for none). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void SetAdvisedControl(const FString& ControlId) { AdvisedControl = ControlId; }
+
+	/** A station's console id (e.g. "senior_operator"); "" if there is no such station. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetStationId(int32 Station) const;
+
 private:
 	bool Build(const USimWorldSubsystem* Sim);
 	void BuildControl(const USimWorldSubsystem* Sim, int32 LayoutIndex);
@@ -243,4 +252,5 @@ private:
 	/** The layout the parts were built from; rebuilt when the subsystem loads another. */
 	const simcore::CabinLayout* BuiltLayout = nullptr;
 	int32 HighlightedItem = INDEX_NONE;
+	FString AdvisedControl;
 };
