@@ -41,6 +41,27 @@ void ASimEntityActor::UseGroundStandIn()
 	}
 }
 
+bool ASimEntityActor::UseVehicleModel(const FString& Kind)
+{
+	const TCHAR* Path = Kind == TEXT("reload") ? TEXT("/Game/SAM3D/Vehicles/SM_TZM_9T217.SM_TZM_9T217")
+		: Kind == TEXT("fuel") ? TEXT("/Game/SAM3D/Vehicles/SM_ATZ_38_131.SM_ATZ_38_131")
+		: Kind == TEXT("command_post") ? TEXT("/Game/SAM3D/Vehicles/SM_PU12M.SM_PU12M")
+		: nullptr;
+	if (Path == nullptr)
+	{
+		return false;
+	}
+	UStaticMesh* Model = LoadObject<UStaticMesh>(nullptr, Path);
+	if (Model == nullptr)
+	{
+		return false;
+	}
+	Mesh->SetStaticMesh(Model);
+	Mesh->SetRelativeRotation(FRotator::ZeroRotator);
+	Mesh->SetRelativeLocation(FVector::ZeroVector);
+	return true;
+}
+
 void ASimEntityActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

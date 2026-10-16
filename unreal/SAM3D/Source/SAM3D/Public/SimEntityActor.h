@@ -35,6 +35,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D")
 	void UseGroundStandIn();
 
+	/** A battery vehicle's model by its kind (reload: the TZM 9T217, fuel: the ATZ-3.8-131, command_post: the PU-12M;
+	 *  /Game/SAM3D/Vehicles, built by tools/blender/build_support_vehicles.py). False if there is none: keep the box. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D")
+	bool UseVehicleModel(const FString& Kind);
+
 	/** Called once when the entity stops being alive (shot down, missile detonated...). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "SAM3D")
 	void OnEntityInactive();

@@ -285,7 +285,7 @@ SC_TEST("battery practice: the shipped scenario loads and runs with its battery,
     for (int i = 0; i < 20 * 330; ++i) r.Step(0.05);
     const em::ViewExtras x = r.ViewExtrasNow(16);
     std::printf("    at %.0f s: %zu board marks, %zu radio messages, %zu vehicles and dummies\n", r.Time(), x.board.size(), x.radio.size(), x.battery.size());
-    SC_EXPECT(x.battery.size() == 7);
+    SC_EXPECT(x.battery.size() == 8);
     SC_EXPECT(!x.board.empty() && !x.radio.empty());
     SC_EXPECT(r.Em() != nullptr && r.Em()->DummyPlatforms().size() == 2);
 }

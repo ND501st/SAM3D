@@ -762,7 +762,8 @@ private:
     }
 
     // An order to the battery: "march" with a "route" (positions), "short_halt", "combat_formation" with "covered"
-    // (a position) and "axis_deg", "halt", "resume".
+    // (a position), "axis_deg" and "bounding", "halt", "resume", "ambush" with "points" (and "roving"),
+    // "river_crossing" with "crossing", "axis_deg" and "width_m", "far_bank_held", "reload" / "refuel" with "vehicle".
     bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
             return Fail(p, "unknown battery order '" + kind_text +
