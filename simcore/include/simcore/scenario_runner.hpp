@@ -68,7 +68,9 @@ public:
             const double reaction = c.reaction_time_s + (2.0 * u - 1.0) * c.reaction_jitter_s;
             crew_.emplace_back(c.name, c.role, reaction);
             if (const SkillTier* tier = SkillOf(c)) {  // docs/crew/05_SKILL.md
-                crew_.back().SetSkill(ToCrewSkill(*tier), def_.seed * 7919u + static_cast<unsigned>(i) * 104729u + 17u);
+                CrewSkill sk = ToCrewSkill(*tier);
+                if (def_.has_crew_data) sk.decision_controls = def_.crew_data.decision_controls;
+                crew_.back().SetSkill(sk, def_.seed * 7919u + static_cast<unsigned>(i) * 104729u + 17u);
             }
         }
         UpdateAimCrew();
@@ -1279,6 +1281,16 @@ private:
             npc_target_ = tracked;
             npc_prepared_ = false;
         }
+        // A branch (the low-target drill, the jammer drill): his judgement may make him hesitate (his tier's branch
+        // error: 10 s before he sees it).
+        const bool branch = (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) || m == TrackMethod::RadarOnJam;
+        if (branch && npc_branch_for_ != tracked) {
+            npc_branch_for_ = tracked;
+            const SkillTier* t = CommanderTier();
+            const bool slow = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->branch_error_chance;
+            npc_branch_at_ = time_ + (slow ? 10.0 : 0.0);
+        }
+        if (branch && time_ < npc_branch_at_) return;
         if (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) {
             NpcGive("order_low_target", 30.0);
             return;
@@ -1297,6 +1309,8 @@ private:
     bool npc_prepared_ = false;
     std::string npc_choice_for_;
     bool npc_choice_slip_ = false;
+    std::string npc_branch_for_;
+    double npc_branch_at_ = 0.0;
     const SkillTier* CommanderTier() const {
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() == "commander") return SkillOf(def_.crew[i]);

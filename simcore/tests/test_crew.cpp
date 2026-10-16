@@ -545,3 +545,65 @@ SC_TEST("stress: jamming on the crew's own radars stresses the crew") {
     }
     SC_EXPECT(stressed);
 }
+
+// ------------------------------------------------------------------------------------------ 8.2 calibration
+
+namespace {
+// A ready crew, all at one tier, run by its NPC commander, against a fighter that appears inside the zone: the time
+// from the first echo on the search scope to the launch (the published "detection to launch").
+double DetectionToLaunch(const std::string& tier, unsigned seed) {
+    std::string t = R"JSON({ "scenario_id": "cal", "name": "Calibration", "source": "sam3d", "confidence": "estimate", "seed": SEED,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "crew_commander": "npc",
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 } },
+      "crew": [ { "name": "Commander", "role": "commander", "skill": "TIER" }, { "name": "Deputy commander", "role": "deputy_commander", "skill": "TIER" },
+                { "name": "Senior operator", "role": "senior_operator", "skill": "TIER" }, { "name": "Operator", "role": "operator", "skill": "TIER" },
+                { "name": "Driver", "role": "driver", "skill": "TIER" } ],
+      "targets": [ { "id": "t1", "name": "Fighter (placeholder)", "class": "fighter", "start": { "east_m": 800, "north_m": 9500, "up_m": 1000 },
+                     "waypoints": [ { "east_m": 800, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150, "rcs_m2": 3, "appear_at_s": 40 } ],
+      "triggers": [], "end": { "time_limit_s": 200 } })JSON";
+    t = ReplaceAll(ReplaceAll(t, "TIER", tier), "SEED", std::to_string(seed));
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    if (!LoadScenario(t, kData, def, console, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return -1.0;
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    double seen = -1.0;
+    while (!r.Finished() && r.Time() < 200.0) {
+        r.Step(0.1);
+        if (seen < 0.0 && !r.Engagement().SearchPicture().empty()) seen = r.Time();
+        if (r.Launches() > 0) return seen >= 0.0 ? r.Time() - seen : -1.0;
+    }
+    return -1.0;
+}
+
+double MeanDetectionToLaunch(const std::string& tier) {
+    double sum = 0.0;
+    int n = 0;
+    for (unsigned seed = 1; seed <= 5; ++seed) {
+        const double t = DetectionToLaunch(tier, seed);
+        if (t > 0.0) {
+            sum += t;
+            ++n;
+        }
+    }
+    return n > 0 ? sum / n : -1.0;
+}
+}  // namespace
+
+SC_TEST("calibration: detection to launch falls in the published 26-40 s for trained crews, longer for recruits") {
+    const double master = MeanDetectionToLaunch("master"), c1 = MeanDetectionToLaunch("class1"), c2 = MeanDetectionToLaunch("class2"),
+                 c3 = MeanDetectionToLaunch("class3"), rec = MeanDetectionToLaunch("recruit");
+    std::printf("    detection to launch (mean of 5): master %.1f s, 1st class %.1f s, 2nd %.1f s, 3rd %.1f s, recruit %.1f s\n", master,
+                c1, c2, c3, rec);
+    SC_EXPECT(master > 0.0 && c1 > 0.0 && c2 > 0.0 && c3 > 0.0 && rec > 0.0);
+    SC_EXPECT(master < c2 && c2 < rec);
+    SC_EXPECT(c1 >= 24.0 && c1 <= 40.0);  // nvo_2015, korovin_tiv_2010: 26-40 s (27-39 s for the Osa-AK)
+    SC_EXPECT(c3 >= 26.0 && c3 <= 42.0);
+    SC_EXPECT(rec > 40.0);
+}

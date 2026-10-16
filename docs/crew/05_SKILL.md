@@ -28,7 +28,7 @@ sam3d's use of the standard grades, the numbers are game values).
 | Tier | Name | reaction_s | jitter_s | perception_s | wheel × | tv_lag_s | aim_noise_deg | slip | omission | launch_timing_s | stress × | patience_s |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | Recruit (без класса) | 2.4 | 1.0 | 3.5 | 0.55 | 0.9 | 0.25 | 0.06 | 0.03 | 8 | 1.8 | 12 |
-| 1 | 3rd class | 1.6 | 0.6 | 2.4 | 0.70 | 0.6 | 0.17 | 0.03 | 0.01 | 5 | 1.5 | 9 |
+| 1 | 3rd class | 1.4 | 0.5 | 2.0 | 0.70 | 0.6 | 0.17 | 0.03 | 0.01 | 4 | 1.5 | 9 |
 | 2 | 2nd class | 1.1 | 0.4 | 1.6 | 0.85 | 0.45 | 0.11 | 0.01 | 0.004 | 3 | 1.3 | 7 |
 | 3 | 1st class | 0.8 | 0.25 | 1.1 | 1.00 | 0.35 | 0.08 | 0.004 | 0.0 | 1.5 | 1.15 | 5 |
 | 4 | Master (мастер) | 0.55 | 0.15 | 0.7 | 1.10 | 0.25 | 0.05 | 0.0 | 0.0 | 0.5 | 1.05 | 4 |
@@ -47,6 +47,11 @@ The tier table must reproduce these, measured by tests on full engagements with 
 | New target after a kill | 40 s (excellent crew) to 120 s (poor) | `video_osa` (unverified) | Master ≈ 40 s, recruit ≈ 120 s |
 | Deploy from a powered march | 35–50 s by crew skill | `video_osa` (unverified) | Master 35 s, 3rd class 50 s |
 | March to combat, cold | ≤ 4 min including the GTA | `mon_2112_80` p11–12 | All tiers within 4 min except recruits |
+
+Measured (16 October 2026, `simcore/tests/test_crew.cpp` "calibration"): a ready crew at one tier, run by its NPC
+commander, against a fighter appearing inside the zone, mean of five seeds, first echo to launch: master 29.3 s, 1st
+class 31.1 s, 2nd class 38.4 s, 3rd class 41.0 s, recruit 81.2 s. The 3rd class was tuned once (reaction 1.6 → 1.4 s,
+perception 2.4 → 2.0 s, launch timing 5 → 4 s) to come near the band.
 
 ## 4. Per crewmate, per seat
 

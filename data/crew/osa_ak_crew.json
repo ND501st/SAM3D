@@ -6,6 +6,10 @@
   "source": "voenizdat_osa_1991 pp246-258 (the К бою drill and its reports); flak11 and wrk (seats and duties); sam3d for the rest",
   "confidence": "medium",
 
+  "decisions": { "controls": ["fo.launch"],
+                 "source": "sam3d: the moment of launch is the deputy commander's judgement (voenizdat_osa_1991 p257: the first missile to meet the target at the far edge of the zone); its delay is the tier's launch_timing_s",
+                 "confidence": "estimate" },
+
   "seats": [
     { "station": "commander", "number": 0, "title_ru": "Командир боевой машины", "title_en": "Vehicle commander",
       "duties": ["Commands the crew", "Takes designations and orders from the PU-12 on the right R-123M and passes them on", "Decides the target, fire and cease fire", "Hatches and the search antenna's mast", "Reports to the battery"],

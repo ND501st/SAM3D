@@ -101,6 +101,7 @@ struct CrewData {
     std::vector<CrewTask> tasks;
     std::vector<CrewFact> facts;
     std::vector<AutoReportDef> reports;
+    std::vector<std::string> decision_controls;  // steps that are decisions (ПУСК): judgement delays them
 
     const CalloutDef* FindCallout(const std::string& id) const {
         for (const CalloutDef& c : callouts) {
@@ -170,6 +171,7 @@ inline CrewSkill ToCrewSkill(const SkillTier& t) {
     s.omission_chance = t.omission_chance;
     s.patience_s = t.patience_s;
     s.stress_factor = t.stress_factor;
+    s.decision_delay_s = t.launch_timing_s;
     return s;
 }
 
@@ -192,7 +194,7 @@ class CrewLoader : public ConsoleLoader {
 public:
     bool LoadCrew(const json::Value& root, const ConsoleData& console, CrewData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "seats", "callouts", "orders",
-                             "tasks", "facts", "reports"}) ||
+                             "tasks", "facts", "reports", "decisions"}) ||
             !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "")) {
             return false;
         }
@@ -200,7 +202,8 @@ public:
             return Fail("system_id", "'" + out.system_id + "' is not the console's '" + console.system_id + "'");
         }
         return LoadSeats(root, console, out) && LoadCallouts(root, console, out) && LoadOrders(root, console, out) &&
-               LoadTasks(root, console, out) && LoadFacts(root, console, out) && LoadReports(root, console, out);
+               LoadTasks(root, console, out) && LoadFacts(root, console, out) && LoadReports(root, console, out) &&
+               LoadDecisions(root, console, out);
     }
 
     bool LoadSkills(const json::Value& root, SkillTable& out) {
@@ -422,6 +425,22 @@ private:
             if (out.FindFact(d.input) != nullptr) return Fail(Join(p, "input"), "duplicate fact for '" + d.input + "'");
             if (d.by_action && d.seats.size() != 1) return Fail(Join(p, "by_action"), "needs exactly one seat");
             out.facts.push_back(std::move(d));
+        }
+        return true;
+    }
+
+    // "decisions": { "controls": [...], "source", "confidence" }: the controls whose steps are a decision.
+    bool LoadDecisions(const json::Value& root, const ConsoleData& console, CrewData& out) {
+        const json::Value* d = root.Find("decisions");
+        if (d == nullptr) return true;
+        if (!Keys(*d, "decisions", {"controls", "source", "confidence", "notes"}) || !Provenance(*d, "decisions") ||
+            !StringList(*d, "decisions", "controls", out.decision_controls)) {
+            return false;
+        }
+        for (std::size_t i = 0; i < out.decision_controls.size(); ++i) {
+            if (!console.panel.Has(out.decision_controls[i])) {
+                return Fail(Index("decisions.controls", i), "unknown control '" + out.decision_controls[i] + "'");
+            }
         }
         return true;
     }
