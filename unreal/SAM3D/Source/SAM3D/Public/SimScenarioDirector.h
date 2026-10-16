@@ -32,7 +32,7 @@ public:
 
 	/** Scenario to play, relative to the data folder. Empty = the generic demo engagement. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
-	FString ScenarioFile = TEXT("scenarios/osa_practice_em.json");
+	FString ScenarioFile = TEXT("scenarios/osa_battery_practice.json");
 
 	/** 3D cabin layout for the scenario's console, relative to the data folder. Empty = no cabin. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
@@ -104,6 +104,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
 	FVector MissileScale = FVector(4.0);
+
+	/** Actor for the battery's other vehicles and dummy positions (roadmap 7.7); default: a box stand-in. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Battery")
+	TSubclassOf<ASimEntityActor> GroundActorClass;
+
+	/** Box size for the ground stand-in (the engine cube is 1 m): about a 9A33's 9 x 3 x 3 m. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Battery")
+	FVector GroundScale = FVector(9.0, 3.0, 3.0);
 
 private:
 	UFUNCTION()

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cmath>
+#include <algorithm>
 #include <cstddef>
 #include <fstream>
 #include <sstream>
@@ -18,10 +19,12 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
@@ -55,7 +58,7 @@ struct ScenarioTarget {
 };
 
 struct TriggerAction {
-    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore };
+    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat };
     Kind kind = Kind::SetInput;
     std::string input;      // SetInput
     bool value = true;      // SetInput
@@ -63,6 +66,8 @@ struct TriggerAction {
     std::string procedure;  // Order, Queue
     std::string reason;     // End, C2Fail
     std::string c2_id;      // C2Source (a source id or "none"), C2Fail, C2Restore
+    simcore::BatteryOrder battery_order;  // BatteryOrder
+    bool air_threat = false;              // AirThreat
 };
 
 struct ScenarioTrigger {
@@ -98,6 +103,7 @@ struct ScenarioDef {
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
     PositionPowerDef position_power;
+    PreparedPositionDef prepared;  // own_unit.prepared_position (roadmap 7.6)
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
@@ -113,6 +119,13 @@ struct ScenarioDef {
     // scenario's "c2" block. Empty: no command network.
     C2Policy c2_policy;
     std::vector<C2SourceDef> c2_sources;
+    // The battery around the player's vehicle (roadmap 7.5): "battery" block. The own vehicle is battery_vehicles[0].
+    bool has_battery = false;
+    BatteryTactics battery_tactics;
+    std::vector<BatteryVehicleDef> battery_vehicles;
+    std::vector<BatteryOrder> battery_orders;  // scheduled by at_s
+    bool battery_drive_own = false;
+    bool battery_night = false;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
 };
@@ -140,7 +153,7 @@ public:
 
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "command_post", "c2", "own_unit", "crew", "targets", "triggers", "end"})) {
+                             "terrain", "command_post", "c2", "battery", "own_unit", "crew", "targets", "triggers", "end"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -161,6 +174,7 @@ public:
             }
         }
         if (!LoadC2(root, data_dir, out)) return false;
+        if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, out, console)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
@@ -238,7 +252,8 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position_power", "position", "heading_deg", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
+                                   "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -356,6 +371,9 @@ private:
             }
             out.has_em = true;
         }
+        if (const json::Value* pp = u->Find("prepared_position")) {
+            if (!LoadPrepared(*pp, data_dir, out)) return false;
+        }
         const json::Value* pos = nullptr;
         if (!RequireObject(*u, "own_unit", "position", pos) ||
             !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position) ||
@@ -462,13 +480,27 @@ private:
 
     bool LoadAction(const json::Value& a, const std::string& p, const ScenarioDef& def, const ConsoleData& console,
                     TriggerAction& out) {
-        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason"})) {
+        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
+                         "battery_order", "route", "covered", "axis_deg", "air_threat"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
                           (a.Find("end") != nullptr) + (a.Find("c2_source") != nullptr) + (a.Find("c2_fail") != nullptr) +
-                          (a.Find("c2_restore") != nullptr);
-        if (kinds != 1) return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail or c2_restore");
+                          (a.Find("c2_restore") != nullptr) + (a.Find("battery_order") != nullptr) +
+                          (a.Find("air_threat") != nullptr);
+        if (kinds != 1) {
+            return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail, c2_restore, battery_order or air_threat");
+        }
+        if (a.Find("battery_order") != nullptr || a.Find("air_threat") != nullptr) {
+            if (!def.has_battery) return Fail(p, "the scenario has no battery block");
+            if (a.Find("air_threat") != nullptr) {
+                out.kind = TriggerAction::Kind::AirThreat;
+                return OptionalBool(a, p, "air_threat", out.air_threat);
+            }
+            out.kind = TriggerAction::Kind::BatteryOrder;
+            std::string kind;
+            return RequireString(a, p, "battery_order", kind) && LoadBatteryOrder(a, p, kind, out.battery_order);
+        }
         for (const char* key : {"c2_source", "c2_fail", "c2_restore"}) {
             if (a.Find(key) == nullptr) continue;
             out.kind = key[3] == 's' ? TriggerAction::Kind::C2Source
@@ -724,6 +756,177 @@ private:
                 return message_.empty() ? Fail(Join(p, "position"), "required, an object") : false;
             }
             pu->feed.push_back(std::move(radar));
+        }
+        return true;
+    }
+
+    // An order to the battery: "march" with a "route" (positions), "short_halt", "combat_formation" with "covered"
+    // (a position) and "axis_deg", "halt", "resume".
+    bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
+        if (!ParseBatteryOrder(kind_text, out.kind)) {
+            return Fail(p, "unknown battery order '" + kind_text + "' (march, short_halt, combat_formation, halt, resume)");
+        }
+        if (out.kind == BatteryOrder::Kind::March) {
+            const json::Value* route = OptionalArray(o, p, "route");
+            if (route == nullptr || route->items.size() < 2) return message_.empty() ? Fail(Join(p, "route"), "a march needs a route of 2 or more positions") : false;
+            for (std::size_t i = 0; i < route->items.size(); ++i) {
+                Vec3 v;
+                if (!LoadPosition(route->items[i], Index(Join(p, "route"), i), frame_, v)) return false;
+                out.route.push_back(v);
+            }
+        }
+        if (out.kind == BatteryOrder::Kind::CombatFormation) {
+            const json::Value* c = o.Find("covered");
+            if (c == nullptr) return Fail(Join(p, "covered"), "a combat formation needs the covered unit's position");
+            if (!LoadPosition(*c, Join(p, "covered"), frame_, out.covered) || !OptionalNumber(o, p, "axis_deg", out.axis_deg)) return false;
+        }
+        return true;
+    }
+
+    //   "battery": { "tactics": "command/battery_tactics.json", "drive_own": false, "night": false, "share_picture": true,
+    //                "own": { "id": "21", "callsign": "21" },
+    //                "vehicles": [ { "id": "22", "callsign": "22", "kind": "launcher", "position": {...} }, ... ],
+    //                "orders": [ { "at_s": 0, "order": "march", "route": [ {...}, {...} ] }, ... ] }
+    bool LoadBattery(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* b = root.Find("battery");
+        if (b == nullptr) return true;
+        const std::string bp = "battery";
+        if (!b->Is(json::Type::Object) ||
+            !Keys(*b, bp, {"tactics", "drive_own", "night", "share_picture", "own", "vehicles", "orders", "notes"})) {
+            return message_.empty() ? Fail(bp, "expected an object") : false;
+        }
+        std::string tactics = "command/battery_tactics.json";
+        bool share = false;
+        if (!OptionalString(*b, bp, "tactics", tactics) || !OptionalBool(*b, bp, "drive_own", out.battery_drive_own) ||
+            !OptionalBool(*b, bp, "night", out.battery_night) || !OptionalBool(*b, bp, "share_picture", share)) {
+            return false;
+        }
+        std::string error;
+        if (!LoadBatteryTacticsFile(data_dir + "/" + tactics, out.battery_tactics, &error)) return Fail(Join(bp, "tactics"), error);
+        BatteryVehicleDef own;
+        own.id = "own";
+        own.callsign = "own";
+        own.own = true;
+        own.start = out.unit_position;
+        if (const json::Value* o = b->Find("own")) {
+            if (!Keys(*o, Join(bp, "own"), {"id", "callsign"}) || !OptionalString(*o, Join(bp, "own"), "id", own.id) ||
+                !OptionalString(*o, Join(bp, "own"), "callsign", own.callsign)) {
+                return false;
+            }
+        }
+        out.battery_vehicles.push_back(own);
+        if (const json::Value* vs = OptionalArray(*b, bp, "vehicles")) {
+            for (std::size_t i = 0; i < vs->items.size(); ++i) {
+                const std::string p = Index(Join(bp, "vehicles"), i);
+                const json::Value& v = vs->items[i];
+                BatteryVehicleDef d;
+                std::string kind = "launcher";
+                if (!Keys(v, p, {"id", "callsign", "kind", "position", "notes"}) || !RequireString(v, p, "id", d.id) ||
+                    !OptionalString(v, p, "callsign", d.callsign) || !OptionalString(v, p, "kind", kind)) {
+                    return false;
+                }
+                if (!ParseBatteryVehicleKind(kind, d.kind)) return Fail(Join(p, "kind"), "launcher, reload, command_post or maintenance");
+                const json::Value* pos = v.Find("position");
+                if (pos == nullptr) return Fail(Join(p, "position"), "required");
+                if (!LoadPosition(*pos, Join(p, "position"), frame_, d.start)) return false;
+                if (d.callsign.empty()) d.callsign = d.id;
+                for (const BatteryVehicleDef& other : out.battery_vehicles) {
+                    if (other.id == d.id) return Fail(Join(p, "id"), "duplicate vehicle '" + d.id + "'");
+                }
+                out.battery_vehicles.push_back(d);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* os = OptionalArray(*b, bp, "orders")) {
+            for (std::size_t i = 0; i < os->items.size(); ++i) {
+                const std::string p = Index(Join(bp, "orders"), i);
+                const json::Value& o = os->items[i];
+                if (!Keys(o, p, {"at_s", "order", "route", "covered", "axis_deg", "notes"})) return false;
+                std::string kind;
+                BatteryOrder ord;
+                if (!RequireString(o, p, "order", kind) || !OptionalNumber(o, p, "at_s", ord.at_s) ||
+                    !LoadBatteryOrder(o, p, kind, ord)) {
+                    return false;
+                }
+                out.battery_orders.push_back(ord);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        out.has_battery = true;
+        // The other launchers' radar pictures reach the crew as neighbour sources (batteries feeding each other).
+        if (share) {
+            std::string library = "command/c2_sources.json";
+            C2Library lib;
+            if (!LoadC2LibraryFile(data_dir + "/" + library, lib, &error)) return Fail(Join(bp, "share_picture"), error);
+            const C2SourceDef* t = lib.Find("neighbour_radio");
+            if (t == nullptr) return Fail(Join(bp, "share_picture"), "the C2 library has no neighbour_radio type");
+            for (const BatteryVehicleDef& v : out.battery_vehicles) {
+                if (v.own || v.kind != BatteryVehicleKind::Launcher) continue;
+                C2SourceDef d = *t;
+                d.id = v.id;
+                d.type = "neighbour_radio";
+                d.display_name = "Battery vehicle " + v.callsign;
+                d.short_name = ("Veh " + v.callsign).substr(0, 14);
+                d.board.id = v.id;
+                d.has_position = true;
+                d.position = v.start;
+                out.c2_sources.push_back(d);
+                if (std::find(out.c2_policy.fallback_order.begin(), out.c2_policy.fallback_order.end(), v.id) ==
+                    out.c2_policy.fallback_order.end()) {
+                    out.c2_policy.fallback_order.push_back(v.id);
+                }
+            }
+            bool primary_known = false;
+            for (const C2SourceDef& d : out.c2_sources) primary_known = primary_known || d.id == out.c2_policy.primary;
+            if (!primary_known && !out.c2_sources.empty()) out.c2_policy.primary = out.c2_sources.front().id;
+        }
+        return true;
+    }
+
+    //   "prepared_position": { "file": "command/prepared_positions.json", "emplacement": true, "nets": true, "wire": true,
+    //                          "dummies": [ { "position": {...}, "decoy": "when_radar_off" } ] }
+    bool LoadPrepared(const json::Value& v, const std::string& data_dir, ScenarioDef& out) {
+        const std::string p = "own_unit.prepared_position";
+        std::string file = "command/prepared_positions.json";
+        if (!v.Is(json::Type::Object) || !Keys(v, p, {"file", "emplacement", "nets", "wire", "dummies", "notes"}) ||
+            !OptionalString(v, p, "file", file) || !OptionalBool(v, p, "emplacement", out.prepared.emplacement) ||
+            !OptionalBool(v, p, "nets", out.prepared.nets) || !OptionalBool(v, p, "wire", out.prepared.wire)) {
+            return message_.empty() ? Fail(p, "expected an object") : false;
+        }
+        std::string error;
+        if (!LoadPreparedPositionFile(data_dir + "/" + file, out.prepared.values, &error)) return Fail(Join(p, "file"), error);
+        if (const json::Value* ds = OptionalArray(v, p, "dummies")) {
+            for (std::size_t i = 0; i < ds->items.size(); ++i) {
+                const std::string dp = Index(Join(p, "dummies"), i);
+                const json::Value& d = ds->items[i];
+                if (!Keys(d, dp, {"position", "decoy", "notes"})) return false;
+                DummyPositionDef dd;
+                std::string decoy;
+                if (!OptionalString(d, dp, "decoy", decoy)) return false;
+                if (!decoy.empty() && decoy != "none") {
+                    if (!em::ParseDecoyMode(decoy, dd.mode)) return Fail(Join(dp, "decoy"), "none, with_radar, when_radar_off or always");
+                    dd.decoy = true;
+                }
+                const json::Value* pos = d.Find("position");
+                if (pos == nullptr) return Fail(Join(dp, "position"), "required");
+                if (!LoadPosition(*pos, Join(dp, "position"), frame_, dd.position)) return false;
+                out.prepared.dummies.push_back(dd);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        out.prepared.present = true;
+        // With the EM layer: the vehicle's echo and the dummies' echoes and decoys.
+        out.em.unit_rcs_m2 = out.prepared.VehicleRcsM2();
+        for (const DummyPositionDef& d : out.prepared.dummies) {
+            EmDummyDef e;
+            e.position = d.position;
+            e.rcs_m2 = out.prepared.values.dummy_rcs_m2;
+            e.decoy = d.decoy;
+            e.mode = d.mode;
+            out.em.dummies.push_back(e);
         }
         return true;
     }

@@ -58,6 +58,10 @@ E10). Code: `simcore/scenario_runner.hpp` (seats), `simcore/console_sync.hpp`, `
 * **The practice map plays the EM scenario** (`scenarios/osa_practice_em.json`), so the knowledge views carry the unit's
   radar tracks and picture as well.
 
+* **Board, radio and battery ride along.** Each view also carries `em::ViewExtras`: the PU-12 board's marks of the last
+  five plots, the last radio messages, and the battery's other vehicles and dummy positions; a client's HUD and map draw
+  from it (roadmap 7.7).
+
 ## Not done
 
 * Voice between players (the R-124 intercom is modelled as the order path, not as player audio).

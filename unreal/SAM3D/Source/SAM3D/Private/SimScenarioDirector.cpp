@@ -140,7 +140,7 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 		{
 			continue;
 		}
-		TSubclassOf<ASimEntityActor> ClassToSpawn = State.bIsMissile ? MissileActorClass : AircraftActorClass;
+		TSubclassOf<ASimEntityActor> ClassToSpawn = State.bIsGround ? GroundActorClass : (State.bIsMissile ? MissileActorClass : AircraftActorClass);
 		if (!ClassToSpawn)
 		{
 			ClassToSpawn = ASimEntityActor::StaticClass();
@@ -152,7 +152,11 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 		if (Actor != nullptr)
 		{
 			Actor->EntityId = State.Id;
-			Actor->SetActorScale3D(State.bIsMissile ? MissileScale : AircraftScale);
+			Actor->SetActorScale3D(State.bIsGround ? GroundScale : (State.bIsMissile ? MissileScale : AircraftScale));
+			if (State.bIsGround && (!GroundActorClass || GroundActorClass == ASimEntityActor::StaticClass()))
+			{
+				Actor->UseGroundStandIn();
+			}
 #if WITH_EDITOR
 			Actor->SetActorLabel(FString::Printf(TEXT("%s_%d"), *State.Name, State.Id));
 #endif

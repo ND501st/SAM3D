@@ -98,6 +98,38 @@ struct ViewScope {
     Vec3 unit_position;
 };
 
+// What else the player's crew has in front of it (roadmap 7.7): the PU-12 plotting board's recent marks, the latest
+// radio traffic it heard, and where its own battery's vehicles and dummy positions are.
+struct ViewBoardMark {
+    int number = 0;
+    int stamp = 0;
+    int height_hm = 0;
+    int code = 0;
+    Vec3 position;
+};
+
+struct ViewRadio {
+    double time_s = 0.0;
+    std::string net;
+    std::string from;
+    std::string text;
+};
+
+struct ViewVehicle {
+    std::string id;
+    std::string kind;  // launcher, reload, command_post, maintenance, dummy
+    Vec3 position;
+    double heading_deg = 0.0;
+    bool deployed = false;
+};
+
+struct ViewExtras {
+    bool valid = false;
+    std::vector<ViewBoardMark> board;
+    std::vector<ViewRadio> radio;  // oldest first
+    std::vector<ViewVehicle> battery;
+};
+
 struct KnowledgeView {
     std::uint32_t seq = 0;
     double time_s = 0.0;
@@ -108,6 +140,7 @@ struct KnowledgeView {
     std::vector<ViewContact> contacts;
     std::vector<ViewSensorTrack> sensor_tracks;
     ViewScope scope;  // filled by the server's caller (the engagement model's presentation), not by BuildView
+    ViewExtras extras;  // likewise (the board, the radio traffic, the battery's vehicles)
 };
 
 // What node `node_id` knows at the scene's time. Empty (node 0) if there is no such node.
@@ -399,6 +432,74 @@ inline bool GetScope(Reader& r, ViewScope& sc) {
     return r.ok;
 }
 
+inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
+    Writer w;
+    w.U8(x.valid ? 1 : 0);
+    if (!x.valid) return w.bytes;
+    w.U32(static_cast<std::uint32_t>(x.board.size()));
+    for (const ViewBoardMark& m : x.board) {
+        w.I32(m.number);
+        w.I32(m.stamp);
+        w.I32(m.height_hm);
+        w.I32(m.code);
+        w.V3(m.position, kPosStep);
+    }
+    w.U32(static_cast<std::uint32_t>(x.radio.size()));
+    for (const ViewRadio& r : x.radio) {
+        w.Time(r.time_s);
+        w.Str(r.net);
+        w.Str(r.from);
+        w.Str(r.text);
+    }
+    w.U32(static_cast<std::uint32_t>(x.battery.size()));
+    for (const ViewVehicle& v : x.battery) {
+        w.Str(v.id);
+        w.Str(v.kind);
+        w.V3(v.position, kPosStep);
+        w.Q(v.heading_deg, kDegStep);
+        w.U8(v.deployed ? 1 : 0);
+    }
+    return w.bytes;
+}
+inline bool GetExtras(Reader& r, ViewExtras& x) {
+    x = ViewExtras();
+    x.valid = r.U8() != 0;
+    if (!x.valid) return r.ok;
+    std::uint32_t n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewBoardMark m;
+        m.number = r.I32();
+        m.stamp = r.I32();
+        m.height_hm = r.I32();
+        m.code = r.I32();
+        m.position = r.V3(kPosStep);
+        x.board.push_back(m);
+    }
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewRadio m;
+        m.time_s = r.Time();
+        m.net = r.Str();
+        m.from = r.Str();
+        m.text = r.Str();
+        x.radio.push_back(m);
+    }
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewVehicle v;
+        v.id = r.Str();
+        v.kind = r.Str();
+        v.position = r.V3(kPosStep);
+        v.heading_deg = r.Q(kDegStep);
+        v.deployed = r.U8() != 0;
+        x.battery.push_back(v);
+    }
+    return r.ok;
+}
+
 // One item's bytes (to tell whether it changed since the base).
 template <typename T>
 std::vector<std::uint8_t> ItemBytes(const T& item) {
@@ -474,6 +575,13 @@ inline std::vector<std::uint8_t> EncodeView(const KnowledgeView& v, const Knowle
         w.U8(1);
         w.bytes.insert(w.bytes.end(), scope.begin(), scope.end());
     }
+    const std::vector<std::uint8_t> extras = wire::ExtrasBytes(v.extras);
+    if (base != nullptr && wire::ExtrasBytes(base->extras) == extras) {
+        w.U8(0);
+    } else {
+        w.U8(1);
+        w.bytes.insert(w.bytes.end(), extras.begin(), extras.end());
+    }
     return w.bytes;
 }
 
@@ -500,6 +608,7 @@ inline bool DecodeView(const std::vector<std::uint8_t>& bytes, KnowledgeView& in
     inout.own_position = r.V3(wire::kPosStep);
     if (!wire::ReadList(r, inout.tracks) || !wire::ReadList(r, inout.contacts) || !wire::ReadList(r, inout.sensor_tracks)) return false;
     if (r.U8() != 0 && !wire::GetScope(r, inout.scope)) return false;
+    if (r.U8() != 0 && !wire::GetExtras(r, inout.extras)) return false;
     return r.ok && r.AtEnd();
 }
 

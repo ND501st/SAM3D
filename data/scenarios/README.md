@@ -111,6 +111,12 @@ transport-loader vehicle up: with the vehicle stopped, the launcher reloads one 
 `external_power` connects an external 220 V 400 Hz supply (a cable, not a console control): at a halt it powers the
 equipment without the turbine or the take-off generator and burns no fuel; it drops out when the vehicle moves.
 
+`"battery"` (optional, roadmap 7.5) puts the rest of the battery around the player's vehicle: `{ "tactics": "command/battery_tactics.json", "drive_own": false, "night": false, "share_picture": true, "own": { "id": "21", "callsign": "21" }, "vehicles": [ { "id": "22", "kind": "launcher" | "reload" | "command_post" | "maintenance", "position": {...} } ], "orders": [ { "at_s": 0, "order": "march", "route": [ {...}, {...} ] } ] }`. Orders: `march` (with `route`), `short_halt`, `combat_formation` (with `covered` and `axis_deg`), `halt`, `resume`; a trigger can give them (`{ "battery_order": "short_halt" }`) or set `{ "air_threat": true }`. `drive_own` lets the battery drive the player's vehicle too; `share_picture` makes the other launchers' radars neighbour sources of the command network.
+
+`own_unit.prepared_position` (optional, roadmap 7.6): `{ "emplacement": true, "nets": true, "wire": true, "dummies": [ { "position": {...}, "decoy": "when_radar_off" } ] }`; values from `command/prepared_positions.json`.
+
+`osa_battery_practice.json` is the EM practice shoot with the whole battery in a prepared position (the practice map's scenario).
+
 `own_unit.position_power` (optional, roadmap 7.6) is a prepared position's supply, and sets `external_power` itself every
 step: `{ "grid": true, "grid_cut_s": 900, "diesel_start_s": 30, "diesel_hours": 24, "source": "...", "confidence": "low" }`.
 The civil grid carries the vehicle until it is cut (omit `grid_cut_s` for never); the diesel set takes over `diesel_start_s`
