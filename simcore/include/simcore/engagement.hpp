@@ -82,6 +82,7 @@ struct EngagementTuning {
         double max_speed_mps = 0.0;
         double min_alt_m = 0.0;
         double max_alt_m = 0.0;
+        double max_parameter_m = 0.0;  // crossing parameter: how far the target's course passes from the unit (0 = no limit)
     };
     bool has_zones = false;
     std::vector<SpeedBand> head_on;  // ascending speed
@@ -135,9 +136,18 @@ struct EngagementTuning {
     double manoeuvre_factor_min = 1.0;
     double deviation_penalty = 0.0;
     double deviation_factor_min = 1.0;
+    // By guidance method (its short name: "T/T", "Gorka", "F", "N"); a method without one gets 1.
+    std::map<std::string, double> method_factor;
+    // A missile launched with no range known and ПОМЕХА off: the fuse is armed by range, and there is none (1 = no effect).
+    double no_range_fuse_factor = 1.0;
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
+
+    double MethodFactor(const char* method) const {
+        const auto it = method_factor.find(method);
+        return it != method_factor.end() ? it->second : 1.0;
+    }
 
     double HitChanceFor(const std::string& target_class) const {
         const auto it = hit_chance.find(target_class);
@@ -172,7 +182,8 @@ struct EngagementTuning {
     }
 
     // Which firing zone a target is in (None = outside them all). `closing_mps` > 0 means it is coming toward the unit.
-    ZoneKind ZoneFor(double range_m, double agl_m, double speed_mps, double closing_mps) const {
+    // `parameter_m`: the crossing parameter, checked against a head-on band's limit (< 0: not known, not checked).
+    ZoneKind ZoneFor(double range_m, double agl_m, double speed_mps, double closing_mps, double parameter_m = -1.0) const {
         if (!has_zones) {
             const bool in = range_m >= zone_min_range_m && range_m <= zone_max_range_m && agl_m >= zone_min_alt_m &&
                             agl_m <= zone_max_alt_m;
@@ -186,6 +197,7 @@ struct EngagementTuning {
             if (range_m < zone_min_range_m || range_m > zone_max_range_m) return ZoneKind::None;
             for (const SpeedBand& b : head_on) {
                 if (speed_mps <= b.max_speed_mps) {
+                    if (b.max_parameter_m > 0.0 && parameter_m > b.max_parameter_m) return ZoneKind::None;
                     return agl_m >= b.min_alt_m && agl_m <= b.max_alt_m ? ZoneKind::HeadOn : ZoneKind::None;
                 }
             }
@@ -301,7 +313,7 @@ public:
         }
         if (!Group(root, "outcome",
                    {"hit_chance", "low_altitude", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
-                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min"},
+                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor"},
                    g) ||
             !Factor(*g, "tv_factor", t.tv_factor) || !Factor(*g, "outside_zone_factor", t.outside_zone_factor) ||
             !Num(*g, "outcome", "manoeuvre_penalty_per_deg_s", t.manoeuvre_penalty_per_deg_s, 0.0) ||
@@ -322,6 +334,21 @@ public:
             t.hit_chance[hc->keys[i]] = v.number;
         }
         if (t.hit_chance.count("default") == 0) return Fail("outcome.hit_chance", "needs a \"default\" entry");
+        if (const json::Value* mf = g->Find("method_factor")) {
+            if (!mf->Is(json::Type::Object)) return Fail("outcome.method_factor", "expected an object of method: factor");
+            for (std::size_t i = 0; i < mf->keys.size(); ++i) {
+                const std::string& k = mf->keys[i];
+                if (k != "T/T" && k != "Gorka" && k != "F" && k != "N") {
+                    return Fail(Join("outcome.method_factor", k), "unknown method (T/T, Gorka, F, N)");
+                }
+                const json::Value& v = mf->items[i];
+                if (!v.Is(json::Type::Number) || v.number < 0.0 || v.number > 1.0) {
+                    return Fail(Join("outcome.method_factor", k), "expected a number from 0 to 1");
+                }
+                t.method_factor[k] = v.number;
+            }
+        }
+        if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
         return LoadLowAltitude(*g, t);
     }
 
@@ -343,10 +370,11 @@ private:
         for (std::size_t i = 0; i < ho->items.size(); ++i) {
             const std::string p = Index("zones.head_on", i);
             EngagementTuning::SpeedBand b;
-            if (!Keys(ho->items[i], p, {"max_speed_mps", "min_altitude_m", "max_altitude_m"}) ||
-                !LoadSpeedBand(ho->items[i], p, b)) {
+            if (!Keys(ho->items[i], p, {"max_speed_mps", "min_altitude_m", "max_altitude_m", "max_parameter_m"}) ||
+                !LoadSpeedBand(ho->items[i], p, b) || !OptionalNumber(ho->items[i], p, "max_parameter_m", b.max_parameter_m)) {
                 return false;
             }
+            if (b.max_parameter_m < 0.0) return Fail(Join(p, "max_parameter_m"), "must be >= 0");
             if (!(b.max_speed_mps > last)) return Fail(p, "speed bands must be in ascending order of max_speed_mps");
             last = b.max_speed_mps;
             t.head_on.push_back(b);
@@ -464,13 +492,15 @@ struct EngagementTarget {
     bool friendly = false;  // replies to IFF interrogation
 };
 
-enum class TrackMethod { None, Radar, Tv };
+// RadarOnJam: the tracking radar follows a noise jammer in angle; its echo is drowned, so there is no radar range.
+enum class TrackMethod { None, Radar, Tv, RadarOnJam };
 
 inline const char* ToString(TrackMethod m) {
     switch (m) {
         case TrackMethod::None: return "none";
         case TrackMethod::Radar: return "radar";
         case TrackMethod::Tv: return "TV";
+        case TrackMethod::RadarOnJam: return "radar on the jammer";
     }
     return "?";
 }
@@ -548,16 +578,21 @@ public:
         s.zone = ZoneOf(g);
         s.in_zone = s.zone != EngagementTuning::ZoneKind::None;
         s.guidance = tuning_.MethodFor(g.agl_m, g.el_deg, g.speed_mps, jam_switch);
+        s.range_known = range_known_now_;
         s.flight_time_s = g.range_m / tuning_.missile_average_speed_mps;
         s.out_of_reach = s.flight_time_s > tuning_.missile_max_flight_time_s;
         if (s.out_of_reach) s.flight_time_s = tuning_.missile_max_flight_time_s;
-        char detail[220];
+        char detail[300];
         std::snprintf(detail, sizeof(detail), "guided at %s, %.1f km, %s track%s", tracked_.c_str(), g.range_m / 1000.0,
                       ToString(method_), s.in_zone ? ", in the zone" : ", OUTSIDE the zone");
         if (tuning_.has_zones || tuning_.has_methods) {
             const std::size_t n = std::strlen(detail);
             std::snprintf(detail + n, sizeof(detail) - n, " (%s zone, %s method, %.0f m up, %.0f m/s)",
                           EngagementTuning::ToString(s.zone), EngagementTuning::ToString(s.guidance), g.agl_m, g.speed_mps);
+        }
+        if (!s.range_known) {
+            const std::size_t n = std::strlen(detail);
+            std::snprintf(detail + n, sizeof(detail) - n, "; NO RANGE%s", jam_switch ? " (method N)" : ", ПОМЕХА off");
         }
         log.Record({t, DebriefEntry::Kind::Scenario, who, tracked_, detail});
         shots_.push_back(s);
@@ -691,6 +726,7 @@ private:
         bool friendly = false;
         double closing_mps = 0.0;
         double speed_mps = 0.0;
+        double parameter_m = 0.0;  // crossing parameter: distance from the unit to the target's course, over the ground
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
         bool los = false;
@@ -717,6 +753,7 @@ private:
         EngagementTuning::GuidanceMethod guidance = EngagementTuning::GuidanceMethod::ThreePoint;
         double tv_error_sum_deg_s = 0.0;  // manual TV tracking: aim error integrated over the flight
         double tv_time_s = 0.0;
+        bool range_known = true;  // the system had a range at launch (radar, range-only radar or the range by hand)
     };
 
     static double Wrap180(double deg) {
@@ -770,6 +807,8 @@ private:
             const Vec3 dir = los.Normalized();
             g.closing_mps = -Dot(a->velocity, dir);
             g.speed_mps = a->velocity.Length();
+            const double vh = std::hypot(a->velocity.x, a->velocity.y);
+            g.parameter_m = vh > 1.0 ? std::fabs(los.x * a->velocity.y - los.y * a->velocity.x) / vh : std::hypot(los.x, los.y);
             g.history.push_back({time_, g.az_deg, g.el_deg});
             while (g.history.size() > 2 && g.history[1][0] < time_ - 3.0) g.history.erase(g.history.begin());
             if (g.has_prev && dt > 0.0) {
@@ -831,7 +870,7 @@ private:
     }
 
     EngagementTuning::ZoneKind ZoneOf(const Geometry& g) const {
-        return tuning_.ZoneFor(g.range_m, g.agl_m, g.speed_mps, g.closing_mps);
+        return tuning_.ZoneFor(g.range_m, g.agl_m, g.speed_mps, g.closing_mps, g.parameter_m);
     }
     bool InZone(const Geometry& g) const { return ZoneOf(g) != EngagementTuning::ZoneKind::None; }
 
@@ -879,14 +918,26 @@ private:
                 aim = std::fmax(tuning_.tv_error_factor_min,
                                 1.0 - tuning_.tv_error_penalty * aim_error_deg / tuning_.tv_reticle_deg);
             }
-            const double p = base * method * zone * manoeuvre * crew * altitude * aim;
-            char aim_text[80] = "";  // only a TV shot is aimed by hand
+            // The guidance method's own factor (method N: no range, the fuse armed early), and the fuse with no range.
+            const double guidance = tuning_.MethodFactor(EngagementTuning::ToString(s.guidance));
+            const bool unfused = !s.range_known && s.guidance != EngagementTuning::GuidanceMethod::Jammer;
+            const double fuse = unfused ? tuning_.no_range_fuse_factor : 1.0;
+            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse;
+            char aim_text[160] = "";  // only a TV shot is aimed by hand
             if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
                 std::snprintf(aim_text, sizeof(aim_text), " x TV aim %.2f (%.2f deg off the crosshair)", aim, aim_error_deg);
             }
+            if (guidance != 1.0) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x method %s %.2f", EngagementTuning::ToString(s.guidance), guidance);
+            }
+            if (unfused) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fuse %.2f (no range, ПОМЕХА off)", fuse);
+            }
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
-            char detail[360];
+            char detail[480];
             std::snprintf(detail, sizeof(detail),
                           "%s: chance %.2f = %s %.2f x %s track %.2f x zone %.2f x manoeuvre %.2f (%.0f deg/s) x "
                           "crew %.2f (%d mistakes) x height %.2f (%.0f m up)%s; draw %.2f",
@@ -1062,7 +1113,7 @@ private:
         const Equipment& eq = console.equipment;
         if (!g.alive) return "target down";
         if (!eq.IsReady(d.slew)) return "antenna not free to turn";
-        if (method == TrackMethod::Radar && em_ != nullptr) {  // the radar equation decides, not these rules
+        if ((method == TrackMethod::Radar || method == TrackMethod::RadarOnJam) && em_ != nullptr) {  // the radar equation decides, not these rules
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
             return nullptr;
         }
@@ -1082,10 +1133,55 @@ private:
         return nullptr;
     }
 
-    bool RangeKnown(const ConsoleData& console) const {
-        if (method_ == TrackMethod::Radar) return true;
+    // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by
+    // the TV), or by hand: angles from the TV or from the radar on a jammer, and the range operator keeping the range
+    // wheel on the target's blip on the search scope (Korovin: in heavy jamming, angles from the TV sight, range from
+    // the search radar), or, with the search radar silent or jammed too, to the range the battery commander last gave
+    // for it (the plotting board's designation, up to a minute old). By hand the range is the wheel's, whoever turns it.
+    enum class RangeSource { None, Radar, RangeOnly, Search, Board };
+    RangeSource RangeFrom(const ConsoleData& console) const {
+        if (method_ == TrackMethod::Radar) return RangeSource::Radar;
         const TrackSensorDef& d = console.track;
-        return method_ == TrackMethod::Tv && !d.range_only_mode.empty() && console.equipment.IsReady(d.range_only_mode);
+        if (method_ == TrackMethod::Tv && !d.range_only_mode.empty() && console.equipment.IsReady(d.range_only_mode)) {
+            return RangeSource::RangeOnly;
+        }
+        if (method_ == TrackMethod::Tv || method_ == TrackMethod::RadarOnJam) {
+            if (SearchContact(tracked_) != nullptr) return RangeSource::Search;
+            if (BoardRange(tracked_) > 0.0) return RangeSource::Board;
+        }
+        return RangeSource::None;
+    }
+    static bool ByHand(RangeSource s) { return s == RangeSource::Search || s == RangeSource::Board; }
+
+    // The range the battery commander last gave for this target (its newest board mark), 0 if none.
+    double BoardRange(const std::string& id) const {
+        if (c2_ == nullptr && board_ == nullptr) return 0.0;
+        double range = 0.0, newest = -1.0;
+        for (const BoardMark& m : c2_ != nullptr ? c2_->Known(time_) : board_->Known(time_)) {
+            if (m.target_id != id || m.time_s < newest) continue;
+            newest = m.time_s;
+            range = PlottingBoard::Designate(m, unit_).range_m;
+        }
+        return range;
+    }
+    bool RangeKnown(const ConsoleData& console) const { return RangeFrom(console) != RangeSource::None; }
+
+    const Contact* SearchContact(const std::string& id) const {
+        for (const Contact& c : picture_) {
+            if (c.target_id == id) return &c;
+        }
+        return nullptr;
+    }
+
+    // The range by hand: an NPC range operator turns the wheel onto the tracked target's blip on the search scope, or
+    // to the range the commander gave.
+    void FollowRangeByHand(double dt, ConsoleData& console, const AimCrew& crew) {
+        const RangeSource source = RangeFrom(console);
+        if (!crew.range || !ByHand(source)) return;
+        const double want = source == RangeSource::Search ? SearchContact(tracked_)->range_m : BoardRange(tracked_);
+        const TrackSensorDef& d = console.track;
+        const double wheel_r = console.panel.GetValue(d.range_wheel);
+        console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * dt));
     }
 
     // Manual TV tracking: the target has to stay in the lens field around where the wheels point. An NPC in a wheel's seat
@@ -1168,9 +1264,43 @@ private:
                 }
             }
         }
-        if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, g.range_m);
+        if (RangeFrom(console) == RangeSource::RangeOnly) console.panel.SetValue(d.range_wheel, g.range_m);
+        FollowRangeByHand(dt, console, crew);
         antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = console.panel.GetValue(d.el_wheel);
         if (em_ != nullptr) em_->ClearDesignation();
+        return true;
+    }
+
+    // The tracking radar follows a jammer in angle (no range). The servo turns the wheels to the measured angles; the
+    // range gate stays on the range wheel, so the radar takes the echo again by itself if it burns through. Returns
+    // false (and logs why) when there is nothing left to follow.
+    bool TrackJammer(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
+        const TrackSensorDef& d = console.track;
+        const Geometry& g = geo_.at(tracked_);
+        const char* problem = LockProblem(console, g, TrackMethod::RadarOnJam);
+        std::string id;
+        EmSensorLink::Contact est;
+        if (problem == nullptr && em_->Locked(&id, &est) && id == tracked_) {
+            method_ = TrackMethod::Radar;
+            char detail[96];
+            std::snprintf(detail, sizeof(detail), "burn-through: the echo is back in the gate at %.1f km, radar range again", est.range_m / 1000.0);
+            log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
+            return true;
+        }
+        if (problem == nullptr && !(em_->JamTracked(&id, &est) && id == tracked_)) problem = "the jamming stopped: nothing to follow in angle";
+        if (problem != nullptr) {
+            log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+            em_->ClearLock();
+            method_ = TrackMethod::None;
+            tracked_.clear();
+            return false;
+        }
+        const double az_deg = Wrap180(est.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+        console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
+        console.panel.SetValue(d.el_wheel, est.el_deg);
+        FollowRangeByHand(dt, console, crew);
+        em_->Designate(est.true_az_deg, est.el_deg, console.panel.GetValue(d.range_wheel));
+        antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = est.el_deg;
         return true;
     }
 
@@ -1178,17 +1308,31 @@ private:
         const TrackSensorDef& d = console.track;
         if (method_ == TrackMethod::Tv && tuning_.has_tv_manual) {
             if (TrackTvByHand(t, dt, console, log, crew)) return;
+        } else if (method_ == TrackMethod::RadarOnJam && em_ != nullptr) {
+            if (TrackJammer(t, dt, console, log, crew)) return;
         } else if (method_ != TrackMethod::None) {
             const Geometry& g = geo_.at(tracked_);
             const char* problem = LockProblem(console, g, method_);
-            // The radar's own lock: the filter's estimate drives the servo, and a lock that has gone is lost.
+            // The radar's own lock: the filter's estimate drives the servo, and a lock that has gone is lost. If the echo
+            // went because jamming drowned it, the radar follows the jammer in angle instead (no range).
             const bool radar_em = method_ == TrackMethod::Radar && em_ != nullptr;
             EmSensorLink::Contact estimate;
             if (problem == nullptr && radar_em) {
                 std::string id;
-                if (!em_->Locked(&id, &estimate) || id != tracked_) problem = "radar lost the echo";
+                if (!em_->Locked(&id, &estimate) || id != tracked_) {
+                    if (em_->JamTracked(&id) && id == tracked_) {
+                        method_ = TrackMethod::RadarOnJam;
+                        log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_,
+                                    "range lost in the jamming: the radar follows the jammer in angle (ПОМЕХА: method N)"});
+                        if (TrackJammer(t, dt, console, log, crew)) return;  // false: it logged why and dropped the track
+                    } else {
+                        problem = "radar lost the echo";
+                    }
+                }
             }
-            if (problem == nullptr) {  // the tracking servo follows the target
+            if (method_ == TrackMethod::None) {
+                // handed over to the jammer and lost at once: look again below
+            } else if (problem == nullptr) {  // the tracking servo follows the target
                 const double az_deg = radar_em ? Wrap180(estimate.true_az_deg - unit_heading_deg_ + gyro_heading_deg_) : g.az_deg;
                 const double el_deg = radar_em ? estimate.el_deg : g.el_deg;
                 const double range_m = radar_em ? estimate.range_m : g.range_m;
@@ -1198,11 +1342,12 @@ private:
                 antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = el_deg;
                 if (em_ != nullptr && method_ == TrackMethod::Tv) em_->ClearDesignation();
                 return;
+            } else {
+                log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
+                if (radar_em) em_->ClearLock();
+                method_ = TrackMethod::None;
+                tracked_.clear();
             }
-            log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
-            if (radar_em) em_->ClearLock();
-            method_ = TrackMethod::None;
-            tracked_.clear();
         }
         // Looking for a lock: radar first, then TV. Targets are checked in id order (deterministic).
         UpdateElevationSearch(dt, console);
@@ -1221,10 +1366,13 @@ private:
             std::string locked;
             if (aiming) {
                 em_->Designate(IndicatedToTrueDeg(wheel_az), antenna_el_deg_, wheel_r);
-                const auto it = em_->Captured(&locked) ? geo_.find(locked) : geo_.end();
+                auto it = em_->Captured(&locked) ? geo_.find(locked) : geo_.end();
                 if (it != geo_.end() && it->second.alive) {
                     found = locked;
                     found_method = TrackMethod::Radar;
+                } else if (em_->JamTracked(&locked) && (it = geo_.find(locked)) != geo_.end() && it->second.alive) {
+                    found = locked;  // designated onto a jamming strobe: the radar takes the jammer in angle
+                    found_method = TrackMethod::RadarOnJam;
                 }
             } else {
                 em_->ClearLock();
@@ -1241,7 +1389,7 @@ private:
                 found_method = TrackMethod::Radar;
                 break;
             }
-            if (found.empty() && half_fov > 0.0 && az_err <= half_fov && std::fabs(g.el_deg - wheel_el) <= half_fov &&
+            if (found.empty() && half_fov > 0.0 && az_err <= half_fov && std::fabs(g.el_deg - wheel_el) <= half_fov * d.fov_height_ratio &&
                 LockProblem(console, g, TrackMethod::Tv) == nullptr) {
                 found = kv.first;
                 found_method = TrackMethod::Tv;
@@ -1265,8 +1413,12 @@ private:
         candidate_time_s_ = 0.0;
         const Geometry& g = geo_.at(tracked_);
         char detail[96];
-        std::snprintf(detail, sizeof(detail), "%s track, %.1f km, azimuth %.0f deg", ToString(method_),
-                      g.range_m / 1000.0, g.az_deg);
+        if (method_ == TrackMethod::RadarOnJam) {  // the crew has no range for it
+            std::snprintf(detail, sizeof(detail), "%s track, no range, azimuth %.0f deg", ToString(method_), g.az_deg);
+        } else {
+            std::snprintf(detail, sizeof(detail), "%s track, %.1f km, azimuth %.0f deg", ToString(method_),
+                          g.range_m / 1000.0, g.az_deg);
+        }
         log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
     }
 
@@ -1455,10 +1607,22 @@ private:
     void SetInputs(ConsoleData& console) {
         const TrackSensorDef& d = console.track;
         Equipment& eq = console.equipment;
+        Geometry by_hand;  // by hand the zone is judged at the range the wheel shows
         const Geometry* g = tracked_.empty() ? nullptr : &geo_.at(tracked_);
-        const bool range_known = g != nullptr && RangeKnown(console);
+        const RangeSource source = g != nullptr ? RangeFrom(console) : RangeSource::None;
+        if (ByHand(source)) {
+            by_hand = *g;
+            by_hand.range_m = console.panel.GetValue(d.range_wheel);
+            g = &by_hand;
+        }
+        const bool range_known = source != RangeSource::None;
+        range_known_now_ = range_known;
         const bool in_zone = range_known && InZone(*g);
-        if (!d.captured_input.empty()) eq.SetInput(d.captured_input, method_ == TrackMethod::Radar);
+        // ЗАХВАТ: the radar holds the target (on a jammer it holds it in angle only).
+        if (!d.captured_input.empty()) {
+            eq.SetInput(d.captured_input, method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam);
+        }
+        if (!d.tv_track_input.empty()) eq.SetInput(d.tv_track_input, method_ == TrackMethod::Tv);
         if (!d.in_zone_input.empty()) eq.SetInput(d.in_zone_input, in_zone);
         if (!d.near_zone_input.empty()) {
             bool near_zone = in_zone;
@@ -1532,6 +1696,7 @@ private:
     std::vector<Shot> shots_;
     int hits_ = 0;
     int misses_ = 0;
+    bool range_known_now_ = false;  // the system has a range for the tracked target (set each step)
 };
 
 }  // namespace simcore

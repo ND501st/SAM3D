@@ -53,7 +53,7 @@ public:
     ScenarioRunner(ScenarioDef def, ConsoleData console)
         : def_(std::move(def)),
           console_(std::move(console)),
-          ground_(def_.ground_height_m),
+          ground_(def_.ground_height_m, def_.ridges),
           world_(def_.origin, &ground_),
           acmi_(world_.Frame(), "2026-01-01T00:00:00Z", def_.name),
           rng_(def_.seed),
@@ -125,6 +125,9 @@ public:
         UpdateC2();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
+            // A radar lock is heard by the target's warning receiver; a TV track is not.
+            const TrackMethod m = engagement_.Method();
+            if (m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) CueTarget(engagement_.TrackedTarget(), false);
         }
         UpdateLauncher();
         UpdateFuel(dt);
@@ -440,6 +443,7 @@ private:
         bool spawned = false;
         bool gone = false;
         int world_id = -1;
+        TargetPilot pilot;  // terrain following, pop-up, evasion (target_behaviour.hpp)
     };
 
     // Start warm: set the state's controls and inputs, warm its subsystems up in order (each sees those before it),
@@ -475,12 +479,26 @@ private:
             a.max_turn_rate_rad_s = t.max_turn_rate_rad_s;
             a.rcs_m2 = t.rcs_m2;
             a.waypoints = t.waypoints;
+            targets_[i].pilot = TargetPilot(t.behaviour, t.evade);
+            targets_[i].pilot.OnSpawn(a);
             targets_[i].world_id = world_.AddAircraft(std::move(a));
             targets_[i].spawned = true;
             eng_targets_[i].world_id = targets_[i].world_id;
             Event(t.id, "appeared: " + t.name);
         }
+        for (TargetState& s : targets_) {
+            if (!s.spawned || s.gone) continue;
+            if (Aircraft* a = world_.FindAircraft(s.world_id)) s.pilot.BeforeStep(*a);
+        }
         world_.Step(dt);
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            TargetState& s = targets_[i];
+            if (!s.spawned || s.gone) continue;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            if (a == nullptr) continue;
+            const std::string what = s.pilot.AfterStep(*a, world_.GetTerrain(), world_.Frame(), dt, time_);
+            if (!what.empty()) Event(def_.targets[i].id, what);
+        }
         for (const SimEvent& e : world_.DrainEvents()) {
             if (e.type == EventType::AircraftDestroyed) Event(TargetIdOf(e.aircraft_id), "destroyed");
         }
@@ -494,6 +512,20 @@ private:
                 s.gone = true;
                 Event(def_.targets[i].id, "passed its last waypoint");
             }
+        }
+    }
+
+    // A missile was launched at a target (`launch`), or the tracking radar holds it: its pilot may evade.
+    void CueTarget(const std::string& id, bool launch) {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            TargetState& s = targets_[i];
+            if (def_.targets[i].id != id || !s.spawned || s.gone) continue;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            if (a == nullptr) return;
+            const std::string what = launch ? s.pilot.OnLaunch(*a, def_.unit_position, time_)
+                                            : s.pilot.OnLocked(*a, def_.unit_position, time_);
+            if (!what.empty()) Event(id, what);
+            return;
         }
     }
 
@@ -772,6 +804,7 @@ private:
             if (engagement_on_) {
                 const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
                 engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
+                CueTarget(engagement_.TrackedTarget(), true);
             }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
@@ -853,7 +886,7 @@ private:
 
     ScenarioDef def_;
     ConsoleData console_;
-    FlatTerrain ground_;
+    RidgeTerrain ground_;  // the scenario's flat ground and its ridges
     World world_;
     AcmiWriter acmi_;
     std::mt19937 rng_;

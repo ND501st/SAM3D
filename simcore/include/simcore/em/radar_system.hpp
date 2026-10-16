@@ -488,28 +488,35 @@ inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const 
 inline void RunTrackRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterState& e, const Platform& p, double dt) {
     const SensorTrack* lt = r.locked_track != 0 ? r.tracker.Find(r.locked_track) : nullptr;
     if (lt == nullptr && r.locked_track != 0) r.locked_track = 0;
-    Vec3 aim;
+    // Where to point (apparent elevation over a 4/3 Earth) and where the range gate sits: the locked track's prediction,
+    // else the jammer's measured direction with the gate where it was (or at the designation's range), else the designation.
+    double want_az = 0.0, want_el = 0.0, aim_range = 0.0;
+    auto toward = [&](const Vec3& aim) {
+        const Vec3 rel = aim - p.position;
+        const double ground = rel.HorizontalLength();
+        want_az = AzimuthOf(rel);
+        want_el = std::atan2(rel.z, ground > 1.0 ? ground : 1.0) + ground / (2.0 * wgs84::kMeanRadius) -
+                  ground / (2.0 * s.env.k_factor * wgs84::kMeanRadius);
+        aim_range = rel.Length();
+    };
     if (lt != nullptr) {
         SensorTrack pred = *lt;
         PredictTrack(pred, s.time_s, d.tracker.process_noise_accel);
-        aim = pred.Position();
+        toward(pred.Position());
+    } else if (r.on_jam) {
+        want_az = r.jam_az_rad;
+        want_el = r.jam_el_rad;
+        aim_range = r.has_designation ? (r.designation - p.position).Length() : r.jam_range_m;
     } else if (r.has_designation) {
-        aim = r.designation;
+        toward(r.designation);
     } else {
         return;  // nothing to point at
     }
-    // Slew the antenna towards the aim point (apparent elevation over a 4/3 Earth).
-    const Vec3 rel = aim - p.position;
-    const double want_az = AzimuthOf(rel);
-    const double ground = rel.HorizontalLength();
-    const double want_el = std::atan2(rel.z, ground > 1.0 ? ground : 1.0) + ground / (2.0 * wgs84::kMeanRadius) -
-                           ground / (2.0 * s.env.k_factor * wgs84::kMeanRadius);
     const double max_step = d.max_slew_rad_s * dt;
     // Low-target mode: hold the antenna above the ground reflection (mon_2112_80 p17).
     const double held_el = MaxOf(want_el, d.low_target_elevation_rad);
     e.pointing_az_rad = WrapTwoPi(e.pointing_az_rad + Clamp(WrapPi(want_az - e.pointing_az_rad), -max_step, max_step));
     e.pointing_el_rad += Clamp(held_el - e.pointing_el_rad, -2.0 * max_step, 2.0 * max_step);
-    const double aim_range = rel.Length();
     const double gate = d.track_gate_m;
     const ElevationBeam beam{e.pointing_el_rad, d.emitter.antenna.beamwidth_el_rad};
     const Vec3 boresight = DirectionFromAzEl(e.pointing_az_rad, e.pointing_el_rad);
@@ -588,6 +595,34 @@ inline void RunTrackRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterS
         // The repeater fell silent before the gate left the skin echo: the radar keeps the target.
         r.rgpo_captured = false;
         r.rgpo_offset_m = 0.0;
+    }
+
+    // Angle tracking on a noise jammer: no echo in the gate, but jamming in the main beam strong enough to show as a strobe.
+    // The antenna follows its measured direction (the angle error comes from the jamming's own J/N, like a strobe's); the
+    // range is gone. Entered from a lock that is being lost or from a designation onto the strobe.
+    if (have) {
+        r.on_jam = false;
+    } else if (d.angle_track_on_jam && (r.locked_track != 0 || r.on_jam || r.has_designation)) {
+        const BeamJammer bj = StrongestNoiseJammerInBeam(s, p, d.emitter.antenna, e.pointing_az_rad, e.pointing_el_rad,
+                                                         1.5 * d.emitter.antenna.beamwidth_az_rad, e.freq_hz,
+                                                         d.RxBandwidthHz(), d.noise_figure_db, &r.paths);
+        if (bj.jammer_id != 0 && LinearToDb(bj.jn) >= d.strobe_jn_threshold_db) {
+            if (!r.on_jam) {
+                r.jam_range_m = aim_range;
+                s.Log(EmEventKind::Info, r.id, bj.jammer_id, "echo lost in the jamming: angle tracking on the jammer, no range");
+            }
+            const double sigma =
+                AngleSigmaRad(d.emitter.antenna.beamwidth_az_rad, bj.jn, d.monopulse_slope, d.angle_sigma_floor_rad);
+            const std::uint64_t key = LookKey(r.id, -4000 - bj.jammer_id, r.looks);
+            r.jam_az_rad = WrapTwoPi(bj.az_rad + sigma * s.rng.NormalOf(Stream::AzimuthNoise, key));
+            r.jam_el_rad = bj.el_rad + sigma * s.rng.NormalOf(Stream::ElevationNoise, key);
+            r.jam_jn_db = LinearToDb(bj.jn);
+            r.jam_jammer_id = bj.jammer_id;
+            r.on_jam = true;
+        } else if (r.on_jam) {
+            r.on_jam = false;
+            s.Log(EmEventKind::Info, r.id, r.jam_jammer_id, "the jamming has left the beam");
+        }
     }
 
     if (have) {

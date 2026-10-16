@@ -532,3 +532,24 @@ The server runs the one simulation; each player receives what *their own node* k
 * A moving track changes every item, so a delta carries about as much as a keyframe for a busy picture; value-level delta coding is possible later if bandwidth matters.
 * **Unreal transport (built 16 October 2026)**: `USimKnowledgeComponent` on a PlayerController. On the server it registers with `USimWorldSubsystem`, which after the sim steps (`PumpKnowledge`, by sim time) sends each player the view of its `NodeId` (0: the scenario unit's node, `EmSensorLink::UnitNodeId()`) every `SendPeriodSeconds` (0.5 s) through an unreliable client RPC; the client applies it with a `KnowledgeMirror`, fires `OnKnowledgeUpdated`, and acknowledges by an unreliable server RPC. Blueprint: `GetPictureTracks`, `GetEsmContacts`, `GetSensorTracks` (Unreal coordinates), `GetKnowledgeSeq`, `GetKnowledgeSummary`. The scene is the scenario's EM layer, else the EM demo (`GetActiveEmScene`). Automation test `SAM3D.Knowledge.ComponentAppliesStream` (headless) feeds the component a keyframe and deltas and checks it holds byte for byte what the server sent. Since then: a networked check with a dedicated server and two clients, the client's own simulation switched off, and the scopes' feed (`em::ViewScope`) carried in each view (`docs/MULTIPLAYER.md`).
 
+
+## 31. The tracking radar on a noise jammer (roadmap 9.1, 16 October 2026)
+
+A tracking radar whose definition has `eccm.angle_track_on_jam` (the Osa's SSC: `samsim_thread`, `korovin_tiv_2010`)
+follows a noise jammer in angle when the jamming drowns its echo (`RunTrackRadar`, `em/radar_system.hpp`):
+
+* It enters this state from a lock that is being lost, or from a designation onto the strobe, when the strongest noise
+  jammer inside 1.5 beam widths of the boresight (`StrongestNoiseJammerInBeam`, `em/scene_ops.hpp`) gives a J/N at
+  or above the radar's `strobe_jn_threshold_db` and no echo is detected in the gate.
+* The antenna then points at the jammer's measured direction; the angle error comes from the jamming's own J/N
+  (`AngleSigmaRad`, as for a strobe), drawn on the keyed random streams. There is no range: the gate stays at the
+  range it had, or at the designation's range (the crew's range wheel), so the radar takes the echo again by itself
+  when it burns through (about 2.6 km for a 5 m2 target against the placeholder `generic_selfscreen_noise_ku`).
+* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam.
+* `EmSensorLink::JamTracked` gives the engagement layer the target that direction lines up with (by angle only, the
+  referee-side association of §23) and the measured angles, with `no_range` set. `RadarState::on_jam`, `jam_az_rad`,
+  `jam_el_rad`, `jam_jn_db`, `jam_range_m` hold the state; `ClearLock` resets it.
+
+The engagement layer's side (method Н, the range by hand from the search scope or the PU-12, the fuse) is in
+`data/gameplay/README.md` and `simcore/engagement.hpp`. Not modelled: the range-only mode being jammed, home-on-jam by
+the missile (the Osa's missile is command-guided), sidelobe blanking or frequency agility against the jammer.

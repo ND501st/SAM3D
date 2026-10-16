@@ -1,0 +1,56 @@
+{
+  "scenario_id": "osa_jamming_em",
+  "name": "Osa-AK against a jamming strike aircraft (EM radars)",
+  "description": "A fictional practice shoot against jamming (roadmap 9.1). A strike aircraft with a self-screening noise pod in the tracking radar's band comes in from the north. The tracking radar can't range it through the noise: it follows the jammer in angle, the operator keeps the range wheel on the target's blip on the search scope, and the deputy commander fires with ПОМЕХА up (method Н). The aircraft breaks away when the missile is launched. No player actions needed: a regression and demo scenario; a player can take any seat.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. The aircraft's speed, height, route and RCS and the pod (generic_selfscreen_noise_ku in data/em/generic.json) are PLACEHOLDER numbers. The drill is fire_at_jammer (data/procedures/osa_ak.json).",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
+      "extra_libraries": [ "em/generic.json" ],
+      "jammers": [
+        { "jammer": "generic_selfscreen_noise_ku", "target": "t1", "on_at_s": 0,
+          "notes": "A self-screening noise pod in the tracking radar's band, on all the way: the radar never gets a range until it burns through at a few km." }
+      ]
+    },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Deputy commander", "role": "deputy_commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Senior operator", "role": "senior_operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Operator", "role": "operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Driver", "role": "driver", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Strike aircraft with a noise pod (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": 3000, "north_m": 50000, "up_m": 1500 },
+      "waypoints": [ { "east_m": 3000, "north_m": -30000, "up_m": 1500 } ],
+      "speed_mps": 220, "rcs_m2": 3.0, "appear_at_s": 220,
+      "evade": { "on": "launch", "kind": "break", "turn_rate_deg_s": 10 },
+      "notes": "Placeholder numbers. It appears once the crew has had its 4 min to readiness (mon_2112_80 p11–12)."
+    }
+  ],
+  "triggers": [
+    { "id": "ready", "when": { "after_s": 0 },
+      "do": [ { "order": "power_up", "crew": "Driver" }, { "queue": "pto_on_line", "crew": "Driver" },
+              { "order": "equipment_on", "crew": "Operator" }, { "queue": "deploy_at_halt", "crew": "Operator" },
+              { "order": "search_on_march", "crew": "Senior operator" } ] },
+    { "id": "acquire", "when": { "target": "t1", "target_within_m": 35000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+      "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "queue": "ready_capture", "crew": "Deputy commander" },
+              { "order": "capture_with_ssc", "crew": "Operator" } ] },
+    { "id": "jammed", "when": { "target": "t1", "target_within_m": 25000 },
+      "do": [ { "queue": "fire_at_jammer", "crew": "Deputy commander" } ],
+      "notes": "The strobe on the scope tells the crew it is a jammer: the deputy commander makes ready to fire by method Н." }
+  ],
+  "end": { "time_limit_s": 700, "when_targets_gone": true }
+}
