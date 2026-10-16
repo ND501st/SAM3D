@@ -54,6 +54,7 @@ add_executable(simcore_tests
   tests/test_readiness.cpp
   tests/test_pu12.cpp
   tests/test_c2_sources.cpp
+  tests/test_em_deception.cpp
   tests/test_comms.cpp
   tests/test_fuel.cpp)
 simcore_configure_target(simcore_tests)

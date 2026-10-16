@@ -57,6 +57,13 @@ struct EmChaffDef {
     double lifetime_s = 60.0;
 };
 
+// A decoy emitter copying the unit's search radar, at a dummy position (roadmap E7). `mode`: with the radar, while the
+// radar is off, or always.
+struct EmDecoyDef {
+    Vec3 position;
+    em::DecoyMode mode = em::DecoyMode::WithRadar;
+};
+
 // What a scenario asks for: the library file and which of its radars are the unit's search and tracking radars.
 struct EmLinkDef {
     std::string library_file;  // relative to the data folder, e.g. "em/osa_ak.json"
@@ -65,6 +72,7 @@ struct EmLinkDef {
     std::vector<std::string> extra_libraries;  // more files merged in (jammers, threat libraries): "em/nato_1985.json"
     std::vector<EmJammerDef> jammers;
     std::vector<EmChaffDef> chaff;
+    std::vector<EmDecoyDef> decoys;
     Vec3 wind_mps;  // chaff drift
     double rain_mmh = 0.0;  // rain rate over the scene (ITU-R P.838)
     em::EmLibrary library;
@@ -161,6 +169,11 @@ public:
         world_.AttachSensor(node_, search_);
         world_.AttachSensor(node_, track_);
         if (em::RadarState* sr = Radar(search_)) sr->iff_interrogating = false;  // until the console interrogates
+        for (const EmDecoyDef& dd : def.decoys) {
+            const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
+            const int dp = world_.AddGroundPlatform("Decoy", em::Side::Red, dd.position.x, dd.position.y, mast);
+            decoy_emitters_.push_back(world_.AddDecoy(dp, search_, dd.mode));
+        }
         jammer_ids_.assign(def.jammers.size(), 0);
         chaff_done_.assign(def.chaff.size(), 0);
         for (std::size_t i = 0; i < def.jammers.size(); ++i) {
@@ -270,6 +283,8 @@ public:
     }
 
     bool Ok() const { return error_.empty(); }
+    // The decoy emitters copying the search radar (scenario own_unit.em.decoys), in order.
+    const std::vector<int>& DecoyEmitters() const { return decoy_emitters_; }
     const std::string& Error() const { return error_; }
     em::EmWorld& World() { return world_; }
     const em::EmWorld& World() const { return world_; }
@@ -661,6 +676,7 @@ private:
         std::vector<std::pair<long long, long long>> voice;  // (sender's tag, EM message id)
     };
     std::vector<RadioSource> radio_sources_;
+    std::vector<int> decoy_emitters_;
     int node_ = 0;
     double antenna_height_m_ = 0.0;
     int capture_looks_ = 40;

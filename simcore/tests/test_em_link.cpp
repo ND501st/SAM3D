@@ -800,3 +800,25 @@ SC_TEST("em link: IFF replies come from the friendly transponder's track, only w
     }
     SC_EXPECT(seen_h > 20 && iff_h == 0);
 }
+
+SC_TEST("em link: the Osa's decoys copy its search radar and blink with it (own_unit.em.decoys)") {
+    EmLinkDef def;
+    SC_EXPECT(LoadEmLinkDef(kData, "em/osa_ak.json", "osa_ak_soc", "osa_ak_ssc", def));
+    def.decoys.push_back({Vec3{1500.0, 800.0, 0.0}, em::DecoyMode::WithRadar});
+    def.decoys.push_back({Vec3{-2000.0, 500.0, 0.0}, em::DecoyMode::WhenRadarOff});
+    FlatTerrain ground{0.0};
+    EmSensorLink link(GeoPoint::FromDegrees(46.9, 19.7, 0.0), &ground, 3u, def, Vec3{0.0, 0.0, 3.0});
+    SC_EXPECT(link.Ok() && link.DecoyEmitters().size() == 2);
+    if (!link.Ok() || link.DecoyEmitters().size() != 2) return;
+    const em::EmScene& s = link.World().Scene();
+    link.SetSearch(true, false);
+    link.Advance(0.2);
+    const em::EmitterState* with = s.FindEmitter(link.DecoyEmitters()[0]);
+    const em::EmitterState* off = s.FindEmitter(link.DecoyEmitters()[1]);
+    SC_EXPECT(with->radiating && !off->radiating);
+    SC_EXPECT(with->def.kind == em::EmitterKind::Decoy);
+    SC_EXPECT_NEAR(with->def.waveform.prf_hz, s.lib.radars[static_cast<std::size_t>(s.lib.Radar("osa_ak_soc"))].emitter.waveform.prf_hz, 1e-9);
+    link.SetSearch(false, false);
+    link.Advance(0.2);
+    SC_EXPECT(!s.FindEmitter(link.DecoyEmitters()[0])->radiating && s.FindEmitter(link.DecoyEmitters()[1])->radiating);
+}

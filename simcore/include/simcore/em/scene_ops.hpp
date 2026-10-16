@@ -155,12 +155,12 @@ inline double NoiseJammingToNoise(const EmScene& s, const Platform& rx, const An
     for (const JammerState& j : s.jammers) {
         if (!j.on || j.silent_until_s > s.time_s) continue;
         const JammerDef& jd = s.lib.jammers[static_cast<std::size_t>(j.def_index)];
-        if (jd.technique == JamTechnique::RangeGatePullOff) continue;
+        if (jd.technique == JamTechnique::RangeGatePullOff || jd.technique == JamTechnique::FalseTargets) continue;
         const Platform* jp = s.FindPlatform(j.platform_id);
         const EmitterState* je = s.FindEmitter(j.emitter_id);
         if (jp == nullptr || je == nullptr || !jp->alive || jp->id == rx.id) continue;
-        const double overlap =
-            JammerBandOverlap(jd.emitter.waveform.freq_hz, jd.emitter.waveform.bandwidth_hz, freq_hz, bw_hz);
+        const double centre = je->freq_hz > 0.0 ? je->freq_hz : jd.emitter.waveform.freq_hz;  // a spot jammer may re-tune
+        const double overlap = JammerBandOverlap(centre, jd.emitter.waveform.bandwidth_hz, freq_hz, bw_hz);
         if (overlap <= 0.0) continue;
         const double az_j = AzimuthFromTo(rx.position, jp->position);
         const double el_j = s.ElevationAngle(rx, *jp);

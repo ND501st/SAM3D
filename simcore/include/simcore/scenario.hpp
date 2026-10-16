@@ -276,7 +276,7 @@ private:
             std::string library, search, track;
             if (!em->Is(json::Type::Object) ||
                 !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps", "rain_mmh",
-                                           "jammers", "chaff", "notes"}) ||
+                                           "jammers", "chaff", "decoys", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
                 !RequireString(*em, "own_unit.em", "track_radar", track)) {
@@ -333,6 +333,23 @@ private:
                     if (cd.rcs_m2 <= 0.0) return Fail(Join(cp, "rcs_m2"), "must be > 0");
                     if (cd.lifetime_s <= 0.0) return Fail(Join(cp, "lifetime_s"), "must be > 0");
                     out.em.chaff.push_back(cd);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (const json::Value* dl = OptionalArray(*em, "own_unit.em", "decoys")) {
+                for (std::size_t i = 0; i < dl->items.size(); ++i) {
+                    const std::string dpth = Index("own_unit.em.decoys", i);
+                    const json::Value& dv = dl->items[i];
+                    if (!Keys(dv, dpth, {"position", "mode", "notes"})) return false;
+                    EmDecoyDef dd;
+                    std::string mode = "with_radar";
+                    if (!OptionalString(dv, dpth, "mode", mode)) return false;
+                    if (!em::ParseDecoyMode(mode, dd.mode)) return Fail(Join(dpth, "mode"), "with_radar, when_radar_off or always");
+                    const json::Value* dpos = dv.Find("position");
+                    if (dpos == nullptr) return Fail(Join(dpth, "position"), "required");
+                    if (!LoadPosition(*dpos, Join(dpth, "position"), frame_, dd.position)) return false;
+                    out.em.decoys.push_back(dd);
                 }
             } else if (!message_.empty()) {
                 return false;
