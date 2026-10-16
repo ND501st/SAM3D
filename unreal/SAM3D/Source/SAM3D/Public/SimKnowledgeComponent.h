@@ -129,7 +129,7 @@ public:
 
 	/** Sim seconds between packets (server only). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Knowledge", meta = (ClampMin = "0.05"))
-	float SendPeriodSeconds = 0.5f;
+	float SendPeriodSeconds = 0.2f;
 
 	/** Fired on the owning client each time a newer view is applied. */
 	UPROPERTY(BlueprintAssignable, Category = "SAM3D|Knowledge")

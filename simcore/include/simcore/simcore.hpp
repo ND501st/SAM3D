@@ -32,3 +32,5 @@
 #include "simcore/world.hpp"
 #include "simcore/acmi.hpp"
 #include "simcore/em.hpp"
+#include "simcore/scope_feed.hpp"
+#include "simcore/console_sync.hpp"

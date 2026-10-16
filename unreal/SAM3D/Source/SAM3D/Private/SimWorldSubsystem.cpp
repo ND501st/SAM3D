@@ -937,6 +937,25 @@ int32 USimWorldSubsystem::GetDefaultKnowledgeNode() const
 	return Runner && Runner->Em() != nullptr ? Runner->Em()->UnitNodeId() : 0;
 }
 
+void USimWorldSubsystem::SetLocalKnowledge(USimKnowledgeComponent* Knowledge)
+{
+	LocalKnowledge = Knowledge;
+}
+
+void USimWorldSubsystem::ClearLocalKnowledge(USimKnowledgeComponent* Knowledge)
+{
+	if (LocalKnowledge.Get() == Knowledge)
+	{
+		LocalKnowledge.Reset();
+	}
+}
+
+const simcore::em::ViewScope* USimWorldSubsystem::GetMirroredScope() const
+{
+	const USimKnowledgeComponent* K = LocalKnowledge.Get();
+	return K != nullptr && K->GetView().scope.valid ? &K->GetView().scope : nullptr;
+}
+
 void USimWorldSubsystem::PumpKnowledge()
 {
 	if (!Replicator || KnowledgeClients.Num() == 0 || GetWorld() == nullptr || GetWorld()->GetNetMode() == NM_Client)
@@ -944,17 +963,18 @@ void USimWorldSubsystem::PumpKnowledge()
 		return;
 	}
 	const simcore::em::EmScene* Scene = GetActiveEmScene();
-	if (Scene == nullptr)
+	if (Scene == nullptr && !Runner)
 	{
 		return;
 	}
 	// Sim time, not frame time: a paused or time-compressed sim sends by its own clock.
-	double Dt = LastKnowledgeSimTime >= 0.0 ? Scene->time_s - LastKnowledgeSimTime : 0.0;
+	const double Now = Runner ? Runner->Time() : Scene->time_s;
+	double Dt = LastKnowledgeSimTime >= 0.0 ? Now - LastKnowledgeSimTime : 0.0;
 	if (Dt < 0.0)
 	{
 		Dt = 0.0;  // a new scene started
 	}
-	LastKnowledgeSimTime = Scene->time_s;
+	LastKnowledgeSimTime = Now;
 	KnowledgeClients.RemoveAll([](const TWeakObjectPtr<USimKnowledgeComponent>& C) { return !C.IsValid(); });
 	for (const TWeakObjectPtr<USimKnowledgeComponent>& Weak : KnowledgeClients)
 	{
@@ -972,7 +992,16 @@ void USimWorldSubsystem::PumpKnowledge()
 		{
 			Replicator->SetNode(Handle, Node);
 		}
-		const std::vector<std::uint8_t> Bytes = Replicator->Produce(Handle, *Scene);
+		// The scopes as the crew sees them ride along (echoes keyed opaquely per player).
+		simcore::EchoKeys& Keys = EchoKeysByClient[Handle];
+		simcore::ScenarioRunner* R = Runner.Get();
+		const std::vector<std::uint8_t> Bytes = Replicator->Produce(Handle, Scene, [R, &Keys, Now](simcore::em::KnowledgeView& V) {
+			V.time_s = Now;
+			if (R != nullptr && R->EngagementOn())
+			{
+				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time()), Keys);
+			}
+		});
 		TArray<uint8> Packet;
 		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
 		Client->SendKnowledge(Packet);

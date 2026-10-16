@@ -58,6 +58,8 @@ private:
 
 	int32 LayoutIndex = INDEX_NONE;
 	simcore::CabinDisplayKind Kind = simcore::CabinDisplayKind::Dial;
+	// What the scopes draw from this frame: the engagement model where the sim runs, the knowledge stream on a client.
+	simcore::ScopeFeed Feed;
 	TUniquePtr<simcore::SearchScope> Scope;
 	TUniquePtr<simcore::ElevationScope> ElevScope;
 	int32 ElevRaster = INDEX_NONE;

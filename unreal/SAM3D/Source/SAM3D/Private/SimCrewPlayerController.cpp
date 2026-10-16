@@ -72,9 +72,11 @@ void ASimCrewPlayerController::LogSmoke()
 	{
 		Gta = Sim->GetControlPosition(TEXT("pwr.gta"));
 	}
-	UE_LOG(LogSAM3D, Display, TEXT("SIMCREW SMOKE client: seat '%s', procedure '%s' step %d, console snapshots applied %d, pwr.gta %d, mirror-only %d; knowledge: %s"),
+	const simcore::em::ViewScope& Sc = Knowledge->GetView().scope;
+	UE_LOG(LogSAM3D, Display, TEXT("SIMCREW SMOKE client: seat '%s', procedure '%s' step %d, console snapshots applied %d, pwr.gta %d, mirror-only %d; knowledge: %s; scope: valid %d, %d search echoes, %d track echoes, antenna el %.1f deg"),
 		*CrewSeat->SeatRole, *CrewSeat->SeatProcedureId, CrewSeat->SeatProcedureStep, CrewSeat->GetConsoleSnapshotsApplied(), Gta,
-		Sim != nullptr && Sim->IsMirrorOnly() ? 1 : 0, *Knowledge->GetKnowledgeSummary());
+		Sim != nullptr && Sim->IsMirrorOnly() ? 1 : 0, *Knowledge->GetKnowledgeSummary(), Sc.valid ? 1 : 0,
+		static_cast<int32>(Sc.search.size()), static_cast<int32>(Sc.track_returns.size()), Sc.antenna_el_deg);
 	FGenericPlatformMisc::RequestExit(false);
 }
 

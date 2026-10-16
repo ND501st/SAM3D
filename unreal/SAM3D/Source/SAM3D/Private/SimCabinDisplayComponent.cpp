@@ -293,6 +293,22 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const simcore::CabinDisplay& Display = Layout->displays[LayoutIndex];
 	const simcore::ConsoleData& Console = Runner->Console();
 	const bool bOn = simcore::CabinLayout::DisplayOn(Display, Console.panel, Console.equipment);
+	// A network client never steps its own sim: its scopes come from the knowledge stream, and its sweep runs on the
+	// frame clock (the stream's views arrive a few times a second).
+	const bool bMirror = Sim->IsMirrorOnly();
+	const simcore::em::ViewScope* Mirrored = bMirror ? Sim->GetMirroredScope() : nullptr;
+	Feed = Mirrored != nullptr ? simcore::FromViewScope(*Mirrored)
+	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time());
+	auto StepSeconds = [&]() {
+		if (bMirror)
+		{
+			return FMath::Clamp(static_cast<double>(DeltaTime) * Sim->GetTimeScale(), 0.0, 1.0);
+		}
+		const double Now = Runner->Time();
+		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
+		LastSimTimeSeconds = Now;
+		return Dt;
+	};
 
 	if (Kind == simcore::CabinDisplayKind::Tv)
 	{
@@ -302,25 +318,20 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	if (Kind == simcore::CabinDisplayKind::Ppi)
 	{
 		// The sweep follows simulated time, so it stops when the sim is paused.
-		const double Now = Runner->Time();
-		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
-		LastSimTimeSeconds = Now;
+		const double Dt = StepSeconds();
 		const bool bRotating = Console.has_sensors && Console.equipment.IsReady(Console.search.antenna);
-		Scope->Update(Dt, bRotating, Runner->Engagement().SearchPicture(), Runner->Engagement().IffReplies());
+		Scope->Update(Dt, bRotating, Feed.search, Feed.iff);
 	}
 	if (Kind == simcore::CabinDisplayKind::ElevationScope && Console.has_sensors)
 	{
-		const double Now = Runner->Time();
-		const double Dt = LastSimTimeSeconds < 0.0 ? 0.0 : FMath::Clamp(Now - LastSimTimeSeconds, 0.0, 1.0);
-		LastSimTimeSeconds = Now;
+		const double Dt = StepSeconds();
 		// The engagement model scans the antenna (target designation) or points it; the indicator shows the beam it
 		// searches and paints what the antenna's beam passed over.
 		const simcore::TrackSensorDef& Track = Console.track;
-		const simcore::EngagementModel& Engagement = Runner->Engagement();
-		ElevRaster = Engagement.ElevationBeam();
-		ElevScope->Update(Dt, bOn && Console.equipment.IsReady(Track.transmitter), Engagement.SweptElevationLowDeg(),
-			Engagement.SweptElevationHighDeg(), Console.panel.GetValue(Track.range_wheel), Display.range_window_m,
-			Engagement.TrackReturns());
+		ElevRaster = Feed.elevation_beam;
+		ElevScope->Update(Dt, bOn && Console.equipment.IsReady(Track.transmitter), Feed.swept_low_deg,
+			Feed.swept_high_deg, Console.panel.GetValue(Track.range_wheel), Display.range_window_m,
+			Feed.track_returns);
 	}
 
 	// The range indicator's dead glass is pale like the TV's (opisybroni 54539); the tubes and dials paint their own.
@@ -514,11 +525,11 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	const double MaxM = FMath::Max(1.0, Track.max_range_m);
 	const double Gate = Console.panel.GetValue(Track.range_wheel);
 	const double HalfGate = Runner.EngagementOn() ? Runner.Engagement().Tuning().range_gate_m : 500.0;
-	const std::vector<simcore::Contact>& Returns = Runner.Engagement().TrackReturns();
+	const std::vector<simcore::Contact>& Returns = Feed.track_returns;
 	// Р I — ЦЕЛЬ — Р II: the fine sweep follows the target, or the missile of channel I or II (its range unit drives it).
 	const simcore::Launcher* Launch = Runner.GetLauncher();
 	const int32 SweepChannel = Launch != nullptr ? Launch->RangeSweepChannel(Console) : 0;
-	const double MissileRange = SweepChannel != 0 ? Launch->MissileRangeM(SweepChannel, Runner.Time()) : -1.0;
+	const double MissileRange = SweepChannel != 0 ? Feed.MissileRangeM(SweepChannel) : -1.0;
 	const bool bFollowMissile = SweepChannel != 0 && MissileRange >= 0.0;
 	const double FineCentre = SweepChannel != 0 ? (bFollowMissile ? MissileRange : Gate) : Gate;
 	const double X0 = 0.05 * Size.X;
@@ -645,7 +656,7 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 
 	// Where the antenna points now: a brighter line while the tracking radar radiates.
 	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
-	const double AntennaY = YOfEl(Runner.Engagement().AntennaElevationDeg());
+	const double AntennaY = YOfEl(Feed.antenna_el_deg);
 	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 3.0f, Phosphor * (bRadiating ? 1.0f : 0.45f));
 
 	// Target marks: bright spots fading with the afterglow.
@@ -729,7 +740,7 @@ void USimCabinDisplayComponent::DrawCounters(UCanvas* Canvas, const FVector2D& S
 		Disc(Canvas, At, 0.42 * Dia, bOn ? FLinearColor(0.9f, 0.36f, 0.05f) : FLinearColor(0.32f, 0.18f, 0.07f));
 		if (bOn && K < static_cast<int32>(Display.readouts.size()))
 		{
-			const int32 Value = simcore::CounterReading(Display.readouts[K], Console, Runner.Engagement());
+			const int32 Value = simcore::CounterReading(Display.readouts[K], Console, Feed.track_returns, Feed.antenna_el_deg);
 			Text(Canvas, FString::Printf(TEXT("%03d"), Value), At, FLinearColor(0.12f, 0.04f, 0.0f), 1.1f);
 		}
 	}
@@ -765,10 +776,10 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	// The camera sits on the antenna unit and looks along the tracking radar's azimuth and elevation (the wheel's
 	// azimuth is in the crew's frame; the camera needs it from true north).
 	const simcore::ConsoleData& Console = Runner.Console();
-	const double Az = FMath::DegreesToRadians(Runner.Engagement().IndicatedToTrueDeg(Console.panel.GetValue(Console.track.az_wheel)));
+	const double Az = FMath::DegreesToRadians(Feed.IndicatedToTrueDeg(Console.panel.GetValue(Console.track.az_wheel)));
 	const double El = FMath::DegreesToRadians(Console.panel.GetValue(Console.track.el_wheel));
 	const simcore::Vec3 Dir{FMath::Sin(Az) * FMath::Cos(El), FMath::Cos(Az) * FMath::Cos(El), FMath::Sin(El)};
-	const simcore::Vec3& Unit = Runner.UnitPosition();
+	const simcore::Vec3& Unit = Feed.unit_position;
 	const FVector From = Sim->ToUnreal(Unit);
 	const FVector To = Sim->ToUnreal(Unit + Dir * 1000.0);
 	Capture->SetWorldLocationAndRotation(From, (To - From).Rotation());
