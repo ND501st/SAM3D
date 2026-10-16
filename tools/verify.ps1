@@ -23,6 +23,15 @@ $demo = if (Test-Path simcore/build/Release/engagement_demo.exe) { 'simcore/buil
 & $demo out/engagement_demo.acmi
 if ($LASTEXITCODE -ne 0) { throw 'demo failed' }
 
+Write-Host '==> EM scaling benchmark (trend; the result must not depend on the thread count)' -ForegroundColor Cyan
+$bench = if (Test-Path simcore/build/Release/em_bench.exe) { 'simcore/build/Release/em_bench.exe' } else { 'simcore/build/em_bench.exe' }
+$one = & $bench data 300 40 16 1
+$one | Select-Object -First 3
+$four = & $bench data 300 40 16 4
+$a = ($one | Select-String 'checksum (\w+)').Matches.Groups[1].Value
+$b = ($four | Select-String 'checksum (\w+)').Matches.Groups[1].Value
+if ($a -ne $b) { throw "em_bench: result differs between 1 and 4 threads ($a vs $b)" }
+
 Write-Host '==> prototype and tools: pytest' -ForegroundColor Cyan
 $py = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
 # Windows PowerShell 5.1 turns native stderr into a terminating error under 'Stop'; relax it for the probe.
