@@ -27,6 +27,26 @@ the intercom are the same family.
 * An R-123 front panel in a museum, [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Funkstation_R-123_IMG_1390.JPG), 3000 x 2250 px: top row left to right ШУМЫ, СИМПЛЕКС / ДУПЛЕКС / Д. ПРИЕМ selector, the ЧАСТОТА x 100 (кГц) window, НАСТРОЙКА АНТЕННЫ (red), four preset fixators under a hinged cover; below them КОНТРОЛЬ НАПРЯЖЕНИЙ, УСТАНОВКА ЧАСТОТЫ, the round preset drum with its cap, the big ФИКСИР. 1-4 / ПЛАВНЫЙ ПОДДИАПАЗОН selector, ГРОМКОСТЬ, the ПОДДИАПАЗОН I-II windows. This is the older R-123; the R-123M's labels are the same family.
 * An R-123M in a vehicle with its BP-26 power block above it, [qrz.ru](https://www.qrz.ru/catalog/detail/r-123m_906) (640 x 480).
 
+* A second R-123 in the St Petersburg artillery museum, cap closed, photographed from well above ([Commons](https://commons.wikimedia.org/wiki/File:SpB-Museum-artillery-135.jpg), `r123_kuzmin`).
+* The R-124's boxes A-1, A-2 and A-4 (`r124_photos`): a museum A-1 and boxes sold new from store.
+
+## The 3D models (October 2026)
+
+The R-123M is traced in 3D (`tools/blender/r123m_trace.py`, `tools/r123m_rectify.py`): the first photo is flattened with the
+homography that sends the plate's two vanishing points to infinity (twelve in-plane edges agree to 0.65 degrees; the band
+selector's well comes out round to 0.6 %), scaled to the set's 225 mm height, which makes the front 406 mm wide; the wells and
+the drum are fitted as circles in it, everything else read off a 5 mm grid. How far each part stands out of the plate (hood
+13 mm, cap 12 mm, fixators in a 3 mm recess, the lower-left block 16 mm back...) is read from the second photo. Checks: the
+model rendered from the first photo's solved camera (focal length and pose from the plate, 1.3 px rms) lies on the photo,
+raised parts included; `tools/tests/test_r123m_trace.py` checks that no screw, plate, well or control runs into another. The
+clean drawing is `docs/research/r123m_front_trace.png`.
+
+The R-124's boxes (`tools/blender/r124_model.py`): A-1 for the commander (on SP-1M's lower door ahead of his R-123M), A-2 for
+the deputy commander (on SŁ-1M's lower door by the end of SŁ-2M), A-4 for the driver (beside his seat); sizes scaled from the
+photos with the switch knob as yardstick (about 15 %). The A-1 and A-2 mode switches are the console's `intercom.a1` and
+`intercom.a2` on the boxes' faces; the driver's ВС / РС stays on the driver panel (it is on his chest switch). Where the Osa
+mounts its boxes is not in any source found: the positions are SAM3D's choice.
+
 ## What the sim does with them
 
 * Each set hears only when it is switched on, warmed up and turned up; `CrewComms::Receiving` tells the C2 network

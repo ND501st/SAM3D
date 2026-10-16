@@ -136,7 +136,12 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 14);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 16);
+    // The R-123M's and the R-124 boxes' faces are bare panels: the meshes carry their own fronts.
+    for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel"}) {
+        const CabinPanel* bare = layout.FindPanel(id);
+        SC_EXPECT(bare != nullptr && bare->bare);
+    }
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.

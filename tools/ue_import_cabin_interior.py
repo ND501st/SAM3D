@@ -55,6 +55,7 @@ MATERIALS = {
     'Canvas': ((0.14, 0.13, 0.07), 0.9, 0.0, 0.5, 'VinylN', 0.4, 6.0, None),
     'Paint_Letters': ((0.5, 0.48, 0.42), 0.5, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),   # engraved letters filled cream
     'Paint_Red': ((0.3, 0.035, 0.012), 0.35, 0.0, 0.05, 'PaintN', 0.05, 4.0, None),
+    'Metal_Brass': ((0.42, 0.3, 0.12), 0.38, 1.0, 0.35, 'PaintN', 0.1, 4.0, None),   # brass screw heads (r123_kuzmin)
     'PanelFace': ((1.0, 1.0, 1.0), 0.5, 0.0, 0.0, 'PaintN', 0.18, 2.0, None),
 }
 
@@ -67,6 +68,7 @@ TEX = '/Game/SAM3D/Cabin/Textures'
 MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
+PLAIN = ('SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4')   # no Nanite: their details are mm thick
 ONLY = %(only)r
 DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,
             'SM_RackSP2M': 2.0, 'SM_RackSP3M': 2.0, 'SM_OperatorBench': 2.0}
@@ -281,7 +283,7 @@ def meshes():
     # Nanite builds the fallback mesh LOD0 from a reduced copy: the radio's letters and screws would be gone from it. So
     # a run that imports only meshes that don't want Nanite builds none; a full run imports them with it, and the code
     # below turns it off for them (they keep their reduced fallback, fine for glass, wrong for the radio: import it alone).
-    only_plain = bool(files) and all(os.path.splitext(os.path.basename(f))[0] in ('SM_RadioR123M',) for f in files)
+    only_plain = bool(files) and all(os.path.splitext(os.path.basename(f))[0] in PLAIN for f in files)
     for prop, value in (('collision', False), ('build_nanite', not only_plain)):
         try:
             mesh_pipe.set_editor_property(prop, value)
@@ -304,7 +306,7 @@ def meshes():
                 sm.set_material(i, mi)
             else:
                 print('no material for slot', name, slot)
-        if name in ('SM_OsaGlass', 'SM_RadioR123M'):   # glass; and the radio, whose letters and screws are millimetres thick: Nanite drops them
+        if name in ('SM_OsaGlass',) + PLAIN:   # glass; and the radio and intercom boxes, whose letters and screws are millimetres thick: Nanite drops them
             ns = sm.get_editor_property('nanite_settings')
             ns.enabled = False
             sm.set_editor_property('nanite_settings', ns)

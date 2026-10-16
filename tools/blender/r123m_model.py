@@ -1,36 +1,37 @@
-"""The R-123M radio set as a 3D model, built from the traced front panel (tools/blender/r123m_trace.py).
+"""The R-123M radio set as a 3D model, built from the 3D trace of its front (tools/blender/r123m_trace.py: positions in mm
+from a flattened photograph, and how far each part stands out of the plate).
 
 Run inside Blender through tools/blender/build_r123m.py (the radio alone) or tools/blender/build_cabin_interior.py (the
 whole compartment, which calls `build` for SM_RadioR123M).
 
-The set: a casing 428 x 225 mm (r123_refs; 178 mm deep, 162 mm here so the knobs and the cap fit the 174 mm the cabin
-plan gives), its front plate with the seven knob wells, the preset drum under its hinged cap, the frequency window in a
-raised bezel, the antenna-tuning lamp, the four numbered fixators under their flap, the two sub-band lamp windows, the
-engraved plates and the screws, all where the photograph has them; on a shock-mount frame 481 mm wide.
+The set: a casing 406 x 225 mm in front (the bolts on its sides make the 428 mm of `r123_refs`), 150 mm deep behind the
+plate (the set is 178 mm deep with its front fittings; the cabin plan gives 174 mm, mon_2112_80 Fig. 3), on a shock-mount
+frame 481 mm wide. The front: the flat plate with its seven knob wells, the step at its lower left and the set-back block
+under it (connector, toggle), the frequency window's hood standing 13 mm out, the drum's cap 12 mm out, the fixators in
+their recess under the hinged flap, the arched window, the lamp plates, the black engraved plates and arcs, the screws.
 
-Frame (the model's own, front looks +y, as build_cabin_interior's `build_r123m`): x to the operator's left when he
-faces the front (so the plate's right is -x), y forward, z up; origin at the casing's centre.
+Frame (the model's own, front looks +y, as build_cabin_interior's `build_r123m`): x to the operator's left when he faces
+the front (so the plate's right is -x), y forward, z up; the plate's centre at (0, YP, ZC).
 
 The cabin supplies the knobs of the functions it simulates (squelch, mode, preset selector, volume, power, antenna
-selector, headset): the model leaves those wells empty, with a shaft stub. Pass knobs=True to draw them all, for a
-render of the set on its own.
+selector, headset): the model leaves those wells empty, with a shaft stub, and gives the power and antenna controls a
+bushing from the set-back block out to the plate's plane. Pass knobs=True to draw them all, for a render of the set alone.
 """
 import math
 import os
 
-import bmesh
 import bpy
-from mathutils import Matrix, Vector
+from mathutils import Vector
 
 import r123m_trace as T
 
-# casing, metres
-HALF_W = T.PLATE_W_M / 2             # 0.214
-HALF_Z = 0.1125                      # the casing is 225 mm high
-HALF_D = 0.0871                      # frame and protrusions: 174.2 mm deep in all
-YP = 0.0731                          # the plate's front surface
-WELL_DEPTH = 0.03
-ZC = -HALF_Z + T.PLATE_H_M / 2       # the plate's centre height: the plate starts at the bottom of the casing
+MM = 0.001
+HALF_W = T.PLATE_W_M / 2             # 0.203
+HALF_Z = T.PLATE_H_M / 2             # 0.1125: the plate is the whole front
+DEPTH = 0.150                        # the casing behind the plate
+YP = 0.0745                          # the plate's front surface (the knobs and the cap stay inside the cabin's 0.179 m)
+WELL_DEPTH = -T.Z['well_depth'] * MM
+ZC = 0.0                             # the plate's centre height
 FRAME_HALF_W = 0.2405                # the shock-mount frame, 481 mm
 FRAME_T = 0.015
 FONT = r'C:\Windows\Fonts\ARIALN.TTF'
@@ -40,9 +41,8 @@ V = Vector((0.0, 0.0, 1.0))
 N = Vector((0.0, 1.0, 0.0))           # out of the plate
 
 
-def P(x, y, z):
-    """Body frame to Blender, as build_cabin_interior.P (the Builder takes Blender-frame vertices)."""
-    return Vector((y, -x, z))
+def z(key):
+    return T.Z[key] * MM
 
 
 def pos(a, b, h=0.0):
@@ -50,49 +50,94 @@ def pos(a, b, h=0.0):
     return Vector((-a, YP + h, ZC + b))
 
 
-def px(c):
-    return T.to_m(*c)
+def at(c, h=0.0):
+    """A trace point (x, y mm) h out of the plate."""
+    a, b = T.to_m(*c)
+    return pos(a, b, h)
 
 
-def disc(b, c_px, r_m, h0, h1, mat, seg=28, smooth=True):
-    a, bb = px(c_px)
-    b.cylinder(pos(a, bb, h0), pos(a, bb, h1), r_m, mat, seg=seg, smooth=smooth)
+def P(x, y, z_):
+    """Body frame to Blender, as build_cabin_interior.P (the Builder's raw vertices are Blender-frame)."""
+    return Vector((y, -x, z_))
 
 
-def ring(b, c_px, r_out_m, r_in_m, h0, h1, mat, seg=48):
-    """A flat ring (slab with a round hole)."""
-    a, bb = px(c_px)
-    outer = [(a + r_out_m * math.cos(2 * math.pi * k / seg), bb + r_out_m * math.sin(2 * math.pi * k / seg)) for k in range(seg)]
-    inner = [(a + r_in_m * math.cos(2 * math.pi * k / seg), bb + r_in_m * math.sin(2 * math.pi * k / seg)) for k in range(seg)]
+def turned(rot_deg):
+    th = math.radians(rot_deg)
+    return U * math.cos(th) + V * math.sin(th), -U * math.sin(th) + V * math.cos(th)
+
+
+def disc(b, c, r_mm, h0, h1, mat, seg=28):
+    b.cylinder(at(c, h0), at(c, h1), r_mm * MM, mat, seg=seg)
+
+
+def ring(b, c, r_out_mm, r_in_mm, h0, h1, mat, seg=48):
+    """A flat ring (a slab with a round hole), between heights h0 and h1 (m)."""
+    a, bb = T.to_m(*c)
+    ro, ri = r_out_mm * MM, r_in_mm * MM
+    outer = [(a + ro * math.cos(2 * math.pi * k / seg), bb + ro * math.sin(2 * math.pi * k / seg)) for k in range(seg)]
+    inner = [(a + ri * math.cos(2 * math.pi * k / seg), bb + ri * math.sin(2 * math.pi * k / seg)) for k in range(seg)]
     b.slab(pos(0, 0, h1), U, V, outer, [inner], h1 - h0, mat)
 
 
-def rect_slab(b, r_px, h0, h1, mat, holes=(), inset=0.0):
-    a0, b0, a1, b1 = T.rect_m(r_px)
-    outer = [(a0 + inset, b0 + inset), (a1 - inset, b0 + inset), (a1 - inset, b1 - inset), (a0 + inset, b1 - inset)]
-    b.slab(pos(0, 0, h1), U, V, outer, list(holes), h1 - h0, mat)
+def flat(b, pts, h0, h1, mat, holes=()):
+    """A slab from outline pts (plate metres) between heights h0 < h1 out of the plate."""
+    b.slab(pos(0, 0, h1), U, V, pts, list(holes), h1 - h0, mat)
 
 
-def rect_pts(r_px, inset=0.0):
-    a0, b0, a1, b1 = T.rect_m(r_px)
+def rect_pts(r, inset=0.0):
+    a0, b0, a1, b1 = T.rect_m(r)
     return [(a0 + inset, b0 + inset), (a1 - inset, b0 + inset), (a1 - inset, b1 - inset), (a0 + inset, b1 - inset)]
 
 
-def plate_box(b, centre_ab, size_ab, rot_deg, h0, h1, mat):
-    """A thin oriented box lying on the plate: centre (a, b), size (along, across), turned rot_deg anticlockwise."""
-    th = math.radians(rot_deg)
-    ua = U * math.cos(th) + V * math.sin(th)
-    vb = -U * math.sin(th) + V * math.cos(th)
-    b.obox(pos(centre_ab[0], centre_ab[1], 0.5 * (h0 + h1)), ua, vb, N, (size_ab[0], size_ab[1], h1 - h0), mat)
+def rect_minus_circle(r, c, rad, step=0.6):
+    """A mm rectangle's outline with a round bite out of it (circle c, rad mm) where it reaches in: plate metres. The
+    rectangle's edge is walked in small steps and every point inside the circle is pushed out onto it."""
+    x0, y0, x1, y1 = r
+    pts = []
+    for (ax, ay, bx, by) in ((x0, y1, x1, y1), (x1, y1, x1, y0), (x1, y0, x0, y0), (x0, y0, x0, y1)):
+        n = max(1, int(math.hypot(bx - ax, by - ay) / step))
+        for k in range(n):
+            x, y = ax + (bx - ax) * k / n, ay + (by - ay) * k / n
+            dx, dy = x - c[0], y - c[1]
+            d = math.hypot(dx, dy)
+            if d < rad:
+                x, y = c[0] + dx / d * rad, c[1] + dy / d * rad
+            pts.append(T.to_m(x, y))
+    return pts
 
 
-def screw(b, c_px, h=0.0, r=0.0028):
-    a, bb = px(c_px)
-    b.cylinder(pos(a, bb, h - 0.0003), pos(a, bb, h + 0.0014), r, 'Metal_Steel', seg=10)
-    th = math.radians(25)
-    ua = U * math.cos(th) + V * math.sin(th)
-    vb = -U * math.sin(th) + V * math.cos(th)
-    b.obox(pos(a, bb, h + 0.0016), ua, vb, N, (2 * r * 0.95, 0.0006, 0.0006), 'Metal_Dark')
+def sector_pts(c, r0, r1, a0, a1, seg=24, cap=True):
+    """An annular sector round c (mm), radii r0 < r1 mm, angles a0 < a1 degrees anticlockwise (up +90), with round ends."""
+    ca, cb = T.to_m(*c)
+    pts = []
+    rm, hw = (r0 + r1) / 2, (r1 - r0) / 2
+    for k in range(seg + 1):
+        t = math.radians(a0 + (a1 - a0) * k / seg)
+        pts.append((ca + r1 * MM * math.cos(t), cb + r1 * MM * math.sin(t)))
+    if cap:
+        e = math.radians(a1)
+        ex, ey = ca + rm * MM * math.cos(e), cb + rm * MM * math.sin(e)
+        for k in range(1, 6):
+            t = e + math.pi * k / 6
+            pts.append((ex + hw * MM * math.cos(t), ey + hw * MM * math.sin(t)))
+    for k in range(seg + 1):
+        t = math.radians(a1 - (a1 - a0) * k / seg)
+        pts.append((ca + r0 * MM * math.cos(t), cb + r0 * MM * math.sin(t)))
+    if cap:
+        e = math.radians(a0)
+        ex, ey = ca + rm * MM * math.cos(e), cb + rm * MM * math.sin(e)
+        for k in range(1, 6):
+            t = e + math.pi + math.pi * k / 6
+            pts.append((ex + hw * MM * math.cos(t), ey + hw * MM * math.sin(t)))
+    return pts
+
+
+def screw(b, c, h=0.0, r_mm=2.6, mat='Metal_Steel', slot_deg=25):
+    a, bb = T.to_m(*c)
+    r = r_mm * MM
+    b.lathe(pos(a, bb, h - 0.0003), N, [(r, 0.0), (r, 0.0011), (r * 0.8, 0.0017), (0.0, 0.0018)], mat, seg=12)
+    ua, vb = turned(slot_deg)
+    b.obox(pos(a, bb, h + 0.0017), ua, vb, N, (2 * r * 0.9, 0.00055, 0.0006), 'Metal_Dark')
 
 
 # ------------------------------------------------------------------------------------------------ text
@@ -131,19 +176,9 @@ def text_mesh(text, height_m, extrude_m=0.0004):
     return verts, faces
 
 
-def engrave(b, text, centre_ab, height_m, rot_deg, lift, mat='Paint_Letters', extrude_m=0.0007):
-    """Raised letters on the plate: centre (a, b), cap height, turned rot_deg anticlockwise, standing `lift` out of it."""
-    verts, faces = text_mesh(text, height_m, extrude_m)
-    if not faces:
-        return
-    th = math.radians(rot_deg)
-    cs, sn = math.cos(th), math.sin(th)
+def _place_glyphs(b, verts, faces, frame, mat):
     idx = b.mat(mat)
-    bmv = []
-    for v in verts:
-        a = centre_ab[0] + v.x * cs - v.y * sn
-        bb = centre_ab[1] + v.x * sn + v.y * cs
-        bmv.append(b.bm.verts.new(P(*pos(a, bb, lift + v.z + extrude_m / 2))))
+    bmv = [b.bm.verts.new(P(*frame(v))) for v in verts]
     for fc in faces:
         try:
             f = b.bm.faces.new([bmv[i] for i in fc])
@@ -152,55 +187,115 @@ def engrave(b, text, centre_ab, height_m, rot_deg, lift, mat='Paint_Letters', ex
             pass
 
 
+def engrave(b, text, c, h_mm, rot_deg, lift, mat='Paint_Letters', extrude_m=0.0006, tilt_deg=0.0):
+    """Raised letters: centre c (trace mm), cap height, turned rot_deg anticlockwise, standing on a surface `lift` (m)
+    out of the plate; tilt_deg leans the letters' plane back about their middle (a sloping face)."""
+    verts, faces = text_mesh(text, h_mm * MM, extrude_m)
+    if not faces:
+        return
+    ca, cb = T.to_m(*c)
+    th, tl = math.radians(rot_deg), math.radians(tilt_deg)
+    cs, sn = math.cos(th), math.sin(th)
+
+    def frame(v):
+        vy = v.y * math.cos(tl)
+        a = ca + v.x * cs - vy * sn
+        bb = cb + v.x * sn + vy * cs
+        return pos(a, bb, lift + v.y * math.sin(tl) + v.z + extrude_m / 2)
+
+    _place_glyphs(b, verts, faces, frame, mat)
+
+
+def engrave_arc(b, text, centre, r_mm, mid_deg, h_mm, lift, mat='Paint_Letters', extrude_m=0.0006):
+    """Letters set one by one along an arc round centre (trace mm), radius r_mm, centred on mid_deg. Below the centre
+    (180..360 degrees) they read left to right with their tops towards it; elsewhere with their tops away from it."""
+    below = 180.0 < (mid_deg % 360.0) < 360.0
+    glyphs = []
+    for ch in text:
+        if ch == ' ':
+            glyphs.append((None, None, 0.32 * h_mm))
+            continue
+        verts, faces = text_mesh(ch, h_mm * MM, extrude_m)
+        w = (max(v.x for v in verts) - min(v.x for v in verts)) / MM if verts else 0.4 * h_mm
+        glyphs.append((verts, faces, w + 0.14 * h_mm))
+    total = sum(g[2] for g in glyphs)
+    ca, cb = T.to_m(*centre)
+    s = -total / 2
+    for verts, faces, adv in glyphs:
+        mid = s + adv / 2
+        s += adv
+        if verts is None:
+            continue
+        ang = math.radians(mid_deg) + (1 if below else -1) * mid / r_mm
+        ax, ay = ca + r_mm * MM * math.cos(ang), cb + r_mm * MM * math.sin(ang)
+        rot = ang + (math.pi / 2 if below else -math.pi / 2)
+        cs, sn = math.cos(rot), math.sin(rot)
+        gx = (max(v.x for v in verts) + min(v.x for v in verts)) / 2
+
+        def frame(v, ax=ax, ay=ay, cs=cs, sn=sn, gx=gx):
+            x = v.x - gx
+            return pos(ax + x * cs - v.y * sn, ay + x * sn + v.y * cs, lift + v.z + extrude_m / 2)
+
+        _place_glyphs(b, verts, faces, frame, mat)
+
+
+def surface_h(c):
+    """How far the surface at trace point c stands out of the plate (m): the top of the plate, strip or arc it lies on, so
+    a screw there sits on it rather than in it."""
+    x, y = c
+    h = 0.0
+    for pl in T.PLATES:
+        x0, y0, x1, y1 = pl['rect']
+        if x0 <= x <= x1 and y0 <= y <= y1:
+            base = z(pl['z']) if pl.get('z') else 0.0
+            h = max(h, base + (z('subband_plate') if pl['id'] == 'subband' else z('label_plate')))
+    x0, y0, x1, y1 = T.VOLT_PLATE
+    if x0 <= x <= x1 and y0 <= y <= y1:
+        h = max(h, z('voltage_plate'))
+    for arc in T.ARCS:
+        wc = T.well(arc['well'])['c']
+        r = math.hypot(x - wc[0], y - wc[1])
+        ang = math.degrees(math.atan2(wc[1] - y, x - wc[0])) % 360.0
+        a0, a1 = arc['a'][0] % 360.0, arc['a'][1] % 360.0
+        inside = (a0 <= ang <= a1) if a0 <= a1 else (ang >= a0 or ang <= a1)
+        if arc['r'][0] - 1.0 <= r <= arc['r'][1] + 1.0 and inside:
+            h = max(h, z('label_plate'))
+    return h
+
+
+def holes_in(rect, extra=0.4):
+    """The round holes (blind holes, brass shafts) that fall inside a plate's rect: cut them through it too."""
+    x0, y0, x1, y1 = rect
+    return [T.circle_m((x, y), r + extra, 16) for x, y, r in T.HOLES + T.BRASS_IN_HOLE if x0 < x < x1 and y0 < y < y1]
+
+
 # ------------------------------------------------------------------------------------------------ knobs
 
-def knob_lever(b, c_px, r_m, angle_deg, length_m):
-    a, bb = px(c_px)
-    b.cylinder(pos(a, bb, -0.012), pos(a, bb, 0.012), r_m * 0.14, 'Bakelite_Black', seg=16)
-    th = math.radians(angle_deg)
-    ua = U * math.cos(th) + V * math.sin(th)
-    vb = -U * math.sin(th) + V * math.cos(th)
-    b.obox(pos(a, bb, 0.006), ua, vb, N, (length_m, r_m * 0.2, 0.011), 'Bakelite_Black')
-    b.cylinder(pos(a, bb, 0.011), pos(a, bb, 0.0135), r_m * 0.1, 'Metal_Steel', seg=12)
-
-
-def knob_three(b, c_px, r_m, angle_deg=90):
-    a, bb = px(c_px)
-    b.cylinder(pos(a, bb, -0.012), pos(a, bb, 0.012), r_m * 0.2, 'Bakelite_Black', seg=16)
-    for k in range(3):
-        th = math.radians(angle_deg + 120 * k)
-        ua = U * math.cos(th) + V * math.sin(th)
-        vb = -U * math.sin(th) + V * math.cos(th)
-        c = pos(a + 0.5 * r_m * 0.8 * math.cos(th), bb + 0.5 * r_m * 0.8 * math.sin(th), 0.006)
-        b.obox(c, ua, vb, N, (r_m * 0.8, r_m * 0.17, 0.011), 'Bakelite_Black')
-    b.cylinder(pos(a, bb, 0.011), pos(a, bb, 0.0135), r_m * 0.08, 'Metal_Steel', seg=12)
-
-
-def knob_bar(b, c_px, d_m, angle_deg):
+def knob_bar(b, c, d_m, angle_deg, h0=-0.008):
     """The bakelite T-bar knob (`r123_kuzmin`), d_m across, its pointer end towards angle_deg: the cabin's SM_KnobBar shape
     (tools/blender/build_cabin_parts.py), so the model's knobs and the cabin's match."""
-    a, bb = px(c_px)
-    b.lathe(pos(a, bb, -0.008), N, [(0.34 * d_m, 0.0), (0.34 * d_m, 0.3 * d_m), (0.3 * d_m, 0.36 * d_m), (0.0, 0.36 * d_m)],
+    a, bb = T.to_m(*c)
+    b.lathe(pos(a, bb, h0), N, [(0.34 * d_m, 0.0), (0.34 * d_m, 0.3 * d_m), (0.3 * d_m, 0.36 * d_m), (0.0, 0.36 * d_m)],
             'Bakelite_Black', seg=28)
     th = math.radians(angle_deg - 90)                 # the outline's +y (the pointer) turned to angle_deg
     outline = [(-0.08, 0.0), (-0.14, -0.4), (-0.1, -0.46), (0.1, -0.46), (0.14, -0.4), (0.08, 0.0), (0.12, 0.38),
                (0.05, 0.5), (-0.05, 0.5), (-0.12, 0.38)]
-    pts = [(a + d_m * (x * math.cos(th) - y * math.sin(th)), bb + d_m * (x * math.sin(th) + y * math.cos(th))) for x, y in outline]
-    b.slab(pos(0, 0, -0.008 + 0.62 * d_m), U, V, pts, [], 0.56 * d_m, 'Bakelite_Black')
-    b.cylinder(pos(a, bb, -0.008 + 0.62 * d_m), pos(a, bb, -0.008 + 0.66 * d_m), 0.07 * d_m, 'Metal_Steel', seg=12)
+    pts = [(a + d_m * (x * math.cos(th) - y * math.sin(th)), bb + d_m * (x * math.sin(th) + y * math.cos(th)))
+           for x, y in outline]
+    flat(b, pts, h0 + 0.06 * d_m, h0 + 0.62 * d_m, 'Bakelite_Black')
+    b.cylinder(pos(a, bb, h0 + 0.62 * d_m), pos(a, bb, h0 + 0.66 * d_m), 0.07 * d_m, 'Metal_Steel', seg=12)
 
 
-def knob_red(b, c_px, r_cap_m):
+def knob_red(b, c, r_cap_m):
     """The antenna-tuning knob (`r123_kuzmin`): a black hub of four broad arms with round ends (a cross, turned a little),
     the red cap on it with a raised bar across its face and the shaft's end, and the lock latch hanging under it."""
-    a, bb = px(c_px)
+    a, bb = T.to_m(*c)
     arm = r_cap_m * 1.85
     for k in range(4):
+        ua, vb = turned(8 + 90 * k)
         th = math.radians(8 + 90 * k)
-        ua = U * math.cos(th) + V * math.sin(th)
-        vb = -U * math.sin(th) + V * math.cos(th)
-        c = pos(a + 0.5 * arm * math.cos(th), bb + 0.5 * arm * math.sin(th), -0.002)
-        b.obox(c, ua, vb, N, (arm, r_cap_m * 0.75, 0.014), 'Bakelite_Black')
+        b.obox(pos(a + 0.5 * arm * math.cos(th), bb + 0.5 * arm * math.sin(th), -0.002), ua, vb, N,
+               (arm, r_cap_m * 0.75, 0.014), 'Bakelite_Black')
         e = (a + arm * math.cos(th), bb + arm * math.sin(th))
         b.cylinder(pos(e[0], e[1], -0.009), pos(e[0], e[1], 0.005), r_cap_m * 0.375, 'Bakelite_Black', seg=16)
     b.cylinder(pos(a, bb, -0.012), pos(a, bb, 0.007), r_cap_m * 1.12, 'Bakelite_Black', seg=28)
@@ -208,286 +303,340 @@ def knob_red(b, c_px, r_cap_m):
                                    (0.0, 0.0095)], 'Paint_Red', seg=32)
     b.obox(pos(a, bb, 0.017), V, -U, N, (r_cap_m * 1.75, r_cap_m * 0.42, 0.004), 'Paint_Red')     # the bar, top to bottom
     b.cylinder(pos(a, bb, 0.0165), pos(a, bb, 0.019), r_cap_m * 0.13, 'Metal_Steel', seg=12)
-    # the latch: a steel tongue from the hub's foot down to a small clevis
     b.obox(pos(a, bb - r_cap_m * 1.35, 0.004), V, -U, N, (r_cap_m * 0.9, r_cap_m * 0.22, 0.004), 'Metal_Steel')
     b.cylinder(pos(a, bb - r_cap_m * 1.8, 0.0), pos(a, bb - r_cap_m * 1.8, 0.008), r_cap_m * 0.2, 'Metal_Steel', seg=12)
 
 
-def knob_bat(b, c_px, r_m):
-    """A bat-handle switch: a short black stalk with a round head, standing out of its hole."""
-    a, bb = px(c_px)
-    b.lathe(pos(a, bb, -0.008), N, [(r_m * 0.55, 0.0), (r_m * 0.55, 0.008), (r_m * 0.75, 0.011), (r_m, 0.015),
-                                     (r_m * 0.9, 0.019), (r_m * 0.5, 0.0215), (0.0, 0.022)], 'Bakelite_Black', seg=18)
+def knob_bat(b, c, r_m, h0, h1):
+    """A bat-handle switch: a black stalk with a round head, from h0 out to h1."""
+    a, bb = T.to_m(*c)
+    L = h1 - h0
+    b.lathe(pos(a, bb, h0), N, [(r_m * 0.55, 0.0), (r_m * 0.55, 0.4 * L), (r_m * 0.75, 0.55 * L), (r_m, 0.75 * L),
+                                (r_m * 0.9, 0.9 * L), (r_m * 0.5, 0.98 * L), (0.0, L)], 'Bakelite_Black', seg=18)
 
 
-# ------------------------------------------------------------------------------------------------ the set
+# ------------------------------------------------------------------------------------------------ the parts
 
-def arc_pts(c_px, r_in_px, r_out_px, a0, a1, seg=14):
-    cx, cy = px(c_px)
-    pts = []
-    for k in range(seg + 1):
-        t = math.radians(a0 + (a1 - a0) * k / seg)
-        pts.append((cx + r_out_px * T.SX * math.cos(t), cy + r_out_px * T.SX * math.sin(t)))
-    for k in range(seg + 1):
-        t = math.radians(a1 - (a1 - a0) * k / seg)
-        pts.append((cx + r_in_px * T.SX * math.cos(t), cy + r_in_px * T.SX * math.sin(t)))
-    return pts
+def build_casing(b):
+    back = YP - DEPTH
+    # the shock-mount frame and its side clamps
+    b.box(-FRAME_HALF_W, FRAME_HALF_W, back + 0.004, YP - 0.012, -HALF_Z - FRAME_T, -HALF_Z, 'Metal_Dark')
+    mid = YP - DEPTH / 2
+    for sx in (-1, 1):
+        b.box(sx * (HALF_W + 0.011), sx * FRAME_HALF_W, mid - 0.06, mid + 0.06, -HALF_Z - FRAME_T, -HALF_Z + 0.1, 'Metal_Dark')
+        for zz in (-0.05, -0.09):
+            b.cylinder(Vector((sx * (FRAME_HALF_W - 0.006), mid, zz)), Vector((sx * FRAME_HALF_W, mid, zz)), 0.007,
+                       'Metal_Steel', seg=12)
+    # the casing behind the plate; its top with four ribs running back; the bolts on its sides (to 428 mm)
+    b.box(-HALF_W, HALF_W, back, YP - WELL_DEPTH, -HALF_Z, HALF_Z, 'Paint_Radio')
+    for xr in (-0.15, -0.05, 0.05, 0.15):
+        b.box(xr - 0.004, xr + 0.004, back + 0.01, YP - 0.035, HALF_Z, HALF_Z + 0.004, 'Paint_Radio')
+    for y_mm in T.SIDE_BOLTS:
+        _, bz = T.to_m(0.0, y_mm)
+        for sx in (-1, 1):
+            b.cylinder(Vector((sx * HALF_W, YP - 0.02, ZC + bz)), Vector((sx * (HALF_W + 0.011), YP - 0.02, ZC + bz)),
+                       0.0055, 'Metal_Steel', seg=6)
+    # the block under the plate's lower left, set back, filling the space behind the step
+    a0, b0, a1, b1 = T.rect_m((0.0, T.STEP_Y, T.NOTCH_X, T.H_MM))
+    b.box(-a1, -a0, YP - WELL_DEPTH, YP + z('lower_block'), ZC + b0, ZC + b1, 'Paint_Radio')
 
 
-def build_set(b, knobs=False):
-    # ---- the shock-mount frame and the casing's body and lid
-    b.box(-FRAME_HALF_W, FRAME_HALF_W, -HALF_D, HALF_D, -HALF_Z - FRAME_T, -HALF_Z, 'Metal_Dark')
-    for sx in (-1, 1):                                       # side clamps
-        b.box(sx * (HALF_W + 0.001), sx * FRAME_HALF_W, -0.06, 0.06, -HALF_Z - FRAME_T, -0.01, 'Metal_Dark')
-        b.cylinder(Vector((sx * (FRAME_HALF_W - 0.006), 0.0, -0.05)), Vector((sx * FRAME_HALF_W, 0.0, -0.05)), 0.007, 'Metal_Steel', seg=12)
-        b.cylinder(Vector((sx * (FRAME_HALF_W - 0.006), 0.0, -0.09)), Vector((sx * FRAME_HALF_W, 0.0, -0.09)), 0.007, 'Metal_Steel', seg=12)
-    back = -HALF_D + 0.004
-    b.box(-HALF_W, HALF_W, back, YP - WELL_DEPTH, -HALF_Z, HALF_Z, 'Paint_Radio')           # the casing behind the plate
-    top_z0 = ZC + T.PLATE_H_M / 2                                                             # the lid above the plate
-    b.box(-HALF_W - 0.001, HALF_W + 0.001, back, YP + 0.004, top_z0, HALF_Z, 'Paint_Radio')
-    b.box(-HALF_W + 0.01, HALF_W - 0.01, YP + 0.004, YP + 0.0075, top_z0 + 0.004, HALF_Z - 0.002, 'Paint_Radio')   # the lid's raised ledge
-    # ---- the front plate with its openings
+def plate_holes():
     holes = []
     for w in T.WELLS:
         holes.append(T.circle_m(w['c'], w['r'], 48))
     holes.append(T.circle_m(T.DRUM['c'], T.DRUM['r_opening'], 56))
-    for hx, hy, hr in T.HOLES:
-        holes.append(T.circle_m((hx, hy), hr, 16))
-    for win in T.WINDOWS:
-        holes.append(T.arch_m(win['rect']) if win.get('arch') else rect_pts(win['rect']))
-    holes.append(T.circle_m(T.LENS['c'], T.LENS['r'] * 0.9, 32))
-    for c in T.LAMP_WINDOWS['c']:
-        holes.append(T.circle_m(c, T.LAMP_WINDOWS['r'], 20))
+    for x, y, r in T.HOLES + T.BRASS_IN_HOLE:
+        holes.append(T.circle_m((x, y), r, 16))
+    holes.append(T.arch_m(T.DWIN['rect']))
+    holes.append(T.circle_m(T.LENS['c'], T.LENS['r'] * 0.72, 28))
+    for c in T.LAMP_PLATE['c']:
+        holes.append(T.circle_m(c, T.LAMP_PLATE['r'], 20))
     holes.append(T.circle_m(T.RED_LAMP['c'], T.RED_LAMP['r'] * 0.8, 16))
-    holes.append(T.circle_m(T.CONNECTOR['c'], T.CONNECTOR['r'] * 0.7, 32))
-    for c in T.SMALL_SOCKETS:
-        holes.append(T.circle_m(c, 20, 18))
-    b.slab(pos(0, 0, 0), U, V, T.plate_outline_m(), holes, WELL_DEPTH, 'Paint_Radio')
-    # floors of the wells and holes: dark discs a little in front of the casing's face
+    holes.append(T.rounded_rect_m(T.FIXATORS['recess'], 2.0))
+    holes.append(T.rounded_rect_m(T.POCKET, 3.0))
+    return holes
+
+
+def build_plate(b):
+    flat(b, T.plate_outline_m(), -WELL_DEPTH, 0.0, 'Paint_Radio', holes=plate_holes())
     floor = -WELL_DEPTH + 0.0015
     for w in T.WELLS:
-        a, bb = px(w['c'])
-        b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), w['r'] * T.SX * 0.99, 'Duct_Grey', seg=28)   # grey inside (r123_kuzmin)
-        # a step ring half-way down, as the photo shows inside the wells
-        ring(b, w['c'], w['r'] * T.SX * 0.99, w['r'] * T.SX * 0.84, -WELL_DEPTH * 0.55, -WELL_DEPTH * 0.5, 'Metal_Steel', seg=36)
-        a, bb = px(w['c'])
-        b.cylinder(pos(a, bb, floor), pos(a, bb, -0.004), 0.0035, 'Metal_Steel', seg=10)       # the shaft
-    for hx, hy, hr in T.HOLES:
-        a, bb = px((hx, hy))
-        b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), hr * T.SX * 0.99, 'Metal_Dark', seg=14)
-    for c in T.SMALL_SOCKETS:                       # three bat-handle switches under the voltage plate (`r123_kuzmin`)
-        a, bb = px(c)
-        b.cylinder(pos(a, bb, floor), pos(a, bb, -0.008), 20 * T.SX * 0.98, 'Metal_Dark', seg=14)
-        knob_bat(b, c, 19 * T.SX)
-    # the big selector's well: a grey dish behind its lever, as both photographs show
-    sel = next(w for w in T.WELLS if w['id'] == 'selector')
-    a, bb = px(sel['c'])
-    b.lathe(pos(a, bb, -WELL_DEPTH + 0.002), N, [(sel['r'] * T.SX * 0.93, 0.0), (sel['r'] * T.SX * 0.93, 0.006),
-                                                  (sel['r'] * T.SX * 0.86, 0.009), (sel['r'] * T.SX * 0.35, 0.0115),
+        disc(b, w['c'], w['r'] * 0.99, floor, floor + 0.001, 'Duct_Grey')               # grey inside (r123_kuzmin)
+        ring(b, w['c'], w['r'] * 0.99, w['r'] * 0.84, -WELL_DEPTH * 0.55, -WELL_DEPTH * 0.5, 'Metal_Steel', seg=36)
+        disc(b, w['c'], 3.5, floor, -0.004, 'Metal_Steel', seg=10)                       # the shaft
+    sel = T.well('selector')
+    a, bb = T.to_m(*sel['c'])
+    r = sel['r'] * MM
+    b.lathe(pos(a, bb, -WELL_DEPTH + 0.002), N, [(r * 0.93, 0.0), (r * 0.93, 0.006), (r * 0.86, 0.009), (r * 0.35, 0.0115),
                                                   (0.0, 0.0115)], 'Metal_Steel', seg=48)
-    # ---- the preset drum under its cap
-    a, bb = px(T.DRUM['c'])
-    b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), T.DRUM['r_opening'] * T.SX * 0.99, 'Metal_Dark', seg=40)
-    ring(b, T.DRUM['c'], 135 * T.SX, 124 * T.SX, -0.014, -0.0125, 'Paint_Red', seg=48)
-    b.cylinder(pos(a, bb, -0.0135), pos(a, bb, -0.0105), 118 * T.SX, 'Metal_Dark', seg=40)
-    # the cap, closed (`r123_kuzmin`): a flat disc with a rolled rim, a recess in its middle holding the round lock knob
-    # and its lever, a black strip round the upper left (ОТКР. -> ЗАКР., three screws), the hinge bracket below
-    rc = T.DRUM['r_cap'] * T.SX
+    for x, y, rr in T.HOLES:
+        disc(b, (x, y), rr * 0.99, floor, floor + 0.001, 'Metal_Dark', seg=14)
+    for x, y, rr in T.BRASS_IN_HOLE:                    # a brass slotted shaft in its hole
+        disc(b, (x, y), rr * 0.98, -0.012, -0.011, 'Metal_Dark', seg=14)
+        screw(b, (x, y), -0.0025, r_mm=rr * 0.8, mat='Metal_Brass', slot_deg=-30)
+    # the pocket under the voltage plate and its three bat handles
+    pa0, pb0, pa1, pb1 = T.rect_m(T.POCKET)
+    b.box(-pa1, -pa0, YP + z('pocket') - 0.001, YP + z('pocket'), ZC + pb0, ZC + pb1, 'Metal_Dark')
+    for c in T.BAT_HANDLES:
+        knob_bat(b, c, 3.6 * MM, z('pocket'), 0.003)
+
+
+def build_hood(b):
+    """The frequency window's hood: a box standing 13 mm out (its top runs into the casing's top edge), the window in it
+    with the scale behind, and the sloping lip under it carrying ЧАСТОТА x100 (кГц) and two screws."""
+    hd = T.HOOD
+    top = z('hood_top')
+    flat(b, T.rounded_rect_m(hd['body'], 1.5), 0.0, top, 'Paint_Radio', holes=[T.rounded_rect_m(hd['window'], 1.0)])
+    wa0, wb0, wa1, wb1 = T.rect_m(hd['window'])
+    # the scale seen through the window: a pale card set back in it, a hairline, ticks every 25 kHz (long at each 100) and
+    # the figures of six hundreds of kHz, the red cursor
+    gl = z('hood_glass')
+    b.box(-wa1, -wa0, YP + gl - 0.0015, YP + gl, ZC + wb0, ZC + wb1, 'Paint_Letters')
+    for k in range(1, 24):
+        ta = wa0 + (wa1 - wa0) * k / 24
+        long_ = k % 4 == 2
+        b.box(-ta - 0.00025, -ta + 0.00025, YP + gl, YP + gl + 0.0003, ZC + wb0 + 0.004,
+              ZC + wb0 + (0.011 if long_ else 0.008), 'Metal_Dark')
+    b.box(-wa1, -wa0, YP + gl, YP + gl + 0.0003, ZC + wb0 + 0.0038, ZC + wb0 + 0.0043, 'Metal_Dark')
+    for k, fig in ((2, '245'), (6, '246'), (10, '247'), (14, '248'), (18, '249'), (22, '250')):
+        x_mm = hd['window'][0] + (hd['window'][2] - hd['window'][0]) * k / 24
+        engrave(b, fig, (x_mm, hd['window'][3] - 17.5), 4.2, 0, gl, mat='Metal_Dark', extrude_m=0.0003)
+    xc = 0.5 * (wa0 + wa1)
+    b.box(-xc - 0.0004, -xc + 0.0004, YP + gl + 0.0003, YP + gl + 0.0008, ZC + wb0 + 0.002, ZC + wb1 - 0.002, 'Paint_Red')
+    # the lip: from the hood's front at its top edge down to 8 mm at its bottom, as a prism across it
+    la0, lb0, la1, lb1 = T.rect_m(hd['lip'])
+    low = z('hood_lip_bottom')
+    section = [(YP, ZC + lb1), (YP + top, ZC + lb1), (YP + low, ZC + lb0 + 0.002), (YP + low - 0.002, ZC + lb0),
+               (YP, ZC + lb0)]
+    b.prism(section, -la1, -la0, 'Paint_Radio')
+    slope = math.degrees(math.atan2(top - low, lb1 - lb0))
+
+    def lip_h(y_mm):
+        return top - (top - low) * (y_mm - hd['lip'][1]) / (hd['lip'][3] - hd['lip'][1])
+
+    text, c, h = hd['label']
+    engrave(b, text, c, h, 0, lip_h(c[1]) - 0.0003, mat='Metal_Dark', extrude_m=0.0006, tilt_deg=slope)
+    for c in hd['screws']:
+        screw(b, c, lip_h(c[1]) - 0.0004)
+
+
+def build_drum(b):
+    """The preset drum's opening (dark inside, the brass rim) and its cap, closed (`r123_kuzmin`): a flat disc with a
+    rolled rim, a recess holding the round lock knob and its lever, a black strip round the upper left (ОТКР. -> ЗАКР.,
+    three screws); the hinge bracket under it and the plate under that."""
+    d = T.DRUM
+    c = d['c']
+    a, bb = T.to_m(*c)
+    disc(b, c, d['r_opening'] * 0.99, -WELL_DEPTH + 0.0015, -WELL_DEPTH + 0.0025, 'Metal_Dark', seg=40)
+    ring(b, c, d['r_opening'], d['r_opening'] - 1.6, -0.004, 0.0005, 'Metal_Brass', seg=56)     # the brass rim
+    rc = d['r_cap'] * MM
     cap = T.CAP
     rr = cap['recess_r'] * rc
-    b.lathe(pos(a, bb, 0.0), N, [(T.DRUM['r_opening'] * T.SX * 1.03, 0.0), (rc * 1.02, 0.004), (rc * 0.99, 0.0075),
-                                 (rc * 0.95, 0.0085), (rr * 1.04, 0.0085), (rr, 0.0075), (rr, 0.004),
-                                 (0.0, 0.004)], 'Paint_Radio', seg=64)
+    rim, face, rec = z('cap_rim'), z('cap_face'), z('cap_recess')
+    b.lathe(pos(a, bb, 0.0), N, [(rc * 1.0, 0.0), (rc * 1.02, 0.003), (rc, rim - 0.001), (rc * 0.96, rim),
+                                 (rc * 0.92, face), (rr * 1.04, face), (rr, face - 0.001), (rr, rec), (0.0, rec)],
+            'Paint_Radio', seg=64)
     rk = cap['knob_r'] * rc
-    b.lathe(pos(a, bb, 0.004), N, [(rk, 0.0), (rk, 0.006), (rk * 0.94, 0.0075), (0.0, 0.0075)], 'Bakelite_Black', seg=36)
+    b.lathe(pos(a, bb, rec), N, [(rk, 0.0), (rk, 0.006), (rk * 0.94, 0.0075), (0.0, 0.0075)], 'Bakelite_Black', seg=36)
     for ang, length, width in ((cap['lever_a'], rk * 1.55, rk * 0.62), (cap['nub_a'], rk * 1.3, rk * 0.3)):
         th = math.radians(ang)
-        ua = U * math.cos(th) + V * math.sin(th)
-        vb = -U * math.sin(th) + V * math.cos(th)
-        b.obox(pos(a + 0.5 * length * math.cos(th), bb + 0.5 * length * math.sin(th), 0.0075), ua, vb, N,
+        ua, vb = turned(ang)
+        b.obox(pos(a + 0.5 * length * math.cos(th), bb + 0.5 * length * math.sin(th), rec + 0.0035), ua, vb, N,
                (length, width, 0.006), 'Bakelite_Black')
-    b.cylinder(pos(a, bb, 0.0105), pos(a, bb, 0.0115), rk * 0.15, 'Metal_Steel', seg=12)
-    r0, r1 = cap['strip_r'][0] * rc, cap['strip_r'][1] * rc
-    seg = 24
-    a0_, a1_ = (math.radians(x) for x in cap['strip_a'])
-    pts = [(a + r1 * math.cos(a0_ + (a1_ - a0_) * k / seg), bb + r1 * math.sin(a0_ + (a1_ - a0_) * k / seg)) for k in range(seg + 1)]
-    pts += [(a + r0 * math.cos(a1_ - (a1_ - a0_) * k / seg), bb + r0 * math.sin(a1_ - (a1_ - a0_) * k / seg)) for k in range(seg + 1)]
-    b.slab(pos(0, 0, 0.0097), U, V, pts, [], 0.0012, 'Bakelite_Black')
+    b.cylinder(pos(a, bb, rec + 0.0075), pos(a, bb, rec + 0.0085), rk * 0.15, 'Metal_Steel', seg=12)
+    r0, r1 = cap['strip_r'][0] * d['r_cap'], cap['strip_r'][1] * d['r_cap']
+    flat(b, sector_pts(c, r0, r1, cap['strip_a'][0], cap['strip_a'][1], cap=False), face, face + 0.0012, 'Bakelite_Black')
     rm = 0.5 * (r0 + r1)
     for ang in cap['screws_a']:
         t = math.radians(ang)
-        a_s, b_s = a + rm * math.cos(t), bb + rm * math.sin(t)
-        b.cylinder(pos(a_s, b_s, 0.0094), pos(a_s, b_s, 0.0112), 0.0026, 'Metal_Steel', seg=10)
-        b.obox(pos(a_s, b_s, 0.0114), U, V, N, (0.005, 0.0006, 0.0006), 'Metal_Dark')
+        screw(b, (c[0] + rm * math.cos(t), c[1] - rm * math.sin(t)), face + 0.0010, r_mm=2.2)
     for text, ang in cap['texts']:
-        t = math.radians(ang)
-        engrave(b, text, (a + rm * math.cos(t), bb + rm * math.sin(t)), 0.0026, ang - 90, 0.0097)
+        engrave_arc(b, text, c, rm, ang, 2.4, face + 0.0012)
     for k in range(9):                                   # the arrow between them: a row of dashes along the strip
-        t = math.radians(146 - 5.5 * k)
-        b.obox(pos(a + rm * math.cos(t), bb + rm * math.sin(t), 0.0099), U * math.sin(t) - V * math.cos(t),
-               U * math.cos(t) + V * math.sin(t), N, (0.0022 if k < 8 else 0.003, 0.0005, 0.0004), 'Paint_Letters')
-    # the hinge: a bracket on the plate under the cap, two posts and a knuckle across them
-    rect_slab(b, T.DRUM['hinge'], 0.0, 0.004, 'Metal_Steel')
-    h0, hb0, h1, hb1 = T.rect_m(T.DRUM['hinge'])
-    hm = 0.5 * (hb0 + hb1)
+        t = 146 - 5.5 * k
+        tr = math.radians(t)
+        p_ = (c[0] + rm * math.cos(tr), c[1] - rm * math.sin(tr))
+        ua, vb = turned(t + 90)
+        b.obox(at(p_, face + 0.0014), ua, vb, N, (0.0022 if k < 8 else 0.003, 0.0005, 0.0004), 'Paint_Letters')
+    # the hinge: a bracket on the plate under the cap, two lugs and a knuckle across them, its pins
+    flat(b, rect_pts(d['hinge']), 0.0, 0.004, 'Metal_Steel')
+    h0, hb0, h1, hb1 = T.rect_m(d['hinge'])
     for side in (-1, 1):
         x_ = 0.5 * (h0 + h1) + side * 0.4 * (h1 - h0)
-        b.box(-x_ - 0.0025, -x_ + 0.0025, YP + 0.004, YP + 0.011, ZC + hm - 0.002, ZC + hb1 + 0.003, 'Metal_Steel')
-    b.cylinder(pos(h0 + 0.004, hb1 - 0.002, 0.0085), pos(h1 - 0.004, hb1 - 0.002, 0.0085), 0.0028, 'Metal_Steel', seg=12)
-    for sx_ in (850, 883):
-        screw(b, (sx_, 948), 0.004)
-    # ---- the frequency window in its bezel
-    fw = T.WINDOWS[0]
-    rect_slab(b, fw['bezel'], 0.0, 0.007, 'Paint_Radio', holes=[rect_pts(fw['rect'])])
-    a0, b0, a1, b1 = T.rect_m(fw['rect'])
-    # the scale seen through the window: a pale card set back in it, a hairline across the middle, ticks every 25 kHz
-    # (long at each 100 kHz) and the figures of three hundreds of kHz (frequency x100 kHz, as the plate under it says)
-    b.box(-a1, -a0, YP - 0.0085, YP - 0.007, ZC + b0, ZC + b1, 'Paint_Letters')
-    for k in range(1, 24):
-        ta = a0 + (a1 - a0) * k / 24
-        long_ = k % 4 == 2
-        b.box(-ta - 0.00025, -ta + 0.00025, YP - 0.007, YP - 0.0067, ZC + b0 + 0.004, ZC + b0 + (0.011 if long_ else 0.008), 'Metal_Dark')
-    b.box(-a1, -a0, YP - 0.007, YP - 0.0067, ZC + b0 + 0.0038, ZC + b0 + 0.0043, 'Metal_Dark')
-    for k, fig in ((2, '245'), (6, '246'), (10, '247'), (14, '248'), (18, '249'), (22, '250')):
-        ta = a0 + (a1 - a0) * k / 24
-        engrave(b, fig, (ta, b0 + 0.0175), 0.0042, 0, -0.007, mat='Metal_Dark', extrude_m=0.0003)
-    b.box(-0.0004, 0.0004, YP - 0.0067, YP - 0.0062, ZC + b0 + 0.002, ZC + b1 - 0.002, 'Paint_Red')    # the cursor
-    b.box(-a1 - 0.001, -a0 + 0.001, YP - 0.0035, YP - 0.0025, ZC + b1 - 0.0005, ZC + b1 + 0.0015, 'Paint_Radio')   # hood lip
-    # ---- the antenna lamp's lens (concentric rings)
-    a, bb = px(T.LENS['c'])
-    ring(b, T.LENS['c'], T.LENS['r'] * T.SX * 1.12, T.LENS['r'] * T.SX * 0.9, 0.0, 0.0045, 'Metal_Steel', seg=36)
-    b.cylinder(pos(a, bb, -0.012), pos(a, bb, -0.003), T.LENS['r'] * T.SX * 0.9, 'Paint_Letters', seg=32)   # yellowed lens, unlit
-    ring(b, T.LENS['c'], T.LENS['r'] * T.SX * 0.6, T.LENS['r'] * T.SX * 0.52, -0.003, -0.0012, 'Metal_Steel', seg=28)
-    ring(b, T.LENS['c'], T.LENS['r'] * T.SX * 0.3, T.LENS['r'] * T.SX * 0.22, -0.003, -0.0012, 'Metal_Steel', seg=20)
-    # ---- the D-shaped window, the two sub-band lamp windows, the red lamp
-    dw = T.WINDOWS[1]
-    a0, b0, a1, b1 = T.rect_m(dw['rect'])
-    b.slab(pos(0, 0, 0.0025), U, V, T.arch_m(dw['rect'], grow=12), [T.arch_m(dw['rect'])], 0.0025, 'Paint_Radio')
-    b.box(-a1, -a0, YP - 0.012, YP - 0.0105, ZC + b0, ZC + b1, 'Paint_Letters')        # the sub-band dial behind it
-    b.box(-0.5 * (a0 + a1) - 0.0005, -0.5 * (a0 + a1) + 0.0005, YP - 0.0105, YP - 0.0100, ZC + b0 + 0.003, ZC + b1 - 0.006, 'Metal_Dark')
+        b.box(-x_ - 0.0025, -x_ + 0.0025, YP + 0.004, YP + 0.010, ZC + 0.5 * (hb0 + hb1), ZC + hb1 + 0.002, 'Metal_Steel')
+    b.cylinder(pos(h0 + 0.004, hb1, 0.0075), pos(h1 - 0.004, hb1, 0.0075), 0.0028, 'Metal_Steel', seg=12)
+    for c_ in d['hinge_pins']:
+        disc(b, c_, 1.6, 0.004, 0.0062, 'Metal_Steel', seg=10)
+    flat(b, T.rounded_rect_m(d['plate'], 2.0), 0.0, 0.0015, 'Paint_Radio')
+    for c_ in d['plate_screws']:
+        screw(b, c_, 0.0015)
 
-    lp = T.LAMP_WINDOWS
-    rect_slab(b, lp['panel'], 0.0, 0.004, 'Metal_Steel', holes=[T.circle_m(c, lp['r'], 20) for c in lp['c']])
-    x0_, y0_, x1_, y1_ = lp['panel']
-    for sc in ((x0_ + 18, y0_ + 18), (x1_ - 18, y0_ + 18), (x0_ + 18, y1_ - 18), (x1_ - 18, y1_ - 18)):
-        screw(b, sc, 0.004, r=0.0022)
-    for c, mark in zip(lp['c'], ('I', 'II')):
-        a, bb = px(c)
-        engrave(b, mark, (a + (0.0095 if mark == 'I' else -0.0105), bb), 0.004, 0, 0.004, mat='Metal_Dark', extrude_m=0.0004)
-    for c in lp['c']:
-        a, bb = px(c)
-        b.cylinder(pos(a, bb, -0.012), pos(a, bb, -0.004), lp['r'] * T.SX * 0.95, 'Glass', seg=20)
-    a, bb = px(T.RED_LAMP['c'])
-    b.cylinder(pos(a, bb, -0.008), pos(a, bb, 0.0025), T.RED_LAMP['r'] * T.SX, 'Paint_Red', seg=18)
-    ring(b, T.RED_LAMP['c'], T.RED_LAMP['r'] * T.SX * 1.25, T.RED_LAMP['r'] * T.SX * 0.99, 0.0, 0.0022, 'Metal_Steel', seg=20)
-    # ---- the fixator window: raised panel, four numbered buttons, the flap with its finger notch
+
+def build_fixators(b):
+    """The preset fixators in their recess: the panel with the four numbered buttons, its screws and rivets, the hinged
+    flap over its lower half (its top stepped down in the middle) with the spring and the arched finger notch."""
     fx = T.FIXATORS
-    rect_slab(b, fx['panel'], 0.0, 0.004, 'Metal_Steel')
+    rec = z('fixator_recess')
+    ra0, rb0, ra1, rb1 = T.rect_m(fx['recess'])
+    b.box(-ra1, -ra0, YP + rec * 2 - 0.001, YP + rec * 2, ZC + rb0, ZC + rb1, 'Metal_Dark')      # the recess's floor
+    panel_top = rec + 0.0005
+    flat(b, rect_pts(fx['panel']), rec * 2, panel_top, 'Metal_Steel')
     for c in fx['buttons']:
-        a, bb = px(c)
-        b.cylinder(pos(a, bb, 0.004), pos(a, bb, 0.0075), fx['r'] * T.SX, 'Bakelite_Black', seg=22)
-    rect_slab(b, fx['flap'], 0.004, 0.0062, 'Metal_Steel', holes=[T.arch_m(fx['notch'])])
-    b.slab(pos(0, 0, 0.0045), U, V, T.arch_m(fx['notch']), [], 0.0005, 'Metal_Dark')        # the notch's dark floor
-    for k in range(7):                                   # the flap's spring, a coil along the hinge in its middle
-        xs = 1735 + 8 * k
-        a, bb = px((xs, 448))
-        b.cylinder(pos(a, bb - 0.0012, 0.0068), pos(a, bb + 0.0012, 0.0068), 0.0011, 'Metal_Steel', seg=8)
-    a0, b0, a1, b1 = T.rect_m(fx['flap'])
-    b.box(-(a1 - 0.03), -(a0 + 0.03), YP + 0.0062, YP + 0.0085, ZC + b1 - 0.002, ZC + b1 + 0.0035, 'Metal_Steel')   # the hinge strip
-    # ---- the multi-pin socket and its housing, the small sockets' panel
-    rect_slab(b, T.CONNECTOR['housing'], 0.0, 0.004, 'Metal_Dark', holes=[T.circle_m(T.CONNECTOR['c'], T.CONNECTOR['r'] * 0.7, 32)])
-    a, bb = px(T.CONNECTOR['c'])
-    ring(b, T.CONNECTOR['c'], T.CONNECTOR['r'] * T.SX * 0.9, T.CONNECTOR['r'] * T.SX * 0.7, -0.006, 0.0, 'Metal_Steel', seg=32)
-    b.cylinder(pos(a, bb, floor), pos(a, bb, -0.006), T.CONNECTOR['r'] * T.SX * 0.7, 'Metal_Dark', seg=30)
-    for k in range(10):                                                                 # the pins
-        t = 2 * math.pi * k / 10
-        b.cylinder(pos(a + 0.008 * math.cos(t), bb + 0.008 * math.sin(t), -0.012), pos(a + 0.008 * math.cos(t), bb + 0.008 * math.sin(t), -0.006), 0.0012, 'Metal_Steel', seg=6)
-    rect_slab(b, T.SOCKET_PANEL, 0.0, 0.003, 'Bakelite_Black', holes=[T.circle_m(c, 20, 18) for c in T.SMALL_SOCKETS])
-    # ---- plates: black with engraved letters; arcs round the big selector
+        b.lathe(at(c, panel_top), N, [(fx['r'] * MM, 0.0), (fx['r'] * MM, 0.0022), (fx['r'] * 0.85 * MM, 0.003),
+                                      (0.0, 0.003)], 'Bakelite_Black', seg=24)
+    for t, c, h in T.MARKS:
+        engrave(b, t, c, h, 0, panel_top + 0.003, mat='Paint_Letters', extrude_m=0.0003)
+    for c in fx['screws']:
+        screw(b, c, panel_top)
+    for c in fx['rivets']:
+        b.lathe(at(c, panel_top), N, [(1.3 * MM, 0.0), (1.2 * MM, 0.0008), (0.0, 0.0012)], 'Metal_Steel', seg=10)
+    x0, y0, x1, y1 = fx['flap']
+    tx0, ty, tx1 = fx['flap_tab']
+    outline = [T.to_m(x, y) for x, y in ((x0, y1), (x1, y1), (x1, y0), (tx1, y0), (tx1, ty), (tx0, ty), (tx0, y0), (x0, y0))]
+    flap = z('fixator_flap')
+    flat(b, outline, flap - 0.0025, flap, 'Metal_Steel', holes=[T.arch_m(fx['notch'], seg=20)])
+    flat(b, T.arch_m(fx['notch'], seg=20), panel_top - 0.0005, panel_top, 'Metal_Dark')
+    sx, sy0, sy1 = fx['spring']
+    for k in range(8):                                   # the spring: a coil along the hinge, by its slot
+        disc(b, (sx - 3.5 + k, sy0 + 1.0), 0.9, flap, flap + 0.0012, 'Metal_Steel', seg=8)
+    flat(b, rect_pts((sx - 0.6, sy0, sx + 0.6, sy1)), flap, flap + 0.0004, 'Metal_Dark')          # its slot
+    b.cylinder(at((x0 + 2, y0), flap - 0.001), at((x1 - 2, y0), flap - 0.001), 0.0016, 'Metal_Steel', seg=10)   # the hinge
+
+
+def build_windows_and_lamps(b):
+    # the arched window: its bezel, the sub-band dial behind it with a pointer
+    dw = T.DWIN
+    flat(b, T.arch_m(dw['rect'], grow=dw['bezel_grow']), 0.0, z('dwin_bezel'), 'Paint_Radio', holes=[T.arch_m(dw['rect'])])
+    a0, b0, a1, b1 = T.rect_m(dw['rect'])
+    gl = z('dwin_glass')
+    b.box(-a1, -a0, YP + gl - 0.0015, YP + gl, ZC + b0, ZC + b1, 'Paint_Letters')
+    xc = 0.5 * (a0 + a1)
+    b.box(-xc - 0.0005, -xc + 0.0005, YP + gl, YP + gl + 0.0005, ZC + b0 + 0.003, ZC + b1 - 0.006, 'Metal_Dark')
+    # the sub-band lamps' plate: raised steel, two lens holes (the cabin's lamps), I and II, screws
+    lp = T.LAMP_PLATE
+    top = z('lamp_plate')
+    flat(b, T.rounded_rect_m(lp['rect'], 2.0), 0.0, top, 'Metal_Steel', holes=[T.circle_m(c, lp['r'], 20) for c in lp['c']])
+    for c in lp['screws']:
+        screw(b, c, top, r_mm=2.2)
+    for c, mark in zip(lp['c'], ('I', 'II')):
+        engrave(b, mark, (c[0] + (7.5 if mark == 'I' else -8.0), c[1]), 3.5, 0, top, mat='Metal_Dark', extrude_m=0.0004)
+    # the antenna-tuning lamp's lens: a ring standing out, the yellowed lens set in it with its rings
+    L = T.LENS
+    ring(b, L['c'], L['r'], L['r'] * 0.72, 0.0, z('lens_ring'), 'Metal_Steel', seg=36)
+    disc(b, L['c'], L['r'] * 0.72, -0.006, z('lens_ring') - 0.0015, 'Paint_Letters', seg=32)
+    for f in (0.5, 0.25):
+        ring(b, L['c'], L['r'] * f, L['r'] * f - 0.8, z('lens_ring') - 0.0015, z('lens_ring') - 0.001, 'Metal_Steel', seg=24)
+    # the red lamp
+    R = T.RED_LAMP
+    b.lathe(at(R['c'], -0.004), N, [(R['r'] * 0.8 * MM, 0.0), (R['r'] * 0.8 * MM, 0.0055), (R['r'] * 0.5 * MM, 0.007),
+                                    (0.0, 0.0072)], 'Paint_Red', seg=18)
+    ring(b, R['c'], R['r'] * 1.2, R['r'] * 0.8, 0.0, 0.0022, 'Metal_Steel', seg=20)
+
+
+def build_plates(b):
+    lp_ = z('label_plate')
     for pl in T.PLATES:
-        if pl['id'] in ('left_strip', 'freq_bezel_text'):
-            if pl['id'] == 'left_strip':
-                a0, b0, a1, b1 = T.rect_m(pl['rect'])
-                plate_box(b, ((a0 + a1) / 2, (b0 + b1) / 2), (a1 - a0, b1 - b0), 0, 0.0, 0.0012, 'Bakelite_Black')
-            continue
-        a0, b0, a1, b1 = T.rect_m(pl['rect'])
-        if pl['id'] == 'voltage':
-            pts = rect_pts(pl['rect'])
-            b.slab(pos(0, 0, 0.0012), U, V, pts, [T.circle_m(T.WELLS[2]['c'], T.WELLS[2]['r'] * 1.02, 40)] + [T.circle_m(c, 20.5, 18) for c in T.SMALL_SOCKETS] + [rect_pts(T.SOCKET_PANEL)], 0.0012, 'Bakelite_Black')
+        base = z(pl['z']) if pl.get('z') else 0.0
+        if pl.get('cut'):
+            w = T.well(pl['cut'])
+            pts = rect_minus_circle(pl['rect'], w['c'], w['r'] + 1.2)
         else:
-            rot = pl.get('rot', 0)
-            w, h = a1 - a0, b1 - b0
-            plate_box(b, ((a0 + a1) / 2, (b0 + b1) / 2), (w, h), 0, 0.0, 0.0012, 'Bakelite_Black')
-    for pl in T.PLATES:
-        a0, b0, a1, b1 = T.rect_m(pl['rect'])
-        cx, cy = (a0 + a1) / 2, (b0 + b1) / 2
-        if pl.get('label_at'):
-            cx, cy = px(pl['label_at'])
-        lines = pl['text']
-        hm = pl['h'] * T.SX
-        for i, line in enumerate(lines):
-            off = ((len(lines) - 1) / 2 - i) * hm * 1.45
-            rot = pl.get('rot', 0)
-            r = math.radians(rot)
-            engrave(b, line, (cx - off * math.sin(r), cy + off * math.cos(r)), hm, rot, 0.0012 if not pl.get('plain') else 0.0004,
-                    mat='Paint_Letters' if not pl.get('plain') else 'Metal_Dark')
-    for arc in T.ARCS:
-        pts = arc_pts(T.SELECTOR_C, T.ARC_R_IN, T.ARC_R_OUT, arc['a0'], arc['a1'])
-        b.slab(pos(0, 0, 0.0012), U, V, pts, [], 0.0012, 'Bakelite_Black')
-        cx, cy = px(T.SELECTOR_C)
-        mid = math.radians((arc['a0'] + arc['a1']) / 2)
-        rm = 0.5 * (T.ARC_R_IN + T.ARC_R_OUT) * T.SX
-        rot = math.degrees(mid) - 90
-        if 90 < (rot % 360) < 270:
-            rot += 180
-        engrave(b, arc['text'], (cx + rm * math.cos(mid), cy + rm * math.sin(mid)), 15 * T.SX, rot, 0.0012)
-        for text, ang in arc['marks']:
-            t = math.radians(ang)
-            engrave(b, text, (cx + rm * math.cos(t), cy + rm * math.sin(t)), 14 * T.SX, 0, 0.0012)
-            b.cylinder(pos(cx + rm * 0.9 * math.cos(t), cy + rm * 0.9 * math.sin(t), 0.0012), pos(cx + rm * 0.9 * math.cos(t), cy + rm * 0.9 * math.sin(t), 0.0024), 0.0022, 'Lamp_Glass', seg=8)
-    for text, c, h, rot in T.VOLT_LABELS:
-        engrave(b, text, px(c), h * T.SX, rot, 0.0024)
-    vw = next(w for w in T.WELLS if w['id'] == 'voltage')
-    va, vb_ = px(vw['c'])
-    for ang in T.VOLT_TICKS:                            # the scale's ticks just outside the well
+            pts = T.rounded_rect_m(pl['rect'], 1.2)
+        th = z('subband_plate') if pl['id'] == 'subband' else lp_
+        flat(b, pts, base, base + th, 'Bakelite_Black', holes=holes_in(pl['rect']))
+        top = base + th
+        if pl.get('line'):
+            a0, _, a1, _ = T.rect_m(pl['rect'])
+            _, yb = T.to_m(0.0, pl['line'])
+            b.box(-a1 + 0.001, -a0 - 0.001, YP + top, YP + top + 0.0003, ZC + yb - 0.0003, ZC + yb + 0.0003, 'Paint_Letters')
+        c = pl.get('at', ((pl['rect'][0] + pl['rect'][2]) / 2, (pl['rect'][1] + pl['rect'][3]) / 2))
+        rot = pl.get('rot', 0)
+        r = math.radians(rot)
+        for i, line in enumerate(pl['text']):
+            off = (i - (len(pl['text']) - 1) / 2) * pl['h'] * 1.5        # mm, down the lines (turned with the text)
+            engrave(b, line, (c[0] + off * math.sin(r), c[1] + off * math.cos(r)), pl['h'], rot, top)
+    # the voltage plate, cut round its well, with its scale's ticks
+    vw = T.well('voltage')
+    flat(b, rect_minus_circle(T.VOLT_PLATE, vw['c'], vw['r'] + 1.0), 0.0, z('voltage_plate'), 'Bakelite_Black')
+    for t, c, h, rot, on in T.LABELS:
+        engrave(b, t, c, h, rot, z(on))
+    for ang in T.VOLT_TICKS:
         t = math.radians(ang)
-        r_t = vw['r'] * T.SX * 1.1
-        b.obox(pos(va + r_t * math.cos(t), vb_ + r_t * math.sin(t), 0.0027), U * math.cos(t) + V * math.sin(t),
-               -U * math.sin(t) + V * math.cos(t), N, (0.003, 0.0006, 0.0006), 'Paint_Letters')
-    for c in ((160, 365), (170, 440)):                  # the two squelch regulators beside the РЕГ. strip: big slotted heads
-        a, bb = px(c)
-        b.cylinder(pos(a, bb, -0.0005), pos(a, bb, 0.0018), 0.0047, 'Metal_Steel', seg=18)
-        b.obox(pos(a, bb, 0.0019), U * math.cos(0.3) + V * math.sin(0.3), -U * math.sin(0.3) + V * math.cos(0.3), N,
-               (0.0088, 0.0009, 0.0008), 'Metal_Dark')
-    for text, c, h in T.MARKS:
-        a, bb = px(c)
-        engrave(b, text, (a, bb), h * T.SX, 0, 0.0075 if h >= 20 else 0.0012, mat='Paint_Letters')
-    # ---- screws and side bolts
-    for sc in T.SCREWS:
-        if sc in ((160, 365), (170, 440)):             # the squelch regulators, drawn above
-            continue
-        screw(b, sc, 0.0)
-    for c in T.SIDE_BOLTS:                                   # bolt heads on the casing's right-hand side (the photo's right edge)
-        _, bb = px(c)
-        b.cylinder(Vector((-HALF_W, YP - 0.03, ZC + bb)), Vector((-HALF_W - 0.005, YP - 0.03, ZC + bb)), 0.005, 'Metal_Steel', seg=10)
-    for sx in (-1, 1):
-        for z in (ZC - 0.045, ZC - 0.095):
-            b.cylinder(Vector((sx * HALF_W, YP - 0.04, z)), Vector((sx * (HALF_W + 0.006), YP - 0.04, z)), 0.0075, 'Metal_Steel', seg=12)
-    # ---- the knobs the model owns, and (for a render) the ones the cabin supplies
+        r_t = vw['r'] * 1.12
+        p_ = (vw['c'][0] + r_t * math.cos(t), vw['c'][1] - r_t * math.sin(t))
+        ua, vb = turned(ang)
+        b.obox(at(p_, z('voltage_plate') + 0.0003), ua, vb, N, (0.003, 0.0006, 0.0006), 'Paint_Letters')
+    # the arcs round the selector, the antenna knob and the volume knob: their words, studs and figures
+    for arc in T.ARCS:
+        wc = T.well(arc['well'])['c']
+        flat(b, sector_pts(wc, arc['r'][0], arc['r'][1], arc['a'][0], arc['a'][1]), 0.0, lp_, 'Bakelite_Black')
+        below = 180 < arc['text_a'] < 360
+        lines = arc['text'].split('\n')
+        r_text = arc.get('text_r', 0.5 * (arc['r'][0] + arc['r'][1]))
+        for i, line in enumerate(lines):
+            rr = r_text + (i - (len(lines) - 1) / 2) * 5.0 * (1 if below else -1)
+            engrave_arc(b, line, wc, rr, arc['text_a'], 2.6, lp_)
+        for mark, ang in arc['studs']:
+            t = math.radians(ang)
+            sp = (wc[0] + arc['r_stud'] * math.cos(t), wc[1] - arc['r_stud'] * math.sin(t))
+            b.lathe(at(sp, lp_), N, [(1.9 * MM, 0.0), (1.8 * MM, 0.0012), (0.0, 0.0019)], 'Paint_Letters', seg=12)
+            # the figure beside its stud, on the side away from the words
+            away = 1.0 if ang > arc['text_a'] else -1.0
+            ta = math.radians(ang + away * math.degrees(4.6 / arc['r_stud']))
+            engrave(b, mark, (wc[0] + arc['r_stud'] * math.cos(ta), wc[1] - arc['r_stud'] * math.sin(ta)), 2.4, 0, lp_)
+    # the nameplate
+    np_ = T.NAMEPLATE
+    flat(b, T.rounded_rect_m(np_['rect'], 1.5), 0.0, z('nameplate'), 'Metal_Steel')
+    cx, cy = (np_['rect'][0] + np_['rect'][2]) / 2, (np_['rect'][1] + np_['rect'][3]) / 2
+    engrave(b, np_['text'][0], (cx, cy), 4.0, 0, z('nameplate'), mat='Metal_Dark', extrude_m=0.0004)
+    for dx in (-16.5, 16.5):
+        b.lathe(at((cx + dx, cy), z('nameplate')), N, [(1.2 * MM, 0.0), (0.0, 0.0010)], 'Metal_Steel', seg=8)
+
+
+def build_lower_block(b):
+    """The set-back block under the plate's lower left: the connector's housing and multi-pin socket, the bushings that
+    bring the cabin's power toggle and antenna knob out to the plate's plane."""
+    lb = z('lower_block')
+    con = T.CONNECTOR
+    flat(b, T.rounded_rect_m(con['housing'], 4.0), lb, lb + 0.004, 'Paint_Radio', holes=[T.circle_m(con['c'], con['r'], 32)])
+    ring(b, con['c'], con['r'], con['r'] * 0.8, lb, lb + 0.008, 'Metal_Steel', seg=32)
+    disc(b, con['c'], con['r'] * 0.8, lb - 0.004, lb - 0.003, 'Metal_Dark', seg=30)
+    ca, cb = T.to_m(*con['c'])
+    for k in range(10):
+        t = 2 * math.pi * k / 10
+        b.cylinder(pos(ca + 0.0075 * math.cos(t), cb + 0.0075 * math.sin(t), lb - 0.003),
+                   pos(ca + 0.0075 * math.cos(t), cb + 0.0075 * math.sin(t), lb + 0.002), 0.0011, 'Metal_Steel', seg=6)
+    for name in T.ON_LOWER_BLOCK:
+        c = T.CONTROL_MM[name]
+        b.lathe(at(c, lb), N, [(0.008, 0.0), (0.008, 0.003), (0.0055, 0.004), (0.0055, -lb - 0.0005), (0.0, -lb - 0.0005)],
+                'Metal_Dark', seg=20)
+
+
+def build_set(b, knobs=False):
+    build_casing(b)
+    build_plate(b)
+    build_hood(b)
+    build_drum(b)
+    build_fixators(b)
+    build_windows_and_lamps(b)
+    build_plates(b)
+    build_lower_block(b)
+    for c in T.SCREWS:
+        screw(b, c, surface_h(c))
+    for x, y, r in T.BRASS_HEADS:
+        screw(b, (x, y), surface_h((x, y)), r_mm=r, mat='Metal_Brass', slot_deg=-35)
+    # the knobs the model owns, and (for a render) the ones the cabin supplies
     for w in T.WELLS:
         if w['sim'] is not None and not knobs:
             continue
-        r = w['r'] * T.SX
+        r = w['r'] * MM
         if w['knob'] == 'red':
-            knob_red(b, w['c'], 68 * T.SX)
-        elif w['knob'] == 'bar':
-            knob_bar(b, w['c'], r * 1.7, 120 if w['id'] == 'voltage' else 70)
-        elif w['knob'] == 'three':
-            knob_three(b, w['c'], r * 0.9)
-        elif w['knob'] == 'lever_big':
-            knob_lever(b, w['c'], r, -55, 0.0726)
+            knob_red(b, w['c'], 0.011)
+        elif w['id'] == 'selector':
+            knob_bar(b, w['c'], r * 1.7, 125)
         else:
-            knob_lever(b, w['c'], r, 60 if w['id'] != 'volume' else 120, r * 1.5)
+            knob_bar(b, w['c'], r * 1.6, 120 if w['id'] == 'voltage' else 70)
 
 
 def build(B, finish, knobs=False):
