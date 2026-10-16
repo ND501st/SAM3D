@@ -12,6 +12,13 @@ The plate is 0.428 m wide (the set's 428 mm, `r123_refs`) and 0.206 m high: the 
 0.220 mm per px down, so the scale is the same both ways.
 
 Plate coordinates: a to the right as the operator looks at it, b up, origin at the plate's centre.
+
+Details the traced photo shows poorly (the drum's cap is open in it, the plates' small print is blurred) come from a second
+museum R-123, Wikimedia Commons "SpB-Museum-artillery-135.jpg" (Vitaly V. Kuzmin, 2250 x 1500 px, St Petersburg artillery
+museum; `r123_kuzmin`), photographed with the cap closed: the cap's face (ОТКР./ЗАКР. strip, the round lock knob), the
+voltage plate's scale (600в ... 150в, ПЕРЕДАЧА / ПРИЕМ), the strip left of ШУМЫ (РЕГ. / ДЕЖ.ПР.), the three bat handles
+under the voltage plate, the arched windows, the antenna knob's cross-shaped hub and the hammer-grey paint. A third photo of
+an R-123M in a vehicle (`r123m_qrz`) shows the same layout and paint.
 """
 import math
 
@@ -38,8 +45,8 @@ def len_m(px, axis='x'):
 WELLS = [
     {'id': 'squelch',   'c': (265, 400),  'r': 66,  'sim': 'squelch',  'knob': 'three'},
     {'id': 'mode',      'c': (470, 445),  'r': 102, 'sim': 'mode',     'knob': 'lever'},
-    {'id': 'voltage',   'c': (215, 625),  'r': 95,  'sim': None,       'knob': 'lever'},
-    {'id': 'freq_set',  'c': (470, 700),  'r': 100, 'sim': None,       'knob': 'three'},
+    {'id': 'voltage',   'c': (215, 625),  'r': 95,  'sim': None,       'knob': 'bar'},
+    {'id': 'freq_set',  'c': (470, 700),  'r': 100, 'sim': None,       'knob': 'bar'},     # T-bar (r123_kuzmin); older sets a three-spoke
     {'id': 'antenna_tune', 'c': (1295, 600), 'r': 170, 'sim': None,    'knob': 'red'},
     {'id': 'selector',  'c': (1330, 945), 'r': 190, 'sim': 'preset',   'knob': 'lever_big'},
     {'id': 'volume',    'c': (1725, 950), 'r': 110, 'sim': 'volume',   'knob': 'lever'},
@@ -57,7 +64,7 @@ SCREWS = [(160, 365), (170, 440), (235, 850), (625, 305), (680, 340), (965, 345)
 # Plates with engraved text. `rect` (x0, y0, x1, y1) px; `text` lines; `h` letter height px; `rot` degrees (anticlockwise).
 PLATES = [
     {'id': 'shumy',      'rect': (165, 295, 310, 330), 'text': ['ШУМЫ'], 'h': 20},
-    {'id': 'left_strip', 'rect': (90, 305, 150, 475), 'text': [], 'h': 14},
+    {'id': 'left_strip', 'rect': (90, 305, 150, 475), 'text': ['РЕГ.', 'ДЕЖ.ПР.'], 'h': 13, 'rot': 90},
     {'id': 'korrektor',  'rect': (565, 290, 600, 490), 'text': ['КОРРЕКТОР'], 'h': 17, 'rot': 90},
     {'id': 'mode_arc',   'rect': (410, 505, 590, 590), 'text': ['ДУПЛЕКС Д.ПРИЕМ', 'СИМПЛЕКС'], 'h': 15},
     {'id': 'voltage',    'rect': (50, 480, 375, 800), 'text': ['КОНТРОЛЬ НАПРЯЖЕНИЙ', '1 РАБОТА 2'], 'h': 14, 'label_at': (215, 495)},
@@ -75,6 +82,15 @@ PLATES = [
     {'id': 'headset',    'rect': (1625, 1140, 1765, 1170), 'text': ['ГАРНИТУРА'], 'h': 15},
 ]
 
+# The voltage plate's scale round the voltage switch (`r123_kuzmin`; read off the traced photo, where they are blurred):
+# (text, centre px, h px, rot)
+VOLT_LABELS = [
+    ('600в', (103, 547), 12, 0), ('250в', (103, 590), 12, 0), ('150в', (107, 657), 12, 0), ('1,2в', (113, 690), 12, 0),
+    ('1,2в', (303, 557), 12, 0), ('6,3в', (310, 590), 12, 0), ('150в', (327, 657), 12, 0),
+    ('ПЕРЕДАЧА', (72, 625), 12, 90), ('ПРИЕМ', (356, 610), 12, -90),
+]
+VOLT_TICKS = [150, 170, 200, 228, 30, 10, -20]     # degrees round the voltage well where the scale's ticks stand
+
 # Position numerals and small marks: (text, centre px, h px)
 MARKS = [
     ('1', (1637, 370), 20), ('2', (1715, 372), 20), ('3', (1790, 372), 20), ('4', (1865, 377), 20),
@@ -83,7 +99,7 @@ MARKS = [
 # Window panes: glass, `rect` px.
 WINDOWS = [
     {'id': 'freq', 'rect': (700, 280, 945, 400), 'bezel': (655, 240, 990, 500)},
-    {'id': 'dwin', 'rect': (1640, 610, 1835, 730), 'bezel': None, 'round_bottom': True},
+    {'id': 'dwin', 'rect': (1640, 610, 1835, 730), 'bezel': None, 'arch': True},     # round top, flat bottom
 ]
 LENS = {'c': (1180, 400), 'r': 55}                 # the antenna-tuning indicator lamp's lens (concentric rings)
 RED_LAMP = {'c': (180, 875), 'r': 22}
@@ -92,10 +108,14 @@ LAMP_WINDOWS = {'panel': (1590, 785, 1875, 880), 'c': [(1655, 835), (1800, 838)]
 # The preset drum: a round opening with a hinged cap; four fixators inside; the cap closed in the model.
 DRUM = {'c': (850, 740), 'r_opening': 190, 'r_cap': 182, 'latch_w': 300, 'latch_h': 110,
         'hinge': (820, 910, 910, 985)}
+# The closed cap's face (`r123_kuzmin`), as fractions of r_cap and degrees anticlockwise from the right: a black strip round
+# its upper left with ОТКР. and ЗАКР. and three screws, a recess in the middle with the round lock knob and its lever.
+CAP = {'strip_r': (0.76, 0.92), 'strip_a': (62, 182), 'screws_a': [70, 130, 176],
+       'texts': [('ОТКР.', 160), ('ЗАКР.', 92)], 'recess_r': 0.62, 'knob_r': 0.34, 'lever_a': 108, 'nub_a': -58}
 
 # The preset fixator window: four numbered round buttons over a hinged flap with a finger notch.
 FIXATORS = {'panel': (1565, 305, 1935, 600), 'buttons': [(1637, 370), (1715, 372), (1790, 372), (1865, 377)], 'r': 25,
-            'flap': (1575, 435, 1925, 590), 'notch': (1700, 520, 1800, 595)}
+            'flap': (1575, 435, 1925, 590), 'notch': (1700, 520, 1800, 595)}     # the notch is an arch, as the window
 
 # Curved plates round the big selector's well (angles anticlockwise from the right, degrees; radii px from its centre):
 # ФИКСИР. (positions 1, 2), ВОЛНЫ (3, 4) and ПЛАВНЫЙ ПОДДИАПАЗОН (I, II).
@@ -141,6 +161,19 @@ def circle_m(c, r, seg=40):
     cx, cy = to_m(*c)
     rr = r * SX
     return [(cx + rr * math.cos(2 * math.pi * k / seg), cy + rr * math.sin(2 * math.pi * k / seg)) for k in range(seg)]
+
+
+def arch_m(r, seg=16, grow=0.0):
+    """A px rectangle with a round top (a half circle as wide as it), flat bottom -> points anticlockwise, metres; grow
+    widens it all round (px)."""
+    a0, b0, a1, b1 = rect_m((r[0] - grow, r[1] - grow, r[2] + grow, r[3] + grow))
+    rr = (a1 - a0) / 2
+    cb = max(b0, b1 - rr)
+    pts = [(a0, b0), (a1, b0)]
+    for k in range(seg + 1):
+        t = math.pi * k / seg
+        pts.append(((a0 + a1) / 2 + rr * math.cos(t), cb + (b1 - cb) * math.sin(t)))
+    return pts
 
 
 def plate_outline_m(seg=8):

@@ -8,6 +8,7 @@ was traced from, to check the trace.
 Standard library plus Pillow. The sketch is drawn at the photo's own pixel frame (2000 x 1500), cropped to the plate.
 """
 import argparse
+import math
 import os
 import sys
 
@@ -65,8 +66,16 @@ def draw_trace(d, ink, fill_plate=None, scale=1.0, dx=0, dy=0, text=True):
         d.line([x - 7 * scale, y - 4 * scale, x + 7 * scale, y + 4 * scale], fill=ink, width=2)
     for pl in T.PLATES:
         rect(pl['rect'], outline=ink, width=2)
+    def arch(r, **kw):
+        a0, b0, a1, b1 = r
+        rr = (a1 - a0) / 2
+        cy = b0 + rr
+        pts = [p(a0, cy)] + [p(0.5 * (a0 + a1) - rr * math.cos(math.pi * k / 16), cy - rr * math.sin(math.pi * k / 16))
+                             for k in range(17)] + [p(a1, b1), p(a0, b1), p(a0, cy)]
+        d.line(pts, fill=kw.get('outline'), width=kw.get('width', 2))
+
     for win in T.WINDOWS:
-        rect(win['rect'], outline=ink, width=3)
+        (arch if win.get('arch') else rect)(win['rect'], outline=ink, width=3)
         if win['bezel']:
             rect(win['bezel'], outline=ink, width=2)
     circle(T.LENS['c'], T.LENS['r'], outline=ink, width=3)
@@ -78,7 +87,7 @@ def draw_trace(d, ink, fill_plate=None, scale=1.0, dx=0, dy=0, text=True):
         circle(c, T.LAMP_WINDOWS['r'], outline=ink, width=2)
     rect(T.FIXATORS['panel'], outline=ink, width=3)
     rect(T.FIXATORS['flap'], outline=ink, width=2)
-    rect(T.FIXATORS['notch'], outline=ink, width=2)
+    arch(T.FIXATORS['notch'], outline=ink, width=2)
     for c in T.FIXATORS['buttons']:
         circle(c, T.FIXATORS['r'], outline=ink, width=3)
     rect(T.CONNECTOR['housing'], outline=ink, width=2)
@@ -104,6 +113,12 @@ def draw_trace(d, ink, fill_plate=None, scale=1.0, dx=0, dy=0, text=True):
                 img = img.rotate(rot, expand=True)
                 px, py = p(cxp, cyp + (off if rot == 0 else 0))
                 d._image.paste(img, (int(px - img.width / 2), int(py - img.height / 2)), img)
+        for t, c, h, rot in T.VOLT_LABELS:
+            img = Image.new('RGBA', (int(len(t) * h * 0.8 * scale + 20), int(h * 1.8 * scale)), (0, 0, 0, 0))
+            ImageDraw.Draw(img).text((4, 2), t, font=font(h * scale), fill=ink)
+            img = img.rotate(rot, expand=True)
+            px, py = p(*c)
+            d._image.paste(img, (int(px - img.width / 2), int(py - img.height / 2)), img)
         for t, c, h in T.MARKS:
             x, y = p(*c)
             d.text((x - h * 0.3 * scale, y - h * 0.6 * scale), t, font=font(h * scale), fill=ink)

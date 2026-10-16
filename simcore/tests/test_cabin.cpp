@@ -434,6 +434,12 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
           "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": 0.06 } ])"), console, extra, &error));
     SC_EXPECT(extra.blocks.size() == 1 && extra.blocks[0].color == "black" && extra.fixtures.size() == 1 &&
               extra.fixtures[0].look.kind == CabinLookKind::Gauge);
+    // The R-123M's T-bar knob, the last look kind: the loader reads it by name.
+    CabinLayout bar;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "bar_knob", "size_m": 0.03 } ])"),
+                        console, bar, &error));
+    SC_EXPECT(bar.fixtures.size() == 1 && bar.fixtures[0].look.kind == CabinLookKind::BarKnob &&
+              std::string(ToString(CabinLookKind::BarKnob)) == "bar_knob");
     // A gauge's printed scale: compass or linear, for gauges only.
     CabinLayout scaled;
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.12],

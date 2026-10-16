@@ -176,19 +176,48 @@ def knob_three(b, c_px, r_m, angle_deg=90):
     b.cylinder(pos(a, bb, 0.011), pos(a, bb, 0.0135), r_m * 0.08, 'Metal_Steel', seg=12)
 
 
-def knob_red(b, c_px, r_cap_m):
+def knob_bar(b, c_px, d_m, angle_deg):
+    """The bakelite T-bar knob (`r123_kuzmin`), d_m across, its pointer end towards angle_deg: the cabin's SM_KnobBar shape
+    (tools/blender/build_cabin_parts.py), so the model's knobs and the cabin's match."""
     a, bb = px(c_px)
-    # dark star-shaped base with five lobes, the red cap on it with its slot
-    for k in range(5):
-        th = math.radians(90 + 72 * k)
+    b.lathe(pos(a, bb, -0.008), N, [(0.34 * d_m, 0.0), (0.34 * d_m, 0.3 * d_m), (0.3 * d_m, 0.36 * d_m), (0.0, 0.36 * d_m)],
+            'Bakelite_Black', seg=28)
+    th = math.radians(angle_deg - 90)                 # the outline's +y (the pointer) turned to angle_deg
+    outline = [(-0.08, 0.0), (-0.14, -0.4), (-0.1, -0.46), (0.1, -0.46), (0.14, -0.4), (0.08, 0.0), (0.12, 0.38),
+               (0.05, 0.5), (-0.05, 0.5), (-0.12, 0.38)]
+    pts = [(a + d_m * (x * math.cos(th) - y * math.sin(th)), bb + d_m * (x * math.sin(th) + y * math.cos(th))) for x, y in outline]
+    b.slab(pos(0, 0, -0.008 + 0.62 * d_m), U, V, pts, [], 0.56 * d_m, 'Bakelite_Black')
+    b.cylinder(pos(a, bb, -0.008 + 0.62 * d_m), pos(a, bb, -0.008 + 0.66 * d_m), 0.07 * d_m, 'Metal_Steel', seg=12)
+
+
+def knob_red(b, c_px, r_cap_m):
+    """The antenna-tuning knob (`r123_kuzmin`): a black hub of four broad arms with round ends (a cross, turned a little),
+    the red cap on it with a raised bar across its face and the shaft's end, and the lock latch hanging under it."""
+    a, bb = px(c_px)
+    arm = r_cap_m * 1.85
+    for k in range(4):
+        th = math.radians(8 + 90 * k)
         ua = U * math.cos(th) + V * math.sin(th)
         vb = -U * math.sin(th) + V * math.cos(th)
-        c = pos(a + 0.55 * r_cap_m * 1.7 * math.cos(th), bb + 0.55 * r_cap_m * 1.7 * math.sin(th), 0.003)
-        b.obox(c, ua, vb, N, (r_cap_m * 1.7, r_cap_m * 0.8, 0.012), 'Bakelite_Black')
-    b.cylinder(pos(a, bb, -0.01), pos(a, bb, 0.008), r_cap_m * 1.15, 'Bakelite_Black', seg=24)
-    b.cylinder(pos(a, bb, 0.008), pos(a, bb, 0.0165), r_cap_m, 'Paint_Red', seg=28)
-    b.obox(pos(a, bb, 0.0168), U, V, N, (r_cap_m * 1.5, r_cap_m * 0.22, 0.0014), 'Metal_Dark')
-    b.cylinder(pos(a, bb, 0.0165), pos(a, bb, 0.019), r_cap_m * 0.14, 'Metal_Steel', seg=12)
+        c = pos(a + 0.5 * arm * math.cos(th), bb + 0.5 * arm * math.sin(th), -0.002)
+        b.obox(c, ua, vb, N, (arm, r_cap_m * 0.75, 0.014), 'Bakelite_Black')
+        e = (a + arm * math.cos(th), bb + arm * math.sin(th))
+        b.cylinder(pos(e[0], e[1], -0.009), pos(e[0], e[1], 0.005), r_cap_m * 0.375, 'Bakelite_Black', seg=16)
+    b.cylinder(pos(a, bb, -0.012), pos(a, bb, 0.007), r_cap_m * 1.12, 'Bakelite_Black', seg=28)
+    b.lathe(pos(a, bb, 0.007), N, [(r_cap_m * 0.98, 0.0), (r_cap_m, 0.001), (r_cap_m, 0.0085), (r_cap_m * 0.93, 0.0095),
+                                   (0.0, 0.0095)], 'Paint_Red', seg=32)
+    b.obox(pos(a, bb, 0.017), V, -U, N, (r_cap_m * 1.75, r_cap_m * 0.42, 0.004), 'Paint_Red')     # the bar, top to bottom
+    b.cylinder(pos(a, bb, 0.0165), pos(a, bb, 0.019), r_cap_m * 0.13, 'Metal_Steel', seg=12)
+    # the latch: a steel tongue from the hub's foot down to a small clevis
+    b.obox(pos(a, bb - r_cap_m * 1.35, 0.004), V, -U, N, (r_cap_m * 0.9, r_cap_m * 0.22, 0.004), 'Metal_Steel')
+    b.cylinder(pos(a, bb - r_cap_m * 1.8, 0.0), pos(a, bb - r_cap_m * 1.8, 0.008), r_cap_m * 0.2, 'Metal_Steel', seg=12)
+
+
+def knob_bat(b, c_px, r_m):
+    """A bat-handle switch: a short black stalk with a round head, standing out of its hole."""
+    a, bb = px(c_px)
+    b.lathe(pos(a, bb, -0.008), N, [(r_m * 0.55, 0.0), (r_m * 0.55, 0.008), (r_m * 0.75, 0.011), (r_m, 0.015),
+                                     (r_m * 0.9, 0.019), (r_m * 0.5, 0.0215), (0.0, 0.022)], 'Bakelite_Black', seg=18)
 
 
 # ------------------------------------------------------------------------------------------------ the set
@@ -225,7 +254,7 @@ def build_set(b, knobs=False):
     for hx, hy, hr in T.HOLES:
         holes.append(T.circle_m((hx, hy), hr, 16))
     for win in T.WINDOWS:
-        holes.append(rect_pts(win['rect']))
+        holes.append(T.arch_m(win['rect']) if win.get('arch') else rect_pts(win['rect']))
     holes.append(T.circle_m(T.LENS['c'], T.LENS['r'] * 0.9, 32))
     for c in T.LAMP_WINDOWS['c']:
         holes.append(T.circle_m(c, T.LAMP_WINDOWS['r'], 20))
@@ -238,7 +267,7 @@ def build_set(b, knobs=False):
     floor = -WELL_DEPTH + 0.0015
     for w in T.WELLS:
         a, bb = px(w['c'])
-        b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), w['r'] * T.SX * 0.99, 'Metal_Dark', seg=28)
+        b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), w['r'] * T.SX * 0.99, 'Duct_Grey', seg=28)   # grey inside (r123_kuzmin)
         # a step ring half-way down, as the photo shows inside the wells
         ring(b, w['c'], w['r'] * T.SX * 0.99, w['r'] * T.SX * 0.84, -WELL_DEPTH * 0.55, -WELL_DEPTH * 0.5, 'Metal_Steel', seg=36)
         a, bb = px(w['c'])
@@ -246,47 +275,105 @@ def build_set(b, knobs=False):
     for hx, hy, hr in T.HOLES:
         a, bb = px((hx, hy))
         b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), hr * T.SX * 0.99, 'Metal_Dark', seg=14)
-    for c in T.SMALL_SOCKETS:
+    for c in T.SMALL_SOCKETS:                       # three bat-handle switches under the voltage plate (`r123_kuzmin`)
         a, bb = px(c)
-        b.cylinder(pos(a, bb, floor), pos(a, bb, -0.006), 20 * T.SX * 0.98, 'Metal_Dark', seg=14)
-        b.cylinder(pos(a, bb, -0.006), pos(a, bb, -0.0045), 8 * T.SX, 'Metal_Steel', seg=10)
+        b.cylinder(pos(a, bb, floor), pos(a, bb, -0.008), 20 * T.SX * 0.98, 'Metal_Dark', seg=14)
+        knob_bat(b, c, 19 * T.SX)
+    # the big selector's well: a grey dish behind its lever, as both photographs show
+    sel = next(w for w in T.WELLS if w['id'] == 'selector')
+    a, bb = px(sel['c'])
+    b.lathe(pos(a, bb, -WELL_DEPTH + 0.002), N, [(sel['r'] * T.SX * 0.93, 0.0), (sel['r'] * T.SX * 0.93, 0.006),
+                                                  (sel['r'] * T.SX * 0.86, 0.009), (sel['r'] * T.SX * 0.35, 0.0115),
+                                                  (0.0, 0.0115)], 'Metal_Steel', seg=48)
     # ---- the preset drum under its cap
     a, bb = px(T.DRUM['c'])
     b.cylinder(pos(a, bb, floor), pos(a, bb, floor + 0.001), T.DRUM['r_opening'] * T.SX * 0.99, 'Metal_Dark', seg=40)
     ring(b, T.DRUM['c'], 135 * T.SX, 124 * T.SX, -0.014, -0.0125, 'Paint_Red', seg=48)
     b.cylinder(pos(a, bb, -0.0135), pos(a, bb, -0.0105), 118 * T.SX, 'Metal_Dark', seg=40)
-    # the cap: closed, a shallow dome with a stepped rim, a diamond latch, a hinge block below
-    b.cylinder(pos(a, bb, 0.0), pos(a, bb, 0.003), T.DRUM['r_opening'] * T.SX * 1.02, 'Metal_Steel', seg=56)
-    b.cylinder(pos(a, bb, 0.003), pos(a, bb, 0.009), T.DRUM['r_cap'] * T.SX, 'Metal_Steel', seg=56)
-    b.cylinder(pos(a, bb, 0.009), pos(a, bb, 0.0102), (T.DRUM['r_cap'] - 14) * T.SX, 'Metal_Steel', seg=56)
-    hw, hh = T.DRUM['latch_w'] / 2 * T.SX, T.DRUM['latch_h'] / 2 * T.SX
-    diamond = [(a - hw, bb), (a - hw * 0.4, bb - hh), (a + hw * 0.4, bb - hh), (a + hw, bb), (a + hw * 0.4, bb + hh), (a - hw * 0.4, bb + hh)]
-    b.slab(pos(0, 0, 0.0126), U, V, diamond, [], 0.0024, 'Metal_Steel')
-    for dx in (-0.006, 0.006):
-        b.cylinder(pos(a + dx, bb, 0.0126), pos(a + dx, bb, 0.0142), 0.0028, 'Metal_Steel', seg=10)
-    rect_slab(b, T.DRUM['hinge'], 0.0, 0.006, 'Metal_Steel')
+    # the cap, closed (`r123_kuzmin`): a flat disc with a rolled rim, a recess in its middle holding the round lock knob
+    # and its lever, a black strip round the upper left (ОТКР. -> ЗАКР., three screws), the hinge bracket below
+    rc = T.DRUM['r_cap'] * T.SX
+    cap = T.CAP
+    rr = cap['recess_r'] * rc
+    b.lathe(pos(a, bb, 0.0), N, [(T.DRUM['r_opening'] * T.SX * 1.03, 0.0), (rc * 1.02, 0.004), (rc * 0.99, 0.0075),
+                                 (rc * 0.95, 0.0085), (rr * 1.04, 0.0085), (rr, 0.0075), (rr, 0.004),
+                                 (0.0, 0.004)], 'Paint_Radio', seg=64)
+    rk = cap['knob_r'] * rc
+    b.lathe(pos(a, bb, 0.004), N, [(rk, 0.0), (rk, 0.006), (rk * 0.94, 0.0075), (0.0, 0.0075)], 'Bakelite_Black', seg=36)
+    for ang, length, width in ((cap['lever_a'], rk * 1.55, rk * 0.62), (cap['nub_a'], rk * 1.3, rk * 0.3)):
+        th = math.radians(ang)
+        ua = U * math.cos(th) + V * math.sin(th)
+        vb = -U * math.sin(th) + V * math.cos(th)
+        b.obox(pos(a + 0.5 * length * math.cos(th), bb + 0.5 * length * math.sin(th), 0.0075), ua, vb, N,
+               (length, width, 0.006), 'Bakelite_Black')
+    b.cylinder(pos(a, bb, 0.0105), pos(a, bb, 0.0115), rk * 0.15, 'Metal_Steel', seg=12)
+    r0, r1 = cap['strip_r'][0] * rc, cap['strip_r'][1] * rc
+    seg = 24
+    a0_, a1_ = (math.radians(x) for x in cap['strip_a'])
+    pts = [(a + r1 * math.cos(a0_ + (a1_ - a0_) * k / seg), bb + r1 * math.sin(a0_ + (a1_ - a0_) * k / seg)) for k in range(seg + 1)]
+    pts += [(a + r0 * math.cos(a1_ - (a1_ - a0_) * k / seg), bb + r0 * math.sin(a1_ - (a1_ - a0_) * k / seg)) for k in range(seg + 1)]
+    b.slab(pos(0, 0, 0.0097), U, V, pts, [], 0.0012, 'Bakelite_Black')
+    rm = 0.5 * (r0 + r1)
+    for ang in cap['screws_a']:
+        t = math.radians(ang)
+        a_s, b_s = a + rm * math.cos(t), bb + rm * math.sin(t)
+        b.cylinder(pos(a_s, b_s, 0.0094), pos(a_s, b_s, 0.0112), 0.0026, 'Metal_Steel', seg=10)
+        b.obox(pos(a_s, b_s, 0.0114), U, V, N, (0.005, 0.0006, 0.0006), 'Metal_Dark')
+    for text, ang in cap['texts']:
+        t = math.radians(ang)
+        engrave(b, text, (a + rm * math.cos(t), bb + rm * math.sin(t)), 0.0026, ang - 90, 0.0097)
+    for k in range(9):                                   # the arrow between them: a row of dashes along the strip
+        t = math.radians(146 - 5.5 * k)
+        b.obox(pos(a + rm * math.cos(t), bb + rm * math.sin(t), 0.0099), U * math.sin(t) - V * math.cos(t),
+               U * math.cos(t) + V * math.sin(t), N, (0.0022 if k < 8 else 0.003, 0.0005, 0.0004), 'Paint_Letters')
+    # the hinge: a bracket on the plate under the cap, two posts and a knuckle across them
+    rect_slab(b, T.DRUM['hinge'], 0.0, 0.004, 'Metal_Steel')
+    h0, hb0, h1, hb1 = T.rect_m(T.DRUM['hinge'])
+    hm = 0.5 * (hb0 + hb1)
+    for side in (-1, 1):
+        x_ = 0.5 * (h0 + h1) + side * 0.4 * (h1 - h0)
+        b.box(-x_ - 0.0025, -x_ + 0.0025, YP + 0.004, YP + 0.011, ZC + hm - 0.002, ZC + hb1 + 0.003, 'Metal_Steel')
+    b.cylinder(pos(h0 + 0.004, hb1 - 0.002, 0.0085), pos(h1 - 0.004, hb1 - 0.002, 0.0085), 0.0028, 'Metal_Steel', seg=12)
     for sx_ in (850, 883):
-        screw(b, (sx_, 948), 0.006)
+        screw(b, (sx_, 948), 0.004)
     # ---- the frequency window in its bezel
     fw = T.WINDOWS[0]
     rect_slab(b, fw['bezel'], 0.0, 0.007, 'Paint_Radio', holes=[rect_pts(fw['rect'])])
     a0, b0, a1, b1 = T.rect_m(fw['rect'])
-    b.box(-a1, -a0, YP - 0.006, YP - 0.0045, ZC + b0, ZC + b1, 'Glass')                 # the glass, set back in the window
-    for k in range(1, 12):                                                              # the scale's ticks
-        ta = a0 + (a1 - a0) * k / 12
-        b.box(-ta - 0.0003, -ta + 0.0003, YP - 0.0045, YP - 0.0042, ZC + b0 + 0.005, ZC + b0 + 0.014, 'Metal_Dark')
+    # the scale seen through the window: a pale card set back in it, a hairline across the middle, ticks every 25 kHz
+    # (long at each 100 kHz) and the figures of three hundreds of kHz (frequency x100 kHz, as the plate under it says)
+    b.box(-a1, -a0, YP - 0.0085, YP - 0.007, ZC + b0, ZC + b1, 'Paint_Letters')
+    for k in range(1, 24):
+        ta = a0 + (a1 - a0) * k / 24
+        long_ = k % 4 == 2
+        b.box(-ta - 0.00025, -ta + 0.00025, YP - 0.007, YP - 0.0067, ZC + b0 + 0.004, ZC + b0 + (0.011 if long_ else 0.008), 'Metal_Dark')
+    b.box(-a1, -a0, YP - 0.007, YP - 0.0067, ZC + b0 + 0.0038, ZC + b0 + 0.0043, 'Metal_Dark')
+    for k, fig in ((2, '245'), (6, '246'), (10, '247'), (14, '248'), (18, '249'), (22, '250')):
+        ta = a0 + (a1 - a0) * k / 24
+        engrave(b, fig, (ta, b0 + 0.0175), 0.0042, 0, -0.007, mat='Metal_Dark', extrude_m=0.0003)
+    b.box(-0.0004, 0.0004, YP - 0.0067, YP - 0.0062, ZC + b0 + 0.002, ZC + b1 - 0.002, 'Paint_Red')    # the cursor
+    b.box(-a1 - 0.001, -a0 + 0.001, YP - 0.0035, YP - 0.0025, ZC + b1 - 0.0005, ZC + b1 + 0.0015, 'Paint_Radio')   # hood lip
     # ---- the antenna lamp's lens (concentric rings)
     a, bb = px(T.LENS['c'])
     ring(b, T.LENS['c'], T.LENS['r'] * T.SX * 1.12, T.LENS['r'] * T.SX * 0.9, 0.0, 0.0045, 'Metal_Steel', seg=36)
-    b.cylinder(pos(a, bb, -0.012), pos(a, bb, -0.003), T.LENS['r'] * T.SX * 0.9, 'Glass', seg=32)
+    b.cylinder(pos(a, bb, -0.012), pos(a, bb, -0.003), T.LENS['r'] * T.SX * 0.9, 'Paint_Letters', seg=32)   # yellowed lens, unlit
     ring(b, T.LENS['c'], T.LENS['r'] * T.SX * 0.6, T.LENS['r'] * T.SX * 0.52, -0.003, -0.0012, 'Metal_Steel', seg=28)
     ring(b, T.LENS['c'], T.LENS['r'] * T.SX * 0.3, T.LENS['r'] * T.SX * 0.22, -0.003, -0.0012, 'Metal_Steel', seg=20)
     # ---- the D-shaped window, the two sub-band lamp windows, the red lamp
     dw = T.WINDOWS[1]
     a0, b0, a1, b1 = T.rect_m(dw['rect'])
-    b.box(-a1, -a0, YP - 0.012, YP - 0.0095, ZC + b0, ZC + b1, 'Glass')
+    b.slab(pos(0, 0, 0.0025), U, V, T.arch_m(dw['rect'], grow=12), [T.arch_m(dw['rect'])], 0.0025, 'Paint_Radio')
+    b.box(-a1, -a0, YP - 0.012, YP - 0.0105, ZC + b0, ZC + b1, 'Paint_Letters')        # the sub-band dial behind it
+    b.box(-0.5 * (a0 + a1) - 0.0005, -0.5 * (a0 + a1) + 0.0005, YP - 0.0105, YP - 0.0100, ZC + b0 + 0.003, ZC + b1 - 0.006, 'Metal_Dark')
+
     lp = T.LAMP_WINDOWS
-    rect_slab(b, lp['panel'], 0.0, 0.004, 'Bakelite_Black', holes=[T.circle_m(c, lp['r'], 20) for c in lp['c']])
+    rect_slab(b, lp['panel'], 0.0, 0.004, 'Metal_Steel', holes=[T.circle_m(c, lp['r'], 20) for c in lp['c']])
+    x0_, y0_, x1_, y1_ = lp['panel']
+    for sc in ((x0_ + 18, y0_ + 18), (x1_ - 18, y0_ + 18), (x0_ + 18, y1_ - 18), (x1_ - 18, y1_ - 18)):
+        screw(b, sc, 0.004, r=0.0022)
+    for c, mark in zip(lp['c'], ('I', 'II')):
+        a, bb = px(c)
+        engrave(b, mark, (a + (0.0095 if mark == 'I' else -0.0105), bb), 0.004, 0, 0.004, mat='Metal_Dark', extrude_m=0.0004)
     for c in lp['c']:
         a, bb = px(c)
         b.cylinder(pos(a, bb, -0.012), pos(a, bb, -0.004), lp['r'] * T.SX * 0.95, 'Glass', seg=20)
@@ -299,9 +386,12 @@ def build_set(b, knobs=False):
     for c in fx['buttons']:
         a, bb = px(c)
         b.cylinder(pos(a, bb, 0.004), pos(a, bb, 0.0075), fx['r'] * T.SX, 'Bakelite_Black', seg=22)
-    rect_slab(b, fx['flap'], 0.004, 0.0062, 'Metal_Steel', holes=[rect_pts(fx['notch'], 0.0)])
-    nc = T.rect_m(fx['notch'])
-    b.box(-nc[2], -nc[0], YP + 0.004, YP + 0.0062, ZC + nc[1], ZC + nc[3], 'Metal_Dark')   # the notch's dark floor lies in the flap's plane
+    rect_slab(b, fx['flap'], 0.004, 0.0062, 'Metal_Steel', holes=[T.arch_m(fx['notch'])])
+    b.slab(pos(0, 0, 0.0045), U, V, T.arch_m(fx['notch']), [], 0.0005, 'Metal_Dark')        # the notch's dark floor
+    for k in range(7):                                   # the flap's spring, a coil along the hinge in its middle
+        xs = 1735 + 8 * k
+        a, bb = px((xs, 448))
+        b.cylinder(pos(a, bb - 0.0012, 0.0068), pos(a, bb + 0.0012, 0.0068), 0.0011, 'Metal_Steel', seg=8)
     a0, b0, a1, b1 = T.rect_m(fx['flap'])
     b.box(-(a1 - 0.03), -(a0 + 0.03), YP + 0.0062, YP + 0.0085, ZC + b1 - 0.002, ZC + b1 + 0.0035, 'Metal_Steel')   # the hinge strip
     # ---- the multi-pin socket and its housing, the small sockets' panel
@@ -355,11 +445,27 @@ def build_set(b, knobs=False):
             t = math.radians(ang)
             engrave(b, text, (cx + rm * math.cos(t), cy + rm * math.sin(t)), 14 * T.SX, 0, 0.0012)
             b.cylinder(pos(cx + rm * 0.9 * math.cos(t), cy + rm * 0.9 * math.sin(t), 0.0012), pos(cx + rm * 0.9 * math.cos(t), cy + rm * 0.9 * math.sin(t), 0.0024), 0.0022, 'Lamp_Glass', seg=8)
+    for text, c, h, rot in T.VOLT_LABELS:
+        engrave(b, text, px(c), h * T.SX, rot, 0.0024)
+    vw = next(w for w in T.WELLS if w['id'] == 'voltage')
+    va, vb_ = px(vw['c'])
+    for ang in T.VOLT_TICKS:                            # the scale's ticks just outside the well
+        t = math.radians(ang)
+        r_t = vw['r'] * T.SX * 1.1
+        b.obox(pos(va + r_t * math.cos(t), vb_ + r_t * math.sin(t), 0.0027), U * math.cos(t) + V * math.sin(t),
+               -U * math.sin(t) + V * math.cos(t), N, (0.003, 0.0006, 0.0006), 'Paint_Letters')
+    for c in ((160, 365), (170, 440)):                  # the two squelch regulators beside the РЕГ. strip: big slotted heads
+        a, bb = px(c)
+        b.cylinder(pos(a, bb, -0.0005), pos(a, bb, 0.0018), 0.0047, 'Metal_Steel', seg=18)
+        b.obox(pos(a, bb, 0.0019), U * math.cos(0.3) + V * math.sin(0.3), -U * math.sin(0.3) + V * math.cos(0.3), N,
+               (0.0088, 0.0009, 0.0008), 'Metal_Dark')
     for text, c, h in T.MARKS:
         a, bb = px(c)
         engrave(b, text, (a, bb), h * T.SX, 0, 0.0075 if h >= 20 else 0.0012, mat='Paint_Letters')
     # ---- screws and side bolts
     for sc in T.SCREWS:
+        if sc in ((160, 365), (170, 440)):             # the squelch regulators, drawn above
+            continue
         screw(b, sc, 0.0)
     for c in T.SIDE_BOLTS:                                   # bolt heads on the casing's right-hand side (the photo's right edge)
         _, bb = px(c)
@@ -374,6 +480,8 @@ def build_set(b, knobs=False):
         r = w['r'] * T.SX
         if w['knob'] == 'red':
             knob_red(b, w['c'], 68 * T.SX)
+        elif w['knob'] == 'bar':
+            knob_bar(b, w['c'], r * 1.7, 120 if w['id'] == 'voltage' else 70)
         elif w['knob'] == 'three':
             knob_three(b, w['c'], r * 0.9)
         elif w['knob'] == 'lever_big':

@@ -99,7 +99,8 @@ enum class CabinLookKind {
     Diagram,      // printed outline diagram
     Oval,         // raised oval mount
     Legend,       // legend lamp: black glass with its `label` on it, the letters lit in `color` (lamps only)
-    Gauge         // an instrument the console doesn't model: dark rim, light face, needle (round, or square for [w, h])
+    Gauge,        // an instrument the console doesn't model: dark rim, light face, needle (round, or square for [w, h])
+    BarKnob       // bakelite T-bar knob: a round boss with a bar across it, one end longer (the pointer): the R-123M's
 };
 
 inline const char* ToString(CabinLookKind k) {
@@ -123,6 +124,7 @@ inline const char* ToString(CabinLookKind k) {
         case CabinLookKind::Oval: return "oval";
         case CabinLookKind::Legend: return "legend";
         case CabinLookKind::Gauge: return "gauge";
+        case CabinLookKind::BarKnob: return "bar_knob";
     }
     return "?";
 }
@@ -665,7 +667,7 @@ private:
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
         if (!kind.empty()) {
             bool found = false;
-            for (int k = 0; k <= static_cast<int>(CabinLookKind::Gauge); ++k) {
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::BarKnob); ++k) {
                 if (kind == ToString(static_cast<CabinLookKind>(k))) {
                     out.kind = static_cast<CabinLookKind>(k);
                     found = true;

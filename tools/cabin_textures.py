@@ -499,7 +499,7 @@ def bake_panel(layout, console, panel, ppm, seed):
             face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'))
             if fx.get('scale') == 'counters':
                 continue
-        if kind in ('knob', 'pointer_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):
+        if kind in ('knob', 'pointer_knob', 'bar_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):
             face.handled(u, v, max(w, h), 0.025)
         label = fx.get('label', '')
         if not label:

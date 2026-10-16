@@ -122,6 +122,22 @@ def knob_pointer(bm):
         bm.faces.new((low[k], low[(k + 1) % n], top[(k + 1) % n], top[k]))
 
 
+def knob_bar(bm):
+    # The R-123M's bakelite T-bar knob (r123_kuzmin, r123_commons): a round boss and a bar across its whole face, flared
+    # at the ends, the pointer end (+y) longer and tapering, a steel screw in the middle (the colour is the knob's).
+    lathe(bm, [(0.0, 0.0), (0.34, 0.0), (0.34, 0.3), (0.3, 0.36), (0.0, 0.36)])
+    outline = [(-0.08, 0.0), (-0.14, -0.4), (-0.1, -0.46), (0.1, -0.46), (0.14, -0.4), (0.08, 0.0), (0.12, 0.38),
+               (0.05, 0.5), (-0.05, 0.5), (-0.12, 0.38)]
+    low = [bm.verts.new((x, y, 0.06)) for x, y in outline]
+    top = [bm.verts.new((x, y, 0.62)) for x, y in outline]
+    bm.faces.new(list(reversed(low)))
+    bm.faces.new(top)
+    n = len(outline)
+    for k in range(n):
+        bm.faces.new((low[k], low[(k + 1) % n], top[(k + 1) % n], top[k]))
+    lathe(bm, [(0.0, 0.62), (0.07, 0.62), (0.07, 0.66), (0.0, 0.67)], seg=12)
+
+
 def trim(bm):
     # Slotted trimmer head in its collar.
     lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.1), (0.36, 0.1), (0.36, 0.22), (0.3, 0.26), (0.0, 0.26)])
@@ -223,7 +239,8 @@ def screw(bm):
 
 
 PARTS = [
-    ('SM_Knob', knob, 0.012), ('SM_KnobPointer', knob_pointer, 0.012), ('SM_Trim', trim, 0.01),
+    ('SM_Knob', knob, 0.012), ('SM_KnobPointer', knob_pointer, 0.012), ('SM_KnobBar', knob_bar, 0.012),
+    ('SM_Trim', trim, 0.01),
     ('SM_ToggleBase', toggle_base, 0.015), ('SM_ToggleLever', toggle_lever, 0.0), ('SM_LampBezel', lamp_bezel, 0.01),
     ('SM_LampLens', lamp_lens, 0.0), ('SM_ButtonRing', button_ring, 0.01), ('SM_ButtonCap', button_cap, 0.0),
     ('SM_Jack', jack, 0.01), ('SM_Socket', socket, 0.01), ('SM_Latch', latch, 0.01), ('SM_WheelDish', wheel_dish, 0.0),

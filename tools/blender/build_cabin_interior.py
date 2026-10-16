@@ -306,7 +306,7 @@ def circle(cx, cy, r, seg=32):
 # Viewport colours for the preview only; Unreal assigns MI_Cabin_<name> by slot name.
 PREVIEW = {
     'Paint_Interior': (0.62, 0.64, 0.6), 'Paint_Rack': (0.45, 0.47, 0.47), 'Paint_Bench': (0.16, 0.19, 0.15),
-    'Paint_Equipment': (0.2, 0.24, 0.18), 'Paint_Radio': (0.17, 0.2, 0.15), 'Floor_Steel': (0.25, 0.25, 0.24),
+    'Paint_Equipment': (0.2, 0.24, 0.18), 'Paint_Radio': (0.33, 0.35, 0.36), 'Floor_Steel': (0.25, 0.25, 0.24),
     'Rubber_Mat': (0.06, 0.06, 0.06), 'Rubber_Black': (0.03, 0.03, 0.03), 'Vinyl_Olive': (0.16, 0.18, 0.08),
     'Vinyl_Brown': (0.22, 0.09, 0.05), 'Metal_Steel': (0.55, 0.56, 0.57), 'Metal_Dark': (0.12, 0.12, 0.13),
     'Bakelite_Black': (0.02, 0.02, 0.02), 'Glass': (0.2, 0.25, 0.27), 'Lamp_Glass': (1.0, 0.9, 0.7),

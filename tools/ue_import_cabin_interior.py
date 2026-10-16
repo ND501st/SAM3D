@@ -38,7 +38,7 @@ MATERIALS = {
     'Paint_Rack': ((0.095, 0.1, 0.095), 0.55, 0.0, 0.30, 'PaintN', 0.12, 3.0, None),      # dark grey rack frames, posts
     'Paint_Bench': ((0.062, 0.076, 0.055), 0.62, 0.0, 0.55, 'PaintN', 0.45, 1.5, None),   # dark green bench
     'Paint_Equipment': ((0.105, 0.125, 0.075), 0.58, 0.0, 0.45, 'PaintN', 0.40, 2.0, None),
-    'Paint_Radio': ((0.08, 0.105, 0.072), 0.5, 0.0, 0.35, 'PaintN', 0.35, 2.0, None),
+    'Paint_Radio': ((0.2, 0.212, 0.22), 0.46, 0.0, 0.3, 'PaintN', 0.45, 3.0, None),       # R-123M hammer grey (r123_kuzmin, r123m_qrz)
     'Paint_Panel': ((0.53, 0.52, 0.47), 0.5, 0.0, 0.2, 'PaintN', 0.2, 2.0, None),
     'Floor_Steel': ((0.14, 0.14, 0.13), 0.72, 0.15, 0.75, 'PaintN', 0.6, 1.0, None),
     'Rubber_Mat': ((0.018, 0.018, 0.018), 0.85, 0.0, 0.5, 'RibN', 1.0, 1.0, None),

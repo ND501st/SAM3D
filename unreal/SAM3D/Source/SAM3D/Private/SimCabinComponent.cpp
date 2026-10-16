@@ -454,7 +454,10 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	}
 	else if (Control.style == simcore::CabinStyle::Rotary && PartMesh(TEXT("SM_KnobPointer")))
 	{
-		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_KnobPointer")));
+		// The R-123M's T-bar knobs where the layout asks for them and the part is imported; the pointer knob otherwise.
+		UStaticMesh* KnobMesh = Control.look.kind == simcore::CabinLookKind::BarKnob && PartMesh(TEXT("SM_KnobBar"))
+			? PartMesh(TEXT("SM_KnobBar")) : PartMesh(TEXT("SM_KnobPointer"));
+		Item.Moving->SetStaticMesh(KnobMesh);
 		Item.Pointer->SetVisibility(false);
 		Item.bParts = true;
 	}
@@ -938,6 +941,7 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 	{
 	case CabinLookKind::Knob: bDone = Part(TEXT("SM_Knob"), W, Color); break;
 	case CabinLookKind::PointerKnob: bDone = Part(TEXT("SM_KnobPointer"), W, Color); break;
+	case CabinLookKind::BarKnob: bDone = Part(TEXT("SM_KnobBar"), W, Color); break;
 	case CabinLookKind::Trim: bDone = Part(TEXT("SM_Trim"), W, Color); break;
 	case CabinLookKind::Jack: bDone = Part(TEXT("SM_Jack"), W, Color); break;
 	case CabinLookKind::Socket: bDone = Part(TEXT("SM_Socket"), W, Color); break;
@@ -975,6 +979,7 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Disc(W, W, FMath::Min(2.0, 60.0 * W), Color);
 		break;
 	case CabinLookKind::PointerKnob:
+	case CabinLookKind::BarKnob:
 		Disc(W, W, FMath::Min(2.0, 60.0 * W), Color);
 		Box(L + U * (25.0 * W), 0.003, 0.45 * W, 0.2, FLinearColor::White, FMath::Min(2.0, 60.0 * W));
 		break;
