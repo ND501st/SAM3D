@@ -305,8 +305,9 @@ aircraft beside the command post's beliefs.
 * Several Osa internals (exact frequencies, pulse rates) are not public; they are labelled estimates and
   only affect what enemy receivers hear and how jamming bites, not the published ranges.
 * One known gap: over smooth ground the model lets the Osa's tracking radar lock a 50 m target further
-  out (about 25 km) than the published 14 km unless "lock" means reliable detection (then it gives
-  14 km). It is recorded as an open question.
+  out (about 22 km) than the published 14 km, and no definition of "lock" closes it (the detection chance
+  falls smoothly there). It is recorded as an open question; closing it needs a rougher surface or another
+  trials-site effect.
 
 ## 13. How it grows
 

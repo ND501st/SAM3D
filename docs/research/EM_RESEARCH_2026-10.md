@@ -170,8 +170,9 @@ the reflection at microwave but not at VHF. With an antenna-pattern weighting (a
 suppresses the reflection) this model, *with nothing fitted to it*, gives the Osa-AK search radar
 26.2 km against a fighter at 50 m; Korovin's published figure is 27 km. The tracking radar is
 discussed in the Osa spec (§5 there): the Ku-band first lobe lies below 0.1°, so over smooth ground
-a 50 m target is *enhanced*; the published 14 km matches the model's Pd 0.8 range, and the gap at
-Pd 0.5 is an open item. The Osa-AK's own low-target mode (НЛЦ/NLC: the tracking and missile-tracking
+a 50 m target is *enhanced*; the published 14 km is **not** reproduced (the model locks a 50 m target
+at about 22 km). An earlier reading that it matched the Pd 0.8 range was an artefact of one deep multipath
+null in the calibration-check path (found in the E2 review, October 2026); it is an open item. The Osa-AK's own low-target mode (НЛЦ/NLC: the tracking and missile-tracking
 antennas are held at a fixed elevation "to eliminate distortion of the antenna pattern by the
 ground", `mon_2112_80` p17; engaged at 0-06…0-10 mils, `flak11`) is modelled as a minimum pointing
 elevation.

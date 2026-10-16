@@ -446,3 +446,39 @@ Co-operative crews share one node.
 * **Range rings.** `sensors.search.range_rings_m`: per scale, 2, 7 and 12 km on 0-15 km, multiples of 5 km inside the
   others (ePap, `samsim_thread`). The data is loaded; drawing it is up to the display.
 
+
+## 25. Review of the E2 integration against this architecture (11 October 2026)
+
+`simcore/em_link.hpp` (`EmSensorLink`) and its use in `engagement.hpp` were read against sections 1–14. It keeps the
+layering where it matters and the numbers are honest (the 22-of-40 capture rule and the 50 m gap are documented and
+pinned by tests). Findings, most important first:
+
+1. **Truth reaches the crew through `debug_truth_platform`.** Principle 2 says trackers, fusion, AI and displays
+   must not read the `debug_truth_*` fields; `EmSensorLink::TargetOf` does, to turn a sensor track into the
+   scenario's target id (needed to resolve a launch). Consequences: a track that no truth platform produced (chaff,
+   a repeater's false echo, a ghost) has no id and is silently dropped from the crew's picture and cannot be locked;
+   two close targets that the tracker merges show as one id; and the scope can never be fooled. That is acceptable
+   for E2 (no deception yet) but blocks E7. **Fix when deception arrives:** show every confirmed track by its own
+   track number; let the launch resolver (referee side, not the sensor path) pick the nearest truth target to the
+   locked track at launch time.
+2. **Antenna height differs from the calibration height.** The scenario puts the unit at `up_m: 3`; the radars were
+   calibrated with the antenna at 5 m (search) and 4.5 m (tracking) over flat ground, and multipath lobing depends on
+   the height. Low-altitude ranges are therefore a little off the calibrated check. **Fix:** take the platform's
+   antenna height from the radar definition (`antenna_height_m`) or put the scenario's `up_m` at the same value.
+3. **Capture constants are code, not data.** `kCaptureLooks`/`kCaptureHits` (22 of 40) are `static constexpr` in the
+   link; game-balance numbers belong in `data/gameplay/` like the other thresholds. **Fix:** move them into the
+   tuning file with the reasoning that is currently in the header comment.
+4. **Chaff and jammers are not connected.** The link's `EmWorld` has one platform for the unit and the targets; no
+   jammer, chaff, ESM, node or net exists in it. That matches E2's scope; E4/E6/E7 add them (the scenario file will
+   need `jammers`, `chaff` and node blocks).
+5. **No knowledge layer for the unit.** The picture the crew sees comes straight from the radar tracker, not from a
+   node's `KnowledgeBase`. Fine now; when the PU-12 (phase 7) feeds designations, the vehicle should become a
+   `NodeState` so network tracks and its own radar tracks fuse (E4).
+6. **The `Contact::beam` map and the look record are state outside the EM scene** (`beam_of_`, `look_record_`): they
+   are rebuilt per run and deterministic, so replays are unaffected, but they do not appear in the overlays.
+7. **Doc correction found on the way:** E0 claimed the tracking radar's published 14 km at 50 m was reproduced at
+   Pd 0.8; the E2 work showed that came from one deep multipath null in the flat-ground check path. The spec, research
+   report, explainer and a test comment were corrected on this branch.
+
+Nothing found contradicts determinism (one seed through `EmWorld`), the update rates (0.1 s ticks inside the scenario
+step) or the data rules.

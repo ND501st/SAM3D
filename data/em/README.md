@@ -7,6 +7,7 @@ loaded by `simcore/em/data.hpp` (`LoadEmLibraryFile`) and used by the EM layer
 | File | Provenance | Contents |
 |---|---|---|
 | `osa_ak.json` | `per_value` | 9K33M2 Osa-AK search and tracking radars, R-123M radio, NATO's view of the SA-8 (blue threat library). Every value cited; spec and open items in `docs/research/OSA_EM_SPEC_2026-10.md` |
+| `nato_1985.json` | `per_value` | NATO-era fighter radar, RWR, ESM station and stand-off jammer classes, and each side's threat library about the other; band/year facts cited, the rest labelled estimates (`docs/research/EM_E1_NATO_DATA_2026-10.md`) |
 | `generic.json` | `placeholder` | Round generic numbers for tests, the MVP demo and the viewer. **Not data for any real system** |
 
 ## Rules
