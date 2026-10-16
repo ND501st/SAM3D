@@ -38,6 +38,7 @@
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/console_sync.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
@@ -60,12 +61,8 @@ public:
             const double u = Uniform01(rng_);
             const double reaction = c.reaction_time_s + (2.0 * u - 1.0) * c.reaction_jitter_s;
             crew_.emplace_back(c.name, c.role, reaction);
-            if (engagement_on_) {
-                aim_crew_.azimuth = aim_crew_.azimuth || c.role == def_.tuning.aim_az_role;
-                aim_crew_.elevation = aim_crew_.elevation || c.role == def_.tuning.aim_el_role;
-                aim_crew_.range = aim_crew_.range || c.role == def_.tuning.aim_range_role;
-            }
         }
+        UpdateAimCrew();
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
         const ReadinessState* ready_state = console_.FindReadiness(def_.readiness);
         targets_.resize(def_.targets.size());
@@ -127,7 +124,10 @@ public:
         CheckLaunch();
         CheckEmergencyLaunch();
         console_.panel.ReleaseMomentaries();
-        for (CrewMember& c : crew_) c.Update(dt, console_.panel, &console_.equipment);
+        for (CrewMember& c : crew_) {
+            if (!SeatHolder(c.Role()).empty()) continue;  // a player sits there
+            c.Update(dt, console_.panel, &console_.equipment);
+        }
         player_.Update(dt);
         log_.CollectEquipment(console_.equipment);
         for (CrewMember& c : crew_) log_.CollectCrew(c, time_);
@@ -192,11 +192,7 @@ public:
     void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
         const double delay = comms_ ? comms_->OrderDelayS(crew.Role(), console_) : 0.0;
         if (delay <= 0.0) {
-            if (queue) {
-                crew.Queue(procedure);
-            } else {
-                crew.Order(procedure);
-            }
+            Hand(crew, procedure, queue);
             return;
         }
         pending_orders_.push_back({time_ + delay, crew.Name(), &procedure, queue});
@@ -267,6 +263,97 @@ public:
     bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
 
     const ProcedureTracker& PlayerTracker() const { return player_; }
+    // Which wheels the NPC crew aims (none at a seat a player holds).
+    AimCrew AimFlags() const { return aim_crew_; }
+
+    // ---- Multiplayer crew: players in the crew's seats (one per station role).
+    // A player in a seat replaces the NPC there: the NPC stops acting (and stops aiming its wheel), and orders for that
+    // seat become the player's procedure, judged in the debrief under the player's name. A player may only work the
+    // controls of their own station (a control with no station is anyone's). The server calls these on behalf of the
+    // players; each player's machine mirrors the console (console_sync.hpp).
+
+    // Take a seat. False for a role the console doesn't have, or a seat another player holds.
+    bool TakeSeat(const std::string& role, const std::string& player) {
+        if (player.empty() || (!console_.stations.empty() && console_.FindStation(role) == nullptr)) return false;
+        for (Seat& st : seats_) {
+            if (st.role != role) continue;
+            if (st.player != player) return false;
+            return true;
+        }
+        Seat st;
+        st.role = role;
+        st.player = player;
+        if (CrewMember* c = CrewAt(role)) {
+            // the NPC's current work passes to the player
+            if (c->IsBusy()) st.tracker = c->Tracker();  // carry on where the NPC was
+            c->CancelOrder();
+        }
+        seats_.push_back(st);
+        UpdateAimCrew();
+        log_.Record({time_, DebriefEntry::Kind::Scenario, player, role, "takes the seat"});
+        return true;
+    }
+    void LeaveSeat(const std::string& role) {
+        for (std::size_t i = 0; i < seats_.size(); ++i) {
+            if (seats_[i].role != role) continue;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, seats_[i].player, role, "leaves the seat (the NPC takes over)"});
+            seats_.erase(seats_.begin() + static_cast<std::ptrdiff_t>(i));
+            UpdateAimCrew();
+            return;
+        }
+    }
+    // Who sits there ("" for the NPC).
+    std::string SeatHolder(const std::string& role) const {
+        for (const Seat& st : seats_)
+            if (st.role == role) return st.player;
+        return std::string();
+    }
+    // The procedure the player in a seat is being judged against (null: no player there).
+    const ProcedureTracker* SeatTracker(const std::string& role) const {
+        for (const Seat& st : seats_)
+            if (st.role == role) return &st.tracker;
+        return nullptr;
+    }
+    bool SetSeatProcedure(const std::string& role, const std::string& procedure_id) {
+        Seat* st = FindSeat(role);
+        if (st == nullptr) return false;
+        if (procedure_id.empty()) {
+            st->tracker.Reset(Procedure{});
+            return true;
+        }
+        const Procedure* p = console_.FindProcedure(procedure_id);
+        if (p == nullptr) return false;
+        st->tracker.Reset(*p);
+        log_.Record({time_, DebriefEntry::Kind::Started, st->player, procedure_id, std::string()});
+        return true;
+    }
+    // A seated player moves a control. Blocked (with `why`) if no player sits there or it is another station's control.
+    StepResult SeatSet(const std::string& role, const std::string& control_id, int position, std::string* why = nullptr) {
+        Seat* st = FindSeat(role);
+        if (st == nullptr) {
+            if (why != nullptr) *why = "nobody sits at '" + role + "'";
+            return StepResult::Blocked;
+        }
+        if (!AtStation(role, control_id, why)) return StepResult::Blocked;
+        const bool was_complete = st->tracker.IsComplete();
+        const StepResult r = st->tracker.Attempt(console_.panel, control_id, position, &console_.equipment);
+        log_.RecordAttempt(time_, st->player, st->tracker, r);
+        if (!was_complete && st->tracker.IsComplete() && !st->tracker.GetProcedure().id.empty()) {
+            log_.Record({time_, DebriefEntry::Kind::Completed, st->player, st->tracker.GetProcedure().id, std::string()});
+            if (!st->queued.empty()) {
+                const Procedure* next = console_.FindProcedure(st->queued.front());
+                st->queued.erase(st->queued.begin());
+                if (next != nullptr) st->tracker.Reset(*next);
+            }
+        }
+        return r;
+    }
+    bool SeatTurn(const std::string& role, const std::string& wheel_id, double value, std::string* why = nullptr) {
+        if (FindSeat(role) == nullptr || !AtStation(role, wheel_id, why)) return false;
+        return console_.panel.SetValue(wheel_id, value);
+    }
+    // The console's whole state for the players' machines (console_sync.hpp).
+    std::vector<std::uint8_t> ConsoleSnapshot(std::uint32_t seq) const { return EncodeConsoleState(console_, seq, time_); }
     static constexpr const char* kPlayerName = "Player";
 
     // Distance from the unit to a target, or a negative number if it isn't in the air.
@@ -417,13 +504,7 @@ private:
             }
             const PendingOrder o = pending_orders_[i];
             pending_orders_.erase(pending_orders_.begin() + static_cast<std::ptrdiff_t>(i));
-            if (CrewMember* c = Crew(o.crew)) {
-                if (o.queue) {
-                    c->Queue(*o.procedure);
-                } else {
-                    c->Order(*o.procedure);
-                }
-            }
+            if (CrewMember* c = Crew(o.crew)) Hand(*c, *o.procedure, o.queue);
         }
     }
 
@@ -646,6 +727,68 @@ private:
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
+
+    struct Seat {
+        std::string role;
+        std::string player;
+        ProcedureTracker tracker;
+        std::vector<std::string> queued;  // procedures ordered while one was under way
+    };
+    std::vector<Seat> seats_;
+
+    Seat* FindSeat(const std::string& role) {
+        for (Seat& st : seats_)
+            if (st.role == role) return &st;
+        return nullptr;
+    }
+    CrewMember* CrewAt(const std::string& role) {
+        for (CrewMember& c : crew_)
+            if (c.Role() == role) return &c;
+        return nullptr;
+    }
+    bool AtStation(const std::string& role, const std::string& control_id, std::string* why) const {
+        const ControlDef* d = console_.panel.Find(control_id);
+        if (d == nullptr) {
+            if (why != nullptr) *why = "no control '" + control_id + "'";
+            return false;
+        }
+        if (!d->station.empty() && d->station != role) {
+            if (why != nullptr) *why = "'" + control_id + "' is at the " + d->station + "'s station";
+            return false;
+        }
+        return true;
+    }
+    // An order reaches a crew member, or the player in that seat.
+    void Hand(CrewMember& crew, const Procedure& procedure, bool queue) {
+        if (Seat* st = FindSeat(crew.Role())) {
+            const bool busy = !st->tracker.IsComplete() && !st->tracker.GetProcedure().id.empty();
+            if (queue && busy) {
+                st->queued.push_back(procedure.id);
+            } else {
+                st->tracker.Reset(procedure);
+                st->queued.clear();
+            }
+            log_.Record({time_, DebriefEntry::Kind::Scenario, st->player, procedure.id,
+                         std::string(queue && busy ? "order queued for the player" : "order for the player")});
+            return;
+        }
+        if (queue) {
+            crew.Queue(procedure);
+        } else {
+            crew.Order(procedure);
+        }
+    }
+    // NPCs aim the wheels of the roles they sit in, unless a player sits there.
+    void UpdateAimCrew() {
+        aim_crew_ = AimCrew{};
+        if (!engagement_on_) return;
+        for (const CrewMember& c : crew_) {
+            if (!SeatHolder(c.Role()).empty()) continue;
+            aim_crew_.azimuth = aim_crew_.azimuth || c.Role() == def_.tuning.aim_az_role;
+            aim_crew_.elevation = aim_crew_.elevation || c.Role() == def_.tuning.aim_el_role;
+            aim_crew_.range = aim_crew_.range || c.Role() == def_.tuning.aim_range_role;
+        }
+    }
     std::vector<EngagementTarget> eng_targets_;
     std::vector<CrewMember> crew_;
     ProcedureTracker player_;  // empty procedure = free play

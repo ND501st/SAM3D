@@ -56,6 +56,7 @@ add_executable(simcore_tests
   tests/test_c2_sources.cpp
   tests/test_em_deception.cpp
   tests/test_em_replication.cpp
+  tests/test_crew_seats.cpp
   tests/test_comms.cpp
   tests/test_fuel.cpp)
 simcore_configure_target(simcore_tests)
