@@ -209,3 +209,21 @@ SC_TEST("em replication: soak, 10 minutes over a lossy channel: the client alway
     SC_EXPECT(server.Keyframes(red) < server.Packets(red) / 4);
     SC_EXPECT(kb_s < 8.0);
 }
+
+SC_TEST("em replication: a player moved to another node gets the new node's view on the same stream") {
+    Scene sc;
+    sc.Run(300);
+    KnowledgeReplicator server;
+    const int c = server.AddClient(sc.red_node);
+    KnowledgeMirror m;
+    std::uint32_t ack = 0;
+    SC_EXPECT(m.Receive(server.Produce(c, sc.w.Scene()), &ack));
+    server.Ack(c, ack);
+    server.SetNode(c, sc.blue_node);
+    SC_EXPECT(server.Node(c) == sc.blue_node && server.ClientCount() == 1);
+    sc.Run(5);
+    SC_EXPECT(m.Receive(server.Produce(c, sc.w.Scene()), &ack));
+    SC_EXPECT(m.View().node == sc.blue_node);
+    SC_EXPECT(EncodeView(m.View()) == EncodeView(*server.Sent(c, ack)));
+    SC_EXPECT(server.Keyframes(c) == 1);  // the switch went as a delta
+}

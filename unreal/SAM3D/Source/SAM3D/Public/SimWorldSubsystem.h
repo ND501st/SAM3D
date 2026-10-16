@@ -7,6 +7,7 @@
 #include "SimWorldSubsystem.generated.h"
 
 class ACesium3DTileset;
+class USimKnowledgeComponent;
 class ACesiumGeoreference;
 
 /** Snapshot of one simulated entity, converted to Unreal units (cm, degrees). */
@@ -360,6 +361,23 @@ public:
 
 	const FSimEmLayer* GetEmLayer() const { return EmLayer.Get(); }
 
+	// ------------------------------------------------------------------ multiplayer knowledge (roadmap E10)
+
+	/** Server: a player's knowledge component starts or stops receiving its node's view (USimKnowledgeComponent). */
+	void RegisterKnowledgeClient(USimKnowledgeComponent* Client);
+	void UnregisterKnowledgeClient(USimKnowledgeComponent* Client);
+	/** Server: the player holds view `Seq`; the next delta is taken from it. */
+	void AckKnowledge(USimKnowledgeComponent* Client, uint32 Seq);
+	/** Server: send each registered player its view when its period is up (called after the sim steps). */
+	void PumpKnowledge();
+
+	/** The EM scene players' knowledge comes from: the scenario's EM layer, else the EM demo (null: none). */
+	const simcore::em::EmScene* GetActiveEmScene() const;
+
+	/** The node a knowledge component with NodeId 0 sees: the scenario unit's own node (0: none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Knowledge")
+	int32 GetDefaultKnowledgeNode() const;
+
 	// ------------------------------------------------------------------ both modes
 
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
@@ -442,4 +460,9 @@ private:
 
 	// Electromagnetic layer (runs on the active sim world's origin and terrain; stopped when they change).
 	TUniquePtr<FSimEmLayer> EmLayer;
+
+	// Multiplayer knowledge: one stream per registered player (simcore/em/replication.hpp).
+	TUniquePtr<simcore::em::KnowledgeReplicator> Replicator;
+	TArray<TWeakObjectPtr<USimKnowledgeComponent>> KnowledgeClients;
+	double LastKnowledgeSimTime = -1.0;
 };
