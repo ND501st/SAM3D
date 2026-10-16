@@ -494,6 +494,18 @@ ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& Contr
 	{
 		return ESimPlayerActionResult::Invalid;
 	}
+	// A single player who took the control's seat (T in the cabin, docs/crew/08): his move goes through the seat, so the
+	// orders he was given there (and the NPC commander watching them) see it.
+	if (const simcore::ControlDef* Def = Runner->Console().panel.Find(ToStd(ControlId)))
+	{
+		if (!Def->station.empty() && !Runner->SeatHolder(Def->station).empty())
+		{
+			std::string Why;
+			const simcore::StepResult R = Runner->SeatSet(Def->station, ToStd(ControlId), Position, &Why);
+			BroadcastNewDebriefEntries();
+			return ToActionResult(R);
+		}
+	}
 	const simcore::StepResult Result = Runner->PlayerSet(ToStd(ControlId), Position);
 	BroadcastNewDebriefEntries();
 	switch (Result)
@@ -523,6 +535,17 @@ bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 			}
 			std::string Why;
 			return Runner && Runner->SeatTurn(ToStd(Seat->SeatRole), ToStd(ControlId), Value, &Why);
+		}
+	}
+	if (Runner && !IsMirrorOnly())
+	{
+		if (const simcore::ControlDef* Def = Runner->Console().panel.Find(ToStd(ControlId)))
+		{
+			if (!Def->station.empty() && !Runner->SeatHolder(Def->station).empty())
+			{
+				std::string Why;
+				return Runner->SeatTurn(Def->station, ToStd(ControlId), Value, &Why);
+			}
 		}
 	}
 	return Runner && !IsMirrorOnly() && Runner->PlayerTurn(ToStd(ControlId), Value);
@@ -741,6 +764,90 @@ FSimDrillAdvice USimWorldSubsystem::GetDrillAdvice(const FString& Station, const
 		Out.Why.Add(ToF(W));
 	}
 	return Out;
+}
+
+bool USimWorldSubsystem::IsCrewTaskDone(const FString& TaskId) const
+{
+	if (!Runner || !Runner->Def().has_crew_data)
+	{
+		return false;
+	}
+	const simcore::CrewTask* Task = Runner->Def().crew_data.FindTask(ToStd(TaskId));
+	const simcore::ConsoleData& C = Runner->Console();
+	return Task != nullptr && C.equipment.AllHold(Task->conditions, C.panel);
+}
+
+TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station) const
+{
+	TArray<FSimCrewMenuEntry> Out;
+	if (!Runner || !Runner->Def().has_crew_data)
+	{
+		return Out;
+	}
+	const simcore::CrewData& Crew = Runner->Def().crew_data;
+	const std::string Seat = ToStd(Station);
+	if (Seat == "commander")
+	{
+		for (const simcore::OrderDef& O : Crew.orders)
+		{
+			if (const simcore::CalloutDef* C = Crew.FindCallout(O.callout))
+			{
+				Out.Add({ToF(C->id), ToF(C->ru), ToF(C->en), true});
+			}
+		}
+		return Out;
+	}
+	for (const simcore::CalloutDef& C : Crew.callouts)
+	{
+		if (C.kind == simcore::CalloutKind::Report && (C.from == Seat || C.from == "any"))
+		{
+			Out.Add({ToF(C.id), ToF(C.ru), ToF(C.en), false});
+		}
+	}
+	return Out;
+}
+
+bool USimWorldSubsystem::AssignBatteryTarget(const FString& Callsign, const FString& Target)
+{
+	return Runner && Runner->AssignBatteryTarget(ToStd(Callsign), ToStd(Target));
+}
+
+TArray<FSimBatteryShooter> USimWorldSubsystem::GetBatteryShooters() const
+{
+	TArray<FSimBatteryShooter> Out;
+	const simcore::BatteryFire* Fire = Runner ? Runner->GetBatteryFire() : nullptr;
+	if (Fire == nullptr)
+	{
+		return Out;
+	}
+	for (const simcore::BatteryFire::Shooter& S : Fire->Shooters())
+	{
+		FSimBatteryShooter O;
+		O.Callsign = ToF(S.callsign);
+		O.Missiles = S.missiles;
+		O.Target = ToF(S.target);
+		O.bDeployed = S.deployed;
+		switch (S.phase)
+		{
+		case simcore::BatteryFire::Phase::Idle: O.Phase = TEXT("idle"); break;
+		case simcore::BatteryFire::Phase::Acquiring: O.Phase = TEXT("acquiring"); break;
+		case simcore::BatteryFire::Phase::Tracking: O.Phase = TEXT("tracking"); break;
+		case simcore::BatteryFire::Phase::Preparing: O.Phase = TEXT("preparing"); break;
+		case simcore::BatteryFire::Phase::InFlight: O.Phase = TEXT("missile in flight"); break;
+		}
+		Out.Add(O);
+	}
+	return Out;
+}
+
+bool USimWorldSubsystem::PlayerSay(const FString& Station, const FString& CalloutId)
+{
+	return Runner && Runner->PlayerSay(ToStd(Station), ToStd(CalloutId));
+}
+
+FString USimWorldSubsystem::GetCrewSeatHolder(const FString& Station) const
+{
+	return Runner ? ToF(Runner->SeatHolder(ToStd(Station))) : FString();
 }
 
 FString USimWorldSubsystem::GetTrackedTarget() const

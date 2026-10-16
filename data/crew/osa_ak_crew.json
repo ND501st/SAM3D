@@ -6,6 +6,10 @@
   "source": "voenizdat_osa_1991 pp246-258 (the К бою drill and its reports); flak11 and wrk (seats and duties); sam3d for the rest",
   "confidence": "medium",
 
+  "decisions": { "controls": ["fo.launch"],
+                 "source": "sam3d: the moment of launch is the deputy commander's judgement (voenizdat_osa_1991 p257: the first missile to meet the target at the far edge of the zone); its delay is the tier's launch_timing_s",
+                 "confidence": "estimate" },
+
   "seats": [
     { "station": "commander", "number": 0, "title_ru": "Командир боевой машины", "title_en": "Vehicle commander",
       "duties": ["Commands the crew", "Takes designations and orders from the PU-12 on the right R-123M and passes them on", "Decides the target, fire and cease fire", "Hatches and the search antenna's mast", "Reports to the battery"],
@@ -108,6 +112,8 @@
     { "id": "launcher_empty", "kind": "report", "from": "deputy_commander", "to": "commander", "ru": "Ракет нет!", "en": "No missiles left!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "fault", "kind": "report", "from": "any", "to": "commander", "ru": "Отказ: {what}!", "en": "Fault: {what}!", "priority": 0, "source": "sam3d", "confidence": "estimate" },
     { "id": "report_ready", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign} к бою готов, каналы {channels}, ракет {missiles}!", "en": "{callsign} ready for action, channels {channels}, {missiles} missiles!", "priority": 1, "source": "voenizdat_osa_1991 p246 (к бою готов, with channels and missiles)", "confidence": "high" },
+    { "id": "order_assign", "kind": "radio", "from": "battery", "to": "battery", "ru": "{callsign}, цель {number} — уничтожить!", "en": "{callsign}, destroy target {number}!", "priority": 0, "source": "sam3d (the battery commander's fire distribution on the battery net)", "confidence": "estimate" },
+    { "id": "report_launch", "kind": "radio", "from": "any", "to": "battery", "ru": "{callsign}: пуск по цели {number}!", "en": "{callsign}: launch at target {number}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "report_result", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign}: цель {number} поражена, израсходовано {spent}!", "en": "{callsign}: target {number} destroyed, {spent} spent!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "request_tzm", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign}: ракет нет, прошу ТЗМ!", "en": "{callsign}: out of missiles, request the TZM!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
 
@@ -141,7 +147,7 @@
     { "callout": "order_antenna_up", "procedures": [ { "station": "commander", "procedure": "raise_search_antenna" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_radio_on", "procedures": [ { "station": "driver", "procedure": "radio_left_on" }, { "station": "commander", "procedure": "radio_right_on" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_search", "task": "searching", "procedures": [ { "station": "senior_operator", "procedure": "acquire_with_soc" } ], "source": "sam3d", "confidence": "estimate" },
-    { "callout": "order_search_on_march", "procedures": [ { "station": "senior_operator", "procedure": "search_on_march" } ], "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_search_on_march", "task": "searching_on_march", "procedures": [ { "station": "senior_operator", "procedure": "search_on_march" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_stop_search", "procedures": [ { "station": "senior_operator", "procedure": "stop_search" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_take_target", "task": "captured",
       "procedures": [ { "station": "senior_operator", "procedure": "azimuth_onto_target" }, { "station": "deputy_commander", "procedure": "ready_capture" },
@@ -160,6 +166,10 @@
     { "id": "powered", "name": "Power on", "conditions": [ { "subsystem": "power", "is": "ready" } ],
       "prefer": [ { "subsystem": "gta", "is": "ready" } ], "source": "voenizdat_osa_1991 p246 (К бою, включить ГТА)", "confidence": "medium" },
     { "id": "searching", "name": "Searching with the SOC", "conditions": [ { "subsystem": "soc_antenna", "is": "ready" }, { "subsystem": "soc_transmitter", "is": "ready" } ], "source": "sam3d", "confidence": "estimate" },
+    { "id": "searching_on_march", "name": "Searching with the SOC on the move",
+      "conditions": [ { "subsystem": "soc_antenna", "is": "ready" }, { "subsystem": "soc_transmitter", "is": "ready" } ],
+      "prefer": [ { "subsystem": "gta", "is": "ready" } ],
+      "source": "wrk (search possible on the move, on the turbine: the take-off generator works only at a halt)", "confidence": "medium" },
     { "id": "ready_halted", "name": "Ready for action at a halt (к бою готов)",
       "conditions": [ { "subsystem": "power", "is": "ready" }, { "subsystem": "soc_antenna", "is": "ready" }, { "subsystem": "soc_transmitter", "is": "ready" },
                       { "subsystem": "antenna_drives", "is": "ready" }, { "subsystem": "tov_camera", "is": "ready" }, { "subsystem": "fire_control_computer", "is": "ready" },

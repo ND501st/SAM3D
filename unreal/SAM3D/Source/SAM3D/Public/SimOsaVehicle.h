@@ -152,6 +152,36 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetCabinStationLabel() const { return StationLabel; }
 
+	// ---- The crew (phase 8, docs/crew/): H the training overlay, O the crew menu (orders at the commander's seat,
+	// reports elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back.
+
+	/** The training overlay is on: the drill master's next move for this seat is highlighted (refreshed each second). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	bool IsAssistOn() const { return bAssist; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FSimDrillAdvice GetAdvice() const { return Advice; }
+
+	/** The task the overlay aims at: К бою until ready, then the capture, then the launch. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetAssistTask() const { return AssistTask; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	bool IsCrewMenuOpen() const { return bMenuOpen; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	TArray<FSimCrewMenuEntry> GetCrewMenuEntries() const { return MenuEntries; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	int32 GetCrewMenuPage() const { return MenuPage; }
+
+	/** This seat's console id, and whether the player holds it (true) or its NPC works it. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetStationId() const { return StationId; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	bool IsHoldingSeat() const { return bHoldingSeat; }
+
 	/**
 	 * Hands-free test mode: enter the cabin and step through every seat and a close-up of every instrument,
 	 * SecondsPerView each, round and round, logging each view (LogSAM3D). Lets a run be checked from screenshots
@@ -223,6 +253,7 @@ private:
 	void ShowFeedback(ESimPlayerActionResult Result);
 	void UpdateTour(float DeltaSeconds);
 	void ShowTourView();
+	void HandleCrew(class APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds);
 
 	double SpeedMps = 0.0;
 	double HeadingDeg = 0.0;
@@ -242,6 +273,16 @@ private:
 	bool bViewOverride = false;
 	FVector OverrideLocation = FVector::ZeroVector;
 	FRotator OverrideRotation = FRotator::ZeroRotator;
+
+	bool bAssist = false;
+	float AssistClock = 0.0f;
+	FString AssistTask;
+	FSimDrillAdvice Advice;
+	bool bMenuOpen = false;
+	int32 MenuPage = 0;
+	TArray<FSimCrewMenuEntry> MenuEntries;
+	FString StationId;
+	bool bHoldingSeat = false;
 
 	bool bTouring = false;
 	float TourSecondsPerView = 6.0f;

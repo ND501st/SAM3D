@@ -346,10 +346,29 @@ SC_TEST("drill master: the cost of a move: none for the best one, the goal lost 
     const DrillMaster dm(o.console, &o.crew);
     const DrillGoal goal = TaskOf(o, "ready_halted");
     SC_EXPECT_NEAR(dm.CostOf(goal, o.console, "pwr.gta", 1), 0.0, 1e-9);
-    // Unlocking the АПУ while the vehicle is still moving faults it (its prerequisite is a halted vehicle).
+    // Unlocking the АПУ while the vehicle is still moving faults it (its prerequisite is a halted vehicle): the cost is
+    // the recovery (lock it again, halt, unlock), not the goal lost.
     Osa m;
     const DrillMaster dm2(m.console, &m.crew);
-    SC_EXPECT(dm2.CostOf(goal, m.console, "apu.lock", 1, 600.0) >= 600.0);
+    const double cost = dm2.CostOf(goal, m.console, "apu.lock", 1, 600.0);
+    std::printf("    unlocking on the move costs %.1f s\n", cost);
+    SC_EXPECT(cost > 0.5 && cost < 600.0);
+}
+
+SC_TEST("drill master: from a faulted subsystem it plans the recovery: off, the prerequisite, on again") {
+    Osa o;  // moving
+    o.console.panel.Set("apu.lock", 1);
+    o.console.equipment.Update(0.0, o.console.panel);
+    SC_EXPECT(o.console.equipment.State("apu_free") == SubsystemState::Fault);
+    const DrillMaster dm(o.console, &o.crew);
+    const IdealTimeline tl = dm.Ideal(TaskOf(o, "ready_halted"), o.console);
+    SC_EXPECT(tl.reached);
+    double off_s = -1.0, on_s = -1.0;
+    for (const DrillAction& a : tl.actions) {
+        if (a.control == "apu.lock" && a.position == 0 && off_s < 0.0) off_s = a.time_s;
+        if (a.control == "apu.lock" && a.position == 1 && off_s >= 0.0 && on_s < 0.0) on_s = a.time_s;
+    }
+    SC_EXPECT(off_s >= 0.0 && on_s > off_s);
 }
 
 // ------------------------------------------------------------------------------------------ 8.4 callouts
@@ -477,4 +496,269 @@ SC_TEST("drill master: a task's order lends its drills (К бою's autonomous s
     const DrillPlan plan = dm.Plan(dm.GoalFor(*o.crew.FindTask("ready_halted")), o.console.panel, o.console.equipment);
     const DrillPlan::Seat* so = plan.FindSeat("senior_operator");
     SC_EXPECT(so != nullptr && so->procedures == std::vector<std::string>{"acquire_with_soc"});
+}
+
+// ------------------------------------------------------------------------------------------ 8.5 knowledge
+
+SC_TEST("knowledge: the operator puts the range on what the senior operator told him, not on the truth") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    const double start = r->Console().panel.GetValue("ssc.range_wheel");
+    double told_s = -1.0, moved_s = -1.0;
+    while (!r->Finished() && r->Time() < 460.0 && moved_s < 0.0) {
+        r->Step(0.1);
+        const CrewPicture* p = r->PictureOf("operator");
+        const KnownTarget* k = p != nullptr ? p->Find("t1") : nullptr;
+        if (told_s < 0.0 && k != nullptr) {
+            told_s = r->Time();
+            SC_EXPECT(k->source == "told by Senior operator");
+        }
+        if (std::fabs(r->Console().panel.GetValue("ssc.range_wheel") - start) > 1.0) moved_s = r->Time();
+    }
+    std::printf("    told at %.1f s, range wheel moved at %.1f s\n", told_s, moved_s);
+    SC_EXPECT(told_s > 0.0 && moved_s >= told_s);
+}
+
+SC_TEST("knowledge: a crewmate who misses a report says Повторите and learns it from the repeat") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_crew_practice.json", kData, def, console));
+    for (SkillTier& t : def.skills.tiers) {
+        if (t.id == "class3") t.miss_chance = 1.0;  // the operator's tier: he never takes a report in the first time
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (!r.Finished() && r.Time() < 360.0) r.Step(0.1);
+    SC_EXPECT(r.SayAgains() >= 1);
+    const KnownTarget* k = r.PictureOf("operator") != nullptr ? r.PictureOf("operator")->Find("t1") : nullptr;
+    SC_EXPECT(k != nullptr && k->has_range);
+    bool repeated = false;
+    for (const SpokenCallout& s : r.Callouts()->Log()) repeated = repeated || (s.id == "contact" && s.repeats > 0);
+    SC_EXPECT(repeated);
+}
+
+SC_TEST("knowledge: with a silent player at the search scope the commander never hears of the target; his report starts the crew") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->TakeSeat("senior_operator", "Player"));
+    // The player switches his search radar on, but says nothing.
+    for (const auto& s : std::vector<std::pair<std::string, int>>{{"soc.search", 1}, {"soc.hv_cover", 1}, {"soc.hv", 1}, {"soc.range", 2}}) {
+        r->PlayerSet(s.first, s.second);
+    }
+    while (r->Time() < 420.0) r->Step(0.1);
+    SC_EXPECT(!r->Engagement().SearchPicture().empty());  // the target is on his scope
+    SC_EXPECT(r->PictureOf("commander") == nullptr || r->PictureOf("commander")->Find("t1") == nullptr);
+    SC_EXPECT(r->Debrief().find("started    ready_capture") == std::string::npos);
+    SC_EXPECT(r->PlayerSay("senior_operator", "contact"));
+    for (int i = 0; i < 100; ++i) r->Step(0.1);
+    SC_EXPECT(r->PictureOf("commander")->Find("t1") != nullptr);
+    SC_EXPECT(r->Debrief().find("started    ready_capture") != std::string::npos);
+}
+
+SC_TEST("stress: jamming on the crew's own radars stresses the crew") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_jamming_em.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    bool stressed = false;
+    while (!r.Finished() && r.Time() < 700.0) {
+        r.Step(0.1);
+        stressed = stressed || r.Crew("Operator")->Stressed();
+    }
+    SC_EXPECT(stressed);
+}
+
+// ------------------------------------------------------------------------------------------ 8.2 calibration
+
+namespace {
+// A ready crew, all at one tier, run by its NPC commander, against a fighter that appears inside the zone: the time
+// from the first echo on the search scope to the launch (the published "detection to launch").
+double DetectionToLaunch(const std::string& tier, unsigned seed) {
+    std::string t = R"JSON({ "scenario_id": "cal", "name": "Calibration", "source": "sam3d", "confidence": "estimate", "seed": SEED,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "crew_commander": "npc",
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 } },
+      "crew": [ { "name": "Commander", "role": "commander", "skill": "TIER" }, { "name": "Deputy commander", "role": "deputy_commander", "skill": "TIER" },
+                { "name": "Senior operator", "role": "senior_operator", "skill": "TIER" }, { "name": "Operator", "role": "operator", "skill": "TIER" },
+                { "name": "Driver", "role": "driver", "skill": "TIER" } ],
+      "targets": [ { "id": "t1", "name": "Fighter (placeholder)", "class": "fighter", "start": { "east_m": 800, "north_m": 9500, "up_m": 1000 },
+                     "waypoints": [ { "east_m": 800, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150, "rcs_m2": 3, "appear_at_s": 40 } ],
+      "triggers": [], "end": { "time_limit_s": 200 } })JSON";
+    t = ReplaceAll(ReplaceAll(t, "TIER", tier), "SEED", std::to_string(seed));
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    if (!LoadScenario(t, kData, def, console, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return -1.0;
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    double seen = -1.0;
+    while (!r.Finished() && r.Time() < 200.0) {
+        r.Step(0.1);
+        if (seen < 0.0 && !r.Engagement().SearchPicture().empty()) seen = r.Time();
+        if (r.Launches() > 0) return seen >= 0.0 ? r.Time() - seen : -1.0;
+    }
+    return -1.0;
+}
+
+double MeanDetectionToLaunch(const std::string& tier) {
+    double sum = 0.0;
+    int n = 0;
+    for (unsigned seed = 1; seed <= 5; ++seed) {
+        const double t = DetectionToLaunch(tier, seed);
+        if (t > 0.0) {
+            sum += t;
+            ++n;
+        }
+    }
+    return n > 0 ? sum / n : -1.0;
+}
+}  // namespace
+
+SC_TEST("calibration: detection to launch falls in the published 26-40 s for trained crews, longer for recruits") {
+    const double master = MeanDetectionToLaunch("master"), c1 = MeanDetectionToLaunch("class1"), c2 = MeanDetectionToLaunch("class2"),
+                 c3 = MeanDetectionToLaunch("class3"), rec = MeanDetectionToLaunch("recruit");
+    std::printf("    detection to launch (mean of 5): master %.1f s, 1st class %.1f s, 2nd %.1f s, 3rd %.1f s, recruit %.1f s\n", master,
+                c1, c2, c3, rec);
+    SC_EXPECT(master > 0.0 && c1 > 0.0 && c2 > 0.0 && c3 > 0.0 && rec > 0.0);
+    SC_EXPECT(master < c2 && c2 < rec);
+    SC_EXPECT(c1 >= 24.0 && c1 <= 40.0);  // nvo_2015, korovin_tiv_2010: 26-40 s (27-39 s for the Osa-AK)
+    SC_EXPECT(c3 >= 26.0 && c3 <= 42.0);
+    SC_EXPECT(rec > 40.0);
+}
+
+// ------------------------------------------------------------------------------------------ 8.6 march and logistics
+
+SC_TEST("npc commander: on the march he searches on the move and stops the vehicle at once for a hostile inside 20 km") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const std::string text = ReplaceAll(ReadFile(kData + "/scenarios/osa_crew_practice.json"), "\"inputs\": { \"vehicle_stopped\": true }",
+                                        "\"inputs\": { \"vehicle_stopped\": false }");
+    SC_EXPECT(LoadScenario(text, kData, def, console, &e));
+    ScenarioRunner r(std::move(def), std::move(console));
+    double halted_s = -1.0, halt_range_m = -1.0;
+    while (!r.Finished() && r.Time() < 800.0) {
+        r.Step(0.1);
+        if (halted_s < 0.0 && r.Console().equipment.GetInput("vehicle_stopped")) {
+            halted_s = r.Time();
+            halt_range_m = r.TargetRange("t1");
+        }
+    }
+    std::printf("    halted at %.1f s with the target at %.1f km; %d launch(es)\n", halted_s, halt_range_m / 1000.0, r.Launches());
+    SC_EXPECT(halted_s > 0.0 && halt_range_m > 0.0 && halt_range_m < 20000.0);
+    SC_EXPECT(r.Debrief().find("Стой!") != std::string::npos);
+    SC_EXPECT(r.Debrief().find("started    deploy_at_halt") != std::string::npos);
+    SC_EXPECT(r.Launches() >= 1);
+}
+
+SC_TEST("npc commander: an empty launcher is reported and the TZM asked for; the driver reports the fuel at half") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    for (int i = 0; i < 20; ++i) r->Step(0.1);
+    for (const char* c : {"1-I", "2-I", "3-I", "1-II", "2-II", "3-II"}) r->GetLauncher()->Unload(c);
+    for (int i = 0; i < 100; ++i) r->Step(0.1);
+    const std::string d = r->Debrief();
+    SC_EXPECT(d.find("Ракет нет!") != std::string::npos);
+    SC_EXPECT(d.find("прошу ТЗМ!") != std::string::npos);
+}
+
+// ------------------------------------------------------------------------------------------ 8.7 grading
+
+SC_TEST("grading: the debrief grades К бою against the drill master's ideal and lists every seat's reminders and slips") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->IdealReadyS() > 240.0 && r->IdealReadyS() < 260.0);
+    r->RunToEnd(0.1, 800.0);
+    SC_EXPECT(r->ActualReadyS() >= r->IdealReadyS() - 1.0);
+    const std::string d = r->Debrief();
+    SC_EXPECT(d.find("К бою (ready, halted):") != std::string::npos);
+    SC_EXPECT(d.find("excellent") != std::string::npos || d.find("good") != std::string::npos || d.find("satisfactory") != std::string::npos);
+    SC_EXPECT(d.find("First echo to launch") != std::string::npos);
+    SC_EXPECT(d.find("operator           Operator         tier class3") != std::string::npos);
+}
+
+// ------------------------------------------------------------------------------------------ the player in the crew
+
+SC_TEST("in the crew: a player in the operator's seat who does what he's ordered, with what he's told, fights with the crew") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->TakeSeat("operator", "Player"));
+    while (!r->Finished() && r->Time() < 800.0) {
+        r->Step(0.1);
+        // The player works his orders step by step when each step's lamps allow ...
+        const ProcedureTracker* t = r->SeatTracker("operator");
+        const ProcedureStep* next = t != nullptr && !t->GetProcedure().id.empty() ? t->NextStep() : nullptr;
+        if (next != nullptr && r->Console().equipment.AllHold(next->wait_for, r->Console().panel)) {
+            r->SeatSet("operator", next->control_id, next->value);
+        }
+        // ... and turns his range wheel onto the range he was told or sees on his indicator (never the truth).
+        const CrewPicture* p = r->PictureOf("operator");
+        const KnownTarget* k = p != nullptr && !r->AssignedTarget().empty() ? p->Find(r->AssignedTarget()) : nullptr;
+        if (k != nullptr && k->has_range && r->Engagement().Method() == TrackMethod::None) r->SeatTurn("operator", "ssc.range_wheel", k->range_m);
+    }
+    const std::string d = r->Debrief();
+    SC_EXPECT(r->Launches() >= 1);
+    SC_EXPECT(d.find("HIT") != std::string::npos || d.find("MISS") != std::string::npos);
+    SC_EXPECT(d.find("operator           Player (player)") != std::string::npos);
+}
+
+// ------------------------------------------------------------------------------------------ 8.9 the battery
+
+SC_TEST("battery: the NPC battery commander gives the PU-12's targets to the launchers on the battery net, and they fight") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_fight.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.RunToEnd(0.1, 900.0);
+    int assigned = 0, reports = 0;
+    for (const SpokenCallout& s : r.Callouts()->Log()) {
+        assigned += s.id == "order_assign" ? 1 : 0;
+        reports += s.id == "report_result" ? 1 : 0;
+    }
+    int shooter_launches = 0, shooter_hits = 0;
+    for (const BatteryFire::Shooter& s : r.GetBatteryFire()->Shooters()) {
+        shooter_launches += s.launches;
+        shooter_hits += s.hits;
+    }
+    std::printf("    %d assignments, %d launches and %d hits by the other launchers, %d by ours\n", assigned, shooter_launches,
+                shooter_hits, r.Launches());
+    SC_EXPECT(assigned >= 2 && shooter_launches >= 2 && shooter_hits >= 1 && reports == shooter_hits);
+    SC_EXPECT(r.Debrief().find("цель 620") != std::string::npos);  // targets named by their board numbers
+}
+
+SC_TEST("battery: with the player as battery commander nothing is assigned until he does it") {
+    ScenarioDef def;
+    ConsoleData console;
+    const std::string text = ReplaceAll(ReadFile(kData + "/scenarios/osa_battery_fight.json"), "\"battery_commander\": \"npc\"",
+                                        "\"battery_commander\": \"player\"");
+    SC_EXPECT(LoadScenario(text, kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (r.Time() < 420.0) r.Step(0.1);
+    int assigned = 0;
+    for (const SpokenCallout& s : r.Callouts()->Log()) assigned += s.id == "order_assign" ? 1 : 0;
+    SC_EXPECT(assigned == 0);
+    SC_EXPECT(r.AssignBatteryTarget("24", "t2"));
+    SC_EXPECT(!r.AssignBatteryTarget("99", "t2"));
+    for (int i = 0; i < 30; ++i) r.Step(0.1);
+    bool said = false;
+    for (const SpokenCallout& s : r.Callouts()->Log()) said = said || (s.id == "order_assign" && s.ru.find("24, цель") == 0);
+    SC_EXPECT(said);
+    SC_EXPECT(r.GetBatteryFire()->Engaged("t2"));
+}
+
+// ------------------------------------------------------------------------------------------ 8.11 one mission
+
+SC_TEST("mission: on the march, a raid: halt, deploy, fight, stow and march on, run by the NPC commanders without a fault") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_mission_march.json", kData, def, console, &e));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.RunToEnd(0.1, 1500.0);
+    const std::string d = r.Debrief();
+    for (const char* step : {"march: form the column", "started    search_on_march", "Стой!", "short halt", "started    deploy_at_halt",
+                             "К маршу!", "the crew is stowed and marches on", "К маршу готов!"}) {
+        if (d.find(step) == std::string::npos) std::printf("    no '%s'\n", step);
+        SC_EXPECT(d.find(step) != std::string::npos);
+    }
+    SC_EXPECT(r.Launches() >= 1);
+    SC_EXPECT(r.Log().Summary().equipment_faults == 0);
 }

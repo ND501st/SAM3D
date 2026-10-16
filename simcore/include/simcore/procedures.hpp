@@ -136,6 +136,9 @@ struct CrewSkill {
     double omission_chance = 0.0;  // per step: forgets it until its patience runs out
     double patience_s = 5.0;
     double stress_factor = 1.0;  // multiplies delays and chances while stressed
+    // Judgement: a step on one of these controls (a decision such as ПУСК) waits up to this much more, drawn each time.
+    std::vector<std::string> decision_controls;
+    double decision_delay_s = 0.0;
 };
 
 // What a crew member tells the player (drives voice lines and the order UI).
@@ -279,6 +282,9 @@ private:
         const double stress = stressed_ ? skill_.stress_factor : 1.0;
         double d = skill_.reaction_s + (2.0 * Uniform() - 1.0) * skill_.jitter_s;
         d = (d > 0.05 ? d : 0.05) * stress;
+        for (const std::string& c : skill_.decision_controls) {
+            if (c == tracker_.NextStep()->control_id) d += Uniform() * skill_.decision_delay_s * stress;
+        }
         if (Uniform() < skill_.omission_chance * stress) {
             d += skill_.patience_s;
             ++omissions_;

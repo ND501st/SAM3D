@@ -260,7 +260,12 @@ public:
     void SetDriveOwn(bool on) { drive_own_ = on; }
     void SetNight(bool night) { night_ = night; }
     // The battery stands in a prepared position: the first move order costs `seconds` to climb out and clear the nets.
-    void SetInEmplacement(double seconds) { leave_s_ = seconds; }
+    // The battery starts dug in at a prepared position: every vehicle is set up there (deployed) and takes `seconds` to
+    // leave its emplacement when it moves.
+    void SetInEmplacement(double seconds) {
+        leave_s_ = seconds;
+        for (Vehicle& v : vehicles_) v.deployed = true;
+    }
 
     void SetAirThreat(bool threat, double t) {
         if (threat == air_threat_) return;

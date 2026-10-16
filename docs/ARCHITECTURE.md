@@ -95,6 +95,11 @@ someone must have driven within reach), and that interdependence is mapped. The 
   (`EngagementModel::TakeEvents`), designations and reminders, into the radio log and the debrief.
 - The NPC vehicle commander (`ScenarioRunner`, `"crew_commander": "npc"`): readiness by the drill master's plan, the
   engagement by the crew data's orders, supervision of players' seats; `GiveCrewOrder` is the order menu's backend.
+  On the march he halts for a hostile inside 20 km; between fights the function check (from cold) and the stow.
+- Knowledge per seat (`crew_knowledge.hpp`): each seat's picture from its own instruments and the reports it heard;
+  NPCs act on it (the operator's range, the commander's choice of target), never on the truth.
+- The battery's fight (`battery_fire.hpp`): the other launchers with an abstract crew (the network chart's times at
+  their tier, geometric sensors, the same zones and hit chances); the battery commander's fire distribution.
 
 The player's 3D cabin clicks call the same functions, so the player and the crew share one source of truth.
 - Player: `ScenarioRunner::PlayerSet` puts the player's moves through a `ProcedureTracker` (the procedure set with

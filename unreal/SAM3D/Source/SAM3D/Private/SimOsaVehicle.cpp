@@ -144,10 +144,105 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
 		UpdateSim(Sim);
-		HandleHotkeys(Pc, Sim);
+		if (!bMenuOpen)
+		{
+			HandleHotkeys(Pc, Sim);
+		}
 		AnimateFromSim(Sim);
 	}
 	HandleCabin(DeltaSeconds, Pc);
+	if (Sim != nullptr && Sim->IsScenarioRunning())
+	{
+		HandleCrew(Pc, Sim, DeltaSeconds);
+	}
+}
+
+void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds)
+{
+	StationId = bInCabin ? Cabin->GetStationId(Station) : FString();
+	bHoldingSeat = !StationId.IsEmpty() && !Sim->GetCrewSeatHolder(StationId).IsEmpty();
+	if (Pc == nullptr || !bInCabin || StationId.IsEmpty())
+	{
+		Cabin->SetAdvisedControl(FString());
+		bMenuOpen = false;
+		return;
+	}
+	// T: take this seat (its NPC stops and its orders become yours), or give it back.
+	if (Pc->WasInputKeyJustPressed(EKeys::T))
+	{
+		if (bHoldingSeat)
+		{
+			Sim->LeaveCrewSeat(StationId);
+		}
+		else
+		{
+			Sim->TakeCrewSeat(StationId, TEXT("Player"));
+		}
+		bHoldingSeat = !Sim->GetCrewSeatHolder(StationId).IsEmpty();
+	}
+	// H: the training overlay. The task: К бою until ready, then the capture, then the launch.
+	if (Pc->WasInputKeyJustPressed(EKeys::H))
+	{
+		bAssist = !bAssist;
+		AssistClock = 0.0f;
+		if (!bAssist)
+		{
+			Cabin->SetAdvisedControl(FString());
+			Advice = FSimDrillAdvice();
+		}
+	}
+	if (bAssist)
+	{
+		AssistClock -= DeltaSeconds;
+		if (AssistClock <= 0.0f)
+		{
+			AssistClock = 1.0f;
+			AssistTask = !Sim->IsCrewTaskDone(TEXT("ready_halted")) ? FString(TEXT("ready_halted"))
+			             : Sim->GetTrackedTarget().IsEmpty()            ? FString(TEXT("captured"))
+			                                                            : FString(TEXT("launched"));
+			Advice = Sim->GetDrillAdvice(StationId, AssistTask);
+			Cabin->SetAdvisedControl(Advice.bValid ? Advice.Control : FString());
+		}
+	}
+	// O: the crew menu. 1-9 choose a line, 0 the next page, O or Escape close it.
+	if (Pc->WasInputKeyJustPressed(EKeys::O))
+	{
+		bMenuOpen = !bMenuOpen;
+		MenuPage = 0;
+		MenuEntries = Sim->GetCrewMenu(StationId);
+	}
+	if (!bMenuOpen)
+	{
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Escape))
+	{
+		bMenuOpen = false;
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Zero))
+	{
+		const int32 Pages = FMath::Max(1, (MenuEntries.Num() + 8) / 9);
+		MenuPage = (MenuPage + 1) % Pages;
+	}
+	static const FKey Digits[9] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine};
+	for (int32 I = 0; I < 9; ++I)
+	{
+		if (!Pc->WasInputKeyJustPressed(Digits[I]))
+		{
+			continue;
+		}
+		const int32 Index = MenuPage * 9 + I;
+		if (!MenuEntries.IsValidIndex(Index))
+		{
+			continue;
+		}
+		const FSimCrewMenuEntry& E = MenuEntries[Index];
+		const bool bOk = E.bOrder ? Sim->GiveCrewOrder(E.Id) : Sim->PlayerSay(StationId, E.Id);
+		FeedbackText = FString::Printf(TEXT("%s %s%s"), E.bOrder ? TEXT("Order:") : TEXT("Report:"), *E.Ru, bOk ? TEXT("") : TEXT("  (not now)"));
+		FeedbackSecondsLeft = 3.0f;
+		bMenuOpen = false;
+	}
 }
 
 void ASimOsaVehicle::Drive(float DeltaSeconds, APlayerController* Pc)

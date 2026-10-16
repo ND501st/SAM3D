@@ -105,13 +105,13 @@ its done-when criteria is `docs/crew/09_IMPLEMENTATION_PLAN.md`.
 | 8.2 | **First pass done:** skill in behaviour: reaction, jitter, slips, omissions, wheel rates, TV lag and aim, range by hand, stress (flag). Left: judgement, communication misses, stress from the situation, calibration tests |
 | 8.3 | **v1 done:** the drill master (`simcore/drill_master.hpp`): plan, ideal timeline, best next move per seat, cost of a move. Left: fault recovery, the engagement's network chart, decisions under uncertainty |
 | 8.4 | **First pass done:** callouts (`simcore/crew_callouts.hpp`): orders, acknowledgements, automatic reports, engagement reports, designations passed on, faults, reminders; HUD radio lines and the debrief |
-| 8.5 | Knowledge per seat: NPCs act on their instruments and what they were told |
+| 8.5 | **Done 17 Oct 2026:** knowledge per seat (`simcore/crew_knowledge.hpp`): pictures from own instruments and heard reports; missed reports and "Повторите"; the commander decides from his picture; player reports |
 | 8.6 | **Vehicle first pass done:** the NPC vehicle commander (`"crew_commander": "npc"`, scenario `osa_crew_practice.json`): readiness by the drill master's plan, the engagement by the crew data's orders, supervision of a player's seat; the player in command through `GiveCrewOrder`. Left: march, priorities, second missile, logistics, C2 |
-| 8.7 | Assistance overlay and grading (Unreal and debrief). Backend `GetDrillAdvice` done |
-| 8.8 | Commander mode: the order menu (Unreal). Backend `GiveCrewOrder` done |
-| 8.9 | The battery: NPC vehicle commanders, fire distribution, the battery commander's seat |
+| 8.7 | **First pass done:** the training overlay (H: the next control pulses green, with why and when), the crew's grades in the debrief |
+| 8.8 | **First pass done:** the crew menu (O: orders at the commander's seat, reports elsewhere), taking a seat (T) |
+| 8.9 | **First pass done:** the battery's other launchers fight (`simcore/battery_fire.hpp`), the battery commander's fire distribution (NPC or player) on the battery net; scenario `osa_battery_fight.json`. Left: the PU-12M seat itself |
 | 8.10 | NPC crew bodies, animations, seats, voice lines (five seats) |
-| 8.11 | One mission end to end: march, choose a position, orient, deploy, function check, engage, reload, stow, debrief |
+| 8.11 | **First pass done in simcore:** `osa_mission_march.json` (march, raid, halt, deploy, fight, stow, march on). Left: choosing the position, orientation in the readiness, a reload inside the mission, the map |
 | 8.12 | Playtest and balance |
 
 **Exit = M2:** a person can play the whole mission without touching the editor, in a seat of the crew or in command.

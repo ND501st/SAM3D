@@ -58,6 +58,7 @@
 
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/crew_knowledge.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/c2_sources.hpp"
@@ -554,6 +555,11 @@ struct AimCrew {
     double az_noise_deg = 0.0;
     double el_noise_deg = 0.0;
     double range_error_m = 0.0;
+    // Knowledge (roadmap 8.5): the target the commander ordered taken ("" = the nearest contact), and what the NPC in
+    // the range seat knows (null: he aims by the search picture, as before). With it he puts the range wheel only on an
+    // echo he sees on his own range indicator or on a range he was told.
+    std::string assigned;
+    const CrewPicture* range_knows = nullptr;
 };
 
 class EngagementModel {
@@ -1054,8 +1060,10 @@ private:
         bool have = false;
         std::string best_id;
         bool range_known = false;
-        for (const Contact& c : picture_) {
-            if (!have || c.range_m < best.range_m) {
+        for (const Contact& c : picture_) {  // the target the commander ordered taken, else the nearest
+            const bool assigned = !crew.assigned.empty() && c.target_id == crew.assigned;
+            const bool keep_assigned = have && !crew.assigned.empty() && best_id == crew.assigned;
+            if (!have || assigned || (!keep_assigned && c.range_m < best.range_m)) {
                 best = {c.range_m, c.azimuth_deg, c.elevation_deg};
                 best_id = c.target_id;
                 have = true;
@@ -1072,6 +1080,7 @@ private:
                 if (des.range_m > best_r) continue;
                 best_r = des.range_m;
                 best = {des.range_m, Wrap180(des.azimuth_deg), des.elevation_deg};
+                best_id = m.target_id;
                 board_true_az = Wrap180(des.azimuth_deg);
                 have = true;
                 from_board = true;
@@ -1100,9 +1109,23 @@ private:
             const double want_az = WheelAzimuth(from_board ? board_true_az : best.az_deg, wheel_az, d.az_limit_deg);
             console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
         }
-        if (crew.range && range_known) {
-            const double wheel_r = console.panel.GetValue(d.range_wheel);
-            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best.range_m, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
+        if (crew.range) {
+            double want_r = -1.0;
+            if (crew.range_knows == nullptr) {
+                if (range_known) want_r = best.range_m;
+            } else {  // his own range indicator first, then what he was told
+                for (const Contact& c : track_returns_) {
+                    if (c.target_id == best_id) want_r = c.range_m;
+                }
+                if (want_r < 0.0) {
+                    const KnownTarget* k = crew.range_knows->Find(best_id);
+                    if (k != nullptr && k->has_range) want_r = k->range_m;
+                }
+            }
+            if (want_r >= 0.0) {
+                const double wheel_r = console.panel.GetValue(d.range_wheel);
+                console.panel.SetValue(d.range_wheel, Toward(wheel_r, want_r, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
+            }
         }
         // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
         // (under the azimuth line while the tracking radar radiates).
