@@ -1211,7 +1211,7 @@ private:
         npc_next_think_s_ = time_ + 1.0;
         const bool halted = console_.equipment.GetInput("vehicle_stopped");
         // Readiness: the next drill of each idle seat toward the task.
-        const CrewTask* task = def_.crew_data.FindTask(halted ? "ready_halted" : "searching");
+        const CrewTask* task = def_.crew_data.FindTask(halted ? "ready_halted" : "searching_on_march");
         if (task != nullptr) {
             const DrillPlan plan = drill_->Plan(drill_->GoalFor(*task), console_.panel, console_.equipment);
             for (const DrillPlan::Seat& s : plan.seats) {
@@ -1240,7 +1240,29 @@ private:
                 }
             }
         }
-        if (!engagement_on_ || !halted) return;
+        NpcLogistics();
+        if (!engagement_on_) return;
+        if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once (mon_2112_80 p63-68)
+            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+                if (!k.has_range || k.friendly || k.range_m > 20000.0 || npc_halt_ordered_) continue;
+                npc_halt_ordered_ = true;
+                SpeakOrder("order_halt");
+                if (battery_ && def_.battery_drive_own) {  // the battery drives us: its short halt (off the road, deploy)
+                    BatteryOrder o;
+                    o.kind = BatteryOrder::Kind::ShortHalt;
+                    battery_->Order(o, time_);
+                } else if (NpcAt("driver")) {  // our driver stops the vehicle
+                    npc_halt_at_ = time_ + SpeakDelayS("driver") + 2.0;
+                }
+                break;
+            }
+            if (npc_halt_at_ > 0.0 && time_ >= npc_halt_at_) {
+                console_.equipment.SetInput("vehicle_stopped", true);
+                npc_halt_at_ = -1.0;
+            }
+            return;
+        }
+        npc_halt_ordered_ = false;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
         const EngagementModel& eng = engagement_;
@@ -1303,14 +1325,58 @@ private:
             npc_prepared_ = NpcGive("order_prepare", 20.0);
             return;
         }
-        NpcGive("fire_permitted", 8.0);
+        // One permission stands until a missile goes (the launch is counted a step after ПУСК); after a miss with the
+        // target still in the zone it is given again (re-engage: voenizdat_osa_1991 p257).
+        if (npc_permit_launches_ == launches_ && time_ - npc_permit_s_ < 60.0) return;
+        if (NpcGive("fire_permitted", 0.0)) {
+            npc_permit_launches_ = launches_;
+            npc_permit_s_ = time_;
+        }
     }
+    int npc_permit_launches_ = -1;
+    double npc_permit_s_ = -1e9;
     std::string npc_target_;
     bool npc_prepared_ = false;
     std::string npc_choice_for_;
     bool npc_choice_slip_ = false;
     std::string npc_branch_for_;
     double npc_branch_at_ = 0.0;
+    bool npc_halt_ordered_ = false;
+    double npc_halt_at_ = -1.0;
+    bool npc_empty_reported_ = false;
+    bool npc_fuel_reported_ = false;
+
+    // Logistics: the deputy reports the launcher empty and the commander asks the battery for the TZM; the driver reports
+    // the fuel at half (the crew asks for fuel at half: samsim_thread, ePap). The TZM and the fuel truck themselves come
+    // through the battery (ServiceDrills).
+    void NpcLogistics() {
+        if (launcher_) {
+            const bool empty = launcher_->LoadedCount() == 0;
+            if (empty && !npc_empty_reported_ && !engagement_.ShotsInFlight()) {
+                npc_empty_reported_ = true;
+                if (NpcAt("deputy_commander")) Say("launcher_empty", "deputy_commander");
+                const std::string callsign = battery_ ? OwnCallsign() : std::string("21");
+                if (callouts_) callouts_->Say(time_, "request_tzm", "commander", {{"callsign", callsign}}, 3.0);
+            }
+            if (!empty) npc_empty_reported_ = false;
+        }
+        if (fuel_) {
+            const bool half = fuel_->LevelL() <= 0.5 * fuel_->TankL();
+            if (half && !npc_fuel_reported_ && NpcAt("driver")) {
+                npc_fuel_reported_ = true;
+                Say("fuel_half", "driver");
+            }
+            if (!half) npc_fuel_reported_ = false;
+        }
+    }
+    std::string OwnCallsign() const {
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (v.def.own) return v.def.callsign;
+            }
+        }
+        return "21";
+    }
     const SkillTier* CommanderTier() const {
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() == "commander") return SkillOf(def_.crew[i]);

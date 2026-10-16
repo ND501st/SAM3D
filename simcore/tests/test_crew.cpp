@@ -626,3 +626,38 @@ SC_TEST("calibration: detection to launch falls in the published 26-40 s for tra
     SC_EXPECT(c3 >= 26.0 && c3 <= 42.0);
     SC_EXPECT(rec > 40.0);
 }
+
+// ------------------------------------------------------------------------------------------ 8.6 march and logistics
+
+SC_TEST("npc commander: on the march he searches on the move and stops the vehicle at once for a hostile inside 20 km") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const std::string text = ReplaceAll(ReadFile(kData + "/scenarios/osa_crew_practice.json"), "\"inputs\": { \"vehicle_stopped\": true }",
+                                        "\"inputs\": { \"vehicle_stopped\": false }");
+    SC_EXPECT(LoadScenario(text, kData, def, console, &e));
+    ScenarioRunner r(std::move(def), std::move(console));
+    double halted_s = -1.0, halt_range_m = -1.0;
+    while (!r.Finished() && r.Time() < 800.0) {
+        r.Step(0.1);
+        if (halted_s < 0.0 && r.Console().equipment.GetInput("vehicle_stopped")) {
+            halted_s = r.Time();
+            halt_range_m = r.TargetRange("t1");
+        }
+    }
+    std::printf("    halted at %.1f s with the target at %.1f km; %d launch(es)\n", halted_s, halt_range_m / 1000.0, r.Launches());
+    SC_EXPECT(halted_s > 0.0 && halt_range_m > 0.0 && halt_range_m < 20000.0);
+    SC_EXPECT(r.Debrief().find("Стой!") != std::string::npos);
+    SC_EXPECT(r.Debrief().find("started    deploy_at_halt") != std::string::npos);
+    SC_EXPECT(r.Launches() >= 1);
+}
+
+SC_TEST("npc commander: an empty launcher is reported and the TZM asked for; the driver reports the fuel at half") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    for (int i = 0; i < 20; ++i) r->Step(0.1);
+    for (const char* c : {"1-I", "2-I", "3-I", "1-II", "2-II", "3-II"}) r->GetLauncher()->Unload(c);
+    for (int i = 0; i < 100; ++i) r->Step(0.1);
+    const std::string d = r->Debrief();
+    SC_EXPECT(d.find("Ракет нет!") != std::string::npos);
+    SC_EXPECT(d.find("прошу ТЗМ!") != std::string::npos);
+}
