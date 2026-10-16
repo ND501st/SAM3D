@@ -807,6 +807,39 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 	return Out;
 }
 
+bool USimWorldSubsystem::AssignBatteryTarget(const FString& Callsign, const FString& Target)
+{
+	return Runner && Runner->AssignBatteryTarget(ToStd(Callsign), ToStd(Target));
+}
+
+TArray<FSimBatteryShooter> USimWorldSubsystem::GetBatteryShooters() const
+{
+	TArray<FSimBatteryShooter> Out;
+	const simcore::BatteryFire* Fire = Runner ? Runner->GetBatteryFire() : nullptr;
+	if (Fire == nullptr)
+	{
+		return Out;
+	}
+	for (const simcore::BatteryFire::Shooter& S : Fire->Shooters())
+	{
+		FSimBatteryShooter O;
+		O.Callsign = ToF(S.callsign);
+		O.Missiles = S.missiles;
+		O.Target = ToF(S.target);
+		O.bDeployed = S.deployed;
+		switch (S.phase)
+		{
+		case simcore::BatteryFire::Phase::Idle: O.Phase = TEXT("idle"); break;
+		case simcore::BatteryFire::Phase::Acquiring: O.Phase = TEXT("acquiring"); break;
+		case simcore::BatteryFire::Phase::Tracking: O.Phase = TEXT("tracking"); break;
+		case simcore::BatteryFire::Phase::Preparing: O.Phase = TEXT("preparing"); break;
+		case simcore::BatteryFire::Phase::InFlight: O.Phase = TEXT("missile in flight"); break;
+		}
+		Out.Add(O);
+	}
+	return Out;
+}
+
 bool USimWorldSubsystem::PlayerSay(const FString& Station, const FString& CalloutId)
 {
 	return Runner && Runner->PlayerSay(ToStd(Station), ToStd(CalloutId));

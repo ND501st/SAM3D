@@ -136,6 +136,18 @@ void ASimCabinHUD::DrawBoard(USimWorldSubsystem* Sim, UFont* Font)
 	const FVector2D Origin(Canvas->ClipX - Size - 30.0f, 40.0f);
 	const FVector2D Centre = Origin + FVector2D(Size, Size) * 0.5f;
 	DrawRect(FLinearColor(0.02f, 0.04f, 0.05f, 0.85f), Origin.X, Origin.Y, Size, Size);
+	// The battery's other launchers under the board: missiles, target, what they are doing (battery_fire.hpp).
+	{
+		float Y = Origin.Y + Size + 8.0f;
+		for (const FSimBatteryShooter& S : Sim->GetBatteryShooters())
+		{
+			DrawText(FString::Printf(TEXT("%s  %d missiles  %s%s"), *S.Callsign, S.Missiles,
+						 S.Target.IsEmpty() ? TEXT("no target") : *FString::Printf(TEXT("%s, %s"), *S.Target, *S.Phase),
+						 S.bDeployed ? TEXT("") : TEXT("  (not deployed)")),
+				FLinearColor(0.8f, 0.9f, 1.0f), Origin.X, Y, Font);
+			Y += 16.0f;
+		}
+	}
 	const TArray<float> Rings = Sim->GetBoardRangeRings();
 	float MaxRange = 1.f;
 	for (float R : Rings)
