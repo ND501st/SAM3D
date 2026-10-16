@@ -699,3 +699,47 @@ SC_TEST("in the crew: a player in the operator's seat who does what he's ordered
     SC_EXPECT(d.find("HIT") != std::string::npos || d.find("MISS") != std::string::npos);
     SC_EXPECT(d.find("operator           Player (player)") != std::string::npos);
 }
+
+// ------------------------------------------------------------------------------------------ 8.9 the battery
+
+SC_TEST("battery: the NPC battery commander gives the PU-12's targets to the launchers on the battery net, and they fight") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_fight.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.RunToEnd(0.1, 900.0);
+    int assigned = 0, reports = 0;
+    for (const SpokenCallout& s : r.Callouts()->Log()) {
+        assigned += s.id == "order_assign" ? 1 : 0;
+        reports += s.id == "report_result" ? 1 : 0;
+    }
+    int shooter_launches = 0, shooter_hits = 0;
+    for (const BatteryFire::Shooter& s : r.GetBatteryFire()->Shooters()) {
+        shooter_launches += s.launches;
+        shooter_hits += s.hits;
+    }
+    std::printf("    %d assignments, %d launches and %d hits by the other launchers, %d by ours\n", assigned, shooter_launches,
+                shooter_hits, r.Launches());
+    SC_EXPECT(assigned >= 2 && shooter_launches >= 2 && shooter_hits >= 1 && reports == shooter_hits);
+    SC_EXPECT(r.Debrief().find("цель 620") != std::string::npos);  // targets named by their board numbers
+}
+
+SC_TEST("battery: with the player as battery commander nothing is assigned until he does it") {
+    ScenarioDef def;
+    ConsoleData console;
+    const std::string text = ReplaceAll(ReadFile(kData + "/scenarios/osa_battery_fight.json"), "\"battery_commander\": \"npc\"",
+                                        "\"battery_commander\": \"player\"");
+    SC_EXPECT(LoadScenario(text, kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (r.Time() < 420.0) r.Step(0.1);
+    int assigned = 0;
+    for (const SpokenCallout& s : r.Callouts()->Log()) assigned += s.id == "order_assign" ? 1 : 0;
+    SC_EXPECT(assigned == 0);
+    SC_EXPECT(r.AssignBatteryTarget("24", "t2"));
+    SC_EXPECT(!r.AssignBatteryTarget("99", "t2"));
+    for (int i = 0; i < 30; ++i) r.Step(0.1);
+    bool said = false;
+    for (const SpokenCallout& s : r.Callouts()->Log()) said = said || (s.id == "order_assign" && s.ru.find("24, цель") == 0);
+    SC_EXPECT(said);
+    SC_EXPECT(r.GetBatteryFire()->Engaged("t2"));
+}

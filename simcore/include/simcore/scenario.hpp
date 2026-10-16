@@ -143,6 +143,9 @@ struct ScenarioDef {
     // docs/crew/07_COMMANDER_MODE.md §4) instead of the scenario's triggers giving every order. "script" (default): the
     // triggers give the orders.
     bool npc_commander = false;
+    // "battery_commander": "npc" (default) distributes the PU-12's targets to the battery's other launchers; "player": the
+    // player does (ScenarioRunner::AssignBatteryTarget); "none": they fire freely at what is in their reach.
+    std::string battery_commander = "npc";
 };
 
 namespace detail {
@@ -168,7 +171,8 @@ public:
 
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "command_post", "c2", "battery", "own_unit", "crew", "crew_commander", "targets", "triggers", "end"})) {
+                             "terrain", "command_post", "c2", "battery", "own_unit", "crew", "crew_commander", "battery_commander", "targets",
+                             "triggers", "end"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -196,6 +200,12 @@ public:
                 return Fail("crew_commander", "must be \"npc\" or \"script\"");
             }
             out.npc_commander = cc->string == "npc";
+        }
+        if (const json::Value* bc = root.Find("battery_commander")) {
+            if (!bc->Is(json::Type::String) || (bc->string != "npc" && bc->string != "player" && bc->string != "none")) {
+                return Fail("battery_commander", "must be \"npc\", \"player\" or \"none\"");
+            }
+            out.battery_commander = bc->string;
         }
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;

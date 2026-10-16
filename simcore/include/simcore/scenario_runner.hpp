@@ -39,6 +39,7 @@
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
 #include "simcore/battery.hpp"
+#include "simcore/battery_fire.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_callouts.hpp"
@@ -715,6 +716,7 @@ private:
         if (!def_.battery_drive_own) battery_->SetOwnPosition(def_.unit_position);
         ServiceDrills();
         battery_->Step(time_, dt);
+        UpdateBatteryFire();
         // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
         bool has_tzm = false, has_fuel = false;
         for (const Battery::Vehicle& v : battery_->Vehicles()) {
@@ -1360,7 +1362,9 @@ private:
             const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
             std::vector<KnownTarget> known;
             for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
-                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target)) known.push_back(k);
+                // A target the battery commander gave another launcher (he heard it on the battery net) is theirs.
+                const bool theirs = battery_fire_ && battery_fire_->Engaged(k.target);
+                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs) known.push_back(k);
             }
             std::sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
             if (known.empty()) return;
@@ -1646,6 +1650,119 @@ private:
         }
     }
 
+    // ---- The battery's other launchers and the battery commander's fire distribution (roadmap 8.9, battery_fire.hpp).
+    std::unique_ptr<BatteryFire> battery_fire_;
+    std::mt19937 battery_fire_rng_{4099u};
+    double next_distribution_s_ = 0.0;
+
+    void UpdateBatteryFire() {
+        if (!engagement_on_) return;
+        if (!battery_fire_) {
+            battery_fire_ = std::make_unique<BatteryFire>(def_.tuning, console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 28000.0);
+            battery_fire_->SetAutonomous(def_.battery_commander == "none" || !c2_);
+            battery_fire_rng_.seed(def_.seed * 4099u + 7u);
+        }
+        battery_fire_->Sync(*battery_);
+        // What the other vehicles see (geometric sensors), with each target's number on the board.
+        std::vector<BatteryFireTarget> targets;
+        std::vector<BoardMark> marks = c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            BatteryFireTarget t;
+            t.id = def_.targets[i].id;
+            t.position = a->position;
+            t.velocity = a->velocity;
+            t.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            t.target_class = def_.targets[i].target_class;
+            t.friendly = def_.targets[i].friendly;
+            for (const BoardMark& m : marks) {
+                if (m.target_id == t.id) t.number = m.number;
+            }
+            targets.push_back(t);
+        }
+        // The NPC battery commander: each hostile on the board that nobody has goes to the nearest ready launcher that
+        // can reach it soon (our own vehicle's target is ours).
+        if (def_.battery_commander == "npc" && c2_ && time_ >= next_distribution_s_) {
+            next_distribution_s_ = time_ + 5.0;
+            for (const BoardMark& m : marks) {
+                if (m.type == 1 || battery_fire_->Engaged(m.target_id) || m.target_id == assigned_target_ ||
+                    m.target_id == engagement_.TrackedTarget()) {
+                    continue;
+                }
+                bool alive = false;
+                for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
+                if (!alive) continue;
+                const BatteryFire::Shooter* best = nullptr;
+                double best_r = battery_fire_->ReachM() + 10000.0;
+                for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                    if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
+                    const double r = (m.position - s.position).HorizontalLength();
+                    if (r < best_r) {
+                        best_r = r;
+                        best = &s;
+                    }
+                }
+                // Our own vehicle is a launcher of the battery too: when it is the nearest, the target is left to its crew
+                // (the PU-12's designation by voice).
+                const bool own_nearer = launcher_ != nullptr && launcher_->LoadedCount() > 0 &&
+                                        (m.position - def_.unit_position).HorizontalLength() < best_r;
+                if (best != nullptr && !own_nearer) AssignBatteryTarget(best->callsign, m.target_id);
+            }
+        }
+        battery_fire_->Step(time_, targets, battery_fire_rng_, battery_.get(), [this](const std::string& id) {
+            for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+                if (def_.targets[i].id != id) continue;
+                if (Aircraft* a = world_.FindAircraft(targets_[i].world_id)) a->alive = false;
+            }
+        });
+        for (const BatteryFire::Event& e : battery_fire_->TakeEvents()) {
+            char n[16];
+            std::snprintf(n, sizeof(n), "%04d", e.number);
+            const std::string number = e.number > 0 ? std::string(n) : e.target;
+            switch (e.kind) {
+                case BatteryFire::Event::Kind::Assigned: break;  // spoken by whoever assigned it
+                case BatteryFire::Event::Kind::Captured: Event(e.callsign, "captures " + e.target); break;
+                case BatteryFire::Event::Kind::Launch:
+                    Event(e.callsign, "launches at " + e.target);
+                    if (callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", e.callsign}, {"number", number}});
+                    break;
+                case BatteryFire::Event::Kind::Hit:
+                    Event(e.callsign, "destroys " + e.target);
+                    if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
+                    break;
+                case BatteryFire::Event::Kind::Miss: Event(e.callsign, "misses " + e.target); break;
+                case BatteryFire::Event::Kind::Empty:
+                    Event(e.callsign, "out of missiles");
+                    if (callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", e.callsign}});
+                    break;
+                case BatteryFire::Event::Kind::Reloaded: Event(e.callsign, "reloaded"); break;
+            }
+        }
+    }
+
+public:
+    // The battery commander (the player, or the NPC) gives one of the battery's other launchers a target on the battery
+    // net. False without a battery, for an unknown launcher, or one with no missiles.
+    bool AssignBatteryTarget(const std::string& callsign, const std::string& target) {
+        if (!battery_fire_) return false;
+        int number = 0;
+        if (c2_) {
+            for (const BoardMark& m : c2_->Known(time_)) {
+                if (m.target_id == target) number = m.number;
+            }
+        }
+        if (!battery_fire_->Assign(callsign, target, number, time_)) return false;
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", number);
+        if (callouts_) callouts_->Say(time_, "order_assign", "battery", {{"callsign", callsign}, {"number", number > 0 ? std::string(n) : target}});
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign, "target " + target});
+        return true;
+    }
+    const BatteryFire* GetBatteryFire() const { return battery_fire_.get(); }
+
+private:
     // ---- Knowledge per seat (roadmap 8.5, crew_knowledge.hpp): each seat's picture, from its own instruments and
     // from what it heard. The NPCs act on these, never on the truth.
     std::map<std::string, CrewPicture> pictures_;
