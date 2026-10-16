@@ -132,6 +132,7 @@ public:
         UpdateBattery(dt);
         UpdateC2();
         if (engagement_on_) {
+            aim_crew_.assigned = assigned_target_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
             // A radar lock is heard by the target's warning receiver; a TV track is not.
             const TrackMethod m = engagement_.Method();
@@ -156,7 +157,9 @@ public:
             CrewCallouts(c, reports);
             log_.CollectCrewReports(c.Name(), std::move(reports), time_);
         }
+        SeeInstruments();
         UpdateCallouts();
+        UpdateStress();
         UpdateNpcCommander();
         if (time_ + 1e-9 >= next_acmi_s_) {
             WriteAcmiFrame();
@@ -746,9 +749,18 @@ private:
         c2_->Update(time_, contacts, def_.unit_position);
         for (const C2Network::Event& e : c2_->PeekEvents()) {
             Radio("command net", e.actor, e.subject + ": " + e.text);
-            if (e.actor == "Commander" && e.number > 0) {  // the commander passes them on
+            if (e.actor == "Commander" && e.number > 0) {  // the commander heard it on the radio, and passes it on
                 designations_.push_back(e);
                 designations_heard_.push_back(e);
+                KnownTarget k;
+                k.target = e.subject;
+                k.number = e.number;
+                k.has_azimuth = k.has_range = k.true_azimuth = true;
+                k.azimuth_deg = e.azimuth_mils * 360.0 / 6000.0;
+                k.range_m = e.range_m;
+                k.time_s = time_;
+                k.source = "radio";
+                pictures_["commander"].Learn(k);
             }
         }
         SyncRadios();
@@ -1060,6 +1072,7 @@ private:
             }
             if (c.Role() == def_.tuning.aim_range_role) {
                 aim_crew_.range = true;
+                if (def_.has_crew_data) aim_crew_.range_knows = &pictures_[c.Role()];  // range only from what he sees or hears
                 if (tier != nullptr) {
                     aim_crew_.range_rate_factor = tier->wheel_rate_factor;
                     aim_crew_.range_error_m = tier->range_error_m;
@@ -1126,8 +1139,9 @@ private:
         return cut == std::string::npos ? t : t.substr(0, cut);
     }
 
-    void Say(const std::string& id, const std::string& station, const std::map<std::string, std::string>& fields = {}) {
-        if (callouts_) callouts_->Say(time_, id, station, fields, NpcAt(station) ? SpeakDelayS(station) : 0.0);
+    void Say(const std::string& id, const std::string& station, const std::map<std::string, std::string>& fields = {},
+             const KnownTarget* about = nullptr) {
+        if (callouts_) callouts_->Say(time_, id, station, fields, NpcAt(station) ? SpeakDelayS(station) : 0.0, about);
     }
 
     // The commander's order for a procedure, if the crew data has one: the most specific order that starts it.
@@ -1236,18 +1250,27 @@ private:
             // Take the nearest contact once it is within the tracking radar's reach (the drill switches the tracking
             // transmitter on only when the azimuth line is on the target: voenizdat_osa_1991 p250); a designation
             // from the PU-12 counts when it is that close too.
+            // He knows what his crew told him and what the radio said (his picture): the nearest hostile he has heard of
+            // in the last 30 s, unless his judgement slips (his tier's priority error: he takes the next one).
             const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
-            double nearest = -1.0, az = 0.0;
-            for (const Contact& c : eng.SearchPicture()) {
-                if (nearest < 0.0 || c.range_m < nearest) {
-                    nearest = c.range_m;
-                    az = c.azimuth_deg;
-                }
+            std::vector<KnownTarget> known;
+            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target)) known.push_back(k);
             }
-            if (nearest < 0.0 && !designations_heard_.empty()) nearest = designations_heard_.back().range_m;
-            if (nearest >= 0.0 && nearest <= reach && console_.equipment.IsReady("hv_ready") && NpcGive("order_take_target", 60.0) &&
-                designations_heard_.empty() && callouts_) {  // no number from the PU-12: the contact by its azimuth
-                callouts_->Say(time_, "order_take_contact", "commander", {{"azimuth", MilsText(az)}});
+            std::sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
+            if (known.empty()) return;
+            std::size_t pick = 0;
+            if (known.size() > 1 && npc_choice_for_ != known.front().target) {
+                npc_choice_for_ = known.front().target;
+                const SkillTier* t = CommanderTier();
+                npc_choice_slip_ = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->priority_error_chance;
+            }
+            if (npc_choice_slip_ && known.size() > 1) pick = 1;
+            const KnownTarget& k = known[pick];
+            if (k.range_m > reach || !console_.equipment.IsReady("hv_ready")) return;
+            assigned_target_ = k.target;
+            if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_) {  // no number from the PU-12: by its azimuth
+                callouts_->Say(time_, "order_take_contact", "commander", {{"azimuth", MilsText(k.azimuth_deg)}});
             }
             return;
         }
@@ -1272,6 +1295,14 @@ private:
     }
     std::string npc_target_;
     bool npc_prepared_ = false;
+    std::string npc_choice_for_;
+    bool npc_choice_slip_ = false;
+    const SkillTier* CommanderTier() const {
+        for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
+            if (crew_[i].Role() == "commander") return SkillOf(def_.crew[i]);
+        }
+        return nullptr;
+    }
 
     // Give an order of the crew data unless it was given within `again_s`, and only when every seat it goes to is free.
     bool NpcGive(const std::string& order_id, double again_s) {
@@ -1324,18 +1355,49 @@ private:
                 std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
                 switch (e.kind) {
                     case EngagementEvent::Kind::Contact:
-                        if (NpcAt("senior_operator")) Say("contact", "senior_operator", {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}});
+                        if (NpcAt("senior_operator")) {
+                            KnownTarget k;
+                            k.target = e.target;
+                            k.has_azimuth = k.has_range = true;
+                            k.azimuth_deg = e.az_deg;
+                            k.range_m = e.range_m;
+                            Say("contact", "senior_operator", {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}}, &k);
+                            next_contact_update_s_ = time_ + 15.0;
+                        }
                         break;
                     case EngagementEvent::Kind::TrackLost:
                         if (NpcAt("operator") && TargetRange(e.target) >= 0.0) Say("lock_lost", "operator");  // not a target just shot down
                         break;
                     case EngagementEvent::Kind::OnJammer: if (NpcAt("operator")) Say("on_jammer", "operator"); break;
                     case EngagementEvent::Kind::BurnThrough: if (NpcAt("operator")) Say("captured", "operator"); break;
-                    case EngagementEvent::Kind::IffFriend: if (NpcAt("senior_operator")) Say("iff_friend", "senior_operator"); break;
+                    case EngagementEvent::Kind::IffFriend:
+                        if (NpcAt("senior_operator")) {
+                            KnownTarget k;
+                            k.target = e.target;
+                            k.friendly = true;
+                            Say("iff_friend", "senior_operator", {}, &k);
+                        }
+                        break;
                     case EngagementEvent::Kind::Hit: if (NpcAt("deputy_commander")) Say("hit", "deputy_commander"); break;
                     case EngagementEvent::Kind::Miss: if (NpcAt("deputy_commander")) Say("miss", "deputy_commander"); break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
                 }
+            }
+        }
+        // Until something is tracked the senior operator keeps the crew up to date: the nearest echo on his scope,
+        // every 15 s (the first report of each contact is spoken when it appears).
+        if (engagement_on_ && NpcAt("senior_operator") && engagement_.Method() == TrackMethod::None && time_ >= next_contact_update_s_) {
+            const KnownTarget* near = nullptr;
+            for (const KnownTarget& k : pictures_["senior_operator"].All()) {
+                if (time_ - k.time_s > 2.0 || !k.has_range || k.friendly) continue;
+                if (near == nullptr || k.range_m < near->range_m) near = &k;
+            }
+            if (near != nullptr) {
+                KnownTarget k = *near;
+                char r[16];
+                std::snprintf(r, sizeof(r), "%.0f", k.range_m / 1000.0);
+                Say("contact", "senior_operator", {{"azimuth", MilsText(k.azimuth_deg)}, {"range_km", r}}, &k);
+                next_contact_update_s_ = time_ + 15.0;
             }
         }
         // Designations the commander heard on the radio, passed on to the crew.
@@ -1347,7 +1409,13 @@ private:
                     std::snprintf(n, sizeof(n), "%04d", e.number);
                     std::snprintf(r, sizeof(r), "%.0f", e.range_m / 1000.0);
                     std::snprintf(h, sizeof(h), "%d", e.height_hm);
-                    Say("designation", "commander", {{"number", n}, {"azimuth", az}, {"range_km", r}, {"height_hm", h}});
+                    KnownTarget k;
+                    k.target = e.subject;
+                    k.number = e.number;
+                    k.has_azimuth = k.has_range = k.true_azimuth = true;
+                    k.azimuth_deg = e.azimuth_mils * 360.0 / 6000.0;
+                    k.range_m = e.range_m;
+                    Say("designation", "commander", {{"number", n}, {"azimuth", az}, {"range_km", r}, {"height_hm", h}}, &k);
                 }
             }
         }
@@ -1413,8 +1481,128 @@ private:
             const std::string who = s.from == "battery" ? std::string("Battery") : SpeakerName(s.from);
             Radio(s.channel, who, s.ru + " (" + s.en + ")");
             log_.Record({s.start_s, DebriefEntry::Kind::Scenario, who, "says", s.ru + " (" + s.en + ")"});
+            Hear(s);
         }
     }
+
+    // ---- Knowledge per seat (roadmap 8.5, crew_knowledge.hpp): each seat's picture, from its own instruments and
+    // from what it heard. The NPCs act on these, never on the truth.
+    std::map<std::string, CrewPicture> pictures_;
+    std::string assigned_target_;  // the target the commander ordered taken ("" = none yet)
+    std::mt19937 hear_rng_{97u};    // who misses a callout (the outcome draws stay where they were)
+    int say_agains_ = 0;
+    double next_contact_update_s_ = 0.0;
+
+    // The seats' own instruments: the senior operator's scope, the operator's range indicator.
+    void SeeInstruments() {
+        if (!engagement_on_ || !def_.has_crew_data) return;
+        for (const Contact& c : engagement_.SearchPicture()) {
+            KnownTarget k;
+            k.target = c.target_id;
+            k.has_azimuth = k.has_range = true;
+            k.azimuth_deg = c.azimuth_deg;
+            k.range_m = c.range_m;
+            k.time_s = time_;
+            k.source = "scope";
+            pictures_["senior_operator"].Learn(k);
+        }
+        for (const Contact& c : engagement_.TrackReturns()) {
+            KnownTarget k;
+            k.target = c.target_id;
+            k.has_range = true;
+            k.range_m = c.range_m;
+            k.time_s = time_;
+            k.source = "range indicator";
+            pictures_["operator"].Learn(k);
+        }
+    }
+
+    // A callout was heard: what it says about a target goes into each listener's picture. An NPC listener may not take
+    // it in (his tier's miss chance, more under stress): he says "Повторите!" and the speaker says it again (once).
+    void Hear(const SpokenCallout& s) {
+        if (s.channel != "intercom") return;
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            CrewMember& c = crew_[i];
+            if (c.Role() == s.from) continue;
+            const bool addressed = s.to == "crew" || s.to == "any" || s.to == c.Role();
+            if (!addressed) continue;
+            const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
+            const bool npc = SeatHolder(c.Role()).empty();
+            // Only a seat with a stake in it asks again: the one it was said to, the commander, the aiming seats.
+            const bool stake = s.to == c.Role() || c.Role() == "commander" || c.Role() == def_.tuning.aim_az_role ||
+                               c.Role() == def_.tuning.aim_el_role || c.Role() == def_.tuning.aim_range_role;
+            if (npc && stake && t != nullptr && s.has_about && s.repeats == 0) {
+                const double miss = t->miss_chance * (c.Stressed() ? t->stress_factor : 1.0);
+                if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
+                    ++say_agains_;
+                    Say("say_again", c.Role());
+                    callouts_->Repeat(s, time_, 1.0 + SpeakDelayS(s.from));
+                    continue;
+                }
+            }
+            if (!s.has_about) continue;
+            KnownTarget k = s.about;
+            k.time_s = s.start_s;
+            k.source = "told by " + SpeakerName(s.from);
+            pictures_[c.Role()].Learn(k);
+        }
+    }
+
+    // Stress (docs/crew/05_SKILL.md): the crew's own radars jammed, or a hostile they know of inside 10 km and nothing
+    // tracked. It multiplies every crewmate's delays and chances by his tier's stress factor.
+    void UpdateStress() {
+        bool jammed = false;
+        if (em_link_) {
+            const em::RadarState* sr = em_link_->SearchRadar();
+            const em::RadarState* tr = em_link_->TrackRadar();
+            jammed = (sr != nullptr && sr->on && !sr->strobe_tracks.empty()) || (tr != nullptr && tr->on && tr->on_jam);
+        }
+        bool pressed = false;
+        if (engagement_on_ && engagement_.Method() == TrackMethod::None) {
+            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+                pressed = pressed || (k.has_range && k.range_m < 10000.0 && !k.friendly);
+            }
+        }
+        for (CrewMember& c : crew_) c.SetStressed(jammed || pressed);
+    }
+
+public:
+    // What a seat knows (its picture), for the HUD of a player in that seat and for tests.
+    const CrewPicture* PictureOf(const std::string& station) const {
+        const auto it = pictures_.find(station);
+        return it != pictures_.end() ? &it->second : nullptr;
+    }
+    // The target the commander has ordered taken ("" = none).
+    const std::string& AssignedTarget() const { return assigned_target_; }
+    // The player in command picks the target to take (a contact his crew reported, or a designation).
+    void AssignTarget(const std::string& target) { assigned_target_ = target; }
+    // "Повторите" so far (a crewmate missed a report).
+    int SayAgains() const { return say_agains_; }
+
+    // A player in a seat speaks a report of the crew data (the UI's report buttons): what it says comes from his own
+    // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.
+    bool PlayerSay(const std::string& station, const std::string& callout_id) {
+        if (!callouts_ || def_.crew_data.FindCallout(callout_id) == nullptr) return false;
+        if (callout_id == "contact" && engagement_on_) {
+            const Contact* near = nullptr;
+            for (const Contact& c : engagement_.SearchPicture()) {
+                if (near == nullptr || c.range_m < near->range_m) near = &c;
+            }
+            if (near == nullptr) return false;  // nothing on his scope to report
+            KnownTarget k;
+            k.target = near->target_id;
+            k.has_azimuth = k.has_range = true;
+            k.azimuth_deg = near->azimuth_deg;
+            k.range_m = near->range_m;
+            char r[16];
+            std::snprintf(r, sizeof(r), "%.0f", near->range_m / 1000.0);
+            callouts_->Say(time_, callout_id, station, {{"azimuth", MilsText(near->azimuth_deg)}, {"range_km", r}}, 0.0, &k);
+            return true;
+        }
+        return callouts_->Say(time_, callout_id, station);
+    }
+
+private:
 
     // The NPC commander watches the orders he gave to players' seats: when the next step could be done (its lamps are
     // lit) and nothing has moved for his patience, he names it ("Оператор, ПЕРЕДАТЧИК ВКЛ.!"), then orders it again.

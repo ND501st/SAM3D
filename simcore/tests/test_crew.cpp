@@ -478,3 +478,70 @@ SC_TEST("drill master: a task's order lends its drills (К бою's autonomous s
     const DrillPlan::Seat* so = plan.FindSeat("senior_operator");
     SC_EXPECT(so != nullptr && so->procedures == std::vector<std::string>{"acquire_with_soc"});
 }
+
+// ------------------------------------------------------------------------------------------ 8.5 knowledge
+
+SC_TEST("knowledge: the operator puts the range on what the senior operator told him, not on the truth") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    const double start = r->Console().panel.GetValue("ssc.range_wheel");
+    double told_s = -1.0, moved_s = -1.0;
+    while (!r->Finished() && r->Time() < 460.0 && moved_s < 0.0) {
+        r->Step(0.1);
+        const CrewPicture* p = r->PictureOf("operator");
+        const KnownTarget* k = p != nullptr ? p->Find("t1") : nullptr;
+        if (told_s < 0.0 && k != nullptr) {
+            told_s = r->Time();
+            SC_EXPECT(k->source == "told by Senior operator");
+        }
+        if (std::fabs(r->Console().panel.GetValue("ssc.range_wheel") - start) > 1.0) moved_s = r->Time();
+    }
+    std::printf("    told at %.1f s, range wheel moved at %.1f s\n", told_s, moved_s);
+    SC_EXPECT(told_s > 0.0 && moved_s >= told_s);
+}
+
+SC_TEST("knowledge: a crewmate who misses a report says Повторите and learns it from the repeat") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_crew_practice.json", kData, def, console));
+    for (SkillTier& t : def.skills.tiers) {
+        if (t.id == "class3") t.miss_chance = 1.0;  // the operator's tier: he never takes a report in the first time
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (!r.Finished() && r.Time() < 360.0) r.Step(0.1);
+    SC_EXPECT(r.SayAgains() >= 1);
+    const KnownTarget* k = r.PictureOf("operator") != nullptr ? r.PictureOf("operator")->Find("t1") : nullptr;
+    SC_EXPECT(k != nullptr && k->has_range);
+    bool repeated = false;
+    for (const SpokenCallout& s : r.Callouts()->Log()) repeated = repeated || (s.id == "contact" && s.repeats > 0);
+    SC_EXPECT(repeated);
+}
+
+SC_TEST("knowledge: with a silent player at the search scope the commander never hears of the target; his report starts the crew") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->TakeSeat("senior_operator", "Player"));
+    // The player switches his search radar on, but says nothing.
+    for (const auto& s : std::vector<std::pair<std::string, int>>{{"soc.search", 1}, {"soc.hv_cover", 1}, {"soc.hv", 1}, {"soc.range", 2}}) {
+        r->PlayerSet(s.first, s.second);
+    }
+    while (r->Time() < 420.0) r->Step(0.1);
+    SC_EXPECT(!r->Engagement().SearchPicture().empty());  // the target is on his scope
+    SC_EXPECT(r->PictureOf("commander") == nullptr || r->PictureOf("commander")->Find("t1") == nullptr);
+    SC_EXPECT(r->Debrief().find("started    ready_capture") == std::string::npos);
+    SC_EXPECT(r->PlayerSay("senior_operator", "contact"));
+    for (int i = 0; i < 100; ++i) r->Step(0.1);
+    SC_EXPECT(r->PictureOf("commander")->Find("t1") != nullptr);
+    SC_EXPECT(r->Debrief().find("started    ready_capture") != std::string::npos);
+}
+
+SC_TEST("stress: jamming on the crew's own radars stresses the crew") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_jamming_em.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    bool stressed = false;
+    while (!r.Finished() && r.Time() < 700.0) {
+        r.Step(0.1);
+        stressed = stressed || r.Crew("Operator")->Stressed();
+    }
+    SC_EXPECT(stressed);
+}

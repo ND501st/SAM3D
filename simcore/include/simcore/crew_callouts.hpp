@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "simcore/crew_data.hpp"
+#include "simcore/crew_knowledge.hpp"
 
 namespace simcore {
 
@@ -32,6 +33,11 @@ struct SpokenCallout {
     double queued_s = 0.0;
     double start_s = 0.0;
     double end_s = 0.0;
+    // What it tells the listeners about a target (a contact's azimuth and range, a designation), if anything: it goes
+    // into each listener's picture when heard (crew_knowledge.hpp).
+    bool has_about = false;
+    KnownTarget about;
+    int repeats = 0;  // said again after "Повторите"
 };
 
 // "{key}" replaced by fields[key]; unknown keys are left as they are.
@@ -76,7 +82,7 @@ public:
 
     // Queue the catalogue's callout `id` from `from` (a station), after `delay_s`. Returns false for an unknown id.
     bool Say(double now_s, const std::string& id, const std::string& from, const std::map<std::string, std::string>& fields = {},
-             double delay_s = 0.0) {
+             double delay_s = 0.0, const KnownTarget* about = nullptr) {
         const CalloutDef* def = crew_ != nullptr ? crew_->FindCallout(id) : nullptr;
         if (def == nullptr) return false;
         SpokenCallout s;
@@ -93,8 +99,21 @@ public:
         s.en = FillCallout(def->en, en);
         s.priority = def->priority;
         s.queued_s = now_s + (delay_s > 0.0 ? delay_s : 0.0);
+        if (about != nullptr) {
+            s.has_about = true;
+            s.about = *about;
+        }
         pending_.push_back(std::move(s));
         return true;
+    }
+
+    // Say a callout again (a listener asked "Повторите"), after `delay_s`.
+    void Repeat(const SpokenCallout& said, double now_s, double delay_s) {
+        SpokenCallout s = said;
+        s.queued_s = now_s + delay_s;
+        s.start_s = s.end_s = 0.0;
+        ++s.repeats;
+        pending_.push_back(std::move(s));
     }
 
     // Start what can be spoken now, finish what has been said. Finished callouts go to TakeHeard().
