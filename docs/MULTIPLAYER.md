@@ -43,13 +43,25 @@ E10). Code: `simcore/scenario_runner.hpp` (seats), `simcore/console_sync.hpp`, `
 * Unreal, networked: `tools/ue_crew_smoke.ps1` starts a dedicated server and two clients. Result on 16 October 2026:
   the driver's client started the gas turbine (moved by the server, then mirrored), the commander's client's try at the
   same switch was refused ("'pwr.gta' is at the driver's station"), both clients applied 234 console snapshots in
-  30 s, and the server's seats emptied when the clients left.
+  30 s, and the server's seats emptied when the clients left. With the EM practice scenario and `-TimeScale 8
+  -ClientSeconds 60`: at 466 s of sim time both clients' scopes showed the drone from the stream (one search echo, one
+  tracking-radar echo, antenna at 9.9 degrees; the unit node's view held two radar tracks and one picture item), and the
+  driver had received the next order (`pto_on_line`) as a player.
+
+* **The scopes come with the knowledge.** Every cabin display draws from one `simcore::ScopeFeed` (`scope_feed.hpp`):
+  search echoes, IFF replies, tracking-radar echoes, the elevation indicator's beam and sweep, the antenna elevation, the
+  wheels-to-true-azimuth offset, the missiles' ranges and the unit's position. Where the sim runs it comes from the
+  engagement model; the server also puts it into each player's knowledge view (`em::ViewScope`), with each echo's
+  scenario target id replaced by an opaque key per player (`EchoKeys`), so a client can't tell a drone from chaff by
+  its name. On a network client the displays draw from that block, and their sweep runs on the frame clock. The counters
+  read from it too (`CounterReading` with echoes and antenna elevation).
+* **The practice map plays the EM scenario** (`scenarios/osa_practice_em.json`), so the knowledge views carry the unit's
+  radar tracks and picture as well.
 
 ## Not done
 
-* The cabin's scopes on a client still read the client's own (unstepped) engagement model; they should draw from the
-  knowledge view and the mirrored console (the scope pictures need their own stream).
 * Voice between players (the R-124 intercom is modelled as the order path, not as player audio).
 * Which seat a player may take is first come, first served; no lobby or roles screen.
-* The practice map's scenario has no EM layer, so the smoke test's knowledge views are empty; an EM scenario on the map
-  would exercise both streams together.
+* The 3D world on a client (the target aircraft actors, the TV camera's picture of them) still comes from the client's
+  own unstepped world; entity positions need a stream of their own (or Unreal's actor replication).
+* NPC crewmate behaviour and teamwork (next).

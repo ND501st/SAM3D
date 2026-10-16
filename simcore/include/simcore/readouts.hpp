@@ -52,7 +52,9 @@ inline const Contact* GatedReturn(const ConsoleData& console, const EngagementMo
 //   elevation_error  Δε: mils between the antenna's elevation and the echo's (0 with no echo)
 //   azimuth_*        the SSC azimuth wheel's reading; elevation_* the elevation wheel's (its sign is not shown)
 //   none             0 (places the data doesn't give a reading for yet)
-inline int CounterReading(const std::string& readout, const ConsoleData& console, const EngagementModel& engagement) {
+// The value (0..999) for counters fed by the tracking radar's echoes and the antenna elevation (a ScopeFeed on a client).
+inline int CounterReading(const std::string& readout, const ConsoleData& console, const std::vector<Contact>& track_returns,
+                          double antenna_el_deg) {
     if (!console.has_sensors) return 0;
     const TrackSensorDef& d = console.track;
     auto clamp = [](double v) { return static_cast<int>(std::min(999.0, std::max(0.0, std::floor(v + 0.5)))); };
@@ -61,12 +63,21 @@ inline int CounterReading(const std::string& readout, const ConsoleData& console
     if (readout == "elevation_coarse") return CoarseCounter(MilsFromDegrees(console.panel.GetValue(d.el_wheel)));
     if (readout == "elevation_fine") return FineCounter(MilsFromDegrees(console.panel.GetValue(d.el_wheel)));
     if (readout == "range_error" || readout == "elevation_error") {
-        const Contact* echo = GatedReturn(console, engagement);
+        const double gate = console.panel.GetValue(d.range_wheel);
+        const Contact* echo = nullptr;
+        for (const Contact& c : track_returns) {
+            if (std::fabs(c.range_m - gate) > 5000.0) continue;
+            if (echo == nullptr || std::fabs(c.range_m - gate) < std::fabs(echo->range_m - gate)) echo = &c;
+        }
         if (echo == nullptr) return 0;
-        if (readout == "range_error") return clamp(std::fabs(echo->range_m - console.panel.GetValue(d.range_wheel)));
-        return clamp(std::fabs(MilsFromDegrees(engagement.AntennaElevationDeg() - echo->elevation_deg)));
+        if (readout == "range_error") return clamp(std::fabs(echo->range_m - gate));
+        return clamp(std::fabs(MilsFromDegrees(antenna_el_deg - echo->elevation_deg)));
     }
     return 0;
+}
+
+inline int CounterReading(const std::string& readout, const ConsoleData& console, const EngagementModel& engagement) {
+    return CounterReading(readout, console, engagement.TrackReturns(), engagement.AntennaElevationDeg());
 }
 
 }  // namespace simcore

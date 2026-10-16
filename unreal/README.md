@@ -44,7 +44,7 @@ runs changes.
 
 The level is in the repository (`Content/Maps/OsaPractice`, stored with Git LFS: run `git lfs install` once per
 clone) and the editor opens it on startup. It holds a `CesiumGeoreference`, Cesium World Terrain with Bing Maps
-aerial imagery, a `CesiumSunSky` and a **Sim Scenario Director** (scenario `scenarios/osa_practice.json`, terrain
+aerial imagery, a `CesiumSunSky` and a **Sim Scenario Director** (scenario `scenarios/osa_practice_em.json`: the practice shoot with the EM layer behind the radars, since 16 Oct 2026; terrain
 tileset set). Don't place a Sim Osa Vehicle in it: the director spawns the player's.
 
 1. Open `SAM3D.uproject`.

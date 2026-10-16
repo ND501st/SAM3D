@@ -32,7 +32,7 @@ public:
 
 	/** Scenario to play, relative to the data folder. Empty = the generic demo engagement. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
-	FString ScenarioFile = TEXT("scenarios/osa_practice.json");
+	FString ScenarioFile = TEXT("scenarios/osa_practice_em.json");
 
 	/** 3D cabin layout for the scenario's console, relative to the data folder. Empty = no cabin. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")

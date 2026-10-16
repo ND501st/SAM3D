@@ -72,6 +72,32 @@ struct ViewSensorTrack {  // a track of a radar cabled to the node
     int Key() const { return key; }
 };
 
+// What the crew's scopes show (the search indicator, the range and elevation indicators, the TV's pointing), carried
+// in the knowledge stream so a network client's cabin draws the server's scopes. An echo carries an opaque key, never
+// the scenario's target id: a client must not be able to tell a real echo from chaff by its name.
+struct ViewEcho {
+    int key = 0;
+    double range_m = 0.0;
+    double azimuth_deg = 0.0;
+    double elevation_deg = 0.0;
+    int beam = -1;
+    bool control_reply = false;
+};
+
+struct ViewScope {
+    bool valid = false;
+    std::vector<ViewEcho> search;         // search radar echoes this step
+    std::vector<ViewEcho> iff;            // IFF replies this step
+    std::vector<ViewEcho> track_returns;  // the tracking radar's echoes
+    int elevation_beam = 0;
+    double swept_low_deg = 0.0;
+    double swept_high_deg = 0.0;
+    double antenna_el_deg = 0.0;
+    double indicated_to_true_deg = 0.0;   // the wheels' azimuth + this = true azimuth
+    double missile_range_m[2] = {-1.0, -1.0};  // guidance channels I and II (-1: none in flight)
+    Vec3 unit_position;
+};
+
 struct KnowledgeView {
     std::uint32_t seq = 0;
     double time_s = 0.0;
@@ -81,6 +107,7 @@ struct KnowledgeView {
     std::vector<ViewTrack> tracks;
     std::vector<ViewContact> contacts;
     std::vector<ViewSensorTrack> sensor_tracks;
+    ViewScope scope;  // filled by the server's caller (the engagement model's presentation), not by BuildView
 };
 
 // What node `node_id` knows at the scene's time. Empty (node 0) if there is no such node.
@@ -310,6 +337,68 @@ inline void Get(Reader& r, ViewSensorTrack& t) {
     t.sigma_m = r.Q(kSigmaStep);
 }
 
+constexpr double kDegStep = 1e-4;  // degrees, for the scope
+
+inline void PutEchoes(Writer& w, const std::vector<ViewEcho>& list) {
+    w.U32(static_cast<std::uint32_t>(list.size()));
+    for (const ViewEcho& e : list) {
+        w.I32(e.key);
+        w.Q(e.range_m, kPosStep);
+        w.Q(e.azimuth_deg, kDegStep);
+        w.Q(e.elevation_deg, kDegStep);
+        w.I32(e.beam);
+        w.U8(e.control_reply ? 1 : 0);
+    }
+}
+inline bool GetEchoes(Reader& r, std::vector<ViewEcho>& list) {
+    const std::uint32_t n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    list.clear();
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewEcho e;
+        e.key = r.I32();
+        e.range_m = r.Q(kPosStep);
+        e.azimuth_deg = r.Q(kDegStep);
+        e.elevation_deg = r.Q(kDegStep);
+        e.beam = r.I32();
+        e.control_reply = r.U8() != 0;
+        list.push_back(e);
+    }
+    return r.ok;
+}
+inline std::vector<std::uint8_t> ScopeBytes(const ViewScope& sc) {
+    Writer w;
+    w.U8(sc.valid ? 1 : 0);
+    if (!sc.valid) return w.bytes;
+    PutEchoes(w, sc.search);
+    PutEchoes(w, sc.iff);
+    PutEchoes(w, sc.track_returns);
+    w.I32(sc.elevation_beam);
+    w.Q(sc.swept_low_deg, kDegStep);
+    w.Q(sc.swept_high_deg, kDegStep);
+    w.Q(sc.antenna_el_deg, kDegStep);
+    w.Q(sc.indicated_to_true_deg, kDegStep);
+    w.Q(sc.missile_range_m[0], kPosStep);
+    w.Q(sc.missile_range_m[1], kPosStep);
+    w.V3(sc.unit_position, kPosStep);
+    return w.bytes;
+}
+inline bool GetScope(Reader& r, ViewScope& sc) {
+    sc = ViewScope();
+    sc.valid = r.U8() != 0;
+    if (!sc.valid) return r.ok;
+    if (!GetEchoes(r, sc.search) || !GetEchoes(r, sc.iff) || !GetEchoes(r, sc.track_returns)) return false;
+    sc.elevation_beam = r.I32();
+    sc.swept_low_deg = r.Q(kDegStep);
+    sc.swept_high_deg = r.Q(kDegStep);
+    sc.antenna_el_deg = r.Q(kDegStep);
+    sc.indicated_to_true_deg = r.Q(kDegStep);
+    sc.missile_range_m[0] = r.Q(kPosStep);
+    sc.missile_range_m[1] = r.Q(kPosStep);
+    sc.unit_position = r.V3(kPosStep);
+    return r.ok;
+}
+
 // One item's bytes (to tell whether it changed since the base).
 template <typename T>
 std::vector<std::uint8_t> ItemBytes(const T& item) {
@@ -377,6 +466,14 @@ inline std::vector<std::uint8_t> EncodeView(const KnowledgeView& v, const Knowle
     wire::WriteList(w, v.tracks, base != nullptr ? &base->tracks : nullptr);
     wire::WriteList(w, v.contacts, base != nullptr ? &base->contacts : nullptr);
     wire::WriteList(w, v.sensor_tracks, base != nullptr ? &base->sensor_tracks : nullptr);
+    // The scope block whole, or a single 0 when it is the same as the base's.
+    const std::vector<std::uint8_t> scope = wire::ScopeBytes(v.scope);
+    if (base != nullptr && wire::ScopeBytes(base->scope) == scope) {
+        w.U8(0);
+    } else {
+        w.U8(1);
+        w.bytes.insert(w.bytes.end(), scope.begin(), scope.end());
+    }
     return w.bytes;
 }
 
@@ -402,6 +499,7 @@ inline bool DecodeView(const std::vector<std::uint8_t>& bytes, KnowledgeView& in
     inout.c2_status = r.U8();
     inout.own_position = r.V3(wire::kPosStep);
     if (!wire::ReadList(r, inout.tracks) || !wire::ReadList(r, inout.contacts) || !wire::ReadList(r, inout.sensor_tracks)) return false;
+    if (r.U8() != 0 && !wire::GetScope(r, inout.scope)) return false;
     return r.ok && r.AtEnd();
 }
 
@@ -429,8 +527,14 @@ public:
     // The next packet for a client: a delta against its newest acknowledged view if the server still has it, else a
     // keyframe.
     std::vector<std::uint8_t> Produce(int client, const EmScene& s) {
+        return Produce(client, &s, [](KnowledgeView&) {});
+    }
+    // The same, with no EM scene (an empty picture) and/or a caller that adds what the scopes show (`decorate`).
+    template <typename F>
+    std::vector<std::uint8_t> Produce(int client, const EmScene* s, F&& decorate) {
         Client& c = clients_[static_cast<std::size_t>(client)];
-        KnowledgeView v = BuildView(s, c.node);
+        KnowledgeView v = s != nullptr ? BuildView(*s, c.node) : KnowledgeView();
+        decorate(v);
         v.seq = ++c.seq;
         const KnowledgeView* base = nullptr;
         for (const KnowledgeView& h : c.history)
