@@ -275,7 +275,7 @@ private:
             if (out.tuning_file.empty()) return Fail("own_unit.em", "needs own_unit.tuning: the EM layer replaces its sensors");
             std::string library, search, track;
             if (!em->Is(json::Type::Object) ||
-                !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps",
+                !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps", "rain_mmh",
                                            "jammers", "chaff", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
@@ -292,6 +292,8 @@ private:
                 return false;
             }
             if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error, extras)) return Fail("own_unit.em", error);
+            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh)) return false;
+            if (out.em.rain_mmh < 0.0) return Fail("own_unit.em.rain_mmh", "must be >= 0");
             if (const json::Value* w = em->Find("wind_mps")) {
                 if (!Keys(*w, "own_unit.em.wind_mps", {"east", "north", "notes"}) ||
                     !OptionalNumber(*w, "own_unit.em.wind_mps", "east", out.em.wind_mps.x) ||

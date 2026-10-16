@@ -97,7 +97,7 @@ inline RadarLookPhysics AnchorLook(const RadarDef& d, const Environment& env, do
     // Pattern relative to the reference beam's peak: a taller beam has lower gain (two-way).
     const double peak_db = ant.gain_db - d.emitter.antenna.gain_db;
     l.pattern_db = 2.0 * (AntennaGainDb(ant, 0.0, el - beam.centre_rad) - ant.gain_db + peak_db);
-    l.one_way_loss_db = DiffractionLossDb(g, f) + GaseousLossDb(range_m, hr, target_alt_m, f);
+    l.one_way_loss_db = DiffractionLossDb(g, f) + GaseousLossDb(range_m, hr, target_alt_m, f) + RainLossDb(range_m, f, env.rain_rate_mmh);
     l.multipath_factor = TwoRayFactor(rg, lambda, rho, ratio);
     return l;
 }

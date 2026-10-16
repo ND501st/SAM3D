@@ -92,7 +92,7 @@ inline LinkLossResult LinkLossCore(const Environment& env, const PathGeometry& g
     r.line_of_sight = g.line_of_sight;
     r.range_m = range_m;
     r.diffraction_db = DiffractionLossDb(g, freq_hz);
-    r.gas_db = GaseousLossDb(range_m, alt1, alt2, freq_hz);
+    r.gas_db = GaseousLossDb(range_m, alt1, alt2, freq_hz) + RainLossDb(range_m, freq_hz, env.rain_rate_mmh);
     const double lambda = WavelengthOf(freq_hz);
     if (freq_hz < 1e9) {
         const double pe = PlaneEarthFactor(h1, h2, g.ground_range_m, lambda);

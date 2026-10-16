@@ -126,7 +126,7 @@ tick at the 500-aircraft benchmark (14 ms mean today on one core).
 | **E6** | Threats | ARMs homing on emitters (with memory after shutdown), decoy drones, self-protection pods, SOJ escorts; doctrine: ARM detection, blink, relocate | E5 | M | small | scenarios: Lebanon-style decoys, HARM drill | phase 9.2 |
 | **E7** | Deception and EMCON depth | Decoy emitters on the same parameters (Czechoslovak doctrine), dummy positions, frequency changes vs spot jammers, repeater false targets, VGPO, comms deception and the intercept value of voice | E6 | M | small | deception scenarios produce ghost fixes / misidentifications | phase 9 complete |
 | **E8** | Scale | Threads for ESM/radar systems, time-sliced cold paths, hierarchical max-height grid, level of detail for distant units | any | M | goal: 500 aircraft ≤ 5 ms mean | `em_bench` in CI as a trend | goal met with identical results single- and multi-threaded |
-| **E9** | Environment depth | Deygout multi-edge diffraction, forest/urban obstacle heights from land cover, rain at Ku band, sea areas | E2 | M | +10–30 % path cost | propagation tests vs ITU-R examples | — |
+| **E9** (started 16 Oct 2026: Deygout three-edge diffraction with distinct-crest sub-edges, ITU-R P.838 rain; left: forest/urban obstacle heights, sea areas) | Environment depth | Deygout multi-edge diffraction, forest/urban obstacle heights from land cover, rain at Ku band, sea areas | E2 | M | +10–30 % path cost | propagation tests vs ITU-R examples | — |
 | **E10** | Multiplayer knowledge | Server-side simcore; replicate each player's knowledge, never truth | multiplayer crew | L | network | soak tests | later |
 
 ## Later

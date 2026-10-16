@@ -259,6 +259,7 @@ struct Environment {
     double k_factor = kStandardRefractionK;
     double profile_spacing_m = 100.0;
     Vec3 wind_mps;                      // chaff drift
+    double rain_rate_mmh = 0.0;         // rain over the whole scene (ITU-R P.838); never part of a radar's calibration
 };
 
 // Effective reflection coefficient: rho0 * Rayleigh roughness factor

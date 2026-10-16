@@ -43,6 +43,12 @@ public:
         s_.rng = Random(seed);
     }
 
+    // The weather is never part of a calibration: ranges are published for a clear day.
+    static Environment Dry(Environment env) {
+        env.rain_rate_mmh = 0.0;
+        return env;
+    }
+
     EmScene& Scene() { return s_; }
     const EmScene& Scene() const { return s_; }
     double Time() const { return s_.time_s; }
@@ -58,13 +64,14 @@ public:
 
     // Install the definitions and calibrate every radar to its anchor. Fails if a radar has none.
     bool SetLibrary(EmLibrary lib, std::string* error = nullptr) {
+        const Environment dry = Dry(s_.env);
         for (RadarDef& d : lib.radars) {
-            if (!Calibrate(d, s_.env)) {
+            if (!Calibrate(d, dry)) {
                 if (error != nullptr) *error = "radar '" + d.id + "' has no usable calibration anchor";
                 return false;
             }
         }
-        for (RadioDef& r : lib.radios) CalibrateRadio(r, s_.env);
+        for (RadioDef& r : lib.radios) CalibrateRadio(r, dry);
         s_.lib = std::move(lib);
         return true;
     }
@@ -72,8 +79,9 @@ public:
     // Changing the environment changes the propagation the calibration was done in: recalibrate.
     void SetEnvironment(const Environment& env) {
         s_.env = env;
-        for (RadarDef& d : s_.lib.radars) Calibrate(d, s_.env);
-        for (RadioDef& r : s_.lib.radios) CalibrateRadio(r, s_.env);
+        const Environment dry = Dry(env);
+        for (RadarDef& d : s_.lib.radars) Calibrate(d, dry);
+        for (RadioDef& r : s_.lib.radios) CalibrateRadio(r, dry);
         s_.paths.Clear();
     }
 
