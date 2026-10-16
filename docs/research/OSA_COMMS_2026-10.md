@@ -32,7 +32,7 @@ the intercom are the same family.
 
 ## The 3D models (October 2026)
 
-The R-123M is traced in 3D (`tools/blender/r123m_trace.py`, `tools/r123m_rectify.py`): the first photo is flattened with the
+The R-123M is traced in 3D (`tools/blender/r123m_trace.py`; the method is `docs/MODELLING_FROM_PHOTOS.md`, run with `tools/photo_trace.py` and `tools/traces/r123m_front.json`): the first photo is flattened with the
 homography that sends the plate's two vanishing points to infinity (twelve in-plane edges agree to 0.65 degrees; the band
 selector's well comes out round to 0.6 %), scaled to the set's 225 mm height, which makes the front 406 mm wide; the wells and
 the drum are fitted as circles in it, everything else read off a 5 mm grid. How far each part stands out of the plate (hood

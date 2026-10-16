@@ -1,7 +1,7 @@
 """The R-123M's front, traced in 3D from two photographs (no bpy: the Blender builder, the sketch tool and the cabin layout
 all read it).
 
-How it was traced (tools/r123m_rectify.py repeats it):
+How it was traced (docs/MODELLING_FROM_PHOTOS.md; tools/photo_trace.py with tools/traces/r123m_front.json repeats it):
 
 1. The photo: an R-123 in a museum, Wikimedia Commons "Funkstation_R-123_IMG_1390.JPG" (3000 x 2250 px; `r123_commons`; not
    kept in the repository). It is taken from above and to the right, close up: the plate's verticals lean up to 7 degrees

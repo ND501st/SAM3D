@@ -2,10 +2,10 @@
 traced from, to check the trace.
 
     python tools/r123m_sketch.py                                 # out/r123m/front_sketch.png
-    python tools/r123m_sketch.py --photo out/r123m/front_mm.png  # also out/r123m/front_overlay.png (the trace in red on it)
+    python tools/r123m_sketch.py --photo out/traces/r123m_front/front_mm.png   # also out/r123m/front_overlay.png
     python tools/r123m_sketch.py --out docs/research/r123m_front_trace.png
 
-The drawing is at 5 px/mm with a 40 mm margin: the frame of tools/r123m_rectify.py's flattened photo (front_mm.png), so
+The drawing is at 5 px/mm with a 40 mm margin: the frame of the flattened photo tools/photo_trace.py rectify writes (front_mm.png), so
 the two lie on each other. Standard library plus Pillow.
 """
 import argparse
@@ -20,7 +20,7 @@ import r123m_trace as T  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = r'C:\Windows\Fonts\ARIALN.TTF'
-K, MARGIN = 5.0, 40.0          # px per mm, mm round the front (as tools/r123m_rectify.py)
+K, MARGIN = 5.0, 40.0          # px per mm, mm round the front (as tools/photo_trace.py)
 
 
 def font(px):
@@ -139,7 +139,7 @@ def draw_trace(img, ink, text=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--photo', help='the flattened photo (tools/r123m_rectify.py writes out/r123m/front_mm.png)')
+    ap.add_argument('--photo', help='the flattened photo (tools/photo_trace.py rectify writes out/traces/r123m_front/front_mm.png)')
     ap.add_argument('--out', default=os.path.join(REPO, 'out', 'r123m', 'front_sketch.png'))
     args = ap.parse_args()
     size = (int((T.W_MM + 2 * MARGIN) * K), int((T.H_MM + 2 * MARGIN) * K))
@@ -153,7 +153,7 @@ def main():
     if args.photo:
         photo = Image.open(args.photo).convert('RGB')
         if photo.size != size:
-            sys.exit('the photo is %s, the sketch frame %s: use tools/r123m_rectify.py output' % (photo.size, size))
+            sys.exit('the photo is %s, the sketch frame %s: use tools/photo_trace.py rectify output' % (photo.size, size))
         draw_trace(photo, (255, 40, 40))
         out = os.path.join(os.path.dirname(os.path.abspath(args.out)), 'front_overlay.png')
         photo.save(out)
