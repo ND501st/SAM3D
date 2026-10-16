@@ -232,3 +232,7 @@ Done: `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, scenario `c2` bl
 
 `simcore/em/deception.hpp` (decoys, spot-jammer re-tune, dummy radio traffic) and `AddFalseTargetPlots` in `radar_system.hpp`; scenario `own_unit.em.decoys`. See `docs/EM_ARCHITECTURE.md` §29. Next ideas: decoys and dummy traffic as crew procedures (who switches the decoy on), scenario-level dummy nets for the battery, content value of intercepted voice.
 
+## 17. Multiplayer knowledge (E10, simcore side)
+
+`simcore/em/replication.hpp`: `BuildView`, `EncodeView`/`DecodeView`, `KnowledgeReplicator` (server), `KnowledgeMirror` (client); `EmSensorLink::UnitNodeId()`. See `docs/EM_ARCHITECTURE.md` §30. Next: the Unreal transport (unreliable RPC carrying the bytes, acknowledgement back), and the multiplayer crew (several players on one vehicle share its node's view; per-seat filtering if wanted).
+
