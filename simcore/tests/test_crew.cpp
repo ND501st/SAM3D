@@ -346,10 +346,29 @@ SC_TEST("drill master: the cost of a move: none for the best one, the goal lost 
     const DrillMaster dm(o.console, &o.crew);
     const DrillGoal goal = TaskOf(o, "ready_halted");
     SC_EXPECT_NEAR(dm.CostOf(goal, o.console, "pwr.gta", 1), 0.0, 1e-9);
-    // Unlocking the АПУ while the vehicle is still moving faults it (its prerequisite is a halted vehicle).
+    // Unlocking the АПУ while the vehicle is still moving faults it (its prerequisite is a halted vehicle): the cost is
+    // the recovery (lock it again, halt, unlock), not the goal lost.
     Osa m;
     const DrillMaster dm2(m.console, &m.crew);
-    SC_EXPECT(dm2.CostOf(goal, m.console, "apu.lock", 1, 600.0) >= 600.0);
+    const double cost = dm2.CostOf(goal, m.console, "apu.lock", 1, 600.0);
+    std::printf("    unlocking on the move costs %.1f s\n", cost);
+    SC_EXPECT(cost > 0.5 && cost < 600.0);
+}
+
+SC_TEST("drill master: from a faulted subsystem it plans the recovery: off, the prerequisite, on again") {
+    Osa o;  // moving
+    o.console.panel.Set("apu.lock", 1);
+    o.console.equipment.Update(0.0, o.console.panel);
+    SC_EXPECT(o.console.equipment.State("apu_free") == SubsystemState::Fault);
+    const DrillMaster dm(o.console, &o.crew);
+    const IdealTimeline tl = dm.Ideal(TaskOf(o, "ready_halted"), o.console);
+    SC_EXPECT(tl.reached);
+    double off_s = -1.0, on_s = -1.0;
+    for (const DrillAction& a : tl.actions) {
+        if (a.control == "apu.lock" && a.position == 0 && off_s < 0.0) off_s = a.time_s;
+        if (a.control == "apu.lock" && a.position == 1 && off_s >= 0.0 && on_s < 0.0) on_s = a.time_s;
+    }
+    SC_EXPECT(off_s >= 0.0 && on_s > off_s);
 }
 
 // ------------------------------------------------------------------------------------------ 8.4 callouts
