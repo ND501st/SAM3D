@@ -101,14 +101,14 @@ its done-when criteria is `docs/crew/09_IMPLEMENTATION_PLAN.md`.
 | # | Task |
 |---|---|
 | 8.0 | **Done 16 Oct 2026:** the crew reference (`docs/crew/`), the pillars in every document, the generated action map (`tools/crew_map.py`) |
-| 8.1 | Crew data (`data/crew/`): seats, orders, callouts, tasks, world facts, skill tiers; loader; scenario `crew[].skill` |
-| 8.2 | Skill in behaviour: reaction, jitter, slips, omissions, wheel rates, TV lag and aim, stress |
-| 8.3 | The drill master: plan, ideal timeline, best next move per seat, cost of a move |
-| 8.4 | Callouts: the callout bus (intercom, radios), reports and acknowledgements, reminders |
+| 8.1 | **Done 16 Oct 2026:** crew data (`data/crew/`): seats, orders, callouts, tasks, world facts, skill tiers; loader `simcore/crew_data.hpp`; scenario `crew[].skill` |
+| 8.2 | **First pass done:** skill in behaviour: reaction, jitter, slips, omissions, wheel rates, TV lag and aim, range by hand, stress (flag). Left: judgement, communication misses, stress from the situation, calibration tests |
+| 8.3 | **v1 done:** the drill master (`simcore/drill_master.hpp`): plan, ideal timeline, best next move per seat, cost of a move. Left: fault recovery, the engagement's network chart, decisions under uncertainty |
+| 8.4 | **First pass done:** callouts (`simcore/crew_callouts.hpp`): orders, acknowledgements, automatic reports, engagement reports, designations passed on, faults, reminders; HUD radio lines and the debrief |
 | 8.5 | Knowledge per seat: NPCs act on their instruments and what they were told |
-| 8.6 | The NPC vehicle commander: doctrine paths from the crew's reports; the player in any seat |
-| 8.7 | Assistance overlay and grading (Unreal and debrief) |
-| 8.8 | Commander mode: the order menu (Unreal) |
+| 8.6 | **Vehicle first pass done:** the NPC vehicle commander (`"crew_commander": "npc"`, scenario `osa_crew_practice.json`): readiness by the drill master's plan, the engagement by the crew data's orders, supervision of a player's seat; the player in command through `GiveCrewOrder`. Left: march, priorities, second missile, logistics, C2 |
+| 8.7 | Assistance overlay and grading (Unreal and debrief). Backend `GetDrillAdvice` done |
+| 8.8 | Commander mode: the order menu (Unreal). Backend `GiveCrewOrder` done |
 | 8.9 | The battery: NPC vehicle commanders, fire distribution, the battery commander's seat |
 | 8.10 | NPC crew bodies, animations, seats, voice lines (five seats) |
 | 8.11 | One mission end to end: march, choose a position, orient, deploy, function check, engage, reload, stow, debrief |

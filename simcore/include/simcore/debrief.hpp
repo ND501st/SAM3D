@@ -79,8 +79,11 @@ public:
     }
 
     // Drains a crew member's reports, stamping them with the session time.
-    void CollectCrew(CrewMember& crew, double now_s) {
-        for (CrewReport& r : crew.TakeReports()) {
+    void CollectCrew(CrewMember& crew, double now_s) { CollectCrewReports(crew.Name(), crew.TakeReports(), now_s); }
+
+    // Records reports already taken from a crew member (the runner speaks them first: crew_callouts.hpp).
+    void CollectCrewReports(const std::string& name, std::vector<CrewReport> reports, double now_s) {
+        for (CrewReport& r : reports) {
             DebriefEntry::Kind kind = DebriefEntry::Kind::Started;
             switch (r.kind) {
                 case CrewReport::Kind::Started: kind = DebriefEntry::Kind::Started; break;
@@ -98,7 +101,7 @@ public:
                     r.detail = "forgot " + r.detail + " for a while";
                     break;
             }
-            Record({now_s, kind, crew.Name(), std::move(r.procedure_id), std::move(r.detail)});
+            Record({now_s, kind, name, std::move(r.procedure_id), std::move(r.detail)});
         }
     }
 

@@ -47,6 +47,7 @@ struct DrillAction {
 struct DrillGoal {
     std::vector<Condition> conditions;
     std::vector<Condition> prefer;
+    std::vector<std::string> drills;  // the drills of the order behind the task: chosen first where they help
     std::string name;  // for the why chains ("the goal: Ready for action at a halt")
     DrillGoal(std::vector<Condition> c) : conditions(std::move(c)) {}  // NOLINT: implicit on purpose
     DrillGoal(const CrewTask& t) : conditions(t.conditions), prefer(t.prefer), name(t.name) {}  // NOLINT
@@ -99,6 +100,19 @@ public:
 
     double ReactionS() const { return reaction_s_; }
 
+    // A task as the drill master aims at it: its conditions, its preferred ways, and the drills of the crew data's
+    // orders that ask for it (К бою's drills for "ready, halted"), which win over other drills that would also do.
+    DrillGoal GoalFor(const CrewTask& task) const {
+        DrillGoal g(task);
+        if (crew_ != nullptr) {
+            for (const OrderDef& o : crew_->orders) {
+                if (o.task != task.id) continue;
+                for (const OrderStart& s : o.procedures) g.drills.push_back(s.procedure);
+            }
+        }
+        return g;
+    }
+
     // The plan from a state (a panel and its equipment) to the goal.
     DrillPlan Plan(const DrillGoal& goal, const ControlPanel& panel, const Equipment& equipment) const {
         Expansion x{panel, equipment, {}, {}, {}, {}, {}, &goal.prefer};
@@ -109,7 +123,7 @@ public:
             drills.clear();
             std::map<std::string, std::vector<std::pair<std::string, int>>> needed;
             for (const auto& a : x.actions) needed[Station(a.first)].push_back(a);
-            for (const auto& n : needed) ChooseDrills(n.first, n.second, drills[n.first]);
+            for (const auto& n : needed) ChooseDrills(n.first, n.second, goal.drills, drills[n.first]);
             const std::size_t before = x.actions.size() + x.world.size() + x.world_actions.size();
             for (const auto& d : drills) {
                 for (const std::string& id : d.second) {
@@ -536,8 +550,22 @@ private:
 
     // Greedy: the seat's drill that covers most of its needed actions, while most of the drill's steps are needed (a drill
     // that would do much else, such as a launch, is not pulled in for one switch); ties to the shorter drill.
-    void ChooseDrills(const std::string& station, const std::vector<std::pair<std::string, int>>& todo, std::vector<std::string>& out) const {
+    void ChooseDrills(const std::string& station, const std::vector<std::pair<std::string, int>>& todo,
+                      const std::vector<std::string>& preferred, std::vector<std::string>& out) const {
         std::vector<std::pair<std::string, int>> left = todo;
+        for (const std::string& id : preferred) {  // the order's own drills first, wherever they help
+            const Procedure* p = console_.FindProcedure(id);
+            if (p == nullptr || p->station != station || std::find(out.begin(), out.end(), id) != out.end()) continue;
+            bool helps = false;
+            for (const auto& a : left) helps = helps || Covered({id}, a);
+            if (!helps) continue;
+            out.push_back(id);
+            std::vector<std::pair<std::string, int>> rest;
+            for (const auto& a : left) {
+                if (!Covered({id}, a)) rest.push_back(a);
+            }
+            left.swap(rest);
+        }
         for (;;) {
             const Procedure* best = nullptr;
             int best_cover = 0;

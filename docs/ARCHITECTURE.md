@@ -82,6 +82,20 @@ someone must have driven within reach), and that interdependence is mapped. The 
   `wait_for`, reacts with a delay once a lamp comes on, and reports started / completed / waiting / equipment fault /
   aborted for voice lines and the order UI.
 
+- Crew data and skill (`crew_data.hpp`, `data/crew/`): seats, the callout catalogue, orders, tasks, world facts,
+  automatic reports, skill tiers. A crew member with a tier (`CrewMember::SetSkill`) reacts per action with jitter,
+  slips (an out-of-order action, logged as a crew mistake) and forgets steps for its patience; NPC aiming takes wheel
+  rates, TV lag and aim noise from the tiers (`AimCrew`).
+- The drill master (`drill_master.hpp`): the reference performer. Backward chaining over the console's own dependency
+  data to each seat's actions, the sourced drills preferred, a ghost run on a copy of the console for the ideal
+  timeline, each seat's best next move and the cost of a move. It drives reminders, the NPC commander's readiness
+  orders and (to come) the training overlay.
+- Callouts (`crew_callouts.hpp`): the crew's voice on the intercom and the battery net, one voice per channel, urgent
+  first; `ScenarioRunner` speaks orders, acknowledgements, automatic reports, engagement events
+  (`EngagementModel::TakeEvents`), designations and reminders, into the radio log and the debrief.
+- The NPC vehicle commander (`ScenarioRunner`, `"crew_commander": "npc"`): readiness by the drill master's plan, the
+  engagement by the crew data's orders, supervision of players' seats; `GiveCrewOrder` is the order menu's backend.
+
 The player's 3D cabin clicks call the same functions, so the player and the crew share one source of truth.
 - Player: `ScenarioRunner::PlayerSet` puts the player's moves through a `ProcedureTracker` (the procedure set with
   `SetPlayerProcedure`, or none for free play), so early and out-of-order actions reach the debrief like a crew

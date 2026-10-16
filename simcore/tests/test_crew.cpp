@@ -1,14 +1,17 @@
 // Phase 8, crew and teamwork (docs/crew/): the crew data, skill in behaviour, and the drill master (the reference
 // performer that knows each seat's best move).
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/crew_callouts.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/drill_master.hpp"
 #include "simcore/procedures.hpp"
@@ -347,4 +350,131 @@ SC_TEST("drill master: the cost of a move: none for the best one, the goal lost 
     Osa m;
     const DrillMaster dm2(m.console, &m.crew);
     SC_EXPECT(dm2.CostOf(goal, m.console, "apu.lock", 1, 600.0) >= 600.0);
+}
+
+// ------------------------------------------------------------------------------------------ 8.4 callouts
+
+SC_TEST("callouts: one voice at a time per channel, urgent first, speaking takes time, fields filled in") {
+    Osa o;
+    CalloutBus bus(&o.crew);
+    SC_EXPECT(bus.Say(0.0, "done", "operator"));
+    SC_EXPECT(bus.Say(0.0, "contact", "senior_operator", {{"azimuth", "05-40"}, {"range_km", "24"}}));
+    SC_EXPECT(bus.Say(0.0, "captured", "operator"));  // urgent: spoken first
+    SC_EXPECT(!bus.Say(0.0, "no_such_callout", "operator"));
+    std::vector<SpokenCallout> heard;
+    for (int i = 1; i <= 100; ++i) {
+        bus.Step(i * 0.1);
+        for (const SpokenCallout& s : bus.TakeHeard()) heard.push_back(s);
+    }
+    SC_EXPECT(heard.size() == 3);
+    SC_EXPECT(heard[0].id == "captured" && heard[1].id == "contact" && heard[2].id == "done");
+    for (std::size_t i = 1; i < heard.size(); ++i) SC_EXPECT(heard[i].start_s >= heard[i - 1].end_s - 1e-9);  // never two at once
+    SC_EXPECT(heard[1].ru == "Цель, азимут 05-40, дальность 24!");
+    SC_EXPECT_NEAR(SpeakingTimeS("Цель, азимут 05-40, дальность 24!"), 0.4 + 0.35 * 6, 1e-9);
+    SC_EXPECT(MilsText(90.0) == "15-00" && MilsText(-6.0) == "59-00");
+}
+
+SC_TEST("callouts: in the practice shoot the crew speaks its drill: orders, acknowledgements, reports, contact, capture, result") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_practice_em.json", kData, def, console, &e));
+    SC_EXPECT(def.has_crew_data);
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.RunToEnd(0.1, 700.0);
+    std::vector<std::string> said;
+    for (const SpokenCallout& s : r.Callouts()->Log()) said.push_back(s.id);
+    auto has = [&](const std::string& id) {
+        const bool f = std::find(said.begin(), said.end(), id) != said.end();
+        if (!f) std::printf("    no '%s'\n", id.c_str());
+        return f;
+    };
+    SC_EXPECT(has("order_gta") && has("ack") && has("power_on") && has("soc_ready") && has("contact") && has("captured") &&
+              has("target_in_zone") && has("missile_away"));
+    SC_EXPECT(has("hit") || has("miss"));
+    // They reach the radio log (the HUD's lines) and the debrief.
+    bool on_radio = false;
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) on_radio = on_radio || m.net == "intercom";
+    SC_EXPECT(on_radio);
+    SC_EXPECT(r.Debrief().find("Питание подано!") != std::string::npos);
+}
+
+SC_TEST("callouts: a crewmate waiting on a player's seat reminds him, then the commander orders it by name") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_practice_em.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.TakeSeat("operator", "Player"));  // the player holds the operator's seat and does nothing
+    r.RunToEnd(0.1, 300.0);
+    SC_EXPECT(r.RemindersTo("operator") >= 1);
+    bool asked = false, ordered = false;
+    for (const SpokenCallout& s : r.Callouts()->Log()) {
+        asked = asked || (s.id == "remind" && s.ru.find("Оператор") == 0);
+        ordered = ordered || (s.id == "remind_order" && s.ru.find("Оператор") == 0);
+    }
+    SC_EXPECT(asked && ordered);
+    SC_EXPECT(r.Debrief().find("waits for Operator") != std::string::npos);
+}
+
+// ------------------------------------------------------------------------------------------ 8.6 the NPC commander
+
+namespace {
+std::unique_ptr<ScenarioRunner> CrewPractice() {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    if (!LoadScenarioFile(kData + "/scenarios/osa_crew_practice.json", kData, def, console, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return nullptr;
+    }
+    return std::unique_ptr<ScenarioRunner>(new ScenarioRunner(std::move(def), std::move(console)));
+}
+}  // namespace
+
+SC_TEST("npc commander: with no triggers the crew comes to readiness from cold, takes the target and fires") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r != nullptr && r->NpcCommanderActive());
+    r->RunToEnd(0.1, 800.0);
+    const std::string d = r->Debrief();
+    SC_EXPECT(r->Launches() >= 1);
+    SC_EXPECT(d.find("HIT") != std::string::npos || d.find("MISS") != std::string::npos);
+    for (const char* drill : {"power_up", "equipment_on", "deploy_at_halt", "acquire_with_soc", "ready_capture", "capture_with_ssc",
+                              "prepare_firing", "launch"}) {
+        if (d.find(std::string("started    ") + drill) == std::string::npos) std::printf("    no %s\n", drill);
+        SC_EXPECT(d.find(std::string("started    ") + drill) != std::string::npos);
+    }
+    SC_EXPECT(d.find("Пуск разрешаю!") != std::string::npos);
+}
+
+SC_TEST("npc commander: the player in the operator's seat gets his orders; the crew waits for him, reminds him, and fires only with him") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->TakeSeat("operator", "Player"));
+    r->RunToEnd(0.1, 520.0);
+    SC_EXPECT(r->Launches() == 0);  // the chain stops at the seat that never acted
+    SC_EXPECT(r->RemindersTo("operator") >= 1);
+    SC_EXPECT(r->Debrief().find("order for the player") != std::string::npos);
+}
+
+SC_TEST("npc commander: with the player in command the crew waits for his orders; К бою from the order menu starts every seat") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->TakeSeat("commander", "Player"));
+    SC_EXPECT(!r->NpcCommanderActive());
+    for (int i = 0; i < 300; ++i) r->Step(0.1);
+    SC_EXPECT(r->Debrief().find("started    power_up") == std::string::npos);  // nobody acts unordered
+    SC_EXPECT(r->GiveCrewOrder("order_k_boyu"));
+    SC_EXPECT(!r->GiveCrewOrder("order_no_such_thing"));
+    for (int i = 0; i < 50; ++i) r->Step(0.1);
+    const std::string d = r->Debrief();
+    SC_EXPECT(d.find("started    power_up") != std::string::npos && d.find("started    equipment_on") != std::string::npos &&
+              d.find("started    acquire_with_soc") != std::string::npos);
+    SC_EXPECT(d.find("К бою!") != std::string::npos);
+}
+
+SC_TEST("drill master: a task's order lends its drills (К бою's autonomous search at a halt, not the search on the move)") {
+    Osa o;
+    o.console.equipment.SetInput("vehicle_stopped", true);
+    const DrillMaster dm(o.console, &o.crew);
+    const DrillPlan plan = dm.Plan(dm.GoalFor(*o.crew.FindTask("ready_halted")), o.console.panel, o.console.equipment);
+    const DrillPlan::Seat* so = plan.FindSeat("senior_operator");
+    SC_EXPECT(so != nullptr && so->procedures == std::vector<std::string>{"acquire_with_soc"});
 }

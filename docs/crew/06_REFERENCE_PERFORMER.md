@@ -111,23 +111,36 @@ is that chart, laid on the actual target's geometry (when the target enters the 
 
 ## 5. Interface (simcore)
 
+As built (`simcore/drill_master.hpp`, 16 October 2026):
+
 ```cpp
-// A task: conditions to make true, with a name for the overlay and the debrief.
-struct CrewTask { std::string id, name; std::vector<Condition> conditions; };
+// What it aims at: conditions, the doctrine's preferred ways (a task's "prefer"), and the drills of the order behind
+// the task (GoalFor), which win over other drills that would also do.
+struct DrillGoal { std::vector<Condition> conditions, prefer; std::vector<std::string> drills; std::string name; };
 
 class DrillMaster {
 public:
-    DrillMaster(const ConsoleData& console, const CrewData& crew);
-    // The plan from the current state: for each seat, its procedures and loose actions in order.
-    CrewPlan Plan(const CrewTask& task, const ControlPanel& panel, const Equipment& equipment) const;
-    // The ideal timeline from the current state (a ghost run on a copy of the console).
-    IdealTimeline Ideal(const CrewTask& task, const ConsoleData& now, double max_s = 1200.0) const;
-    // Each seat's best next action now, with the why chain and when it is due.
-    std::vector<Advice> NextBest(const CrewTask& task, const ConsoleData& now) const;
-    // The cost of an action: how much later the task is done after it than before it.
-    double CostOf(const CrewTask& task, const ConsoleData& before, const std::string& control, int position) const;
+    DrillMaster(const ConsoleData& console, const CrewData* crew, double reaction_s = 0.55);  // the reference tier's
+    DrillGoal GoalFor(const CrewTask& task) const;
+    // For each seat: its drills in order, loose actions (with their waits), world facts it makes true (the driver
+    // halts); world facts nobody can make true; and the why chain of every action.
+    DrillPlan Plan(const DrillGoal& goal, const ControlPanel& panel, const Equipment& equipment) const;
+    // The ghost run: every seat's actions with times, subsystems' ready times, whether and when the goal is reached,
+    // and what it is still waiting for in the world.
+    IdealTimeline Ideal(const DrillGoal& goal, const ConsoleData& now, double max_s = 1800.0, double dt = 0.1) const;
+    // Each seat's best next move (control, position, drill, description, due in s, why), or one seat's.
+    std::vector<DrillAdvice> NextBest(const DrillGoal& goal, const ConsoleData& now) const;
+    DrillAdvice NextFor(const std::string& station, const DrillGoal& goal, const ConsoleData& now) const;
+    // How much later the goal comes after moving a control than after the best move (0 for a best move; max_s for a
+    // move that makes it unreachable, e.g. one that faults equipment).
+    double CostOf(const DrillGoal& goal, const ConsoleData& before, const std::string& control, int position,
+                  double max_s = 1800.0) const;
 };
 ```
+
+Found while building it: the take-off generator has no warm-up in the console data, so the fastest way to power is
+the generator; the sourced К бою starts the turbine. Tasks therefore carry the doctrine's preference (`prefer`), and
+where the source says how, the plan follows the source.
 
 ## 6. What it is not
 

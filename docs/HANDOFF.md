@@ -237,3 +237,8 @@ the ATZ and the PU-12M; the PU-12M plan in `docs/PU12_DEVELOPMENT.md`), and now 
 - Scenarios: `osa_jamming_em.json`, `osa_low_level_em.json`, `osa_emcon_tv.json`. 323 simcore tests.
 
 Next, as the user set it: NPC crewmate behaviour and teamwork (phase 8), then the PU-12M (`docs/PU12_DEVELOPMENT.md`).
+
+**Phase 8 started the same day** (`docs/crew/`, plan and status in `docs/crew/09_IMPLEMENTATION_PLAN.md`): the
+reference documents and the generated action map; crew data and skill tiers; skill in the crew's behaviour; the drill
+master (the ideal crew: best move per seat from any state); callouts; the NPC vehicle commander
+(`osa_crew_practice.json` is fought from cold with no triggers). 343 simcore tests.

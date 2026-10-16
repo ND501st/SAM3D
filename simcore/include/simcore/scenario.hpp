@@ -139,6 +139,10 @@ struct ScenarioDef {
     bool battery_night = false;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
+    // "crew_commander": "npc": the vehicle commander is an NPC who runs the crew by doctrine (roadmap 8.6,
+    // docs/crew/07_COMMANDER_MODE.md §4) instead of the scenario's triggers giving every order. "script" (default): the
+    // triggers give the orders.
+    bool npc_commander = false;
 };
 
 namespace detail {
@@ -164,7 +168,7 @@ public:
 
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "command_post", "c2", "battery", "own_unit", "crew", "targets", "triggers", "end"})) {
+                             "terrain", "command_post", "c2", "battery", "own_unit", "crew", "crew_commander", "targets", "triggers", "end"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -187,6 +191,12 @@ public:
         if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
+        if (const json::Value* cc = root.Find("crew_commander")) {
+            if (!cc->Is(json::Type::String) || (cc->string != "npc" && cc->string != "script")) {
+                return Fail("crew_commander", "must be \"npc\" or \"script\"");
+            }
+            out.npc_commander = cc->string == "npc";
+        }
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);

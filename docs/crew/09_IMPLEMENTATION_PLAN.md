@@ -19,7 +19,29 @@ tests; the Unreal parts come after the simcore parts they show.
 | 8.11 | One mission end to end (the former 8.3): march, position, orient, deploy, function check, engage, reload, stow, debrief | M2: a person plays the whole mission without the editor |
 | 8.12 | Playtest and balance (the former 8.4), including the skill table | – |
 
-## Status
+## Status (16 October 2026)
 
-- 8.0: done 16 October 2026 (this folder, `tools/crew_map.py`).
-- 8.1–8.4: started 16 October 2026 (see the roadmap).
+- **8.0 done**: this folder, `tools/crew_map.py`, the pillars in every document.
+- **8.1 done**: `data/crew/osa_ak_crew.json`, `data/crew/skill_levels.json`, `simcore/crew_data.hpp`; scenario
+  `crew[].skill`, `own_unit.crew_data` (default `crew/<system>_crew.json`).
+- **8.2 done** (first pass): reaction and jitter per action, slips (crew mistakes in the debrief), omissions, stress
+  (`CrewMember::SetSkill`, `SetStressed`); the engagement's NPC wheel rates, TV lag and aim noise per seat, range error
+  by hand (`AimCrew`). Not yet: judgement (launch timing, priorities), communication misses, stress set by the
+  situation (the flag exists; nothing sets it yet), the calibration bands of `05` §3 as tests.
+- **8.3 done** (v1): `simcore/drill_master.hpp`: plan (with the doctrine's preferred ways and the order's own drills,
+  `GoalFor`), the ideal timeline by a ghost run, the best next move per seat with its why chain, the cost of a move.
+  Ideal К бою from cold: 254.9 s. Not yet: recovering faulted equipment (switch off and on), the engagement network
+  chart as part of the timeline, decisions under uncertainty (`06` §3.6).
+- **8.4 done** (first pass): `simcore/crew_callouts.hpp` (one voice per channel, urgent first, speaking time); orders
+  spoken with their acknowledgements and "done"; automatic reports from the data; contacts, losses, the jammer, IFF,
+  hits and misses from the engagement's events; designations passed on; faults; reminders (a waiting NPC names the
+  seat that can act; the NPC commander watches his orders to a player's seat and names the step); all to the radio
+  log (the HUD) and the debrief.
+- **8.6 done** (vehicle, first pass): `"crew_commander": "npc"`: the NPC commander brings the crew to readiness by
+  the drill master's plan and fights by the crew data's orders (take, prepare, permit, jammer, low target); a player in
+  a seat gets his orders and is reminded; a player in command gives orders through `GiveCrewOrder`. Scenario
+  `osa_crew_practice.json`. Not yet: the march (he doesn't order the vehicle to move), target priorities among
+  several, the second missile, reload and refuel, C2 source changes.
+- **8.7, 8.8 started**: the Unreal backends `USimWorldSubsystem::GiveCrewOrder` (order menu) and `GetDrillAdvice`
+  (overlay); the callouts already show as HUD radio lines. The menu and the highlight themselves are not built.
+- 8.5, 8.9–8.12: not started.
