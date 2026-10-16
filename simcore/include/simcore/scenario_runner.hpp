@@ -59,10 +59,14 @@ public:
           rng_(def_.seed),
           engagement_on_(!def_.tuning_file.empty()),
           engagement_(def_.tuning, def_.unit_position) {
-        for (const ScenarioCrew& c : def_.crew) {
+        for (std::size_t i = 0; i < def_.crew.size(); ++i) {
+            const ScenarioCrew& c = def_.crew[i];
             const double u = Uniform01(rng_);
             const double reaction = c.reaction_time_s + (2.0 * u - 1.0) * c.reaction_jitter_s;
             crew_.emplace_back(c.name, c.role, reaction);
+            if (const SkillTier* tier = SkillOf(c)) {  // docs/crew/05_SKILL.md
+                crew_.back().SetSkill(ToCrewSkill(*tier), def_.seed * 7919u + static_cast<unsigned>(i) * 104729u + 17u);
+            }
         }
         UpdateAimCrew();
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
@@ -976,12 +980,37 @@ private:
     void UpdateAimCrew() {
         aim_crew_ = AimCrew{};
         if (!engagement_on_) return;
-        for (const CrewMember& c : crew_) {
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            const CrewMember& c = crew_[i];
             if (!SeatHolder(c.Role()).empty()) continue;
-            aim_crew_.azimuth = aim_crew_.azimuth || c.Role() == def_.tuning.aim_az_role;
-            aim_crew_.elevation = aim_crew_.elevation || c.Role() == def_.tuning.aim_el_role;
-            aim_crew_.range = aim_crew_.range || c.Role() == def_.tuning.aim_range_role;
+            const SkillTier* tier = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
+            if (c.Role() == def_.tuning.aim_az_role) {
+                aim_crew_.azimuth = true;
+                if (tier != nullptr) {
+                    aim_crew_.az_rate_factor = tier->wheel_rate_factor;
+                    aim_crew_.az_lag_s = tier->tv_lag_s;
+                    aim_crew_.az_noise_deg = tier->aim_noise_deg;
+                }
+            }
+            if (c.Role() == def_.tuning.aim_el_role) {
+                aim_crew_.elevation = true;
+                if (tier != nullptr) {
+                    aim_crew_.el_rate_factor = tier->wheel_rate_factor;
+                    aim_crew_.el_lag_s = tier->tv_lag_s;
+                    aim_crew_.el_noise_deg = tier->aim_noise_deg;
+                }
+            }
+            if (c.Role() == def_.tuning.aim_range_role) {
+                aim_crew_.range = true;
+                if (tier != nullptr) {
+                    aim_crew_.range_rate_factor = tier->wheel_rate_factor;
+                    aim_crew_.range_error_m = tier->range_error_m;
+                }
+            }
         }
+    }
+    const SkillTier* SkillOf(const ScenarioCrew& c) const {
+        return def_.has_skills && !c.skill.empty() ? def_.skills.Find(c.skill) : nullptr;
     }
     std::vector<EngagementTarget> eng_targets_;
     std::vector<CrewMember> crew_;

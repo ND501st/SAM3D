@@ -530,6 +530,17 @@ struct AimCrew {
     bool azimuth = false;
     bool elevation = false;
     bool range = false;
+    // The skill of the NPC in each aiming seat (docs/crew/05_SKILL.md): wheel speed as a factor on the tuning's aim
+    // rates; how far behind the target the TV wheels follow (s; < 0: the tuning's tv npc_delay_s); random aim error
+    // on the TV wheels (deg, per step); the error of a range set by hand (m, one draw per target).
+    double az_rate_factor = 1.0;
+    double el_rate_factor = 1.0;
+    double range_rate_factor = 1.0;
+    double az_lag_s = -1.0;
+    double el_lag_s = -1.0;
+    double az_noise_deg = 0.0;
+    double el_noise_deg = 0.0;
+    double range_error_m = 0.0;
 };
 
 class EngagementModel {
@@ -1059,11 +1070,11 @@ private:
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             // The board gives true azimuth, set on the wheel as it is: right only if the vehicle is oriented.
             const double want_az = WheelAzimuth(from_board ? board_true_az : best.az_deg, wheel_az, d.az_limit_deg);
-            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * dt));
+            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
         }
         if (crew.range && range_known) {
             const double wheel_r = console.panel.GetValue(d.range_wheel);
-            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best.range_m, tuning_.aim_range_rate_mps * dt));
+            console.panel.SetValue(d.range_wheel, Toward(wheel_r, best.range_m, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
         }
         // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
         // (under the azimuth line while the tracking radar radiates).
@@ -1073,7 +1084,7 @@ private:
         }
         if (crew.elevation && (tv_search || on_indicator)) {
             const double wheel_el = console.panel.GetValue(d.el_wheel);
-            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * dt));
+            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
         }
     }
 
@@ -1178,10 +1189,14 @@ private:
     void FollowRangeByHand(double dt, ConsoleData& console, const AimCrew& crew) {
         const RangeSource source = RangeFrom(console);
         if (!crew.range || !ByHand(source)) return;
-        const double want = source == RangeSource::Search ? SearchContact(tracked_)->range_m : BoardRange(tracked_);
+        if (range_bias_for_ != tracked_) {  // a crewmate's error setting a range by hand, one draw per target
+            range_bias_for_ = tracked_;
+            range_bias_m_ = crew.range_error_m > 0.0 ? crew.range_error_m * AimNormal() : 0.0;
+        }
+        const double want = (source == RangeSource::Search ? SearchContact(tracked_)->range_m : BoardRange(tracked_)) + range_bias_m_;
         const TrackSensorDef& d = console.track;
         const double wheel_r = console.panel.GetValue(d.range_wheel);
-        console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * dt));
+        console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
     }
 
     // Manual TV tracking: the target has to stay in the lens field around where the wheels point. An NPC in a wheel's seat
@@ -1234,22 +1249,23 @@ private:
             return false;
         }
         if (g.los) {
-            // The NPC seats follow the target as it was a moment ago.
+            // The NPC seats follow the target as it was a moment ago (each seat's own lag), with their own aim error.
             double az = g.az_deg, el = g.el_deg;
-            const double want_t = time_ - tuning_.tv_npc_delay_s;
+            const double az_t = time_ - (crew.az_lag_s >= 0.0 ? crew.az_lag_s : tuning_.tv_npc_delay_s);
+            const double el_t = time_ - (crew.el_lag_s >= 0.0 ? crew.el_lag_s : tuning_.tv_npc_delay_s);
             for (const std::array<double, 3>& smp : g.history) {
-                if (smp[0] <= want_t) {
-                    az = smp[1];
-                    el = smp[2];
-                }
+                if (smp[0] <= az_t) az = smp[1];
+                if (smp[0] <= el_t) el = smp[2];
             }
+            if (crew.az_noise_deg > 0.0) az += crew.az_noise_deg * AimNormal();
+            if (crew.el_noise_deg > 0.0) el += crew.el_noise_deg * AimNormal();
             const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
             if (crew.azimuth && !az_locked) {
                 console.panel.SetValue(d.az_wheel, Toward(wheel_az, WheelAzimuth(az, wheel_az, d.az_limit_deg),
-                                                           tuning_.aim_az_rate_deg_s * dt));
+                                                           tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
             }
             if (crew.elevation) {
-                console.panel.SetValue(d.el_wheel, Toward(wheel_el, el, tuning_.aim_el_rate_deg_s * dt));
+                console.panel.SetValue(d.el_wheel, Toward(wheel_el, el, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
             }
             // What the memory would carry on with: the wheels' recent angular rates.
             if (dt > 0.0) {
@@ -1697,6 +1713,15 @@ private:
     int hits_ = 0;
     int misses_ = 0;
     bool range_known_now_ = false;  // the system has a range for the tracked target (set each step)
+    // The crew's aim errors (skill): their own random stream, so the outcome draws don't move when skill is off.
+    std::mt19937 aim_rng_{20261016u};
+    std::string range_bias_for_;
+    double range_bias_m_ = 0.0;
+    double AimNormal() {  // a standard normal draw (Box-Muller), the same on every platform
+        const double u1 = (static_cast<double>(aim_rng_()) + 1.0) / 4294967297.0;
+        const double u2 = static_cast<double>(aim_rng_()) / 4294967296.0;
+        return std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * kPi * u2);
+    }
 };
 
 }  // namespace simcore

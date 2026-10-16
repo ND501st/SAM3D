@@ -10,7 +10,9 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <deque>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -124,6 +126,18 @@ private:
 
 enum class CrewStatus { Idle, Working, Waiting };
 
+// What a crew member's drill work takes from its skill tier (docs/crew/05_SKILL.md, data/crew/skill_levels.json).
+// Without one (the default) a crew member reacts after its fixed reaction time and never slips.
+struct CrewSkill {
+    std::string tier;            // the tier's id, for the debrief
+    double reaction_s = 1.0;     // per control action
+    double jitter_s = 0.0;       // uniform +- on each action
+    double slip_chance = 0.0;    // per step: does the next step first (an out-of-order action), then this one
+    double omission_chance = 0.0;  // per step: forgets it until its patience runs out
+    double patience_s = 5.0;
+    double stress_factor = 1.0;  // multiplies delays and chances while stressed
+};
+
 // What a crew member tells the player (drives voice lines and the order UI).
 struct CrewReport {
     enum class Kind {
@@ -131,8 +145,10 @@ struct CrewReport {
         Completed,       // finished a procedure
         Waiting,         // waiting for equipment; detail = the condition's id
         EquipmentFault,  // saw a fault it was waiting on; stopped; detail = subsystem id
-        Aborted          // stopped: cancelled, superseded, bad procedure data, or another seat's
+        Aborted,         // stopped: cancelled, superseded, bad procedure data, or another seat's
                          // procedure; detail says which
+        Slip,            // did a later step first (skill); detail = the control moved out of order
+        Forgot           // forgot the next step for a while (skill); detail = its control
     };
     Kind kind = Kind::Started;
     std::string procedure_id;
@@ -167,6 +183,23 @@ public:
         Stop();
     }
 
+    // Give this crew member a skill tier; `seed` makes its slips and jitter repeatable.
+    void SetSkill(const CrewSkill& skill, unsigned seed) {
+        skill_ = skill;
+        has_skill_ = true;
+        rng_.seed(seed);
+        reaction_time_s_ = skill.reaction_s;
+        step_delay_s_ = -1.0;
+    }
+    bool HasSkill() const { return has_skill_; }
+    const CrewSkill& Skill() const { return skill_; }
+    // Under stress (night, jamming, under fire, a target in the zone with no track) delays and chances grow.
+    void SetStressed(bool stressed) { stressed_ = stressed; }
+    bool Stressed() const { return stressed_; }
+    // Slips and omissions so far (the debrief and the tests).
+    int Slips() const { return slips_; }
+    int Omissions() const { return omissions_; }
+
     // Call every sim step, after Equipment::Update. Performs at most one control action per call.
     // Without `equipment`, subsystem conditions in wait_for count as met.
     void Update(double dt, ControlPanel& panel, const Equipment* equipment = nullptr) {
@@ -178,6 +211,7 @@ public:
             FinishCurrent();
             return;
         }
+        if (has_skill_ && tracker_.NextIndex() != drawn_for_step_) DrawStep();
         const std::string faulted = FaultedSubsystem(step->wait_for, equipment);
         if (!faulted.empty()) {
             Report(CrewReport::Kind::EquipmentFault, faulted);
@@ -194,7 +228,17 @@ public:
         }
         status_ = CrewStatus::Working;
         action_timer_s_ += dt;
-        if (action_timer_s_ < reaction_time_s_ || tracker_.ElapsedSinceStep() < step->min_wait_s) return;
+        const double needed_s = has_skill_ ? step_delay_s_ : reaction_time_s_;
+        if (action_timer_s_ < needed_s || tracker_.ElapsedSinceStep() < step->min_wait_s) return;
+        if (has_skill_ && slip_pending_) {
+            slip_pending_ = false;
+            const ProcedureStep& next = tracker_.GetProcedure().steps[tracker_.NextIndex() + 1];
+            ++slips_;
+            Report(CrewReport::Kind::Slip, next.control_id);
+            tracker_.Attempt(panel, next.control_id, next.value, equipment);  // logged out of order (or blocked: nothing moves)
+            action_timer_s_ = 0.0;
+            return;
+        }
         const std::string control_id = step->control_id;
         const StepResult r = tracker_.Attempt(panel, control_id, step->value, equipment);
         action_timer_s_ = 0.0;
@@ -224,6 +268,27 @@ public:
 private:
     void Report(CrewReport::Kind kind, std::string detail = std::string()) {
         reports_.push_back({kind, tracker_.GetProcedure().id, std::move(detail), time_s_});
+    }
+
+    double Uniform() { return static_cast<double>(rng_()) / 4294967296.0; }
+
+    // A new step is due: how long it takes this crew member (reaction and jitter, a forgotten step's patience, stress),
+    // and whether he slips (does the next step first). A slip is only possible between two steps that wait for nothing.
+    void DrawStep() {
+        drawn_for_step_ = tracker_.NextIndex();
+        const double stress = stressed_ ? skill_.stress_factor : 1.0;
+        double d = skill_.reaction_s + (2.0 * Uniform() - 1.0) * skill_.jitter_s;
+        d = (d > 0.05 ? d : 0.05) * stress;
+        if (Uniform() < skill_.omission_chance * stress) {
+            d += skill_.patience_s;
+            ++omissions_;
+            Report(CrewReport::Kind::Forgot, tracker_.NextStep()->control_id);
+        }
+        step_delay_s_ = d;
+        const std::vector<ProcedureStep>& steps = tracker_.GetProcedure().steps;
+        const std::size_t i = tracker_.NextIndex();
+        slip_pending_ = i + 1 < steps.size() && steps[i].wait_for.empty() && steps[i + 1].wait_for.empty() &&
+                        steps[i + 1].min_wait_s <= 0.0 && Uniform() < skill_.slip_chance * stress;
     }
 
     void StartNext() {
@@ -282,6 +347,15 @@ private:
     std::string name_;
     std::string role_;
     double reaction_time_s_;
+    bool has_skill_ = false;
+    CrewSkill skill_;
+    std::mt19937 rng_;
+    bool stressed_ = false;
+    std::size_t drawn_for_step_ = static_cast<std::size_t>(-1);
+    double step_delay_s_ = -1.0;
+    bool slip_pending_ = false;
+    int slips_ = 0;
+    int omissions_ = 0;
     double action_timer_s_ = 0.0;
     double time_s_ = 0.0;
     bool has_order_ = false;

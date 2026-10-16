@@ -88,6 +88,15 @@ public:
                 case CrewReport::Kind::Waiting: kind = DebriefEntry::Kind::Waiting; break;
                 case CrewReport::Kind::EquipmentFault: kind = DebriefEntry::Kind::EquipmentFault; break;
                 case CrewReport::Kind::Aborted: kind = DebriefEntry::Kind::Aborted; break;
+                case CrewReport::Kind::Slip:  // an NPC's out-of-order action is a crew mistake like a player's
+                    kind = DebriefEntry::Kind::Deviation;
+                    r.detail += " (out of order: a slip)";
+                    ++out_of_order_;
+                    break;
+                case CrewReport::Kind::Forgot:
+                    kind = DebriefEntry::Kind::Waiting;
+                    r.detail = "forgot " + r.detail + " for a while";
+                    break;
             }
             Record({now_s, kind, crew.Name(), std::move(r.procedure_id), std::move(r.detail)});
         }

@@ -22,6 +22,7 @@
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/crew_data.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
@@ -38,6 +39,7 @@ struct ScenarioCrew {
     std::string role;
     double reaction_time_s = 1.0;
     double reaction_jitter_s = 0.0;  // each run draws reaction_time_s ± this from the scenario seed
+    std::string skill;               // a tier of data/crew/skill_levels.json (docs/crew/05_SKILL.md); empty: none
 };
 
 struct ScenarioTarget {
@@ -103,6 +105,11 @@ struct ScenarioDef {
     double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
     std::vector<TerrainRidge> ridges;     // straight ridges on it, for cover (terrain.ridges)
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
+    std::string crew_file;         // the crew data (own_unit.crew_data, or data/crew/<system>_crew.json when it exists)
+    bool has_crew_data = false;
+    CrewData crew_data;
+    bool has_skills = false;       // a crew member has a "skill": the tiers are loaded
+    SkillTable skills;
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
@@ -179,7 +186,7 @@ public:
         }
         if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
-        if (!LoadCrew(root, out, console)) return false;
+        if (!LoadCrew(root, data_dir, out, console)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -278,7 +285,7 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
+            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
                                    "position", "heading_deg", "inputs"})) {
             return false;
         }
@@ -286,6 +293,16 @@ private:
         std::string error;
         if (!LoadConsoleFile(data_dir + "/" + out.console_file, console, &error)) {
             return Fail("own_unit.console", error);
+        }
+        // The crew's data (docs/crew/): named, or the system's own file when there is one.
+        if (!OptionalString(*u, "own_unit", "crew_data", out.crew_file)) return false;
+        const bool named_crew = !out.crew_file.empty();
+        if (!named_crew) out.crew_file = "crew/" + console.system_id + "_crew.json";
+        if (named_crew || std::ifstream(data_dir + "/" + out.crew_file).good()) {
+            if (!LoadCrewDataFile(data_dir + "/" + out.crew_file, console, out.crew_data, &error)) return Fail("own_unit.crew_data", error);
+            out.has_crew_data = true;
+        } else {
+            out.crew_file.clear();
         }
         if (!OptionalString(*u, "own_unit", "tuning", out.tuning_file)) return false;
         if (!out.tuning_file.empty()) {
@@ -418,18 +435,26 @@ private:
         return true;
     }
 
-    bool LoadCrew(const json::Value& root, ScenarioDef& out, const ConsoleData& console) {
+    bool LoadCrew(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
         const json::Value* arr = OptionalArray(root, "", "crew");
         if (arr == nullptr) return message_.empty();
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string p = Index("crew", i);
             const json::Value& c = arr->items[i];
             ScenarioCrew crew;
-            if (!Keys(c, p, {"name", "role", "reaction_time_s", "reaction_jitter_s"}) ||
+            if (!Keys(c, p, {"name", "role", "reaction_time_s", "reaction_jitter_s", "skill"}) ||
                 !RequireString(c, p, "name", crew.name) || !RequireString(c, p, "role", crew.role) ||
                 !OptionalNumber(c, p, "reaction_time_s", crew.reaction_time_s) ||
-                !OptionalNumber(c, p, "reaction_jitter_s", crew.reaction_jitter_s)) {
+                !OptionalNumber(c, p, "reaction_jitter_s", crew.reaction_jitter_s) || !OptionalString(c, p, "skill", crew.skill)) {
                 return false;
+            }
+            if (!crew.skill.empty()) {
+                std::string error;
+                if (!out.has_skills && !LoadSkillTableFile(data_dir + "/crew/skill_levels.json", out.skills, &error)) {
+                    return Fail(Join(p, "skill"), error);
+                }
+                out.has_skills = true;
+                if (out.skills.Find(crew.skill) == nullptr) return Fail(Join(p, "skill"), "unknown skill tier '" + crew.skill + "'");
             }
             if (crew.reaction_time_s <= 0.0) return Fail(Join(p, "reaction_time_s"), "must be > 0");
             if (crew.reaction_jitter_s < 0.0 || crew.reaction_jitter_s >= crew.reaction_time_s) {

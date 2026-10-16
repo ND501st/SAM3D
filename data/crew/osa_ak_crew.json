@@ -155,13 +155,15 @@
   ],
 
   "tasks": [
-    { "id": "powered", "name": "Power on", "conditions": [ { "subsystem": "power", "is": "ready" } ], "source": "sam3d", "confidence": "estimate" },
+    { "id": "powered", "name": "Power on", "conditions": [ { "subsystem": "power", "is": "ready" } ],
+      "prefer": [ { "subsystem": "gta", "is": "ready" } ], "source": "voenizdat_osa_1991 p246 (К бою, включить ГТА)", "confidence": "medium" },
     { "id": "searching", "name": "Searching with the SOC", "conditions": [ { "subsystem": "soc_antenna", "is": "ready" }, { "subsystem": "soc_transmitter", "is": "ready" } ], "source": "sam3d", "confidence": "estimate" },
     { "id": "ready_halted", "name": "Ready for action at a halt (к бою готов)",
       "conditions": [ { "subsystem": "power", "is": "ready" }, { "subsystem": "soc_antenna", "is": "ready" }, { "subsystem": "soc_transmitter", "is": "ready" },
                       { "subsystem": "antenna_drives", "is": "ready" }, { "subsystem": "tov_camera", "is": "ready" }, { "subsystem": "fire_control_computer", "is": "ready" },
                       { "subsystem": "gyro_erected", "is": "ready" } ],
-      "source": "voenizdat_osa_1991 pp246-248 (the seats' ready reports); the tracking transmitter waits for the target (p250)", "confidence": "medium",
+      "prefer": [ { "subsystem": "gta", "is": "ready" } ],
+      "source": "voenizdat_osa_1991 pp246-248 (К бою, включить ГТА: the turbine, not the take-off generator) (the seats' ready reports); the tracking transmitter waits for the target (p250)", "confidence": "medium",
       "notes": "Not the radios (10 min warm-up, switched on earlier in garrison) and not the function check (its own task)." },
     { "id": "ready_to_fire", "name": "Launch circuit armed", "conditions": [ { "subsystem": "launch_armed", "is": "ready" } ], "source": "sam3d", "confidence": "estimate" },
     { "id": "captured", "name": "Target captured by the tracking radar", "conditions": [ { "input": "target_captured", "is": true } ], "source": "sam3d", "confidence": "estimate" },
@@ -173,7 +175,7 @@
   ],
 
   "facts": [
-    { "input": "vehicle_stopped", "set_by": "the vehicle (driver)", "seats": ["driver"], "needs": [],
+    { "input": "vehicle_stopped", "set_by": "the vehicle (driver)", "seats": ["driver"], "needs": [], "by_action": true,
       "notes": "The driver halts on the commander's order (order_halt), or the scenario.", "source": "sam3d", "confidence": "estimate" },
     { "input": "target_captured", "set_by": "engagement model", "seats": ["senior_operator", "operator", "deputy_commander"],
       "needs": [ { "subsystem": "capture_mode", "is": "ready" }, { "subsystem": "ssc_transmitter", "is": "ready" }, { "subsystem": "antenna_drives", "is": "ready" } ],
