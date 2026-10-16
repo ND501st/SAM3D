@@ -106,6 +106,7 @@ public:
             battery_ = std::make_unique<Battery>(def_.battery_tactics, def_.battery_vehicles);
             battery_->SetDriveOwn(def_.battery_drive_own);
             battery_->SetNight(def_.battery_night);
+            if (def_.prepared.present && def_.prepared.emplacement) battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
@@ -271,6 +272,9 @@ public:
     bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
 
     const ProcedureTracker& PlayerTracker() const { return player_; }
+    // The prepared position the unit stands in (present = false: none).
+    const PreparedPositionDef& Prepared() const { return def_.prepared; }
+
     // The battery around the player's vehicle (null: the scenario has none).
     const Battery* GetBattery() const { return battery_.get(); }
     bool OrderBattery(const BatteryOrder& o) {
@@ -736,6 +740,10 @@ private:
         acmi_.WriteObject(kUnitAcmiId, def_.unit_position, Vec3{},
                           "Type=Ground+AntiAircraft,Name=" + console_.display_name + ",Color=Red");
         if (engagement_on_) engagement_.WriteAcmi(acmi_, time_, world_, eng_targets_);
+        for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
+            acmi_.WriteObject(kUnitAcmiId + 100 + static_cast<int>(i), def_.prepared.dummies[i].position, Vec3{},
+                              "Type=Ground+Static,Name=Dummy position,Color=Red");
+        }
         if (battery_) {
             int k = 0;
             for (const Battery::Vehicle& v : battery_->Vehicles()) {

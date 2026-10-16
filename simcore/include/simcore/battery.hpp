@@ -224,6 +224,8 @@ public:
     // Whether the battery drives the player's vehicle too (a demo, or an NPC driver). Off: it only gives it a goal.
     void SetDriveOwn(bool on) { drive_own_ = on; }
     void SetNight(bool night) { night_ = night; }
+    // The battery stands in a prepared position: the first move order costs `seconds` to climb out and clear the nets.
+    void SetInEmplacement(double seconds) { leave_s_ = seconds; }
 
     void SetAirThreat(bool threat, double t) {
         if (threat == air_threat_) return;
@@ -234,6 +236,12 @@ public:
     }
 
     void Order(const BatteryOrder& o, double t) {
+        const bool moves = o.kind == BatteryOrder::Kind::March || o.kind == BatteryOrder::Kind::CombatFormation;
+        if (moves && leave_s_ > 0.0) {
+            hold_until_s_ = t + leave_s_;
+            events_.push_back({t, "Battery commander", "out of the position: clear the nets and climb out (" + Fmt(leave_s_) + " s)"});
+            leave_s_ = 0.0;
+        }
         switch (o.kind) {
             case BatteryOrder::Kind::March:
                 if (o.route.size() < 2) return;
@@ -291,7 +299,7 @@ public:
                 vehicles_[k].goal = PointAt(SlotArc(k));
                 if (Dist(vehicles_[k].position, vehicles_[k].goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
             }
-            if (mode_ == Mode::Forming && formed) {
+            if (mode_ == Mode::Forming && formed && t >= hold_until_s_) {
                 mode_ = Mode::Marching;
                 events_.push_back({t, "Battery commander", "column formed: march"});
             }
@@ -300,7 +308,7 @@ public:
                 bool keeping_up = true;
                 for (std::size_t k = 0; k < vehicles_.size(); ++k)
                     if (Dist(vehicles_[k].position, vehicles_[k].goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
-                if (keeping_up && lead_s_ < total_) {
+                if (keeping_up && lead_s_ < total_ && t >= hold_until_s_) {
                     lead_s_ = std::min(total_, lead_s_ + tactics_.march_speed_mps * dt);
                     marched_s_ += dt;
                 }
@@ -317,7 +325,7 @@ public:
                                                        : tactics_.march_speed_mps * 1.3;  // a little faster to keep up
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
-            if (mode_ == Mode::Halted || mode_ == Mode::Waiting) {
+            if (mode_ == Mode::Halted || mode_ == Mode::Waiting || t < hold_until_s_) {
                 v.speed_mps = 0.0;
                 continue;
             }
@@ -462,6 +470,8 @@ private:
     double marched_s_ = 0.0;
     double halt_until_s_ = 0.0;
     bool arrived_logged_ = false;
+    double leave_s_ = 0.0;
+    double hold_until_s_ = -1.0;
     std::vector<Event> events_;
 };
 

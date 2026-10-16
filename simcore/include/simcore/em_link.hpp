@@ -64,6 +64,14 @@ struct EmDecoyDef {
     em::DecoyMode mode = em::DecoyMode::WithRadar;
 };
 
+// A dummy position (roadmap 7.6): an echo of its own and, optionally, a decoy emitter copying the search radar.
+struct EmDummyDef {
+    Vec3 position;
+    double rcs_m2 = 20.0;
+    bool decoy = false;
+    em::DecoyMode mode = em::DecoyMode::WhenRadarOff;
+};
+
 // What a scenario asks for: the library file and which of its radars are the unit's search and tracking radars.
 struct EmLinkDef {
     std::string library_file;  // relative to the data folder, e.g. "em/osa_ak.json"
@@ -73,6 +81,8 @@ struct EmLinkDef {
     std::vector<EmJammerDef> jammers;
     std::vector<EmChaffDef> chaff;
     std::vector<EmDecoyDef> decoys;
+    std::vector<EmDummyDef> dummies;  // a prepared position's dummy positions
+    double unit_rcs_m2 = 0.0;         // the vehicle's echo for the other side (0: the EM layer's default)
     Vec3 wind_mps;  // chaff drift
     double rain_mmh = 0.0;  // rain rate over the scene (ITU-R P.838)
     em::EmLibrary library;
@@ -156,6 +166,7 @@ public:
         unit.side = em::Side::Red;
         unit.kind = em::PlatformKind::Ground;
         unit.position = Antenna();
+        if (def.unit_rcs_m2 > 0.0) unit.rcs = em::RcsModel{def.unit_rcs_m2, def.unit_rcs_m2, def.unit_rcs_m2};
         unit_id_ = world_.AddPlatform(unit);
         search_ = world_.AddRadar(unit_id_, def.search_radar, false);
         track_ = world_.AddRadar(unit_id_, def.track_radar, false);
@@ -169,6 +180,13 @@ public:
         world_.AttachSensor(node_, search_);
         world_.AttachSensor(node_, track_);
         if (em::RadarState* sr = Radar(search_)) sr->iff_interrogating = false;  // until the console interrogates
+        for (const EmDummyDef& dm : def.dummies) {
+            const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
+            const int dp = world_.AddGroundPlatform("Dummy position", em::Side::Red, dm.position.x, dm.position.y, mast,
+                                                    em::RcsModel{dm.rcs_m2, dm.rcs_m2, dm.rcs_m2});
+            dummy_platforms_.push_back(dp);
+            if (dm.decoy) decoy_emitters_.push_back(world_.AddDecoy(dp, search_, dm.mode));
+        }
         for (const EmDecoyDef& dd : def.decoys) {
             const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
             const int dp = world_.AddGroundPlatform("Decoy", em::Side::Red, dd.position.x, dd.position.y, mast);
@@ -285,6 +303,9 @@ public:
     bool Ok() const { return error_.empty(); }
     // The decoy emitters copying the search radar (scenario own_unit.em.decoys), in order.
     const std::vector<int>& DecoyEmitters() const { return decoy_emitters_; }
+    // The dummy positions' ground echoes (scenario own_unit.prepared_position), in order.
+    const std::vector<int>& DummyPlatforms() const { return dummy_platforms_; }
+    int UnitPlatformId() const { return unit_id_; }
     const std::string& Error() const { return error_; }
     em::EmWorld& World() { return world_; }
     const em::EmWorld& World() const { return world_; }
@@ -679,6 +700,7 @@ private:
     };
     std::vector<RadioSource> radio_sources_;
     std::vector<int> decoy_emitters_;
+    std::vector<int> dummy_platforms_;
     int node_ = 0;
     double antenna_height_m_ = 0.0;
     int capture_looks_ = 40;

@@ -211,3 +211,42 @@ SC_TEST("battery: the scenario's battery block refuses mistakes with a path") {
     SC_EXPECT(bad(o, "unknown battery order"));
     SC_EXPECT(bad(BatteryScenario(R"({ "id": "x", "when": {}, "do": [ { "battery_order": "combat_formation" } ] })"), "covered"));
 }
+
+SC_TEST("prepared position: emplacement and nets shrink the vehicle's echo; dummies are echoes and decoys; leaving takes time") {
+    const std::string text = R"({
+      "scenario_id": "prep", "name": "Prepared", "source": "sam3d", "confidence": "estimate", "seed": 2,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "battery": { "drive_own": true, "vehicles": [ { "id": "22", "kind": "launcher", "position": { "east_m": 0, "north_m": -60, "up_m": 3 } } ],
+        "orders": [ { "at_s": 10, "order": "march", "route": [ { "east_m": 0, "north_m": 0, "up_m": 3 }, { "east_m": 0, "north_m": 30000, "up_m": 3 } ] } ] },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+                    "prepared_position": { "emplacement": true, "nets": true, "wire": true,
+                      "dummies": [ { "position": { "east_m": 800, "north_m": 300, "up_m": 0 }, "decoy": "when_radar_off" },
+                                   { "position": { "east_m": -900, "north_m": 200, "up_m": 0 } } ] },
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" } ],
+      "targets": [], "triggers": [], "end": { "time_limit_s": 900, "when_targets_gone": false } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.prepared.present && def.prepared.dummies.size() == 2 && def.prepared.dummies[0].decoy && !def.prepared.dummies[1].decoy);
+    // 20 m2 x 0.2 (emplacement) x 0.5 (nets) = 2 m2
+    SC_EXPECT_NEAR(def.prepared.VehicleRcsM2(), 2.0, 1e-9);
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.Em() != nullptr);
+    if (r.Em() == nullptr) return;
+    const em::EmScene& s = r.Em()->World().Scene();
+    SC_EXPECT_NEAR(s.FindPlatform(r.Em()->UnitPlatformId())->rcs.beam_m2, 2.0, 1e-9);
+    SC_EXPECT(r.Em()->DummyPlatforms().size() == 2);
+    SC_EXPECT_NEAR(s.FindPlatform(r.Em()->DummyPlatforms()[0])->rcs.beam_m2, 20.0, 1e-9);
+    SC_EXPECT(r.Em()->DecoyEmitters().size() == 1);
+    // the march is ordered at 10 s; climbing out takes 60 s: nobody has moved by 60 s
+    for (int i = 0; i < 600; ++i) r.Step(0.1);
+    SC_EXPECT(r.UnitPosition().y < 1.0);
+    for (int i = 0; i < 1200; ++i) r.Step(0.1);  // 180 s
+    SC_EXPECT(r.UnitPosition().y > 100.0);
+    SC_EXPECT(r.Debrief().find("climb out") != std::string::npos);
+    SC_EXPECT(r.Acmi().Text().find("Dummy position") != std::string::npos);
+}

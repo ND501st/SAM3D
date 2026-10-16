@@ -24,6 +24,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
@@ -102,6 +103,7 @@ struct ScenarioDef {
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
     PositionPowerDef position_power;
+    PreparedPositionDef prepared;  // own_unit.prepared_position (roadmap 7.6)
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
@@ -250,7 +252,8 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position_power", "position", "heading_deg", "inputs"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
+                                   "position", "heading_deg", "inputs"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -367,6 +370,9 @@ private:
                 return false;
             }
             out.has_em = true;
+        }
+        if (const json::Value* pp = u->Find("prepared_position")) {
+            if (!LoadPrepared(*pp, data_dir, out)) return false;
         }
         const json::Value* pos = nullptr;
         if (!RequireObject(*u, "own_unit", "position", pos) ||
@@ -875,6 +881,52 @@ private:
             bool primary_known = false;
             for (const C2SourceDef& d : out.c2_sources) primary_known = primary_known || d.id == out.c2_policy.primary;
             if (!primary_known && !out.c2_sources.empty()) out.c2_policy.primary = out.c2_sources.front().id;
+        }
+        return true;
+    }
+
+    //   "prepared_position": { "file": "command/prepared_positions.json", "emplacement": true, "nets": true, "wire": true,
+    //                          "dummies": [ { "position": {...}, "decoy": "when_radar_off" } ] }
+    bool LoadPrepared(const json::Value& v, const std::string& data_dir, ScenarioDef& out) {
+        const std::string p = "own_unit.prepared_position";
+        std::string file = "command/prepared_positions.json";
+        if (!v.Is(json::Type::Object) || !Keys(v, p, {"file", "emplacement", "nets", "wire", "dummies", "notes"}) ||
+            !OptionalString(v, p, "file", file) || !OptionalBool(v, p, "emplacement", out.prepared.emplacement) ||
+            !OptionalBool(v, p, "nets", out.prepared.nets) || !OptionalBool(v, p, "wire", out.prepared.wire)) {
+            return message_.empty() ? Fail(p, "expected an object") : false;
+        }
+        std::string error;
+        if (!LoadPreparedPositionFile(data_dir + "/" + file, out.prepared.values, &error)) return Fail(Join(p, "file"), error);
+        if (const json::Value* ds = OptionalArray(v, p, "dummies")) {
+            for (std::size_t i = 0; i < ds->items.size(); ++i) {
+                const std::string dp = Index(Join(p, "dummies"), i);
+                const json::Value& d = ds->items[i];
+                if (!Keys(d, dp, {"position", "decoy", "notes"})) return false;
+                DummyPositionDef dd;
+                std::string decoy;
+                if (!OptionalString(d, dp, "decoy", decoy)) return false;
+                if (!decoy.empty() && decoy != "none") {
+                    if (!em::ParseDecoyMode(decoy, dd.mode)) return Fail(Join(dp, "decoy"), "none, with_radar, when_radar_off or always");
+                    dd.decoy = true;
+                }
+                const json::Value* pos = d.Find("position");
+                if (pos == nullptr) return Fail(Join(dp, "position"), "required");
+                if (!LoadPosition(*pos, Join(dp, "position"), frame_, dd.position)) return false;
+                out.prepared.dummies.push_back(dd);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        out.prepared.present = true;
+        // With the EM layer: the vehicle's echo and the dummies' echoes and decoys.
+        out.em.unit_rcs_m2 = out.prepared.VehicleRcsM2();
+        for (const DummyPositionDef& d : out.prepared.dummies) {
+            EmDummyDef e;
+            e.position = d.position;
+            e.rcs_m2 = out.prepared.values.dummy_rcs_m2;
+            e.decoy = d.decoy;
+            e.mode = d.mode;
+            out.em.dummies.push_back(e);
         }
         return true;
     }
