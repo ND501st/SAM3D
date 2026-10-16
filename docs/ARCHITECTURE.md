@@ -139,8 +139,12 @@ roadmap phase 6:
   the commanded Qc from the log. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
-- Engagement: zones and the methods T/T, Горка, Ф and Н are selected; Н (ПОМЕХА on) is a label with К3 timing only, since
-  no target jams yet (E5), and the NVA's crossing-offset limit is missing. (6.7)
+- Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer
+  drowns the tracking radar's echo and the radar follows it in angle; the range is then by hand (search scope or PU-12)
+  and Н has an outcome factor (9.1). Not modelled: the counter-jamming used "only while firing", the range-only radar
+  (ПОЛУАВТОМАТ) being jammed too, the anti-radiation missile threat. (6.7, 9.1)
+- Targets: terrain following, low strike runs, pop-up helicopters and evasion on launch or lock are scenario behaviours
+  (9.3); the aircraft is still a constant-speed, turn-rate-limited point (no energy, no g limit).
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario
   block (7.6). No emplacements, nets or dummy positions yet.
 - PU-12 board and voice designations are built (7.1, 7.2); the board's picture is the regiment radars' (P-19, P-40: range and horizon only; no clutter, terrain or blind cone) when the scenario lists them.

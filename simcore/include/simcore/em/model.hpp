@@ -328,6 +328,15 @@ struct RadarState {
     int locked_track = 0;
     double rgpo_offset_m = 0.0;  // how far a repeater has walked the range gate
     bool rgpo_captured = false;
+    // Angle tracking on a noise jammer (RadarDef::angle_track_on_jam): the echo is drowned, so the antenna follows the
+    // jamming's direction, measured, with no range. The gate stays at jam_range_m (the last range it had, or the
+    // designation's) so that it can take the echo again when it burns through.
+    bool on_jam = false;
+    double jam_az_rad = 0.0;
+    double jam_el_rad = 0.0;
+    double jam_jn_db = -300.0;
+    double jam_range_m = 0.0;
+    int jam_jammer_id = 0;
     // Outputs of the last tick (overlays, tests, the scope).
     std::vector<LookRecord> last_looks;
     std::vector<RadarPlot> last_plots;

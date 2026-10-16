@@ -1,0 +1,72 @@
+{
+  "scenario_id": "osa_low_level_em",
+  "name": "Osa-AK against a low-level attack: a strike run and a pop-up helicopter (EM radars)",
+  "description": "A fictional practice shoot against low fliers (roadmap 9.3). A strike aircraft runs in low over the plain, following the ground, pulls up short of the position and jinks when a missile is launched at it. A helicopter hides behind a ridge to the north-east, pops up twice to look and drops back into cover. The NPC crew engages the strike aircraft; the helicopter is for the player (the TV and the optical method for a hovering target), or for the crew once the scenario adds an order.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain with one ridge for cover (terrain.ridges). Every flight profile is a PLACEHOLDER: heights, speeds, pop-up times. Cesium's ground replaces the ridge when the scenario is played on the map.",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": {
+    "type": "flat", "height_m": 110,
+    "ridges": [
+      { "from": { "east_m": 1000, "north_m": 5500 }, "to": { "east_m": 9000, "north_m": 5500 }, "height_m": 60, "width_m": 900,
+        "notes": "A low wooded ridge 5.5 km north: cover for the helicopter's hide 1.5 km behind it." }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Deputy commander", "role": "deputy_commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Senior operator", "role": "senior_operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Operator", "role": "operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Driver", "role": "driver", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Strike aircraft, low run (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": -4000, "north_m": 40000, "up_m": 80 },
+      "waypoints": [
+        { "east_m": -3000, "north_m": 14000, "agl_m": 60 },
+        { "east_m": -1500, "north_m": 6000, "agl_m": 500 },
+        { "east_m": 0, "north_m": -2000, "agl_m": 300 },
+        { "east_m": 2000, "north_m": -30000, "agl_m": 60 }
+      ],
+      "speed_mps": 240, "rcs_m2": 3.0, "appear_at_s": 220,
+      "behaviour": { "kind": "terrain_following", "agl_m": 60, "max_climb_mps": 60, "lookahead_s": 6 },
+      "evade": { "on": "launch", "kind": "jink", "turn_rate_deg_s": 12, "jink_period_s": 4, "evade_s": 16 },
+      "notes": "Low ingress at 60 m, pull-up to 500 m short of the position, the attack at 300 m, low egress. Placeholder profile."
+    },
+    {
+      "id": "h1", "name": "Helicopter, pop-up (placeholder)", "type": "Air+Rotorcraft", "class": "helicopter",
+      "start": { "east_m": 8000, "north_m": 20000, "up_m": 30 },
+      "waypoints": [
+        { "east_m": 4000, "north_m": 7000, "agl_m": 5 },
+        { "east_m": 15000, "north_m": 12000, "agl_m": 5 }
+      ],
+      "speed_mps": 50, "rcs_m2": 5.0, "appear_at_s": 150,
+      "behaviour": { "kind": "pop_up", "hide_agl_m": 5, "popup_agl_m": 25, "max_climb_mps": 5, "first_hold_s": 120,
+                     "expose_s": 40, "hidden_s": 90, "cycles": 2 },
+      "evade": { "on": "lock", "kind": "dive" },
+      "notes": "Hides 1.5 km behind the ridge at 5 m, pops up to 25 m for 40 s twice (inside the optical zone's 10-25 m), drops back when it hears the tracking radar lock. Placeholder profile."
+    }
+  ],
+  "triggers": [
+    { "id": "ready", "when": { "after_s": 0 },
+      "do": [ { "order": "power_up", "crew": "Driver" }, { "queue": "pto_on_line", "crew": "Driver" },
+              { "order": "equipment_on", "crew": "Operator" }, { "queue": "deploy_at_halt", "crew": "Operator" },
+              { "order": "search_on_march", "crew": "Senior operator" } ] },
+    { "id": "acquire", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+      "do": [ { "order": "acquire_with_soc", "crew": "Senior operator" }, { "queue": "ready_capture", "crew": "Deputy commander" },
+              { "order": "capture_with_ssc", "crew": "Operator" },
+              { "queue": "prepare_firing", "crew": "Deputy commander" }, { "queue": "launch", "crew": "Deputy commander" } ] }
+  ],
+  "end": { "time_limit_s": 900, "when_targets_gone": false }
+}

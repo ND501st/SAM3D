@@ -67,4 +67,42 @@ private:
     std::vector<double> heights_;
 };
 
+// A straight ridge on flat ground: a bank `height_m` high along the segment from (a_east, a_north) to (b_east, b_north),
+// `width_m` wide at its foot, with cosine shoulders. Cover for scenarios played without a terrain grid (in the game,
+// Cesium supplies the real ground instead).
+struct TerrainRidge {
+    double a_east_m = 0.0;
+    double a_north_m = 0.0;
+    double b_east_m = 0.0;
+    double b_north_m = 0.0;
+    double height_m = 0.0;
+    double width_m = 500.0;
+};
+
+class RidgeTerrain final : public Terrain {
+public:
+    explicit RidgeTerrain(double base_m = 0.0, std::vector<TerrainRidge> ridges = {}) : base_m_(base_m), ridges_(std::move(ridges)) {}
+
+    double HeightAt(double east_m, double north_m) const override {
+        double top = 0.0;
+        for (const TerrainRidge& r : ridges_) {
+            const double dx = r.b_east_m - r.a_east_m, dy = r.b_north_m - r.a_north_m;
+            const double len2 = dx * dx + dy * dy;
+            double f = len2 > 0.0 ? ((east_m - r.a_east_m) * dx + (north_m - r.a_north_m) * dy) / len2 : 0.0;
+            f = f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f);
+            const double d = std::hypot(east_m - (r.a_east_m + f * dx), north_m - (r.a_north_m + f * dy));
+            const double half = 0.5 * r.width_m;
+            if (d >= half || half <= 0.0) continue;
+            const double h = r.height_m * 0.5 * (1.0 + std::cos(3.14159265358979323846 * d / half));
+            if (h > top) top = h;
+        }
+        return base_m_ + top;
+    }
+    const std::vector<TerrainRidge>& Ridges() const { return ridges_; }
+
+private:
+    double base_m_;
+    std::vector<TerrainRidge> ridges_;
+};
+
 }  // namespace simcore

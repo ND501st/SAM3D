@@ -11,13 +11,13 @@
 
   "zones": {
     "head_on": [
-      { "max_speed_mps": 300, "min_altitude_m": 25, "max_altitude_m": 5000 },
-      { "max_speed_mps": 500, "min_altitude_m": 100, "max_altitude_m": 5000 }
+      { "max_speed_mps": 300, "min_altitude_m": 25, "max_altitude_m": 5000, "max_parameter_m": 6000 },
+      { "max_speed_mps": 500, "min_altitude_m": 100, "max_altitude_m": 5000, "max_parameter_m": 4000 }
     ],
     "pursuit": { "max_speed_mps": 300, "min_altitude_m": 100, "max_altitude_m": 5000, "max_range_m": 6500 },
     "optical": { "max_speed_mps": 100, "min_altitude_m": 10, "max_altitude_m": 25, "min_range_m": 2000, "max_range_m": 6500 },
-    "source": "flak11 (Osa-AK engagement zones: head-on 1.5-10 km, 25-5000 m at up to 300 m/s and 100-5000 m at up to 500 m/s; pursuit to 6.5 km, 100-5000 m, up to 300 m/s; optical 'F' zone for targets at up to 100 m/s or hovering, 2-6.5 km, 10-25 m); docs/research/OSA_RESEARCH_2026-10.md section 5.",
-    "notes": "The head-on range limits are the 'zone' box above (1.5-10.3 km: the SAM Simulator manual's 10.3 km against the NVA's 10 km; the manual's was kept). The NVA's 'parameter' limit (6 km / 4 km of crossing offset) is not modelled. A target is 'approaching' when its closing speed is positive; otherwise it is in the pursuit zone or outside."
+    "source": "flak11 (Osa-AK engagement zones: head-on 1.5-10 km, 25-5000 m at up to 300 m/s and 100-5000 m at up to 500 m/s; pursuit to 6.5 km, 100-5000 m, up to 300 m/s; optical 'F' zone for targets at up to 100 m/s or hovering, 2-6.5 km, 10-25 m); docs/research/OSA_RESEARCH_2026-10.md section 5. max_parameter_m: mon_2112_80 p10-12 (crossing parameter up to 6 km at 300 m/s, up to 4 km at 500 m/s), flak11 (6 / 4 km), korovin_tiv_2010 (summary table: 6 km for the Osa-AK).",
+    "notes": "The head-on range limits are the 'zone' box above (1.5-10.3 km: the SAM Simulator manual's 10.3 km against the NVA's 10 km; the manual's was kept). The crossing parameter is how far the target's course passes from the unit, over the ground: beyond the band's limit a head-on target is outside the zone. A target is 'approaching' when its closing speed is positive; otherwise it is in the pursuit zone or outside."
   },
 
   "tv": {
@@ -29,7 +29,7 @@
   "methods": {
     "low_target_elevation_deg": 1.8, "gorka_max_agl_m": 100,
     "source": "samsim_thread (creator, ePap: T/T above elevation 00-30, the 'Gorka' zoom climb or 'F' for low targets); korovin_tiv_2010 (Gorka against targets at 50-100 m, so the fuse is not set off by the ground).",
-    "notes": "00-30 is 30 thousandths on the Soviet 6000-division circle: 1.8 degrees. The method is printed in the debrief and decides nothing else: its effect is in outcome.low_altitude. 'N' (no range, against jammers) is not modelled."
+    "notes": "00-30 is 30 thousandths on the Soviet 6000-division circle: 1.8 degrees. The method is printed in the debrief and decides nothing else: its effect is in outcome.low_altitude. 'N' (ПОМЕХА on: against a jammer, or with no range) has its own outcome factor (outcome.method_factor)."
   },
 
   "search": {
@@ -66,7 +66,9 @@
     "tv_factor": 0.85, "outside_zone_factor": 0.15,
     "manoeuvre_penalty_per_deg_s": 0.04, "manoeuvre_factor_min": 0.3,
     "deviation_penalty": 0.1, "deviation_factor_min": 0.5,
-    "source": "low_altitude is calibrated to the published single-missile kill probabilities (docs/research/OSA_RESEARCH_2026-10.md section 5): flak11 (strike aircraft at 10 m 0.12-0.55, helicopters at 10 m 0.07-0.12, cruise missiles at 10 m 0.12-0.38) and korovin_tiv_2010 (0.35-0.4 at 50 m, 0.42-0.85 above 100 m, original 9K33 against an F-4C). With the class chances above this gives a fighter 0.39 at 50 m, a bomber 0.32 and a helicopter 0.10 at 10 m. Everything else here is a game value.",
-    "notes": "Game values. chance = hit_chance[class] x (TV track ? tv_factor : 1) x (in zone at launch ? 1 : outside_zone_factor) x max(manoeuvre_factor_min, 1 - penalty x target turn rate in deg/s) x max(deviation_factor_min, 1 - deviation_penalty x crew mistakes) x low_altitude[class](height of the target above the ground at impact), linear between the points, flat beyond them."
+    "method_factor": { "N": 0.75 },
+    "no_range_fuse_factor": 0.0,
+    "source": "method_factor and no_range_fuse_factor follow samsim_osa p34 and samsim_thread (ПОМЕХА selects method N and arms the fuse at once, with the medium beam, because there is no range to arm it by); voenizdat_osa_1991 p23-24 (fuse arming against a jamming target); the numbers are game values. low_altitude is calibrated to the published single-missile kill probabilities (docs/research/OSA_RESEARCH_2026-10.md section 5): flak11 (strike aircraft at 10 m 0.12-0.55, helicopters at 10 m 0.07-0.12, cruise missiles at 10 m 0.12-0.38) and korovin_tiv_2010 (0.35-0.4 at 50 m, 0.42-0.85 above 100 m, original 9K33 against an F-4C). With the class chances above this gives a fighter 0.39 at 50 m, a bomber 0.32 and a helicopter 0.10 at 10 m. Everything else here is a game value.",
+    "notes": "Game values. chance = hit_chance[class] x (TV track ? tv_factor : 1) x (in zone at launch ? 1 : outside_zone_factor) x max(manoeuvre_factor_min, 1 - penalty x target turn rate in deg/s) x max(deviation_factor_min, 1 - deviation_penalty x crew mistakes) x low_altitude[class](height of the target above the ground at impact), linear between the points, flat beyond them x method_factor[guidance method] (N: three-point on angles alone, the fuse armed early: a guess at 0.75) x (no range at launch and ПОМЕХА off ? no_range_fuse_factor : 1): with no range and ПОМЕХА off the fuse, armed by range, never arms."
   }
 }
