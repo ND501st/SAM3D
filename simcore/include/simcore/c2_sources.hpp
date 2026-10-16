@@ -371,6 +371,15 @@ public:
 
     void SetLinkModel(C2LinkModel* model) { link_model_ = model; }
 
+    // A source that moves (a neighbouring vehicle of the battery): its radar and its link now start from `at`.
+    void SetSourcePosition(const std::string& id, const Vec3& at) {
+        Source* s = Find(id);
+        if (s == nullptr) return;
+        s->def.position = at;
+        s->def.has_position = true;
+        s->board->SetSource(at);
+    }
+
     bool Has(const std::string& id) const { return Find(id) != nullptr; }
     std::size_t Size() const { return sources_.size(); }
     const C2SourceDef& Def(std::size_t i) const { return sources_[i]->def; }

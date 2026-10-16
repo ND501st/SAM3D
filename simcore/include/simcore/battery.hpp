@@ -1,0 +1,468 @@
+// simcore/battery.hpp — the battery around the player's vehicle (roadmap 7.5): its other vehicles and how they move.
+//
+// An Osa-AK battery was the battery commander's PU-12M, two platoons of two 9A33 and a TZM, and a maintenance vehicle
+// (flak11). The battery tactics below come from an unnamed manual retold in `video_osa` (tier 4, unverified, consistent
+// with Soviet practice), with numbers in data/command/battery_tactics.json:
+//   * March: one column, 25-50 m between vehicles, 200-800 m when an air attack is expected; ready at any moment to pull
+//     off the road for a short-halt engagement.
+//   * Short halt: each vehicle pulls a few tens of metres off the road, alternating sides, stops and deploys.
+//   * Combat formation (advance, pursuit): launchers in pairs about 3 km apart, 200 m within a pair, 1.5-3 km behind the
+//     covered unit; the reload vehicles about 500 m behind the pairs.
+//   * Halts every 3-4 h for checks, fuel and rest (up to 2 h); at night about 1 h without breaking formation.
+// The model moves the NPC vehicles; the player's own vehicle is a member too, and the battery gives it the same goal
+// (its slot in the column or the formation) whether the player or the battery drives it.
+//
+// Positions are ENU on flat ground (z is kept as given); a vehicle moves straight at its speed toward its goal.
+#pragma once
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "simcore/console_data.hpp"
+#include "simcore/geo.hpp"
+#include "simcore/json.hpp"
+#include "simcore/vec3.hpp"
+
+namespace simcore {
+
+struct BatteryTactics {
+    double march_spacing_m = 40.0;
+    double threat_spacing_m = 400.0;
+    double march_speed_mps = 8.3;
+    double cross_country_speed_mps = 5.5;
+    double short_halt_offset_m = 40.0;
+    double deploy_s = 240.0;
+    double pair_separation_m = 3000.0;
+    double pair_internal_m = 200.0;
+    double behind_covered_m = 2000.0;
+    double reload_behind_m = 500.0;
+    double command_post_behind_m = 1000.0;
+    double halt_interval_s = 3.5 * 3600.0;
+    double halt_duration_s = 1.5 * 3600.0;
+    double night_halt_s = 3600.0;
+    double threat_range_m = 50000.0;
+    double slot_tolerance_m = 15.0;
+};
+
+enum class BatteryVehicleKind { Launcher, Reload, CommandPost, Maintenance };
+
+inline const char* BatteryVehicleKindName(BatteryVehicleKind k) {
+    switch (k) {
+        case BatteryVehicleKind::Launcher: return "launcher";
+        case BatteryVehicleKind::Reload: return "reload";
+        case BatteryVehicleKind::CommandPost: return "command_post";
+        case BatteryVehicleKind::Maintenance: return "maintenance";
+    }
+    return "?";
+}
+
+inline bool ParseBatteryVehicleKind(const std::string& s, BatteryVehicleKind& out) {
+    for (BatteryVehicleKind k : {BatteryVehicleKind::Launcher, BatteryVehicleKind::Reload, BatteryVehicleKind::CommandPost,
+                                 BatteryVehicleKind::Maintenance}) {
+        if (s == BatteryVehicleKindName(k)) {
+            out = k;
+            return true;
+        }
+    }
+    return false;
+}
+
+struct BatteryVehicleDef {
+    std::string id;
+    std::string callsign;
+    BatteryVehicleKind kind = BatteryVehicleKind::Launcher;
+    bool own = false;  // the player's vehicle (the scenario's own_unit)
+    Vec3 start;
+};
+
+struct BatteryOrder {
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume };
+    Kind kind = Kind::March;
+    double at_s = 0.0;
+    std::vector<Vec3> route;  // March: the road, first point to last
+    Vec3 covered;             // CombatFormation: the covered unit's position ...
+    double axis_deg = 0.0;    // ... and its direction of advance (true, clockwise from north)
+};
+
+inline const char* BatteryOrderName(BatteryOrder::Kind k) {
+    switch (k) {
+        case BatteryOrder::Kind::March: return "march";
+        case BatteryOrder::Kind::ShortHalt: return "short_halt";
+        case BatteryOrder::Kind::CombatFormation: return "combat_formation";
+        case BatteryOrder::Kind::Halt: return "halt";
+        case BatteryOrder::Kind::Resume: return "resume";
+    }
+    return "?";
+}
+
+inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
+    for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
+                                 BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume}) {
+        if (s == BatteryOrderName(k)) {
+            out = k;
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace detail {
+
+class BatteryTacticsLoader : public ConsoleLoader {
+public:
+    bool Load(const json::Value& root, BatteryTactics& t) {
+        if (!Keys(root, "", {"tactics_id", "display_name", "status", "notes", "tactics"})) return false;
+        const json::Value* b = root.Find("tactics");
+        if (b == nullptr || !b->Is(json::Type::Object)) return Fail("tactics", "required, an object");
+        const std::pair<const char*, double*> fields[] = {
+            {"march_spacing_m", &t.march_spacing_m},       {"threat_spacing_m", &t.threat_spacing_m},
+            {"march_speed_mps", &t.march_speed_mps},       {"cross_country_speed_mps", &t.cross_country_speed_mps},
+            {"short_halt_offset_m", &t.short_halt_offset_m}, {"deploy_s", &t.deploy_s},
+            {"pair_separation_m", &t.pair_separation_m},   {"pair_internal_m", &t.pair_internal_m},
+            {"behind_covered_m", &t.behind_covered_m},     {"reload_behind_m", &t.reload_behind_m},
+            {"command_post_behind_m", &t.command_post_behind_m}, {"halt_interval_s", &t.halt_interval_s},
+            {"halt_duration_s", &t.halt_duration_s},       {"night_halt_s", &t.night_halt_s},
+            {"threat_range_m", &t.threat_range_m}};
+        for (const auto& f : fields) {
+            const std::string p = Join("tactics", f.first);
+            const json::Value* v = b->Find(f.first);
+            if (v == nullptr) return Fail(p, "required");
+            if (!v->Is(json::Type::Object) || !Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) {
+                return message_.empty() ? Fail(p, "expected {value, source, confidence}") : false;
+            }
+            const json::Value* n = v->Find("value");
+            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number > 0.0)) return Fail(Join(p, "value"), "a number > 0");
+            *f.second = n->number;
+        }
+        return true;
+    }
+};
+
+}  // namespace detail
+
+inline bool LoadBatteryTacticsFile(const std::string& path, BatteryTactics& out, std::string* error = nullptr) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) *error = "cannot open " + path;
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text.str(), root, &parse_error)) {
+        if (error != nullptr) *error = path + ": " + parse_error;
+        return false;
+    }
+    BatteryTactics t;
+    detail::BatteryTacticsLoader loader;
+    if (!loader.Load(root, t)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = t;
+    return true;
+}
+
+class Battery {
+public:
+    enum class Mode { Waiting, Forming, Marching, ShortHalt, Formation, Halted };
+
+    struct Vehicle {
+        BatteryVehicleDef def;
+        Vec3 position;
+        Vec3 goal;
+        double heading_deg = 0.0;
+        double speed_mps = 0.0;
+        bool deployed = false;     // stopped and deployed (short halt or formation slot reached and set up)
+        double deploy_done_s = -1.0;
+    };
+
+    struct Event {
+        double t = 0.0;
+        std::string who;
+        std::string text;
+    };
+
+    Battery(BatteryTactics tactics, const std::vector<BatteryVehicleDef>& vehicles) : tactics_(tactics) {
+        for (const BatteryVehicleDef& d : vehicles) {
+            Vehicle v;
+            v.def = d;
+            v.position = d.start;
+            v.goal = d.start;
+            vehicles_.push_back(v);
+        }
+    }
+
+    const BatteryTactics& Tactics() const { return tactics_; }
+    const std::vector<Vehicle>& Vehicles() const { return vehicles_; }
+    Mode CurrentMode() const { return mode_; }
+    bool AirThreat() const { return air_threat_; }
+    double Spacing() const { return air_threat_ ? tactics_.threat_spacing_m : tactics_.march_spacing_m; }
+    const Vehicle* Find(const std::string& id) const {
+        for (const Vehicle& v : vehicles_)
+            if (v.def.id == id) return &v;
+        return nullptr;
+    }
+    const Vehicle* Own() const {
+        for (const Vehicle& v : vehicles_)
+            if (v.def.own) return &v;
+        return nullptr;
+    }
+
+    // The player's vehicle moved (the player drives it): the battery takes its position as it is.
+    void SetOwnPosition(const Vec3& p) {
+        for (Vehicle& v : vehicles_)
+            if (v.def.own) v.position = p;
+    }
+    // Whether the battery drives the player's vehicle too (a demo, or an NPC driver). Off: it only gives it a goal.
+    void SetDriveOwn(bool on) { drive_own_ = on; }
+    void SetNight(bool night) { night_ = night; }
+
+    void SetAirThreat(bool threat, double t) {
+        if (threat == air_threat_) return;
+        air_threat_ = threat;
+        events_.push_back({t, "Battery commander",
+                           threat ? "air attack expected: open the column to " + Fmt(tactics_.threat_spacing_m) + " m"
+                                  : "close the column to " + Fmt(tactics_.march_spacing_m) + " m"});
+    }
+
+    void Order(const BatteryOrder& o, double t) {
+        switch (o.kind) {
+            case BatteryOrder::Kind::March:
+                if (o.route.size() < 2) return;
+                route_ = o.route;
+                BuildArcs();
+                lead_s_ = Spacing() * static_cast<double>(vehicles_.size() - 1);
+                mode_ = Mode::Forming;
+                marched_s_ = 0.0;
+                for (Vehicle& v : vehicles_) v.deployed = false;
+                events_.push_back({t, "Battery commander", "march: form the column (" + std::to_string(vehicles_.size()) + " vehicles)"});
+                break;
+            case BatteryOrder::Kind::ShortHalt:
+                if (route_.size() < 2) return;
+                mode_ = Mode::ShortHalt;
+                for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+                    Vehicle& v = vehicles_[k];
+                    const double s = SlotArc(k);
+                    const Vec3 dir = DirectionAt(s);
+                    const Vec3 left{-dir.y, dir.x, 0.0};
+                    const double side = k % 2 == 0 ? 1.0 : -1.0;
+                    v.goal = PointAt(s) + left * (side * tactics_.short_halt_offset_m);
+                    v.deployed = false;
+                    v.deploy_done_s = -1.0;
+                }
+                events_.push_back({t, "Battery commander", "short halt: off the road, deploy"});
+                break;
+            case BatteryOrder::Kind::CombatFormation:
+                mode_ = Mode::Formation;
+                FormationSlots(o.covered, o.axis_deg);
+                events_.push_back({t, "Battery commander", "combat formation: pairs " + Fmt(tactics_.pair_separation_m) + " m apart, " +
+                                                               Fmt(tactics_.behind_covered_m) + " m behind the covered unit"});
+                break;
+            case BatteryOrder::Kind::Halt:
+                StartHalt(t, night_ ? tactics_.night_halt_s : tactics_.halt_duration_s, "halt ordered");
+                break;
+            case BatteryOrder::Kind::Resume:
+                if (route_.size() >= 2) {
+                    mode_ = Mode::Forming;
+                    for (Vehicle& v : vehicles_) v.deployed = false;
+                    events_.push_back({t, "Battery commander", "back on the road: form the column"});
+                }
+                break;
+        }
+    }
+
+    void Step(double t, double dt) {
+        if (mode_ == Mode::Halted && t >= halt_until_s_) {
+            mode_ = Mode::Forming;
+            marched_s_ = 0.0;
+            events_.push_back({t, "Battery commander", "halt over: form the column"});
+        }
+        if (mode_ == Mode::Forming || mode_ == Mode::Marching) {
+            bool formed = true;
+            for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+                vehicles_[k].goal = PointAt(SlotArc(k));
+                if (Dist(vehicles_[k].position, vehicles_[k].goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
+            }
+            if (mode_ == Mode::Forming && formed) {
+                mode_ = Mode::Marching;
+                events_.push_back({t, "Battery commander", "column formed: march"});
+            }
+            if (mode_ == Mode::Marching) {
+                // The leader moves on as long as nobody behind has fallen too far back.
+                bool keeping_up = true;
+                for (std::size_t k = 0; k < vehicles_.size(); ++k)
+                    if (Dist(vehicles_[k].position, vehicles_[k].goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
+                if (keeping_up && lead_s_ < total_) {
+                    lead_s_ = std::min(total_, lead_s_ + tactics_.march_speed_mps * dt);
+                    marched_s_ += dt;
+                }
+                if (lead_s_ >= total_ - 1e-6 && !arrived_logged_) {
+                    arrived_logged_ = true;
+                    events_.push_back({t, "Battery commander", "the head of the column is at the end of the route"});
+                }
+                if (marched_s_ >= tactics_.halt_interval_s) StartHalt(t, night_ ? tactics_.night_halt_s : tactics_.halt_duration_s,
+                                                                      "scheduled halt: checks, fuel, rest");
+            }
+        }
+        const double speed = mode_ == Mode::Formation ? tactics_.cross_country_speed_mps
+                             : mode_ == Mode::Forming  ? tactics_.cross_country_speed_mps
+                                                       : tactics_.march_speed_mps * 1.3;  // a little faster to keep up
+        for (Vehicle& v : vehicles_) {
+            if (v.def.own && !drive_own_) continue;
+            if (mode_ == Mode::Halted || mode_ == Mode::Waiting) {
+                v.speed_mps = 0.0;
+                continue;
+            }
+            Move(v, speed, dt, mode_ == Mode::Marching);
+        }
+        // Stopped at a short-halt point or a formation slot: deploy.
+        if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation) {
+            for (Vehicle& v : vehicles_) {
+                if (v.deployed) continue;
+                if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) continue;
+                if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
+                if (t >= v.deploy_done_s) {
+                    v.deployed = true;
+                    events_.push_back({t, v.def.callsign, "in position, deployed"});
+                }
+            }
+        }
+    }
+
+    std::vector<Event> TakeEvents() {
+        std::vector<Event> out;
+        out.swap(events_);
+        return out;
+    }
+
+private:
+    static double Dist(const Vec3& a, const Vec3& b) { return std::hypot(a.x - b.x, a.y - b.y); }
+    static std::string Fmt(double v) { return std::to_string(static_cast<long long>(std::llround(v))); }
+
+    void BuildArcs() {
+        arcs_.assign(1, 0.0);
+        for (std::size_t i = 1; i < route_.size(); ++i) arcs_.push_back(arcs_.back() + Dist(route_[i - 1], route_[i]));
+        total_ = arcs_.back();
+        arrived_logged_ = false;
+    }
+    Vec3 PointAt(double s) const {
+        if (route_.empty()) return Vec3{};
+        if (s <= 0.0) return route_.front();
+        for (std::size_t i = 1; i < route_.size(); ++i) {
+            if (s <= arcs_[i]) {
+                const double seg = arcs_[i] - arcs_[i - 1];
+                const double u = seg > 0.0 ? (s - arcs_[i - 1]) / seg : 0.0;
+                return route_[i - 1] + (route_[i] - route_[i - 1]) * u;
+            }
+        }
+        return route_.back();
+    }
+    Vec3 DirectionAt(double s) const {
+        for (std::size_t i = 1; i < route_.size(); ++i) {
+            if (s <= arcs_[i] || i + 1 == route_.size()) {
+                Vec3 d = route_[i] - route_[i - 1];
+                d.z = 0.0;
+                const double l = d.Length();
+                return l > 0.0 ? d / l : Vec3{0.0, 1.0, 0.0};
+            }
+        }
+        return Vec3{0.0, 1.0, 0.0};
+    }
+    // Vehicle k's place in the column: behind the leader by k spacings (never before the start of the route).
+    double SlotArc(std::size_t k) const { return std::max(0.0, lead_s_ - Spacing() * static_cast<double>(k)); }
+
+    void FormationSlots(const Vec3& covered, double axis_deg) {
+        const double a = DegToRad(axis_deg);
+        const Vec3 fwd{std::sin(a), std::cos(a), 0.0};
+        const Vec3 right{std::cos(a), -std::sin(a), 0.0};
+        std::vector<std::size_t> launchers, reloads, others;
+        for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+            switch (vehicles_[k].def.kind) {
+                case BatteryVehicleKind::Launcher: launchers.push_back(k); break;
+                case BatteryVehicleKind::Reload: reloads.push_back(k); break;
+                default: others.push_back(k); break;
+            }
+        }
+        const std::size_t pairs = (launchers.size() + 1) / 2;
+        auto pair_centre = [&](std::size_t p) {
+            const double lateral = (static_cast<double>(p) - 0.5 * static_cast<double>(pairs - 1)) * tactics_.pair_separation_m;
+            return covered + right * lateral - fwd * tactics_.behind_covered_m;
+        };
+        for (std::size_t j = 0; j < launchers.size(); ++j) {
+            const double side = j % 2 == 0 ? -0.5 : 0.5;
+            Vehicle& v = vehicles_[launchers[j]];
+            v.goal = pair_centre(j / 2) + right * (side * tactics_.pair_internal_m);
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+        }
+        for (std::size_t j = 0; j < reloads.size(); ++j) {
+            Vehicle& v = vehicles_[reloads[j]];
+            v.goal = pair_centre(pairs > 0 ? j % pairs : 0) - fwd * tactics_.reload_behind_m;
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+        }
+        for (std::size_t j = 0; j < others.size(); ++j) {
+            Vehicle& v = vehicles_[others[j]];
+            v.goal = covered - fwd * (tactics_.behind_covered_m + tactics_.command_post_behind_m + 300.0 * static_cast<double>(j));
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+        }
+    }
+
+    void StartHalt(double t, double duration, const std::string& why) {
+        mode_ = Mode::Halted;
+        halt_until_s_ = t + duration;
+        events_.push_back({t, "Battery commander", why + " (" + Fmt(duration / 60.0) + " min)"});
+    }
+
+    // Toward the goal at `speed`; on the road a vehicle doesn't back up to open a gap: it waits.
+    void Move(Vehicle& v, double speed, double dt, bool on_road) {
+        Vec3 d = v.goal - v.position;
+        d.z = 0.0;
+        const double dist = d.Length();
+        if (dist < 0.5) {
+            v.speed_mps = 0.0;
+            return;
+        }
+        const Vec3 dir = d / dist;
+        if (on_road) {
+            const double hd = DegToRad(v.heading_deg);
+            const Vec3 facing{std::sin(hd), std::cos(hd), 0.0};
+            if (v.speed_mps > 0.0 && Dot(facing, dir) < 0.0 && dist < 2.0 * Spacing()) {
+                v.speed_mps = 0.0;
+                return;
+            }
+        }
+        const double step = std::min(dist, speed * dt);
+        v.position = v.position + dir * step;
+        v.speed_mps = step / (dt > 0.0 ? dt : 1.0);
+        double hdg = RadToDeg(std::atan2(dir.x, dir.y));
+        if (hdg < 0.0) hdg += 360.0;
+        v.heading_deg = hdg;
+    }
+
+    BatteryTactics tactics_;
+    std::vector<Vehicle> vehicles_;
+    Mode mode_ = Mode::Waiting;
+    bool air_threat_ = false;
+    bool night_ = false;
+    bool drive_own_ = false;
+    std::vector<Vec3> route_;
+    std::vector<double> arcs_;
+    double total_ = 0.0;
+    double lead_s_ = 0.0;
+    double marched_s_ = 0.0;
+    double halt_until_s_ = 0.0;
+    bool arrived_logged_ = false;
+    std::vector<Event> events_;
+};
+
+}  // namespace simcore

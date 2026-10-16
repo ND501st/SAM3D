@@ -1,0 +1,23 @@
+{
+  "tactics_id": "osa_battery_1980s",
+  "display_name": "Osa-AK battery: march, short halt, combat formation and halts",
+  "status": "Numbers for simcore/battery.hpp (roadmap 7.5). The tactics are from an unnamed manual retold in video_osa (tier 4, unverified, consistent with Soviet practice; docs/research/OSA_RESEARCH_2026-10.md §7). Where a range is given, the middle is used; speeds are estimates.",
+  "notes": "Composition (flak11): battery commander's PU-12M, two platoons of two 9A33 and one TZM, a maintenance vehicle.",
+  "tactics": {
+    "march_spacing_m": { "value": 40, "source": "video_osa (25-50 m between vehicles on the march)", "confidence": "low" },
+    "threat_spacing_m": { "value": 400, "source": "video_osa (200-800 m when an air attack is expected)", "confidence": "low" },
+    "march_speed_mps": { "value": 8.3, "source": "estimate (a column on a road at about 30 km/h)", "confidence": "estimate" },
+    "cross_country_speed_mps": { "value": 5.5, "source": "estimate (about 20 km/h off the road)", "confidence": "estimate" },
+    "short_halt_offset_m": { "value": 40, "source": "estimate (off the road far enough to deploy, alternating sides); video_osa (ready to pull off the road for a short-halt engagement at any time)", "confidence": "estimate" },
+    "deploy_s": { "value": 240, "source": "mon_2112_80 p11-12 (readiness within 4 min); video_osa (a powered battery deploys in 35-50 s, unverified): the documented 4 min is used for an NPC vehicle", "confidence": "low" },
+    "pair_separation_m": { "value": 3000, "source": "video_osa (vehicles in pairs about 3 km apart in the combat formation)", "confidence": "low" },
+    "pair_internal_m": { "value": 200, "source": "video_osa (200 m within a pair)", "confidence": "low" },
+    "behind_covered_m": { "value": 2000, "source": "video_osa (1.5-3 km behind the covered unit)", "confidence": "low" },
+    "reload_behind_m": { "value": 500, "source": "video_osa (reload vehicles about 500 m from the pairs)", "confidence": "low" },
+    "command_post_behind_m": { "value": 1000, "source": "estimate (the battery command post behind the pairs; video_osa places the PU-12 at the head or tail of a march column)", "confidence": "estimate" },
+    "halt_interval_s": { "value": 12600, "source": "video_osa (halts every 3-4 h: equipment check, fuel, food)", "confidence": "low" },
+    "halt_duration_s": { "value": 5400, "source": "video_osa (rest up to 2 h); 1.5 h used", "confidence": "low" },
+    "night_halt_s": { "value": 3600, "source": "video_osa (at night shorter halts of about 1 h without breaking formation)", "confidence": "low" },
+    "threat_range_m": { "value": 50000, "source": "samsim_osa p21 (the crew waits until a target approaches the 50 km circle): a designated target inside this makes the battery open the column (sam3d)", "confidence": "estimate" }
+  }
+}

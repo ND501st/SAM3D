@@ -37,6 +37,7 @@
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
+#include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/pu12.hpp"
@@ -101,6 +102,12 @@ public:
             }
             c2_->SetLinkModel(c2_link_.get());
         }
+        if (def_.has_battery) {
+            battery_ = std::make_unique<Battery>(def_.battery_tactics, def_.battery_vehicles);
+            battery_->SetDriveOwn(def_.battery_drive_own);
+            battery_->SetNight(def_.battery_night);
+            battery_orders_done_.assign(def_.battery_orders.size(), 0);
+        }
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -112,6 +119,7 @@ public:
         time_ += dt;
         UpdateTargets(dt);
         DeliverOrders();
+        UpdateBattery(dt);
         UpdateC2();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
@@ -263,6 +271,14 @@ public:
     bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
 
     const ProcedureTracker& PlayerTracker() const { return player_; }
+    // The battery around the player's vehicle (null: the scenario has none).
+    const Battery* GetBattery() const { return battery_.get(); }
+    bool OrderBattery(const BatteryOrder& o) {
+        if (!battery_) return false;
+        battery_->Order(o, time_);
+        return true;
+    }
+
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
 
@@ -492,6 +508,50 @@ private:
             case TriggerAction::Kind::C2Restore:
                 if (c2_) c2_->SetFailed(a.c2_id, false, time_);
                 return;
+            case TriggerAction::Kind::BatteryOrder:
+                if (battery_) battery_->Order(a.battery_order, time_);
+                return;
+            case TriggerAction::Kind::AirThreat:
+                if (battery_) {
+                    battery_->SetAirThreat(a.air_threat, time_);
+                    air_threat_forced_ = a.air_threat;
+                }
+                return;
+        }
+    }
+
+    // The battery around the player's vehicle (roadmap 7.5): scheduled orders, the air-threat spacing from what the crew
+    // has been told, the vehicles' moves; the other launchers' positions feed their neighbour sources.
+    void UpdateBattery(double dt) {
+        if (!battery_) return;
+        for (std::size_t i = 0; i < def_.battery_orders.size(); ++i) {
+            if (battery_orders_done_[i] || def_.battery_orders[i].at_s > time_ + 1e-9) continue;
+            battery_orders_done_[i] = 1;
+            battery_->Order(def_.battery_orders[i], time_);
+        }
+        if (c2_ && !air_threat_forced_) {
+            bool close = false;
+            for (const BoardMark& m : c2_->Known(time_)) {
+                close = close || (m.position - def_.unit_position).HorizontalLength() <= def_.battery_tactics.threat_range_m;
+            }
+            battery_->SetAirThreat(close, time_);
+        }
+        if (!def_.battery_drive_own) battery_->SetOwnPosition(def_.unit_position);
+        battery_->Step(time_, dt);
+        if (def_.battery_drive_own) {
+            if (const Battery::Vehicle* own = battery_->Own()) {
+                SetUnitPosition(Vec3{own->position.x, own->position.y, def_.unit_position.z});
+                if (own->speed_mps > 0.1) SetUnitHeading(own->heading_deg);
+                console_.equipment.SetInput("vehicle_stopped", own->speed_mps <= 0.1);
+            }
+        }
+        if (c2_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (!v.def.own) c2_->SetSourcePosition(v.def.id, v.position);
+            }
+        }
+        for (const Battery::Event& e : battery_->TakeEvents()) {
+            log_.Record({e.t, DebriefEntry::Kind::Scenario, e.who, "battery", e.text});
         }
     }
 
@@ -676,6 +736,16 @@ private:
         acmi_.WriteObject(kUnitAcmiId, def_.unit_position, Vec3{},
                           "Type=Ground+AntiAircraft,Name=" + console_.display_name + ",Color=Red");
         if (engagement_on_) engagement_.WriteAcmi(acmi_, time_, world_, eng_targets_);
+        if (battery_) {
+            int k = 0;
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                ++k;
+                if (v.def.own) continue;
+                acmi_.WriteObject(kUnitAcmiId + k, Vec3{v.position.x, v.position.y, def_.unit_position.z}, Vec3{},
+                                  std::string("Type=Ground+") + (v.def.kind == BatteryVehicleKind::Launcher ? "AntiAircraft" : "Vehicle") +
+                                      ",Name=" + v.def.callsign + ",Color=Red");
+            }
+        }
     }
 
     void CheckEnd() {
@@ -735,6 +805,9 @@ private:
         std::vector<std::string> queued;  // procedures ordered while one was under way
     };
     std::vector<Seat> seats_;
+    std::unique_ptr<Battery> battery_;
+    std::vector<char> battery_orders_done_;
+    bool air_threat_forced_ = false;
 
     Seat* FindSeat(const std::string& role) {
         for (Seat& st : seats_)
