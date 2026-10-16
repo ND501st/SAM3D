@@ -160,6 +160,7 @@ public:
             log_.CollectCrewReports(c.Name(), std::move(reports), time_);
         }
         SeeInstruments();
+        UpdateGrades();
         UpdateCallouts();
         UpdateStress();
         UpdateNpcCommander();
@@ -482,8 +483,60 @@ public:
         std::snprintf(head, sizeof(head), "Scenario: %s (%s), seed %u, system %s\nEnded at %.1f s: %s\n\n",
                       def_.name.c_str(), def_.id.c_str(), def_.seed, console_.display_name.c_str(), time_,
                       finished_ ? end_reason_.c_str() : "still running");
-        return std::string(head) + log_.Format();
+        return std::string(head) + log_.Format() + CrewGrades();
     }
+
+    // The crew's grades (docs/crew/08_TRAINING_AND_ASSISTANCE.md §3): "К бою" against the drill master's ideal time from
+    // the session's start, detection to launch against the published reaction time, and each seat's reminders, slips
+    // and forgotten steps. Empty without crew data.
+    std::string CrewGrades() const {
+        if (!def_.has_crew_data) return std::string();
+        std::string out = "\nCrew:\n";
+        char line[256];
+        if (ideal_ready_s_ > 0.0) {
+            if (actual_ready_s_ > 0.0) {
+                const double pct = 100.0 * actual_ready_s_ / ideal_ready_s_;
+                std::snprintf(line, sizeof(line), "  К бою (ready, halted): %.0f s, ideal %.0f s (%.0f %%): %s\n", actual_ready_s_,
+                              ideal_ready_s_, pct, GradeWord(pct));
+            } else {
+                std::snprintf(line, sizeof(line), "  К бою (ready, halted): not reached; ideal %.0f s\n", ideal_ready_s_);
+            }
+            out += line;
+        }
+        if (first_seen_s_ >= 0.0 && first_launch_s_ >= 0.0) {
+            // The published figure counts from a detection in reach: so from the later of the first echo and the moment
+            // the crew knew the target was within the tracking radar's reach.
+            const bool popped_up = in_reach_s_ >= 0.0 && in_reach_s_ - first_seen_s_ < 1.0;
+            const double dt = first_launch_s_ - first_seen_s_;
+            if (popped_up) {  // first seen already in reach: the published reaction time applies
+                std::snprintf(line, sizeof(line), "  Detection to launch: %.0f s (published 26-40 s: nvo_2015, korovin_tiv_2010)%s\n", dt,
+                              dt <= 40.0 ? ": within the norm" : ": slower than the norm");
+            } else {
+                std::snprintf(line, sizeof(line), "  First echo to launch: %.0f s; in reach to launch %.0f s (seen beyond reach: no norm)\n", dt,
+                              in_reach_s_ >= 0.0 ? first_launch_s_ - in_reach_s_ : -1.0);
+            }
+            out += line;
+        }
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            const CrewMember& c = crew_[i];
+            const auto it = reminders_to_.find(c.Role());
+            const int reminders = it != reminders_to_.end() ? it->second : 0;
+            const std::string tier = c.HasSkill() ? c.Skill().tier : std::string("-");
+            const std::string who = SeatHolder(c.Role()).empty() ? c.Name() : SeatHolder(c.Role()) + " (player)";
+            std::snprintf(line, sizeof(line), "  %-18s %-16s tier %-8s reminders %d, slips %d, forgotten steps %d\n", c.Role().c_str(),
+                          who.c_str(), tier.c_str(), reminders, c.Slips(), c.Omissions());
+            out += line;
+        }
+        return out;
+    }
+    static const char* GradeWord(double pct) {
+        if (pct <= 110.0) return "excellent (отлично)";
+        if (pct <= 130.0) return "good (хорошо)";
+        if (pct <= 160.0) return "satisfactory (удовлетворительно)";
+        return "unsatisfactory (неудовлетворительно)";
+    }
+    double IdealReadyS() const { return ideal_ready_s_; }
+    double ActualReadyS() const { return actual_ready_s_; }
 
 private:
     static constexpr int kUnitAcmiId = 0x7FFF0;
@@ -1098,6 +1151,28 @@ private:
     std::map<std::string, int> reminders_to_;
     std::vector<C2Network::Event> designations_;  // heard this step, to pass on
 
+    // The marks the grades are measured from.
+    double ideal_ready_s_ = -1.0;   // the drill master's К бою from the session's start (when the vehicle starts halted, not ready)
+    double actual_ready_s_ = -1.0;
+    double first_seen_s_ = -1.0;    // the first echo on the search scope
+    double first_launch_s_ = -1.0;
+    double in_reach_s_ = -1.0;      // the first echo within the tracking radar's reach
+    void UpdateGrades() {
+        if (!def_.has_crew_data) return;
+        if (actual_ready_s_ < 0.0 && ideal_ready_s_ > 0.0) {
+            const CrewTask* t = def_.crew_data.FindTask("ready_halted");
+            if (t != nullptr && console_.equipment.AllHold(t->conditions, console_.panel)) actual_ready_s_ = time_;
+        }
+        if (first_seen_s_ < 0.0 && engagement_on_ && !engagement_.SearchPicture().empty()) first_seen_s_ = time_;
+        if (in_reach_s_ < 0.0 && engagement_on_) {
+            const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
+            for (const Contact& c : engagement_.SearchPicture()) {
+                if (c.range_m <= reach) in_reach_s_ = time_;
+            }
+        }
+        if (first_launch_s_ < 0.0 && launches_ > 0) first_launch_s_ = time_;
+    }
+
     void StartCallouts() {
         if (!def_.has_crew_data) return;
         callouts_ = std::make_unique<CalloutBus>(&def_.crew_data);
@@ -1105,6 +1180,12 @@ private:
                                                                              ? def_.skills.Reference()->reaction_s : 0.55);
         for (const AutoReportDef& r : def_.crew_data.reports) {
             report_state_.push_back(console_.equipment.Holds(r.when, console_.panel) ? 1 : 0);
+        }
+        if (const CrewTask* t = def_.crew_data.FindTask("ready_halted")) {  // the ideal "К бою" from here, if there is one to do
+            if (console_.equipment.GetInput("vehicle_stopped") && !console_.equipment.AllHold(t->conditions, console_.panel)) {
+                const IdealTimeline tl = drill_->Ideal(drill_->GoalFor(*t), console_);
+                if (tl.reached) ideal_ready_s_ = tl.time_s;
+            }
         }
         waits_.assign(crew_.size(), WaitWatch{});
     }

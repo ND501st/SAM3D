@@ -661,3 +661,17 @@ SC_TEST("npc commander: an empty launcher is reported and the TZM asked for; the
     SC_EXPECT(d.find("Ракет нет!") != std::string::npos);
     SC_EXPECT(d.find("прошу ТЗМ!") != std::string::npos);
 }
+
+// ------------------------------------------------------------------------------------------ 8.7 grading
+
+SC_TEST("grading: the debrief grades К бою against the drill master's ideal and lists every seat's reminders and slips") {
+    std::unique_ptr<ScenarioRunner> r = CrewPractice();
+    SC_EXPECT(r->IdealReadyS() > 240.0 && r->IdealReadyS() < 260.0);
+    r->RunToEnd(0.1, 800.0);
+    SC_EXPECT(r->ActualReadyS() >= r->IdealReadyS() - 1.0);
+    const std::string d = r->Debrief();
+    SC_EXPECT(d.find("К бою (ready, halted):") != std::string::npos);
+    SC_EXPECT(d.find("excellent") != std::string::npos || d.find("good") != std::string::npos || d.find("satisfactory") != std::string::npos);
+    SC_EXPECT(d.find("First echo to launch") != std::string::npos);
+    SC_EXPECT(d.find("operator           Operator         tier class3") != std::string::npos);
+}
