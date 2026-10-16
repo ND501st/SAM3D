@@ -481,7 +481,8 @@ private:
     bool LoadAction(const json::Value& a, const std::string& p, const ScenarioDef& def, const ConsoleData& console,
                     TriggerAction& out) {
         if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
-                         "battery_order", "route", "covered", "axis_deg", "air_threat"})) {
+                         "battery_order", "route", "covered", "axis_deg", "air_threat", "bounding", "roving", "points",
+                         "crossing", "width_m", "vehicle"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
@@ -764,7 +765,27 @@ private:
     // (a position) and "axis_deg", "halt", "resume".
     bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
-            return Fail(p, "unknown battery order '" + kind_text + "' (march, short_halt, combat_formation, halt, resume)");
+            return Fail(p, "unknown battery order '" + kind_text +
+                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel)");
+        }
+        if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
+            !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle)) {
+            return false;
+        }
+        if (out.kind == BatteryOrder::Kind::Ambush) {
+            const json::Value* pts = OptionalArray(o, p, "points");
+            if (pts == nullptr || pts->items.empty()) return message_.empty() ? Fail(Join(p, "points"), "an ambush needs its prepared points") : false;
+            for (std::size_t i = 0; i < pts->items.size(); ++i) {
+                Vec3 v;
+                if (!LoadPosition(pts->items[i], Index(Join(p, "points"), i), frame_, v)) return false;
+                out.route.push_back(v);
+            }
+        }
+        if (out.kind == BatteryOrder::Kind::RiverCrossing) {
+            const json::Value* c = o.Find("crossing");
+            if (c == nullptr) return Fail(Join(p, "crossing"), "a river crossing needs the crossing point on the near bank");
+            if (!LoadPosition(*c, Join(p, "crossing"), frame_, out.covered) || !OptionalNumber(o, p, "axis_deg", out.axis_deg)) return false;
+            if (out.width_m <= 0.0) return Fail(Join(p, "width_m"), "must be > 0");
         }
         if (out.kind == BatteryOrder::Kind::March) {
             const json::Value* route = OptionalArray(o, p, "route");
@@ -825,7 +846,7 @@ private:
                     !OptionalString(v, p, "callsign", d.callsign) || !OptionalString(v, p, "kind", kind)) {
                     return false;
                 }
-                if (!ParseBatteryVehicleKind(kind, d.kind)) return Fail(Join(p, "kind"), "launcher, reload, command_post or maintenance");
+                if (!ParseBatteryVehicleKind(kind, d.kind)) return Fail(Join(p, "kind"), "launcher, reload, command_post, maintenance or fuel");
                 const json::Value* pos = v.Find("position");
                 if (pos == nullptr) return Fail(Join(p, "position"), "required");
                 if (!LoadPosition(*pos, Join(p, "position"), frame_, d.start)) return false;
@@ -842,7 +863,10 @@ private:
             for (std::size_t i = 0; i < os->items.size(); ++i) {
                 const std::string p = Index(Join(bp, "orders"), i);
                 const json::Value& o = os->items[i];
-                if (!Keys(o, p, {"at_s", "order", "route", "covered", "axis_deg", "notes"})) return false;
+                if (!Keys(o, p, {"at_s", "order", "route", "covered", "axis_deg", "bounding", "roving", "points", "crossing", "width_m",
+                                 "vehicle", "notes"})) {
+                    return false;
+                }
                 std::string kind;
                 BatteryOrder ord;
                 if (!RequireString(o, p, "order", kind) || !OptionalNumber(o, p, "at_s", ord.at_s) ||

@@ -289,3 +289,113 @@ SC_TEST("battery practice: the shipped scenario loads and runs with its battery,
     SC_EXPECT(!x.board.empty() && !x.radio.empty());
     SC_EXPECT(r.Em() != nullptr && r.Em()->DummyPlatforms().size() == 2);
 }
+
+SC_TEST("battery drills: an ambush puts pairs on the prepared points and, roving, moves them on") {
+    BatteryTactics tac = Tactics();
+    tac.ambush_dwell_s = 3000.0;  // long enough to get there first at 10 km/h
+    Battery b(tac, Vehicles());
+    b.SetDriveOwn(true);
+    BatteryOrder a;
+    a.kind = BatteryOrder::Kind::Ambush;
+    a.route = {Vec3{0.0, 2000.0, 0.0}, Vec3{3000.0, 2000.0, 0.0}};
+    a.roving = true;
+    double t = 0.0;
+    b.Order(a, t);
+    Run(b, t, 2000.0, 1.0);
+    const auto& v = b.Vehicles();
+    SC_EXPECT(std::hypot(0.5 * (v[0].position.x + v[1].position.x) - 0.0, v[0].position.y - 2000.0) < 20.0);
+    SC_EXPECT(std::hypot(0.5 * (v[2].position.x + v[3].position.x) - 3000.0, v[2].position.y - 2000.0) < 20.0);
+    SC_EXPECT_NEAR(std::fabs(v[0].position.x - v[1].position.x), 200.0, 1.0);
+    Run(b, t, 1000.0 + 1500.0, 1.0);  // roved at 3000 s: the pairs swap points
+    SC_EXPECT(std::fabs(0.5 * (v[0].position.x + v[1].position.x) - 3000.0) < 20.0);
+}
+
+SC_TEST("battery drills: bounding forward, one pair moves while the other stays deployed") {
+    Battery b(Tactics(), Vehicles());
+    b.SetDriveOwn(true);
+    BatteryOrder f;
+    f.kind = BatteryOrder::Kind::CombatFormation;
+    f.covered = Vec3{0.0, 5000.0, 0.0};
+    f.bounding = true;
+    double t = 0.0;
+    b.Order(f, t);
+    Run(b, t, 300.0, 1.0);
+    const auto& v = b.Vehicles();
+    SC_EXPECT(v[0].speed_mps > 0.0 || v[1].speed_mps > 0.0);   // the first pair is moving
+    SC_EXPECT(v[2].speed_mps == 0.0 && v[3].speed_mps == 0.0);  // the second waits
+    Run(b, t, 3600.0, 1.0);
+    for (std::size_t i = 0; i < 4; ++i) SC_EXPECT(v[i].deployed);
+    bool told = false;
+    for (const Battery::Event& e : b.TakeEvents()) told = told || e.text.find("bounds forward") != std::string::npos;
+    SC_EXPECT(told);
+}
+
+SC_TEST("battery drills: a river crossing: positions 2 km short, then across in pairs once the far bank is held") {
+    Battery b(Tactics(), Vehicles());
+    b.SetDriveOwn(true);
+    BatteryOrder r;
+    r.kind = BatteryOrder::Kind::RiverCrossing;
+    r.covered = Vec3{0.0, 3000.0, 0.0};  // the crossing on the near bank; the river runs east-west, 120 m wide
+    r.axis_deg = 0.0;
+    r.width_m = 120.0;
+    double t = 0.0;
+    b.Order(r, t);
+    Run(b, t, 2000.0, 1.0);
+    const auto& v = b.Vehicles();
+    for (std::size_t i = 0; i < 4; ++i) SC_EXPECT(std::fabs(v[i].position.y - 1000.0) < 20.0);  // 2 km short of the bank
+    BatteryOrder go;
+    go.kind = BatteryOrder::Kind::FarBankHeld;
+    b.Order(go, t);
+    bool pair2_waited = false, afloat_seen = false;
+    for (int i = 0; i < 4000; ++i) {
+        b.Step(t + 1.0, 1.0);
+        t += 1.0;
+        if (v[0].afloat) {
+            afloat_seen = true;
+            pair2_waited = pair2_waited || (v[2].crossing_stage == 0 && v[3].crossing_stage == 0);
+            SC_EXPECT(v[0].speed_mps <= 2.2 + 1e-9);
+        }
+    }
+    SC_EXPECT(afloat_seen && pair2_waited);
+    for (const Battery::Vehicle& x : v) SC_EXPECT(x.position.y > 3120.0);  // everyone across
+    bool across = false;
+    for (const Battery::Event& e : b.TakeEvents()) across = across || e.text.find("the battery is across") != std::string::npos;
+    SC_EXPECT(across);
+}
+
+SC_TEST("battery drills: the TZM drives up when the launcher is empty, reloads six, and goes back; the fuel truck refuels") {
+    const std::string text = R"({
+      "scenario_id": "svc", "name": "Service", "source": "sam3d", "confidence": "estimate", "seed": 2,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "battery": { "own": { "id": "21", "callsign": "21" },
+        "vehicles": [ { "id": "TZM", "kind": "reload", "position": { "east_m": 300, "north_m": -400, "up_m": 3 } },
+                      { "id": "ATZ", "kind": "fuel", "position": { "east_m": -300, "north_m": -500, "up_m": 3 } } ] },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed", "fuel_fraction": 0.4,
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" } ],
+      "targets": [], "triggers": [], "end": { "time_limit_s": 1200, "when_targets_gone": false } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.GetLauncher() != nullptr && r.Fuel() != nullptr);
+    if (r.GetLauncher() == nullptr || r.Fuel() == nullptr) return;
+    for (const char* c : {"1-I", "2-I", "3-I", "1-II", "2-II", "3-II"}) r.GetLauncher()->Unload(c);
+    for (int i = 0; i < 20 * 900; ++i) r.Step(0.05);  // 15 min
+    SC_EXPECT(r.GetLauncher()->LoadedCount() == 6);
+    SC_EXPECT(r.Fuel()->LevelL() > 0.9 * r.Fuel()->TankL());  // filled (and burning again since)
+    SC_EXPECT(r.Debrief().find("tank full") != std::string::npos);
+    const Battery::Vehicle* t = r.GetBattery()->Find("TZM");
+    const Battery::Vehicle* f = r.GetBattery()->Find("ATZ");
+    SC_EXPECT(t != nullptr && f != nullptr);
+    if (t == nullptr || f == nullptr) return;
+    std::printf("    TZM %.0f missiles left, fuel truck %.0f l left\n", t->stock, f->stock);
+    SC_EXPECT_NEAR(t->stock, 6.0, 1e-9);
+    SC_EXPECT(f->stock < 3800.0 - 100.0);
+    SC_EXPECT(t->serving.empty() && f->serving.empty());  // both back in place
+    const std::string d = r.Debrief();
+    SC_EXPECT(d.find("to reload 21") != std::string::npos && d.find("alongside 21") != std::string::npos &&
+              d.find("reload done") != std::string::npos && d.find("to refuel 21") != std::string::npos);
+}
