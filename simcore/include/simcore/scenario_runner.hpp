@@ -363,11 +363,13 @@ public:
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
         SpeakOrder(order_id);
+        quiet_orders_ = true;  // the order's own words were spoken: its drills don't each speak an order
         for (const OrderStart& s : o->procedures) {
             CrewMember* m = MemberAt(s.station);
             const Procedure* p = console_.FindProcedure(s.procedure);
             if (m != nullptr && p != nullptr) GiveOrder(*m, *p, s.queue);
         }
+        quiet_orders_ = false;
         return true;
     }
     bool NpcCommanderActive() const { return def_.npc_commander && SeatHolder("commander").empty(); }
@@ -1183,6 +1185,7 @@ private:
         for (const AutoReportDef& r : def_.crew_data.reports) {
             report_state_.push_back(console_.equipment.Holds(r.when, console_.panel) ? 1 : 0);
         }
+        started_cold_ = !console_.equipment.IsReady("power");
         if (const CrewTask* t = def_.crew_data.FindTask("ready_halted")) {  // the ideal "К бою" from here, if there is one to do
             if (console_.equipment.GetInput("vehicle_stopped") && !console_.equipment.AllHold(t->conditions, console_.panel)) {
                 const IdealTimeline tl = drill_->Ideal(drill_->GoalFor(*t), console_);
@@ -1230,8 +1233,9 @@ private:
     }
 
     // The commander's order for a procedure, if the crew data has one: the most specific order that starts it.
+    bool quiet_orders_ = false;
     void SayOrder(const std::string& station, const std::string& procedure) {
-        if (!callouts_) return;
+        if (!callouts_ || quiet_orders_) return;
         const OrderDef* best = nullptr;
         for (const OrderDef& o : def_.crew_data.orders) {
             for (const OrderStart& s : o.procedures) {
@@ -1292,10 +1296,14 @@ private:
     void UpdateNpcCommander() {
         if (!NpcCommanderActive() || !drill_ || time_ + 1e-9 < npc_next_think_s_) return;
         npc_next_think_s_ = time_ + 1.0;
-        const bool halted = console_.equipment.GetInput("vehicle_stopped");
+        // A stop while the battery forms its column or marches is not a halt: nobody deploys for it.
+        const bool column = battery_ && def_.battery_drive_own &&
+                            (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
+        const bool halted = console_.equipment.GetInput("vehicle_stopped") && !column;
+        const bool stowing = npc_stow_ordered_ && !npc_resumed_;
         // Readiness: the next drill of each idle seat toward the task.
         const CrewTask* task = def_.crew_data.FindTask(halted ? "ready_halted" : "searching_on_march");
-        if (task != nullptr) {
+        if (task != nullptr && !stowing) {
             const DrillPlan plan = drill_->Plan(drill_->GoalFor(*task), console_.panel, console_.equipment);
             for (const DrillPlan::Seat& s : plan.seats) {
                 if (!SeatFree(s.station)) continue;
@@ -1346,6 +1354,7 @@ private:
             return;
         }
         npc_halt_ordered_ = false;
+        if (NpcBetweenFights()) return;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
         const EngagementModel& eng = engagement_;
@@ -1377,6 +1386,13 @@ private:
             if (npc_choice_slip_ && known.size() > 1) pick = 1;
             const KnownTarget& k = known[pick];
             if (k.range_m > reach || !console_.equipment.IsReady("hv_ready")) return;
+            // A target in reach interrupts the function check (the deputy's РОД РАБОТЫ goes back with the next drills).
+            if (CrewMember* dep = MemberAt("deputy_commander")) {
+                if (dep->IsBusy() && dep->Tracker().GetProcedure().id == "function_check" && SeatHolder("deputy_commander").empty()) {
+                    dep->CancelOrder();
+                    console_.panel.Set("fo.mode", 1);
+                }
+            }
             assigned_target_ = k.target;
             if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_) {  // no number from the PU-12: by its azimuth
                 callouts_->Say(time_, "order_take_contact", "commander", {{"azimuth", MilsText(k.azimuth_deg)}});
@@ -1427,6 +1443,51 @@ private:
     std::string npc_branch_for_;
     double npc_branch_at_ = 0.0;
     bool npc_halt_ordered_ = false;
+    bool npc_checked_ = false;
+    bool started_cold_ = false;  // the vehicle had no power at the session's start
+    bool npc_fought_ = false;
+    double npc_last_hostile_s_ = -1.0;
+    bool npc_stow_ordered_ = false;
+    bool npc_resumed_ = false;
+
+    // Between fights at a halt (docs/crew/03_ENVIRONMENTS_AND_PATHS.md §2.1, §2.6): with nothing hostile known and the
+    // vehicle ready, the function check once; when the fight is over (something was fought, nothing hostile heard of for
+    // 90 s, nothing in the air), stow for the march, and once stowed the battery marches on. True while it is busy so.
+    bool NpcBetweenFights() {
+        bool hostile = false;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
+        if (hostile) {
+            npc_last_hostile_s_ = time_;
+            npc_fought_ = true;
+        }
+        if (engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight()) return false;
+        const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
+        const bool is_ready = ready != nullptr && console_.equipment.AllHold(ready->conditions, console_.panel);
+        // The function check belongs to the preliminary preparation from cold (flak11: 3.8 min switch-on, then 3.0 min check).
+        if (!hostile && is_ready && !npc_checked_ && !npc_fought_ && started_cold_) {
+            npc_checked_ = NpcGive("order_function_check", 600.0);
+            return npc_checked_;
+        }
+        if (npc_fought_ && !hostile && time_ - npc_last_hostile_s_ > 90.0) {
+            if (!npc_stow_ordered_) {
+                npc_stow_ordered_ = GiveCrewOrder("order_march");
+                return true;
+            }
+            const CrewTask* stowed = def_.crew_data.FindTask("stowed");
+            if (!npc_resumed_ && stowed != nullptr && console_.equipment.AllHold(stowed->conditions, console_.panel)) {
+                npc_resumed_ = true;
+                if (NpcAt("driver")) Say("ready_to_march", "driver");
+                if (battery_ && def_.battery_drive_own) {
+                    BatteryOrder o;
+                    o.kind = BatteryOrder::Kind::Resume;
+                    battery_->Order(o, time_);
+                }
+                Event(def_.id, "the crew is stowed and marches on");
+            }
+            return true;
+        }
+        return false;
+    }
     double npc_halt_at_ = -1.0;
     bool npc_empty_reported_ = false;
     bool npc_fuel_reported_ = false;

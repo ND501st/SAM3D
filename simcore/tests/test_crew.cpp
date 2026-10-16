@@ -743,3 +743,22 @@ SC_TEST("battery: with the player as battery commander nothing is assigned until
     SC_EXPECT(said);
     SC_EXPECT(r.GetBatteryFire()->Engaged("t2"));
 }
+
+// ------------------------------------------------------------------------------------------ 8.11 one mission
+
+SC_TEST("mission: on the march, a raid: halt, deploy, fight, stow and march on, run by the NPC commanders without a fault") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_mission_march.json", kData, def, console, &e));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.RunToEnd(0.1, 1500.0);
+    const std::string d = r.Debrief();
+    for (const char* step : {"march: form the column", "started    search_on_march", "Стой!", "short halt", "started    deploy_at_halt",
+                             "К маршу!", "the crew is stowed and marches on", "К маршу готов!"}) {
+        if (d.find(step) == std::string::npos) std::printf("    no '%s'\n", step);
+        SC_EXPECT(d.find(step) != std::string::npos);
+    }
+    SC_EXPECT(r.Launches() >= 1);
+    SC_EXPECT(r.Log().Summary().equipment_faults == 0);
+}
