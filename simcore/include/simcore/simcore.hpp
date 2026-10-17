@@ -25,6 +25,7 @@
 #include "simcore/debrief.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/orientation.hpp"
+#include "simcore/crew_audio.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "simcore/cabin.hpp"

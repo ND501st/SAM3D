@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "simcore/c2_sources.hpp"
+#include "simcore/crew_audio.hpp"
 #include "simcore/crew_comms.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
@@ -487,4 +488,42 @@ SC_TEST("comms 7.8: every seat has its R-124 box; a seat without one is not on t
     SC_EXPECT(!without.HasBox("operator"));
     SC_EXPECT(without.OrderDelayS("operator", c) > 0.0);
     SC_EXPECT_NEAR(without.OrderDelayS("senior_operator", c), 0.0, 1e-12);
+}
+
+// ---- What the headset carries (roadmap 7.7)
+
+SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it on, and the carrier quietens it") {
+    auto r = Load(Text());
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("commander", "player"));
+    Steps(*r, 1.0);
+    ConsoleData& c = r->Console();
+    const std::string side = r->C2()->ListeningSet() == 0 ? "left" : "right";
+    HeadsetSound h = HeadsetSoundNow(*r);
+    SC_EXPECT(h.on_radio && !h.squelched && !h.carrier);
+    SC_EXPECT_NEAR(h.hiss, 0.35, 1e-12);
+    c.panel.Set("radio." + side + ".squelch", 1);  // the suppressor: silence between transmissions
+    Steps(*r, 0.5);
+    h = HeadsetSoundNow(*r);
+    SC_EXPECT(h.squelched && h.hiss == 0.0);
+    // Our own transmission is a carrier on the net (and the sidetone): the hiss drops under it.
+    c.panel.Set("radio." + side + ".squelch", 0);
+    c.panel.Set("radio.chest", 1);
+    Steps(*r, 1.0);
+    h = HeadsetSoundNow(*r);
+    SC_EXPECT(h.carrier);
+    SC_EXPECT_NEAR(h.hiss, 0.05, 1e-12);
+    // The call tone while ТОН. ВЫЗОВ is pressed.
+    c.panel.Set("radio." + side + ".tone", 1);
+    r->Step(0.5);
+    SC_EXPECT(HeadsetSoundNow(*r).tone);
+    Steps(*r, 2.0);
+    SC_EXPECT(!HeadsetSoundNow(*r).tone);
+    // A1 on the intercom only: no set in his ears.
+    c.panel.Set("radio.chest", 0);
+    c.panel.Set("intercom.a1", 1);
+    Steps(*r, 0.5);
+    h = HeadsetSoundNow(*r);
+    SC_EXPECT(!h.on_radio && h.hiss == 0.0);
 }

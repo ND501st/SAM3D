@@ -239,8 +239,14 @@ public:
         return true;
     }
     const CompassSurvey& Compass() const { return compass_; }
+    // Every designation the commander has heard on the radio so far (the latest last).
+    const std::vector<C2Network::Event>& DesignationsHeard() const { return designations_heard_; }
+    // When the last call tone went out (ТОН. ВЫЗОВ), or a large negative number.
+    double LastToneCallS() const { return last_tone_s_; }
     // The R-123M sets' tuning (null when the console has no preset set-up).
     const RadioTuning* Tuning() const { return tuning_.get(); }
+    // When the vehicle last went on the air (a report, a carrier second, a call tone).
+    double LastTransmissionS() const { return last_tx_s_; }
     // Transmissions the vehicle has made (roadmap 7.8): every report, carrier second and call tone that went out.
     int Transmissions() const { return transmissions_; }
     // Can the commander go on the air on his set now? `why` says what stops him.
@@ -1026,6 +1032,7 @@ private:
     // source on that set (the EM layer: the other side's ESM can hear it and find the vehicle).
     int transmissions_ = 0;
     double last_tx_s_ = -1e9;
+    double last_tone_s_ = -1e9;
     bool chest_was_keyed_ = false;
     double next_carrier_s_ = 0.0;
     std::string tx_blocked_why_;
@@ -1149,6 +1156,7 @@ private:
             return;
         }
         Radio("battery net", OwnCallsign(), "ТОН. ВЫЗОВ (call tone)");
+        last_tone_s_ = time_;
         log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("commander"), "radio", "ТОН. ВЫЗОВ: a call tone on " + set});
         OnAir(1.0);
     }

@@ -14,7 +14,8 @@ public class SAM3D : ModuleRules
 			"Engine",
 			"InputCore",
 			"ProceduralMeshComponent",  // cabin screens: quads with exact texture coordinates
-			"CesiumRuntime"  // Cesium for Unreal: georeference, terrain height sampling
+			"CesiumRuntime",  // Cesium for Unreal: georeference, terrain height sampling
+			"TextToSpeech"  // the crew's words (SimCrewAudioComponent): the engine's experimental text-to-speech
 		});
 
 		// simcore is a header-only C++17 library that lives at the repo root (../../../../simcore).

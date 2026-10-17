@@ -100,6 +100,6 @@ mounts its boxes is not in any source found: the positions are SAM3D's choice.
 
 * (Done 17 Oct 2026, below.)
 * (The presets' set-up drill and smooth tuning: done 17 Oct 2026, below.)
-* Audio in Unreal, and the 27 V battery (a set draws 3 A receiving, 9.6 A transmitting; the battery's capacity and the
-  generators' charging are not modelled).
-* Which crew member has which R-124 box beyond A-1 (commander), A-2 (deputy commander) and ПВ (driver).
+* The 27 V battery (a set draws 3 A receiving, 9.6 A transmitting; the battery's capacity and the generators' charging
+  are not modelled). (Audio: done 17 Oct 2026, `unreal/README.md` "Cabin audio".)
+* Russian voices: the text-to-speech speaks the callouts' English; recorded lines are roadmap 8.10.

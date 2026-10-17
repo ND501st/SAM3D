@@ -1,5 +1,7 @@
 #include "SimOsaVehicle.h"
 
+#include "SimCrewAudioComponent.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -79,6 +81,7 @@ ASimOsaVehicle::ASimOsaVehicle()
 	// The cabin's body frame has its origin at the root (ground under the hull centre), like the hull boxes.
 	Cabin = CreateDefaultSubobject<USimCabinComponent>(TEXT("Cabin"));
 	Cabin->SetupAttachment(Root);
+	CrewAudio = CreateDefaultSubobject<USimCrewAudioComponent>(TEXT("CrewAudio"));
 	CabinCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CabinCamera"));
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);

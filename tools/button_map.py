@@ -51,7 +51,6 @@ DISPLAY_SOURCES = {
 PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
-        ("p:radio_audio", "Radio and intercom audio: noise, squelch, voices", "7.7", "Nothing is heard in the Unreal cabin: the net's state shows in the debrief and the lamps. Noise that the squelch removes, the voices of the designations and the R-124's sidetone would be audio.", ["m:comms"], "missing"),
     ],
 }
 
