@@ -19,7 +19,8 @@ from mathutils import Matrix, Vector
 
 def _scene_setup(res, transparent=False):
     sc = bpy.context.scene
-    sc.render.engine = 'BLENDER_EEVEE'
+    engines = bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items.keys()
+    sc.render.engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in engines else 'BLENDER_EEVEE'  # 4.2 renamed it
     sc.render.resolution_x, sc.render.resolution_y = res
     sc.render.resolution_percentage = 100
     sc.render.film_transparent = transparent
@@ -97,6 +98,41 @@ def render_photo_camera(front, cfg, cam_json, out_png, width=1500):
     cam.data.clip_start = 0.05
     sc.camera = cam
     lights(Vector((front['x'], front['y'], front['z'])))
+    sc.render.filepath = out_png
+    bpy.ops.render.render(write_still=True)
+    sc.render.film_transparent = False
+    return out_png
+
+
+def render_world_camera(cam_json, out_png, width=1500, light_target=(0.0, 0.0, 1.2), creases=True):
+    """From a camera solved in Blender's world frame (tools/vehicle_fit.py: camera_world.json, R and
+    t mapping world metres to OpenCV camera coordinates), with a transparent background, at the photo's aspect. With
+    `creases` it renders in Workbench with studio light and flat shading, so every plate takes its own shade and the
+    overlay's edge finder draws the creases between them (a vehicle's plates share one paint)."""
+    c = json.load(open(cam_json))
+    R, t = c['R'], c['t']
+    Rt = [[R[j][i] for j in range(3)] for i in range(3)]
+    C = Vector([-sum(Rt[i][j] * t[j] for j in range(3)) for i in range(3)])
+    X, Y, Z = Vector(R[0]), -Vector(R[1]), -Vector(R[2])  # OpenCV camera (x right, y down, z ahead) -> Blender
+    rot = Matrix((X, Y, Z)).transposed()
+    sc = _scene_setup((width, int(width * c['h'] / c['w'])), transparent=True)
+    cam = _object('trace_world', bpy.data.cameras.new('trace_world'))
+    cam.matrix_world = Matrix.Translation(C) @ rot.to_4x4()
+    cam.data.sensor_fit = 'HORIZONTAL'
+    cam.data.sensor_width = 36.0
+    cam.data.lens = c['f_px'] / c['w'] * 36.0
+    cam.data.clip_start = 0.05
+    sc.camera = cam
+    if creases:
+        sc.render.engine = 'BLENDER_WORKBENCH'
+        sh = sc.display.shading
+        sh.light = 'STUDIO'
+        sh.color_type = 'SINGLE'
+        sh.single_color = (0.8, 0.8, 0.8)
+        sh.show_shadows = False
+        sh.show_cavity = False
+    else:
+        lights(Vector(light_target))
     sc.render.filepath = out_png
     bpy.ops.render.render(write_still=True)
     sc.render.film_transparent = False

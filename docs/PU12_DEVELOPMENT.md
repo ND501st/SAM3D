@@ -173,6 +173,21 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   - Battery orders (march, halt, formation, ambush, river crossing, reload, emission control) and sectors of fire work
     from the post as before (`OrderBattery`, `SetBatterySector`). Not yet in Unreal: the boards and the designation UI
     (P6).
+- **P5 done:** the exterior traced from photographs (docs/MODELLING_FROM_PHOTOS.md, the new "Vehicles" section).
+  - `tools/blender/pu12m_trace.py` (the hull's stations, wheels, roof fittings, the mast's geometry), tested by
+    `tools/tests/test_pu12m_trace.py` (published dimensions, the wheels clear of the hull, the fittings clear of each
+    other, the mast nesting and reaching 16 m).
+  - The side profile: a BTR-60PB's side photograph with its camera fitted (EXIF focal length, the published length,
+    roof height, track and the ČSLA plan's widths as priors; 3.5 px rms; the wheelbase lands on the published 4.40 m).
+    The overlay from that camera lines up the tyres, the chine, the ends and the glacis; the roof shows 6-10 cm low
+    (the photo reads 5-8 % taller than the published 2.055 m).
+  - `tools/blender/pu12m_model.py` builds `SM_PU12M` (hull, wheels, hatches, vision blocks, lights, the roof box, whips,
+    rails, the side stowage box, the exhaust, the mast's base), the mast's five sections, the AB-1 set and a guy, and
+    `art/pu12m/pu12m_rig.json`.
+  - Unreal: `USimPu12MastComponent` stands the sections for an extension 0-1 (stowed 1.5 m above the roof, raised to 16 m),
+    shows eight guys at two heights once it is up and the AB-1 once it is set out. A battery's PU-12M follows its
+    deployment at the mast's pace; the player's own post follows the console's `mast_up` progress
+    (`USimWorldSubsystem::GetPostMastExtension`, `IsPostGeneratorOut`). Test `SAM3D.PU12M.Mast`.
 
 ## 6. Placeholder now
 

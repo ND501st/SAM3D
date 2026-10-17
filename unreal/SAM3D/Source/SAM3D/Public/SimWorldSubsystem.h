@@ -47,6 +47,10 @@ struct SAM3D_API FSimEntityState
 	/** launcher, reload, command_post, maintenance, dummy (ground entities only). */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	FString Kind;
+
+	/** A battery vehicle set up in position (its mast raised, for the PU-12M). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	bool bDeployed = false;
 };
 
 /** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
@@ -656,6 +660,15 @@ public:
 	/** The board's range rings (m) and its current plot number. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Board")
 	TArray<float> GetBoardRangeRings() const;
+
+	/** When the player's vehicle is the PU-12M: its mast's extension, 0 stowed to 1 raised (the console's mast_up
+	 *  progress); -1 for any other vehicle. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	float GetPostMastExtension() const;
+
+	/** When the player's vehicle is the PU-12M: its AB-1 set is out on the ground (ab1_placed past half-way). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	bool IsPostGeneratorOut() const;
 
 	/** The last radio and intercom messages, oldest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Radio")

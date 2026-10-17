@@ -123,6 +123,31 @@ python tools/photo_trace.py overlay tools/traces/<name>.json out/traces/<name>/r
   (no Nanite: its reduced fallback drops millimetre letters and screws), then photograph it in place with
   `tools/ue_panel_shot.py`. Close the editor and revert the material assets it re-saved unchanged before committing.
 
+## Vehicles
+
+A vehicle's side is not one plane, and a museum photograph of it is seldom square-on or taken from far away. First used
+for the PU-12M (`tools/blender/pu12m_trace.py`, `pu12m_model.py`; October 2026):
+
+* **Read the side** off a side photograph with `tools/vehicle_trace.py` (a 1-D projective map through the wheel hubs on
+  the published wheelbase, heights from one published height). That is a first reading only: it assumes the camera far
+  away.
+* **Fit the camera and the main dimensions together** with `tools/vehicle_fit.py`: the hull as a handful of parameters
+  (wheelbase, axle spacing, overhangs, the heights of its ends, the widths at the ends and the roof, the tyre), the
+  camera as a pinhole, and the points read off the photo (hubs, ground contacts, the ends' corners). Published dimensions
+  go in as priors: tight where a source is sure (the length, the roof's height, the track), loose for SAM3D's readings.
+  **Take the focal length from the photo's EXIF** (35 mm-equivalent focal / 36 x the width in px) and hold it: free, a
+  side view trades focal length against depth and the fit runs off to a wide lens close to the hull. Drop a point read
+  too uncertainly (a soft corner) rather than let it pull the fit.
+* **Back-project** the other features with the fitted camera onto the vertical plane each lies in (`vehicle_fit.py ...
+  backproject`): the chine's ends, the bottom, the bow plate's foot.
+* **Widths** come from a plan view (a manual's equipment plan, a top-view drawing) scaled to the published width
+  separately from the length; a side view hardly constrains them.
+* **Prove it** as for a front: render from the fitted camera (`trace_check.render_world_camera`, which renders the
+  plates' creases for the edge finder) and `photo_trace.py overlay ... --photo`. A photograph of a sister vehicle (the
+  BTR-60PB for the PU-12M's hull) proves the shared shape; the variant's own fittings are compared with its own photos.
+* What a single photograph cannot settle, say: the PU-12M's photo reads its height about 5-8 % larger against its length
+  than the published dimensions; the model keeps the published ones and the overlay shows the roof 6-10 cm low.
+
 ## Without a good reference
 
 A part seen only from one angle, or only in a drawing: still flatten what there is, but mark sizes as scaled (with the

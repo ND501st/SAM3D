@@ -1106,6 +1106,7 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 				S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 				S.bIsGround = true;
 				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
+				S.bDeployed = V.deployed;
 				Out.Add(S);
 			}
 		}
@@ -1486,6 +1487,21 @@ TArray<float> USimWorldSubsystem::GetBoardRangeRings() const
 		Out = {50000.f, 100000.f, 150000.f, 200000.f};
 	}
 	return Out;
+}
+
+float USimWorldSubsystem::GetPostMastExtension() const
+{
+	if (!Runner || Runner->Post() == nullptr || !Runner->Console().equipment.Has("mast_up"))
+	{
+		return -1.f;
+	}
+	return static_cast<float>(Runner->Console().equipment.Progress("mast_up"));
+}
+
+bool USimWorldSubsystem::IsPostGeneratorOut() const
+{
+	return Runner && Runner->Post() != nullptr && Runner->Console().equipment.Has("ab1_placed") &&
+		Runner->Console().equipment.Progress("ab1_placed") >= 0.5;
 }
 
 TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) const
