@@ -395,10 +395,8 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	if (NewLink)
 	{
 		Link = MoveTemp(NewLink);
-		// The player starts in the Osa; -SimVehicle=post puts him in the PU-12M.
-		FString Vehicle;
-		FParse::Value(FCommandLine::Get(), TEXT("SimVehicle="), Vehicle);
-		Runner = Vehicle == TEXT("post") ? &Link->Post() : &Link->Osa();
+		// The player starts in the Osa; SimVehicle=post (the menu's ?SimVehicle or -SimVehicle) puts him in the PU-12M.
+		Runner = GetLaunchOption(TEXT("SimVehicle")) == TEXT("post") ? &Link->Post() : &Link->Osa();
 	}
 	else
 	{
@@ -710,6 +708,87 @@ FVector USimWorldSubsystem::GetOriginLongitudeLatitudeHeight() const
 FString USimWorldSubsystem::GetDebriefText() const
 {
 	return Runner ? ToF(Runner->Debrief()) : FString();
+}
+
+FString USimWorldSubsystem::GetScenarioName() const
+{
+	return Runner ? ToF(Runner->Def().name) : FString();
+}
+
+bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& OutError) const
+{
+	OutMissions.Reset();
+	simcore::MissionCatalog Catalog;
+	std::string Error;
+	if (!simcore::LoadMissionCatalog(ToStd(ResolveDataDirectory()), Catalog, &Error))
+	{
+		OutError = ToF(Error);
+		return false;
+	}
+	for (const simcore::MissionGroup& G : Catalog.groups)
+	{
+		for (const simcore::MissionDef& M : G.missions)
+		{
+			FSimMission& Out = OutMissions.AddDefaulted_GetRef();
+			Out.Id = ToF(M.id);
+			Out.Title = ToF(M.title);
+			Out.GroupId = ToF(G.id);
+			Out.GroupLabel = ToF(G.label);
+			Out.GroupNotes = ToF(G.notes);
+			Out.Name = ToF(M.name);
+			Out.Description = ToF(M.description);
+			Out.bLink = M.link;
+			for (const simcore::MissionVehicle& V : M.vehicles)
+			{
+				FSimMissionVehicle& OutV = Out.Vehicles.AddDefaulted_GetRef();
+				OutV.Id = ToF(V.id);
+				OutV.Label = ToF(V.label);
+				OutV.SystemId = ToF(V.system_id);
+				for (const simcore::MissionSeat& S : V.seats)
+				{
+					FSimMissionSeat& OutS = OutV.Seats.AddDefaulted_GetRef();
+					OutS.Id = ToF(S.id);
+					OutS.Label = ToF(S.label);
+					OutS.bCommands = S.commands;
+				}
+			}
+		}
+	}
+	OutError.Reset();
+	return true;
+}
+
+FString USimWorldSubsystem::GetLaunchOption(const FString& Key) const
+{
+	const FString Match = Key + TEXT("=");
+	if (const UWorld* World = GetWorld())
+	{
+		for (const FString& Op : World->URL.Op)
+		{
+			if (Op.StartsWith(Match, ESearchCase::IgnoreCase))
+			{
+				return Op.Mid(Match.Len());
+			}
+		}
+	}
+	FString Value;
+	FParse::Value(FCommandLine::Get(), *Match, Value);
+	return Value;
+}
+
+bool USimWorldSubsystem::HasUrlOption(const FString& Key) const
+{
+	if (const UWorld* World = GetWorld())
+	{
+		for (const FString& Op : World->URL.Op)
+		{
+			if (Op.Equals(Key, ESearchCase::IgnoreCase) || Op.StartsWith(Key + TEXT("="), ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 void USimWorldSubsystem::BroadcastNewDebriefEntries()

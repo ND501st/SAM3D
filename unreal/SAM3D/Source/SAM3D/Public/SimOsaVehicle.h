@@ -201,6 +201,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	bool IsHoldingSeat() const { return bHoldingSeat; }
 
+	// ---- A mission from the menu (ASimMissionMenuHUD): the player starts in a seat; Esc opens the mission's menu.
+
+	/** Start in this station's seat (the menu's choice): into the cabin at that seat, the seat taken from its NPC, once
+	 *  the cabin is built. "" stays outside. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Missions")
+	void StartInSeat(const FString& SeatId);
+
+	/** The mission's menu: the sim paused (single player), resume, restart, the missions, quit; with the debrief once the
+	 *  scenario has ended. Esc opens and closes it. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Missions")
+	void SetMissionMenuOpen(bool bOpen);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
+	bool IsMissionMenuOpen() const { return bMissionMenuOpen; }
+
+	/** Restart and the missions menu are single player (a networked game only resumes or quits). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
+	bool CanLeaveMission() const;
+
 	/**
 	 * Hands-free test mode: enter the cabin and step through every seat and a close-up of every instrument,
 	 * SecondsPerView each, round and round, logging each view (LogSAM3D). Lets a run be checked from screenshots
@@ -331,6 +350,9 @@ private:
 	double HeadingDeg = 0.0;
 
 	bool bInCabin = false;
+	FString PendingSeat;
+	bool bMissionMenuOpen = false;
+	void HandleMissionMenu(APlayerController* Pc);
 	int32 Station = 0;
 	FString StationLabel;
 	/** Head turn from the station's view direction (degrees). */

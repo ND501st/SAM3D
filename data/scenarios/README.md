@@ -5,6 +5,10 @@ played by `simcore::ScenarioRunner` (`scenario_runner.hpp`). Loading also loads 
 checks every reference in it (inputs, procedures, crew, targets, conditions), reporting the path to any problem.
 An order must go to the crew member in the seat that owns the procedure (`data/procedures/README.md`).
 
+`missions.json` is the game's missions menu (`simcore/missions.hpp`): it orders and groups the scenarios and gives
+each a short title; the name, description, seats and the seat that commands come from the scenario. A new scenario
+goes into it (or is a half of a listed battery link): `test_missions.cpp` checks every file here is listed and starts.
+
 Fictional and training scenarios use `"source": "sam3d"` with `"confidence": "estimate"`. Historical scenarios cite
 their sources like any other data file (`data/systems/README.md`). Placeholder numbers (target speed, RCS, the
 ranges at which zone lamps light) are labelled as such in `notes`.

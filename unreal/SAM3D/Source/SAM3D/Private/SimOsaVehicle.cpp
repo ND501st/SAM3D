@@ -9,6 +9,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "SAM3D.h"
 #include "SimCabinComponent.h"
 #include "SimCabinHUD.h"
@@ -153,6 +154,16 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	APlayerController* Pc = Cast<APlayerController>(GetController());
 	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	// Esc: the mission's menu (unless the crew menu is open: Esc closes that). Nothing else moves while it is open.
+	if (Pc != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !bMenuOpen && !bTouring && Pc->WasInputKeyJustPressed(EKeys::Escape))
+	{
+		SetMissionMenuOpen(!bMissionMenuOpen);
+	}
+	if (bMissionMenuOpen)
+	{
+		HandleMissionMenu(Pc);
+		return;
+	}
 	Drive(DeltaSeconds, Pc);
 	FollowGround();
 	if (Sim != nullptr && Sim->IsScenarioRunning())
@@ -162,6 +173,25 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			Sim->SwitchLinkedVehicle();
 		}
 		ConfigureForScenario(Sim);
+		// The menu's seat, once the cabin has its stations.
+		if (!PendingSeat.IsEmpty() && Cabin->GetNumStations() > 0)
+		{
+			for (int32 I = 0; I < Cabin->GetNumStations(); ++I)
+			{
+				if (Cabin->GetStationId(I) == PendingSeat)
+				{
+					Station = I;
+					if (SetInCabin(true))
+					{
+						Sim->TakeCrewSeat(PendingSeat, TEXT("Player"));
+						FeedbackText = FString::Printf(TEXT("Your seat: %s"), *StationLabel);
+						FeedbackSecondsLeft = 4.0f;
+					}
+				}
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Mission start: the player in the %s's seat"), *PendingSeat);
+			PendingSeat.Reset();
+		}
 		UpdateSim(Sim);
 		if (!bMenuOpen)
 		{
@@ -563,6 +593,64 @@ void ASimOsaVehicle::HandlePost(APlayerController* Pc)
 	else if (Pc->WasInputKeyJustPressed(EKeys::P))
 	{
 		PlotPicked();
+	}
+}
+
+// ---------------------------------------------------------------------------------------------- the mission's menu
+
+void ASimOsaVehicle::StartInSeat(const FString& SeatId)
+{
+	PendingSeat = SeatId;
+}
+
+bool ASimOsaVehicle::CanLeaveMission() const
+{
+	return GetWorld() != nullptr && GetWorld()->GetNetMode() == NM_Standalone;
+}
+
+void ASimOsaVehicle::SetMissionMenuOpen(bool bOpen)
+{
+	bMissionMenuOpen = bOpen;
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim != nullptr && CanLeaveMission())
+	{
+		Sim->SetSimPaused(bOpen);  // a networked game runs on for the others
+	}
+	DraggedWheel = INDEX_NONE;
+}
+
+void ASimOsaVehicle::HandleMissionMenu(APlayerController* Pc)
+{
+	if (Pc == nullptr)
+	{
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Enter))
+	{
+		SetMissionMenuOpen(false);
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Q))
+	{
+		FGenericPlatformMisc::RequestExit(false);
+		return;
+	}
+	if (!CanLeaveMission())
+	{
+		return;
+	}
+	const FName Level(*UGameplayStatics::GetCurrentLevelName(this, true));
+	if (Pc->WasInputKeyJustPressed(EKeys::R))
+	{
+		// The same mission from the start: the level's own options again (or the command line's scenario).
+		const FString Options = FString::Join(GetWorld()->URL.Op, TEXT("?"));
+		UE_LOG(LogSAM3D, Log, TEXT("Mission menu: restart (%s)"), *Options);
+		UGameplayStatics::OpenLevel(this, Level, true, Options);
+	}
+	else if (Pc->WasInputKeyJustPressed(EKeys::M))
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Mission menu: to the missions"));
+		UGameplayStatics::OpenLevel(this, Level, true, TEXT("SimMenu"));
 	}
 }
 

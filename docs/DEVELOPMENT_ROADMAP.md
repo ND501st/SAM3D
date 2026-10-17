@@ -115,6 +115,11 @@ its done-when criteria is `docs/crew/09_IMPLEMENTATION_PLAN.md`.
 | 8.12 | **First pass (headless) done:** `simcore/examples/crew_balance`, `docs/crew/11_PLAYTEST_AND_BALANCE.md`: trained crews meet the published reaction time, recruits don't; two NPC commander faults found and fixed. Every system of the console in the NPCs' decisions (IFF, СДЦ, EMCON by the TV, the second missile, radios, fuel; 17 Oct). Left: a person playing the missions on the map |
 
 **Exit = M2:** a person can play the whole mission without touching the editor, in a seat of the crew or in command.
+**The way in done 18 Oct 2026:** the game opens on a missions menu (`data/scenarios/missions.json`,
+`simcore/missions.hpp`, Unreal `ASimMissionMenuHUD`): every mission with its scenario's description, started in the
+vehicle and seat the player picks (the commander's: in command; any other: in the crew); Esc in a mission pauses it
+with restart, the missions and quit, and shows the debrief when it ends (`unreal/README.md`). Left for M2: a person
+playing them through.
 
 ## Phase 9 - Threats
 

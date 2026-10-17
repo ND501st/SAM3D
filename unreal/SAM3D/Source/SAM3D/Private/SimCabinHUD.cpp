@@ -17,16 +17,34 @@ void ASimCabinHUD::DrawHUD()
 	{
 		bShowBoard = !bShowBoard;
 	}
-	if (Sim != nullptr && Canvas != nullptr)
+	const APlayerController* Pc = OwnerPc;
+	const ASimOsaVehicle* Vehicle = Pc != nullptr ? Cast<ASimOsaVehicle>(Pc->GetPawn()) : nullptr;
+	if (Sim != nullptr && Canvas != nullptr && (Vehicle == nullptr || !Vehicle->IsMissionMenuOpen()))
 	{
-		DrawRadio(Sim, SmallFont);
+		DrawRadio(Sim, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f);
 		if (bShowBoard)
 		{
 			DrawBoard(Sim, SmallFont);
 		}
 	}
-	const APlayerController* Pc = OwnerPc;
-	const ASimOsaVehicle* Vehicle = Pc != nullptr ? Cast<ASimOsaVehicle>(Pc->GetPawn()) : nullptr;
+	if (Vehicle != nullptr && Sim != nullptr && Canvas != nullptr && Sim->IsScenarioRunning())
+	{
+		if (Vehicle->IsMissionMenuOpen())
+		{
+			DrawMissionMenu(Sim, Vehicle);
+			return;
+		}
+		if (Sim->IsScenarioFinished())
+		{
+			UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+			const FString Ended = TEXT("The scenario has ended.   Esc: the debrief and the menu");
+			float Tw = 0.0f;
+			float Th = 0.0f;
+			GetTextSize(Ended, Tw, Th, Medium);
+			DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), (Canvas->ClipX - Tw) * 0.5f - 12.0f, 8.0f, Tw + 24.0f, Th + 10.0f);
+			DrawText(Ended, FLinearColor(1.0f, 0.78f, 0.35f), (Canvas->ClipX - Tw) * 0.5f, 13.0f, Medium);
+		}
+	}
 	// A battery link: the other vehicle is a key away.
 	const FString SwitchHint = Sim != nullptr && Sim->IsBatteryLink() ? FString::Printf(TEXT("   V to %s"), *Sim->GetOtherLinkedVehicle()) : FString();
 	if (Vehicle != nullptr && !Vehicle->IsInCabin() && Canvas != nullptr && !SwitchHint.IsEmpty())
@@ -68,6 +86,66 @@ void ASimCabinHUD::DrawHUD()
 	}
 }
 
+void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle)
+{
+	UFont* Large = GEngine != nullptr ? GEngine->GetLargeFont() : nullptr;
+	UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const FLinearColor Amber(1.0f, 0.78f, 0.35f);
+	const FLinearColor Paper(0.93f, 0.92f, 0.86f);
+	const FLinearColor Dim(0.62f, 0.64f, 0.58f);
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float X = FMath::Max(24.0f, W * 0.06f);
+	DrawRect(FLinearColor(0.015f, 0.02f, 0.015f, 0.82f), 0.0f, 0.0f, W, H);
+	const bool bEnded = Sim->IsScenarioFinished();
+	float Y = FMath::Max(24.0f, H * 0.06f);
+	DrawText(bEnded ? TEXT("The scenario has ended") : TEXT("Paused"), Amber, X, Y, Large, 1.2f);
+	Y += 44.0f;
+	DrawText(Sim->GetScenarioName(), Paper, X, Y, Medium);
+	Y += 34.0f;
+	const bool bLeave = Vehicle->CanLeaveMission();
+	const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit")};
+	for (int32 I = 0; I < 4; ++I)
+	{
+		if (!bLeave && (I == 1 || I == 2))
+		{
+			continue;
+		}
+		DrawText(Lines[I], Paper, X, Y, Medium);
+		Y += 26.0f;
+	}
+	if (!bLeave)
+	{
+		DrawText(TEXT("(a networked game runs on while this menu is open)"), Dim, X, Y, Small);
+		Y += 22.0f;
+	}
+	if (!bEnded)
+	{
+		return;
+	}
+	// The debrief's summary: from its totals to the crew's grades (the event list above it is in the log).
+	Y += 16.0f;
+	DrawText(TEXT("Debrief"), Amber, X, Y, Medium);
+	Y += 28.0f;
+	TArray<FString> DebriefLines;
+	Sim->GetDebriefText().ParseIntoArrayLines(DebriefLines, false);
+	int32 From = FMath::Max(0, DebriefLines.Num() - 24);
+	for (int32 I = 0; I < DebriefLines.Num(); ++I)
+	{
+		if (DebriefLines[I].StartsWith(TEXT("Procedures completed")))
+		{
+			From = I;
+			break;
+		}
+	}
+	for (int32 I = From; I < DebriefLines.Num() && Y < H - 30.0f; ++I)
+	{
+		DrawText(DebriefLines[I], Paper, X, Y, Small);
+		Y += 17.0f;
+	}
+}
+
 void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle, UFont* Font)
 {
 	// The PU-12M's aids (the cabin's IT-45, glass and IT boards are the real picture): what the seat can pick and the
@@ -91,8 +169,9 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 		Line += TEXT("(nothing)");
 	}
 	const float X = 20.0f;
-	float Y = Canvas->ClipY - (bCommander ? 142.0f : 120.0f);
+	float Y = PostAidsTop(Sim, Vehicle);
 	const FLinearColor Ink(0.85f, 0.95f, 0.85f);
+	DrawBacking(X, Y, Canvas->ClipX - 2.0f * X, Canvas->ClipY - 52.0f - Y);
 	DrawText(Line, Ink, X, Y, Font);
 	Y += 22.0f;
 	if (bCommander)
@@ -112,7 +191,9 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 	}
 	else
 	{
-		DrawText(TEXT("[ ] pick a target, P write it on the board (take the seat first: T)"), Ink, X, Y, Font);
+		DrawText(Vehicle->IsHoldingSeat() ? TEXT("[ ] pick a target, P write it on the board")
+										  : TEXT("[ ] pick a target, P write it on the board (take the seat first: T)"),
+			Ink, X, Y, Font);
 	}
 }
 
@@ -191,21 +272,57 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 	}
 }
 
-void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font)
+float ASimCabinHUD::PostAidsTop(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle) const
 {
+	if (Vehicle != nullptr && Vehicle->IsInCabin() && Vehicle->IsCommandPost())
+	{
+		if (Vehicle->GetStationId() == Sim->GetCommanderStation())
+		{
+			return Canvas->ClipY - 118.0f;
+		}
+		if (Vehicle->GetStationId() == Sim->GetPlotterStation())
+		{
+			return Canvas->ClipY - 96.0f;
+		}
+	}
+	return Canvas->ClipY - 54.0f;
+}
+
+void ASimCabinHUD::DrawBacking(float X, float Y, float W, float H)
+{
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.38f), X - 6.0f, Y - 3.0f, W + 12.0f, H + 6.0f);
+}
+
+void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
+{
+	// The lines still fresh, packed at the bottom: the oldest fades.
 	const double Now = Sim->GetSimTimeSeconds();
 	const TArray<FSimRadioMessage> Messages = Sim->GetRadioMessages(RadioLines);
-	float Y = Canvas->ClipY - 70.0f - 16.0f * Messages.Num();
+	TArray<TPair<FString, float>> Lines;
+	float Widest = 0.0f;
 	for (const FSimRadioMessage& M : Messages)
 	{
 		const double Age = Now - M.TimeSeconds;
 		if (Age > RadioLineSeconds && Now > 0.0)
 		{
-			Y += 16.0f;
 			continue;
 		}
-		const float Alpha = FMath::Clamp(1.0f - static_cast<float>(Age) / RadioLineSeconds, 0.35f, 1.0f);
-		DrawText(FString::Printf(TEXT("[%s] %s: %s"), *M.Net, *M.From, *M.Text), FLinearColor(0.75f, 0.95f, 0.75f, Alpha), 20.0f, Y, Font);
+		const FString Text = FString::Printf(TEXT("[%s] %s: %s"), *M.Net, *M.From, *M.Text);
+		float W = 0.0f;
+		float H = 0.0f;
+		GetTextSize(Text, W, H, Font);
+		Widest = FMath::Max(Widest, W);
+		Lines.Emplace(Text, FMath::Clamp(1.0f - static_cast<float>(Age) / RadioLineSeconds, 0.35f, 1.0f));
+	}
+	if (Lines.Num() == 0)
+	{
+		return;
+	}
+	float Y = Bottom - 16.0f * Lines.Num();
+	DrawBacking(20.0f, Y, Widest, 16.0f * Lines.Num());
+	for (const TPair<FString, float>& L : Lines)
+	{
+		DrawText(L.Key, FLinearColor(0.75f, 0.95f, 0.75f, L.Value), 20.0f, Y, Font);
 		Y += 16.0f;
 	}
 }
