@@ -68,6 +68,7 @@ public:
         double time_scale = 1.0;  // its crew's tier against the reference
         bool asked_tzm = false;
         double reload_clock_s = 0.0;
+        bool external = false;      // simulated elsewhere (the player's own Osa, battery_link.hpp): set, not stepped
         bool has_sector = false;    // its sector of fire (true azimuth from its position, clockwise from..to)
         double sector_from_deg = 0.0;
         double sector_to_deg = 0.0;
@@ -95,7 +96,9 @@ public:
         return true;
     }
     struct Event {
-        enum class Kind { Assigned, Captured, Launch, Hit, Miss, Empty, Reloaded };
+        // Ready: a launcher's к бою готов (said by the runner, or a linked Osa; the abstract shooters report readiness
+        // when they deploy).
+        enum class Kind { Assigned, Captured, Launch, Hit, Miss, Empty, Reloaded, Ready };
         Kind kind = Kind::Assigned;
         double t = 0.0;
         std::string callsign;
@@ -133,6 +136,24 @@ public:
     // Free fire: shooters with no target take the nearest hostile in reach (and in their sector) themselves.
     void SetAutonomous(bool on) { autonomous_ = on; }
 
+    // A launcher simulated elsewhere (the player's own Osa when its battery's post is a linked PU-12M, battery_link.hpp):
+    // it keeps its place in the battery and in the fire distribution, but its missiles, target and phase are set from
+    // what its crew does. False for an unknown launcher.
+    bool SetExternal(const std::string& callsign) {
+        Shooter* s = Find(callsign);
+        if (s == nullptr) return false;
+        s->external = true;
+        return true;
+    }
+    bool SetExternalState(const std::string& callsign, int missiles, const std::string& target, Phase phase) {
+        Shooter* s = Find(callsign);
+        if (s == nullptr || !s->external) return false;
+        if (missiles >= 0) s->missiles = missiles;
+        s->target = phase == Phase::Idle ? std::string() : target;
+        s->phase = s->target.empty() ? Phase::Idle : phase;
+        return true;
+    }
+
     // The battery commander gives a shooter a target. False for an unknown shooter, or one with no missiles.
     bool Assign(const std::string& callsign, const std::string& target, int number, double t) {
         Shooter* s = Find(callsign);
@@ -149,6 +170,7 @@ public:
     template <typename OnHit>
     void Step(double t, const std::vector<BatteryFireTarget>& targets, std::mt19937& rng, Battery* battery, OnHit hit) {
         for (Shooter& s : shooters_) {
+            if (s.external) continue;  // its own crew fights it
             Reload(s, t, battery);
             if (!s.deployed) continue;
             if (s.target.empty() && autonomous_ && s.missiles > 0) TakeNearest(s, targets, t);

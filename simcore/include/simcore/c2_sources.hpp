@@ -385,6 +385,18 @@ public:
         s->board->SetSource(at);
     }
 
+    // The source is the real PU-12M of a battery link (battery_link.hpp): its board plots nothing itself, the
+    // designations come by Relay, and while it is on the air its routine calls keep the net alive.
+    void SetExternal(const std::string& id) {
+        if (Source* s = Find(id)) s->board->SetExternal(true);
+    }
+    bool Relay(const std::string& id, const BoardMark& m, double start_s, double end_s) {
+        Source* s = Find(id);
+        if (s == nullptr) return false;
+        s->board->Relay(m, start_s, end_s);
+        return true;
+    }
+
     bool Has(const std::string& id) const { return Find(id) != nullptr; }
     std::size_t Size() const { return sources_.size(); }
     const C2SourceDef& Def(std::size_t i) const { return sources_[i]->def; }
@@ -748,6 +760,7 @@ private:
                                                     : std::string("out of reach of the vehicle"))});
             if (!up) s.board->CancelQueued(t);
         }
+        if (s.avail && s.board->External() && Receivable(s)) s.last_contact_s = t;
         if (s.avail && s.board->Due(t)) {
             const std::size_t before = s.board->Marks().size();
             if (s.board->Update(t, Sees(s, truth))) {

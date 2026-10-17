@@ -39,6 +39,7 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/engagement_demo out/demo.acmi     # Windows: simcore\build\Release\engagement_demo.exe
 ./simcore/build/procedure_demo                    # Osa console session + debrief (run from the repo root)
 ./simcore/build/scenario_demo                     # play data/scenarios/osa_practice.json, print the debrief, write .acmi
+./simcore/build/battery_link_demo                 # the Osa and the PU-12M in one battery (battery_link_practice.json): both debriefs
 ./simcore/build/em_demo data out/em_demo.json out/em_demo.acmi   # EM layer MVP: timeline + 11 checks
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 

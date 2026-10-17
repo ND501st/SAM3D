@@ -130,6 +130,7 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 | P5 | Exterior model at full detail, animated mast | the exterior matches the photographs |
 | P6 | Interior model and cabin data; displays; seats | a player can sit at every PU-12M station |
 | P7 | Multiplayer: PU-12M seats in the crew system; the battery commander's picture over the network | a commander and Osa crews play together |
+| P8 | The PU-12M as a seat of the Osa's battery: the post and the player's Osa in one battery (a battery link), then in Unreal | a player in the PU-12M gives targets to an Osa crewed by NPCs or another player |
 
 ## Status
 
@@ -240,6 +241,27 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     is inside, the lining 15 cm thick with a finer distance field, the cabin hidden from outside); the DT-2's and the
     IT-45's round parts drawn as polygons (Nanite's fallback: the interior without Nanite). The PU-12M's crew has its
     voices (`data/crew/voices.json` serves both crews).
+
+- **P8 first part, simcore (18 Oct 2026):** the post and the player's Osa in one battery. `simcore/battery_link.hpp`
+  steps two runners, the Osa's and the PU-12M's, as one battery (`data/scenarios/battery_link_practice.json`):
+  - **One sky.** The Osa's runner moves the targets; the post's mirrors them every step; a kill on either side is a
+    kill on both.
+  - **Designations.** The post's designation to 21 (by voice: number, azimuth and range) reaches the Osa's commander as
+    the PU-12's on the command net, at the message's own times and over the Osa's link. None comes while the post's
+    battery-net set is off the air.
+  - **Reports.** The Osa's commander reports on the battery net (к бою готов, пуск, цель поражена, ракет нет), and the
+    post writes it on its IT boards. The post's other launchers' assignments and reports are heard in the Osa.
+  - **Fire distribution.** The Osa counts in the post's distribution with its own missiles and the target its crew is
+    on.
+  - **The Osa's commander in a linked battery.** He fights the target the post gave him first. He leaves targets given
+    to another launcher alone, and echoes beside them too (a second track of the same aircraft). If his crew still
+    locks one, he has it let go.
+  - **A general fix found on the way:** the commander's "Цель номер … — взять!" now names the ordered target's number,
+    not the latest one heard.
+  - **Checks.** Tests in `simcore/tests/test_battery_link.cpp`; `battery_link_demo` plays it headless and prints both
+    debriefs. In the practice raid each hostile is destroyed once, by the launcher it was given to.
+  - **Next: Unreal.** One world subsystem holding the link, both vehicles on the map with their cabins, the seats of
+    both crews in the crew system (multiplayer: a commander in the post and players in the Osa).
 
 ## 6. What is still SAM3D's
 
