@@ -99,7 +99,17 @@ someone must have driven within reach), and that interdependence is mapped. The 
 - Knowledge per seat (`crew_knowledge.hpp`): each seat's picture from its own instruments and the reports it heard;
   NPCs act on it (the operator's range, the commander's choice of target), never on the truth.
 - The battery's fight (`battery_fire.hpp`): the other launchers with an abstract crew (the network chart's times at
-  their tier, geometric sensors, the same zones and hit chances); the battery commander's fire distribution.
+  their tier, geometric sensors, the same zones and hit chances); the battery commander's fire distribution; sectors of
+  fire.
+- The crew's bodies (`crew_body.hpp`): a seated crewman from `data/crew/body.json`, reach planning (bend, turn on the
+  seat, stand), two-bone IK, a per-seat animator driven by `ScenarioRunner::CrewActivity`; Unreal draws it
+  (`USimCrewBodiesComponent`). Presentation, except the controls out of seated reach (crew data `stand_for`), which cost
+  drill time.
+- The crew's voices (`crew_voice.hpp`): what a speech engine says for a callout and in whose voice; Unreal speaks it
+  (`FSimSpeech`, `USimCrewVoiceComponent`).
+- Training and command (`crew_training.hpp`, `crew_decisions.hpp`): the assistance levels, each player move judged
+  (`MoveVerdicts`), the honest order menu (`CheckOrder`, `TryCrewOrder`), the evaluation of target choice and launch
+  timing judged in the debrief.
 
 The player's 3D cabin clicks call the same functions, so the player and the crew share one source of truth.
 - Player: `ScenarioRunner::PlayerSet` puts the player's moves through a `ProcedureTracker` (the procedure set with

@@ -53,6 +53,10 @@ commander, against a fighter appearing inside the zone, mean of five seeds, firs
 class 31.1 s, 2nd class 38.4 s, 3rd class 41.0 s, recruit 81.2 s. The 3rd class was tuned once (reaction 1.6 → 1.4 s,
 perception 2.4 → 2.0 s, launch timing 5 → 4 s) to come near the band.
 
+Re-measured 17 October 2026 over 20 seeds (five were too few: one bad run moved a tier's mean by 3 s), after each new
+procedure's first step began drawing its own reaction (it had reused the last one): master 28.5 s, 1st class 31.4 s,
+2nd 36.9 s, 3rd 41.1 s, recruit 85.8 s. The table is unchanged. The whole-scenario balance per tier is in `11`.
+
 As built: reaction, jitter, slips, omissions and stress in `CrewMember`; wheel rates, TV lag, aim noise and the range
 error by hand in the engagement (`AimCrew`); perception and callout delay in the callouts; the miss chance in hearing
 reports; judgement as the launch timing on the decision controls (ПУСК), the commander's priority slips and his

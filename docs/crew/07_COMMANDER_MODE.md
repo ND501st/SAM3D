@@ -14,6 +14,22 @@ then the whole battery as the battery commander in the PU-12M.
    gives (the first unmet condition: "the АПУ is locked: halt first").
 4. **He may advise from the drill master too**, at the assistance level he chose (`08`): "next best order".
 
+As built, 17 October 2026: the honest menu is `ScenarioRunner::CheckOrder`. It greys an order:
+
+- whose task holds already ("уже выполнено");
+- whose drills wait on equipment that has failed;
+- whose first step waits for a world fact no seat can make true and that isn't so. The crew data's facts give the
+  words, e.g. "Цель не в зоне / No target in the zone";
+- that needs what the commander doesn't know or have. Each order's `needs` lists them: a reported contact, a track, a
+  jammer tracked, a missile.
+
+Waits the crew works through by itself (power, warm-up, the driver halting) don't grey an order.
+`ScenarioRunner::TryCrewOrder` (the Unreal menu) refuses a greyed order, and the seat answers "Не могу: <reason>". The
+NPC commander is held to the same needs: no launch permission from an empty launcher. The battery commander sets
+sectors of fire (`ScenarioRunner::SetBatterySector`; battery vehicles' `sector_deg`). In free fire a launcher takes
+only targets in its sector, and the NPC battery commander gives targets to a launcher whose sector covers them. Still
+a list, not a radial menu.
+
 ## 2. The vehicle commander's order menu
 
 Grouped as the commander thinks, each entry an order of `04` §3:

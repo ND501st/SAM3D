@@ -40,6 +40,20 @@ What the overlay shows, from the drill master (`06` §3.4):
 - a warning on a move that would fault equipment;
 - after a move off the plan: what the best move was and what it cost (seconds, or a deviation).
 
+As built, 17 October 2026 (`simcore/crew_training.hpp`, `ScenarioRunner::Assistance`): the levels are as in the
+table, set by the scenario's `assistance` (default guided). In the cabin, H cycles guided, hint, demonstrate and off;
+an exam scenario keeps the overlay off.
+
+- **The task** follows the fight: К бою until ready, then the capture, then the launch (`TrainingTask`).
+- **Hint** waits for the player's hesitation: time since he took the seat or last moved anything there, against the
+  patience of that seat's tier.
+- **Demonstrate** names the move the seat's NPC is about to make (`CrewMember::CurrentIntent`) with the drill master's
+  why. Its body makes the move in the cabin (`10`).
+- **Every move the player makes at a held seat is judged** against the drill master's best (`ScenarioRunner::MoveVerdicts`).
+  A move off the drill shows at once: "Off the drill: that cost N s. The best move was ...". Costly moves reach the
+  debrief.
+- **The ghost hand** pulses on the advised control (Unreal `USimCrewBodiesComponent::SetGhostHand`).
+
 ## 3. Grading
 
 The debrief already lists crew reports, faults and deviations (`debrief.hpp`, no points: SAM Simulator's rule). The
