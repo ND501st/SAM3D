@@ -280,6 +280,7 @@ struct CabinDisplay {
     std::vector<Condition> lit_when;     // dial backlight: all must hold (empty = lit whenever powered)
     // dial and meter
     std::string control;                 // the control whose value the needle shows
+    std::string readout;                 // dial: or a value the simulation gives (simcore/readouts.hpp, DialReading)
     int marks = 12;                      // labelled divisions on the scale
     // dial: one needle revolution = value_per_turn; the scale reads 0..labels_per_turn around it
     double value_per_turn = 360.0;
@@ -819,8 +820,8 @@ private:
             const std::string path = Index("displays", i);
             const json::Value& d = arr->items[i];
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
-                                "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
-                                "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
+                                "control", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale",
+                                "unit", "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
                                 "readouts", "source", "confidence", "notes"})) {
                 return false;
             }
@@ -878,7 +879,7 @@ private:
             }
         } else if (kind == "dial") {
             disp.kind = CabinDisplayKind::Dial;
-            allowed = {"control", "marks", "value_per_turn", "labels_per_turn"};
+            allowed = {"control", "readout", "marks", "value_per_turn", "labels_per_turn"};
         } else if (kind == "meter") {
             disp.kind = CabinDisplayKind::Meter;
             allowed = {"control", "marks", "scale", "full_scale", "unit"};
@@ -889,14 +890,19 @@ private:
         } else {
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter or counters");
         }
-        for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
+        for (const char* key : {"control", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
                                 "range_window_m", "readouts"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
         }
-        if (disp.kind == CabinDisplayKind::Dial || disp.kind == CabinDisplayKind::Meter) {
+        if (disp.kind == CabinDisplayKind::Dial && d.Find("readout") != nullptr) {
+            if (d.Find("control") != nullptr) return Fail(Join(path, "readout"), "a dial reads a control or a readout, not both");
+            if (!RequireString(d, path, "readout", disp.readout)) return false;
+            if (disp.readout != "gyro_heading") return Fail(Join(path, "readout"), "must be gyro_heading");
+            if (!console.has_orientation) return Fail(Join(path, "readout"), "gyro_heading needs the console's orientation block");
+        } else if (disp.kind == CabinDisplayKind::Dial || disp.kind == CabinDisplayKind::Meter) {
             if (!RequireString(d, path, "control", disp.control)) return false;
             if (!console.panel.Has(disp.control)) {
                 return Fail(Join(path, "control"), "unknown control '" + disp.control + "'");

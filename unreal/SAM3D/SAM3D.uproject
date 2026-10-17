@@ -23,6 +23,10 @@
       "Enabled": true
     },
     {
+      "Name": "TextToSpeech",
+      "Enabled": true
+    },
+    {
       "Name": "ModelContextProtocol",
       "Enabled": true
     },

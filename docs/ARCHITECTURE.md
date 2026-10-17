@@ -163,15 +163,19 @@ roadmap phase 6:
   search beam). The scan period is an estimate, and in the automatic beam programmes the beam searched is the one the
   echo is seen in, not the real search radar's beam commands. Manual capture has no slow elevation scan of its own:
   the elevation wheel has to be on the target. (6.4)
-- Heading: the gyro half-compass and its orientation drill are modelled (the crew's azimuths are in the gyro's
-  frame); gyro drift, the OR-31M Qc scale and the crew chief's compass work are not, and the player deputy reads
-  the commanded Qc from the log. (6.5)
+- Heading: the gyro half-compass, its orientation drill, its drift (the Earth's rate at the site's latitude less the
+  ШИРОТА correction, plus an estimated own drift), the OR-31M Qc scale and the crew chief's compass work are modelled
+  (`orientation.hpp`; the crew's azimuths are in the gyro's frame). The compass work is one timed activity with an
+  estimated error, not the sighting itself; the GA-3's own drift and the survey's time and error are estimates. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
-- TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
+- TV channel: tracked by hand (the wheels), with the 3-thousandth reticle drawn in the Unreal view and the range judged
+  from the target's size against it (class spans are placeholders). (6.6)
 - Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer
   drowns the tracking radar's echo and the radar follows it in angle; the range is then by hand (search scope or PU-12)
-  and Н has an outcome factor (9.1). Not modelled: the counter-jamming used "only while firing", the range-only radar
-  (ПОЛУАВТОМАТ) being jammed too, the anti-radiation missile threat. (6.7, 9.1)
+  and Н has an outcome factor (9.1). A range-gate pull-off takes the gate; УВ. ПОМЕХА (against one walking out) and
+  the SSC's СДЦ (against one walking in) defeat it, switched on only when it is seen (9.4). Not modelled: the
+  range-only radar (ПОЛУАВТОМАТ) being jammed too, the SOC's СА against non-synchronous pulses (no such interference
+  in the EM layer), the anti-radiation missile threat. (6.7, 9.1, 9.4)
 - Targets: terrain following, low strike runs, pop-up helicopters and evasion on launch or lock are scenario behaviours
   (9.3); the aircraft is still a constant-speed, turn-rate-limited point (no energy, no g limit).
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario

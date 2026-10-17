@@ -8,6 +8,7 @@
 
 class UCameraComponent;
 class USimCabinComponent;
+class USimCrewAudioComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
@@ -237,6 +238,10 @@ protected:
 	/** Panels, controls and lamps inside the hull, built from the cabin layout. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USimCabinComponent> Cabin;
+
+	/** What the crew hears: the radio's hiss and call tone in the commander's headset, the crew's words (roadmap 7.7). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimCrewAudioComponent> CrewAudio;
 
 	/** First-person camera at the current station's eye point. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")

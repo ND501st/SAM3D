@@ -66,7 +66,11 @@ struct OrderDef {
     std::string callout;  // the order's callout id (its words)
     std::string task;     // the task it asks for (may be empty)
     std::vector<OrderStart> procedures;
+    // Work the order starts that is not a console drill (ScenarioRunner carries it out; IsOrderAction lists them):
+    //   compass_survey  the crew chief finds Qc with the artillery compass at a halt (orientation.hpp)
+    std::vector<std::string> actions;
 };
+inline bool IsOrderAction(const std::string& a) { return a == "compass_survey"; }
 
 // A named goal: conditions on the console to make true (docs/crew/06_REFERENCE_PERFORMER.md).
 struct CrewTask {
@@ -350,7 +354,7 @@ private:
             const json::Value& o = arr->items[i];
             const std::string p = Index("orders", i);
             OrderDef d;
-            if (!Keys(o, p, {"callout", "task", "procedures", "source", "confidence", "notes"}) ||
+            if (!Keys(o, p, {"callout", "task", "procedures", "actions", "source", "confidence", "notes"}) ||
                 !RequireString(o, p, "callout", d.callout) || !OptionalString(o, p, "task", d.task) || !Provenance(o, p)) {
                 return false;
             }
@@ -375,6 +379,10 @@ private:
                 }
             } else if (!message_.empty()) {
                 return false;
+            }
+            if (!StringList(o, p, "actions", d.actions)) return false;
+            for (std::size_t j = 0; j < d.actions.size(); ++j) {
+                if (!IsOrderAction(d.actions[j])) return Fail(Index(Join(p, "actions"), j), "unknown action '" + d.actions[j] + "'");
             }
             out.orders.push_back(std::move(d));
         }

@@ -41,6 +41,37 @@ void ASimEntityActor::UseGroundStandIn()
 	}
 }
 
+void ASimEntityActor::UseOsaStandIn()
+{
+	if (BoxMesh == nullptr)
+	{
+		return;
+	}
+	// The own vehicle's placeholder proportions (SimOsaVehicle): hull 9.1 x 2.8 x 1.6 m, turret 2.4 x 2.0 x 1.2 m, the
+	// search antenna folded down on the turret.
+	struct Part
+	{
+		FVector SizeM;
+		FVector CentreM;
+	};
+	const Part Parts[] = {{FVector(9.1, 2.8, 1.6), FVector(0.0, 0.0, 1.4)}, {FVector(2.4, 2.0, 1.2), FVector(-1.0, 0.0, 2.8)},
+		{FVector(1.4, 2.4, 0.2), FVector(-1.6, 0.0, 3.5)}};
+	Mesh->SetStaticMesh(BoxMesh);
+	Mesh->SetRelativeRotation(FRotator::ZeroRotator);
+	Mesh->SetRelativeScale3D(Parts[0].SizeM);
+	Mesh->SetRelativeLocation(Parts[0].CentreM * 100.0);
+	for (int32 I = 1; I < 3; ++I)
+	{
+		UStaticMeshComponent* Box = NewObject<UStaticMeshComponent>(this);
+		Box->SetupAttachment(Root);
+		Box->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Box->SetStaticMesh(BoxMesh);
+		Box->RegisterComponent();
+		Box->SetRelativeScale3D(Parts[I].SizeM);
+		Box->SetRelativeLocation(Parts[I].CentreM * 100.0);
+	}
+}
+
 bool ASimEntityActor::UseVehicleModel(const FString& Kind)
 {
 	const TCHAR* Path = Kind == TEXT("reload") ? TEXT("/Game/SAM3D/Vehicles/SM_TZM_9T217.SM_TZM_9T217")

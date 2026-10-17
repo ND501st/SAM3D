@@ -111,7 +111,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 9);
+    SC_EXPECT(layout.displays.size() == 11);
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {

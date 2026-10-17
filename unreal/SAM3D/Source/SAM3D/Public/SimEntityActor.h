@@ -35,6 +35,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D")
 	void UseGroundStandIn();
 
+	/** An Osa-shaped stand-in (hull, turret, the folded search antenna as boxes, the own vehicle's proportions): a
+	 *  battery launcher, or the mock-up at a dummy position. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D")
+	void UseOsaStandIn();
+
 	/** A battery vehicle's model by its kind (reload: the TZM 9T217, fuel: the ATZ-3.8-131, command_post: the PU-12M;
 	 *  /Game/SAM3D/Vehicles, built by tools/blender/build_support_vehicles.py). False if there is none: keep the box. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D")

@@ -76,6 +76,15 @@ inline int CounterReading(const std::string& readout, const ConsoleData& console
     return 0;
 }
 
+// The value a dial shows: its control's, or for a readout dial what the simulation gives (from the scope feed, so a
+// network client draws the server's value).
+//   gyro_heading  the gyro half-compass's heading in degrees (the Qc scale of block OR-31M, which turns while the gyro is
+//                 being slaved to the course setter and stops once they agree: voenizdat_osa_1991 p48)
+inline double DialReading(const CabinDisplay& display, const ConsoleData& console, double gyro_heading_deg) {
+    if (display.readout == "gyro_heading") return gyro_heading_deg;
+    return console.panel.GetValue(display.control);
+}
+
 inline int CounterReading(const std::string& readout, const ConsoleData& console, const EngagementModel& engagement) {
     return CounterReading(readout, console, engagement.TrackReturns(), engagement.AntennaElevationDeg());
 }

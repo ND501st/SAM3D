@@ -42,7 +42,7 @@ DISPLAY_SOURCES = {
         "soc_ppi": ["m:search", "m:iff"], "ssc_range": ["m:track", "m:launcher"], "beta_c": ["c:ssc.az_wheel", "c:ssc.az_light"],
         "soc_counters": ["m:track"], "tov_monitor": ["m:track", "c:tov.fov"],
         "epsilon_c": ["c:ssc.el_wheel", "c:ssc.el_light"], "dts_voltmeter": ["m:track"], "qc_setter": ["c:orient.qc"],
-        "elev_search": ["m:elev"],
+        "elev_search": ["m:elev"], "or31_qc": ["m:orient"], "lat_scale": ["c:orient.latitude"],
     },
 }
 
@@ -51,14 +51,6 @@ DISPLAY_SOURCES = {
 PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
-        ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale. No source gives a drift or a measurement error.", ["m:orient"], "missing"),
-        ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
-        ("p:eccm", "Counter-jamming used only while firing (mixed tracking)", "9.4", "Jamming itself is built (9.1): the tracking radar follows a noise jammer in angle, the range comes by hand from the search scope or the PU-12, and ПОМЕХА fires by method Н. video_osa adds a counter-jamming facility used only while firing and only when no other way to track is left; what it is (a range-memory circuit is the video's guess) is not documented.", ["c:fo.pomekha", "e:launch"], "unknown"),
-        ("p:radio_tx", "Transmissions from the vehicle: reports, ТОН. ВЫЗОВ, the chest switch (ПРД)", "7.8", "The sets only receive today: designations come in, nothing goes out. The commander's reports, the tone call and the chest switch's transmit position would use the transmit state (r123m_*_tx) and the EM layer's radio.", ["m:comms"], "missing"),
-        ("p:preset_setup", "Setting the four presets: drum fixators, frequency, antenna tuning, smooth tuning", "7.8", "The presets are tuned when the scenario starts (the frequency plan is the scenario's). The real set's set-up drill (release a fixator, set the frequency, key, tune the antenna to the maximum, fix it: eight steps per frequency) and the smooth sub-band mode are not modelled.", ["c:radio.left.preset", "c:radio.right.preset"], "missing"),
-        ("p:radio_audio", "Radio and intercom audio: noise, squelch, voices", "7.7", "Nothing is heard in the Unreal cabin: the net's state shows in the debrief and the lamps. Noise that the squelch removes, the voices of the designations and the R-124's sidetone would be audio.", ["m:comms"], "missing"),
-        ("p:intercom_all", "The other subscribers' R-124 boxes", "7.8", "The commander's A-1, the deputy's A-2 and the driver's ПВ matter; the senior operator and operator are always on the intercom (the R-124 has five subscribers; which crew member has which box is not in any source found).", ["c:intercom.a1"], "missing"),
-        ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
     ],
 }
 
@@ -246,10 +238,11 @@ class MapBuilder:
             self.add_node("m:track", t="model", label="Tracking radar and TV channel", notes=track.get("notes"),
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:track", [("s:", k, track, k) for k in ("transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode")]
-                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control")])
+                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control",
+                                                         "rgpo_control")])
             if es:
                 self.add_edge("m:elev", "m:track", "feed", "elevation search")
-            for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input"):
+            for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input", "range_pulled_input"):
                 if track.get(k):
                     self.add_edge("m:track", "i:" + track[k], "signal", "sets this signal")
         if orient:
@@ -257,9 +250,11 @@ class MapBuilder:
                           source=orient.get("source"), conf=orient.get("confidence"))
             feeds("m:orient", [("s:", "gyro", orient, "gyro power"), ("c:", "setter", orient, "course setter"),
                                ("c:", "mode_control", orient, "mode switch"), ("c:", "relay_control", orient, "relay switch"),
-                               ("c:", "sync_button", orient, "fast sync")])
-            if orient.get("synced_input"):
-                self.add_edge("m:orient", "i:" + orient["synced_input"], "signal", "sets this signal")
+                               ("c:", "sync_button", orient, "fast sync"),
+                               ("c:", "latitude_control", orient, "latitude correction (drift)")])
+            for key in ("synced_input", "qc_known_input", "oriented_input"):
+                if orient.get(key):
+                    self.add_edge("m:orient", "i:" + orient[key], "signal", "sets this signal")
 
         radios = self.con.get("radios")
         if radios:  # the two R-123M sets: the commander's source selection (roadmap 7.8)
@@ -286,8 +281,23 @@ class MapBuilder:
                     self.add_edge("c:" + r[key], "m:comms", "feed", why)
                 for key in ("warm", "transmit"):
                     self.add_edge("s:" + r[key], "m:comms", "feed", "state of the set")
+                if r.get("tone"):
+                    self.add_edge("c:" + r["tone"], "m:comms", "feed", "ТОН. ВЫЗОВ: a call tone while transmitting")
+                # the preset set-up (radio_setup.hpp): what the fixators hold, and the knobs
+                for key, why in (("fixator_cover", "the fixators' cover"), ("frequency", "УСТАНОВКА ЧАСТОТЫ: the frequency"),
+                                 ("subband", "the sub-band"), ("antenna_lock", "the antenna knob's lock"),
+                                 ("antenna_tune", "НАСТРОЙКА АНТЕННЫ: the antenna's match")):
+                    if r.get(key):
+                        self.add_edge("c:" + r[key], "m:comms", "feed", why)
+                for fx in r.get("fixators", []):
+                    self.add_edge("c:" + fx, "m:comms", "feed", "a fixator: locked, it keeps the frequency set")
+                for key in ("on_frequency_input", "tuned_input"):
+                    if r.get(key):
+                        self.add_edge("m:comms", "i:" + r[key], "signal", "sets this signal")
             ic = comms.get("intercom", {})
-            for key, why in (("commander", "A-1: on the radio, on the intercom or off"), ("deputy", "A-2: on the radio"), ("driver", "ПВ: on the radio")):
+            for key, why in (("commander", "A-1: on the radio, on the intercom or off"), ("deputy", "A-2: on the radio"), ("driver", "ПВ: on the radio"),
+                             ("chest", "chest switch: ПРД transmits on the commander's set"),
+                             ("driver_chest", "the driver's chest switch: ПРД keys the left set (ПВ on РС)")):
                 if ic.get(key):
                     self.add_edge("c:" + ic[key], "m:comms", "feed", why)
             if ic.get("subsystem"):
