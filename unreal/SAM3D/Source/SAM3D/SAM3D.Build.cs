@@ -21,5 +21,11 @@ public class SAM3D : ModuleRules
 		// It is shared with the standalone tests and runs on any platform.
 		string SimCoreInclude = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", "..", "..", "simcore", "include"));
 		PublicIncludePaths.Add(SimCoreInclude);
+
+		// The crew's voices (roadmap 8.10): Windows' speech engine (SAPI) through COM.
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PublicSystemLibraries.AddRange(new string[] { "sapi.lib", "ole32.lib" });
+		}
 	}
 }

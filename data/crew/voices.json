@@ -3,15 +3,15 @@
   "status": "The crew's voices (roadmap 8.10, docs/crew/10_BODIES_AND_VOICES.md), read by simcore/crew_voice.hpp: what a speech engine says for each callout and in whose voice. Recorded lines, where there are any, take the place of the engine's (unreal/README.md).",
   "source": "sam3d estimates: presentation, chosen by ear so the five seats can be told apart",
   "confidence": "estimate",
-  "notes": "Pitch and rate are on the speech engine's -10..10 scale (Windows SAPI's absmiddle and absspeed). The language is the first of 'languages' that the player's machine has a voice for: Russian needs a Russian voice (Windows: Settings > Time & language > Speech > Add voices > Russian), otherwise the English lines are spoken.",
+  "notes": "Pitch and rate are on the speech engine's -10..10 scale (Windows SAPI's absmiddle and absspeed). The language is the first of 'languages' that the player's machine has a voice for: Russian needs a Russian voice (Windows: Settings > Time & language > Speech > Add voices > Russian), otherwise the English lines are spoken. The rates are a little fast: the crew speaks briskly, and the simulation gives a line 0.4 s plus 0.35 s a word (crew_callouts.hpp), quicker than a speech engine's normal pace.",
   "languages": ["ru", "en"],
   "seats": [
-    {"station": "commander", "pitch": -2, "rate": 0, "notes": "The senior voice in the cabin."},
-    {"station": "deputy_commander", "pitch": 0, "rate": 1},
-    {"station": "senior_operator", "pitch": 2, "rate": 0},
-    {"station": "operator", "pitch": 1, "rate": 2, "notes": "The youngest, quick."},
-    {"station": "driver", "pitch": -4, "rate": -1},
-    {"station": "battery", "pitch": -1, "rate": 0, "radio": true, "notes": "The battery commander on the battery net (an R-123M)."}
+    {"station": "commander", "pitch": -2, "rate": 2, "notes": "The senior voice in the cabin."},
+    {"station": "deputy_commander", "pitch": 0, "rate": 3},
+    {"station": "senior_operator", "pitch": 2, "rate": 2},
+    {"station": "operator", "pitch": 1, "rate": 4, "notes": "The youngest, quick."},
+    {"station": "driver", "pitch": -4, "rate": 1},
+    {"station": "battery", "pitch": -1, "rate": 2, "radio": true, "notes": "The battery commander on the battery net (an R-123M)."}
   ],
   "stress": {"pitch": 2, "rate": 2, "source": "sam3d estimate: a stressed crewman speaks higher and faster", "confidence": "estimate"},
   "bands": {

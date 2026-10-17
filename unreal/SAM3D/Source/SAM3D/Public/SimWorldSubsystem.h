@@ -127,6 +127,47 @@ struct SAM3D_API FSimDrillAdvice
 	/** Why, nearest reason first, up to the task. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
 	TArray<FString> Why;
+
+	/** The task it aims at (ready_halted, captured, launched). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Task;
+
+	/** Demonstrate level: the seat's NPC is about to make this move (the player watches). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bDemonstrating = false;
+};
+
+/** A player's move at a held seat, judged against the drill master's best (docs/crew/08_TRAINING_AND_ASSISTANCE.md). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimMoveVerdict
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bValid = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	double TimeSeconds = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Control;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	int32 Position = 0;
+
+	/** The drill master's best move, or as good. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bBest = true;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString BestControl;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString BestDescription;
+
+	/** How much later the task is done than after the best move. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	double CostSeconds = 0.0;
 };
 
 /** One line of the crew menu: an order (the commander's seat) or a report (any other seat), from the crew data. */
@@ -147,6 +188,14 @@ struct SAM3D_API FSimCrewMenuEntry
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
 	bool bOrder = false;
+
+	/** An order that can be carried out now (the honest menu greys the others, docs/crew/07_COMMANDER_MODE.md). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bAvailable = true;
+
+	/** Why not, in Russian and English. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Reason;
 };
 
 /** One of the battery's other launchers in the fight (battery_fire.hpp). */
@@ -429,6 +478,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	FSimDrillAdvice GetDrillAdvice(const FString& Station, const FString& TaskId) const;
 
+	/** The training overlay for a seat at the scenario's assistance level (guided, hint, demonstrate; nothing when
+	 *  unassisted or in an exam): docs/crew/08_TRAINING_AND_ASSISTANCE.md section 2. Call it about once a second. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	FSimDrillAdvice GetAssistance(const FString& Station) const;
+
+	/** The assistance level: demonstrate, guided, hint, unassisted or exam. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	bool SetAssistLevel(const FString& Level);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetAssistLevel() const;
+
+	/** The last move the player made at a held seat, judged against the drill master's best. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FSimMoveVerdict GetLastMoveVerdict(const FString& Station) const;
+
+	/** The order menu: give an order if it can be carried out; otherwise the seat answers and OutReason says why. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	bool TryCrewOrder(const FString& OrderId, FString& OutReason);
+
 	/** Whether a task of the crew data holds now (e.g. "ready_halted"). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	bool IsCrewTaskDone(const FString& TaskId) const;
@@ -490,6 +559,14 @@ public:
 
 	/** The loaded cabin layout (null without one). */
 	const simcore::CabinLayout* GetCabinLayout() const { return Cabin.Get(); }
+
+	/** The crew's bodies and voices (roadmap 8.10): data/crew/body.json and voices.json, loaded with the scenario (null if
+	 *  missing). USimCrewBodiesComponent and USimCrewVoiceComponent read them. */
+	const simcore::BodyData* GetBodyData() const { return CrewBodies.Get(); }
+	const simcore::VoiceData* GetVoiceData() const { return CrewVoices.Get(); }
+
+	/** Absolute path of the data folder in use. */
+	FString GetDataDirectory() const { return ResolveDataDirectory(); }
 
 	// ------------------------------------------------------------------ terrain and Cesium
 
@@ -673,6 +750,8 @@ private:
 	// Scenario mode.
 	TUniquePtr<simcore::ScenarioRunner> Runner;
 	TUniquePtr<simcore::CabinLayout> Cabin;
+	TUniquePtr<simcore::BodyData> CrewBodies;
+	TUniquePtr<simcore::VoiceData> CrewVoices;
 	TUniquePtr<simcore::GridTerrain> SampledTerrain;
 	double ScenarioStepSeconds = 0.05;
 	size_t DebriefEntriesSent = 0;
