@@ -52,7 +52,6 @@ PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
         ("p:radio_audio", "Radio and intercom audio: noise, squelch, voices", "7.7", "Nothing is heard in the Unreal cabin: the net's state shows in the debrief and the lamps. Noise that the squelch removes, the voices of the designations and the R-124's sidetone would be audio.", ["m:comms"], "missing"),
-        ("p:intercom_all", "The other subscribers' R-124 boxes", "7.8", "The commander's A-1, the deputy's A-2 and the driver's ПВ matter; the senior operator and operator are always on the intercom (the R-124 has five subscribers; which crew member has which box is not in any source found).", ["c:intercom.a1"], "missing"),
         ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
     ],
 }

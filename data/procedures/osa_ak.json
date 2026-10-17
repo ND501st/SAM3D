@@ -117,7 +117,15 @@
                 "notes": "All four numbers are SAM3D estimates: the motors' 3 s, the antenna circuit's half-width of 5 knob divisions, a drift of 2 kHz a second on the move in smooth tuning (the net is lost within about 6 s), and the lamp at its brightest from 90 % of the peak." },
     "intercom": { "commander": "intercom.a1", "commander_radio_position": 2, "commander_off_position": 0,
                   "deputy": "intercom.a2", "deputy_radio_position": 1, "driver": "intercom.pv", "driver_radio_position": 1,
-                  "subsystem": "r124_intercom", "chest": "radio.chest", "driver_chest": "radio.chest_driver", "shout_quiet_s": 1.5, "shout_noisy_s": 4.0, "noisy": [ "gta", "pto_generator" ] },
+                  "subsystem": "r124_intercom", "chest": "radio.chest", "driver_chest": "radio.chest_driver",
+                  "subscribers": [
+                    { "box": "A-1", "station": "commander", "source": "r124_refs; r123m_training (A-1 is the commander's)", "confidence": "high" },
+                    { "box": "A-2", "station": "deputy_commander", "source": "r124_refs (A-2 can go on a radio); r123m_training", "confidence": "low", "notes": "The second box that can go on a radio; the deputy's is SAM3D's choice." },
+                    { "box": "A-3", "station": "senior_operator", "source": "r124_refs (five subscribers, A-1 to A-5)", "confidence": "estimate", "notes": "Which operator has which box is in no source found: SAM3D's choice." },
+                    { "box": "A-4", "station": "driver", "source": "r124_photos (A-4 sold with A-1 and A-2)", "confidence": "low", "notes": "The driver's plain box; his ВС / РС is the ПВ switch." },
+                    { "box": "A-5", "station": "operator", "source": "r124_refs (five subscribers, A-1 to A-5)", "confidence": "estimate", "notes": "SAM3D's choice, as A-3." }
+                  ],
+                  "shout_quiet_s": 1.5, "shout_noisy_s": 4.0, "noisy": [ "gta", "pto_generator" ] },
     "source": "r123m_training (ranges on a medium-rough route at up to 40 km/h: 4 m whip at least 20 km with the noise suppressor off and up to 13 km with it on, 1 m whip up to 8 km, emergency wire up to 4 km); r124_refs; the shouting times are SAM3D estimates",
     "confidence": "medium",
     "notes": "The range figures become losses in the receiving chain with the EM layer's plane-earth law (40 log10 of the range ratio against the 4 m whip with the suppressor off), applied to the set the headset is on. They matter only to a link made by the EM layer's radio sources. Shouting: without the commander's box, or for a crew member whose own box is on the radio, an order takes shout_quiet_s to arrive (shout_noisy_s while the turbine or the take-off generator runs): estimates, with the R-124's own specification of 90 % word intelligibility at 120 dB of noise as the reason a box is needed at all." },

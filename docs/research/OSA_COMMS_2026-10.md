@@ -89,6 +89,13 @@ mounts its boxes is not in any source found: the positions are SAM3D's choice.
   knobs (`r123m_trace.py` WELLS); the fixators, the cover, the knob's lock and the sub-band switch are drawn at estimated
   places.
 
+* The five subscribers (17 Oct 2026): the comms block lists the R-124's boxes and seats, A-1 commander, A-2 deputy
+  commander, A-3 senior operator, A-4 driver, A-5 operator (which operator has A-3 or A-5 is in no source found: SAM3D's
+  choice); a seat without a box is off the intercom and an order to it is shouted (`CrewComms::HasBox`). The sources
+  found give no controls on the plain boxes (the volume is A-1's; every subscriber hears the others whatever his chest
+  switch's tangent), so the operators' boxes have none; the cabin places them at the foot of SŁ-2M by their seats
+  (the A-4 mesh as the plain box's stand-in).
+
 ## Not done
 
 * (Done 17 Oct 2026, below.)

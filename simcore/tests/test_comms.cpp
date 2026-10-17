@@ -1,5 +1,6 @@
 // The R-123M radio sets and the R-124 intercom (roadmap 7.8): the console's comms block, a set that is off or warming up,
 // the squelch and antenna as losses on the link, the commander's box on the radio or off, and shouted orders.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -467,4 +468,23 @@ SC_TEST("comms 7.8: with the EM layer what the commander says goes on the air on
     SC_EXPECT(r->PlayerSay("commander", "report_ready"));
     Steps(*r, 3.0);
     SC_EXPECT(r->Em()->UnitTransmissions() > before);
+}
+
+SC_TEST("comms 7.8: every seat has its R-124 box; a seat without one is not on the intercom and orders to it are shouted") {
+    ConsoleData c = Osa();
+    SC_EXPECT(c.comms.subscribers.size() == 5);
+    CrewComms comms(c.comms);
+    for (const char* seat : {"commander", "deputy_commander", "senior_operator", "operator", "driver"}) SC_EXPECT(comms.HasBox(seat));
+    SC_EXPECT(comms.BoxOf("commander") == "A-1" && comms.BoxOf("driver") == "A-4");
+    c.equipment.SetInput("vehicle_stopped", true);
+    SC_EXPECT_NEAR(comms.OrderDelayS("operator", c), 0.0, 1e-12);
+    // Take the operator's box away: he is off the intercom.
+    CommsDef d = c.comms;
+    d.subscribers.erase(std::remove_if(d.subscribers.begin(), d.subscribers.end(),
+                                       [](const CommsDef::Subscriber& s) { return s.station == "operator"; }),
+                        d.subscribers.end());
+    CrewComms without(d);
+    SC_EXPECT(!without.HasBox("operator"));
+    SC_EXPECT(without.OrderDelayS("operator", c) > 0.0);
+    SC_EXPECT_NEAR(without.OrderDelayS("senior_operator", c), 0.0, 1e-12);
 }

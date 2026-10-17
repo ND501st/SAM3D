@@ -166,6 +166,13 @@ struct CommsDef {
     std::string intercom_subsystem;
     std::string chest;                       // the commander's chest switch (optional): position 1 = ПРД, transmitting
     std::string driver_chest;                // the driver's (optional): with his ПВ on РС it keys the left set
+    // The R-124's subscriber boxes and the seat each is at (optional): a seat without a box is not on the intercom, so an
+    // order to it is shouted. Empty: every seat is on it.
+    struct Subscriber {
+        std::string box;
+        std::string station;
+    };
+    std::vector<Subscriber> subscribers;
     // Tuning the sets (radio_setup.hpp): the motors' time to drive the knobs to a fixed frequency, the antenna circuit's
     // half-width in knob divisions, how fast the vibration walks a smooth-tuned frequency off on the move, the reading
     // at which the tuning lamp is at its brightest.
@@ -761,6 +768,26 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         return true;
     }
 
+    bool LoadSubscribers(const json::Value& ic, const std::string& ip, const ConsoleData& out, CommsDef& d) {
+        const json::Value* arr = OptionalArray(ic, ip, "subscribers");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& e = arr->items[i];
+            const std::string sp = Index(Join(ip, "subscribers"), i);
+            CommsDef::Subscriber sub;
+            if (!Keys(e, sp, {"box", "station", "source", "confidence", "notes"}) || !RequireString(e, sp, "box", sub.box) ||
+                !RequireString(e, sp, "station", sub.station) || !Provenance(e, sp)) {
+                return false;
+            }
+            if (out.FindStation(sub.station) == nullptr) return Fail(Join(sp, "station"), "unknown station '" + sub.station + "'");
+            for (const CommsDef::Subscriber& o : d.subscribers) {
+                if (o.box == sub.box || o.station == sub.station) return Fail(sp, "each box and each seat once");
+            }
+            d.subscribers.push_back(sub);
+        }
+        return true;
+    }
+
     bool LoadComms(const json::Value& root, ConsoleData& out) {
         const json::Value* v = root.Find("comms");
         if (v == nullptr) return true;
@@ -841,7 +868,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string ip = Join(p, "intercom");
         if (ic == nullptr || !ic->Is(json::Type::Object) ||
             !Keys(*ic, ip, {"commander", "commander_radio_position", "commander_off_position", "deputy", "deputy_radio_position", "driver",
-                            "driver_radio_position", "subsystem", "chest", "driver_chest", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
+                            "driver_radio_position", "subsystem", "chest", "driver_chest", "subscribers", "shout_quiet_s", "shout_noisy_s",
+                            "noisy"})) {
             return message_.empty() ? Fail(ip, "required, an object") : false;
         }
         if (!RefControl(*ic, ip, "commander", out.panel, ControlKind::Discrete, true, d.commander) ||
@@ -854,6 +882,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefSubsystem(*ic, ip, "subsystem", eq, true, d.intercom_subsystem) ||
             !RefControl(*ic, ip, "chest", out.panel, ControlKind::Discrete, false, d.chest) ||
             !RefControl(*ic, ip, "driver_chest", out.panel, ControlKind::Discrete, false, d.driver_chest) ||
+            !LoadSubscribers(*ic, ip, out, d) ||
             !OptionalNumber(*ic, ip, "shout_quiet_s", d.shout_quiet_s) || !OptionalNumber(*ic, ip, "shout_noisy_s", d.shout_noisy_s)) {
             return false;
         }

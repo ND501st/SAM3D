@@ -141,6 +141,22 @@ public:
     }
     bool CommanderOff(const ConsoleData& console) const { return console.panel.Get(def_.commander) == def_.commander_off_position; }
 
+    // Does the seat have an R-124 subscriber box (is it on the intercom)? Every seat does when the data lists none.
+    bool HasBox(const std::string& station) const {
+        if (def_.subscribers.empty()) return true;
+        for (const CommsDef::Subscriber& s : def_.subscribers) {
+            if (s.station == station) return true;
+        }
+        return false;
+    }
+    // The box at a seat ("" if none).
+    std::string BoxOf(const std::string& station) const {
+        for (const CommsDef::Subscriber& s : def_.subscribers) {
+            if (s.station == station) return s.box;
+        }
+        return std::string();
+    }
+
     // The cabin is too loud to talk: the turbine or the take-off generator is running.
     bool Noisy(const ConsoleData& console) const {
         for (const std::string& id : def_.noisy) {
@@ -155,6 +171,7 @@ public:
     double OrderDelayS(const std::string& role, const ConsoleData& console) const {
         if (role == "commander") return 0.0;
         if (CommanderOff(console)) return ShoutS(console);
+        if (!HasBox(role)) return ShoutS(console);  // no subscriber box at his seat: not on the intercom
         if (role == "deputy_commander" && console.panel.Get(def_.deputy) == def_.deputy_radio_position) return ShoutS(console);
         if (role == "driver" && console.panel.Get(def_.driver) == def_.driver_radio_position) return ShoutS(console);
         return 0.0;
