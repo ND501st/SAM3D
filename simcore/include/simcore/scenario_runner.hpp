@@ -215,6 +215,8 @@ public:
         return engagement_.MissilesInFlight(time_, world_, eng_targets_);
     }
     SessionLog& Log() { return log_; }
+    // The crew members, in the scenario's order (their slips, omissions, skill: the balance tool, the debrief).
+    const std::vector<CrewMember>& CrewMembers() const { return crew_; }
     const AcmiWriter& Acmi() const { return acmi_; }
     bool EngagementOn() const { return engagement_on_; }
     const EngagementModel& Engagement() const { return engagement_; }
@@ -755,8 +757,8 @@ public:
                                   d.target.c_str(), d.score, d.best.c_str(), d.best_score, d.good ? ": as good" : "");
                 }
             } else if (d.ideal_s >= 0.0) {
-                std::snprintf(line, sizeof(line), "    %.0f s: launch at %s, the ideal moment %.0f s (network chart from the detection, the zone's entry): %.0f s late%s\n",
-                              d.time_s, d.target.c_str(), d.ideal_s, d.late_s, d.good ? "" : " (more than 10 s)");
+                std::snprintf(line, sizeof(line), "    %.0f s: launch at %s, the ideal moment %.0f s (network chart from the detection, the zone's entry): %.0f s after it%s\n",
+                              d.time_s, d.target.c_str(), d.ideal_s, d.late_s, d.good ? ", within the norm" : ", slower than the norm");
             } else {
                 std::snprintf(line, sizeof(line), "    %.0f s: launch at %s\n", d.time_s, d.target.c_str());
             }
@@ -1478,6 +1480,8 @@ private:
     int judged_launches_ = 0;
     std::map<std::string, double> seen_at_;  // each target's first echo on the search scope
     std::string zone_target_;
+    bool was_flying_ = false;
+    double free_since_s_ = -1.0;            // the last missile's result came in (the crew free for the next target)
     double zone_since_s_ = -1.0;            // ЦЕЛЬ В ЗОНЕ lit for the tracked target since
     // The truth about a live target from the unit, for the evaluation (null if it isn't in the air).
     bool TrackOf(const std::string& id, DecisionTrack& out) {
@@ -1508,6 +1512,10 @@ private:
         }
         const NetworkChart chart;
         const double cycle_s = chart.result_s + chart.launch_s;
+        // The crew is free for the next target once a missile's result is in (one tracking channel).
+        const bool flying = engagement_.ShotsInFlight();
+        if (was_flying_ && !flying) free_since_s_ = time_;
+        was_flying_ = flying;
         // A target ordered taken: against the evaluation of every hostile his crew had reported.
         if (!assigned_target_.empty() && assigned_target_ != judged_choice_) {
             judged_choice_ = assigned_target_;
@@ -1541,11 +1549,14 @@ private:
             r.target = tracked;
             const auto seen = seen_at_.find(tracked);
             const double ready = std::max(chart.radar_on_s + chart.capture_s + chart.computer_s, chart.prep_s) + chart.launch_s;
-            double ideal = seen != seen_at_.end() ? seen->second + ready : -1.0;
+            // From the detection, or from when the crew was done with the target before (the chart starts with a free crew).
+            double ideal = seen != seen_at_.end() ? std::max(seen->second, free_since_s_) + ready : -1.0;
             if (zone_since_s_ >= 0.0 && zone_target_ == tracked) ideal = std::max(ideal, zone_since_s_);
             r.ideal_s = ideal;
             r.late_s = ideal >= 0.0 ? std::max(0.0, time_ - ideal) : 0.0;
-            r.good = r.late_s <= 10.0;
+            // The chart is the ideal crew's; a trained crew is within the published norm (nvo_2015, korovin_tiv_2010: up
+            // to 40 s from detection), so late is beyond 40 s less the chart's own time.
+            r.good = r.late_s <= 40.0 - ready;
             decisions_.push_back(r);
         }
     }

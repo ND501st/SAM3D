@@ -105,6 +105,10 @@ simcore_configure_target(crew_pose_dump)
 add_test(NAME crew_pose_dump
          COMMAND crew_pose_dump "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/crew_poses.json")
 
+# The crew scenarios at every skill tier over many seeds, tabulated (roadmap 8.12; not a test: it takes minutes).
+add_executable(crew_balance examples/crew_balance.cpp)
+simcore_configure_target(crew_balance)
+
 # Electromagnetic layer MVP: radar, ESM, triangulation, jamming, C2 on a synthetic battlefield.
 # Prints the timeline and the eleven MVP checks; also run as a test.
 add_executable(em_demo examples/em_demo.cpp)
