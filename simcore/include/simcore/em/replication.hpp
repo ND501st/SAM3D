@@ -124,11 +124,21 @@ struct ViewVehicle {
     bool deployed = false;
 };
 
+// A prepared position's works at one vehicle's place (roadmap 7.6): the emplacement dug there (it stays when the vehicle
+// drives off) and the camouflage net over it (taken down when the vehicle leaves).
+struct ViewWork {
+    Vec3 position;
+    double heading_deg = 0.0;
+    bool emplacement = false;
+    bool nets = false;
+};
+
 struct ViewExtras {
     bool valid = false;
     std::vector<ViewBoardMark> board;
     std::vector<ViewRadio> radio;  // oldest first
     std::vector<ViewVehicle> battery;
+    std::vector<ViewWork> works;
 };
 
 struct KnowledgeView {
@@ -462,6 +472,12 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Q(v.heading_deg, kDegStep);
         w.U8(v.deployed ? 1 : 0);
     }
+    w.U32(static_cast<std::uint32_t>(x.works.size()));
+    for (const ViewWork& k : x.works) {
+        w.V3(k.position, kPosStep);
+        w.Q(k.heading_deg, kDegStep);
+        w.U8((k.emplacement ? 1u : 0u) | (k.nets ? 2u : 0u));
+    }
     return w.bytes;
 }
 inline bool GetExtras(Reader& r, ViewExtras& x) {
@@ -499,6 +515,17 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         v.heading_deg = r.Q(kDegStep);
         v.deployed = r.U8() != 0;
         x.battery.push_back(v);
+    }
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewWork k;
+        k.position = r.V3(kPosStep);
+        k.heading_deg = r.Q(kDegStep);
+        const std::uint32_t f = r.U8();
+        k.emplacement = (f & 1u) != 0;
+        k.nets = (f & 2u) != 0;
+        x.works.push_back(k);
     }
     return r.ok;
 }

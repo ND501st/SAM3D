@@ -131,6 +131,7 @@ public:
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
         StartRadioTuning();
+        RecordWorkPlaces();
         StartCallouts();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
@@ -369,7 +370,33 @@ public:
         for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
             x.battery.push_back({"dummy " + std::to_string(i + 1), "dummy", def_.prepared.dummies[i].position, 0.0, true});
         }
+        x.works = Works();
         return x;
+    }
+
+    // A prepared position's works (roadmap 7.6): an emplacement and a net at each place a vehicle of the battery started
+    // in (ours, the battery's, the dummy positions). The emplacements stay; a vehicle's net is taken down once it has
+    // left its place (more than 15 m off it). Empty without a prepared position.
+    std::vector<em::ViewWork> Works() const {
+        std::vector<em::ViewWork> out;
+        if (!def_.prepared.present) return out;
+        for (const WorkPlace& w : work_places_) {
+            em::ViewWork k;
+            k.position = w.position;
+            k.heading_deg = w.heading_deg;
+            k.emplacement = def_.prepared.emplacement;
+            bool here = true;
+            if (w.vehicle == "own") {
+                here = (def_.unit_position - w.position).HorizontalLength() <= 15.0;
+            } else if (!w.vehicle.empty() && battery_) {
+                for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                    if (v.def.callsign == w.vehicle) here = (v.position - w.position).HorizontalLength() <= 15.0;
+                }
+            }
+            k.nets = def_.prepared.nets && here;
+            out.push_back(k);
+        }
+        return out;
     }
 
     // The prepared position the unit stands in (present = false: none).
@@ -946,6 +973,24 @@ private:
                          "counter-jamming switched on with no range pull-off seen (only when automatic tracking is impossible)"});
         }
         rgpo_was_on_ = on;
+    }
+
+    // Where a prepared position's works are: each vehicle's place at the start, and the dummy positions ("" vehicle).
+    struct WorkPlace {
+        Vec3 position;
+        double heading_deg = 0.0;
+        std::string vehicle;  // "own", a battery vehicle's callsign, or "" for a dummy position
+    };
+    std::vector<WorkPlace> work_places_;
+    void RecordWorkPlaces() {
+        if (!def_.prepared.present) return;
+        work_places_.push_back({def_.unit_position, def_.unit_heading_deg, "own"});
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (!v.def.own) work_places_.push_back({v.position, v.heading_deg, v.def.callsign});
+            }
+        }
+        for (const DummyPositionDef& d : def_.prepared.dummies) work_places_.push_back({d.position, 0.0, std::string()});
     }
 
     // The compass survey runs while the vehicle stands; its Qc is commanded to the deputy (engagement: SetCommandedQc).

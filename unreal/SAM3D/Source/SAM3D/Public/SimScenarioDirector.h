@@ -123,10 +123,15 @@ private:
 	void StartScenario(USimWorldSubsystem* Sim);
 	void SpawnPlayerVehicle(USimWorldSubsystem* Sim);
 	void SpawnMissingEntityActors();
+	/** The prepared position's works (roadmap 7.6): spawned once each, their nets following the sim. */
+	void UpdatePositionWorks();
 	void ShowStatus(const USimWorldSubsystem* Sim) const;
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<ASimEntityActor>> SpawnedActors;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class ASimPositionWork>> PositionWorks;
 
 	bool bTerrainRequested = false;
 	float TimeSinceBeginPlay = 0.0f;
