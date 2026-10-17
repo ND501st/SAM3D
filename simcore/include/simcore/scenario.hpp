@@ -1029,8 +1029,18 @@ private:
                 const json::Value& v = vs->items[i];
                 BatteryVehicleDef d;
                 std::string kind = "launcher";
-                if (!Keys(v, p, {"id", "callsign", "kind", "position", "notes"}) || !RequireString(v, p, "id", d.id) ||
+                if (!Keys(v, p, {"id", "callsign", "kind", "position", "sector_deg", "notes"}) || !RequireString(v, p, "id", d.id) ||
                     !OptionalString(v, p, "callsign", d.callsign) || !OptionalString(v, p, "kind", kind)) {
+                    return false;
+                }
+                if (const json::Value* sec = OptionalArray(v, p, "sector_deg")) {
+                    if (sec->items.size() != 2 || !sec->items[0].Is(json::Type::Number) || !sec->items[1].Is(json::Type::Number)) {
+                        return Fail(Join(p, "sector_deg"), "expected [from, to]: true azimuths, clockwise");
+                    }
+                    d.has_sector = true;
+                    d.sector_from_deg = sec->items[0].number;
+                    d.sector_to_deg = sec->items[1].number;
+                } else if (!message_.empty()) {
                     return false;
                 }
                 if (!ParseBatteryVehicleKind(kind, d.kind)) return Fail(Join(p, "kind"), "launcher, reload, command_post, maintenance or fuel");

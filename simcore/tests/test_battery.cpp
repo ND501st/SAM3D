@@ -399,3 +399,61 @@ SC_TEST("battery drills: the TZM drives up when the launcher is empty, reloads s
     SC_EXPECT(d.find("to reload 21") != std::string::npos && d.find("alongside 21") != std::string::npos &&
               d.find("reload done") != std::string::npos && d.find("to refuel 21") != std::string::npos);
 }
+
+SC_TEST("battery fire: in free fire each launcher takes the targets in its sector of fire, not just the nearest") {
+    std::vector<BatteryVehicleDef> v;
+    auto add = [&v](const char* id, double from, double to) {
+        BatteryVehicleDef d;
+        d.id = d.callsign = id;
+        d.kind = BatteryVehicleKind::Launcher;
+        d.start = Vec3{0.0, 0.0, 0.0};
+        d.has_sector = true;
+        d.sector_from_deg = from;
+        d.sector_to_deg = to;
+        v.push_back(d);
+    };
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    v.push_back(own);
+    add("22", 0.0, 90.0);     // north-east
+    add("23", 180.0, 270.0);  // south-west
+    Battery b(Tactics(), v);
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    BatteryFire fire(t, 20000.0);
+    fire.SetAutonomous(true);
+    fire.Sync(b);
+    // The near target is south-west, the far one north-east: without sectors 22 would take the near one.
+    BatteryFireTarget ne, sw;
+    ne.id = "ne";
+    ne.position = Vec3{10000.0, 10000.0, 1000.0};
+    ne.velocity = Vec3{-150.0, -150.0, 0.0};
+    ne.agl_m = 1000.0;
+    ne.alive = true;
+    sw.id = "sw";
+    sw.position = Vec3{-5000.0, -5000.0, 1000.0};
+    sw.velocity = Vec3{150.0, 150.0, 0.0};
+    sw.agl_m = 1000.0;
+    sw.alive = true;
+    std::mt19937 rng(3);
+    fire.Step(0.0, {ne, sw}, rng, &b, [](const std::string&) {});
+    std::string t22, t23;
+    for (const BatteryFire::Shooter& s : fire.Shooters()) {
+        if (s.callsign == "22") t22 = s.target;
+        if (s.callsign == "23") t23 = s.target;
+    }
+    SC_EXPECT(t22 == "ne");
+    SC_EXPECT(t23 == "sw");
+    // Cleared, a sector no longer limits it.
+    SC_EXPECT(fire.SetSector("22", 0.0, 0.0));
+    SC_EXPECT(BatteryFire::InSector(fire.Shooters()[0], Vec3{-100.0, -100.0, 0.0}));
+    SC_EXPECT(!fire.SetSector("99", 0.0, 90.0));
+}

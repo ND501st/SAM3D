@@ -2174,14 +2174,18 @@ private:
                 bool alive = false;
                 for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
                 if (!alive) continue;
+                // The nearest ready launcher whose sector of fire covers it; any ready launcher if none does.
                 const BatteryFire::Shooter* best = nullptr;
                 double best_r = battery_fire_->ReachM() + 10000.0;
-                for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
-                    if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
-                    const double r = (m.position - s.position).HorizontalLength();
-                    if (r < best_r) {
-                        best_r = r;
-                        best = &s;
+                for (int pass = 0; pass < 2 && best == nullptr; ++pass) {
+                    for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                        if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
+                        if (pass == 0 && !BatteryFire::InSector(s, m.position)) continue;
+                        const double r = (m.position - s.position).HorizontalLength();
+                        if (r < best_r) {
+                            best_r = r;
+                            best = &s;
+                        }
                     }
                 }
                 // Our own vehicle is a launcher of the battery too: when it is the nearest, the target is left to its crew
@@ -2225,6 +2229,10 @@ private:
 public:
     // The battery commander (the player, or the NPC) gives one of the battery's other launchers a target on the battery
     // net. False without a battery, for an unknown launcher, or one with no missiles.
+    // The battery commander sets a launcher's sector of fire (true azimuths, clockwise; from == to clears it).
+    bool SetBatterySector(const std::string& callsign, double from_deg, double to_deg) {
+        return battery_fire_ && battery_fire_->SetSector(callsign, from_deg, to_deg);
+    }
     bool AssignBatteryTarget(const std::string& callsign, const std::string& target) {
         if (!battery_fire_) return false;
         int number = 0;

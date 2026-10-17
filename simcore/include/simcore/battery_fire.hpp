@@ -68,7 +68,32 @@ public:
         double time_scale = 1.0;  // its crew's tier against the reference
         bool asked_tzm = false;
         double reload_clock_s = 0.0;
+        bool has_sector = false;    // its sector of fire (true azimuth from its position, clockwise from..to)
+        double sector_from_deg = 0.0;
+        double sector_to_deg = 0.0;
     };
+
+    // Whether a point is in a shooter's sector of fire (any point when it has none).
+    static bool InSector(const Shooter& s, const Vec3& point) {
+        if (!s.has_sector) return true;
+        const double az = RadToDeg(AzimuthOf(point - s.position));
+        double span = s.sector_to_deg - s.sector_from_deg;
+        while (span < 0.0) span += 360.0;
+        double off = az - s.sector_from_deg;
+        while (off < 0.0) off += 360.0;
+        while (off >= 360.0) off -= 360.0;
+        return off <= span + 1e-9;
+    }
+
+    // The battery commander sets (or clears, from == to) a launcher's sector of fire. False for an unknown launcher.
+    bool SetSector(const std::string& callsign, double from_deg, double to_deg) {
+        Shooter* s = Find(callsign);
+        if (s == nullptr) return false;
+        s->has_sector = from_deg != to_deg;
+        s->sector_from_deg = from_deg;
+        s->sector_to_deg = to_deg;
+        return true;
+    }
     struct Event {
         enum class Kind { Assigned, Captured, Launch, Hit, Miss, Empty, Reloaded };
         Kind kind = Kind::Assigned;
@@ -91,6 +116,9 @@ public:
                 s = &shooters_.back();
                 s->callsign = v.def.id;
                 s->time_scale = time_scale_;
+                s->has_sector = v.def.has_sector;  // the scenario's sector; the battery commander may change it later
+                s->sector_from_deg = v.def.sector_from_deg;
+                s->sector_to_deg = v.def.sector_to_deg;
             }
             s->position = v.position;
             s->deployed = v.deployed;
@@ -102,7 +130,7 @@ public:
         time_scale_ = scale > 0.1 ? scale : 0.1;
         for (Shooter& s : shooters_) s.time_scale = time_scale_;
     }
-    // Free fire: shooters with no target take the nearest hostile in reach themselves.
+    // Free fire: shooters with no target take the nearest hostile in reach (and in their sector) themselves.
     void SetAutonomous(bool on) { autonomous_ = on; }
 
     // The battery commander gives a shooter a target. False for an unknown shooter, or one with no missiles.
@@ -219,7 +247,7 @@ private:
         const BatteryFireTarget* best = nullptr;
         double best_r = reach_m_;
         for (const BatteryFireTarget& tg : targets) {
-            if (!tg.alive || tg.friendly || Engaged(tg.id)) continue;
+            if (!tg.alive || tg.friendly || Engaged(tg.id) || !InSector(s, tg.position)) continue;
             const double r = (tg.position - s.position).Length();
             if (r < best_r) {
                 best_r = r;
