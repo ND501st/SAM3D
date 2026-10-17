@@ -62,7 +62,9 @@ add_executable(simcore_tests
   tests/test_comms.cpp
   tests/test_fuel.cpp
   tests/test_threats.cpp
-  tests/test_crew.cpp)
+  tests/test_crew.cpp
+  tests/test_crew_body.cpp
+  tests/test_crew_voice.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -94,6 +96,13 @@ add_test(NAME scenario_demo
 add_test(NAME scenario_demo_em
          COMMAND scenario_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/osa_practice_em.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/osa_practice_em.acmi")
+
+# The crew's bodies posed at rest and at work, as JSON for tools/blender/render_crew_poses.py (roadmap 8.10); also run
+# as a test so the body data, the cabin and the poses stay loadable together.
+add_executable(crew_pose_dump examples/crew_pose_dump.cpp)
+simcore_configure_target(crew_pose_dump)
+add_test(NAME crew_pose_dump
+         COMMAND crew_pose_dump "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/crew_poses.json")
 
 # Electromagnetic layer MVP: radar, ESM, triangulation, jamming, C2 on a synthetic battlefield.
 # Prints the timeline and the eleven MVP checks; also run as a test.

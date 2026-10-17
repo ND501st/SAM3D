@@ -1,0 +1,49 @@
+{
+  "voices_id": "osa_ak_voices",
+  "status": "The crew's voices (roadmap 8.10, docs/crew/10_BODIES_AND_VOICES.md), read by simcore/crew_voice.hpp: what a speech engine says for each callout and in whose voice. Recorded lines, where there are any, take the place of the engine's (unreal/README.md).",
+  "source": "sam3d estimates: presentation, chosen by ear so the five seats can be told apart",
+  "confidence": "estimate",
+  "notes": "Pitch and rate are on the speech engine's -10..10 scale (Windows SAPI's absmiddle and absspeed). The language is the first of 'languages' that the player's machine has a voice for: Russian needs a Russian voice (Windows: Settings > Time & language > Speech > Add voices > Russian), otherwise the English lines are spoken.",
+  "languages": ["ru", "en"],
+  "seats": [
+    {"station": "commander", "pitch": -2, "rate": 0, "notes": "The senior voice in the cabin."},
+    {"station": "deputy_commander", "pitch": 0, "rate": 1},
+    {"station": "senior_operator", "pitch": 2, "rate": 0},
+    {"station": "operator", "pitch": 1, "rate": 2, "notes": "The youngest, quick."},
+    {"station": "driver", "pitch": -4, "rate": -1},
+    {"station": "battery", "pitch": -1, "rate": 0, "radio": true, "notes": "The battery commander on the battery net (an R-123M)."}
+  ],
+  "stress": {"pitch": 2, "rate": 2, "source": "sam3d estimate: a stressed crewman speaks higher and faster", "confidence": "estimate"},
+  "bands": {
+    "intercom_hz": [300, 3400],
+    "radio_hz": [300, 3000],
+    "source": "sam3d estimate: a telephone-quality channel for the R-124 intercom, a narrower one for the R-123M's VHF FM voice",
+    "confidence": "estimate"
+  },
+  "say": {
+    "ru": {
+      "ГТА": "гэ тэ а",
+      "АПУ": "а пэ у",
+      "СОЦ": "соц",
+      "ССЦ": "эс эс цэ",
+      "СПК": "эс пэ ка",
+      "СРП": "эс эр пэ",
+      "НЛЦ": "эн эл цэ",
+      "ТВ": "тэ вэ",
+      "ТЗМ": "тэ зэ эм",
+      "СДЦ": "эс дэ цэ",
+      "ЦУ": "цэ у",
+      "ПУ": "пэ у",
+      "Н": "эн",
+      "source": "sam3d: the Russian letter names (а, бэ, вэ, гэ ...) for initialisms read aloud letter by letter; СОЦ is said as a word",
+      "confidence": "estimate"
+    },
+    "en": {
+      "MTI": "M T I",
+      "TV": "T V",
+      "TZM": "T Z M",
+      "source": "sam3d: initialisms spelled out",
+      "confidence": "estimate"
+    }
+  }
+}

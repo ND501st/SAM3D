@@ -203,18 +203,75 @@ public:
     int Slips() const { return slips_; }
     int Omissions() const { return omissions_; }
 
+    // Controls this crew member can't reach sitting down (data/crew/<system>_crew.json, a seat's "stand_for", checked
+    // against the body model of crew_body.hpp): a step on one first costs `stand_s` to get up and step to its panel,
+    // and the next step on any other control `sit_s` to sit back down. Idle, he sits down again by himself.
+    void SetStanding(std::vector<std::string> stand_for, double stand_s, double sit_s) {
+        stand_for_ = std::move(stand_for);
+        stand_s_ = stand_s;
+        sit_s_ = sit_s;
+    }
+    bool Standing() const { return standing_; }
+
+    // What he is about to do, for his body (crew_body.hpp, roadmap 8.10): the next action's control and position, the
+    // seconds until he moves it (in_s < 0 while he waits for a condition), the control he moved last and when, and
+    // whether he is up at a panel. An empty control: nothing to do.
+    struct Intent {
+        std::string control;
+        int value = 0;
+        double in_s = -1.0;
+        bool waiting = false;
+        std::string last_control;
+        double since_last_s = 1e9;
+        bool standing = false;
+        std::string stand_control;
+    };
+    Intent CurrentIntent() const {
+        Intent i;
+        i.last_control = last_control_;
+        i.since_last_s = last_control_.empty() ? 1e9 : time_s_ - last_time_s_;
+        i.standing = standing_;
+        i.stand_control = stand_control_;
+        if (!has_order_) return i;
+        const ProcedureStep* step = tracker_.NextStep();
+        if (step == nullptr) return i;
+        const std::vector<ProcedureStep>& steps = tracker_.GetProcedure().steps;
+        const std::size_t n = tracker_.NextIndex();
+        const ProcedureStep& act = has_skill_ && slip_pending_ && n + 1 < steps.size() ? steps[n + 1] : *step;
+        i.control = act.control_id;
+        i.value = act.value;
+        if (status_ == CrewStatus::Waiting) {
+            i.waiting = true;
+            return i;
+        }
+        const double needed = (has_skill_ ? step_delay_s_ : reaction_time_s_) + extra_s_;
+        double left = needed - action_timer_s_;
+        const double min_left = step->min_wait_s - tracker_.ElapsedSinceStep();
+        if (min_left > left) left = min_left;
+        i.in_s = left > 0.0 ? left : 0.0;
+        return i;
+    }
+
     // Call every sim step, after Equipment::Update. Performs at most one control action per call.
     // Without `equipment`, subsystem conditions in wait_for count as met.
     void Update(double dt, ControlPanel& panel, const Equipment* equipment = nullptr) {
         time_s_ += dt;
         tracker_.Update(dt);
-        if (!has_order_) return;
+        if (!has_order_) {
+            idle_s_ += dt;
+            if (standing_ && idle_s_ > 1.0) {  // nothing more to do up there: back to his seat
+                standing_ = false;
+                stand_control_.clear();
+            }
+            return;
+        }
+        idle_s_ = 0.0;
         const ProcedureStep* step = tracker_.NextStep();
         if (step == nullptr) {
             FinishCurrent();
             return;
         }
-        if (has_skill_ && tracker_.NextIndex() != drawn_for_step_) DrawStep();
+        if (tracker_.NextIndex() != drawn_for_step_ || serial_ != drawn_serial_) BeginStep();
         const std::string faulted = FaultedSubsystem(step->wait_for, equipment);
         if (!faulted.empty()) {
             Report(CrewReport::Kind::EquipmentFault, faulted);
@@ -231,7 +288,7 @@ public:
         }
         status_ = CrewStatus::Working;
         action_timer_s_ += dt;
-        const double needed_s = has_skill_ ? step_delay_s_ : reaction_time_s_;
+        const double needed_s = (has_skill_ ? step_delay_s_ : reaction_time_s_) + extra_s_;
         if (action_timer_s_ < needed_s || tracker_.ElapsedSinceStep() < step->min_wait_s) return;
         if (has_skill_ && slip_pending_) {
             slip_pending_ = false;
@@ -239,18 +296,26 @@ public:
             ++slips_;
             Report(CrewReport::Kind::Slip, next.control_id);
             tracker_.Attempt(panel, next.control_id, next.value, equipment);  // logged out of order (or blocked: nothing moves)
+            last_control_ = next.control_id;
+            last_time_s_ = time_s_;
             action_timer_s_ = 0.0;
+            extra_s_ = 0.0;
             return;
         }
         const std::string control_id = step->control_id;
         const StepResult r = tracker_.Attempt(panel, control_id, step->value, equipment);
+        last_control_ = control_id;
+        last_time_s_ = time_s_;
         action_timer_s_ = 0.0;
+        extra_s_ = 0.0;
         if (r == StepResult::UnknownControl || r == StepResult::InvalidPosition || r == StepResult::Blocked) {
             // Bad procedure data (e.g. a missing "open cover" step): stop rather than loop forever.
             Report(CrewReport::Kind::Aborted, control_id);
             Stop();
         } else if (tracker_.IsComplete()) {
             FinishCurrent();
+        } else {
+            BeginStep();  // on to the next step at once (his body already turns to it)
         }
     }
 
@@ -275,10 +340,29 @@ private:
 
     double Uniform() { return static_cast<double>(rng_()) / 4294967296.0; }
 
-    // A new step is due: how long it takes this crew member (reaction and jitter, a forgotten step's patience, stress),
-    // and whether he slips (does the next step first). A slip is only possible between two steps that wait for nothing.
-    void DrawStep() {
+    // A new step is due: getting up for a control out of seated reach (or sitting back down), then the skill's draw.
+    void BeginStep() {
         drawn_for_step_ = tracker_.NextIndex();
+        drawn_serial_ = serial_;
+        extra_s_ = 0.0;
+        const std::string& c = tracker_.NextStep()->control_id;
+        bool needs = false;
+        for (const std::string& s : stand_for_) needs = needs || s == c;
+        if (needs && !standing_) {
+            extra_s_ = stand_s_;
+            standing_ = true;
+        } else if (!needs && standing_) {
+            extra_s_ = sit_s_;
+            standing_ = false;
+            stand_control_.clear();
+        }
+        if (needs) stand_control_ = c;
+        if (has_skill_) DrawStep();
+    }
+
+    // How long the step takes this crew member (reaction and jitter, a forgotten step's patience, stress), and
+    // whether he slips (does the next step first). A slip is only possible between two steps that wait for nothing.
+    void DrawStep() {
         const double stress = stressed_ ? skill_.stress_factor : 1.0;
         double d = skill_.reaction_s + (2.0 * Uniform() - 1.0) * skill_.jitter_s;
         d = (d > 0.05 ? d : 0.05) * stress;
@@ -308,10 +392,12 @@ private:
                 continue;
             }
             tracker_.Reset(std::move(next));
+            ++serial_;
             action_timer_s_ = 0.0;
             has_order_ = true;
             status_ = CrewStatus::Working;
             Report(CrewReport::Kind::Started);
+            BeginStep();
             return;
         }
         has_order_ = false;
@@ -358,7 +444,18 @@ private:
     std::mt19937 rng_;
     bool stressed_ = false;
     std::size_t drawn_for_step_ = static_cast<std::size_t>(-1);
+    unsigned serial_ = 0;        // procedures started (a new one's first step is a new step even at the same index)
+    unsigned drawn_serial_ = 0;
     double step_delay_s_ = -1.0;
+    double extra_s_ = 0.0;       // this step's getting up or sitting down
+    std::vector<std::string> stand_for_;
+    double stand_s_ = 0.0;
+    double sit_s_ = 0.0;
+    bool standing_ = false;
+    std::string stand_control_;
+    double idle_s_ = 0.0;
+    std::string last_control_;
+    double last_time_s_ = 0.0;
     bool slip_pending_ = false;
     int slips_ = 0;
     int omissions_ = 0;

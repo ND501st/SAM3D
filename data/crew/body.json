@@ -1,0 +1,61 @@
+{
+  "body_id": "crew_body",
+  "status": "The crew's bodies (roadmap 8.10, docs/crew/10_BODIES_AND_VOICES.md): the sizes of a seated crewman for simcore/crew_body.hpp (the bodies Unreal draws, the reach check of the cabin layout) and tools/blender/build_crew_body.py (the meshes). Each seat's rest posture and gaze.",
+  "source": "winter_biomech; gost_12_2_032_78; sam3d estimates where a block says so",
+  "confidence": "medium",
+  "notes": "Body frame of data/cabins/<system>.json. Lengths are fractions of the stature, so a taller or shorter crewman only changes stature_m. The sitting eye height this gives (0.79 m above the seat) and GOST's seat height (0.43 m) put the floor 1.22 m under a station's eye point: the Osa cabin's floor is 0.62 m and its bench eyes 1.83 m above the ground, 1.21 m apart.",
+  "body": {
+    "stature_m": 1.72,
+    "source": "sam3d estimate (a conscript of the 1980s; no published figure found yet)",
+    "confidence": "low"
+  },
+  "fractions": {
+    "eye": 0.936,
+    "shoulder": 0.818,
+    "hip": 0.530,
+    "knee": 0.285,
+    "ankle": 0.039,
+    "upper_arm": 0.186,
+    "forearm": 0.146,
+    "hand": 0.108,
+    "foot": 0.152,
+    "shoulder_breadth": 0.259,
+    "hip_breadth": 0.191,
+    "source": "winter_biomech ch. 4: segment lengths as fractions of the height H (after Drillis and Contini, 1966)",
+    "confidence": "medium",
+    "notes": "Standing heights of the eye, shoulder joint, hip joint (greater trochanter), knee and ankle; upper arm 0.186 H, forearm 0.146 H, hand 0.108 H, foot 0.152 H; breadths across the shoulders and the hips."
+  },
+  "seat": {
+    "seat_height_m": 0.43,
+    "hip_above_seat_m": 0.09,
+    "eye_ahead_m": 0.07,
+    "source": "gost_12_2_032_78 Table 2 (seat height, men: 430 mm); the hip joints above the seat and the eye ahead of them are sam3d estimates",
+    "confidence": "medium"
+  },
+  "limits": {
+    "bend_deg": 40,
+    "twist_deg": 45,
+    "turn_deg": 45,
+    "stand_bend_deg": 70,
+    "crouch_frac": 0.55,
+    "head_yaw_deg": 60,
+    "head_pitch_deg": 45,
+    "source": "gost_12_2_032_78 §4.4 (displays read rarely: within 60 degrees of the line of sight with eye and head movement); the bend at the hips (sitting, standing), the twist of the shoulders, the turn on the seat, the crouch and the head's pitch are sam3d estimates",
+    "confidence": "low"
+  },
+  "motion": {
+    "hand_speed_mps": 1.2,
+    "hold_s": 0.3,
+    "standing_off_m": 0.35,
+    "source": "sam3d estimates (by eye)",
+    "confidence": "low",
+    "notes": "How fast a hand goes to a control, how long it stays after moving it, and how far from a panel he stands when he has to get up for it. The time to stand up and step is drill time and lives in the crew data (data/crew/<system>_crew.json, standing)."
+  },
+  "seats": [
+    {"station": "driver", "look": "forward", "hands_on": "steering", "feet_on": "pedals", "notes": "Hands on the steering wheel and feet on the pedals when he isn't reaching for a control; looks out through the windscreen."},
+    {"station": "commander", "look": "forward", "notes": "Looks out through the windscreen when nothing calls him."},
+    {"station": "senior_operator", "look": "soc_ppi", "notes": "Watches the search indicator."},
+    {"station": "operator", "look": "ssc_range", "notes": "Watches the range indicator."},
+    {"station": "deputy_commander", "look": "tov_monitor", "notes": "Watches the TV monitor."}
+  ]
+}

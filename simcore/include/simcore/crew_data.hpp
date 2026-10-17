@@ -29,6 +29,9 @@ struct CrewSeatDef {
     std::string title_en;
     std::vector<std::string> duties;
     std::vector<std::string> displays;
+    // Controls of this seat out of seated reach: he stands up and steps to them (crew_body.hpp checks the list
+    // against the cabin and the body; CrewMember::SetStanding counts the time).
+    std::vector<std::string> stand_for;
 };
 
 enum class CalloutKind { Order, Ack, Report, Warning, Remind, Radio };
@@ -102,6 +105,8 @@ struct CrewData {
     std::vector<CrewFact> facts;
     std::vector<AutoReportDef> reports;
     std::vector<std::string> decision_controls;  // steps that are decisions (ПУСК): judgement delays them
+    double stand_s = 0.0;  // "standing": getting up and stepping to a panel out of seated reach
+    double sit_s = 0.0;    // and back to the seat
 
     const CalloutDef* FindCallout(const std::string& id) const {
         for (const CalloutDef& c : callouts) {
@@ -194,7 +199,7 @@ class CrewLoader : public ConsoleLoader {
 public:
     bool LoadCrew(const json::Value& root, const ConsoleData& console, CrewData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "seats", "callouts", "orders",
-                             "tasks", "facts", "reports", "decisions"}) ||
+                             "tasks", "facts", "reports", "decisions", "standing"}) ||
             !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "")) {
             return false;
         }
@@ -203,7 +208,7 @@ public:
         }
         return LoadSeats(root, console, out) && LoadCallouts(root, console, out) && LoadOrders(root, console, out) &&
                LoadTasks(root, console, out) && LoadFacts(root, console, out) && LoadReports(root, console, out) &&
-               LoadDecisions(root, console, out);
+               LoadDecisions(root, console, out) && LoadStanding(root, out);
     }
 
     bool LoadSkills(const json::Value& root, SkillTable& out) {
@@ -298,13 +303,22 @@ private:
             const json::Value& s = arr->items[i];
             const std::string p = Index("seats", i);
             CrewSeatDef seat;
-            if (!Keys(s, p, {"station", "number", "title_ru", "title_en", "duties", "displays", "source", "confidence", "notes"}) ||
+            if (!Keys(s, p, {"station", "number", "title_ru", "title_en", "duties", "displays", "stand_for", "source", "confidence",
+                             "notes"}) ||
                 !RequireString(s, p, "station", seat.station) || !OptionalInt(s, p, "number", seat.number) ||
                 !OptionalString(s, p, "title_ru", seat.title_ru) || !OptionalString(s, p, "title_en", seat.title_en) ||
-                !StringList(s, p, "duties", seat.duties) || !StringList(s, p, "displays", seat.displays) || !Provenance(s, p)) {
+                !StringList(s, p, "duties", seat.duties) || !StringList(s, p, "displays", seat.displays) ||
+                !StringList(s, p, "stand_for", seat.stand_for) || !Provenance(s, p)) {
                 return false;
             }
             if (!KnownSeat(console, seat.station, false)) return Fail(Join(p, "station"), "unknown station '" + seat.station + "'");
+            for (std::size_t j = 0; j < seat.stand_for.size(); ++j) {
+                const ControlDef* c = console.panel.Find(seat.stand_for[j]);
+                if (c == nullptr) return Fail(Index(Join(p, "stand_for"), j), "unknown control '" + seat.stand_for[j] + "'");
+                if (c->station != seat.station) {
+                    return Fail(Index(Join(p, "stand_for"), j), "'" + seat.stand_for[j] + "' is the " + c->station + "'s control");
+                }
+            }
             out.seats.push_back(std::move(seat));
         }
         for (const ConsoleStation& st : console.stations) {
@@ -426,6 +440,19 @@ private:
             if (d.by_action && d.seats.size() != 1) return Fail(Join(p, "by_action"), "needs exactly one seat");
             out.facts.push_back(std::move(d));
         }
+        return true;
+    }
+
+    // "standing": { "stand_s", "sit_s", "source", "confidence" }: getting up for a control out of seated reach.
+    bool LoadStanding(const json::Value& root, CrewData& out) {
+        const json::Value* s = root.Find("standing");
+        if (s == nullptr) return true;
+        if (!Keys(*s, "standing", {"stand_s", "sit_s", "source", "confidence", "notes"}) || !Provenance(*s, "standing") ||
+            !OptionalNumber(*s, "standing", "stand_s", out.stand_s) || !OptionalNumber(*s, "standing", "sit_s", out.sit_s)) {
+            return false;
+        }
+        if (out.stand_s < 0.0 || out.stand_s > 30.0) return Fail("standing.stand_s", "must be from 0 to 30");
+        if (out.sit_s < 0.0 || out.sit_s > 30.0) return Fail("standing.sit_s", "must be from 0 to 30");
         return true;
     }
 

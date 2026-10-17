@@ -604,7 +604,7 @@ double DetectionToLaunch(const std::string& tier, unsigned seed) {
 double MeanDetectionToLaunch(const std::string& tier) {
     double sum = 0.0;
     int n = 0;
-    for (unsigned seed = 1; seed <= 5; ++seed) {
+    for (unsigned seed = 1; seed <= 20; ++seed) {  // enough seeds for a mean that doesn't hang on one bad run
         const double t = DetectionToLaunch(tier, seed);
         if (t > 0.0) {
             sum += t;
@@ -618,7 +618,7 @@ double MeanDetectionToLaunch(const std::string& tier) {
 SC_TEST("calibration: detection to launch falls in the published 26-40 s for trained crews, longer for recruits") {
     const double master = MeanDetectionToLaunch("master"), c1 = MeanDetectionToLaunch("class1"), c2 = MeanDetectionToLaunch("class2"),
                  c3 = MeanDetectionToLaunch("class3"), rec = MeanDetectionToLaunch("recruit");
-    std::printf("    detection to launch (mean of 5): master %.1f s, 1st class %.1f s, 2nd %.1f s, 3rd %.1f s, recruit %.1f s\n", master,
+    std::printf("    detection to launch (mean of 20): master %.1f s, 1st class %.1f s, 2nd %.1f s, 3rd %.1f s, recruit %.1f s\n", master,
                 c1, c2, c3, rec);
     SC_EXPECT(master > 0.0 && c1 > 0.0 && c2 > 0.0 && c3 > 0.0 && rec > 0.0);
     SC_EXPECT(master < c2 && c2 < rec);

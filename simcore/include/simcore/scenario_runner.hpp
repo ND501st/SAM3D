@@ -42,6 +42,7 @@
 #include "simcore/battery_fire.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
+#include "simcore/crew_body.hpp"
 #include "simcore/crew_callouts.hpp"
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
@@ -73,6 +74,15 @@ public:
                 if (def_.has_crew_data) sk.decision_controls = def_.crew_data.decision_controls;
                 crew_.back().SetSkill(sk, def_.seed * 7919u + static_cast<unsigned>(i) * 104729u + 17u);
             }
+            if (def_.has_crew_data) {  // controls out of seated reach: he gets up for them (crew_body.hpp)
+                const CrewSeatDef* seat = def_.crew_data.FindSeat(c.role);
+                if (seat != nullptr && !seat->stand_for.empty()) {
+                    crew_.back().SetStanding(seat->stand_for, def_.crew_data.stand_s, def_.crew_data.sit_s);
+                }
+            }
+        }
+        for (const ControlDef& c : console_.panel.Controls()) {
+            if (c.kind == ControlKind::Continuous) wheels_.push_back({c.id, c.station, console_.panel.GetValue(c.id), -1e9});
         }
         UpdateAimCrew();
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
@@ -154,6 +164,11 @@ public:
             c.Update(dt, console_.panel, &console_.equipment);
         }
         player_.Update(dt);
+        for (WheelWatch& w : wheels_) {  // who is turning a hand wheel (the bodies, roadmap 8.10)
+            const double v = console_.panel.GetValue(w.id);
+            if (std::fabs(v - w.value) > 1e-9) w.moved_s = time_;
+            w.value = v;
+        }
         log_.CollectEquipment(console_.equipment);
         for (CrewMember& c : crew_) {
             std::vector<CrewReport> reports = c.TakeReports();
@@ -349,6 +364,35 @@ public:
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
+
+    // What each seat's crewmate is doing, for the bodies (crew_body.hpp, roadmap 8.10): his next action and when, his
+    // last one, whether he is up at a panel, the hand wheels he is turning, whether he is speaking. One per crew
+    // member, in the scenario's order.
+    std::vector<SeatActivity> CrewActivity() const {
+        std::vector<SeatActivity> out;
+        for (const CrewMember& m : crew_) {
+            SeatActivity a;
+            a.station = m.Role();
+            a.npc = SeatHolder(m.Role()).empty();
+            const CrewMember::Intent in = m.CurrentIntent();
+            if (a.npc) {
+                a.control = in.control;
+                a.act_in_s = in.in_s;
+                a.waiting = in.waiting;
+                a.standing = in.standing;
+                a.stand_control = in.stand_control;
+            }
+            a.last_control = in.last_control;
+            a.since_last_s = in.since_last_s;
+            for (const WheelWatch& w : wheels_) {
+                if (w.station == m.Role() && time_ - w.moved_s < 0.5) a.wheels.push_back(w.id);
+            }
+            a.speaking = callouts_ != nullptr && callouts_->SpeakingFrom(m.Role());
+            a.stressed = m.Stressed();
+            out.push_back(std::move(a));
+        }
+        return out;
+    }
 
     // ---- The crew's voice (roadmap 8.4, docs/crew/04_COMMANDS_AND_CALLOUTS.md): orders, acknowledgements, reports
     // and reminders as they were spoken (null without crew data). They also go to the radio log and the debrief.
@@ -1044,6 +1088,13 @@ private:
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
+    struct WheelWatch {
+        std::string id;
+        std::string station;
+        double value = 0.0;
+        double moved_s = -1e9;  // when it last turned
+    };
+    std::vector<WheelWatch> wheels_;
 
     struct Seat {
         std::string role;
