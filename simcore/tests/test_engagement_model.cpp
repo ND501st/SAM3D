@@ -116,6 +116,10 @@ SC_TEST("tuning: the Osa game-balance file loads; bad values are rejected with p
               error.find("outcome.tv_factor") != std::string::npos);
     SC_EXPECT(!LoadEngagementTuning(broken("\"lock_time_s\"", "\"lock_tme_s\""), t, &error) &&
               error.find("track.lock_tme_s: unknown key") != std::string::npos);
+    // The EM layer's auto-capture rule is data: 22 hits in the last 40 looks for the Osa.
+    SC_EXPECT(t.em_capture_looks == 40 && t.em_capture_hits == 22);
+    SC_EXPECT(!LoadEngagementTuning(broken("\"em_capture_hits\": 22", "\"em_capture_hits\": 41"), t, &error) &&
+              error.find("track.em_capture_hits") != std::string::npos);
 }
 
 SC_TEST("engagement: search contact, aimed radar lock, zone lamps, launch and a resolved outcome") {

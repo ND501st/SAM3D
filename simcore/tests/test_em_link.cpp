@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -354,7 +355,7 @@ SC_TEST("em practice: contact and lock ranges sit in the bands the radars' calib
     // A confirmed contact needs two hits in three looks: it appears between where Pd is 0.1 and where it is high.
     SC_EXPECT(contacts.front() > 0.75 * soc_50 && contacts.back() < 1.1 * soc_10);
     // The auto-capture takes it at about the tracking radar's R50 (the crew sets the gate on the contact first).
-    SC_EXPECT(locks.front() > 0.85 * ssc_50 && locks.back() < 1.15 * ssc_50);
+    SC_EXPECT(locks.front() > 0.8 * ssc_50 && locks.back() < 1.15 * ssc_50);  // the antenna now stands at its calibrated height: lobing moves the spread
     SC_EXPECT(ssc_10 > ssc_50);
     // And the search radar always shows the target before the tracking radar holds it.
     for (std::size_t i = 0; i < contacts.size(); ++i) SC_EXPECT(contacts[i] > locks[0]);
@@ -606,4 +607,196 @@ SC_TEST("em 6.4: the beam selector holds a beam or steps through the programme, 
             if (all[i] >= 0 && all[i] < 3) seen_all[all[i]] = true;
         SC_EXPECT(seen_all[0] && seen_all[1] && seen_all[2]);
     }
+}
+
+// ------------------------------------------------------------------------------------ review fixes (October 2026)
+
+namespace {
+// A bench whose link is built from a definition with extra libraries and scripted effects.
+struct EffectsBench : Bench {
+    EffectsBench(const std::vector<std::string>& extras, const std::function<void(EmLinkDef&)>& effects, unsigned seed = 7u)
+        : Bench(seed) {
+        EmLinkDef d;
+        std::string error;
+        ok = LoadEmLinkDef(kData, "em/osa_ak.json", "osa_ak_soc", "osa_ak_ssc", d, &error, extras);
+        if (!ok) std::printf("    %s\n", error.c_str());
+        effects(d);
+        def = d;
+        link = std::make_unique<EmSensorLink>(GeoPoint::FromDegrees(46.9, 19.7, 0.0), &ground, seed, def, unit);
+        ok = ok && link->Ok();
+    }
+};
+}  // namespace
+
+SC_TEST("em link: the antenna stands at the radar's calibrated height, whatever the hull's up_m") {
+    Bench b;
+    SC_EXPECT(b.ok);
+    SC_EXPECT_NEAR(b.link->Antenna().z, OsaRadar("osa_ak_soc").antenna_height_m, 1e-9);
+    SC_EXPECT_NEAR(b.link->Antenna().x, b.unit.x, 1e-9);
+}
+
+SC_TEST("em link: chaff reaches the scope as a ghost contact that no target owns") {
+    EffectsBench b({}, [](EmLinkDef& d) { d.chaff.push_back({"t", 0.0, 800.0, 120.0}); });
+    SC_EXPECT(b.ok);
+    b.link->SetSearch(true, false);
+    b.height_m = 3000.0;
+    b.north_m = 38000.0;
+    bool saw_ghost = false, saw_target = false, ghost_owned = false;
+    Vec3 ghost_at;
+    for (int i = 0; i < 1100; ++i) {
+        b.Tick(false);
+        for (const EmSensorLink::Contact& c : b.link->SearchPicture()) {
+            if (c.ghost) {
+                saw_ghost = true;
+                ghost_at = c.position;
+                ghost_owned = ghost_owned || c.target_id == "t";
+                SC_EXPECT(c.target_id.size() > 1 && c.target_id[0] == 'T');
+            } else {
+                saw_target = saw_target || c.target_id == "t";
+            }
+        }
+    }
+    SC_EXPECT(saw_ghost);
+    SC_EXPECT(saw_target);
+    SC_EXPECT(!ghost_owned);
+    SC_EXPECT(ghost_at.y > 33000.0);  // left behind where the cloud was dropped, far from the aircraft
+}
+
+SC_TEST("em link: a stand-off noise jammer shortens the search radar's first contact") {
+    double first_km[2] = {0.0, 0.0};
+    for (int jam = 0; jam < 2; ++jam) {
+        EffectsBench b({"em/nato_1985.json"}, [&](EmLinkDef& d) {
+            if (jam == 0) return;
+            EmJammerDef j;
+            j.jammer_id = "nato_alq99_band8";
+            j.position = {30000.0, 20000.0, 8000.0};
+            d.jammers.push_back(j);
+        });
+        SC_EXPECT(b.ok);
+        b.link->SetSearch(true, false);
+        b.rcs_m2 = 3.0;
+        b.height_m = 3000.0;
+        b.north_m = 60000.0;
+        for (int i = 0; i < 3500 && first_km[jam] == 0.0; ++i) {
+            b.Tick(false);
+            for (const EmSensorLink::Contact& c : b.link->SearchPicture())
+                if (c.target_id == "t") first_km[jam] = b.north_m / 1000.0;
+        }
+    }
+    std::printf("    first contact %.1f km clear, %.1f km with a stand-off jammer\n", first_km[0], first_km[1]);
+    SC_EXPECT(first_km[0] > 25.0);
+    SC_EXPECT(first_km[1] > 0.0 && first_km[1] < 0.8 * first_km[0]);
+}
+
+SC_TEST("em link: the unit's own radar tracks become knowledge and fuse with a report from elsewhere") {
+    Bench b;
+    SC_EXPECT(b.ok);
+    b.link->SetSearch(true, false);
+    b.height_m = 3000.0;
+    b.north_m = 30000.0;
+    b.Run(40.0, false);
+    std::vector<em::FusedTrack> pic = b.link->UnitPicture();
+    SC_EXPECT(pic.size() == 1);
+    if (pic.size() != 1) return;
+    SC_EXPECT(pic[0].fused.source == em::InfoSource::OwnRadar);
+    SC_EXPECT(pic[0].fused.PositionSigmaM() > 0.0 && pic[0].contributors == 1);
+    // A neighbour reports the same aircraft, less precisely: one fused track, never more uncertain than before.
+    const double before = pic[0].fused.PositionSigmaM();
+    em::KnowledgeTrack rep;
+    rep.origin = {99, 1, 1};
+    rep.category = em::Category::Air;
+    rep.position_valid = true;
+    rep.position = pic[0].fused.position;
+    rep.cov = em::Mat3::Diagonal(2000.0 * 2000.0);
+    rep.time_s = b.link->Time();
+    b.link->ReceiveReport(rep);
+    pic = b.link->UnitPicture();
+    SC_EXPECT(pic.size() == 1 && pic[0].contributors == 2);
+    SC_EXPECT(pic[0].fused.PositionSigmaM() <= before * 1.001);
+}
+
+SC_TEST("em link: scenario em.jammers and em.chaff load; bad ones are refused with the path") {
+    const std::string em_block =
+        "\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\" }";
+    auto with = [&](const std::string& tail) {
+        return ReplaceAll(PracticeEm(), em_block,
+                          "\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\", " + tail + " }");
+    };
+    auto load = [&](const std::string& text, std::string* e) {
+        ScenarioDef d;
+        ConsoleData c;
+        return LoadScenario(text, kData, d, c, e);
+    };
+    std::string e;
+    SC_EXPECT(load(with("\"extra_libraries\": [\"em/nato_1985.json\"], \"jammers\": [ { \"jammer\": \"nato_alq99_band8\", "
+                        "\"target\": \"t1\", \"on_at_s\": 60 } ], \"chaff\": [ { \"target\": \"t1\", \"at_s\": 90, \"rcs_m2\": 200 } ]"),
+                   &e));
+    SC_EXPECT(!load(with("\"jammers\": [ { \"jammer\": \"nato_alq99_band8\", \"target\": \"t1\" } ]"), &e) &&
+              e.find("own_unit.em.jammers[0].jammer: unknown jammer") != std::string::npos);
+    SC_EXPECT(!load(with("\"extra_libraries\": [\"em/nato_1985.json\"], \"jammers\": [ { \"jammer\": \"nato_alq99_band8\" } ]"), &e) &&
+              e.find("either a target") != std::string::npos);
+    SC_EXPECT(!load(with("\"chaff\": [ { \"target\": \"t1\" } ]"), &e) && e.find("own_unit.em.chaff[0].at_s") != std::string::npos);
+}
+
+SC_TEST("em practice: the jamming-and-chaff variant plays to the end and shows the chaff as a ghost contact") {
+    const std::string text = ReadFile(kData + "/scenarios/osa_practice_em_ew.json");
+    SC_EXPECT(!text.empty());
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    SC_EXPECT(def.has_em && def.em.jammers.size() == 1 && def.em.chaff.size() == 1);
+    def.seed = 3;
+    ScenarioRunner runner(std::move(def), std::move(console));
+    bool ghost_seen = false;
+    for (int i = 0; i < 7000 && !runner.Finished(); ++i) {
+        runner.Step(0.1);
+        if (runner.Em() != nullptr)
+            for (const EmSensorLink::Contact& c : runner.Em()->SearchPicture()) ghost_seen = ghost_seen || c.ghost;
+    }
+    SC_EXPECT(runner.Em() != nullptr && runner.Em()->Ok());
+    SC_EXPECT(ghost_seen);  // the chaff cloud shows on the scope as a contact no target owns
+}
+
+SC_TEST("em link: IFF replies come from the friendly transponder's track, only while the interrogator transmits") {
+    Bench b;
+    SC_EXPECT(b.ok);
+    b.link->SetSearch(true, false);
+    double north = 28000.0;
+    auto run = [&](double seconds, bool friendly, int* iff_ticks, int* contact_ticks) {
+        for (int i = 0; i < static_cast<int>(seconds / 0.1); ++i) {
+            north -= 0.5;  // slow, so the target stays in the same place on the scope
+            b.link->SyncTarget("f", true, Vec3{0.0, north, 3000.0 - north * north / (2.0 * wgs84::kMeanRadius) + 3000.0 * 0.0}, Vec3{0.0, -5.0, 0.0},
+                               50.0, friendly);
+            b.link->Advance(0.1);
+            for (const EmSensorLink::Contact& c : b.link->SearchPicture()) {
+                if (c.target_id != "f") continue;
+                ++*contact_ticks;
+                *iff_ticks += c.iff ? 1 : 0;
+            }
+        }
+    };
+    int iff_a = 0, seen_a = 0, iff_b = 0, seen_b = 0;
+    run(40.0, true, &iff_a, &seen_a);  // interrogator silent
+    SC_EXPECT(seen_a > 20);
+    SC_EXPECT(iff_a == 0);
+    b.link->SetInterrogating(true);
+    run(40.0, true, &iff_b, &seen_b);
+    SC_EXPECT(seen_b > 20 && iff_b > seen_b / 2);
+    // A target that does not carry a friendly transponder never replies.
+    Bench hostile;
+    hostile.link->SetSearch(true, false);
+    hostile.link->SetInterrogating(true);
+    int iff_h = 0, seen_h = 0;
+    double n2 = 28000.0;
+    for (int i = 0; i < 400; ++i) {
+        n2 -= 0.5;
+        hostile.link->SyncTarget("h", true, Vec3{0.0, n2, 3000.0 - n2 * n2 / (2.0 * wgs84::kMeanRadius)}, Vec3{0.0, -5.0, 0.0}, 50.0, false);
+        hostile.link->Advance(0.1);
+        for (const EmSensorLink::Contact& c : hostile.link->SearchPicture()) {
+            ++seen_h;
+            iff_h += c.iff ? 1 : 0;
+        }
+    }
+    SC_EXPECT(seen_h > 20 && iff_h == 0);
 }

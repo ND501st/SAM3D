@@ -54,7 +54,10 @@ PLANNED = {
         ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale. No source gives a drift or a measurement error.", ["m:orient"], "missing"),
         ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
         ("p:jammer", "Jamming targets: range lost in noise, method Н outcome", "6.7 / E5", "ПОМЕХА already selects method Н and arms К3 with the medium beam, but no target jams yet, so the range is never lost and Н has no effect on the hit chance. Needs noise jammers from the EM layer (E5) and the NVA's crossing-offset 'parameter' limit.", ["c:fo.pomekha", "e:launch"], "missing"),
-        ("p:pu12feed", "PU-12 fed by the regiment's radars", "7.1", "The board and the voice designations are built; the board still plots the scenario's targets directly instead of a regiment radar picture.", [], "missing"),
+        ("p:radio_tx", "Transmissions from the vehicle: reports, ТОН. ВЫЗОВ, the chest switch (ПРД)", "7.8", "The sets only receive today: designations come in, nothing goes out. The commander's reports, the tone call and the chest switch's transmit position would use the transmit state (r123m_*_tx) and the EM layer's radio.", ["m:comms"], "missing"),
+        ("p:preset_setup", "Setting the four presets: drum fixators, frequency, antenna tuning, smooth tuning", "7.8", "The presets are tuned when the scenario starts (the frequency plan is the scenario's). The real set's set-up drill (release a fixator, set the frequency, key, tune the antenna to the maximum, fix it: eight steps per frequency) and the smooth sub-band mode are not modelled.", ["c:radio.left.preset", "c:radio.right.preset"], "missing"),
+        ("p:radio_audio", "Radio and intercom audio: noise, squelch, voices", "7.7", "Nothing is heard in the Unreal cabin: the net's state shows in the debrief and the lamps. Noise that the squelch removes, the voices of the designations and the R-124's sidetone would be audio.", ["m:comms"], "missing"),
+        ("p:intercom_all", "The other subscribers' R-124 boxes", "7.8", "The commander's A-1, the deputy's A-2 and the driver's ПВ matter; the senior operator and operator are always on the intercom (the R-124 has five subscribers; which crew member has which box is not in any source found).", ["c:intercom.a1"], "missing"),
         ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
     ],
 }
@@ -257,6 +260,39 @@ class MapBuilder:
                                ("c:", "sync_button", orient, "fast sync")])
             if orient.get("synced_input"):
                 self.add_edge("m:orient", "i:" + orient["synced_input"], "signal", "sets this signal")
+
+        radios = self.con.get("radios")
+        if radios:  # the two R-123M sets: the commander's source selection (roadmap 7.8)
+            self.add_node("m:radios", t="model", label="R-123M sets and the command network", notes=radios.get("notes"),
+                          source=radios.get("source"), conf=radios.get("confidence"))
+            feeds("m:radios", [("c:", "listen", radios, "set listened on")])
+            for cid in radios.get("sets", []):
+                self.add_edge("c:" + cid, "m:radios", "feed", "preset")
+
+        comms = self.con.get("comms")
+        if comms:  # the R-123M sets and the R-124 intercom (roadmap 7.8, simcore/crew_comms.hpp)
+            self.add_node("m:c2net", t="model", label="Command network: sources, presets, headset",
+                          notes="simcore/c2_sources.hpp: which source is on which of the four presets, the set the headset is on, "
+                                "what the crew has been told. The two sets' preset selectors and the headset switch move it, and it moves them.",
+                          source="mon_2112_80 p26; r123_refs; docs/research/EM_C2_SOURCES_2026-10.md", conf="medium")
+            for cid in ("radio.left.preset", "radio.right.preset", "radio.headset"):
+                if cid in self.ctrl:
+                    self.add_edge("c:" + cid, "m:c2net", "feed", "tunes / listens")
+            self.add_node("m:comms", t="model", label="R-123M sets and R-124 intercom",
+                          notes=comms.get("notes"), source=comms.get("source"), conf=comms.get("confidence"))
+            for r in comms.get("radios", []):
+                for key, why in (("power", "switched on"), ("mode", "СИМПЛЕКС / Д. ПРИЕМ"), ("squelch", "noise suppressor: shortens the range"),
+                                 ("volume", "turned up"), ("antenna", "whip, 1 m or emergency wire: shortens the range")):
+                    self.add_edge("c:" + r[key], "m:comms", "feed", why)
+                for key in ("warm", "transmit"):
+                    self.add_edge("s:" + r[key], "m:comms", "feed", "state of the set")
+            ic = comms.get("intercom", {})
+            for key, why in (("commander", "A-1: on the radio, on the intercom or off"), ("deputy", "A-2: on the radio"), ("driver", "ПВ: on the radio")):
+                if ic.get(key):
+                    self.add_edge("c:" + ic[key], "m:comms", "feed", why)
+            if ic.get("subsystem"):
+                self.add_edge("s:" + ic["subsystem"], "m:comms", "feed", "intercom up")
+            self.add_edge("m:comms", "m:c2net", "feed", "which set hears, the loss on the link, who is on the radio")
 
         launcher = self.con.get("launcher")
         if launcher:  # the missile load and the guidance channels (roadmap 6.3, simcore/launcher.hpp)

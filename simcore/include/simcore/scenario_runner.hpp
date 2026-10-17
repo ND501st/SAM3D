@@ -21,6 +21,8 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <random>
 #include <string>
@@ -29,11 +31,13 @@
 
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/crew_comms.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
+#include "simcore/c2_sources.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
@@ -78,10 +82,12 @@ public:
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
+        if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
-        if (!def_.command_post_file.empty()) {
-            board_ = std::make_unique<PlottingBoard>(def_.board, def_.unit_position, def_.seed);
-            engagement_.SetPlottingBoard(board_.get());
+        if (!def_.c2_sources.empty()) {
+            c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
+            for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
+            engagement_.SetAirPicture(c2_.get());
         }
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
@@ -90,6 +96,13 @@ public:
             } else {
                 em_link_.reset();  // the loader checked the radars; fall back to the gameplay rules rather than crash
             }
+        }
+        if (c2_ && em_link_) {  // sources with a place talk to the unit over EM radio links
+            c2_link_ = std::make_unique<EmC2LinkModel>(em_link_.get());
+            for (const C2SourceDef& s : def_.c2_sources) {
+                if (s.has_position) em_link_->AddRadioSource(s.id, s.position, s.radio, s.frequency_hz);
+            }
+            c2_->SetLinkModel(c2_link_.get());
         }
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
@@ -101,7 +114,8 @@ public:
         if (finished_) return;
         time_ += dt;
         UpdateTargets(dt);
-        UpdateBoard();
+        DeliverOrders();
+        UpdateC2();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
         }
@@ -154,7 +168,6 @@ public:
     void SetUnitPosition(const Vec3& enu) {
         def_.unit_position = enu;
         engagement_.SetUnitPosition(enu);
-        if (board_) board_->SetCentre(enu);
     }
     const Vec3& UnitPosition() const { return def_.unit_position; }
     // The hull turned (e.g. the player drove it): degrees clockwise from north.
@@ -171,7 +184,38 @@ public:
     }
 
     // The battery command post's plotting board (null when the scenario has no "command_post").
-    const PlottingBoard* Board() const { return board_.get(); }
+    const PlottingBoard* Board() const { return c2_ ? c2_->BoardOf("pu12") : nullptr; }
+
+    // The commander's order to a crew member. It goes by the R-124 intercom, so it arrives at once; with the commander's
+    // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
+    // (roadmap 7.8). The same path serves the scenario's triggers and the player's order menu.
+    void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
+        const double delay = comms_ ? comms_->OrderDelayS(crew.Role(), console_) : 0.0;
+        if (delay <= 0.0) {
+            if (queue) {
+                crew.Queue(procedure);
+            } else {
+                crew.Order(procedure);
+            }
+            return;
+        }
+        pending_orders_.push_back({time_ + delay, crew.Name(), &procedure, queue});
+        char detail[160];
+        std::snprintf(detail, sizeof(detail), "'%s' to %s is shouted, it arrives in %.1f s", procedure.id.c_str(), crew.Name().c_str(), delay);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "R-124", detail});
+    }
+    const CrewComms* Comms() const { return comms_.get(); }
+    std::size_t PendingOrders() const { return pending_orders_.size(); }
+
+    // The battery's early-warning and command sources, and which one the crew listens to (null: no command network).
+    // `RequestSource` is how a player (or the UI) changes it.
+    const C2Network* C2() const { return c2_.get(); }
+    // The two R-123M sets (0 left, 1 right): turn one to a preset 1-4, or take the headset to one.
+    bool TuneC2Radio(int set, int preset, const std::string& by = "Commander") { return c2_ && c2_->TuneSet(set, preset, time_, by); }
+    bool ListenToC2Radio(int set, const std::string& by = "Commander") { return c2_ && c2_->ListenToSet(set, time_, by); }
+    bool RequestC2Source(const std::string& id, const std::string& by = "Commander", const std::string& why = std::string()) {
+        return c2_ && c2_->RequestSource(id, time_, by, why);
+    }
 
     // The vehicle's fuel (null when the console has no "fuel" block).
     const FuelModel* Fuel() const { return fuel_.get(); }
@@ -346,22 +390,46 @@ private:
                 CrewMember* c = Crew(a.crew);
                 const Procedure* p = console_.FindProcedure(a.procedure);
                 if (c == nullptr || p == nullptr) return;  // checked when the scenario loaded
-                if (a.kind == TriggerAction::Kind::Order) {
-                    c->Order(*p);
-                } else {
-                    c->Queue(*p);
-                }
+                GiveOrder(*c, *p, a.kind == TriggerAction::Kind::Queue);
                 return;
             }
             case TriggerAction::Kind::End:
                 Finish(a.reason);
                 return;
+            case TriggerAction::Kind::C2Source:
+                if (c2_) c2_->RequestSource(a.c2_id, time_, "Scenario");
+                return;
+            case TriggerAction::Kind::C2Fail:
+                if (c2_) c2_->SetFailed(a.c2_id, true, time_, a.reason);
+                return;
+            case TriggerAction::Kind::C2Restore:
+                if (c2_) c2_->SetFailed(a.c2_id, false, time_);
+                return;
+        }
+    }
+
+    // Orders that were shouted reach their crew member after the delay.
+    void DeliverOrders() {
+        for (std::size_t i = 0; i < pending_orders_.size();) {
+            if (pending_orders_[i].at_s > time_ + 1e-9) {
+                ++i;
+                continue;
+            }
+            const PendingOrder o = pending_orders_[i];
+            pending_orders_.erase(pending_orders_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (CrewMember* c = Crew(o.crew)) {
+                if (o.queue) {
+                    c->Queue(*o.procedure);
+                } else {
+                    c->Order(*o.procedure);
+                }
+            }
         }
     }
 
     // The regiment's picture onto the board, once a minute; the first mark of each target goes in the log.
-    void UpdateBoard() {
-        if (!board_) return;
+    void UpdateC2() {
+        if (!c2_) return;
         std::vector<BoardContact> contacts;
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
@@ -372,20 +440,54 @@ private:
             c.target_id = t.id;
             c.position = a->position;
             c.altitude_m = world_.Frame().AltitudeOf(a->position);
+            c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
             c.formation = t.formation;
             contacts.push_back(c);
         }
-        const std::size_t before = board_->Marks().size();
-        if (board_->Update(time_, contacts)) {
-            for (std::size_t k = before; k < board_->Marks().size(); ++k) {
-                const BoardMark& m = board_->Marks()[k];
-                bool first = true;
-                for (std::size_t j = 0; j < before && first; ++j) first = board_->Marks()[j].target_id != m.target_id;
-                if (first) log_.Record({time_, DebriefEntry::Kind::Scenario, "PU-12", m.target_id, "on the board: " + board_->Describe(m)});
+        if (comms_) {  // the R-123M sets and the R-124 box as the console has them now
+            for (const CrewComms::Event& e : comms_->Step(console_, c2_.get(), c2_link_.get())) {
+                log_.Record({time_, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
             }
         }
-        UpdateDesignations();
+        c2_->Update(time_, contacts, def_.unit_position);
+        SyncRadios();
+        for (const C2Network::Event& e : c2_->TakeEvents()) {
+            log_.Record({e.t, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
+        }
+    }
+
+    // The R-123M controls and the command network (the console's radio.left.preset, radio.right.preset, radio.headset): a
+    // control the crew moves asks the network to tune a set or move the headset (it follows after the select time); a
+    // change the network makes itself (the commander falling back) moves the control. Absent controls are skipped.
+    void SyncRadios() {
+        static const char* const ids[3] = {"radio.left.preset", "radio.right.preset", "radio.headset"};
+        ControlPanel& pan = console_.panel;
+        const auto radios = c2_->Radios();
+        const int now[3] = {radios[0].preset - 1, radios[1].preset - 1, c2_->ListeningSet()};
+        for (int i = 0; i < 3; ++i) {
+            if (pan.Find(ids[i]) == nullptr) continue;
+            const int p = pan.Get(ids[i]);
+            if (!radio_synced_) {
+                pan.Set(ids[i], now[i]);
+            } else if (p != radio_panel_[i]) {
+                radio_want_[i] = p;  // the crew moved it
+            } else if (now[i] != radio_now_[i] && radio_want_[i] < 0) {
+                pan.Set(ids[i], now[i]);  // the network changed it
+            }
+            if (radio_want_[i] >= 0) {
+                if (now[i] == radio_want_[i]) {
+                    radio_want_[i] = -1;
+                } else if (i < 2) {
+                    c2_->TuneSet(i, radio_want_[i] + 1, time_, "Crew");
+                } else {
+                    c2_->ListenToSet(radio_want_[i], time_, "Crew");
+                }
+            }
+            radio_panel_[i] = pan.Get(ids[i]);
+            radio_now_[i] = now[i];
+        }
+        radio_synced_ = true;
     }
 
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
@@ -418,17 +520,6 @@ private:
             log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "fuel", detail});
         }
         if (ev.refuelled) log_.Record({time_, DebriefEntry::Kind::Scenario, "Driver", "fuel", "tank full"});
-    }
-
-    // The battery commander's voice designations reaching the vehicle's crew (roadmap 7.2).
-    void UpdateDesignations() {
-        for (const BoardMark& m : board_->PollHeard(time_)) {
-            const PlottingBoard::Designation d = board_->DesignationFor(m, def_.unit_position);
-            char detail[96];
-            std::snprintf(detail, sizeof(detail), "designation %04d: azimuth %02d-%02d, range %.0f km, height %d hm", m.number,
-                          d.azimuth_mils / 100, d.azimuth_mils % 100, d.range_m / 1000.0, m.height_hm);
-            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", m.target_id, detail});
-        }
     }
 
     // The missile load and channels: shots the outcome model has finished free their channel; then selection at
@@ -539,7 +630,20 @@ private:
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;
-    std::unique_ptr<PlottingBoard> board_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
+    struct PendingOrder {
+        double at_s = 0.0;
+        std::string crew;
+        const Procedure* procedure = nullptr;
+        bool queue = false;
+    };
+    std::vector<PendingOrder> pending_orders_;
+    std::unique_ptr<CrewComms> comms_;
+    bool radio_synced_ = false;
+    int radio_panel_[3] = {-1, -1, -1};
+    int radio_now_[3] = {-1, -1, -1};
+    int radio_want_[3] = {-1, -1, -1};
+    std::unique_ptr<EmC2LinkModel> c2_link_;
+    std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
     std::vector<EngagementTarget> eng_targets_;

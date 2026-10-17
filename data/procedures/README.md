@@ -70,6 +70,22 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
     "emergency": { "select_control": "msl.emergency_select", "select_containers": [ "3-II", "", "3-I" ],
                    "fire_control": "msl.emergency", "ready_input": "emerg_ready", "flight_s": 25.5,
                    "source": "...", "confidence": "medium" },
+    // Optional, top level (next to "launcher"): the two R-123M sets and the R-124 intercom (roadmap 7.8,
+    // simcore/crew_comms.hpp). Each radio names its controls (power, mode, squelch, volume, antenna: 3 positions = 4 m whip,
+    // 1 m whip, emergency wire) and two subsystems: `warm` (can receive, 10 min after switching on) and `transmit` (3 min after
+    // duty reception). `ranges_km` are the published ranges, turned into receiving losses (40 log10 of the ratio against the
+    // 4 m whip with the suppressor off). The intercom names the commander's box A-1 (with the position that is on the radio and
+    // the one that is off), the deputy's A-2 and the driver's ПВ, the subsystem that says the intercom is up, and the times
+    // an order takes when shouted (quiet, and noisy while any of `noisy` runs). The preset selectors and the headset switch
+    // (radio.*.preset, radio.headset) belong to the command network (c2_sources.hpp), not to this block.
+    //   "comms": { "radios": [ { "set": 0, "name": "left", "power": "radio.left.power", "mode": "radio.left.mode",
+    //                            "squelch": "radio.left.squelch", "volume": "radio.left.volume", "antenna": "radio.left.antenna",
+    //                            "warm": "r123m_left", "transmit": "r123m_left_tx" }, { "set": 1, ... } ],
+    //              "ranges_km": { "whip_4m_squelch_off": 20, "whip_4m_squelch_on": 13, "whip_1m": 8, "emergency_wire": 4 },
+    //              "intercom": { "commander": "intercom.a1", "commander_radio_position": 2, "commander_off_position": 0,
+    //                            "deputy": "intercom.a2", "deputy_radio_position": 1, "driver": "intercom.pv", "driver_radio_position": 1,
+    //                            "subsystem": "r124_intercom", "shout_quiet_s": 1.5, "shout_noisy_s": 4.0, "noisy": [ "gta" ] },
+    //              "source": "...", "confidence": "medium" }
     // Optional. A prepared pair is held at most hold_s; then its gyros have overheated (the container's hot_input is
     // set, its lamp flashes), the next pair is prepared, and the hot missile rests rest_s (long_rest_s after `cycles` holds).
     "prep_hold": { "hold_s": 600, "rest_s": 600, "cycles": 3, "long_rest_s": 3600, "source": "...", "confidence": "medium" },

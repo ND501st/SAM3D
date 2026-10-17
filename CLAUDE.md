@@ -47,6 +47,7 @@ python tools/panel_sheet.py                       # draw the cabin panels flat: 
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
+python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 
 # Everything at once
 ./tools/verify.sh          # Mac/Linux
@@ -106,3 +107,8 @@ Switch with `/model` in Claude Code.
 See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass: all of 6.0-6.8 done (6.2 and 6.5 have Unreal parts awaiting a build); next phase 7, the battery and PU-12; the EM track is at E2) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
+
+Modelling equipment from photographs: always follow `docs/MODELLING_FROM_PHOTOS.md` (skill `model-from-photos`): flatten the
+photo to mm, trace in 3D with heights, overlap tests, then check the model rendered from the photo's own camera.
+
+Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

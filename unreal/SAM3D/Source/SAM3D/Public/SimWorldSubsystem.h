@@ -229,6 +229,35 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Console")
 	bool SetControlPosition(const FString& ControlId, int32 Position);
 
+	/** Change the early-warning / command source the crew listens to (a source id from the scenario's command network,
+	 *  or "none" for the vehicle's own radar alone). The PU-12 is "pu12". False if unknown or already listened to. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Command")
+	bool RequestC2Source(const FString& SourceId, const FString& Why);
+
+	/** Turn R-123M set 0 (left) or 1 (right) to preset 1-4. Takes a few seconds in the sim. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Command")
+	bool TuneC2Radio(int32 Set, int32 Preset);
+
+	/** Take the headset to set 0 (left) or 1 (right): the crew then hears the source on that set's preset. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Command")
+	bool ListenToC2Radio(int32 Set);
+
+	/** The preset (1-4) a set is on, 0 if there is no command network. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	int32 GetC2RadioPreset(int32 Set) const;
+
+	/** The source id on a preset (1-4), "" if free. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	FString GetC2PresetSource(int32 Preset) const;
+
+	/** The source the crew listens to now ("" while changing or off the net). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	FString GetActiveC2Source() const;
+
+	/** Ids of the scenario's early-warning / command sources (PU-12 first). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	TArray<FString> GetC2SourceIds() const;
+
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Console")
 	double GetWheelValue(const FString& ControlId) const;
 

@@ -131,6 +131,7 @@ SC_TEST("em data: NATO-era library loads with provenance and each side identifie
     // Red side: an Osa search radar (search radar on) and a ground ESM station.
     const int sam = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
     w.AddRadar(sam, "osa_ak_soc", true);
+    w.AddRadar(sam, "osa_ak_ssc", true);  // the tracking radar radiates too (pointing north, at the strike aircraft)
     const int esm_site = w.AddGroundPlatform("ESM", Side::Red, 3000.0, 0.0, 20.0);
     const int red_esm = w.AddEsm(esm_site, "red_ground_esm_class");
     // Blue side: a fighter 90 km out with its X-band radar, a noise pod, and an RWR.
@@ -156,7 +157,18 @@ SC_TEST("em data: NATO-era library loads with provenance and each side identifie
     }
     SC_EXPECT(fcr_id);
     SC_EXPECT(jammer_id);
-    bool saw_sa8 = false;
-    for (const EsmContact& c : s.FindEsm(rwr)->contacts) saw_sa8 = saw_sa8 || (c.sig.library_id == "sa8_land_roll_search" && c.sig.hostile);
+    // FM 100-2-3 gives letter bands only (H for the search radar, with other Soviet radars in the same band), so the NATO
+    // RWR names the search radar with low confidence; the tracking radar's J band is the SA-8's alone.
+    bool saw_sa8 = false, saw_track = false;
+    double search_conf = 1.0;
+    for (const EsmContact& c : s.FindEsm(rwr)->contacts) {
+        if (c.sig.library_id == "sa8_land_roll_search" && c.sig.hostile) {
+            saw_sa8 = true;
+            search_conf = c.sig.library_confidence;
+        }
+        saw_track = saw_track || (c.sig.library_id == "sa8_land_roll_track" && c.sig.hostile);
+    }
     SC_EXPECT(saw_sa8);
+    SC_EXPECT(search_conf < 0.5);
+    SC_EXPECT(saw_track);
 }

@@ -1,0 +1,22 @@
+{
+  "name": "r123m_front",
+  "notes": "The R-123M's front (tools/blender/r123m_trace.py). Photo: Wikimedia Commons Funkstation_R-123_IMG_1390.JPG (r123_commons). height_mm: the set's 225 mm (r123_refs); width_mm read from the flattened image.",
+  "photo_size": [3000, 2250],
+  "height_mm": 225.0,
+  "width_mm": 406.0,
+  "edges": {
+    "h_top": [200, 2800, 370, 450],
+    "h_fixtop": [2380, 2860, 440, 495],
+    "h_volt": [140, 500, 685, 740],
+    "h_bottom": [2000, 2800, 1735, 1815],
+    "h_calib": [610, 870, 1355, 1405],
+    "v_fixL": [490, 860, 2320, 2390],
+    "v_fixR": [500, 860, 2870, 2920],
+    "v_korr": [440, 680, 880, 930],
+    "v_volt": [735, 985, 512, 565],
+    "v_calib": [1175, 1365, 878, 928],
+    "v_sub": [670, 870, 2232, 2285]
+  },
+  "offset": [500, 100],
+  "plate_edges": {"top": 503.0, "left": 428.0, "bottom": 2095.0}
+}

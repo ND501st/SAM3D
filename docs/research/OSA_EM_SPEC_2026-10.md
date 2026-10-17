@@ -169,3 +169,7 @@ radar off as soon as the missile is far enough or detonates; ARM threat → stop
 6. The special circuit against asynchronous pulse interference (`mon_2112_80` p67) — model as reduced
    mutual interference between neighbouring vehicles once co-channel radar interference is modelled.
 7. FM 100-2-3 and NATO-era threat handbooks for the blue library (what NATO believed in 1985–90).
+
+## Command sources
+
+The Osa's early warning comes from the PU-12 by default and may come from other sources; see `docs/research/EM_C2_SOURCES_2026-10.md`.

@@ -8,6 +8,7 @@
   "sources": [
     { "id": "nato_radar_refs", "title": "Encyclopaedic pages: AN/APG-63 (X band, in service 1973 on the F-15A/B), AN/APG-66 (X band 6.2-10.9 GHz; mechanically scanned; ±10/30/60 deg; low PRF uplook, medium PRF downlook; 80 nmi), P-19 'Flat Face B' (UHF 830-875 MHz, 900 kW, 360 deg, 260 km, 1974)", "url": "https://en.wikipedia.org/wiki/AN/APG-66", "tier": "4", "notes": "Wikipedia. Read 11 Oct 2026; no power or PRF values are given for the APG-63/66, so those are estimates." },
     { "id": "nato_ew_refs", "title": "Encyclopaedic pages: AN/ALR-46 RWR (2-18 GHz; flown in Southeast Asia from January 1973), AN/ALQ-99 tactical jamming system (10 bands from 64 MHz to 20 GHz; band 8 4-7.8 GHz, band 9 7.8-11 GHz, band 10 11-20 GHz; three under-wing transmit pods and a tail receive pod; maximum output 10.8 kW older, 6.8 kW newer; AN/ALQ-99A 1972; EA-6B, EF-111A)", "url": "https://en.wikipedia.org/wiki/AN/ALQ-99", "tier": "4", "notes": "Wikipedia. Read 11 Oct 2026." },
+    { "id": "fm100_2_3", "title": "US Army FM 100-2-3, The Soviet Army: Troops, Organization and Equipment, 6 June 1991 (distribution unlimited): SA-8 description p. 5-132, SAM-associated radar table p. 5-138", "tier": "1 (for what NATO believed)", "notes": "Local copy reference/sources/fm100-2-3(91).pdf (not in git). A statement of what the US Army believed, with 'probably' on the SA-8's bands; not evidence of the Soviet radars' real parameters. Never used for Osa values." },
     { "id": "ew_textbooks", "title": "D. Adamy, EW 101 and EW 102 (Artech); R. Wiley, ELINT (Artech); D. Schleher, Electronic Warfare in the Information Age: class values for receiver sensitivity, bearing accuracy, ERP and PRF ranges", "tier": "textbook", "notes": "Used only for labelled estimates of a system class." }
   ],
 
@@ -115,13 +116,36 @@
   ],
 
   "threat_libraries": [
-    { "id": "blue_rwr_nato_view", "name": "What NATO RWRs believed about Soviet emitters", "owner": "blue",
-      "notes": "Bands from Western references. Wider than the truth on purpose. PRF and pulse width are not constrained: not public.",
+    { "id": "blue_rwr_nato_view", "name": "What NATO RWRs believed about Soviet emitters (US Army FM 100-2-3, 1991)", "owner": "blue",
+      "notes": "From the US Army's own handbook of Soviet equipment: radar names, the old NATO/ECM letter bands and the ranges FM 100-2-3 gives (p. 5-138). The manual gives letters, not GHz; they are read here with the contemporary scheme (C 0.5-1, E 2-3, G 4-6, H 6-8, I 8-10, J 10-20 GHz; A below 0.25), which is the reader's conversion, not the manual's, so every window is low confidence. It is what NATO believed in 1991, not proof of what the Soviet radars did (the manual says 'probably' for the SA-8's bands): wider than the truth on purpose. PRF and pulse width are not given: not constrained. Do not treat these figures as gospel.",
       "entries": [
-        { "id": "sa8_land_roll_search", "name": "SA-8 search (Land Roll)", "kind": "search", "owner": "red", "platform": "ground",
-          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "western_bands", "confidence": "low" },
-        { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll)", "kind": "track", "owner": "red", "platform": "ground",
-          "freq_min_hz": 14.0e9, "freq_max_hz": 15.0e9, "source": "western_bands", "confidence": "low" }
+        { "id": "sa8_land_roll_search", "name": "SA-8 search (Land Roll, H band)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-132 ('probably operates in the H band', ~30 km), p. 5-138 (H acquisition)", "confidence": "low" },
+        { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll, J band)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 10.0e9, "freq_max_hz": 20.0e9, "source": "fm100_2_3 p. 5-132 ('probably ... J band', 20-25 km), p. 5-138 (J tracking)", "confidence": "low" },
+        { "id": "sa8_command_guidance", "name": "SA-8 command-guidance radars (two, I band, different frequencies)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 8.0e9, "freq_max_hz": 10.0e9, "source": "fm100_2_3 p. 5-132 ('two I-band guidance radars ... each one responding to a different frequency to frustrate ECM')", "confidence": "low",
+          "notes": "The Polish manual (mon_2112_80 p67) confirms two command-link frequencies per vehicle chosen from a grid." },
+        { "id": "sa6_straight_flush_acq", "name": "SA-6 Straight Flush, acquisition (G/H)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 4.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "sa6_straight_flush_track", "name": "SA-6 Straight Flush, tracking (I)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 8.0e9, "freq_max_hz": 10.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "sa4_pat_hand", "name": "SA-4 Pat Hand fire control (H)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "sa3_low_blow", "name": "SA-3 Low Blow fire control (I)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 8.0e9, "freq_max_hz": 10.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "sa2_fan_song_ef", "name": "SA-2 Fan Song A/B (E/F)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 2.0e9, "freq_max_hz": 4.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "sa2_fan_song_g", "name": "SA-2 Fan Song C/D/E (G)", "kind": "track", "owner": "red", "platform": "ground",
+          "freq_min_hz": 4.0e9, "freq_max_hz": 6.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "flat_face_p15", "name": "Flat Face / Squat Eye (P-15, P-15M, P-19), UHF-C", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 0.5e9, "freq_max_hz": 1.0e9, "source": "fm100_2_3 p. 5-138 (C, 'UHF', 250 km); nato_radar_refs (P-19 Flat Face B 830-875 MHz)", "confidence": "low" },
+        { "id": "long_track_p40", "name": "Long Track (P-40) early warning (E)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 2.0e9, "freq_max_hz": 3.0e9, "source": "fm100_2_3 p. 5-138 (E; 'in excess of 150 km, 30,000 m altitude')", "confidence": "low" },
+        { "id": "thin_skin_height_finder", "name": "Thin Skin A/B height finder (H)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-138", "confidence": "low" },
+        { "id": "spoon_rest_p12", "name": "Spoon Rest (P-12) VHF early warning (A band and below)", "kind": "search", "owner": "red", "platform": "ground",
+          "freq_min_hz": 0.05e9, "freq_max_hz": 0.25e9, "source": "fm100_2_3 p. 5-138 (A (VHF); 'VHF below A band')", "confidence": "low" }
       ] },
     { "id": "red_esm_nato_view", "name": "What the Warsaw Pact side believed about NATO emitters", "owner": "red",
       "notes": "Bands from the NATO equipment's public descriptions. A Czechoslovak 1985 analysis expected every newly switched-on source to be located within seconds (vr_1985_plss); this is the library such a station would match against.",

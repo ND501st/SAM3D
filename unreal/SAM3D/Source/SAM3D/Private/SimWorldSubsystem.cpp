@@ -344,6 +344,72 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	return true;
 }
 
+bool USimWorldSubsystem::RequestC2Source(const FString& SourceId, const FString& Why)
+{
+	simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner == nullptr)
+	{
+		return false;
+	}
+	return ActiveRunner->RequestC2Source(std::string(TCHAR_TO_UTF8(*SourceId)), "Player", std::string(TCHAR_TO_UTF8(*Why)));
+}
+
+bool USimWorldSubsystem::TuneC2Radio(int32 Set, int32 Preset)
+{
+	simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	return ActiveRunner != nullptr && ActiveRunner->TuneC2Radio(Set, Preset, "Player");
+}
+
+bool USimWorldSubsystem::ListenToC2Radio(int32 Set)
+{
+	simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	return ActiveRunner != nullptr && ActiveRunner->ListenToC2Radio(Set, "Player");
+}
+
+int32 USimWorldSubsystem::GetC2RadioPreset(int32 Set) const
+{
+	const simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner == nullptr || ActiveRunner->C2() == nullptr || Set < 0 || Set > 1)
+	{
+		return 0;
+	}
+	return ActiveRunner->C2()->Radios()[static_cast<size_t>(Set)].preset;
+}
+
+FString USimWorldSubsystem::GetC2PresetSource(int32 Preset) const
+{
+	const simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner == nullptr || ActiveRunner->C2() == nullptr)
+	{
+		return FString();
+	}
+	return FString(UTF8_TO_TCHAR(ActiveRunner->C2()->PresetSource(Preset).c_str()));
+}
+
+FString USimWorldSubsystem::GetActiveC2Source() const
+{
+	const simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner == nullptr || ActiveRunner->C2() == nullptr)
+	{
+		return FString();
+	}
+	return FString(UTF8_TO_TCHAR(ActiveRunner->C2()->ActiveId().c_str()));
+}
+
+TArray<FString> USimWorldSubsystem::GetC2SourceIds() const
+{
+	TArray<FString> Ids;
+	const simcore::ScenarioRunner* ActiveRunner = GetScenarioRunner();
+	if (ActiveRunner != nullptr && ActiveRunner->C2() != nullptr)
+	{
+		for (size_t i = 0; i < ActiveRunner->C2()->Size(); ++i)
+		{
+			Ids.Add(FString(UTF8_TO_TCHAR(ActiveRunner->C2()->Def(i).id.c_str())));
+		}
+	}
+	return Ids;
+}
+
 bool USimWorldSubsystem::LoadCabin(const FString& CabinFile, FString& OutError)
 {
 	if (!Runner)
@@ -569,14 +635,8 @@ bool USimWorldSubsystem::OrderCrew(const FString& CrewName, const FString& Proce
 		UE_LOG(LogSAM3D, Warning, TEXT("OrderCrew: unknown crew '%s' or procedure '%s'"), *CrewName, *ProcedureId);
 		return false;
 	}
-	if (bQueue)
-	{
-		Crew->Queue(*Proc);
-	}
-	else
-	{
-		Crew->Order(*Proc);
-	}
+	// Through the runner, so the R-124 intercom decides whether the order arrives at once or is shouted.
+	Runner->GiveOrder(*Crew, *Proc, bQueue);
 	return true;
 }
 

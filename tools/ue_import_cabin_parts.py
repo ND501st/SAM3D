@@ -5,6 +5,7 @@ mesh under /Game/SAM3D/Cabin/Parts and saves them. The cabin (SimCabinComponent)
 engine basic shapes for any that are missing.
 
     python tools/ue_import_cabin_parts.py
+    python tools/ue_import_cabin_parts.py SM_KnobBar      # only the parts named
 """
 import glob
 import os
@@ -36,6 +37,8 @@ for t in tasks:
 
 def main():
     files = sorted(glob.glob(os.path.join(REPO, 'art', 'cabin_parts', 'SM_*.fbx')))
+    if sys.argv[1:]:
+        files = [f for f in files if os.path.splitext(os.path.basename(f))[0] in sys.argv[1:]]
     if not files:
         sys.exit('no parts: run tools/blender/build_cabin_parts.py first')
     with Editor() as ue:

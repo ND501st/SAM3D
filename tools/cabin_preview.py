@@ -67,9 +67,9 @@ def draw_panel(cab, controls, panel_id, k):
         hw, hh = sw * 1000 * k / 2, sh * 1000 * k / 2
         if kind == 'lamp' and abs(sw - sh) > 1e-6:
             d.rectangle([c[0] - hw, c[1] - hh, c[0] + hw, c[1] + hh], fill=col, outline=INK)
-        elif kind in ('knob', 'pointer_knob', 'socket', 'jack', 'lamp', 'trim', 'latch'):
+        elif kind in ('knob', 'pointer_knob', 'bar_knob', 'socket', 'jack', 'lamp', 'trim', 'latch'):
             circle(c, sw, col)
-            if kind == 'pointer_knob':
+            if kind in ('pointer_knob', 'bar_knob'):
                 d.line([c, (c[0], c[1] - hw)], fill=(240, 240, 240), width=max(1, round(k)))
             if kind == 'trim':
                 d.line([(c[0] - hw * 0.7, c[1]), (c[0] + hw * 0.7, c[1])], fill=INK, width=max(1, round(k)))

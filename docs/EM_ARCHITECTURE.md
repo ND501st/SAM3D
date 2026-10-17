@@ -447,38 +447,48 @@ Co-operative crews share one node.
   others (ePap, `samsim_thread`). The data is loaded; drawing it is up to the display.
 
 
-## 25. Review of the E2 integration against this architecture (11 October 2026)
+## 25. Review of the E2 integration, and what was done about it (October 2026)
 
-`simcore/em_link.hpp` (`EmSensorLink`) and its use in `engagement.hpp` were read against sections 1–14. It keeps the
-layering where it matters and the numbers are honest (the 22-of-40 capture rule and the 50 m gap are documented and
-pinned by tests). Findings, most important first:
+`simcore/em_link.hpp` (`EmSensorLink`) and its use in `engagement.hpp` were read against sections 1-14 on 11 October
+2026. The wiring kept the layering where it matters and the numbers are honest. Findings and their fixes:
 
-1. **Truth reaches the crew through `debug_truth_platform`.** Principle 2 says trackers, fusion, AI and displays
-   must not read the `debug_truth_*` fields; `EmSensorLink::TargetOf` does, to turn a sensor track into the
-   scenario's target id (needed to resolve a launch). Consequences: a track that no truth platform produced (chaff,
-   a repeater's false echo, a ghost) has no id and is silently dropped from the crew's picture and cannot be locked;
-   two close targets that the tracker merges show as one id; and the scope can never be fooled. That is acceptable
-   for E2 (no deception yet) but blocks E7. **Fix when deception arrives:** show every confirmed track by its own
-   track number; let the launch resolver (referee side, not the sensor path) pick the nearest truth target to the
-   locked track at launch time.
-2. **Antenna height differs from the calibration height.** The scenario puts the unit at `up_m: 3`; the radars were
-   calibrated with the antenna at 5 m (search) and 4.5 m (tracking) over flat ground, and multipath lobing depends on
-   the height. Low-altitude ranges are therefore a little off the calibrated check. **Fix:** take the platform's
-   antenna height from the radar definition (`antenna_height_m`) or put the scenario's `up_m` at the same value.
-3. **Capture constants are code, not data.** `kCaptureLooks`/`kCaptureHits` (22 of 40) are `static constexpr` in the
-   link; game-balance numbers belong in `data/gameplay/` like the other thresholds. **Fix:** move them into the
-   tuning file with the reasoning that is currently in the header comment.
-4. **Chaff and jammers are not connected.** The link's `EmWorld` has one platform for the unit and the targets; no
-   jammer, chaff, ESM, node or net exists in it. That matches E2's scope; E4/E6/E7 add them (the scenario file will
-   need `jammers`, `chaff` and node blocks).
-5. **No knowledge layer for the unit.** The picture the crew sees comes straight from the radar tracker, not from a
-   node's `KnowledgeBase`. Fine now; when the PU-12 (phase 7) feeds designations, the vehicle should become a
-   `NodeState` so network tracks and its own radar tracks fuse (E4).
-6. **The `Contact::beam` map and the look record are state outside the EM scene** (`beam_of_`, `look_record_`): they
-   are rebuilt per run and deterministic, so replays are unaffected, but they do not appear in the overlays.
-7. **Doc correction found on the way:** E0 claimed the tracking radar's published 14 km at 50 m was reproduced at
-   Pd 0.8; the E2 work showed that came from one deep multipath null in the flat-ground check path. The spec, research
-   report, explainer and a test comment were corrected on this branch.
+1. **Truth reached the crew through `debug_truth_platform`** (the link turned a sensor track into the scenario's target
+   id with it). *Fixed.* The link no longer reads the debug fields. A confirmed track becomes a contact labelled with
+   the scenario target it lines up with in angle (`ResolveTarget`, a referee-side association with gates of 2.5 deg in
+   azimuth, 10 deg in elevation and, for the search radar, 1.5 km in range; each target is claimed by one track); a
+   track that lines up with no target (chaff, a false echo) is a **ghost** contact `T<n>` (`Contact::ghost`) that
+   reaches the scope, the crew's aiming and the debrief. The tracking radar's lock resolves by angle only (a range-gate
+   pull-off must not make a lock look like a ghost); a lock on a ghost is not a capture. Not done: the range
+   indicator's echoes (`EchoVisible`) are still computed per truth target, so chaff does not show there yet.
+2. **Antenna height.** *Fixed.* The platform's antenna stands at the search radar definition's `antenna_height_m`
+   above the ground (`EmSensorLink::Antenna`), the height the radar was calibrated at, whatever the hull's `up_m`.
+   Contact geometry and the tracking designation use the same point. (The tracking radar is calibrated at 4.5 m, the
+   search radar at 5 m; the platform uses 5 m.)
+3. **Capture constants.** *Fixed.* `em_capture_looks` / `em_capture_hits` are in `data/gameplay/osa_ak.json` (`track`),
+   loaded into `EngagementTuning`, validated, and given to the link every step; the reasoning is in that file's notes.
+4. **Jammers and chaff.** *Fixed.* A scenario's `own_unit.em` takes `extra_libraries` (e.g. `em/nato_1985.json`),
+   `jammers` (on a scenario target, self-screening, or at a stand-off point, aimed at the unit, with on/off times),
+   `chaff` (a cloud dropped at a target's position at a time) and `wind_mps`. The radar equation does the rest:
+   noise J/N (a stand-off band-8 jammer cut first contact from 38 km to 10 km in the test), chaff in the cell and as
+   false plots (the MTI notch passes it only if it drifts faster than 15 m/s). `data/scenarios/osa_practice_em_ew.json`
+   shows both. Not done: ESM, nets and a jamming response by the crew.
+5. **The unit as a node.** *Fixed.* The unit is an `em::NodeState` with both radars cabled to it, so its tracks are
+   knowledge (`EmSensorLink::Knowledge`, `UnitPicture`), and `ReceiveReport` lets another node's report fuse with them
+   (covariance intersection; tested). The crew's scope still reads the radar tracker directly (hold times and
+   per-revolution refresh are pinned by tests); moving it onto the fused picture belongs with E4.
 
-Nothing found contradicts determinism (one seed through `EmWorld`), the update rates (0.1 s ticks inside the scenario
-step) or the data rules.
+Also done with it (the E2 remainder): **IFF replies** now come from the EM layer. The interrogator is the search
+radar's (`SetInterrogating`); an own-side platform with a working transponder in the beam replies with probability
+0.9 per detection; the reply tags the track (`Contact::iff`, held 2.5 s) and the engagement model's reply list and
+debrief use it. A target that is not a friendly transponder never replies.
+
+Still not electromagnetic in the Osa link: the TV channel, missiles and the command link (E5), the crew's response to
+jamming (E6), codes and modes.
+
+Two smaller observations that needed no change: `beam_of_track_` and the capture look record live in the link rather
+than in the EM scene (rebuilt per run, deterministic, but not in the overlays); and nothing contradicts determinism,
+the update rates or the data rules.
+
+## 26. Command sources (E4, started 11 October 2026)
+
+The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C2Network`) holds selectable sources, each with its own plotting board: the PU-12 (main, from `command_post`), and library types (EWR voice net, division early-warning net, neighbouring battery, observation post, data link; `data/command/c2_sources.json`). Sources share voice nets (one message at a time), go down (outages, `c2_fail`, link range, a `C2LinkModel`), and the crew listens to one at a time: `RequestSource` (player/UI/trigger) or the NPC commander's fallback on silence (2.5 / 5 periods, as the EM C2 status) and return to the main source. The EM link budget is now the `C2LinkModel` for sources with a position (`EmSensorLink::AddRadioSource`). Voice designations as EM messages are still to do. Evidence: `docs/research/EM_C2_SOURCES_2026-10.md`.

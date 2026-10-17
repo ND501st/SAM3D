@@ -171,9 +171,9 @@
       "notes": "What the blue side believed: band letters from Western sources. Wider than the truth on purpose; PRF and pulse width are unknown to us, so not constrained.",
       "entries": [
         { "id": "sa8_land_roll_search", "name": "SA-8 search (Land Roll)", "kind": "search", "owner": "red", "platform": "ground",
-          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "western_bands", "confidence": "low" },
+          "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-132 (H band); western_bands", "confidence": "low" },
         { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll)", "kind": "track", "owner": "red", "platform": "ground",
-          "freq_min_hz": 14.0e9, "freq_max_hz": 15.0e9, "source": "western_bands", "confidence": "low" }
+          "freq_min_hz": 10.0e9, "freq_max_hz": 20.0e9, "source": "fm100_2_3 p. 5-132 (J band); western_bands (14.5 GHz)", "confidence": "low" }
       ] }
   ]
 }

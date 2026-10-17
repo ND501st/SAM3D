@@ -10,6 +10,7 @@
 // (inputs, procedures, subsystems, controls) is checked when the scenario loads.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <sstream>
@@ -17,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/c2_sources.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
@@ -53,13 +55,14 @@ struct ScenarioTarget {
 };
 
 struct TriggerAction {
-    enum class Kind { SetInput, Order, Queue, End };
+    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore };
     Kind kind = Kind::SetInput;
     std::string input;      // SetInput
     bool value = true;      // SetInput
     std::string crew;       // Order, Queue
     std::string procedure;  // Order, Queue
-    std::string reason;     // End
+    std::string reason;     // End, C2Fail
+    std::string c2_id;      // C2Source (a source id or "none"), C2Fail, C2Restore
 };
 
 struct ScenarioTrigger {
@@ -106,6 +109,10 @@ struct ScenarioDef {
     std::vector<ScenarioTrigger> triggers;
     std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
     PlottingBoardDef board;
+    // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
+    // scenario's "c2" block. Empty: no command network.
+    C2Policy c2_policy;
+    std::vector<C2SourceDef> c2_sources;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
 };
@@ -133,7 +140,7 @@ public:
 
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "command_post", "own_unit", "crew", "targets", "triggers", "end"})) {
+                             "terrain", "command_post", "c2", "own_unit", "crew", "targets", "triggers", "end"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -153,6 +160,7 @@ public:
                 return Fail("command_post", error);
             }
         }
+        if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadCrew(root, out, console)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
@@ -266,13 +274,67 @@ private:
         if (const json::Value* em = u->Find("em")) {
             if (out.tuning_file.empty()) return Fail("own_unit.em", "needs own_unit.tuning: the EM layer replaces its sensors");
             std::string library, search, track;
-            if (!em->Is(json::Type::Object) || !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "notes"}) ||
+            if (!em->Is(json::Type::Object) ||
+                !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps",
+                                           "jammers", "chaff", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
                 !RequireString(*em, "own_unit.em", "track_radar", track)) {
                 return message_.empty() ? Fail("own_unit.em", "expected an object") : false;
             }
-            if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error)) return Fail("own_unit.em", error);
+            std::vector<std::string> extras;
+            if (const json::Value* ex = OptionalArray(*em, "own_unit.em", "extra_libraries")) {
+                for (std::size_t i = 0; i < ex->items.size(); ++i) {
+                    if (!ex->items[i].Is(json::Type::String)) return Fail(Index("own_unit.em.extra_libraries", i), "expected a file name");
+                    extras.push_back(ex->items[i].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error, extras)) return Fail("own_unit.em", error);
+            if (const json::Value* w = em->Find("wind_mps")) {
+                if (!Keys(*w, "own_unit.em.wind_mps", {"east", "north", "notes"}) ||
+                    !OptionalNumber(*w, "own_unit.em.wind_mps", "east", out.em.wind_mps.x) ||
+                    !OptionalNumber(*w, "own_unit.em.wind_mps", "north", out.em.wind_mps.y)) {
+                    return false;
+                }
+            }
+            if (const json::Value* jm = OptionalArray(*em, "own_unit.em", "jammers")) {
+                for (std::size_t i = 0; i < jm->items.size(); ++i) {
+                    const std::string jp = Index("own_unit.em.jammers", i);
+                    const json::Value& j = jm->items[i];
+                    if (!Keys(j, jp, {"jammer", "target", "position", "on_at_s", "off_at_s", "notes"})) return false;
+                    EmJammerDef jd;
+                    if (!RequireString(j, jp, "jammer", jd.jammer_id) || !OptionalString(j, jp, "target", jd.target_id) ||
+                        !OptionalNumber(j, jp, "on_at_s", jd.on_at_s) || !OptionalNumber(j, jp, "off_at_s", jd.off_at_s)) {
+                        return false;
+                    }
+                    if (out.em.library.Jammer(jd.jammer_id) < 0) return Fail(Join(jp, "jammer"), "unknown jammer '" + jd.jammer_id + "' (add its file to extra_libraries)");
+                    const json::Value* jpos = j.Find("position");
+                    if (jd.target_id.empty() == (jpos == nullptr)) return Fail(jp, "give either a target (self-screening) or a position (stand-off)");
+                    if (jpos != nullptr && !LoadPosition(*jpos, Join(jp, "position"), frame_, jd.position)) return false;
+                    out.em.jammers.push_back(jd);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (const json::Value* ch = OptionalArray(*em, "own_unit.em", "chaff")) {
+                for (std::size_t i = 0; i < ch->items.size(); ++i) {
+                    const std::string cp = Index("own_unit.em.chaff", i);
+                    const json::Value& c = ch->items[i];
+                    if (!Keys(c, cp, {"target", "at_s", "rcs_m2", "lifetime_s", "notes"})) return false;
+                    EmChaffDef cd;
+                    if (!RequireString(c, cp, "target", cd.target_id) || !RequireNumber(c, cp, "at_s", cd.at_s) ||
+                        !OptionalNumber(c, cp, "rcs_m2", cd.rcs_m2) || !OptionalNumber(c, cp, "lifetime_s", cd.lifetime_s)) {
+                        return false;
+                    }
+                    if (cd.rcs_m2 <= 0.0) return Fail(Join(cp, "rcs_m2"), "must be > 0");
+                    if (cd.lifetime_s <= 0.0) return Fail(Join(cp, "lifetime_s"), "must be > 0");
+                    out.em.chaff.push_back(cd);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
             out.has_em = true;
         }
         const json::Value* pos = nullptr;
@@ -381,10 +443,25 @@ private:
 
     bool LoadAction(const json::Value& a, const std::string& p, const ScenarioDef& def, const ConsoleData& console,
                     TriggerAction& out) {
-        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end"})) return false;
+        if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason"})) {
+            return false;
+        }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
-                          (a.Find("end") != nullptr);
-        if (kinds != 1) return Fail(p, "needs exactly one of set_input, order, queue or end");
+                          (a.Find("end") != nullptr) + (a.Find("c2_source") != nullptr) + (a.Find("c2_fail") != nullptr) +
+                          (a.Find("c2_restore") != nullptr);
+        if (kinds != 1) return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail or c2_restore");
+        for (const char* key : {"c2_source", "c2_fail", "c2_restore"}) {
+            if (a.Find(key) == nullptr) continue;
+            out.kind = key[3] == 's' ? TriggerAction::Kind::C2Source
+                       : key[3] == 'f' ? TriggerAction::Kind::C2Fail
+                                       : TriggerAction::Kind::C2Restore;
+            if (!RequireString(a, p, key, out.c2_id) || !OptionalString(a, p, "reason", out.reason)) return false;
+            if (def.c2_sources.empty()) return Fail(Join(p, key), "the scenario has no command network (command_post or c2)");
+            bool found = out.c2_id == "none" && out.kind == TriggerAction::Kind::C2Source;
+            for (const C2SourceDef& d : def.c2_sources) found = found || d.id == out.c2_id;
+            if (!found) return Fail(Join(p, key), "unknown source '" + out.c2_id + "'");
+            return true;
+        }
         if (a.Find("set_input") != nullptr) {
             out.kind = TriggerAction::Kind::SetInput;
             if (!RequireString(a, p, "set_input", out.input) || !OptionalBool(a, p, "value", out.value)) return false;
@@ -413,6 +490,223 @@ private:
             return true;
         }
         return Fail(Join(p, "crew"), "unknown crew member '" + out.crew + "'");
+    }
+
+    // The command network: the PU-12 (when there is a command post) and the other sources the crew can switch to.
+    //   "c2": { "library": "command/c2_sources.json", "primary": "pu12", "active": "pu12", "auto_fallback": true,
+    //           "fallback_order": ["ewr_north"], "presets": ["pu12","ewr_north"], "select_s": 3, "retune_s": 30, "primary_stable_s": 60, "heard_life_s": 180,
+    //           "sources": [ { "id": "ewr_north", "type": "ewr_voice", "position": {...}, "net": "battery_net",
+    //                          "link_range_m": 30000, "outages": [ { "from_s": 300, "to_s": 420, "reason": "jammed" } ] },
+    //                        { "id": "pu12", "outages": [...] } ] }
+    bool LoadC2(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        if (!out.command_post_file.empty()) {
+            C2SourceDef pu;
+            pu.id = "pu12";
+            pu.display_name = out.board.display_name.empty() ? std::string("PU-12M") : out.board.display_name;
+            pu.short_name = "PU-12";
+            pu.kind = C2Kind::BatteryPost;
+            pu.medium = "voice";
+            pu.sense = C2Sense::Relayed;
+            pu.board = out.board;
+            out.c2_sources.push_back(pu);
+        }
+        const json::Value* c = root.Find("c2");
+        if (c == nullptr) return true;
+        if (!c->Is(json::Type::Object) ||
+            !Keys(*c, "c2", {"library", "primary", "active", "auto_fallback", "fallback_order", "presets", "select_s", "retune_s", "primary_stable_s",
+                             "heard_life_s", "sources", "regiment", "notes"})) {
+            return message_.empty() ? Fail("c2", "expected an object") : false;
+        }
+        out.c2_policy.heard_life_s = 180.0;  // with a network the crew forgets stale designations
+        std::string library_file;
+        if (!OptionalString(*c, "c2", "library", library_file) || !OptionalString(*c, "c2", "primary", out.c2_policy.primary) ||
+            !OptionalString(*c, "c2", "active", out.c2_policy.active) ||
+            !OptionalBool(*c, "c2", "auto_fallback", out.c2_policy.auto_fallback) ||
+            !OptionalNumber(*c, "c2", "select_s", out.c2_policy.select_s) ||
+            !OptionalNumber(*c, "c2", "retune_s", out.c2_policy.retune_s) ||
+            !OptionalNumber(*c, "c2", "primary_stable_s", out.c2_policy.primary_stable_s) ||
+            !OptionalNumber(*c, "c2", "heard_life_s", out.c2_policy.heard_life_s)) {
+            return false;
+        }
+        if (out.c2_policy.select_s < 0.0) return Fail("c2.select_s", "must be >= 0");
+        if (out.c2_policy.retune_s < 0.0) return Fail("c2.retune_s", "must be >= 0");
+        if (out.c2_policy.primary_stable_s < 0.0) return Fail("c2.primary_stable_s", "must be >= 0");
+        if (out.c2_policy.heard_life_s < 0.0) return Fail("c2.heard_life_s", "must be >= 0");
+        C2Library lib;
+        if (!library_file.empty()) {
+            std::string error;
+            if (!LoadC2LibraryFile(data_dir + "/" + library_file, lib, &error)) return Fail("c2.library", error);
+        }
+        if (const json::Value* order = OptionalArray(*c, "c2", "fallback_order")) {
+            for (std::size_t i = 0; i < order->items.size(); ++i) {
+                if (!order->items[i].Is(json::Type::String)) return Fail(Index("c2.fallback_order", i), "expected a source id");
+                out.c2_policy.fallback_order.push_back(order->items[i].string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* pr = OptionalArray(*c, "c2", "presets")) {
+            if (pr->items.size() > 4) return Fail("c2.presets", "the R-123M has four presets");
+            for (std::size_t i = 0; i < pr->items.size(); ++i) {
+                if (!pr->items[i].Is(json::Type::String)) return Fail(Index("c2.presets", i), "expected a source id");
+                out.c2_policy.presets.push_back(pr->items[i].string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* list = OptionalArray(*c, "c2", "sources")) {
+            for (std::size_t i = 0; i < list->items.size(); ++i) {
+                const std::string p = Index("c2.sources", i);
+                const json::Value& e = list->items[i];
+                std::string id;
+                std::string type;
+                if (!Keys(e, p, {"id", "type", "name", "position", "net", "radio", "frequency_mhz", "link_range_m", "outages", "notes"}) ||
+                    !RequireString(e, p, "id", id) || !OptionalString(e, p, "type", type)) {
+                    return false;
+                }
+                C2SourceDef* def = nullptr;
+                for (C2SourceDef& d : out.c2_sources) {
+                    if (d.id == id) def = &d;
+                }
+                if (type.empty()) {
+                    if (def == nullptr || id != "pu12") {
+                        return Fail(Join(p, "type"), "a source other than the PU-12 needs a library \"type\" (and \"c2.library\")");
+                    }
+                } else {
+                    if (def != nullptr) return Fail(Join(p, "id"), "duplicate source '" + id + "'");
+                    const C2SourceDef* t = lib.Find(type);
+                    if (t == nullptr) return Fail(Join(p, "type"), "unknown source type '" + type + "' (c2.library names the file)");
+                    out.c2_sources.push_back(*t);
+                    def = &out.c2_sources.back();
+                    def->id = id;
+                    def->type = type;
+                    def->board.id = id;
+                }
+                std::string name;
+                if (!OptionalString(e, p, "name", name) || !OptionalString(e, p, "net", def->net) || !OptionalString(e, p, "radio", def->radio) ||
+                    !OptionalNumber(e, p, "link_range_m", def->link_range_m)) {
+                    return false;
+                }
+                if (!name.empty()) def->display_name = name;
+                if (def->link_range_m < 0.0) return Fail(Join(p, "link_range_m"), "must be >= 0");
+                double mhz = 0.0;
+                if (!OptionalNumber(e, p, "frequency_mhz", mhz)) return false;
+                if (e.Find("frequency_mhz") != nullptr) {
+                    // the R-123M covers 20.00 to 51.50 MHz in 25 kHz steps (r123_refs)
+                    const double steps = (mhz - 20.0) / 0.025;
+                    if (mhz < 20.0 || mhz > 51.5 || std::fabs(steps - std::round(steps)) > 1e-6) {
+                        return Fail(Join(p, "frequency_mhz"), "an R-123M frequency: 20.000 to 51.500 MHz in 25 kHz steps");
+                    }
+                    def->frequency_hz = mhz * 1e6;
+                }
+                if (const json::Value* pos = e.Find("position")) {
+                    if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(p, "position"), frame_, def->position)) {
+                        return message_.empty() ? Fail(Join(p, "position"), "expected an object") : false;
+                    }
+                    def->has_position = true;
+                }
+                if (def->sense != C2Sense::Relayed && !def->has_position) {
+                    return Fail(Join(p, "position"), "a radar or observation source needs the place of its site");
+                }
+                if (const json::Value* outs = OptionalArray(e, p, "outages")) {
+                    for (std::size_t j = 0; j < outs->items.size(); ++j) {
+                        const std::string op = Index(Join(p, "outages"), j);
+                        C2Outage o;
+                        if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
+                            !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason)) {
+                            return false;
+                        }
+                        if (o.to_s <= o.from_s) return Fail(Join(op, "to_s"), "must be after from_s");
+                        def->outages.push_back(o);
+                    }
+                } else if (!message_.empty()) {
+                    return false;
+                }
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (!LoadRegiment(*c, data_dir, out)) return false;
+        if (const json::Value* presets = OptionalArray(*c, "c2", "presets")) {
+            if (presets->items.size() > 4) return Fail("c2.presets", "the R-123M has four presets");
+            for (std::size_t i = 0; i < presets->items.size(); ++i) {
+                if (!presets->items[i].Is(json::Type::String)) return Fail(Index("c2.presets", i), "expected a source id or \"\"");
+                out.c2_policy.presets.push_back(presets->items[i].string);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (out.c2_sources.empty()) return Fail("c2", "needs sources (or a command_post for the PU-12)");
+        auto known = [&](const std::string& id) {
+            for (const C2SourceDef& d : out.c2_sources) {
+                if (d.id == id) return true;
+            }
+            return false;
+        };
+        if (!known(out.c2_policy.primary)) {
+            if (out.c2_policy.primary != "pu12") return Fail("c2.primary", "unknown source '" + out.c2_policy.primary + "'");
+            out.c2_policy.primary = out.c2_sources.front().id;  // no PU-12: the first source is the main one
+        }
+        if (!out.c2_policy.active.empty() && !known(out.c2_policy.active)) {
+            return Fail("c2.active", "unknown source '" + out.c2_policy.active + "'");
+        }
+        for (const std::string& id : out.c2_policy.fallback_order) {
+            if (!known(id)) return Fail("c2.fallback_order", "unknown source '" + id + "'");
+        }
+        for (const std::string& id : out.c2_policy.presets) {
+            if (!known(id)) return Fail("c2.presets", "unknown source '" + id + "'");
+        }
+        return true;
+    }
+
+    // The regiment's radars that feed the PU-12M: "regiment": { "library": "command/regiment_radars.json",
+    //   "radars": [ { "id": "p19_a", "type": "p19", "position": { "east_m": ..., "north_m": ... } } ] }.
+    // The PU-12's board then holds only the targets some radar covers; without the block it sees them all.
+    bool LoadRegiment(const json::Value& c2, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* r = c2.Find("regiment");
+        if (r == nullptr) return true;
+        const std::string rp = "c2.regiment";
+        if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"library", "radars", "notes"})) {
+            return message_.empty() ? Fail(rp, "expected an object") : false;
+        }
+        C2SourceDef* pu = nullptr;
+        for (C2SourceDef& d : out.c2_sources) {
+            if (d.id == "pu12") pu = &d;
+        }
+        if (pu == nullptr) return Fail(rp, "the regiment feeds the PU-12M: the scenario needs a command_post");
+        std::string library_file;
+        if (!RequireString(*r, rp, "library", library_file)) return false;
+        RegimentRadarLibrary lib;
+        std::string error;
+        if (!LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail(Join(rp, "library"), error);
+        const json::Value* list = OptionalArray(*r, rp, "radars");
+        if (list == nullptr || list->items.empty()) {
+            return message_.empty() ? Fail(Join(rp, "radars"), "needs at least one radar") : false;
+        }
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index(Join(rp, "radars"), i);
+            const json::Value& e = list->items[i];
+            std::string id;
+            std::string type;
+            if (!Keys(e, p, {"id", "type", "position", "notes"}) || !RequireString(e, p, "id", id) ||
+                !RequireString(e, p, "type", type)) {
+                return false;
+            }
+            const RegimentRadar* t = lib.Find(type);
+            if (t == nullptr) return Fail(Join(p, "type"), "unknown radar type '" + type + "'");
+            for (const RegimentRadar& other : pu->feed) {
+                if (other.id == id) return Fail(Join(p, "id"), "duplicate radar '" + id + "'");
+            }
+            RegimentRadar radar = *t;
+            radar.id = id;
+            radar.type = type;
+            const json::Value* pos = e.Find("position");
+            if (pos == nullptr || !pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(p, "position"), frame_, radar.position)) {
+                return message_.empty() ? Fail(Join(p, "position"), "required, an object") : false;
+            }
+            pu->feed.push_back(std::move(radar));
+        }
+        return true;
     }
 
     bool LoadTriggers(const json::Value& root, ScenarioDef& out, const ConsoleData& console) {

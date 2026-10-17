@@ -53,6 +53,8 @@ add_executable(simcore_tests
   tests/test_launcher.cpp
   tests/test_readiness.cpp
   tests/test_pu12.cpp
+  tests/test_c2_sources.cpp
+  tests/test_comms.cpp
   tests/test_fuel.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp

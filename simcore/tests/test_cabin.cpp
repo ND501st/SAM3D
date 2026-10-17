@@ -136,7 +136,12 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 12);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 16);
+    // The R-123M's and the R-124 boxes' faces are bare panels: the meshes carry their own fronts.
+    for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel"}) {
+        const CabinPanel* bare = layout.FindPanel(id);
+        SC_EXPECT(bare != nullptr && bare->bare);
+    }
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
@@ -434,6 +439,12 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
           "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": 0.06 } ])"), console, extra, &error));
     SC_EXPECT(extra.blocks.size() == 1 && extra.blocks[0].color == "black" && extra.fixtures.size() == 1 &&
               extra.fixtures[0].look.kind == CabinLookKind::Gauge);
+    // The R-123M's T-bar knob, the last look kind: the loader reads it by name.
+    CabinLayout bar;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "bar_knob", "size_m": 0.03 } ])"),
+                        console, bar, &error));
+    SC_EXPECT(bar.fixtures.size() == 1 && bar.fixtures[0].look.kind == CabinLookKind::BarKnob &&
+              std::string(ToString(CabinLookKind::BarKnob)) == "bar_knob");
     // A gauge's printed scale: compass or linear, for gauges only.
     CabinLayout scaled;
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.12],

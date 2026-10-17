@@ -60,6 +60,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
+#include "simcore/c2_sources.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/world.hpp"
@@ -111,6 +112,10 @@ struct EngagementTuning {
     double track_clutter_altitude_m = 0.0;  // below it the tracking radar needs СДЦ to hold a target (0 = never)
     double tv_max_range_m = 0.0;
     double max_angular_rate_deg_s = 0.0;
+    // With the EM layer: the auto-capture circuit takes the lock once the tracking radar has echoed on `hits` of its
+    // last `looks` looks (em_link.hpp).
+    int em_capture_looks = 40;
+    int em_capture_hits = 22;
     // Crew aiming: the crew role (console station) that turns each wheel.
     std::string aim_az_role;
     std::string aim_el_role;
@@ -260,7 +265,7 @@ public:
         }
         if (!Group(root, "track",
                    {"az_tolerance_deg", "range_gate_m", "lock_time_s", "min_altitude_m", "clutter_altitude_m",
-                    "tv_max_range_m", "max_angular_rate_deg_s"},
+                    "tv_max_range_m", "max_angular_rate_deg_s", "em_capture_looks", "em_capture_hits"},
                    g) ||
             !Num(*g, "track", "az_tolerance_deg", t.az_tolerance_deg, 0.01) ||
             !Num(*g, "track", "range_gate_m", t.range_gate_m, 1.0) ||
@@ -268,8 +273,14 @@ public:
             !Num(*g, "track", "min_altitude_m", t.track_min_altitude_m, 0.0) ||
             !OptionalNumber(*g, "track", "clutter_altitude_m", t.track_clutter_altitude_m) ||
             !Num(*g, "track", "tv_max_range_m", t.tv_max_range_m, 1.0) ||
-            !Num(*g, "track", "max_angular_rate_deg_s", t.max_angular_rate_deg_s, 0.1)) {
+            !Num(*g, "track", "max_angular_rate_deg_s", t.max_angular_rate_deg_s, 0.1) ||
+            !OptionalInt(*g, "track", "em_capture_looks", t.em_capture_looks) ||
+            !OptionalInt(*g, "track", "em_capture_hits", t.em_capture_hits)) {
             return false;
+        }
+        if (t.em_capture_looks < 1) return Fail("track.em_capture_looks", "must be >= 1");
+        if (t.em_capture_hits < 1 || t.em_capture_hits > t.em_capture_looks) {
+            return Fail("track.em_capture_hits", "must be from 1 to em_capture_looks");
         }
         if (!Group(root, "aim", {"azimuth_role", "elevation_role", "range_role", "az_rate_deg_s", "el_rate_deg_s",
                                  "range_rate_mps", "plotting_board_range_m"},
@@ -602,6 +613,9 @@ public:
     // Aim by the battery command post's designations when the radars are silent (null = by the truth, within
     // plotting_board_range_m): what the battery commander has told the crew by radio. The board must outlive the model.
     void SetPlottingBoard(const PlottingBoard* board) { board_ = board; }
+    // The battery's command network (c2_sources.hpp): the crew aims by what the source it listens to has told it. Takes
+    // the place of a plotting board. The network must outlive the model.
+    void SetAirPicture(const C2Network* c2) { c2_ = c2; }
     bool EmActive() const { return em_ != nullptr; }
 
     // The unit moved (driven by the player or an AI driver).
@@ -801,6 +815,7 @@ private:
     // Hand the EM layer this step's world: where the unit and the targets are, which radars radiate and whether the
     // search radar's MTI is selected; then let it run to now.
     void StepEm(double dt, World& world, const ConsoleData& console, const std::vector<EngagementTarget>& targets) {
+        em_->SetCaptureRule(tuning_.em_capture_looks, tuning_.em_capture_hits);
         em_->SetUnit(unit_);
         for (const EngagementTarget& tg : targets) {
             if (tg.world_id < 0) continue;
@@ -960,10 +975,10 @@ private:
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
         bool from_board = false;
         double board_true_az = 0.0;
-        if (!have && tv_search && board_ != nullptr) {  // radars silent: the board's last marks, a minute old at worst
+        if (!have && tv_search && (board_ != nullptr || c2_ != nullptr)) {  // radars silent: the last designations, a minute old at worst
             double best_r = tuning_.plotting_board_range_m;
-            for (const BoardMark& m : board_->Known(time_)) {
-                const PlottingBoard::Designation des = board_->DesignationFor(m, unit_);
+            for (const BoardMark& m : c2_ != nullptr ? c2_->Known(time_) : board_->Known(time_)) {
+                const PlottingBoard::Designation des = PlottingBoard::Designate(m, unit_);
                 if (des.range_m > best_r) continue;
                 best_r = des.range_m;
                 best = {des.range_m, Wrap180(des.azimuth_deg), des.elevation_deg};
@@ -1326,7 +1341,21 @@ private:
         }
         const bool active = ready && t < iff_until_s_ + 1e-9;
         if (!d.iff_interrogating_input.empty()) console.equipment.SetInput(d.iff_interrogating_input, active);
+        if (em_ != nullptr) em_->SetInterrogating(active);
         if (!active) return;
+        if (em_ != nullptr) {  // replies ride on the search radar's own tracks, from the transponder that answered
+            for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
+                if (!c.iff || c.range_m > d.iff_max_range_m) continue;
+                const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
+                iff_replies_.push_back({c.target_id, c.range_m, az, c.el_deg, iff_control_});
+                if (replied_.insert(c.target_id).second) {
+                    char detail[96];
+                    std::snprintf(detail, sizeof(detail), "IFF reply: friend, %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
+                    log.Record({t, DebriefEntry::Kind::Scenario, "IFF", c.target_id, detail});
+                }
+            }
+            return;
+        }
         const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
@@ -1468,6 +1497,7 @@ private:
     EngagementTuning tuning_;
     EmSensorLink* em_ = nullptr;  // not owned
     const PlottingBoard* board_ = nullptr;  // not owned
+    const C2Network* c2_ = nullptr;         // not owned; takes the board's place when set
     Vec3 unit_;
     std::map<std::string, Geometry> geo_;  // ordered by id: deterministic iteration
     std::vector<Contact> picture_;

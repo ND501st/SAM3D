@@ -201,8 +201,14 @@ frequency changes are data-only.
    does not have. I chose the capture rule that reproduces the fitted 5 km figure (a Pd of about 0.55); a Pd of 0.7
    would put it at 19 km (-17 %) and move the 50 m case by nothing. Closing the 50 m gap needs a rougher
    surface or another trials-site effect.
-4. **E1 data:** read FM 100-2-3 for the blue library; period NATO aircraft radars, RWRs and pods as
-   generic-but-plausible entries with sources.
+4. **E1 data (first pass done, 11 Oct 2026):** `data/em/nato_1985.json` (NATO fighter radar, RWR, ESM station and
+   ALQ-99-class jammer classes, and both sides' threat libraries; FM 100-2-3 read for 13 Soviet radars, low confidence;
+   `docs/research/EM_E1_NATO_DATA_2026-10.md`). Still to do: named period NATO aircraft radars/RWRs/pods when a source
+   gives distinct values, ZSU-23-4/SA-9/13 and Soviet radios from FM 100-2-3, ARM seeker data for E6.
+5. **E2 review fixes (done):** the review's findings 1-5 are fixed (`docs/EM_ARCHITECTURE.md` §25): no truth reads in
+   the link (ghost contacts for chaff and false echoes), antenna at the calibrated height, capture rule as data,
+   scripted jammers and chaff in scenarios, the unit as a node with knowledge; IFF replies now come from the EM layer.
+   Next EM code: E3 (Unreal scopes from EM output) or E4 (PU-12 node, voice designations as messages).
 
 ## 13. Open questions for the owner
 
@@ -217,3 +223,7 @@ frequency changes are data-only.
 ## 14. References
 
 The bibliography is `docs/research/EM_RESEARCH_2026-10.md` §14; source ids and tiers in `docs/SOURCES.md`.
+
+## 15. Command sources (E4)
+
+Done: `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, scenario `c2` block and triggers `c2_source`/`c2_fail`/`c2_restore`, `osa_practice_c2.json`, tests in `simcore/tests/test_c2_sources.cpp`. The PU-12 is source `pu12`, always main. Link model done (`EmSensorLink::AddRadioSource`, `EmC2LinkModel`; sources with a `position` and an `own_unit.em` block). VHF jamming tested; the PU-12 takes a `position` in the scenario's `c2.sources`. Unreal: `RequestC2Source` etc. on `USimWorldSubsystem` (unbuilt). Voice designations are now EM `Voice` messages for sources with a radio. Next: (done: move voice designations onto EM messages, four-vehicle battery net, an R-123M preset control and Unreal switching UI (`USimWorldSubsystem` -> `ScenarioRunner::RequestC2Source`). The commander only monitors the sources on the presets of the two R-123M sets (`c2.presets`, `select_s`, `retune_s`; `TuneSet`, `ListenToSet`); see `docs/research/EM_C2_SOURCES_2026-10.md`. Console controls `radio.left.preset`, `radio.right.preset`, `radio.headset` are synced to the network by `ScenarioRunner::SyncRadios`; cabin panels `radio_left_panel`, `radio_right_panel`.
