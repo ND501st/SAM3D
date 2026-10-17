@@ -159,6 +159,7 @@ public:
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
         CheckEmergencyLaunch();
+        UpdateTransmit();
         console_.panel.ReleaseMomentaries();
         for (CrewMember& c : crew_) {
             if (!SeatHolder(c.Role()).empty()) continue;  // a player sits there
@@ -234,6 +235,10 @@ public:
         return true;
     }
     const CompassSurvey& Compass() const { return compass_; }
+    // Transmissions the vehicle has made (roadmap 7.8): every report, carrier second and call tone that went out.
+    int Transmissions() const { return transmissions_; }
+    // Can the commander go on the air on his set now? `why` says what stops him.
+    bool CommanderCanTransmit(std::string* why = nullptr) const { return CanTransmitNow(why); }
     // The vehicle has been oriented at this halt (the gyro slaved to the crew chief's Qc since it last stopped).
     bool OrientedAtHalt() const { return halt_oriented_; }
 
@@ -793,14 +798,16 @@ private:
             const int loaded = launcher_->LoadedCount();
             if (last_loaded_ >= 0 && loaded > last_loaded_) battery_->Consume("", Battery::Service::Reload, loaded - last_loaded_, time_);
             last_loaded_ = loaded;
-            if (loaded == 0 && launcher_->ShotsFlying().empty()) battery_->RequestService("", Battery::Service::Reload, time_);
+            if (loaded == 0 && launcher_->ShotsFlying().empty() && RequestOnAir("the TZM")) {
+                battery_->RequestService("", Battery::Service::Reload, time_);
+            }
             if (loaded == launcher_->Capacity()) battery_->Done("", Battery::Service::Reload, time_);
         }
         if (fuel_) {
             const double level = fuel_->LevelL();
             if (last_fuel_l_ >= 0.0 && level > last_fuel_l_) battery_->Consume("", Battery::Service::Refuel, level - last_fuel_l_, time_);
             last_fuel_l_ = level;
-            if (fuel_->Requested()) battery_->RequestService("", Battery::Service::Refuel, time_);
+            if (fuel_->Requested() && RequestOnAir("the fuel truck")) battery_->RequestService("", Battery::Service::Refuel, time_);
             if (level >= fuel_->TankL() - 1e-6) battery_->Done("", Battery::Service::Refuel, time_);
         }
     }
@@ -956,6 +963,139 @@ private:
         } else if (was_running && !compass_.Running()) {
             Event("orientation", "the compass survey was broken off: the vehicle moved");
         }
+    }
+
+    // ---- Transmitting from the vehicle (roadmap 7.8). The commander talks on the set his headset is on, keyed by his chest
+    // switch (r123m_training: its tangent to ПРД transmits; ТОН. ВЫЗОВ sends a call tone while transmitting). Nothing goes
+    // out unless the set is on, warm and in СИМПЛЕКС and his A-1 is on Р-123. What does go out radiates on the net of the
+    // source on that set (the EM layer: the other side's ESM can hear it and find the vehicle).
+    int transmissions_ = 0;
+    double last_tx_s_ = -1e9;
+    bool chest_was_keyed_ = false;
+    double next_carrier_s_ = 0.0;
+    std::string tx_blocked_why_;
+    double tx_blocked_s_ = -1e9;
+    bool reported_ready_ = false;
+    std::map<std::string, std::string> request_blocked_;
+
+    int CommanderSet() const { return c2_ ? c2_->ListeningSet() : 1; }
+    bool CanTransmitNow(std::string* why = nullptr) const {
+        if (!comms_) return true;
+        return comms_->CanTransmit(CommanderSet(), console_, why);
+    }
+    void TransmitBlocked(const std::string& why) {
+        if (why == tx_blocked_why_ && time_ - tx_blocked_s_ < 30.0) return;
+        tx_blocked_why_ = why;
+        tx_blocked_s_ = time_;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("commander"), "radio", "cannot transmit: " + why});
+    }
+    // The vehicle on the air for `seconds` on the net of the source on the commander's set.
+    void OnAir(double seconds) {
+        ++transmissions_;
+        last_tx_s_ = time_;
+        if (!em_link_ || !c2_) return;
+        const std::vector<C2Network::RadioView> sets = c2_->Radios();
+        const int set = CommanderSet();
+        if (set < 0 || set >= static_cast<int>(sets.size()) || sets[static_cast<std::size_t>(set)].source.empty()) return;
+        em_link_->SendVoiceFromUnit(sets[static_cast<std::size_t>(set)].source, time_, time_ + seconds);
+    }
+    // The commander says a radio callout: it goes out only if his set can transmit (a player has to hold the chest switch
+    // at ПРД). False, with the reason in the log, if nothing went out.
+    bool SayOnRadio(const std::string& id, const std::map<std::string, std::string>& fields, bool by_player) {
+        if (!callouts_) return false;
+        const CalloutDef* def = def_.crew_data.FindCallout(id);
+        if (def == nullptr) return false;
+        std::string why;
+        if (by_player && comms_ && comms_->HasChest() && !comms_->ChestKeyed(console_)) {
+            why = "the chest switch is at receive (hold it at ПРД to talk)";
+        } else {
+            CanTransmitNow(&why);
+        }
+        if (!why.empty()) {
+            TransmitBlocked(why);
+            return false;
+        }
+        const double delay = by_player ? 0.0 : SpeakDelayS("commander");
+        if (!callouts_->Say(time_, id, "commander", fields, delay)) return false;
+        OnAir(delay + SpeakingTimeS(FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
+        return true;
+    }
+    // The fields of the vehicle's radio reports: its callsign, the channels the КАНАЛЫ selector allows, missiles loaded.
+    std::map<std::string, std::string> RadioFields() const {
+        std::map<std::string, std::string> f;
+        f["callsign"] = OwnCallsign();
+        std::string ch;
+        if (console_.has_launcher) {
+            const int pos = console_.panel.Get(console_.launcher.channel_control);
+            if (pos >= 0 && pos < static_cast<int>(console_.launcher.channel_positions.size())) {
+                for (int c : console_.launcher.channel_positions[static_cast<std::size_t>(pos)]) ch += (ch.empty() ? "" : ", ") + std::string(c == 1 ? "I" : "II");
+            }
+        }
+        f["channels"] = ch.empty() ? "-" : ch;
+        f["missiles"] = std::to_string(launcher_ ? launcher_->LoadedCount() : 0);
+        return f;
+    }
+    // A request the crew makes by radio (the TZM, the fuel truck) reaches the battery only if the set can transmit.
+    bool RequestOnAir(const std::string& what) {
+        std::string why;
+        if (CanTransmitNow(&why)) {
+            request_blocked_.erase(what);
+            return true;
+        }
+        if (request_blocked_[what] != why) {
+            request_blocked_[what] = why;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("commander"), "radio",
+                         "the request for " + what + " can't go out: " + why});
+        }
+        return false;
+    }
+    // The NPC commander reports the vehicle ready on the battery net once at each halt (voenizdat_osa_1991 p246: "к бою
+    // готов", with its channels and missiles).
+    void NpcReportReady(bool halted) {
+        if (!halted) {
+            reported_ready_ = false;
+            return;
+        }
+        if (reported_ready_ || !(battery_ || c2_) || !def_.has_crew_data) return;
+        const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
+        if (ready == nullptr || !console_.equipment.AllHold(ready->conditions, console_.panel)) return;
+        reported_ready_ = SayOnRadio("report_ready", RadioFields(), false);
+    }
+    // The chest switch and ТОН. ВЫЗОВ, as the crew works them.
+    void UpdateTransmit() {
+        if (!comms_) return;
+        const bool keyed = comms_->ChestKeyed(console_);
+        std::string why;
+        const bool can = CanTransmitNow(&why);
+        if (keyed && !chest_was_keyed_) {
+            if (can) {
+                Event("radio", "the commander keys R-123M " + comms_->SetName(CommanderSet()));
+            } else {
+                TransmitBlocked(why);
+            }
+        }
+        if (keyed && can && time_ + 1e-9 >= next_carrier_s_) {  // held: on the air, second by second
+            OnAir(1.0);
+            next_carrier_s_ = time_ + 1.0;
+        }
+        chest_was_keyed_ = keyed;
+        const int tone = comms_->TonePressed(console_);
+        if (tone < 0) return;
+        const std::string set = "R-123M " + comms_->SetName(tone);
+        if (tone != CommanderSet()) {
+            why = set + " is not the set the commander's headset is on";
+        } else if (!can) {
+            // why says it
+        } else if (comms_->HasChest() && !keyed) {
+            why = "not transmitting (the chest switch is at receive)";
+        }
+        if (!why.empty()) {
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("commander"), "radio", "ТОН. ВЫЗОВ on " + set + ": nothing goes out: " + why});
+            return;
+        }
+        Radio("battery net", OwnCallsign(), "ТОН. ВЫЗОВ (call tone)");
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("commander"), "radio", "ТОН. ВЫЗОВ: a call tone on " + set});
+        OnAir(1.0);
     }
 
     void UpdatePositionPower() {
@@ -1426,6 +1566,7 @@ private:
             }
         }
         NpcLogistics();
+        NpcReportReady(halted);
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once (mon_2112_80 p63-68)
             for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
@@ -1647,7 +1788,7 @@ private:
                 npc_empty_reported_ = true;
                 if (NpcAt("deputy_commander")) Say("launcher_empty", "deputy_commander");
                 const std::string callsign = battery_ ? OwnCallsign() : std::string("21");
-                if (callouts_) callouts_->Say(time_, "request_tzm", "commander", {{"callsign", callsign}}, 3.0);
+                SayOnRadio("request_tzm", {{"callsign", callsign}}, false);
             }
             if (!empty) npc_empty_reported_ = false;
         }
@@ -1749,7 +1890,20 @@ private:
                             Say("iff_friend", "senior_operator", {}, &k);
                         }
                         break;
-                    case EngagementEvent::Kind::Hit: if (NpcAt("deputy_commander")) Say("hit", "deputy_commander"); break;
+                    case EngagementEvent::Kind::Hit:
+                        if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
+                        if (NpcAt("commander") && (battery_ || c2_)) {
+                            std::map<std::string, std::string> f = RadioFields();
+                            f["number"] = e.target;
+                            for (const C2Network::Event& d : designations_heard_) {
+                                char n[16];
+                                std::snprintf(n, sizeof(n), "%04d", d.number);
+                                if (d.subject == e.target && d.number > 0) f["number"] = n;
+                            }
+                            f["spent"] = std::to_string(launches_);
+                            SayOnRadio("report_result", f, false);
+                        }
+                        break;
                     case EngagementEvent::Kind::Miss: if (NpcAt("deputy_commander")) Say("miss", "deputy_commander"); break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
                 }
@@ -2067,6 +2221,9 @@ public:
     // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.
     bool PlayerSay(const std::string& station, const std::string& callout_id) {
         if (!callouts_ || def_.crew_data.FindCallout(callout_id) == nullptr) return false;
+        if (station == "commander" && def_.crew_data.FindCallout(callout_id)->kind == CalloutKind::Radio) {
+            return SayOnRadio(callout_id, RadioFields(), true);  // on the air only with his chest switch at ПРД
+        }
         if (callout_id == "contact" && engagement_on_) {
             const Contact* nearest = nullptr;
             for (const Contact& c : engagement_.SearchPicture()) {

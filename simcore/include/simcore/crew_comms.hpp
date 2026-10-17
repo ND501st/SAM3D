@@ -78,6 +78,44 @@ public:
         return console.panel.Get(r.power) == 1 && console.equipment.IsReady(r.transmit);
     }
 
+    // Can the commander go on the air on this set (roadmap 7.8)? The set switched on and its transmitter ready (СИМПЛЕКС,
+    // warmed up: 3 min after duty reception), and his A-1 on Р-123 with the intercom working, so his chest switch keys it
+    // (r123m_training: the chest switch's tangent to ПРД transmits, released it receives). `why` says what is wrong.
+    bool CanTransmit(int set, const ConsoleData& console, std::string* why = nullptr) const {
+        std::string reason;
+        if (set < 0 || set >= static_cast<int>(def_.radios.size())) {
+            reason = "no such set";
+        } else {
+            const CommsRadioDef& r = def_.radios[static_cast<std::size_t>(set)];
+            const std::string name = "R-123M " + r.name;
+            if (console.panel.Get(r.power) != 1) {
+                reason = name + " is switched off";
+            } else if (!console.equipment.IsReady(r.warm)) {
+                reason = name + " is still warming up (10 min after switching on)";
+            } else if (!console.equipment.IsReady(r.transmit)) {
+                reason = name + " is not ready to transmit (СИМПЛЕКС, 3 min after duty reception)";
+            } else if (!CommanderOnRadio(console)) {
+                reason = "the commander's A-1 is not on Р-123";
+            }
+        }
+        if (why != nullptr) *why = reason;
+        return reason.empty();
+    }
+    // The commander's chest switch is at ПРД (a player holds it there to talk; an NPC keys it as he speaks).
+    bool ChestKeyed(const ConsoleData& console) const { return !def_.chest.empty() && console.panel.Get(def_.chest) == 1; }
+    bool HasChest() const { return !def_.chest.empty(); }
+    // The set whose ТОН. ВЫЗОВ is pressed this step (-1: none).
+    int TonePressed(const ConsoleData& console) const {
+        for (std::size_t i = 0; i < def_.radios.size(); ++i) {
+            if (!def_.radios[i].tone.empty() && console.panel.Get(def_.radios[i].tone) == 1) return static_cast<int>(i);
+        }
+        return -1;
+    }
+    const std::string& SetName(int set) const {
+        static const std::string none;
+        return set >= 0 && set < static_cast<int>(def_.radios.size()) ? def_.radios[static_cast<std::size_t>(set)].name : none;
+    }
+
     bool CommanderOnRadio(const ConsoleData& console) const {
         return console.panel.Get(def_.commander) == def_.commander_radio_position && console.equipment.IsReady(def_.intercom_subsystem);
     }

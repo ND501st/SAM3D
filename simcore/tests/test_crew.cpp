@@ -708,10 +708,11 @@ SC_TEST("battery: the NPC battery commander gives the PU-12's targets to the lau
     SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_fight.json", kData, def, console));
     ScenarioRunner r(std::move(def), std::move(console));
     r.RunToEnd(0.1, 900.0);
-    int assigned = 0, reports = 0;
+    int assigned = 0, reports = 0, own_reports = 0;
     for (const SpokenCallout& s : r.Callouts()->Log()) {
         assigned += s.id == "order_assign" ? 1 : 0;
-        reports += s.id == "report_result" ? 1 : 0;
+        reports += s.id == "report_result" && s.from == "battery" ? 1 : 0;  // the other launchers' results
+        own_reports += s.id == "report_result" && s.from == "commander" ? 1 : 0;  // ours, on our set (roadmap 7.8)
     }
     int shooter_launches = 0, shooter_hits = 0;
     for (const BatteryFire::Shooter& s : r.GetBatteryFire()->Shooters()) {
@@ -721,6 +722,8 @@ SC_TEST("battery: the NPC battery commander gives the PU-12's targets to the lau
     std::printf("    %d assignments, %d launches and %d hits by the other launchers, %d by ours\n", assigned, shooter_launches,
                 shooter_hits, r.Launches());
     SC_EXPECT(assigned >= 2 && shooter_launches >= 2 && shooter_hits >= 1 && reports == shooter_hits);
+    SC_EXPECT(own_reports <= r.Launches());
+    SC_EXPECT(r.Transmissions() >= own_reports);
     SC_EXPECT(r.Debrief().find("цель 620") != std::string::npos);  // targets named by their board numbers
 }
 

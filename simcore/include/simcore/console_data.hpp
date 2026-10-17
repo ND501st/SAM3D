@@ -140,6 +140,7 @@ struct CommsRadioDef {
     std::string name;
     std::string power, mode, squelch, volume, antenna;  // controls
     std::string warm, transmit;                         // subsystems
+    std::string tone;                                   // ТОН. ВЫЗОВ button (optional): a call tone while transmitting
 };
 
 struct CommsDef {
@@ -154,6 +155,7 @@ struct CommsDef {
     int deputy_radio_position = 0;
     int driver_radio_position = 0;
     std::string intercom_subsystem;
+    std::string chest;                       // the commander's chest switch (optional): position 1 = ПРД, transmitting
     double shout_quiet_s = 0.0;
     double shout_noisy_s = 0.0;
     std::vector<std::string> noisy;          // subsystems whose running makes the cabin too loud to talk
@@ -758,14 +760,15 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string rp = Index(Join(p, "radios"), i);
             const json::Value& e = radios->items[i];
             CommsRadioDef r;
-            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit"}) ||
+            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit", "tone"}) ||
                 !OptionalInt(e, rp, "set", r.set) || !RequireString(e, rp, "name", r.name) ||
                 !RefControl(e, rp, "power", out.panel, ControlKind::Discrete, true, r.power) ||
                 !RefControl(e, rp, "mode", out.panel, ControlKind::Discrete, true, r.mode) ||
                 !RefControl(e, rp, "squelch", out.panel, ControlKind::Discrete, true, r.squelch) ||
                 !RefControl(e, rp, "volume", out.panel, ControlKind::Discrete, true, r.volume) ||
                 !RefControl(e, rp, "antenna", out.panel, ControlKind::Discrete, true, r.antenna) ||
-                !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit)) {
+                !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit) ||
+                !RefControl(e, rp, "tone", out.panel, ControlKind::Momentary, false, r.tone)) {
                 return false;
             }
             if (r.set != static_cast<int>(i)) return Fail(Join(rp, "set"), "radios are in the order of the C2 network's sets: 0, 1");
@@ -793,7 +796,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string ip = Join(p, "intercom");
         if (ic == nullptr || !ic->Is(json::Type::Object) ||
             !Keys(*ic, ip, {"commander", "commander_radio_position", "commander_off_position", "deputy", "deputy_radio_position", "driver",
-                            "driver_radio_position", "subsystem", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
+                            "driver_radio_position", "subsystem", "chest", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
             return message_.empty() ? Fail(ip, "required, an object") : false;
         }
         if (!RefControl(*ic, ip, "commander", out.panel, ControlKind::Discrete, true, d.commander) ||
@@ -804,6 +807,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalInt(*ic, ip, "deputy_radio_position", d.deputy_radio_position) ||
             !OptionalInt(*ic, ip, "driver_radio_position", d.driver_radio_position) ||
             !RefSubsystem(*ic, ip, "subsystem", eq, true, d.intercom_subsystem) ||
+            !RefControl(*ic, ip, "chest", out.panel, ControlKind::Discrete, false, d.chest) ||
             !OptionalNumber(*ic, ip, "shout_quiet_s", d.shout_quiet_s) || !OptionalNumber(*ic, ip, "shout_noisy_s", d.shout_noisy_s)) {
             return false;
         }

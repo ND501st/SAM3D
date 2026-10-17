@@ -66,10 +66,18 @@ mounts its boxes is not in any source found: the positions are SAM3D's choice.
 * Procedures `radio_left_on` (driver) and `radio_right_on` (commander, with A-1 to Р-123) let NPC crew do it. The vehicle starts with both sets on and warm (`start_ready`): the 10 min applies when a crew switches one
   off and on.
 
+* Transmitting (17 Oct 2026): the commander talks on the set his headset is on, keyed by his chest switch (`radio.chest`,
+  ПРМ — ПРД; `r123m_training`: the tangent to ПРД transmits). It goes out only if that set is on, warm, in СИМПЛЕКС (its
+  transmitter ready, 3 min after duty reception) and his A-1 is on Р-123 (`CrewComms::CanTransmit`); otherwise the debrief
+  says why ("cannot transmit: …"). His radio reports (`report_ready` once at each halt, `report_result` after our hit,
+  `request_tzm`) go through it, a player's only with the chest switch held at ПРД, and the requests for the TZM and the
+  fuel truck reach the battery only when the set can transmit. ТОН. ВЫЗОВ (`radio.*.tone`) sends a call tone while he
+  transmits on that set. What goes out radiates on the net of the source on his set (`EmSensorLink::SendVoiceFromUnit`):
+  the other side's ESM can hear it.
+
 ## Not done
 
-* Transmitting: the sets only receive. The commander's reports, ТОН. ВЫЗОВ and the chest switch's transmit position need a
-  sender in the sim (the transmit state exists).
+* (Done 17 Oct 2026, below.)
 * The set-up drill for the presets, smooth tuning, the fixators (the preset frequencies are the scenario's).
 * Audio in Unreal, and the 27 V battery (a set draws 3 A receiving, 9.6 A transmitting; the battery's capacity and the
   generators' charging are not modelled).
