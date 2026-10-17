@@ -67,7 +67,7 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 	// keys. At the commander's seat the board's targets and the launchers as the IT boards show them; at the plotter's
 	// the IT-45's numbers.
 	const bool bCommander = Vehicle->GetStationId() == Sim->GetCommanderStation();
-	const bool bPlotter = Vehicle->GetStationId() == TEXT("operator");
+	const bool bPlotter = Vehicle->GetStationId() == Sim->GetPlotterStation();
 	if (!bCommander && !bPlotter)
 	{
 		return;
@@ -84,7 +84,7 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 		Line += TEXT("(nothing)");
 	}
 	const float X = 20.0f;
-	float Y = Canvas->ClipY - 120.0f;
+	float Y = Canvas->ClipY - (bCommander ? 142.0f : 120.0f);
 	const FLinearColor Ink(0.85f, 0.95f, 0.85f);
 	DrawText(Line, Ink, X, Y, Font);
 	Y += 22.0f;
@@ -99,6 +99,9 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 				L.Missiles >= 0 ? *FString::Printf(TEXT(" (%d)"), L.Missiles) : TEXT(""));
 		}
 		DrawText(Launchers + TEXT("|  [ ] pick a target, 1-5 give it to that launcher"), Ink, X, Y, Font);
+		Y += 22.0f;
+		DrawText(TEXT("Or on the instruments: the DT-2's wheels put the marker on a target (its number in the ДХ window), ЦУ then the ")
+			TEXT("launcher's place (1-5) on the ДХ's keys; СБР clears"), Ink, X, Y, Font);
 	}
 	else
 	{

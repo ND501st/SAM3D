@@ -155,5 +155,9 @@ orients with the PAB-2 and sets the GAK and KP-4; the operator switches on the A
    straight behind the IT-45's face (its screen's bulge, 1175-1200 px), so the operator sits there, the ДХ keypad at the
    tube's left as the photograph shows. SAM3D: the commander in the middle place, the radio operator at the left (the
    R-111 and its R-123M ahead of that place, his table between them). See `tools/blender/pu12m_interior_trace.py`.
+   **Corrected 18 Oct 2026** (`docs/research/PU12_VISUALS_2026-10.md` §2): the NVA catalogue (`rwd_mb3`) lists the
+   PU-12M commander's workplace as the IT-45, the ДХ, the IT-2M, the ФР block, the RTK-1 and the DT-2, so the battery
+   commander takes the right place at the IT-45 and the operator-plotter the middle one, at the air-situation map (the
+   plan's item 24, a plexiglass board).
 5. The telecode's message rate and range on the R-407 (only "to 15 km" for the set).
 6. The NVA plotters' handbook (1980) for the plotting drill: still to acquire.

@@ -157,6 +157,31 @@ struct LauncherStatus {
     int target_number = 0;    // the target it reported (0: none)
     double reported_s = -1.0; // when the post last heard from it
 };
+// A launcher's full load: the 9A33's two packs of three (battery_fire.hpp's launchers start with it).
+constexpr int kLauncherFullLoad = 6;
+
+// The lamps one launcher's column lights on the IT-1M / IT-2M boards (rwd_mb3, pu12e: the signal groups КОМПЛЕКТ,
+// РАБОТА and ТЕХ. СОСТОЯНИЕ; legends read from its photographs). Which report lights which lamp is SAM3D's reading.
+struct BoardLamps {
+    int load = 0;              // КОМПЛЕКТ: 0 dark, 1 the lamp "1" (three quarters or more), 2 "1/2", 3 "1/4"
+    bool ready = false;        // ГОТОВ
+    bool sees = false;         // ВИЖУ: on a target
+    bool fired = false;        // ВЫП.: launched
+    bool fault = false;        // ТЕХ. СОСТОЯНИЕ (РПК, БЧ, ШАССИ): a fault reported (none modelled: dark)
+};
+inline BoardLamps BoardLampsOf(const LauncherStatus& s, int full_load = kLauncherFullLoad) {
+    BoardLamps b;
+    if (s.state == LauncherStatus::State::Unknown) return b;
+    if (s.missiles > 0 && full_load > 0) {
+        const double f = static_cast<double>(s.missiles) / full_load;
+        b.load = f >= 0.75 ? 1 : (f >= 0.4 ? 2 : 3);
+    }
+    b.ready = s.state == LauncherStatus::State::Ready;
+    b.sees = s.state == LauncherStatus::State::Engaging;
+    b.fired = s.state == LauncherStatus::State::Launched;
+    return b;
+}
+
 inline const char* LauncherStateName(LauncherStatus::State s) {
     switch (s) {
         case LauncherStatus::State::March: return "march";
@@ -313,6 +338,7 @@ public:
         int zone = 1;
         bool friendly = false;
         bool group = false;
+        bool primary = false;  // a cabled radar's track: its echo is on the tube too
     };
     std::vector<ScopeMark> Scope(double scale_m) const {
         std::vector<ScopeMark> out;
@@ -329,6 +355,7 @@ public:
             m.zone = k.zone;
             m.friendly = k.friendly;
             m.group = k.group;
+            m.primary = k.primary;
             out.push_back(m);
         }
         return out;

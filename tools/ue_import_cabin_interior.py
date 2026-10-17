@@ -35,7 +35,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # detail tiling per metre, emissive). Colours from the cabin photos (usaf_shaw_2017, opisybroni, rwd_mb3).
 MATERIALS = {
     'Paint_Interior': ((0.16, 0.168, 0.15), 0.62, 0.0, 0.30, 'PaintN', 0.12, 3.0, None),  # grey-green lining
-    'Paint_Light': ((0.5, 0.51, 0.48), 0.6, 0.0, 0.25, 'PaintN', 0.12, 3.0, None),       # the PU-12M's light lining (shilka_narod)
+    'Paint_Light': ((0.62, 0.57, 0.43), 0.62, 0.0, 0.15, 'PaintN', 0.12, 3.0, None),     # the PU-12M's cream lining (rwd_mb3)
+    'Paint_BlueGrey': ((0.16, 0.2, 0.24), 0.55, 0.0, 0.08, 'PaintN', 0.15, 3.0, None),   # its ASPD-U and power blocks (rwd_mb3)
+    'Paint_LightGrey': ((0.36, 0.37, 0.38), 0.6, 0.0, 0.05, 'PaintN', 0.04, 3.0, None),   # its IT-45, ДХ, IT-2M (rwd_mb3)
     'Paint_Rack': ((0.095, 0.1, 0.095), 0.55, 0.0, 0.30, 'PaintN', 0.12, 3.0, None),      # dark grey rack frames, posts
     'Paint_Bench': ((0.062, 0.076, 0.055), 0.62, 0.0, 0.55, 'PaintN', 0.45, 1.5, None),   # dark green bench
     'Paint_Equipment': ((0.105, 0.125, 0.075), 0.58, 0.0, 0.45, 'PaintN', 0.40, 2.0, None),

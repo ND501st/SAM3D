@@ -738,6 +738,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	FString GetCommanderStation() const;
 
+	/** The command post's plotter's seat (the console's post block: the PU-12M's "operator"); "" if not a post. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetPlotterStation() const;
+
 	/** Who holds a crew seat ("" the NPC). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	FString GetSeatHolder(const FString& Role) const;

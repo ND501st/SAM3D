@@ -1,5 +1,6 @@
 // The crew's voices (roadmap 8.10, docs/crew/10_BODIES_AND_VOICES.md): the words a speech engine says for a callout,
 // each seat's voice, and the bus's "now speaking" for the voice and the bodies.
+#include <cstdio>
 #include <string>
 
 #include "simcore/console_data.hpp"
@@ -94,6 +95,26 @@ SC_TEST("crew voice: every seat has a voice; stress and the radio change it") {
                              " \"seats\": [{\"station\": \"driver\"}]}",
                              &o.crew, v, &e));
     SC_EXPECT(e.find("has no voice") != std::string::npos);
+}
+
+SC_TEST("crew voice: one file voices the Osa's crew and the PU-12M's; every seat it names is somebody's") {
+    ConsoleData osa, post;
+    CrewData osa_crew, post_crew;
+    VoiceData osa_voices, post_voices, all;
+    std::string e;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", osa, &e) && LoadCrewDataFile(kData + "/crew/osa_ak_crew.json", osa, osa_crew, &e));
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/pu12m.json", post, &e) && LoadCrewDataFile(kData + "/crew/pu12m_crew.json", post, post_crew, &e));
+    SC_EXPECT(LoadVoiceDataFile(kData + "/crew/voices.json", &post_crew, post_voices, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(post_voices.Seat("battery_commander") != nullptr && post_voices.Seat("radio_operator") != nullptr);
+    SC_EXPECT(post_voices.Seat("deputy_commander") == nullptr);  // the Osa's, not the post's
+    SC_EXPECT(LoadVoiceDataFile(kData + "/crew/voices.json", &osa_crew, osa_voices, &e) && osa_voices.Seat("squad_leader") == nullptr);
+    SC_EXPECT(LoadVoiceDataFile(kData + "/crew/voices.json", nullptr, all, &e));
+    for (const VoiceSeat& s : all.seats) {
+        const bool known = s.station == "battery" || osa_crew.FindSeat(s.station) != nullptr || post_crew.FindSeat(s.station) != nullptr;
+        if (!known) std::printf("    no crew has a seat '%s'\n", s.station.c_str());
+        SC_EXPECT(known);
+    }
 }
 
 SC_TEST("crew voice: the bus says who is speaking now and numbers each line") {

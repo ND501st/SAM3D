@@ -223,15 +223,33 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   the server through its seat (`USimCrewSeatComponent::Designate`, `PlotTrack`), checked there (only the commanding seat
   designates, only the plotter plots: `ScenarioRunner::SeatDesignate`, `SeatPlot`). Checked with
   `tools/ue_crew_smoke.ps1 -Pu12m` (a dedicated server and two clients, `docs/MULTIPLAYER.md`).
+- **The look refined (18 Oct 2026):** research `docs/research/PU12_VISUALS_2026-10.md` (the NVA catalogue's PU-12 pages
+  and colour photographs, the Soviet tube table, GOST 21829-76).
+  - Corrections from it: the battery commander sits at the IT-45 (the ДХ, the IT-2M, the ФР block, the RTK-1 and the
+    DT-2 are his), the operator-plotter at his own air-situation map (the plan's item 24, a plexiglass board); the lining
+    cream, the ASPD-U's blocks blue-grey, the IT-45, the ДХ and the IT-2M light grey; the GAK on a stand over the PT-200;
+    the S-23 a black box.
+  - The instruments work: the DT-2's two wheels put the IT-45's marker on a target; the ДХ's digits pick a target, ЦУ and
+    a digit give it to the launcher in that place on the IT boards (by voice on the battery net), СБР clears
+    (`data/procedures/pu12m.json` keypad and marker, `ScenarioRunner::UpdateKeypad`, test in `test_pu12m_battery.cpp`).
+  - The displays: the IT-45 an amber long-afterglow tube with its sweep, range marks and a cabled radar's echoes fading,
+    the symbols steady, the marker and the marked target's time of arrival; the ДХ's window; the plotter's map with the
+    board's grease-pencil tracks; the IT-1M and IT-2M as lamp boards (`simcore::BoardLampsOf`); the cabin's lamps ease on
+    and off.
+  - Fixes: the mauve cast (Lumen's sky light through the closed compartment: the sky lights are put out while the camera
+    is inside, the lining 15 cm thick with a finer distance field, the cabin hidden from outside); the DT-2's and the
+    IT-45's round parts drawn as polygons (Nanite's fallback: the interior without Nanite). The PU-12M's crew has its
+    voices (`data/crew/voices.json` serves both crews).
 
 ## 6. What is still SAM3D's
 
-- The plan's item 24 (the air-situation plotting board, drawn as a 0.4 m bar on the centreline before the bench) is
-  taken to be the grid glass over the IT-45 that the commander's workplace drawing and the photograph show; the bar's
-  own meaning is not settled.
+- The plan's item 24 is the plotter's air-situation map (`rwd_mb3`); its grid, range circles and the pencil's colours
+  are SAM3D's.
 - Heights, the seats' cushions and the desk, the faces of the blocks not photographed (the S block, the ŠČK, the R-111,
-  the R-407, the power boards), the lamps' meanings. The ДХ keypad's keys are drawn, not yet worked (the console does not
-  model the characteristics or the ЦУ key).
+  the R-407, the power boards), the lamps' meanings. Of the ДХ's keys only the digits, ЦУ and СБР work (the console does
+  not model the characteristics, the height zone or the other keys); what its window shows is SAM3D's.
+- The IT-45's symbols and sweep period, the IT boards' lamp-to-report mapping and which board stands where (the NVA
+  catalogue's two pages disagree), the lamps' timings (`docs/research/PU12_VISUALS_2026-10.md` §9).
 - The two whips' bases inside: the plan's items 3 and 28 stand elsewhere than the exterior's whips (placed from the
   photographs); left out of the interior until the photographs are read again.
 

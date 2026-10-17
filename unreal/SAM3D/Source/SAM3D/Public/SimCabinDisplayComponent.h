@@ -18,9 +18,9 @@ class USimWorldSubsystem;
 /**
  * One instrument of the cabin (simcore::CabinDisplay): the search radar's scope, the tracking radar's range
  * indicator and elevation-search indicator, the TV sight's monitor, a needle dial or meter, or the command post's IT-45
- * (with the plotting glass over it) and status boards. Draws into its own render target every frame
- * from the simulation's state and shows it on a quad on the panel. The TV films the 3D world with a scene
- * capture looking along the tracking radar's wheels.
+ * (with its grid glass), the plotter's map, the ДХ keypad's window and the IT-1M / IT-2M boards. Draws into its own
+ * render target every frame from the simulation's state and shows it on a quad on the panel. The TV films the 3D world
+ * with a scene capture looking along the tracking radar's wheels.
  *
  * Created and placed by USimCabinComponent; presentation only.
  */
@@ -56,7 +56,9 @@ private:
 	void DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn);
 	void DrawCounters(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, simcore::ScenarioRunner& Runner, bool bOn);
 	void DrawAspdScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::PostFeed& Post, bool bOn);
-	void DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn);
+	void DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn, float DeltaTime);
+	void DrawPlotBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn);
+	void DrawKeypadWindow(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn);
 	void UpdateTv(const USimWorldSubsystem* Sim, simcore::ScenarioRunner& Runner, bool bOn);
 
 	int32 LayoutIndex = INDEX_NONE;
@@ -69,6 +71,11 @@ private:
 	double LastSimTimeSeconds = -1.0;
 	bool bTvWasOn = false;
 	FRandomStream Noise;
+	// The IT-45's sweep (rad clockwise from north) and the turns it has made (its speckle is redrawn each turn).
+	double AspdSweepRad = 0.0;
+	int32 AspdTurns = 0;
+	// The status board's lamps, each easing on and off (a row of nine per launcher).
+	TArray<float> BoardGlow;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Screen;

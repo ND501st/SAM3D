@@ -123,7 +123,7 @@ SC_TEST("pu12m battery: the post's IT-45, board and IT boards ride in the knowle
     for (std::size_t i = 0; i < there.scope.size() && i < here.scope.size(); ++i) {
         SC_EXPECT(there.scope[i].number == here.scope[i].number && there.scope[i].zone == here.scope[i].zone);
         SC_EXPECT(std::fabs(there.scope[i].x - here.scope[i].x) < 1e-4 && std::fabs(there.scope[i].vy - here.scope[i].vy) < 1e-4);
-        SC_EXPECT(there.scope[i].friendly == here.scope[i].friendly);
+        SC_EXPECT(there.scope[i].friendly == here.scope[i].friendly && there.scope[i].primary == here.scope[i].primary);
     }
     SC_EXPECT(there.glass.size() == here.glass.size() && LatestMarks(there).size() == LatestMarks(here).size());
     // The board's numbers a client sees are the ones the commander can give out (PostBoard).
@@ -170,4 +170,47 @@ SC_TEST("pu12m battery: through the seats only the plotter plots and only the co
     SC_EXPECT(!r->SeatDesignate("operator", "22", board[0].number, &why));
     SC_EXPECT(why.find("battery_commander") != std::string::npos);
     SC_EXPECT(r->SeatDesignate("battery_commander", "22", board[0].number, &why));
+}
+
+SC_TEST("pu12m battery: the commander puts the DT-2 marker on a target, presses ЦУ and a launcher's place on the ДХ") {
+    std::unique_ptr<ScenarioRunner> r = LoadBattery();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("battery_commander", "Player"));
+    while (r->Time() < 140.0) r->Step(0.1);
+    const std::vector<CommandPost::ScopeMark> tube = r->PostScope();
+    SC_EXPECT(!tube.empty());
+    if (tube.empty()) return;
+    const CommandPost::ScopeMark& m = tube[0];
+    // The marker onto it (azimuth from north, range a fraction of the scale).
+    double az = RadToDeg(std::atan2(m.x, m.y));
+    if (az < 0.0) az += 360.0;
+    std::string why;
+    SC_EXPECT(r->SeatTurn("battery_commander", "dt2.azimuth", az, &why));
+    SC_EXPECT(r->SeatTurn("battery_commander", "dt2.range", std::hypot(m.x, m.y), &why));
+    r->Step(0.1);
+    SC_EXPECT(r->MarkedTarget() == m.number && r->KeypadTarget() == m.number);
+    SC_EXPECT(r->PostFeedNow().keypad.size() == 2);
+    // Only the commander's hands: the operator can't press his keys.
+    SC_EXPECT(r->SeatSet("operator", "dch.key.cu", 1, &why) != StepResult::Accepted || !why.empty());
+    // ЦУ, then 2: the second launcher on the IT boards.
+    r->SeatSet("battery_commander", "dch.key.cu", 1, &why);
+    r->Step(0.1);
+    SC_EXPECT(r->Keypad().designating);
+    r->SeatSet("battery_commander", "dch.key.2", 1, &why);
+    r->Step(0.1);
+    SC_EXPECT(!r->Keypad().designating);
+    const std::string second = r->StatusBoards().size() > 1 ? r->StatusBoards()[1].callsign : std::string();
+    std::printf("    the ДХ gave: %s\n", r->Keypad().last.c_str());
+    SC_EXPECT(!second.empty() && r->Keypad().last.find(">" + second) != std::string::npos);
+    SC_EXPECT(Count(r->Debrief(), "by voice: azimuth") == 1);
+    // Typed digits win over the marker; СБР clears them.
+    r->SeatSet("battery_commander", "dch.key.4", 1, &why);
+    r->Step(0.1);
+    r->SeatSet("battery_commander", "dch.key.2", 1, &why);
+    r->Step(0.1);
+    SC_EXPECT(r->KeypadTarget() == 42);
+    r->SeatSet("battery_commander", "dch.key.reset", 1, &why);
+    r->Step(0.1);
+    SC_EXPECT(r->Keypad().entry.empty());
 }

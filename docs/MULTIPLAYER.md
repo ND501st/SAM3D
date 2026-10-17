@@ -74,7 +74,10 @@ in a seat; a player commander gets the same reports and acknowledgements as an N
 * **The post's instruments ride along** (`simcore/post_feed.hpp`): the server puts the IT-45's tracks (fractions of the
   scale), the post's position and scale, the board as the commander reads it (the targets he can give out, each with its
   marks of the last five minutes; destroyed ones wiped off) and the IT boards into each view's `em::ViewExtras`; a client
-  draws its IT-45, grid glass and IT boards from them (`USimWorldSubsystem::GetPostFeed`).
+  draws its IT-45, grid glass and IT boards from them (`USimWorldSubsystem::GetPostFeed`). The DT-2's marker, the
+  target it is on and its time of arrival, the ДХ's window and whether each track is a cabled radar's ride along too, so
+  a client's IT-45, map and ДХ window match the server's; the ДХ's keys and the DT-2's wheels are console controls, sent
+  through the seat like any other.
 * **Designations and plots go through the seat**: `USimCrewSeatComponent::Designate(Callsign, Number)` and
   `PlotTrack(Number)` (reliable), checked on the server (`ScenarioRunner::SeatDesignate`: the commanding seat only;
   `SeatPlot`: the plotter's only); the answer comes back by `OnActionResult` ("designate", "plot").

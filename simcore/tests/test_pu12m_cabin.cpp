@@ -41,16 +41,32 @@ SC_TEST("pu12m cabin: five seats, every control placed, the IT-45 and the status
     }
     SC_EXPECT(it45 != nullptr && it45->glass);
     SC_EXPECT(boards == 2);
-    // The IT-45 is the operator's, in front of his place on the bench; the IT-2 at the commander's.
+    // The IT-45 is the battery commander's, in front of his place on the bench (csla_pu12_manual, rwd_mb3); the plotter's map
+    // in front of his.
     const CabinPanel* tube = it45 != nullptr ? layout.FindPanel(it45->panel_id) : nullptr;
-    const CabinStation* op = layout.FindStation("operator");
-    SC_EXPECT(tube != nullptr && op != nullptr && tube->station == "operator");
-    if (tube != nullptr && op != nullptr) {
-        const Vec3 to_tube = tube->centre_m - op->eye_m;
+    const CabinStation* cmdr = layout.FindStation("battery_commander");
+    SC_EXPECT(tube != nullptr && cmdr != nullptr && tube->station == "battery_commander");
+    if (tube != nullptr && cmdr != nullptr) {
+        const Vec3 to_tube = tube->centre_m - cmdr->eye_m;
         SC_EXPECT(to_tube.y > 0.4 && to_tube.y < 0.9);              // ahead of him, at reading distance
-        SC_EXPECT(std::fabs(to_tube.x) < 0.1);                       // straight ahead
+        SC_EXPECT(std::fabs(to_tube.x) < 0.15);                      // about straight ahead
         SC_EXPECT(tube->Normal().y < -0.99);                        // facing back at him
     }
+    const CabinStation* plotter = layout.FindStation("operator");
+    const CabinDisplay* map = nullptr;
+    const CabinDisplay* window = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.kind == CabinDisplayKind::PlotBoard) map = &d;
+        if (d.kind == CabinDisplayKind::KeypadWindow) window = &d;
+    }
+    SC_EXPECT(map != nullptr && window != nullptr && plotter != nullptr);
+    if (map != nullptr && plotter != nullptr) {
+        const Vec3 to_map = layout.FindPanel(map->panel_id)->centre_m - plotter->eye_m;
+        SC_EXPECT(to_map.y > 0.3 && to_map.y < 0.7 && std::fabs(to_map.x) < 0.1);
+    }
+    // The panels take the equipment's paint.
+    const CabinPanel* fr = layout.FindPanel("fr_panel");
+    SC_EXPECT(fr != nullptr && fr->color == "bluegrey");
     // The R-123Ms are bare panels on the Osa cabin's traced mesh.
     for (const char* id : {"r123_fug1_panel", "r123_fug2_panel", "r123_fug4_panel"}) {
         const CabinPanel* p = layout.FindPanel(id);

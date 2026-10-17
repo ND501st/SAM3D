@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 #include <array>
 #include <map>
@@ -59,6 +60,14 @@ namespace simcore {
 
 class ScenarioRunner {
 public:
+    // The ДХ keypad: the two digits typed (the target's ASPD-U number), ЦУ pressed and waiting for the launcher's place
+    // on the IT boards (1-...), the last designation it gave ("05>22"). The target it is on: typed, or the marker's.
+    struct PostKeypad {
+        std::string entry;
+        bool designating = false;
+        int held = -1;
+        std::string last;
+    };
     ScenarioRunner(ScenarioDef def, ConsoleData console)
         : def_(std::move(def)),
           console_(std::move(console)),
@@ -1133,6 +1142,70 @@ private:
             post_first_mark_[m.target_id] = m.time_s;
             Event(m.target_id, "on the post's board: " + post_->Board().Describe(m));
         }
+        UpdateKeypad();
+    }
+    // The DT-2 marker and the ДХ keypad (rwd_mb3: the Pult DCh enters a target's number, height zone, characteristics and
+    // the designation signal with an address; the DT-2 gives the coordinates; the IT-45 brightens the marked target and
+    // shows its time of arrival). Read before the step's buttons are released, so each press counts once.
+    static constexpr double kMarkerCaptureFraction = 0.05;  // sam3d: the marker takes a target within 5 % of the scale
+    void UpdateKeypad() {
+        const ConsoleData& c = console_;
+        marked_ = -1;
+        marked_arrival_s_ = -1.0;
+        if (!c.post_marker_azimuth.empty()) {
+            const double az = DegToRad(c.panel.GetValue(c.post_marker_azimuth));
+            const double r = c.panel.GetValue(c.post_marker_range);
+            marker_x_ = r * std::sin(az);
+            marker_y_ = r * std::cos(az);
+            double best = kMarkerCaptureFraction;
+            for (const CommandPost::ScopeMark& m : PostScope()) {
+                const double d = std::hypot(m.x - marker_x_, m.y - marker_y_);
+                if (d < best) {
+                    best = d;
+                    marked_ = m.number;
+                }
+            }
+            if (marked_ >= 0) marked_arrival_s_ = ArrivalS(marked_);
+        }
+        if (c.post_keypad_digits.empty()) return;
+        PostKeypad& k = keypad_;
+        if (c.panel.Get(c.post_keypad_reset) == 1) {
+            k.entry.clear();
+            k.designating = false;
+        }
+        if (c.panel.Get(c.post_keypad_designate) == 1) {
+            const int target = KeypadTarget();
+            k.designating = target >= 0;
+            if (k.designating) k.held = target;
+        }
+        for (std::size_t d = 0; d < c.post_keypad_digits.size(); ++d) {
+            if (c.panel.Get(c.post_keypad_digits[d]) != 1) continue;
+            if (k.designating) {
+                // the address: the launcher's place on the IT boards (1 the first)
+                k.designating = false;
+                if (d >= 1 && d <= status_boards_.size()) {
+                    const std::string& callsign = status_boards_[d - 1].callsign;
+                    char text[32];
+                    std::snprintf(text, sizeof(text), "%02d>%s", k.held, callsign.c_str());
+                    k.last = DesignateFromTube(callsign, k.held) ? std::string(text) : std::string("--");
+                }
+            } else {
+                k.entry = (k.entry + static_cast<char>('0' + static_cast<int>(d)));
+                if (k.entry.size() > 2) k.entry.erase(0, k.entry.size() - 2);
+            }
+        }
+    }
+    // When a target on the IT-45 reaches the post at its closing speed (s), or -1 if it isn't closing.
+    double ArrivalS(int aspd_number) const {
+        if (!post_) return -1.0;
+        for (const AspdTrack& t : post_->Tracks()) {
+            if (t.number != aspd_number) continue;
+            const Vec3 rel = t.position - post_->Position();
+            const double range = rel.HorizontalLength();
+            const double closing = range > 1.0 ? -(rel.x * t.velocity.x + rel.y * t.velocity.y) / range : 0.0;
+            return closing > 1.0 ? range / closing : -1.0;
+        }
+        return -1.0;
     }
     // The plotter's handwork speed (his tier's), and how well the squad leader orients (his tier's azimuth error
     // against the reference tier's: 1 for a trained one).
@@ -2583,6 +2656,11 @@ private:
     std::vector<VoiceDesignation> designations_out_;
     double battery_net_free_s_ = 0.0;
     std::vector<LauncherStatus> status_boards_;
+    PostKeypad keypad_;
+    double marker_x_ = 0.0;
+    double marker_y_ = 0.0;
+    int marked_ = -1;
+    double marked_arrival_s_ = -1.0;
     std::map<std::string, bool> reported_deployed_;
 
     bool BatteryNetUp() const {
@@ -2766,7 +2844,51 @@ public:
             f.glass.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
         }
         f.launchers = status_boards_;
+        f.marker_x = marker_x_;
+        f.marker_y = marker_y_;
+        f.marked = marked_;
+        f.marked_arrival_s = marked_arrival_s_;
+        const int target = KeypadTarget();
+        if (target >= 0) {
+            char n[8];
+            std::snprintf(n, sizeof(n), "%02d", target % 100);
+            f.keypad = n;
+        }
+        f.keypad_designating = keypad_.designating;
+        f.keypad_last = keypad_.last;
         return f;
+    }
+    const PostKeypad& Keypad() const { return keypad_; }
+    int KeypadTarget() const {
+        if (!keypad_.entry.empty()) return std::atoi(keypad_.entry.c_str());
+        return marked_;
+    }
+    // The DT-2 marker on the IT-45 (fractions of the scale, x east, y north), the target it is on (-1 none) and that
+    // target's time of arrival at the post (s; -1 not closing).
+    double MarkerX() const { return marker_x_; }
+    double MarkerY() const { return marker_y_; }
+    int MarkedTarget() const { return marked_; }
+    double MarkedArrivalS() const { return marked_arrival_s_; }
+    // The battery commander gives a launcher the target with this number on the IT-45 (the ASPD-U's): its board number
+    // if the plotter has written it, else the tube's; by voice on the battery net as DesignateBatteryTarget.
+    bool DesignateFromTube(const std::string& callsign, int aspd_number) {
+        if (!post_) return false;
+        const AspdTrack* track = nullptr;
+        for (const AspdTrack& t : post_->Tracks()) {
+            if (t.number == aspd_number) track = &t;
+        }
+        if (track == nullptr || reported_kills_.count(track->target_id) != 0) return false;
+        for (const BoardMark& m : PostMarks()) {
+            if (m.target_id == track->target_id) return DesignateByVoice(callsign, m);
+        }
+        BoardMark m;
+        m.target_id = track->target_id;
+        m.number = aspd_number;
+        m.time_s = track->time_s;
+        m.position = track->position;
+        m.height_hm = static_cast<int>(std::lround(track->height_m / 100.0));
+        m.type = track->type;
+        return DesignateByVoice(callsign, m);
     }
     // A player's designation through his seat (multiplayer): only the commanding seat gives the launchers targets.
     bool SeatDesignate(const std::string& seat, const std::string& callsign, int number, std::string* why = nullptr) {

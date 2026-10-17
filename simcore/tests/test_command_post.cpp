@@ -154,6 +154,7 @@ SC_TEST("command post: a cabled radar's targets are taken off by hand, a few at 
                                              Target("d", 0, 16000, 1000)};
     p.Update(0.0, {}, radar, in);
     SC_EXPECT(p.Tracks().size() == 1 && p.Tracks()[0].target_id == "a" && p.Tracks()[0].primary);
+    SC_EXPECT(p.Scope(50000.0).size() == 1 && p.Scope(50000.0)[0].primary);  // its echo on the IT-45 under the symbol
     p.Update(1.0, {}, radar, in);  // still taking the first off
     SC_EXPECT(p.Tracks().size() == 1);
     p.Update(2.0, {}, radar, in);
@@ -281,4 +282,24 @@ SC_TEST("command post scenario: the tube's scale switch picks the scale; the pla
     SC_EXPECT(!r.PlayerPlot(number));  // still writing the last one
     SC_EXPECT(r.Board()->Marks().size() == 1);
     SC_EXPECT(!r.PlayerPlot(99));  // no such track on the tube
+}
+
+SC_TEST("command post: the IT boards' lamps for a launcher's report") {
+    LauncherStatus s;
+    SC_EXPECT(BoardLampsOf(s).load == 0 && !BoardLampsOf(s).ready);  // never heard from: all dark
+    s.state = LauncherStatus::State::Ready;
+    s.missiles = 6;
+    BoardLamps b = BoardLampsOf(s);
+    SC_EXPECT(b.load == 1 && b.ready && !b.sees && !b.fired && !b.fault);
+    s.missiles = 3;
+    s.state = LauncherStatus::State::Engaging;
+    b = BoardLampsOf(s);
+    SC_EXPECT(b.load == 2 && !b.ready && b.sees);
+    s.missiles = 1;
+    s.state = LauncherStatus::State::Launched;
+    b = BoardLampsOf(s);
+    SC_EXPECT(b.load == 3 && b.fired);
+    s.missiles = 0;
+    s.state = LauncherStatus::State::Empty;
+    SC_EXPECT(BoardLampsOf(s).load == 0 && !BoardLampsOf(s).ready);  // out of missiles: КОМПЛЕКТ dark
 }

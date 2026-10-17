@@ -1637,6 +1637,11 @@ FString USimWorldSubsystem::GetCommanderStation() const
 	return Runner && Runner->Def().has_crew_data ? ToF(Runner->Def().crew_data.commander) : FString();
 }
 
+FString USimWorldSubsystem::GetPlotterStation() const
+{
+	return Runner && Runner->Console().has_post ? ToF(Runner->Console().post_plotter) : FString();
+}
+
 TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) const
 {
 	TArray<FSimRadioMessage> Out;

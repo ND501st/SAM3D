@@ -2,6 +2,7 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -16,6 +17,7 @@
 #include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UObjectIterator.h"
 #include "UnrealClient.h"
 
 namespace
@@ -365,6 +367,7 @@ void ASimOsaVehicle::ConfigureForScenario(USimWorldSubsystem* Sim)
 	PostExterior->SetStaticMesh(Mesh);
 	PostExterior->RegisterComponent();
 	PostExterior->SetVisibility(!bInCabin);
+	Cabin->SetCabinHidden(!bInCabin);
 	PostMast = NewObject<USimPu12MastComponent>(this, TEXT("PostMast"));
 	PostMast->SetupAttachment(Root);
 	PostMast->RegisterComponent();
@@ -541,6 +544,10 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 	{
 		PostExterior->SetVisibility(!bEnter);
 	}
+	// The PU-12M's compartment is closed: from outside nothing of it shows, and its lining (thick, to keep Lumen's sky
+	// out) would stand through the hull.
+	Cabin->SetCabinHidden(bIsPost && !bEnter);
+	SetDaylightShut(bIsPost && bEnter);
 	DraggedWheel = INDEX_NONE;
 	HoveredItem = INDEX_NONE;
 	HoverText.Reset();
@@ -551,6 +558,35 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 		ApplyStationView();
 	}
 	return true;
+}
+
+void ASimOsaVehicle::SetDaylightShut(bool bShut)
+{
+	// The PU-12M's hatches are shut and its windscreens' armoured covers closed (the squad leader and driver drawing): no
+	// daylight reaches the compartment, only its lamps light it. Lumen still lets the sky light seep through the hull's
+	// lining and paints the cream walls mauve, so while the camera is inside, the sky lights are put out. (The Osa's cabin
+	// has windows: its daylight stays.)
+	if (bShut)
+	{
+		for (TObjectIterator<USkyLightComponent> It; It; ++It)
+		{
+			USkyLightComponent* Sky = *It;
+			if (Sky != nullptr && Sky->GetWorld() == GetWorld() && !ShutSkyLights.Contains(Sky))
+			{
+				ShutSkyLights.Add(Sky, Sky->Intensity);
+				Sky->SetIntensity(0.0f);
+			}
+		}
+		return;
+	}
+	for (const TPair<TWeakObjectPtr<USkyLightComponent>, float>& Shut : ShutSkyLights)
+	{
+		if (USkyLightComponent* Sky = Shut.Key.Get())
+		{
+			Sky->SetIntensity(Shut.Value);
+		}
+	}
+	ShutSkyLights.Reset();
 }
 
 void ASimOsaVehicle::SetCabinViewOverride(FVector BodyLocationM, FRotator Rotation, float FovDeg)

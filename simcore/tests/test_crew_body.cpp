@@ -318,23 +318,25 @@ SC_TEST("crew body: the PU-12M's seats put the floor where its cabin has it") {
     }
 }
 
-SC_TEST("crew body: the PU-12M's operator rests his eyes on the IT-45 (the seat's look names it as an alternative)") {
+SC_TEST("crew body: the PU-12M's plotter rests his eyes on his map, the commander on the IT-45 (look alternatives)") {
     Pu12mBody o = LoadPu12mBody();
     SC_EXPECT(o.ok);
-    BodyAnimator anim(&o.cabin, &o.body, "operator");
-    SC_EXPECT(anim.Valid());
-    SeatActivity idle;
-    for (int i = 0; i < 40; ++i) anim.Update(0.05, idle, &o.console.panel);
-    const CabinDisplay* it45 = nullptr;
-    for (const CabinDisplay& d : o.cabin.displays) {
-        if (d.id == "it45") it45 = &d;
+    for (const auto& seat : {std::make_pair("operator", "map"), std::make_pair("battery_commander", "it45")}) {
+        BodyAnimator anim(&o.cabin, &o.body, seat.first);
+        SC_EXPECT(anim.Valid());
+        SeatActivity idle;
+        for (int i = 0; i < 40; ++i) anim.Update(0.05, idle, &o.console.panel);
+        const CabinDisplay* disp = nullptr;
+        for (const CabinDisplay& d : o.cabin.displays) {
+            if (d.id == seat.second) disp = &d;
+        }
+        SC_EXPECT(disp != nullptr);
+        if (disp == nullptr) continue;
+        const Vec3 target = o.cabin.FindPanel(disp->panel_id)->PointAt(disp->u_m, disp->v_m);
+        const BodyPose& p = anim.Pose();
+        const Vec3 to = (target - p.head).Normalized();
+        SC_EXPECT(Dot(p.head_forward, to) > 0.97);   // within about 14 degrees
     }
-    SC_EXPECT(it45 != nullptr);
-    if (it45 == nullptr) return;
-    const Vec3 screen = o.cabin.FindPanel(it45->panel_id)->PointAt(it45->u_m, it45->v_m);
-    const BodyPose& p = anim.Pose();
-    const Vec3 to = (screen - p.head).Normalized();
-    SC_EXPECT(Dot(p.head_forward, to) > 0.97);   // within about 14 degrees
 }
 
 SC_TEST("crew body: in the PU-12M, every control is in reach of its seat, standing only for the crew data's stand_for") {
@@ -363,5 +365,5 @@ SC_TEST("crew body: in the PU-12M, every control is in reach of its seat, standi
         SC_EXPECT(listed != p.seated);
         if (!p.reachable) ++away; else if (p.seated) ++seated; else ++standing;
     }
-    SC_EXPECT(seated + standing == 25 && away == 0);
+    SC_EXPECT(seated + standing == static_cast<int>(o.console.panel.Controls().size()) && away == 0);
 }

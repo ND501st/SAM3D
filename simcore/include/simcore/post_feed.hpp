@@ -21,6 +21,13 @@ struct PostFeed {
     std::vector<CommandPost::ScopeMark> scope;      // the IT-45 now (fractions of the scale)
     std::vector<em::ViewBoardMark> glass;           // the board's marks of the last few minutes, oldest first
     std::vector<LauncherStatus> launchers;          // the IT boards
+    double marker_x = 0.0;                          // the DT-2 marker (fractions of the scale, x east, y north)
+    double marker_y = 0.0;
+    int marked = -1;                                // the target the marker is on (-1 none)
+    double marked_arrival_s = -1.0;                 // its time of arrival at the post (-1 not closing)
+    std::string keypad;                             // the ДХ window: the target's number ("" none)
+    bool keypad_designating = false;                // ЦУ pressed, waiting for the launcher's place
+    std::string keypad_last;                        // the last designation ("05>22")
 };
 
 // The board's targets as the commander reads them: each number's latest mark.
@@ -56,6 +63,7 @@ inline PostFeed FromViewExtras(const em::ViewExtras& x) {
         m.zone = t.zone;
         m.friendly = t.friendly;
         m.group = t.group;
+        m.primary = t.primary;
         f.scope.push_back(m);
     }
     f.glass = x.board;
@@ -67,6 +75,13 @@ inline PostFeed FromViewExtras(const em::ViewExtras& x) {
         s.target_number = l.target_number;
         f.launchers.push_back(s);
     }
+    f.marker_x = x.post_marker_x;
+    f.marker_y = x.post_marker_y;
+    f.marked = x.post_marked;
+    f.marked_arrival_s = x.post_marked_arrival_s;
+    f.keypad = x.post_keypad;
+    f.keypad_designating = x.post_keypad_designating;
+    f.keypad_last = x.post_keypad_last;
     return f;
 }
 
@@ -78,13 +93,20 @@ inline void ToViewExtras(const PostFeed& f, em::ViewExtras& x) {
     x.post_position = f.position;
     x.post_scope.clear();
     for (const CommandPost::ScopeMark& m : f.scope) {
-        x.post_scope.push_back({m.number, m.x, m.y, m.vx, m.vy, m.zone, m.friendly, m.group});
+        x.post_scope.push_back({m.number, m.x, m.y, m.vx, m.vy, m.zone, m.friendly, m.group, m.primary});
     }
     x.board = f.glass;
     x.launchers.clear();
     for (const LauncherStatus& s : f.launchers) {
         x.launchers.push_back({s.callsign, static_cast<int>(s.state), s.missiles, s.target_number});
     }
+    x.post_marker_x = f.marker_x;
+    x.post_marker_y = f.marker_y;
+    x.post_marked = f.marked;
+    x.post_marked_arrival_s = f.marked_arrival_s;
+    x.post_keypad = f.keypad;
+    x.post_keypad_designating = f.keypad_designating;
+    x.post_keypad_last = f.keypad_last;
 }
 
 }  // namespace simcore

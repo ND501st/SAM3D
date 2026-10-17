@@ -18,7 +18,7 @@
       "displays": ["it1"], "stand_for": ["dtp.parallax"], "source": "ru_pu12_text (No. 1); csla_pu12_manual (his workplace: KP-4, GAK panel, IT-1, DTP, R-123M)", "confidence": "high" },
     { "station": "operator", "number": 2, "title_ru": "Оператор-планшетист", "title_en": "Operator-plotter",
       "duties": ["The ASPD-U and the IT-45", "Marks the targets with the DI marker and the ДХ keypad", "Plots the air picture on the board"],
-      "displays": ["it45"], "source": "ru_pu12_text (No. 2); shilka_narod (the operator's place at the IT-45)", "confidence": "high" },
+      "displays": ["map", "it45"], "stand_for": ["aspd.power", "fr.mode", "fr.scale"], "source": "ru_pu12_text (No. 2); shilka_narod (the operator's place at the IT-45)", "confidence": "high" },
     { "station": "radio_operator", "number": 3, "title_ru": "Радиотелефонист", "title_en": "Radiotelephone operator",
       "duties": ["The R-123M FuG-2 and the R-111 FuG-3", "Raises and guys the mast", "The distribution board and the rectifier"],
       "displays": [], "stand_for": ["mast.raise"], "source": "ru_pu12_text (No. 3); csla_pu12_manual (his workplace); valka_pu12 (the signalman extends the mast)", "confidence": "high" },

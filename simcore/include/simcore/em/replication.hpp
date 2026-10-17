@@ -134,6 +134,7 @@ struct ViewPostTrack {
     int zone = 1;
     bool friendly = false;
     bool group = false;
+    bool primary = false;  // from a radar cabled to the post: its echo paints under the symbol
 };
 
 struct ViewLauncher {
@@ -154,6 +155,14 @@ struct ViewExtras {
     Vec3 post_position;
     std::vector<ViewPostTrack> post_scope;
     std::vector<ViewLauncher> launchers;
+    // the commander's marker and keypad (post_feed.hpp)
+    double post_marker_x = 0.0;
+    double post_marker_y = 0.0;
+    int post_marked = -1;
+    double post_marked_arrival_s = -1.0;
+    std::string post_keypad;
+    bool post_keypad_designating = false;
+    std::string post_keypad_last;
 };
 
 struct KnowledgeView {
@@ -398,6 +407,7 @@ inline void Get(Reader& r, ViewSensorTrack& t) {
 
 constexpr double kDegStep = 1e-4;  // degrees, for the scope
 constexpr double kFracStep = 1e-5; // fractions of a scope's scale (the IT-45's tracks)
+constexpr double kSecStep = 0.01;  // seconds (a time of arrival)
 
 inline void PutEchoes(Writer& w, const std::vector<ViewEcho>& list) {
     w.U32(static_cast<std::uint32_t>(list.size()));
@@ -498,7 +508,7 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Q(t.vx, kFracStep);
         w.Q(t.vy, kFracStep);
         w.U8(static_cast<std::uint8_t>(t.zone));
-        w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0)));
+        w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0) | (t.primary ? 4 : 0)));
     }
     w.U32(static_cast<std::uint32_t>(x.launchers.size()));
     for (const ViewLauncher& l : x.launchers) {
@@ -507,6 +517,13 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.I32(l.missiles);
         w.I32(l.target_number);
     }
+    w.Q(x.post_marker_x, kFracStep);
+    w.Q(x.post_marker_y, kFracStep);
+    w.I32(x.post_marked);
+    w.Q(x.post_marked_arrival_s, kSecStep);
+    w.Str(x.post_keypad);
+    w.U8(x.post_keypad_designating ? 1 : 0);
+    w.Str(x.post_keypad_last);
     return w.bytes;
 }
 inline bool GetExtras(Reader& r, ViewExtras& x) {
@@ -562,6 +579,7 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         const std::uint8_t flags = r.U8();
         t.friendly = (flags & 1u) != 0;
         t.group = (flags & 2u) != 0;
+        t.primary = (flags & 4u) != 0;
         x.post_scope.push_back(t);
     }
     n = r.U32();
@@ -574,6 +592,13 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         l.target_number = r.I32();
         x.launchers.push_back(l);
     }
+    x.post_marker_x = r.Q(kFracStep);
+    x.post_marker_y = r.Q(kFracStep);
+    x.post_marked = r.I32();
+    x.post_marked_arrival_s = r.Q(kSecStep);
+    x.post_keypad = r.Str();
+    x.post_keypad_designating = r.U8() != 0;
+    x.post_keypad_last = r.Str();
     return r.ok;
 }
 

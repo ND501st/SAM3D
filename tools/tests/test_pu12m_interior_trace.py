@@ -66,16 +66,20 @@ def test_the_seats_and_eye_points():
         it, (x, y, _) = I.item(seat), I.STATIONS[sid]['eye']
         assert it['x0'] <= x <= it['x1'] and it['y0'] <= y <= it['y1'], sid
     bench = I.item('bench')
-    for sid, (y0, y1) in zip(('operator', 'battery_commander', 'radio_operator'), I.BENCH['places']):
+    for sid, (y0, y1) in zip(('battery_commander', 'operator', 'radio_operator'), I.BENCH['places']):
         x, y, _ = I.STATIONS[sid]['eye']
         assert y0 <= y <= y1 and bench['x0'] - 0.05 <= x <= bench['x1'], sid
 
 
-def test_the_operator_faces_the_it45():
-    s, (x, y, z) = I.IT45_SCREEN, I.STATIONS['operator']['eye']
+def test_the_commander_faces_the_it45_and_the_plotter_his_map():
+    s, (x, y, z) = I.IT45_SCREEN, I.STATIONS['battery_commander']['eye']
     d = s['x'] - x
     assert 0.45 < d < 0.85                                   # reading distance
-    assert abs(s['y'] - y) < 0.06 and -0.4 < s['z'] - z < 0.0
+    assert abs(s['y'] - y) < 0.15 and -0.5 < s['z'] - z < 0.0
+    assert 0.38 < s['d'] < 0.46                              # a 45 cm tube
+    mx, my, mz = I.STATIONS['operator']['eye']
+    board = I.item('map_board')
+    assert 0.35 < board['x1'] - mx < 0.6 and board['y0'] < my < board['y1'] and board['z0'] < mz
     keypad = I.item('dch')
     assert keypad['y0'] > s['y'] + s['d'] / 2 - 0.01         # the ДХ keypad at the tube's left (shilka_narod)
     fr = I.item('fr_block')
@@ -102,17 +106,21 @@ def test_the_panels_stand_on_their_items_faces():
     import json
     layout = json.loads((ROOT / 'data' / 'cabins' / 'pu12m.json').read_text(encoding='utf-8'))
     for p in layout['panels']:
+        if p.get('bare'):
+            continue                                            # an R-123M's own plate, inside its mesh's box
         bx, by, bz = p['centre_m']
         x, y, z = by, -bx, bz                                   # body to trace
         f = math.radians(p['facing_deg'])
-        nx, ny = math.cos(f), -math.sin(f)                      # the face's normal, trace X and Y
+        up = p.get('tilt_deg', 0) == 90                         # a top face looks up
+        nx, ny = (0.0, 0.0) if up else (math.cos(f), -math.sin(f))   # the face's normal, trace X and Y
+        nz = 1.0 if up else 0.0
         near = [it for it in I.ITEMS
                 if it['x0'] - 0.08 <= x <= it['x1'] + 0.08 and it['y0'] - 0.08 <= y <= it['y1'] + 0.08 and
                 it['z0'] - 0.02 <= z <= it['z1'] + 0.02]
         assert near, p['id']
         # the point just behind the panel is inside an item, the point just in front of it is not
-        behind = (x - 0.02 * nx, y - 0.02 * ny, z)
-        front = (x + 0.02 * nx, y + 0.02 * ny, z)
+        behind = (x - 0.008 * nx, y - 0.008 * ny, z - 0.008 * nz)
+        front = (x + 0.008 * nx, y + 0.008 * ny, z + 0.008 * nz)
 
         def within(pt):
             return any(it['x0'] <= pt[0] <= it['x1'] and it['y0'] <= pt[1] <= it['y1'] and it['z0'] <= pt[2] <= it['z1']

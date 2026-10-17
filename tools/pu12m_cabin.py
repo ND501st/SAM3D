@@ -20,7 +20,12 @@ import pu12m_interior_trace as I  # noqa: E402
 
 OUT = ROOT / 'data' / 'cabins' / 'pu12m.json'
 MANIFEST = ROOT / 'art' / 'pu12m_interior' / 'manifest.json'
-FACING = {'rear': 180.0, 'front': 0.0, 'left': -90.0, 'right': 90.0}
+FACING = {'rear': 180.0, 'front': 0.0, 'left': -90.0, 'right': 90.0, 'top': 180.0}
+# A panel's plate takes its item's paint (rwd_mb3's colour photographs: the blocks blue-grey, the IT-45, the ДХ and the IT-2M
+# light grey, the S-23 black).
+MAT_COLOR = {'Paint_BlueGrey': 'bluegrey', 'Paint_LightGrey': 'lightgrey', 'Bakelite_Black': 'black', 'Paint_Radio': 'grey'}
+VISUALS = 'docs/research/PU12_VISUALS_2026-10.md'
+
 PLAN = 'csla_pu12_manual (the equipment plan, item %s)'
 
 
@@ -39,13 +44,15 @@ class Layout:
         self._frames = {}
 
     # -- panels -------------------------------------------------------------------------------------------------
-    def panel(self, pid, label, station, iid, size, at=(0.0, 0.0), notes='', face=None):
-        """A panel on an item's face: `at` (m) right and up from the face's centre, as the person at it sees it."""
+    def panel(self, pid, label, station, iid, size, at=(0.0, 0.0), notes='', face=None, color=None):
+        """A panel on an item's face: `at` (m) right and up from the face's centre, as the person at it sees it. A
+        "top" face looks up, read from the bench (its up is forward)."""
         it = I.item(iid)
         face = face or I.FACES[iid]
         cx, cy, cz = I.centre(it)
         f = FACING[face]
         rx, ry = math.sin(math.radians(f)), math.cos(math.radians(f))   # the panel's right, trace X and Y
+        tilt = 0
         if face == 'rear':
             cx = it['x0']
         elif face == 'front':
@@ -54,9 +61,16 @@ class Layout:
             cy = it['y1']
         elif face == 'right':
             cy = it['y0']
-        c = (cx + rx * at[0], cy + ry * at[0], cz + at[1])
-        p = {'id': pid, 'label': label, 'station': station, 'centre_m': body(c), 'facing_deg': f, 'tilt_deg': 0,
+        if face == 'top':
+            c = (cx + at[1], cy - at[0], it['z1'])
+            tilt = 90
+        else:
+            c = (cx + rx * at[0], cy + ry * at[0], cz + at[1])
+        p = {'id': pid, 'label': label, 'station': station, 'centre_m': body(c), 'facing_deg': f, 'tilt_deg': tilt,
              'size_m': [r4(size[0]), r4(size[1])]}
+        color = color or MAT_COLOR.get(it['mat'])
+        if color:
+            p['color'] = color
         p['notes'] = notes or 'On the face of %s (%s).' % (it['label'], PLAN % it['no'] if it['no'] else 'sam3d')
         self.panels.append(p)
         return pid
@@ -83,10 +97,12 @@ class Layout:
         return pid
 
     # -- items on panels ----------------------------------------------------------------------------------------
-    def control(self, cid, panel, at, style=None, look=None):
+    def control(self, cid, panel, at, style=None, look=None, units_per_turn=None):
         c = {'control': cid, 'panel': panel, 'at_m': [r4(at[0]), r4(at[1])]}
         if style:
             c['style'] = style
+        if units_per_turn:
+            c['units_per_turn'] = units_per_turn
         if look:
             c['look'] = look
         self.controls.append(c)
@@ -150,14 +166,15 @@ def build():
         'squad_leader': 'Front right (the plan\'s seat at 543-648 x 338-462 px): the KP-4 and the VO telescope ahead, the '
                         'IT-1 board, the PVS-2 and the DTP at his right, the GAK\'s panel and his R-123M (FuG-1) on the '
                         'side behind them.',
-        'operator': 'The bench\'s right place, facing the IT-45 (shilka_narod: the operator\'s place at the tube, the ДХ '
-                    'keypad at its left, the ФР block at its right). The bench: the plan\'s three places across the '
-                    'compartment facing forward (1288-1385 x 338-600 px).',
-        'battery_commander': 'The bench\'s middle place (csla_pu12_manual calls the IT-45 desk the battery commander\'s '
-                             'workplace): the tube and the keypad ahead and to his right, the RTK-1 over the tube, the '
-                             'IT-2, the ŠČK and the R-123M of the battery net (FuG-4) on the desk at the right, the R-407 '
-                             'behind the operator. SAM3D: the operator sits at the tube, the commander beside him '
-                             '(docs/research/PU12_RESEARCH_2026-10.md).',
+        'battery_commander': 'The bench\'s right place, at the IT-45 (csla_pu12_manual: the battery commander\'s '
+                             'workplace; rwd_mb3: "Platz des Kommandeurs/Operators"): the tube ahead, the ДХ keypad at its '
+                             'left, the ФР block at its right, the DT-2 marker on the desk, the RTK-1 over the tube, the '
+                             'IT-2M, the ŠČK and the R-123M of the battery net (FuG-4) on the desk at his right, the R-407 '
+                             'behind him. The bench: the plan\'s three places across the compartment facing forward '
+                             '(1288-1385 x 338-600 px).',
+        'operator': 'The bench\'s middle place, the plotter\'s (rwd_mb3: "Platz des Planzeichners"): the air-situation map '
+                    'ahead of him (the plan\'s item 24), the IT-45 at his right front. He switches the ASPD-U on at the '
+                    'ФР block, leaning over to the commander\'s side.',
         'radio_operator': 'The bench\'s left place: the R-111 with the R-123M (FuG-2) on top ahead of him, his table '
                           'between, the power boards (ŠČR, VS-27) and the PVS-1 on the side at his left '
                           '(csla_pu12_manual: the radio operator\'s workplace drawing).',
@@ -237,16 +254,9 @@ def build():
     L.control('intercom.pvs2', p, (0.04, -0.02), 'toggle')
     L.nameplate(p, (-0.03, 0.045), 'ПВС-2')
     L.fixture(p, (-0.04, -0.02), 'socket', 0.028, 'chrome')
-    p = L.panel('it1_panel', 'IT-1 status board', 'squad_leader', 'it1', (0.22, 0.26))
-    L.displays.append({'id': 'it1', 'label': 'IT-1 status board', 'kind': 'status_board', 'panel': p, 'at_m': [0.0, -0.01],
-                       'size_m': [0.20, 0.22], 'on_when': ready('net_27v'),
-                       'source': 'valka_pu12 (IT-1 and IT-2 information boards: the units\' state, the vehicles\' '
-                                 'activity, their ammunition); csla_pu12_manual item 4',
-                       'confidence': 'low',
-                       'notes': 'One column of lamps per launcher (the drawing shows five columns): its callsign, ready, '
-                                'engaging, launched, out of missiles and the missiles it reported, from what the post has '
-                                'heard on the battery net (scenario_runner StatusBoards). The rows are SAM3D\'s.'})
-    L.nameplate(p, (0.0, 0.115), 'ИТ-1', 0.04)
+    status_board(L, 'it1', 'IT-1M status board', 'squad_leader', 'it1', 'ИТ-1М', '4',
+                 'At the vehicle commander\'s (the squad leader\'s) place (rwd_mb3: "Tableau IT-1M in PU-12M am Platz des '
+                 'Kommandeurs"; csla_pu12_manual item 4).')
     p = L.r123m_panel('r123_fug1_panel', 'R-123M (FuG-1)', 'squad_leader', 'r123_fug1')
     radio_lamps(L, p, 'fug1')
     L.control('radio.fug1.power', p, (-0.112, -0.0935), 'toggle')
@@ -264,30 +274,42 @@ def build():
     L.lamp('mast_raising', 'МАЧТА', p, (-0.05, 0.07), 'amber', warming('mast_up'), 'sam3d (the mast going up)')
     L.lamp('mast_up', 'МАЧТА ПОДНЯТА', p, (0.05, 0.07), 'green', ready('mast_up'), 'sam3d (raised and guyed)')
 
-    # ---------------------------------------------------------------------------------------------- the operator
+    # ---------------------------------------------------------------------------------------------- the commander's workplace
     s = I.IT45_SCREEN
     it45 = I.item('it45')
-    face_y = 0.5 * (it45['y0'] + it45['y1'])
-    pw, ph = 0.34, 0.40
-    pu = -(s['y'] - face_y) + 0.0      # the panel's right is to the vehicle's right (-Y) facing back
-    p = L.panel('it45_panel', 'IT-45 indicator', 'operator', 'it45', (pw, ph), at=(pu, s['z'] - I.centre(it45)[2]),
-                notes='The IT-45 tube\'s face (csla_pu12_manual item 19; shilka_narod: the round tube with the grid '
-                      'glass in front, the ДХ keypad at its left and the ФР block at its right).')
-    L.displays.append({'id': 'it45', 'label': 'IT-45 indicator', 'kind': 'aspd_scope', 'panel': p, 'at_m': [0.0, 0.0],
-                       'size_m': [s['d'], s['d']], 'glass': True, 'on_when': ready('aspd_warm'),
-                       'source': 'ru_pu12_text (up to 100 targets: number 00-99, friend or foe, group, height zone H1-H3, '
-                                 'speed vector; scales 35, 50, 100 km); flak11 (PU12-0: primary or secondary picture); '
-                                 'shilka_narod (the grid glass over the tube)',
+    p = L.panel('it45_panel', 'IT-45 indicator', 'battery_commander', 'it45', (0.52, 0.64),
+                notes='The IT-45\'s face, light grey (rwd_mb3 and shilka_narod photographs: a 45 cm tube behind an amber '
+                      'filter and a grid glass, a strip of knobs over it, the ДХ keypad at its left, the ФР block at its '
+                      'right).')
+    L.displays.append({'id': 'it45', 'label': 'IT-45 indicator', 'kind': 'aspd_scope', 'panel': p,
+                       'at_m': [0.0, r4(s['z'] - I.centre(it45)[2])], 'size_m': [s['d'], s['d']], 'glass': True,
+                       'sweep_period_s': 10.0, 'afterglow_s': 6.0,
+                       'on_when': ready('aspd_warm'),
+                       'source': 'rwd_mb3 (the IT-45 shows the primary picture and the telecode\'s data as digits, signs, '
+                                 'characteristics and symbols; the ФР block makes the radial-circular sweep and the range '
+                                 'marks; the speed vector and the time of arrival; the DT-2 marker); ru_pu12_text (number '
+                                 '00-99, friend or foe, group, height zone H1-H3, speed vector; scales 35, 50, 100 km); '
+                                 'shilka_narod, rwd_mb3 (photographs: the amber filter, the grid glass); viko_commons (the '
+                                 'same orange glass on a Soviet remote PPI); radiolamp_elt (the radar screens\' long '
+                                 'yellow and orange afterglows)',
                        'confidence': 'medium',
-                       'notes': 'The ASPD-U\'s tracks on the scale of the ФР block\'s switch (command_post.hpp Scope): '
-                                'each target its number, a mark for its zone, its speed vector, friends marked. Lit once '
-                                'the ASPD-U has warmed up; tracks while the telecode or a cabled radar gives a picture. '
-                                'The grid glass in front carries the plotter\'s marks (the board). Phosphor colour and the '
-                                'marks\' symbols are SAM3D\'s.'})
-    L.fixture(p, (-0.14, 0.17), 'nameplate', (0.05, 0.014), label='ИТ-45')
-    L.fixture(p, (0.15, -0.17), 'knob', 0.02, 'black')
-    L.fixture(p, (-0.15, -0.17), 'knob', 0.02, 'black')
+                       'notes': 'Amber long-persistence picture (the filter in the photographs, as the Soviet PPIs\'): the '
+                                'sweep turning with the range marks lighting as it passes and fading, the telecode\'s '
+                                'targets drawn by the character generator (number, zone mark, speed vector, friends barred), '
+                                'the marker, the marked target brightened with its time of arrival; a cabled radar\'s '
+                                'echoes painted by the sweep under their symbols. Symbols, the sweep\'s period (10 s) and the '
+                                'afterglow (6 s: the long-afterglow screens of the Soviet tube table, radiolamp_elt) are '
+                                'SAM3D\'s. ' + VISUALS})
+    L.fixture(p, (-0.2, 0.29), 'nameplate', (0.05, 0.014), label='ИТ-45')
     dch(L)
+    p = L.panel('dt2_panel', 'DT-2 coordinate pickup', 'battery_commander', 'di', (0.17, 0.17),
+                notes='The marker\'s pickup on the desk (rwd_mb3: Geber der Koordinaten DT-2; the ČSLA plan\'s item 20, '
+                      'DI). SAM3D works it as two wheels: the marker\'s azimuth and its range.')
+    L.control('dt2.azimuth', p, (-0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=90)
+    L.control('dt2.range', p, (0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=0.25)
+    L.nameplate(p, (-0.04, 0.045), 'АЗ', 0.025)
+    L.nameplate(p, (0.04, 0.045), 'Д', 0.025)
+    L.nameplate(p, (0.0, -0.065), 'ДТ-2', 0.04)
     fr(L)
     sblock(L)
     p = L.panel('r_panel', 'R telecode transmitter', 'operator', 'telecode_tx', (0.26, 0.16), at=(0.0, 0.22))
@@ -304,12 +326,37 @@ def build():
 
     # ---------------------------------------------------------------------------------------------- the battery commander
     rtk1(L)
-    p = L.panel('it2_panel', 'IT-2 status board', 'battery_commander', 'it2', (0.22, 0.23))
-    L.displays.append({'id': 'it2', 'label': 'IT-2 status board', 'kind': 'status_board', 'panel': p, 'at_m': [0.0, -0.01],
-                       'size_m': [0.20, 0.19], 'on_when': ready('net_27v'),
-                       'source': 'valka_pu12 (IT-1 and IT-2 information boards); csla_pu12_manual item 18',
-                       'confidence': 'low', 'notes': 'As the IT-1, at the commander\'s desk.'})
-    L.nameplate(p, (0.0, 0.1), 'ИТ-2', 0.04)
+    status_board(L, 'it2', 'IT-2M status board', 'battery_commander', 'it2', 'ИТ-2М', '18',
+                 'At the commander\'s workplace (rwd_mb3: "Tableau IT-2M ... am Platz des Operators", over the IT-45; '
+                 'csla_pu12_manual item 18).')
+
+    # ---------------------------------------------------------------------------------------------- the plotter
+    p = L.panel('map_panel', 'Air-situation map', 'operator', 'map_board', (0.33, 0.37), color='lightgrey',
+                notes='The plotter\'s map board (csla_pu12_manual item 24, planšet vzdušné situace; rwd_mb3: the '
+                      'Luftlagekarte, a plexiglass board on a hinge, etched with a grid and range circles).')
+    L.displays.append({'id': 'map', 'label': 'Air-situation map', 'kind': 'plot_board', 'panel': p, 'at_m': [0.0, 0.0],
+                       'size_m': [0.32, 0.36],
+                       'source': 'rwd_mb3 (Luftlagekarte: the targets\' tracks drawn by hand in the designation squares, '
+                                 'azimuth and range taken off it; the photograph: a plexiglass board with a grid and range '
+                                 'circles); data/command/pu12.json (the board\'s notation: number, height over the code)',
+                       'confidence': 'medium',
+                       'notes': 'The plotter\'s grease-pencil marks on the etched plexiglass: each target\'s last marks '
+                                'joined into a track, its number and height over its code; the post at the centre. The '
+                                'grid\'s spacing and the pencil\'s colour are SAM3D\'s. ' + VISUALS})
+    p = L.panel('s23_panel', 'S-23 data transmission set', 'operator', 's23', (0.30, 0.18),
+                notes='The S-23 (rwd_mb3: the PU-12M\'s data transmission set behind the driver, a black box with a row '
+                      'of coloured lamps). What each lamp shows is SAM3D\'s.')
+    for u, lid, lab, color, cond in ((-0.11, 's23_power', 'ПИТ', 'white', ready('equipment_power')),
+                                     (-0.07, 's23_warm', 'ПРОГР', 'amber', warming('aspd_warm')),
+                                     (-0.03, 's23_rx', 'ПРМ', 'green', ready('telecode_reception')),
+                                     (0.01, 's23_tx', 'ПРД', 'green', ready('aspd_working'))):
+        L.lamp(lid, lab, p, (u, 0.03), color, cond, 'rwd_mb3 (photograph: a row of coloured lamps); the lamps\' meanings '
+               'are sam3d', look={'kind': 'lamp', 'size_m': 0.016})
+    for u, color in ((0.05, 'red'), (0.09, 'amber'), (0.13, 'white')):
+        L.fixture(p, (u, 0.03), 'lamp', 0.016, color)
+    for u in (-0.11, -0.07, -0.03, 0.01, 0.05, 0.09):
+        L.fixture(p, (u, -0.04), 'button', 0.014, 'white', ring='chrome')
+    L.nameplate(p, (0.1, -0.065), 'С-23', 0.04)
     p = L.panel('skc_panel', "ŠČK commander's panel", 'battery_commander', 'skc', (0.24, 0.18),
                 notes='The commander\'s panel (ЩК; csla_pu12_manual item 36). What its switches do is not published; '
                       'SAM3D gives it the lamps of the commander\'s nets.')
@@ -435,31 +482,80 @@ def radio_lamps(L, p, sub):
     L.lamp(sub + '_warm', 'R-123M %s: прогрев' % sub.upper(), p, (0.1767, -0.0183), 'amber', warming(sub), src)
 
 
+def status_board(L, did, label, station, iid, name, item_no, where):
+    """An IT-1M / IT-2M board as the photographs show them (rwd_mb3): a light plate with the lamp matrix and its legends
+    (the display), a blank label strip under it, then the input buttons, the fuse, the +27 V toggle and СБРОС."""
+    it = I.item(iid)
+    w = (it['x1'] - it['x0']) - 0.01
+    h = (it['z1'] - it['z0']) - 0.01
+    p = L.panel(did + '_panel', label, station, iid, (w, h),
+                notes=where + ' The plate\'s legends and lamps are drawn by its display; the buttons, fuse and toggle are '
+                              'fixtures (the crew\'s entries are the post\'s own, scenario_runner StatusBoards).')
+    L.displays.append({'id': did, 'label': label, 'kind': 'status_board', 'panel': p, 'at_m': [0.0, r4(0.19 * h)],
+                       'size_m': [r4(w - 0.012), r4(0.58 * h)], 'on_when': ready('net_27v'),
+                       'source': 'rwd_mb3 (Informationstableau IT-1: signal groups for the ammunition, the combat activity '
+                                 'and the readiness, input buttons, СБРОС; photographs of the IT-1, IT-1M and IT-2M: '
+                                 'КОМПЛЕКТ 1, 1/2, 1/4; РАБОТА ГОТОВ, ВИЖУ, ВЫП.; ТЕХ. СОСТОЯНИЕ РПК, БЧ, ШАССИ; '
+                                 'rows of amber lamps); csla_pu12_manual item ' + item_no,
+                       'confidence': 'medium',
+                       'notes': 'A row per launcher in the order of the battery: its number; КОМПЛЕКТ lit for the share '
+                                'of its missiles left (SAM3D: a full load, half or more, any left); РАБОТА ГОТОВ for ready, '
+                                'ВИЖУ while it engages (target seen), ВЫП. once it has launched; ТЕХ. СОСТОЯНИЕ dark (no '
+                                'faults modelled); the bottom row the support vehicles (dark). ' + VISUALS})
+    L.fixture(p, (0.0, r4(-0.16 * h)), 'window', (r4(0.8 * w), r4(0.07 * h)), 'white')
+    for k in range(6):
+        L.fixture(p, (r4((k - 2.5) * 0.15 * w), r4(-0.31 * h)), 'button', 0.011, 'red', ring='chrome')
+    L.fixture(p, (r4(-0.38 * w), r4(-0.43 * h)), 'lamp', 0.009, 'red')
+    L.fixture(p, (r4(0.22 * w), r4(-0.43 * h)), 'toggle', 0.01)
+    L.fixture(p, (r4(0.38 * w), r4(-0.43 * h)), 'button', 0.013, 'red', label='СБРОС')
+    L.nameplate(p, (0.0, r4(0.47 * h)), name + ' № 0373' if name.startswith('ИТ-2') else name, 0.06)
+    return p
+
+
 def dch(L):
-    """The ДХ characteristics keypad, after the photograph (shilka_narod; its outline 20-330 x 10-715 px in the crop)."""
-    size = (0.13, 0.30)
-    p = L.panel('dch_panel', 'ДХ characteristics keypad', 'operator', 'dch', size, at=(0.0, 0.05),
-                notes='The ДХ keypad (csla_pu12_manual item 15) as the photograph shows it (shilka_narod): a window, '
-                      'two rows of toggles, the characteristics keys and the digits. It gives a selected target its '
-                      'characteristics (friend or foe, group, height) or a designation (ЦУ); the console does not model '
-                      'it yet. Labels read at low resolution.')
+    """The ДХ characteristics keypad, after the photographs (shilka_narod, its outline 20-330 x 10-715 px in the crop; rwd_mb3
+    in colour: a light grey plate, a blue window, ivory keys with black legends in black frames, red keys at the bottom
+    corners and one in the upper block). The digits, ЦУ and СБР work (the console's post keypad); the rest are drawn."""
+    size = (0.13, 0.40)
     ext = (20, 10, 330, 715)
-    items = [(175, 30, 'nameplate', (0.03, 0.012), None, 'ДХ'), (215, 120, 'window', (0.063, 0.03), 'black', None)]
+    p = L.panel('dch_panel', 'ДХ characteristics keypad', 'battery_commander', 'dch', size,
+                notes='The ДХ keypad (csla_pu12_manual item 15; rwd_mb3: Pult DCh, entering a target\'s number, height '
+                      'zone, characteristics and the designation signal with an address). SAM3D works the digits (the '
+                      'target\'s number), ЦУ and a digit after it (the launcher\'s place on the IT boards: he reads it out '
+                      'on the battery net) and СБР (reset). Labels read at low resolution.')
+    wx, wy = L.at_photo(size, ext, 215, 120)
+    L.displays.append({'id': 'dch_window', 'label': 'ДХ window', 'kind': 'keypad_window', 'panel': p, 'at_m': [r4(wx), r4(wy)],
+                       'size_m': [0.063, 0.04], 'on_when': ready('aspd_warm'),
+                       'source': 'rwd_mb3 (photograph: a window of blue glass at the top of the ДХ); gost_21829_76 (a '
+                                 'warning flashes at 0.5-1 Hz: ЦУ); what it shows is sam3d',
+                       'confidence': 'low',
+                       'notes': 'The number the keypad is on (typed, or the marker\'s target), ЦУ flashing once a second '
+                                'while it waits for the launcher\'s place, the last designation. Blue-green vacuum-fluorescent '
+                                'seven-segment digits with their dark segments faintly showing: SAM3D\'s reading of the blue '
+                                'window. ' + VISUALS})
+    items = [(175, 30, 'nameplate', (0.03, 0.012), None, 'ДХ')]
     for x in (118, 160, 203, 245):
         items.append((x, 190, 'toggle', 0.008, None, None))
-    items.append((288, 190, 'knob', 0.014, 'black', None))
+    items.append((288, 190, 'lamp_button', 0.016, 'red', None))
     for x in (118, 160, 203, 245, 288):
         items.append((x, 240, 'toggle', 0.008, None, None))
-    keys = [('ВР', '', 'ТС'), ('СР', 'СМ', ''), ('СВ', 'Ч', 'ГР'), ('Н1', 'Н2', 'Н3'), ('Н', '22', 'ЦУ')]
+    keys = [('ВР', '', 'ТС'), ('СР', 'СМ', '*'), ('СВ', 'Ч', 'ГР'), ('Н1', 'Н2', 'Н3'), ('Н', '22', None)]
     for row, y in zip(keys, (300, 330, 362, 393, 425)):
         for lab, x in zip(row, (145, 190, 240)):
-            items.append((x, y, 'button', 0.016, 'white', lab or None))
-    digits = [('7', '8', '9'), ('4', '5', '6'), ('1', '2', '3'), ('0', 'М', 'ПВ')]
-    for row, y in zip(digits, (495, 530, 568, 603)):
-        for lab, x in zip(row, (118, 175, 228)):
-            items.append((x, y, 'button', 0.016, 'white', lab))
-    items.append((175, 640, 'button', 0.016, 'white', 'СЗТ'))
+            if lab is None:
+                continue
+            items.append((x, y, 'button', 0.016, 'red' if lab == '*' else 'ivory', None if lab in ('', '*') else lab))
+    items += [(175, 603, 'button', 0.016, 'ivory', 'М'), (228, 603, 'button', 0.016, 'ivory', 'ПВ'),
+              (175, 640, 'button', 0.016, 'ivory', 'СЗТ'), (228, 640, 'button', 0.016, 'red', None)]
     L.photo(p, size, ext, items)
+    for d, (x, y) in {'7': (118, 495), '8': (175, 495), '9': (228, 495), '4': (118, 530), '5': (175, 530), '6': (228, 530),
+                      '1': (118, 568), '2': (175, 568), '3': (228, 568), '0': (118, 603)}.items():
+        L.control('dch.key.' + d, p, L.at_photo(size, ext, x, y), 'button',
+                  {'kind': 'button', 'size_m': 0.016, 'color': 'ivory', 'label': d})
+    L.control('dch.key.cu', p, L.at_photo(size, ext, 240, 425), 'button',
+              {'kind': 'button', 'size_m': 0.016, 'color': 'ivory', 'label': 'ЦУ'})
+    L.control('dch.key.reset', p, L.at_photo(size, ext, 118, 640), 'button',
+              {'kind': 'button', 'size_m': 0.016, 'color': 'red', 'label': 'СБР'})
 
 
 def fr(L):

@@ -195,6 +195,7 @@ struct CabinPanel {
     double height_m = 0.0;
     bool bare = false;        // no plate of its own: the panel is the front of a mesh that has its own (an R-123M's), and only
                               // carries the controls and lamps at their places on it
+    std::string color;        // the plate's paint (a look colour; "" the console's cream)
 
     // Unit vectors in the body frame: the face's normal, the operator's right along the face, and up the face.
     Vec3 Normal() const {
@@ -244,10 +245,12 @@ inline bool KnownReadout(const std::string& name) {
     return false;
 }
 
-// aspd_scope: the command post's IT-45 (command_post.hpp: the ASPD-U's tracks on the scale the console's post block names),
-// with the plotting glass over it (`glass`: the board's marks in grease pencil); status_board: the IT-1 / IT-2 boards (the
-// launchers' reports). Both need the console's post block.
-enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters, AspdScope, StatusBoard };
+// aspd_scope: the command post's IT-45 (command_post.hpp: the ASPD-U's tracks on the scale the console's post block names,
+// the DT-2 marker), with the grid glass over it (`glass`); status_board: the IT-1M / IT-2M boards (the launchers' reports);
+// plot_board: the plotter's air-situation map (the board's marks in grease pencil); keypad_window: the ДХ keypad's window
+// (the number it is on, ЦУ). All need the console's post block (keypad_window its keypad).
+enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters, AspdScope, StatusBoard, PlotBoard,
+                              KeypadWindow };
 
 inline const char* ToString(CabinDisplayKind k) {
     switch (k) {
@@ -260,6 +263,8 @@ inline const char* ToString(CabinDisplayKind k) {
         case CabinDisplayKind::Counters: return "counters";
         case CabinDisplayKind::AspdScope: return "aspd_scope";
         case CabinDisplayKind::StatusBoard: return "status_board";
+        case CabinDisplayKind::PlotBoard: return "plot_board";
+        case CabinDisplayKind::KeypadWindow: return "keypad_window";
     }
     return "?";
 }
@@ -494,11 +499,11 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("panels", i);
             const json::Value& p = arr->items[i];
-            if (!Keys(p, path, {"id", "label", "station", "centre_m", "facing_deg", "tilt_deg", "size_m", "bare", "notes"})) {
+            if (!Keys(p, path, {"id", "label", "station", "centre_m", "facing_deg", "tilt_deg", "size_m", "bare", "color", "notes"})) {
                 return false;
             }
             CabinPanel panel;
-            if (!OptionalBool(p, path, "bare", panel.bare)) return false;
+            if (!OptionalBool(p, path, "bare", panel.bare) || !OptionalString(p, path, "color", panel.color)) return false;
             if (!RequireString(p, path, "id", panel.id) || !RequireString(p, path, "label", panel.label) ||
                 !RequireString(p, path, "station", panel.station) || !Number3(p, path, "centre_m", panel.centre_m) ||
                 !Degrees(p, path, "facing_deg", panel.facing_rad) || !Degrees(p, path, "tilt_deg", panel.tilt_rad) ||
@@ -509,6 +514,7 @@ private:
                 return Fail(Join(path, "station"), "unknown station '" + panel.station + "'");
             }
             if (!(panel.width_m > 0.0) || !(panel.height_m > 0.0)) return Fail(Join(path, "size_m"), "must be positive");
+            if (!panel.color.empty() && !KnownColour(panel.color)) return Fail(Join(path, "color"), "unknown colour '" + panel.color + "'");
             if (out.FindPanel(panel.id) != nullptr) return Fail(Join(path, "id"), "duplicate panel '" + panel.id + "'");
             out.panels.push_back(std::move(panel));
         }
@@ -659,7 +665,8 @@ private:
     }
 
     static bool KnownColour(const std::string& c) {
-        for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange"}) {
+        for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange", "bluegrey",
+                                  "lightgrey", "ivory"}) {
             if (c == known) return true;
         }
         return false;
@@ -895,14 +902,20 @@ private:
             if (!console.has_sensors) return Fail(Join(path, "kind"), "counters need the console's sensors block");
         } else if (kind == "aspd_scope") {
             disp.kind = CabinDisplayKind::AspdScope;
-            allowed = {"glass"};
+            allowed = {"glass", "sweep_period_s", "afterglow_s"};
             if (!console.has_post) return Fail(Join(path, "kind"), "an aspd_scope needs the console's post block");
         } else if (kind == "status_board") {
             disp.kind = CabinDisplayKind::StatusBoard;
             if (!console.has_post) return Fail(Join(path, "kind"), "a status_board needs the console's post block");
+        } else if (kind == "plot_board") {
+            disp.kind = CabinDisplayKind::PlotBoard;
+            if (!console.has_post) return Fail(Join(path, "kind"), "a plot_board needs the console's post block");
+        } else if (kind == "keypad_window") {
+            disp.kind = CabinDisplayKind::KeypadWindow;
+            if (console.post_keypad_digits.empty()) return Fail(Join(path, "kind"), "a keypad_window needs the console's post keypad");
         } else {
-            return Fail(Join(path, "kind"),
-                        "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope or status_board");
+            return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope, "
+                                            "status_board, plot_board or keypad_window");
         }
         for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",

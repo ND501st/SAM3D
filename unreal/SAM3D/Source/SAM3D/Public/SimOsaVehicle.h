@@ -314,6 +314,9 @@ private:
 	void ConfigureForScenario(USimWorldSubsystem* Sim);
 	void HandlePost(class APlayerController* Pc);
 	TArray<int32> PickList() const;
+	/** Shuts the daylight out of a closed compartment (the PU-12M's): the level's sky lights dark while the camera is in
+	 *  it, their brightness back when it leaves. */
+	void SetDaylightShut(bool bShut);
 
 	double SpeedMps = 0.0;
 	double HeadingDeg = 0.0;
@@ -348,6 +351,8 @@ private:
 
 	bool bConfigured = false;
 	bool bIsPost = false;
+	/** The sky lights dimmed by SetDaylightShut, with their own intensities. */
+	TMap<TWeakObjectPtr<class USkyLightComponent>, float> ShutSkyLights;
 	int32 PickedTarget = INDEX_NONE;
 
 	bool bTouring = false;

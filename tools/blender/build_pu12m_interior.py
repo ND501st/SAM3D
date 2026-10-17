@@ -27,8 +27,12 @@ import pu12m_trace as T  # noqa: E402
 REPO = C.REPO
 OUT = os.path.join(REPO, 'art', 'pu12m_interior')
 C.COLLECTION = 'PU12MInterior'
-C.PREVIEW['Paint_Light'] = (0.78, 0.79, 0.76)
-LINING = 0.08          # the lining mesh's thickness, outwards from the inside face (Lumen's distance fields want a solid)
+C.PREVIEW['Paint_Light'] = (0.86, 0.83, 0.72)      # the lining's cream (rwd_mb3 photographs)
+C.PREVIEW['Paint_BlueGrey'] = (0.45, 0.5, 0.55)     # the blocks' blue-grey
+C.PREVIEW['Paint_LightGrey'] = (0.74, 0.75, 0.75)   # the IT-45's, the ДХ's, the IT-2M's light grey
+LINING = 0.15          # the lining mesh's thickness, outwards from the inside face: Lumen's distance fields need a solid this
+                       # thick to keep the sky out of a closed compartment. The cabin is hidden from outside, so it may stand
+                       # proud of the exterior.
 INSET = 0.004          # equipment faces stand this far behind their panels' planes (the panels' plates cover them)
 
 
@@ -204,18 +208,27 @@ def build_equipment():
             cx, cy, _ = I.centre(it)
             r = 0.5 * (it['x1'] - it['x0'])
             if iid == 'gak':
-                # the gyro: a cylinder on a square foot with a domed top (shilka_narod photograph)
-                b.box(-cy - r - 0.04, -cy + r + 0.04, cx - r - 0.04, cx + r + 0.04, it['z0'], it['z0'] + 0.06, 'Paint_Rack')
-                b.cylinder(b3(cx, cy, it['z0'] + 0.06), b3(cx, cy, it['z1'] - 0.10), r, 'Paint_Equipment', seg=32)
+                # the gyro: a cylinder with a domed top on a plate, the plate on a stand of four legs over its converter
+                # (rwd_mb3 photographs: light grey in the PU-12M)
+                plate = (-cy - r - 0.05, -cy + r + 0.05, cx - r - 0.05, cx + r + 0.05)
+                b.box(plate[0], plate[1], plate[2], plate[3], it['z0'] - 0.03, it['z0'], 'Paint_Rack')
+                for lx in (plate[0] + 0.015, plate[1] - 0.015):
+                    for ly in (plate[2] + 0.015, plate[3] - 0.015):
+                        b.box(lx - 0.012, lx + 0.012, ly - 0.012, ly + 0.012, I.FLOOR_Z, it['z0'] - 0.03, 'Paint_Rack')
+                b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1'] - 0.10), r, it['mat'], seg=40)
                 b.lathe(b3(cx, cy, it['z1'] - 0.10), (0, 0, 1),
-                        [(r, 0.0), (0.97 * r, 0.04), (0.85 * r, 0.075), (0.55 * r, 0.095), (0.0, 0.10)], 'Paint_Equipment')
-                b.box(-cy - 0.06, -cy + 0.06, cx - r - 0.05, cx - r + 0.01, it['z0'] + 0.15, it['z0'] + 0.25, 'Paint_Rack')
+                        [(r, 0.0), (0.97 * r, 0.04), (0.85 * r, 0.075), (0.55 * r, 0.095), (0.0, 0.10)], it['mat'], seg=40)
+                b.cylinder(b3(cx, cy, it['z0'] + 0.02), b3(cx, cy, it['z0'] + 0.05), r + 0.012, 'Metal_Dark', seg=40)
+                for k in range(6):
+                    a = 2 * math.pi * k / 6
+                    px, py = cx + (r + 0.004) * math.cos(a), cy + (r + 0.004) * math.sin(a)
+                    b.cylinder(b3(px, py, it['z0'] + 0.05), b3(px, py, it['z0'] + 0.09), 0.006, 'Metal_Steel', seg=8)
             elif iid == 'di':
-                # the marker: a round housing in the desk with a ball handle
-                b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z0'] + 0.025), r, 'Paint_Rack', seg=32)
-                b.cylinder(b3(cx, cy, it['z0'] + 0.025), b3(cx, cy, it['z1'] - 0.02), 0.012, 'Metal_Steel', seg=12)
-                b.lathe(b3(cx, cy, it['z1'] - 0.02), (0, 0, 1), [(0.0, -0.02), (0.02, -0.01), (0.02, 0.0), (0.0, 0.012)],
-                        'Bakelite_Black', seg=16)
+                # the DT-2 coordinate pickup: a round housing on the desk, its two wheels on top (the cabin's controls)
+                hgt = it['z1'] - it['z0'] - INSET
+                b.lathe(b3(cx, cy, it['z0']), (0, 0, 1),
+                        [(r + 0.006, 0.0), (r + 0.006, 0.008), (r, 0.012), (r, hgt - 0.004), (r - 0.004, hgt), (0.0, hgt)],
+                        'Paint_BlueGrey', seg=48)
             elif iid == 'vo':
                 b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1']), r * 0.6, 'Paint_Rack', seg=20)
                 b.cylinder(b3(cx, cy, it['z0'] + 0.02), b3(cx + 0.09, cy, it['z0'] + 0.08), 0.03, 'Rubber_Black', seg=14)
@@ -233,6 +246,26 @@ def build_equipment():
             b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
             b.box(-it['y1'] + 0.01, -it['y1'] + 0.03, it['x0'] + 0.02, it['x1'] - 0.02, I.FLOOR_Z, it['z0'], 'Paint_Rack')
             continue
+        if iid == 'map_board':
+            # the plexiglass in an aluminium frame (the panel and its display are the glass); a hanger to a roof bracket
+            # at its left edge (rwd_mb3: hinged on its frame)
+            x0, x1 = it['x0'], it['x1'] - INSET
+            for y0, y1, z0, z1 in ((it['y0'], it['y1'], it['z0'], it['z0'] + 0.015), (it['y0'], it['y1'], it['z1'] - 0.015, it['z1']),
+                                   (it['y0'], it['y0'] + 0.015, it['z0'], it['z1']), (it['y1'] - 0.015, it['y1'], it['z0'], it['z1'])):
+                b.box(-y1, -y0, x0, x1, z0, z1, 'Metal_Steel')
+            zc = I.ceiling_z(x0)
+            b.box(-it['y1'] - 0.002, -it['y1'] + 0.02, x0 + 0.002, x1 - 0.002, it['z1'], zc + 0.01, 'Metal_Steel')
+            b.box(-it['y1'] - 0.05, -it['y1'] + 0.05, x0 - 0.03, x1 + 0.03, zc - 0.012, zc + 0.01, 'Paint_Rack')
+            continue
+        if iid == 'pt200':
+            # the converter: a motor-generator lying along the vehicle on its feet
+            cyy = 0.5 * (it['y0'] + it['y1'])
+            rr = 0.5 * (it['z1'] - it['z0']) - 0.01
+            zc = it['z0'] + 0.02 + rr
+            b.cylinder(b3(it['x0'] + 0.01, cyy, zc), b3(it['x1'] - 0.01, cyy, zc), rr, it['mat'], seg=28)
+            for xx in (it['x0'] + 0.05, it['x1'] - 0.05):
+                b.box(-cyy - rr, -cyy + rr, xx - 0.02, xx + 0.02, it['z0'], zc, 'Paint_Rack')
+            continue
         if iid in ('r111_stand', 'rear_shelf'):
             # a frame: four posts and a top
             b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z1'] - 0.025, it['z1'], it['mat'])
@@ -242,11 +275,19 @@ def build_equipment():
             continue
         if iid == 'it45':
             # the tube's housing: a box, its back (to the bench) dished round the screen, a hood over the top
+            # the tube's housing, light grey (rwd_mb3), a frame round the screen and a dark strip of knobs and sockets over
+            # it (the photograph)
             face_inset(b, it)
             s = I.IT45_SCREEN
-            x = it['x0'] + INSET - 0.002
-            b.torus(b3(x - 0.004, s['y'], s['z']), (0, 1, 0), s['d'] / 2 + 0.03, 0.018, 'Paint_Panel', seg=48, rseg=10)
-            b.box(-it['y1'], -it['y0'], it['x0'] - 0.10, it['x0'] + INSET, it['z1'] - 0.012, it['z1'], 'Paint_Panel')
+            x = it['x0'] + INSET
+            b.torus(b3(x - 0.004, s['y'], s['z']), (0, 1, 0), s['d'] / 2 + 0.022, 0.014, it['mat'], seg=64, rseg=10)
+            sy0, sy1 = it['y0'] + 0.03, it['y1'] - 0.03
+            ztop = s['z'] + s['d'] / 2
+            b.box(-sy1, -sy0, x - 0.008, x, ztop + 0.035, ztop + 0.085, 'Metal_Dark')
+            for k in range(9):
+                yy = sy0 + (k + 0.5) * (sy1 - sy0) / 9
+                b.cylinder(b3(x - 0.008, yy, ztop + 0.06), b3(x - 0.022, yy, ztop + 0.06), 0.008,
+                           'Bakelite_Black' if k % 3 else 'Metal_Steel', seg=12)
             continue
         x0, x1, y0, y1 = face_inset(b, it)
         if iid in ('telecode_tx', 'telecode_rx', 'r407', 'r111', 'scr', 'bp48', 'vs27'):
