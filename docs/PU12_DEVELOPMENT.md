@@ -270,9 +270,16 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     on the battery net and on the IT boards.
   - **The IT boards' rows follow the battery's order (21, 22, ...)**, not who reported first: the ДХ's launcher places
     count down them.
-  - **Next: multiplayer across the two vehicles.** Seats of both crews, each player's knowledge and console stream from
-    his own vehicle's runner, a client loading the link and following its own vehicle. Until then a networked game
-    keeps everyone in the Osa (`SwitchLinkedVehicle` refuses).
+- **P8 third part, multiplayer (18 Oct 2026):** a commander in the post and players in the Osa.
+  - **The player's vehicle.** He chooses it when he joins (`-SimVehicle=post` or `osa`). His seat carries it
+    (`USimCrewSeatComponent::SeatVehicle`, sent with his seat request).
+  - **Server routing.** The server routes his seat's moves, designations and plots to that vehicle's runner, and sends
+    him that vehicle's console snapshots and knowledge (`USimWorldSubsystem::RunnerFor`).
+  - **On the client.** The client loads the link and follows its own vehicle (its cabin, its exterior).
+  - **No moving mid-game.** Changing vehicle in the middle of a networked game is not offered (V stays single player).
+  - **Check.** `tools/ue_crew_smoke.ps1 -Link`. The commander's client in the PU-12M was refused the operator's switch by
+    the post's console and gave the board's first target to 21. The Osa's driver started its gas turbine. The Osa's
+    commander heard the designation on its command net.
 
 ## 6. What is still SAM3D's
 

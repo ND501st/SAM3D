@@ -662,18 +662,24 @@ public:
 	/** The local player's seat (cabin clicks go through it when it holds a seat). */
 	void SetLocalCrewSeat(USimCrewSeatComponent* Seat);
 	void ClearLocalCrewSeat(USimCrewSeatComponent* Seat);
-	/** Server: a player takes or leaves a crew seat (a console station id). */
-	bool TakeCrewSeat(const FString& Role, const FString& Player);
-	void LeaveCrewSeat(const FString& Role);
+	/** Server: a player takes or leaves a crew seat (a console station id). In a battery link, Vehicle says whose: "osa"
+	 *  or "post" ("" the vehicle this machine's player is in). The same for the seat calls below. */
+	bool TakeCrewSeat(const FString& Role, const FString& Player, const FString& Vehicle = FString());
+	void LeaveCrewSeat(const FString& Role, const FString& Vehicle = FString());
 	/** Server: a seated player's control move / wheel turn. True if the control moved; otherwise Why says why not. */
-	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why);
+	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why, const FString& Vehicle = FString());
 	/** Server: a seated player's designation (the commanding seat only) or plot (the plotter's only). */
-	bool SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why);
-	bool SeatPlot(const FString& Role, int32 Number, FString& Why);
+	bool SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why, const FString& Vehicle = FString());
+	bool SeatPlot(const FString& Role, int32 Number, FString& Why, const FString& Vehicle = FString());
+	/** In a battery link, the runner of a vehicle ("osa", "post"; "" the one this machine's player is in); else the
+	 *  scenario's. */
+	simcore::ScenarioRunner* RunnerFor(const FString& Vehicle) const;
+	/** The vehicle this machine's player is in: "osa" or "post" in a battery link, "" otherwise (sent with his seat). */
+	FString GetLocalVehicle() const;
 	/** The command post's instruments (the IT-45, the board's glass, the IT boards): from the sim where it runs, from the
 	 *  local player's knowledge stream on a network client (simcore/post_feed.hpp). */
 	simcore::PostFeed GetPostFeed() const;
-	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why);
+	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why, const FString& Vehicle = FString());
 	/** Network client: overwrite the local console with the server's snapshot if it is newer than Seq. */
 	bool ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq);
 	/** Server: console snapshots and seat procedures to seated players (called after the sim steps). */

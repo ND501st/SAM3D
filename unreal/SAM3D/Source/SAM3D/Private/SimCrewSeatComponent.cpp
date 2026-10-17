@@ -16,6 +16,7 @@ void USimCrewSeatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(USimCrewSeatComponent, SeatRole, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(USimCrewSeatComponent, SeatVehicle, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(USimCrewSeatComponent, SeatProcedureId, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(USimCrewSeatComponent, SeatProcedureStep, COND_OwnerOnly);
 }
@@ -52,7 +53,7 @@ void USimCrewSeatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		{
 			if (!SeatRole.IsEmpty())
 			{
-				S->LeaveCrewSeat(SeatRole);
+				S->LeaveCrewSeat(SeatRole, SeatVehicle);
 			}
 			S->UnregisterCrewSeat(this);
 		}
@@ -77,7 +78,9 @@ FString USimCrewSeatComponent::DebriefName() const
 
 void USimCrewSeatComponent::RequestSeat(const FString& Role)
 {
-	ServerRequestSeat(Role);
+	// In a battery link, the seat is in the vehicle this player is in (-SimVehicle=post: the PU-12M).
+	USimWorldSubsystem* S = Sim();
+	ServerRequestSeat(Role, S != nullptr ? S->GetLocalVehicle() : FString());
 }
 
 void USimCrewSeatComponent::SetControl(const FString& ControlId, int32 Position)
@@ -103,18 +106,18 @@ void USimCrewSeatComponent::PlotTrack(int32 Number)
 void USimCrewSeatComponent::ServerDesignate_Implementation(const FString& Callsign, int32 Number)
 {
 	FString Why = TEXT("no seat");
-	const bool bOk = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatDesignate(SeatRole, Callsign, Number, Why);
+	const bool bOk = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatDesignate(SeatRole, Callsign, Number, Why, SeatVehicle);
 	ClientActionResult(TEXT("designate"), bOk, Why);
 }
 
 void USimCrewSeatComponent::ServerPlotTrack_Implementation(int32 Number)
 {
 	FString Why = TEXT("no seat");
-	const bool bOk = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatPlot(SeatRole, Number, Why);
+	const bool bOk = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatPlot(SeatRole, Number, Why, SeatVehicle);
 	ClientActionResult(TEXT("plot"), bOk, Why);
 }
 
-void USimCrewSeatComponent::ServerRequestSeat_Implementation(const FString& Role)
+void USimCrewSeatComponent::ServerRequestSeat_Implementation(const FString& Role, const FString& Vehicle)
 {
 	USimWorldSubsystem* S = Sim();
 	if (S == nullptr)
@@ -123,10 +126,11 @@ void USimCrewSeatComponent::ServerRequestSeat_Implementation(const FString& Role
 	}
 	if (!SeatRole.IsEmpty())
 	{
-		S->LeaveCrewSeat(SeatRole);
+		S->LeaveCrewSeat(SeatRole, SeatVehicle);
 		SeatRole.Reset();
 	}
-	if (!Role.IsEmpty() && S->TakeCrewSeat(Role, DebriefName()))
+	SeatVehicle = S->IsBatteryLink() && (Vehicle == TEXT("osa") || Vehicle == TEXT("post")) ? Vehicle : FString();
+	if (!Role.IsEmpty() && S->TakeCrewSeat(Role, DebriefName(), SeatVehicle))
 	{
 		SeatRole = Role;
 	}
@@ -136,7 +140,7 @@ void USimCrewSeatComponent::ServerRequestSeat_Implementation(const FString& Role
 void USimCrewSeatComponent::ServerSetControl_Implementation(const FString& ControlId, int32 Position)
 {
 	FString Why;
-	const bool bMoved = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatSetControl(SeatRole, ControlId, Position, Why);
+	const bool bMoved = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatSetControl(SeatRole, ControlId, Position, Why, SeatVehicle);
 	if (SeatRole.IsEmpty())
 	{
 		Why = TEXT("no seat");
@@ -149,7 +153,7 @@ void USimCrewSeatComponent::ServerTurnWheel_Implementation(const FString& Contro
 	if (!SeatRole.IsEmpty() && Sim() != nullptr)
 	{
 		FString Why;
-		Sim()->SeatTurnWheel(SeatRole, ControlId, Value, Why);
+		Sim()->SeatTurnWheel(SeatRole, ControlId, Value, Why, SeatVehicle);
 	}
 }
 

@@ -416,8 +416,8 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 
 bool USimWorldSubsystem::SwitchLinkedVehicle()
 {
-	// Networked, every player is in the Osa for now: the knowledge and console streams follow the server's runner, and
-	// the seats of both crews over the network are the next step (docs/PU12_DEVELOPMENT.md P8).
+	// Networked, each player chooses his vehicle when he joins (-SimVehicle=post) and his seat says which; a mid-game
+	// move would need his streams and his seat moved with him, so it is single player only.
 	if (!Link || IsMirrorOnly() || (GetWorld() != nullptr && GetWorld()->GetNetMode() != NM_Standalone))
 	{
 		return false;
@@ -1341,15 +1341,19 @@ void USimWorldSubsystem::PumpKnowledge()
 		}
 		Acc = 0.0;
 		const int32 Handle = Client->GetReplicatorHandle();
-		const int32 Node = Client->NodeId != 0 ? Client->NodeId : GetDefaultKnowledgeNode();
+		// In a battery link, the player's own vehicle (his seat says which): its sensors' scene, its unit, its extras.
+		const USimCrewSeatComponent* Seat = Client->GetOwner() != nullptr ? Client->GetOwner()->FindComponentByClass<USimCrewSeatComponent>() : nullptr;
+		simcore::ScenarioRunner* R = Seat != nullptr ? RunnerFor(Seat->SeatVehicle) : Runner;
+		const simcore::em::EmScene* ClientScene = R != Runner ? (R->Em() != nullptr ? &R->Em()->World().Scene() : nullptr) : Scene;
+		const int32 Node = Client->NodeId != 0 ? Client->NodeId
+			: R != Runner ? (R->Em() != nullptr ? R->Em()->UnitNodeId() : 0) : GetDefaultKnowledgeNode();
 		if (Replicator->Node(Handle) != Node)
 		{
 			Replicator->SetNode(Handle, Node);
 		}
 		// The scopes as the crew sees them ride along (echoes keyed opaquely per player).
 		simcore::EchoKeys& Keys = EchoKeysByClient[Handle];
-		simcore::ScenarioRunner* R = Runner;
-		const std::vector<std::uint8_t> Bytes = Replicator->Produce(Handle, Scene, [R, &Keys, Now](simcore::em::KnowledgeView& V) {
+		const std::vector<std::uint8_t> Bytes = Replicator->Produce(Handle, ClientScene, [R, &Keys, Now](simcore::em::KnowledgeView& V) {
 			V.time_s = Now;
 			if (R != nullptr && R->EngagementOn())
 			{
@@ -1400,31 +1404,51 @@ void USimWorldSubsystem::ClearLocalCrewSeat(USimCrewSeatComponent* Seat)
 	}
 }
 
-bool USimWorldSubsystem::TakeCrewSeat(const FString& Role, const FString& Player)
+simcore::ScenarioRunner* USimWorldSubsystem::RunnerFor(const FString& Vehicle) const
 {
-	const bool bOk = Runner && Runner->TakeSeat(ToStd(Role), ToStd(Player));
+	if (!Link || Vehicle.IsEmpty())
+	{
+		return Runner;
+	}
+	return Vehicle == TEXT("post") ? &Link->Post() : &Link->Osa();
+}
+
+FString USimWorldSubsystem::GetLocalVehicle() const
+{
+	if (!Link)
+	{
+		return FString();
+	}
+	return Runner == &Link->Post() ? FString(TEXT("post")) : FString(TEXT("osa"));
+}
+
+bool USimWorldSubsystem::TakeCrewSeat(const FString& Role, const FString& Player, const FString& Vehicle)
+{
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	const bool bOk = In != nullptr && In->TakeSeat(ToStd(Role), ToStd(Player));
 	BroadcastNewDebriefEntries();
 	return bOk;
 }
 
-void USimWorldSubsystem::LeaveCrewSeat(const FString& Role)
+void USimWorldSubsystem::LeaveCrewSeat(const FString& Role, const FString& Vehicle)
 {
-	if (Runner)
+	if (simcore::ScenarioRunner* In = RunnerFor(Vehicle))
 	{
-		Runner->LeaveSeat(ToStd(Role));
+		In->LeaveSeat(ToStd(Role));
 		BroadcastNewDebriefEntries();
 	}
 }
 
-bool USimWorldSubsystem::SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why)
+bool USimWorldSubsystem::SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why, const FString& Vehicle)
 {
-	if (!Runner)
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	if (In == nullptr)
 	{
 		Why = TEXT("no scenario");
 		return false;
 	}
 	std::string W;
-	const simcore::StepResult R = Runner->SeatSet(ToStd(Role), ToStd(ControlId), Position, &W);
+	const simcore::StepResult R = In->SeatSet(ToStd(Role), ToStd(ControlId), Position, &W);
 	BroadcastNewDebriefEntries();
 	const ESimPlayerActionResult A = ToActionResult(R);
 	const bool bMoved = A == ESimPlayerActionResult::Accepted || A == ESimPlayerActionResult::AcceptedEarly ||
@@ -1436,10 +1460,11 @@ bool USimWorldSubsystem::SeatSetControl(const FString& Role, const FString& Cont
 	return bMoved;
 }
 
-bool USimWorldSubsystem::SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why)
+bool USimWorldSubsystem::SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why, const FString& Vehicle)
 {
 	std::string W;
-	const bool bOk = Runner && Runner->SeatTurn(ToStd(Role), ToStd(ControlId), Value, &W);
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	const bool bOk = In != nullptr && In->SeatTurn(ToStd(Role), ToStd(ControlId), Value, &W);
 	Why = UTF8_TO_TCHAR(W.c_str());
 	return bOk;
 }
@@ -1481,12 +1506,13 @@ void USimWorldSubsystem::PumpConsole()
 	for (const TWeakObjectPtr<USimCrewSeatComponent>& Weak : CrewSeats)
 	{
 		USimCrewSeatComponent* Seat = Weak.Get();
+		simcore::ScenarioRunner* In = RunnerFor(Seat->SeatVehicle);  // a battery link: the player's own vehicle
 		// The seat's procedure for the player's UI (owner-only replicated properties).
 		FString ProcId;
 		int32 Step = 0;
 		if (!Seat->SeatRole.IsEmpty())
 		{
-			if (const simcore::ProcedureTracker* T = Runner->SeatTracker(ToStd(Seat->SeatRole)))
+			if (const simcore::ProcedureTracker* T = In->SeatTracker(ToStd(Seat->SeatRole)))
 			{
 				ProcId = UTF8_TO_TCHAR(T->GetProcedure().id.c_str());
 				Step = T->IsComplete() ? 0 : static_cast<int32>(T->NextIndex()) + 1;
@@ -1501,7 +1527,7 @@ void USimWorldSubsystem::PumpConsole()
 			continue;
 		}
 		Acc = 0.0;
-		const std::vector<std::uint8_t> Bytes = Runner->ConsoleSnapshot(Seat->NextSnapshotSeq());
+		const std::vector<std::uint8_t> Bytes = In->ConsoleSnapshot(Seat->NextSnapshotSeq());
 		TArray<uint8> Packet;
 		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
 		Seat->SendConsole(Packet);
@@ -1668,7 +1694,7 @@ bool USimWorldSubsystem::DesignateBatteryTarget(const FString& Callsign, int32 N
 				return true;
 			}
 			FString Why;
-			return SeatDesignate(Seat->SeatRole, Callsign, Number, Why);
+			return SeatDesignate(Seat->SeatRole, Callsign, Number, Why, Seat->SeatVehicle);
 		}
 	}
 	return Runner && !IsMirrorOnly() && Runner->DesignateBatteryTarget(ToStd(Callsign), Number);
@@ -1686,26 +1712,28 @@ bool USimWorldSubsystem::PlotPostTrack(int32 Number)
 				return true;
 			}
 			FString Why;
-			return SeatPlot(Seat->SeatRole, Number, Why);
+			return SeatPlot(Seat->SeatRole, Number, Why, Seat->SeatVehicle);
 		}
 	}
 	return Runner && !IsMirrorOnly() && Runner->PlayerPlot(Number);
 }
 
-bool USimWorldSubsystem::SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why)
+bool USimWorldSubsystem::SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why, const FString& Vehicle)
 {
 	std::string W;
-	const bool bOk = Runner && Runner->SeatDesignate(ToStd(Role), ToStd(Callsign), Number, &W);
-	Why = Runner ? ToF(W) : FString(TEXT("no scenario"));
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	const bool bOk = In != nullptr && In->SeatDesignate(ToStd(Role), ToStd(Callsign), Number, &W);
+	Why = In != nullptr ? ToF(W) : FString(TEXT("no scenario"));
 	BroadcastNewDebriefEntries();
 	return bOk;
 }
 
-bool USimWorldSubsystem::SeatPlot(const FString& Role, int32 Number, FString& Why)
+bool USimWorldSubsystem::SeatPlot(const FString& Role, int32 Number, FString& Why, const FString& Vehicle)
 {
 	std::string W;
-	const bool bOk = Runner && Runner->SeatPlot(ToStd(Role), Number, &W);
-	Why = Runner ? ToF(W) : FString(TEXT("no scenario"));
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	const bool bOk = In != nullptr && In->SeatPlot(ToStd(Role), Number, &W);
+	Why = In != nullptr ? ToF(W) : FString(TEXT("no scenario"));
 	return bOk;
 }
 
