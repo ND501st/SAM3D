@@ -746,7 +746,7 @@ SC_TEST("battery: with the player as battery commander nothing is assigned until
 
 // ------------------------------------------------------------------------------------------ 8.11 one mission
 
-SC_TEST("mission: on the march, a raid: halt, deploy, fight, stow and march on, run by the NPC commanders without a fault") {
+SC_TEST("mission: on the march, a raid: halt, deploy, fight, reload, stow and march on, run by the NPC commanders without a fault") {
     ScenarioDef def;
     ConsoleData console;
     std::string e;
@@ -754,8 +754,10 @@ SC_TEST("mission: on the march, a raid: halt, deploy, fight, stow and march on, 
     ScenarioRunner r(std::move(def), std::move(console));
     r.RunToEnd(0.1, 1500.0);
     const std::string d = r.Debrief();
+    // It starts with one missile (the scenario's empty containers): the TZM comes within the mission, and the crew waits
+    // for the reload before it marches on.
     for (const char* step : {"march: form the column", "started    search_on_march", "Стой!", "short halt", "started    deploy_at_halt",
-                             "К маршу!", "the crew is stowed and marches on", "К маршу готов!"}) {
+                             "прошу ТЗМ", "alongside 21", "reload done", "К маршу!", "the crew is stowed and marches on", "К маршу готов!"}) {
         if (d.find(step) == std::string::npos) std::printf("    no '%s'\n", step);
         SC_EXPECT(d.find(step) != std::string::npos);
     }

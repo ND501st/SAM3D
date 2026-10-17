@@ -102,7 +102,10 @@ public:
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
-        if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
+        if (console_.has_launcher) {
+            launcher_ = std::make_unique<Launcher>(console_.launcher);
+            for (const std::string& c : def_.empty_containers) launcher_->Unload(c);
+        }
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
         if (!def_.c2_sources.empty()) {
@@ -366,6 +369,16 @@ public:
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
+
+    // The vehicle is oriented: its gyro half-compass agrees with the true heading (or the console models no
+    // orientation). Designations' azimuths agree with the crew's only then.
+    bool Oriented() const {
+        if (!console_.has_orientation || !engagement_on_) return true;
+        double err = std::fmod(engagement_.GyroHeadingDeg() - engagement_.UnitHeadingDeg(), 360.0);
+        if (err > 180.0) err -= 360.0;
+        if (err < -180.0) err += 360.0;
+        return std::fabs(err) < 1.0;
+    }
 
     // What each seat's crewmate is doing, for the bodies (crew_body.hpp, roadmap 8.10): his next action and when, his
     // last one, whether he is up at a panel, the hand wheels he is turning, whether he is speaking. One per crew
@@ -1842,12 +1855,18 @@ private:
         if (engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight()) return false;
         const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
         const bool is_ready = ready != nullptr && console_.equipment.AllHold(ready->conditions, console_.panel);
+        // Orientation (voenizdat_osa_1991 p246: the deputy orients the vehicle as part of К бою, the gyro half-compass
+        // set to the course angle so that designations' azimuths agree): once ready at a halt with nothing hostile known,
+        // if it isn't oriented yet. It needs the deputy at the gyro panel, so not while a fight is on.
+        if (!hostile && is_ready && !Oriented() && NpcGive("order_orient", 120.0)) return true;
         // The function check belongs to the preliminary preparation from cold (flak11: 3.8 min switch-on, then 3.0 min check).
         if (!hostile && is_ready && !npc_checked_ && !npc_fought_ && started_cold_) {
             npc_checked_ = NpcGive("order_function_check", 600.0);
             return npc_checked_;
         }
-        if (npc_fought_ && !hostile && time_ - npc_last_hostile_s_ > 90.0) {
+        // A reload under way (the launcher not full and a TZM in the battery): the crew waits for it before marching on.
+        const bool reloading = launcher_ && battery_ && launcher_->LoadedCount() < launcher_->Capacity() && BatteryHasTzm();
+        if (npc_fought_ && !hostile && !reloading && time_ - npc_last_hostile_s_ > 90.0) {
             if (!npc_stow_ordered_) {
                 npc_stow_ordered_ = GiveCrewOrder("order_march");
                 return true;
@@ -1910,9 +1929,30 @@ private:
     }
 
     // Give an order of the crew data unless it was given within `again_s`, and only when every seat it goes to is free.
+    // The battery has a transport-loader.
+    bool BatteryHasTzm() const {
+        if (!battery_) return false;
+        for (const Battery::Vehicle& v : battery_->Vehicles()) {
+            if (v.def.kind == BatteryVehicleKind::Reload) return true;
+        }
+        return false;
+    }
     bool NpcGive(const std::string& order_id, double again_s) {
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
+        // He doesn't give an order that needs what isn't there (a missile, a track): CheckOrder's "needs" (world waits
+        // he leaves to the crew: a launch permission given before the target is in the zone waits for it).
+        if (!o->needs.empty()) {
+            const OrderCheck c = CheckOrder(order_id);
+            if (!c.can && c.reason_en != "done already") {
+                bool need = false;
+                for (const std::string& n : o->needs) {
+                    need = need || (n == "missiles" && c.reason_en == "no missiles left") || (n == "tracked" && c.reason_en == "nothing tracked") ||
+                           (n == "jamming" && c.reason_en == "no jammer tracked") || (n == "contact" && c.reason_en == "no target reported");
+                }
+                if (need) return false;
+            }
+        }
         if (NpcOrdered("order", order_id, again_s)) return false;
         for (const OrderStart& st : o->procedures) {
             if (!SeatFree(st.station)) return false;

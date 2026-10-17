@@ -28,9 +28,10 @@ std::string Replace(std::string s, const std::string& from, const std::string& t
     return s;
 }
 
-// The crew practice scenario (NPC commander, from cold), with an assistance level.
-std::unique_ptr<ScenarioRunner> Practice(const std::string& assistance = "guided") {
+// The crew practice scenario (NPC commander, from cold), with an assistance level and the hull's heading.
+std::unique_ptr<ScenarioRunner> Practice(const std::string& assistance = "guided", const std::string& heading = "0") {
     std::string text = ReadAll(kData + "/scenarios/osa_crew_practice.json");
+    text = Replace(text, "\"heading_deg\": 0", "\"heading_deg\": " + heading);
     text = Replace(text, "\"crew_commander\"", "\"assistance\": \"" + assistance + "\", \"crew_commander\"");
     ScenarioDef def;
     ConsoleData console;
@@ -239,4 +240,20 @@ SC_TEST("decisions: the commander's choice of target and his launch are judged i
     SC_EXPECT(target);
     SC_EXPECT(launch);
     SC_EXPECT(r->Debrief().find("Decisions") != std::string::npos);
+}
+
+SC_TEST("npc commander: ready at a halt with nothing about, he has the vehicle oriented before the fight") {
+    std::unique_ptr<ScenarioRunner> r = Practice("guided", "75");  // the hull 75 degrees off north: the gyro must be set
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    double oriented_s = -1.0;
+    for (int i = 0; i < 9000 && !r->Finished() && r->Launches() == 0; ++i) {
+        r->Step(0.1);
+        if (oriented_s < 0.0 && r->Time() > 60.0 && r->Oriented()) oriented_s = r->Time();
+    }
+    std::printf("    oriented at %.0f s; first launch at %.0f s\n", oriented_s, r->Time());
+    SC_EXPECT(oriented_s > 0.0);
+    SC_EXPECT(r->Oriented());  // and it stays so: the gyro half-compass keeps the heading
+    SC_EXPECT(r->Launches() > 0);
+    SC_EXPECT(Said(*r, "order_orient", "commander", "Ориентировать"));
 }

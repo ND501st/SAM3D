@@ -121,6 +121,9 @@ struct ScenarioDef {
     EmLinkDef em;
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
+    // "empty_containers": the launcher's containers that start without a missile (e.g. ["1-I", "1-II"]): a mission that
+    // starts part-spent, so that the TZM comes within it (roadmap 8.11).
+    std::vector<std::string> empty_containers;
     std::vector<std::pair<std::string, bool>> initial_inputs;
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
@@ -315,7 +318,7 @@ private:
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
             !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
-                                   "position", "heading_deg", "inputs"})) {
+                                   "position", "heading_deg", "inputs", "empty_containers"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -450,6 +453,18 @@ private:
         if (!RequireObject(*u, "own_unit", "position", pos) ||
             !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position) ||
             !OptionalNumber(*u, "own_unit", "heading_deg", out.unit_heading_deg)) {
+            return false;
+        }
+        if (const json::Value* ec = OptionalArray(*u, "own_unit", "empty_containers")) {
+            for (std::size_t i = 0; i < ec->items.size(); ++i) {
+                const std::string p = Index("own_unit.empty_containers", i);
+                if (!ec->items[i].Is(json::Type::String)) return Fail(p, "expected a container id");
+                bool known = false;
+                for (const auto& c : console.launcher.containers) known = known || c.id == ec->items[i].string;
+                if (!console.has_launcher || !known) return Fail(p, "the console's launcher has no container '" + ec->items[i].string + "'");
+                out.empty_containers.push_back(ec->items[i].string);
+            }
+        } else if (!message_.empty()) {
             return false;
         }
         if (const json::Value* in = u->Find("inputs")) {
