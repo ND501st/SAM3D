@@ -262,6 +262,9 @@ Also:
 - sectors of fire (8.9);
 - the vehicle oriented in the readiness, and a reload inside the mission (8.11);
 - `crew_balance` and the first balance pass (8.12, `docs/crew/11_PLAYTEST_AND_BALANCE.md`).
+- the Osa's systems in the NPCs' decisions (IFF, a friend let go, СДЦ, EMCON and the ambush with the TV search, the
+  second missile, radios, the fuel truck, kills heard on the net): `docs/crew/09_IMPLEMENTATION_PLAN.md`, fourth
+  session; tests `simcore/tests/test_crew_systems.cpp`.
 
-381 simcore tests. Next: a person plays the missions on the map (the crew half and the command half), then the PU-12M
+390 simcore tests. Next: a person plays the missions on the map (the crew half and the command half), then the PU-12M
 as a seat.

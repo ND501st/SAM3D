@@ -93,8 +93,8 @@ capture 6–7 s.
 
 | Seat | Does | Says |
 |---|---|---|
-| Senior operator | ЗАПРОС (or ЗАПРОС К) while the target is on the scope | `iff_friend` ("Свой") / `iff_no_reply` ("Ответа нет") |
-| Commander | Decides from the IFF, the board's code (friend 1x, practice 7x, enemy 8x), the orders and the zone | `fire_permitted` ("Пуск разрешаю") / `hold_fire` ("Огонь не открывать") / `order_drop_target` |
+| Senior operator | ЗАПРОС (or ЗАПРОС К) on each new contact within the interrogator's reach, by himself or on `order_iff` ("Запрос!") | `iff_friend` ("Свой") / `iff_no_reply` ("Ответа нет") |
+| Commander | Decides from the IFF, the board's code (friend 1x, practice 7x, enemy 8x), the orders and the zone; an unidentified target first gets `order_iff`; a friend under track is held and let go; a miss with the target still in the zone gets a second missile | `fire_permitted` ("Пуск разрешаю") / `order_second_missile` ("Вторая — пуск!") / `hold_fire` ("Огонь не открывать") / `order_drop_target` ("Цель сбросить!") |
 
 ### 2.5 Preparation, launch, guidance, assessment (E4 → E8)
 
@@ -173,15 +173,15 @@ listed are the defaults of §2.**
 | V3 | Short halt | From M2 to firing without full deployment of the battery | Fast R2 (already powered) | 35–50 s deploy (`video_osa`, unverified) vs 4 min norm |
 | V4 | Prepared position (7.6) | External power, emplacement, nets, dummy positions; leaving takes time | Generator off; decoys | Strike on the position → relocate |
 | V5 | Combat formation in pairs | Neighbour's radar as a source (`share_picture`); sectors | Divide targets with the pair | Saturation |
-| V6 | Ambush (prepared points, roving) | Silent until the target is close; move between points | S (silent) then short radiation; TV | Pop-up targets |
+| V6 | Ambush (prepared points, roving) | Silent until the target is close (the NPC commander springs it when a hostile is designated inside 15 km); move between points | S (silent, task `ready_silent`) then short radiation; TV | Pop-up targets |
 | V7 | River crossing | Afloat at 8 km/h; wait 2 km short; cross in pairs | No firing afloat (sam3d: not sourced either way) | Exposure during the crossing |
 | V8 | Night / poor visibility | The TV is useless; driving by the PNV | Radar only; no TV branches | Low targets harder |
-| V9 | Low targets (below ε 00-30) | НЛЦ; Горка; clutter | Beam I / I–II, MTI, TV angles + radar range (`track_low_target`) | НЛЦ, clutter losses |
+| V9 | Low targets (below ε 00-30) | НЛЦ; Горка; clutter | Beam I / I–II, MTI (`order_mti` when a low target is designated), TV angles + radar range (`track_low_target`) | НЛЦ, clutter losses |
 | V10 | Helicopters (hovering, pop-up) | Optical zone Ф (≤ 100 m/s, 10–25 m, 2–6.5 km); pop-ups behind cover (`target_behaviour.hpp`) | TV; short windows | Exposed for seconds; masked |
 | V11 | Jamming: noise on the SSC | Range lost; angles on the jammer (9.1) | `fire_at_jammer`, range by hand | Burn-through at a few km |
 | V12 | Jamming: noise on the SOC | Strobes, no blips | Board / EWR positions; TV | Late detection |
 | V13 | Jamming: RGPO, chaff, false targets | Gate walked off; ghosts | Retry capture; external-coherence MTI; ignore ghosts | Lost locks |
-| V14 | EMCON (radars silent) | No SOC or SSC | `emcon_tv_azimuth`, `emcon_tv_engagement`: board azimuth, TV, ПОМЕХА | Range by the board; short windows |
+| V14 | EMCON (radars silent; the battery's `emcon` order) | No SOC or SSC | `ready_silent`; `order_emcon_tv` (`emcon_tv_azimuth`, `emcon_tv_engagement`): board azimuth led on, a TV search across the designation, ПОМЕХА; the key turned when the target fills the crosshair | Range by the board; short windows; a designation a minute old |
 | V15 | Saturation (several targets) | Priorities; two channels; salvo or single shots | Threat order (time to the defended point, type) | Missed targets; fast reload |
 | V16 | Friendly aircraft about | IFF matters; fire discipline | ЗАПРОС on every contact; hold on a reply | Fratricide is a crew mistake (debrief) |
 | V17 | C2 lost (PU-12 destroyed, radio jammed) | No designations | Switch source; autonomous search | Late detection |

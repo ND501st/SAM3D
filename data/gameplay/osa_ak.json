@@ -49,7 +49,8 @@
     "azimuth_role": "senior_operator", "elevation_role": "deputy_commander", "range_role": "operator",
     "az_rate_deg_s": 20, "el_rate_deg_s": 8, "range_rate_mps": 4000,
     "plotting_board_range_m": 50000,
-    "notes": "Roles: who turns each wheel (flak11, 9A33-3); they are console stations. The rest are game values: how fast an NPC turns each wheel onto a contact. plotting_board_range_m: the PU-12 board is watched from 50 km (manual p21)."
+    "tv_search_half_deg": 15, "tv_search_bars": 3,
+    "notes": "Roles: who turns each wheel (flak11, 9A33-3); they are console stations. The rest are game values: how fast an NPC turns each wheel onto a contact. plotting_board_range_m: the PU-12 board is watched from 50 km (manual p21). tv_search_*: with the radars silent the crew search for a designated target with the TV, sweeping 15 degrees each side of the designation and stepping the elevation a field height up and down (3 bars); a designation read out on the battery net can be a minute old. Game values (sam3d estimate), not a published drill."
   },
 
   "missile": {

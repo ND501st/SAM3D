@@ -211,7 +211,7 @@
       "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "mti_control": "ssc.mti", "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "tv_track_input": "target_tv_tracked", "too_low_input": "target_too_low",
-      "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
+      "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone", "crosshair_input": "target_fills_crosshair",
       "elevation_search": {
         "mode": "auto_acquisition", "beam_control": "soc.beam",
         "beams_deg": [ [-1, 5], [3, 9], [6, 30] ], "beam_by_position": [0, 1, 2, -1, -1],
@@ -273,7 +273,8 @@
     { "id": "target_in_zone", "description": "Target is within the firing zone (ЦЕЛЬ В ЗОНЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
     { "id": "target_too_low", "description": "Target too low for the SSC radar to track in angle (НЛЦ lamp)", "source": "samsim_osa p25", "confidence": "high" },
     { "id": "target_captured", "description": "SSC is on the target azimuth and the target is inside the range gate, so it captures automatically", "source": "samsim_osa p24", "confidence": "high" },
-    { "id": "target_tv_tracked", "description": "The target is in the TOV crosshair and the operators are tracking it by hand (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p25, p34 (ПА: angle tracking with the TOV camera)", "confidence": "medium" }
+    { "id": "target_tv_tracked", "description": "The target is in the TOV crosshair and the operators are tracking it by hand (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p25, p34 (ПА: angle tracking with the TOV camera)", "confidence": "medium" },
+    { "id": "target_fills_crosshair", "description": "The TV-tracked target fills the narrow-lens crosshair: by its size it is about within range (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p33-35 (range judged from the target's size in the narrow-lens crosshair); taken as the target within the firing zone at its true range: sam3d estimate", "confidence": "estimate" }
   ],
 
   "controls": [
@@ -825,7 +826,7 @@
         { "control": "fo.key", "position": 1, "description": "Insert the launch authorization key" },
         { "control": "tov.fov", "position": 1, "description": "УГОЛ ЗРЕНИЯ УЗКИЙ, narrow lens" },
         { "control": "fo.key", "position": 2, "description": "When the target fills the crosshair (roughly within range): turn the launch key",
-          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" }, { "input": "target_tv_tracked", "is": true } ] },
+          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" }, { "input": "target_fills_crosshair", "is": true } ] },
         { "control": "fo.launch", "position": 1, "description": "ПУСК",
           "wait_for": [ { "subsystem": "launch_armed", "is": "ready" } ] }
       ]
@@ -901,6 +902,24 @@
         { "control": "soc.hv", "position": 0, "description": "ВЫСОКОЕ ВЫКЛ, SOC transmitter off" },
         { "control": "soc.hv_cover", "position": 0, "description": "Close the guard over ВЫСОКОЕ" },
         { "control": "soc.search", "position": 0, "description": "ПОИСК ВЫКЛ, stop the SOC antenna" }
+      ]
+    },
+    {
+      "id": "iff_interrogate", "name": "Interrogate the contacts (ЗАПРОС)",
+      "source": "mon_2112_80 p21 (ЗАПРОС: the reply is an arc on the PPI); voenizdat_osa_1991 p17 (a reply puts a «свой» mark beside the echo), p56 (1 s per press); the drill as an order of the commander (\"Запрос!\"): sam3d",
+      "confidence": "medium",
+      "notes": "Senior operator, with the search radar radiating (the interrogator's antenna is built into the search antenna). A contact that doesn't answer is reported \"Ответа нет!\": not identified as a friend.",
+      "steps": [
+        { "control": "iff.query", "position": 1, "description": "Press ЗАПРОС: interrogate the contacts on the scope", "wait_for": [ { "subsystem": "soc_transmitter", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "search_mti_on", "name": "СДЦ on the search radar",
+      "source": "samsim_osa p15 (item 12: the SOC's СДЦ / ШТ. switch); the order when a low target is designated: sam3d",
+      "confidence": "medium",
+      "notes": "Senior operator. With СДЦ the search radar sees low targets in the ground clutter, out to the MTI's shorter range.",
+      "steps": [
+        { "control": "soc.mti", "position": 1, "description": "СДЦ: the moving-target canceller on" }
       ]
     },
     {

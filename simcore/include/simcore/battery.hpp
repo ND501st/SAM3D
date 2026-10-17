@@ -94,7 +94,7 @@ struct BatteryVehicleDef {
 };
 
 struct BatteryOrder {
-    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel };
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon };
     Kind kind = Kind::March;
     double at_s = 0.0;
     std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
@@ -104,6 +104,7 @@ struct BatteryOrder {
     bool roving = false;      // Ambush: the pairs move on to the next point every ambush_dwell_s
     double width_m = 100.0;   // RiverCrossing: the river's width
     std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
+    bool radiate = false;     // Emcon: the radars may radiate again (false: radiation off, the battery fights silent)
 };
 
 inline const char* BatteryOrderName(BatteryOrder::Kind k) {
@@ -118,6 +119,7 @@ inline const char* BatteryOrderName(BatteryOrder::Kind k) {
         case BatteryOrder::Kind::FarBankHeld: return "far_bank_held";
         case BatteryOrder::Kind::Reload: return "reload";
         case BatteryOrder::Kind::Refuel: return "refuel";
+        case BatteryOrder::Kind::Emcon: return "emcon";
     }
     return "?";
 }
@@ -126,7 +128,7 @@ inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
     for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
                                  BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume, BatteryOrder::Kind::Ambush,
                                  BatteryOrder::Kind::RiverCrossing, BatteryOrder::Kind::FarBankHeld, BatteryOrder::Kind::Reload,
-                                 BatteryOrder::Kind::Refuel}) {
+                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon}) {
         if (s == BatteryOrderName(k)) {
             out = k;
             return true;
@@ -243,6 +245,9 @@ public:
     const BatteryTactics& Tactics() const { return tactics_; }
     const std::vector<Vehicle>& Vehicles() const { return vehicles_; }
     Mode CurrentMode() const { return mode_; }
+    // The battery commander's emission control: the vehicles' radars silent (docs/crew/07 §3). An ambush is silent too
+    // until it is sprung; the vehicle commanders decide that by the designations.
+    bool Emcon() const { return emcon_; }
     bool AirThreat() const { return air_threat_; }
     double Spacing() const { return air_threat_ ? tactics_.threat_spacing_m : tactics_.march_spacing_m; }
     const Vehicle* Find(const std::string& id) const {
@@ -288,6 +293,10 @@ public:
             leave_s_ = 0.0;
         }
         switch (o.kind) {
+            case BatteryOrder::Kind::Emcon:
+                emcon_ = !o.radiate;
+                events_.push_back({t, "Battery commander", emcon_ ? "radiation off: the battery's radars silent" : "radiation on"});
+                return;
             case BatteryOrder::Kind::March:
                 if (o.route.size() < 2) return;
                 route_ = o.route;
@@ -775,6 +784,7 @@ private:
     std::vector<Vehicle> vehicles_;
     Mode mode_ = Mode::Waiting;
     bool air_threat_ = false;
+    bool emcon_ = false;
     bool night_ = false;
     bool drive_own_ = false;
     std::vector<Vec3> route_;
