@@ -21,6 +21,7 @@
 
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/crew_training.hpp"
@@ -130,6 +131,14 @@ struct ScenarioDef {
     std::vector<ScenarioTrigger> triggers;
     std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
     PlottingBoardDef board;
+    // The player's vehicle is the command post (the console has "post"): its own board, its ASPD-U, the regiment that
+    // sends it the telecode, and a radar cabled to it (simcore/command_post.hpp, docs/PU12_DEVELOPMENT.md P3).
+    bool has_post = false;
+    PlottingBoardDef post_board;
+    AspdDef post_aspd;
+    PostRegiment post_regiment;
+    bool has_post_radar = false;
+    RegimentRadar post_radar;
     // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
     // scenario's "c2" block. Empty: no command network.
     C2Policy c2_policy;
@@ -178,8 +187,8 @@ public:
 
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
-                             "terrain", "command_post", "c2", "battery", "own_unit", "crew", "crew_commander", "battery_commander", "targets",
-                             "triggers", "end", "assistance"})) {
+                             "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
+                             "targets", "triggers", "end", "assistance"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -200,6 +209,7 @@ public:
             }
         }
         if (!LoadC2(root, data_dir, out)) return false;
+        if (!LoadPost(root, data_dir, out, console)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
         if (const json::Value* cc = root.Find("crew_commander")) {
@@ -894,6 +904,92 @@ private:
         for (const std::string& id : out.c2_policy.presets) {
             if (!known(id)) return Fail("c2.presets", "unknown source '" + id + "'");
         }
+        return true;
+    }
+
+    // The player's vehicle is the command post: "post": { "board": "command/pu12.json", "aspd": "command/aspd_u.json",
+    //   "library": "command/regiment_radars.json",
+    //   "regiment": { "position": {...}, "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ] },
+    //   "radar": { "type": "p19", "position": {...} } }  (a radar cabled to the post; optional)
+    // Required when the console has "post", refused otherwise.
+    bool LoadPost(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* p = root.Find("post");
+        if (p == nullptr) {
+            if (console.has_post) return Fail("post", "the console is a command post: the scenario needs a \"post\" block");
+            return true;
+        }
+        if (!console.has_post) return Fail("post", "the console is not a command post (no \"post\" block)");
+        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "library", "regiment", "radar", "notes"})) {
+            return message_.empty() ? Fail("post", "expected an object") : false;
+        }
+        std::string board_file, aspd_file, library_file, error;
+        if (!RequireString(*p, "post", "board", board_file) || !RequireString(*p, "post", "aspd", aspd_file) ||
+            !OptionalString(*p, "post", "library", library_file)) {
+            return false;
+        }
+        if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
+        if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);
+        RegimentRadarLibrary lib;
+        if (!library_file.empty() && !LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail("post.library", error);
+        auto radar_of = [&](const json::Value& e, const std::string& rp, bool with_id, RegimentRadar& radar) {
+            std::string id, type;
+            if (!Keys(e, rp, {"id", "type", "position", "notes"}) || (with_id && !RequireString(e, rp, "id", id)) ||
+                !RequireString(e, rp, "type", type)) {
+                return false;
+            }
+            if (library_file.empty()) return Fail(Join("post", "library"), "a radar needs the library of radar types");
+            const RegimentRadar* t = lib.Find(type);
+            if (t == nullptr) return Fail(Join(rp, "type"), "unknown radar type '" + type + "'");
+            radar = *t;
+            radar.id = with_id ? id : type;
+            radar.type = type;
+            const json::Value* pos = e.Find("position");
+            if (pos == nullptr || !pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(rp, "position"), frame_, radar.position)) {
+                return message_.empty() ? Fail(Join(rp, "position"), "required, an object") : false;
+            }
+            return true;
+        };
+        if (const json::Value* r = p->Find("regiment")) {
+            const std::string rp = "post.regiment";
+            if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"position", "radars", "outages", "notes"})) {
+                return message_.empty() ? Fail(rp, "expected an object") : false;
+            }
+            if (const json::Value* pos = r->Find("position")) {
+                if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(rp, "position"), frame_, out.post_regiment.position)) {
+                    return message_.empty() ? Fail(Join(rp, "position"), "expected an object") : false;
+                }
+                out.post_regiment.has_position = true;
+            }
+            if (const json::Value* list = OptionalArray(*r, rp, "radars")) {
+                for (std::size_t i = 0; i < list->items.size(); ++i) {
+                    RegimentRadar radar;
+                    if (!radar_of(list->items[i], Index(Join(rp, "radars"), i), true, radar)) return false;
+                    out.post_regiment.radars.push_back(std::move(radar));
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (const json::Value* outs = OptionalArray(*r, rp, "outages")) {
+                for (std::size_t j = 0; j < outs->items.size(); ++j) {
+                    const std::string op = Index(Join(rp, "outages"), j);
+                    C2Outage o;
+                    if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
+                        !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason)) {
+                        return false;
+                    }
+                    if (o.to_s <= o.from_s) return Fail(Join(op, "to_s"), "must be after from_s");
+                    out.post_regiment.outages.push_back(o);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+        }
+        if (const json::Value* r = p->Find("radar")) {
+            if (!r->Is(json::Type::Object)) return Fail("post.radar", "expected an object");
+            if (!radar_of(*r, "post.radar", false, out.post_radar)) return false;
+            out.has_post_radar = true;
+        }
+        out.has_post = true;
         return true;
     }
 

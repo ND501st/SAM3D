@@ -44,10 +44,12 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // Optional: states a session can start in instead of cold (roadmap 6.2; a scenario's own_unit.readiness picks one):
   // controls already set, inputs, subsystems warmed up at once (in dependency order: each must be commanded on by then),
   // and whether the vehicle is already oriented. "cold" is the default and has no entry.
-  // Optional: a command post's own board (the PU-12M). board_source is the command network's source that is this
-  // vehicle's board (the scenario's command_post makes it "pu12"); picture lists the subsystems that give it a picture
-  // (any one ready). While none is, the source is off the air ("the post has no picture") and nothing is plotted.
-  "post": { "board_source": "pu12", "picture": [ "telecode_reception", "primary_picture" ], "source": "...", "confidence": "medium" },
+  // Optional: the vehicle is a command post (the PU-12M, simcore/command_post.hpp). The subsystems that show the
+  // regiment's telecode picture and a cabled radar's primary picture on the IT-45, the input the sim sets while the
+  // regiment's telecode is within reach, the station that writes the board, the subsystem that says the post is
+  // oriented, and the IT-45's scale switch (one position per scale). The scenario then needs a "post" block.
+  "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode",
+            "plotter": "operator", "oriented": "oriented", "scale": "fr.scale", "source": "...", "confidence": "medium" },
 
   "readiness": {
     "deployed": { "description": "...", "controls": { "pwr.gta": 1, "apu.lock": 1 }, "inputs": { "vehicle_stopped": true },

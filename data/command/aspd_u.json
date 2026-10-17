@@ -1,0 +1,27 @@
+{
+  "aspd_id": "aspd_u",
+  "display_name": "ASPD-U data equipment of the PU-12M (IT-45 picture, telecode, plotting)",
+  "status": "P3 of docs/PU12_DEVELOPMENT.md: the PU-12M's information chain when the player's vehicle is the post (simcore/command_post.hpp). Research: docs/research/PU12_RESEARCH_2026-10.md.",
+  "notes": "Every number cited or an estimate. The telecode cycle and the plotter's time per mark are not published in what was read: the cycle is taken as one turn of the regiment's early-warning radar, the plotting time is fitted so a board of about ten targets takes a minute, SAM Simulator's cadence.",
+  "aspd": {
+    "max_targets": { "value": 100, "source": "ru_pu12_text (information on a hundred targets, numbers 00 to 99)", "confidence": "medium" },
+    "semi_auto_tracks": { "value": 12, "source": "ru_pu12_text (targets tracked in the semi-automatic mode: 12)", "confidence": "medium" },
+    "take_off_s": { "value": 2.5, "source": "ru_pu12_text (semi-automatic take-off and sending of one target's coordinates: 2-3 s)", "confidence": "medium" },
+    "height_step_m": { "value": 200, "source": "ru_pu12_text (height in steps of 0.2 km)", "confidence": "medium" },
+    "speed_step_mps": { "value": 12.5, "source": "ru_pu12_text (speed in steps of 12.5 m/s, shown as a vector)", "confidence": "medium" },
+    "max_speed_mps": { "value": 787.5, "source": "ru_pu12_text (0 to 787.5 m/s)", "confidence": "medium" },
+    "zone1_top_m": { "value": 1400, "source": "ru_pu12_text (H1 from 0 to 1.4 km)", "confidence": "medium" },
+    "zone2_top_m": { "value": 3000, "source": "ru_pu12_text (H2 from 1.6 to 3.0 km; H3 from 3.2 to 25.2 km)", "confidence": "medium" },
+    "scales_m": { "value": [35000, 50000, 100000], "source": "ru_pu12_text (scales 35, 50, 100 km); flak11 (to 50 and 100 km)", "confidence": "medium" },
+    "telecode_period_s": { "value": 10, "source": "estimate (one turn of the regiment's early-warning radar; the P-19's rate is not found)", "confidence": "estimate" },
+    "telecode_range_m": { "value": 15000, "source": "flak11 (PU12-1: FuG-5 R-407, the net of the regiment's automated fire control, to 15 km), valka_pu12", "confidence": "high" },
+    "radar_period_s": { "value": 10, "source": "estimate (a radar cabled to the post: one turn, as above)", "confidence": "estimate" },
+    "plot_mark_s": { "value": 6, "source": "estimate (one target written on the glass board: number, height, time; fitted so ten targets take about a minute, samsim_osa p20)", "confidence": "estimate" },
+    "oriented_az_error_deg": { "value": 0.6, "source": "estimate (an aiming-circle orientation; the later TNA-4 set's mean error is 0-20 mils, ru_pu12_text)", "confidence": "estimate" },
+    "oriented_position_error_m": { "value": 100, "source": "estimate (the position read off a 1:50 000 map)", "confidence": "estimate" },
+    "drift_fraction": { "value": 0.01, "source": "flak11 (PU12-0: the KP-4 course plotter's coordinates to at most 1 % of the distance travelled)", "confidence": "high" },
+    "unoriented_az_error_deg": { "value": 5, "source": "flak11 (PU12-0: designation errors up to 5 degrees in azimuth working with the navigation equipment)", "confidence": "medium",
+      "notes": "Used for a post whose GAK was never set from the aiming circle: the largest published error." },
+    "unoriented_position_error_m": { "value": 3000, "source": "flak11 (PU12-0: and 3 000 m in range)", "confidence": "medium" }
+  }
+}

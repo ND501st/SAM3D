@@ -8,13 +8,22 @@
   "seed": 1,
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "terrain": { "type": "flat", "height_m": 110 },
-  "command_post": "command/pu12.json",
+  "post": {
+    "board": "command/pu12.json",
+    "aspd": "command/aspd_u.json",
+    "library": "command/regiment_radars.json",
+    "regiment": {
+      "position": { "east_m": -6000, "north_m": -5000, "up_m": 2 },
+      "radars": [ { "id": "p19_regiment", "type": "p19", "position": { "east_m": -6200, "north_m": -5000, "up_m": 2 } } ],
+      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery: inside the R-407 net's 15 km."
+    }
+  },
   "crew_commander": "npc",
   "own_unit": {
     "console": "procedures/pu12m.json",
     "position": { "east_m": 0, "north_m": 0, "up_m": 2 },
     "heading_deg": 0,
-    "inputs": { "vehicle_stopped": true, "regiment_telecode": true }
+    "inputs": { "vehicle_stopped": true }
   },
   "crew": [
     { "name": "Battery commander", "role": "battery_commander", "skill": "class1" },

@@ -146,9 +146,19 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   scripted, the NPC battery commander has the post deployed in 602 s; each seat reports its part. The crew data names
   its commanding seat (`commander_seat`), so the runner's NPC commander, reminders and pictures work for any crew. The
   post's own board (`post` in the console; the scenario's `command_post`) fills only while the ASPD-U receives the
-  regiment's picture or a radar is cabled in. Crew map: `docs/crew/generated/pu12m_action_map.md`. Left for P3: the
-  plotting itself as the operator's work (marks taken with the DI marker, 2-3 s each), the IT-45 as a scope, the
-  telecode as EM messages, the orientation error from the drill.
+  regiment's picture or a radar is cabled in. Crew map: `docs/crew/generated/pu12m_action_map.md`.
+- **P3 done (simcore):** `simcore/command_post.hpp`, `data/command/aspd_u.json`, the scenario's `post` block.
+  - The regiment's telecode arrives once a cycle while the post is within the R-407's 15 km of the regiment's post and
+    the net is on the air (outages: jamming, a cut).
+  - The ASPD-U's tracks on the IT-45: numbers 00-99, heights in 0.2 km steps and zones H1-H3, speed vectors in 12.5 m/s
+    steps. The tube follows the ФР block's scale switch (35, 50, 100 km).
+  - A cabled radar's picture is taken off by the operator, 12 targets at 2-3 s each.
+  - The operator-plotter writes the board by hand, one mark at a time, new targets first and nearest first, a target
+    again after each new fix; his tier sets his pace. A player in the seat writes the marks himself.
+  - The navigation error comes from the orientation drill: up to 5 degrees and 3 km until the post is oriented with the
+    aiming circle (flak11), then small (his tier's), growing on the move by up to 1 % of the distance (the KP-4).
+  - Not yet: the telecode through the EM layer's link budget (its reach is the R-407's published range, jamming an
+    outage); the IT-45 drawn in Unreal (P6).
 
 ## 6. Placeholder now
 

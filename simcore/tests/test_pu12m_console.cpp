@@ -217,7 +217,7 @@ SC_TEST("pu12m crew: with no orders scripted, the NPC battery commander has the 
     std::printf("    deployed at %.0f s; the picture from %.0f s, the first mark at %.0f s\n", deployed_s, picture_s, first_mark_s);
     // The post's own board fills only once its ASPD-U receives the regiment's picture (the target is on the regiment's
     // picture from the start).
-    SC_EXPECT(picture_s > 0.0 && first_mark_s >= picture_s && first_mark_s < picture_s + 1.0);
+    SC_EXPECT(picture_s > 0.0 && first_mark_s >= picture_s && first_mark_s < picture_s + 15.0);
     SC_EXPECT(r.Board() != nullptr && r.Board()->Marks().size() >= 10);  // once a minute since
     SC_EXPECT(deployed_s > 0.0 && deployed_s <= 1080.0);
     auto said = [&](const std::string& id, const std::string& from) {

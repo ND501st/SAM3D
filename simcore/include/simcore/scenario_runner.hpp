@@ -42,6 +42,7 @@
 #include "simcore/battery.hpp"
 #include "simcore/battery_fire.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/command_post.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_callouts.hpp"
@@ -109,6 +110,7 @@ public:
         }
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
+        if (def_.has_post) post_ = std::make_unique<CommandPost>(def_.post_aspd, def_.post_board, def_.unit_position, def_.seed ^ 0x51ed27u);
         if (!def_.c2_sources.empty()) {
             c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
             for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
@@ -150,6 +152,7 @@ public:
         DeliverOrders();
         UpdateBattery(dt);
         UpdateC2();
+        UpdatePost();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
@@ -245,8 +248,35 @@ public:
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
     }
 
-    // The battery command post's plotting board (null when the scenario has no "command_post").
-    const PlottingBoard* Board() const { return c2_ ? c2_->BoardOf("pu12") : nullptr; }
+    // The battery command post's plotting board: the player's own when the vehicle is the post, else the scenario's
+    // "command_post" (null when there is none).
+    const PlottingBoard* Board() const {
+        if (post_) return &post_->Board();
+        return c2_ ? c2_->BoardOf("pu12") : nullptr;
+    }
+    // The command post's information chain when the player's vehicle is the post (null otherwise): the IT-45's tracks,
+    // the navigation error (command_post.hpp).
+    const CommandPost* Post() const { return post_.get(); }
+    // The IT-45 as it shows now: the tracks on the scale the console's scale switch is at (its position picks the
+    // ASPD-U's scale), while the tube has a picture. Empty otherwise.
+    std::vector<CommandPost::ScopeMark> PostScope() const {
+        if (!post_) return {};
+        const bool picture = console_.equipment.IsReady(console_.post_telecode) || console_.equipment.IsReady(console_.post_primary);
+        if (!picture) return {};
+        return post_->Scope(PostScaleM());
+    }
+    double PostScaleM() const {
+        if (!post_ || post_->Def().scales_m.empty()) return 0.0;
+        const std::vector<double>& s = post_->Def().scales_m;
+        const int pos = console_.post_scale.empty() ? 0 : console_.panel.Get(console_.post_scale);
+        return s[static_cast<std::size_t>(std::min<int>(std::max(pos, 0), static_cast<int>(s.size()) - 1))];
+    }
+    // The player at the plotter's seat writes one target from the IT-45 on the board (its ASPD-U number). False if the
+    // vehicle is no post, the seat isn't the player's, the number isn't on the tube, or he is still writing the last one.
+    bool PlayerPlot(int aspd_number) {
+        if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
+        return post_->PlotTrack(time_, aspd_number, PlotterSpeed());
+    }
 
     // The commander's order to a crew member. It goes by the R-124 intercom, so it arrives at once; with the commander's
     // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
@@ -1054,7 +1084,98 @@ private:
         }
     }
 
-    bool post_picture_ = true;  // the post's own board had a picture at the last step (console "post")
+    // ---- The player's vehicle is the command post (docs/PU12_DEVELOPMENT.md P3, command_post.hpp).
+    std::unique_ptr<CommandPost> post_;
+    std::map<std::string, double> post_first_mark_;  // first mark of each target on the post's board (the log)
+
+    // The regiment's telecode is within reach (the R-407 net, its outages); the console shows it once its ASPD-U works;
+    // the post is oriented when its subsystem says so; the plotter works when he is free (an NPC not at a drill).
+    void UpdatePost() {
+        if (!post_) return;
+        post_->MoveTo(def_.unit_position);
+        const bool reach = post_->TelecodeInReach(def_.post_regiment, time_);
+        if (reach != console_.equipment.GetInput(console_.post_telecode_input)) console_.equipment.SetInput(console_.post_telecode_input, reach);
+        const bool oriented = console_.equipment.IsReady(console_.post_oriented);
+        if (oriented != post_->IsOriented()) {
+            if (oriented) {
+                post_->Oriented(OrientQuality());
+            } else {
+                post_->Unoriented();
+            }
+            char detail[128];
+            std::snprintf(detail, sizeof(detail), "%s: azimuth error %.1f deg, position %.0f m", oriented ? "oriented" : "not oriented",
+                          RadToDeg(post_->AzErrorRad()), post_->OffsetM().HorizontalLength());
+            Event("navigation", detail);
+        }
+        const std::vector<BoardContact> truth = TruthContacts();
+        std::vector<BoardContact> radar;
+        if (def_.has_post_radar) {
+            for (const BoardContact& c : truth) {
+                if (CommandPost::Covers(def_.post_radar, c)) radar.push_back(c);
+            }
+        }
+        CommandPost::Inputs in;
+        in.telecode = console_.equipment.IsReady(console_.post_telecode);
+        in.primary = console_.equipment.IsReady(console_.post_primary);
+        const CrewMember* plotter = MemberAt(console_.post_plotter);
+        in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
+        in.operator_speed = PlotterSpeed();
+        post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (post_first_mark_.count(m.target_id) != 0) continue;
+            post_first_mark_[m.target_id] = m.time_s;
+            Event(m.target_id, "on the post's board: " + post_->Board().Describe(m));
+        }
+    }
+    // The plotter's handwork speed (his tier's), and how well the squad leader orients (his tier's azimuth error
+    // against the reference tier's: 1 for a trained one).
+    double PlotterSpeed() const {
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            if (crew_[i].Role() != console_.post_plotter) continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->wheel_rate_factor;
+        }
+        return 1.0;
+    }
+    double OrientQuality() const {
+        const SkillTier* ref = def_.has_skills ? def_.skills.Reference() : nullptr;
+        if (ref == nullptr || !(ref->azimuth_error_deg > 0.0)) return 1.0;
+        const std::string orienter = OrientingSeat();
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            if (crew_[i].Role() != orienter) continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->azimuth_error_deg / ref->azimuth_error_deg;
+        }
+        return 1.0;
+    }
+    // The seat whose drill makes the post oriented (the one that owns the controls the subsystem waits for).
+    std::string OrientingSeat() const {
+        const SubsystemDef* d = console_.equipment.Def(console_.post_oriented);
+        if (d == nullptr) return std::string();
+        for (const Condition& c : d->enable) {
+            if (c.kind != Condition::Kind::ControlEquals && c.kind != Condition::Kind::ControlAtLeast) continue;
+            if (const ControlDef* cd = console_.panel.Find(c.id)) return cd->station;
+        }
+        return std::string();
+    }
+
+    // The targets as they are, for the boards (alive and spawned).
+    std::vector<BoardContact> TruthContacts() {
+        std::vector<BoardContact> contacts;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            const ScenarioTarget& t = def_.targets[i];
+            BoardContact c;
+            c.target_id = t.id;
+            c.position = a->position;
+            c.altitude_m = world_.Frame().AltitudeOf(a->position);
+            c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
+            c.formation = t.formation;
+            contacts.push_back(c);
+        }
+        return contacts;
+    }
 
     // The regiment's picture onto the board, once a minute; the first mark of each target goes in the log.
     void UpdateC2() {
@@ -1077,16 +1198,6 @@ private:
         if (comms_) {  // the R-123M sets and the R-124 box as the console has them now
             for (const CrewComms::Event& e : comms_->Step(console_, c2_.get(), c2_link_.get())) {
                 log_.Record({time_, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
-            }
-        }
-        // A command post's own board (the PU-12M): it fills only while the post's equipment gives it a picture (the
-        // ASPD-U receiving the regiment's telecode, or a radar cabled in).
-        if (console_.has_post) {
-            bool picture = false;
-            for (const std::string& s : console_.post_picture) picture = picture || console_.equipment.IsReady(s);
-            if (picture != post_picture_) {
-                c2_->SetFailed(console_.post_board_source, !picture, time_, "the post has no picture");
-                post_picture_ = picture;
             }
         }
         c2_->Update(time_, contacts, def_.unit_position);

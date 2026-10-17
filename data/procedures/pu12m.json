@@ -239,9 +239,9 @@
       ] }
   ],
 
-  "post": { "board_source": "pu12", "picture": [ "telecode_reception", "primary_picture" ],
-            "source": "flak11 (PU12-0: the ASPD-U receives the air picture by telecode, or the primary picture from a radar cabled to the post, and shows it on the IT-45, from which the board is plotted)", "confidence": "medium",
-            "notes": "The scenario's command post (command_post / c2 source pu12) is this vehicle's own board: it is off the air until the post has a picture." },
+  "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode", "plotter": "operator", "oriented": "oriented", "scale": "fr.scale",
+            "source": "flak11 (PU12-0: the ASPD-U receives the air picture by telecode, or the primary picture from a radar cabled to the post, and shows it on the IT-45); ru_pu12_text (the operator-plotter, No. 2)", "confidence": "medium",
+            "notes": "The post's information chain (simcore/command_post.hpp, the scenario's \"post\" block): the regiment's telecode or a cabled radar onto the IT-45, the plotter's marks on the board, the navigation error from the orientation." },
 
   "readiness": {
     "march": { "description": "on the march: the post's radios on and warm, the GAK and KP-4 plotting the route",

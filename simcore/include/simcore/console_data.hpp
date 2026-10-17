@@ -278,11 +278,16 @@ struct ConsoleData {
     CommsDef comms;
     bool has_fuel = false;
     FuelDef fuel;
-    // A command post's own board ("post"): the command network's source that is this vehicle's board, and the
-    // subsystems that give it a picture (any one ready). The board is off the air while none is.
+    // A command post's own information chain ("post", simcore/command_post.hpp): the subsystems that show the regiment's
+    // telecode picture and a cabled radar's primary picture, the input the sim sets while the regiment's telecode is
+    // within reach, the plotter's station, and the subsystem that says the post is oriented.
     bool has_post = false;
-    std::string post_board_source;
-    std::vector<std::string> post_picture;
+    std::string post_telecode;        // subsystem: the telecode picture on the IT-45
+    std::string post_primary;         // subsystem: a cabled radar's picture on the IT-45
+    std::string post_telecode_input;  // input: the regiment's telecode arriving
+    std::string post_plotter;         // station: writes the board and tracks the primary picture
+    std::string post_oriented;        // subsystem: the post oriented (its navigation error small)
+    std::string post_scale;           // control: the IT-45's scale switch, one position per scale of the ASPD-U ("" none)
     std::vector<ReadinessState> readiness;
 
     const ReadinessState* FindReadiness(const std::string& id) const {
@@ -634,16 +639,21 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadPost(const json::Value& root, ConsoleData& out) {
         const json::Value* p = root.Find("post");
         if (p == nullptr) return true;
-        if (!Keys(*p, "post", {"board_source", "picture", "source", "confidence", "notes"}) || !Provenance(*p, "post") ||
-            !RequireString(*p, "post", "board_source", out.post_board_source)) {
+        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "source", "confidence", "notes"}) ||
+            !OptionalString(*p, "post", "scale", out.post_scale) ||
+            !Provenance(*p, "post") || !RequireString(*p, "post", "telecode", out.post_telecode) ||
+            !RequireString(*p, "post", "primary", out.post_primary) || !RequireString(*p, "post", "telecode_input", out.post_telecode_input) ||
+            !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
             return false;
         }
-        const json::Value* pic = p->Find("picture");
-        if (pic == nullptr || !pic->Is(json::Type::Array) || pic->items.empty()) return Fail("post.picture", "a list of subsystems");
-        for (std::size_t i = 0; i < pic->items.size(); ++i) {
-            const json::Value& v = pic->items[i];
-            if (!v.Is(json::Type::String) || out.equipment.Def(v.string) == nullptr) return Fail(Index("post.picture", i), "unknown subsystem");
-            out.post_picture.push_back(v.string);
+        for (const auto& sub : {std::make_pair("telecode", &out.post_telecode), std::make_pair("primary", &out.post_primary),
+                                std::make_pair("oriented", &out.post_oriented)}) {
+            if (out.equipment.Def(*sub.second) == nullptr) return Fail(Join("post", sub.first), "unknown subsystem '" + *sub.second + "'");
+        }
+        if (!out.equipment.HasInput(out.post_telecode_input)) return Fail("post.telecode_input", "unknown input '" + out.post_telecode_input + "'");
+        if (!out.post_scale.empty() && out.panel.Find(out.post_scale) == nullptr) return Fail("post.scale", "unknown control '" + out.post_scale + "'");
+        if (!out.stations.empty() && out.FindStation(out.post_plotter) == nullptr) {
+            return Fail("post.plotter", "'" + out.post_plotter + "' is not a station");
         }
         out.has_post = true;
         return true;
