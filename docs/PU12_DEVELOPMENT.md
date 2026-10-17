@@ -277,9 +277,35 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     him that vehicle's console snapshots and knowledge (`USimWorldSubsystem::RunnerFor`).
   - **On the client.** The client loads the link and follows its own vehicle (its cabin, its exterior).
   - **No moving mid-game.** Changing vehicle in the middle of a networked game is not offered (V stays single player).
-  - **Check.** `tools/ue_crew_smoke.ps1 -Link`. The commander's client in the PU-12M was refused the operator's switch by
-    the post's console and gave the board's first target to 21. The Osa's driver started its gas turbine. The Osa's
+  - **Check.** `tools/ue_crew_smoke.ps1 -Link`. The commander's client in the PU-12M was refused the radio operator's mast
+    winch by the post's console and gave the board's first target to 21. The Osa's driver started its gas turbine. The Osa's
     commander heard the designation on its command net.
+- **The interior refined (18 Oct 2026):** nothing in the compartment goes into anything else, the crew included.
+  - **The check.** `tools/blender/pu12m_interior_check.py` builds every item and part of the interior and the cabin's
+    panels and finds what intersects, with its depth (rays cast from each mesh's vertices and edges into the other).
+    With `--poses` it adds the crew's bodies posed at rest and at their controls
+    (`crew_pose_dump data out/crew_poses_pu12m.json pu12m`). Run headless:
+    `blender --background --python tools/blender/pu12m_interior_check.py -- --poses out/crew_poses_pu12m.json`.
+    From 30 intersecting pairs to none.
+  - **The equipment.** The GAK on its stand over the PT-200; the IT-2M moved in from the sloping side; the IT-45's
+    screen raised above the desk. The wheel raised 8 cm, its rim clear of the dash and the driver's knees. The PAB-2
+    case off the mast's clamp. The VO a periscope from the bow plate. The map board's hanger to a roof bracket; the gear
+    lever's boot on the floor. The ФР and S panels sit on their block's face.
+  - **The RTK-1** stands on the desk at the right wall under the IT-2M (SAM3D). It hung over the tube's front, as the
+    plan has it, and the commander getting up for it put his head into the IT-45.
+  - **The ФР block is the commander's.** Its switches (power, mode, scale) belong to the battery commander, as does the
+    deploy and stow drill of the ASPD-U (`rwd_mb3`: the tube's place is the commander's, the plotter's is at the map).
+    The operator-plotter has no switch of his own: he plots. `tools/ue_crew_smoke.ps1 -Pu12m` now has the plotter
+    refused the scale switch and the commander setting it; `-Link` has the commander refused the mast's winch.
+  - **The crew's bodies.** The desk's inner edge stops 9 cm short of the plan's, clear of the commander's arm. The radio
+    operator's table hangs on struts from the R-111 (its leg stood between his knees). The reach planner keeps heads
+    under the roof (`ceiling_m` in the cabin, 1.40 m over the floor) and bodies out of the equipment. A crewman who
+    gets up for the DTP or the winch crouches a step back with his knees clear (`docs/crew/10_BODIES_AND_VOICES.md`).
+    Hands set off in time to arrive on the control.
+  - **The light.** The rear dome lamp now hangs over the map and the desk. Just over the bench's heads it threw their
+    shadows across the whole rear bulkhead.
+  - **Shots all round.** `-SimShotsAround` adds left, right, behind, down and up to each seat's shots
+    (`unreal/README.md`).
 
 ## 6. What is still SAM3D's
 

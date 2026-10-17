@@ -3,11 +3,12 @@
 # same switch (refused: another station's control). Every machine prints "SIMCREW" lines; this script prints them all.
 #   .\tools\ue_crew_smoke.ps1 [-Engine D:\UE_5.8]
 # -Pu12m plays the PU-12M battery (scenarios/pu12m_battery.json, docs/PU12_DEVELOPMENT.md P7) instead: client 1 takes the
-# operator-plotter's seat, sets the IT-45's scale and writes the tube's first target on the board; client 2 takes the
-# battery commander's seat, tries the operator's scale switch (refused) and gives the board's first target to launcher 22.
+# operator-plotter's seat, tries the IT-45's scale switch (refused: the FR block is the commander's) and writes the tube's
+# first target on the board; client 2 takes the battery commander's seat, sets the scale and gives the board's first
+# target to launcher 22.
 # Both log the post's picture as the knowledge stream brought it (IT-45, board, IT boards).
 # -Link plays the battery link (scenarios/battery_link_practice.json, docs/PU12_DEVELOPMENT.md P8): client 1 joins in the
-# PU-12M (-SimVehicle=post) as the battery commander, tries the operator's scale switch (refused: the post's console) and
+# PU-12M (-SimVehicle=post) as the battery commander, tries the mast's winch (refused: the radio operator's) and
 # gives the board's first target to launcher 21 (the Osa); client 2 joins in the Osa as the driver and starts the gas
 # turbine (the Osa's console). Each one's console and knowledge come from its own vehicle.
 # Build the editor target first, with the editor closed.
@@ -28,11 +29,11 @@ $server = Start-Process -FilePath $exe -PassThru -ArgumentList (@($proj, '/Game/
 Start-Sleep -Seconds 25
 $common = @($proj, '127.0.0.1', '-game', '-nullrhi', '-nosound', '-unattended', '-log', "-SimCrewSmoke=$ClientSeconds") + $scenario
 if ($Link) {
-    $c1 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client1.log", '-SimVehicle=post', '-SimSeat=battery_commander', '-SimCrewTry=fr.scale:0', "-SimCrewDesignate=$([int]($ClientSeconds * 0.5)):0"))
+    $c1 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client1.log", '-SimVehicle=post', '-SimSeat=battery_commander', '-SimCrewTry=mast.raise:1', "-SimCrewDesignate=$([int]($ClientSeconds * 0.5)):0"))
     $c2 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client2.log", '-SimVehicle=osa', '-SimSeat=driver', '-SimCrewTry=pwr.gta:1'))
 } elseif ($Pu12m) {
     $c1 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client1.log", '-SimSeat=operator', '-SimCrewTry=fr.scale:2', "-SimCrewPlot=$([int]($ClientSeconds * 0.4))"))
-    $c2 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client2.log", '-SimSeat=battery_commander', '-SimCrewTry=fr.scale:0', "-SimCrewDesignate=$([int]($ClientSeconds * 0.5)):1"))
+    $c2 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client2.log", '-SimSeat=battery_commander', '-SimCrewTry=fr.scale:2', "-SimCrewDesignate=$([int]($ClientSeconds * 0.5)):1"))
 } else {
     $c1 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client1.log", '-SimSeat=driver', '-SimCrewTry=pwr.gta:1'))
     $c2 = Start-Process -FilePath $exe -PassThru -ArgumentList ($common + @("-ABSLOG=$out\client2.log", '-SimSeat=commander', '-SimCrewTry=pwr.gta:1'))

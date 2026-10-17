@@ -280,7 +280,14 @@ void USimCrewBodiesComponent::UpdateGhost(float DeltaTime)
 	}
 	// The hand from the seat's right shoulder, as the drill master's move would be made, pulsing green.
 	const simcore::SeatFrame Seat = simcore::SeatFrameOf(*St, BodyData->dims);
-	const simcore::ReachPlan Plan = simcore::PlanReach(Seat, BodyData->dims, Touch);
+	const FString PlanKey = GhostStation + TEXT("|") + GhostControl;
+	if (PlanKey != GhostPlanKey || Layout != GhostPlanLayout)
+	{
+		GhostPlan = simcore::PlanReach(Seat, BodyData->dims, Touch, Layout);
+		GhostPlanKey = PlanKey;
+		GhostPlanLayout = Layout;
+	}
+	const simcore::ReachPlan& Plan = GhostPlan;
 	const simcore::TorsoFrame Torso = simcore::TorsoFrameOf(Seat.hip, simcore::PelvisForward(Seat.forward, Plan.lean),
 		simcore::TorsoLean{0.0, Plan.lean.forward_rad, Plan.lean.side_rad, Plan.lean.twist_rad, 0.0}, BodyData->dims);
 	const simcore::WristTarget W =

@@ -2,7 +2,7 @@
 // tools/blender/render_crew_poses.py, which draws them in the cabin so a person can check that each crewman sits in
 // his seat and his hands meet the controls.
 //
-//   crew_pose_dump <data dir> <out.json>
+//   crew_pose_dump <data dir> <out.json> [osa_ak | pu12m]   (the vehicle; default the Osa)
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
@@ -32,20 +32,22 @@ void Vec(std::ostream& f, const char* key, const Vec3& v) { f << "\"" << key << 
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::printf("usage: crew_pose_dump <data dir> <out.json>\n");
+        std::printf("usage: crew_pose_dump <data dir> <out.json> [osa_ak | pu12m]\n");
         return 2;
     }
     const std::string data = argv[1];
+    const std::string system = argc > 3 ? argv[3] : "osa_ak";
     ConsoleData console;
     CabinLayout cabin;
     BodyData body;
     std::string e;
-    if (!LoadConsoleFile(data + "/procedures/osa_ak.json", console, &e) || !LoadCabinFile(data + "/cabins/osa_ak.json", console, cabin, &e) ||
+    if (!LoadConsoleFile(data + "/procedures/" + system + ".json", console, &e) ||
+        !LoadCabinFile(data + "/cabins/" + system + ".json", console, cabin, &e) ||
         !LoadBodyDataFile(data + "/crew/body.json", body, &e)) {
         std::printf("%s\n", e.c_str());
         return 1;
     }
-    const Shot shots[] = {
+    const std::vector<Shot> osa = {
         {"driver_rest", "driver", "", false, false},
         {"driver_gta", "driver", "pwr.gta", false, false},
         {"commander_rest", "commander", "", false, false},
@@ -63,6 +65,24 @@ int main(int argc, char** argv) {
         {"deputy_key", "deputy_commander", "fo.key", false, false},
         {"deputy_orient", "deputy_commander", "orient.qc", false, true},
     };
+    // The PU-12M: each seat at rest and at a control of its own (the crew data's stand_for: standing).
+    const std::vector<Shot> pu12m = {
+        {"driver_rest", "driver", "", false, false},
+        {"driver_mass", "driver", "pwr.mass", false, false},
+        {"squad_leader_rest", "squad_leader", "", false, false},
+        {"squad_leader_gak", "squad_leader", "gak.power", false, false},
+        {"squad_leader_parallax", "squad_leader", "dtp.parallax", false, true},
+        {"commander_rest", "battery_commander", "", false, false},
+        {"commander_keypad", "battery_commander", "dch.key.5", false, false},
+        {"commander_marker", "battery_commander", "dt2.azimuth", true, false},
+        {"commander_rtk1", "battery_commander", "rtk1.power", false, false},
+        {"commander_fr", "battery_commander", "fr.scale", false, false},
+        {"operator_rest", "operator", "", false, false},
+        {"radio_rest", "radio_operator", "", false, false},
+        {"radio_fug3", "radio_operator", "radio.fug3.power", false, false},
+        {"radio_mast", "radio_operator", "mast.raise", false, true},
+    };
+    const std::vector<Shot>& shots = system == "pu12m" ? pu12m : osa;
     std::ostringstream f;
     f << std::fixed << std::setprecision(4);
     f << "{\"poses\": [\n";

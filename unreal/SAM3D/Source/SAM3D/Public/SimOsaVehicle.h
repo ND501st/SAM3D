@@ -43,6 +43,10 @@ struct FSimCabinTourView
 	bool bLookAt = false;
 	FVector Target = FVector::ZeroVector;
 	FString Label;
+	/** A look round from the seat (not bLookAt): the head turned this far from the seat's view, and the lens (0: 80). */
+	double YawDeg = 0.0;
+	double PitchDeg = 0.0;
+	float FovDeg = 0.0f;
 };
 
 /**

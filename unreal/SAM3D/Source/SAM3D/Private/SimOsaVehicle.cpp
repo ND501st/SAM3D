@@ -860,6 +860,22 @@ void ASimOsaVehicle::UpdateTour(float DeltaSeconds)
 					TourViews.Add(Close);
 				}
 			}
+			// -SimShotsAround: the seat's surroundings too, to look for parts running into each other.
+			if (FParse::Param(FCommandLine::Get(), TEXT("SimShotsAround")))
+			{
+				static const struct { double Yaw, Pitch; const TCHAR* Name; } Around[] = {
+					{-90.0, -10.0, TEXT("left")}, {90.0, -10.0, TEXT("right")}, {180.0, -5.0, TEXT("behind")},
+					{0.0, -55.0, TEXT("down")}, {0.0, 40.0, TEXT("up")}};
+				for (const auto& A : Around)
+				{
+					FSimCabinTourView Look = Seat;
+					Look.YawDeg = A.Yaw;
+					Look.PitchDeg = A.Pitch;
+					Look.FovDeg = 100.0f;
+					Look.Label = Seat.Label + TEXT(" - ") + A.Name;
+					TourViews.Add(Look);
+				}
+			}
 		}
 		SetInCabin(true);
 		TourIndex = 0;
@@ -907,7 +923,12 @@ void ASimOsaVehicle::ShowTourView()
 		LookYawDeg = FRotator::NormalizeAxis(Want.Yaw - View.Yaw);
 		LookPitchDeg = Want.Pitch - View.Pitch;
 	}
-	CabinCamera->SetFieldOfView(V.bLookAt ? 40.0f : 80.0f);
+	else
+	{
+		LookYawDeg = V.YawDeg;
+		LookPitchDeg = V.PitchDeg;
+	}
+	CabinCamera->SetFieldOfView(V.bLookAt ? 40.0f : (V.FovDeg > 0.0f ? V.FovDeg : 80.0f));
 	ApplyStationView();
 	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	UE_LOG(LogSAM3D, Log, TEXT("Cabin tour view %d/%d at t=%.0f s: %s"), TourIndex + 1, TourViews.Num(),

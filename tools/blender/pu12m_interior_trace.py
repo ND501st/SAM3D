@@ -170,8 +170,8 @@ _add('bench_back', None, 'Bench back', BENCH['back_x'][0], BENCH['back_x'][1], B
 # The squad leader's place (front right): csla_pu12_manual's squad leader and driver drawing.
 rect('kp4', 2, 'KP-4 coordinate and course plotter', 437, 513, 300, 405, 1.36, 1.58,
      note='on a bracket ahead of the squad leader; the drawing: a drum unit at the height of his chest')
-circle('vo', 1, 'VO orientation telescope', 467, 327, 18, 1.58, 1.84,
-       note='from the KP-4 up to the bow plate')
+circle('vo', 1, 'VO orientation telescope', 467, 327, 18, 1.60, 1.84,
+       note='a periscope from the bow plate down to its eyepiece just over the KP-4')
 rect('it1', 4, 'IT-1 status board', 530, 585, 262, 297, 1.30, 1.58,
      note='a tall lamp panel at his right (the drawing: five columns of lamps)')
 rect('dtp', 5, 'DTP coordinate sensor', 560, 617, 305, 330, FLOOR_Z + 0.08, FLOOR_Z + 0.30)
@@ -190,11 +190,15 @@ rect('kv', 12, 'KV cable entries', 958, 1025, 208, 248, 1.36, 1.50, dy=0.012,
 
 # The driver's place (front left).
 rect('pvs3', 29, 'PVS-3 intercom box', 595, 652, 667, 708, 1.36, 1.52)
-circle('gak', 30, 'GAK gyro direction indicator', 752, 640, 34, 0.84, 1.30, dy=-0.05, mat='Paint_LightGrey',
-       note='the gyro on a stand behind the driver, its converter under it (rwd_mb3 photographs; shilka_narod); moved in 5 cm '
-            'to clear the lower side')
-rect('pt200', 31, 'PT-200C-III converter', 750, 818, 583, 620, FLOOR_Z, 0.80,
-     note='under the GAK on its stand (rwd_mb3: "hinter dem Fahrersitz", the converter lying under the gyro)')
+circle('gak', 30, 'GAK gyro direction indicator', 752, 640, 34, 0.84, 1.30, dy=-0.10, mat='Paint_LightGrey',
+       note='the gyro on a stand behind the driver, its converter under it (rwd_mb3 photographs; shilka_narod); moved in 10 cm '
+            "so its stand's feet clear the lower side")
+_GAK = ITEMS[-1]
+_gx, _gy = 0.5 * (_GAK['x0'] + _GAK['x1']), 0.5 * (_GAK['y0'] + _GAK['y1'])
+# The converter lies under the gyro between the stand's legs (rwd_mb3: "hinter dem Fahrersitz", under the gyro): the
+# plan's 0.29 x 0.17 m (750-818 x 583-620 px), centred under the stand.
+_add('pt200', 31, 'PT-200C-III converter', _gx - 0.145, _gx + 0.145, _gy - 0.083, _gy + 0.083, FLOOR_Z, 0.80,
+     note="under the GAK between its stand's legs (the plan draws it beside, at 750-818 x 583-620 px)")
 rect('scv', 32, 'ŠČV input board', 788, 858, 666, 705, 1.52, 1.74,
      note="on the sloping side above the RK-2 (the plan draws them overlapping); the plan's ellipse as a box")
 rect('rk2', 33, 'RK-2 junction box', 835, 895, 683, 718, 1.36, 1.50)
@@ -207,20 +211,26 @@ _add('s23', None, 'S-23 data transmission set', 1.40, 1.72, 0.76, 0.92, 1.42, 1.
      note='SAM3D place, after the rwd_mb3 photograph')
 
 # The battery commander's workplace (right side, middle): the IT-45 at the front of the desk, facing back to the bench.
-rect('rtk1', 16, 'RTK-1 radiotelephone concentrator', 1018, 1040, 335, 428, 1.80, 1.98, mat='Paint_BlueGrey',
-     note='above the front of the desk (the drawing: top left), over the IT-45 as the commander sees it, facing back')
-rect('it45', 19, 'IT-45 indicator (with the UO amplifiers, 14, under it)', 1060, 1175, 293, 415, 1.10, 1.78,
+# The RTK-1 (rwd_mb3: the commander's workplace, with the IT-45, the ДХ, the IT-2M, the ФР block and the DT-2): the plan
+# draws it (item 16, 1018-1040 x 335-428 px) over the front of the tube. SAM3D stands it on the desk against the right wall
+# under the IT-2M instead: with the tube's screen above the desk (IT45_SCREEN) the tube would hide it from the commander,
+# and he could not reach it over the tube.
+_add('rtk1', 16, 'RTK-1 radiotelephone concentrator', -0.69, -0.27, -1.20, -1.106, 1.375, 1.605, mat='Paint_BlueGrey',
+     note='on the desk against the right wall under the IT-2M (SAM3D; the plan: over the front of the tube)')
+rect('it45', 19, 'IT-45 indicator (with the UO amplifiers, 14, under it)', 1060, 1175, 293, 415, 1.10, 1.92,
      mat='Paint_LightGrey', note="the tube block, light grey (rwd_mb3 photograph); the plan's D (1175-1200 px) is the "
                                  "DT-2 marker's housing at its foot")
-rect('dch', 15, 'ДХ characteristics keypad', 1125, 1190, 418, 450, 1.20, 1.64, mat='Paint_LightGrey',
-     note='left of the tube (shilka_narod, rwd_mb3 photographs), its face in the plane of the screen')
-rect('fr_block', 13, 'ФР block and the S synchronisation block (13)', 1085, 1175, 243, 293, 1.30, 1.70, mat='Paint_BlueGrey',
+rect('dch', 15, 'ДХ characteristics keypad', 1125, 1190, 418, 450, 1.38, 1.82, mat='Paint_LightGrey',
+     note='left of the tube (shilka_narod, rwd_mb3 photographs), its face in the plane of the screen, beside it')
+rect('fr_block', 13, 'ФР block and the S synchronisation block (13)', 1085, 1175, 243, 293, 1.48, 1.88, mat='Paint_BlueGrey',
      note='right of the tube (shilka_narod photograph); the plan draws S dashed under it')
 rect('desk', None, "The commander's desk", 1175, 1360, 190, 318, 1.34, 1.37, dy=0.05, mat='Paint_Panel',
-     note='on the ledge (its top 0.35 m above the bench); moved in 5 cm to clear the side')
+     note='on the ledge (its top 0.35 m above the bench); moved in 5 cm to clear the side, its inner edge 9 cm short of '
+          "the plan's: the commander's right arm hangs beside it")
+ITEMS[-1]['y1'] -= 0.09
 rect('rk3', 17, 'RK-3 junction box', 1075, 1160, 202, 228, 1.36, 1.48, dy=0.012, note='under the side hatch')
-rect('it2', 18, 'IT-2M status board', 1190, 1245, 203, 228, 1.66, 1.88, dy=0.08, mat='Paint_LightGrey',
-     note='high over the desk at the commander\'s right (rwd_mb3: the IT-2M over the commander\'s workplace); moved in 8 cm '
+rect('it2', 18, 'IT-2M status board', 1190, 1245, 203, 228, 1.66, 1.88, dy=0.10, mat='Paint_LightGrey',
+     note='high over the desk at the commander\'s right (rwd_mb3: the IT-2M over the commander\'s workplace); moved in 10 cm '
           'to clear the sloping side')
 circle('di', 20, 'DI information marker', 1243, 276, 22, 1.37, 1.43, note="in the desk top (the plan's circle is 31 px)")
 rect('fan_right', 50, 'Fan', 1265, 1290, 196, 218, 1.86, 1.96, dy=0.15, note='high on the sloping wall, above the ŠČK')
@@ -275,15 +285,19 @@ _add('winch', 10, 'Mast winch', WINCH['x'] - 0.08, WINCH['x'] + 0.08, WINCH['y']
 
 # The driver's controls (the BTR-60PB's, from the drawing): the wheel on its column, the dash with his instruments.
 DRIVER_Y = py_y(557)
-WHEEL = {'x': 2.72, 'y': DRIVER_Y, 'z': 1.36, 'r': 0.22, 'tilt_deg': 50}   # its plane 50 degrees from flat (estimate)
+# its plane 50 degrees from flat (estimate); its rim clear of the dash's gauges
+# and high enough that its lower rim clears his knees (the crew body check)
+WHEEL = {'x': 2.69, 'y': DRIVER_Y, 'z': 1.44, 'r': 0.22, 'tilt_deg': 50}
 _add('dash', None, "Driver's instrument panel", 2.86, 3.02, DRIVER_Y - 0.30, DRIVER_Y + 0.28, 1.30, 1.62,
      mat='Paint_Interior', note='the BTR-60PB dash under the windscreen (the drawing)')
 
 # Where the PAB-2 aiming circle is stowed: a case on the ledge behind the squad leader (SAM3D; not in the plan).
-_add('pab2_case', None, 'PAB-2 aiming circle case', 1.18, 1.48, -1.10, -0.95, 1.36, 1.58, mat='Paint_Rack')
+_add('pab2_case', None, 'PAB-2 aiming circle case', 1.18, 1.48, -1.10, -0.95, 1.39, 1.61, mat='Paint_Rack',
+     note="on the mast's lower clamp")
 
-# Lamps on the roof (SAM3D: the BTR-60PB's dome lamps; positions an estimate).
-DOME_LAMPS = [(2.05, 0.0), (0.60, 0.0), (-0.95, 0.0)]
+# Lamps on the roof (SAM3D: the BTR-60PB's dome lamps; positions an estimate). The rear one over the map and the desk,
+# ahead of the bench: just over the crew's heads it threw their shadows across the whole rear bulkhead.
+DOME_LAMPS = [(2.05, 0.0), (0.60, 0.0), (-0.55, 0.0)]
 
 # Two windscreens with their armoured covers closed, in the upper bow plate before the front seats (the drawing).
 WINDSCREENS = [(2.62, py_y(557)), (2.62, py_y(400))]
@@ -303,7 +317,7 @@ for _it in ITEMS:
 FACES = {
     'kp4': 'rear', 'it1': 'left', 'dtp': 'left', 'pvs2': 'left', 'gak_panel': 'left', 'r123_fug1': 'left',
     'telecode_tx': 'left', 'kv': 'left', 'pvs3': 'right', 'gak': 'right', 'scv': 'right', 'rk2': 'right',
-    'telecode_rx': 'right', 'baf': 'right', 'rtk1': 'rear', 'it45': 'rear', 'dch': 'rear', 'fr_block': 'rear',
+    'telecode_rx': 'right', 'baf': 'right', 'rtk1': 'left', 'it45': 'rear', 'dch': 'rear', 'fr_block': 'rear',
     'rk3': 'left', 'it2': 'left', 'skc': 'left', 'r123_fug4': 'left', 'r407': 'left', 'r111': 'rear', 'r123_fug2': 'rear',
     'bp_fug2': 'right', 'rk1': 'right', 'pvs1': 'right', 'vs27': 'right', 'scr': 'right', 'fp': 'rear', 'rr361': 'right',
     'bp48': 'front', 'winch': 'left', 'dash': 'rear', 'pab2_case': 'left', 'map_board': 'rear', 's23': 'right', 'di': 'top',
@@ -343,7 +357,7 @@ STATIONS = {
     # rwd_mb3: the commander (or the operator) at the tube, the plotter beside him at the map (the ČSLA drawing calls the
     # tube's desk the battery commander's workplace).
     'battery_commander': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][0]), SEAT_Z + EYE_ABOVE_SEAT),
-                          'yaw': 9.0, 'pitch': -14.0},
+                          'yaw': 9.0, 'pitch': -16.0},
     'operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][1]), SEAT_Z + EYE_ABOVE_SEAT), 'yaw': 6.0,
                  'pitch': -16.0},
     'radio_operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][2]), SEAT_Z + EYE_ABOVE_SEAT),
@@ -356,4 +370,5 @@ STATIONS = {
 # workplace). Diameter 0.40 m: the photograph against the ДХ keypad beside it, 3 times its width (about 0.13 m), and the
 # name: Soviet tubes are named for their diameter in cm, IT-45 a 45 cm tube with its bezel over the rim. Scaled, about 10 %.
 _IT45 = item('it45')
-IT45_SCREEN = {'x': _IT45['x0'], 'y': 0.5 * (_IT45['y0'] + _IT45['y1']), 'z': 1.43, 'd': 0.40}
+# Its bezel's lowest point clears the commander's desk (the desk's top at 1.37 m): the screen centred at 1.61 m.
+IT45_SCREEN = {'x': _IT45['x0'], 'y': 0.5 * (_IT45['y0'] + _IT45['y1']), 'z': 1.61, 'd': 0.40}

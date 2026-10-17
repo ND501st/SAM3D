@@ -315,6 +315,7 @@ struct CabinDisplay {
 
 struct CabinLayout {
     std::string system_id;
+    double ceiling_m = 0.0;  // the roof's inside in the body frame, where a crewman getting up must keep his head under (0: none)
     std::vector<CabinStation> stations;
     std::vector<CabinPanel> panels;
     std::vector<CabinControl> controls;
@@ -421,11 +422,12 @@ namespace detail {
 class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "stations", "panels", "controls", "lamps", "displays",
-                             "blocks", "fixtures", "shell"})) {
+        if (!Keys(root, "", {"system_id", "status", "notes", "ceiling_m", "stations", "panels", "controls", "lamps",
+                             "displays", "blocks", "fixtures", "shell"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
+        if (!OptionalNumber(root, "", "ceiling_m", out.ceiling_m)) return false;
         if (out.system_id != console.system_id) {
             return Fail("system_id", "'" + out.system_id + "' doesn't match the console's '" + console.system_id + "'");
         }

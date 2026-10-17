@@ -19,7 +19,7 @@ def test_the_pu12m_map_uses_its_own_five_seats():
     for seat in ("battery_commander", "squad_leader", "operator", "radio_operator", "driver"):
         assert f"| **{seat}** |" in text, seat
     assert "| **deputy_commander** |" not in text
-    row = next(line for line in text.splitlines() if line.startswith("| **operator** |"))
+    row = next(line for line in text.splitlines() if line.startswith("| **battery_commander** |"))
     assert "`deploy_aspd`" in row  # the ASPD-U waits for the driver's generator and the radio operator's distribution board
 
 

@@ -102,7 +102,7 @@ SC_TEST("crew body: every control is in reach of its seat, standing only for the
         if (st == nullptr) continue;
         ControlTouch t;
         SC_EXPECT(TouchOf(o.cabin, c.control_id, t));
-        const ReachPlan p = PlanReach(SeatFrameOf(*st, o.body.dims), o.body.dims, t);
+        const ReachPlan p = PlanReach(SeatFrameOf(*st, o.body.dims), o.body.dims, t, &o.cabin);
         if (!p.reachable) std::printf("    out of reach: %s (%s)\n", c.control_id.c_str(), def->station.c_str());
         SC_EXPECT(p.reachable);
         const CrewSeatDef* seat = o.crew.FindSeat(def->station);
@@ -350,11 +350,11 @@ SC_TEST("crew body: in the PU-12M, every control is in reach of its seat, standi
         if (st == nullptr) continue;
         ControlTouch t;
         SC_EXPECT(TouchOf(o.cabin, c.control_id, t));
-        const ReachPlan p = PlanReach(SeatFrameOf(*st, o.body.dims), o.body.dims, t);
+        const ReachPlan p = PlanReach(SeatFrameOf(*st, o.body.dims), o.body.dims, t, &o.cabin);
         if (!p.reachable) std::printf("    out of reach: %s (%s)\n", c.control_id.c_str(), def->station.c_str());
         SC_EXPECT(p.reachable);
-        // He stands for those the crew data says (the DTP low at the squad leader's side, the RTK-1 over the tube, the
-        // mast's winch at the front of the compartment: he walks to it), and only those.
+        // He stands for those the crew data says (the DTP low at the squad leader's side, the mast's winch at the front
+        // of the compartment: he walks to it), and only those.
         const CrewSeatDef* seat = o.crew.FindSeat(def->station);
         bool listed = false;
         for (const std::string& s : seat->stand_for) listed = listed || s == c.control_id;
@@ -366,4 +366,76 @@ SC_TEST("crew body: in the PU-12M, every control is in reach of its seat, standi
         if (!p.reachable) ++away; else if (p.seated) ++seated; else ++standing;
     }
     SC_EXPECT(seated + standing == static_cast<int>(o.console.panel.Controls().size()) && away == 0);
+}
+
+SC_TEST("crew body: a ball behind a panel's face is in its equipment, one in front or past its edge is clear (ReachSpace)") {
+    CabinLayout cabin;
+    CabinPanel p;
+    p.id = "box";
+    p.centre_m = Vec3{0.0, 1.0, 1.0};
+    p.facing_rad = kPi;  // looking back at the seat: the normal -y, the right +x
+    p.width_m = 0.4;
+    p.height_m = 0.3;
+    cabin.panels.push_back(p);
+    cabin.ceiling_m = 2.0;
+    ReachSpace space;
+    SC_EXPECT(space.Clear(Vec3{0.0, 1.1, 1.0}, 0.1) && space.UnderRoof(5.0));  // no cabin: nothing in the way
+    space.cabin = &cabin;
+    SC_EXPECT(space.Clear(Vec3{0.0, 0.85, 1.0}, 0.1));    // 15 cm in front of the face
+    SC_EXPECT(!space.Clear(Vec3{0.0, 0.95, 1.0}, 0.1));   // 5 cm in front: the ball touches it
+    SC_EXPECT(!space.Clear(Vec3{0.0, 1.10, 1.0}, 0.1));   // 10 cm into the 20 cm slab
+    SC_EXPECT(space.Clear(Vec3{0.0, 1.35, 1.0}, 0.1));    // 35 cm behind: past the slab and the ball's radius
+    SC_EXPECT(space.Clear(Vec3{0.32, 1.05, 1.0}, 0.1));   // 12 cm past the right edge
+    SC_EXPECT(!space.Clear(Vec3{0.27, 1.05, 1.0}, 0.1));  // 7 cm past it: the ball reaches in
+    // Off the corner: 7 cm across, 7 cm up, 5 cm in front is sqrt(0.07^2 + 0.07^2 + 0.05^2) = 0.111 m from it; 5, 5
+    // and 3 cm is 0.077 m.
+    SC_EXPECT(space.Clear(Vec3{0.27, 0.95, 1.22}, 0.1));
+    SC_EXPECT(!space.Clear(Vec3{0.25, 0.97, 1.20}, 0.1));
+    SC_EXPECT(space.UnderRoof(1.97) && !space.UnderRoof(1.99));  // 2 cm to spare under the roof
+}
+
+SC_TEST("crew body: in the PU-12M, a crewman reaching for any control keeps his head under the roof and out of the equipment") {
+    Pu12mBody o = LoadPu12mBody();
+    SC_EXPECT(o.ok);
+    SC_EXPECT_NEAR(o.cabin.ceiling_m, 2.025, 0.01);  // 1.40 m over the floor: no room to stand up straight
+    ReachSpace space;
+    space.cabin = &o.cabin;
+    const double head_top = (1.0 - o.body.dims.shoulder_frac) * o.body.dims.stature_m;
+    int stood = 0;
+    for (const CabinControl& c : o.cabin.controls) {
+        const ControlDef* def = o.console.panel.Find(c.control_id);
+        if (def == nullptr) continue;
+        BodyAnimator anim(&o.cabin, &o.body, def->station);
+        if (!anim.Valid()) continue;
+        const ReachPlan& plan = anim.PlanFor(c.control_id);
+        SeatActivity a;
+        a.station = def->station;
+        a.control = c.control_id;
+        a.standing = !plan.seated;
+        a.stand_control = plan.seated ? "" : c.control_id;
+        for (double t = 0.0; t < 3.0; t += 0.05) {
+            a.act_in_s = 3.0 - t;
+            anim.Update(0.05, a, &o.console.panel);
+        }
+        a.act_in_s = 0.0;
+        anim.Update(0.05, a, &o.console.panel);
+        const BodyPose& p = anim.Pose();
+        const bool roof = (p.torso.chest + p.torso.up * head_top).z < o.cabin.ceiling_m;
+        const bool head = space.Clear(p.head + p.head_up * 0.09, 0.08);
+        bool knees = true;
+        for (int i = 0; i < 2; ++i) knees = knees && (plan.seated || space.Clear(p.knee[i], 0.06));
+        if (!roof || !head || !knees) {
+            std::printf("    %s (%s): %s%s%s\n", c.control_id.c_str(), def->station.c_str(), roof ? "" : "head through the roof ",
+                        head ? "" : "head in the equipment ", knees ? "" : "knees in the equipment");
+        }
+        SC_EXPECT(roof && head && knees);
+        // And his finger (his grip) is on it, as in the Osa.
+        ControlTouch t;
+        SC_EXPECT(TouchOf(o.cabin, c.control_id, t));
+        const double off = (Fingertip(p, SideIndex(plan.side), o.body.dims) - t.point).Length();
+        if (off > 0.03) std::printf("    %s (%s): the finger %.3f m from it\n", c.control_id.c_str(), def->station.c_str(), off);
+        SC_EXPECT(off < 0.03);
+        if (!plan.seated) ++stood;
+    }
+    SC_EXPECT(stood == 2);  // the DTP and the mast's winch, crouching under the roof
 }

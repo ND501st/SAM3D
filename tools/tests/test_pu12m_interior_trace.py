@@ -126,3 +126,44 @@ def test_the_panels_stand_on_their_items_faces():
             return any(it['x0'] <= pt[0] <= it['x1'] and it['y0'] <= pt[1] <= it['y1'] and it['z0'] <= pt[2] <= it['z1']
                        for it in I.ITEMS)
         assert within(behind) and not within(front), p['id']
+
+
+def test_the_panels_lie_within_their_faces_and_apart():
+    """Each corner of a panel has its item behind it (a panel hanging off its block's edge floats in the air), and two
+    panels in one plane do not overlap (the ФР and S blocks' panels, one above the other)."""
+    import json
+    layout = json.loads((ROOT / 'data' / 'cabins' / 'pu12m.json').read_text(encoding='utf-8'))
+    panels = [p for p in layout['panels'] if not p.get('bare')]
+
+    def axes(p):
+        f, t = math.radians(p['facing_deg']), math.radians(p.get('tilt_deg', 0))
+        n = (math.sin(f) * math.cos(t), math.cos(f) * math.cos(t), math.sin(t))
+        r = (-math.cos(f), math.sin(f), 0.0)
+        u = (n[1] * r[2] - n[2] * r[1], n[2] * r[0] - n[0] * r[2], n[0] * r[1] - n[1] * r[0])
+        return n, r, u
+
+    def within(bx, by, bz):
+        x, y, z = by, -bx, bz                                   # body to trace
+        return any(it['x0'] <= x <= it['x1'] and it['y0'] <= y <= it['y1'] and it['z0'] <= z <= it['z1'] for it in I.ITEMS)
+
+    for p in panels:
+        n, r, u = axes(p)
+        c = p['centre_m']
+        w, h = p['size_m']
+        for su in (-1, 1):
+            for sv in (-1, 1):
+                a, b = su * (w / 2 - 0.015), sv * (h / 2 - 0.015)
+                pt = [c[k] + r[k] * a + u[k] * b - n[k] * 0.008 for k in range(3)]
+                assert within(*pt), (p['id'], su, sv)
+    for i, p in enumerate(panels):
+        n, r, u = axes(p)
+        for q in panels[i + 1:]:
+            if (p['facing_deg'], p.get('tilt_deg', 0)) != (q['facing_deg'], q.get('tilt_deg', 0)):
+                continue
+            d = [q['centre_m'][k] - p['centre_m'][k] for k in range(3)]
+            if abs(sum(d[k] * n[k] for k in range(3))) > 0.01:
+                continue                                        # parallel, not in one plane
+            du, dv = sum(d[k] * r[k] for k in range(3)), sum(d[k] * u[k] for k in range(3))
+            apart_u = abs(du) >= (p['size_m'][0] + q['size_m'][0]) / 2 - 0.005
+            apart_v = abs(dv) >= (p['size_m'][1] + q['size_m'][1]) / 2 - 0.005
+            assert apart_u or apart_v, (p['id'], q['id'])

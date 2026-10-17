@@ -7,8 +7,8 @@ instruments and voice; this is the part of it a player sees and hears. Built 17 
 
 Each NPC crewmate is a body in his seat in the 3D cabin:
 
-- **His hand goes to the control he is about to move.** The hand sets off about half a second before the action, so it
-  arrives when the switch moves. It stays there a moment and then comes back. A toggle, button or cover gets a finger;
+- **His hand goes to the control he is about to move.** The hand sets off 0.9 s before the action (the longest move
+  takes 0.8 s), so it arrives when the switch moves. It stays there a moment and then comes back. A toggle, button or cover gets a finger;
   a knob, key or hand wheel gets a grip.
 - **He grips the hand wheel he is turning** while he tracks by hand. The hand rides round with the rim and takes a new
   grip every 120 degrees.
@@ -33,8 +33,8 @@ control the drill master advises (`08`).
 | `SeatFrameOf` | The hip joints and the floor from a station's eye point and heading. The sitting eye height (0.79 m) and the seat height put the floor where the cabin has it (0.62 m), to a centimetre |
 | `TwoBoneIk` | The elbow (knee) of a two-segment chain, bent toward a pole |
 | `TouchOf` | Where a hand meets a control: a finger's pad 12 mm out from a toggle; the palm on a knob, a key or a hand wheel's rim |
-| `PlanReach` | The cheapest posture from which a hand meets the control. Sitting, it searches over a turn on the seat, the bend and the twist. If none works, he stands at the panel and may bend or crouch. Unreachable controls are reported |
-| `SolveBody` | The pose: pelvis, torso, head with its gaze, both arms, legs (thighs on the seat, feet on the floor or the pedals; straight when standing) |
+| `PlanReach` | The cheapest posture from which a hand meets the control. Sitting, it searches over a turn on the seat, the bend and the twist. If none works, he stands at the panel and may bend or crouch. Given the cabin, it keeps his head and chest out of the equipment behind every panel (a 20 cm slab behind its face) and his head under the roof (the cabin's `ceiling_m`); standing, his knees and shins too, stepping back up to 24 cm from the panel when a crouch needs the room (`ReachSpace`). Unreachable controls are reported |
+| `SolveBody` | The pose: pelvis, torso, head with its gaze, both arms, legs (thighs on the seat, feet on the floor or the pedals; standing, the feet under the hips, the knees bent in a crouch) |
 | `PartsOf` | The pose as 16 rigid parts (origin, bone, up, length) for a renderer |
 | `BodyAnimator` | A seat's body over time from `SeatActivity` (§3): hand moves along a short arc at 1.2 m/s, the lean smoothed, standing over a second, wheel grips |
 
@@ -44,6 +44,10 @@ nine:
 
 - the deputy commander's four orientation controls, 1.4–1.6 m along the wall;
 - the commander's right-radio controls, low behind his seat.
+
+In the PU-12M two: the squad leader's DTP, low at his side, and the radio operator's mast winch. The roof is 1.40 m over
+the floor there, so both crouch; the PU-12M test checks that every reach keeps the head under the roof and out of the
+equipment with the finger on the control.
 
 **Drill time.** Standing costs time in the drill: `CrewMember` adds 1.5 s to get up and step, and 1.0 s to sit back
 down (crew data `standing`). The drill master's ideal crew pays it too.
@@ -86,7 +90,8 @@ Console: `sam3d.Voice`, `sam3d.VoiceLanguage auto|ru|en`, `sam3d.VoiceVolume`.
 |---|---|
 | `tools/blender/build_crew_body.py` | Builds the parts from `body.json`'s sizes: torso with belt, a padded tank helmet (шлемофон) with its ribs, earphone cups and chin strap, the face, arms, three hand shapes per side (rest, point, grip), legs with tall boots. Writes `art/crew_body/*.fbx` and `crew_body.blend` |
 | `tools/ue_import_crew_body.py` | Imports them as `/Game/SAM3D/Crew/SM_Crew_*` (editor closed, through the commandlet) |
-| `simcore/examples/crew_pose_dump` + `tools/blender/render_crew_poses.py` | Pose every seat at rest and at work (16 poses) and render them in the furnished cabin, with a red bead on the control being reached: the check by eye |
+| `simcore/examples/crew_pose_dump` + `tools/blender/render_crew_poses.py` | Pose every seat at rest and at work (16 poses; `crew_pose_dump data <out> pu12m`: the PU-12M's 14) and render them in the furnished cabin, with a red bead on the control being reached: the check by eye |
+| `tools/blender/pu12m_interior_check.py -- --poses <poses>` | The PU-12M's posed bodies against its meshes: what goes into what, and how deep (`docs/PU12_DEVELOPMENT.md`) |
 
 The parts are rigid: each has its origin at its proximal joint, its bone along +X and its "up" along +Z. Engine
 basic shapes stand in for any part that isn't imported.
@@ -97,7 +102,10 @@ basic shapes stand in for any part that isn't imported.
   - the data loads;
   - the IK against a hand calculation;
   - the seats put the floor where the cabin has it;
-  - every control is in reach of its seat, standing only for `stand_for`;
+  - every control is in reach of its seat, standing only for `stand_for` (the Osa and the PU-12M);
+  - a ball behind a panel's face is in its equipment, one in front or past its edge clear (`ReachSpace`, a hand
+    calculation);
+  - in the PU-12M, every reach keeps the head under the roof and out of the equipment, the finger on the control;
   - the finger is on the switch when it moves and the hand comes back;
   - the deputy stands at the gyro panel;
   - a wheel grip rides round with the wheel;
