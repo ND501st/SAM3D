@@ -16,9 +16,10 @@ How it was traced:
   (2.825 m, valka_pu12) separately from the length (the drawing's ratio is 4 % off the published one).
 * The roof's and the bottom's widths: 0.75 and 0.64 of the full width, from a front-view drawing and the museum's front
   photograph (opisybroni_pu12): scaled, about 5 %.
-* PU-12M fittings: the mast on the right at 30 % of the length from the bow, 0.69 m off the centreline (csla_pu12_manual
-  item 10; a museum photograph, wikimedia_pu12_spb, shows it at the right roof edge); stowed it stands about 1.5 m above the
-  roof (wikimedia_pu12_vtm), raised 16 m (flak11 PU12-1); guyed at two heights (csla_pu12_manual). The roof box in place of
+* PU-12M fittings: the mast on the right at 32 % of the length from the bow, 0.63 m off the centreline (csla_pu12_manual
+  plan item 10; a museum photograph, wikimedia_pu12_spb, shows it at the right roof edge); stowed it stands about 1.5 m above the
+  roof (wikimedia_pu12_vtm), raised 16 m (flak11 PU12-1); a fixed section and eight moving ones raised by a hand winch
+  (csla_pu12_manual, the mast drawings); guyed at two heights (csla_pu12_manual). The roof box in place of
   the turret (flak11 PU12-0), the whips, rails and lights are placed from the photographs: scaled, about 10 %.
 
 Frame: X forward from the middle of the wheelbase, Y to the left, Z up from the ground; metres.
@@ -119,15 +120,20 @@ EXHAUST = (-3.3, -2.0, 1.75, -1.18)
 
 # ---------------------------------------------------------------------------------------------- the mast
 
-MAST_X = BOW_X - 0.30 * LENGTH   # 30 % of the length from the bow (csla_pu12_manual item 10)
-MAST_Y = -0.69                   # on the right (negative Y)
+# Where it stands: the ČSLA plan's item 10 (pu12m_interior_trace.py reads the plan: the circle at 780, 328 px).
+MAST_X = BOW_X - (780 - 242) * LENGTH / 1686.0   # 2.30 m behind the bow
+MAST_Y = -(467 - 328) * WIDTH / 626.0            # 0.63 m to the right (negative Y)
 MAST_FOOT_Z = 0.65               # it stands on the floor inside the hull and comes up through the roof (csla_pu12_manual item 10)
-MAST_BASE_TOP_Z = ROOF_Z + 1.2   # the fixed base tube's top, 1.2 m above the roof
+MAST_BASE_TOP_Z = ROOF_Z + 1.2   # the fixed section's top, 1.2 m above the roof
 MAST_STOWED_TOP_Z = ROOF_Z + 1.5  # retracted, about 1.5 m above the roof (the photographs)
-# Sections from the base outward: radius and length; each slides out of the one below it. Stowed, they nest down into the
-# hull to its floor. Radii scaled from the photographs (about 15 %); the lengths are SAM3D's (long enough to overlap
-# 0.3 m when raised).
-MAST_SECTIONS = [(0.075, MAST_BASE_TOP_Z - MAST_FOOT_Z), (0.065, 2.9), (0.055, 2.9), (0.046, 2.9), (0.038, 2.9), (0.030, 2.9)]
+# A fixed section and eight moving ones (csla_pu12_manual, the mast drawings: sections 1 fixed, 2-9 moving, raised by a
+# hand winch at its foot over cables and pulleys). Radii from 7.5 cm down to 3 cm, scaled from the photographs (about
+# 15 %); the lengths are SAM3D's: each moving section reaches from the foot to its stowed top, so stowed they nest down
+# into the hull, and raised each overlaps the one below it by about 1 m.
+MAST_MOVING = 8
+MAST_NEST_STEP = (MAST_STOWED_TOP_Z - MAST_BASE_TOP_Z) / MAST_MOVING  # stowed, each top stands this much above the last
+MAST_SECTIONS = [(0.075, MAST_BASE_TOP_Z - MAST_FOOT_Z)] + [
+    (round(0.075 - 0.045 * i / MAST_MOVING, 4), 2.6) for i in range(1, MAST_MOVING + 1)]
 # Guys at two heights (fraction of the raised height), four each, to stakes this far out (csla_pu12_manual's drawing).
 GUY_LEVELS = (0.5, 0.95)
 GUY_RADIUS = 6.0
@@ -141,7 +147,7 @@ def mast_section_tops(extension):
     travel = (MAST_TOP_RAISED - MAST_STOWED_TOP_Z) / moving
     e = max(0.0, min(1.0, extension))
     for i in range(1, len(MAST_SECTIONS)):
-        stowed_top = MAST_STOWED_TOP_Z - (moving - i) * 0.05  # nested inside each other, a little lower each
+        stowed_top = MAST_STOWED_TOP_Z - (moving - i) * MAST_NEST_STEP  # nested inside each other, a little lower each
         tops.append(stowed_top + e * travel * i)
     return tops
 

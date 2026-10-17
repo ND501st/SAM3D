@@ -1,0 +1,106 @@
+{
+ "SM_PU12MBench": {
+  "centre_m": [
+   -0.009,
+   -0.9795,
+   1.065
+  ],
+  "reuse": false,
+  "size_m": [
+   1.1823,
+   0.5604,
+   0.89
+  ]
+ },
+ "SM_PU12MDriver": {
+  "centre_m": [
+   -0.344,
+   2.695,
+   1.1294
+  ],
+  "reuse": false,
+  "size_m": [
+   0.7043,
+   0.65,
+   1.0211
+  ]
+ },
+ "SM_PU12MEquipment": {
+  "centre_m": [
+   0.0098,
+   0.5076,
+   1.29
+  ],
+  "reuse": false,
+  "size_m": [
+   2.3804,
+   4.7748,
+   1.34
+  ]
+ },
+ "SM_PU12MFrontSeat": {
+  "centre_m": [
+   -0.0,
+   -0.1,
+   1.0608
+  ],
+  "reuse": true,
+  "size_m": [
+   0.42,
+   0.64,
+   0.8815
+  ]
+ },
+ "SM_PU12MHull": {
+  "centre_m": [
+   -0.0,
+   0.8139,
+   1.3225
+  ],
+  "reuse": false,
+  "size_m": [
+   2.925,
+   5.4892,
+   1.565
+  ]
+ },
+ "SM_PU12MMastFoot": {
+  "centre_m": [
+   0.8346,
+   1.4261,
+   1.3325
+  ],
+  "reuse": false,
+  "size_m": [
+   0.8447,
+   0.27,
+   1.425
+  ]
+ },
+ "SM_PU12MPedals": {
+  "centre_m": [
+   -0.4062,
+   2.9226,
+   0.9358
+  ],
+  "reuse": false,
+  "size_m": [
+   0.35,
+   0.1692,
+   0.2541
+  ]
+ },
+ "SM_PU12MSteering": {
+  "centre_m": [
+   -0.4062,
+   2.72,
+   1.36
+  ],
+  "reuse": false,
+  "size_m": [
+   0.468,
+   0.31,
+   0.365
+  ]
+ }
+}

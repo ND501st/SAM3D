@@ -244,7 +244,10 @@ inline bool KnownReadout(const std::string& name) {
     return false;
 }
 
-enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters };
+// aspd_scope: the command post's IT-45 (command_post.hpp: the ASPD-U's tracks on the scale the console's post block names),
+// with the plotting glass over it (`glass`: the board's marks in grease pencil); status_board: the IT-1 / IT-2 boards (the
+// launchers' reports). Both need the console's post block.
+enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters, AspdScope, StatusBoard };
 
 inline const char* ToString(CabinDisplayKind k) {
     switch (k) {
@@ -255,6 +258,8 @@ inline const char* ToString(CabinDisplayKind k) {
         case CabinDisplayKind::Dial: return "dial";
         case CabinDisplayKind::Meter: return "meter";
         case CabinDisplayKind::Counters: return "counters";
+        case CabinDisplayKind::AspdScope: return "aspd_scope";
+        case CabinDisplayKind::StatusBoard: return "status_board";
     }
     return "?";
 }
@@ -299,6 +304,8 @@ struct CabinDisplay {
     double range_window_m = 2000.0;
     // counters: what each lit digit counter reads (simcore/readouts.hpp), left to right
     std::vector<std::string> readouts;
+    // aspd_scope: the grid glass over the tube, with the plotting board's marks on it
+    bool glass = false;
 };
 
 struct CabinLayout {
@@ -821,7 +828,7 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "readouts", "source", "confidence", "notes"})) {
+                                "readouts", "glass", "source", "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -886,12 +893,20 @@ private:
             disp.kind = CabinDisplayKind::Counters;
             allowed = {"readouts"};
             if (!console.has_sensors) return Fail(Join(path, "kind"), "counters need the console's sensors block");
+        } else if (kind == "aspd_scope") {
+            disp.kind = CabinDisplayKind::AspdScope;
+            allowed = {"glass"};
+            if (!console.has_post) return Fail(Join(path, "kind"), "an aspd_scope needs the console's post block");
+        } else if (kind == "status_board") {
+            disp.kind = CabinDisplayKind::StatusBoard;
+            if (!console.has_post) return Fail(Join(path, "kind"), "a status_board needs the console's post block");
         } else {
-            return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter or counters");
+            return Fail(Join(path, "kind"),
+                        "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope or status_board");
         }
         for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
-                                "range_window_m", "readouts"}) {
+                                "range_window_m", "readouts", "glass"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
@@ -909,7 +924,7 @@ private:
             !OptionalNumber(d, path, "sweep_period_s", disp.sweep_period_s) ||
             !OptionalNumber(d, path, "afterglow_s", disp.afterglow_s) ||
             !OptionalNumber(d, path, "magnified_window_m", disp.magnified_window_m) ||
-            !OptionalNumber(d, path, "range_window_m", disp.range_window_m)) {
+            !OptionalNumber(d, path, "range_window_m", disp.range_window_m) || !OptionalBool(d, path, "glass", disp.glass)) {
             return false;
         }
         if (disp.marks < 1) return Fail(Join(path, "marks"), "must be at least 1");

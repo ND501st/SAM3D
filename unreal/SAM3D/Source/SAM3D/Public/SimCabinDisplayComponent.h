@@ -17,7 +17,8 @@ class USimWorldSubsystem;
 
 /**
  * One instrument of the cabin (simcore::CabinDisplay): the search radar's scope, the tracking radar's range
- * indicator and elevation-search indicator, the TV sight's monitor, or a needle dial or meter. Draws into its own render target every frame
+ * indicator and elevation-search indicator, the TV sight's monitor, a needle dial or meter, or the command post's IT-45
+ * (with the plotting glass over it) and status boards. Draws into its own render target every frame
  * from the simulation's state and shows it on a quad on the panel. The TV films the 3D world with a scene
  * capture looking along the tracking radar's wheels.
  *
@@ -54,6 +55,8 @@ private:
 	void DrawDial(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, bool bLit);
 	void DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn);
 	void DrawCounters(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, simcore::ScenarioRunner& Runner, bool bOn);
+	void DrawAspdScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, const simcore::PostFeed& Post, bool bOn);
+	void DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn);
 	void UpdateTv(const USimWorldSubsystem* Sim, simcore::ScenarioRunner& Runner, bool bOn);
 
 	int32 LayoutIndex = INDEX_NONE;

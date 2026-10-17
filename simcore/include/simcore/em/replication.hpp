@@ -123,11 +123,37 @@ struct ViewVehicle {
     bool deployed = false;
 };
 
+// The command post's own instruments (post_feed.hpp): an IT-45 track (fractions of the scale) and a launcher on the IT
+// boards (state: LauncherStatus::State).
+struct ViewPostTrack {
+    int number = 0;
+    double x = 0.0;
+    double y = 0.0;
+    double vx = 0.0;
+    double vy = 0.0;
+    int zone = 1;
+    bool friendly = false;
+    bool group = false;
+};
+
+struct ViewLauncher {
+    std::string callsign;
+    int state = 0;
+    int missiles = -1;
+    int target_number = 0;
+};
+
 struct ViewExtras {
     bool valid = false;
     std::vector<ViewBoardMark> board;
     std::vector<ViewRadio> radio;  // oldest first
     std::vector<ViewVehicle> battery;
+    // the player's vehicle is the command post: its IT-45, where it is, its IT boards (the board's marks are `board`)
+    bool post = false;
+    double post_scale_m = 0.0;
+    Vec3 post_position;
+    std::vector<ViewPostTrack> post_scope;
+    std::vector<ViewLauncher> launchers;
 };
 
 struct KnowledgeView {
@@ -371,6 +397,7 @@ inline void Get(Reader& r, ViewSensorTrack& t) {
 }
 
 constexpr double kDegStep = 1e-4;  // degrees, for the scope
+constexpr double kFracStep = 1e-5; // fractions of a scope's scale (the IT-45's tracks)
 
 inline void PutEchoes(Writer& w, const std::vector<ViewEcho>& list) {
     w.U32(static_cast<std::uint32_t>(list.size()));
@@ -459,6 +486,27 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Q(v.heading_deg, kDegStep);
         w.U8(v.deployed ? 1 : 0);
     }
+    w.U8(x.post ? 1 : 0);
+    if (!x.post) return w.bytes;
+    w.Q(x.post_scale_m, kPosStep);
+    w.V3(x.post_position, kPosStep);
+    w.U32(static_cast<std::uint32_t>(x.post_scope.size()));
+    for (const ViewPostTrack& t : x.post_scope) {
+        w.I32(t.number);
+        w.Q(t.x, kFracStep);
+        w.Q(t.y, kFracStep);
+        w.Q(t.vx, kFracStep);
+        w.Q(t.vy, kFracStep);
+        w.U8(static_cast<std::uint8_t>(t.zone));
+        w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0)));
+    }
+    w.U32(static_cast<std::uint32_t>(x.launchers.size()));
+    for (const ViewLauncher& l : x.launchers) {
+        w.Str(l.callsign);
+        w.U8(static_cast<std::uint8_t>(l.state));
+        w.I32(l.missiles);
+        w.I32(l.target_number);
+    }
     return w.bytes;
 }
 inline bool GetExtras(Reader& r, ViewExtras& x) {
@@ -496,6 +544,35 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         v.heading_deg = r.Q(kDegStep);
         v.deployed = r.U8() != 0;
         x.battery.push_back(v);
+    }
+    x.post = r.U8() != 0;
+    if (!r.ok || !x.post) return r.ok;
+    x.post_scale_m = r.Q(kPosStep);
+    x.post_position = r.V3(kPosStep);
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewPostTrack t;
+        t.number = r.I32();
+        t.x = r.Q(kFracStep);
+        t.y = r.Q(kFracStep);
+        t.vx = r.Q(kFracStep);
+        t.vy = r.Q(kFracStep);
+        t.zone = r.U8();
+        const std::uint8_t flags = r.U8();
+        t.friendly = (flags & 1u) != 0;
+        t.group = (flags & 2u) != 0;
+        x.post_scope.push_back(t);
+    }
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewLauncher l;
+        l.callsign = r.Str();
+        l.state = r.U8();
+        l.missiles = r.I32();
+        l.target_number = r.I32();
+        x.launchers.push_back(l);
     }
     return r.ok;
 }

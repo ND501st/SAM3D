@@ -2,7 +2,7 @@
 
     "C:/Program Files/Blender Foundation/Blender 4.2/blender.exe" --background --python tools/blender/pu12m_model.py -- [--preview out/pu12m]
 
-Writes art/pu12m/SM_PU12M.fbx (hull, wheels, fittings, the mast's fixed base), SM_PU12M_Mast1..5.fbx (the moving sections,
+Writes art/pu12m/SM_PU12M.fbx (hull, wheels, fittings, the mast's fixed base), SM_PU12M_Mast1..8.fbx (the moving sections,
 each with its origin at its top centre so Unreal sets one height per section from pu12m_trace.mast_section_tops),
 SM_PU12M_AB1.fbx (the generator set, shown on the ground when it is set out), SM_PU12M_Guy.fbx (a guy wire 1 m long along
 +Z, stretched by Unreal) and art/pu12m/pu12m.blend. The vehicle points along Blender -Y (Unreal +X after export), stands on
@@ -135,7 +135,7 @@ def mast_base(p):
 
 
 def mast_section(i):
-    """Section i (1..5): a tube with its origin at its top centre, hanging down along -Z."""
+    """Section i (1..8): a tube with its origin at its top centre, hanging down along -Z."""
     r, length = T.MAST_SECTIONS[i]
     p = S.Part()
     p.cylinder((0.0, 0.0, -0.5 * length), r, length, 'Z', 'M_Metal', 18)
@@ -200,7 +200,7 @@ def write_rig():
                  'stowed_top_z': T.MAST_STOWED_TOP_Z * cm, 'raised_top_z': T.MAST_TOP_RAISED * cm,
                  'sections': [{'radius': r * cm, 'length': l * cm, 'mesh': 'SM_PU12M_Mast%d' % i if i else ''}
                               for i, (r, l) in enumerate(T.MAST_SECTIONS)],
-                 'nest_step': 0.05 * cm},
+                 'nest_step': T.MAST_NEST_STEP * cm},
         'guys': {'levels': list(T.GUY_LEVELS), 'radius': T.GUY_RADIUS * cm, 'mesh': 'SM_PU12M_Guy'},
         'ab1': {'x': T.AB1['x'] * cm, 'y': -T.AB1['y'] * cm, 'mesh': 'SM_PU12M_AB1'},
     }

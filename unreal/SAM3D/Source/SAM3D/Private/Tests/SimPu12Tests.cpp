@@ -2,7 +2,10 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
+#include "SimCabinComponent.h"
+#include "SimCrewBodiesComponent.h"
 #include "SimEntityActor.h"
+#include "SimOsaVehicle.h"
 #include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
 
@@ -32,7 +35,7 @@ bool FSimPu12MastTest::RunTest(const FString& Parameters)
 	if (Mast != nullptr)
 	{
 		TestTrue(TEXT("the rig file was read"), Mast->IsRigLoaded());
-		TestEqual(TEXT("a base and five moving sections"), Mast->NumSections(), 6);
+		TestEqual(TEXT("a fixed section and eight moving ones"), Mast->NumSections(), 9);
 		Mast->SetExtension(0.f);
 		const float Stowed = Mast->SectionTopZ(Mast->NumSections() - 1);
 		TestTrue(FString::Printf(TEXT("stowed, the top at %.0f cm: about 1.5 m above the 2.055 m roof"), Stowed), FMath::Abs(Stowed - 355.5f) < 2.f);
@@ -71,6 +74,86 @@ bool FSimPu12MastTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("on its way up"), E > 0.05f && E < 1.f);
 	}
 
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+// The PU-12M's cabin (P6): the battery scenario's own vehicle is the post, the director's default cabin is its own
+// (data/cabins/pu12m.json), the player's vehicle wears the PU-12M's exterior and mast, the cabin has a seat for each of
+// the five stations with the IT-45 and the two IT boards on its panels, a body in every seat, and the post's API (the
+// IT-45's numbers, the board's, the launchers on the IT boards) is wired through.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimPu12CabinTest, "SAM3D.PU12M.Cabin",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimPu12CabinTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, TEXT("SAM3DPu12CabinTest"));
+	FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+	Context.SetCurrentWorld(World);
+	World->InitializeActorsForPlay(FURL());
+	World->BeginPlay();
+	USimWorldSubsystem* Sim = World->GetSubsystem<USimWorldSubsystem>();
+	FString Error;
+	const bool bLoaded = Sim != nullptr && Sim->LoadScenario(TEXT("scenarios/pu12m_battery.json"), Error);
+	TestTrue(FString::Printf(TEXT("the battery scenario loads %s"), *Error), bLoaded);
+	if (!bLoaded)
+	{
+		GEngine->DestroyWorldContext(World);
+		World->DestroyWorld(false);
+		return true;
+	}
+	TestTrue(TEXT("the player's vehicle is the post"), Sim->IsCommandPost());
+	TestEqual(TEXT("its own cabin"), Sim->GetDefaultCabinFile(), FString(TEXT("cabins/pu12m.json")));
+	TestEqual(TEXT("the battery commander commands"), Sim->GetCommanderStation(), FString(TEXT("battery_commander")));
+	TestTrue(FString::Printf(TEXT("the cabin loads %s"), *Error), Sim->LoadCabin(Sim->GetDefaultCabinFile(), Error));
+	ASimOsaVehicle* Car = World->SpawnActor<ASimOsaVehicle>();
+	TestNotNull(TEXT("the player's vehicle"), Car);
+	if (Car != nullptr)
+	{
+		Car->Tick(0.05f);
+		TestTrue(TEXT("it knows it is the post"), Car->IsCommandPost());
+		UStaticMeshComponent* Exterior = nullptr;
+		for (UActorComponent* C : Car->GetComponents())
+		{
+			if (C->GetName() == TEXT("PostExterior"))
+			{
+				Exterior = Cast<UStaticMeshComponent>(C);
+			}
+		}
+		TestTrue(TEXT("it wears SM_PU12M"), Exterior != nullptr && Exterior->GetStaticMesh() != nullptr);
+		TestNotNull(TEXT("and its mast"), Car->FindComponentByClass<USimPu12MastComponent>());
+		USimCabinComponent* Cabin = Car->FindComponentByClass<USimCabinComponent>();
+		TestTrue(TEXT("a cabin component"), Cabin != nullptr);
+		if (Cabin != nullptr)
+		{
+			TestTrue(TEXT("into the cabin"), Car->SetInCabin(true));
+			TestEqual(TEXT("five seats"), Cabin->GetNumStations(), 5);
+			TestEqual(TEXT("the IT-45 and the IT-1, IT-2"), Cabin->GetNumDisplays(), 3);
+			TestFalse(TEXT("the hull hidden from inside"), Exterior != nullptr && Exterior->IsVisible());
+		}
+		USimCrewBodiesComponent* Bodies = Car->FindComponentByClass<USimCrewBodiesComponent>();
+		for (int32 I = 0; I < 200; ++I)  // 10 s
+		{
+			Sim->Tick(0.05f);
+			if (Bodies != nullptr)
+			{
+				Bodies->TickComponent(0.05f, LEVELTICK_All, nullptr);
+			}
+		}
+		TestEqual(TEXT("a body in each seat"), Bodies != nullptr ? Bodies->GetNumBodies() : 0, 5);
+	}
+	TestEqual(TEXT("four launchers on the IT boards"), Sim->GetLauncherStatus().Num(), 4);
+	// The post deployed: the ASPD-U warms up and the regiment's telecode brings the raid onto the IT-45; the NPC
+	// plotter writes it on the board.
+	for (int32 I = 0; I < 20 * 300 && Sim->GetPostBoardNumbers().Num() == 0; ++I)
+	{
+		Sim->Tick(0.05f);
+	}
+	AddInfo(FString::Printf(TEXT("IT-45: %d targets, board: %d"), Sim->GetPostTrackNumbers().Num(), Sim->GetPostBoardNumbers().Num()));
+	TestTrue(TEXT("targets on the IT-45"), Sim->GetPostTrackNumbers().Num() > 0);
+	TestTrue(TEXT("and on the board"), Sim->GetPostBoardNumbers().Num() > 0);
+	TestFalse(TEXT("an unknown launcher can't be given a target"), Sim->DesignateBatteryTarget(TEXT("99"), 1));
 	GEngine->DestroyWorldContext(World);
 	World->DestroyWorld(false);
 	return true;

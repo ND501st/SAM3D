@@ -105,7 +105,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	// Cathode-ray tubes and dials are round (the search indicator OP81-16M, OS81-10M, the βс / εс dials in the
 	// samsim_panels photos); the TV monitor, range indicator and meters rectangular.
 	const bool bRound = Kind == simcore::CabinDisplayKind::Ppi || Kind == simcore::CabinDisplayKind::ElevationScope ||
-		Kind == simcore::CabinDisplayKind::Dial;
+		Kind == simcore::CabinDisplayKind::Dial || Kind == simcore::CabinDisplayKind::AspdScope;
 	UStaticMesh* Cylinder = bRound ? LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")) : nullptr;
 
 	// Bezel: a dark box (or ring) just behind the screen, a little larger. (Not for the readout strip: its frame is
@@ -200,6 +200,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		case simcore::CabinDisplayKind::ElevationScope: Crt = {0.05f, 0.6f, 0.009f, 0.0f, 100.0f, 0.05f, 120.0f, 0.03f, 0.4f, 0.55f}; break;
 		case simcore::CabinDisplayKind::RangeScope: Crt = {0.07f, 0.5f, 0.007f, 0.15f, 200.0f, 0.07f, 140.0f, 0.03f, 0.45f, 0.5f}; break;
 		case simcore::CabinDisplayKind::Tv: Crt = {0.08f, 0.3f, 0.004f, 0.4f, 150.0f, 0.16f, 220.0f, 0.05f, 0.5f, 0.8f}; break;
+		case simcore::CabinDisplayKind::AspdScope: Crt = {0.05f, 0.5f, 0.007f, 0.0f, 100.0f, 0.04f, 120.0f, 0.02f, 0.4f, 0.6f}; break;
 		default: break;
 		}
 		ScreenMaterial->SetScalarParameterValue(TEXT("Curvature"), Crt.Curve);
@@ -361,6 +362,12 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			break;
 		case simcore::CabinDisplayKind::Counters:
 			DrawCounters(Canvas, Size, Display, *Runner, bOn);
+			break;
+		case simcore::CabinDisplayKind::AspdScope:
+			DrawAspdScope(Canvas, Size, Display, Sim->GetPostFeed(), bOn);
+			break;
+		case simcore::CabinDisplayKind::StatusBoard:
+			DrawStatusBoard(Canvas, Size, Sim->GetPostFeed(), bOn);
 			break;
 		case simcore::CabinDisplayKind::Tv:
 			break;
@@ -746,6 +753,159 @@ void USimCabinDisplayComponent::DrawCounters(UCanvas* Canvas, const FVector2D& S
 	}
 	// the lamp at the right end of the strip
 	Disc(Canvas, FVector2D(Size.X - 0.045 * Size.X, 0.5 * Size.Y), 0.1 * Size.Y, bOn ? FLinearColor(0.7f, 0.25f, 0.04f) : FLinearColor(0.3f, 0.2f, 0.1f));
+}
+
+// ---------------------------------------------------------------------------------------------- command post
+
+void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
+	const simcore::PostFeed& Post, bool bOn)
+{
+	// The IT-45 (command_post.hpp): the ASPD-U's tracks drawn as symbols on the scale the ФР block's switch is at (35, 50
+	// or 100 km, ru_pu12_text), the post at the centre, north up: each target its number, a mark for its height zone
+	// (H1 a circle, H2 a square, H3 a triangle), its speed vector (a minute's travel), friends with a bar. Over the tube
+	// the grid glass the plotter writes on (shilka_narod): the board's marks in grease pencil. Symbols and colours are
+	// SAM3D's. Drawn from the post's feed (post_feed.hpp): the sim's where it runs, the stream's on a network client.
+	const FVector2D C = Size * 0.5;
+	const double S = FMath::Min(Size.X, Size.Y);
+	const double R = 0.46 * S;
+	const FLinearColor Glow(0.5f, 1.0f, 0.62f);
+	Disc(Canvas, C, 0.5 * S, FLinearColor(0.01f, 0.012f, 0.01f));
+	const double ScaleM = Post.scale_m;
+	if (bOn && ScaleM > 0.0)
+	{
+		Disc(Canvas, C, R, FLinearColor(0.012f, 0.03f, 0.016f));
+		const double RingStepM = ScaleM > 60000.0 ? 20000.0 : 10000.0;
+		for (double Ring = RingStepM; Ring <= ScaleM + 1.0; Ring += RingStepM)
+		{
+			Circle(Canvas, C, R * Ring / ScaleM, Glow * 0.18f);
+		}
+		for (int32 I = 0; I < 36; ++I)
+		{
+			const double A = UE_DOUBLE_TWO_PI * I / 36.0;
+			Canvas->K2_DrawLine(Polar(C, A, R * (I % 3 == 0 ? 0.93 : 0.96)), Polar(C, A, R), 1.0f, Glow * 0.3f);
+		}
+		Text(Canvas, FString::Printf(TEXT("%d"), FMath::RoundToInt32(ScaleM / 1000.0)), C + FVector2D(0.0, R * 0.88),
+			Glow * 0.4f, 0.9f);
+		for (const simcore::CommandPost::ScopeMark& M : Post.scope)
+		{
+			const FVector2D At = C + FVector2D(M.x, -M.y) * R;
+			const FVector2D Tip = At + FVector2D(M.vx, -M.vy) * R;
+			const FLinearColor Ink = M.friendly ? Glow * 0.55f : Glow;
+			Beam(Canvas, At, Tip, 1.5f, Ink * 0.8f);
+			const double K = 0.012 * S;
+			if (M.zone <= 1)
+			{
+				Circle(Canvas, At, K, Ink, 2.0f);
+			}
+			else if (M.zone == 2)
+			{
+				Canvas->K2_DrawBox(At - FVector2D(K, K), FVector2D(2.0 * K, 2.0 * K), 2.0f, Ink);
+			}
+			else
+			{
+				const FVector2D P0 = At + FVector2D(0.0, -1.2 * K);
+				const FVector2D P1 = At + FVector2D(K, 0.8 * K);
+				const FVector2D P2 = At + FVector2D(-K, 0.8 * K);
+				Beam(Canvas, P0, P1, 2.0f, Ink);
+				Beam(Canvas, P1, P2, 2.0f, Ink);
+				Beam(Canvas, P2, P0, 2.0f, Ink);
+			}
+			if (M.friendly)
+			{
+				Canvas->K2_DrawLine(At + FVector2D(-1.6 * K, -1.6 * K), At + FVector2D(1.6 * K, -1.6 * K), 2.0f, Ink);
+			}
+			Text(Canvas, FString::Printf(TEXT("%02d"), M.number), At + FVector2D(2.6 * K, -2.2 * K), Ink, 1.0f);
+		}
+	}
+	if (!Display.glass)
+	{
+		return;
+	}
+	// The grid glass (shilka_narod: ruled in squares), faint, lit by the cabin; over it the plotter's marks.
+	const FLinearColor GridInk(0.05f, 0.05f, 0.045f);
+	for (int32 I = 1; I < 12; ++I)
+	{
+		const double U = Size.X * I / 12.0;
+		const double V = Size.Y * I / 12.0;
+		Canvas->K2_DrawLine(FVector2D(U, 0.0), FVector2D(U, Size.Y), 1.0f, GridInk);
+		Canvas->K2_DrawLine(FVector2D(0.0, V), FVector2D(Size.X, V), 1.0f, GridInk);
+	}
+	if (!(ScaleM > 0.0))
+	{
+		return;
+	}
+	// Each target's marks of the last plots (a track of dots, oldest first), the latest with its number, and its height
+	// over its code (the PU-12 board's way of writing, data/command/pu12.json).
+	const FLinearColor Pencil(0.55f, 0.16f, 0.05f);
+	for (const simcore::em::ViewBoardMark& Latest : simcore::LatestMarks(Post))
+	{
+		FVector2D Prev = FVector2D::ZeroVector;
+		bool bHasPrev = false;
+		for (const simcore::em::ViewBoardMark& M : Post.glass)
+		{
+			if (M.number != Latest.number || Latest.stamp - M.stamp > 3)
+			{
+				continue;
+			}
+			const simcore::Vec3 Rel = M.position - Post.position;
+			const FVector2D P = C + FVector2D(Rel.x, -Rel.y) / ScaleM * R;
+			Disc(Canvas, P, 0.006 * S, Pencil);
+			if (bHasPrev)
+			{
+				Canvas->K2_DrawLine(Prev, P, 1.5f, Pencil * 0.8f);
+			}
+			Prev = P;
+			bHasPrev = true;
+		}
+		if (bHasPrev)
+		{
+			Text(Canvas, FString::Printf(TEXT("%d"), Latest.number), Prev + FVector2D(0.03 * S, 0.0), Pencil, 0.9f, false);
+			Text(Canvas, FString::Printf(TEXT("%d/%02d"), Latest.height_hm, Latest.code), Prev + FVector2D(0.03 * S, 0.035 * S),
+				Pencil, 0.8f, false);
+		}
+	}
+}
+
+void USimCabinDisplayComponent::DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn)
+{
+	// The IT-1 / IT-2 information board (valka_pu12: the units' state, the vehicles' activity, their ammunition): a
+	// column of legend lamps per launcher, as the post last heard it on the battery net, its missiles below. Rows and
+	// legends are SAM3D's.
+	static const TCHAR* Rows[] = {TEXT("ГОТОВ"), TEXT("ЦЕЛЬ"), TEXT("ПУСК"), TEXT("НЕТ РАК")};
+	static const simcore::LauncherStatus::State States[] = {simcore::LauncherStatus::State::Ready,
+		simcore::LauncherStatus::State::Engaging, simcore::LauncherStatus::State::Launched, simcore::LauncherStatus::State::Empty};
+	static const FLinearColor Lit[] = {FLinearColor(0.3f, 1.0f, 0.35f), FLinearColor(1.0f, 0.75f, 0.2f),
+		FLinearColor(1.0f, 0.3f, 0.15f), FLinearColor(1.0f, 0.1f, 0.05f)};
+	Canvas->K2_DrawLine(FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y),
+		FLinearColor(0.015f, 0.015f, 0.014f));
+	const std::vector<simcore::LauncherStatus>& Boards = Post.launchers;
+	constexpr int32 Columns = 5;  // the drawing's five columns
+	const double Cw = Size.X / Columns;
+	const double Rh = Size.Y / 6.0;
+	for (int32 Col = 0; Col < Columns; ++Col)
+	{
+		const simcore::LauncherStatus* L = Col < static_cast<int32>(Boards.size()) ? &Boards[Col] : nullptr;
+		const double X = Cw * (Col + 0.5);
+		Text(Canvas, L != nullptr ? FString(UTF8_TO_TCHAR(L->callsign.c_str())) : FString(TEXT("--")), FVector2D(X, 0.5 * Rh),
+			bOn ? FLinearColor(0.7f, 0.68f, 0.6f) : FLinearColor(0.12f, 0.12f, 0.11f), 0.9f);
+		for (int32 Row = 0; Row < 4; ++Row)
+		{
+			const FVector2D At(X, Rh * (Row + 1.5));
+			const bool bLit = bOn && L != nullptr && L->state == States[Row];
+			Canvas->K2_DrawBox(At - FVector2D(0.42 * Cw, 0.4 * Rh), FVector2D(0.84 * Cw, 0.8 * Rh), 1.0f,
+				FLinearColor(0.06f, 0.06f, 0.055f));
+			if (bLit)
+			{
+				// a filled cell (no texture: the canvas's white)
+				Canvas->K2_DrawTexture(nullptr, At - FVector2D(0.4 * Cw, 0.38 * Rh), FVector2D(0.8 * Cw, 0.76 * Rh),
+					FVector2D::ZeroVector, FVector2D::UnitVector, Lit[Row] * 0.5f, BLEND_Opaque);
+			}
+			Text(Canvas, Rows[Row], At, bLit ? Lit[Row] : FLinearColor(0.09f, 0.09f, 0.085f), 0.7f);
+		}
+		const bool bCount = bOn && L != nullptr && L->missiles >= 0;
+		Text(Canvas, bCount ? FString::FromInt(L->missiles) : FString(TEXT("-")), FVector2D(X, Rh * 5.5),
+			bCount ? FLinearColor(1.0f, 0.55f, 0.1f) : FLinearColor(0.1f, 0.08f, 0.06f), 1.0f);
+	}
 }
 
 // ---------------------------------------------------------------------------------------------- TV

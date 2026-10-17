@@ -34,9 +34,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
 	FString ScenarioFile = TEXT("scenarios/osa_battery_practice.json");
 
-	/** 3D cabin layout for the scenario's console, relative to the data folder. Empty = no cabin. */
+	/** 3D cabin layout for the scenario's console, relative to the data folder. Empty = the scenario's own vehicle's
+	 *  (cabins/<its system>.json: the Osa's, the PU-12M's), if there is one; "none" = no cabin. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
-	FString CabinFile = TEXT("cabins/osa_ak.json");
+	FString CabinFile;
 
 	/**
 	 * Hands-free test mode: the player's vehicle tours its cabin (every seat and instrument) while the scenario

@@ -49,6 +49,7 @@ python tools/panel_sheet.py                       # draw the cabin panels flat: 
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
+python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json from the PU-12M interior's trace (after build_pu12m_interior.py)
 ./simcore/build/crew_balance data 10              # every crew scenario at every skill tier over 10 seeds (docs/crew/11_*)
 ./simcore/build/crew_pose_dump data out/crew_poses.json   # the crew's bodies posed; draw them: tools/blender/render_crew_poses.py
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
@@ -129,7 +130,7 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); next a person playing the missions on the map, then the PU-12M as a seat; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
+See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore, and the PU-12M command post built through its plan's P0-P7 (console, crew, information chain, battery commander, exterior, interior and cabin, multiplayer: `docs/PU12_DEVELOPMENT.md`); phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); next a person playing the missions on the map, then the PU-12M as a seat; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 

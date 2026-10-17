@@ -106,7 +106,9 @@ telephones. The R-111 has an automatic antenna tuner (SAU).
 
 The mast: telescopic, **16 m** (`flak11`; a ČSLA caption on valka: "the signalman extends the 16 m mast"); 6 m in
 `armforc_pu12` and `shilka_narod`. **SAM3D: 16 m**, the tier-1 figure. Guyed at two heights in the combat position
-(the ČSLA drawing). Its raising time is not published.
+(the ČSLA drawing). The ČSLA mast drawings (the kinematic section and the general view): a fixed section (1) and eight
+moving ones (2-9), raised by a hand winch (naviják, 10) on the fixed section's lower part, over cables and pulleys. Its
+raising time is not published.
 
 ### Navigation and orientation
 
@@ -148,7 +150,10 @@ orients with the PAB-2 and sets the GAK and KP-4; the operator switches on the A
 1. The ASPD-U panels' controls and their labels (only the ДХ keypad and the ФР block are seen in a photograph).
 2. The R-407's and R-111's panels (public photographs exist; not yet traced).
 3. The deployment drill's order and the mast's raising time.
-4. Who sits where behind the front seats (the plan shows seat cushions at the desk and along the board; the photographs
-   name the operator's place only).
+4. ~~Who sits where behind the front seats.~~ Read off the plan for P6 (17 Oct 2026): a bench across the compartment,
+   facing forward, three places (cushions 1288-1343 px, backs 1350-1385 px, across 338-600 px); the right place is
+   straight behind the IT-45's face (its screen's bulge, 1175-1200 px), so the operator sits there, the ДХ keypad at the
+   tube's left as the photograph shows. SAM3D: the commander in the middle place, the radio operator at the left (the
+   R-111 and its R-123M ahead of that place, his table between them). See `tools/blender/pu12m_interior_trace.py`.
 5. The telecode's message rate and range on the R-407 (only "to 15 km" for the set).
 6. The NVA plotters' handbook (1980) for the plotting drill: still to acquire.

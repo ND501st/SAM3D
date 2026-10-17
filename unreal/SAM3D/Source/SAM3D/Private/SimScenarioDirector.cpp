@@ -6,6 +6,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "SAM3D.h"
 #include "SimEntityActor.h"
 #include "SimOsaVehicle.h"
@@ -31,6 +33,16 @@ void ASimScenarioDirector::BeginPlay()
 	Sim->OnSimEvent.AddDynamic(this, &ASimScenarioDirector::HandleSimEvent);
 	Sim->OnDebriefEntry.AddDynamic(this, &ASimScenarioDirector::HandleDebriefEntry);
 
+	// -SimScenario=scenarios/<file>.json plays that scenario instead of the level's (a server or a scripted run), with
+	// its own vehicle's cabin.
+	FString CommandLineScenario;
+	if (FParse::Value(FCommandLine::Get(), TEXT("SimScenario="), CommandLineScenario) && !CommandLineScenario.IsEmpty())
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Scenario from the command line: %s"), *CommandLineScenario);
+		ScenarioFile = CommandLineScenario;
+		CabinFile.Reset();
+	}
+
 	if (!ScenarioFile.IsEmpty())
 	{
 		StartScenario(Sim);
@@ -54,7 +66,8 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 		}
 		return;
 	}
-	if (!CabinFile.IsEmpty() && !Sim->LoadCabin(CabinFile, Error) && GEngine != nullptr)
+	const FString Cabin = CabinFile.IsEmpty() ? Sim->GetDefaultCabinFile() : (CabinFile == TEXT("none") ? FString() : CabinFile);
+	if (!Cabin.IsEmpty() && !Sim->LoadCabin(Cabin, Error) && GEngine != nullptr)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Red, FString::Printf(TEXT("Cabin failed to load: %s"), *Error));
 	}
@@ -85,6 +98,16 @@ void ASimScenarioDirector::SpawnPlayerVehicle(USimWorldSubsystem* Sim)
 	if (Vehicle != nullptr && Pc != nullptr)
 	{
 		Pc->Possess(Vehicle);
+	}
+	// -SimCabinShots=<folder>: photograph every seat and instrument of the cabin (after -SimShotDelay= seconds, default
+	// 20), then quit. With -game -RenderOffscreen, a run checked from its pictures alone.
+	FString ShotFolder;
+	if (Vehicle != nullptr && FParse::Value(FCommandLine::Get(), TEXT("SimCabinShots="), ShotFolder) && !ShotFolder.IsEmpty())
+	{
+		float Delay = 20.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("SimShotDelay="), Delay);
+		Vehicle->StartCabinShots(ShotFolder, Delay);
+		return;
 	}
 	const FString TourEnv = FPlatformMisc::GetEnvironmentVariable(TEXT("SAM3D_CABIN_TOUR"));
 	if (Vehicle != nullptr && (bCabinTour || !TourEnv.IsEmpty()))

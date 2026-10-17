@@ -43,6 +43,7 @@
 #include "simcore/battery_fire.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/command_post.hpp"
+#include "simcore/post_feed.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_callouts.hpp"
@@ -377,7 +378,9 @@ public:
     em::ViewExtras ViewExtrasNow(std::size_t radio_count = 8) const {
         em::ViewExtras x;
         x.valid = true;
-        if (const PlottingBoard* b = Board()) {
+        if (post_) {
+            ToViewExtras(PostFeedNow(), x);  // the post's own board (killed targets wiped off) and instruments
+        } else if (const PlottingBoard* b = Board()) {
             for (const BoardMark& m : b->Marks()) {
                 if (m.stamp + 4 < b->Stamp()) continue;
                 x.board.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
@@ -2744,6 +2747,50 @@ public:
     }
     // The IT-1 and IT-2 boards: each launcher's state as the post last heard it.
     const std::vector<LauncherStatus>& StatusBoards() const { return status_boards_; }
+    // The post's instruments in one block (post_feed.hpp): the IT-45 now, the board as the commander reads it (the
+    // targets of PostBoard, each with its marks of the last five minutes: the same numbers he can give out), the IT
+    // boards. Empty (post false) when the vehicle is no post.
+    PostFeed PostFeedNow() const {
+        PostFeed f;
+        if (!post_) return f;
+        f.post = true;
+        f.scale_m = PostScaleM();
+        f.position = post_->Position();
+        f.scope = PostScope();
+        const PlottingBoard& b = post_->Board();
+        const std::vector<BoardMark> now = PostMarks();
+        for (const BoardMark& m : b.Marks()) {
+            bool current = false;
+            for (const BoardMark& c : now) current = current || c.target_id == m.target_id;
+            if (!current || m.stamp + 4 < b.Stamp()) continue;
+            f.glass.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
+        }
+        f.launchers = status_boards_;
+        return f;
+    }
+    // A player's designation through his seat (multiplayer): only the commanding seat gives the launchers targets.
+    bool SeatDesignate(const std::string& seat, const std::string& callsign, int number, std::string* why = nullptr) {
+        if (seat != Cmdr()) {
+            if (why) *why = "designations are the " + Cmdr() + "'s";
+            return false;
+        }
+        const bool ok = DesignateBatteryTarget(callsign, number);
+        if (!ok && why) *why = "the net is down, the launcher is unknown or empty, or the number is not on the board";
+        return ok;
+    }
+    // A player's plot through his seat: only the plotter's.
+    bool SeatPlot(const std::string& seat, int aspd_number, std::string* why = nullptr) {
+        if (!post_ || seat != console_.post_plotter) {
+            if (why) *why = "the board is the " + console_.post_plotter + "'s";
+            return false;
+        }
+        const bool ok = PlayerPlot(aspd_number);
+        if (!ok && why) *why = "not on the tube, or the last mark is still being written";
+        return ok;
+    }
+    // The post's board as the commander reads it now: each target's latest mark of the last two minutes, the ones
+    // reported destroyed gone. Empty when the vehicle is no post.
+    std::vector<BoardMark> PostBoard() const { return PostMarks(); }
 
 private:
     // ---- Knowledge per seat (roadmap 8.5, crew_knowledge.hpp): each seat's picture, from its own instruments and

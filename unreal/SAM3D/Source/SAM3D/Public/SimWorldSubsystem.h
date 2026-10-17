@@ -78,6 +78,28 @@ struct SAM3D_API FSimBoardMark
 	FVector2D EastNorthMeters = FVector2D::ZeroVector;
 };
 
+/** One launcher on the PU-12M's IT-1 / IT-2 boards: what its reports on the battery net told the post. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimLauncherStatus
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|PU12M")
+	FString Callsign;
+
+	/** unknown, march, ready, engaging, launched, out of missiles (simcore::LauncherStateName). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|PU12M")
+	FString State;
+
+	/** Missiles it reported (-1: not reported). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|PU12M")
+	int32 Missiles = -1;
+
+	/** The target it reported (0: none). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|PU12M")
+	int32 TargetNumber = 0;
+};
+
 /** A radio or intercom message the crew heard. */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimRadioMessage
@@ -645,6 +667,12 @@ public:
 	void LeaveCrewSeat(const FString& Role);
 	/** Server: a seated player's control move / wheel turn. True if the control moved; otherwise Why says why not. */
 	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why);
+	/** Server: a seated player's designation (the commanding seat only) or plot (the plotter's only). */
+	bool SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why);
+	bool SeatPlot(const FString& Role, int32 Number, FString& Why);
+	/** The command post's instruments (the IT-45, the board's glass, the IT boards): from the sim where it runs, from the
+	 *  local player's knowledge stream on a network client (simcore/post_feed.hpp). */
+	simcore::PostFeed GetPostFeed() const;
 	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why);
 	/** Network client: overwrite the local console with the server's snapshot if it is newer than Seq. */
 	bool ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq);
@@ -670,9 +698,45 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	bool IsPostGeneratorOut() const;
 
+	/** The player's vehicle is a battery command post (the PU-12M): the scenario gives it the post's information chain. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	bool IsCommandPost() const;
+
+	/** The targets' numbers on the IT-45 now (the ASPD-U's 00-99), nearest first. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	TArray<int32> GetPostTrackNumbers() const;
+
+	/** The targets' numbers on the post's board now (each target's latest mark), nearest first. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	TArray<int32> GetPostBoardNumbers() const;
+
+	/** The IT-1 / IT-2 boards: each launcher as the post last heard it. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	TArray<FSimLauncherStatus> GetLauncherStatus() const;
+
+	/** The player in the battery commander's seat gives launcher `Callsign` the board's target `Number`, by voice on the
+	 *  battery net. False if the net is down, the launcher is unknown or the number is not on the board. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	bool DesignateBatteryTarget(const FString& Callsign, int32 Number);
+
+	/** The player at the plotter's seat writes the IT-45's target `Number` on the board. False if it isn't on the tube,
+	 *  the seat isn't the player's, or he is still writing the last one. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	bool PlotPostTrack(int32 Number);
+
 	/** The last radio and intercom messages, oldest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Radio")
 	TArray<FSimRadioMessage> GetRadioMessages(int32 MaxCount = 8) const;
+
+	/** The cabin layout of the scenario's own vehicle, relative to the data folder (cabins/<its system>.json), or "" if
+	 *  there is none. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetDefaultCabinFile() const;
+
+	/** The crew's commanding seat (the crew data's commander_seat: the Osa's "commander", the PU-12M's
+	 *  "battery_commander"); "" without crew data. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetCommanderStation() const;
 
 	/** Who holds a crew seat ("" the NPC). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")

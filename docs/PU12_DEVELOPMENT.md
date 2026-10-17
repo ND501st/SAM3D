@@ -189,11 +189,51 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     deployment at the mast's pace; the player's own post follows the console's `mast_up` progress
     (`USimWorldSubsystem::GetPostMastExtension`, `IsPostGeneratorOut`). Test `SAM3D.PU12M.Mast`.
 
-## 6. Placeholder now
+- **P6 done (17-18 Oct 2026):** the interior, the cabin, the displays, the seats.
+  - `tools/blender/pu12m_interior_trace.py`: the ČSLA equipment plan read item by item (scaled on the hull's outline as
+    the exterior is; 47 of its 53 numbered items, every one inside the hull and clear of the others, each move noted),
+    heights from the workplace drawings and the veteran's photographs, the hull's inside from the exterior's stations.
+    Tests `tools/tests/test_pu12m_interior_trace.py`. Acceptance: the top view rendered from the model over the plan
+    (`out/pu12m_interior/overlay_plan.png`, made by the scratch overlay script described in the modelling doc).
+  - The seats from the plan: the driver front left, the squad leader front right, and **a bench across the compartment
+    facing forward with three places**: the operator-plotter at the right (the IT-45 straight ahead of him, the ДХ
+    keypad at its left and the ФР block at its right, as the photograph shows), the battery commander in the middle,
+    the radio operator at the left (the R-111 with an R-123M on it ahead, his table between). Eye points 1.22 m above
+    the floor (the body model's), every control within reach, three of them standing (`stand_for` in the crew data).
+  - `tools/blender/build_pu12m_interior.py` builds the lining (light grey, the photographs), the equipment, the bench,
+    the front seats, the driver's wheel, pedals and dash, the mast's foot with its hand winch; the Osa's traced R-123M
+    serves three times. `tools/ue_import_pu12m.py` imports it headless.
+  - `data/cabins/pu12m.json` is written by `tools/pu12m_cabin.py` from the trace: 27 panels on the equipment's faces,
+    all 25 controls, 37 lamps (each sourced), 153 fixtures (the ДХ keypad, the ФР block and the RTK-1 read off the
+    photographs). Displays: the IT-45 (`aspd_scope`: the ASPD-U's tracks on the ФР block's scale, numbers, zone marks,
+    speed vectors, with the grid glass over it carrying the plotter's marks in grease pencil) and the IT-1 / IT-2
+    (`status_board`: a column of legend lamps per launcher and its missiles). Tests
+    `simcore/tests/test_pu12m_cabin.cpp`.
+  - The mast corrected from the ČSLA mast drawings: a fixed section and **eight** moving ones, raised by a hand winch at
+    its foot; its place from the plan (2.30 m behind the bow, 0.63 m right).
+  - Unreal: the player's vehicle wears the PU-12M's exterior and mast when the scenario's own vehicle is the post; the
+    director loads the cabin of the scenario's own vehicle (`cabins/<system>.json`). At the battery commander's seat,
+    `[` `]` pick a target on the board and 1-5 give it to that launcher; at the plotter's, `[` `]` pick one on the IT-45
+    and P writes it on the board (`ASimOsaVehicle::PickTarget`, `DesignatePicked`, `PlotPicked`). Tests
+    `SAM3D.PU12M.Cabin`, `SAM3D.PU12M.Mast`; photographs of every seat from a scripted offscreen run
+    (`-SimScenario=scenarios/pu12m_battery.json -SimCabinShots=<folder>`).
+- **P7 done (18 Oct 2026):** multiplayer. The seats are the crew system's (any station id). The post's instruments ride in
+  each player's knowledge stream (`simcore/post_feed.hpp`, `em::ViewExtras`: the IT-45's tracks, the board as the
+  commander reads it, the IT boards), so a client's cabin draws the same picture; a client's designation or plot goes to
+  the server through its seat (`USimCrewSeatComponent::Designate`, `PlotTrack`), checked there (only the commanding seat
+  designates, only the plotter plots: `ScenarioRunner::SeatDesignate`, `SeatPlot`). Checked with
+  `tools/ue_crew_smoke.ps1 -Pu12m` (a dedicated server and two clients, `docs/MULTIPLAYER.md`).
 
-`SM_PU12M` (`art/support_vehicles/`, imported to `/Game/SAM3D/Vehicles/`): the BTR-60PB hull at 7.22 x 2.825 m, 2.055 m
-to the armour top, four axles at the BTR-60PB's spacing, the mast stowed on the roof, four whip antennas, the roof box,
-vision blocks and side doors. No interior. Battery entities of kind `command_post` use it on the map.
+## 6. What is still SAM3D's
+
+- The plan's item 24 (the air-situation plotting board, drawn as a 0.4 m bar on the centreline before the bench) is
+  taken to be the grid glass over the IT-45 that the commander's workplace drawing and the photograph show; the bar's
+  own meaning is not settled.
+- Heights, the seats' cushions and the desk, the faces of the blocks not photographed (the S block, the ŠČK, the R-111,
+  the R-407, the power boards), the lamps' meanings. The ДХ keypad's keys are drawn, not yet worked (the console does not
+  model the characteristics or the ЦУ key).
+- The two whips' bases inside: the plan's items 3 and 28 stand elsewhere than the exterior's whips (placed from the
+  photographs); left out of the interior until the photographs are read again.
 
 ## Sources
 

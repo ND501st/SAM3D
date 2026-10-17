@@ -13,8 +13,10 @@
 #include "SimCabinHUD.h"
 #include "SimCrewBodiesComponent.h"
 #include "SimCrewVoiceComponent.h"
+#include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UnrealClient.h"
 
 namespace
 {
@@ -148,6 +150,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	FollowGround();
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
+		ConfigureForScenario(Sim);
 		UpdateSim(Sim);
 		if (!bMenuOpen)
 		{
@@ -159,6 +162,10 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
 		HandleCrew(Pc, Sim, DeltaSeconds);
+		if (bIsPost && !bMenuOpen)
+		{
+			HandlePost(Pc);
+		}
 	}
 	// The body at the camera's seat isn't drawn (first person); the overlay's ghost hand shows the advised move.
 	CrewBodies->SetHiddenStation(bInCabin && !bViewOverride ? Cabin->GetStationId(Station) : FString());
@@ -329,8 +336,55 @@ void ASimOsaVehicle::UpdateSim(USimWorldSubsystem* Sim)
 	Sim->SetSimInput(StoppedInput, FMath::Abs(SpeedMps) < StoppedBelowMps);
 }
 
+void ASimOsaVehicle::ConfigureForScenario(USimWorldSubsystem* Sim)
+{
+	if (bConfigured)
+	{
+		return;
+	}
+	bConfigured = true;
+	bIsPost = Sim->IsCommandPost();
+	if (!bIsPost)
+	{
+		return;
+	}
+	// The PU-12M: its traced exterior (tools/blender/pu12m_model.py, imported to /Game/SAM3D/Vehicles) and its mast
+	// (USimPu12MastComponent) instead of the Osa's placeholder boxes; its origin is the middle of the wheelbase on the
+	// ground, as the cabin layout's body frame (data/cabins/pu12m.json).
+	for (UStaticMeshComponent* Box : {Hull.Get(), Turret.Get(), SearchAntenna.Get()})
+	{
+		if (Box != nullptr)
+		{
+			Box->SetVisibility(false);
+		}
+	}
+	PostExterior = NewObject<UStaticMeshComponent>(this, TEXT("PostExterior"));
+	PostExterior->SetupAttachment(Root);
+	PostExterior->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/SAM3D/Vehicles/SM_PU12M.SM_PU12M"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	PostExterior->SetStaticMesh(Mesh);
+	PostExterior->RegisterComponent();
+	PostExterior->SetVisibility(!bInCabin);
+	PostMast = NewObject<USimPu12MastComponent>(this, TEXT("PostMast"));
+	PostMast->SetupAttachment(Root);
+	PostMast->RegisterComponent();
+	// The crew's drills go through the crew menu (O) here; the number keys pick launchers in the commander's seat.
+	CrewHotkeys.Reset();
+	UE_LOG(LogSAM3D, Log, TEXT("Vehicle: the PU-12M command post%s"), Mesh != nullptr ? TEXT("") : TEXT(" (SM_PU12M not imported: no exterior)"));
+}
+
 void ASimOsaVehicle::AnimateFromSim(const USimWorldSubsystem* Sim)
 {
+	if (bIsPost)
+	{
+		// The mast at the console's mast_up progress (the radio operator cranking it), the AB-1 out once it is set down.
+		if (PostMast != nullptr)
+		{
+			PostMast->SetExtension(FMath::Max(0.f, Sim->GetPostMastExtension()));
+			PostMast->SetGeneratorOut(Sim->IsPostGeneratorOut());
+		}
+		return;
+	}
 	// The wheel's azimuth is in the crew's frame (the gyro half-compass, engagement.hpp): as true azimuth from north,
 	// minus the hull's true heading, it is the turret's yaw on the hull (relative, so the same in either mapping).
 	const double AzimuthFromNorth = Sim->IndicatedToTrueAzimuth(Sim->GetWheelValue(TurretAzimuthWheel));
@@ -362,6 +416,105 @@ void ASimOsaVehicle::HandleHotkeys(APlayerController* Pc, USimWorldSubsystem* Si
 	}
 }
 
+// ---------------------------------------------------------------------------------------------- the command post
+
+TArray<int32> ASimOsaVehicle::PickList() const
+{
+	const USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr || !bIsPost || StationId.IsEmpty())
+	{
+		return {};
+	}
+	if (StationId == Sim->GetCommanderStation())
+	{
+		return Sim->GetPostBoardNumbers();
+	}
+	return Sim->GetPostTrackNumbers();
+}
+
+void ASimOsaVehicle::PickTarget(int32 Direction)
+{
+	const TArray<int32> List = PickList();
+	if (List.Num() == 0)
+	{
+		PickedTarget = INDEX_NONE;
+		return;
+	}
+	const int32 At = List.IndexOfByKey(PickedTarget);
+	const int32 Next = At == INDEX_NONE ? (Direction >= 0 ? 0 : List.Num() - 1) : (At + (Direction >= 0 ? 1 : -1) + List.Num()) % List.Num();
+	PickedTarget = List[Next];
+}
+
+bool ASimOsaVehicle::DesignatePicked(int32 LauncherIndex)
+{
+	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr || PickedTarget < 0)
+	{
+		return false;
+	}
+	const TArray<FSimLauncherStatus> Launchers = Sim->GetLauncherStatus();
+	if (!Launchers.IsValidIndex(LauncherIndex))
+	{
+		return false;
+	}
+	const bool bOk = Sim->DesignateBatteryTarget(Launchers[LauncherIndex].Callsign, PickedTarget);
+	FeedbackText = bOk ? FString::Printf(TEXT("Target %d to %s"), PickedTarget, *Launchers[LauncherIndex].Callsign)
+		: FString::Printf(TEXT("Can't give %d to %s now (the net down, the launcher empty, or the number gone)"), PickedTarget,
+			*Launchers[LauncherIndex].Callsign);
+	FeedbackSecondsLeft = 3.0f;
+	return bOk;
+}
+
+bool ASimOsaVehicle::PlotPicked()
+{
+	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr || PickedTarget < 0)
+	{
+		return false;
+	}
+	const bool bOk = Sim->PlotPostTrack(PickedTarget);
+	FeedbackText = bOk ? FString::Printf(TEXT("Plotting %02d"), PickedTarget)
+		: TEXT("Not now: take the seat (T), and finish the last mark first");
+	FeedbackSecondsLeft = 2.5f;
+	return bOk;
+}
+
+void ASimOsaVehicle::HandlePost(APlayerController* Pc)
+{
+	const USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Pc == nullptr || Sim == nullptr || !bInCabin || StationId.IsEmpty())
+	{
+		return;
+	}
+	if (!PickList().Contains(PickedTarget))
+	{
+		PickedTarget = INDEX_NONE;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::RightBracket))
+	{
+		PickTarget(1);
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftBracket))
+	{
+		PickTarget(-1);
+	}
+	if (StationId == Sim->GetCommanderStation())
+	{
+		static const FKey Digits[5] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five};
+		for (int32 I = 0; I < 5; ++I)
+		{
+			if (Pc->WasInputKeyJustPressed(Digits[I]))
+			{
+				DesignatePicked(I);
+			}
+		}
+	}
+	else if (Pc->WasInputKeyJustPressed(EKeys::P))
+	{
+		PlotPicked();
+	}
+}
+
 // ---------------------------------------------------------------------------------------------- cabin
 
 bool ASimOsaVehicle::SetInCabin(bool bEnter)
@@ -381,8 +534,12 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 	{
 		if (Outside != nullptr)
 		{
-			Outside->SetVisibility(!bEnter);
+			Outside->SetVisibility(!bEnter && !bIsPost);
 		}
+	}
+	if (PostExterior != nullptr)
+	{
+		PostExterior->SetVisibility(!bEnter);
 	}
 	DraggedWheel = INDEX_NONE;
 	HoveredItem = INDEX_NONE;
@@ -460,6 +617,14 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	if (Pc == nullptr)
 	{
 		return;
+	}
+	if (ShotDelayLeft >= 0.0f)
+	{
+		ShotDelayLeft -= DeltaSeconds;
+		if (ShotDelayLeft < 0.0f)
+		{
+			StartCabinTour(3.0f);
+		}
 	}
 	if (Pc->WasInputKeyJustPressed(CabinKey))
 	{
@@ -565,6 +730,14 @@ void ASimOsaVehicle::StartCabinTour(float SecondsPerView)
 	UE_LOG(LogSAM3D, Log, TEXT("Cabin tour: starting, %.0f s per view"), TourSecondsPerView);
 }
 
+void ASimOsaVehicle::StartCabinShots(const FString& Folder, float DelaySeconds)
+{
+	ShotFolder = Folder;
+	ShotDelayLeft = FMath::Max(0.0f, DelaySeconds);
+	ShotTaken = INDEX_NONE;
+	UE_LOG(LogSAM3D, Log, TEXT("Cabin shots: into %s after %.0f s"), *Folder, ShotDelayLeft);
+}
+
 void ASimOsaVehicle::StopCabinTour()
 {
 	bTouring = false;
@@ -611,9 +784,24 @@ void ASimOsaVehicle::UpdateTour(float DeltaSeconds)
 		return;
 	}
 	TourClock += DeltaSeconds;
+	if (!ShotFolder.IsEmpty() && ShotTaken != TourIndex && TourClock >= 0.75f * TourSecondsPerView)
+	{
+		// The picture late in the view: the lamps and the exposure have settled.
+		FString Name = TourViews[TourIndex].Label.Replace(TEXT(" "), TEXT("_")).Replace(TEXT("/"), TEXT("_"));
+		const FString File = FPaths::Combine(ShotFolder, FString::Printf(TEXT("%02d_%s.png"), TourIndex + 1, *Name));
+		FScreenshotRequest::RequestScreenshot(File, false, false);
+		UE_LOG(LogSAM3D, Log, TEXT("Cabin shot: %s"), *File);
+		ShotTaken = TourIndex;
+	}
 	if (TourClock >= TourSecondsPerView)
 	{
 		TourClock = 0.0f;
+		if (!ShotFolder.IsEmpty() && TourIndex + 1 >= TourViews.Num())
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Cabin shots: done"));
+			FGenericPlatformMisc::RequestExit(false);
+			return;
+		}
 		TourIndex = (TourIndex + 1) % TourViews.Num();
 		ShowTourView();
 	}

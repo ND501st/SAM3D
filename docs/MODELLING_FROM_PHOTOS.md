@@ -148,6 +148,27 @@ for the PU-12M (`tools/blender/pu12m_trace.py`, `pu12m_model.py`; October 2026):
 * What a single photograph cannot settle, say: the PU-12M's photo reads its height about 5-8 % larger against its length
   than the published dimensions; the model keeps the published ones and the overlay shows the roof 6-10 cm low.
 
+## Interiors from a plan drawing
+
+A manual's equipment plan is a view from above: no perspective to undo, but no heights either. First used for the
+PU-12M's fighting compartment (`tools/blender/pu12m_interior_trace.py`, `build_pu12m_interior.py`; October 2026):
+
+* **Scale the plan on the hull's outline** (the bow's edge, the stern, the chines) to the published length and width,
+  separately if the drawing's ratio is off, the same way the exterior's trace does, so the inside and outside agree.
+* **Read each numbered item** on a 10 px grid (`zgrid`-style crops at 2-2.5x): its rectangle or circle, and which number
+  it is from the labels' leader lines. Where two shapes overlap in the plan they stand at different heights.
+* **Heights** from the workplace drawings and photographs, scaled against the seats and the hull: say "estimate" with
+  them. Put the eye points where the crew's body model puts them (`data/crew/body.json`: 1.22 m above the floor).
+* **The hull's inside** from the exterior's stations a few centimetres in. Test before modelling: every item's corners
+  inside it, no two items overlapping, each eye point with room for the head and over its seat, every control in reach
+  (`tools/tests/test_pu12m_interior_trace.py`, `simcore/tests/test_crew_body.cpp`). Move an item only as far as the hull
+  makes it, and note it.
+* **Generate the cabin layout from the trace** (`tools/pu12m_cabin.py`): the panels on the items' faces, so the meshes
+  and the panels cannot drift apart.
+* **Prove it on the plan**: render the model straight down with the roof clipped away and draw its edges over the scan
+  in the plan's own pixels (the PU-12M: `out/pu12m_interior/overlay_plan.png`). Then photograph every seat in Unreal
+  (`-SimCabinShots=<folder>`, `unreal/README.md`).
+
 ## Without a good reference
 
 A part seen only from one angle, or only in a drawing: still flatten what there is, but mark sizes as scaled (with the

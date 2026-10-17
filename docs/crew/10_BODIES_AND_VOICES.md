@@ -16,7 +16,9 @@ Each NPC crewmate is a body in his seat in the 3D cabin:
   up and steps to it: the deputy commander at rack SŁ-1M for the orientation, the commander at the right R-123M on the
   floor behind his seat.
 - **He looks at what he works.** Otherwise he watches his instrument: the senior operator the search scope, the
-  operator the range indicator, the deputy commander the TV monitor. The driver and the commander look out.
+  operator the range indicator, the deputy commander the TV monitor. The driver and the commander look out. In the
+  PU-12M the operator and the battery commander watch the IT-45 (a seat's `look` can name alternatives, `"ssc_range|it45"`,
+  the first one the cabin has: one `operator` entry serves both vehicles).
 - **He nods while he speaks.** He breathes.
 - **The driver's hands rest on the steering wheel** and his feet on the pedals.
 

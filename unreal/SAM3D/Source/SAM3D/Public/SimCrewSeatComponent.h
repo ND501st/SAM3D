@@ -63,6 +63,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	void TurnWheel(const FString& ControlId, double Value);
 
+	/** The command post (P7): give launcher Callsign the board's target Number (the commanding seat only), or write the
+	 *  IT-45's target Number on the board (the plotter's seat only). The answer comes back by OnActionResult, its
+	 *  ControlId "designate" or "plot". */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	void Designate(const FString& Callsign, int32 Number);
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	void PlotTrack(int32 Number);
+
 	/** Console snapshots applied on this machine (network clients). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	int32 GetConsoleSnapshotsApplied() const { return SnapshotsApplied; }
@@ -90,6 +99,12 @@ protected:
 
 	UFUNCTION(Server, Unreliable)
 	void ServerTurnWheel(const FString& ControlId, double Value);
+
+	UFUNCTION(Server, Reliable)
+	void ServerDesignate(const FString& Callsign, int32 Number);
+
+	UFUNCTION(Server, Reliable)
+	void ServerPlotTrack(int32 Number);
 
 	UFUNCTION(Client, Unreliable)
 	void ClientReceiveConsole(const TArray<uint8>& Bytes);

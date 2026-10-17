@@ -90,6 +90,30 @@ void USimCrewSeatComponent::TurnWheel(const FString& ControlId, double Value)
 	ServerTurnWheel(ControlId, Value);
 }
 
+void USimCrewSeatComponent::Designate(const FString& Callsign, int32 Number)
+{
+	ServerDesignate(Callsign, Number);
+}
+
+void USimCrewSeatComponent::PlotTrack(int32 Number)
+{
+	ServerPlotTrack(Number);
+}
+
+void USimCrewSeatComponent::ServerDesignate_Implementation(const FString& Callsign, int32 Number)
+{
+	FString Why = TEXT("no seat");
+	const bool bOk = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatDesignate(SeatRole, Callsign, Number, Why);
+	ClientActionResult(TEXT("designate"), bOk, Why);
+}
+
+void USimCrewSeatComponent::ServerPlotTrack_Implementation(int32 Number)
+{
+	FString Why = TEXT("no seat");
+	const bool bOk = !SeatRole.IsEmpty() && Sim() != nullptr && Sim()->SeatPlot(SeatRole, Number, Why);
+	ClientActionResult(TEXT("plot"), bOk, Why);
+}
+
 void USimCrewSeatComponent::ServerRequestSeat_Implementation(const FString& Role)
 {
 	USimWorldSubsystem* S = Sim();

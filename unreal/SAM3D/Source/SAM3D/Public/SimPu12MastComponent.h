@@ -10,7 +10,7 @@ class UStaticMeshComponent;
  * The PU-12M's telescopic mast, its guys and the AB-1 generator set on the ground (docs/PU12_DEVELOPMENT.md P5).
  *
  * Where they stand comes from art/pu12m/pu12m_rig.json (written by tools/blender/pu12m_model.py from the traced model,
- * tools/blender/pu12m_trace.py). The mast's five moving sections stand for an extension from 0 (stowed, about 1.5 m above
+ * tools/blender/pu12m_trace.py). The mast's eight moving sections stand for an extension from 0 (stowed, about 1.5 m above
  * the roof) to 1 (raised, 16 m above the ground); the guys show once it is up; the AB-1 once it is set out. The owner sets
  * the extension: the player's own post from the console's mast_up subsystem (USimWorldSubsystem::GetPostMastExtension),
  * a battery's post from its deployment (it raises and lowers at the mast's own pace).
@@ -77,12 +77,12 @@ private:
 	void Build();
 	void Place();
 
-	float MastX = 156.4f;
-	float MastY = 69.f;
+	float MastX = 142.6f;
+	float MastY = 62.7f;
 	float BaseTopZ = 325.5f;
 	float StowedTopZ = 355.5f;
 	float RaisedTopZ = 1600.f;
-	float NestStep = 5.f;
+	float NestStep = 3.75f;
 	TArray<FSection> Sections;
 	TArray<float> GuyLevels;
 	float GuyRadius = 600.f;

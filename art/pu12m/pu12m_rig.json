@@ -1,8 +1,8 @@
 {
  "note": "Written by tools/blender/pu12m_model.py from pu12m_trace.py. Unreal frame: X forward, Y right, Z up, cm.",
  "mast": {
-  "x": 156.40000000000006,
-  "y": 69.0,
+  "x": 142.61091340450776,
+  "y": 62.727635782747605,
   "foot_z": 65.0,
   "base_top_z": 325.5,
   "stowed_top_z": 355.5,
@@ -14,32 +14,47 @@
     "mesh": ""
    },
    {
-    "radius": 6.5,
-    "length": 290.0,
+    "radius": 6.94,
+    "length": 260.0,
     "mesh": "SM_PU12M_Mast1"
    },
    {
-    "radius": 5.5,
-    "length": 290.0,
+    "radius": 6.38,
+    "length": 260.0,
     "mesh": "SM_PU12M_Mast2"
    },
    {
-    "radius": 4.6,
-    "length": 290.0,
+    "radius": 5.81,
+    "length": 260.0,
     "mesh": "SM_PU12M_Mast3"
    },
    {
-    "radius": 3.8,
-    "length": 290.0,
+    "radius": 5.25,
+    "length": 260.0,
     "mesh": "SM_PU12M_Mast4"
    },
    {
-    "radius": 3.0,
-    "length": 290.0,
+    "radius": 4.6899999999999995,
+    "length": 260.0,
     "mesh": "SM_PU12M_Mast5"
+   },
+   {
+    "radius": 4.12,
+    "length": 260.0,
+    "mesh": "SM_PU12M_Mast6"
+   },
+   {
+    "radius": 3.56,
+    "length": 260.0,
+    "mesh": "SM_PU12M_Mast7"
+   },
+   {
+    "radius": 3.0,
+    "length": 260.0,
+    "mesh": "SM_PU12M_Mast8"
    }
   ],
-  "nest_step": 5.0
+  "nest_step": 3.7500000000000036
  },
  "guys": {
   "levels": [

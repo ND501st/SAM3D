@@ -34,14 +34,13 @@ namespace
 USimPu12MastComponent::USimPu12MastComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	// The built-in copy of tools/blender/pu12m_trace.py's numbers (cm), used when the rig file can't be read.
-	const float Radii[] = {7.5f, 6.5f, 5.5f, 4.6f, 3.8f, 3.0f};
-	const float Lengths[] = {260.5f, 290.f, 290.f, 290.f, 290.f, 290.f};
-	for (int32 I = 0; I < 6; ++I)
+	// The built-in copy of tools/blender/pu12m_trace.py's numbers (cm), used when the rig file can't be read: a fixed
+	// section and eight moving ones.
+	for (int32 I = 0; I < 9; ++I)
 	{
 		FSection S;
-		S.Radius = Radii[I];
-		S.Length = Lengths[I];
+		S.Radius = 7.5f - 4.5f * static_cast<float>(I) / 8.f;
+		S.Length = I == 0 ? 260.5f : 260.f;
 		S.Mesh = I == 0 ? FString() : FString::Printf(TEXT("SM_PU12M_Mast%d"), I);
 		Sections.Add(S);
 	}

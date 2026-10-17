@@ -284,3 +284,84 @@ SC_TEST("crew body: the runner tells the bodies what each seat is doing") {
     SC_EXPECT(turned.count("senior_operator") == 1u);  // the azimuth wheel onto the target
     SC_EXPECT(deputy_stood);
 }
+
+// ---- The PU-12M (docs/PU12_DEVELOPMENT.md P6): the same body model in the command post's cabin.
+
+namespace {
+
+struct Pu12mBody {
+    ConsoleData console;
+    CabinLayout cabin;
+    BodyData body;
+    CrewData crew;
+    bool ok = false;
+};
+
+Pu12mBody LoadPu12mBody() {
+    Pu12mBody o;
+    std::string e;
+    o.ok = LoadConsoleFile(kData + "/procedures/pu12m.json", o.console, &e) &&
+           LoadCabinFile(kData + "/cabins/pu12m.json", o.console, o.cabin, &e) &&
+           LoadBodyDataFile(kData + "/crew/body.json", o.body, &e) &&
+           LoadCrewDataFile(kData + "/crew/pu12m_crew.json", o.console, o.crew, &e);
+    if (!o.ok) std::printf("    load: %s\n", e.c_str());
+    return o;
+}
+
+}  // namespace
+
+SC_TEST("crew body: the PU-12M's seats put the floor where its cabin has it") {
+    Pu12mBody o = LoadPu12mBody();
+    SC_EXPECT(o.ok);
+    for (const CabinStation& st : o.cabin.stations) {
+        SC_EXPECT_NEAR(SeatFrameOf(st, o.body.dims).floor_z, 0.62, 0.03);
+    }
+}
+
+SC_TEST("crew body: the PU-12M's operator rests his eyes on the IT-45 (the seat's look names it as an alternative)") {
+    Pu12mBody o = LoadPu12mBody();
+    SC_EXPECT(o.ok);
+    BodyAnimator anim(&o.cabin, &o.body, "operator");
+    SC_EXPECT(anim.Valid());
+    SeatActivity idle;
+    for (int i = 0; i < 40; ++i) anim.Update(0.05, idle, &o.console.panel);
+    const CabinDisplay* it45 = nullptr;
+    for (const CabinDisplay& d : o.cabin.displays) {
+        if (d.id == "it45") it45 = &d;
+    }
+    SC_EXPECT(it45 != nullptr);
+    if (it45 == nullptr) return;
+    const Vec3 screen = o.cabin.FindPanel(it45->panel_id)->PointAt(it45->u_m, it45->v_m);
+    const BodyPose& p = anim.Pose();
+    const Vec3 to = (screen - p.head).Normalized();
+    SC_EXPECT(Dot(p.head_forward, to) > 0.97);   // within about 14 degrees
+}
+
+SC_TEST("crew body: in the PU-12M, every control is in reach of its seat, standing only for the crew data's stand_for") {
+    Pu12mBody o = LoadPu12mBody();
+    SC_EXPECT(o.ok);
+    int seated = 0, standing = 0, away = 0;
+    for (const CabinControl& c : o.cabin.controls) {
+        const ControlDef* def = o.console.panel.Find(c.control_id);
+        const CabinStation* st = def != nullptr ? o.cabin.FindStation(def->station) : nullptr;
+        SC_EXPECT(st != nullptr);
+        if (st == nullptr) continue;
+        ControlTouch t;
+        SC_EXPECT(TouchOf(o.cabin, c.control_id, t));
+        const ReachPlan p = PlanReach(SeatFrameOf(*st, o.body.dims), o.body.dims, t);
+        if (!p.reachable) std::printf("    out of reach: %s (%s)\n", c.control_id.c_str(), def->station.c_str());
+        SC_EXPECT(p.reachable);
+        // He stands for those the crew data says (the DTP low at the squad leader's side, the RTK-1 over the tube, the
+        // mast's winch at the front of the compartment: he walks to it), and only those.
+        const CrewSeatDef* seat = o.crew.FindSeat(def->station);
+        bool listed = false;
+        for (const std::string& s : seat->stand_for) listed = listed || s == c.control_id;
+        if (listed == p.seated) {
+            std::printf("    %s: the model says %s, the crew data %s\n", c.control_id.c_str(), p.seated ? "seated" : "standing",
+                        listed ? "stand_for" : "seated");
+        }
+        SC_EXPECT(listed != p.seated);
+        if (!p.reachable) ++away; else if (p.seated) ++seated; else ++standing;
+    }
+    SC_EXPECT(seated + standing == 25 && away == 0);
+}

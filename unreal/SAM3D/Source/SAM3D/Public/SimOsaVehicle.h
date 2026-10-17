@@ -10,6 +10,7 @@ class UCameraComponent;
 class USimCabinComponent;
 class USimCrewBodiesComponent;
 class USimCrewVoiceComponent;
+class USimPu12MastComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
@@ -206,6 +207,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsTouringCabin() const { return bTouring; }
 
+	/** The cabin tour as pictures: after DelaySeconds, each seat and instrument once, a screenshot of each into Folder
+	 *  (<n>_<view>.png), then the game quits. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void StartCabinShots(const FString& Folder, float DelaySeconds = 20.0f);
+
 	/**
 	 * For scripted checks and screenshots: enter the cabin with the camera at a point of the layout's body frame
 	 * (metres: x right, y forward, z up) looking along Rotation (yaw clockwise from forward, pitch up), with this field
@@ -216,6 +222,32 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	void ClearCabinViewOverride();
+
+	// ---- The PU-12M (docs/PU12_DEVELOPMENT.md P6): when the scenario's own vehicle is the command post, the pawn wears
+	// its traced exterior and mast instead of the Osa's boxes. In the battery commander's seat, [ and ] pick a target on
+	// the post's board and 1-5 give it to that launcher by voice; in the plotter's seat, [ and ] pick a target on the
+	// IT-45 and P writes it on the board.
+
+	/** The scenario's own vehicle is the PU-12M command post. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	bool IsCommandPost() const { return bIsPost; }
+
+	/** The target number picked at this seat (board or IT-45; -1: none; the IT-45's numbers start at 00). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	int32 GetPickedTarget() const { return PickedTarget; }
+
+	/** Pick the next (+1) or previous (-1) target on this seat's picture: the board at the commander's, the IT-45 at the
+	 *  plotter's. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	void PickTarget(int32 Direction);
+
+	/** At the commander's seat: give the picked target to the launcher at this place on the IT boards (0-based). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	bool DesignatePicked(int32 LauncherIndex);
+
+	/** At the plotter's seat: write the picked IT-45 target on the board. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	bool PlotPicked();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
@@ -260,6 +292,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<UCameraComponent> CabinCamera;
 
+	/** The PU-12M's exterior (SM_PU12M) and mast, made when a command-post scenario starts. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<UStaticMeshComponent> PostExterior;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimPu12MastComponent> PostMast;
+
 private:
 	void Drive(float DeltaSeconds, class APlayerController* Pc);
 	void FollowGround();
@@ -272,6 +311,9 @@ private:
 	void UpdateTour(float DeltaSeconds);
 	void ShowTourView();
 	void HandleCrew(class APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds);
+	void ConfigureForScenario(USimWorldSubsystem* Sim);
+	void HandlePost(class APlayerController* Pc);
+	TArray<int32> PickList() const;
 
 	double SpeedMps = 0.0;
 	double HeadingDeg = 0.0;
@@ -304,7 +346,14 @@ private:
 	FString StationId;
 	bool bHoldingSeat = false;
 
+	bool bConfigured = false;
+	bool bIsPost = false;
+	int32 PickedTarget = INDEX_NONE;
+
 	bool bTouring = false;
+	FString ShotFolder;
+	float ShotDelayLeft = -1.0f;
+	int32 ShotTaken = INDEX_NONE;
 	float TourSecondsPerView = 6.0f;
 	float TourClock = 0.0f;
 	int32 TourIndex = 0;
