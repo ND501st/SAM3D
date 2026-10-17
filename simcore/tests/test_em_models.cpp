@@ -60,6 +60,64 @@ SC_TEST("em propagation: a ridge blinds a microwave radar but not a VHF radio") 
     SC_EXPECT_NEAR(DiffractionLossDb(clear, 6e9), 0.0, 1e-9);
 }
 
+namespace {
+// Two ridges of the same height across the path (east-west), each 400 m wide.
+class TwoRidges final : public Terrain {
+public:
+    explicit TwoRidges(double h2) : h2_(h2) {}
+    double HeightAt(double east, double /*north*/) const override {
+        if (east > 6800.0 && east < 7200.0) return 300.0;
+        if (east > 12800.0 && east < 13200.0) return h2_;
+        return 0.0;
+    }
+
+private:
+    double h2_;
+};
+}  // namespace
+
+SC_TEST("em propagation: two ridges cost more than the higher one alone (Deygout, ITU-R P.526 sec. 4.3)") {
+    const Vec3 a{0.0, 0.0, 5.0}, b{20000.0, 0.0, 5.0};
+    const PathGeometry both = AnalysePath(TwoRidges(300.0), a, 5.0, b, 5.0, 50.0);
+    const PathGeometry one = AnalysePath(TwoRidges(0.0), a, 5.0, b, 5.0, 50.0);
+    SC_EXPECT(both.sub_v_geometry_a > -1e8 || both.sub_v_geometry_b > -1e8);
+    const double l_both = DiffractionLossDb(both, 50e6);
+    const double l_one = DiffractionLossDb(one, 50e6);
+    std::printf("    VHF: one ridge %.1f dB, two %.1f dB; 6 GHz: %.1f, %.1f dB\n", l_one, l_both, DiffractionLossDb(one, 6e9),
+                DiffractionLossDb(both, 6e9));
+    SC_EXPECT(l_both > l_one + 5.0);
+    // the sum is exactly the three knife edges: J(main) + J(sub a) + J(sub b)
+    const double k = std::sqrt(2.0 / WavelengthOf(50e6));
+    double expect = KnifeEdgeLossDb(both.worst_v_geometry * k);
+    if (both.sub_v_geometry_a > -1e8) expect += KnifeEdgeLossDb(both.sub_v_geometry_a * k);
+    if (both.sub_v_geometry_b > -1e8) expect += KnifeEdgeLossDb(both.sub_v_geometry_b * k);
+    SC_EXPECT_NEAR(l_both, expect, 1e-9);
+    // a path the main edge does not block has no sub-edges
+    const PathGeometry high = AnalysePath(TwoRidges(300.0), Vec3{0.0, 0.0, 900.0}, 900.0, Vec3{20000.0, 0.0, 900.0}, 900.0, 50.0);
+    SC_EXPECT(high.line_of_sight && high.sub_v_geometry_a < -1e8 && high.sub_v_geometry_b < -1e8);
+    // a single ridge is unchanged: the old single-edge value (test above)
+    SC_EXPECT(one.sub_v_geometry_a < -1e8 || one.sub_v_geometry_b < -1e8 || DiffractionLossDb(one, 50e6) > 0.0);
+}
+
+SC_TEST("em propagation: rain attenuation follows ITU-R P.838 and costs microwaves, not VHF") {
+    // 10 GHz at 50 mm/h: 0.01217 * 50^1.2571 = 1.66 dB/km (the familiar ~1.7)
+    SC_EXPECT_NEAR(RainSpecificAttenuationDbPerKm(10e9, 50.0), 0.01217 * std::pow(50.0, 1.2571), 1e-9);
+    SC_EXPECT_NEAR(RainSpecificAttenuationDbPerKm(10e9, 50.0), 1.66, 0.02);
+    SC_EXPECT(RainSpecificAttenuationDbPerKm(15e9, 25.0) > RainSpecificAttenuationDbPerKm(6e9, 25.0) * 5.0);
+    SC_EXPECT_NEAR(RainSpecificAttenuationDbPerKm(10e9, 0.0), 0.0, 1e-12);
+    SC_EXPECT(RainSpecificAttenuationDbPerKm(50e6, 50.0) < 1e-3);  // below the table: the 1 GHz value, tiny
+    // the long path is not wholly under the cell: 30 km at 10 GHz, 50 mm/h is far less than 30 x 1.66 dB
+    const double path = RainLossDb(30000.0, 10e9, 50.0);
+    SC_EXPECT(path < 30.0 * 1.66 * 0.7 && path > 10.0);
+    std::printf("    rain, 30 km at 10 GHz, 50 mm/h: %.1f dB one way\n", path);
+    // rain never enters a calibration
+    EmWorld w(GeoPoint::FromDegrees(46.9, 19.7, 110.0), nullptr, 1);
+    Environment env = w.Scene().env;
+    env.rain_rate_mmh = 40.0;
+    w.SetEnvironment(env);
+    SC_EXPECT_NEAR(EmWorld::Dry(env).rain_rate_mmh, 0.0, 0.0);
+}
+
 SC_TEST("em propagation: gases cost little below 10 GHz and peak near 22 GHz") {
     SC_EXPECT_NEAR(GaseousLossDb(10000.0, 0.0, 0.0, 6e9), 0.09, 0.01);
     SC_EXPECT(GaseousAttenuationDbPerKm(22.2e9) > GaseousAttenuationDbPerKm(15e9));

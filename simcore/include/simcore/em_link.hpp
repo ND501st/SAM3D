@@ -66,6 +66,7 @@ struct EmLinkDef {
     std::vector<EmJammerDef> jammers;
     std::vector<EmChaffDef> chaff;
     Vec3 wind_mps;  // chaff drift
+    double rain_mmh = 0.0;  // rain rate over the scene (ITU-R P.838)
     em::EmLibrary library;
 };
 
@@ -133,9 +134,10 @@ public:
             error_ = err;
             return;
         }
-        if (def.wind_mps.LengthSquared() > 0.0) {
+        if (def.wind_mps.LengthSquared() > 0.0 || def.rain_mmh > 0.0) {
             em::Environment env = world_.Scene().env;
             env.wind_mps = def.wind_mps;
+            env.rain_rate_mmh = def.rain_mmh;
             world_.SetEnvironment(env);
         }
         const int search_def = world_.Scene().lib.Radar(def.search_radar);

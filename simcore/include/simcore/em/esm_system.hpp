@@ -15,9 +15,11 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "simcore/em/detection.hpp"
@@ -143,7 +145,7 @@ inline IlluminationGeometry Illumination(const EmScene& s, const EmitterState& e
     return g;
 }
 
-inline void UpdateContact(EmScene& s, const EsmDef& def, const EsmState& esm, Side side, const Platform& rx,
+inline void UpdateContact(const EmScene& s, std::vector<EmEvent>& log, const EsmDef& def, const EsmState& esm, Side side, const Platform& rx,
                           EsmContact& c, const EsmIntercept& i, double dt) {
     const bool first = c.intercepts == 0;
     if (first) {
@@ -185,18 +187,24 @@ inline void UpdateContact(EmScene& s, const EsmDef& def, const EsmState& esm, Si
     c.debug_truth_emitter = i.debug_truth_emitter;
     Identify(s, def, side, c);
     if (first) {
-        s.Log(EmEventKind::EsmNewContact, esm.id, c.id,
+        log.push_back({s.time_s, EmEventKind::EsmNewContact, esm.id, c.id,
               std::string(EsmKindName(def.kind)) + " contact " + std::to_string(c.id) + " at " +
                   std::to_string(static_cast<int>(RadToDeg(c.bearing_rad) + 0.5)) + " deg: " +
-                  (c.sig.library_name.empty() ? std::string("unknown emitter") : c.sig.library_name));
+                  (c.sig.library_name.empty() ? std::string("unknown emitter") : c.sig.library_name)});
     }
 }
 
-inline void RunEsm(EmScene& s, double dt) {
-    for (EsmState& esm : s.esm) {
+// What one site's pass produces besides its own state: counters and events, merged in site order afterwards.
+struct EsmWork {
+    std::vector<EmEvent> events;
+    std::uint64_t culled = 0, evaluations = 0, intercepts = 0;
+};
+
+inline void RunEsmSite(const EmScene& s, EsmState& esm, double dt, EsmWork& work) {
+    {
         esm.intercepts.clear();
         const Platform* rx = s.FindPlatform(esm.platform_id);
-        if (rx == nullptr || !rx->alive || !esm.on) continue;
+        if (rx == nullptr || !rx->alive || !esm.on) return;
         const EsmDef& def = s.lib.esm[static_cast<std::size_t>(esm.def_index)];
         const double sens_w = DbToLinear(def.sensitivity_dbw);
         for (const EmitterState& e : s.emitters) {
@@ -209,14 +217,14 @@ inline void RunEsm(EmScene& s, double dt) {
             // Cheap bound first: even the main beam in free space can't reach the sensitivity.
             const double peak_eirp = e.def.peak_power_w * DbToLinear(e.def.antenna.gain_db - e.def.tx_loss_db);
             if (OneWayReceivedPowerW(peak_eirp, def.antenna_gain_db, f, range, 0.0) < sens_w) {
-                ++s.stats.esm_culled;
+                ++work.culled;
                 continue;
             }
-            ++s.stats.esm_evaluations;
+            ++work.evaluations;
             const IlluminationGeometry ill = Illumination(s, e, *tx, *rx, dt);
             const double eirp =
                 e.def.peak_power_w * DbToLinear(AntennaGainDb(ill.antenna, ill.off_az_rad, ill.off_el_rad) - e.def.tx_loss_db);
-            const LinkLossResult loss = LinkLoss(s, *tx, *rx, f);
+            const LinkLossResult loss = LinkLossCached(s, esm.paths, *tx, *rx, f);
             const double pr = OneWayReceivedPowerW(eirp, def.antenna_gain_db, f, range, loss.TotalOneWayDb());
             if (pr < sens_w) continue;
             const std::uint64_t key = DrawHash(0, Stream::EsmBearing, Key(esm.id), Key(e.id), Key(s.tick));
@@ -239,7 +247,7 @@ inline void RunEsm(EmScene& s, double dt) {
             in.arrival_time_s = range / kSpeedOfLight + def.time_sigma_s * s.rng.NormalOf(Stream::TdoaNoise, key);
             in.debug_truth_emitter = e.id;
             esm.intercepts.push_back(in);
-            ++s.stats.intercepts;
+            ++work.intercepts;
         }
         // Parametric association of this tick's intercepts with the contacts. Gates are 4 sigma of
         // the difference between a new measurement and a contact's smoothed value.
@@ -270,7 +278,7 @@ inline void RunEsm(EmScene& s, double dt) {
                 esm.contacts.push_back(c);
                 best = &esm.contacts.back();
             }
-            UpdateContact(s, def, esm, side, *rx, *best, in, dt);
+            UpdateContact(s, work.events, def, esm, side, *rx, *best, in, dt);
         }
         // Contacts that drifted together are one emitter: merge into the older one.
         for (std::size_t i = 0; i < esm.contacts.size(); ++i)
@@ -304,10 +312,43 @@ inline void RunEsm(EmScene& s, double dt) {
             if (s.time_s - c.last_seen_s <= def.contact_timeout_s) {
                 kept.push_back(c);
             } else {
-                s.Log(EmEventKind::EsmContactLost, esm.id, c.id, "ESM contact " + std::to_string(c.id) + " lost");
+                work.events.push_back({s.time_s, EmEventKind::EsmContactLost, esm.id, c.id, "ESM contact " + std::to_string(c.id) + " lost"});
             }
         }
         esm.contacts.swap(kept);
+    }
+}
+
+// Every ESM site listens. Sites are independent (each has its own contacts, path profiles, counters and event list), so
+// they can run on `s.threads` threads; counters and events are merged in site order, and the result is the same at any
+// thread count.
+inline void RunEsm(EmScene& s, double dt) {
+    const std::size_t n = s.esm.size();
+    std::vector<EsmWork> work(n);
+    const EmScene& cs = s;
+    const unsigned threads = s.threads < 1 ? 1u : s.threads;
+    if (threads <= 1 || n < 2) {
+        for (std::size_t i = 0; i < n; ++i) RunEsmSite(cs, s.esm[i], dt, work[i]);
+    } else {
+        std::atomic<std::size_t> next{0};
+        std::vector<std::thread> pool;
+        const unsigned count = threads < n ? threads : static_cast<unsigned>(n);
+        for (unsigned t = 0; t < count; ++t) {
+            pool.emplace_back([&]() {
+                for (;;) {
+                    const std::size_t i = next.fetch_add(1);
+                    if (i >= n) break;
+                    RunEsmSite(cs, s.esm[i], dt, work[i]);
+                }
+            });
+        }
+        for (std::thread& th : pool) th.join();
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+        s.stats.esm_culled += work[i].culled;
+        s.stats.esm_evaluations += work[i].evaluations;
+        s.stats.intercepts += work[i].intercepts;
+        s.events.insert(s.events.end(), work[i].events.begin(), work[i].events.end());
     }
 }
 

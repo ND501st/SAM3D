@@ -600,3 +600,57 @@ SC_TEST("em scenario: identical seeds give identical histories") {
     SC_EXPECT(a == b);
     SC_EXPECT(a != c);
 }
+
+namespace {
+
+// A busy scene run with a given number of worker threads; returns everything observable.
+struct RunOut {
+    std::vector<std::string> events;
+    std::vector<double> numbers;
+};
+
+RunOut RunBusyScene(unsigned threads) {
+    EmWorld w(kOrigin, nullptr, 77);
+    w.SetLibrary(GenericLib());
+    w.Rates().threads = threads;
+    for (int i = 0; i < 4; ++i) {
+        w.AddRadar(w.AddGroundPlatform("SAM", Side::Red, -6000.0 + 4000.0 * i, 0.0, 5.0), "generic_search_c", true);
+        w.AddEsm(w.AddGroundPlatform("ESM", Side::Red, -8000.0 + 5000.0 * i, -3000.0, 10.0), "generic_esm_site");
+    }
+    const EmitterDef fcr = w.Scene().lib.emitters[static_cast<std::size_t>(w.Scene().lib.Emitter("generic_airborne_fcr_x"))];
+    for (int i = 0; i < 6; ++i) {
+        const int jet = AddAircraft(w, "striker", Side::Blue, -20000.0 + 7000.0 * i, 90000.0 - 5000.0 * i, 3000.0 + 700.0 * i,
+                                    {20.0 * (i - 3), -230.0, 0.0});
+        w.Scene().FindEmitter(w.AddEmitter(jet, fcr))->radiating = i % 2 == 0;
+        if (i == 3) w.Scene().FindJammer(w.AddJammer(jet, "generic_soj_barrage_c", true))->aim_at_point = false;
+    }
+    for (int i = 0; i < 600; ++i) {
+        Fly(w, 0.1);
+        w.Step(0.1);
+    }
+    RunOut out;
+    for (const EmEvent& e : w.Scene().events) out.events.push_back(std::to_string(e.time_s) + " " + e.text);
+    for (const EsmState& e : w.Scene().esm)
+        for (const EsmContact& c : e.contacts) {
+            out.numbers.push_back(c.bearing_rad);
+            out.numbers.push_back(c.sig.freq_hz);
+            out.numbers.push_back(static_cast<double>(c.intercepts));
+        }
+    for (const RadarState& r : w.Scene().radars)
+        for (const SensorTrack& t : r.tracker.Tracks()) out.numbers.push_back(t.Position().x + t.Position().y);
+    out.numbers.push_back(static_cast<double>(w.Scene().stats.intercepts));
+    out.numbers.push_back(static_cast<double>(w.Scene().stats.radar_looks));
+    out.numbers.push_back(static_cast<double>(w.Scene().stats.plots));
+    return out;
+}
+
+}  // namespace
+
+SC_TEST("em scale: the ESM sites and search radars give the same result on 1 and 4 threads") {
+    const RunOut one = RunBusyScene(1);
+    const RunOut four = RunBusyScene(4);
+    std::printf("    %zu events, %zu numbers\n", one.events.size(), one.numbers.size());
+    SC_EXPECT(one.events.size() > 10 && one.numbers.size() > 10);
+    SC_EXPECT(one.events == four.events);
+    SC_EXPECT(one.numbers == four.numbers);
+}
