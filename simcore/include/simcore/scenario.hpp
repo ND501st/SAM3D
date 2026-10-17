@@ -23,6 +23,7 @@
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
@@ -120,6 +121,9 @@ struct ScenarioDef {
     EmLinkDef em;
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
+    // "empty_containers": the launcher's containers that start without a missile (e.g. ["1-I", "1-II"]): a mission that
+    // starts part-spent, so that the TZM comes within it (roadmap 8.11).
+    std::vector<std::string> empty_containers;
     std::vector<std::pair<std::string, bool>> initial_inputs;
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
@@ -146,6 +150,9 @@ struct ScenarioDef {
     // "battery_commander": "npc" (default) distributes the PU-12's targets to the battery's other launchers; "player": the
     // player does (ScenarioRunner::AssignBatteryTarget); "none": they fire freely at what is in their reach.
     std::string battery_commander = "npc";
+    // "assistance": the training overlay's level for the player's seat (docs/crew/08_TRAINING_AND_ASSISTANCE.md §2):
+    // "demonstrate", "guided", "hint", "unassisted" or "exam". Default: guided.
+    AssistLevel assistance = AssistLevel::Guided;
 };
 
 namespace detail {
@@ -172,7 +179,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "battery", "own_unit", "crew", "crew_commander", "battery_commander", "targets",
-                             "triggers", "end"})) {
+                             "triggers", "end", "assistance"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -206,6 +213,11 @@ public:
                 return Fail("battery_commander", "must be \"npc\", \"player\" or \"none\"");
             }
             out.battery_commander = bc->string;
+        }
+        if (const json::Value* as = root.Find("assistance")) {
+            if (!as->Is(json::Type::String) || !ParseAssistLevel(as->string, out.assistance)) {
+                return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
+            }
         }
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
@@ -306,7 +318,7 @@ private:
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
             !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
-                                   "position", "heading_deg", "inputs"})) {
+                                   "position", "heading_deg", "inputs", "empty_containers"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -441,6 +453,18 @@ private:
         if (!RequireObject(*u, "own_unit", "position", pos) ||
             !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position) ||
             !OptionalNumber(*u, "own_unit", "heading_deg", out.unit_heading_deg)) {
+            return false;
+        }
+        if (const json::Value* ec = OptionalArray(*u, "own_unit", "empty_containers")) {
+            for (std::size_t i = 0; i < ec->items.size(); ++i) {
+                const std::string p = Index("own_unit.empty_containers", i);
+                if (!ec->items[i].Is(json::Type::String)) return Fail(p, "expected a container id");
+                bool known = false;
+                for (const auto& c : console.launcher.containers) known = known || c.id == ec->items[i].string;
+                if (!console.has_launcher || !known) return Fail(p, "the console's launcher has no container '" + ec->items[i].string + "'");
+                out.empty_containers.push_back(ec->items[i].string);
+            }
+        } else if (!message_.empty()) {
             return false;
         }
         if (const json::Value* in = u->Find("inputs")) {
@@ -1005,8 +1029,18 @@ private:
                 const json::Value& v = vs->items[i];
                 BatteryVehicleDef d;
                 std::string kind = "launcher";
-                if (!Keys(v, p, {"id", "callsign", "kind", "position", "notes"}) || !RequireString(v, p, "id", d.id) ||
+                if (!Keys(v, p, {"id", "callsign", "kind", "position", "sector_deg", "notes"}) || !RequireString(v, p, "id", d.id) ||
                     !OptionalString(v, p, "callsign", d.callsign) || !OptionalString(v, p, "kind", kind)) {
+                    return false;
+                }
+                if (const json::Value* sec = OptionalArray(v, p, "sector_deg")) {
+                    if (sec->items.size() != 2 || !sec->items[0].Is(json::Type::Number) || !sec->items[1].Is(json::Type::Number)) {
+                        return Fail(Join(p, "sector_deg"), "expected [from, to]: true azimuths, clockwise");
+                    }
+                    d.has_sector = true;
+                    d.sector_from_deg = sec->items[0].number;
+                    d.sector_to_deg = sec->items[1].number;
+                } else if (!message_.empty()) {
                     return false;
                 }
                 if (!ParseBatteryVehicleKind(kind, d.kind)) return Fail(Join(p, "kind"), "launcher, reload, command_post, maintenance or fuel");

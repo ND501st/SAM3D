@@ -181,6 +181,10 @@ public:
         for (const DrillPlan::Seat& s : plan.seats) {
             hands.push_back({CrewMember("ghost " + s.station, s.station, reaction_s_), s.station, 0, std::string()});
             CrewMember& m = hands.back().member;
+            if (crew_ != nullptr) {  // the perfect crewman still gets up for a control out of seated reach
+                const CrewSeatDef* seat = crew_->FindSeat(s.station);
+                if (seat != nullptr && !seat->stand_for.empty()) m.SetStanding(seat->stand_for, crew_->stand_s, crew_->sit_s);
+            }
             std::vector<Procedure> later;
             for (std::size_t i = 0; i < s.loose.size(); ++i) {  // loose actions with nothing to wait for come first
                 Procedure p;

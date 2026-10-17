@@ -54,6 +54,8 @@ handoff so that no change loses them.
 | `07_COMMANDER_MODE.md` | The player in command: the order menu for the vehicle, then the battery |
 | `08_TRAINING_AND_ASSISTANCE.md` | The player in the crew: curricula per seat, the assistance overlay, grading, quests |
 | `09_IMPLEMENTATION_PLAN.md` | Phases, what is built, what is next |
+| `10_BODIES_AND_VOICES.md` | The crewmates seen and heard: the body model, the reach check of the cabin, the voices |
+| `11_PLAYTEST_AND_BALANCE.md` | Every tier played over many seeds against the published norms, and what that showed |
 | `generated/osa_ak_action_map.md` | Every action of the Osa-AK console and how it connects (`python tools/crew_map.py`) |
 
 ## Words used here

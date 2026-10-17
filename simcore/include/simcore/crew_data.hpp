@@ -29,6 +29,9 @@ struct CrewSeatDef {
     std::string title_en;
     std::vector<std::string> duties;
     std::vector<std::string> displays;
+    // Controls of this seat out of seated reach: he stands up and steps to them (crew_body.hpp checks the list
+    // against the cabin and the body; CrewMember::SetStanding counts the time).
+    std::vector<std::string> stand_for;
 };
 
 enum class CalloutKind { Order, Ack, Report, Warning, Remind, Radio };
@@ -66,7 +69,16 @@ struct OrderDef {
     std::string callout;  // the order's callout id (its words)
     std::string task;     // the task it asks for (may be empty)
     std::vector<OrderStart> procedures;
+    // What the commander must know or have for the order to make sense (the order menu greys it otherwise, docs/crew/
+    // 07_COMMANDER_MODE.md §1.3): "contact" (a hostile reported, with its range), "tracked" (a target tracked),
+    // "jamming" (the track is on a jammer), "missiles" (a missile on the launcher).
+    std::vector<std::string> needs;
 };
+
+// The kinds an order's "needs" may name.
+inline bool KnownOrderNeed(const std::string& n) {
+    return n == "contact" || n == "tracked" || n == "jamming" || n == "missiles";
+}
 
 // A named goal: conditions on the console to make true (docs/crew/06_REFERENCE_PERFORMER.md).
 struct CrewTask {
@@ -84,6 +96,9 @@ struct CrewFact {
     std::vector<Condition> needs;
     std::string knowledge;
     bool by_action = false;  // one of `seats` makes it true by an action of his own (the driver halts)
+    // Said when an order waits for it and it isn't so (the order menu's reason; "Не могу: ..."): e.g. "Цель не в зоне".
+    std::string unmet_ru;
+    std::string unmet_en;
 };
 
 // A callout a seat speaks by itself when `when` becomes true.
@@ -102,6 +117,8 @@ struct CrewData {
     std::vector<CrewFact> facts;
     std::vector<AutoReportDef> reports;
     std::vector<std::string> decision_controls;  // steps that are decisions (ПУСК): judgement delays them
+    double stand_s = 0.0;  // "standing": getting up and stepping to a panel out of seated reach
+    double sit_s = 0.0;    // and back to the seat
 
     const CalloutDef* FindCallout(const std::string& id) const {
         for (const CalloutDef& c : callouts) {
@@ -194,7 +211,7 @@ class CrewLoader : public ConsoleLoader {
 public:
     bool LoadCrew(const json::Value& root, const ConsoleData& console, CrewData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "seats", "callouts", "orders",
-                             "tasks", "facts", "reports", "decisions"}) ||
+                             "tasks", "facts", "reports", "decisions", "standing"}) ||
             !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "")) {
             return false;
         }
@@ -203,7 +220,7 @@ public:
         }
         return LoadSeats(root, console, out) && LoadCallouts(root, console, out) && LoadOrders(root, console, out) &&
                LoadTasks(root, console, out) && LoadFacts(root, console, out) && LoadReports(root, console, out) &&
-               LoadDecisions(root, console, out);
+               LoadDecisions(root, console, out) && LoadStanding(root, out);
     }
 
     bool LoadSkills(const json::Value& root, SkillTable& out) {
@@ -298,13 +315,22 @@ private:
             const json::Value& s = arr->items[i];
             const std::string p = Index("seats", i);
             CrewSeatDef seat;
-            if (!Keys(s, p, {"station", "number", "title_ru", "title_en", "duties", "displays", "source", "confidence", "notes"}) ||
+            if (!Keys(s, p, {"station", "number", "title_ru", "title_en", "duties", "displays", "stand_for", "source", "confidence",
+                             "notes"}) ||
                 !RequireString(s, p, "station", seat.station) || !OptionalInt(s, p, "number", seat.number) ||
                 !OptionalString(s, p, "title_ru", seat.title_ru) || !OptionalString(s, p, "title_en", seat.title_en) ||
-                !StringList(s, p, "duties", seat.duties) || !StringList(s, p, "displays", seat.displays) || !Provenance(s, p)) {
+                !StringList(s, p, "duties", seat.duties) || !StringList(s, p, "displays", seat.displays) ||
+                !StringList(s, p, "stand_for", seat.stand_for) || !Provenance(s, p)) {
                 return false;
             }
             if (!KnownSeat(console, seat.station, false)) return Fail(Join(p, "station"), "unknown station '" + seat.station + "'");
+            for (std::size_t j = 0; j < seat.stand_for.size(); ++j) {
+                const ControlDef* c = console.panel.Find(seat.stand_for[j]);
+                if (c == nullptr) return Fail(Index(Join(p, "stand_for"), j), "unknown control '" + seat.stand_for[j] + "'");
+                if (c->station != seat.station) {
+                    return Fail(Index(Join(p, "stand_for"), j), "'" + seat.stand_for[j] + "' is the " + c->station + "'s control");
+                }
+            }
             out.seats.push_back(std::move(seat));
         }
         for (const ConsoleStation& st : console.stations) {
@@ -350,9 +376,15 @@ private:
             const json::Value& o = arr->items[i];
             const std::string p = Index("orders", i);
             OrderDef d;
-            if (!Keys(o, p, {"callout", "task", "procedures", "source", "confidence", "notes"}) ||
-                !RequireString(o, p, "callout", d.callout) || !OptionalString(o, p, "task", d.task) || !Provenance(o, p)) {
+            if (!Keys(o, p, {"callout", "task", "procedures", "needs", "source", "confidence", "notes"}) ||
+                !RequireString(o, p, "callout", d.callout) || !OptionalString(o, p, "task", d.task) || !Provenance(o, p) ||
+                !StringList(o, p, "needs", d.needs)) {
                 return false;
+            }
+            for (std::size_t j = 0; j < d.needs.size(); ++j) {
+                if (!KnownOrderNeed(d.needs[j])) {
+                    return Fail(Index(Join(p, "needs"), j), "'" + d.needs[j] + "' is not contact, tracked, jamming or missiles");
+                }
             }
             const CalloutDef* c = out.FindCallout(d.callout);
             if (c == nullptr || c->kind != CalloutKind::Order) return Fail(Join(p, "callout"), "'" + d.callout + "' is not an order callout");
@@ -412,7 +444,9 @@ private:
             const json::Value& f = arr->items[i];
             const std::string p = Index("facts", i);
             CrewFact d;
-            if (!Keys(f, p, {"input", "set_by", "seats", "needs", "knowledge", "by_action", "source", "confidence", "notes"}) ||
+            if (!Keys(f, p, {"input", "set_by", "seats", "needs", "knowledge", "by_action", "unmet_ru", "unmet_en", "source", "confidence",
+                             "notes"}) ||
+                !OptionalString(f, p, "unmet_ru", d.unmet_ru) || !OptionalString(f, p, "unmet_en", d.unmet_en) ||
                 !RequireString(f, p, "input", d.input) || !RequireString(f, p, "set_by", d.set_by) || !OptionalBool(f, p, "by_action", d.by_action) ||
                 !StringList(f, p, "seats", d.seats) || !OptionalString(f, p, "knowledge", d.knowledge) || !Provenance(f, p) ||
                 !LoadConditions(f, p, "needs", console.panel, console.equipment, d.needs)) {
@@ -426,6 +460,19 @@ private:
             if (d.by_action && d.seats.size() != 1) return Fail(Join(p, "by_action"), "needs exactly one seat");
             out.facts.push_back(std::move(d));
         }
+        return true;
+    }
+
+    // "standing": { "stand_s", "sit_s", "source", "confidence" }: getting up for a control out of seated reach.
+    bool LoadStanding(const json::Value& root, CrewData& out) {
+        const json::Value* s = root.Find("standing");
+        if (s == nullptr) return true;
+        if (!Keys(*s, "standing", {"stand_s", "sit_s", "source", "confidence", "notes"}) || !Provenance(*s, "standing") ||
+            !OptionalNumber(*s, "standing", "stand_s", out.stand_s) || !OptionalNumber(*s, "standing", "sit_s", out.sit_s)) {
+            return false;
+        }
+        if (out.stand_s < 0.0 || out.stand_s > 30.0) return Fail("standing.stand_s", "must be from 0 to 30");
+        if (out.sit_s < 0.0 || out.sit_s > 30.0) return Fail("standing.sit_s", "must be from 0 to 30");
         return true;
     }
 

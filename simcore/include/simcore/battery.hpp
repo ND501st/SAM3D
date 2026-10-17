@@ -86,6 +86,11 @@ struct BatteryVehicleDef {
     BatteryVehicleKind kind = BatteryVehicleKind::Launcher;
     bool own = false;  // the player's vehicle (the scenario's own_unit)
     Vec3 start;
+    // A launcher's sector of fire (true azimuth, clockwise from `sector_from_deg` to `sector_to_deg`): in free fire it
+    // takes targets only there, and the battery commander gives it targets there first (docs/crew/07 §3).
+    bool has_sector = false;
+    double sector_from_deg = 0.0;
+    double sector_to_deg = 0.0;
 };
 
 struct BatteryOrder {

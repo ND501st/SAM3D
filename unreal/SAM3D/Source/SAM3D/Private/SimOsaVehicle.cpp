@@ -11,6 +11,8 @@
 #include "SAM3D.h"
 #include "SimCabinComponent.h"
 #include "SimCabinHUD.h"
+#include "SimCrewBodiesComponent.h"
+#include "SimCrewVoiceComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -79,6 +81,9 @@ ASimOsaVehicle::ASimOsaVehicle()
 	// The cabin's body frame has its origin at the root (ground under the hull centre), like the hull boxes.
 	Cabin = CreateDefaultSubobject<USimCabinComponent>(TEXT("Cabin"));
 	Cabin->SetupAttachment(Root);
+	CrewBodies = CreateDefaultSubobject<USimCrewBodiesComponent>(TEXT("CrewBodies"));
+	CrewBodies->SetupAttachment(Cabin);
+	CrewVoice = CreateDefaultSubobject<USimCrewVoiceComponent>(TEXT("CrewVoice"));
 	CabinCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CabinCamera"));
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);
@@ -155,6 +160,9 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		HandleCrew(Pc, Sim, DeltaSeconds);
 	}
+	// The body at the camera's seat isn't drawn (first person); the overlay's ghost hand shows the advised move.
+	CrewBodies->SetHiddenStation(bInCabin && !bViewOverride ? Cabin->GetStationId(Station) : FString());
+	CrewBodies->SetGhostHand(StationId, bAssist && Advice.bValid ? Advice.Control : FString());
 }
 
 void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds)
@@ -180,10 +188,25 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		}
 		bHoldingSeat = !Sim->GetCrewSeatHolder(StationId).IsEmpty();
 	}
-	// H: the training overlay. The task: К бою until ready, then the capture, then the launch.
-	if (Pc->WasInputKeyJustPressed(EKeys::H))
+	// H: the training overlay's level, round and round: guided, hint, demonstrate, off (docs/crew/08 section 2). An
+	// exam scenario keeps it off. The task: К бою until ready, then the capture, then the launch.
+	if (Pc->WasInputKeyJustPressed(EKeys::H) && Sim->GetAssistLevel() != TEXT("exam"))
 	{
-		bAssist = !bAssist;
+		static const TCHAR* Levels[] = {TEXT("guided"), TEXT("hint"), TEXT("demonstrate"), TEXT("unassisted")};
+		int32 Next = 0;
+		if (bAssist)
+		{
+			for (int32 I = 0; I < 4; ++I)
+			{
+				if (AssistLevel == Levels[I])
+				{
+					Next = (I + 1) % 4;
+				}
+			}
+		}
+		AssistLevel = Levels[Next];
+		Sim->SetAssistLevel(AssistLevel);
+		bAssist = AssistLevel != TEXT("unassisted");
 		AssistClock = 0.0f;
 		if (!bAssist)
 		{
@@ -197,13 +220,12 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		if (AssistClock <= 0.0f)
 		{
 			AssistClock = 1.0f;
-			AssistTask = !Sim->IsCrewTaskDone(TEXT("ready_halted")) ? FString(TEXT("ready_halted"))
-			             : Sim->GetTrackedTarget().IsEmpty()            ? FString(TEXT("captured"))
-			                                                            : FString(TEXT("launched"));
-			Advice = Sim->GetDrillAdvice(StationId, AssistTask);
+			Advice = Sim->GetAssistance(StationId);
+			AssistTask = Advice.Task;
 			Cabin->SetAdvisedControl(Advice.bValid ? Advice.Control : FString());
 		}
 	}
+	LastVerdict = Sim->GetLastMoveVerdict(StationId);
 	// O: the crew menu. 1-9 choose a line, 0 the next page, O or Escape close it.
 	if (Pc->WasInputKeyJustPressed(EKeys::O))
 	{
@@ -237,9 +259,11 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		{
 			continue;
 		}
-		const FSimCrewMenuEntry& E = MenuEntries[Index];
-		const bool bOk = E.bOrder ? Sim->GiveCrewOrder(E.Id) : Sim->PlayerSay(StationId, E.Id);
-		FeedbackText = FString::Printf(TEXT("%s %s%s"), E.bOrder ? TEXT("Order:") : TEXT("Report:"), *E.Ru, bOk ? TEXT("") : TEXT("  (not now)"));
+			const FSimCrewMenuEntry& E = MenuEntries[Index];
+		FString Reason;
+		const bool bOk = E.bOrder ? Sim->TryCrewOrder(E.Id, Reason) : Sim->PlayerSay(StationId, E.Id);
+		const FString NotNow = FString::Printf(TEXT("  (not now: %s)"), Reason.IsEmpty() ? TEXT("can't") : *Reason);
+		FeedbackText = FString::Printf(TEXT("%s %s%s"), E.bOrder ? TEXT("Order:") : TEXT("Report:"), *E.Ru, bOk ? TEXT("") : *NotNow);
 		FeedbackSecondsLeft = 3.0f;
 		bMenuOpen = false;
 	}

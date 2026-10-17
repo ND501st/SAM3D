@@ -248,3 +248,20 @@ reaction time), fault recovery in the drill master, the commander on the march a
 overlay and crew menu in Unreal (H, O, T), the crew's grades in the debrief, the battery's fight with fire distribution
 (`osa_battery_fight.json`) and one mission end to end (`osa_mission_march.json`). 356 simcore tests. Next: 8.10 (bodies,
 animations, voices), playing it on the map, then the PU-12M (`docs/PU12_DEVELOPMENT.md`).
+
+**17 October 2026, later:** 8.10 bodies and voices (`docs/crew/10_BODIES_AND_VOICES.md`):
+- simcore's body model and a reach check of the cabin (standing for far panels costs drill time);
+- Unreal crew bodies working their controls, a ghost hand;
+- callouts spoken through Windows' speech engine (English on this machine: no Russian voice installed);
+- headless Unreal tests `SAM3D.Crew.Speech` and `SAM3D.Crew.Bodies`.
+
+Also:
+- the assistance levels and each move's cost (8.7);
+- the honest order menu with refusals (8.8);
+- the engagement reference and scored decisions in the debrief (8.3);
+- sectors of fire (8.9);
+- the vehicle oriented in the readiness, and a reload inside the mission (8.11);
+- `crew_balance` and the first balance pass (8.12, `docs/crew/11_PLAYTEST_AND_BALANCE.md`).
+
+381 simcore tests. Next: a person plays the missions on the map (the crew half and the command half), then the PU-12M
+as a seat.

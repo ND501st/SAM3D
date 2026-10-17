@@ -64,15 +64,17 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 		const FSimDrillAdvice A = Vehicle->GetAdvice();
 		const FLinearColor Green(0.4f, 1.0f, 0.5f);
 		float Y = 40.0f;
-		DrawText(FString::Printf(TEXT("Help (%s):"), *Vehicle->GetAssistTask()), Green, 20.0f, Y, Font);
+		DrawText(FString::Printf(TEXT("Help, %s (H: next level): %s"), *Vehicle->GetAssistLevel(), *Vehicle->GetAssistTask()), Green, 20.0f, Y,
+			Font);
 		Y += 20.0f;
 		if (!A.bValid)
 		{
-			DrawText(TEXT("nothing for this seat now"), Green, 20.0f, Y, Font);
+			DrawText(Vehicle->GetAssistLevel() == TEXT("hint") ? TEXT("(a hint comes if you hesitate)") : TEXT("nothing for this seat now"), Green,
+				20.0f, Y, Font);
 		}
 		else
 		{
-			DrawText(FString::Printf(TEXT("Next: %s%s"), *A.Description,
+			DrawText(FString::Printf(TEXT("%s: %s%s"), A.bDemonstrating ? TEXT("Watch the crewman") : TEXT("Next"), *A.Description,
 						 A.DueInSeconds > 2.0 ? *FString::Printf(TEXT("  (in about %.0f s)"), A.DueInSeconds) : TEXT("  (now)")),
 				Green, 20.0f, Y, Font);
 			Y += 20.0f;
@@ -81,6 +83,16 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 				DrawText(FString::Printf(TEXT("   because: %s"), *A.Why[I]), FLinearColor(0.7f, 0.9f, 0.7f), 20.0f, Y, Font);
 				Y += 18.0f;
 			}
+		}
+		// The last move off the drill, and what it cost (docs/crew/08 section 2: after a move off the plan).
+		const FSimMoveVerdict V = Vehicle->GetLastVerdict();
+		const USimWorldSubsystem* VSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		if (V.bValid && !V.bBest && VSim != nullptr && VSim->GetSimTimeSeconds() - V.TimeSeconds < 10.0)
+		{
+			Y += 4.0f;
+			DrawText(FString::Printf(TEXT("Off the drill: that cost %.0f s. The best move was: %s"), V.CostSeconds,
+						 V.BestDescription.IsEmpty() ? *V.BestControl : *V.BestDescription),
+				FLinearColor(1.0f, 0.6f, 0.3f), 20.0f, Y, Font);
 		}
 	}
 	// The crew menu: orders at the commander's seat, this seat's reports elsewhere.
@@ -91,7 +103,7 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 		const int32 Pages = FMath::Max(1, (Entries.Num() + 8) / 9);
 		const float X = Canvas->ClipX * 0.5f - 260.0f;
 		float Y = Canvas->ClipY * 0.25f;
-		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X - 10.0f, Y - 10.0f, 540.0f, 230.0f);
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X - 10.0f, Y - 10.0f, 860.0f, 230.0f);
 		DrawText(FString::Printf(TEXT("%s (page %d/%d: 0 next, Esc close)"), Vehicle->GetStationId() == TEXT("commander") ? TEXT("Orders") : TEXT("Reports"),
 					 Page + 1, Pages),
 			FLinearColor::White, X, Y, Font);
@@ -103,7 +115,15 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 			{
 				break;
 			}
-			DrawText(FString::Printf(TEXT("%d  %s  (%s)"), I + 1, *Entries[Index].Ru, *Entries[Index].En), FLinearColor(1.0f, 0.95f, 0.8f), X, Y, Font);
+			const FSimCrewMenuEntry& E = Entries[Index];
+			if (E.bAvailable)
+			{
+				DrawText(FString::Printf(TEXT("%d  %s  (%s)"), I + 1, *E.Ru, *E.En), FLinearColor(1.0f, 0.95f, 0.8f), X, Y, Font);
+			}
+			else  // honest greying: what stops it
+			{
+				DrawText(FString::Printf(TEXT("%d  %s  (%s): %s"), I + 1, *E.Ru, *E.En, *E.Reason), FLinearColor(0.5f, 0.5f, 0.5f), X, Y, Font);
+			}
 			Y += 20.0f;
 		}
 	}

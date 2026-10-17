@@ -34,8 +34,10 @@ the readiness state they start in (march, deployed, powered).
     "fuel_fraction": 1.0,                             // optional: the tank's starting level, 0 to 1 (roadmap 7.4)
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
-    "inputs": { "vehicle_stopped": false }            // starting values of console inputs
+    "inputs": { "vehicle_stopped": false },           // starting values of console inputs
+    "empty_containers": ["1-I", "1-II"]               // optional: launcher containers that start without a missile
   },
+  "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
             { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" } ],   // role = a console station, one each; skill: a tier of data/crew/skill_levels.json
@@ -92,13 +94,16 @@ on the range the PU-12 last gave; ЦЕЛЬ В ЗОНЕ lights from it. The deput
 `"battery_commander": "npc"` (default) gives them the PU-12's targets on the battery net; `"player"` leaves that to
 the player (`ScenarioRunner::AssignBatteryTarget`); `"none"` lets them fire freely at what is in their reach.
 `osa_battery_fight.json` is a raid on the battery; `osa_mission_march.json` is one mission end to end (the battery on
-the march, a raid, the fight, stowing and marching on).
+the march, a raid, the fight, stowing and marching on). It starts with one missile (`empty_containers`), so the TZM
+comes within the mission. A battery vehicle may have a sector of fire, `"sector_deg": [from, to]` (true azimuths,
+clockwise): in free fire it takes only targets there, and the NPC battery commander gives it targets there first.
 
 **The crew (phase 8, `docs/crew/`).** With crew data the crew speaks (orders, acknowledgements, reports, reminders:
 the radio log and the debrief), and each crew member may have a `skill` tier (recruit, class3, class2, class1, master)
 that sets its pace, slips, omissions and aim. With `"crew_commander": "npc"` no triggers are needed for the crew's
 work: the NPC commander brings the vehicle to readiness and engages by doctrine (`osa_crew_practice.json`). A player
 may take any seat (`ScenarioRunner::TakeSeat`): he gets that seat's orders and is reminded when the crew waits for him.
+`"assistance"` sets the training overlay's level for him (`docs/crew/08_TRAINING_AND_ASSISTANCE.md`).
 
 Each trigger fires once, when every part of `when` holds. Positions: `east_m`/`north_m`/`up_m` are the local frame
 at `origin` (ENU metres); `lat_deg`/`lon_deg`/`alt_m` are converted to it.

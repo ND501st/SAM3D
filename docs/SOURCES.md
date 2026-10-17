@@ -92,6 +92,16 @@ because that is what the Western side believed.
 | `ew_textbooks` | textbook | Adamy *EW 101/102*; Wiley *ELINT*; Schleher (see the textbook table below) | Class values behind labelled estimates only (sensitivity, bearing accuracy, PRF windows, ERP) |
 | `games_ew` | — | [Skynet IADS](https://github.com/walder/Skynet-IADS); [MIXR](https://github.com/doughodson/mixr) and Garland et al., CSCI 2020 ([record](https://scholar.afit.edu/facpub/1857)); [Stone Soup](https://github.com/dstl/Stone-Soup); [DCS ECM analysis](https://flyandwire.com/2022/11/11/electronic-countermeasures-f-14-avionics/); [Sea Power EMCON](https://sea-power.pmctactical.org/emcon.php) | Design lessons only (`EM_RESEARCH` §12) |
 
+## Crew and human-factors sources (added 17 October 2026)
+
+For the crew's bodies (roadmap 8.10, `data/crew/body.json`, `simcore/crew_body.hpp`): generic human sizes, not system
+data.
+
+| Id | Tier | Source | Used for |
+|---|---|---|---|
+| `gost_12_2_032_78` | 1 | ГОСТ 12.2.032-78 *ССБТ. Рабочее место при выполнении работ сидя. Общие эргономические требования* (USSR State Standard, in force from 1 January 1979; public text e.g. [meganorm.ru](https://meganorm.ru/Data2/1/4294852/4294852024.htm)) | Seat height 430 mm for men (Table 2); viewing angles: within 15° for displays read very often, 30° often, 60° rarely, with eye and head movement (§4.2–4.4). The reach-zone charts (§2.1–2.2) are figures that the public text doesn't carry |
+| `winter_biomech` | textbook | D. A. Winter, *Biomechanics and Motor Control of Human Movement*, 4th ed., Wiley 2009, ch. 4 (anthropometry): segment lengths as fractions of the height H, after Drillis and Contini (1966) | The crew bodies' segment lengths and joint heights (`data/crew/body.json` "fractions") |
+
 ## Physics textbooks (for simcore's generic models)
 
 | Topic | Reference |

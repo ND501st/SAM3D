@@ -42,7 +42,9 @@
 #include "simcore/battery_fire.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
+#include "simcore/crew_body.hpp"
 #include "simcore/crew_callouts.hpp"
+#include "simcore/crew_decisions.hpp"
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
@@ -63,6 +65,7 @@ public:
           rng_(def_.seed),
           engagement_on_(!def_.tuning_file.empty()),
           engagement_(def_.tuning, def_.unit_position) {
+        assist_level_ = def_.assistance;
         for (std::size_t i = 0; i < def_.crew.size(); ++i) {
             const ScenarioCrew& c = def_.crew[i];
             const double u = Uniform01(rng_);
@@ -73,6 +76,15 @@ public:
                 if (def_.has_crew_data) sk.decision_controls = def_.crew_data.decision_controls;
                 crew_.back().SetSkill(sk, def_.seed * 7919u + static_cast<unsigned>(i) * 104729u + 17u);
             }
+            if (def_.has_crew_data) {  // controls out of seated reach: he gets up for them (crew_body.hpp)
+                const CrewSeatDef* seat = def_.crew_data.FindSeat(c.role);
+                if (seat != nullptr && !seat->stand_for.empty()) {
+                    crew_.back().SetStanding(seat->stand_for, def_.crew_data.stand_s, def_.crew_data.sit_s);
+                }
+            }
+        }
+        for (const ControlDef& c : console_.panel.Controls()) {
+            if (c.kind == ControlKind::Continuous) wheels_.push_back({c.id, c.station, console_.panel.GetValue(c.id), -1e9});
         }
         UpdateAimCrew();
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
@@ -90,7 +102,10 @@ public:
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
-        if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
+        if (console_.has_launcher) {
+            launcher_ = std::make_unique<Launcher>(console_.launcher);
+            for (const std::string& c : def_.empty_containers) launcher_->Unload(c);
+        }
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
         if (!def_.c2_sources.empty()) {
@@ -154,6 +169,11 @@ public:
             c.Update(dt, console_.panel, &console_.equipment);
         }
         player_.Update(dt);
+        for (WheelWatch& w : wheels_) {  // who is turning a hand wheel (the bodies, roadmap 8.10)
+            const double v = console_.panel.GetValue(w.id);
+            if (std::fabs(v - w.value) > 1e-9) w.moved_s = time_;
+            w.value = v;
+        }
         log_.CollectEquipment(console_.equipment);
         for (CrewMember& c : crew_) {
             std::vector<CrewReport> reports = c.TakeReports();
@@ -195,6 +215,8 @@ public:
         return engagement_.MissilesInFlight(time_, world_, eng_targets_);
     }
     SessionLog& Log() { return log_; }
+    // The crew members, in the scenario's order (their slips, omissions, skill: the balance tool, the debrief).
+    const std::vector<CrewMember>& CrewMembers() const { return crew_; }
     const AcmiWriter& Acmi() const { return acmi_; }
     bool EngagementOn() const { return engagement_on_; }
     const EngagementModel& Engagement() const { return engagement_; }
@@ -350,6 +372,45 @@ public:
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
 
+    // The vehicle is oriented: its gyro half-compass agrees with the true heading (or the console models no
+    // orientation). Designations' azimuths agree with the crew's only then.
+    bool Oriented() const {
+        if (!console_.has_orientation || !engagement_on_) return true;
+        double err = std::fmod(engagement_.GyroHeadingDeg() - engagement_.UnitHeadingDeg(), 360.0);
+        if (err > 180.0) err -= 360.0;
+        if (err < -180.0) err += 360.0;
+        return std::fabs(err) < 1.0;
+    }
+
+    // What each seat's crewmate is doing, for the bodies (crew_body.hpp, roadmap 8.10): his next action and when, his
+    // last one, whether he is up at a panel, the hand wheels he is turning, whether he is speaking. One per crew
+    // member, in the scenario's order.
+    std::vector<SeatActivity> CrewActivity() const {
+        std::vector<SeatActivity> out;
+        for (const CrewMember& m : crew_) {
+            SeatActivity a;
+            a.station = m.Role();
+            a.npc = SeatHolder(m.Role()).empty();
+            const CrewMember::Intent in = m.CurrentIntent();
+            if (a.npc) {
+                a.control = in.control;
+                a.act_in_s = in.in_s;
+                a.waiting = in.waiting;
+                a.standing = in.standing;
+                a.stand_control = in.stand_control;
+            }
+            a.last_control = in.last_control;
+            a.since_last_s = in.since_last_s;
+            for (const WheelWatch& w : wheels_) {
+                if (w.station == m.Role() && time_ - w.moved_s < 0.5) a.wheels.push_back(w.id);
+            }
+            a.speaking = callouts_ != nullptr && callouts_->SpeakingFrom(m.Role());
+            a.stressed = m.Stressed();
+            out.push_back(std::move(a));
+        }
+        return out;
+    }
+
     // ---- The crew's voice (roadmap 8.4, docs/crew/04_COMMANDS_AND_CALLOUTS.md): orders, acknowledgements, reports
     // and reminders as they were spoken (null without crew data). They also go to the radio log and the debrief.
     const CalloutBus* Callouts() const { return callouts_.get(); }
@@ -373,6 +434,167 @@ public:
         return true;
     }
     bool NpcCommanderActive() const { return def_.npc_commander && SeatHolder("commander").empty(); }
+
+    // Whether an order can be carried out now, and if not why: the order menu's honest greying (roadmap 8.8,
+    // docs/crew/07_COMMANDER_MODE.md §1.3). Greyed: an order whose task already holds; one whose drills wait on equipment
+    // that has failed; one whose first step waits for a world fact no seat can make true and that isn't so (no target in
+    // the zone, the target not flying low: the crew data's facts say which, and what to say); one that needs what the
+    // commander doesn't know or have (a reported contact, a track, a jammer, a missile: the order's "needs"). Waits the
+    // crew works through by itself (power, warm-up, the driver halting) don't grey an order.
+    struct OrderCheck {
+        bool can = true;
+        std::string reason_ru;
+        std::string reason_en;
+    };
+    OrderCheck CheckOrder(const std::string& order_id) const {
+        OrderCheck out;
+        auto refuse = [&out](const std::string& ru, const std::string& en) {
+            out.can = false;
+            out.reason_ru = ru;
+            out.reason_en = en;
+            return out;
+        };
+        const OrderDef* o = def_.has_crew_data ? def_.crew_data.FindOrder(order_id) : nullptr;
+        if (o == nullptr) return refuse("нет такого приказа", "no such order");
+        if (!o->task.empty()) {
+            const CrewTask* t = def_.crew_data.FindTask(o->task);
+            if (t != nullptr && !t->conditions.empty() && console_.equipment.AllHold(t->conditions, console_.panel)) {
+                return refuse("уже выполнено", "done already");
+            }
+        }
+        for (const std::string& need : o->needs) {
+            if (need == "contact") {
+                bool known = false;
+                const auto it = pictures_.find("commander");
+                if (it != pictures_.end()) {
+                    for (const KnownTarget& k : it->second.Recent(time_, 30.0)) known = known || (k.has_range && !k.friendly);
+                }
+                if (!known) return refuse("цели нет", "no target reported");
+            } else if (need == "tracked") {
+                if (!engagement_on_ || engagement_.Method() == TrackMethod::None) return refuse("сопровождения нет", "nothing tracked");
+            } else if (need == "jamming") {
+                if (!engagement_on_ || engagement_.Method() != TrackMethod::RadarOnJam) return refuse("помехи нет", "no jammer tracked");
+            } else if (need == "missiles") {
+                if (launcher_ && launcher_->LoadedCount() == 0) return refuse("ракет нет", "no missiles left");
+            }
+        }
+        for (const OrderStart& s : o->procedures) {
+            const Procedure* p = console_.FindProcedure(s.procedure);
+            if (p == nullptr || p->steps.empty()) continue;
+            bool someone = !SeatHolder(s.station).empty();
+            for (const CrewMember& m : crew_) someone = someone || m.Role() == s.station;
+            if (!someone) return refuse("нет номера расчёта", "nobody at the " + s.station + "'s seat");
+            for (const ProcedureStep& st : p->steps) {
+                for (const Condition& c : st.wait_for) {
+                    if (c.kind == Condition::Kind::SubsystemIs && c.state != SubsystemState::Fault &&
+                        console_.equipment.State(c.id) == SubsystemState::Fault) {
+                        return refuse("отказ: " + c.id, "fault: " + c.id);
+                    }
+                }
+            }
+            for (const Condition& c : p->steps.front().wait_for) {
+                if (c.kind != Condition::Kind::InputIs || console_.equipment.Holds(c, console_.panel)) continue;
+                const CrewFact* f = def_.crew_data.FindFact(c.id);
+                if (f != nullptr && f->by_action) continue;  // a seat makes it true (the driver halts)
+                if (f != nullptr && !f->unmet_ru.empty()) return refuse(f->unmet_ru, f->unmet_en.empty() ? f->unmet_ru : f->unmet_en);
+                return refuse("нет: " + c.id, "waiting for " + c.id);
+            }
+        }
+        return out;
+    }
+
+    // ---- Training (roadmap 8.7, docs/crew/08_TRAINING_AND_ASSISTANCE.md): the overlay's level, what it shows a seat,
+    // and the verdict on each move a player makes at a held seat.
+    void SetAssistLevel(AssistLevel l) { assist_level_ = l; }
+    AssistLevel GetAssistLevel() const { return assist_level_; }
+
+    // The task the overlay aims at now: К бою until the vehicle is ready, then the capture, then the launch.
+    std::string TrainingTask() const {
+        if (!def_.has_crew_data) return std::string();
+        const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
+        if (ready != nullptr && !console_.equipment.AllHold(ready->conditions, console_.panel)) return "ready_halted";
+        if (!engagement_on_ || engagement_.Method() == TrackMethod::None) return "captured";
+        return "launched";
+    }
+
+    // What the overlay shows a seat at the level set: the drill master's best next move (guided; hint once the player
+    // has hesitated longer than an NPC's patience at that seat), or the move the seat's NPC is about to make
+    // (demonstrate), or nothing (unassisted, exam).
+    AssistView Assistance(const std::string& station) const {
+        AssistView v;
+        if (!drill_ || !def_.has_crew_data) return v;
+        v.task = TrainingTask();
+        const CrewTask* t = def_.crew_data.FindTask(v.task);
+        if (t == nullptr) return v;
+        const DrillGoal goal = drill_->GoalFor(*t);
+        switch (assist_level_) {
+            case AssistLevel::Unassisted:
+            case AssistLevel::Exam:
+                return v;
+            case AssistLevel::Demonstrate:
+                for (const CrewMember& m : crew_) {
+                    if (m.Role() != station) continue;
+                    const CrewMember::Intent in = m.CurrentIntent();
+                    if (in.control.empty()) return v;
+                    v.show = true;
+                    v.demonstrating = true;
+                    v.control = in.control;
+                    v.position = in.value;
+                    v.due_in_s = in.in_s > 0.0 ? in.in_s : 0.0;
+                    if (m.IsBusy() && m.Tracker().NextStep() != nullptr) v.description = m.Tracker().NextStep()->description;
+                    const DrillPlan plan = drill_->Plan(goal, console_.panel, console_.equipment);
+                    const auto w = plan.why.find(in.control + "=" + std::to_string(in.value));
+                    if (w != plan.why.end()) {
+                        v.why = w->second;
+                    } else if (m.IsBusy()) {
+                        v.why = {"a step of the drill '" + m.Tracker().GetProcedure().id + "'"};
+                    }
+                    return v;
+                }
+                return v;
+            case AssistLevel::Hint:
+                if (Hesitation(station) < PatienceAt(station)) return v;
+                break;
+            case AssistLevel::Guided:
+                break;
+        }
+        const DrillAdvice a = drill_->NextFor(station, goal, console_);
+        if (a.control.empty()) return v;
+        v.show = true;
+        v.control = a.control;
+        v.position = a.position;
+        v.description = a.description;
+        v.why = a.why;
+        v.due_in_s = a.due_in_s;
+        return v;
+    }
+
+    // Every move players made at held seats, judged against the drill master's best (the overlay's "that cost" line
+    // and the debrief's).
+    const std::vector<MoveVerdict>& MoveVerdicts() const { return verdicts_; }
+    const MoveVerdict* LastVerdict(const std::string& station) const {
+        for (auto it = verdicts_.rbegin(); it != verdicts_.rend(); ++it) {
+            if (it->station == station) return &*it;
+        }
+        return nullptr;
+    }
+
+    // The player's order from the menu: carried out if CheckOrder allows it; otherwise the seat it is for answers
+    // "Не могу: <reason>" and nothing starts. False if refused.
+    bool TryCrewOrder(const std::string& order_id, OrderCheck* why = nullptr) {
+        const OrderCheck c = CheckOrder(order_id);
+        if (why != nullptr) *why = c;
+        if (!c.can) {
+            const OrderDef* o = def_.has_crew_data ? def_.crew_data.FindOrder(order_id) : nullptr;
+            const std::string seat = o != nullptr && !o->procedures.empty() ? o->procedures.front().station : std::string("deputy_commander");
+            if (o != nullptr) SpeakOrder(order_id);
+            if (callouts_ && NpcAt(seat)) {
+                Say("cannot", seat, {{"reason", c.reason_ru}, {"reason_en", c.reason_en}});
+            }
+            return false;
+        }
+        return GiveCrewOrder(order_id);
+    }
 
     // Reminders each seat has been given (the seat that was waited for), for the debrief and grading.
     int RemindersTo(const std::string& station) const {
@@ -402,6 +624,7 @@ public:
             if (c->IsBusy()) st.tracker = c->Tracker();  // carry on where the NPC was
             c->CancelOrder();
         }
+        st.taken_s = time_;
         seats_.push_back(st);
         UpdateAimCrew();
         log_.Record({time_, DebriefEntry::Kind::Scenario, player, role, "takes the seat"});
@@ -449,6 +672,8 @@ public:
             return StepResult::Blocked;
         }
         if (!AtStation(role, control_id, why)) return StepResult::Blocked;
+        JudgeMove(role, control_id, position);
+        st->last_action_s = time_;
         const bool was_complete = st->tracker.IsComplete();
         const StepResult r = st->tracker.Attempt(console_.panel, control_id, position, &console_.equipment);
         log_.RecordAttempt(time_, st->player, st->tracker, r);
@@ -463,7 +688,9 @@ public:
         return r;
     }
     bool SeatTurn(const std::string& role, const std::string& wheel_id, double value, std::string* why = nullptr) {
-        if (FindSeat(role) == nullptr || !AtStation(role, wheel_id, why)) return false;
+        Seat* st = FindSeat(role);
+        if (st == nullptr || !AtStation(role, wheel_id, why)) return false;
+        st->last_action_s = time_;
         return console_.panel.SetValue(wheel_id, value);
     }
     // The console's whole state for the players' machines (console_sync.hpp).
@@ -520,6 +747,23 @@ public:
             }
             out += line;
         }
+        if (!decisions_.empty()) out += "  Decisions (the drill master's evaluation, on the truth):\n";
+        for (const DecisionRecord& d : decisions_) {
+            if (d.kind == "target") {
+                if (d.best.empty() || d.best == d.target) {
+                    std::snprintf(line, sizeof(line), "    %.0f s: took %s: the best choice (score %.2f)\n", d.time_s, d.target.c_str(), d.score);
+                } else {
+                    std::snprintf(line, sizeof(line), "    %.0f s: took %s (score %.2f); the evaluation's first was %s (%.2f)%s\n", d.time_s,
+                                  d.target.c_str(), d.score, d.best.c_str(), d.best_score, d.good ? ": as good" : "");
+                }
+            } else if (d.ideal_s >= 0.0) {
+                std::snprintf(line, sizeof(line), "    %.0f s: launch at %s, the ideal moment %.0f s (network chart from the detection, the zone's entry): %.0f s after it%s\n",
+                              d.time_s, d.target.c_str(), d.ideal_s, d.late_s, d.good ? ", within the norm" : ", slower than the norm");
+            } else {
+                std::snprintf(line, sizeof(line), "    %.0f s: launch at %s\n", d.time_s, d.target.c_str());
+            }
+            out += line;
+        }
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             const CrewMember& c = crew_[i];
             const auto it = reminders_to_.find(c.Role());
@@ -540,6 +784,23 @@ public:
     }
     double IdealReadyS() const { return ideal_ready_s_; }
     double ActualReadyS() const { return actual_ready_s_; }
+
+    // The commander's decisions judged afterwards (docs/crew/06_REFERENCE_PERFORMER.md §3.6): each target he ordered
+    // taken against the drill master's evaluation of the targets his crew had reported, and each launch against the
+    // ideal moment (the network chart from the detection, laid on when the target entered the zone). Judged on the
+    // truth: the debrief may compare with it.
+    struct DecisionRecord {
+        double time_s = 0.0;
+        std::string kind;          // "target" or "launch"
+        std::string target;        // chosen / launched at
+        std::string best;          // "target": the evaluation's first choice
+        double score = 0.0;        // "target": the chosen one's score, and the best's
+        double best_score = 0.0;
+        double ideal_s = -1.0;     // "launch": the ideal moment
+        double late_s = 0.0;       // "launch": after the ideal moment
+        bool good = true;
+    };
+    const std::vector<DecisionRecord>& Decisions() const { return decisions_; }
 
 private:
     static constexpr int kUnitAcmiId = 0x7FFF0;
@@ -1044,13 +1305,69 @@ private:
     std::unique_ptr<C2Network> c2_;  // before engagement_ is fine: the model keeps a pointer, set in the constructor
     EngagementModel engagement_;
     AimCrew aim_crew_;
+    struct WheelWatch {
+        std::string id;
+        std::string station;
+        double value = 0.0;
+        double moved_s = -1e9;  // when it last turned
+    };
+    std::vector<WheelWatch> wheels_;
 
     struct Seat {
         std::string role;
         std::string player;
         ProcedureTracker tracker;
         std::vector<std::string> queued;  // procedures ordered while one was under way
+        double taken_s = 0.0;             // when the player took it
+        double last_action_s = -1e9;      // his last move there
     };
+    AssistLevel assist_level_ = AssistLevel::Guided;
+    std::vector<MoveVerdict> verdicts_;
+    // How long the player at a seat has done nothing (since he took it, or since his last move).
+    double Hesitation(const std::string& station) const {
+        for (const Seat& s : seats_) {
+            if (s.role == station) return time_ - std::max(s.taken_s, s.last_action_s);
+        }
+        return 0.0;
+    }
+    // An NPC's patience at a seat (its tier's), the hint level's wait.
+    double PatienceAt(const std::string& station) const {
+        for (const CrewMember& m : crew_) {
+            if (m.Role() == station && m.HasSkill()) return m.Skill().patience_s;
+        }
+        return 5.0;
+    }
+    // A player's move at a held seat against the drill master's best for the training task (not while demonstrating).
+    void JudgeMove(const std::string& station, const std::string& control, int position) {
+        if (!drill_ || !def_.has_crew_data || assist_level_ == AssistLevel::Demonstrate) return;
+        if (console_.panel.Get(control) == position) return;  // no change
+        MoveVerdict v;
+        v.time_s = time_;
+        v.station = station;
+        v.control = control;
+        v.position = position;
+        v.task = TrainingTask();
+        const CrewTask* t = def_.crew_data.FindTask(v.task);
+        if (t == nullptr) return;
+        const DrillGoal goal = drill_->GoalFor(*t);
+        const DrillAdvice best = drill_->NextFor(station, goal, console_);
+        v.best_control = best.control;
+        v.best_position = best.position;
+        v.best_description = best.description;
+        v.best = best.control == control && best.position == position;
+        if (!v.best) {
+            v.cost_s = drill_->CostOf(goal, console_, control, position);
+            v.best = v.cost_s <= 0.0;
+        }
+        if (!v.best) {
+            char cost[32];
+            std::snprintf(cost, sizeof(cost), "%.1f", v.cost_s);
+            Event(def_.id, station + ": " + control + " to " + std::to_string(position) + " off the drill; the best move was " +
+                               (best.control.empty() ? std::string("none") : best.description.empty() ? best.control : best.description) +
+                               " (" + cost + " s later)");
+        }
+        verdicts_.push_back(std::move(v));
+    }
     std::vector<Seat> seats_;
     std::unique_ptr<Battery> battery_;
     std::vector<RadioMessage> radio_;
@@ -1158,6 +1475,91 @@ private:
     // The marks the grades are measured from.
     double ideal_ready_s_ = -1.0;   // the drill master's К бою from the session's start (when the vehicle starts halted, not ready)
     double actual_ready_s_ = -1.0;
+    std::vector<DecisionRecord> decisions_;
+    std::string judged_choice_;
+    int judged_launches_ = 0;
+    std::map<std::string, double> seen_at_;  // each target's first echo on the search scope
+    std::string zone_target_;
+    bool was_flying_ = false;
+    double free_since_s_ = -1.0;            // the last missile's result came in (the crew free for the next target)
+    double zone_since_s_ = -1.0;            // ЦЕЛЬ В ЗОНЕ lit for the tracked target since
+    // The truth about a live target from the unit, for the evaluation (null if it isn't in the air).
+    bool TrackOf(const std::string& id, DecisionTrack& out) {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id != id || !targets_[i].spawned) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) return false;
+            out.target = id;
+            out.target_class = def_.targets[i].target_class;
+            out.friendly = def_.targets[i].friendly;
+            out.position = a->position - def_.unit_position;
+            out.velocity = a->velocity;
+            out.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            return true;
+        }
+        return false;
+    }
+    void JudgeDecisions() {
+        if (!engagement_on_) return;
+        for (const Contact& c : engagement_.SearchPicture()) {
+            if (seen_at_.count(c.target_id) == 0) seen_at_[c.target_id] = time_;
+        }
+        const std::string tracked = engagement_.TrackedTarget();
+        const bool in_zone = console_.equipment.HasInput("target_in_zone") && console_.equipment.GetInput("target_in_zone");
+        if (!in_zone || tracked != zone_target_) {
+            zone_target_ = in_zone ? tracked : std::string();
+            zone_since_s_ = in_zone ? time_ : -1.0;
+        }
+        const NetworkChart chart;
+        const double cycle_s = chart.result_s + chart.launch_s;
+        // The crew is free for the next target once a missile's result is in (one tracking channel).
+        const bool flying = engagement_.ShotsInFlight();
+        if (was_flying_ && !flying) free_since_s_ = time_;
+        was_flying_ = flying;
+        // A target ordered taken: against the evaluation of every hostile his crew had reported.
+        if (!assigned_target_.empty() && assigned_target_ != judged_choice_) {
+            judged_choice_ = assigned_target_;
+            std::vector<DecisionTrack> tracks;
+            DecisionTrack d;
+            for (const auto& kv : seen_at_) {
+                if (TrackOf(kv.first, d)) tracks.push_back(d);
+            }
+            if (TrackOf(assigned_target_, d) && seen_at_.count(assigned_target_) == 0) tracks.push_back(d);
+            const std::vector<TargetScore> scores = ScoreTargets(def_.tuning, tracks, cycle_s);
+            DecisionRecord r;
+            r.time_s = time_;
+            r.kind = "target";
+            r.target = assigned_target_;
+            for (const TargetScore& s : scores) {
+                if (s.target == assigned_target_) r.score = s.score;
+                if (r.best.empty() && !s.friendly) {
+                    r.best = s.target;
+                    r.best_score = s.score;
+                }
+            }
+            r.good = r.best.empty() || r.best == r.target || r.score >= 0.9 * r.best_score;
+            decisions_.push_back(r);
+        }
+        // A launch: against the network chart from the detection and the zone's entry (the far edge).
+        if (launches_ > judged_launches_) {
+            judged_launches_ = launches_;
+            DecisionRecord r;
+            r.time_s = time_;
+            r.kind = "launch";
+            r.target = tracked;
+            const auto seen = seen_at_.find(tracked);
+            const double ready = std::max(chart.radar_on_s + chart.capture_s + chart.computer_s, chart.prep_s) + chart.launch_s;
+            // From the detection, or from when the crew was done with the target before (the chart starts with a free crew).
+            double ideal = seen != seen_at_.end() ? std::max(seen->second, free_since_s_) + ready : -1.0;
+            if (zone_since_s_ >= 0.0 && zone_target_ == tracked) ideal = std::max(ideal, zone_since_s_);
+            r.ideal_s = ideal;
+            r.late_s = ideal >= 0.0 ? std::max(0.0, time_ - ideal) : 0.0;
+            // The chart is the ideal crew's; a trained crew is within the published norm (nvo_2015, korovin_tiv_2010: up
+            // to 40 s from detection), so late is beyond 40 s less the chart's own time.
+            r.good = r.late_s <= 40.0 - ready;
+            decisions_.push_back(r);
+        }
+    }
     double first_seen_s_ = -1.0;    // the first echo on the search scope
     double first_launch_s_ = -1.0;
     double in_reach_s_ = -1.0;      // the first echo within the tracking radar's reach
@@ -1175,6 +1577,7 @@ private:
             }
         }
         if (first_launch_s_ < 0.0 && launches_ > 0) first_launch_s_ = time_;
+        JudgeDecisions();
     }
 
     void StartCallouts() {
@@ -1463,12 +1866,18 @@ private:
         if (engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight()) return false;
         const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
         const bool is_ready = ready != nullptr && console_.equipment.AllHold(ready->conditions, console_.panel);
+        // Orientation (voenizdat_osa_1991 p246: the deputy orients the vehicle as part of К бою, the gyro half-compass
+        // set to the course angle so that designations' azimuths agree): once ready at a halt with nothing hostile known,
+        // if it isn't oriented yet. It needs the deputy at the gyro panel, so not while a fight is on.
+        if (!hostile && is_ready && !Oriented() && NpcGive("order_orient", 120.0)) return true;
         // The function check belongs to the preliminary preparation from cold (flak11: 3.8 min switch-on, then 3.0 min check).
         if (!hostile && is_ready && !npc_checked_ && !npc_fought_ && started_cold_) {
             npc_checked_ = NpcGive("order_function_check", 600.0);
             return npc_checked_;
         }
-        if (npc_fought_ && !hostile && time_ - npc_last_hostile_s_ > 90.0) {
+        // A reload under way (the launcher not full and a TZM in the battery): the crew waits for it before marching on.
+        const bool reloading = launcher_ && battery_ && launcher_->LoadedCount() < launcher_->Capacity() && BatteryHasTzm();
+        if (npc_fought_ && !hostile && !reloading && time_ - npc_last_hostile_s_ > 90.0) {
             if (!npc_stow_ordered_) {
                 npc_stow_ordered_ = GiveCrewOrder("order_march");
                 return true;
@@ -1531,9 +1940,30 @@ private:
     }
 
     // Give an order of the crew data unless it was given within `again_s`, and only when every seat it goes to is free.
+    // The battery has a transport-loader.
+    bool BatteryHasTzm() const {
+        if (!battery_) return false;
+        for (const Battery::Vehicle& v : battery_->Vehicles()) {
+            if (v.def.kind == BatteryVehicleKind::Reload) return true;
+        }
+        return false;
+    }
     bool NpcGive(const std::string& order_id, double again_s) {
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
+        // He doesn't give an order that needs what isn't there (a missile, a track): CheckOrder's "needs" (world waits
+        // he leaves to the crew: a launch permission given before the target is in the zone waits for it).
+        if (!o->needs.empty()) {
+            const OrderCheck c = CheckOrder(order_id);
+            if (!c.can && c.reason_en != "done already") {
+                bool need = false;
+                for (const std::string& n : o->needs) {
+                    need = need || (n == "missiles" && c.reason_en == "no missiles left") || (n == "tracked" && c.reason_en == "nothing tracked") ||
+                           (n == "jamming" && c.reason_en == "no jammer tracked") || (n == "contact" && c.reason_en == "no target reported");
+                }
+                if (need) return false;
+            }
+        }
         if (NpcOrdered("order", order_id, again_s)) return false;
         for (const OrderStart& st : o->procedures) {
             if (!SeatFree(st.station)) return false;
@@ -1755,14 +2185,18 @@ private:
                 bool alive = false;
                 for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
                 if (!alive) continue;
+                // The nearest ready launcher whose sector of fire covers it; any ready launcher if none does.
                 const BatteryFire::Shooter* best = nullptr;
                 double best_r = battery_fire_->ReachM() + 10000.0;
-                for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
-                    if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
-                    const double r = (m.position - s.position).HorizontalLength();
-                    if (r < best_r) {
-                        best_r = r;
-                        best = &s;
+                for (int pass = 0; pass < 2 && best == nullptr; ++pass) {
+                    for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                        if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
+                        if (pass == 0 && !BatteryFire::InSector(s, m.position)) continue;
+                        const double r = (m.position - s.position).HorizontalLength();
+                        if (r < best_r) {
+                            best_r = r;
+                            best = &s;
+                        }
                     }
                 }
                 // Our own vehicle is a launcher of the battery too: when it is the nearest, the target is left to its crew
@@ -1806,6 +2240,10 @@ private:
 public:
     // The battery commander (the player, or the NPC) gives one of the battery's other launchers a target on the battery
     // net. False without a battery, for an unknown launcher, or one with no missiles.
+    // The battery commander sets a launcher's sector of fire (true azimuths, clockwise; from == to clears it).
+    bool SetBatterySector(const std::string& callsign, double from_deg, double to_deg) {
+        return battery_fire_ && battery_fire_->SetSector(callsign, from_deg, to_deg);
+    }
     bool AssignBatteryTarget(const std::string& callsign, const std::string& target) {
         if (!battery_fire_) return false;
         int number = 0;
