@@ -23,6 +23,7 @@
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
@@ -146,6 +147,9 @@ struct ScenarioDef {
     // "battery_commander": "npc" (default) distributes the PU-12's targets to the battery's other launchers; "player": the
     // player does (ScenarioRunner::AssignBatteryTarget); "none": they fire freely at what is in their reach.
     std::string battery_commander = "npc";
+    // "assistance": the training overlay's level for the player's seat (docs/crew/08_TRAINING_AND_ASSISTANCE.md §2):
+    // "demonstrate", "guided", "hint", "unassisted" or "exam". Default: guided.
+    AssistLevel assistance = AssistLevel::Guided;
 };
 
 namespace detail {
@@ -172,7 +176,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "battery", "own_unit", "crew", "crew_commander", "battery_commander", "targets",
-                             "triggers", "end"})) {
+                             "triggers", "end", "assistance"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -206,6 +210,11 @@ public:
                 return Fail("battery_commander", "must be \"npc\", \"player\" or \"none\"");
             }
             out.battery_commander = bc->string;
+        }
+        if (const json::Value* as = root.Find("assistance")) {
+            if (!as->Is(json::Type::String) || !ParseAssistLevel(as->string, out.assistance)) {
+                return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
+            }
         }
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;

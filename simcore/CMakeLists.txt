@@ -64,7 +64,8 @@ add_executable(simcore_tests
   tests/test_threats.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp
-  tests/test_crew_voice.cpp)
+  tests/test_crew_voice.cpp
+  tests/test_crew_training.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")

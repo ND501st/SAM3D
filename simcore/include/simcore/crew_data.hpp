@@ -69,7 +69,16 @@ struct OrderDef {
     std::string callout;  // the order's callout id (its words)
     std::string task;     // the task it asks for (may be empty)
     std::vector<OrderStart> procedures;
+    // What the commander must know or have for the order to make sense (the order menu greys it otherwise, docs/crew/
+    // 07_COMMANDER_MODE.md §1.3): "contact" (a hostile reported, with its range), "tracked" (a target tracked),
+    // "jamming" (the track is on a jammer), "missiles" (a missile on the launcher).
+    std::vector<std::string> needs;
 };
+
+// The kinds an order's "needs" may name.
+inline bool KnownOrderNeed(const std::string& n) {
+    return n == "contact" || n == "tracked" || n == "jamming" || n == "missiles";
+}
 
 // A named goal: conditions on the console to make true (docs/crew/06_REFERENCE_PERFORMER.md).
 struct CrewTask {
@@ -87,6 +96,9 @@ struct CrewFact {
     std::vector<Condition> needs;
     std::string knowledge;
     bool by_action = false;  // one of `seats` makes it true by an action of his own (the driver halts)
+    // Said when an order waits for it and it isn't so (the order menu's reason; "Не могу: ..."): e.g. "Цель не в зоне".
+    std::string unmet_ru;
+    std::string unmet_en;
 };
 
 // A callout a seat speaks by itself when `when` becomes true.
@@ -364,9 +376,15 @@ private:
             const json::Value& o = arr->items[i];
             const std::string p = Index("orders", i);
             OrderDef d;
-            if (!Keys(o, p, {"callout", "task", "procedures", "source", "confidence", "notes"}) ||
-                !RequireString(o, p, "callout", d.callout) || !OptionalString(o, p, "task", d.task) || !Provenance(o, p)) {
+            if (!Keys(o, p, {"callout", "task", "procedures", "needs", "source", "confidence", "notes"}) ||
+                !RequireString(o, p, "callout", d.callout) || !OptionalString(o, p, "task", d.task) || !Provenance(o, p) ||
+                !StringList(o, p, "needs", d.needs)) {
                 return false;
+            }
+            for (std::size_t j = 0; j < d.needs.size(); ++j) {
+                if (!KnownOrderNeed(d.needs[j])) {
+                    return Fail(Index(Join(p, "needs"), j), "'" + d.needs[j] + "' is not contact, tracked, jamming or missiles");
+                }
             }
             const CalloutDef* c = out.FindCallout(d.callout);
             if (c == nullptr || c->kind != CalloutKind::Order) return Fail(Join(p, "callout"), "'" + d.callout + "' is not an order callout");
@@ -426,7 +444,9 @@ private:
             const json::Value& f = arr->items[i];
             const std::string p = Index("facts", i);
             CrewFact d;
-            if (!Keys(f, p, {"input", "set_by", "seats", "needs", "knowledge", "by_action", "source", "confidence", "notes"}) ||
+            if (!Keys(f, p, {"input", "set_by", "seats", "needs", "knowledge", "by_action", "unmet_ru", "unmet_en", "source", "confidence",
+                             "notes"}) ||
+                !OptionalString(f, p, "unmet_ru", d.unmet_ru) || !OptionalString(f, p, "unmet_en", d.unmet_en) ||
                 !RequireString(f, p, "input", d.input) || !RequireString(f, p, "set_by", d.set_by) || !OptionalBool(f, p, "by_action", d.by_action) ||
                 !StringList(f, p, "seats", d.seats) || !OptionalString(f, p, "knowledge", d.knowledge) || !Provenance(f, p) ||
                 !LoadConditions(f, p, "needs", console.panel, console.equipment, d.needs)) {
