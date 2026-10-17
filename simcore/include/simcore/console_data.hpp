@@ -92,6 +92,7 @@ struct TrackSensorDef {
     std::string too_low_input;
     std::string near_zone_input;
     std::string in_zone_input;
+    std::string crosshair_input;  // the TV-tracked target fills the narrow-lens crosshair (its range judged by its size)
     // Elevation search (optional; beam_width_deg 0 = absent): while `el_search_mode` is ready the antenna scans in
     // elevation through one search-radar beam, and the radar only captures when the antenna's beam is on the
     // target in elevation. `beam_by_position` gives the beam for each position of `beam_control`; -1 = the beam
@@ -1164,7 +1165,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
                             "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "fov_deg", "fov_height_ratio", "max_range_m",
                             "az_limit_deg", "captured_input", "tv_track_input", "too_low_input", "near_zone_input", "in_zone_input",
-                            "elevation_search", "notes"}) ||
+                            "crosshair_input", "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -1183,7 +1184,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefInput(*tr, tp, "tv_track_input", eq, track.tv_track_input) ||
             !RefInput(*tr, tp, "too_low_input", eq, track.too_low_input) ||
             !RefInput(*tr, tp, "near_zone_input", eq, track.near_zone_input) ||
-            !RefInput(*tr, tp, "in_zone_input", eq, track.in_zone_input)) {
+            !RefInput(*tr, tp, "in_zone_input", eq, track.in_zone_input) ||
+            !RefInput(*tr, tp, "crosshair_input", eq, track.crosshair_input)) {
             return false;
         }
         if (track.max_range_m <= 0.0) return Fail(Join(tp, "max_range_m"), "must be > 0");

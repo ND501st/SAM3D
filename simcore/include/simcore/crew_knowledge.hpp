@@ -26,6 +26,9 @@ struct KnownTarget {
     double time_s = 0.0;       // when it was seen or said
     std::string source;        // "scope", "range indicator", "TV", "told by Senior operator", "radio"
     bool friendly = false;     // answered the IFF, or reported as a friend
+    bool interrogated = false; // asked by the IFF and didn't answer ("Ответа нет!"): not a friend we know of
+    bool has_height = false;   // a designation's height
+    double height_m = 0.0;
 };
 
 class CrewPicture {
@@ -45,6 +48,11 @@ public:
             }
             if (k.number != 0) e.number = k.number;
             e.friendly = e.friendly || k.friendly;
+            e.interrogated = e.interrogated || k.interrogated;
+            if (k.has_height) {
+                e.has_height = true;
+                e.height_m = k.height_m;
+            }
             if (k.time_s >= e.time_s) {
                 e.time_s = k.time_s;
                 e.source = k.source;

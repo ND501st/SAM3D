@@ -550,6 +550,7 @@ SC_TEST("osa data: TV-only engagement with the radars silent") {
     seats.Order("emcon_tv_engagement");
     CrewMember& crew = seats.At("deputy_commander");
     c.equipment.SetInput("target_tv_tracked", true);  // the target is in the crosshair (the engagement model sets this)
+    c.equipment.SetInput("target_fills_crosshair", true);  // ... and fills it: within range
     bool launched = false;
     double t = 0.0;
     for (; t < 120.0 && !launched; t += 0.1) {

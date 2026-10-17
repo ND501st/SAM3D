@@ -26,6 +26,7 @@
 #include <map>
 #include <memory>
 #include <random>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -185,6 +186,10 @@ public:
         UpdateCallouts();
         UpdateStress();
         UpdateNpcCommander();
+        if (drop_at_s_ >= 0.0 && time_ >= drop_at_s_ && engagement_on_) {
+            drop_at_s_ = -1.0;
+            if (engagement_.DropTrack(time_, log_, "Цель сбросить")) assigned_target_.clear();
+        }
         if (time_ + 1e-9 >= next_acmi_s_) {
             WriteAcmiFrame();
             next_acmi_s_ += 1.0;
@@ -424,6 +429,7 @@ public:
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
         SpeakOrder(order_id);
+        if (order_id == "order_drop_target") drop_at_s_ = time_ + SpeakDelayS("operator") + 1.5;  // the wheels off the target
         quiet_orders_ = true;  // the order's own words were spoken: its drills don't each speak an order
         for (const OrderStart& s : o->procedures) {
             CrewMember* m = MemberAt(s.station);
@@ -1069,7 +1075,9 @@ private:
         c2_->Update(time_, contacts, def_.unit_position);
         for (const C2Network::Event& e : c2_->PeekEvents()) {
             Radio("command net", e.actor, e.subject + ": " + e.text);
-            if (e.actor == "Commander" && e.number > 0) {  // the commander heard it on the radio, and passes it on
+            // The commander heard it on the radio, and passes it on; not a target he heard destroyed (the PU-12's plot
+            // a few seconds behind the kill report).
+            if (e.actor == "Commander" && e.number > 0 && reported_kills_.count(e.subject) == 0) {
                 designations_.push_back(e);
                 designations_heard_.push_back(e);
                 KnownTarget k;
@@ -1078,6 +1086,8 @@ private:
                 k.has_azimuth = k.has_range = k.true_azimuth = true;
                 k.azimuth_deg = e.azimuth_mils * 360.0 / 6000.0;
                 k.range_m = e.range_m;
+                k.has_height = e.height_hm > 0;
+                k.height_m = e.height_hm * 100.0;
                 k.time_s = time_;
                 k.source = "radio";
                 pictures_["commander"].Learn(k);
@@ -1180,6 +1190,7 @@ private:
                 from = " from " + launcher_->Selected(ch) + ", channel " + Launcher::ChannelName(ch);
             }
             ++launches_;
+            if (engagement_on_ && !engagement_.TrackedTarget().empty()) ++npc_launched_at_[engagement_.TrackedTarget()];
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
@@ -1705,7 +1716,15 @@ private:
         const bool halted = console_.equipment.GetInput("vehicle_stopped") && !column;
         const bool stowing = npc_stow_ordered_ && !npc_resumed_;
         // Readiness: the next drill of each idle seat toward the task.
-        const CrewTask* task = def_.crew_data.FindTask(halted ? "ready_halted" : "searching_on_march");
+        // Emission control (the battery's EMCON, an ambush not yet sprung): ready with the radars silent, the search
+        // transmitter off; when it lifts, radiation on again.
+        const bool silent = NpcSilent();
+        if (silent && halted && console_.equipment.IsReady("soc_transmitter")) NpcGive("order_emcon_off", 30.0);
+        if (!silent && npc_was_silent_) NpcGive("order_emcon_on", 30.0);
+        npc_was_silent_ = silent;
+        // The radios: the commander's set off with a command net to hear (a scenario that starts them off).
+        if (c2_ && console_.panel.Get("radio.right.power") == 0) NpcGive("order_radio_on", 120.0);
+        const CrewTask* task = def_.crew_data.FindTask(halted ? (silent ? "ready_silent" : "ready_halted") : "searching_on_march");
         if (task != nullptr && !stowing) {
             const DrillPlan plan = drill_->Plan(drill_->GoalFor(*task), console_.panel, console_.equipment);
             for (const DrillPlan::Seat& s : plan.seats) {
@@ -1735,6 +1754,16 @@ private:
             }
         }
         NpcLogistics();
+        // A low target designated (under the search radar's clutter height, with a margin) and СДЦ off: "СДЦ включить!"
+        // (a low target is invisible to the search radar in the ground clutter without it).
+        if (engagement_on_ && !console_.search.mti_control.empty() && console_.panel.Get(console_.search.mti_control) == 0 && !NpcSilent()) {
+            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 60.0)) {
+                if (k.has_height && !k.friendly && k.height_m <= def_.tuning.clutter_altitude_m + 100.0) {
+                    NpcGive("order_mti", 120.0);
+                    break;
+                }
+            }
+        }
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once (mon_2112_80 p63-68)
             for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
@@ -1788,7 +1817,19 @@ private:
             }
             if (npc_choice_slip_ && known.size() > 1) pick = 1;
             const KnownTarget& k = known[pick];
-            if (k.range_m > reach || !console_.equipment.IsReady("hv_ready")) return;
+            // Silent: a designated hostile within the TV's reach is engaged by the TV, the range from the board (the
+            // EMCON engagement: emcon_tv_azimuth, emcon_tv_engagement).
+            if (NpcSilent()) {
+                if (k.number > 0 && k.range_m <= def_.tuning.tv_max_range_m) {
+                    assigned_target_ = k.target;
+                    NpcGive("order_emcon_tv", 90.0);
+                }
+                return;
+            }
+            if (k.range_m > reach || !console_.equipment.IsReady("hv_ready")) {
+                NpcIdentify();  // meanwhile: who is it?
+                return;
+            }
             // A target in reach interrupts the function check (the deputy's РОД РАБОТЫ goes back with the next drills).
             if (CrewMember* dep = MemberAt("deputy_commander")) {
                 if (dep->IsBusy() && dep->Tracker().GetProcedure().id == "function_check" && SeatHolder("deputy_commander").empty()) {
@@ -1802,7 +1843,16 @@ private:
             }
             return;
         }
-        if (eng.KnownFriend(tracked)) return;  // never at a friend: hold
+        // Never at a friend: "Пуск запрещаю!" and the track let go ("Цель сбросить!").
+        const KnownTarget* told = pictures_["commander"].Find(tracked);
+        if (eng.KnownFriend(tracked) || (told != nullptr && told->friendly)) {
+            if (npc_held_ != tracked) {
+                npc_held_ = tracked;
+                SpeakOrder("hold_fire");
+                GiveCrewOrder("order_drop_target");
+            }
+            return;
+        }
         if (tracked != npc_target_) {
             npc_target_ = tracked;
             npc_prepared_ = false;
@@ -1832,11 +1882,52 @@ private:
         // One permission stands until a missile goes (the launch is counted a step after ПУСК); after a miss with the
         // target still in the zone it is given again (re-engage: voenizdat_osa_1991 p257).
         if (npc_permit_launches_ == launches_ && time_ - npc_permit_s_ < 60.0) return;
-        if (NpcGive("fire_permitted", 0.0)) {
+        // Identified first: interrogated with no reply (the senior operator's report), or designated by the PU-12 (the
+        // battery commander's identification). Under EMCON the interrogator is silent too: the designation must do.
+        const bool identified = told != nullptr && (told->interrogated || told->number > 0);
+        if (!identified && !NpcSilent()) {
+            NpcGive("order_iff", 10.0);
+            return;
+        }
+        // A missile already at this target (a miss, still in the zone): "Вторая — пуск!".
+        const char* permit = npc_launched_at_.count(tracked) != 0 ? "order_second_missile" : "fire_permitted";
+        if (NpcGive(permit, 0.0)) {
             npc_permit_launches_ = launches_;
             npc_permit_s_ = time_;
         }
     }
+    // Every hostile he has heard of within the interrogator's reach that isn't identified yet: "Запрос!" (the senior
+    // operator's ЗАПРОС). Not one the PU-12 designated (identified by the battery commander), not under EMCON.
+    void NpcIdentify() {
+        const SearchSensorDef& d = console_.search;
+        if (d.iff_query.empty() || NpcSilent() || !console_.equipment.IsReady(d.iff_ready)) return;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            if (k.friendly || k.interrogated || k.number > 0 || !k.has_range || k.range_m > d.iff_max_range_m) continue;
+            NpcGive("order_iff", 15.0);
+            return;
+        }
+    }
+    // The battery's EMCON, or an ambush not yet sprung: sprung once a hostile is designated within 15 km (sam3d).
+    bool NpcSilent() {
+        if (!battery_) return false;
+        if (battery_->Emcon()) return true;
+        if (battery_->CurrentMode() != Battery::Mode::Ambush) {
+            npc_ambush_sprung_ = false;
+            return false;
+        }
+        if (!npc_ambush_sprung_) {
+            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+                if (k.has_range && !k.friendly && k.range_m <= 15000.0) npc_ambush_sprung_ = true;
+            }
+            if (npc_ambush_sprung_) Event(def_.id, "the ambush is sprung: radiation on");
+        }
+        return !npc_ambush_sprung_;
+    }
+    bool npc_was_silent_ = false;
+    bool npc_ambush_sprung_ = false;
+    std::string npc_held_;
+    std::map<std::string, int> npc_launched_at_;  // launches at each target (the second missile's words)
+    double drop_at_s_ = -1.0;
     int npc_permit_launches_ = -1;
     double npc_permit_s_ = -1e9;
     std::string npc_target_;
@@ -1864,7 +1955,7 @@ private:
             npc_fought_ = true;
         }
         if (engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight()) return false;
-        const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
+        const CrewTask* ready = def_.crew_data.FindTask(NpcSilent() ? "ready_silent" : "ready_halted");
         const bool is_ready = ready != nullptr && console_.equipment.AllHold(ready->conditions, console_.panel);
         // Orientation (voenizdat_osa_1991 p246: the deputy orients the vehicle as part of К бою, the gyro half-compass
         // set to the course angle so that designations' azimuths agree): once ready at a halt with nothing hostile known,
@@ -1900,6 +1991,7 @@ private:
     double npc_halt_at_ = -1.0;
     bool npc_empty_reported_ = false;
     bool npc_fuel_reported_ = false;
+    bool npc_fuel_requested_ = false;
 
     // Logistics: the deputy reports the launcher empty and the commander asks the battery for the TZM; the driver reports
     // the fuel at half (the crew asks for fuel at half: samsim_thread, ePap). The TZM and the fuel truck themselves come
@@ -1914,6 +2006,12 @@ private:
                 if (callouts_) callouts_->Say(time_, "request_tzm", "commander", {{"callsign", callsign}}, 3.0);
             }
             if (!empty) npc_empty_reported_ = false;
+        }
+        if (fuel_ && battery_) {  // the fuel model asks at its reserve; the commander says so on the battery net
+            if (fuel_->Requested() && !npc_fuel_requested_ && NpcAt("commander") && callouts_) {
+                callouts_->Say(time_, "request_fuel", "commander", {{"callsign", OwnCallsign()}}, 3.0);
+            }
+            npc_fuel_requested_ = fuel_->Requested();
         }
         if (fuel_) {
             const bool half = fuel_->LevelL() <= 0.5 * fuel_->TankL();
@@ -1973,6 +2071,7 @@ private:
         return true;
     }
     std::vector<C2Network::Event> designations_heard_;  // every designation so far (the latest last)
+    std::map<std::string, double> passed_at_;  // when the commander last passed a target's designation on
 
     // A crew member's reports as words: acknowledgement, done, can't, fault; and the start of a wait (reminders).
     void CrewCallouts(const CrewMember& c, const std::vector<CrewReport>& reports) {
@@ -2019,11 +2118,30 @@ private:
                             k.range_m = e.range_m;
                             Say("contact", "senior_operator", {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}}, &k);
                             next_contact_update_s_ = time_ + 15.0;
+                            // His own duty with a new echo in the interrogator's reach: ЗАПРОС, unasked (the commander's
+                            // "Запрос!" covers what he misses).
+                            CrewMember* so = MemberAt("senior_operator");
+                            const Procedure* iff = console_.FindProcedure("iff_interrogate");
+                            if (so != nullptr && iff != nullptr && !so->IsBusy() && !console_.search.iff_query.empty() &&
+                                e.range_m <= console_.search.iff_max_range_m) {
+                                so->Queue(*iff);
+                            }
                         }
                         break;
                     case EngagementEvent::Kind::TrackLost:
-                        if (NpcAt("operator") && TargetRange(e.target) >= 0.0) Say("lock_lost", "operator");  // not a target just shot down
+                        // not a target just shot down, nor one the crew let go
+                        if (NpcAt("operator") && TargetRange(e.target) >= 0.0 && e.detail != "dropped") Say("lock_lost", "operator");
                         break;
+                    case EngagementEvent::Kind::IffNoReply: {
+                        KnownTarget k;  // the senior operator saw no reply mark beside the echo
+                        k.target = e.target;
+                        k.interrogated = true;
+                        k.time_s = time_;
+                        k.source = "IFF";
+                        pictures_["senior_operator"].Learn(k);
+                        if (NpcAt("senior_operator")) Say("iff_no_reply", "senior_operator", {}, &k);
+                        break;
+                    }
                     case EngagementEvent::Kind::OnJammer: if (NpcAt("operator")) Say("on_jammer", "operator"); break;
                     case EngagementEvent::Kind::BurnThrough: if (NpcAt("operator")) Say("captured", "operator"); break;
                     case EngagementEvent::Kind::IffFriend:
@@ -2034,7 +2152,10 @@ private:
                             Say("iff_friend", "senior_operator", {}, &k);
                         }
                         break;
-                    case EngagementEvent::Kind::Hit: if (NpcAt("deputy_commander")) Say("hit", "deputy_commander"); break;
+                    case EngagementEvent::Kind::Hit:
+                        if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
+                        HeardDestroyed(e.target);
+                        break;
                     case EngagementEvent::Kind::Miss: if (NpcAt("deputy_commander")) Say("miss", "deputy_commander"); break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
                 }
@@ -2056,9 +2177,18 @@ private:
                 next_contact_update_s_ = time_ + 15.0;
             }
         }
-        // Designations the commander heard on the radio, passed on to the crew.
+        // Designations the commander heard on the radio, passed on to the crew: a new target, the one he has ordered
+        // taken, or one not passed on for 30 s (sam3d: every update of every target, four targets every 12 s, would
+        // keep the intercom talking without end and the orders waiting behind it). A target another launcher has, once.
         if (c2_) {
             for (const C2Network::Event& e : designations_) {
+                const auto last = passed_at_.find(e.subject);
+                const bool fresh = last == passed_at_.end();
+                const bool ours = e.subject == assigned_target_;
+                const bool theirs = battery_fire_ && battery_fire_->Engaged(e.subject);
+                const bool stale = !fresh && time_ - last->second >= 30.0;
+                if (!(fresh || ours || (stale && !theirs))) continue;
+                passed_at_[e.subject] = time_;
                 if (NpcAt("commander")) {
                     char az[16], n[16], r[16], h[16];
                     std::snprintf(az, sizeof(az), "%02d-%02d", e.azimuth_mils / 100, e.azimuth_mils % 100);
@@ -2225,6 +2355,7 @@ private:
                     break;
                 case BatteryFire::Event::Kind::Hit:
                     Event(e.callsign, "destroys " + e.target);
+                    HeardDestroyed(e.target);
                     if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
                     break;
                 case BatteryFire::Event::Kind::Miss: Event(e.callsign, "misses " + e.target); break;
@@ -2265,6 +2396,14 @@ private:
     // ---- Knowledge per seat (roadmap 8.5, crew_knowledge.hpp): each seat's picture, from its own instruments and
     // from what it heard. The NPCs act on these, never on the truth.
     std::map<std::string, CrewPicture> pictures_;
+    // Targets the crew knows are destroyed (their own "Цель поражена!", the battery net's "цель … поражена"): out of
+    // every seat's picture, and a late designation of one is not passed on.
+    std::set<std::string> reported_kills_;
+    void HeardDestroyed(const std::string& target) {
+        reported_kills_.insert(target);
+        for (auto& kv : pictures_) kv.second.Forget(target);
+        if (assigned_target_ == target) assigned_target_.clear();
+    }
     std::string assigned_target_;  // the target the commander ordered taken ("" = none yet)
     std::mt19937 hear_rng_{97u};    // who misses a callout (the outcome draws stay where they were)
     int say_agains_ = 0;

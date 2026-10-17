@@ -668,7 +668,7 @@ private:
                     TriggerAction& out) {
         if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
                          "battery_order", "route", "covered", "axis_deg", "air_threat", "bounding", "roving", "points",
-                         "crossing", "width_m", "vehicle"})) {
+                         "crossing", "width_m", "vehicle", "radiate"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
@@ -949,14 +949,16 @@ private:
 
     // An order to the battery: "march" with a "route" (positions), "short_halt", "combat_formation" with "covered"
     // (a position), "axis_deg" and "bounding", "halt", "resume", "ambush" with "points" (and "roving"),
-    // "river_crossing" with "crossing", "axis_deg" and "width_m", "far_bank_held", "reload" / "refuel" with "vehicle".
+    // "river_crossing" with "crossing", "axis_deg" and "width_m", "far_bank_held", "reload" / "refuel" with "vehicle",
+    // "emcon" with "radiate" (false: the battery's radars silent; true: they may radiate again).
     bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
             return Fail(p, "unknown battery order '" + kind_text +
-                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel)");
+                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon)");
         }
         if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
-            !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle)) {
+            !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle) ||
+            !OptionalBool(o, p, "radiate", out.radiate)) {
             return false;
         }
         if (out.kind == BatteryOrder::Kind::Ambush) {
@@ -1061,7 +1063,7 @@ private:
                 const std::string p = Index(Join(bp, "orders"), i);
                 const json::Value& o = os->items[i];
                 if (!Keys(o, p, {"at_s", "order", "route", "covered", "axis_deg", "bounding", "roving", "points", "crossing", "width_m",
-                                 "vehicle", "notes"})) {
+                                 "vehicle", "radiate", "notes"})) {
                     return false;
                 }
                 std::string kind;
