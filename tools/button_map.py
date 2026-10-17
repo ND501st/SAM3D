@@ -503,7 +503,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     console = json.loads((ROOT / "data" / "procedures" / f"{args.system}.json").read_text(encoding="utf-8"))
-    cabin = json.loads((ROOT / "data" / "cabins" / f"{args.system}.json").read_text(encoding="utf-8"))
+    cabin_path = ROOT / "data" / "cabins" / f"{args.system}.json"  # a system without a cabin yet: no lamps or displays
+    cabin = json.loads(cabin_path.read_text(encoding="utf-8")) if cabin_path.exists() else {"panels": []}
     mb = build(console, cabin)
     data = mb.data()
     out = Path(args.out) if args.out else ROOT / "out" / "button_map" / f"{args.system}.html"

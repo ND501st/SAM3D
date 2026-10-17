@@ -54,6 +54,11 @@ namespace
 		if (Name == "amber") return FLinearColor(0.6f, 0.28f, 0.02f);
 		if (Name == "yellow") return FLinearColor(0.65f, 0.48f, 0.12f);
 		if (Name == "orange") return FLinearColor(0.5f, 0.14f, 0.03f);
+		// the PU-12M's equipment paints (rwd_mb3's colour photographs): the ASPD-U's and the power blocks' blue-grey, the
+		// IT-45's, the ДХ's and the IT-2M's light grey, the ДХ's ivory keys
+		if (Name == "bluegrey") return FLinearColor(0.16f, 0.2f, 0.24f);
+		if (Name == "lightgrey") return FLinearColor(0.36f, 0.37f, 0.38f);
+		if (Name == "ivory") return FLinearColor(0.7f, 0.66f, 0.52f);
 		return Fallback;
 	}
 
@@ -135,6 +140,12 @@ void USimCabinComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (BuiltLayout != Sim->GetCabinLayout())
 	{
 		Build(Sim);
+		bHiddenApplied = !bHidden;  // the new parts take the cabin's state
+	}
+	if (bHiddenApplied != bHidden)
+	{
+		SetHiddenInGame(bHidden, true);
+		bHiddenApplied = bHidden;
 	}
 	Animate(Sim, DeltaTime);
 }
@@ -287,7 +298,7 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 			FVector(0.02, Panel.width_m, Panel.height_m));
 		if (!bHasBlocks)
 		{
-			Paint(Mesh, PlateColor * 0.6f);
+			Paint(Mesh, LookColor(Panel.color, PlateColor * 0.6f));
 		}
 		PanelMeshes.Add(Mesh);
 	}
@@ -1121,12 +1132,17 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 			const bool bFlashing = simcore::CabinLayout::LampFlashing(LampDef, Console.panel, Console.equipment);
 			const bool bLit = bFlashing ? FMath::Fmod(GetWorld()->GetTimeSeconds() * 2.0, 1.0) < 0.5
 			                            : simcore::CabinLayout::LampLit(LampDef, Console.panel, Console.equipment);
+			// The lamps are small incandescent bulbs behind coloured glass: the filament takes a few hundredths of a second
+			// to come up and a little longer to go out, glowing orange as it dims (SAM3D's figures).
+			const float Tau = bLit ? 0.035f : 0.09f;
+			Item.Glow += ((bLit ? 1.0f : 0.0f) - Item.Glow) * (1.0f - FMath::Exp(-DeltaTime / Tau));
+			const FLinearColor Lit = FMath::Lerp(Item.MovingColor * FLinearColor(1.0f, 0.45f, 0.2f), Item.MovingColor, Item.Glow) * Item.Glow;
 			if (Item.Legend != nullptr)
 			{
-				const FLinearColor Letters = bLit ? Item.MovingColor : LegendUnlit;
+				const FLinearColor Letters = FMath::Lerp(LegendUnlit, Item.MovingColor, Item.Glow);
 				Paint(Item.Legend, bHighlighted ? FMath::Lerp(Letters, HighlightColor, 0.4f) : Letters);
 			}
-			const FLinearColor Glass = bLit ? Item.MovingColor : Item.MovingColor * 0.04f;
+			const FLinearColor Glass = Item.MovingColor * 0.04f + Lit * 0.96f;
 			Paint(Item.Moving, bHighlighted ? FMath::Lerp(Glass, HighlightColor, 0.4f) : Glass);
 			Paint(Item.Base, bHighlighted ? HighlightColor : Item.BaseColor);
 			continue;

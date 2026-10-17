@@ -31,4 +31,5 @@ private:
 	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font);
 	void DrawCrew(const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	void DrawBoard(class USimWorldSubsystem* Sim, class UFont* Font);
+	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
 };

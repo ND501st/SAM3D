@@ -16,7 +16,9 @@ Each NPC crewmate is a body in his seat in the 3D cabin:
   up and steps to it: the deputy commander at rack SŁ-1M for the orientation, the commander at the right R-123M on the
   floor behind his seat.
 - **He looks at what he works.** Otherwise he watches his instrument: the senior operator the search scope, the
-  operator the range indicator, the deputy commander the TV monitor. The driver and the commander look out.
+  operator the range indicator, the deputy commander the TV monitor. The driver and the commander look out. In the
+  PU-12M the battery commander watches the IT-45 and the operator-plotter his map (a seat's `look` can name alternatives,
+  `"ssc_range|map"`, the first one the cabin has: one `operator` entry serves both vehicles).
 - **He nods while he speaks.** He breathes.
 - **The driver's hands rest on the steering wheel** and his feet on the pedals.
 
@@ -60,7 +62,7 @@ One `SeatActivity` per crew member, built from `CrewMember::CurrentIntent` and t
 
 | Piece | What it does |
 |---|---|
-| `data/crew/voices.json` | The languages in order (Russian, then English); each seat's voice (pitch and rate on the speech engine's −10..10 scale); stress (+2 pitch, +2 rate); the intercom's band (300–3400 Hz) and the radio's (300–3000 Hz); how the crew says its abbreviations (ГТА "гэ тэ а", ССЦ "эс эс цэ", СОЦ as a word) |
+| `data/crew/voices.json` | One file for every crew (the Osa's and the PU-12M's; a crew takes its own seats' voices). The languages in order (Russian, then English); each seat's voice (pitch and rate on the speech engine's −10..10 scale); stress (+2 pitch, +2 rate); the intercom's band (300–3400 Hz) and the radio's (300–3000 Hz); how the crew says its abbreviations (ГТА "гэ тэ а", ССЦ "эс эс цэ", СОЦ as a word) |
 | `crew_voice.hpp` | `SpeechText`: a callout's words for a speech engine. Azimuths in mils are read in pairs ("35-00": "тридцать пять ноль-ноль", "three five, zero zero"), board numbers in pairs, other numbers in Russian words, abbreviations spelled. `VoiceFor`: a speaker's voice, stressed or not, intercom or radio |
 | `CalloutBus` | Numbers each line as it starts (`seq`) and says what is being said now (`Now`), so a voice plays each line once |
 | Unreal `FSimSpeech` | Windows' own speech engine (SAPI) on a worker thread, with its desktop voices and the "OneCore" voices of the language packs. Text in, 16-bit PCM out |

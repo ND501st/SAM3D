@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 #include <array>
 #include <map>
@@ -42,6 +43,8 @@
 #include "simcore/battery.hpp"
 #include "simcore/battery_fire.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/command_post.hpp"
+#include "simcore/post_feed.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_callouts.hpp"
@@ -57,6 +60,14 @@ namespace simcore {
 
 class ScenarioRunner {
 public:
+    // The ДХ keypad: the two digits typed (the target's ASPD-U number), ЦУ pressed and waiting for the launcher's place
+    // on the IT boards (1-...), the last designation it gave ("05>22"). The target it is on: typed, or the marker's.
+    struct PostKeypad {
+        std::string entry;
+        bool designating = false;
+        int held = -1;
+        std::string last;
+    };
     ScenarioRunner(ScenarioDef def, ConsoleData console)
         : def_(std::move(def)),
           console_(std::move(console)),
@@ -109,6 +120,7 @@ public:
         }
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
+        if (def_.has_post) post_ = std::make_unique<CommandPost>(def_.post_aspd, def_.post_board, def_.unit_position, def_.seed ^ 0x51ed27u);
         if (!def_.c2_sources.empty()) {
             c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
             for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
@@ -133,7 +145,11 @@ public:
             battery_ = std::make_unique<Battery>(def_.battery_tactics, def_.battery_vehicles);
             battery_->SetDriveOwn(def_.battery_drive_own);
             battery_->SetNight(def_.battery_night);
-            if (def_.prepared.present && def_.prepared.emplacement) battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
+            if (def_.prepared.present && def_.prepared.emplacement) {
+                battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
+            } else if (def_.battery_deployed) {
+                battery_->SetInEmplacement(0.0);  // set up where it stands, nothing dug in to climb out of
+            }
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
         StartCallouts();
@@ -150,6 +166,7 @@ public:
         DeliverOrders();
         UpdateBattery(dt);
         UpdateC2();
+        UpdatePost();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
@@ -245,8 +262,35 @@ public:
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
     }
 
-    // The battery command post's plotting board (null when the scenario has no "command_post").
-    const PlottingBoard* Board() const { return c2_ ? c2_->BoardOf("pu12") : nullptr; }
+    // The battery command post's plotting board: the player's own when the vehicle is the post, else the scenario's
+    // "command_post" (null when there is none).
+    const PlottingBoard* Board() const {
+        if (post_) return &post_->Board();
+        return c2_ ? c2_->BoardOf("pu12") : nullptr;
+    }
+    // The command post's information chain when the player's vehicle is the post (null otherwise): the IT-45's tracks,
+    // the navigation error (command_post.hpp).
+    const CommandPost* Post() const { return post_.get(); }
+    // The IT-45 as it shows now: the tracks on the scale the console's scale switch is at (its position picks the
+    // ASPD-U's scale), while the tube has a picture. Empty otherwise.
+    std::vector<CommandPost::ScopeMark> PostScope() const {
+        if (!post_) return {};
+        const bool picture = console_.equipment.IsReady(console_.post_telecode) || console_.equipment.IsReady(console_.post_primary);
+        if (!picture) return {};
+        return post_->Scope(PostScaleM());
+    }
+    double PostScaleM() const {
+        if (!post_ || post_->Def().scales_m.empty()) return 0.0;
+        const std::vector<double>& s = post_->Def().scales_m;
+        const int pos = console_.post_scale.empty() ? 0 : console_.panel.Get(console_.post_scale);
+        return s[static_cast<std::size_t>(std::min<int>(std::max(pos, 0), static_cast<int>(s.size()) - 1))];
+    }
+    // The player at the plotter's seat writes one target from the IT-45 on the board (its ASPD-U number). False if the
+    // vehicle is no post, the seat isn't the player's, the number isn't on the tube, or he is still writing the last one.
+    bool PlayerPlot(int aspd_number) {
+        if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
+        return post_->PlotTrack(time_, aspd_number, PlotterSpeed());
+    }
 
     // The commander's order to a crew member. It goes by the R-124 intercom, so it arrives at once; with the commander's
     // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
@@ -343,7 +387,9 @@ public:
     em::ViewExtras ViewExtrasNow(std::size_t radio_count = 8) const {
         em::ViewExtras x;
         x.valid = true;
-        if (const PlottingBoard* b = Board()) {
+        if (post_) {
+            ToViewExtras(PostFeedNow(), x);  // the post's own board (killed targets wiped off) and instruments
+        } else if (const PlottingBoard* b = Board()) {
             for (const BoardMark& m : b->Marks()) {
                 if (m.stamp + 4 < b->Stamp()) continue;
                 x.board.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
@@ -439,7 +485,9 @@ public:
         quiet_orders_ = false;
         return true;
     }
-    bool NpcCommanderActive() const { return def_.npc_commander && SeatHolder("commander").empty(); }
+    // The seat that commands the crew (the crew data's commander_seat: the Osa's commander, the PU-12M's squad leader).
+    const std::string& Cmdr() const { return def_.crew_data.commander; }
+    bool NpcCommanderActive() const { return def_.npc_commander && SeatHolder(Cmdr()).empty(); }
 
     // Whether an order can be carried out now, and if not why: the order menu's honest greying (roadmap 8.8,
     // docs/crew/07_COMMANDER_MODE.md §1.3). Greyed: an order whose task already holds; one whose drills wait on equipment
@@ -471,7 +519,7 @@ public:
         for (const std::string& need : o->needs) {
             if (need == "contact") {
                 bool known = false;
-                const auto it = pictures_.find("commander");
+                const auto it = pictures_.find(Cmdr());
                 if (it != pictures_.end()) {
                     for (const KnownTarget& k : it->second.Recent(time_, 30.0)) known = known || (k.has_range && !k.friendly);
                 }
@@ -501,7 +549,7 @@ public:
             for (const Condition& c : p->steps.front().wait_for) {
                 if (c.kind != Condition::Kind::InputIs || console_.equipment.Holds(c, console_.panel)) continue;
                 const CrewFact* f = def_.crew_data.FindFact(c.id);
-                if (f != nullptr && f->by_action) continue;  // a seat makes it true (the driver halts)
+                if (f != nullptr && f->by_action && c.input_value) continue;  // a seat makes it true (the driver halts)
                 if (f != nullptr && !f->unmet_ru.empty()) return refuse(f->unmet_ru, f->unmet_en.empty() ? f->unmet_ru : f->unmet_en);
                 return refuse("нет: " + c.id, "waiting for " + c.id);
             }
@@ -730,12 +778,15 @@ public:
         std::string out = "\nCrew:\n";
         char line[256];
         if (ideal_ready_s_ > 0.0) {
+            // The readiness task by its name ("Ready for action at a halt (к бою готов)", "Post deployed ...").
+            const CrewTask* task = def_.crew_data.FindTask("ready_halted");
+            const std::string what = task != nullptr && !task->name.empty() ? task->name : std::string("Ready, halted");
             if (actual_ready_s_ > 0.0) {
                 const double pct = 100.0 * actual_ready_s_ / ideal_ready_s_;
-                std::snprintf(line, sizeof(line), "  К бою (ready, halted): %.0f s, ideal %.0f s (%.0f %%): %s\n", actual_ready_s_,
+                std::snprintf(line, sizeof(line), "  %s: %.0f s, ideal %.0f s (%.0f %%): %s\n", what.c_str(), actual_ready_s_,
                               ideal_ready_s_, pct, GradeWord(pct));
             } else {
-                std::snprintf(line, sizeof(line), "  К бою (ready, halted): not reached; ideal %.0f s\n", ideal_ready_s_);
+                std::snprintf(line, sizeof(line), "  %s: not reached; ideal %.0f s\n", what.c_str(), ideal_ready_s_);
             }
             out += line;
         }
@@ -975,9 +1026,9 @@ private:
             battery_orders_done_[i] = 1;
             battery_->Order(def_.battery_orders[i], time_);
         }
-        if (c2_ && !air_threat_forced_) {
+        if ((c2_ || post_) && !air_threat_forced_) {
             bool close = false;
-            for (const BoardMark& m : c2_->Known(time_)) {
+            for (const BoardMark& m : post_ ? PostMarks() : c2_->Known(time_)) {
                 close = close || (m.position - def_.unit_position).HorizontalLength() <= def_.battery_tactics.threat_range_m;
             }
             battery_->SetAirThreat(close, time_);
@@ -1049,6 +1100,163 @@ private:
         }
     }
 
+    // ---- The player's vehicle is the command post (docs/PU12_DEVELOPMENT.md P3, command_post.hpp).
+    std::unique_ptr<CommandPost> post_;
+    std::map<std::string, double> post_first_mark_;  // first mark of each target on the post's board (the log)
+
+    // The regiment's telecode is within reach (the R-407 net, its outages); the console shows it once its ASPD-U works;
+    // the post is oriented when its subsystem says so; the plotter works when he is free (an NPC not at a drill).
+    void UpdatePost() {
+        if (!post_) return;
+        post_->MoveTo(def_.unit_position);
+        const bool reach = post_->TelecodeInReach(def_.post_regiment, time_);
+        if (reach != console_.equipment.GetInput(console_.post_telecode_input)) console_.equipment.SetInput(console_.post_telecode_input, reach);
+        const bool oriented = console_.equipment.IsReady(console_.post_oriented);
+        if (oriented != post_->IsOriented()) {
+            if (oriented) {
+                post_->Oriented(OrientQuality());
+            } else {
+                post_->Unoriented();
+            }
+            char detail[128];
+            std::snprintf(detail, sizeof(detail), "%s: azimuth error %.1f deg, position %.0f m", oriented ? "oriented" : "not oriented",
+                          RadToDeg(post_->AzErrorRad()), post_->OffsetM().HorizontalLength());
+            Event("navigation", detail);
+        }
+        const std::vector<BoardContact> truth = TruthContacts();
+        std::vector<BoardContact> radar;
+        if (def_.has_post_radar) {
+            for (const BoardContact& c : truth) {
+                if (CommandPost::Covers(def_.post_radar, c)) radar.push_back(c);
+            }
+        }
+        CommandPost::Inputs in;
+        in.telecode = console_.equipment.IsReady(console_.post_telecode);
+        in.primary = console_.equipment.IsReady(console_.post_primary);
+        const CrewMember* plotter = MemberAt(console_.post_plotter);
+        in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
+        in.operator_speed = PlotterSpeed();
+        post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (post_first_mark_.count(m.target_id) != 0) continue;
+            post_first_mark_[m.target_id] = m.time_s;
+            Event(m.target_id, "on the post's board: " + post_->Board().Describe(m));
+        }
+        UpdateKeypad();
+    }
+    // The DT-2 marker and the ДХ keypad (rwd_mb3: the Pult DCh enters a target's number, height zone, characteristics and
+    // the designation signal with an address; the DT-2 gives the coordinates; the IT-45 brightens the marked target and
+    // shows its time of arrival). Read before the step's buttons are released, so each press counts once.
+    static constexpr double kMarkerCaptureFraction = 0.05;  // sam3d: the marker takes a target within 5 % of the scale
+    void UpdateKeypad() {
+        const ConsoleData& c = console_;
+        marked_ = -1;
+        marked_arrival_s_ = -1.0;
+        if (!c.post_marker_azimuth.empty()) {
+            const double az = DegToRad(c.panel.GetValue(c.post_marker_azimuth));
+            const double r = c.panel.GetValue(c.post_marker_range);
+            marker_x_ = r * std::sin(az);
+            marker_y_ = r * std::cos(az);
+            double best = kMarkerCaptureFraction;
+            for (const CommandPost::ScopeMark& m : PostScope()) {
+                const double d = std::hypot(m.x - marker_x_, m.y - marker_y_);
+                if (d < best) {
+                    best = d;
+                    marked_ = m.number;
+                }
+            }
+            if (marked_ >= 0) marked_arrival_s_ = ArrivalS(marked_);
+        }
+        if (c.post_keypad_digits.empty()) return;
+        PostKeypad& k = keypad_;
+        if (c.panel.Get(c.post_keypad_reset) == 1) {
+            k.entry.clear();
+            k.designating = false;
+        }
+        if (c.panel.Get(c.post_keypad_designate) == 1) {
+            const int target = KeypadTarget();
+            k.designating = target >= 0;
+            if (k.designating) k.held = target;
+        }
+        for (std::size_t d = 0; d < c.post_keypad_digits.size(); ++d) {
+            if (c.panel.Get(c.post_keypad_digits[d]) != 1) continue;
+            if (k.designating) {
+                // the address: the launcher's place on the IT boards (1 the first)
+                k.designating = false;
+                if (d >= 1 && d <= status_boards_.size()) {
+                    const std::string& callsign = status_boards_[d - 1].callsign;
+                    char text[32];
+                    std::snprintf(text, sizeof(text), "%02d>%s", k.held, callsign.c_str());
+                    k.last = DesignateFromTube(callsign, k.held) ? std::string(text) : std::string("--");
+                }
+            } else {
+                k.entry = (k.entry + static_cast<char>('0' + static_cast<int>(d)));
+                if (k.entry.size() > 2) k.entry.erase(0, k.entry.size() - 2);
+            }
+        }
+    }
+    // When a target on the IT-45 reaches the post at its closing speed (s), or -1 if it isn't closing.
+    double ArrivalS(int aspd_number) const {
+        if (!post_) return -1.0;
+        for (const AspdTrack& t : post_->Tracks()) {
+            if (t.number != aspd_number) continue;
+            const Vec3 rel = t.position - post_->Position();
+            const double range = rel.HorizontalLength();
+            const double closing = range > 1.0 ? -(rel.x * t.velocity.x + rel.y * t.velocity.y) / range : 0.0;
+            return closing > 1.0 ? range / closing : -1.0;
+        }
+        return -1.0;
+    }
+    // The plotter's handwork speed (his tier's), and how well the squad leader orients (his tier's azimuth error
+    // against the reference tier's: 1 for a trained one).
+    double PlotterSpeed() const {
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            if (crew_[i].Role() != console_.post_plotter) continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->wheel_rate_factor;
+        }
+        return 1.0;
+    }
+    double OrientQuality() const {
+        const SkillTier* ref = def_.has_skills ? def_.skills.Reference() : nullptr;
+        if (ref == nullptr || !(ref->azimuth_error_deg > 0.0)) return 1.0;
+        const std::string orienter = OrientingSeat();
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            if (crew_[i].Role() != orienter) continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->azimuth_error_deg / ref->azimuth_error_deg;
+        }
+        return 1.0;
+    }
+    // The seat whose drill makes the post oriented (the one that owns the controls the subsystem waits for).
+    std::string OrientingSeat() const {
+        const SubsystemDef* d = console_.equipment.Def(console_.post_oriented);
+        if (d == nullptr) return std::string();
+        for (const Condition& c : d->enable) {
+            if (c.kind != Condition::Kind::ControlEquals && c.kind != Condition::Kind::ControlAtLeast) continue;
+            if (const ControlDef* cd = console_.panel.Find(c.id)) return cd->station;
+        }
+        return std::string();
+    }
+
+    // The targets as they are, for the boards (alive and spawned).
+    std::vector<BoardContact> TruthContacts() {
+        std::vector<BoardContact> contacts;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            const ScenarioTarget& t = def_.targets[i];
+            BoardContact c;
+            c.target_id = t.id;
+            c.position = a->position;
+            c.altitude_m = world_.Frame().AltitudeOf(a->position);
+            c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
+            c.formation = t.formation;
+            contacts.push_back(c);
+        }
+        return contacts;
+    }
+
     // The regiment's picture onto the board, once a minute; the first mark of each target goes in the log.
     void UpdateC2() {
         if (!c2_) return;
@@ -1090,7 +1298,7 @@ private:
                 k.height_m = e.height_hm * 100.0;
                 k.time_s = time_;
                 k.source = "radio";
-                pictures_["commander"].Learn(k);
+                pictures_[Cmdr()].Learn(k);
             }
         }
         SyncRadios();
@@ -1649,7 +1857,7 @@ private:
     // The commander's order for a procedure, if the crew data has one: the most specific order that starts it.
     bool quiet_orders_ = false;
     void SayOrder(const std::string& station, const std::string& procedure) {
-        if (!callouts_ || quiet_orders_) return;
+        if (!callouts_ || quiet_orders_ || station == Cmdr()) return;  // his own drill needs no words
         const OrderDef* best = nullptr;
         for (const OrderDef& o : def_.crew_data.orders) {
             for (const OrderStart& s : o.procedures) {
@@ -1657,6 +1865,31 @@ private:
             }
         }
         if (best != nullptr) SpeakOrder(best->callout);
+    }
+    // The words for drills given together: the one order that starts them all when there is one ("К бою!", "Пункт
+    // управления развернуть!"), else each drill's own.
+    void SayOrders(const std::vector<std::pair<std::string, std::string>>& given) {
+        std::vector<std::pair<std::string, std::string>> others;
+        for (const auto& g : given) {
+            if (g.first != Cmdr()) others.push_back(g);
+        }
+        if (others.size() > 1) {
+            const OrderDef* best = nullptr;
+            for (const OrderDef& o : def_.crew_data.orders) {
+                bool all = true;
+                for (const auto& g : others) {
+                    bool in = false;
+                    for (const OrderStart& s : o.procedures) in = in || (s.station == g.first && s.procedure == g.second);
+                    all = all && in;
+                }
+                if (all && (best == nullptr || o.procedures.size() < best->procedures.size())) best = &o;
+            }
+            if (best != nullptr) {
+                SpeakOrder(best->callout);
+                return;
+            }
+        }
+        for (const auto& g : others) SayOrder(g.first, g.second);
     }
     // An order's words, filled in from what the crew knows (the latest designation's number); not spoken twice within
     // 3 s (one order starts several drills) nor with a blank left in it.
@@ -1671,7 +1904,7 @@ private:
             fields["number"] = n;
         }
         if (def == nullptr || FillCallout(def->ru, fields).find('{') != std::string::npos) return;
-        const std::string from = console_.FindStation(def->from) != nullptr ? def->from : std::string("commander");
+        const std::string from = console_.FindStation(def->from) != nullptr ? def->from : Cmdr();
         callouts_->Say(time_, callout_id, from, fields);
         last_order_said_ = callout_id;
         last_order_s_ = time_;
@@ -1727,11 +1960,14 @@ private:
         const CrewTask* task = def_.crew_data.FindTask(halted ? (silent ? "ready_silent" : "ready_halted") : "searching_on_march");
         if (task != nullptr && !stowing) {
             const DrillPlan plan = drill_->Plan(drill_->GoalFor(*task), console_.panel, console_.equipment);
+            const bool was_quiet = quiet_orders_;
+            quiet_orders_ = true;  // the words once for all the drills given now
+            std::vector<std::pair<std::string, std::string>> given;
             for (const DrillPlan::Seat& s : plan.seats) {
                 if (!SeatFree(s.station)) continue;
                 for (const std::string& drill : s.procedures) {
                     if (NpcOrdered(s.station, drill, 60.0)) continue;
-                    NpcOrder(s.station, drill);
+                    if (NpcOrder(s.station, drill)) given.emplace_back(s.station, drill);
                     break;
                 }
                 if (!s.loose.empty() && SeatFree(s.station) && SeatHolder(s.station).empty()) {  // one switch, no drill: an order of its own
@@ -1752,12 +1988,14 @@ private:
                     }
                 }
             }
+            quiet_orders_ = was_quiet;
+            if (!was_quiet) SayOrders(given);
         }
         NpcLogistics();
         // A low target designated (under the search radar's clutter height, with a margin) and СДЦ off: "СДЦ включить!"
         // (a low target is invisible to the search radar in the ground clutter without it).
         if (engagement_on_ && !console_.search.mti_control.empty() && console_.panel.Get(console_.search.mti_control) == 0 && !NpcSilent()) {
-            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 60.0)) {
+            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 60.0)) {
                 if (k.has_height && !k.friendly && k.height_m <= def_.tuning.clutter_altitude_m + 100.0) {
                     NpcGive("order_mti", 120.0);
                     break;
@@ -1766,7 +2004,7 @@ private:
         }
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once (mon_2112_80 p63-68)
-            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
                 if (!k.has_range || k.friendly || k.range_m > 20000.0 || npc_halt_ordered_) continue;
                 npc_halt_ordered_ = true;
                 SpeakOrder("order_halt");
@@ -1802,7 +2040,7 @@ private:
             // in the last 30 s, unless his judgement slips (his tier's priority error: he takes the next one).
             const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
             std::vector<KnownTarget> known;
-            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
                 // A target the battery commander gave another launcher (he heard it on the battery net) is theirs.
                 const bool theirs = battery_fire_ && battery_fire_->Engaged(k.target);
                 if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs) known.push_back(k);
@@ -1839,12 +2077,12 @@ private:
             }
             assigned_target_ = k.target;
             if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_) {  // no number from the PU-12: by its azimuth
-                callouts_->Say(time_, "order_take_contact", "commander", {{"azimuth", MilsText(k.azimuth_deg)}});
+                callouts_->Say(time_, "order_take_contact", Cmdr(), {{"azimuth", MilsText(k.azimuth_deg)}});
             }
             return;
         }
         // Never at a friend: "Пуск запрещаю!" and the track let go ("Цель сбросить!").
-        const KnownTarget* told = pictures_["commander"].Find(tracked);
+        const KnownTarget* told = pictures_[Cmdr()].Find(tracked);
         if (eng.KnownFriend(tracked) || (told != nullptr && told->friendly)) {
             if (npc_held_ != tracked) {
                 npc_held_ = tracked;
@@ -1901,7 +2139,7 @@ private:
     void NpcIdentify() {
         const SearchSensorDef& d = console_.search;
         if (d.iff_query.empty() || NpcSilent() || !console_.equipment.IsReady(d.iff_ready)) return;
-        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
             if (k.friendly || k.interrogated || k.number > 0 || !k.has_range || k.range_m > d.iff_max_range_m) continue;
             NpcGive("order_iff", 15.0);
             return;
@@ -1916,7 +2154,7 @@ private:
             return false;
         }
         if (!npc_ambush_sprung_) {
-            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
                 if (k.has_range && !k.friendly && k.range_m <= 15000.0) npc_ambush_sprung_ = true;
             }
             if (npc_ambush_sprung_) Event(def_.id, "the ambush is sprung: radiation on");
@@ -1949,7 +2187,7 @@ private:
     // 90 s, nothing in the air), stow for the march, and once stowed the battery marches on. True while it is busy so.
     bool NpcBetweenFights() {
         bool hostile = false;
-        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
         if (hostile) {
             npc_last_hostile_s_ = time_;
             npc_fought_ = true;
@@ -2003,13 +2241,13 @@ private:
                 npc_empty_reported_ = true;
                 if (NpcAt("deputy_commander")) Say("launcher_empty", "deputy_commander");
                 const std::string callsign = battery_ ? OwnCallsign() : std::string("21");
-                if (callouts_) callouts_->Say(time_, "request_tzm", "commander", {{"callsign", callsign}}, 3.0);
+                if (callouts_) callouts_->Say(time_, "request_tzm", Cmdr(), {{"callsign", callsign}}, 3.0);
             }
             if (!empty) npc_empty_reported_ = false;
         }
         if (fuel_ && battery_) {  // the fuel model asks at its reserve; the commander says so on the battery net
-            if (fuel_->Requested() && !npc_fuel_requested_ && NpcAt("commander") && callouts_) {
-                callouts_->Say(time_, "request_fuel", "commander", {{"callsign", OwnCallsign()}}, 3.0);
+            if (fuel_->Requested() && !npc_fuel_requested_ && NpcAt(Cmdr()) && callouts_) {
+                callouts_->Say(time_, "request_fuel", Cmdr(), {{"callsign", OwnCallsign()}}, 3.0);
             }
             npc_fuel_requested_ = fuel_->Requested();
         }
@@ -2032,7 +2270,7 @@ private:
     }
     const SkillTier* CommanderTier() const {
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
-            if (crew_[i].Role() == "commander") return SkillOf(def_.crew[i]);
+            if (crew_[i].Role() == Cmdr()) return SkillOf(def_.crew[i]);
         }
         return nullptr;
     }
@@ -2078,8 +2316,9 @@ private:
         if (!callouts_ || !SeatHolder(c.Role()).empty()) return;
         for (const CrewReport& r : reports) {
             switch (r.kind) {
-                case CrewReport::Kind::Started: Say("ack", c.Role()); break;
-                case CrewReport::Kind::Completed: Say("done", c.Role()); break;
+                // The commanding seat doesn't answer himself.
+                case CrewReport::Kind::Started: if (c.Role() != Cmdr()) Say("ack", c.Role()); break;
+                case CrewReport::Kind::Completed: if (c.Role() != Cmdr()) Say("done", c.Role()); break;
                 case CrewReport::Kind::Aborted: Say("cannot", c.Role(), {{"reason", r.detail}}); break;
                 case CrewReport::Kind::EquipmentFault: {
                     const SubsystemDef* d = console_.equipment.Def(r.detail);
@@ -2189,7 +2428,7 @@ private:
                 const bool stale = !fresh && time_ - last->second >= 30.0;
                 if (!(fresh || ours || (stale && !theirs))) continue;
                 passed_at_[e.subject] = time_;
-                if (NpcAt("commander")) {
+                if (NpcAt(Cmdr())) {
                     char az[16], n[16], r[16], h[16];
                     std::snprintf(az, sizeof(az), "%02d-%02d", e.azimuth_mils / 100, e.azimuth_mils % 100);
                     std::snprintf(n, sizeof(n), "%04d", e.number);
@@ -2201,7 +2440,7 @@ private:
                     k.has_azimuth = k.has_range = k.true_azimuth = true;
                     k.azimuth_deg = e.azimuth_mils * 360.0 / 6000.0;
                     k.range_m = e.range_m;
-                    Say("designation", "commander", {{"number", n}, {"azimuth", az}, {"range_km", r}, {"height_hm", h}}, &k);
+                    Say("designation", Cmdr(), {{"number", n}, {"azimuth", az}, {"range_km", r}, {"height_hm", h}}, &k);
                 }
             }
         }
@@ -2252,7 +2491,7 @@ private:
             if (w.reminded == 1) {
                 Say("remind", c.Role(), {{"seat", SeatWord(seat, false)}, {"seat_en", SeatWord(seat, true)}, {"what", what}});
             } else {
-                Say("remind_order", "commander", {{"seat", SeatWord(seat, false)}, {"seat_en", SeatWord(seat, true)}});
+                Say("remind_order", Cmdr(), {{"seat", SeatWord(seat, false)}, {"seat_en", SeatWord(seat, true)}});
                 // An NPC who was never ordered to do it is ordered now: the crew sorts it out among themselves.
                 CrewMember* other = MemberAt(seat);
                 const Procedure* p = drill.empty() ? nullptr : console_.FindProcedure(drill);
@@ -2277,16 +2516,22 @@ private:
     double next_distribution_s_ = 0.0;
 
     void UpdateBatteryFire() {
-        if (!engagement_on_) return;
+        if (!engagement_on_ && !post_) return;
         if (!battery_fire_) {
-            battery_fire_ = std::make_unique<BatteryFire>(def_.tuning, console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 28000.0);
-            battery_fire_->SetAutonomous(def_.battery_commander == "none" || !c2_);
+            // The launchers' own tuning and reach when the player's vehicle is the post (battery.launchers), else ours.
+            const EngagementTuning& tuning = def_.has_launcher_tuning ? def_.launcher_tuning : def_.tuning;
+            double reach = def_.has_launcher_tuning ? def_.launcher_reach_m : console_.track.max_range_m;
+            if (!(reach > 0.0)) reach = 28000.0;
+            battery_fire_ = std::make_unique<BatteryFire>(tuning, reach);
+            battery_fire_->SetAutonomous(def_.battery_commander == "none" || (!c2_ && !post_));
             battery_fire_rng_.seed(def_.seed * 4099u + 7u);
         }
         battery_fire_->Sync(*battery_);
-        // What the other vehicles see (geometric sensors), with each target's number on the board.
+        ReportReadiness();
+        // What the other vehicles see (geometric sensors), with each target's number on the board: the post's own when
+        // the player's vehicle is the post, else what the commander has been told.
         std::vector<BatteryFireTarget> targets;
-        std::vector<BoardMark> marks = c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
+        std::vector<BoardMark> marks = post_ ? PostMarks() : c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
@@ -2305,22 +2550,28 @@ private:
         }
         // The NPC battery commander: each hostile on the board that nobody has goes to the nearest ready launcher that
         // can reach it soon (our own vehicle's target is ours).
-        if (def_.battery_commander == "npc" && c2_ && time_ >= next_distribution_s_) {
+        // In the post, he does it from his board by voice on the battery net, and only while he is an NPC and the net is up.
+        const bool distribute = post_ ? NpcAt(Cmdr()) && BatteryNetUp() : c2_ != nullptr;
+        if (def_.battery_commander == "npc" && distribute && time_ >= next_distribution_s_) {
             next_distribution_s_ = time_ + 5.0;
             for (const BoardMark& m : marks) {
                 if (m.type == 1 || battery_fire_->Engaged(m.target_id) || m.target_id == assigned_target_ ||
-                    m.target_id == engagement_.TrackedTarget()) {
+                    m.target_id == engagement_.TrackedTarget() || DesignationPending(m.target_id)) {
                     continue;
                 }
                 bool alive = false;
-                for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
+                if (post_) {
+                    alive = reported_kills_.count(m.target_id) == 0;  // he knows only what he was told
+                } else {
+                    for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
+                }
                 if (!alive) continue;
                 // The nearest ready launcher whose sector of fire covers it; any ready launcher if none does.
                 const BatteryFire::Shooter* best = nullptr;
                 double best_r = battery_fire_->ReachM() + 10000.0;
                 for (int pass = 0; pass < 2 && best == nullptr; ++pass) {
                     for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
-                        if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
+                        if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle || DesignationPendingFor(s.callsign)) continue;
                         if (pass == 0 && !BatteryFire::InSector(s, m.position)) continue;
                         const double r = (m.position - s.position).HorizontalLength();
                         if (r < best_r) {
@@ -2333,38 +2584,209 @@ private:
                 // (the PU-12's designation by voice).
                 const bool own_nearer = launcher_ != nullptr && launcher_->LoadedCount() > 0 &&
                                         (m.position - def_.unit_position).HorizontalLength() < best_r;
-                if (best != nullptr && !own_nearer) AssignBatteryTarget(best->callsign, m.target_id);
+                if (best != nullptr && !own_nearer) {
+                    if (post_) {
+                        DesignateByVoice(best->callsign, m);
+                    } else {
+                        AssignBatteryTarget(best->callsign, m.target_id);
+                    }
+                }
             }
         }
+        DeliverDesignations(targets);
         battery_fire_->Step(time_, targets, battery_fire_rng_, battery_.get(), [this](const std::string& id) {
             for (std::size_t i = 0; i < def_.targets.size(); ++i) {
                 if (def_.targets[i].id != id) continue;
                 if (Aircraft* a = world_.FindAircraft(targets_[i].world_id)) a->alive = false;
             }
         });
+        // The launchers' reports go out on the battery net: the post hears them (and writes them on its IT boards) only
+        // while its set on that net is up.
+        const bool hears = NetHears();
         for (const BatteryFire::Event& e : battery_fire_->TakeEvents()) {
             char n[16];
             std::snprintf(n, sizeof(n), "%04d", e.number);
             const std::string number = e.number > 0 ? std::string(n) : e.target;
+            const BatteryFire::Shooter* sh = battery_fire_->Find(e.callsign);
+            const int missiles = sh != nullptr ? sh->missiles : -1;
             switch (e.kind) {
                 case BatteryFire::Event::Kind::Assigned: break;  // spoken by whoever assigned it
-                case BatteryFire::Event::Kind::Captured: Event(e.callsign, "captures " + e.target); break;
+                case BatteryFire::Event::Kind::Captured:
+                    Event(e.callsign, "captures " + e.target);
+                    if (hears) Status(e.callsign, LauncherStatus::State::Engaging, missiles, e.number);
+                    break;
                 case BatteryFire::Event::Kind::Launch:
                     Event(e.callsign, "launches at " + e.target);
-                    if (callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", e.callsign}, {"number", number}});
+                    if (hears && callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", e.callsign}, {"number", number}});
+                    if (hears) Status(e.callsign, LauncherStatus::State::Launched, missiles, e.number);
                     break;
                 case BatteryFire::Event::Kind::Hit:
                     Event(e.callsign, "destroys " + e.target);
-                    HeardDestroyed(e.target);
-                    if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
+                    if (hears) {
+                        HeardDestroyed(e.target);
+                        if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
+                        Status(e.callsign, missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, missiles, 0);
+                    }
                     break;
-                case BatteryFire::Event::Kind::Miss: Event(e.callsign, "misses " + e.target); break;
+                case BatteryFire::Event::Kind::Miss:
+                    Event(e.callsign, "misses " + e.target);
+                    if (hears) Status(e.callsign, LauncherStatus::State::Engaging, missiles, e.number);
+                    break;
                 case BatteryFire::Event::Kind::Empty:
                     Event(e.callsign, "out of missiles");
-                    if (callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", e.callsign}});
+                    if (hears && callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", e.callsign}});
+                    if (hears) Status(e.callsign, LauncherStatus::State::Empty, 0, 0);
                     break;
-                case BatteryFire::Event::Kind::Reloaded: Event(e.callsign, "reloaded"); break;
+                case BatteryFire::Event::Kind::Reloaded:
+                    Event(e.callsign, "reloaded");
+                    if (hears) Status(e.callsign, LauncherStatus::State::Ready, missiles, 0);
+                    break;
             }
+        }
+    }
+
+    // ---- The battery commander in the post (docs/PU12_DEVELOPMENT.md P4): designations by voice on the battery net,
+    // the launchers' reports onto the IT-1 and IT-2 boards.
+    struct VoiceDesignation {
+        std::string callsign;
+        BoardMark mark;
+        Vec3 point;            // where he told it to look (the IT-45's fix led along its speed vector)
+        double heard_s = 0.0;  // the launcher's commander has it (the message ended)
+    };
+    std::vector<VoiceDesignation> designations_out_;
+    double battery_net_free_s_ = 0.0;
+    std::vector<LauncherStatus> status_boards_;
+    PostKeypad keypad_;
+    double marker_x_ = 0.0;
+    double marker_y_ = 0.0;
+    int marked_ = -1;
+    double marked_arrival_s_ = -1.0;
+    std::map<std::string, bool> reported_deployed_;
+
+    bool BatteryNetUp() const {
+        return post_ && (console_.post_battery_net.empty() || console_.equipment.IsReady(console_.post_battery_net));
+    }
+    // Does the player's vehicle hear the battery net's reports? (Always, unless it is the post with its set down.)
+    bool NetHears() const { return !post_ || BatteryNetUp(); }
+    bool DesignationPending(const std::string& target) const {
+        for (const VoiceDesignation& d : designations_out_) {
+            if (d.mark.target_id == target) return true;
+        }
+        return false;
+    }
+    bool DesignationPendingFor(const std::string& callsign) const {
+        for (const VoiceDesignation& d : designations_out_) {
+            if (d.callsign == callsign) return true;
+        }
+        return false;
+    }
+    // The latest mark of each target on the post's board in the last two minutes, not one he heard destroyed.
+    std::vector<BoardMark> PostMarks() const {
+        std::vector<BoardMark> out;
+        if (!post_) return out;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (time_ - m.time_s > 120.0 || reported_kills_.count(m.target_id) != 0) continue;
+            bool replaced = false;
+            for (BoardMark& o : out) {
+                if (o.target_id == m.target_id) {
+                    if (m.time_s >= o.time_s) o = m;
+                    replaced = true;
+                }
+            }
+            if (!replaced) out.push_back(m);
+        }
+        return out;
+    }
+    // One designation read out on the battery net: number, azimuth and range from the launcher (flak11: by voice,
+    // azimuth and range), one message at a time (the board's operator delay and message time).
+    bool DesignateByVoice(const std::string& callsign, const BoardMark& m) {
+        if (!battery_fire_ || !BatteryNetUp()) return false;
+        const BatteryFire::Shooter* sh = battery_fire_->Find(callsign);
+        if (sh == nullptr || sh->missiles <= 0) return false;
+        const PlottingBoardDef& bd = post_->Board().Def();
+        const double start = std::max(time_, battery_net_free_s_) + bd.operator_delay_s;
+        battery_net_free_s_ = start + bd.message_s;
+        // He reads the number off the board and the place off the IT-45: its latest fix, led along its speed vector to
+        // when the launcher will have it (the tube shows the vector, ru_pu12_text). Not on the tube: the board's mark.
+        BoardMark at = m;
+        for (const AspdTrack& k : post_->Tracks()) {
+            if (k.target_id == m.target_id) at.position = k.position + k.velocity * (battery_net_free_s_ - k.time_s);
+        }
+        designations_out_.push_back({callsign, m, at.position, battery_net_free_s_});
+        const PlottingBoard::Designation d = PlottingBoard::Designate(at, sh->position);
+        char n[16], r[16];
+        std::snprintf(n, sizeof(n), "%04d", m.number);
+        std::snprintf(r, sizeof(r), "%.0f", d.range_m / 1000.0);
+        if (callouts_) {
+            callouts_->Say(time_, "order_assign", Cmdr(), {{"callsign", callsign}, {"number", n}, {"azimuth", MilsText(d.azimuth_deg)}, {"range_km", r}});
+        }
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign,
+                     std::string("target ") + n + " by voice: azimuth " + MilsText(d.azimuth_deg) + ", range " + r + " km"});
+        return true;
+    }
+    // A designation heard: the launcher's crew looks where it was told and takes the nearest target there within
+    // kDesignationSearchM (sam3d: the board's error is up to 5 degrees and 3 km, flak11). Off by much, it may be another
+    // target, or none.
+    static constexpr double kDesignationSearchM = 6000.0;
+    void DeliverDesignations(const std::vector<BatteryFireTarget>& targets) {
+        for (std::size_t i = 0; i < designations_out_.size();) {
+            const VoiceDesignation d = designations_out_[i];
+            if (d.heard_s > time_ + 1e-9) {
+                ++i;
+                continue;
+            }
+            designations_out_.erase(designations_out_.begin() + static_cast<std::ptrdiff_t>(i));
+            const BatteryFireTarget* best = nullptr;
+            double best_d = kDesignationSearchM;
+            for (const BatteryFireTarget& t : targets) {
+                if (!t.alive || t.friendly) continue;
+                const double dist = (Vec3{t.position.x, t.position.y, 0.0} - Vec3{d.point.x, d.point.y, 0.0}).Length();
+                if (dist < best_d) {
+                    best_d = dist;
+                    best = &t;
+                }
+            }
+            if (best == nullptr) {
+                Event(d.callsign, "no target where it was designated");
+                if (callouts_) callouts_->Say(time_, "report_no_target", "battery", {{"callsign", d.callsign}});
+                continue;
+            }
+            if (best->id != d.mark.target_id) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
+            battery_fire_->Assign(d.callsign, best->id, d.mark.number, time_);
+        }
+    }
+    LauncherStatus& Status(const std::string& callsign, LauncherStatus::State state, int missiles, int target_number) {
+        LauncherStatus* s = nullptr;
+        for (LauncherStatus& e : status_boards_) {
+            if (e.callsign == callsign) s = &e;
+        }
+        if (s == nullptr) {
+            status_boards_.push_back(LauncherStatus{});
+            s = &status_boards_.back();
+            s->callsign = callsign;
+        }
+        s->state = state;
+        if (missiles >= 0) s->missiles = missiles;
+        s->target_number = target_number;
+        s->reported_s = time_;
+        return *s;
+    }
+    // The launchers report on the battery net when they come into action (к бою готов, with their missiles) and when they
+    // march off. The post hears it only while its set is up; a launcher reports again once the post can hear it.
+    void ReportReadiness() {
+        if (!post_ || !battery_fire_) return;
+        const bool hears = NetHears();
+        for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+            bool& reported = reported_deployed_[s.callsign];
+            if (s.deployed && !reported && hears) {
+                reported = true;
+                if (callouts_) callouts_->Say(time_, "report_ready", "battery", {{"callsign", s.callsign}, {"missiles", std::to_string(s.missiles)}});
+                Status(s.callsign, s.missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, s.missiles, 0);
+            } else if (!s.deployed && reported) {
+                reported = false;
+                if (hears) Status(s.callsign, LauncherStatus::State::March, s.missiles, 0);
+            }
+            if (!hears) reported = false;  // what it says while the post can't hear is lost: it reports again
         }
     }
 
@@ -2391,6 +2813,106 @@ public:
         return true;
     }
     const BatteryFire* GetBatteryFire() const { return battery_fire_.get(); }
+    // The battery commander in the post gives a launcher the target with this number on the post's board, by voice on the
+    // battery net. False if the vehicle is no post, the net is down, the launcher is unknown or empty, or no target on
+    // the board has the number.
+    bool DesignateBatteryTarget(const std::string& callsign, int number) {
+        if (!post_) return false;
+        for (const BoardMark& m : PostMarks()) {
+            if (m.number == number) return DesignateByVoice(callsign, m);
+        }
+        return false;
+    }
+    // The IT-1 and IT-2 boards: each launcher's state as the post last heard it.
+    const std::vector<LauncherStatus>& StatusBoards() const { return status_boards_; }
+    // The post's instruments in one block (post_feed.hpp): the IT-45 now, the board as the commander reads it (the
+    // targets of PostBoard, each with its marks of the last five minutes: the same numbers he can give out), the IT
+    // boards. Empty (post false) when the vehicle is no post.
+    PostFeed PostFeedNow() const {
+        PostFeed f;
+        if (!post_) return f;
+        f.post = true;
+        f.scale_m = PostScaleM();
+        f.position = post_->Position();
+        f.scope = PostScope();
+        const PlottingBoard& b = post_->Board();
+        const std::vector<BoardMark> now = PostMarks();
+        for (const BoardMark& m : b.Marks()) {
+            bool current = false;
+            for (const BoardMark& c : now) current = current || c.target_id == m.target_id;
+            if (!current || m.stamp + 4 < b.Stamp()) continue;
+            f.glass.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
+        }
+        f.launchers = status_boards_;
+        f.marker_x = marker_x_;
+        f.marker_y = marker_y_;
+        f.marked = marked_;
+        f.marked_arrival_s = marked_arrival_s_;
+        const int target = KeypadTarget();
+        if (target >= 0) {
+            char n[8];
+            std::snprintf(n, sizeof(n), "%02d", target % 100);
+            f.keypad = n;
+        }
+        f.keypad_designating = keypad_.designating;
+        f.keypad_last = keypad_.last;
+        return f;
+    }
+    const PostKeypad& Keypad() const { return keypad_; }
+    int KeypadTarget() const {
+        if (!keypad_.entry.empty()) return std::atoi(keypad_.entry.c_str());
+        return marked_;
+    }
+    // The DT-2 marker on the IT-45 (fractions of the scale, x east, y north), the target it is on (-1 none) and that
+    // target's time of arrival at the post (s; -1 not closing).
+    double MarkerX() const { return marker_x_; }
+    double MarkerY() const { return marker_y_; }
+    int MarkedTarget() const { return marked_; }
+    double MarkedArrivalS() const { return marked_arrival_s_; }
+    // The battery commander gives a launcher the target with this number on the IT-45 (the ASPD-U's): its board number
+    // if the plotter has written it, else the tube's; by voice on the battery net as DesignateBatteryTarget.
+    bool DesignateFromTube(const std::string& callsign, int aspd_number) {
+        if (!post_) return false;
+        const AspdTrack* track = nullptr;
+        for (const AspdTrack& t : post_->Tracks()) {
+            if (t.number == aspd_number) track = &t;
+        }
+        if (track == nullptr || reported_kills_.count(track->target_id) != 0) return false;
+        for (const BoardMark& m : PostMarks()) {
+            if (m.target_id == track->target_id) return DesignateByVoice(callsign, m);
+        }
+        BoardMark m;
+        m.target_id = track->target_id;
+        m.number = aspd_number;
+        m.time_s = track->time_s;
+        m.position = track->position;
+        m.height_hm = static_cast<int>(std::lround(track->height_m / 100.0));
+        m.type = track->type;
+        return DesignateByVoice(callsign, m);
+    }
+    // A player's designation through his seat (multiplayer): only the commanding seat gives the launchers targets.
+    bool SeatDesignate(const std::string& seat, const std::string& callsign, int number, std::string* why = nullptr) {
+        if (seat != Cmdr()) {
+            if (why) *why = "designations are the " + Cmdr() + "'s";
+            return false;
+        }
+        const bool ok = DesignateBatteryTarget(callsign, number);
+        if (!ok && why) *why = "the net is down, the launcher is unknown or empty, or the number is not on the board";
+        return ok;
+    }
+    // A player's plot through his seat: only the plotter's.
+    bool SeatPlot(const std::string& seat, int aspd_number, std::string* why = nullptr) {
+        if (!post_ || seat != console_.post_plotter) {
+            if (why) *why = "the board is the " + console_.post_plotter + "'s";
+            return false;
+        }
+        const bool ok = PlayerPlot(aspd_number);
+        if (!ok && why) *why = "not on the tube, or the last mark is still being written";
+        return ok;
+    }
+    // The post's board as the commander reads it now: each target's latest mark of the last two minutes, the ones
+    // reported destroyed gone. Empty when the vehicle is no post.
+    std::vector<BoardMark> PostBoard() const { return PostMarks(); }
 
 private:
     // ---- Knowledge per seat (roadmap 8.5, crew_knowledge.hpp): each seat's picture, from its own instruments and
@@ -2445,7 +2967,7 @@ private:
             const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
             const bool npc = SeatHolder(c.Role()).empty();
             // Only a seat with a stake in it asks again: the one it was said to, the commander, the aiming seats.
-            const bool stake = s.to == c.Role() || c.Role() == "commander" || c.Role() == def_.tuning.aim_az_role ||
+            const bool stake = s.to == c.Role() || c.Role() == Cmdr() || c.Role() == def_.tuning.aim_az_role ||
                                c.Role() == def_.tuning.aim_el_role || c.Role() == def_.tuning.aim_range_role;
             if (npc && stake && t != nullptr && s.has_about && s.repeats == 0) {
                 const double miss = t->miss_chance * (c.Stressed() ? t->stress_factor : 1.0);
@@ -2475,7 +2997,7 @@ private:
         }
         bool pressed = false;
         if (engagement_on_ && engagement_.Method() == TrackMethod::None) {
-            for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
                 pressed = pressed || (k.has_range && k.range_m < 10000.0 && !k.friendly);
             }
         }
@@ -2533,7 +3055,7 @@ private:
         if (!NpcCommanderActive()) return;
         double patience = 8.0;
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
-            if (crew_[i].Role() != "commander") continue;
+            if (crew_[i].Role() != Cmdr()) continue;
             if (const SkillTier* t = SkillOf(def_.crew[i])) patience = t->patience_s;
         }
         for (const Seat& st : seats_) {
@@ -2557,9 +3079,9 @@ private:
             ++reminders_to_[st.role];
             const std::string what = ShortLabel(next->control_id, next->value);
             if (w.reminded == 1) {
-                Say("remind", "commander", {{"seat", SeatWord(st.role, false)}, {"seat_en", SeatWord(st.role, true)}, {"what", what}});
+                Say("remind", Cmdr(), {{"seat", SeatWord(st.role, false)}, {"seat_en", SeatWord(st.role, true)}, {"what", what}});
             } else {
-                Say("remind_order", "commander", {{"seat", SeatWord(st.role, false)}, {"seat_en", SeatWord(st.role, true)}});
+                Say("remind_order", Cmdr(), {{"seat", SeatWord(st.role, false)}, {"seat_en", SeatWord(st.role, true)}});
             }
             log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "waits for " + SeatWord(st.role, true), what});
         }

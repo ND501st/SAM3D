@@ -670,7 +670,7 @@ SC_TEST("grading: the debrief grades К бою against the drill master's ideal 
     r->RunToEnd(0.1, 800.0);
     SC_EXPECT(r->ActualReadyS() >= r->IdealReadyS() - 1.0);
     const std::string d = r->Debrief();
-    SC_EXPECT(d.find("К бою (ready, halted):") != std::string::npos);
+    SC_EXPECT(d.find("Ready for action at a halt (к бою готов):") != std::string::npos);
     SC_EXPECT(d.find("excellent") != std::string::npos || d.find("good") != std::string::npos || d.find("satisfactory") != std::string::npos);
     SC_EXPECT(d.find("First echo to launch") != std::string::npos);
     SC_EXPECT(d.find("operator           Operator         tier class3") != std::string::npos);

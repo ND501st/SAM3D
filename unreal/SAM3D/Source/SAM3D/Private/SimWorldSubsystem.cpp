@@ -1,5 +1,7 @@
 #include "SimWorldSubsystem.h"
 
+#include <algorithm>
+
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
@@ -885,7 +887,7 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 	}
 	const simcore::CrewData& Crew = Runner->Def().crew_data;
 	const std::string Seat = ToStd(Station);
-	if (Seat == "commander")
+	if (Seat == Crew.commander)
 	{
 		for (const simcore::OrderDef& O : Crew.orders)
 		{
@@ -1106,6 +1108,7 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 				S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 				S.bIsGround = true;
 				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
+				S.bDeployed = V.deployed;
 				Out.Add(S);
 			}
 		}
@@ -1486,6 +1489,157 @@ TArray<float> USimWorldSubsystem::GetBoardRangeRings() const
 		Out = {50000.f, 100000.f, 150000.f, 200000.f};
 	}
 	return Out;
+}
+
+float USimWorldSubsystem::GetPostMastExtension() const
+{
+	if (!Runner || Runner->Post() == nullptr || !Runner->Console().equipment.Has("mast_up"))
+	{
+		return -1.f;
+	}
+	return static_cast<float>(Runner->Console().equipment.Progress("mast_up"));
+}
+
+bool USimWorldSubsystem::IsPostGeneratorOut() const
+{
+	// (a network client reads the mirrored console: mast_up and ab1_placed's progress come in its snapshots)
+	return Runner && Runner->Post() != nullptr && Runner->Console().equipment.Has("ab1_placed") &&
+		Runner->Console().equipment.Progress("ab1_placed") >= 0.5;
+}
+
+bool USimWorldSubsystem::IsCommandPost() const
+{
+	return Runner && Runner->Post() != nullptr;
+}
+
+simcore::PostFeed USimWorldSubsystem::GetPostFeed() const
+{
+	if (IsMirrorOnly())
+	{
+		simcore::em::ViewExtras Scratch;
+		const simcore::em::ViewExtras* X = GetViewExtras(Scratch);
+		return X != nullptr ? simcore::FromViewExtras(*X) : simcore::PostFeed();
+	}
+	return Runner ? Runner->PostFeedNow() : simcore::PostFeed();
+}
+
+TArray<int32> USimWorldSubsystem::GetPostTrackNumbers() const
+{
+	TArray<int32> Out;
+	std::vector<simcore::CommandPost::ScopeMark> Marks = GetPostFeed().scope;
+	std::sort(Marks.begin(), Marks.end(), [](const simcore::CommandPost::ScopeMark& A, const simcore::CommandPost::ScopeMark& B) {
+		return A.x * A.x + A.y * A.y < B.x * B.x + B.y * B.y;
+	});
+	for (const simcore::CommandPost::ScopeMark& M : Marks)
+	{
+		Out.Add(M.number);
+	}
+	return Out;
+}
+
+TArray<int32> USimWorldSubsystem::GetPostBoardNumbers() const
+{
+	TArray<int32> Out;
+	const simcore::PostFeed Feed = GetPostFeed();
+	const simcore::Vec3 At = Feed.position;
+	std::vector<simcore::em::ViewBoardMark> Marks = simcore::LatestMarks(Feed);
+	std::sort(Marks.begin(), Marks.end(), [&At](const simcore::em::ViewBoardMark& A, const simcore::em::ViewBoardMark& B) {
+		return (A.position - At).HorizontalLength() < (B.position - At).HorizontalLength();
+	});
+	for (const simcore::em::ViewBoardMark& M : Marks)
+	{
+		Out.Add(M.number);
+	}
+	return Out;
+}
+
+TArray<FSimLauncherStatus> USimWorldSubsystem::GetLauncherStatus() const
+{
+	TArray<FSimLauncherStatus> Out;
+	for (const simcore::LauncherStatus& L : GetPostFeed().launchers)
+	{
+		FSimLauncherStatus S;
+		S.Callsign = ToF(L.callsign);
+		S.State = ToF(simcore::LauncherStateName(L.state));
+		S.Missiles = L.missiles;
+		S.TargetNumber = L.target_number;
+		Out.Add(S);
+	}
+	return Out;
+}
+
+bool USimWorldSubsystem::DesignateBatteryTarget(const FString& Callsign, int32 Number)
+{
+	// A seated player in multiplayer: through the seat (to the server; the answer comes back as an action result).
+	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
+	{
+		if (!Seat->SeatRole.IsEmpty())
+		{
+			if (IsMirrorOnly())
+			{
+				Seat->Designate(Callsign, Number);
+				return true;
+			}
+			FString Why;
+			return SeatDesignate(Seat->SeatRole, Callsign, Number, Why);
+		}
+	}
+	return Runner && !IsMirrorOnly() && Runner->DesignateBatteryTarget(ToStd(Callsign), Number);
+}
+
+bool USimWorldSubsystem::PlotPostTrack(int32 Number)
+{
+	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
+	{
+		if (!Seat->SeatRole.IsEmpty())
+		{
+			if (IsMirrorOnly())
+			{
+				Seat->PlotTrack(Number);
+				return true;
+			}
+			FString Why;
+			return SeatPlot(Seat->SeatRole, Number, Why);
+		}
+	}
+	return Runner && !IsMirrorOnly() && Runner->PlayerPlot(Number);
+}
+
+bool USimWorldSubsystem::SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why)
+{
+	std::string W;
+	const bool bOk = Runner && Runner->SeatDesignate(ToStd(Role), ToStd(Callsign), Number, &W);
+	Why = Runner ? ToF(W) : FString(TEXT("no scenario"));
+	BroadcastNewDebriefEntries();
+	return bOk;
+}
+
+bool USimWorldSubsystem::SeatPlot(const FString& Role, int32 Number, FString& Why)
+{
+	std::string W;
+	const bool bOk = Runner && Runner->SeatPlot(ToStd(Role), Number, &W);
+	Why = Runner ? ToF(W) : FString(TEXT("no scenario"));
+	return bOk;
+}
+
+FString USimWorldSubsystem::GetDefaultCabinFile() const
+{
+	if (!Runner || Runner->Console().system_id.empty())
+	{
+		return FString();
+	}
+	const FString File = FString::Printf(TEXT("cabins/%s.json"), *ToF(Runner->Console().system_id));
+	return FPaths::FileExists(FPaths::Combine(ResolveDataDirectory(), File)) ? File : FString();
+}
+
+FString USimWorldSubsystem::GetCommanderStation() const
+{
+	return Runner && Runner->Def().has_crew_data ? ToF(Runner->Def().crew_data.commander) : FString();
+}
+
+FString USimWorldSubsystem::GetPlotterStation() const
+{
+	return Runner && Runner->Console().has_post ? ToF(Runner->Console().post_plotter) : FString();
 }
 
 TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) const

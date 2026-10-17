@@ -278,6 +278,26 @@ struct ConsoleData {
     CommsDef comms;
     bool has_fuel = false;
     FuelDef fuel;
+    // A command post's own information chain ("post", simcore/command_post.hpp): the subsystems that show the regiment's
+    // telecode picture and a cabled radar's primary picture, the input the sim sets while the regiment's telecode is
+    // within reach, the plotter's station, and the subsystem that says the post is oriented.
+    bool has_post = false;
+    std::string post_telecode;        // subsystem: the telecode picture on the IT-45
+    std::string post_primary;         // subsystem: a cabled radar's picture on the IT-45
+    std::string post_telecode_input;  // input: the regiment's telecode arriving
+    std::string post_plotter;         // station: writes the board and tracks the primary picture
+    std::string post_oriented;        // subsystem: the post oriented (its navigation error small)
+    std::string post_scale;           // control: the IT-45's scale switch, one position per scale of the ASPD-U ("" none)
+    std::string post_battery_net;     // subsystem: the battery net up, for designations and reports ("" always up)
+    // The ДХ characteristics keypad (optional "keypad"): its ten digit keys, the designation key (ЦУ) and the reset; the
+    // station that works it. And the DT-2 coordinate pickup (optional "marker"): two wheels that move the marker on the
+    // IT-45 in azimuth (deg) and range (a fraction of the scale).
+    std::vector<std::string> post_keypad_digits;
+    std::string post_keypad_designate;
+    std::string post_keypad_reset;
+    std::string post_keypad_station;
+    std::string post_marker_azimuth;
+    std::string post_marker_range;
     std::vector<ReadinessState> readiness;
 
     const ReadinessState* FindReadiness(const std::string& id) const {
@@ -308,7 +328,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors", "post"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -322,6 +342,7 @@ public:
         if (!LoadLaunch(root, out)) return false;
         if (!LoadLauncher(root, out) || !LoadComms(root, out)) return false;
         if (!LoadFuel(root, out)) return false;
+        if (!LoadPost(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
     }
@@ -623,6 +644,61 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool NumberOf(const json::Value& obj, const std::string& path, const char* key, double& out) {
         if (obj.Find(key) == nullptr) return Fail(Join(path, key), "required");
         return OptionalNumber(obj, path, key, out);
+    }
+
+    bool LoadPost(const json::Value& root, ConsoleData& out) {
+        const json::Value* p = root.Find("post");
+        if (p == nullptr) return true;
+        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "keypad", "marker",
+                               "source", "confidence", "notes"}) ||
+            !OptionalString(*p, "post", "scale", out.post_scale) || !OptionalString(*p, "post", "battery_net", out.post_battery_net) ||
+            !Provenance(*p, "post") || !RequireString(*p, "post", "telecode", out.post_telecode) ||
+            !RequireString(*p, "post", "primary", out.post_primary) || !RequireString(*p, "post", "telecode_input", out.post_telecode_input) ||
+            !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
+            return false;
+        }
+        for (const auto& sub : {std::make_pair("telecode", &out.post_telecode), std::make_pair("primary", &out.post_primary),
+                                std::make_pair("oriented", &out.post_oriented)}) {
+            if (out.equipment.Def(*sub.second) == nullptr) return Fail(Join("post", sub.first), "unknown subsystem '" + *sub.second + "'");
+        }
+        if (!out.equipment.HasInput(out.post_telecode_input)) return Fail("post.telecode_input", "unknown input '" + out.post_telecode_input + "'");
+        if (!out.post_scale.empty() && out.panel.Find(out.post_scale) == nullptr) return Fail("post.scale", "unknown control '" + out.post_scale + "'");
+        if (!out.post_battery_net.empty() && out.equipment.Def(out.post_battery_net) == nullptr) {
+            return Fail("post.battery_net", "unknown subsystem '" + out.post_battery_net + "'");
+        }
+        if (!out.stations.empty() && out.FindStation(out.post_plotter) == nullptr) {
+            return Fail("post.plotter", "'" + out.post_plotter + "' is not a station");
+        }
+        if (const json::Value* k = p->Find("keypad")) {
+            const std::string kp = "post.keypad";
+            if (!Keys(*k, kp, {"digits", "designate", "reset", "station"}) ||
+                !RefControl(*k, kp, "designate", out.panel, ControlKind::Momentary, true, out.post_keypad_designate) ||
+                !RefControl(*k, kp, "reset", out.panel, ControlKind::Momentary, true, out.post_keypad_reset) ||
+                !RequireString(*k, kp, "station", out.post_keypad_station)) {
+                return false;
+            }
+            if (!out.stations.empty() && out.FindStation(out.post_keypad_station) == nullptr) {
+                return Fail(Join(kp, "station"), "'" + out.post_keypad_station + "' is not a station");
+            }
+            const json::Value* d = k->Find("digits");
+            if (d == nullptr || !d->Is(json::Type::Array) || d->items.size() != 10) return Fail(Join(kp, "digits"), "needs the ten digit keys, 0 to 9");
+            for (std::size_t i = 0; i < d->items.size(); ++i) {
+                const json::Value& v = d->items[i];
+                const ControlDef* c = v.Is(json::Type::String) ? out.panel.Find(v.string) : nullptr;
+                if (c == nullptr || c->kind != ControlKind::Momentary) return Fail(Index(Join(kp, "digits"), i), "must be a button control");
+                out.post_keypad_digits.push_back(v.string);
+            }
+        }
+        if (const json::Value* m = p->Find("marker")) {
+            const std::string mp = "post.marker";
+            if (!Keys(*m, mp, {"azimuth", "range"}) ||
+                !RefControl(*m, mp, "azimuth", out.panel, ControlKind::Continuous, true, out.post_marker_azimuth) ||
+                !RefControl(*m, mp, "range", out.panel, ControlKind::Continuous, true, out.post_marker_range)) {
+                return false;
+            }
+        }
+        out.has_post = true;
+        return true;
     }
 
     bool LoadFuel(const json::Value& root, ConsoleData& out) {

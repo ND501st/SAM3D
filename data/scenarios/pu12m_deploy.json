@@ -1,0 +1,43 @@
+{
+  "scenario_id": "pu12m_deploy",
+  "name": "PU-12M: the crew deploys the battery command post (take any seat)",
+  "description": "The PU-12M has halted at its position, cold. No triggers give orders: the NPC battery commander has the post deployed (the AB-1 set out, the mast up, the radios warm, the post oriented, the ASPD-U working), and the crew reports each part done. Take any seat, or the battery commander's and give the orders yourself (Пункт управления развернуть!). The regiment is sending its picture by telecode from the start; the board fills once the ASPD-U receives it.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. The deployment norm is at most 18 min by day (ru_pu12_text). docs/PU12_DEVELOPMENT.md P2.",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "post": {
+    "board": "command/pu12.json",
+    "aspd": "command/aspd_u.json",
+    "library": "command/regiment_radars.json",
+    "regiment": {
+      "position": { "east_m": -6000, "north_m": -5000, "up_m": 2 },
+      "radars": [ { "id": "p19_regiment", "type": "p19", "position": { "east_m": -6200, "north_m": -5000, "up_m": 2 } } ],
+      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery: inside the R-407 net's 15 km."
+    }
+  },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/pu12m.json",
+    "position": { "east_m": 0, "north_m": 0, "up_m": 2 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Battery commander", "role": "battery_commander", "skill": "class1" },
+    { "name": "Squad leader", "role": "squad_leader", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Radio operator", "role": "radio_operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "t1", "name": "Practice target (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 7,
+      "start": { "east_m": 5000, "north_m": 90000, "up_m": 2000 }, "waypoints": [ { "east_m": 5000, "north_m": -60000, "up_m": 2000 } ],
+      "speed_mps": 120, "rcs_m2": 1, "appear_at_s": 0,
+      "notes": "Placeholder numbers. On the regiment's picture from the start; the post's board shows it once the post is deployed." }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 1500 }
+}

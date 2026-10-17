@@ -243,6 +243,33 @@ public:
     // Is a plot due at t? (`Update` plots only then.)
     bool Due(double t) const { return !plotted_ || t + 1e-9 >= next_s_; }
 
+    // One mark written by hand (the PU-12M's own plotter, command_post.hpp): `c.position` is where the post's own
+    // picture puts the target (its navigation error already in it); the plotter's own error is added. Stamped with the
+    // minute it is written. Nothing is read out on a net: designations from it are the commander's (P4).
+    BoardMark PlotByHand(double t, const BoardContact& c) {
+        const int minute = static_cast<int>(t / 60.0) + 1;
+        if (minute > stamp_) stamp_ = minute;
+        plotted_ = true;
+        BoardMark m;
+        m.target_id = c.target_id;
+        m.number = NumberFor(c.target_id);
+        m.stamp = minute;
+        m.time_s = t;
+        m.position = c.position;
+        if (def_.plot_error_m > 0.0) {
+            auto un = [this] { return static_cast<double>(noise_()) / 4294967296.0; };
+            const double r = def_.plot_error_m * std::sqrt(un());
+            const double a = 2.0 * kPi * un();
+            m.position = Vec3{m.position.x + r * std::sin(a), m.position.y + r * std::cos(a), m.position.z};
+        }
+        m.height_hm = static_cast<int>(std::lround(c.altitude_m / 100.0));
+        m.type = c.type;
+        m.formation = c.formation;
+        marks_.push_back(m);
+        last_plot_s_ = t;
+        return m;
+    }
+
     // Extra time the commander needs to pass a designation on (no intercom: he shouts over the cabin noise). Applies to
     // the messages queued from now on.
     void SetPassOnExtra(double seconds) { pass_on_extra_s_ = seconds > 0.0 ? seconds : 0.0; }

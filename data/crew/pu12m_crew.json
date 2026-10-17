@@ -1,0 +1,116 @@
+{
+  "system_id": "pu12m",
+  "display_name": "PU-12M crew: seats, orders, callouts, tasks and world facts",
+  "status": "P2 of docs/PU12_DEVELOPMENT.md. Read by simcore/crew_data.hpp; checked against data/procedures/pu12m.json.",
+  "notes": "The crew of the PU-12M battery command post (docs/research/PU12_RESEARCH_2026-10.md). No source read gives the post's words of command or its reports: the phrasing is sam3d's in Soviet style, to be checked against the NVA plotters' handbook (nva_handbooks) and operator accounts. The task ids ready_halted and searching_on_march are the ones the NPC commander looks for (simcore/scenario_runner.hpp): for the post they mean deployed, and on the march with the radios and the gyro running.",
+  "source": "ru_pu12_text (the crew by numbers); csla_pu12_manual and flak11 (the stations and their equipment); sam3d for the words",
+  "confidence": "medium",
+  "commander_seat": "battery_commander",
+
+  "standing": { "stand_s": 1.5, "sit_s": 1.0, "source": "sam3d estimate (as data/crew/osa_ak_crew.json)", "confidence": "estimate" },
+
+  "seats": [
+    { "station": "battery_commander", "number": 0, "title_ru": "Командир батареи (командир боевого расчёта)", "title_en": "Battery commander",
+      "duties": ["Commands the post's crew and the battery", "Watches the air picture on the IT-45 and the board", "Gives the launchers their targets by voice on the battery net (FuG-4)", "The regiment's telecode on the R-407 (FuG-5), the RTK-1 telephones"],
+      "displays": ["it45", "it2"], "stand_for": ["rtk1.power"], "source": "ru_pu12_text (командир боевого расчёта); flak11 (PU12-0: designations by voice, azimuth and range); csla_pu12_manual (his workplace)", "confidence": "high" },
+    { "station": "squad_leader", "number": 1, "title_ru": "Командир отделения управления", "title_en": "Squad leader",
+      "duties": ["Orients the post: the PAB-2 aiming circle, the GAK, the KP-4, the DTP", "The air-picture net (FuG-1)", "The IT-1 status board", "Leads the crew's deployment and the march"],
+      "displays": ["it1"], "stand_for": ["dtp.parallax"], "source": "ru_pu12_text (No. 1); csla_pu12_manual (his workplace: KP-4, GAK panel, IT-1, DTP, R-123M)", "confidence": "high" },
+    { "station": "operator", "number": 2, "title_ru": "Оператор-планшетист", "title_en": "Operator-plotter",
+      "duties": ["The ASPD-U and the IT-45", "Marks the targets with the DI marker and the ДХ keypad", "Plots the air picture on the board"],
+      "displays": ["map", "it45"], "stand_for": ["aspd.power", "fr.mode", "fr.scale"], "source": "ru_pu12_text (No. 2); shilka_narod (the operator's place at the IT-45)", "confidence": "high" },
+    { "station": "radio_operator", "number": 3, "title_ru": "Радиотелефонист", "title_en": "Radiotelephone operator",
+      "duties": ["The R-123M FuG-2 and the R-111 FuG-3", "Raises and guys the mast", "The distribution board and the rectifier"],
+      "displays": [], "stand_for": ["mast.raise"], "source": "ru_pu12_text (No. 3); csla_pu12_manual (his workplace); valka_pu12 (the signalman extends the mast)", "confidence": "high" },
+    { "station": "driver", "number": 4, "title_ru": "Водитель-электромеханик", "title_en": "Driver-electrician",
+      "duties": ["Drives the post", "Sets out and runs the AB-1 generator set", "The input board and the vehicle's power"],
+      "displays": [], "source": "ru_pu12_text (No. 4); csla_pu12_manual (combat position: the set on the ground)", "confidence": "high" }
+  ],
+
+  "callouts": [
+    { "id": "order_deploy", "kind": "order", "from": "battery_commander", "to": "crew", "ru": "Пункт управления развернуть!", "en": "Deploy the post!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "order_stow", "kind": "order", "from": "battery_commander", "to": "crew", "ru": "Пункт управления свернуть!", "en": "Stow the post!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "order_mast", "kind": "order", "from": "battery_commander", "to": "radio_operator", "ru": "Мачту поднять!", "en": "Raise the mast!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "order_orient", "kind": "order", "from": "battery_commander", "to": "squad_leader", "ru": "Пункт сориентировать!", "en": "Orient the post!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "order_aspd_on", "kind": "order", "from": "battery_commander", "to": "operator", "ru": "АСПД включить!", "en": "ASPD on!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+
+    { "id": "power_on", "kind": "report", "from": "driver", "to": "battery_commander", "ru": "Агрегат работает, питание подано!", "en": "Generator running, power on!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "mast_up", "kind": "report", "from": "radio_operator", "to": "battery_commander", "ru": "Мачта поднята!", "en": "Mast up!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "radios_ready", "kind": "report", "from": "radio_operator", "to": "battery_commander", "ru": "Связь с КП полка есть!", "en": "In touch with the regiment!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "oriented", "kind": "report", "from": "squad_leader", "to": "battery_commander", "ru": "Ориентирование закончено!", "en": "Post oriented!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "aspd_ready", "kind": "report", "from": "operator", "to": "battery_commander", "ru": "АСПД к работе готова!", "en": "ASPD ready!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "telecode_on", "kind": "report", "from": "operator", "to": "battery_commander", "ru": "Информация от КП полка поступает!", "en": "The regiment's picture is coming in!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "order_assign", "kind": "radio", "from": "battery_commander", "to": "battery", "ru": "{callsign}, цель {number}, азимут {azimuth}, дальность {range_km} — уничтожить!", "en": "{callsign}, target {number}, azimuth {azimuth}, range {range_km}: destroy!", "priority": 0, "source": "flak11 (PU12-0: designations to the launchers by voice, azimuth and range); the words are sam3d", "confidence": "estimate" },
+    { "id": "report_ready", "kind": "radio", "from": "battery", "to": "battery_commander", "ru": "{callsign} к бою готов, ракет {missiles}!", "en": "{callsign} ready for action, {missiles} missiles!", "priority": 1, "source": "sam3d (as the Osa crew's report_ready, data/crew/osa_ak_crew.json)", "confidence": "estimate" },
+    { "id": "report_launch", "kind": "radio", "from": "battery", "to": "battery_commander", "ru": "{callsign}: пуск по цели {number}!", "en": "{callsign}: launch at target {number}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "report_result", "kind": "radio", "from": "battery", "to": "battery_commander", "ru": "{callsign}: цель {number} поражена, израсходовано {spent}!", "en": "{callsign}: target {number} destroyed, {spent} spent!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "request_tzm", "kind": "radio", "from": "battery", "to": "battery_commander", "ru": "{callsign}: ракет нет, прошу ТЗМ!", "en": "{callsign}: out of missiles, request the TZM!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "report_no_target", "kind": "radio", "from": "battery", "to": "battery_commander", "ru": "{callsign}: цели не наблюдаю!", "en": "{callsign}: no target there!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "post_ready", "kind": "radio", "from": "battery_commander", "to": "battery", "ru": "{callsign}: пункт управления к работе готов!", "en": "{callsign}: command post ready!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+
+    { "id": "ack", "kind": "ack", "from": "any", "to": "battery_commander", "ru": "Есть!", "en": "Yes!", "priority": 2, "source": "sam3d (the standard Soviet acknowledgement)", "confidence": "estimate" },
+    { "id": "done", "kind": "ack", "from": "any", "to": "battery_commander", "ru": "Выполнено!", "en": "Done!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
+    { "id": "cannot", "kind": "ack", "from": "any", "to": "battery_commander", "ru": "Не могу: {reason}!", "en": "Can't: {reason}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "say_again", "kind": "ack", "from": "any", "to": "any", "ru": "Повторите!", "en": "Say again!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "remind", "kind": "remind", "from": "any", "to": "any", "ru": "{seat}, {what}!", "en": "{seat}, {what}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "remind_order", "kind": "remind", "from": "battery_commander", "to": "any", "ru": "{seat}, выполнять!", "en": "{seat}, carry it out!", "priority": 1, "source": "sam3d", "confidence": "estimate" }
+  ],
+
+  "orders": [
+    { "callout": "order_deploy", "task": "ready_halted",
+      "procedures": [ { "station": "driver", "procedure": "deploy_power" }, { "station": "radio_operator", "procedure": "deploy_mast" },
+                      { "station": "squad_leader", "procedure": "deploy_orient" }, { "station": "operator", "procedure": "deploy_aspd" },
+                      { "station": "battery_commander", "procedure": "deploy_command_radios" } ],
+      "source": "sam3d (each seat's part of the deployment, data/procedures/pu12m.json)", "confidence": "estimate" },
+    { "callout": "order_stow", "task": "stowed",
+      "procedures": [ { "station": "operator", "procedure": "stow_aspd" }, { "station": "radio_operator", "procedure": "stow_mast" },
+                      { "station": "driver", "procedure": "stow_power" } ],
+      "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_mast", "procedures": [ { "station": "radio_operator", "procedure": "deploy_mast" } ],
+      "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_orient", "procedures": [ { "station": "squad_leader", "procedure": "deploy_orient" } ],
+      "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_aspd_on", "procedures": [ { "station": "operator", "procedure": "deploy_aspd" } ],
+      "source": "sam3d", "confidence": "estimate" }
+  ],
+
+  "tasks": [
+    { "id": "ready_halted", "name": "Post deployed (пункт управления развёрнут)",
+      "conditions": [ { "subsystem": "equipment_power", "is": "ready" }, { "subsystem": "mast_up", "is": "ready" }, { "subsystem": "fug1", "is": "ready" },
+                      { "subsystem": "fug2", "is": "ready" }, { "subsystem": "fug3", "is": "ready" }, { "subsystem": "fug4", "is": "ready" },
+                      { "subsystem": "fug5", "is": "ready" }, { "subsystem": "rtk1", "is": "ready" }, { "subsystem": "oriented", "is": "ready" },
+                      { "subsystem": "kp4", "is": "ready" }, { "subsystem": "aspd_working", "is": "ready" }, { "subsystem": "battery_net", "is": "ready" } ],
+      "prefer": [ { "subsystem": "ab1_on_line", "is": "ready" } ],
+      "source": "ru_pu12_text (full deployment within 18 min); data/procedures/pu12m.json; the list is sam3d", "confidence": "estimate",
+      "notes": "On the AB-1 set (prefer), not the G-290B, which needs the engine running." },
+    { "id": "searching_on_march", "name": "On the march: the radios warm and the gyro running",
+      "conditions": [ { "subsystem": "fug1", "is": "ready" }, { "subsystem": "fug4", "is": "ready" }, { "subsystem": "fug5", "is": "ready" }, { "subsystem": "gak", "is": "ready" } ],
+      "source": "sam3d", "confidence": "estimate" },
+    { "id": "stowed", "name": "Post stowed for the march",
+      "conditions": [ { "subsystem": "mast_up", "is": "off" }, { "subsystem": "ab1_placed", "is": "off" }, { "subsystem": "aspd_warm", "is": "off" } ],
+      "source": "sam3d", "confidence": "estimate" }
+  ],
+
+  "facts": [
+    { "input": "vehicle_stopped", "set_by": "the vehicle (driver)", "seats": ["driver"], "needs": [], "by_action": true,
+      "unmet_ru": "Машина в движении", "unmet_en": "The vehicle is moving",
+      "notes": "The post deploys at a halt only: the mast, the generator set and the aiming circle go out on the ground.", "source": "csla_pu12_manual (the combat position)", "confidence": "high" },
+    { "input": "external_supply", "set_by": "the position (an external network cabled in, where there is one)", "seats": ["driver"], "needs": [], "by_action": false,
+      "source": "ru_pu12_text", "confidence": "medium" },
+    { "input": "regiment_telecode", "set_by": "the regiment's command post (the command network)", "seats": ["operator", "battery_commander"],
+      "needs": [ { "subsystem": "fug5", "is": "ready" } ], "knowledge": "The regiment's air picture by telecode: targets with their numbers, heights and speeds",
+      "unmet_ru": "Информации от КП полка нет", "unmet_en": "No picture from the regiment",
+      "source": "flak11 (PU12-1: FuG-5 R-407, the regiment's automated fire control)", "confidence": "medium" },
+    { "input": "radar_coupled", "set_by": "the position (a radar cabled to the post, up to 300 m)", "seats": ["operator"], "needs": [], "by_action": false,
+      "source": "flak11 (PU12-0)", "confidence": "high" }
+  ],
+
+  "reports": [
+    { "callout": "power_on", "from": "driver", "when": { "subsystem": "power_220", "is": "ready" }, "source": "sam3d", "confidence": "estimate" },
+    { "callout": "mast_up", "from": "radio_operator", "when": { "subsystem": "mast_up", "is": "ready" }, "source": "sam3d", "confidence": "estimate" },
+    { "callout": "radios_ready", "from": "radio_operator", "when": { "subsystem": "fug3", "is": "ready" }, "source": "sam3d", "confidence": "estimate" },
+    { "callout": "oriented", "from": "squad_leader", "when": { "subsystem": "oriented", "is": "ready" }, "source": "sam3d", "confidence": "estimate" },
+    { "callout": "aspd_ready", "from": "operator", "when": { "subsystem": "aspd_working", "is": "ready" }, "source": "sam3d", "confidence": "estimate" },
+    { "callout": "telecode_on", "from": "operator", "when": { "subsystem": "telecode_reception", "is": "ready" }, "source": "sam3d", "confidence": "estimate" }
+  ]
+}

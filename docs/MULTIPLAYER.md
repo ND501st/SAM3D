@@ -66,6 +66,27 @@ in a seat; a player commander gets the same reports and acknowledgements as an N
   five plots, the last radio messages, and the battery's other vehicles and dummy positions; a client's HUD and map draw
   from it (roadmap 7.7).
 
+## The command post (PU-12M, docs/PU12_DEVELOPMENT.md P7)
+
+* **Any crew's seats.** The seats are the console's stations, so a PU-12M scenario's players take `battery_commander`,
+  `operator` (the plotter), `squad_leader`, `radio_operator` or `driver`. `-SimScenario=scenarios/pu12m_battery.json` on
+  the server and the clients plays it on any map (the director's override).
+* **The post's instruments ride along** (`simcore/post_feed.hpp`): the server puts the IT-45's tracks (fractions of the
+  scale), the post's position and scale, the board as the commander reads it (the targets he can give out, each with its
+  marks of the last five minutes; destroyed ones wiped off) and the IT boards into each view's `em::ViewExtras`; a client
+  draws its IT-45, grid glass and IT boards from them (`USimWorldSubsystem::GetPostFeed`). The DT-2's marker, the
+  target it is on and its time of arrival, the ДХ's window and whether each track is a cabled radar's ride along too, so
+  a client's IT-45, map and ДХ window match the server's; the ДХ's keys and the DT-2's wheels are console controls, sent
+  through the seat like any other.
+* **Designations and plots go through the seat**: `USimCrewSeatComponent::Designate(Callsign, Number)` and
+  `PlotTrack(Number)` (reliable), checked on the server (`ScenarioRunner::SeatDesignate`: the commanding seat only;
+  `SeatPlot`: the plotter's only); the answer comes back by `OnActionResult` ("designate", "plot").
+* **Check**, 18 Oct 2026: `tools/ue_crew_smoke.ps1 -Pu12m -TimeScale 8 -ClientSeconds 60`. The operator's client set the
+  IT-45's scale (its own switch) and, at 24 s, saw two targets on its IT-45 and wrote 04 on the board; the commander's
+  client was refused the operator's scale switch ("'fr.scale' is at the operator's station"), saw that target on the
+  board as 6205 and gave it to launcher 22 ("designate moved"); at the end both clients' IT boards showed 22 engaging, the
+  others ready, with the missiles each had reported.
+
 ## Not done
 
 * Voice between players (the R-124 intercom is modelled as the order path, not as player audio).
