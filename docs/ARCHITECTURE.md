@@ -171,8 +171,10 @@ roadmap phase 6:
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
 - Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer
   drowns the tracking radar's echo and the radar follows it in angle; the range is then by hand (search scope or PU-12)
-  and Н has an outcome factor (9.1). Not modelled: the counter-jamming used "only while firing", the range-only radar
-  (ПОЛУАВТОМАТ) being jammed too, the anti-radiation missile threat. (6.7, 9.1)
+  and Н has an outcome factor (9.1). A range-gate pull-off takes the gate; УВ. ПОМЕХА (against one walking out) and
+  the SSC's СДЦ (against one walking in) defeat it, switched on only when it is seen (9.4). Not modelled: the
+  range-only radar (ПОЛУАВТОМАТ) being jammed too, the SOC's СА against non-synchronous pulses (no such interference
+  in the EM layer), the anti-radiation missile threat. (6.7, 9.1, 9.4)
 - Targets: terrain following, low strike runs, pop-up helicopters and evasion on launch or lock are scenario behaviours
   (9.3); the aircraft is still a constant-speed, turn-rate-limited point (no energy, no g limit).
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario

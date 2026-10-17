@@ -172,6 +172,7 @@ public:
         SeeInstruments();
         UpdateGrades();
         UpdateCallouts();
+        UpdateCounterJamming();
         UpdateStress();
         UpdateNpcCommander();
         if (time_ + 1e-9 >= next_acmi_s_) {
@@ -896,6 +897,22 @@ private:
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
     // sources are cut so the rest stays for driving (roadmap 7.4).
     // A prepared position's supply (roadmap 7.6): the grid, then after a cut the diesel set once it has started.
+    // Counter-jamming (roadmap 9.4) is switched on only when automatic tracking is impossible and off when the jamming
+    // stops (voenizdat_osa_1991 p259): switching it on with no range pull-off seen in the last minute is a crew mistake.
+    double last_pulled_s_ = -1e9;
+    bool rgpo_was_on_ = false;
+    void UpdateCounterJamming() {
+        const TrackSensorDef& tr = console_.track;
+        if (!console_.has_sensors || tr.rgpo_control.empty()) return;
+        if (!tr.range_pulled_input.empty() && console_.equipment.GetInput(tr.range_pulled_input)) last_pulled_s_ = time_;
+        const bool on = console_.panel.Get(tr.rgpo_control) == 1;
+        if (on && !rgpo_was_on_ && time_ - last_pulled_s_ > 60.0) {
+            log_.Record({time_, DebriefEntry::Kind::Deviation, SpeakerName("operator"), tr.rgpo_control,
+                         "counter-jamming switched on with no range pull-off seen (only when automatic tracking is impossible)"});
+        }
+        rgpo_was_on_ = on;
+    }
+
     // The compass survey runs while the vehicle stands; its Qc is commanded to the deputy (engagement: SetCommandedQc).
     // Moving off spoils the measurement and the halt's orientation (the gyro keeps its own, drifting, heading).
     CompassSurvey compass_;
@@ -1414,6 +1431,7 @@ private:
         }
         npc_halt_ordered_ = false;
         NpcOrient();
+        NpcCounterJamming();
         if (NpcBetweenFights()) return;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
@@ -1549,6 +1567,23 @@ private:
         return false;
     }
     double npc_halt_at_ = -1.0;
+
+    // Counter-jamming by doctrine (voenizdat_osa_1991 p259, p266): when the operator reports the range gate pulled off,
+    // the protection on; once the fight is over and nothing has pulled the gate for a minute, off again.
+    void NpcCounterJamming() {
+        const TrackSensorDef& tr = console_.track;
+        if (tr.rgpo_control.empty() || tr.range_pulled_input.empty()) return;
+        const bool on = console_.panel.Get(tr.rgpo_control) == 1;
+        if (console_.equipment.GetInput(tr.range_pulled_input)) {
+            if (!on) NpcGive("order_counter_pulloff", 20.0);
+            return;
+        }
+        if (!on || engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight() || time_ - last_pulled_s_ < 60.0) return;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            if (!k.friendly && k.has_range) return;
+        }
+        NpcGive("order_protection_off", 120.0);
+    }
 
     // Orientation at a halt (voenizdat_osa_1991 p246, p249-250): with nothing hostile heard of, the commander finds Qc
     // with the artillery compass and, once he has it, orders the deputy to orient the gyro with it. Once per halt; in a

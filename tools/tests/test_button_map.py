@@ -91,7 +91,9 @@ def test_osa_map_is_clean(tmp_path):
     assert "__DATA__" not in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\nconst N =", 1)[0])
     ids = {n["id"] for n in data["nodes"]}
-    assert "c:fo.launch" in ids and "e:launch" in ids and "p:eccm" in ids and "m:launcher" in ids
+    assert "c:fo.launch" in ids and "e:launch" in ids and "p:mc" in ids and "m:launcher" in ids
+    assert "p:eccm" not in ids and "p:qcscale" not in ids  # built: 9.4 counter-jamming, 6.5 Qc scale and drift
+    assert "c:ssc.rgpo" in ids and "i:range_pulled" in ids and "m:orient" in ids
     assert data["counts"]["controls"] == len(json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))["controls"])
 
 

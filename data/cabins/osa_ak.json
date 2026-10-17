@@ -101,6 +101,8 @@
       "look": {"kind": "button", "size_m": 0.03, "color": "grey", "ring": "chrome", "label": "ПЕРЕДАТЧИК ВКЛ."} },
     { "control": "ssc.mti", "panel": "op_panel", "at_m": [0.017, -0.066],
       "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "СДЦ — ШТ."} },
+    { "control": "ssc.rgpo", "panel": "op_panel", "at_m": [0.057, -0.066], "notes": "Beside СДЦ — ШТ. on the receiver block: SAM3D estimate.",
+      "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "УВ. ПОМЕХА — ОТКЛ."} },
     { "control": "ro.semi_auto", "panel": "op_panel", "at_m": [-0.23, -0.261],
       "look": {"kind": "lamp_button", "size_m": 0.036, "color": "red", "ring": "grey", "label": "ПОЛУАВТОМАТ"} },
     { "control": "ssc.check_mode", "panel": "op_panel", "at_m": [-0.268, 0.246], "red_dot": 0,

@@ -551,3 +551,44 @@ SC_TEST("threat scenarios: with emissions control nothing radiates; the TV and t
     SC_EXPECT(r.summary.launches == 1);
     SC_EXPECT(r.debrief.find("HIT") != std::string::npos || r.debrief.find("MISS") != std::string::npos);
 }
+
+// Roadmap 9.4: the counter-jamming used only when automatic tracking is impossible (voenizdat_osa_1991 p259, p266).
+SC_TEST("threats 9.4: a range-gate pull-off is reported, the protection goes on, the lock holds; off once the fight is over") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_rgpo_em.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner runner(std::move(def), std::move(console));
+    bool pulled = false, protected_on = false;
+    double off_at = -1.0;
+    while (!runner.Finished() && runner.Time() < 600.0) {
+        runner.Step(0.1);
+        pulled = pulled || runner.Console().equipment.GetInput("range_pulled");
+        const bool on = runner.Console().panel.Get("ssc.rgpo") == 1;
+        protected_on = protected_on || on;
+        if (protected_on && !on && off_at < 0.0) off_at = runner.Time();
+    }
+    const std::string d = runner.Debrief();
+    SC_EXPECT(pulled);
+    SC_EXPECT(d.find("Увод по дальности!") != std::string::npos);
+    SC_EXPECT(d.find("Уводящая помеха! Защиту включить!") != std::string::npos);
+    SC_EXPECT(protected_on);
+    SC_EXPECT(runner.Log().Summary().launches >= 1);
+    SC_EXPECT(d.find("HIT") != std::string::npos || d.find("MISS") != std::string::npos);
+    SC_EXPECT(off_at > 0.0);  // switched off again when the jamming was over
+    SC_EXPECT(d.find("counter-jamming switched on with no range pull-off") == std::string::npos);
+    if (!pulled || !protected_on || off_at < 0.0) std::printf("%s\n", d.c_str());
+}
+
+SC_TEST("threats 9.4: switching the counter-jamming on with no pull-off is logged as a crew mistake") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_rgpo_em.json", kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    runner.Step(0.1);
+    SC_EXPECT(runner.TakeSeat("operator", "player"));
+    runner.PlayerSet("ssc.rgpo", 1);
+    runner.Step(0.1);
+    SC_EXPECT(runner.Debrief().find("counter-jamming switched on with no range pull-off") != std::string::npos);
+}

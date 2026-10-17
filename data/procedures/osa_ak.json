@@ -208,7 +208,8 @@
       "transmitter": "ssc_transmitter", "slew": "antenna_drives", "radar_mode": "capture_mode",
       "tv_camera": "tov_camera", "tv_mode": "tv_angle_track", "range_only_mode": "range_semi_auto",
       "az_wheel": "ssc.az_wheel", "el_wheel": "ssc.el_wheel", "range_wheel": "ssc.range_wheel",
-      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "mti_control": "ssc.mti", "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
+      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "mti_control": "ssc.mti", "rgpo_control": "ssc.rgpo", "range_pulled_input": "range_pulled",
+      "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "tv_track_input": "target_tv_tracked", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
@@ -234,6 +235,7 @@
 
   "inputs": [
     { "id": "heading_synced", "description": "The gyro half-compass agrees with the course setter ЗК-4 (the Qc scale has stopped)", "source": "voenizdat_osa_1991 p48, p246", "confidence": "high" },
+    { "id": "range_pulled", "description": "A repeater holds the tracking radar's range gate (range-gate pull-off): the target's mark and the jamming pulse split on the range indicator", "source": "voenizdat_osa_1991 p80-81 (the gate follows the stronger repeater pulse away from the echo), p258-259 (signs of repeater jamming on the indicators)", "confidence": "high" },
     { "id": "qc_known", "description": "The crew chief has found the vehicle's heading Qc with the artillery compass at this halt and commanded it", "source": "voenizdat_osa_1991 p246 (the deputy sets the Qc the crew chief commands), p249-250 (how he finds it)", "confidence": "high" },
     { "id": "vehicle_oriented", "description": "The gyro half-compass holds a heading set from the crew chief's Qc (until it is switched off)", "source": "voenizdat_osa_1991 p48; mon_2112_80 pp. 63-68 (orientation is lost when the equipment is switched off)", "confidence": "high" },
     { "id": "search_beam_1", "description": "The search radar is radiating its beam I (0-4 degrees) this turn: the I ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
@@ -411,7 +413,10 @@
       "source": "samsim_osa p16 (item 9; range indicator shows 28 km)", "confidence": "medium",
       "notes": "Moves the range gate. Range limits taken from the indicator's displayed range." },
     { "id": "ssc.mti", "label": "СДЦ / ШТ. (SSC)", "station": "operator", "kind": "switch", "position_labels": ["ШТ.", "СДЦ"],
-      "source": "samsim_osa p16 (item 10); start: samsim_game", "confidence": "high", "notes": "On OS61-5M. Starts at ШТ." },
+      "source": "samsim_osa p16 (item 10); start: samsim_game; voenizdat_osa_1991 p80-81 (СДЦ staggers the repetition periods, which defeats a pull-off that walks the gate in)", "confidence": "high", "notes": "On OS61-5M. Starts at ШТ." },
+    { "id": "ssc.rgpo", "label": "УВ. ПОМЕХА — ОТКЛ.", "station": "operator", "kind": "switch", "position_labels": ["ОТКЛ.", "УВ. ПОМЕХА"], "initial": 0,
+      "source": "voenizdat_osa_1991 p98-99 (switch on the SSC receiver block that switches on the tracking radar's protection against range-gate pull-off), p80-81 (the circuit blanks the video just after the tracked echo, so a pull-off that walks the gate out can't take it), p259 (counter-jamming is switched on only when search or automatic tracking is impossible, and off when the jamming stops), p266 (firing at a range pull-off: in the УВОДЯЩАЯ ПОМЕХА mode)", "confidence": "high",
+      "notes": "On the SSC receiver block with СДЦ / ШТ. (OS61-5M); its place there is a SAM3D estimate, start position ОТКЛ. (the textbook: protection is switched on only when needed). This is the counter-jamming the video_osa account says is used only when no other way is left: the textbook names it and its rule." },
     { "id": "ro.semi_auto", "label": "ПОЛУАВТОМАТ", "station": "operator", "kind": "button",
       "source": "samsim_osa p26", "confidence": "high", "notes": "Range-only tracking by the SSC." },
     { "id": "ssc.check_mode", "label": "РАБОТА / КОНТРОЛЬ / КАЛИБР.", "station": "operator", "kind": "switch", "position_labels": ["РАБОТА", "КОНТРОЛЬ", "КАЛИБР."], "initial": 1,
@@ -851,6 +856,23 @@
           "wait_for": [ { "subsystem": "missile_prep", "is": "ready" }, { "input": "target_in_zone", "is": true } ] },
         { "control": "fo.launch", "position": 1, "description": "ПУСК",
           "wait_for": [ { "subsystem": "launch_armed", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "counter_pull_off", "name": "Counter a range-gate pull-off (УВ. ПОМЕХА, СДЦ)",
+      "source": "voenizdat_osa_1991 p80-81 (the trailing-edge circuit against a pull-off that walks out; СДЦ's staggered periods against one that walks in), p259 (only when automatic tracking is impossible), p266 (firing at a pull-off in the УВОДЯЩАЯ ПОМЕХА mode)", "confidence": "medium",
+      "notes": "Operator, when he sees the target's mark split from the jamming pulse on the range indicator (range_pulled) and the commander orders it. After a pull-off has taken the gate away the lock is usually lost when the repeater falls silent; with the protection on the next capture holds. Both switches in one drill: he can't tell at once which way the pulse walks.",
+      "steps": [
+        { "control": "ssc.rgpo", "position": 1, "description": "УВ. ПОМЕХА on: the video just after the target's echo is blanked" },
+        { "control": "ssc.mti", "position": 1, "description": "СДЦ on: the staggered repetition periods leave a leading repeater non-synchronous" }
+      ]
+    },
+    {
+      "id": "pull_off_protection_off", "name": "Counter-jamming off when the jamming has stopped",
+      "source": "voenizdat_osa_1991 p259 (after the jammers are destroyed or the jamming stops, the counter-jamming is switched off)", "confidence": "high",
+      "notes": "Operator. СДЦ stays as the target's height needs it (the low-target drill sets it).",
+      "steps": [
+        { "control": "ssc.rgpo", "position": 0, "description": "УВ. ПОМЕХА off" }
       ]
     },
     {

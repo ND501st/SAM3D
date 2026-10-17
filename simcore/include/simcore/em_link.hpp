@@ -377,11 +377,22 @@ public:
         if (em::RadarState* r = Radar(search_)) r->iff_interrogating = on;
     }
 
-    void SetTrack(bool radiating) {
+    // The tracking radar: radiating; its СДЦ (staggered repetition periods: a repeater that walks the gate in becomes
+    // non-synchronous) and its pull-off circuit (УВ. ПОМЕХА: the video after the tracked echo is blanked, so a repeater
+    // that walks the gate out can't take it): roadmap 9.4, voenizdat_osa_1991 p80-81.
+    void SetTrack(bool radiating, bool mti = false, bool rgpo_protect = false) {
         em::RadarState* r = Radar(track_);
         if (r == nullptr) return;
         if (!radiating && r->on) ClearLock();
         r->on = radiating;
+        r->prf_staggered = mti;
+        r->rgpo_trailing_blank = rgpo_protect;
+    }
+    // A repeater holds the tracking radar's range gate (range-gate pull-off): the operator sees the target's mark and
+    // the jamming pulse split apart on the range indicator.
+    bool RangePulled() const {
+        const em::RadarState* r = Radar(track_);
+        return r != nullptr && r->rgpo_captured;
     }
 
     // Point the tracking radar at a place for the next ticks: where the console's wheels say (azimuth from north,

@@ -921,7 +921,9 @@ private:
         const Equipment& eq = console.equipment;
         const bool mti = !s.mti_control.empty() && console.panel.Get(s.mti_control) == 1;
         em_->SetSearch(eq.IsReady(s.antenna) && eq.IsReady(s.transmitter), mti);
-        em_->SetTrack(eq.IsReady(console.track.transmitter));
+        const TrackSensorDef& tr = console.track;
+        em_->SetTrack(eq.IsReady(tr.transmitter), !tr.mti_control.empty() && console.panel.Get(tr.mti_control) == 1,
+                      !tr.rgpo_control.empty() && console.panel.Get(tr.rgpo_control) == 1);
         em_->Advance(dt);
     }
 
@@ -1731,6 +1733,7 @@ private:
             eq.SetInput(d.captured_input, method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam);
         }
         if (!d.tv_track_input.empty()) eq.SetInput(d.tv_track_input, method_ == TrackMethod::Tv);
+        if (!d.range_pulled_input.empty()) eq.SetInput(d.range_pulled_input, em_ != nullptr && em_->RangePulled());
         if (!d.in_zone_input.empty()) eq.SetInput(d.in_zone_input, in_zone);
         if (!d.near_zone_input.empty()) {
             bool near_zone = in_zone;

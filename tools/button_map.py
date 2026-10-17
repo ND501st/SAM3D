@@ -52,7 +52,6 @@ PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
         ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
-        ("p:eccm", "Counter-jamming used only while firing (mixed tracking)", "9.4", "Jamming itself is built (9.1): the tracking radar follows a noise jammer in angle, the range comes by hand from the search scope or the PU-12, and ПОМЕХА fires by method Н. video_osa adds a counter-jamming facility used only while firing and only when no other way to track is left; what it is (a range-memory circuit is the video's guess) is not documented.", ["c:fo.pomekha", "e:launch"], "unknown"),
         ("p:radio_tx", "Transmissions from the vehicle: reports, ТОН. ВЫЗОВ, the chest switch (ПРД)", "7.8", "The sets only receive today: designations come in, nothing goes out. The commander's reports, the tone call and the chest switch's transmit position would use the transmit state (r123m_*_tx) and the EM layer's radio.", ["m:comms"], "missing"),
         ("p:preset_setup", "Setting the four presets: drum fixators, frequency, antenna tuning, smooth tuning", "7.8", "The presets are tuned when the scenario starts (the frequency plan is the scenario's). The real set's set-up drill (release a fixator, set the frequency, key, tune the antenna to the maximum, fix it: eight steps per frequency) and the smooth sub-band mode are not modelled.", ["c:radio.left.preset", "c:radio.right.preset"], "missing"),
         ("p:radio_audio", "Radio and intercom audio: noise, squelch, voices", "7.7", "Nothing is heard in the Unreal cabin: the net's state shows in the debrief and the lamps. Noise that the squelch removes, the voices of the designations and the R-124's sidetone would be audio.", ["m:comms"], "missing"),
@@ -245,10 +244,11 @@ class MapBuilder:
             self.add_node("m:track", t="model", label="Tracking radar and TV channel", notes=track.get("notes"),
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:track", [("s:", k, track, k) for k in ("transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode")]
-                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control")])
+                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control",
+                                                         "rgpo_control")])
             if es:
                 self.add_edge("m:elev", "m:track", "feed", "elevation search")
-            for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input"):
+            for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input", "range_pulled_input"):
                 if track.get(k):
                     self.add_edge("m:track", "i:" + track[k], "signal", "sets this signal")
         if orient:

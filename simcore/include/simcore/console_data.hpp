@@ -97,6 +97,11 @@ struct TrackSensorDef {
     std::string lock_control;    // lock that must be open before the aiming crew can turn the azimuth wheel
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
     std::string mti_control;     // tracking radar СДЦ / ШТ.: 1 = moving-target indication (may be empty)
+    // Counter-jamming (roadmap 9.4): the switch of the circuit against a range-gate pull-off that walks the gate out
+    // (УВ. ПОМЕХА, 1 = on; with the radar's EM model); the input set while a repeater holds the range gate (the
+    // operator sees the target's mark split from the jamming pulse on the range indicator). Both may be empty.
+    std::string rgpo_control;
+    std::string range_pulled_input;
     double fov_wide_deg = 0.0;
     double fov_narrow_deg = 0.0;
     double fov_height_ratio = 1.0;  // the lens field's height over its width (a 4:3 raster: 0.75)
@@ -1177,8 +1182,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "fov_deg", "fov_height_ratio", "max_range_m",
-                            "az_limit_deg", "captured_input", "tv_track_input", "too_low_input", "near_zone_input", "in_zone_input",
+                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
+                            "max_range_m", "az_limit_deg", "captured_input", "range_pulled_input", "tv_track_input", "too_low_input", "near_zone_input", "in_zone_input",
                             "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
@@ -1192,6 +1197,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
             !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
             !RefControl(*tr, tp, "mti_control", panel, ControlKind::Discrete, false, track.mti_control) ||
+            !RefControl(*tr, tp, "rgpo_control", panel, ControlKind::Discrete, false, track.rgpo_control) ||
+            !RefInput(*tr, tp, "range_pulled_input", eq, track.range_pulled_input) ||
             !OptionalNumber(*tr, tp, "max_range_m", track.max_range_m) ||
             !OptionalNumber(*tr, tp, "az_limit_deg", track.az_limit_deg) ||
             !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||
