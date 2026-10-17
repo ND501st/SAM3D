@@ -106,6 +106,12 @@ struct EngagementTuning {
     double tv_memory_s = 0.0;             // a masked target is carried on at the last rates for this long
     double tv_error_penalty = 0.0;        // loss of hit chance per reticle of mean aim error during the flight
     double tv_error_factor_min = 1.0;
+    // Range judged from the target's size in the TV picture (roadmap 6.6; optional): the span of each target class
+    // (metres, "default" required), how far off the crew's judgement of its size in thousandths is (a fraction, one
+    // draw per target), and the smallest span in thousandths they can judge at all.
+    std::map<std::string, double> tv_span_m;
+    double tv_size_error = 0.0;
+    double tv_size_min_mils = 0.0;
     // Search radar.
     double clutter_altitude_m = 0.0;
     // Tracking.
@@ -256,7 +262,8 @@ public:
         }
         if (root.Find("zones") != nullptr && !LoadZones(root, t)) return false;
         if (root.Find("tv") != nullptr) {
-            if (!Group(root, "tv", {"reticle_deg", "npc_delay_s", "memory_s", "error_penalty_per_reticle", "error_factor_min"}, g) ||
+            if (!Group(root, "tv", {"reticle_deg", "npc_delay_s", "memory_s", "error_penalty_per_reticle", "error_factor_min",
+                                    "span_m", "size_error", "size_min_mils"}, g) ||
                 !Num(*g, "tv", "reticle_deg", t.tv_reticle_deg, 0.01) || !Num(*g, "tv", "npc_delay_s", t.tv_npc_delay_s, 0.0) ||
                 !Num(*g, "tv", "memory_s", t.tv_memory_s, 0.0) ||
                 !Num(*g, "tv", "error_penalty_per_reticle", t.tv_error_penalty, 0.0) ||
@@ -264,6 +271,19 @@ public:
                 return false;
             }
             if (t.tv_error_factor_min > 1.0) return Fail("tv.error_factor_min", "must be from 0 to 1");
+            if (const json::Value* sp = g->Find("span_m")) {
+                if (!sp->Is(json::Type::Object)) return Fail("tv.span_m", "expected an object of class: metres");
+                for (std::size_t i = 0; i < sp->keys.size(); ++i) {
+                    if (!sp->items[i].Is(json::Type::Number) || !(sp->items[i].number > 0.0)) {
+                        return Fail(Join("tv.span_m", sp->keys[i]), "expected metres > 0");
+                    }
+                    t.tv_span_m[sp->keys[i]] = sp->items[i].number;
+                }
+                if (t.tv_span_m.count("default") == 0) return Fail("tv.span_m", "needs a \"default\" entry");
+                if (!Num(*g, "tv", "size_error", t.tv_size_error, 0.0) || !Num(*g, "tv", "size_min_mils", t.tv_size_min_mils, 0.0)) {
+                    return false;
+                }
+            }
             t.has_tv_manual = true;
         }
         if (root.Find("methods") != nullptr) {
@@ -493,6 +513,7 @@ struct EngagementTarget {
     bool evade_on_launch = false;
     double evade_turn_rate_rad_s = 0.0;
     bool friendly = false;  // replies to IFF interrogation
+    double span_m = 0.0;    // its span as the TV sight sees it (0: the tuning's for its class)
 };
 
 // RadarOnJam: the tracking radar follows a noise jammer in angle; its echo is drowned, so there is no radar range.
@@ -523,6 +544,21 @@ inline double TvFieldOfViewDeg(const ConsoleData& console) {
     if (d.tv_camera.empty()) return 0.0;
     const bool narrow = !d.fov_control.empty() && console.panel.Get(d.fov_control) == 1;
     return narrow ? d.fov_narrow_deg : d.fov_wide_deg;
+}
+
+// The TV reticle's marks (roadmap 6.6): one every `reticle_deg` out from the centre along a crosshair arm, as fractions
+// of that half of the screen (`half_field_deg` of the lens field), as far as `limit` of it. The crew read a target's
+// size against them (3 thousandths = 0.18 deg: in the narrow lens, 1.44 deg wide, a mark every quarter of the half
+// width; in the wide one every 7.5 %).
+inline std::vector<double> ReticleMarks(double half_field_deg, double reticle_deg, double limit = 0.8) {
+    std::vector<double> out;
+    if (!(half_field_deg > 0.0) || !(reticle_deg > 0.0)) return out;
+    for (int k = 1; k < 200; ++k) {
+        const double f = k * reticle_deg / half_field_deg;
+        if (f > limit + 1e-9) break;
+        out.push_back(f);
+    }
+    return out;
 }
 
 // One number from [0, 1) drawn from a std::mt19937, the same on every platform.
@@ -582,6 +618,7 @@ public:
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
         if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
+        UpdateTvRange();
         UpdateTrack(t, dt, console, log, aim_crew);
         UpdateTrackReturns(console);
         SetInputs(console);
@@ -716,6 +753,12 @@ public:
     double IndicatedToTrueDeg(double indicated_deg) const {
         return Wrap180(indicated_deg + unit_heading_deg_ - gyro_heading_deg_);
     }
+    // The TV picture (roadmap 6.6): the tracked target's span in thousandths while the TV holds it (0 otherwise), and the
+    // range the crew make of it by the formula of the thousandth (0 when they can't: no span known, too small to judge).
+    double TvSpanMils() const { return tv_span_mils_; }
+    double TvRangeEstimateM() const { return tv_range_estimate_m_; }
+    // The range the zone is judged by comes from the TV picture: no radar range, nothing on the search scope or the board.
+    bool RangeFromTvSize(const ConsoleData& console) const { return RangeFrom(console) == RangeSource::TvSize; }
     // A target that has answered the IFF as a friend at some time (the crew remembers it).
     bool KnownFriend(const std::string& id) const { return replied_.count(id) != 0; }
     // IFF replies painted on the search scope this step.
@@ -791,6 +834,7 @@ private:
         Vec3 prev_los_dir;
         bool has_prev = false;
         std::string target_class;
+        double span_m = 0.0;  // the scenario's span for it (0: its class's)
     };
 
     struct Shot {
@@ -848,6 +892,7 @@ private:
         for (const EngagementTarget& tg : targets) {
             Geometry& g = geo_[tg.id];
             g.target_class = tg.target_class;
+            g.span_m = tg.span_m;
             g.friendly = tg.friendly;
             const Aircraft* a = tg.world_id >= 0 ? world.FindAircraft(tg.world_id) : nullptr;
             g.alive = a != nullptr && a->alive;
@@ -1219,7 +1264,7 @@ private:
     // wheel on the target's blip on the search scope (Korovin: in heavy jamming, angles from the TV sight, range from
     // the search radar), or, with the search radar silent or jammed too, to the range the battery commander last gave
     // for it (the plotting board's designation, up to a minute old). By hand the range is the wheel's, whoever turns it.
-    enum class RangeSource { None, Radar, RangeOnly, Search, Board };
+    enum class RangeSource { None, Radar, RangeOnly, Search, Board, TvSize };
     RangeSource RangeFrom(const ConsoleData& console) const {
         if (method_ == TrackMethod::Radar) return RangeSource::Radar;
         const TrackSensorDef& d = console.track;
@@ -1230,9 +1275,10 @@ private:
             if (SearchContact(tracked_) != nullptr) return RangeSource::Search;
             if (BoardRange(tracked_) > 0.0) return RangeSource::Board;
         }
+        if (method_ == TrackMethod::Tv && tv_range_estimate_m_ > 0.0) return RangeSource::TvSize;
         return RangeSource::None;
     }
-    static bool ByHand(RangeSource s) { return s == RangeSource::Search || s == RangeSource::Board; }
+    static bool ByHand(RangeSource s) { return s == RangeSource::Search || s == RangeSource::Board || s == RangeSource::TvSize; }
 
     // The range the battery commander last gave for this target (its newest board mark), 0 if none.
     double BoardRange(const std::string& id) const {
@@ -1263,7 +1309,10 @@ private:
             range_bias_for_ = tracked_;
             range_bias_m_ = crew.range_error_m > 0.0 ? crew.range_error_m * AimNormal() : 0.0;
         }
-        const double want = (source == RangeSource::Search ? SearchContact(tracked_)->range_m : BoardRange(tracked_)) + range_bias_m_;
+        const double want = (source == RangeSource::Search  ? SearchContact(tracked_)->range_m
+                             : source == RangeSource::Board ? BoardRange(tracked_)
+                                                            : tv_range_estimate_m_) +
+                            range_bias_m_;
         const TrackSensorDef& d = console.track;
         const double wheel_r = console.panel.GetValue(d.range_wheel);
         console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
@@ -1818,6 +1867,42 @@ private:
     std::mt19937 aim_rng_{20261016u};
     std::string range_bias_for_;
     double range_bias_m_ = 0.0;
+    // Range from the TV picture: the tracked target's span in thousandths, the crew's estimate from it (0: none), and
+    // the per-target error of their judgement of its size.
+    double tv_span_mils_ = 0.0;
+    double tv_range_estimate_m_ = 0.0;
+    std::string tv_size_for_;
+    double tv_size_error_ = 0.0;
+
+    double SpanOf(const std::string& id) const {
+        const auto g = geo_.find(id);
+        if (g != geo_.end() && g->second.span_m > 0.0) return g->second.span_m;
+        const std::string cls = g != geo_.end() ? g->second.target_class : std::string("default");
+        const auto it = tuning_.tv_span_m.find(cls);
+        if (it != tuning_.tv_span_m.end()) return it->second;
+        const auto d = tuning_.tv_span_m.find("default");
+        return d != tuning_.tv_span_m.end() ? d->second : 0.0;
+    }
+    // While the TV holds the target: its span in the picture, and the range the crew make of it by the formula of the
+    // thousandth (range = size x 1000 / thousandths), with their error judging the size. The formula treats a
+    // thousandth as 1/1000 of a radian (it is 1/955), so it reads about 5 % long, as it does for real crews.
+    void UpdateTvRange() {
+        tv_span_mils_ = 0.0;
+        tv_range_estimate_m_ = 0.0;
+        if (method_ != TrackMethod::Tv || tuning_.tv_span_m.empty()) return;
+        const auto g = geo_.find(tracked_);
+        if (g == geo_.end() || !g->second.alive || !g->second.los || g->second.range_m <= 1.0) return;
+        const double span = SpanOf(tracked_);
+        if (span <= 0.0) return;
+        tv_span_mils_ = (span / g->second.range_m) * (6000.0 / (2.0 * 3.14159265358979323846));
+        if (tv_span_mils_ < tuning_.tv_size_min_mils) return;
+        if (tv_size_for_ != tracked_) {
+            tv_size_for_ = tracked_;
+            tv_size_error_ = tuning_.tv_size_error > 0.0 ? tuning_.tv_size_error * AimNormal() : 0.0;
+        }
+        const double judged_mils = tv_span_mils_ * std::max(0.2, 1.0 + tv_size_error_);
+        tv_range_estimate_m_ = span * 1000.0 / judged_mils;
+    }
     double AimNormal() {  // a standard normal draw (Box-Muller), the same on every platform
         const double u1 = (static_cast<double>(aim_rng_()) + 1.0) / 4294967297.0;
         const double u2 = static_cast<double>(aim_rng_()) / 4294967296.0;

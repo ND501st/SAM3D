@@ -19,6 +19,7 @@
 // a miss (step 1b, and on launch). Without one, launches are only recorded.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <algorithm>
@@ -85,6 +86,7 @@ public:
             e.evade_on_launch = t.evade_on_launch;
             e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
             e.friendly = t.friendly;
+            e.span_m = t.span_m;
             eng_targets_.push_back(e);
         }
         fired_.assign(def_.triggers.size(), false);
@@ -172,6 +174,7 @@ public:
         SeeInstruments();
         UpdateGrades();
         UpdateCallouts();
+        UpdateTvRangeCallout();
         UpdateCounterJamming();
         UpdateStress();
         UpdateNpcCommander();
@@ -897,6 +900,21 @@ private:
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
     // sources are cut so the rest stays for driving (roadmap 7.4).
     // A prepared position's supply (roadmap 7.6): the grid, then after a cut the diesel set once it has started.
+    // Range from the TV picture (roadmap 6.6): the deputy, watching the TV, tells the operator the range he makes of the
+    // target's size against the reticle; again whenever it has changed by a kilometre.
+    int tv_range_said_km_ = -1;
+    void UpdateTvRangeCallout() {
+        if (!engagement_on_ || !callouts_) return;
+        if (!engagement_.RangeFromTvSize(console_)) {
+            tv_range_said_km_ = -1;
+            return;
+        }
+        const int km = static_cast<int>(std::floor(engagement_.TvRangeEstimateM() / 1000.0 + 0.5));
+        if (km == tv_range_said_km_ || !NpcAt("deputy_commander")) return;
+        tv_range_said_km_ = km;
+        Say("tv_range", "deputy_commander", {{"range_km", std::to_string(km)}});
+    }
+
     // Counter-jamming (roadmap 9.4) is switched on only when automatic tracking is impossible and off when the jamming
     // stops (voenizdat_osa_1991 p259): switching it on with no range pull-off seen in the last minute is a crew mistake.
     double last_pulled_s_ = -1e9;

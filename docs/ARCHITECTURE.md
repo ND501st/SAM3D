@@ -168,7 +168,8 @@ roadmap phase 6:
   (`orientation.hpp`; the crew's azimuths are in the gyro's frame). The compass work is one timed activity with an
   estimated error, not the sighting itself; the GA-3's own drift and the survey's time and error are estimates. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
-- TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
+- TV channel: tracked by hand (the wheels), with the 3-thousandth reticle drawn in the Unreal view and the range judged
+  from the target's size against it (class spans are placeholders). (6.6)
 - Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer
   drowns the tracking radar's echo and the radar follows it in angle; the range is then by hand (search scope or PU-12)
   and Н has an outcome factor (9.1). A range-gate pull-off takes the gate; УВ. ПОМЕХА (against one walking out) and

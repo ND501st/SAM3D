@@ -247,7 +247,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			USimCabinComponent::UseCabinLighting(Line);
 			Line->RegisterComponent();
 			Line->SetRelativeLocationAndRotation(Centre + Normal * 1.4, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
-			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.0012) : FVector(0.001, 0.0012, 0.4 * Display.height_m));
+			// The arms reach 80 % of the way to the edges, as far as the reticle's marks go.
+			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.8 * Display.width_m, 0.0012) : FVector(0.001, 0.0012, 0.8 * Display.height_m));
 			if (ShapeMaterial != nullptr)
 			{
 				// Black reads against the bright sky the camera mostly sees.
@@ -255,6 +256,30 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			}
 			Line->SetVisibility(false);
 			Parts.Add(Line);
+		}
+		// The reticle's marks, placed for the lens in use each frame (UpdateTv).
+		TvCentre = Centre;
+		TvNormal = Normal;
+		TvRight = Right;
+		TvUp = Up;
+		TvWidthCm = WidthCm;
+		TvHeightCm = HeightCm;
+		for (int32 I = 0; I < 4 * kMarksPerArm && Cube != nullptr; ++I)
+		{
+			UStaticMeshComponent* Mark = NewObject<UStaticMeshComponent>(GetOwner());
+			Mark->SetStaticMesh(Cube);
+			Mark->SetupAttachment(GetAttachParent());
+			Mark->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mark->SetCastShadow(false);
+			USimCabinComponent::UseCabinLighting(Mark);
+			Mark->RegisterComponent();
+			Mark->SetRelativeRotation(FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
+			if (ShapeMaterial != nullptr)
+			{
+				Mark->CreateDynamicMaterialInstance(0, ShapeMaterial)->SetVectorParameterValue(TEXT("Color"), FLinearColor::Black);
+			}
+			Mark->SetVisibility(false);
+			ReticleMarks.Add(Mark);
 		}
 	}
 }
@@ -269,6 +294,14 @@ void USimCabinDisplayComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 		}
 	}
 	Parts.Reset();
+	for (UStaticMeshComponent* Mark : ReticleMarks)
+	{
+		if (Mark != nullptr)
+		{
+			Mark->DestroyComponent();
+		}
+	}
+	ReticleMarks.Reset();
 	if (Screen != nullptr)
 	{
 		Screen->DestroyComponent();
@@ -763,6 +796,37 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	if (Capture == nullptr)
 	{
 		return;
+	}
+	// The reticle's marks: every reticle (3 thousandths) along each arm, for the lens in use; a short bar across the arm.
+	{
+		const simcore::ConsoleData& C = Runner.Console();
+		const double Reticle = Runner.Def().tuning.has_tv_manual ? Runner.Def().tuning.tv_reticle_deg : 0.0;
+		const double HalfW = 0.5 * simcore::TvFieldOfViewDeg(C);
+		const std::vector<double> Across = simcore::ReticleMarks(HalfW, Reticle);
+		const std::vector<double> Upward = simcore::ReticleMarks(HalfW * C.track.fov_height_ratio, Reticle);
+		const double MarkM = 0.025 * FMath::Min(TvWidthCm, TvHeightCm) / 100.0;
+		for (int32 I = 0; I < ReticleMarks.Num(); ++I)
+		{
+			UStaticMeshComponent* Mark = ReticleMarks[I];
+			if (Mark == nullptr)
+			{
+				continue;
+			}
+			const int32 Arm = I / kMarksPerArm;  // 0 right, 1 left, 2 up, 3 down
+			const int32 K = I % kMarksPerArm;
+			const bool bAcross = Arm < 2;
+			const std::vector<double>& Marks = bAcross ? Across : Upward;
+			const bool bShow = bOn && K < static_cast<int32>(Marks.size());
+			Mark->SetVisibility(bShow);
+			if (!bShow)
+			{
+				continue;
+			}
+			const double Sign = (Arm == 0 || Arm == 2) ? 1.0 : -1.0;
+			const FVector Along = bAcross ? TvRight * (Sign * Marks[K] * 0.5 * TvWidthCm) : TvUp * (Sign * Marks[K] * 0.5 * TvHeightCm);
+			Mark->SetRelativeLocation(TvCentre + TvNormal * 1.4 + Along);
+			Mark->SetRelativeScale3D(bAcross ? FVector(0.001, 0.0012, MarkM) : FVector(0.001, MarkM, 0.0012));
+		}
 	}
 	if (!bOn)
 	{

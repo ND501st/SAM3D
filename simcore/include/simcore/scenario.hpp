@@ -58,6 +58,7 @@ struct ScenarioTarget {
     bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
     int board_type = -1;                   // its type on the PU-12 board (0-9; -1: 1 if a friend, else 9, no IFF)
     int formation = 1;                     // aircraft in its formation, as the board notes it
+    double span_m = 0.0;                   // its span as the TV sight sees it (0: the gameplay tuning's for its class)
     TargetBehaviourDef behaviour;          // terrain following, pop-up (target_behaviour.hpp)
     EvadeDef evade;                        // evasion on launch or lock (takes the place of evade_on_launch)
 };
@@ -572,7 +573,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "notes"})) {
+                             "formation", "behaviour", "evade", "span_m", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -584,7 +585,11 @@ private:
                 return false;
             }
             if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
-            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation)) return false;
+            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation) ||
+                !OptionalNumber(t, p, "span_m", tg.span_m)) {
+                return false;
+            }
+            if (tg.span_m < 0.0) return Fail(Join(p, "span_m"), "must be >= 0");
             if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
                 return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
             }
