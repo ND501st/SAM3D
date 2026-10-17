@@ -13,6 +13,11 @@ master's perfect performance).
 
 In `<system>_crew.json` (roadmap 8.8, 8.10):
 
+- **`commander_seat`** (default `commander`) is the seat that commands the crew: the NPC commander's seat, whose
+  picture the decisions use, who gives the orders and is not acknowledged by himself. The PU-12M's is
+  `battery_commander`.
+- **A fact's `by_action`** means one of its seats makes the input *true* by an action of his own (the driver halts);
+  making it false is not a way the drill master takes.
 - **A seat's `stand_for`** lists the controls out of its seated reach. They are checked against the body model and the
   cabin by a test, and `standing` gives the time to get up (`stand_s`) and sit down (`sit_s`).
 - **An order's `needs`** names what it can't do without: `contact`, `tracked`, `jamming`, `missiles`.
@@ -26,4 +31,4 @@ control, subsystem and input named here against the system's console file (`data
 Conditions use the console file's form: `{ "control": id, "is": position }`, `{ "subsystem": id, "is": "ready" | "off"
 | … }`, `{ "input": id, "is": true | false }`.
 
-After changing either file, run `python tools/crew_map.py` to update `docs/crew/generated/`.
+After changing either file, run `python tools/crew_map.py <system>` (`osa_ak`, `pu12m`) to update `docs/crew/generated/`.

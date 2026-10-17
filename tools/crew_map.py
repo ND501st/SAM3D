@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SEATS = ["commander", "deputy_commander", "senior_operator", "operator", "driver"]
+SEATS = ["commander", "deputy_commander", "senior_operator", "operator", "driver"]  # the Osa's, when a console lists none
 
 
 def load(system):
@@ -107,6 +107,7 @@ class Graph:
 
 def build(system):
     con, cab, crew = load(system)
+    seat_ids = [st["id"] for st in con.get("stations", [])] or SEATS
     g = Graph(con, crew)
     controls = con["controls"]
     procs = con.get("procedures", [])
@@ -166,7 +167,7 @@ def build(system):
     w("")
 
     w("## 1. Seats")
-    for seat in SEATS:
+    for seat in seat_ids:
         info = seat_info.get(seat, {})
         w("")
         w(f"### {st_label.get(seat, seat)} (`{seat}`)" + (f": {info['title_ru']}" if info.get("title_ru") else ""))
@@ -258,11 +259,11 @@ def build(system):
     w("")
     w("Rows wait for columns: the drills of the row's seat that wait on something the column's seat does.")
     w("")
-    w("| waits → for | " + " | ".join(SEATS) + " |")
-    w("|---|" + "---|" * len(SEATS))
-    for a in SEATS:
+    w("| waits → for | " + " | ".join(seat_ids) + " |")
+    w("|---|" + "---|" * len(seat_ids))
+    for a in seat_ids:
         cells = []
-        for b in SEATS:
+        for b in seat_ids:
             ps = sorted(wait_matrix.get((a, b), []))
             cells.append("–" if a == b or not ps else ", ".join(f"`{p}`" for p in ps))
         w(f"| **{a}** | " + " | ".join(cells) + " |")
@@ -293,7 +294,7 @@ def build(system):
                     acts[seat].append((ctrl, pos))
         w("| Seat | Controls in the chain (alternatives included) |")
         w("|---|---|")
-        for seat in SEATS:
+        for seat in seat_ids:
             if seat in acts:
                 w(f"| {seat} | {', '.join(f'`{c}`={p}' for c, p in acts[seat])} |")
 

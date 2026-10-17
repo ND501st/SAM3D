@@ -278,6 +278,11 @@ struct ConsoleData {
     CommsDef comms;
     bool has_fuel = false;
     FuelDef fuel;
+    // A command post's own board ("post"): the command network's source that is this vehicle's board, and the
+    // subsystems that give it a picture (any one ready). The board is off the air while none is.
+    bool has_post = false;
+    std::string post_board_source;
+    std::vector<std::string> post_picture;
     std::vector<ReadinessState> readiness;
 
     const ReadinessState* FindReadiness(const std::string& id) const {
@@ -308,7 +313,7 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors", "post"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -322,6 +327,7 @@ public:
         if (!LoadLaunch(root, out)) return false;
         if (!LoadLauncher(root, out) || !LoadComms(root, out)) return false;
         if (!LoadFuel(root, out)) return false;
+        if (!LoadPost(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
     }
@@ -623,6 +629,24 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool NumberOf(const json::Value& obj, const std::string& path, const char* key, double& out) {
         if (obj.Find(key) == nullptr) return Fail(Join(path, key), "required");
         return OptionalNumber(obj, path, key, out);
+    }
+
+    bool LoadPost(const json::Value& root, ConsoleData& out) {
+        const json::Value* p = root.Find("post");
+        if (p == nullptr) return true;
+        if (!Keys(*p, "post", {"board_source", "picture", "source", "confidence", "notes"}) || !Provenance(*p, "post") ||
+            !RequireString(*p, "post", "board_source", out.post_board_source)) {
+            return false;
+        }
+        const json::Value* pic = p->Find("picture");
+        if (pic == nullptr || !pic->Is(json::Type::Array) || pic->items.empty()) return Fail("post.picture", "a list of subsystems");
+        for (std::size_t i = 0; i < pic->items.size(); ++i) {
+            const json::Value& v = pic->items[i];
+            if (!v.Is(json::Type::String) || out.equipment.Def(v.string) == nullptr) return Fail(Index("post.picture", i), "unknown subsystem");
+            out.post_picture.push_back(v.string);
+        }
+        out.has_post = true;
+        return true;
     }
 
     bool LoadFuel(const json::Value& root, ConsoleData& out) {

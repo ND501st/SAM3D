@@ -141,6 +141,14 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   controls, 26 subsystems (power from the AB-1, the G-290B or a network; the mast; five radios; GAK, PAB-2, KP-4, DTP;
   the ASPD-U), one deployment drill per seat, stowing, the march and deployed states. Tests
   `simcore/tests/test_pu12m_console.cpp`: a crew of five deploys from cold in about 10 min (the norm: at most 18).
+- **P2 first pass:** `data/crew/pu12m_crew.json` (the five seats, the orders Пункт управления развернуть / свернуть and
+  the single jobs, the reports, the tasks, the world facts) and `data/scenarios/pu12m_deploy.json`: with nothing
+  scripted, the NPC battery commander has the post deployed in 602 s; each seat reports its part. The crew data names
+  its commanding seat (`commander_seat`), so the runner's NPC commander, reminders and pictures work for any crew. The
+  post's own board (`post` in the console; the scenario's `command_post`) fills only while the ASPD-U receives the
+  regiment's picture or a radar is cabled in. Crew map: `docs/crew/generated/pu12m_action_map.md`. Left for P3: the
+  plotting itself as the operator's work (marks taken with the DI marker, 2-3 s each), the IT-45 as a scope, the
+  telecode as EM messages, the orientation error from the drill.
 
 ## 6. Placeholder now
 

@@ -1,10 +1,13 @@
 // The PU-12M battery command post's console (data/procedures/pu12m.json, docs/PU12_DEVELOPMENT.md P1): five stations,
-// the equipment's switching and the deployment drills, run by a crew of five as the Osa's console is.
+// the equipment's switching and the deployment drills, run by a crew of five as the Osa's console is; and the NPC
+// crew deploying the post on its own (P2, data/crew/pu12m_crew.json, data/scenarios/pu12m_deploy.json).
 #include <string>
 #include <vector>
 
 #include "simcore/console_data.hpp"
 #include "simcore/procedures.hpp"
+#include "simcore/scenario.hpp"
+#include "simcore/scenario_runner.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -194,4 +197,45 @@ SC_TEST("pu12m data: the readiness states warm what they list; stowing brings th
         SC_EXPECT(c.equipment.State("mast_up") == SubsystemState::Off && c.equipment.State("ab1_placed") == SubsystemState::Off);
         SC_EXPECT(crew.Deviations() == 0 && !Faulted(c));
     }
+}
+
+
+SC_TEST("pu12m crew: with no orders scripted, the NPC battery commander has the post deployed and each seat reports") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_deploy.json", SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    double deployed_s = -1.0, picture_s = -1.0, first_mark_s = -1.0;
+    while (!r.Finished() && r.Time() < 1500.0) {
+        r.Step(0.1);
+        if (deployed_s < 0.0 && Deployed(r.Console())) deployed_s = r.Time();
+        if (picture_s < 0.0 && r.Console().equipment.IsReady("telecode_reception")) picture_s = r.Time();
+        if (first_mark_s < 0.0 && r.Board() != nullptr && !r.Board()->Marks().empty()) first_mark_s = r.Time();
+    }
+    std::printf("    deployed at %.0f s; the picture from %.0f s, the first mark at %.0f s\n", deployed_s, picture_s, first_mark_s);
+    // The post's own board fills only once its ASPD-U receives the regiment's picture (the target is on the regiment's
+    // picture from the start).
+    SC_EXPECT(picture_s > 0.0 && first_mark_s >= picture_s && first_mark_s < picture_s + 1.0);
+    SC_EXPECT(r.Board() != nullptr && r.Board()->Marks().size() >= 10);  // once a minute since
+    SC_EXPECT(deployed_s > 0.0 && deployed_s <= 1080.0);
+    auto said = [&](const std::string& id, const std::string& from) {
+        for (const SpokenCallout& c : r.Callouts()->Log()) {
+            if (c.id == id && c.from == from) return true;
+        }
+        return false;
+    };
+    // One order for all five drills, from the commanding seat; each part reported by the seat that did it.
+    int orders = 0;
+    for (const SpokenCallout& c : r.Callouts()->Log()) orders += c.id == "order_deploy" ? 1 : 0;
+    SC_EXPECT(orders == 1 && said("order_deploy", "battery_commander"));
+    SC_EXPECT(said("power_on", "driver") && said("mast_up", "radio_operator") && said("oriented", "squad_leader"));
+    SC_EXPECT(said("aspd_ready", "operator") && said("telecode_on", "operator"));
+    SC_EXPECT(!said("ack", "battery_commander") && !said("done", "battery_commander"));  // he doesn't answer himself
+    // The AB-1 at the halt, never the G-290B (that one is for the move).
+    SC_EXPECT(r.Console().panel.Get("pwr.input") == 1 && r.Console().panel.Get("pwr.g290") == 0);
+    const std::string d = r.Debrief();
+    SC_EXPECT(d.find("Post deployed (пункт управления развёрнут):") != std::string::npos);
+    SC_EXPECT(d.find("Equipment faults: 0") != std::string::npos);
 }

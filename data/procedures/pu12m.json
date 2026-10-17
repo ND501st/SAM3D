@@ -92,9 +92,10 @@
   "subsystems": [
     { "id": "net_27v", "name": "27 V network (batteries)", "enable": [ { "control": "pwr.mass", "is": 1 } ], "start_ready": true,
       "source": "valka_pu12 (2 x 6ST-75, AZS-50)", "confidence": "medium" },
-    { "id": "g290", "name": "G-290B generator running (on the move)", "enable": [ { "control": "pwr.g290", "is": 1 }, { "subsystem": "net_27v", "is": "ready" } ],
+    { "id": "g290", "name": "G-290B generator running (on the move)", "enable": [ { "control": "pwr.g290", "is": 1 }, { "subsystem": "net_27v", "is": "ready" }, { "input": "vehicle_stopped", "is": false } ],
       "start_time_s": { "value": 5, "source": "estimate (a generator on the running engine)", "confidence": "estimate" },
-      "source": "flak11 (PU12-0), valka_pu12", "confidence": "medium" },
+      "source": "flak11 (PU12-0), valka_pu12 (generator G-290B: to power the car while driving)", "confidence": "medium",
+      "notes": "On the move only: at a halt the post runs on the AB-1 set (or an external network)." },
     { "id": "ab1_placed", "name": "AB-1 set on the ground, earthed and cabled", "enable": [ { "control": "pwr.ab1_set", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
       "start_time_s": { "value": 240, "source": "estimate (two men lift the set down, earth and cable it; fitted with the other jobs under the 18 min norm of ru_pu12_text)", "confidence": "estimate" },
       "stop_time_s": { "value": 180, "source": "estimate (uncable and lift back)", "confidence": "estimate" },
@@ -237,6 +238,10 @@
         { "control": "aspd.power", "position": 0, "description": "ASPD-U off" }
       ] }
   ],
+
+  "post": { "board_source": "pu12", "picture": [ "telecode_reception", "primary_picture" ],
+            "source": "flak11 (PU12-0: the ASPD-U receives the air picture by telecode, or the primary picture from a radar cabled to the post, and shows it on the IT-45, from which the board is plotted)", "confidence": "medium",
+            "notes": "The scenario's command post (command_post / c2 source pu12) is this vehicle's own board: it is off the air until the post has a picture." },
 
   "readiness": {
     "march": { "description": "on the march: the post's radios on and warm, the GAK and KP-4 plotting the route",

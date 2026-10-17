@@ -110,6 +110,7 @@ struct AutoReportDef {
 
 struct CrewData {
     std::string system_id;
+    std::string commander = "commander";  // the seat that commands the crew (commander_seat): gives the orders, holds the picture
     std::vector<CrewSeatDef> seats;
     std::vector<CalloutDef> callouts;
     std::vector<OrderDef> orders;
@@ -210,10 +211,14 @@ namespace detail {
 class CrewLoader : public ConsoleLoader {
 public:
     bool LoadCrew(const json::Value& root, const ConsoleData& console, CrewData& out) {
-        if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "seats", "callouts", "orders",
-                             "tasks", "facts", "reports", "decisions", "standing"}) ||
-            !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "")) {
+        if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "commander_seat", "seats", "callouts",
+                             "orders", "tasks", "facts", "reports", "decisions", "standing"}) ||
+            !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "") ||
+            !OptionalString(root, "", "commander_seat", out.commander)) {
             return false;
+        }
+        if (out.commander.empty() || (!console.stations.empty() && console.FindStation(out.commander) == nullptr)) {
+            return Fail("commander_seat", "'" + out.commander + "' is not a station of the console");
         }
         if (out.system_id != console.system_id) {
             return Fail("system_id", "'" + out.system_id + "' is not the console's '" + console.system_id + "'");

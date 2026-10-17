@@ -44,6 +44,11 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   // Optional: states a session can start in instead of cold (roadmap 6.2; a scenario's own_unit.readiness picks one):
   // controls already set, inputs, subsystems warmed up at once (in dependency order: each must be commanded on by then),
   // and whether the vehicle is already oriented. "cold" is the default and has no entry.
+  // Optional: a command post's own board (the PU-12M). board_source is the command network's source that is this
+  // vehicle's board (the scenario's command_post makes it "pu12"); picture lists the subsystems that give it a picture
+  // (any one ready). While none is, the source is off the air ("the post has no picture") and nothing is plotted.
+  "post": { "board_source": "pu12", "picture": [ "telecode_reception", "primary_picture" ], "source": "...", "confidence": "medium" },
+
   "readiness": {
     "deployed": { "description": "...", "controls": { "pwr.gta": 1, "apu.lock": 1 }, "inputs": { "vehicle_stopped": true },
                   "ready": [ "gta", "power", "equipment_warm" ], "oriented": true, "source": "...", "confidence": "medium" }
