@@ -114,6 +114,7 @@ struct ScenarioDef {
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
+    bool radio_presets_set = true;  // own_unit.radio_presets: "set" (the frequency plan is on the fixators) or "unset"
     PositionPowerDef position_power;
     PreparedPositionDef prepared;  // own_unit.prepared_position (roadmap 7.6)
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
@@ -306,7 +307,7 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
+            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "radio_presets", "position_power", "prepared_position",
                                    "position", "heading_deg", "inputs"})) {
             return false;
         }
@@ -341,6 +342,12 @@ private:
             }
         }
         if (!OptionalNumber(*u, "own_unit", "fuel_fraction", out.fuel_fraction)) return false;
+        if (const json::Value* rp = u->Find("radio_presets")) {
+            if (!rp->Is(json::Type::String) || (rp->string != "set" && rp->string != "unset")) {
+                return Fail("own_unit.radio_presets", "\"set\" (the frequency plan on the fixators) or \"unset\"");
+            }
+            out.radio_presets_set = rp->string == "set";
+        }
         if (out.fuel_fraction < 0.0 || out.fuel_fraction > 1.0) return Fail("own_unit.fuel_fraction", "from 0 to 1");
         if (!LoadPositionPower(*u, console, out.position_power)) return false;
         if (!OptionalString(*u, "own_unit", "readiness", out.readiness)) return false;

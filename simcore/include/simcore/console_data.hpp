@@ -141,6 +141,15 @@ struct CommsRadioDef {
     std::string power, mode, squelch, volume, antenna;  // controls
     std::string warm, transmit;                         // subsystems
     std::string tone;                                   // ТОН. ВЫЗОВ button (optional): a call tone while transmitting
+    // The preset set-up (roadmap 7.8, radio_setup.hpp; optional, all or none): the preset selector (positions 0-3 the
+    // fixed frequencies, then ПЛАВНЫЙ ПОДДИАПАЗОН I and II), the fixators' cover and the four fixators (0 locked,
+    // 1 unlocked), УСТАНОВКА ЧАСТОТЫ (a wheel, MHz), ПОДДИАПАЗОН (0 I, 1 II), the antenna-tuning knob's lock (0 locked)
+    // and the knob (a wheel, divisions); the inputs set while the set is on its net's frequency and while it is keyed
+    // with its antenna tuned (the tuning lamp at its brightest).
+    std::string preset, fixator_cover, frequency, subband, antenna_lock, antenna_tune;
+    std::vector<std::string> fixators;
+    std::string on_frequency_input, tuned_input;
+    bool HasSetup() const { return !frequency.empty(); }
 };
 
 struct CommsDef {
@@ -156,6 +165,14 @@ struct CommsDef {
     int driver_radio_position = 0;
     std::string intercom_subsystem;
     std::string chest;                       // the commander's chest switch (optional): position 1 = ПРД, transmitting
+    std::string driver_chest;                // the driver's (optional): with his ПВ on РС it keys the left set
+    // Tuning the sets (radio_setup.hpp): the motors' time to drive the knobs to a fixed frequency, the antenna circuit's
+    // half-width in knob divisions, how fast the vibration walks a smooth-tuned frequency off on the move, the reading
+    // at which the tuning lamp is at its brightest.
+    double motor_s = 3.0;
+    double antenna_width = 5.0;
+    double smooth_drift_khz_s = 0.0;
+    double tuned_reading = 0.9;
     double shout_quiet_s = 0.0;
     double shout_noisy_s = 0.0;
     std::vector<std::string> noisy;          // subsystems whose running makes the cabin too loud to talk
@@ -749,7 +766,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (v == nullptr) return true;
         const std::string p = "comms";
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
-        if (!Keys(*v, p, {"radios", "ranges_km", "intercom", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+        if (!Keys(*v, p, {"radios", "ranges_km", "intercom", "tuning", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
         CommsDef& d = out.comms;
         const Equipment& eq = out.equipment;
         const json::Value* radios = OptionalArray(*v, p, "radios");
@@ -760,7 +777,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string rp = Index(Join(p, "radios"), i);
             const json::Value& e = radios->items[i];
             CommsRadioDef r;
-            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit", "tone"}) ||
+            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit", "tone", "preset",
+                              "fixator_cover", "fixators", "frequency", "subband", "antenna_lock", "antenna_tune",
+                              "on_frequency_input", "tuned_input"}) ||
                 !OptionalInt(e, rp, "set", r.set) || !RequireString(e, rp, "name", r.name) ||
                 !RefControl(e, rp, "power", out.panel, ControlKind::Discrete, true, r.power) ||
                 !RefControl(e, rp, "mode", out.panel, ControlKind::Discrete, true, r.mode) ||
@@ -768,8 +787,34 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RefControl(e, rp, "volume", out.panel, ControlKind::Discrete, true, r.volume) ||
                 !RefControl(e, rp, "antenna", out.panel, ControlKind::Discrete, true, r.antenna) ||
                 !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit) ||
-                !RefControl(e, rp, "tone", out.panel, ControlKind::Momentary, false, r.tone)) {
+                !RefControl(e, rp, "tone", out.panel, ControlKind::Momentary, false, r.tone) ||
+                !RefControl(e, rp, "preset", out.panel, ControlKind::Discrete, false, r.preset) ||
+                !RefControl(e, rp, "fixator_cover", out.panel, ControlKind::Discrete, false, r.fixator_cover) ||
+                !RefControl(e, rp, "frequency", out.panel, ControlKind::Continuous, false, r.frequency) ||
+                !RefControl(e, rp, "subband", out.panel, ControlKind::Discrete, false, r.subband) ||
+                !RefControl(e, rp, "antenna_lock", out.panel, ControlKind::Discrete, false, r.antenna_lock) ||
+                !RefControl(e, rp, "antenna_tune", out.panel, ControlKind::Continuous, false, r.antenna_tune) ||
+                !RefInput(e, rp, "on_frequency_input", eq, r.on_frequency_input) || !RefInput(e, rp, "tuned_input", eq, r.tuned_input)) {
                 return false;
+            }
+            if (const json::Value* fx = e.Find("fixators")) {
+                if (!fx->Is(json::Type::Array) || fx->items.size() != 4) return Fail(Join(rp, "fixators"), "expected the four fixators' controls");
+                for (std::size_t k = 0; k < 4; ++k) {
+                    const json::Value& c = fx->items[k];
+                    const std::string fp = Index(Join(rp, "fixators"), k);
+                    if (!c.Is(json::Type::String) || out.panel.Find(c.string) == nullptr) return Fail(fp, "expected a control id");
+                    if (out.panel.Find(c.string)->kind != ControlKind::Discrete) return Fail(fp, "control '" + c.string + "' is the wrong kind");
+                    r.fixators.push_back(c.string);
+                }
+            }
+            const bool any = !r.preset.empty() || !r.fixator_cover.empty() || !r.frequency.empty() || !r.subband.empty() ||
+                             !r.antenna_lock.empty() || !r.antenna_tune.empty() || !r.fixators.empty();
+            if (any && (r.preset.empty() || r.fixator_cover.empty() || r.frequency.empty() || r.subband.empty() ||
+                        r.antenna_lock.empty() || r.antenna_tune.empty() || r.fixators.size() != 4)) {
+                return Fail(rp, "the preset set-up needs preset, fixator_cover, fixators, frequency, subband, antenna_lock and antenna_tune together");
+            }
+            if (!r.preset.empty() && out.panel.Find(r.preset)->positions != 6) {
+                return Fail(Join(rp, "preset"), "needs six positions (fixed frequencies 1-4, smooth sub-band I and II)");
             }
             if (r.set != static_cast<int>(i)) return Fail(Join(rp, "set"), "radios are in the order of the C2 network's sets: 0, 1");
             if (out.panel.Find(r.antenna)->positions != 3) return Fail(Join(rp, "antenna"), "needs three positions (4 m whip, 1 m whip, emergency wire)");
@@ -796,7 +841,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string ip = Join(p, "intercom");
         if (ic == nullptr || !ic->Is(json::Type::Object) ||
             !Keys(*ic, ip, {"commander", "commander_radio_position", "commander_off_position", "deputy", "deputy_radio_position", "driver",
-                            "driver_radio_position", "subsystem", "chest", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
+                            "driver_radio_position", "subsystem", "chest", "driver_chest", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
             return message_.empty() ? Fail(ip, "required, an object") : false;
         }
         if (!RefControl(*ic, ip, "commander", out.panel, ControlKind::Discrete, true, d.commander) ||
@@ -808,6 +853,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalInt(*ic, ip, "driver_radio_position", d.driver_radio_position) ||
             !RefSubsystem(*ic, ip, "subsystem", eq, true, d.intercom_subsystem) ||
             !RefControl(*ic, ip, "chest", out.panel, ControlKind::Discrete, false, d.chest) ||
+            !RefControl(*ic, ip, "driver_chest", out.panel, ControlKind::Discrete, false, d.driver_chest) ||
             !OptionalNumber(*ic, ip, "shout_quiet_s", d.shout_quiet_s) || !OptionalNumber(*ic, ip, "shout_noisy_s", d.shout_noisy_s)) {
             return false;
         }
@@ -837,6 +883,20 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         out.has_comms = true;
+        if (const json::Value* tn = v->Find("tuning")) {
+            const std::string tp = Join(p, "tuning");
+            if (!tn->Is(json::Type::Object) ||
+                !Keys(*tn, tp, {"motor_s", "antenna_width", "smooth_drift_khz_s", "tuned_reading", "source", "confidence", "notes"}) ||
+                !Provenance(*tn, tp) || !OptionalNumber(*tn, tp, "motor_s", d.motor_s) ||
+                !OptionalNumber(*tn, tp, "antenna_width", d.antenna_width) ||
+                !OptionalNumber(*tn, tp, "smooth_drift_khz_s", d.smooth_drift_khz_s) ||
+                !OptionalNumber(*tn, tp, "tuned_reading", d.tuned_reading)) {
+                return message_.empty() ? Fail(tp, "expected an object") : false;
+            }
+            if (d.motor_s < 0.0 || !(d.antenna_width > 0.0) || d.smooth_drift_khz_s < 0.0 || !(d.tuned_reading > 0.0 && d.tuned_reading <= 1.0)) {
+                return Fail(tp, "motor_s and smooth_drift_khz_s >= 0, antenna_width > 0, tuned_reading in (0, 1]");
+            }
+        }
         return true;
     }
 

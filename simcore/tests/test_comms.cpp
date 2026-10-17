@@ -458,10 +458,12 @@ SC_TEST("comms 7.8: with the EM layer what the commander says goes on the air on
     if (!r || r->Em() == nullptr) return;
     SC_EXPECT(r->TakeSeat("commander", "player"));
     SC_EXPECT(r->RequestC2Source("ewr_north"));  // a source with a place: an EM radio link
-    Steps(*r, 30.0);
+    Steps(*r, 35.0);  // the network re-tunes the standby set (30 s), its motors turn the knobs (3 s)
     SC_EXPECT(r->C2()->ActiveId() == "ewr_north");
     const std::size_t before = r->Em()->UnitTransmissions();
     r->Console().panel.Set("radio.chest", 1);
+    std::string why;
+    if (!r->CommanderCanTransmit(&why)) std::printf("    cannot transmit: %s\n", why.c_str());
     SC_EXPECT(r->PlayerSay("commander", "report_ready"));
     Steps(*r, 3.0);
     SC_EXPECT(r->Em()->UnitTransmissions() > before);

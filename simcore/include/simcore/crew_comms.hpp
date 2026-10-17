@@ -16,6 +16,7 @@
 // It only reads the console and sets what the C2 network and the link model expose; it decides nothing about the battle.
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <string>
 #include <utility>
@@ -52,7 +53,22 @@ public:
             default: break;
         }
         if (console.panel.Get(r.squelch) == 1) loss += RangeLossDb(def_.range_whip_4m_km, def_.range_whip_4m_squelch_km);
-        return loss;
+        return loss + tuning_[static_cast<std::size_t>(set)].loss_db;
+    }
+
+    // What the set's tuning means now (radio_setup.hpp; the runner tells it each step): on its net's frequency or not
+    // (`why` then says what it is on), and the antenna mismatch's loss.
+    void SetTuning(int set, bool on_frequency, const std::string& why, double loss_db) {
+        if (set < 0 || set > 1) return;
+        tuning_[static_cast<std::size_t>(set)] = {on_frequency, why, loss_db};
+    }
+
+    // Is set `set` keyed now: the commander's chest switch at ПРД with his A-1 on Р-123 and his headset on that set
+    // (`commander_set`), or for the left set the driver's chest switch with his ПВ on РС.
+    bool Keyed(int set, int commander_set, const ConsoleData& console) const {
+        if (ChestKeyed(console) && CommanderOnRadio(console) && set == commander_set) return true;
+        return set == 0 && !def_.driver_chest.empty() && console.panel.Get(def_.driver_chest) == 1 &&
+               console.panel.Get(def_.driver) == def_.driver_radio_position;
     }
 
     // Can this set hear? Switched on, warm, volume up. `why` says what is wrong.
@@ -67,6 +83,8 @@ public:
             reason = name + " is still warming up (10 min after switching on)";
         } else if (console.panel.Get(r.volume) != 1) {
             reason = name + " has its volume turned right down";
+        } else if (!tuning_[static_cast<std::size_t>(set)].on_frequency) {
+            reason = name + " " + tuning_[static_cast<std::size_t>(set)].why;
         }
         if (why != nullptr) *why = reason;
         return reason.empty();
@@ -94,6 +112,8 @@ public:
                 reason = name + " is still warming up (10 min after switching on)";
             } else if (!console.equipment.IsReady(r.transmit)) {
                 reason = name + " is not ready to transmit (СИМПЛЕКС, 3 min after duty reception)";
+            } else if (!tuning_[static_cast<std::size_t>(set)].on_frequency) {
+                reason = name + " " + tuning_[static_cast<std::size_t>(set)].why;
             } else if (!CommanderOnRadio(console)) {
                 reason = "the commander's A-1 is not on Р-123";
             }
@@ -174,7 +194,13 @@ public:
     }
 
 private:
+    struct Tuning {
+        bool on_frequency = true;
+        std::string why;
+        double loss_db = 0.0;
+    };
     CommsDef def_;
+    std::array<Tuning, 2> tuning_{};
     bool started_ = false;
     bool was_off_ = false;
     bool was_noisy_ = false;

@@ -51,7 +51,6 @@ DISPLAY_SOURCES = {
 PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
-        ("p:preset_setup", "Setting the four presets: drum fixators, frequency, antenna tuning, smooth tuning", "7.8", "The presets are tuned when the scenario starts (the frequency plan is the scenario's). The real set's set-up drill (release a fixator, set the frequency, key, tune the antenna to the maximum, fix it: eight steps per frequency) and the smooth sub-band mode are not modelled.", ["c:radio.left.preset", "c:radio.right.preset"], "missing"),
         ("p:radio_audio", "Radio and intercom audio: noise, squelch, voices", "7.7", "Nothing is heard in the Unreal cabin: the net's state shows in the debrief and the lamps. Noise that the squelch removes, the voices of the designations and the R-124's sidetone would be audio.", ["m:comms"], "missing"),
         ("p:intercom_all", "The other subscribers' R-124 boxes", "7.8", "The commander's A-1, the deputy's A-2 and the driver's ПВ matter; the senior operator and operator are always on the intercom (the R-124 has five subscribers; which crew member has which box is not in any source found).", ["c:intercom.a1"], "missing"),
         ("p:emplacement", "Prepared positions: emplacements, nets, dummy positions", "7.6", "The grid and the diesel set are a scenario block that feeds the external supply; the position's own geometry, camouflage and decoys are not built.", ["s:external_supply"], "missing"),
@@ -287,9 +286,21 @@ class MapBuilder:
                     self.add_edge("s:" + r[key], "m:comms", "feed", "state of the set")
                 if r.get("tone"):
                     self.add_edge("c:" + r["tone"], "m:comms", "feed", "ТОН. ВЫЗОВ: a call tone while transmitting")
+                # the preset set-up (radio_setup.hpp): what the fixators hold, and the knobs
+                for key, why in (("fixator_cover", "the fixators' cover"), ("frequency", "УСТАНОВКА ЧАСТОТЫ: the frequency"),
+                                 ("subband", "the sub-band"), ("antenna_lock", "the antenna knob's lock"),
+                                 ("antenna_tune", "НАСТРОЙКА АНТЕННЫ: the antenna's match")):
+                    if r.get(key):
+                        self.add_edge("c:" + r[key], "m:comms", "feed", why)
+                for fx in r.get("fixators", []):
+                    self.add_edge("c:" + fx, "m:comms", "feed", "a fixator: locked, it keeps the frequency set")
+                for key in ("on_frequency_input", "tuned_input"):
+                    if r.get(key):
+                        self.add_edge("m:comms", "i:" + r[key], "signal", "sets this signal")
             ic = comms.get("intercom", {})
             for key, why in (("commander", "A-1: on the radio, on the intercom or off"), ("deputy", "A-2: on the radio"), ("driver", "ПВ: on the radio"),
-                             ("chest", "chest switch: ПРД transmits on the commander's set")):
+                             ("chest", "chest switch: ПРД transmits on the commander's set"),
+                             ("driver_chest", "the driver's chest switch: ПРД keys the left set (ПВ on РС)")):
                 if ic.get(key):
                     self.add_edge("c:" + ic[key], "m:comms", "feed", why)
             if ic.get("subsystem"):

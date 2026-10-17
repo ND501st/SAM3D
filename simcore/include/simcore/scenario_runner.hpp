@@ -47,6 +47,7 @@
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_setup.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/world.hpp"
@@ -129,6 +130,7 @@ public:
             if (def_.prepared.present && def_.prepared.emplacement) battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
+        StartRadioTuning();
         StartCallouts();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
@@ -143,6 +145,7 @@ public:
         DeliverOrders();
         UpdateBattery(dt);
         UpdateC2();
+        UpdateRadioTuning(dt);
         NpcSurvey();
         UpdateCompass();
         if (engagement_on_) {
@@ -235,6 +238,8 @@ public:
         return true;
     }
     const CompassSurvey& Compass() const { return compass_; }
+    // The R-123M sets' tuning (null when the console has no preset set-up).
+    const RadioTuning* Tuning() const { return tuning_.get(); }
     // Transmissions the vehicle has made (roadmap 7.8): every report, carrier second and call tone that went out.
     int Transmissions() const { return transmissions_; }
     // Can the commander go on the air on his set now? `why` says what stops him.
@@ -882,6 +887,11 @@ private:
         for (int i = 0; i < 3; ++i) {
             if (pan.Find(ids[i]) == nullptr) continue;
             const int p = pan.Get(ids[i]);
+            if (i < 2 && p >= C2Network::kPresets) {  // ПЛАВНЫЙ ПОДДИАПАЗОН: the set tunes off its knobs (radio_setup.hpp)
+                radio_panel_[i] = p;
+                radio_now_[i] = now[i];
+                continue;
+            }
             if (!radio_synced_) {
                 pan.Set(ids[i], now[i]);
             } else if (p != radio_panel_[i]) {
@@ -1096,6 +1106,109 @@ private:
         Radio("battery net", OwnCallsign(), "ТОН. ВЫЗОВ (call tone)");
         log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("commander"), "radio", "ТОН. ВЫЗОВ: a call tone on " + set});
         OnAir(1.0);
+    }
+
+    // ---- Tuning the R-123M sets (roadmap 7.8, radio_setup.hpp). The frequency plan: the net of the source on each fixed
+    // frequency (c2.presets) on its frequency, or a placeholder plan where a source has none. A set off its net's
+    // frequency hears nothing and can't be heard; the antenna mismatch costs on the link.
+    std::unique_ptr<RadioTuning> tuning_;
+    static double DefaultPlanMhz(int preset) {
+        static const double plan[4] = {30.0, 32.5, 41.0, 45.5};  // PLACEHOLDER frequencies where the scenario has none
+        return plan[preset >= 0 && preset < 4 ? preset : 0];
+    }
+    double PlanMhz(int preset) const {
+        if (c2_) {
+            const std::string& id = c2_->PresetSource(preset + 1);
+            for (const C2SourceDef& s : def_.c2_sources) {
+                if (s.id == id && s.frequency_hz > 0.0) return s.frequency_hz / 1e6;
+            }
+        }
+        return DefaultPlanMhz(preset);
+    }
+    // The fixed frequency set `set` is on as the network knows it (0-3), or its panel position without a network.
+    int SetPreset(int set) const {
+        if (c2_) return c2_->Radios()[static_cast<std::size_t>(set)].preset - 1;
+        const CommsRadioDef& r = console_.comms.radios[static_cast<std::size_t>(set)];
+        return r.preset.empty() ? 0 : std::min(console_.panel.Get(r.preset), 3);
+    }
+    bool presets_planned_ = false;
+    std::array<std::string, 4> plan_ids_{};
+    void StartRadioTuning() {
+        if (!comms_) return;
+        bool any = false;
+        for (const CommsRadioDef& r : console_.comms.radios) any = any || r.HasSetup();
+        if (any) tuning_ = std::make_unique<RadioTuning>(console_.comms);
+    }
+    // The fixators' frequency plan, once the command network has put its sources on the presets (its first update);
+    // later, a preset the network re-tunes onto another source (the crew's retune) holds that net's frequency.
+    void PlanPresets() {
+        if (!presets_planned_) {
+            for (int s = 0; s < 2; ++s) {
+                std::array<double, 4> mhz{};
+                for (int p = 0; p < 4; ++p) mhz[static_cast<std::size_t>(p)] = def_.radio_presets_set ? PlanMhz(p) : 0.0;
+                tuning_->SetPresets(s, mhz);
+            }
+            tuning_->Settle(console_);
+            presets_planned_ = true;
+        } else if (c2_) {
+            for (int p = 0; p < 4; ++p) {
+                const std::string& id = c2_->PresetSource(p + 1);
+                if (id == plan_ids_[static_cast<std::size_t>(p)] || plan_ids_[static_cast<std::size_t>(p)].empty()) continue;
+                for (int s = 0; s < 2; ++s) tuning_->SetPresetFrequency(s, p, PlanMhz(p));
+            }
+        }
+        if (c2_) {
+            for (int p = 0; p < 4; ++p) plan_ids_[static_cast<std::size_t>(p)] = c2_->PresetSource(p + 1);
+        }
+    }
+    void UpdateRadioTuning(double dt) {
+        if (!tuning_) return;
+        PlanPresets();
+        NpcTuneRadios(dt);
+        const bool moving = !console_.equipment.GetInput("vehicle_stopped");
+        const bool keyed[2] = {comms_->Keyed(0, CommanderSet(), console_), comms_->Keyed(1, CommanderSet(), console_)};
+        for (const RadioTuning::Event& e : tuning_->Step(time_, dt, console_, moving, keyed)) {
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(console_.comms.radios[static_cast<std::size_t>(e.set)].preset.empty()
+                                                                               ? std::string("driver")
+                                                                               : console_.panel.Find(console_.comms.radios[static_cast<std::size_t>(e.set)].preset)->station),
+                         "R-123M " + comms_->SetName(e.set), e.text});
+        }
+        for (int s = 0; s < 2; ++s) {
+            const double plan = PlanMhz(SetPreset(s));
+            const bool on = tuning_->OnFrequency(s, plan);
+            comms_->SetTuning(s, on, tuning_->OffFrequencyWhy(s, plan), tuning_->LossDb(s));
+            const CommsRadioDef& r = console_.comms.radios[static_cast<std::size_t>(s)];
+            if (!r.on_frequency_input.empty()) console_.equipment.SetInput(r.on_frequency_input, on);
+        }
+    }
+    // An NPC doing a set's preset drill turns its knobs (the drill's steps are the switches): with a fixator open, the
+    // frequency knob to the plan's frequency for that fixed frequency and the sub-band to its band; with the antenna's
+    // lock off and the set keyed, the antenna knob to the meter's peak. Rates: SAM3D estimates.
+    void NpcTuneRadios(double dt) {
+        for (std::size_t s = 0; s < console_.comms.radios.size() && s < 2; ++s) {
+            const CommsRadioDef& r = console_.comms.radios[s];
+            if (!r.HasSetup()) continue;
+            const std::string& seat = console_.panel.Find(r.preset)->station;
+            const CrewMember* m = MemberAt(seat);
+            if (m == nullptr || !SeatHolder(seat).empty() || !m->IsBusy()) continue;
+            const std::string& drill = m->Tracker().GetProcedure().id;
+            if (drill.find("preset_setup") == std::string::npos) continue;
+            const int pos = console_.panel.Get(r.preset);
+            if (pos < 0 || pos >= 4) continue;
+            if (console_.panel.Get(r.fixators[static_cast<std::size_t>(pos)]) == 1) {
+                const double want = PlanMhz(pos);
+                const double now = console_.panel.GetValue(r.frequency);
+                const double step = 2.0 * dt;  // MHz a second
+                console_.panel.SetValue(r.frequency, std::fabs(want - now) <= step ? want : now + (want > now ? step : -step));
+                console_.panel.Set(r.subband, RadioTuning::BandOf(want));
+            }
+            if (console_.panel.Get(r.antenna_lock) == 1 && comms_->Keyed(static_cast<int>(s), CommanderSet(), console_)) {
+                const double want = RadioTuning::AntennaOptimum(tuning_->FrequencyMhz(static_cast<int>(s)));
+                const double now = console_.panel.GetValue(r.antenna_tune);
+                const double step = 10.0 * dt;  // divisions a second
+                console_.panel.SetValue(r.antenna_tune, std::fabs(want - now) <= step ? want : now + (want > now ? step : -step));
+            }
+        }
     }
 
     void UpdatePositionPower() {
