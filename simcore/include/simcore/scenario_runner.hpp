@@ -89,6 +89,13 @@ public:
         }
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
+        if (console_.has_orientation) {  // roadmap 6.5: the gyro's drift at this site, the crew chief's compass work
+            const OrientationDef& o = console_.orientation;
+            engagement_.SetSiteLatitude(RadToDeg(def_.origin.lat_rad));
+            const bool east = ((def_.seed * 2654435761u) >> 11) & 1u;  // the sign of this gyro's own drift, per seed
+            engagement_.SetGyroOwnDrift(east ? o.own_drift_deg_h : -o.own_drift_deg_h);
+            compass_ = CompassSurvey(o.survey_s, o.survey_sigma_deg, def_.seed * 40503u + 977u);
+        }
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) launcher_ = std::make_unique<Launcher>(console_.launcher);
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
@@ -134,6 +141,8 @@ public:
         DeliverOrders();
         UpdateBattery(dt);
         UpdateC2();
+        NpcSurvey();
+        UpdateCompass();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
@@ -210,6 +219,19 @@ public:
         def_.unit_heading_deg = heading_deg;
         engagement_.SetUnitHeading(heading_deg);
     }
+
+    // The crew chief's compass work (roadmap 6.5, orientation.hpp): the commander finds the vehicle's heading Qc with
+    // the artillery compass at a halt, then commands it to the deputy, who orients the gyro with it. False if the console
+    // has no orientation, the vehicle is moving or a survey is already running.
+    bool StartCompassSurvey(const std::string& by = "Commander") {
+        if (!console_.has_orientation || !console_.equipment.GetInput("vehicle_stopped") || compass_.Running()) return false;
+        compass_.Start(time_);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "orientation", "sets up the artillery compass (ПАБ) in front of the vehicle"});
+        return true;
+    }
+    const CompassSurvey& Compass() const { return compass_; }
+    // The vehicle has been oriented at this halt (the gyro slaved to the crew chief's Qc since it last stopped).
+    bool OrientedAtHalt() const { return halt_oriented_; }
 
     // Replace the scenario's flat ground, e.g. with heights sampled from Cesium. Null restores the flat ground.
     // The terrain must outlive the runner or be replaced first.
@@ -370,6 +392,9 @@ public:
             if (m != nullptr && p != nullptr) GiveOrder(*m, *p, s.queue);
         }
         quiet_orders_ = false;
+        for (const std::string& a : o->actions) {
+            if (a == "compass_survey" && !engagement_.QcKnown() && !compass_.Running()) StartCompassSurvey();
+        }
         return true;
     }
     bool NpcCommanderActive() const { return def_.npc_commander && SeatHolder("commander").empty(); }
@@ -564,7 +589,14 @@ private:
             }
             console_.equipment.Update(0.0, console_.panel);
         }
-        if (st.oriented) engagement_.SetOriented();
+        if (st.oriented) {
+            engagement_.SetOriented();
+            halt_oriented_ = true;
+            // The crew set the site's latitude on the gyro's correction when they oriented (from the map).
+            if (console_.has_orientation && !console_.orientation.latitude_control.empty()) {
+                console_.panel.SetValue(console_.orientation.latitude_control, RadToDeg(def_.origin.lat_rad));
+            }
+        }
         Event(def_.id, "starts " + st.id + (st.description.empty() ? std::string() : ": " + st.description));
     }
 
@@ -864,6 +896,33 @@ private:
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
     // sources are cut so the rest stays for driving (roadmap 7.4).
     // A prepared position's supply (roadmap 7.6): the grid, then after a cut the diesel set once it has started.
+    // The compass survey runs while the vehicle stands; its Qc is commanded to the deputy (engagement: SetCommandedQc).
+    // Moving off spoils the measurement and the halt's orientation (the gyro keeps its own, drifting, heading).
+    CompassSurvey compass_;
+    bool was_stopped_ = false;
+    bool halt_oriented_ = false;
+    void UpdateCompass() {
+        if (!console_.has_orientation) return;
+        const bool stopped = console_.equipment.GetInput("vehicle_stopped");
+        if (!stopped && was_stopped_) {
+            engagement_.ClearCommandedQc();
+            halt_oriented_ = false;
+        }
+        was_stopped_ = stopped;
+        if (stopped && engagement_.QcKnown() && console_.equipment.GetInput(console_.orientation.synced_input)) halt_oriented_ = true;
+        const bool was_running = compass_.Running();
+        if (compass_.Step(time_, stopped, def_.unit_heading_deg)) {
+            engagement_.SetCommandedQc(compass_.ResultDeg());
+            char detail[96];
+            std::snprintf(detail, sizeof(detail), "Qc by compass %s (%.1f deg)", MilsText(compass_.ResultDeg()).c_str(),
+                          compass_.ResultDeg());
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
+            Say("qc_report", "commander", {{"qc", MilsText(compass_.ResultDeg())}});
+        } else if (was_running && !compass_.Running()) {
+            Event("orientation", "the compass survey was broken off: the vehicle moved");
+        }
+    }
+
     void UpdatePositionPower() {
         const PositionPowerDef& p = def_.position_power;
         if (!p.present) return;
@@ -1354,6 +1413,7 @@ private:
             return;
         }
         npc_halt_ordered_ = false;
+        NpcOrient();
         if (NpcBetweenFights()) return;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
@@ -1489,6 +1549,38 @@ private:
         return false;
     }
     double npc_halt_at_ = -1.0;
+
+    // Orientation at a halt (voenizdat_osa_1991 p246, p249-250): with nothing hostile heard of, the commander finds Qc
+    // with the artillery compass and, once he has it, orders the deputy to orient the gyro with it. Once per halt; in a
+    // fight he stays at his post and the crew works in the gyro's frame as it is.
+    void NpcOrient() {
+        if (!console_.has_orientation || halt_oriented_ || !engagement_.QcKnown()) return;
+        if (!console_.equipment.IsReady(console_.orientation.gyro)) return;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            if (!k.friendly && k.has_range) return;
+        }
+        NpcGive("order_orient", 120.0);
+    }
+    // The commander's own compass work: an NPC in his seat sets up the compass as soon as the vehicle halts (it needs no
+    // power, so it runs while the equipment warms up), unless he already has this halt's Qc or something hostile is
+    // heard of (then he stays at his post).
+    void NpcSurvey() {
+        if (!console_.has_orientation || !NpcAt("commander") || halt_oriented_ || engagement_.QcKnown()) return;
+        bool hostile = false;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
+        if (compass_.Running()) {
+            if (hostile) {  // a target: back to his post; the crew fights in the gyro's frame as it is
+                compass_.Abort();
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", "breaks off the compass work: a target"});
+            }
+            return;
+        }
+        if (hostile || !console_.equipment.GetInput("vehicle_stopped")) return;
+        const bool column = battery_ && def_.battery_drive_own &&
+                            (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
+        if (column) return;  // a stop in the column is not a halt
+        StartCompassSurvey();
+    }
     bool npc_empty_reported_ = false;
     bool npc_fuel_reported_ = false;
 

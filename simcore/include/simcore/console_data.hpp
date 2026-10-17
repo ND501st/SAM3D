@@ -67,6 +67,21 @@ struct OrientationDef {
     double slew_rate_deg_s = 1.0;
     double sync_rate_deg_s = 10.0;
     std::string synced_input;  // set while slaved and agreeing with the setter
+    // Drift (roadmap 6.5): a gyro half-compass keeps its direction in space, so the Earth turning under it makes its
+    // heading run off at earth_rate * sin(latitude). The latitude correction (with `relay_control` back at its other
+    // position) cancels the part set on `latitude_control` (a wheel, degrees); what is left, plus the gyro's own drift
+    // (degrees an hour, its sign drawn per run), moves the crew's frame away from north until they orient again.
+    std::string latitude_control;
+    double earth_rate_deg_h = 15.041;
+    double own_drift_deg_h = 0.0;
+    // The crew chief's compass work (orientation.hpp): seconds at a halt to find Qc with the artillery compass, and the
+    // error of the result (standard deviation, degrees). `qc_known_input` is set while he has a Qc for this halt.
+    double survey_s = 0.0;
+    double survey_sigma_deg = 0.0;
+    std::string qc_known_input;
+    // Set while the gyro holds a heading that was set from the crew chief's Qc at this halt (cleared when the gyro
+    // stops or the vehicle moves off).
+    std::string oriented_input;
 };
 
 struct TrackSensorDef {
@@ -1216,8 +1231,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadOrientation(const json::Value& o, const std::string& op, const ControlPanel& panel, const Equipment& eq,
                          OrientationDef& def) {
         if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
-                          "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "source", "confidence",
-                          "notes"}) ||
+                          "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
+                          "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
+                          "oriented_input", "source", "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1227,8 +1243,18 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalInt(o, op, "relay_position", def.relay_position) ||
             !OptionalNumber(o, op, "slew_rate_deg_s", def.slew_rate_deg_s) ||
             !OptionalNumber(o, op, "sync_rate_deg_s", def.sync_rate_deg_s) ||
-            !RefInput(o, op, "synced_input", eq, def.synced_input)) {
+            !RefInput(o, op, "synced_input", eq, def.synced_input) ||
+            !RefControl(o, op, "latitude_control", panel, ControlKind::Continuous, false, def.latitude_control) ||
+            !OptionalNumber(o, op, "earth_rate_deg_h", def.earth_rate_deg_h) ||
+            !OptionalNumber(o, op, "own_drift_deg_h", def.own_drift_deg_h) ||
+            !OptionalNumber(o, op, "survey_s", def.survey_s) ||
+            !OptionalNumber(o, op, "survey_sigma_deg", def.survey_sigma_deg) ||
+            !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
+            !RefInput(o, op, "oriented_input", eq, def.oriented_input)) {
             return false;
+        }
+        if (def.earth_rate_deg_h < 0.0 || def.own_drift_deg_h < 0.0 || def.survey_s < 0.0 || def.survey_sigma_deg < 0.0) {
+            return Fail(op, "earth_rate_deg_h, own_drift_deg_h, survey_s and survey_sigma_deg must be >= 0");
         }
         if (def.set_position < 0 || def.set_position >= panel.Find(def.mode_control)->positions) {
             return Fail(Join(op, "set_position"), "not a position of " + def.mode_control);

@@ -58,10 +58,12 @@
 
 #include "simcore/acmi.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/crew_callouts.hpp"
 #include "simcore/crew_knowledge.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/orientation.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/world.hpp"
@@ -695,7 +697,22 @@ public:
     void SetOriented() {
         gyro_heading_deg_ = Wrap360(unit_heading_deg_);
         last_unit_heading_deg_ = unit_heading_deg_;
+        oriented_ = true;
     }
+    // The gyro holds a heading set from the crew chief's Qc (or the session began oriented); lost with the gyro.
+    bool Oriented() const { return oriented_; }
+    // The crew chief's Qc from his compass work at this halt (degrees), or none (he has none yet, or the vehicle moved).
+    void SetCommandedQc(double qc_deg) {
+        qc_known_ = true;
+        qc_commanded_deg_ = Wrap360(qc_deg);
+    }
+    void ClearCommandedQc() { qc_known_ = false; }
+    bool QcKnown() const { return qc_known_; }
+    double CommandedQcDeg() const { return qc_commanded_deg_; }
+    // The site's latitude (degrees, north positive), for the gyro's drift, and the gyro's own drift (deg/h, signed).
+    void SetSiteLatitude(double latitude_deg) { site_latitude_deg_ = latitude_deg; }
+    double SiteLatitudeDeg() const { return site_latitude_deg_; }
+    void SetGyroOwnDrift(double deg_h) { gyro_own_drift_deg_h_ = deg_h; }
     double IndicatedToTrueDeg(double indicated_deg) const {
         return Wrap180(indicated_deg + unit_heading_deg_ - gyro_heading_deg_);
     }
@@ -1497,8 +1514,10 @@ private:
 
     // The gyro half-compass: it turns with the hull; slaved to the course setter it turns towards the setter's
     // value (fast after СОГЛАСОВАНИЕ, until they agree). Without power it loses its orientation and starts again
-    // taking the hull to face north. When the setter is connected the crew chief gives the measured heading
-    // (logged), and an NPC in the elevation seat (the deputy commander) turns the setter to it.
+    // taking the hull to face north. Left to itself it drifts (orientation.hpp): the Earth's rate at the site's
+    // latitude less what the latitude correction cancels (with РЕЛЕ — Qc back at РЕЛЕ), plus its own drift. The crew
+    // chief's Qc comes from his compass work (SetCommandedQc); when the setter is connected an NPC in the elevation
+    // seat (the deputy commander) turns the setter to it, and the latitude scale to the site's latitude (from the map).
     void UpdateOrientation(double t, double dt, ConsoleData& console, SessionLog& log, bool npc_sets_heading) {
         const double turned = Wrap180(unit_heading_deg_ - last_unit_heading_deg_);
         last_unit_heading_deg_ = unit_heading_deg_;
@@ -1507,26 +1526,34 @@ private:
             return;
         }
         const OrientationDef& o = console.orientation;
+        if (!o.qc_known_input.empty()) console.equipment.SetInput(o.qc_known_input, qc_known_);
         if (!console.equipment.IsReady(o.gyro)) {
             gyro_heading_deg_ = 0.0;
             fast_sync_ = false;
+            oriented_ = false;
             if (!o.synced_input.empty()) console.equipment.SetInput(o.synced_input, false);
+            if (!o.oriented_input.empty()) console.equipment.SetInput(o.oriented_input, false);
             return;
         }
         gyro_heading_deg_ = Wrap360(gyro_heading_deg_ + turned);
         const bool setting = console.panel.Get(o.mode_control) == o.set_position;
-        const double true_heading = Wrap360(unit_heading_deg_);
-        if (setting && !was_setting_) {
-            char detail[64];
-            std::snprintf(detail, sizeof(detail), "Qc = %.1f deg (by compass)", true_heading);
+        if (setting && !was_setting_ && qc_known_) {
+            char detail[96];
+            std::snprintf(detail, sizeof(detail), "Qc = %s (%.1f deg, by compass)", MilsText(qc_commanded_deg_).c_str(),
+                          qc_commanded_deg_);
             log.Record({t, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
         }
         was_setting_ = setting;
         if (setting && npc_sets_heading) {
-            const double now = Wrap360(console.panel.GetValue(o.setter));
-            const double err = Wrap180(true_heading - now);
-            const double step = tuning_.aim_az_rate_deg_s * dt;
-            console.panel.SetValue(o.setter, std::fabs(err) <= step ? true_heading : Wrap360(now + (err > 0.0 ? step : -step)));
+            auto turn_to = [&](const std::string& wheel, double want, bool wraps) {
+                const double now = console.panel.GetValue(wheel);
+                const double err = wraps ? Wrap180(want - Wrap360(now)) : want - now;
+                const double step = tuning_.aim_az_rate_deg_s * dt;
+                const double next = std::fabs(err) <= step ? want : now + (err > 0.0 ? step : -step);
+                console.panel.SetValue(wheel, wraps ? Wrap360(next) : next);
+            };
+            if (qc_known_) turn_to(o.setter, qc_commanded_deg_, true);
+            if (!o.latitude_control.empty()) turn_to(o.latitude_control, site_latitude_deg_, false);
         }
         const bool slaved = setting && console.panel.Get(o.relay_control) == o.relay_position;
         bool synced = false;
@@ -1538,10 +1565,16 @@ private:
             gyro_heading_deg_ = std::fabs(err) <= step ? want : Wrap360(gyro_heading_deg_ + (err > 0.0 ? step : -step));
             synced = std::fabs(Wrap180(want - gyro_heading_deg_)) < 0.05;
             if (synced) fast_sync_ = false;  // the scale stops
+            if (synced && qc_known_) oriented_ = true;
         } else {
             fast_sync_ = false;
+            const bool corrected = console.panel.Get(o.relay_control) != o.relay_position;
+            const double set_lat = o.latitude_control.empty() ? site_latitude_deg_ : console.panel.GetValue(o.latitude_control);
+            gyro_heading_deg_ = Wrap360(gyro_heading_deg_ + dt * GyroDriftDegPerS(o.earth_rate_deg_h, site_latitude_deg_, set_lat,
+                                                                                    corrected, gyro_own_drift_deg_h_));
         }
         if (!o.synced_input.empty()) console.equipment.SetInput(o.synced_input, synced);
+        if (!o.oriented_input.empty()) console.equipment.SetInput(o.oriented_input, oriented_);
     }
 
     static double Wrap360(double deg) {
@@ -1751,6 +1784,11 @@ private:
     double gyro_heading_deg_ = 0.0;
     bool fast_sync_ = false;
     bool was_setting_ = false;
+    bool oriented_ = false;
+    bool qc_known_ = false;
+    double qc_commanded_deg_ = 0.0;
+    double site_latitude_deg_ = 0.0;
+    double gyro_own_drift_deg_h_ = 0.0;
     TrackMethod method_ = TrackMethod::None;
     std::string tracked_;
     std::string candidate_;

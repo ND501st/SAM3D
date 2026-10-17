@@ -163,9 +163,10 @@ roadmap phase 6:
   search beam). The scan period is an estimate, and in the automatic beam programmes the beam searched is the one the
   echo is seen in, not the real search radar's beam commands. Manual capture has no slow elevation scan of its own:
   the elevation wheel has to be on the target. (6.4)
-- Heading: the gyro half-compass and its orientation drill are modelled (the crew's azimuths are in the gyro's
-  frame); gyro drift, the OR-31M Qc scale and the crew chief's compass work are not, and the player deputy reads
-  the commanded Qc from the log. (6.5)
+- Heading: the gyro half-compass, its orientation drill, its drift (the Earth's rate at the site's latitude less the
+  ШИРОТА correction, plus an estimated own drift), the OR-31M Qc scale and the crew chief's compass work are modelled
+  (`orientation.hpp`; the crew's azimuths are in the gyro's frame). The compass work is one timed activity with an
+  estimated error, not the sighting itself; the GA-3's own drift and the survey's time and error are estimates. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
 - Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer

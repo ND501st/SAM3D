@@ -225,13 +225,17 @@
       "gyro": "power", "setter": "orient.qc", "mode_control": "orient.ak_zk", "set_position": 1,
       "relay_control": "orient.relay", "relay_position": 1, "sync_button": "orient.sync",
       "slew_rate_deg_s": 1.0, "sync_rate_deg_s": 15.0, "synced_input": "heading_synced",
+      "latitude_control": "orient.latitude", "earth_rate_deg_h": 15.041, "own_drift_deg_h": 0.5,
+      "survey_s": 180, "survey_sigma_deg": 0.2, "qc_known_input": "qc_known", "oriented_input": "vehicle_oriented",
       "source": "voenizdat_osa_1991 p48 (gyro half-compass GA-3 measures the vehicle's heading Qc once oriented; the Qc found with an artillery compass and the TV sight by mutual sighting is set on the setter ЗК-4; with АК — ЗК at ЗК and РЕЛЕ — Qc at Qc the setter is connected and the correction motor turns the GA-3; СОГЛАСОВАНИЕ speeds it up; agreement is checked on the Qc scale of OR-31M, which stops), p50–52 (block 0005-8M), p246 (the deputy crew chief orients the vehicle at a halt), p249 (Qc: clockwise from north to the vehicle's axis); mon_2112_80 pp. 63–68 (orientation is lost when the equipment is switched off)", "confidence": "medium",
-      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Gyro drift is not modelled."
+      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Drift (simcore/orientation.hpp): the Earth's rate 15.041 deg/h times sin(latitude) is textbook physics of the directional gyro; the latitude correction (p51: ШИРОТА potentiometer, used with РЕЛЕ — Qc at РЕЛЕ once oriented, p48) cancels the part set on its scale. own_drift_deg_h 0.5 is a SAM3D estimate: no source gives the GA-3's own drift, and this is of the order of a directional gyro of the period, so an hour or two shows it (its sign is drawn per run). The crew chief's compass work (p249-250: the ПАБ 20-50 m ahead, the launcher laid on it with the TV sight, mutual sighting, the compass correction, Qc = α − qв): survey_s 180 and survey_sigma_deg 0.2 (about 0-03) are SAM3D estimates."
     }
   },
 
   "inputs": [
     { "id": "heading_synced", "description": "The gyro half-compass agrees with the course setter ЗК-4 (the Qc scale has stopped)", "source": "voenizdat_osa_1991 p48, p246", "confidence": "high" },
+    { "id": "qc_known", "description": "The crew chief has found the vehicle's heading Qc with the artillery compass at this halt and commanded it", "source": "voenizdat_osa_1991 p246 (the deputy sets the Qc the crew chief commands), p249-250 (how he finds it)", "confidence": "high" },
+    { "id": "vehicle_oriented", "description": "The gyro half-compass holds a heading set from the crew chief's Qc (until it is switched off)", "source": "voenizdat_osa_1991 p48; mon_2112_80 pp. 63-68 (orientation is lost when the equipment is switched off)", "confidence": "high" },
     { "id": "search_beam_1", "description": "The search radar is radiating its beam I (0-4 degrees) this turn: the I ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "search_beam_2", "description": "The search radar is radiating its beam II (4-8 degrees) this turn: the II ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "ch1_vkl_vys", "description": "Channel I: command transmitter high voltage on (ВКЛ ВЫС), from ВНИМАНИЕ", "source": "flak11 (switched on automatically at ВНИМАНИЕ)", "confidence": "high" },
@@ -352,6 +356,9 @@
       "notes": "Degrees here; the real scale is probably in Russian mils (not seen)." },
     { "id": "orient.sync", "label": "СОГЛАСОВАНИЕ", "station": "deputy_commander", "kind": "button",
       "source": "voenizdat_osa_1991 p48 (on panel ПУ-11 in block 0005-8M: speeds up orienting the GA-3; held until the Qc scale stops), p246", "confidence": "high" },
+    { "id": "orient.latitude", "label": "ШИРОТА (φ)", "station": "deputy_commander", "kind": "wheel", "min": 0, "max": 90, "initial_value": 0, "unit": "deg",
+      "source": "voenizdat_osa_1991 p51-52 (block 0005-8M: potentiometer φ with the scale ШИРОТА feeds the site's latitude into the GA-3's latitude correction)", "confidence": "high",
+      "notes": "Who sets it and when is not in the drill (p246); SAM3D puts it with the orientation, from the map. Start value 0: a vehicle that was never set up for this site drifts at the full Earth rate." },
     { "id": "pwr.equipment", "label": "АППАРАТУРА ВКЛ. — ОТКЛ.", "station": "operator", "kind": "switch", "position_labels": ["ОТКЛ.", "ВКЛ."],
       "source": "voenizdat_osa_1991 p165 (buttons on distribution cabinet 0096-9M1: filaments and fans at once, anode supplies after 1 min, high voltage possible after 3 min), p247 (the operator checks 220 V 400 Hz on the cabinet's voltmeter and presses АППАРАТУРА ВКЛ.)", "confidence": "high",
       "notes": "Two push-buttons modelled as one switch. ОТКЛ. switches everything off except the turret fans, which run 10 min more (not modelled)." },
@@ -927,10 +934,10 @@
     {
       "id": "orient_vehicle", "name": "Orient the vehicle (gyro half-compass to the crew chief's Qc)",
       "source": "voenizdat_osa_1991 p246 (drill: the deputy crew chief sets АК — ЗК to ЗК, the commanded Qc on ЗК-4, РЕЛЕ — Qc to Qc, holds СОГЛАСОВАНИЕ until the Qc scale on OR-31M stops, then АК and РЕЛЕ), p48, p249 (the crew chief finds Qc with an artillery compass)", "confidence": "high",
-      "notes": "Deputy commander, at a halt, once the gyros are up (the driver's АРРЕТИР.). The crew chief's Qc goes on the setter after ЗК (an NPC deputy sets it there; the player is told it in the log). Orientation is lost when the equipment is switched off.",
+      "notes": "Deputy commander, at a halt, once the gyros are up (the driver's АРРЕТИР.) and the crew chief has commanded Qc from his compass work (qc_known). The Qc goes on the setter after ЗК (an NPC deputy sets it there, and the latitude; the player hears it and sees it in the log). Orientation is lost when the equipment is switched off; left alone the gyro drifts, so a long session needs orienting again.",
       "steps": [
-        { "control": "orient.ak_zk", "position": 1, "description": "АК — ЗК to ЗК, then set the crew chief's Qc on the course setter ЗК-4",
-          "wait_for": [ { "subsystem": "gyro_erected", "is": "ready" } ] },
+        { "control": "orient.ak_zk", "position": 1, "description": "АК — ЗК to ЗК, then set the crew chief's Qc on the course setter ЗК-4 and the site's latitude on ШИРОТА",
+          "wait_for": [ { "subsystem": "gyro_erected", "is": "ready" }, { "input": "qc_known", "is": true } ] },
         { "control": "orient.relay", "position": 1, "description": "РЕЛЕ — Qc to Qc" },
         { "control": "orient.sync", "position": 1, "description": "Press and hold СОГЛАСОВАНИЕ until the Qc scale on OR-31M stops", "min_wait_s": 3 },
         { "control": "orient.ak_zk", "position": 0, "description": "Scales agree: АК — ЗК back to АК",

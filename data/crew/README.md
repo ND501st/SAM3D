@@ -6,7 +6,7 @@ master's perfect performance).
 
 | File | What | Read by |
 |---|---|---|
-| `<system>_crew.json` | Seats (titles, duties, displays), the callout catalogue (orders, acknowledgements, reports, warnings, reminders: Russian and English), orders (the procedures each starts, or the task it hands the drill master), tasks (named goals as console conditions), world facts (what makes each simulation input true: seats, conditions, knowledge) and automatic reports (the callout spoken when a condition becomes true) | `simcore/crew_data.hpp`; `tools/crew_map.py` |
+| `<system>_crew.json` | Seats (titles, duties, displays), the callout catalogue (orders, acknowledgements, reports, warnings, reminders: Russian and English), orders (the procedures each starts, work that is not a console drill in `actions` — `compass_survey`, the crew chief's compass work — or the task it hands the drill master), tasks (named goals as console conditions), world facts (what makes each simulation input true: seats, conditions, knowledge) and automatic reports (the callout spoken when a condition becomes true) | `simcore/crew_data.hpp`; `tools/crew_map.py` |
 | `skill_levels.json` | The skill tiers (recruit, 3rd, 2nd, 1st class, master) with every behaviour parameter, and the published crew times they are calibrated to | `simcore/crew_data.hpp` |
 
 Rules (as everywhere in `data/`): every item has `source` and `confidence`; phrasing documented in a source cites it,

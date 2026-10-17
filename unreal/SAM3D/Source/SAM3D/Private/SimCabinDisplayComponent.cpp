@@ -691,7 +691,8 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 	{
 		return;
 	}
-	const double A = UE_DOUBLE_TWO_PI * Console.panel.GetValue(Display.control) / Display.value_per_turn;
+	// A control's value, or for a readout dial (the OR-31M Qc scale) the simulation's, from the feed (the server's on a client).
+	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg) / Display.value_per_turn;
 	Canvas->K2_DrawLine(C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
 	Disc(Canvas, C, 0.06 * R, Ink);
 }

@@ -94,6 +94,7 @@ struct ViewScope {
     double swept_high_deg = 0.0;
     double antenna_el_deg = 0.0;
     double indicated_to_true_deg = 0.0;   // the wheels' azimuth + this = true azimuth
+    double gyro_heading_deg = 0.0;        // the gyro half-compass's heading (the OR-31M Qc scale)
     double missile_range_m[2] = {-1.0, -1.0};  // guidance channels I and II (-1: none in flight)
     Vec3 unit_position;
 };
@@ -411,6 +412,7 @@ inline std::vector<std::uint8_t> ScopeBytes(const ViewScope& sc) {
     w.Q(sc.swept_high_deg, kDegStep);
     w.Q(sc.antenna_el_deg, kDegStep);
     w.Q(sc.indicated_to_true_deg, kDegStep);
+    w.Q(sc.gyro_heading_deg, kDegStep);
     w.Q(sc.missile_range_m[0], kPosStep);
     w.Q(sc.missile_range_m[1], kPosStep);
     w.V3(sc.unit_position, kPosStep);
@@ -426,6 +428,7 @@ inline bool GetScope(Reader& r, ViewScope& sc) {
     sc.swept_high_deg = r.Q(kDegStep);
     sc.antenna_el_deg = r.Q(kDegStep);
     sc.indicated_to_true_deg = r.Q(kDegStep);
+    sc.gyro_heading_deg = r.Q(kDegStep);
     sc.missile_range_m[0] = r.Q(kPosStep);
     sc.missile_range_m[1] = r.Q(kPosStep);
     sc.unit_position = r.V3(kPosStep);

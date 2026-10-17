@@ -42,7 +42,7 @@ DISPLAY_SOURCES = {
         "soc_ppi": ["m:search", "m:iff"], "ssc_range": ["m:track", "m:launcher"], "beta_c": ["c:ssc.az_wheel", "c:ssc.az_light"],
         "soc_counters": ["m:track"], "tov_monitor": ["m:track", "c:tov.fov"],
         "epsilon_c": ["c:ssc.el_wheel", "c:ssc.el_light"], "dts_voltmeter": ["m:track"], "qc_setter": ["c:orient.qc"],
-        "elev_search": ["m:elev"],
+        "elev_search": ["m:elev"], "or31_qc": ["m:orient"], "lat_scale": ["c:orient.latitude"],
     },
 }
 
@@ -51,7 +51,6 @@ DISPLAY_SOURCES = {
 PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
-        ("p:qcscale", "OR-31M Qc scale, gyro drift, compass work", "6.5", "Agreement is read from the log today, not from the OR-31M scale. No source gives a drift or a measurement error.", ["m:orient"], "missing"),
         ("p:reticle", "TV reticle and range from target size", "6.6", "Manual TV tracking is built (the lock follows the wheels); the TV view doesn't draw the 3-mil reticle or let range be read from the target's size in it. Unreal drawing, to be built with the editor.", ["s:tv_angle_track"], "missing"),
         ("p:eccm", "Counter-jamming used only while firing (mixed tracking)", "9.4", "Jamming itself is built (9.1): the tracking radar follows a noise jammer in angle, the range comes by hand from the search scope or the PU-12, and ПОМЕХА fires by method Н. video_osa adds a counter-jamming facility used only while firing and only when no other way to track is left; what it is (a range-memory circuit is the video's guess) is not documented.", ["c:fo.pomekha", "e:launch"], "unknown"),
         ("p:radio_tx", "Transmissions from the vehicle: reports, ТОН. ВЫЗОВ, the chest switch (ПРД)", "7.8", "The sets only receive today: designations come in, nothing goes out. The commander's reports, the tone call and the chest switch's transmit position would use the transmit state (r123m_*_tx) and the EM layer's radio.", ["m:comms"], "missing"),
@@ -257,9 +256,11 @@ class MapBuilder:
                           source=orient.get("source"), conf=orient.get("confidence"))
             feeds("m:orient", [("s:", "gyro", orient, "gyro power"), ("c:", "setter", orient, "course setter"),
                                ("c:", "mode_control", orient, "mode switch"), ("c:", "relay_control", orient, "relay switch"),
-                               ("c:", "sync_button", orient, "fast sync")])
-            if orient.get("synced_input"):
-                self.add_edge("m:orient", "i:" + orient["synced_input"], "signal", "sets this signal")
+                               ("c:", "sync_button", orient, "fast sync"),
+                               ("c:", "latitude_control", orient, "latitude correction (drift)")])
+            for key in ("synced_input", "qc_known_input", "oriented_input"):
+                if orient.get(key):
+                    self.add_edge("m:orient", "i:" + orient[key], "signal", "sets this signal")
 
         radios = self.con.get("radios")
         if radios:  # the two R-123M sets: the commander's source selection (roadmap 7.8)
