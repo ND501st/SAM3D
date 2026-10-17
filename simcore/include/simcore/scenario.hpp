@@ -150,6 +150,12 @@ struct ScenarioDef {
     std::vector<BatteryOrder> battery_orders;  // scheduled by at_s
     bool battery_drive_own = false;
     bool battery_night = false;
+    bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
+    // The battery's launchers when the player's vehicle is not one of them (the PU-12M): their gameplay tuning and their
+    // tracking radar's reach, from "battery.launchers": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json" }.
+    bool has_launcher_tuning = false;
+    EngagementTuning launcher_tuning;
+    double launcher_reach_m = 0.0;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
     // "crew_commander": "npc": the vehicle commander is an NPC who runs the crew by doctrine (roadmap 8.6,
@@ -1098,22 +1104,42 @@ private:
         if (b == nullptr) return true;
         const std::string bp = "battery";
         if (!b->Is(json::Type::Object) ||
-            !Keys(*b, bp, {"tactics", "drive_own", "night", "share_picture", "own", "vehicles", "orders", "notes"})) {
+            !Keys(*b, bp, {"tactics", "drive_own", "night", "share_picture", "deployed", "own", "launchers", "vehicles", "orders", "notes"})) {
             return message_.empty() ? Fail(bp, "expected an object") : false;
         }
         std::string tactics = "command/battery_tactics.json";
         bool share = false;
         if (!OptionalString(*b, bp, "tactics", tactics) || !OptionalBool(*b, bp, "drive_own", out.battery_drive_own) ||
-            !OptionalBool(*b, bp, "night", out.battery_night) || !OptionalBool(*b, bp, "share_picture", share)) {
+            !OptionalBool(*b, bp, "night", out.battery_night) || !OptionalBool(*b, bp, "share_picture", share) ||
+            !OptionalBool(*b, bp, "deployed", out.battery_deployed)) {
             return false;
         }
         std::string error;
         if (!LoadBatteryTacticsFile(data_dir + "/" + tactics, out.battery_tactics, &error)) return Fail(Join(bp, "tactics"), error);
+        if (const json::Value* l = b->Find("launchers")) {
+            const std::string lp = Join(bp, "launchers");
+            std::string console_file, tuning_file;
+            if (!l->Is(json::Type::Object) || !Keys(*l, lp, {"console", "tuning", "notes"}) || !RequireString(*l, lp, "console", console_file) ||
+                !RequireString(*l, lp, "tuning", tuning_file)) {
+                return message_.empty() ? Fail(lp, "expected an object") : false;
+            }
+            ConsoleData launcher_console;
+            if (!LoadConsoleFile(data_dir + "/" + console_file, launcher_console, &error)) return Fail(Join(lp, "console"), error);
+            if (!LoadEngagementTuningFile(data_dir + "/" + tuning_file, out.launcher_tuning, &error)) return Fail(Join(lp, "tuning"), error);
+            if (out.launcher_tuning.system_id != launcher_console.system_id) {
+                return Fail(Join(lp, "tuning"), "is for '" + out.launcher_tuning.system_id + "', not '" + launcher_console.system_id + "'");
+            }
+            out.launcher_reach_m = launcher_console.track.max_range_m;
+            out.has_launcher_tuning = true;
+        } else if (out.has_post) {
+            return Fail(Join(bp, "launchers"), "the player's vehicle is the command post: the battery needs its launchers' console and tuning");
+        }
         BatteryVehicleDef own;
         own.id = "own";
         own.callsign = "own";
         own.own = true;
         own.start = out.unit_position;
+        if (out.has_post) own.kind = BatteryVehicleKind::CommandPost;
         if (const json::Value* o = b->Find("own")) {
             if (!Keys(*o, Join(bp, "own"), {"id", "callsign"}) || !OptionalString(*o, Join(bp, "own"), "id", own.id) ||
                 !OptionalString(*o, Join(bp, "own"), "callsign", own.callsign)) {

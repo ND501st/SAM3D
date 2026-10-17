@@ -159,6 +159,20 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     aiming circle (flak11), then small (his tier's), growing on the move by up to 1 % of the distance (the KP-4).
   - Not yet: the telecode through the EM layer's link budget (its reach is the R-407's published range, jamming an
     outage); the IT-45 drawn in Unreal (P6).
+- **P4 done (simcore):** the battery commander in the post. Scenario `data/scenarios/pu12m_battery.json` (four NPC
+  launchers, a TZM, a raid with a friend in it); tests `simcore/tests/test_pu12m_battery.cpp`.
+  - Designations go by voice on the battery net (the post's FuG-4 up and the mast raised), one message at a time:
+    number, azimuth and range from the launcher (flak11). He reads the number off the board and the place off the
+    IT-45, its latest fix led along its speed vector to when the launcher hears it.
+  - The launcher's crew takes the target nearest the point it was told within 6 km (sam3d): with the post's navigation
+    error it can take another target, or report «цели не наблюдаю».
+  - The NPC battery commander gives each hostile on the board to the nearest free launcher (its sector first), never a
+    friend; a player in his seat does it himself (`DesignateBatteryTarget`).
+  - The launchers report on the battery net (к бою готов with their missiles, launch, result, out of missiles, reloaded);
+    the post hears them only while its set is up, and writes them on the IT-1 and IT-2 boards (`StatusBoards`).
+  - Battery orders (march, halt, formation, ambush, river crossing, reload, emission control) and sectors of fire work
+    from the post as before (`OrderBattery`, `SetBatterySector`). Not yet in Unreal: the boards and the designation UI
+    (P6).
 
 ## 6. Placeholder now
 

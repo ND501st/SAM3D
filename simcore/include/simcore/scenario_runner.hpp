@@ -135,7 +135,11 @@ public:
             battery_ = std::make_unique<Battery>(def_.battery_tactics, def_.battery_vehicles);
             battery_->SetDriveOwn(def_.battery_drive_own);
             battery_->SetNight(def_.battery_night);
-            if (def_.prepared.present && def_.prepared.emplacement) battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
+            if (def_.prepared.present && def_.prepared.emplacement) {
+                battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
+            } else if (def_.battery_deployed) {
+                battery_->SetInEmplacement(0.0);  // set up where it stands, nothing dug in to climb out of
+            }
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
         StartCallouts();
@@ -1010,9 +1014,9 @@ private:
             battery_orders_done_[i] = 1;
             battery_->Order(def_.battery_orders[i], time_);
         }
-        if (c2_ && !air_threat_forced_) {
+        if ((c2_ || post_) && !air_threat_forced_) {
             bool close = false;
-            for (const BoardMark& m : c2_->Known(time_)) {
+            for (const BoardMark& m : post_ ? PostMarks() : c2_->Known(time_)) {
                 close = close || (m.position - def_.unit_position).HorizontalLength() <= def_.battery_tactics.threat_range_m;
             }
             battery_->SetAirThreat(close, time_);
@@ -2436,16 +2440,22 @@ private:
     double next_distribution_s_ = 0.0;
 
     void UpdateBatteryFire() {
-        if (!engagement_on_) return;
+        if (!engagement_on_ && !post_) return;
         if (!battery_fire_) {
-            battery_fire_ = std::make_unique<BatteryFire>(def_.tuning, console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 28000.0);
-            battery_fire_->SetAutonomous(def_.battery_commander == "none" || !c2_);
+            // The launchers' own tuning and reach when the player's vehicle is the post (battery.launchers), else ours.
+            const EngagementTuning& tuning = def_.has_launcher_tuning ? def_.launcher_tuning : def_.tuning;
+            double reach = def_.has_launcher_tuning ? def_.launcher_reach_m : console_.track.max_range_m;
+            if (!(reach > 0.0)) reach = 28000.0;
+            battery_fire_ = std::make_unique<BatteryFire>(tuning, reach);
+            battery_fire_->SetAutonomous(def_.battery_commander == "none" || (!c2_ && !post_));
             battery_fire_rng_.seed(def_.seed * 4099u + 7u);
         }
         battery_fire_->Sync(*battery_);
-        // What the other vehicles see (geometric sensors), with each target's number on the board.
+        ReportReadiness();
+        // What the other vehicles see (geometric sensors), with each target's number on the board: the post's own when
+        // the player's vehicle is the post, else what the commander has been told.
         std::vector<BatteryFireTarget> targets;
-        std::vector<BoardMark> marks = c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
+        std::vector<BoardMark> marks = post_ ? PostMarks() : c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
@@ -2464,22 +2474,28 @@ private:
         }
         // The NPC battery commander: each hostile on the board that nobody has goes to the nearest ready launcher that
         // can reach it soon (our own vehicle's target is ours).
-        if (def_.battery_commander == "npc" && c2_ && time_ >= next_distribution_s_) {
+        // In the post, he does it from his board by voice on the battery net, and only while he is an NPC and the net is up.
+        const bool distribute = post_ ? NpcAt(Cmdr()) && BatteryNetUp() : c2_ != nullptr;
+        if (def_.battery_commander == "npc" && distribute && time_ >= next_distribution_s_) {
             next_distribution_s_ = time_ + 5.0;
             for (const BoardMark& m : marks) {
                 if (m.type == 1 || battery_fire_->Engaged(m.target_id) || m.target_id == assigned_target_ ||
-                    m.target_id == engagement_.TrackedTarget()) {
+                    m.target_id == engagement_.TrackedTarget() || DesignationPending(m.target_id)) {
                     continue;
                 }
                 bool alive = false;
-                for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
+                if (post_) {
+                    alive = reported_kills_.count(m.target_id) == 0;  // he knows only what he was told
+                } else {
+                    for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
+                }
                 if (!alive) continue;
                 // The nearest ready launcher whose sector of fire covers it; any ready launcher if none does.
                 const BatteryFire::Shooter* best = nullptr;
                 double best_r = battery_fire_->ReachM() + 10000.0;
                 for (int pass = 0; pass < 2 && best == nullptr; ++pass) {
                     for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
-                        if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle) continue;
+                        if (!s.deployed || s.missiles <= 0 || s.phase != BatteryFire::Phase::Idle || DesignationPendingFor(s.callsign)) continue;
                         if (pass == 0 && !BatteryFire::InSector(s, m.position)) continue;
                         const double r = (m.position - s.position).HorizontalLength();
                         if (r < best_r) {
@@ -2492,38 +2508,204 @@ private:
                 // (the PU-12's designation by voice).
                 const bool own_nearer = launcher_ != nullptr && launcher_->LoadedCount() > 0 &&
                                         (m.position - def_.unit_position).HorizontalLength() < best_r;
-                if (best != nullptr && !own_nearer) AssignBatteryTarget(best->callsign, m.target_id);
+                if (best != nullptr && !own_nearer) {
+                    if (post_) {
+                        DesignateByVoice(best->callsign, m);
+                    } else {
+                        AssignBatteryTarget(best->callsign, m.target_id);
+                    }
+                }
             }
         }
+        DeliverDesignations(targets);
         battery_fire_->Step(time_, targets, battery_fire_rng_, battery_.get(), [this](const std::string& id) {
             for (std::size_t i = 0; i < def_.targets.size(); ++i) {
                 if (def_.targets[i].id != id) continue;
                 if (Aircraft* a = world_.FindAircraft(targets_[i].world_id)) a->alive = false;
             }
         });
+        // The launchers' reports go out on the battery net: the post hears them (and writes them on its IT boards) only
+        // while its set on that net is up.
+        const bool hears = NetHears();
         for (const BatteryFire::Event& e : battery_fire_->TakeEvents()) {
             char n[16];
             std::snprintf(n, sizeof(n), "%04d", e.number);
             const std::string number = e.number > 0 ? std::string(n) : e.target;
+            const BatteryFire::Shooter* sh = battery_fire_->Find(e.callsign);
+            const int missiles = sh != nullptr ? sh->missiles : -1;
             switch (e.kind) {
                 case BatteryFire::Event::Kind::Assigned: break;  // spoken by whoever assigned it
-                case BatteryFire::Event::Kind::Captured: Event(e.callsign, "captures " + e.target); break;
+                case BatteryFire::Event::Kind::Captured:
+                    Event(e.callsign, "captures " + e.target);
+                    if (hears) Status(e.callsign, LauncherStatus::State::Engaging, missiles, e.number);
+                    break;
                 case BatteryFire::Event::Kind::Launch:
                     Event(e.callsign, "launches at " + e.target);
-                    if (callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", e.callsign}, {"number", number}});
+                    if (hears && callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", e.callsign}, {"number", number}});
+                    if (hears) Status(e.callsign, LauncherStatus::State::Launched, missiles, e.number);
                     break;
                 case BatteryFire::Event::Kind::Hit:
                     Event(e.callsign, "destroys " + e.target);
-                    HeardDestroyed(e.target);
-                    if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
+                    if (hears) {
+                        HeardDestroyed(e.target);
+                        if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
+                        Status(e.callsign, missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, missiles, 0);
+                    }
                     break;
-                case BatteryFire::Event::Kind::Miss: Event(e.callsign, "misses " + e.target); break;
+                case BatteryFire::Event::Kind::Miss:
+                    Event(e.callsign, "misses " + e.target);
+                    if (hears) Status(e.callsign, LauncherStatus::State::Engaging, missiles, e.number);
+                    break;
                 case BatteryFire::Event::Kind::Empty:
                     Event(e.callsign, "out of missiles");
-                    if (callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", e.callsign}});
+                    if (hears && callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", e.callsign}});
+                    if (hears) Status(e.callsign, LauncherStatus::State::Empty, 0, 0);
                     break;
-                case BatteryFire::Event::Kind::Reloaded: Event(e.callsign, "reloaded"); break;
+                case BatteryFire::Event::Kind::Reloaded:
+                    Event(e.callsign, "reloaded");
+                    if (hears) Status(e.callsign, LauncherStatus::State::Ready, missiles, 0);
+                    break;
             }
+        }
+    }
+
+    // ---- The battery commander in the post (docs/PU12_DEVELOPMENT.md P4): designations by voice on the battery net,
+    // the launchers' reports onto the IT-1 and IT-2 boards.
+    struct VoiceDesignation {
+        std::string callsign;
+        BoardMark mark;
+        Vec3 point;            // where he told it to look (the IT-45's fix led along its speed vector)
+        double heard_s = 0.0;  // the launcher's commander has it (the message ended)
+    };
+    std::vector<VoiceDesignation> designations_out_;
+    double battery_net_free_s_ = 0.0;
+    std::vector<LauncherStatus> status_boards_;
+    std::map<std::string, bool> reported_deployed_;
+
+    bool BatteryNetUp() const {
+        return post_ && (console_.post_battery_net.empty() || console_.equipment.IsReady(console_.post_battery_net));
+    }
+    // Does the player's vehicle hear the battery net's reports? (Always, unless it is the post with its set down.)
+    bool NetHears() const { return !post_ || BatteryNetUp(); }
+    bool DesignationPending(const std::string& target) const {
+        for (const VoiceDesignation& d : designations_out_) {
+            if (d.mark.target_id == target) return true;
+        }
+        return false;
+    }
+    bool DesignationPendingFor(const std::string& callsign) const {
+        for (const VoiceDesignation& d : designations_out_) {
+            if (d.callsign == callsign) return true;
+        }
+        return false;
+    }
+    // The latest mark of each target on the post's board in the last two minutes, not one he heard destroyed.
+    std::vector<BoardMark> PostMarks() const {
+        std::vector<BoardMark> out;
+        if (!post_) return out;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (time_ - m.time_s > 120.0 || reported_kills_.count(m.target_id) != 0) continue;
+            bool replaced = false;
+            for (BoardMark& o : out) {
+                if (o.target_id == m.target_id) {
+                    if (m.time_s >= o.time_s) o = m;
+                    replaced = true;
+                }
+            }
+            if (!replaced) out.push_back(m);
+        }
+        return out;
+    }
+    // One designation read out on the battery net: number, azimuth and range from the launcher (flak11: by voice,
+    // azimuth and range), one message at a time (the board's operator delay and message time).
+    bool DesignateByVoice(const std::string& callsign, const BoardMark& m) {
+        if (!battery_fire_ || !BatteryNetUp()) return false;
+        const BatteryFire::Shooter* sh = battery_fire_->Find(callsign);
+        if (sh == nullptr || sh->missiles <= 0) return false;
+        const PlottingBoardDef& bd = post_->Board().Def();
+        const double start = std::max(time_, battery_net_free_s_) + bd.operator_delay_s;
+        battery_net_free_s_ = start + bd.message_s;
+        // He reads the number off the board and the place off the IT-45: its latest fix, led along its speed vector to
+        // when the launcher will have it (the tube shows the vector, ru_pu12_text). Not on the tube: the board's mark.
+        BoardMark at = m;
+        for (const AspdTrack& k : post_->Tracks()) {
+            if (k.target_id == m.target_id) at.position = k.position + k.velocity * (battery_net_free_s_ - k.time_s);
+        }
+        designations_out_.push_back({callsign, m, at.position, battery_net_free_s_});
+        const PlottingBoard::Designation d = PlottingBoard::Designate(at, sh->position);
+        char n[16], r[16];
+        std::snprintf(n, sizeof(n), "%04d", m.number);
+        std::snprintf(r, sizeof(r), "%.0f", d.range_m / 1000.0);
+        if (callouts_) {
+            callouts_->Say(time_, "order_assign", Cmdr(), {{"callsign", callsign}, {"number", n}, {"azimuth", MilsText(d.azimuth_deg)}, {"range_km", r}});
+        }
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign,
+                     std::string("target ") + n + " by voice: azimuth " + MilsText(d.azimuth_deg) + ", range " + r + " km"});
+        return true;
+    }
+    // A designation heard: the launcher's crew looks where it was told and takes the nearest target there within
+    // kDesignationSearchM (sam3d: the board's error is up to 5 degrees and 3 km, flak11). Off by much, it may be another
+    // target, or none.
+    static constexpr double kDesignationSearchM = 6000.0;
+    void DeliverDesignations(const std::vector<BatteryFireTarget>& targets) {
+        for (std::size_t i = 0; i < designations_out_.size();) {
+            const VoiceDesignation d = designations_out_[i];
+            if (d.heard_s > time_ + 1e-9) {
+                ++i;
+                continue;
+            }
+            designations_out_.erase(designations_out_.begin() + static_cast<std::ptrdiff_t>(i));
+            const BatteryFireTarget* best = nullptr;
+            double best_d = kDesignationSearchM;
+            for (const BatteryFireTarget& t : targets) {
+                if (!t.alive || t.friendly) continue;
+                const double dist = (Vec3{t.position.x, t.position.y, 0.0} - Vec3{d.point.x, d.point.y, 0.0}).Length();
+                if (dist < best_d) {
+                    best_d = dist;
+                    best = &t;
+                }
+            }
+            if (best == nullptr) {
+                Event(d.callsign, "no target where it was designated");
+                if (callouts_) callouts_->Say(time_, "report_no_target", "battery", {{"callsign", d.callsign}});
+                continue;
+            }
+            if (best->id != d.mark.target_id) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
+            battery_fire_->Assign(d.callsign, best->id, d.mark.number, time_);
+        }
+    }
+    LauncherStatus& Status(const std::string& callsign, LauncherStatus::State state, int missiles, int target_number) {
+        LauncherStatus* s = nullptr;
+        for (LauncherStatus& e : status_boards_) {
+            if (e.callsign == callsign) s = &e;
+        }
+        if (s == nullptr) {
+            status_boards_.push_back(LauncherStatus{});
+            s = &status_boards_.back();
+            s->callsign = callsign;
+        }
+        s->state = state;
+        if (missiles >= 0) s->missiles = missiles;
+        s->target_number = target_number;
+        s->reported_s = time_;
+        return *s;
+    }
+    // The launchers report on the battery net when they come into action (к бою готов, with their missiles) and when they
+    // march off. The post hears it only while its set is up; a launcher reports again once the post can hear it.
+    void ReportReadiness() {
+        if (!post_ || !battery_fire_) return;
+        const bool hears = NetHears();
+        for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+            bool& reported = reported_deployed_[s.callsign];
+            if (s.deployed && !reported && hears) {
+                reported = true;
+                if (callouts_) callouts_->Say(time_, "report_ready", "battery", {{"callsign", s.callsign}, {"missiles", std::to_string(s.missiles)}});
+                Status(s.callsign, s.missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, s.missiles, 0);
+            } else if (!s.deployed && reported) {
+                reported = false;
+                if (hears) Status(s.callsign, LauncherStatus::State::March, s.missiles, 0);
+            }
+            if (!hears) reported = false;  // what it says while the post can't hear is lost: it reports again
         }
     }
 
@@ -2550,6 +2732,18 @@ public:
         return true;
     }
     const BatteryFire* GetBatteryFire() const { return battery_fire_.get(); }
+    // The battery commander in the post gives a launcher the target with this number on the post's board, by voice on the
+    // battery net. False if the vehicle is no post, the net is down, the launcher is unknown or empty, or no target on
+    // the board has the number.
+    bool DesignateBatteryTarget(const std::string& callsign, int number) {
+        if (!post_) return false;
+        for (const BoardMark& m : PostMarks()) {
+            if (m.number == number) return DesignateByVoice(callsign, m);
+        }
+        return false;
+    }
+    // The IT-1 and IT-2 boards: each launcher's state as the post last heard it.
+    const std::vector<LauncherStatus>& StatusBoards() const { return status_boards_; }
 
 private:
     // ---- Knowledge per seat (roadmap 8.5, crew_knowledge.hpp): each seat's picture, from its own instruments and

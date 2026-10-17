@@ -239,7 +239,7 @@
       ] }
   ],
 
-  "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode", "plotter": "operator", "oriented": "oriented", "scale": "fr.scale",
+  "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode", "plotter": "operator", "oriented": "oriented", "scale": "fr.scale", "battery_net": "battery_net",
             "source": "flak11 (PU12-0: the ASPD-U receives the air picture by telecode, or the primary picture from a radar cabled to the post, and shows it on the IT-45); ru_pu12_text (the operator-plotter, No. 2)", "confidence": "medium",
             "notes": "The post's information chain (simcore/command_post.hpp, the scenario's \"post\" block): the regiment's telecode or a cabled radar onto the IT-45, the plotter's marks on the board, the navigation error from the orientation." },
 

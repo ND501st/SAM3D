@@ -68,7 +68,8 @@ add_executable(simcore_tests
   tests/test_crew_training.cpp
   tests/test_crew_systems.cpp
   tests/test_pu12m_console.cpp
-  tests/test_command_post.cpp)
+  tests/test_command_post.cpp
+  tests/test_pu12m_battery.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")

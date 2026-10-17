@@ -147,6 +147,27 @@ struct AspdTrack {
     double time_s = 0.0;    // last fix
 };
 
+// One launcher on the IT-1 / IT-2 boards: what its reports on the battery net have told the post (valka_pu12: the
+// boards show the units' state, the vehicles' activity and their ammunition).
+struct LauncherStatus {
+    enum class State { Unknown, March, Ready, Engaging, Launched, Empty };
+    std::string callsign;
+    State state = State::Unknown;
+    int missiles = -1;        // -1: not reported
+    int target_number = 0;    // the target it reported (0: none)
+    double reported_s = -1.0; // when the post last heard from it
+};
+inline const char* LauncherStateName(LauncherStatus::State s) {
+    switch (s) {
+        case LauncherStatus::State::March: return "march";
+        case LauncherStatus::State::Ready: return "ready";
+        case LauncherStatus::State::Engaging: return "engaging";
+        case LauncherStatus::State::Launched: return "launched";
+        case LauncherStatus::State::Empty: return "out of missiles";
+        default: return "unknown";
+    }
+}
+
 // The regiment's command post that sends the telecode, its radars, and when its net is off the air (scenario "post").
 struct PostRegiment {
     bool has_position = false;

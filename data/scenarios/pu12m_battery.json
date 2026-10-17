@@ -1,0 +1,68 @@
+{
+  "scenario_id": "pu12m_battery",
+  "name": "PU-12M: run the battery from the command post (four NPC launchers)",
+  "description": "A fictional raid on an Osa-AK battery, seen from its PU-12M. The post stands deployed at the battery's centre with the four launchers around it. The regiment sends its picture by telecode; the operator-plotter writes the board; the battery commander gives each target to a launcher by voice on the battery net (azimuth and range from the board), and the launchers report back onto the IT-1 and IT-2 boards. The NPC battery commander does it unless you take his seat: then give targets yourself (ScenarioRunner::DesignateBatteryTarget).",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. Every target number is a PLACEHOLDER. The launchers fight with the abstract crew of simcore/battery_fire.hpp. docs/PU12_DEVELOPMENT.md P4.",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "crew_commander": "npc",
+  "battery_commander": "npc",
+  "post": {
+    "board": "command/pu12.json",
+    "aspd": "command/aspd_u.json",
+    "library": "command/regiment_radars.json",
+    "regiment": {
+      "position": { "east_m": -4000, "north_m": -7000, "up_m": 2 },
+      "radars": [ { "id": "p19_regiment", "type": "p19", "position": { "east_m": -4200, "north_m": -7000, "up_m": 2 } } ],
+      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery."
+    }
+  },
+  "battery": {
+    "deployed": true,
+    "own": { "id": "20", "callsign": "20" },
+    "launchers": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json" },
+    "vehicles": [
+      { "id": "21", "kind": "launcher", "position": { "east_m": -2500, "north_m": 1500, "up_m": 3 } },
+      { "id": "22", "kind": "launcher", "position": { "east_m": 2500, "north_m": 1500, "up_m": 3 } },
+      { "id": "23", "kind": "launcher", "position": { "east_m": -2500, "north_m": -1500, "up_m": 3 } },
+      { "id": "24", "kind": "launcher", "position": { "east_m": 2500, "north_m": -1500, "up_m": 3 } },
+      { "id": "TZM", "kind": "reload", "position": { "east_m": 0, "north_m": -2500, "up_m": 3 } }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/pu12m.json",
+    "readiness": "deployed",
+    "position": { "east_m": 0, "north_m": 0, "up_m": 2 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Battery commander", "role": "battery_commander", "skill": "class1" },
+    { "name": "Squad leader", "role": "squad_leader", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Radio operator", "role": "radio_operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "t1", "name": "Strike aircraft 1 (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": 3000, "north_m": 50000, "up_m": 1000 }, "waypoints": [ { "east_m": 3000, "north_m": -30000, "up_m": 1000 } ],
+      "speed_mps": 180, "rcs_m2": 3.0, "appear_at_s": 60, "notes": "Placeholder numbers." },
+    { "id": "t2", "name": "Strike aircraft 2 (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": 35000, "north_m": 35000, "up_m": 1500 }, "waypoints": [ { "east_m": -20000, "north_m": -20000, "up_m": 1500 } ],
+      "speed_mps": 200, "rcs_m2": 3.0, "appear_at_s": 90, "notes": "Placeholder numbers." },
+    { "id": "t3", "name": "Strike aircraft 3 (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": -40000, "north_m": 25000, "up_m": 2500 }, "waypoints": [ { "east_m": 20000, "north_m": -10000, "up_m": 2500 } ],
+      "speed_mps": 220, "rcs_m2": 3.0, "appear_at_s": 120, "notes": "Placeholder numbers." },
+    { "id": "t4", "name": "Strike aircraft 4 (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": -5000, "north_m": 55000, "up_m": 800 }, "waypoints": [ { "east_m": -5000, "north_m": -30000, "up_m": 800 } ],
+      "speed_mps": 170, "rcs_m2": 3.0, "appear_at_s": 150, "notes": "Placeholder numbers." },
+    { "id": "t5", "name": "Own transport (placeholder)", "type": "Air+FixedWing", "class": "transport", "iff": "friend",
+      "start": { "east_m": 20000, "north_m": -40000, "up_m": 3000 }, "waypoints": [ { "east_m": 20000, "north_m": 40000, "up_m": 3000 } ],
+      "speed_mps": 140, "rcs_m2": 20.0, "appear_at_s": 30, "notes": "A friend: never designated. Placeholder numbers." }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 900, "when_targets_gone": true }
+}

@@ -288,6 +288,7 @@ struct ConsoleData {
     std::string post_plotter;         // station: writes the board and tracks the primary picture
     std::string post_oriented;        // subsystem: the post oriented (its navigation error small)
     std::string post_scale;           // control: the IT-45's scale switch, one position per scale of the ASPD-U ("" none)
+    std::string post_battery_net;     // subsystem: the battery net up, for designations and reports ("" always up)
     std::vector<ReadinessState> readiness;
 
     const ReadinessState* FindReadiness(const std::string& id) const {
@@ -639,8 +640,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadPost(const json::Value& root, ConsoleData& out) {
         const json::Value* p = root.Find("post");
         if (p == nullptr) return true;
-        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "source", "confidence", "notes"}) ||
-            !OptionalString(*p, "post", "scale", out.post_scale) ||
+        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "source", "confidence", "notes"}) ||
+            !OptionalString(*p, "post", "scale", out.post_scale) || !OptionalString(*p, "post", "battery_net", out.post_battery_net) ||
             !Provenance(*p, "post") || !RequireString(*p, "post", "telecode", out.post_telecode) ||
             !RequireString(*p, "post", "primary", out.post_primary) || !RequireString(*p, "post", "telecode_input", out.post_telecode_input) ||
             !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
@@ -652,6 +653,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         }
         if (!out.equipment.HasInput(out.post_telecode_input)) return Fail("post.telecode_input", "unknown input '" + out.post_telecode_input + "'");
         if (!out.post_scale.empty() && out.panel.Find(out.post_scale) == nullptr) return Fail("post.scale", "unknown control '" + out.post_scale + "'");
+        if (!out.post_battery_net.empty() && out.equipment.Def(out.post_battery_net) == nullptr) {
+            return Fail("post.battery_net", "unknown subsystem '" + out.post_battery_net + "'");
+        }
         if (!out.stations.empty() && out.FindStation(out.post_plotter) == nullptr) {
             return Fail("post.plotter", "'" + out.post_plotter + "' is not a station");
         }
