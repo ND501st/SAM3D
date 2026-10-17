@@ -47,9 +47,9 @@ The sources disagree:
   searcher-draughtsman (the plotter), signalman, driver.
 * `armforc_pu12`: four: squad leader, radiotelephone operator-reconnaissance, operator, driver-mechanic-electrician.
 
-Decision (to confirm): five, as the ČSLA manual, with the battery commander one of them; the four-man version is the
-crew without the battery commander. The flak11 PU-12 pages (`flak11`, NVA) should settle it; the site's certificate had
-expired on 16 Oct 2026.
+**Settled (17 Oct 2026, `docs/research/PU12_RESEARCH_2026-10.md`):** five, as the ČSLA manual: the battery commander
+works in the post, and the post has four numbers of its own (squad leader, operator-plotter, radiotelephone operator,
+driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without him.
 
 ### 2.3 Equipment (PU-12M, ČSLA manual via `valka_pu12`; cross-checked with `armforc_pu12`)
 
@@ -63,7 +63,7 @@ expired on 16 Oct 2026.
 | Power | AB-1-P/30 petrol generator set (220 V, 50 Hz) with URB control; G-290B generator on the move; VS-27 rectifier, regulators, filters; 2 x 6ST-75 batteries |
 | NBC and other | DP-3B radiometer, chemical survey kit, DK-4, filter-ventilation; hours counter 228-CP-PO; water tank; operators' table; lights, fans; the SChK command panel |
 | Capacity (armforc) | 99 targets displayed, 10 processed at once, 6 fire units controlled |
-| Mast | 6 m (armforc); "about 16 m" raised by the signalman (a forum user on valka): to be settled |
+| Mast | **16 m** (`flak11` PU12-1, tier 1; a ČSLA caption on valka); 6 m in `armforc_pu12` and `shilka_narod` |
 | Radars it can take | 1RL-14, 1RL-114(M), 1RL-111D, 1RL-128D(M1), 1RL-131, 1RL-13M1/M2 (`valka_pu12`) |
 
 ### 2.4 How it works (what the sim already does, and what is missing)
@@ -130,6 +130,17 @@ expired on 16 Oct 2026.
 | P5 | Exterior model at full detail, animated mast | the exterior matches the photographs |
 | P6 | Interior model and cabin data; displays; seats | a player can sit at every PU-12M station |
 | P7 | Multiplayer: PU-12M seats in the crew system; the battery commander's picture over the network | a commander and Osa crews play together |
+
+## Status
+
+- **P0 done (17 Oct 2026):** `docs/research/PU12_RESEARCH_2026-10.md`. The crew (five), the stations and the equipment
+  at each from the ČSLA manual's plan and workplace drawings (`csla_pu12_manual`, tier 1), the NVA pages PU12-0 and
+  PU12-1 (`flak11`, tier 1), a Russian training text (`ru_pu12_text`) and a veteran's photographs (`shilka_narod`).
+  Still to find: the ASPD-U panels' controls, the deployment drill's order, the plotters' handbook.
+- **P1 done:** `data/systems/pu12m.json` (every value cited) and `data/procedures/pu12m.json`: five stations, 25
+  controls, 26 subsystems (power from the AB-1, the G-290B or a network; the mast; five radios; GAK, PAB-2, KP-4, DTP;
+  the ASPD-U), one deployment drill per seat, stowing, the march and deployed states. Tests
+  `simcore/tests/test_pu12m_console.cpp`: a crew of five deploys from cold in about 10 min (the norm: at most 18).
 
 ## 6. Placeholder now
 
