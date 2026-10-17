@@ -3011,10 +3011,12 @@ private:
         for (LauncherStatus& e : status_boards_) {
             if (e.callsign == callsign) s = &e;
         }
-        if (s == nullptr) {
-            status_boards_.push_back(LauncherStatus{});
-            s = &status_boards_.back();
-            s->callsign = callsign;
+        if (s == nullptr) {  // a new row, in the battery's order (21, 22, ...): the ДХ's launcher places count down it
+            LauncherStatus row;
+            row.callsign = callsign;
+            const auto at = std::lower_bound(status_boards_.begin(), status_boards_.end(), row,
+                                             [](const LauncherStatus& a, const LauncherStatus& b) { return a.callsign < b.callsign; });
+            s = &*status_boards_.insert(at, row);
         }
         s->state = state;
         if (missiles >= 0) s->missiles = missiles;

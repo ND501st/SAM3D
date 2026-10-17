@@ -383,7 +383,7 @@ public:
 	bool LoadScenario(const FString& ScenarioFile, FString& OutError);
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
-	bool IsScenarioRunning() const { return Runner.IsValid(); }
+	bool IsScenarioRunning() const { return Runner != nullptr; }
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
 	bool IsScenarioFinished() const;
@@ -702,6 +702,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	bool IsCommandPost() const;
 
+	/** The scenario is a battery link: the player's Osa and the PU-12M in one battery (docs/PU12_DEVELOPMENT.md P8). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	bool IsBatteryLink() const { return Link.IsValid(); }
+
+	/** In a battery link: the player moves to the other vehicle (the Osa <-> the PU-12M), its console, crew and cabin; the
+	 *  one he leaves fights on with its NPC crew. False without a link. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	bool SwitchLinkedVehicle();
+
+	/** In a battery link: the vehicle the player is not in ("the PU-12M", or "the Osa 21"); "" without a link. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	FString GetOtherLinkedVehicle() const;
+
 	/** The targets' numbers on the IT-45 now (the ASPD-U's 00-99), nearest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	TArray<int32> GetPostTrackNumbers() const;
@@ -789,7 +802,7 @@ public:
 
 	/** Direct access for C++ gameplay code. */
 	simcore::World* GetSimWorld() const;
-	simcore::ScenarioRunner* GetScenarioRunner() const { return Runner.Get(); }
+	simcore::ScenarioRunner* GetScenarioRunner() const { return Runner; }
 
 	/** ENU metres -> Unreal cm, and back (through the georeference when set). */
 	FVector ToUnreal(const simcore::Vec3& Enu) const;
@@ -829,7 +842,15 @@ private:
 	simcore::FlatTerrain DemoGround{0.0};
 
 	// Scenario mode.
-	TUniquePtr<simcore::ScenarioRunner> Runner;
+	/** The runner the player plays: the scenario's own, or in a battery link the vehicle he is in (the Osa's or the post's). */
+	simcore::ScenarioRunner* Runner = nullptr;
+	TUniquePtr<simcore::ScenarioRunner> OwnedRunner;
+	/** A battery link (simcore/battery_link.hpp): the player's Osa and the PU-12M stepped as one battery. */
+	TUniquePtr<simcore::BatteryLink> Link;
+	/** Drops the scenario (its runner or its link). */
+	void ClearScenario();
+	/** The crew's bodies and voices for the runner the player is in (presentation data: a scenario runs without them). */
+	void LoadCrewPresentation(const FString& DataDir);
 	TUniquePtr<simcore::CabinLayout> Cabin;
 	TUniquePtr<simcore::BodyData> CrewBodies;
 	TUniquePtr<simcore::VoiceData> CrewVoices;

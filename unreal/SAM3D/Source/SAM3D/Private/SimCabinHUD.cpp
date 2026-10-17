@@ -27,6 +27,13 @@ void ASimCabinHUD::DrawHUD()
 	}
 	const APlayerController* Pc = OwnerPc;
 	const ASimOsaVehicle* Vehicle = Pc != nullptr ? Cast<ASimOsaVehicle>(Pc->GetPawn()) : nullptr;
+	// A battery link: the other vehicle is a key away.
+	const FString SwitchHint = Sim != nullptr && Sim->IsBatteryLink() ? FString::Printf(TEXT("   V to %s"), *Sim->GetOtherLinkedVehicle()) : FString();
+	if (Vehicle != nullptr && !Vehicle->IsInCabin() && Canvas != nullptr && !SwitchHint.IsEmpty())
+	{
+		DrawText(FString::Printf(TEXT("C into the cabin%s"), *SwitchHint), FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 20.0f,
+			Canvas->ClipY - 40.0f, GEngine != nullptr ? GEngine->GetMediumFont() : nullptr);
+	}
 	if (Vehicle == nullptr || !Vehicle->IsInCabin() || Canvas == nullptr)
 	{
 		return;
@@ -49,10 +56,10 @@ void ASimCabinHUD::DrawHUD()
 		DrawText(Feedback, FLinearColor(1.0f, 0.4f, 0.3f), Cx + 16.0f, Cy + 32.0f, Font);
 	}
 	const FString CommanderStation = Sim != nullptr ? Sim->GetCommanderStation() : FString(TEXT("commander"));
-	DrawText(FString::Printf(TEXT("%s%s   |   C leave cabin   Tab next seat   T %s   O %s   H help   B plotting board"),
+	DrawText(FString::Printf(TEXT("%s%s   |   C leave cabin   Tab next seat   T %s   O %s   H help   B plotting board%s"),
 				 *Vehicle->GetCabinStationLabel(), Vehicle->IsHoldingSeat() ? TEXT(" (your seat)") : TEXT(""),
 				 Vehicle->IsHoldingSeat() ? TEXT("give the seat back") : TEXT("take this seat"),
-				 Vehicle->GetStationId() == CommanderStation ? TEXT("orders") : TEXT("reports")),
+				 Vehicle->GetStationId() == CommanderStation ? TEXT("orders") : TEXT("reports"), *SwitchHint),
 		Ink, 20.0f, Canvas->ClipY - 40.0f, Font);
 	DrawCrew(Vehicle, Font);
 	if (Sim != nullptr && Vehicle->IsCommandPost())

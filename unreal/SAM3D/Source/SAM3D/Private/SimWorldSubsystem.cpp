@@ -1,5 +1,7 @@
 #include "SimWorldSubsystem.h"
 
+#include "Misc/FileHelper.h"
+
 #include <algorithm>
 
 #include "Cesium3DTileset.h"
@@ -125,7 +127,7 @@ void USimWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void USimWorldSubsystem::Deinitialize()
 {
 	EmLayer.Reset();
-	Runner.Reset();
+	ClearScenario();
 	SampledTerrain.Reset();
 	SimWorld.Reset();
 	Super::Deinitialize();
@@ -197,9 +199,16 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 	if (Runner)
 	{
 		int32 Steps = 0;
-		while (Accumulator >= ScenarioStepSeconds && Steps < 20 * ScaleSteps && !Runner->Finished())
+		while (Accumulator >= ScenarioStepSeconds && Steps < 20 * ScaleSteps && !(Link ? Link->Finished() : Runner->Finished()))
 		{
-			Runner->Step(ScenarioStepSeconds);
+			if (Link)
+			{
+				Link->Step(ScenarioStepSeconds);  // both vehicles of the battery
+			}
+			else
+			{
+				Runner->Step(ScenarioStepSeconds);
+			}
 			Accumulator -= ScenarioStepSeconds;
 			++Steps;
 		}
@@ -230,7 +239,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 void USimWorldSubsystem::ResetSimulation(double OriginLatitudeDeg, double OriginLongitudeDeg, double OriginAltitudeM)
 {
 	StopEmDemo();  // it runs on the old world's frame and terrain
-	Runner.Reset();
+	ClearScenario();
 	SampledTerrain.Reset();
 	// Flat ground at the origin's altitude.
 	DemoGround = simcore::FlatTerrain(OriginAltitudeM);
@@ -337,14 +346,41 @@ FString USimWorldSubsystem::ResolveDataDirectory() const
 	return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT(".."), TEXT("data")));
 }
 
+void USimWorldSubsystem::ClearScenario()
+{
+	Runner = nullptr;
+	Link.Reset();
+	OwnedRunner.Reset();
+}
+
 bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutError)
 {
 	const FString DataDir = ResolveDataDirectory();
 	const FString Path = FPaths::Combine(DataDir, ScenarioFile);
-	simcore::ScenarioDef Def;
-	simcore::ConsoleData Console;
 	std::string Error;
-	if (!simcore::LoadScenarioFile(ToStd(Path), ToStd(DataDir), Def, Console, &Error))
+	// A battery link (a file with "link_id": two scenarios, the Osa's and the post's) or one scenario.
+	FString Text;
+	const bool bLink = FFileHelper::LoadFileToString(Text, *Path) && Text.Contains(TEXT("\"link_id\""));
+	TUniquePtr<simcore::BatteryLink> NewLink;
+	TUniquePtr<simcore::ScenarioRunner> NewRunner;
+	if (bLink)
+	{
+		std::unique_ptr<simcore::BatteryLink> Loaded = simcore::LoadBatteryLinkFile(ToStd(Path), ToStd(DataDir), &Error);
+		if (Loaded)
+		{
+			NewLink = TUniquePtr<simcore::BatteryLink>(Loaded.release());
+		}
+	}
+	else
+	{
+		simcore::ScenarioDef Def;
+		simcore::ConsoleData Console;
+		if (simcore::LoadScenarioFile(ToStd(Path), ToStd(DataDir), Def, Console, &Error))
+		{
+			NewRunner = MakeUnique<simcore::ScenarioRunner>(std::move(Def), std::move(Console));
+		}
+	}
+	if (!NewLink && !NewRunner)
 	{
 		OutError = ToF(Error);
 		UE_LOG(LogSAM3D, Error, TEXT("Scenario failed to load: %s"), *OutError);
@@ -355,10 +391,63 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	bDemoActive = false;
 	SampledTerrain.Reset();
 	Cabin.Reset();
-	Runner = MakeUnique<simcore::ScenarioRunner>(std::move(Def), std::move(Console));
+	ClearScenario();
+	if (NewLink)
+	{
+		Link = MoveTemp(NewLink);
+		// The player starts in the Osa; -SimVehicle=post puts him in the PU-12M.
+		FString Vehicle;
+		FParse::Value(FCommandLine::Get(), TEXT("SimVehicle="), Vehicle);
+		Runner = Vehicle == TEXT("post") ? &Link->Post() : &Link->Osa();
+	}
+	else
+	{
+		OwnedRunner = MoveTemp(NewRunner);
+		Runner = OwnedRunner.Get();
+	}
 	Accumulator = 0.0;
 	DebriefEntriesSent = 0;
-	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)"), *ToF(Runner->Def().name), *Path);
+	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
+		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
+	LoadCrewPresentation(DataDir);
+	BroadcastNewDebriefEntries();
+	return true;
+}
+
+bool USimWorldSubsystem::SwitchLinkedVehicle()
+{
+	// Networked, every player is in the Osa for now: the knowledge and console streams follow the server's runner, and
+	// the seats of both crews over the network are the next step (docs/PU12_DEVELOPMENT.md P8).
+	if (!Link || IsMirrorOnly() || (GetWorld() != nullptr && GetWorld()->GetNetMode() != NM_Standalone))
+	{
+		return false;
+	}
+	Runner = Runner == &Link->Osa() ? &Link->Post() : &Link->Osa();
+	const FString DataDir = ResolveDataDirectory();
+	const FString CabinFile = GetDefaultCabinFile();
+	FString Error;
+	if (CabinFile.IsEmpty() || !LoadCabin(CabinFile, Error))
+	{
+		Cabin.Reset();
+	}
+	LoadCrewPresentation(DataDir);
+	DebriefEntriesSent = Runner->Log().Entries().size();  // its log from here on (not replayed)
+	UE_LOG(LogSAM3D, Log, TEXT("Battery link: the player moves to %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa"));
+	return true;
+}
+
+FString USimWorldSubsystem::GetOtherLinkedVehicle() const
+{
+	if (!Link)
+	{
+		return FString();
+	}
+	return Runner == &Link->Post() ? FString::Printf(TEXT("the Osa %s"), *ToF(Link->Callsign())) : FString(TEXT("the PU-12M"));
+}
+
+void USimWorldSubsystem::LoadCrewPresentation(const FString& DataDir)
+{
+	std::string Error;
 	// The crew's bodies and voices (roadmap 8.10): presentation data, so a scenario runs without them.
 	{
 		TUniquePtr<simcore::BodyData> Bodies = MakeUnique<simcore::BodyData>();
@@ -383,8 +472,6 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 			UE_LOG(LogSAM3D, Warning, TEXT("Crew voices: %s"), *ToF(Error));
 		}
 	}
-	BroadcastNewDebriefEntries();
-	return true;
 }
 
 bool USimWorldSubsystem::RequestC2Source(const FString& SourceId, const FString& Why)
@@ -1261,7 +1348,7 @@ void USimWorldSubsystem::PumpKnowledge()
 		}
 		// The scopes as the crew sees them ride along (echoes keyed opaquely per player).
 		simcore::EchoKeys& Keys = EchoKeysByClient[Handle];
-		simcore::ScenarioRunner* R = Runner.Get();
+		simcore::ScenarioRunner* R = Runner;
 		const std::vector<std::uint8_t> Bytes = Replicator->Produce(Handle, Scene, [R, &Keys, Now](simcore::em::KnowledgeView& V) {
 			V.time_s = Now;
 			if (R != nullptr && R->EngagementOn())

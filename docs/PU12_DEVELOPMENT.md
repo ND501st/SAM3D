@@ -260,8 +260,19 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     not the latest one heard.
   - **Checks.** Tests in `simcore/tests/test_battery_link.cpp`; `battery_link_demo` plays it headless and prints both
     debriefs. In the practice raid each hostile is destroyed once, by the launcher it was given to.
-  - **Next: Unreal.** One world subsystem holding the link, both vehicles on the map with their cabins, the seats of
-    both crews in the crew system (multiplayer: a commander in the post and players in the Osa).
+- **P8 second part, Unreal single player (18 Oct 2026):** the world subsystem holds a link like a scenario
+  (`-SimScenario=scenarios/battery_link_practice.json`, or the director's `ScenarioFile`).
+  - **Which vehicle.** The player starts in the Osa (`-SimVehicle=post`: in the PU-12M). **V** moves him to the other
+    vehicle: its console, crew, cabin, bodies and voices. The player's vehicle actor moves to where that vehicle stands
+    and puts on or takes off the post's exterior and mast. The vehicle he leaves fights on with its NPC crew, and shows
+    on the map as a battery vehicle of the one he is in.
+  - **Checks.** Test `SAM3D.PU12M.BatteryLink`; an offscreen game run in the post showed the linked Osa reporting ready
+    on the battery net and on the IT boards.
+  - **The IT boards' rows follow the battery's order (21, 22, ...)**, not who reported first: the ДХ's launcher places
+    count down them.
+  - **Next: multiplayer across the two vehicles.** Seats of both crews, each player's knowledge and console stream from
+    his own vehicle's runner, a client loading the link and following its own vehicle. Until then a networked game
+    keeps everyone in the Osa (`SwitchLinkedVehicle` refuses).
 
 ## 6. What is still SAM3D's
 

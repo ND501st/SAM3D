@@ -119,6 +119,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey NextStationKey = EKeys::Tab;
 
+	/** In a battery link: to the other vehicle (the Osa <-> the PU-12M). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey SwitchVehicleKey = EKeys::V;
+
 	/** Degrees of view turn per unit of mouse movement. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	double CabinLookDegPerMouseUnit = 2.5;
@@ -314,6 +318,7 @@ private:
 	void ConfigureForScenario(USimWorldSubsystem* Sim);
 	void HandlePost(class APlayerController* Pc);
 	TArray<int32> PickList() const;
+	static TArray<FSimCrewHotkey> DefaultCrewHotkeys();
 	/** Shuts the daylight out of a closed compartment (the PU-12M's): the level's sky lights dark while the camera is in
 	 *  it, their brightness back when it leaves. */
 	void SetDaylightShut(bool bShut);
@@ -349,7 +354,8 @@ private:
 	FString StationId;
 	bool bHoldingSeat = false;
 
-	bool bConfigured = false;
+	/** The runner the vehicle is configured for (in a battery link, the player may move to the other vehicle). */
+	const void* ConfiguredFor = nullptr;
 	bool bIsPost = false;
 	/** The sky lights dimmed by SetDaylightShut, with their own intensities. */
 	TMap<TWeakObjectPtr<class USkyLightComponent>, float> ShutSkyLights;

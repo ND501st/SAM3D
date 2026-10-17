@@ -78,6 +78,8 @@ in a seat; a player commander gets the same reports and acknowledgements as an N
   target it is on and its time of arrival, the ДХ's window and whether each track is a cabled radar's ride along too, so
   a client's IT-45, map and ДХ window match the server's; the ДХ's keys and the DT-2's wheels are console controls, sent
   through the seat like any other.
+* **A battery link** (the Osa and the PU-12M in one battery, docs/PU12_DEVELOPMENT.md P8) plays networked with every
+  player in the Osa for now; the post is its NPC crew's. Seats in both vehicles are the next step.
 * **Designations and plots go through the seat**: `USimCrewSeatComponent::Designate(Callsign, Number)` and
   `PlotTrack(Number)` (reliable), checked on the server (`ScenarioRunner::SeatDesignate`: the commanding seat only;
   `SeatPlot`: the plotter's only); the answer comes back by `OnActionResult` ("designate", "plot").
