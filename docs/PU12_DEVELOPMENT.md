@@ -130,6 +130,7 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 | P5 | Exterior model at full detail, animated mast | the exterior matches the photographs |
 | P6 | Interior model and cabin data; displays; seats | a player can sit at every PU-12M station |
 | P7 | Multiplayer: PU-12M seats in the crew system; the battery commander's picture over the network | a commander and Osa crews play together |
+| P8 | The PU-12M as a seat of the Osa's battery: the post and the player's Osa in one battery (a battery link), then in Unreal | a player in the PU-12M gives targets to an Osa crewed by NPCs or another player |
 
 ## Status
 
@@ -240,6 +241,45 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     is inside, the lining 15 cm thick with a finer distance field, the cabin hidden from outside); the DT-2's and the
     IT-45's round parts drawn as polygons (Nanite's fallback: the interior without Nanite). The PU-12M's crew has its
     voices (`data/crew/voices.json` serves both crews).
+
+- **P8 first part, simcore (18 Oct 2026):** the post and the player's Osa in one battery. `simcore/battery_link.hpp`
+  steps two runners, the Osa's and the PU-12M's, as one battery (`data/scenarios/battery_link_practice.json`):
+  - **One sky.** The Osa's runner moves the targets; the post's mirrors them every step; a kill on either side is a
+    kill on both.
+  - **Designations.** The post's designation to 21 (by voice: number, azimuth and range) reaches the Osa's commander as
+    the PU-12's on the command net, at the message's own times and over the Osa's link. None comes while the post's
+    battery-net set is off the air.
+  - **Reports.** The Osa's commander reports on the battery net (к бою готов, пуск, цель поражена, ракет нет), and the
+    post writes it on its IT boards. The post's other launchers' assignments and reports are heard in the Osa.
+  - **Fire distribution.** The Osa counts in the post's distribution with its own missiles and the target its crew is
+    on.
+  - **The Osa's commander in a linked battery.** He fights the target the post gave him first. He leaves targets given
+    to another launcher alone, and echoes beside them too (a second track of the same aircraft). If his crew still
+    locks one, he has it let go.
+  - **A general fix found on the way:** the commander's "Цель номер … — взять!" now names the ordered target's number,
+    not the latest one heard.
+  - **Checks.** Tests in `simcore/tests/test_battery_link.cpp`; `battery_link_demo` plays it headless and prints both
+    debriefs. In the practice raid each hostile is destroyed once, by the launcher it was given to.
+- **P8 second part, Unreal single player (18 Oct 2026):** the world subsystem holds a link like a scenario
+  (`-SimScenario=scenarios/battery_link_practice.json`, or the director's `ScenarioFile`).
+  - **Which vehicle.** The player starts in the Osa (`-SimVehicle=post`: in the PU-12M). **V** moves him to the other
+    vehicle: its console, crew, cabin, bodies and voices. The player's vehicle actor moves to where that vehicle stands
+    and puts on or takes off the post's exterior and mast. The vehicle he leaves fights on with its NPC crew, and shows
+    on the map as a battery vehicle of the one he is in.
+  - **Checks.** Test `SAM3D.PU12M.BatteryLink`; an offscreen game run in the post showed the linked Osa reporting ready
+    on the battery net and on the IT boards.
+  - **The IT boards' rows follow the battery's order (21, 22, ...)**, not who reported first: the ДХ's launcher places
+    count down them.
+- **P8 third part, multiplayer (18 Oct 2026):** a commander in the post and players in the Osa.
+  - **The player's vehicle.** He chooses it when he joins (`-SimVehicle=post` or `osa`). His seat carries it
+    (`USimCrewSeatComponent::SeatVehicle`, sent with his seat request).
+  - **Server routing.** The server routes his seat's moves, designations and plots to that vehicle's runner, and sends
+    him that vehicle's console snapshots and knowledge (`USimWorldSubsystem::RunnerFor`).
+  - **On the client.** The client loads the link and follows its own vehicle (its cabin, its exterior).
+  - **No moving mid-game.** Changing vehicle in the middle of a networked game is not offered (V stays single player).
+  - **Check.** `tools/ue_crew_smoke.ps1 -Link`. The commander's client in the PU-12M was refused the operator's switch by
+    the post's console and gave the board's first target to 21. The Osa's driver started its gas turbine. The Osa's
+    commander heard the designation on its command net.
 
 ## 6. What is still SAM3D's
 

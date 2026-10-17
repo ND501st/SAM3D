@@ -30,6 +30,11 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_SeatRole, BlueprintReadOnly, Category = "SAM3D|Crew")
 	FString SeatRole;
 
+	/** In a battery link, the vehicle the seat is in: "osa" or "post" (the client's own, sent with its request); "" the
+	 *  scenario's vehicle. Set by the server. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString SeatVehicle;
+
 	/** The procedure the player in the seat is being judged against, and its next step (1-based; 0 none). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SAM3D|Crew")
 	FString SeatProcedureId;
@@ -92,7 +97,7 @@ protected:
 	void OnRep_SeatRole();
 
 	UFUNCTION(Server, Reliable)
-	void ServerRequestSeat(const FString& Role);
+	void ServerRequestSeat(const FString& Role, const FString& Vehicle);
 
 	UFUNCTION(Server, Reliable)
 	void ServerSetControl(const FString& ControlId, int32 Position);

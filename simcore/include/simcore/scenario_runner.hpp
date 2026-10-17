@@ -124,6 +124,7 @@ public:
         if (!def_.c2_sources.empty()) {
             c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
             for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
+            if (LinkedToPost()) c2_->SetExternal(def_.c2_policy.primary);  // the real PU-12M reads its designations out
             engagement_.SetAirPicture(c2_.get());
         }
         if (def_.has_em && engagement_on_) {
@@ -203,6 +204,7 @@ public:
         UpdateCallouts();
         UpdateStress();
         UpdateNpcCommander();
+        UpdateOwnReports();
         if (drop_at_s_ >= 0.0 && time_ >= drop_at_s_ && engagement_on_) {
             drop_at_s_ = -1.0;
             if (engagement_.DropTrack(time_, log_, "Цель сбросить")) assigned_target_.clear();
@@ -1399,6 +1401,7 @@ private:
             }
             ++launches_;
             if (engagement_on_ && !engagement_.TrackedTarget().empty()) ++npc_launched_at_[engagement_.TrackedTarget()];
+            if (engagement_on_) OwnReport(BatteryFire::Event::Kind::Launch, engagement_.TrackedTarget());
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
@@ -1898,9 +1901,15 @@ private:
         if (callout_id == last_order_said_ && time_ - last_order_s_ < 3.0) return;
         const CalloutDef* def = def_.crew_data.FindCallout(callout_id);
         std::map<std::string, std::string> fields;
-        if (!designations_heard_.empty()) {
+        // The number is the ordered target's, from its designation; a target he has no designation of has none (the
+        // order then goes by its azimuth). With no target ordered yet: the latest designation's.
+        int number = 0;
+        for (const C2Network::Event& e : designations_heard_) {
+            if (assigned_target_.empty() || e.subject == assigned_target_) number = e.number;
+        }
+        if (number > 0) {
             char n[16];
-            std::snprintf(n, sizeof(n), "%04d", designations_heard_.back().number);
+            std::snprintf(n, sizeof(n), "%04d", number);
             fields["number"] = n;
         }
         if (def == nullptr || FillCallout(def->ru, fields).find('{') != std::string::npos) return;
@@ -2040,12 +2049,35 @@ private:
             // in the last 30 s, unless his judgement slips (his tier's priority error: he takes the next one).
             const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
             std::vector<KnownTarget> known;
-            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
-                // A target the battery commander gave another launcher (he heard it on the battery net) is theirs.
-                const bool theirs = battery_fire_ && battery_fire_->Engaged(k.target);
-                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs) known.push_back(k);
+            const std::vector<KnownTarget> recent = pictures_[Cmdr()].Recent(time_, 30.0);
+            // A target the battery commander gave another launcher (he heard it on the battery net) is theirs, and so is
+            // an echo beside it on his scope (a second track of the same aircraft, which the tracking radar would lock).
+            auto theirs = [&](const KnownTarget& k) { return (battery_fire_ && battery_fire_->Engaged(k.target)) || GivenElsewhere(k.target); };
+            auto beside_theirs = [&](const KnownTarget& k) {
+                if (!k.has_range) return false;
+                for (const KnownTarget& o : recent) {
+                    if (o.target == k.target || !o.has_range || o.true_azimuth != k.true_azimuth || !theirs(o)) continue;
+                    const double a = DegToRad(k.azimuth_deg), b = DegToRad(o.azimuth_deg);
+                    const double dx = k.range_m * std::sin(a) - o.range_m * std::sin(b);
+                    const double dy = k.range_m * std::cos(a) - o.range_m * std::cos(b);
+                    if (dx * dx + dy * dy < kBesideTheirsM * kBesideTheirsM) return true;
+                }
+                return false;
+            };
+            for (const KnownTarget& k : recent) {
+                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k)) known.push_back(k);
             }
             std::sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
+            // With the battery commander in a real post, what he gave this vehicle comes first: the latest designation
+            // to it of a target still in the picture (the post reads out only this vehicle's on its net).
+            if (LinkedToPost()) {
+                for (auto d = designations_heard_.rbegin(); d != designations_heard_.rend(); ++d) {
+                    const auto at = std::find_if(known.begin(), known.end(), [&](const KnownTarget& k) { return k.target == d->subject; });
+                    if (at == known.end()) continue;
+                    std::rotate(known.begin(), at, at + 1);
+                    break;
+                }
+            }
             if (known.empty()) return;
             std::size_t pick = 0;
             if (known.size() > 1 && npc_choice_for_ != known.front().target) {
@@ -2087,6 +2119,15 @@ private:
             if (npc_held_ != tracked) {
                 npc_held_ = tracked;
                 SpeakOrder("hold_fire");
+                GiveCrewOrder("order_drop_target");
+            }
+            return;
+        }
+        // In a battery whose commander is in a linked post: the crew has locked a target he gave another launcher (they
+        // took an echo beside it): "Цель сбросить!", and look again.
+        if (LinkedToPost() && GivenElsewhere(tracked)) {
+            if (npc_released_ != tracked) {
+                npc_released_ = tracked;
                 GiveCrewOrder("order_drop_target");
             }
             return;
@@ -2394,8 +2435,12 @@ private:
                     case EngagementEvent::Kind::Hit:
                         if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
                         HeardDestroyed(e.target);
+                        OwnReport(BatteryFire::Event::Kind::Hit, e.target);
                         break;
-                    case EngagementEvent::Kind::Miss: if (NpcAt("deputy_commander")) Say("miss", "deputy_commander"); break;
+                    case EngagementEvent::Kind::Miss:
+                        if (NpcAt("deputy_commander")) Say("miss", "deputy_commander");
+                        OwnReport(BatteryFire::Event::Kind::Miss, e.target);
+                        break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
                 }
             }
@@ -2516,6 +2561,7 @@ private:
     double next_distribution_s_ = 0.0;
 
     void UpdateBatteryFire() {
+        if (LinkedToPost()) return;  // the battery's other launchers are the linked post's
         if (!engagement_on_ && !post_) return;
         if (!battery_fire_) {
             // The launchers' own tuning and reach when the player's vehicle is the post (battery.launchers), else ours.
@@ -2527,6 +2573,7 @@ private:
             battery_fire_rng_.seed(def_.seed * 4099u + 7u);
         }
         battery_fire_->Sync(*battery_);
+        for (const std::string& c : external_launchers_) battery_fire_->SetExternal(c);
         ReportReadiness();
         // What the other vehicles see (geometric sensors), with each target's number on the board: the post's own when
         // the player's vehicle is the post, else what the commander has been told.
@@ -2602,48 +2649,247 @@ private:
         });
         // The launchers' reports go out on the battery net: the post hears them (and writes them on its IT boards) only
         // while its set on that net is up.
-        const bool hears = NetHears();
         for (const BatteryFire::Event& e : battery_fire_->TakeEvents()) {
-            char n[16];
-            std::snprintf(n, sizeof(n), "%04d", e.number);
-            const std::string number = e.number > 0 ? std::string(n) : e.target;
             const BatteryFire::Shooter* sh = battery_fire_->Find(e.callsign);
             const int missiles = sh != nullptr ? sh->missiles : -1;
-            switch (e.kind) {
-                case BatteryFire::Event::Kind::Assigned: break;  // spoken by whoever assigned it
-                case BatteryFire::Event::Kind::Captured:
-                    Event(e.callsign, "captures " + e.target);
-                    if (hears) Status(e.callsign, LauncherStatus::State::Engaging, missiles, e.number);
-                    break;
-                case BatteryFire::Event::Kind::Launch:
-                    Event(e.callsign, "launches at " + e.target);
-                    if (hears && callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", e.callsign}, {"number", number}});
-                    if (hears) Status(e.callsign, LauncherStatus::State::Launched, missiles, e.number);
-                    break;
-                case BatteryFire::Event::Kind::Hit:
-                    Event(e.callsign, "destroys " + e.target);
-                    if (hears) {
-                        HeardDestroyed(e.target);
-                        if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", e.callsign}, {"number", number}, {"spent", "1"}});
-                        Status(e.callsign, missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, missiles, 0);
-                    }
-                    break;
-                case BatteryFire::Event::Kind::Miss:
-                    Event(e.callsign, "misses " + e.target);
-                    if (hears) Status(e.callsign, LauncherStatus::State::Engaging, missiles, e.number);
-                    break;
-                case BatteryFire::Event::Kind::Empty:
-                    Event(e.callsign, "out of missiles");
-                    if (hears && callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", e.callsign}});
-                    if (hears) Status(e.callsign, LauncherStatus::State::Empty, 0, 0);
-                    break;
-                case BatteryFire::Event::Kind::Reloaded:
-                    Event(e.callsign, "reloaded");
-                    if (hears) Status(e.callsign, LauncherStatus::State::Ready, missiles, 0);
-                    break;
-            }
+            LauncherReport({e.kind, e.callsign, e.target, e.number, missiles});
+            if (sh != nullptr && !sh->external) net_reports_.push_back({e.kind, e.callsign, e.target, e.number, missiles});
         }
     }
+
+public:
+    // ---- The battery link (battery_link.hpp, docs/PU12_DEVELOPMENT.md P8): the player's Osa and the PU-12M in one
+    // battery, each in its own runner. The Osa's runner keeps the targets' truth and the post's follows it; the post's
+    // designations to the Osa reach its commander as the PU-12's; each side hears the other's reports on the battery net.
+    struct LinkedDesignation {
+        std::string callsign;
+        BoardMark mark;      // where he told it to look (the IT-45's fix led on)
+        double start_s = 0.0;
+        double end_s = 0.0;  // the message ended
+    };
+    struct LinkReport {
+        BatteryFire::Event::Kind kind = BatteryFire::Event::Kind::Ready;
+        std::string callsign;
+        std::string target;
+        int number = 0;     // its number on the board (0: not known)
+        int missiles = -1;  // missiles left (-1: not said)
+    };
+    // The battery commander sits in a linked PU-12M (scenario "battery_commander": "post").
+    bool LinkedToPost() const { return def_.battery_commander == "post"; }
+
+    // The post's side: a launcher of its battery is a linked Osa. Designations to it are handed to the link, its state
+    // comes from its crew, and its reports from its commander.
+    void SetExternalLauncher(const std::string& callsign) { external_launchers_.insert(callsign); }
+    bool ExternalLauncher(const std::string& callsign) const { return external_launchers_.count(callsign) != 0; }
+    bool SetExternalLauncherState(const std::string& callsign, int missiles, const std::string& target, bool tracking) {
+        if (!battery_fire_) return false;
+        const BatteryFire::Phase phase = target.empty() ? BatteryFire::Phase::Idle
+                                         : tracking     ? BatteryFire::Phase::Tracking
+                                                        : BatteryFire::Phase::Acquiring;
+        return battery_fire_->SetExternalState(callsign, missiles, target, phase);
+    }
+    std::vector<LinkedDesignation> TakeLinkedDesignations() {
+        std::vector<LinkedDesignation> out;
+        out.swap(linked_out_);
+        return out;
+    }
+    // Reports of the post's own (abstract) launchers on the battery net, for the linked Osa's crew to hear.
+    std::vector<LinkReport> TakeNetReports() {
+        std::vector<LinkReport> out;
+        out.swap(net_reports_);
+        return out;
+    }
+    bool PostBatteryNetUp() const { return BatteryNetUp(); }
+    // The targets as another runner has them (the linked Osa's: the truth): positions, courses, who is destroyed.
+    void MirrorTargets(const ScenarioRunner& truth) {
+        for (std::size_t i = 0; i < targets_.size() && i < truth.targets_.size(); ++i) {
+            TargetState& s = targets_[i];
+            const TargetState& o = truth.targets_[i];
+            if (!s.spawned || !o.spawned) continue;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            const Aircraft* b = truth.world_.FindAircraft(o.world_id);
+            if (a == nullptr || b == nullptr) continue;
+            a->position = b->position;
+            a->velocity = b->velocity;
+            a->speed_mps = b->speed_mps;
+            a->next_waypoint = b->next_waypoint;
+            if (!b->alive) a->alive = false;
+            if (o.gone) s.gone = true;
+        }
+    }
+
+    // The Osa's side: a designation the linked post read out to it (as the PU-12's, on the command net), whether the
+    // post's net is on the air, the battery's reports it hears, its own commander's reports, a target another launcher
+    // destroyed, and the target its crew is on (tracked, else ordered).
+    bool RelayDesignation(const BoardMark& m, double start_s, double end_s) {
+        return c2_ && c2_->Relay(def_.c2_policy.primary, m, start_s, end_s);
+    }
+    void SetPostNetUp(bool up) {
+        if (c2_) c2_->SetFailed(def_.c2_policy.primary, !up, time_, "the post's battery net is off the air");
+    }
+    void HearBatteryReport(const LinkReport& r) { LauncherReport(r); }
+    std::vector<LinkReport> TakeOwnReports() {
+        std::vector<LinkReport> out;
+        out.swap(own_reports_);
+        return out;
+    }
+    bool DestroyTarget(const std::string& id, const std::string& by) {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id != id) continue;
+            Aircraft* a = targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+            if (a == nullptr || !a->alive) return false;
+            a->alive = false;
+            Event(id, "destroyed by " + by);
+            return true;
+        }
+        return false;
+    }
+    std::string BatteryTarget() const {
+        if (engagement_on_ && !engagement_.TrackedTarget().empty()) return engagement_.TrackedTarget();
+        return assigned_target_;
+    }
+    bool Tracking() const { return engagement_on_ && !engagement_.TrackedTarget().empty(); }
+    // Where a target is now (ENU; zero if it has not appeared).
+    Vec3 TargetPosition(const std::string& id) const {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id != id || !targets_[i].spawned) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            return a != nullptr ? a->position : Vec3{};
+        }
+        return Vec3{};
+    }
+    // Is the target in the sky now (appeared, not destroyed, not past its last waypoint)?
+    bool TargetAlive(const std::string& id) const {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id != id || !targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            return a != nullptr && a->alive;
+        }
+        return false;
+    }
+
+private:
+    std::set<std::string> external_launchers_;
+    std::vector<LinkedDesignation> linked_out_;
+    std::vector<LinkReport> net_reports_;
+    std::vector<LinkReport> own_reports_;
+    bool own_ready_reported_ = false;
+    bool own_empty_reported_ = false;
+    std::map<std::string, std::string> given_elsewhere_;  // target -> the launcher the post gave it (heard on the net)
+    std::string npc_released_;                            // the last such target his crew let go
+    static constexpr double kBesideTheirsM = 2500.0;     // an echo this close to another launcher's target is it (sam3d)
+    bool GivenElsewhere(const std::string& target) const {
+        return given_elsewhere_.count(target) != 0 && reported_kills_.count(target) == 0;
+    }
+
+    // A launcher's report on the battery net (its own abstract crew's, a linked Osa's, or, in that Osa, the post's other
+    // launchers'): the log, the words if the vehicle hears the net, the IT boards in the post.
+    void LauncherReport(const LinkReport& r) {
+        const bool hears = NetHears();
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", r.number);
+        const std::string number = r.number > 0 ? std::string(n) : r.target;
+        switch (r.kind) {
+            case BatteryFire::Event::Kind::Assigned:
+                // Spoken by whoever assigned it; the linked Osa hears the post give another launcher a target.
+                if (LinkedToPost() && r.callsign != OwnCallsign()) {
+                    given_elsewhere_[r.target] = r.callsign;
+                    if (hears && callouts_) callouts_->Say(time_, "order_assign", "battery", {{"callsign", r.callsign}, {"number", number}});
+                }
+                break;
+            case BatteryFire::Event::Kind::Ready:
+                Event(r.callsign, "ready for action");
+                if (hears && callouts_) callouts_->Say(time_, "report_ready", "battery", {{"callsign", r.callsign}, {"missiles", std::to_string(r.missiles)}});
+                if (hears) {
+                    reported_deployed_[r.callsign] = true;
+                    Status(r.callsign, r.missiles != 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, r.missiles, 0);
+                }
+                break;
+            case BatteryFire::Event::Kind::Captured:
+                Event(r.callsign, "captures " + r.target);
+                if (hears) Status(r.callsign, LauncherStatus::State::Engaging, r.missiles, r.number);
+                break;
+            case BatteryFire::Event::Kind::Launch:
+                Event(r.callsign, "launches at " + r.target);
+                if (hears && callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", r.callsign}, {"number", number}});
+                if (hears) Status(r.callsign, LauncherStatus::State::Launched, r.missiles, r.number);
+                break;
+            case BatteryFire::Event::Kind::Hit:
+                Event(r.callsign, "destroys " + r.target);
+                if (hears) {
+                    HeardDestroyed(r.target);
+                    if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", r.callsign}, {"number", number}, {"spent", "1"}});
+                    Status(r.callsign, r.missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, r.missiles, 0);
+                }
+                break;
+            case BatteryFire::Event::Kind::Miss:
+                Event(r.callsign, "misses " + r.target);
+                if (hears) Status(r.callsign, LauncherStatus::State::Engaging, r.missiles, r.number);
+                break;
+            case BatteryFire::Event::Kind::Empty:
+                Event(r.callsign, "out of missiles");
+                if (hears && callouts_) callouts_->Say(time_, "request_tzm", "battery", {{"callsign", r.callsign}});
+                if (hears) Status(r.callsign, LauncherStatus::State::Empty, 0, 0);
+                break;
+            case BatteryFire::Event::Kind::Reloaded:
+                Event(r.callsign, "reloaded");
+                if (hears) Status(r.callsign, LauncherStatus::State::Ready, r.missiles, 0);
+                break;
+        }
+    }
+
+    // The player's Osa in a battery whose commander sits in a linked PU-12M: its commander reports on the battery net as
+    // the abstract launchers do (flak11: readiness, launch, result), and the link carries it to the post's IT boards.
+    void OwnReport(BatteryFire::Event::Kind kind, const std::string& target) {
+        if (!LinkedToPost()) return;
+        LinkReport r;
+        r.kind = kind;
+        r.callsign = OwnCallsign();
+        r.target = target;
+        for (const C2Network::Event& e : designations_heard_) {
+            if (e.subject == target) r.number = e.number;
+        }
+        r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
+        own_reports_.push_back(r);
+        if (!callouts_ || !NpcAt(Cmdr())) return;
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", r.number);
+        const std::string number = r.number > 0 ? std::string(n) : target;
+        if (kind == BatteryFire::Event::Kind::Ready) {
+            callouts_->Say(time_, "report_ready", Cmdr(), {{"callsign", r.callsign}, {"channels", "2"}, {"missiles", std::to_string(r.missiles)}}, 3.0);
+        } else if (kind == BatteryFire::Event::Kind::Launch) {
+            callouts_->Say(time_, "report_launch", Cmdr(), {{"callsign", r.callsign}, {"number", number}}, 3.0);
+        } else if (kind == BatteryFire::Event::Kind::Hit) {
+            const auto spent = npc_launched_at_.find(target);
+            callouts_->Say(time_, "report_result", Cmdr(),
+                           {{"callsign", r.callsign}, {"number", number},
+                            {"spent", std::to_string(spent != npc_launched_at_.end() ? spent->second : 1)}}, 3.0);
+        }
+    }
+    // К бою готов once the vehicle is ready (the crew data's ready_halted) with missiles aboard, and again after a reload;
+    // out of missiles when the last has gone and none is in flight.
+    void UpdateOwnReports() {
+        if (!LinkedToPost()) return;
+        const int loaded = launcher_ ? launcher_->LoadedCount() : 1;
+        bool ready = loaded > 0;
+        if (def_.has_crew_data) {
+            const CrewTask* t = def_.crew_data.FindTask("ready_halted");
+            ready = ready && (t == nullptr || console_.equipment.AllHold(t->conditions, console_.panel));
+        }
+        if (ready && !own_ready_reported_) {
+            own_ready_reported_ = true;
+            OwnReport(BatteryFire::Event::Kind::Ready, std::string());
+        }
+        const bool empty = launcher_ != nullptr && loaded == 0 && (!engagement_on_ || !engagement_.ShotsInFlight());
+        if (empty && !own_empty_reported_) {
+            own_empty_reported_ = true;
+            own_ready_reported_ = false;  // reloaded and ready, it reports again
+            OwnReport(BatteryFire::Event::Kind::Empty, std::string());
+        }
+        if (!empty) own_empty_reported_ = false;
+    }
+
+private:
 
     // ---- The battery commander in the post (docs/PU12_DEVELOPMENT.md P4): designations by voice on the battery net,
     // the launchers' reports onto the IT-1 and IT-2 boards.
@@ -2713,6 +2959,7 @@ private:
             if (k.target_id == m.target_id) at.position = k.position + k.velocity * (battery_net_free_s_ - k.time_s);
         }
         designations_out_.push_back({callsign, m, at.position, battery_net_free_s_});
+        if (ExternalLauncher(callsign)) linked_out_.push_back({callsign, at, start, battery_net_free_s_});
         const PlottingBoard::Designation d = PlottingBoard::Designate(at, sh->position);
         char n[16], r[16];
         std::snprintf(n, sizeof(n), "%04d", m.number);
@@ -2736,6 +2983,10 @@ private:
                 continue;
             }
             designations_out_.erase(designations_out_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (ExternalLauncher(d.callsign)) {  // a linked Osa: its own crew looks for it (the link sets its state)
+                battery_fire_->SetExternalState(d.callsign, -1, d.mark.target_id, BatteryFire::Phase::Acquiring);
+                continue;
+            }
             const BatteryFireTarget* best = nullptr;
             double best_d = kDesignationSearchM;
             for (const BatteryFireTarget& t : targets) {
@@ -2760,10 +3011,12 @@ private:
         for (LauncherStatus& e : status_boards_) {
             if (e.callsign == callsign) s = &e;
         }
-        if (s == nullptr) {
-            status_boards_.push_back(LauncherStatus{});
-            s = &status_boards_.back();
-            s->callsign = callsign;
+        if (s == nullptr) {  // a new row, in the battery's order (21, 22, ...): the ДХ's launcher places count down it
+            LauncherStatus row;
+            row.callsign = callsign;
+            const auto at = std::lower_bound(status_boards_.begin(), status_boards_.end(), row,
+                                             [](const LauncherStatus& a, const LauncherStatus& b) { return a.callsign < b.callsign; });
+            s = &*status_boards_.insert(at, row);
         }
         s->state = state;
         if (missiles >= 0) s->missiles = missiles;
@@ -2777,6 +3030,7 @@ private:
         if (!post_ || !battery_fire_) return;
         const bool hears = NetHears();
         for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+            if (s.external) continue;  // a linked Osa reports for itself
             bool& reported = reported_deployed_[s.callsign];
             if (s.deployed && !reported && hears) {
                 reported = true;

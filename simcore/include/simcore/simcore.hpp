@@ -35,6 +35,7 @@
 #include "simcore/em.hpp"
 #include "simcore/scope_feed.hpp"
 #include "simcore/post_feed.hpp"
+#include "simcore/battery_link.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_voice.hpp"

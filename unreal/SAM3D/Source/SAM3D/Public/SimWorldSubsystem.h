@@ -383,7 +383,7 @@ public:
 	bool LoadScenario(const FString& ScenarioFile, FString& OutError);
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
-	bool IsScenarioRunning() const { return Runner.IsValid(); }
+	bool IsScenarioRunning() const { return Runner != nullptr; }
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
 	bool IsScenarioFinished() const;
@@ -662,18 +662,24 @@ public:
 	/** The local player's seat (cabin clicks go through it when it holds a seat). */
 	void SetLocalCrewSeat(USimCrewSeatComponent* Seat);
 	void ClearLocalCrewSeat(USimCrewSeatComponent* Seat);
-	/** Server: a player takes or leaves a crew seat (a console station id). */
-	bool TakeCrewSeat(const FString& Role, const FString& Player);
-	void LeaveCrewSeat(const FString& Role);
+	/** Server: a player takes or leaves a crew seat (a console station id). In a battery link, Vehicle says whose: "osa"
+	 *  or "post" ("" the vehicle this machine's player is in). The same for the seat calls below. */
+	bool TakeCrewSeat(const FString& Role, const FString& Player, const FString& Vehicle = FString());
+	void LeaveCrewSeat(const FString& Role, const FString& Vehicle = FString());
 	/** Server: a seated player's control move / wheel turn. True if the control moved; otherwise Why says why not. */
-	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why);
+	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why, const FString& Vehicle = FString());
 	/** Server: a seated player's designation (the commanding seat only) or plot (the plotter's only). */
-	bool SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why);
-	bool SeatPlot(const FString& Role, int32 Number, FString& Why);
+	bool SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why, const FString& Vehicle = FString());
+	bool SeatPlot(const FString& Role, int32 Number, FString& Why, const FString& Vehicle = FString());
+	/** In a battery link, the runner of a vehicle ("osa", "post"; "" the one this machine's player is in); else the
+	 *  scenario's. */
+	simcore::ScenarioRunner* RunnerFor(const FString& Vehicle) const;
+	/** The vehicle this machine's player is in: "osa" or "post" in a battery link, "" otherwise (sent with his seat). */
+	FString GetLocalVehicle() const;
 	/** The command post's instruments (the IT-45, the board's glass, the IT boards): from the sim where it runs, from the
 	 *  local player's knowledge stream on a network client (simcore/post_feed.hpp). */
 	simcore::PostFeed GetPostFeed() const;
-	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why);
+	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why, const FString& Vehicle = FString());
 	/** Network client: overwrite the local console with the server's snapshot if it is newer than Seq. */
 	bool ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq);
 	/** Server: console snapshots and seat procedures to seated players (called after the sim steps). */
@@ -701,6 +707,19 @@ public:
 	/** The player's vehicle is a battery command post (the PU-12M): the scenario gives it the post's information chain. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	bool IsCommandPost() const;
+
+	/** The scenario is a battery link: the player's Osa and the PU-12M in one battery (docs/PU12_DEVELOPMENT.md P8). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	bool IsBatteryLink() const { return Link.IsValid(); }
+
+	/** In a battery link: the player moves to the other vehicle (the Osa <-> the PU-12M), its console, crew and cabin; the
+	 *  one he leaves fights on with its NPC crew. False without a link. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	bool SwitchLinkedVehicle();
+
+	/** In a battery link: the vehicle the player is not in ("the PU-12M", or "the Osa 21"); "" without a link. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	FString GetOtherLinkedVehicle() const;
 
 	/** The targets' numbers on the IT-45 now (the ASPD-U's 00-99), nearest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
@@ -789,7 +808,7 @@ public:
 
 	/** Direct access for C++ gameplay code. */
 	simcore::World* GetSimWorld() const;
-	simcore::ScenarioRunner* GetScenarioRunner() const { return Runner.Get(); }
+	simcore::ScenarioRunner* GetScenarioRunner() const { return Runner; }
 
 	/** ENU metres -> Unreal cm, and back (through the georeference when set). */
 	FVector ToUnreal(const simcore::Vec3& Enu) const;
@@ -829,7 +848,15 @@ private:
 	simcore::FlatTerrain DemoGround{0.0};
 
 	// Scenario mode.
-	TUniquePtr<simcore::ScenarioRunner> Runner;
+	/** The runner the player plays: the scenario's own, or in a battery link the vehicle he is in (the Osa's or the post's). */
+	simcore::ScenarioRunner* Runner = nullptr;
+	TUniquePtr<simcore::ScenarioRunner> OwnedRunner;
+	/** A battery link (simcore/battery_link.hpp): the player's Osa and the PU-12M stepped as one battery. */
+	TUniquePtr<simcore::BatteryLink> Link;
+	/** Drops the scenario (its runner or its link). */
+	void ClearScenario();
+	/** The crew's bodies and voices for the runner the player is in (presentation data: a scenario runs without them). */
+	void LoadCrewPresentation(const FString& DataDir);
 	TUniquePtr<simcore::CabinLayout> Cabin;
 	TUniquePtr<simcore::BodyData> CrewBodies;
 	TUniquePtr<simcore::VoiceData> CrewVoices;

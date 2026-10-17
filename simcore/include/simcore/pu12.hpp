@@ -203,11 +203,29 @@ public:
     void SetChannel(VoiceChannel* channel) { channel_ = channel; }
     // Gated: a message is only heard once someone has resolved it with `ResolveMessages` (a link that can lose it).
     void SetGated(bool gated) { gated_ = gated; }
+    // A board kept elsewhere: the real PU-12M of a battery link (battery_link.hpp). It plots nothing itself; the
+    // designations read out to this vehicle, and their marks, come by Relay.
+    void SetExternal(bool external) { external_ = external; }
+    bool External() const { return external_; }
+    // A designation the post read out to this vehicle: on the air from start_s to end_s, the crew has it once the vehicle
+    // commander has passed it on. Its mark goes on this board too.
+    void Relay(const BoardMark& m, double start_s, double end_s) {
+        if (m.stamp > stamp_) stamp_ = m.stamp;
+        plotted_ = true;
+        marks_.push_back(m);
+        Message msg;
+        msg.mark = m;
+        msg.start_s = start_s;
+        msg.air_end_s = end_s;
+        msg.known_s = end_s + def_.pass_on_s + pass_on_extra_s_;
+        messages_.push_back(msg);
+        last_plot_s_ = start_s;
+    }
 
     // Plot the contacts if a minute has passed since the last time (the first plot is at the first call), and queue
     // a voice designation for each target in range. Returns true when it plotted.
     bool Update(double t, const std::vector<BoardContact>& contacts) {
-        if (plotted_ && t + 1e-9 < next_s_) return false;
+        if (external_ || (plotted_ && t + 1e-9 < next_s_)) return false;
         plotted_ = true;
         next_s_ = t + def_.update_period_s;
         ++stamp_;
@@ -241,7 +259,7 @@ public:
     }
 
     // Is a plot due at t? (`Update` plots only then.)
-    bool Due(double t) const { return !plotted_ || t + 1e-9 >= next_s_; }
+    bool Due(double t) const { return !external_ && (!plotted_ || t + 1e-9 >= next_s_); }
 
     // One mark written by hand (the PU-12M's own plotter, command_post.hpp): `c.position` is where the post's own
     // picture puts the target (its navigation error already in it); the plotter's own error is added. Stamped with the
@@ -470,6 +488,7 @@ private:
     VoiceChannel own_channel_;
     VoiceChannel* channel_ = nullptr;
     bool gated_ = false;
+    bool external_ = false;
     Vec3 source_;
     bool has_source_ = false;
     double last_plot_s_ = -1e9;

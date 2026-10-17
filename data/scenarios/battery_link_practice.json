@@ -1,0 +1,11 @@
+{
+  "link_id": "battery_link_practice",
+  "name": "Battery link: the Osa 21 and the PU-12M in one battery",
+  "description": "The raid of pu12m_battery.json on a deployed Osa-AK battery, with the player's choice of vehicle: the Osa 21 (its crew, or its commander) or the PU-12M (the battery commander, the plotter, the post's crew). The post gives targets by voice on the battery net; 21 hears them as the PU-12's; its commander's reports go onto the post's IT boards. Launchers 22-24 are the abstract crews of battery_fire.hpp.",
+  "osa": "scenarios/link_osa_21.json",
+  "post": "scenarios/link_pu12m.json",
+  "callsign": "21",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. docs/PU12_DEVELOPMENT.md P8, simcore/battery_link.hpp."
+}

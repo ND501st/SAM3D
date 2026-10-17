@@ -98,6 +98,22 @@ the march, a raid, the fight, stowing and marching on). It starts with one missi
 comes within the mission. A battery vehicle may have a sector of fire, `"sector_deg": [from, to]` (true azimuths,
 clockwise): in free fire it takes only targets there, and the NPC battery commander gives it targets there first.
 
+**The Osa and the PU-12M in one battery (a battery link, `simcore/battery_link.hpp`, docs/PU12_DEVELOPMENT.md P8).** A
+link file names two scenarios that share a battery and a sky, `{ "link_id", "name", "description", "osa", "post",
+"callsign", "source", "confidence", "notes" }`:
+
+- **The Osa's scenario** has `"battery_commander": "post"` and the link's callsign as its own in the battery. The battery
+  commander sits in the linked PU-12M: his designations reach this vehicle's commander as the PU-12's, on the command
+  net, with their own timing. The other launchers are the post's, and their reports are heard on the battery net.
+  The commander takes the target the post gave him first, and leaves targets given to another launcher (and echoes
+  beside them) alone.
+- **The post's scenario** (its own unit the PU-12M) has a launcher of that callsign in its battery and no targets: it
+  takes the Osa's. The Osa's commander reports to it (к бою готов, пуск, цель поражена, ракет нет), and the post writes
+  it on its IT boards.
+
+`battery_link_practice.json` (with `link_osa_21.json` and `link_pu12m.json`) is the raid of `pu12m_battery.json` on a
+deployed battery. Play it headless with `battery_link_demo`.
+
 **The crew (phase 8, `docs/crew/`).** With crew data the crew speaks (orders, acknowledgements, reports, reminders:
 the radio log and the debrief), and each crew member may have a `skill` tier (recruit, class3, class2, class1, master)
 that sets its pace, slips, omissions and aim. With `"crew_commander": "npc"` no triggers are needed for the crew's

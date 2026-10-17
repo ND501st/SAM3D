@@ -70,7 +70,8 @@ add_executable(simcore_tests
   tests/test_pu12m_console.cpp
   tests/test_command_post.cpp
   tests/test_pu12m_battery.cpp
-  tests/test_pu12m_cabin.cpp)
+  tests/test_pu12m_cabin.cpp
+  tests/test_battery_link.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -92,6 +93,12 @@ simcore_configure_target(procedure_demo)
 add_test(NAME procedure_demo COMMAND procedure_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/procedures/osa_ak.json")
 
 # Play a scenario file headless and print the debrief; also run as a test on the practice scenario.
+add_executable(battery_link_demo examples/battery_link_demo.cpp)
+simcore_configure_target(battery_link_demo)
+add_test(NAME battery_link_demo
+         COMMAND battery_link_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/battery_link_practice.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" battery_link.acmi)
+
 add_executable(scenario_demo examples/scenario_demo.cpp)
 simcore_configure_target(scenario_demo)
 add_test(NAME scenario_demo
