@@ -270,11 +270,13 @@ private:
             if (!LoadAnchor(*low, Join(path, "low_altitude_check"), d.low_altitude_check)) return false;
         if (const json::Value* m = v.Find("mti")) {
             const std::string mp = Join(path, "mti");
-            if (!Keys(*m, mp, {"improvement_db", "notch_mps", "notch_attenuation_db", "notes"})) return false;
+            if (!Keys(*m, mp, {"improvement_db", "notch_mps", "notch_attenuation_db", "max_range_m", "notes"})) return false;
             d.has_mti = true;
             if (!Val(*m, mp, "improvement_db", d.mti_improvement_db, true) || !Val(*m, mp, "notch_mps", d.mti_notch_mps, true) ||
-                !Val(*m, mp, "notch_attenuation_db", d.mti_notch_attenuation_db, false))
+                !Val(*m, mp, "notch_attenuation_db", d.mti_notch_attenuation_db, false) ||
+                !Val(*m, mp, "max_range_m", d.mti_max_range_m, false))
                 return false;
+            if (d.mti_max_range_m < 0.0) return Fail(Join(mp, "max_range_m"), "must be >= 0 (0: no limit)");
         }
         if (const json::Value* c = v.Find("clutter")) {
             const std::string cp = Join(path, "clutter");

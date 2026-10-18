@@ -585,6 +585,34 @@ SC_TEST("em scenario: chaff fools a radar without MTI; external coherence cancel
     SC_EXPECT(false_plots[2] < false_plots[1] / 3 + 1);
 }
 
+// Roadmap 6.4: the MTI works out to its working range only; beyond it the normal channel is gated in and nothing is
+// cancelled (the Osa's search radar: 35 km, voenizdat_osa_1991 p30). Still chaff, calm air, internal coherence.
+SC_TEST("em scenario: past the MTI's working range still chaff is no longer cancelled") {
+    int false_plots[2] = {0, 0};
+    const double north[2] = {25000.0, 40000.0};
+    for (int k = 0; k < 2; ++k) {
+        EmLibrary lib = GenericLib();
+        const int rd = lib.Radar("generic_search_c");
+        SC_EXPECT(rd >= 0);
+        if (rd < 0) return;
+        lib.radars[static_cast<std::size_t>(rd)].mti_max_range_m = 35000.0;
+        SC_EXPECT(lib.radars[static_cast<std::size_t>(rd)].max_range_m > 45000.0);
+        EmWorld w(kOrigin, nullptr, 9);
+        SC_EXPECT(w.SetLibrary(lib));
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+        const int radar = w.AddRadar(site, "generic_search_c", true);
+        w.Scene().FindRadar(radar)->mti = MtiMode::Internal;
+        w.AddChaff(EnuAt(0.0, north[k], 2000.0), 50.0, 120.0);
+        for (int i = 0; i < 300; ++i) {
+            w.Step(0.1);
+            for (const RadarPlot& p : w.Scene().FindRadar(radar)->last_plots) false_plots[k] += p.false_target ? 1 : 0;
+        }
+    }
+    std::printf("    still chaff plots with MTI: at 25 km %d, at 40 km %d\n", false_plots[0], false_plots[1]);
+    SC_EXPECT(false_plots[0] <= 1);
+    SC_EXPECT(false_plots[1] > 5);
+}
+
 SC_TEST("em scenario: a TDOA group fixes an airborne radar (Ramona/Tamara style)") {
     EmWorld w(kOrigin, nullptr, 6);
     SC_EXPECT(w.SetLibrary(GenericLib()));

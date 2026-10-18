@@ -194,7 +194,10 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
     const double ground_horizon = 4120.0 * std::sqrt(p.height_agl_m > 0.5 ? p.height_agl_m : 0.5);
     const bool in_clutter = el < d.clutter_max_elevation_rad && range < 1.3 * ground_horizon;
     if (in_clutter) cn = DbToLinear(d.clutter_cnr_db_at_10km - 30.0 * std::log10(range / 10000.0));
-    if (d.has_mti && r.mti != MtiMode::Off) {
+    // Beyond the MTI's working range the receiver gates the normal channel in: nothing is cancelled there (the Osa's
+    // search radar: 35 km, voenizdat_osa_1991 p30).
+    const bool mti_on = d.has_mti && r.mti != MtiMode::Off && (d.mti_max_range_m <= 0.0 || range <= d.mti_max_range_m);
+    if (mti_on) {
         cn *= DbToLinear(-d.mti_improvement_db);
         if (std::fabs(radial_mps) < d.mti_notch_mps) snr *= DbToLinear(-d.mti_notch_attenuation_db);
         // External coherence references the chaff's own phase: drifting chaff cancels like clutter.
@@ -212,7 +215,7 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
         RadarLookPhysics cp = phys;
         cp.rcs_m2 = sc;
         double chaff_snr = RadarSnr(d, cp);
-        if (d.has_mti && r.mti != MtiMode::Off) {
+        if (mti_on) {
             const double vr_chaff = Dot(c.velocity, cl) / (cr > 1.0 ? cr : 1.0);
             // Internal coherence cancels only echoes that barely move; external coherence takes its
             // phase reference from the chaff itself, so wind-blown chaff cancels too, and the

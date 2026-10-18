@@ -74,6 +74,7 @@
         "improvement_db": { "value": 25, "source": "estimate; mon_2112_80 p15, p23 (TES, double inter-period subtraction)", "confidence": "estimate" },
         "notch_mps": { "value": 15, "source": "estimate", "confidence": "estimate" },
         "notch_attenuation_db": { "value": 30, "source": "estimate", "confidence": "estimate" },
+        "max_range_m": { "value": 35000, "source": "voenizdat_osa_1991 p30 (the working range in СДЦ is 35 km; to see targets beyond it the normal channel is gated in from 35 to 45 km, where passive jamming is not suppressed)", "confidence": "high" },
         "notes": "Internal or external coherence (mon_2112_80 p15): external takes the phase reference from the chaff, cancelling wind-blown chaff (MtiMode::External)."
       },
       "clutter": {

@@ -131,6 +131,7 @@ struct RadarDef {
     double mti_improvement_db = 25.0;
     double mti_notch_mps = 15.0;            // radial speeds below this are cancelled with the clutter
     double mti_notch_attenuation_db = 30.0;
+    double mti_max_range_m = 0.0;           // the MTI's working range (0: all of it); beyond it the normal channel, uncancelled
     double clutter_cnr_db_at_10km = 40.0;   // ground clutter-to-noise in the target's cell at 10 km
     double clutter_max_elevation_rad = 0.026;  // targets below ~1.5 deg share cells with the ground
     // Tracking.
