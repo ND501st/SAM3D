@@ -525,6 +525,14 @@ struct Contact {
     double elevation_deg = 0.0;
     bool control_reply = false;  // IFF replies only: to a control interrogation (ЗАПРОС К)
     int beam = -1;               // search echoes with the EM layer: the elevation beam it came in (0 = I ...), else -1
+    double snr_db = kUnknownSnrDb;  // search echoes with the EM layer: signal to noise and jamming (dB); unknown otherwise
+    static constexpr double kUnknownSnrDb = -1000.0;
+};
+
+// A noise jammer's strobe on the search scope: its direction (crew frame, like the echoes) and strength (J/N, dB).
+struct ScopeStrobe {
+    double azimuth_deg = 0.0;
+    double jn_db = 0.0;
 };
 
 // Full width of the TV sight's field of view for the lens selected now (0 if the console has no TV).
@@ -742,6 +750,11 @@ public:
     const Vec3& UnitPosition() const { return unit_; }
 
     const std::vector<Contact>& SearchPicture() const { return picture_; }
+    // The jamming strobes on the search scope (EM layer only) and where the search antenna points now (crew frame,
+    // degrees; kNoAntenna when not known: the gameplay rules have no antenna).
+    const std::vector<ScopeStrobe>& SearchStrobes() const { return strobes_; }
+    static constexpr double kNoAntenna = -1000.0;
+    double SearchAntennaAzimuthDeg() const { return search_antenna_az_deg_; }
     // The search antenna's elevation beam this turn (0 = I, 1 = II, 2 = III), -1 if the console has no beam selector.
     int SearchBeam() const { return search_beam_; }
     // Echoes on the tracking radar's range indicator: targets inside its beam (the azimuth line, within the
@@ -1044,6 +1057,8 @@ private:
 
     void UpdateSearch(double t, const ConsoleData& console, SessionLog& log) {
         picture_.clear();
+        strobes_.clear();
+        search_antenna_az_deg_ = em_ != nullptr ? Wrap180(em_->SearchAntennaAzimuthDeg() - unit_heading_deg_ + gyro_heading_deg_) : kNoAntenna;
         const SearchSensorDef& d = console.search;
         if (!console.equipment.IsReady(d.antenna) || !console.equipment.IsReady(d.transmitter)) return;
         const int scale = console.panel.Get(d.range_control);
@@ -1056,6 +1071,7 @@ private:
                 const double az = Wrap180(c.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
                 Contact blip{c.target_id, c.range_m, az, c.el_deg};
                 blip.beam = c.beam;
+                blip.snr_db = c.snr_db;
                 picture_.push_back(blip);
                 if (seen_by_search_.insert(c.target_id).second) {
                     events_.push_back({EngagementEvent::Kind::Contact, t, c.target_id, az, c.range_m, TrackMethod::None, std::string()});
@@ -1063,6 +1079,9 @@ private:
                     std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
                     log.Record({t, DebriefEntry::Kind::Scenario, "SOC", c.target_id, detail});
                 }
+            }
+            for (const EmSensorLink::Strobe& st : em_->SearchStrobes()) {
+                strobes_.push_back({Wrap180(st.true_az_deg - unit_heading_deg_ + gyro_heading_deg_), st.jn_db});
             }
             return;
         }
@@ -1868,6 +1887,8 @@ private:
     Vec3 unit_;
     std::map<std::string, Geometry> geo_;  // ordered by id: deterministic iteration
     std::vector<Contact> picture_;
+    std::vector<ScopeStrobe> strobes_;
+    double search_antenna_az_deg_ = kNoAntenna;
     std::vector<Contact> track_returns_;
     std::set<std::string> seen_by_search_;
     std::set<std::string> replied_;

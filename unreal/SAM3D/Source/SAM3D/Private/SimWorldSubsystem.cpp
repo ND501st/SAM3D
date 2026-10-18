@@ -187,6 +187,15 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		}
 		EmLayer->Draw(GetWorld(), [this](const simcore::Vec3& Enu) { return ToUnreal(Enu); });
 	}
+	else if (Runner != nullptr && Runner->Em() != nullptr && FSimEmLayer::ScenarioOverlayOn())
+	{
+		// The scenario's own EM world, on its terrain (sam3d.em.Scenario 1, roadmap E3).
+		if (!EmLayer)
+		{
+			EmLayer = MakeUnique<FSimEmLayer>();
+		}
+		EmLayer->DrawScene(GetWorld(), Runner->Em()->World().Scene(), [this](const simcore::Vec3& Enu) { return ToUnreal(Enu); });
+	}
 	if (bPaused || IsMirrorOnly())
 	{
 		return;  // a network client mirrors the server's simulation; it never steps its own
@@ -708,6 +717,17 @@ FVector USimWorldSubsystem::GetOriginLongitudeLatitudeHeight() const
 FString USimWorldSubsystem::GetDebriefText() const
 {
 	return Runner ? ToF(Runner->Debrief()) : FString();
+}
+
+bool USimWorldSubsystem::GetSearchAntennaAzimuth(double& OutTrueAzimuthDeg) const
+{
+	simcore::EmSensorLink* Em = Runner != nullptr ? Runner->Em() : nullptr;
+	if (Em == nullptr)
+	{
+		return false;
+	}
+	OutTrueAzimuthDeg = Em->SearchAntennaAzimuthDeg();
+	return true;
 }
 
 FString USimWorldSubsystem::GetScenarioName() const

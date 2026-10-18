@@ -23,6 +23,11 @@ TAutoConsoleVariable<int32> CVarEmOwner(TEXT("sam3d.em.Owner"), 0,
 	TEXT("Whose knowledge the electromagnetic-layer overlays show: a node id, 0 = command posts, -1 = every node."),
 	ECVF_Default);
 
+TAutoConsoleVariable<int32> CVarEmScenario(TEXT("sam3d.em.Scenario"), 0,
+	TEXT("1: draw the running scenario's own electromagnetic world (its radars, jamming strobes, command link, the targets' "
+		 "warning receivers) with the sam3d.em.Debug overlays (roadmap E3)."),
+	ECVF_Default);
+
 USimWorldSubsystem* SubsystemOf(UWorld* World)
 {
 	return World != nullptr ? World->GetSubsystem<USimWorldSubsystem>() : nullptr;
@@ -159,10 +164,23 @@ FString FSimEmLayer::GetStatusText() const
 	return Out;
 }
 
+bool FSimEmLayer::ScenarioOverlayOn()
+{
+	return CVarEmScenario.GetValueOnGameThread() != 0;
+}
+
 void FSimEmLayer::Draw(UWorld* World, TFunctionRef<FVector(const simcore::Vec3&)> ToUnreal)
 {
+	if (Demo)
+	{
+		DrawScene(World, Demo->Layer().Scene(), ToUnreal);
+	}
+}
+
+void FSimEmLayer::DrawScene(UWorld* World, simcore::em::EmScene& Scene, TFunctionRef<FVector(const simcore::Vec3&)> ToUnreal)
+{
 #if ENABLE_DRAW_DEBUG
-	if (!Demo || World == nullptr)
+	if (World == nullptr)
 	{
 		return;
 	}
@@ -172,11 +190,13 @@ void FSimEmLayer::Draw(UWorld* World, TFunctionRef<FVector(const simcore::Vec3&)
 	{
 		return;
 	}
-	if (bPrimsDirty || Mask != PrimsMask || Owner != PrimsOwner)
+	if (bPrimsDirty || Mask != PrimsMask || Owner != PrimsOwner || &Scene != PrimsScene || Scene.time_s != PrimsTime)
 	{
-		Prims = simcore::em::BuildDebugScene(Demo->Layer().Scene(), static_cast<uint32>(Mask), Owner, 2.0);
+		Prims = simcore::em::BuildDebugScene(Scene, static_cast<uint32>(Mask), Owner, 2.0);
 		PrimsMask = Mask;
 		PrimsOwner = Owner;
+		PrimsScene = &Scene;
+		PrimsTime = Scene.time_s;
 		bPrimsDirty = false;
 	}
 	using simcore::Vec3;

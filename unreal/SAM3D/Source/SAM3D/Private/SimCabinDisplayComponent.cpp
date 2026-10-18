@@ -349,7 +349,13 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		// The sweep follows simulated time, so it stops when the sim is paused.
 		const double Dt = StepSeconds();
 		const bool bRotating = Console.has_sensors && Console.equipment.IsReady(Console.search.antenna);
-		Scope->Update(Dt, bRotating, Feed.search, Feed.iff);
+		// With the EM layer the sweep is the antenna's own (roadmap E3): an echo paints as the beam passes it.
+		double AntennaRad = -1.0;
+		if (Feed.search_antenna_az_deg > simcore::EngagementModel::kNoAntenna + 1.0)
+		{
+			AntennaRad = FMath::Fmod(FMath::DegreesToRadians(Feed.search_antenna_az_deg) + UE_DOUBLE_TWO_PI, UE_DOUBLE_TWO_PI);
+		}
+		Scope->Update(Dt, bRotating, Feed.search, Feed.iff, Feed.strobes, AntennaRad);
 	}
 	if (Kind == simcore::CabinDisplayKind::AspdScope)
 	{
@@ -496,6 +502,23 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	const bool bGated = !Search.iff_gate_control.empty() && Console.panel.Get(Search.iff_gate_control) == 1;
 	for (const simcore::SearchScope::Blip& B : Scope->Blips())
 	{
+		if (B.strobe)
+		{
+			// A noise jammer's strobe (roadmap E3): a grainy bright spoke along its azimuth across the whole scale, as
+			// bright as the jamming is strong; it has no range.
+			const float Glow = static_cast<float>(B.brightness);
+			for (int32 K = -2; K <= 2; ++K)
+			{
+				const double A = B.azimuth_rad + FMath::DegreesToRadians(0.6 * K);
+				Canvas->K2_DrawLine(C, Polar(C, A, R), K == 0 ? 3.0f : 1.5f, Phosphor * (Glow * (K == 0 ? 0.9f : 0.4f)));
+			}
+			for (int32 I = 0; I < 28; ++I)
+			{
+				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-0.015, 0.015), R * Noise.FRand());
+				Canvas->K2_DrawPolygon(nullptr, P, FVector2D(1.5, 1.5), 4, Phosphor * (Glow * Noise.FRandRange(0.3f, 1.0f)));
+			}
+			continue;
+		}
 		if (B.range_m < MinM || B.range_m > MaxM)
 		{
 			continue;

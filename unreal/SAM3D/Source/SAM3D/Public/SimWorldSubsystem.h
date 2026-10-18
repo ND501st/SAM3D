@@ -468,6 +468,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
 	FString GetDebriefText() const;
 
+	/** Where the search antenna points (true azimuth from north, degrees) when the EM layer turns it; false without
+	 *  one (the gameplay rules have no antenna). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
+	bool GetSearchAntennaAzimuth(double& OutTrueAzimuthDeg) const;
+
 	/** The running scenario's name (its file's "name"). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
 	FString GetScenarioName() const;

@@ -26,10 +26,24 @@ public:
         std::string target_id;
         double azimuth_rad = 0.0;
         double range_m = 0.0;
-        double brightness = 0.0;  // 1 when just painted, fading linearly to 0 over the afterglow
+        double brightness = 0.0;  // its strength when just painted, fading linearly to 0 over the afterglow
         bool iff_reply = false;   // an IFF reply rather than an echo
         bool control_reply = false;  // the reply to a control interrogation (ЗАПРОС К)
+        bool strobe = false;      // a noise jammer's strobe: a bright spoke along its azimuth, no range
     };
+
+    // How bright an echo paints for its signal to noise and jamming: 0.35 at the detection threshold (about 13 dB),
+    // full from 38 dB (a display choice; an unknown SNR, the gameplay rules', paints full).
+    static double EchoStrength(double snr_db) {
+        if (snr_db <= Contact::kUnknownSnrDb + 1.0) return 1.0;
+        const double s = 0.35 + 0.65 * (snr_db - 13.0) / 25.0;
+        return s < 0.35 ? 0.35 : (s > 1.0 ? 1.0 : s);
+    }
+    // A strobe's brightness for its J/N: 0.25 when just heard (3 dB), full from 33 dB.
+    static double StrobeStrength(double jn_db) {
+        const double s = 0.25 + 0.75 * (jn_db - 3.0) / 30.0;
+        return s < 0.25 ? 0.25 : (s > 1.0 ? 1.0 : s);
+    }
 
     // `sweep_period_s`: one antenna turn. `afterglow_s`: how long an echo stays visible.
     SearchScope(double sweep_period_s, double afterglow_s)
@@ -37,7 +51,10 @@ public:
 
     // Advance by dt. The sweep turns while `rotating`; each echo in `picture` and IFF reply in `replies` it passes
     // over is painted (the interrogator's antenna turns with the search antenna).
-    void Update(double dt, bool rotating, const std::vector<Contact>& picture, const std::vector<Contact>& replies = {}) {
+    // `strobes`: jamming strobes, painted as the sweep passes their azimuth. `antenna_az_rad` >= 0: the search
+    // antenna's azimuth now (the EM layer's), which the sweep follows, so a contact paints when the beam passes it.
+    void Update(double dt, bool rotating, const std::vector<Contact>& picture, const std::vector<Contact>& replies = {},
+                const std::vector<ScopeStrobe>& strobes = {}, double antenna_az_rad = -1.0) {
         if (dt <= 0.0) return;
         for (Paint& p : paints_) p.age_s += dt;
         std::size_t kept = 0;
@@ -47,15 +64,27 @@ public:
         paints_.resize(kept);
         if (!rotating) return;
         const double turn = kTwoPi * dt / period_s_;
+        if (antenna_az_rad >= 0.0) sweep_rad_ = Wrap(antenna_az_rad - turn);  // what the antenna swept this step
+        // Painted part-way through the step: aged by the time since the sweep passed.
+        auto passed = [&](double az, double& since_s) {
+            if (turn < kTwoPi && Wrap(az - sweep_rad_) > turn) return false;
+            since_s = turn >= kTwoPi ? 0.0 : (turn - Wrap(az - sweep_rad_)) / kTwoPi * period_s_;
+            return true;
+        };
         for (int list = 0; list < 2; ++list) {
             for (const Contact& c : list == 0 ? picture : replies) {
                 const double az = Wrap(DegToRad(c.azimuth_deg));
-                if (turn >= kTwoPi || Wrap(az - sweep_rad_) <= turn) {
-                    // Painted part-way through the step: age it by the time since the sweep passed.
-                    const double since_s = turn >= kTwoPi ? 0.0 : (turn - Wrap(az - sweep_rad_)) / kTwoPi * period_s_;
-                    paints_.push_back({c.target_id, az, c.range_m, since_s, list == 1, list == 1 && c.control_reply});
+                double since_s = 0.0;
+                if (passed(az, since_s)) {
+                    paints_.push_back({c.target_id, az, c.range_m, since_s, list == 1, list == 1 && c.control_reply,
+                                       list == 0 ? EchoStrength(c.snr_db) : 1.0, false});
                 }
             }
+        }
+        for (const ScopeStrobe& st : strobes) {
+            const double az = Wrap(DegToRad(st.azimuth_deg));
+            double since_s = 0.0;
+            if (passed(az, since_s)) paints_.push_back({std::string(), az, -1.0, since_s, false, false, StrobeStrength(st.jn_db), true});
         }
         sweep_rad_ = Wrap(sweep_rad_ + turn);
     }
@@ -68,7 +97,8 @@ public:
         std::vector<Blip> out;
         out.reserve(paints_.size());
         for (const Paint& p : paints_) {
-            out.push_back({p.target_id, p.azimuth_rad, p.range_m, 1.0 - p.age_s / afterglow_s_, p.iff_reply, p.control_reply});
+            out.push_back({p.target_id, p.azimuth_rad, p.range_m, p.strength * (1.0 - p.age_s / afterglow_s_), p.iff_reply,
+                           p.control_reply, p.strobe});
         }
         return out;
     }
@@ -83,6 +113,8 @@ private:
         double age_s;
         bool iff_reply;
         bool control_reply;
+        double strength;
+        bool strobe;
     };
 
     static double Wrap(double rad) {

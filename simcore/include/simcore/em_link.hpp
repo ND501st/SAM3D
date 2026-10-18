@@ -147,6 +147,7 @@ public:
         double true_az_deg = 0.0;  // -180..180
         double el_deg = 0.0;
         int beam = -1;  // the search radar's elevation beam its last echo came in (-1 unknown)
+        double snr_db = 0.0;  // the last echo's signal to noise and jamming (dB): how bright it paints
         bool no_range = false;  // angles only (the tracking radar on a jammer): range_m and position mean nothing
     };
 
@@ -483,10 +484,40 @@ public:
             c.ghost = ghost;
             c.iff = !ghost && t.iff_replies > 0 && world_.Time() - t.last_iff_s <= kIffHoldS;
             c.beam = BeamOfTrack(t.id);
+            c.snr_db = t.last_snr_db;
             out.push_back(c);
         }
         std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
+    }
+
+    // The search radar's jamming strobes: the direction of each noise jammer it hears (true azimuth from north,
+    // -180..180) and how strong (J/N, dB), held as long as an echo is (one beam programme).
+    struct Strobe {
+        double true_az_deg = 0.0;
+        double jn_db = 0.0;
+    };
+    std::vector<Strobe> SearchStrobes() const {
+        std::vector<Strobe> out;
+        const em::RadarState* r = Radar(search_);
+        if (r == nullptr || !r->on) return out;
+        const em::RadarDef& d = DefOf(*r);
+        const double turns = r->beam_program.empty() ? 1.0 : static_cast<double>(r->beam_program.size());
+        const double hold_s = turns * d.emitter.scan_period_s + 0.3;
+        for (const em::StrobeTrack& st : r->strobe_tracks) {
+            if (world_.Time() - st.last_s > hold_s) continue;
+            double az = std::fmod(RadToDeg(st.azimuth_rad) + 180.0, 360.0);
+            if (az < 0.0) az += 360.0;
+            out.push_back({az - 180.0, st.jn_db});
+        }
+        return out;
+    }
+    // Where the search antenna points now (true azimuth from north, 0..360), and whether it is turning (radiating
+    // or not: the antenna turns with the drive on).
+    double SearchAntennaAzimuthDeg() const {
+        const em::RadarState* r = Radar(search_);
+        const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
+        return e != nullptr ? RadToDeg(e->pointing_az_rad) : 0.0;
     }
 
     // The tracking radar holds a target: who, and where its filter puts it now.
