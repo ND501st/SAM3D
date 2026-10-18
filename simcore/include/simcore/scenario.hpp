@@ -28,6 +28,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/instructor.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/target_behaviour.hpp"
@@ -88,7 +89,7 @@ struct CrewDoctrineDef {
 };
 
 struct TriggerAction {
-    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat };
+    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat, Instructor };
     Kind kind = Kind::SetInput;
     std::string input;      // SetInput
     bool value = true;      // SetInput
@@ -98,6 +99,7 @@ struct TriggerAction {
     std::string c2_id;      // C2Source (a source id or "none"), C2Fail, C2Restore
     simcore::BatteryOrder battery_order;  // BatteryOrder
     bool air_threat = false;              // AirThreat
+    InstructorOrder instructor;           // Instructor: the trainer's scripted drill (roadmap 10.3)
 };
 
 struct ScenarioTrigger {
@@ -767,15 +769,31 @@ private:
                     TriggerAction& out) {
         if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
                          "battery_order", "route", "covered", "axis_deg", "air_threat", "bounding", "roving", "points",
-                         "crossing", "width_m", "vehicle", "radiate"})) {
+                         "crossing", "width_m", "vehicle", "radiate", "instructor", "target", "to"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
                           (a.Find("end") != nullptr) + (a.Find("c2_source") != nullptr) + (a.Find("c2_fail") != nullptr) +
                           (a.Find("c2_restore") != nullptr) + (a.Find("battery_order") != nullptr) +
-                          (a.Find("air_threat") != nullptr);
+                          (a.Find("air_threat") != nullptr) + (a.Find("instructor") != nullptr);
         if (kinds != 1) {
-            return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail, c2_restore, battery_order or air_threat");
+            return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail, c2_restore, battery_order, "
+                           "air_threat or instructor");
+        }
+        // {"instructor": "turn", "target": "t1", "to": 90}: the trainer's instructor gives an order (instructor.hpp).
+        if (a.Find("instructor") != nullptr) {
+            out.kind = TriggerAction::Kind::Instructor;
+            std::string kind;
+            if (!RequireString(a, p, "instructor", kind) || !RequireString(a, p, "target", out.instructor.target)) return false;
+            if (!InstructorKindFrom(kind, out.instructor.kind)) {
+                return Fail(Join(p, "instructor"), "unknown order '" + kind + "' (take, release, turn, height, speed, evade, jam)");
+            }
+            bool known = false;
+            for (const ScenarioTarget& t : def.targets) known = known || t.id == out.instructor.target;
+            if (!known) return Fail(Join(p, "target"), "unknown target '" + out.instructor.target + "'");
+            if (InstructorOrderHasValue(out.instructor.kind)) return RequireNumber(a, p, "to", out.instructor.value);
+            if (a.Find("to") != nullptr) return Fail(Join(p, "to"), "'" + kind + "' takes no value");
+            return true;
         }
         if (a.Find("battery_order") != nullptr || a.Find("air_threat") != nullptr) {
             if (!def.has_battery) return Fail(p, "the scenario has no battery block");

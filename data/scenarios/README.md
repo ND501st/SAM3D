@@ -207,6 +207,13 @@ post's navigation error, and the vehicle crews aim by its last marks instead of 
 silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
 `"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/71 at 45 km, 00-71").
 
+A trigger can give the trainer's instructor's orders (roadmap 10.3, `simcore/instructor.hpp`): `{ "instructor": "turn",
+"target": "t1", "to": 270 }`. Orders: `take`, `release`, `turn` (`to`: the true heading, degrees), `height` (`to`: metres
+above the ground), `speed` (`to`: m/s), `evade` (a jink), `jam` (`to`: 1 on, 0 off; the target must carry a jammer in
+`own_unit.em.jammers`, which then follows his switch). He holds two targets at a time; an order he can't give is logged
+("turn not done: ..."). `osa_trainer.json` is his scripted drill: a drone turned away and brought back low, then a strike
+aircraft whose pod he switches on.
+
 ## Ranges and history (roadmap 10.1, 10.2)
 
 The missions menu's "Ranges and history" group. Each file's `notes` name the sources of its event and mark everything

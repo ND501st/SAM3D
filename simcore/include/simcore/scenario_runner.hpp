@@ -19,6 +19,7 @@
 // a miss (step 1b, and on launch). Without one, launches are only recorded.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -39,6 +40,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
+#include "simcore/instructor.hpp"
 #include "simcore/launcher.hpp"
 #include "simcore/battery.hpp"
 #include "simcore/battery_fire.hpp"
@@ -881,7 +883,14 @@ private:
         bool gone = false;
         int world_id = -1;
         TargetPilot pilot;  // terrain following, pop-up, evasion (target_behaviour.hpp)
+        // Held by the instructor (roadmap 10.3): it flies his heading, height and speed; its own pilot and route wait.
+        bool held = false;
+        double held_heading_rad = 0.0;
+        TargetPilot route_pilot;
+        std::vector<Vec3> route_waypoints;
+        std::size_t route_next = 0;
     };
+    static constexpr double kHeldLegM = 50000.0;  // a held target flies at a point this far along his heading
 
     // Start warm: set the state's controls and inputs, warm its subsystems up in order (each sees those before it),
     // orient the vehicle if the state says so. The scenario's own inputs win over the state's.
@@ -925,7 +934,13 @@ private:
         }
         for (TargetState& s : targets_) {
             if (!s.spawned || s.gone) continue;
-            if (Aircraft* a = world_.FindAircraft(s.world_id)) s.pilot.BeforeStep(*a);
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            if (a == nullptr) continue;
+            if (s.held && !s.pilot.Evading()) {  // the instructor's heading (a jink he ordered steers itself)
+                a->waypoints = {a->position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
+                a->next_waypoint = 0;
+            }
+            s.pilot.BeforeStep(*a);
         }
         world_.Step(dt);
         for (std::size_t i = 0; i < targets_.size(); ++i) {
@@ -1072,6 +1087,14 @@ private:
                     air_threat_forced_ = a.air_threat;
                 }
                 return;
+            case TriggerAction::Kind::Instructor: {  // the trainer's scripted drill (roadmap 10.3)
+                std::string why;
+                if (!Instruct(a.instructor, &why)) {
+                    log_.Record({time_, DebriefEntry::Kind::Scenario, "Instructor", a.instructor.target,
+                                 std::string(ToString(a.instructor.kind)) + " not done: " + why});
+                }
+                return;
+            }
         }
     }
 
@@ -2947,7 +2970,215 @@ public:
         return false;
     }
 
+    // ---- The trainer's instructor (roadmap 10.3, instructor.hpp) ----
+    // One order. Turning, a height, a speed or a manoeuvre takes the target first (the trainer holds two at a time:
+    // flak11, ePap). False, with the reason, if it can't be done: a target not in the sky, a third target, a jammer it
+    // doesn't carry, a height or speed out of reach.
+    bool Instruct(const InstructorOrder& o, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        std::size_t i = 0;
+        while (i < def_.targets.size() && def_.targets[i].id != o.target) ++i;
+        if (i == def_.targets.size()) return fail("no target '" + o.target + "'");
+        TargetState& s = targets_[i];
+        Aircraft* a = s.spawned && !s.gone ? world_.FindAircraft(s.world_id) : nullptr;
+        if (a == nullptr || !a->alive) return fail(o.target + " is not in the sky");
+        const std::string& id = o.target;
+        if (o.kind == InstructorOrder::Kind::Release) {
+            if (!s.held) return fail(id + " is not held");
+            ReleaseTarget(s, *a);
+            Instructed(id, "lets it go back to its route");
+            return true;
+        }
+        if (o.kind == InstructorOrder::Kind::Jam) {
+            if (!em_link_ || !em_link_->SetJammerSwitch(id, o.value != 0.0)) return fail(id + " carries no jammer");
+            Instructed(id, o.value != 0.0 ? "switches its jammer on" : "switches its jammer off");
+            return true;
+        }
+        const bool rotor = a->type.find("Rotorcraft") != std::string::npos;
+        if (o.kind == InstructorOrder::Kind::Height && (o.value < kHeldMinAglM || o.value > kHeldMaxAglM)) {
+            return fail("a height of 5 to 6000 m above the ground");
+        }
+        if (o.kind == InstructorOrder::Kind::Speed &&
+            (o.value < (rotor ? 0.0 : kHeldMinSpeedMps) || o.value > (rotor ? kHeldRotorMaxMps : kHeldMaxSpeedMps))) {
+            return fail(rotor ? "a helicopter's speed of 0 to 90 m/s" : "an aircraft's speed of 80 to 700 m/s");
+        }
+        const bool took = !s.held;
+        if (took && !TakeTarget(i, *a, why)) return false;
+        char text[160];
+        switch (o.kind) {
+            case InstructorOrder::Kind::Take:
+                Instructed(id, took ? "takes it: it flies on as it is, at his orders" : "holds it already");
+                return true;
+            case InstructorOrder::Kind::Turn: {
+                double deg = std::fmod(o.value, 360.0);
+                if (deg < 0.0) deg += 360.0;
+                s.held_heading_rad = DegToRad(deg);
+                std::snprintf(text, sizeof(text), "turns it onto %03.0f degrees", deg);
+                break;
+            }
+            case InstructorOrder::Kind::Height:
+                s.pilot.SetAgl(o.value);
+                std::snprintf(text, sizeof(text), "sends it to %.0f m above the ground", o.value);
+                break;
+            case InstructorOrder::Kind::Speed:
+                a->speed_mps = o.value;
+                std::snprintf(text, sizeof(text), "sets its speed to %.0f m/s", o.value);
+                break;
+            case InstructorOrder::Kind::Evade: {
+                const std::string what = s.pilot.EvadeNow(*a, def_.unit_position, time_);
+                if (what.empty()) return fail(id + " is manoeuvring already");
+                std::snprintf(text, sizeof(text), "makes it manoeuvre: %s", what.c_str());
+                break;
+            }
+            default:
+                return fail("unknown order");
+        }
+        Instructed(id, (took ? std::string("takes it and ") : std::string()) + text);
+        return true;
+    }
+
+    // Enters a new target into the air picture: it appears now, with the file's keys (its id must be new).
+    bool InstructorEnter(ScenarioTarget t, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        if (t.id.empty()) return fail("a target needs an id");
+        for (const ScenarioTarget& o : def_.targets) {
+            if (o.id == t.id) return fail("there is a target '" + t.id + "' already");
+        }
+        if (t.waypoints.empty()) return fail(t.id + " needs a route (one waypoint at least)");
+        t.appear_at_s = time_;
+        EngagementTarget e;
+        e.id = t.id;
+        e.target_class = t.target_class;
+        e.evade_on_launch = t.evade_on_launch;
+        e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
+        e.friendly = t.friendly;
+        e.size_m = t.size_m;
+        eng_targets_.push_back(e);
+        targets_.emplace_back();
+        rwr_warned_.push_back(0);
+        if (em_link_ && !t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);
+        const Vec3 rel = t.start - def_.unit_position;
+        double az = RadToDeg(std::atan2(rel.x, rel.y));
+        if (az < 0.0) az += 360.0;
+        char text[200];
+        std::snprintf(text, sizeof(text), "enters %s: %.1f km out at %03.0f degrees, %.0f m up", t.name.c_str(),
+                      std::hypot(rel.x, rel.y) / 1000.0, az, t.start.z);
+        const std::string id = t.id;
+        def_.targets.push_back(std::move(t));
+        Instructed(id, text);
+        return true;
+    }
+
+    // The targets he holds now (at most kInstructorTargets).
+    std::vector<std::string> InstructorTargets() const {
+        std::vector<std::string> out;
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            if (targets_[i].held && !targets_[i].gone) out.push_back(def_.targets[i].id);
+        }
+        return out;
+    }
+
+    // What the instructor's seat shows: every target in the sky as it truly is (he is not the crew).
+    struct InstructorTrack {
+        std::string id;
+        std::string name;
+        Vec3 position;
+        double heading_deg = 0.0;
+        double speed_mps = 0.0;
+        double agl_m = 0.0;
+        bool held = false;
+        bool has_jammer = false;
+        bool jamming = false;
+    };
+    std::vector<InstructorTrack> InstructorPicture() const {
+        std::vector<InstructorTrack> out;
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            const TargetState& s = targets_[i];
+            const Aircraft* a = s.spawned && !s.gone ? world_.FindAircraft(s.world_id) : nullptr;
+            if (a == nullptr || !a->alive) continue;
+            InstructorTrack t;
+            t.id = def_.targets[i].id;
+            t.name = def_.targets[i].name;
+            t.position = a->position;
+            t.heading_deg = RadToDeg(std::atan2(a->velocity.x, a->velocity.y));
+            if (t.heading_deg < 0.0) t.heading_deg += 360.0;
+            t.speed_mps = a->speed_mps;
+            t.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            t.held = s.held;
+            t.has_jammer = em_link_ && em_link_->CarriesJammer(t.id);
+            t.jamming = em_link_ && em_link_->TargetJamming(t.id);
+            out.push_back(t);
+        }
+        return out;
+    }
+
 private:
+    static constexpr double kHeldMinAglM = 5.0;  // game limits on his orders (sam3d)
+    static constexpr double kHeldMaxAglM = 6000.0;
+    static constexpr double kHeldMinSpeedMps = 80.0;
+    static constexpr double kHeldMaxSpeedMps = 700.0;
+    static constexpr double kHeldRotorMaxMps = 90.0;
+
+    void Instructed(const std::string& target, const std::string& what) {
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Instructor", target, what});
+    }
+
+    // He takes the target: from now on a terrain-following pilot holds its height, it flies his heading (the one it
+    // has now) and its speed, and manoeuvres only when he orders it (a jink; its own if it has one).
+    bool TakeTarget(std::size_t i, Aircraft& a, std::string* why) {
+        int held = 0;
+        for (const TargetState& t : targets_) held += t.held && !t.gone ? 1 : 0;
+        if (held >= kInstructorTargets) {
+            if (why != nullptr) *why = "the trainer holds two targets at a time: let one go first";
+            return false;
+        }
+        TargetState& s = targets_[i];
+        const ScenarioTarget& def = def_.targets[i];
+        const auto route = s.pilot.Route(a);
+        s.route_waypoints = route.first;
+        s.route_next = route.second;
+        s.route_pilot = s.pilot;
+        s.held_heading_rad = std::atan2(a.velocity.x, a.velocity.y);
+        TargetBehaviourDef hold;
+        hold.kind = TargetBehaviourDef::Kind::TerrainFollowing;
+        const double agl = world_.Frame().AltitudeOf(a.position) - world_.GetTerrain().HeightAt(a.position.x, a.position.y);
+        hold.agl_m = std::max(kHeldMinAglM, agl);
+        hold.max_climb_mps = def.behaviour.kind == TargetBehaviourDef::Kind::None ? 30.0 : std::max(5.0, def.behaviour.max_climb_mps);
+        EvadeDef jink;
+        if (def.evade.present && def.evade.kind == EvadeDef::Kind::Jink) jink = def.evade;
+        jink.kind = EvadeDef::Kind::Jink;
+        if (!(def.evade.present && def.evade.kind == EvadeDef::Kind::Jink)) {
+            jink.turn_rate_rad_s = DegToRad(10.0);  // a placeholder jink (sam3d)
+            jink.jink_period_s = 4.0;
+            jink.evade_s = 15.0;
+        }
+        jink.present = true;
+        jink.on = EvadeDef::On::Order;
+        s.pilot = TargetPilot(hold, jink);
+        s.held = true;
+        return true;
+    }
+
+    // He lets it go: its own pilot again, and the route it was on (its next waypoint); with none left it flies on.
+    void ReleaseTarget(TargetState& s, Aircraft& a) {
+        s.held = false;
+        s.pilot = s.route_pilot;
+        a.max_turn_rate_rad_s = std::max(a.max_turn_rate_rad_s, 1e-3);
+        if (s.route_next < s.route_waypoints.size()) {
+            a.waypoints = s.route_waypoints;
+            a.next_waypoint = s.route_next;
+        } else {
+            a.waypoints = {a.position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
+            a.next_waypoint = 0;
+        }
+    }
+
     std::set<std::string> external_launchers_;
     std::vector<LinkedDesignation> linked_out_;
     std::vector<LinkReport> net_reports_;

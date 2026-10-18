@@ -39,4 +39,5 @@ private:
 	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
 	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
+	void DrawInstructor(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 };
