@@ -1408,10 +1408,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("procedures", i);
             const json::Value& p = arr->items[i];
-            if (!Keys(p, path, {"id", "name", "steps", "source", "confidence", "notes"})) return false;
+            if (!Keys(p, path, {"id", "name", "steps", "situational", "source", "confidence", "notes"})) return false;
             Procedure proc;
             if (!RequireString(p, path, "id", proc.id) || !RequireString(p, path, "name", proc.name) ||
-                !Provenance(p, path)) {
+                !OptionalBool(p, path, "situational", proc.situational) || !Provenance(p, path)) {
                 return false;
             }
             for (const Procedure& existing : out) {

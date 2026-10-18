@@ -740,6 +740,27 @@
       ]
     },
     {
+      "id": "hv_off", "name": "Search transmitter off, the antenna turning (a burst ends)", "situational": true,
+      "source": "sam3d", "confidence": "estimate",
+      "notes": "Senior operator. Emission discipline against direction-finding (scenario doctrine search_bursts): ВЫСОКОЕ off between bursts, the antenna turning on and the guard open, so the next burst is one switch (roadmap E6).",
+      "steps": [ { "control": "soc.hv", "position": 0, "description": "ВЫСОКОЕ ВЫКЛ, the SOC transmitter off" } ]
+    },
+    {
+      "id": "hv_on", "name": "Search transmitter on again (a burst)", "situational": true,
+      "source": "sam3d", "confidence": "estimate",
+      "notes": "Senior operator: the next burst of the search radar (doctrine search_bursts; video_osa: the search radar on for only two turns).",
+      "steps": [ { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, the SOC transmitter on", "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] } ]
+    },
+    {
+      "id": "tv_watch", "name": "Look at the tracked target on the TV", "situational": true,
+      "source": "sam3d", "confidence": "estimate",
+      "notes": "Deputy commander, with the radar holding the target: the TV camera on and the narrow lens, to see what the radar holds (a decoy drone shows small where its echo says aircraft: roadmap E6, em/optical.hpp). Ordered when the scenario's doctrine says to check on the TV before a launch.",
+      "steps": [
+        { "control": "tov.power", "position": 1, "description": "РАБ.РЕЖ. ВКЛ, the TV camera on" },
+        { "control": "tov.fov", "position": 1, "description": "УГОЛ ЗРЕНИЯ УЗКИЙ, the narrow lens to make the target out" }
+      ]
+    },
+    {
       "id": "track_low_target", "name": "Tracking a target at ultra-low altitude",
       "source": "samsim_osa p25–26", "confidence": "high",
       "notes": "Deputy commander. The operator tracks range at the same time (track_range_semi_auto). The azimuth wheel is the senior operator's.",

@@ -1,0 +1,42 @@
+{
+  "scenario_id": "osa_decoys",
+  "name": "Osa-AK against decoy drones, then the strike (warned of decoys: look on the TV)",
+  "description": "A fictional raid in the style described for June 1982 over the Bekaa: drones that show on radar like fighters come first, to draw the crew's missiles; the strike aircraft follows. The crew has been warned of decoys, so the commander has the deputy look at each target on the TV through the narrow lens before he permits a launch: a small drone where the echo says aircraft is reported as a false target and dropped. The NPC commander runs the crew; take any seat, or his.",
+  "source": "sam3d", "confidence": "estimate",
+  "notes": "The tactic follows secondary accounts of Operation Mole Cricket 19 (docs/research/EM_RESEARCH_2026-10.md section 5; tier 4/5, a scenario idea, not data). Placeholder numbers: the decoys' 5 m2 echo (radar reflectors), their 1.5 m size (the TV makes such a drone out at about 5-6 km through the narrow lens on a clear day, em/optical.hpp), speeds and routes. The striker carries NATO's warning receiver (em/nato_1985.json) and jinks when warned of a launch. Roadmap E6.",
+  "seed": 3,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "environment": { "visibility_km": 40, "daylight": true },
+  "doctrine": { "tv_check": true },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc", "extra_libraries": ["em/nato_1985.json"] },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class1" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "d1", "name": "Decoy drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "decoy": true, "size_m": 1.5,
+      "start": { "east_m": -3000, "north_m": 30000, "up_m": 1500 }, "waypoints": [ { "east_m": -3000, "north_m": -30000, "up_m": 1500 } ],
+      "speed_mps": 120, "rcs_m2": 5.0, "appear_at_s": 200 },
+    { "id": "d2", "name": "Decoy drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "decoy": true, "size_m": 1.5,
+      "start": { "east_m": 4000, "north_m": 32000, "up_m": 1800 }, "waypoints": [ { "east_m": 4000, "north_m": -30000, "up_m": 1800 } ],
+      "speed_mps": 120, "rcs_m2": 5.0, "appear_at_s": 230 },
+    { "id": "s1", "name": "Strike aircraft (placeholder)", "type": "Air+FixedWing", "class": "fighter", "size_m": 4.5, "rwr": "nato_alr46_class_rwr",
+      "start": { "east_m": 1000, "north_m": 45000, "up_m": 800 }, "waypoints": [ { "east_m": 1000, "north_m": -30000, "up_m": 800 } ],
+      "speed_mps": 220, "rcs_m2": 3.0, "appear_at_s": 420,
+      "evade": { "on": "launch", "kind": "jink", "turn_rate_deg_s": 10, "jink_period_s": 4, "evade_s": 16 } }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 900, "when_targets_gone": true }
+}

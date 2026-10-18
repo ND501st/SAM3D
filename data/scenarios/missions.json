@@ -14,7 +14,9 @@
         { "file": "scenarios/pu12m_battery.json", "title": "PU-12M: run the battery in a raid" },
         { "file": "scenarios/battery_link_practice.json", "title": "The battery: the Osa 21 and the PU-12M",
           "vehicles": [ { "id": "osa", "label": "the Osa 21" }, { "id": "post", "label": "the PU-12M" } ] },
-        { "file": "scenarios/osa_mission_march.json", "title": "Osa: march, raid, fight, march on" }
+        { "file": "scenarios/osa_mission_march.json", "title": "Osa: march, raid, fight, march on" },
+        { "file": "scenarios/osa_decoys.json", "title": "Osa: decoy drones, then the strike" },
+        { "file": "scenarios/osa_soj_strike.json", "title": "Osa: a strike under stand-off jamming" }
       ]
     },
     {

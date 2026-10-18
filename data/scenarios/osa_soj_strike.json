@@ -1,0 +1,49 @@
+{
+  "scenario_id": "osa_soj_strike",
+  "name": "Osa-AK against a strike under stand-off jamming",
+  "description": "A fictional strike on the vehicle's position. A stand-off jammer orbits beyond the missiles' reach and jams the search radar's band: its strobe lies across the search scope and the strike aircraft show late, out of the noise. Two strikers come in low with warning receivers; one carries a self-protection noise pod in the tracking radar's band, so the crew takes it in angle on the jammer and fires by method Н. The NPC commander runs the crew; take any seat, or his.",
+  "source": "sam3d", "confidence": "estimate",
+  "notes": "Placeholder numbers throughout: the stand-off jammer's racetrack (about 55-60 km out), the ALQ-99-class jammer's band 8 (em/nato_1985.json, class values), the pod (em/generic.json), the strikers' speeds and heights. The strikers carry NATO's warning receiver and jink when it warns of a launch (in combat the command link is on the air from ВНИМАНИЕ, so the warning comes before the missile). Roadmap E6.",
+  "seed": 5,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
+            "extra_libraries": ["em/nato_1985.json", "em/generic.json"],
+            "jammers": [
+              { "jammer": "nato_alq99_band8", "target": "soj1", "on_at_s": 0, "notes": "The stand-off jammer in the search radar's band." },
+              { "jammer": "generic_selfscreen_noise_ku", "target": "s1", "on_at_s": 0, "notes": "The first striker's self-protection pod." }
+            ] },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class1" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "soj1", "name": "Stand-off jammer (placeholder)", "type": "Air+FixedWing", "class": "fighter", "size_m": 6.0,
+      "start": { "east_m": 30000, "north_m": 52000, "up_m": 7000 },
+      "waypoints": [ { "east_m": -15000, "north_m": 58000, "up_m": 7000 }, { "east_m": 30000, "north_m": 52000, "up_m": 7000 },
+                     { "east_m": -15000, "north_m": 58000, "up_m": 7000 }, { "east_m": 30000, "north_m": 52000, "up_m": 7000 },
+                     { "east_m": -15000, "north_m": 58000, "up_m": 7000 }, { "east_m": 30000, "north_m": 52000, "up_m": 7000 } ],
+      "speed_mps": 200, "rcs_m2": 10.0, "appear_at_s": 0, "notes": "A racetrack beyond the missiles' reach." },
+    { "id": "s1", "name": "Strike aircraft with a noise pod (placeholder)", "type": "Air+FixedWing", "class": "fighter", "rwr": "nato_alr46_class_rwr",
+      "start": { "east_m": 5000, "north_m": 48000, "up_m": 600 }, "waypoints": [ { "east_m": 5000, "north_m": -30000, "up_m": 600 } ],
+      "speed_mps": 230, "rcs_m2": 3.0, "appear_at_s": 300,
+      "evade": { "on": "launch", "kind": "jink", "turn_rate_deg_s": 10, "jink_period_s": 4, "evade_s": 16 } },
+    { "id": "s2", "name": "Strike aircraft (placeholder)", "type": "Air+FixedWing", "class": "fighter", "rwr": "nato_alr46_class_rwr",
+      "start": { "east_m": -6000, "north_m": 50000, "up_m": 700 }, "waypoints": [ { "east_m": -6000, "north_m": -30000, "up_m": 700 } ],
+      "speed_mps": 230, "rcs_m2": 3.0, "appear_at_s": 340,
+      "evade": { "on": "launch", "kind": "jink", "turn_rate_deg_s": 10, "jink_period_s": 4, "evade_s": 16 } }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 900, "when_targets_gone": false }
+}

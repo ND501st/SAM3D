@@ -67,6 +67,20 @@ struct ScenarioTarget {
     // Its radar warning receiver: an ESM receiver of the EM library (kind rwr). With one, the pilot evades when it warns
     // of the lock or the launch (the command link heard: roadmap E5), not on the truth.
     std::string rwr;
+    // A decoy (roadmap E6): a drone whose echo is made to look like an aircraft's (radar reflectors). The radar can't
+    // tell; the TV can, close enough to make out its type (em/optical.hpp), when the crew looks.
+    bool decoy = false;
+};
+
+// How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
+struct CrewDoctrineDef {
+    // Warned of decoys: the commander has the deputy look at what the radar holds on the TV (tv_watch) and launches
+    // only at what he has made out; at night or in a haze where the TV sees nothing he goes by the radar.
+    bool tv_check = false;
+    // Emission discipline against direction-finding: while nothing is tracked, the search radar radiates in bursts,
+    // on for on_s then off for off_s (video_osa: the search radar on for two turns). 0: always on.
+    double search_on_s = 0.0;
+    double search_off_s = 0.0;
 };
 
 struct TriggerAction {
@@ -126,6 +140,7 @@ struct ScenarioDef {
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
     em::OpticalConditions optics;  // "environment": the visibility and the daylight the TV sight works in
+    CrewDoctrineDef doctrine;      // "doctrine": the TV check against decoys, search bursts
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
     // "empty_containers": the launcher's containers that start without a missile (e.g. ["1-I", "1-II"]): a mission that
@@ -202,7 +217,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "triggers", "end", "assistance", "environment"})) {
+                             "targets", "triggers", "end", "assistance", "environment", "doctrine"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -244,7 +259,7 @@ public:
                 return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
             }
         }
-        if (!LoadEnvironment(root, out)) return false;
+        if (!LoadEnvironment(root, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -632,6 +647,27 @@ private:
         return true;
     }
 
+    // "doctrine": {"tv_check": true, "search_bursts": {"on_s": 4, "off_s": 20}}.
+    bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
+        const json::Value* d = root.Find("doctrine");
+        if (d == nullptr) return true;
+        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "notes"}) ||
+            !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check)) {
+            return false;
+        }
+        if (const json::Value* b = d->Find("search_bursts")) {
+            if (!Keys(*b, "doctrine.search_bursts", {"on_s", "off_s", "notes"}) ||
+                !RequireNumber(*b, "doctrine.search_bursts", "on_s", out.doctrine.search_on_s) ||
+                !RequireNumber(*b, "doctrine.search_bursts", "off_s", out.doctrine.search_off_s)) {
+                return false;
+            }
+            if (out.doctrine.search_on_s <= 0.0 || out.doctrine.search_off_s <= 0.0) {
+                return Fail("doctrine.search_bursts", "on_s and off_s must be > 0");
+            }
+        }
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         const json::Value* arr = OptionalArray(root, "", "targets");
         if (arr == nullptr) return message_.empty();
@@ -640,7 +676,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -657,7 +693,10 @@ private:
                 return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
             }
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
-            if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr)) return false;
+            if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr) ||
+                !OptionalBool(t, p, "decoy", tg.decoy)) {
+                return false;
+            }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
             if (!tg.rwr.empty()) {
                 if (!out.has_em) return Fail(Join(p, "rwr"), "needs own_unit.em: the warning receiver is an EM receiver");

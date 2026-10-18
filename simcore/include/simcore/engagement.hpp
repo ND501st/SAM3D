@@ -580,6 +580,8 @@ struct AimCrew {
     // echo he sees on his own range indicator or on a range he was told.
     std::string assigned;
     const CrewPicture* range_knows = nullptr;
+    // Contacts the commander has called false (decoys made out on the TV, roadmap E6): the wheels leave them alone.
+    std::set<std::string> ignore;
 };
 
 class EngagementModel {
@@ -1118,6 +1120,7 @@ private:
         std::string best_id;
         bool range_known = false;
         for (const Contact& c : picture_) {  // the target the commander ordered taken, else the nearest
+            if (crew.ignore.count(c.target_id) != 0) continue;
             const bool assigned = !crew.assigned.empty() && c.target_id == crew.assigned;
             const bool keep_assigned = have && !crew.assigned.empty() && best_id == crew.assigned;
             if (!have || assigned || (!keep_assigned && c.range_m < best.range_m)) {

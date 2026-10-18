@@ -37,6 +37,7 @@ struct Procedure {
     std::string name;
     std::vector<ProcedureStep> steps;
     std::string station;  // the seat whose controls it uses (console_data fills it); empty = any crew member
+    bool situational = false;  // done only when an order calls for it: the drill master never pulls it into a plan
 };
 
 enum class StepResult {

@@ -475,6 +475,9 @@ public:
             if (world_.Time() - t.last_update_s > hold_s) continue;
             std::string id = ResolveTarget(t.Position(), true, claimed);
             const bool ghost = id.empty();
+            // An echo standing still on the ground (the battery's own vehicles, its dummy positions) is ground clutter
+            // to the operator, not a contact: he reports moving echoes and anything in the air.
+            if (ghost && (IsGroundClutter(t) || t.updates < kGhostUpdates)) continue;
             if (ghost) {
                 id = "T" + std::to_string(t.id);
             } else {
@@ -875,6 +878,31 @@ private:
     static constexpr double kResolveAzDeg = 2.5;
     static constexpr double kResolveElDeg = 10.0;  // a search track's height is only known to its beam
     static constexpr double kResolveRangeM = 1500.0;
+
+    // Ground clutter to the operator (a ghost track: it lines up with no target): over one of the unit's own ground
+    // objects (the battery's vehicles, its dummy positions), or near the vehicle and slower than any aircraft (clutter
+    // false alarms the tracker confirmed, a parked vehicle). By place over the ground only: a search track's height is
+    // only its beam's, and a young track's speed is noisy. A drifting chaff cloud stays on the scope (the referee knows
+    // where the clouds are, as it knows the targets: ResolveTarget).
+    bool IsGroundClutter(const em::SensorTrack& t) const {
+        const Vec3 p = t.Position();
+        const em::EmScene& s = world_.Scene();
+        for (const em::Platform& g : s.platforms) {
+            if (!g.alive || g.id == unit_id_ || g.side != em::Side::Red || g.kind != em::PlatformKind::Ground) continue;
+            if ((g.position - p).HorizontalLength() < kOwnObjectM) return true;
+        }
+        if (t.Velocity().Length() >= kClutterSpeedMps || (p - Antenna()).HorizontalLength() > kClutterRangeM) return false;
+        for (const em::ChaffCloud& c : s.chaff) {
+            if (ChaffRcs(c, s.time_s) > 0.0 && (c.position - p).Length() < 1500.0) return false;
+        }
+        return true;
+    }
+    static constexpr double kOwnObjectM = 1000.0;       // a young search track errs by several hundred metres
+    static constexpr double kClutterSpeedMps = 50.0;    // slower than an aircraft (a young track's speed is noisy)
+    static constexpr double kClutterRangeM = 10000.0;   // where ground clutter makes false alarms
+    // A ghost is reported once it has held for this many updates: a young track off a parked vehicle's echo extrapolates
+    // its noisy speed and wanders off the vehicle before it is dropped.
+    static constexpr int kGhostUpdates = 4;
 
     Contact MakeContact(const std::string& id, const Vec3& position) const {
         Contact c;
