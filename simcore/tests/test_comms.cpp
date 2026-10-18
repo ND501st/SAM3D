@@ -527,3 +527,30 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     h = HeadsetSoundNow(*r);
     SC_EXPECT(!h.on_radio && h.hiss == 0.0);
 }
+// Roadmap 7.8 / E4: a barrage jammer on the VHF band takes the PU-12's net (38.550 MHz, inside its 30-70 MHz) off the
+// air; the commander waits out the silence and changes to the early-warning site's net (25.375 MHz, below the band).
+SC_TEST("comms 7.8: the command net jammed, the commander changes to the EWR's net below the band and the crew fights") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_vhf_jamming_em.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.Em() != nullptr && r.C2() != nullptr);
+    if (r.Em() == nullptr || r.C2() == nullptr) return;
+    Steps(r, 50.0, 0.1);
+    SC_EXPECT(r.Em()->RadioDeliveryProbability("pu12") > 0.9);
+    Steps(r, 30.0, 0.1);  // the jammer is up
+    SC_EXPECT(r.Em()->RadioDeliveryProbability("pu12") < 0.05);
+    SC_EXPECT(r.Em()->RadioDeliveryProbability("ewr_south") > 0.9);  // below the jammer's band
+    double changed_at = -1.0;
+    while (!r.Finished() && r.Time() < 1000.0) {
+        r.Step(0.1);
+        if (changed_at < 0.0 && r.C2()->ActiveId() == "ewr_south") changed_at = r.Time();
+    }
+    std::printf("    changed to the EWR's net at %.0f s; %zu designations heard\n", changed_at, r.DesignationsHeard().size());
+    SC_EXPECT(changed_at > 60.0 && changed_at < 450.0);
+    SC_EXPECT(!r.DesignationsHeard().empty());
+    SC_EXPECT(r.Launches() >= 1);
+    SC_EXPECT(Has(r.Debrief(), "HIT") || Has(r.Debrief(), "MISS"));
+}

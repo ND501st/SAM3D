@@ -1,0 +1,58 @@
+{
+  "scenario_id": "osa_vhf_jamming_em",
+  "name": "Osa-AK: the command net jammed (EM radars and radio; the NPC commander runs the crew)",
+  "description": "A fictional practice shoot against communications jamming (roadmap 7.8, E4). The PU-12 is to give its designations on its net, on 38.550 MHz, but at 60 s a stand-off barrage jammer comes up on the VHF band and the net is lost: the commander hears nothing, waits out the silence (five of the PU-12's one-minute plots), and changes to the early-warning radar site's net, which is on 25.375 MHz below the jammer's band. Its designations bring the drone in; the crew takes it on its own radar and fires. Take any seat.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. The drone, the two sites' places and the jammer (generic_vhf_barrage in data/em/generic.json: 30-70 MHz, 1 kW) are PLACEHOLDERS. The R-123M's link budget is data/em/osa_ak.json's (15 km with the radars off, 12 km on: mon_2112_80 p12-13), so both sites stand within 10 km.",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "crew_commander": "npc",
+  "command_post": "command/pu12.json",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "readiness": "deployed",
+    "em": {
+      "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
+      "extra_libraries": [ "em/generic.json" ],
+      "jammers": [
+        { "jammer": "generic_vhf_barrage", "position": { "east_m": 40000, "north_m": 20000, "up_m": 5000 }, "on_at_s": 60,
+          "notes": "A stand-off communications jammer barraging 30-70 MHz from 60 s." }
+      ]
+    },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander" },
+    { "name": "Deputy commander", "role": "deputy_commander" },
+    { "name": "Senior operator", "role": "senior_operator" },
+    { "name": "Operator", "role": "operator" },
+    { "name": "Driver", "role": "driver" }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Target drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 7,
+      "start": { "east_m": 3000, "north_m": 120000, "up_m": 1500 },
+      "waypoints": [ { "east_m": 3000, "north_m": -30000, "up_m": 1500 } ],
+      "speed_mps": 150, "rcs_m2": 1.0, "appear_at_s": 0,
+      "notes": "Placeholder numbers."
+    }
+  ],
+  "triggers": [],
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12",
+    "fallback_order": [ "ewr_south" ],
+    "presets": [ "pu12", "ewr_south" ],
+    "sources": [
+      { "id": "pu12", "net": "pu12_net", "position": { "east_m": -2000, "north_m": -5000, "up_m": 0 }, "frequency_mhz": 38.55 },
+      { "id": "ewr_south", "type": "ewr_voice", "net": "ewr_net", "position": { "east_m": 3000, "north_m": -9000, "up_m": 0 },
+        "frequency_mhz": 25.375 }
+    ]
+  },
+  "end": { "time_limit_s": 1000, "when_targets_gone": true }
+}
