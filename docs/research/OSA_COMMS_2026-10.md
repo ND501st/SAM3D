@@ -102,4 +102,5 @@ mounts its boxes is not in any source found: the positions are SAM3D's choice.
 * (The presets' set-up drill and smooth tuning: done 17 Oct 2026, below.)
 * The 27 V battery (a set draws 3 A receiving, 9.6 A transmitting; the battery's capacity and the generators' charging
   are not modelled). (Audio: done 17 Oct 2026, `unreal/README.md` "Cabin audio".)
-* Russian voices: the text-to-speech speaks the callouts' English; recorded lines are roadmap 8.10.
+* The designations the PU-12 speaks on the net are not voiced (the crew's own lines are, 8.10); the commander's passing
+  them on is.

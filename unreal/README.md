@@ -45,9 +45,8 @@ runs changes.
 `USimCrewAudioComponent` (on the Osa vehicle, roadmap 7.7) plays what the commander's headset carries
 (`simcore::HeadsetSoundNow`): the R-123M's hiss when his A-1 is on Р-123 and the set works, shut off by ШУМЫ (the
 noise suppressor) and quietened under a carrier (a report on the net, our own transmission: the R-124 sidetone), and the
-1 kHz call tone of ТОН. ВЫЗОВ, synthesised. The crew's callouts (the intercom, and the net while the headset is on a set)
-and the designations he hears are spoken by the engine's experimental TextToSpeech plugin (English, its Flite voice:
-placeholders until recorded voice lines, roadmap 8.10). `sam3d.Audio 0` silences the radio, `sam3d.Voices 0` the words.
+1 kHz call tone of ТОН. ВЫЗОВ, synthesised. The words themselves are the crew's voices (`USimCrewVoiceComponent`,
+roadmap 8.10). `sam3d.Audio 0` silences the headset's hiss and tone.
 
 ## First level: Osa practice scenario on Cesium terrain
 
