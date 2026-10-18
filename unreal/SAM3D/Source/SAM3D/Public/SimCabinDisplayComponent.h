@@ -92,4 +92,18 @@ private:
 	/** Bezel behind the screen, and the TV's crosshair. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> Parts;
+
+	/**
+	 * The TV reticle's marks (roadmap 6.6): kMarksPerArm along each of the crosshair's four arms (right, left, up, down),
+	 * spaced every reticle (3 thousandths) for the lens in use, so the crew can read a target's size against them.
+	 */
+	static constexpr int32 kMarksPerArm = 12;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> ReticleMarks;
+	FVector TvCentre = FVector::ZeroVector;
+	FVector TvNormal = FVector::ForwardVector;
+	FVector TvRight = FVector::RightVector;
+	FVector TvUp = FVector::UpVector;
+	double TvWidthCm = 0.0;
+	double TvHeightCm = 0.0;
 };

@@ -276,13 +276,15 @@ SC_TEST("threats 9.1: jammed from the start, designating onto the strobe gives t
 }
 
 SC_TEST("threats 9.1: fired with no range, ПОМЕХА makes it method Н; without ПОМЕХА the fuse is never armed") {
-    // The TV-only drill: radars silent, so no range at all.
-    const Run with = Play(Engage(Target(12000, 800), kEmconTv));
+    // The TV-only drill: radars silent, and the target too small in the picture to judge its range by (a 0.5 m span is
+    // 0.04 thousandths at 12 km), so no range at all.
+    const std::string tiny = R"(, "span_m": 0.5)";
+    const Run with = Play(Engage(Target(12000, 800, tiny), kEmconTv));
     SC_EXPECT(with.summary.launches == 1);
     SC_EXPECT(Has(with, "NO RANGE (method N)"));
     SC_EXPECT(Has(with, "x method N 0.75"));
     // The same drill with the ПОМЕХА step left out.
-    const Run without = PlayWith(Engage(Target(12000, 800), kEmconTv), [](ConsoleData& c) {
+    const Run without = PlayWith(Engage(Target(12000, 800, tiny), kEmconTv), [](ConsoleData& c) {
         for (Procedure& p : c.procedures) {
             if (p.id != "emcon_tv_engagement") continue;
             p.steps.erase(std::remove_if(p.steps.begin(), p.steps.end(),
@@ -579,4 +581,89 @@ SC_TEST("threat scenarios: with emissions control nothing radiates; the TV and t
     SC_EXPECT(r.debrief.find("SOC              event") == std::string::npos);  // the search radar never saw anything
     SC_EXPECT(r.summary.launches == 1);
     SC_EXPECT(r.debrief.find("HIT") != std::string::npos || r.debrief.find("MISS") != std::string::npos);
+}
+
+// Roadmap 9.4: the counter-jamming used only when automatic tracking is impossible (voenizdat_osa_1991 p259, p266).
+SC_TEST("threats 9.4: a range-gate pull-off is reported, the protection goes on, the lock holds; off once the fight is over") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_rgpo_em.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner runner(std::move(def), std::move(console));
+    bool pulled = false, protected_on = false;
+    double off_at = -1.0;
+    while (!runner.Finished() && runner.Time() < 600.0) {
+        runner.Step(0.1);
+        pulled = pulled || runner.Console().equipment.GetInput("range_pulled");
+        const bool on = runner.Console().panel.Get("ssc.rgpo") == 1;
+        protected_on = protected_on || on;
+        if (protected_on && !on && off_at < 0.0) off_at = runner.Time();
+    }
+    const std::string d = runner.Debrief();
+    SC_EXPECT(pulled);
+    SC_EXPECT(d.find("Увод по дальности!") != std::string::npos);
+    SC_EXPECT(d.find("Уводящая помеха! Защиту включить!") != std::string::npos);
+    SC_EXPECT(protected_on);
+    SC_EXPECT(runner.Log().Summary().launches >= 1);
+    SC_EXPECT(d.find("HIT") != std::string::npos || d.find("MISS") != std::string::npos);
+    SC_EXPECT(off_at > 0.0);  // switched off again when the jamming was over
+    SC_EXPECT(d.find("counter-jamming switched on with no range pull-off") == std::string::npos);
+    if (!pulled || !protected_on || off_at < 0.0) std::printf("%s\n", d.c_str());
+}
+
+SC_TEST("threats 9.4: switching the counter-jamming on with no pull-off is logged as a crew mistake") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_rgpo_em.json", kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    runner.Step(0.1);
+    SC_EXPECT(runner.TakeSeat("operator", "player"));
+    runner.PlayerSet("ssc.rgpo", 1);
+    runner.Step(0.1);
+    SC_EXPECT(runner.Debrief().find("counter-jamming switched on with no range pull-off") != std::string::npos);
+}
+
+// Roadmap 6.6: with the radars silent the crew judge the range from the target's size in the TV picture (ePap), by the
+// formula of the thousandth; ЦЕЛЬ В ЗОНЕ then lights from that range and the shot has a range.
+SC_TEST("tv 6.6: the range judged from the target's size in the TV picture gives the shot a range") {
+    const Run r = Play(Engage(Target(12000, 800), kEmconTv));
+    SC_EXPECT(r.summary.launches == 1);
+    SC_EXPECT(Has(r, "Дальность по телевизору"));
+    SC_EXPECT(!Has(r, "NO RANGE"));
+    SC_EXPECT(Has(r, "HIT") || Has(r, "MISS"));
+}
+
+SC_TEST("tv 6.6: the span in thousandths and the range made of it follow the formula of the thousandth") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenario(Engage(Target(12000, 800, R"(, "span_m": 10)"), kEmconTv), kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    while (!runner.Finished() && runner.Engagement().Method() != TrackMethod::Tv && runner.Time() < 700.0) runner.Step(0.1);
+    SC_EXPECT(runner.Engagement().Method() == TrackMethod::Tv);
+    runner.Step(0.1);
+    const EngagementModel& e = runner.Engagement();
+    const double range = runner.TargetRange("t1");
+    // 10 m at the target's range: 10 / range radians, 955 thousandths to the radian (6000 / 2 pi).
+    SC_EXPECT_NEAR(e.TvSpanMils(), 10.0 / range * 6000.0 / (2.0 * 3.14159265358979323846), 1e-3);
+    // The crew's estimate: 10 x 1000 / (their reading of the span); their reading is off by 15 % at most 3 sigma, and the
+    // formula itself reads 4.7 % long.
+    const double est = e.TvRangeEstimateM();
+    SC_EXPECT(est > range * 1.047 / 1.45 && est < range * 1.047 / 0.55);
+    SC_EXPECT(e.RangeFromTvSize(runner.Console()));
+}
+
+SC_TEST("tv 6.6: the reticle's 3-thousandth marks fall where the lens field puts them") {
+    // Narrow lens 1.44 deg wide: half 0.72 deg; 0.18 deg a mark: a quarter, a half and three quarters of the half width.
+    const std::vector<double> narrow = ReticleMarks(0.72, 0.18);
+    SC_EXPECT(narrow.size() == 3);
+    if (narrow.size() == 3) {
+        SC_EXPECT_NEAR(narrow[0], 0.25, 1e-12);
+        SC_EXPECT_NEAR(narrow[2], 0.75, 1e-12);
+    }
+    // Wide lens 4.8 deg: every 0.075 of the half width, ten of them out to 0.75.
+    const std::vector<double> wide = ReticleMarks(2.4, 0.18);
+    SC_EXPECT(wide.size() == 10);
+    if (!wide.empty()) SC_EXPECT_NEAR(wide.back(), 0.75, 1e-12);
+    SC_EXPECT(ReticleMarks(0.0, 0.18).empty() && ReticleMarks(1.0, 0.0).empty());
 }

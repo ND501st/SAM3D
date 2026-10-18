@@ -61,6 +61,8 @@ add_executable(simcore_tests
   tests/test_battery.cpp
   tests/test_comms.cpp
   tests/test_fuel.cpp
+  tests/test_orientation.cpp
+  tests/test_radio_setup.cpp
   tests/test_threats.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp

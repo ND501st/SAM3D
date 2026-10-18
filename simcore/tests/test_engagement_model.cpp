@@ -423,14 +423,19 @@ SC_TEST("engagement: an unoriented vehicle sees the picture turned by its headin
     // The deputy finishes the drill (АК, РЕЛЕ); the frame is now true north.
     for (int i = 0; i < 100 && c.panel.Get("orient.relay") != 0; ++i) runner->Step(0.1);
     SC_EXPECT(c.panel.Get("orient.ak_zk") == 0 && c.panel.Get("orient.relay") == 0);
-    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 40.0, 0.1);
-    SC_EXPECT_NEAR(e.IndicatedToTrueDeg(10.0), 10.0, 0.1);
-    SC_EXPECT(runner->Debrief().find("Qc = 40.0 deg") != std::string::npos);
-    // The hull turns: the gyro follows, so the frame stays true north.
+    // The crew chief's Qc came from his compass work (its error is 0.2 deg, one sigma): the frame is true north to that.
+    SC_EXPECT(runner->Debrief().find("Qc by compass") != std::string::npos);
+    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 40.0, 0.6);
+    SC_EXPECT_NEAR(e.IndicatedToTrueDeg(10.0), 10.0, 0.6);
+    SC_EXPECT_NEAR(e.GyroHeadingDeg(), e.CommandedQcDeg(), 0.06);
+    SC_EXPECT(e.Oriented() && c.equipment.GetInput("vehicle_oriented"));
+    // The hull turns: the gyro follows, so the frame stays where it was set.
+    double error = e.GyroHeadingDeg() - 40.0;
+    if (error > 180.0) error -= 360.0;
+    if (error < -180.0) error += 360.0;
     runner->SetUnitHeading(70.0);
     runner->Step(0.1);
-    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 70.0, 0.1);
-    SC_EXPECT_NEAR(e.IndicatedToTrueDeg(10.0), 10.0, 0.1);
+    SC_EXPECT_NEAR(e.GyroHeadingDeg(), 70.0 + error, 0.01);
     // Power off: orientation lost.
     c.panel.Set("pwr.gta", 0);
     c.panel.Set("pwr.pto", 0);  // both sources: the power take-off generator feeds it too

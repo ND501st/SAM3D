@@ -101,14 +101,31 @@
   "comms": {
     "radios": [
       { "set": 0, "name": "left", "power": "radio.left.power", "mode": "radio.left.mode", "squelch": "radio.left.squelch",
-        "volume": "radio.left.volume", "antenna": "radio.left.antenna", "warm": "r123m_left", "transmit": "r123m_left_tx" },
+        "volume": "radio.left.volume", "antenna": "radio.left.antenna", "warm": "r123m_left", "transmit": "r123m_left_tx", "tone": "radio.left.tone",
+        "preset": "radio.left.preset", "fixator_cover": "radio.left.fix_cover", "fixators": ["radio.left.fix1", "radio.left.fix2", "radio.left.fix3", "radio.left.fix4"],
+        "frequency": "radio.left.freq", "subband": "radio.left.subband", "antenna_lock": "radio.left.ant_lock", "antenna_tune": "radio.left.ant_tune",
+        "on_frequency_input": "r123m_left_on_frequency", "tuned_input": "r123m_left_tuned" },
       { "set": 1, "name": "right", "power": "radio.right.power", "mode": "radio.right.mode", "squelch": "radio.right.squelch",
-        "volume": "radio.right.volume", "antenna": "radio.right.antenna", "warm": "r123m_right", "transmit": "r123m_right_tx" }
+        "volume": "radio.right.volume", "antenna": "radio.right.antenna", "warm": "r123m_right", "transmit": "r123m_right_tx", "tone": "radio.right.tone",
+        "preset": "radio.right.preset", "fixator_cover": "radio.right.fix_cover", "fixators": ["radio.right.fix1", "radio.right.fix2", "radio.right.fix3", "radio.right.fix4"],
+        "frequency": "radio.right.freq", "subband": "radio.right.subband", "antenna_lock": "radio.right.ant_lock", "antenna_tune": "radio.right.ant_tune",
+        "on_frequency_input": "r123m_right_on_frequency", "tuned_input": "r123m_right_tuned" }
     ],
     "ranges_km": { "whip_4m_squelch_off": 20, "whip_4m_squelch_on": 13, "whip_1m": 8, "emergency_wire": 4 },
+    "tuning": { "motor_s": 3, "antenna_width": 5, "smooth_drift_khz_s": 2, "tuned_reading": 0.9,
+                "source": "r123m_training (selecting a fixed frequency, the knobs turn by themselves until they stop; smooth tuning only at a halt, because the vibration shifts an unlocked frequency; the antenna tuned to the meter's highest reading, the lamp brightest)", "confidence": "estimate",
+                "notes": "All four numbers are SAM3D estimates: the motors' 3 s, the antenna circuit's half-width of 5 knob divisions, a drift of 2 kHz a second on the move in smooth tuning (the net is lost within about 6 s), and the lamp at its brightest from 90 % of the peak." },
     "intercom": { "commander": "intercom.a1", "commander_radio_position": 2, "commander_off_position": 0,
                   "deputy": "intercom.a2", "deputy_radio_position": 1, "driver": "intercom.pv", "driver_radio_position": 1,
-                  "subsystem": "r124_intercom", "shout_quiet_s": 1.5, "shout_noisy_s": 4.0, "noisy": [ "gta", "pto_generator" ] },
+                  "subsystem": "r124_intercom", "chest": "radio.chest", "driver_chest": "radio.chest_driver",
+                  "subscribers": [
+                    { "box": "A-1", "station": "commander", "source": "r124_refs; r123m_training (A-1 is the commander's)", "confidence": "high" },
+                    { "box": "A-2", "station": "deputy_commander", "source": "r124_refs (A-2 can go on a radio); r123m_training", "confidence": "low", "notes": "The second box that can go on a radio; the deputy's is SAM3D's choice." },
+                    { "box": "A-3", "station": "senior_operator", "source": "r124_refs (five subscribers, A-1 to A-5)", "confidence": "estimate", "notes": "Which operator has which box is in no source found: SAM3D's choice." },
+                    { "box": "A-4", "station": "driver", "source": "r124_photos (A-4 sold with A-1 and A-2)", "confidence": "low", "notes": "The driver's plain box; his ВС / РС is the ПВ switch." },
+                    { "box": "A-5", "station": "operator", "source": "r124_refs (five subscribers, A-1 to A-5)", "confidence": "estimate", "notes": "SAM3D's choice, as A-3." }
+                  ],
+                  "shout_quiet_s": 1.5, "shout_noisy_s": 4.0, "noisy": [ "gta", "pto_generator" ] },
     "source": "r123m_training (ranges on a medium-rough route at up to 40 km/h: 4 m whip at least 20 km with the noise suppressor off and up to 13 km with it on, 1 m whip up to 8 km, emergency wire up to 4 km); r124_refs; the shouting times are SAM3D estimates",
     "confidence": "medium",
     "notes": "The range figures become losses in the receiving chain with the EM layer's plane-earth law (40 log10 of the range ratio against the 4 m whip with the suppressor off), applied to the set the headset is on. They matter only to a link made by the EM layer's radio sources. Shouting: without the commander's box, or for a crew member whose own box is on the radio, an order takes shout_quiet_s to arrive (shout_noisy_s while the turbine or the take-off generator runs): estimates, with the R-124's own specification of 90 % word intelligibility at 120 dB of noise as the reason a box is needed at all." },
@@ -208,7 +225,8 @@
       "transmitter": "ssc_transmitter", "slew": "antenna_drives", "radar_mode": "capture_mode",
       "tv_camera": "tov_camera", "tv_mode": "tv_angle_track", "range_only_mode": "range_semi_auto",
       "az_wheel": "ssc.az_wheel", "el_wheel": "ssc.el_wheel", "range_wheel": "ssc.range_wheel",
-      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "mti_control": "ssc.mti", "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
+      "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "mti_control": "ssc.mti", "rgpo_control": "ssc.rgpo", "range_pulled_input": "range_pulled",
+      "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
       "max_range_m": 28000, "az_limit_deg": 330,
       "captured_input": "target_captured", "tv_track_input": "target_tv_tracked", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone", "crosshair_input": "target_fills_crosshair",
@@ -225,13 +243,22 @@
       "gyro": "power", "setter": "orient.qc", "mode_control": "orient.ak_zk", "set_position": 1,
       "relay_control": "orient.relay", "relay_position": 1, "sync_button": "orient.sync",
       "slew_rate_deg_s": 1.0, "sync_rate_deg_s": 15.0, "synced_input": "heading_synced",
+      "latitude_control": "orient.latitude", "earth_rate_deg_h": 15.041, "own_drift_deg_h": 0.5,
+      "survey_s": 180, "survey_sigma_deg": 0.2, "qc_known_input": "qc_known", "oriented_input": "vehicle_oriented",
       "source": "voenizdat_osa_1991 p48 (gyro half-compass GA-3 measures the vehicle's heading Qc once oriented; the Qc found with an artillery compass and the TV sight by mutual sighting is set on the setter ЗК-4; with АК — ЗК at ЗК and РЕЛЕ — Qc at Qc the setter is connected and the correction motor turns the GA-3; СОГЛАСОВАНИЕ speeds it up; agreement is checked on the Qc scale of OR-31M, which stops), p50–52 (block 0005-8M), p246 (the deputy crew chief orients the vehicle at a halt), p249 (Qc: clockwise from north to the vehicle's axis); mon_2112_80 pp. 63–68 (orientation is lost when the equipment is switched off)", "confidence": "medium",
-      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Gyro drift is not modelled."
+      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Drift (simcore/orientation.hpp): the Earth's rate 15.041 deg/h times sin(latitude) is textbook physics of the directional gyro; the latitude correction (p51: ШИРОТА potentiometer, used with РЕЛЕ — Qc at РЕЛЕ once oriented, p48) cancels the part set on its scale. own_drift_deg_h 0.5 is a SAM3D estimate: no source gives the GA-3's own drift, and this is of the order of a directional gyro of the period, so an hour or two shows it (its sign is drawn per run). The crew chief's compass work (p249-250: the ПАБ 20-50 m ahead, the launcher laid on it with the TV sight, mutual sighting, the compass correction, Qc = α − qв): survey_s 180 and survey_sigma_deg 0.2 (about 0-03) are SAM3D estimates."
     }
   },
 
   "inputs": [
     { "id": "heading_synced", "description": "The gyro half-compass agrees with the course setter ЗК-4 (the Qc scale has stopped)", "source": "voenizdat_osa_1991 p48, p246", "confidence": "high" },
+    { "id": "range_pulled", "description": "A repeater holds the tracking radar's range gate (range-gate pull-off): the target's mark and the jamming pulse split on the range indicator", "source": "voenizdat_osa_1991 p80-81 (the gate follows the stronger repeater pulse away from the echo), p258-259 (signs of repeater jamming on the indicators)", "confidence": "high" },
+    { "id": "r123m_left_on_frequency", "description": "The left R-123M is on its net's frequency (the fixed frequency set up, or smooth tuning on it) with the right sub-band", "source": "r123m_training", "confidence": "medium" },
+    { "id": "r123m_left_tuned", "description": "The left R-123M is keyed with its antenna tuned (the tuning lamp at its brightest, the meter at its peak)", "source": "r123m_training", "confidence": "medium" },
+    { "id": "r123m_right_on_frequency", "description": "The right R-123M is on its net's frequency (the fixed frequency set up, or smooth tuning on it) with the right sub-band", "source": "r123m_training", "confidence": "medium" },
+    { "id": "r123m_right_tuned", "description": "The right R-123M is keyed with its antenna tuned (the tuning lamp at its brightest, the meter at its peak)", "source": "r123m_training", "confidence": "medium" },
+    { "id": "qc_known", "description": "The crew chief has found the vehicle's heading Qc with the artillery compass at this halt and commanded it", "source": "voenizdat_osa_1991 p246 (the deputy sets the Qc the crew chief commands), p249-250 (how he finds it)", "confidence": "high" },
+    { "id": "vehicle_oriented", "description": "The gyro half-compass holds a heading set from the crew chief's Qc (until it is switched off)", "source": "voenizdat_osa_1991 p48; mon_2112_80 pp. 63-68 (orientation is lost when the equipment is switched off)", "confidence": "high" },
     { "id": "search_beam_1", "description": "The search radar is radiating its beam I (0-4 degrees) this turn: the I ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "search_beam_2", "description": "The search radar is radiating its beam II (4-8 degrees) this turn: the II ЛУЧ lamp", "source": "samsim_osa p15 (items 6-10); voenizdat_osa_1991 p52-53", "confidence": "medium" },
     { "id": "ch1_vkl_vys", "description": "Channel I: command transmitter high voltage on (ВКЛ ВЫС), from ВНИМАНИЕ", "source": "flak11 (switched on automatically at ВНИМАНИЕ)", "confidence": "high" },
@@ -278,15 +305,34 @@
   ],
 
   "controls": [
-    { "id": "radio.left.preset", "label": "R-123M left: preset", "station": "driver", "kind": "switch", "position_labels": ["1", "2", "3", "4"], "initial": 0,
+    { "id": "radio.left.preset", "label": "R-123M left: preset", "station": "driver", "kind": "switch", "position_labels": ["1", "2", "3", "4", "ПЛАВН. I", "ПЛАВН. II"], "initial": 0,
       "source": "mon_2112_80 p26 (two R-123M radios) and Fig. 3 (the right set beside the commander's seat, the left by the driver's side); r123_refs (four preset channels); the preset and headset control itself is sam3d", "confidence": "estimate",
-      "notes": "Selector of the left R-123M's four fixed channels; the frequency plan (which net is on which preset) is the scenario's c2.presets. The sim follows after the select time (c2_sources.hpp)." },
-    { "id": "radio.right.preset", "label": "R-123M right: preset", "station": "commander", "kind": "switch", "position_labels": ["1", "2", "3", "4"], "initial": 1,
+      "notes": "ФИКСИР. ЧАСТОТЫ 1-4 / ПЛАВНЫЙ ПОДДИАПАЗОН I-II: the left R-123M's four fixed channels and its smooth tuning (r123m_training); the frequency plan (which net is on which preset) is the scenario's c2.presets. The sim follows after the select time (c2_sources.hpp); smooth tuning goes by the knobs (radio_setup.hpp)." },
+    { "id": "radio.right.preset", "label": "R-123M right: preset", "station": "commander", "kind": "switch", "position_labels": ["1", "2", "3", "4", "ПЛАВН. I", "ПЛАВН. II"], "initial": 1,
       "source": "mon_2112_80 p26 (two R-123M radios) and Fig. 3 (the right set beside the commander's seat, the left by the driver's side); r123_refs (four preset channels); the preset and headset control itself is sam3d", "confidence": "estimate",
-      "notes": "Selector of the right R-123M's four fixed channels (the standby set at the start: preset 2)." },
+      "notes": "ФИКСИР. ЧАСТОТЫ 1-4 / ПЛАВНЫЙ ПОДДИАПАЗОН I-II of the right R-123M (the standby set at the start: preset 2); smooth tuning goes by the knobs (radio_setup.hpp)." },
     { "id": "radio.headset", "label": "headset: which R-123M the commander listens to", "station": "commander", "kind": "switch", "position_labels": ["left set", "right set"], "initial": 0,
       "source": "mon_2112_80 p26 (two R-123M radios) and Fig. 3 (the right set beside the commander's seat, the left by the driver's side); r123_refs (four preset channels); the preset and headset control itself is sam3d", "confidence": "estimate",
       "notes": "Changes which set the crew hears designations from; the other set is the standby the commander keeps an ear on." },
+    {"id": "radio.left.fix_cover", "label": "R-123M left: крышка фиксаторов", "station": "driver", "kind": "switch", "position_labels": ["закрыта", "открыта"], "initial": 0, "source": "r123m_training (the cover over the frequency fixators); r123_commons (the hinged cover)", "confidence": "medium"},
+    {"id": "radio.left.fix1", "label": "R-123M left: фиксатор 1", "station": "driver", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.left.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.left.fix2", "label": "R-123M left: фиксатор 2", "station": "driver", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.left.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.left.fix3", "label": "R-123M left: фиксатор 3", "station": "driver", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.left.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.left.fix4", "label": "R-123M left: фиксатор 4", "station": "driver", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.left.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.left.freq", "label": "R-123M left: УСТАНОВКА ЧАСТОТЫ", "station": "driver", "kind": "wheel", "min": 20.0, "max": 51.5, "initial_value": 30.0, "unit": "MHz", "source": "r123m_training (УСТАНОВКА ЧАСТОТЫ sets the frequency on the scale); r123_refs (20.00-51.50 MHz, 25 kHz steps)", "confidence": "medium", "notes": "Turned by the set's motors to a fixed frequency when it is selected; by hand with its fixator unlocked or in smooth tuning."},
+    {"id": "radio.left.subband", "label": "R-123M left: ПОДДИАПАЗОН I — II", "station": "driver", "kind": "switch", "position_labels": ["I", "II"], "initial": 0, "source": "r123m_training (ПОДДИАПАЗОН I-II set to the frequency's sub-band); r123_refs (I 20-35.75 MHz, II 35.75-51.5 MHz)", "confidence": "medium", "notes": "Its place on the panel is a SAM3D estimate."},
+    {"id": "radio.left.ant_lock", "label": "R-123M left: стопор НАСТРОЙКА АНТЕННЫ", "station": "driver", "kind": "switch", "position_labels": ["застопорена", "расстопорена"], "initial": 0, "source": "r123m_training (the red НАСТРОЙКА АНТЕННЫ knob is unlocked 3-4 turns anticlockwise for tuning and locked by turning its fixator clockwise to the stop)", "confidence": "medium", "notes": "One switch for the knob's lock; its place is a SAM3D estimate."},
+    {"id": "radio.left.ant_tune", "label": "R-123M left: НАСТРОЙКА АНТЕННЫ", "station": "driver", "kind": "wheel", "min": 0.0, "max": 100.0, "initial_value": 32.0, "unit": "div", "source": "r123m_training (turned for the meter's highest reading, the lamp brightest)", "confidence": "medium", "notes": "The knob in divisions 0-100; the circuit resonates at a setting rising with the frequency (radio_setup.hpp: a SAM3D model)."},
+    {"id": "radio.right.fix_cover", "label": "R-123M right: крышка фиксаторов", "station": "commander", "kind": "switch", "position_labels": ["закрыта", "открыта"], "initial": 0, "source": "r123m_training (the cover over the frequency fixators); r123_commons (the hinged cover)", "confidence": "medium"},
+    {"id": "radio.right.fix1", "label": "R-123M right: фиксатор 1", "station": "commander", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.right.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.right.fix2", "label": "R-123M right: фиксатор 2", "station": "commander", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.right.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.right.fix3", "label": "R-123M right: фиксатор 3", "station": "commander", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.right.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.right.fix4", "label": "R-123M right: фиксатор 4", "station": "commander", "kind": "switch", "position_labels": ["застопорен", "расстопорен"], "initial": 0, "guard": "radio.right.fix_cover", "source": "r123m_training (fixator n unlocked a quarter turn anticlockwise with the special key, locked with its slot on the drum's red circle)", "confidence": "medium"},
+    {"id": "radio.right.freq", "label": "R-123M right: УСТАНОВКА ЧАСТОТЫ", "station": "commander", "kind": "wheel", "min": 20.0, "max": 51.5, "initial_value": 30.0, "unit": "MHz", "source": "r123m_training (УСТАНОВКА ЧАСТОТЫ sets the frequency on the scale); r123_refs (20.00-51.50 MHz, 25 kHz steps)", "confidence": "medium", "notes": "Turned by the set's motors to a fixed frequency when it is selected; by hand with its fixator unlocked or in smooth tuning."},
+    {"id": "radio.right.subband", "label": "R-123M right: ПОДДИАПАЗОН I — II", "station": "commander", "kind": "switch", "position_labels": ["I", "II"], "initial": 0, "source": "r123m_training (ПОДДИАПАЗОН I-II set to the frequency's sub-band); r123_refs (I 20-35.75 MHz, II 35.75-51.5 MHz)", "confidence": "medium", "notes": "Its place on the panel is a SAM3D estimate."},
+    {"id": "radio.right.ant_lock", "label": "R-123M right: стопор НАСТРОЙКА АНТЕННЫ", "station": "commander", "kind": "switch", "position_labels": ["застопорена", "расстопорена"], "initial": 0, "source": "r123m_training (the red НАСТРОЙКА АНТЕННЫ knob is unlocked 3-4 turns anticlockwise for tuning and locked by turning its fixator clockwise to the stop)", "confidence": "medium", "notes": "One switch for the knob's lock; its place is a SAM3D estimate."},
+    {"id": "radio.right.ant_tune", "label": "R-123M right: НАСТРОЙКА АНТЕННЫ", "station": "commander", "kind": "wheel", "min": 0.0, "max": 100.0, "initial_value": 32.0, "unit": "div", "source": "r123m_training (turned for the meter's highest reading, the lamp brightest)", "confidence": "medium", "notes": "The knob in divisions 0-100; the circuit resonates at a setting rising with the frequency (radio_setup.hpp: a SAM3D model)."},
+    {"id": "radio.chest_driver", "label": "нагрудный переключатель (ПВ): ПРМ — ПРД", "station": "driver", "kind": "switch", "position_labels": ["ПРМ", "ПРД"], "initial": 0, "source": "r124_refs (five subscribers with helmets and chest switches, ПРД / приём); r123m_training (with ПВ on РС the driver is on the radio)", "confidence": "low", "notes": "The driver's chest switch: with his ПВ on РС it keys the left set (SAM3D's reading: the left set is his)."},
     { "id": "radio.left.power", "label": "R-123M left: ПИТАНИЕ", "station": "driver", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"], "initial": 1,
       "source": "r123m_training (Russian training text, the R-123M's controls and order of work: СИМПЛЕКС, Д. ПРИЕМ, ШУМЫ, ГРОМКОСТЬ, ПИТАНИЕ); r123_commons (front-panel photograph); mon_2112_80 p26 (two R-123M radios)", "confidence": "medium",
       "notes": "The set's supply switch (27 V from the vehicle's network). A set that is switched on warms up for 10 min before it can be called; the vehicle starts with both sets on and warm, as a crew chief leaves them." },
@@ -317,6 +363,15 @@
     { "id": "radio.right.antenna", "label": "R-123M right: антенна", "station": "commander", "kind": "switch", "position_labels": ["штырь 4 м", "штырь 1 м", "аварийная 3 м"], "initial": 0,
       "source": "r123m_training (Russian training text, the R-123M's controls and order of work: СИМПЛЕКС, Д. ПРИЕМ, ШУМЫ, ГРОМКОСТЬ, ПИТАНИЕ); r123_commons (front-panel photograph); mon_2112_80 p26 (two R-123M radios)", "confidence": "medium",
       "notes": "Which antenna the set uses: the 4 m whip, a 1 m whip or the emergency wire thrown out of the commander's hatch. The ranges they give are in the comms block." },
+    { "id": "radio.chest", "label": "нагрудный переключатель (А-1): ПРМ — ПРД", "station": "commander", "kind": "switch", "position_labels": ["ПРМ", "ПРД"], "initial": 0,
+      "source": "r123m_training (the chest switches plug into A-1 and A-2; the tangent pressed to ПРД transmits, released it receives)", "confidence": "medium",
+      "notes": "The commander's chest switch, held at ПРД while he talks on the set his headset is on (A-1 on Р-123). An NPC commander keys it as he speaks." },
+    { "id": "radio.left.tone", "label": "R-123M left: ТОН. ВЫЗОВ", "station": "driver", "kind": "button",
+      "source": "r123m_training (pressed while transmitting, it sends a call tone heard in the headset)", "confidence": "medium",
+      "notes": "Its place on the front panel is a SAM3D estimate." },
+    { "id": "radio.right.tone", "label": "R-123M right: ТОН. ВЫЗОВ", "station": "commander", "kind": "button",
+      "source": "r123m_training (pressed while transmitting, it sends a call tone heard in the headset)", "confidence": "medium",
+      "notes": "Its place on the front panel is a SAM3D estimate." },
     { "id": "intercom.a1", "label": "Р-124 А-1: род работы", "station": "commander", "kind": "switch", "position_labels": ["ВЫКЛ", "ВС", "Р-123"], "initial": 2,
       "source": "r124_refs (A-1 is the commander's subscriber set); r123m_training (А-1 mode switch ВС / Р-123 / ВЫКЛ; the commander on Р-123 hears the radio, the others stay on the intercom)", "confidence": "medium",
       "notes": "The commander's intercom box. Р-123: on the radio (he hears the net the headset is on); ВС: on the intercom only, the net is not heard; ВЫКЛ: the box is off, orders to the crew are shouted. Starts on Р-123." },
@@ -353,6 +408,9 @@
       "notes": "Degrees here; the real scale is probably in Russian mils (not seen)." },
     { "id": "orient.sync", "label": "СОГЛАСОВАНИЕ", "station": "deputy_commander", "kind": "button",
       "source": "voenizdat_osa_1991 p48 (on panel ПУ-11 in block 0005-8M: speeds up orienting the GA-3; held until the Qc scale stops), p246", "confidence": "high" },
+    { "id": "orient.latitude", "label": "ШИРОТА (φ)", "station": "deputy_commander", "kind": "wheel", "min": 0, "max": 90, "initial_value": 0, "unit": "deg",
+      "source": "voenizdat_osa_1991 p51-52 (block 0005-8M: potentiometer φ with the scale ШИРОТА feeds the site's latitude into the GA-3's latitude correction)", "confidence": "high",
+      "notes": "Who sets it and when is not in the drill (p246); SAM3D puts it with the orientation, from the map. Start value 0: a vehicle that was never set up for this site drifts at the full Earth rate." },
     { "id": "pwr.equipment", "label": "АППАРАТУРА ВКЛ. — ОТКЛ.", "station": "operator", "kind": "switch", "position_labels": ["ОТКЛ.", "ВКЛ."],
       "source": "voenizdat_osa_1991 p165 (buttons on distribution cabinet 0096-9M1: filaments and fans at once, anode supplies after 1 min, high voltage possible after 3 min), p247 (the operator checks 220 V 400 Hz on the cabinet's voltmeter and presses АППАРАТУРА ВКЛ.)", "confidence": "high",
       "notes": "Two push-buttons modelled as one switch. ОТКЛ. switches everything off except the turret fans, which run 10 min more (not modelled)." },
@@ -405,7 +463,10 @@
       "source": "samsim_osa p16 (item 9; range indicator shows 28 km)", "confidence": "medium",
       "notes": "Moves the range gate. Range limits taken from the indicator's displayed range." },
     { "id": "ssc.mti", "label": "СДЦ / ШТ. (SSC)", "station": "operator", "kind": "switch", "position_labels": ["ШТ.", "СДЦ"],
-      "source": "samsim_osa p16 (item 10); start: samsim_game", "confidence": "high", "notes": "On OS61-5M. Starts at ШТ." },
+      "source": "samsim_osa p16 (item 10); start: samsim_game; voenizdat_osa_1991 p80-81 (СДЦ staggers the repetition periods, which defeats a pull-off that walks the gate in)", "confidence": "high", "notes": "On OS61-5M. Starts at ШТ." },
+    { "id": "ssc.rgpo", "label": "УВ. ПОМЕХА — ОТКЛ.", "station": "operator", "kind": "switch", "position_labels": ["ОТКЛ.", "УВ. ПОМЕХА"], "initial": 0,
+      "source": "voenizdat_osa_1991 p98-99 (switch on the SSC receiver block that switches on the tracking radar's protection against range-gate pull-off), p80-81 (the circuit blanks the video just after the tracked echo, so a pull-off that walks the gate out can't take it), p259 (counter-jamming is switched on only when search or automatic tracking is impossible, and off when the jamming stops), p266 (firing at a range pull-off: in the УВОДЯЩАЯ ПОМЕХА mode)", "confidence": "high",
+      "notes": "On the SSC receiver block with СДЦ / ШТ. (OS61-5M); its place there is a SAM3D estimate, start position ОТКЛ. (the textbook: protection is switched on only when needed). This is the counter-jamming the video_osa account says is used only when no other way is left: the textbook names it and its rule." },
     { "id": "ro.semi_auto", "label": "ПОЛУАВТОМАТ", "station": "operator", "kind": "button",
       "source": "samsim_osa p26", "confidence": "high", "notes": "Range-only tracking by the SSC." },
     { "id": "ssc.check_mode", "label": "РАБОТА / КОНТРОЛЬ / КАЛИБР.", "station": "operator", "kind": "switch", "position_labels": ["РАБОТА", "КОНТРОЛЬ", "КАЛИБР."], "initial": 1,
@@ -502,7 +563,7 @@
       "enable": [ { "control": "radio.left.mode", "is": 1 }, { "subsystem": "r123m_left", "is": "ready" } ], "start_ready": true,
       "start_time_s": { "value": 180, "source": "r123m_training (from Д. ПРИЕМ to СИМПЛЕКС wait 3 min for the transmitter valves)", "confidence": "medium" },
       "source": "r123m_training", "confidence": "medium",
-      "notes": "Nothing in the sim transmits on the sets yet; this is the state a radio call would need (the commander's reports, later)." },
+      "notes": "The commander can transmit on the set only when this is ready (roadmap 7.8, simcore/crew_comms.hpp CanTransmit)." },
     { "id": "r123m_right", "name": "R-123M right warmed up (10 min)",
       "enable": [ { "control": "radio.right.power", "is": 1 } ], "start_ready": true,
       "start_time_s": { "value": 600, "source": "r123m_training (switch on, warm the set up for 10 min, then call)", "confidence": "medium" },
@@ -512,7 +573,7 @@
       "enable": [ { "control": "radio.right.mode", "is": 1 }, { "subsystem": "r123m_right", "is": "ready" } ], "start_ready": true,
       "start_time_s": { "value": 180, "source": "r123m_training (from Д. ПРИЕМ to СИМПЛЕКС wait 3 min for the transmitter valves)", "confidence": "medium" },
       "source": "r123m_training", "confidence": "medium",
-      "notes": "Nothing in the sim transmits on the sets yet; this is the state a radio call would need (the commander's reports, later)." },
+      "notes": "The commander can transmit on the set only when this is ready (roadmap 7.8, simcore/crew_comms.hpp CanTransmit)." },
     { "id": "r124_intercom", "name": "Р-124 intercom working (commander's box on)",
       "enable": [ { "control": "intercom.a1", "at_least": 1 } ], "start_ready": true,
       "source": "r124_refs (27 V from the vehicle's network, 0.45 A)", "confidence": "medium",
@@ -620,6 +681,455 @@
   ],
 
   "procedures": [
+    {
+      "id": "preset_setup_left",
+      "name": "Set up the left R-123M's four fixed frequencies",
+      "source": "r123m_training (the order of work: ФИКСИР. ЧАСТОТЫ n, wait for the knobs to stop; open the cover, unlock fixator n a quarter turn with the key; set the frequency with УСТАНОВКА ЧАСТОТЫ; lock the fixator, slot on the drum's red circle; ПОДДИАПАЗОН to the frequency's sub-band; the chest switch to ПРД; unlock НАСТРОЙКА АНТЕННЫ 3-4 turns and tune to the meter's peak, the lamp at its brightest; lock it; release the chest switch; the same for 2, 3, 4; close the cover)",
+      "confidence": "medium",
+      "notes": "Driver, at a halt, with the set on and warm, in СИМПЛЕКС. The frequency plan is the scenario's (c2 presets); the frequency and antenna knobs are wheel work described in the steps (an NPC turns them). The driver keys the set with his chest switch, his ПВ on РС.",
+      "steps": [
+        {
+          "control": "intercom.pv",
+          "position": 1,
+          "description": "ПВ to РС: on the left set, so the chest switch keys it"
+        },
+        {
+          "control": "radio.left.fix_cover",
+          "position": 1,
+          "description": "Open the cover over the frequency fixators"
+        },
+        {
+          "control": "radio.left.preset",
+          "position": 0,
+          "description": "ФИКСИР. ЧАСТОТЫ 1: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.left.fix1",
+          "position": 1,
+          "description": "Unlock fixator 1 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.left.fix1",
+          "position": 0,
+          "description": "Lock fixator 1: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_left_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_left_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.left.preset",
+          "position": 1,
+          "description": "ФИКСИР. ЧАСТОТЫ 2: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.left.fix2",
+          "position": 1,
+          "description": "Unlock fixator 2 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.left.fix2",
+          "position": 0,
+          "description": "Lock fixator 2: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_left_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_left_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.left.preset",
+          "position": 2,
+          "description": "ФИКСИР. ЧАСТОТЫ 3: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.left.fix3",
+          "position": 1,
+          "description": "Unlock fixator 3 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.left.fix3",
+          "position": 0,
+          "description": "Lock fixator 3: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_left_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_left_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.left.preset",
+          "position": 3,
+          "description": "ФИКСИР. ЧАСТОТЫ 4: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.left.fix4",
+          "position": 1,
+          "description": "Unlock fixator 4 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.left.fix4",
+          "position": 0,
+          "description": "Lock fixator 4: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_left_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.left.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_left_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest_driver",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.left.fix_cover",
+          "position": 0,
+          "description": "Close the cover"
+        },
+        {
+          "control": "radio.left.preset",
+          "position": 0,
+          "description": "Back to the working fixed frequency 1",
+          "min_wait_s": 3
+        },
+        {
+          "control": "intercom.pv",
+          "position": 0,
+          "description": "ПВ back to ВС: on the intercom"
+        }
+      ]
+    },
+    {
+      "id": "preset_setup_right",
+      "name": "Set up the right R-123M's four fixed frequencies",
+      "source": "r123m_training (the order of work: ФИКСИР. ЧАСТОТЫ n, wait for the knobs to stop; open the cover, unlock fixator n a quarter turn with the key; set the frequency with УСТАНОВКА ЧАСТОТЫ; lock the fixator, slot on the drum's red circle; ПОДДИАПАЗОН to the frequency's sub-band; the chest switch to ПРД; unlock НАСТРОЙКА АНТЕННЫ 3-4 turns and tune to the meter's peak, the lamp at its brightest; lock it; release the chest switch; the same for 2, 3, 4; close the cover)",
+      "confidence": "medium",
+      "notes": "Commander, at a halt, with the set on and warm, in СИМПЛЕКС. The frequency plan is the scenario's (c2 presets); the frequency and antenna knobs are wheel work described in the steps (an NPC turns them). The commander keys the set with his chest switch, his A-1 on Р-123 and his headset on this set.",
+      "steps": [
+        {
+          "control": "radio.headset",
+          "position": 1,
+          "description": "The headset to the right set, so the chest switch keys it (A-1 on Р-123)"
+        },
+        {
+          "control": "radio.right.fix_cover",
+          "position": 1,
+          "description": "Open the cover over the frequency fixators"
+        },
+        {
+          "control": "radio.right.preset",
+          "position": 0,
+          "description": "ФИКСИР. ЧАСТОТЫ 1: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.right.fix1",
+          "position": 1,
+          "description": "Unlock fixator 1 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.right.fix1",
+          "position": 0,
+          "description": "Lock fixator 1: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_right_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_right_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.right.preset",
+          "position": 1,
+          "description": "ФИКСИР. ЧАСТОТЫ 2: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.right.fix2",
+          "position": 1,
+          "description": "Unlock fixator 2 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.right.fix2",
+          "position": 0,
+          "description": "Lock fixator 2: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_right_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_right_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.right.preset",
+          "position": 2,
+          "description": "ФИКСИР. ЧАСТОТЫ 3: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.right.fix3",
+          "position": 1,
+          "description": "Unlock fixator 3 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.right.fix3",
+          "position": 0,
+          "description": "Lock fixator 3: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_right_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_right_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.right.preset",
+          "position": 3,
+          "description": "ФИКСИР. ЧАСТОТЫ 4: wait until УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ stop turning",
+          "min_wait_s": 3
+        },
+        {
+          "control": "radio.right.fix4",
+          "position": 1,
+          "description": "Unlock fixator 4 with the key; set its frequency with УСТАНОВКА ЧАСТОТЫ and ПОДДИАПАЗОН to its sub-band"
+        },
+        {
+          "control": "radio.right.fix4",
+          "position": 0,
+          "description": "Lock fixator 4: the slot on the drum's red circle",
+          "wait_for": [
+            {
+              "input": "r123m_right_on_frequency",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 1,
+          "description": "Chest switch to ПРД"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 1,
+          "description": "Unlock НАСТРОЙКА АНТЕННЫ (3-4 turns) and tune it to the meter's peak"
+        },
+        {
+          "control": "radio.right.ant_lock",
+          "position": 0,
+          "description": "The lamp at its brightest: lock НАСТРОЙКА АНТЕННЫ",
+          "wait_for": [
+            {
+              "input": "r123m_right_tuned",
+              "is": true
+            }
+          ]
+        },
+        {
+          "control": "radio.chest",
+          "position": 0,
+          "description": "Release the chest switch (check the modulation: раз, два, три)"
+        },
+        {
+          "control": "radio.right.fix_cover",
+          "position": 0,
+          "description": "Close the cover"
+        },
+        {
+          "control": "radio.right.preset",
+          "position": 1,
+          "description": "Back to the working fixed frequency 2",
+          "min_wait_s": 3
+        }
+      ]
+    },
     {
       "id": "radio_left_on", "name": "Switch the left R-123M on",
       "source": "r123m_training (the order of work on the set: ПИТАНИЕ ВКЛ, СИМПЛЕКС, ШУМЫ against the clock, ГРОМКОСТЬ to the stop; warm up 10 min); voenizdat_osa_1991 p228 (the crew chief tunes the R-123M)", "confidence": "medium",
@@ -869,6 +1379,23 @@
       ]
     },
     {
+      "id": "counter_pull_off", "name": "Counter a range-gate pull-off (УВ. ПОМЕХА, СДЦ)",
+      "source": "voenizdat_osa_1991 p80-81 (the trailing-edge circuit against a pull-off that walks out; СДЦ's staggered periods against one that walks in), p259 (only when automatic tracking is impossible), p266 (firing at a pull-off in the УВОДЯЩАЯ ПОМЕХА mode)", "confidence": "medium",
+      "notes": "Operator, when he sees the target's mark split from the jamming pulse on the range indicator (range_pulled) and the commander orders it. After a pull-off has taken the gate away the lock is usually lost when the repeater falls silent; with the protection on the next capture holds. Both switches in one drill: he can't tell at once which way the pulse walks.",
+      "steps": [
+        { "control": "ssc.rgpo", "position": 1, "description": "УВ. ПОМЕХА on: the video just after the target's echo is blanked" },
+        { "control": "ssc.mti", "position": 1, "description": "СДЦ on: the staggered repetition periods leave a leading repeater non-synchronous" }
+      ]
+    },
+    {
+      "id": "pull_off_protection_off", "name": "Counter-jamming off when the jamming has stopped",
+      "source": "voenizdat_osa_1991 p259 (after the jammers are destroyed or the jamming stops, the counter-jamming is switched off)", "confidence": "high",
+      "notes": "Operator. СДЦ stays as the target's height needs it (the low-target drill sets it).",
+      "steps": [
+        { "control": "ssc.rgpo", "position": 0, "description": "УВ. ПОМЕХА off" }
+      ]
+    },
+    {
       "id": "stow_ssc", "name": "Stow the SSC and lock the АПУ for the march",
       "source": "wrk (АПУ locked on the march); steps: sam3d (the drill's reverse)", "confidence": "estimate",
       "notes": "Operator, with stow_launch_console (deputy commander) and pto_off_line (driver). The senior operator turns the SSC antenna to the rear first (azimuth wheel to 180°).",
@@ -967,10 +1494,10 @@
     {
       "id": "orient_vehicle", "name": "Orient the vehicle (gyro half-compass to the crew chief's Qc)",
       "source": "voenizdat_osa_1991 p246 (drill: the deputy crew chief sets АК — ЗК to ЗК, the commanded Qc on ЗК-4, РЕЛЕ — Qc to Qc, holds СОГЛАСОВАНИЕ until the Qc scale on OR-31M stops, then АК and РЕЛЕ), p48, p249 (the crew chief finds Qc with an artillery compass)", "confidence": "high",
-      "notes": "Deputy commander, at a halt, once the gyros are up (the driver's АРРЕТИР.). The crew chief's Qc goes on the setter after ЗК (an NPC deputy sets it there; the player is told it in the log). Orientation is lost when the equipment is switched off.",
+      "notes": "Deputy commander, at a halt, once the gyros are up (the driver's АРРЕТИР.) and the crew chief has commanded Qc from his compass work (qc_known). The Qc goes on the setter after ЗК (an NPC deputy sets it there, and the latitude; the player hears it and sees it in the log). Orientation is lost when the equipment is switched off; left alone the gyro drifts, so a long session needs orienting again.",
       "steps": [
-        { "control": "orient.ak_zk", "position": 1, "description": "АК — ЗК to ЗК, then set the crew chief's Qc on the course setter ЗК-4",
-          "wait_for": [ { "subsystem": "gyro_erected", "is": "ready" } ] },
+        { "control": "orient.ak_zk", "position": 1, "description": "АК — ЗК to ЗК, then set the crew chief's Qc on the course setter ЗК-4 and the site's latitude on ШИРОТА",
+          "wait_for": [ { "subsystem": "gyro_erected", "is": "ready" }, { "input": "qc_known", "is": true } ] },
         { "control": "orient.relay", "position": 1, "description": "РЕЛЕ — Qc to Qc" },
         { "control": "orient.sync", "position": 1, "description": "Press and hold СОГЛАСОВАНИЕ until the Qc scale on OR-31M stops", "min_wait_s": 3 },
         { "control": "orient.ak_zk", "position": 0, "description": "Scales agree: АК — ЗК back to АК",

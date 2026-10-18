@@ -196,6 +196,25 @@ struct SAM3D_API FSimMoveVerdict
 	double CostSeconds = 0.0;
 };
 
+/** A prepared position's works at one place (roadmap 7.6): where, which way, the emplacement, the net. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimPositionWorkState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	double YawDeg = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	bool bEmplacement = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	bool bNets = false;
+};
+
 /** One line of the crew menu: an order (the commander's seat) or a report (any other seat), from the crew data. */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimCrewMenuEntry
@@ -687,6 +706,10 @@ public:
 	/** The crew menu for a seat: the orders of the crew data at the commander's seat, else the seat's own reports. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	TArray<FSimCrewMenuEntry> GetCrewMenu(const FString& Station) const;
+
+	/** A prepared position's works (roadmap 7.6): the emplacements and nets at the battery's places (also on a client). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Battery")
+	TArray<FSimPositionWorkState> GetPositionWorks() const;
 
 	/** A player in a seat speaks a report (filled from his own instruments: a contact from his scope). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")

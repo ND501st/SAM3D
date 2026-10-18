@@ -27,6 +27,7 @@ struct ScopeFeed {
     double swept_high_deg = 0.0;
     double antenna_el_deg = 0.0;
     double indicated_to_true_deg = 0.0;
+    double gyro_heading_deg = 0.0;  // the gyro half-compass's heading (the OR-31M Qc scale)
     double missile_range_m[2] = {-1.0, -1.0};
     Vec3 unit_position;
     std::vector<ScopeStrobe> strobes;  // jamming strobes (EM layer)
@@ -52,6 +53,7 @@ inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher,
     f.swept_high_deg = e.SweptElevationHighDeg();
     f.antenna_el_deg = e.AntennaElevationDeg();
     f.indicated_to_true_deg = e.IndicatedToTrueDeg(0.0);
+    f.gyro_heading_deg = e.GyroHeadingDeg();
     if (launcher != nullptr) {
         f.missile_range_m[0] = launcher->MissileRangeM(1, now_s);
         f.missile_range_m[1] = launcher->MissileRangeM(2, now_s);
@@ -102,6 +104,7 @@ inline em::ViewScope ToViewScope(const ScopeFeed& f, EchoKeys& keys) {
     v.swept_high_deg = f.swept_high_deg;
     v.antenna_el_deg = f.antenna_el_deg;
     v.indicated_to_true_deg = f.indicated_to_true_deg;
+    v.gyro_heading_deg = f.gyro_heading_deg;
     v.missile_range_m[0] = f.missile_range_m[0];
     v.missile_range_m[1] = f.missile_range_m[1];
     v.unit_position = f.unit_position;
@@ -134,6 +137,7 @@ inline ScopeFeed FromViewScope(const em::ViewScope& v) {
     f.swept_high_deg = v.swept_high_deg;
     f.antenna_el_deg = v.antenna_el_deg;
     f.indicated_to_true_deg = v.indicated_to_true_deg;
+    f.gyro_heading_deg = v.gyro_heading_deg;
     f.missile_range_m[0] = v.missile_range_m[0];
     f.missile_range_m[1] = v.missile_range_m[1];
     f.unit_position = v.unit_position;

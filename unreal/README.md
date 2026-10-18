@@ -40,6 +40,15 @@ real time, from 0.25 to 32. A cold start takes minutes (roadmap 6.2: 3.8 min swi
 `sam3d.TimeScale 8` gets through it in under a minute. The sim stays on its fixed step; only how many steps a frame
 runs changes.
 
+## Cabin audio
+
+`USimCrewAudioComponent` (on the Osa vehicle, roadmap 7.7) plays what the commander's headset carries
+(`simcore::HeadsetSoundNow`): the R-123M's hiss when his A-1 is on Р-123 and the set works, shut off by ШУМЫ (the
+noise suppressor) and quietened under a carrier (a report on the net, our own transmission: the R-124 sidetone), and the
+1 kHz call tone of ТОН. ВЫЗОВ, synthesised. The crew's callouts (the intercom, and the net while the headset is on a set)
+and the designations he hears are spoken by the engine's experimental TextToSpeech plugin (English, its Flite voice:
+placeholders until recorded voice lines, roadmap 8.10). `sam3d.Audio 0` silences the radio, `sam3d.Voices 0` the words.
+
 ## First level: Osa practice scenario on Cesium terrain
 
 The level is in the repository (`Content/Maps/OsaPractice`, stored with Git LFS: run `git lfs install` once per

@@ -131,7 +131,20 @@
         {
           "order": "pto_on_line",
           "crew": "Driver"
-        },
+        }
+      ]
+    },
+    {
+      "id": "orient",
+      "when": {
+        "conditions": [
+          {
+            "input": "qc_known",
+            "is": true
+          }
+        ]
+      },
+      "do": [
         {
           "order": "orient_vehicle",
           "crew": "Deputy commander"

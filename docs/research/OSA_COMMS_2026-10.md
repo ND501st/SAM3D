@@ -66,11 +66,40 @@ mounts its boxes is not in any source found: the positions are SAM3D's choice.
 * Procedures `radio_left_on` (driver) and `radio_right_on` (commander, with A-1 to Р-123) let NPC crew do it. The vehicle starts with both sets on and warm (`start_ready`): the 10 min applies when a crew switches one
   off and on.
 
+* Transmitting (17 Oct 2026): the commander talks on the set his headset is on, keyed by his chest switch (`radio.chest`,
+  ПРМ — ПРД; `r123m_training`: the tangent to ПРД transmits). It goes out only if that set is on, warm, in СИМПЛЕКС (its
+  transmitter ready, 3 min after duty reception) and his A-1 is on Р-123 (`CrewComms::CanTransmit`); otherwise the debrief
+  says why ("cannot transmit: …"). His radio reports (`report_ready` once at each halt, `report_result` after our hit,
+  `request_tzm`) go through it, a player's only with the chest switch held at ПРД, and the requests for the TZM and the
+  fuel truck reach the battery only when the set can transmit. ТОН. ВЫЗОВ (`radio.*.tone`) sends a call tone while he
+  transmits on that set. What goes out radiates on the net of the source on his set (`EmSensorLink::SendVoiceFromUnit`):
+  the other side's ESM can hear it.
+
+* Tuning the sets (17 Oct 2026, `simcore/radio_setup.hpp`): each set keeps, under its four fixators, a frequency, its
+  sub-band and the antenna setting. Selecting a fixed frequency the motors turn the knobs to it (3 s, an estimate; off tune
+  meanwhile); with the fixator unlocked the set tunes off УСТАНОВКА ЧАСТОТЫ (25 kHz grid) and ПОДДИАПАЗОН, and locking it
+  keeps them; the red НАСТРОЙКА АНТЕННЫ knob, unlocked and with the set keyed, peaks the tuning meter (the lamp on the lens
+  at its brightest) and locking it keeps that. ПЛАВНЫЙ ПОДДИАПАЗОН I-II (the selector's last two positions) tunes straight
+  off the knobs and walks off on the move (2 kHz a second, an estimate). A set off its net's frequency neither hears nor
+  is heard ("R-123M right is on 32.500 MHz, the net on 38.550 MHz"); a detuned antenna costs on the link. The drills
+  `preset_setup_left` (driver, with his ПВ on РС and his chest switch) and `preset_setup_right` (commander) follow the
+  training text's order of work for the four frequencies; `order_presets` starts both. A scenario can start with the
+  fixators unset (`own_unit.radio_presets: "unset"`); the plan is the c2 sources' `frequency_mhz`, or placeholder
+  frequencies where a source has none. The model leaves the УСТАНОВКА ЧАСТОТЫ and НАСТРОЙКА АНТЕННЫ wells to the cabin's
+  knobs (`r123m_trace.py` WELLS); the fixators, the cover, the knob's lock and the sub-band switch are drawn at estimated
+  places.
+
+* The five subscribers (17 Oct 2026): the comms block lists the R-124's boxes and seats, A-1 commander, A-2 deputy
+  commander, A-3 senior operator, A-4 driver, A-5 operator (which operator has A-3 or A-5 is in no source found: SAM3D's
+  choice); a seat without a box is off the intercom and an order to it is shouted (`CrewComms::HasBox`). The sources
+  found give no controls on the plain boxes (the volume is A-1's; every subscriber hears the others whatever his chest
+  switch's tangent), so the operators' boxes have none; the cabin places them at the foot of SŁ-2M by their seats
+  (the A-4 mesh as the plain box's stand-in).
+
 ## Not done
 
-* Transmitting: the sets only receive. The commander's reports, ТОН. ВЫЗОВ and the chest switch's transmit position need a
-  sender in the sim (the transmit state exists).
-* The set-up drill for the presets, smooth tuning, the fixators (the preset frequencies are the scenario's).
-* Audio in Unreal, and the 27 V battery (a set draws 3 A receiving, 9.6 A transmitting; the battery's capacity and the
-  generators' charging are not modelled).
-* Which crew member has which R-124 box beyond A-1 (commander), A-2 (deputy commander) and ПВ (driver).
+* (Done 17 Oct 2026, below.)
+* (The presets' set-up drill and smooth tuning: done 17 Oct 2026, below.)
+* The 27 V battery (a set draws 3 A receiving, 9.6 A transmitting; the battery's capacity and the generators' charging
+  are not modelled). (Audio: done 17 Oct 2026, `unreal/README.md` "Cabin audio".)
+* Russian voices: the text-to-speech speaks the callouts' English; recorded lines are roadmap 8.10.
