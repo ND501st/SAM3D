@@ -6,10 +6,14 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "simcore/cabin.hpp"
 #include "simcore/fuel.hpp"
+#include "simcore/readouts.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
+#include "simcore/scope_feed.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -226,4 +230,45 @@ SC_TEST("position power: the block's values are checked with paths") {
     SC_EXPECT(!LoadScenario(text, kData, def, console, &error) && error.find("own_unit.position_power.diesel_start_s") != std::string::npos);
     const std::string no_source = Osa(R"("position_power": { "grid": true }, )", "");
     SC_EXPECT(!LoadScenario(no_source, kData, def, console, &error) && error.find("own_unit.position_power") != std::string::npos);
+}
+
+SC_TEST("fuel: the driver's gauge reads the tank in litres, through the feed and the wire") {
+    ConsoleData console;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", console));
+    CabinLayout layout;
+    std::string error;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    const CabinDisplay* gauge = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.id == "fuel_gauge") gauge = &d;
+    }
+    SC_EXPECT(gauge != nullptr && gauge->readout == "fuel" && gauge->panel_id == "driver_panel");
+    if (gauge == nullptr) return;
+    auto r = Load(Osa("", ""));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ScopeFeed f = ScopeFeedOf(r->Engagement(), r->GetLauncher(), r->Time(), r->Fuel());
+    SC_EXPECT_NEAR(DialReading(*gauge, r->Console(), f.gyro_heading_deg, f.fuel_l), 300.0, 1e-9);
+    Run(*r, 1800.0);  // half an hour of the turbine and the generator: 50 l
+    f = ScopeFeedOf(r->Engagement(), r->GetLauncher(), r->Time(), r->Fuel());
+    SC_EXPECT_NEAR(DialReading(*gauge, r->Console(), f.gyro_heading_deg, f.fuel_l), 250.0, 0.5);
+    // A client's cabin reads the same level from the knowledge stream (to the metre-step, 1 l).
+    EchoKeys keys;
+    const std::vector<std::uint8_t> bytes = em::wire::ScopeBytes(ToViewScope(f, keys));
+    em::wire::Reader rd(bytes);
+    em::ViewScope back;
+    SC_EXPECT(em::wire::GetScope(rd, back));
+    SC_EXPECT_NEAR(FromViewScope(back).fuel_l, f.fuel_l, 0.5);
+    // Without a fuel model the feed says so and the gauge rests at zero.
+    const ScopeFeed none = ScopeFeedOf(r->Engagement(), r->GetLauncher(), r->Time());
+    SC_EXPECT(none.fuel_l < 0.0);
+    SC_EXPECT_NEAR(DialReading(*gauge, r->Console(), 0.0, none.fuel_l), 0.0, 1e-12);
+    // The cabin refuses a fuel gauge on a console with no fuel block.
+    ConsoleData bare = console;
+    bare.has_fuel = false;
+    CabinLayout refused;
+    std::string why;
+    SC_EXPECT(!LoadCabinFile(kData + "/cabins/osa_ak.json", bare, refused, &why));
+    SC_EXPECT(why.find("fuel needs the console's fuel block") != std::string::npos);
 }

@@ -168,7 +168,8 @@ roadmap phase 6:
 - Timings: power-up in about a minute; real cold start-up is about 6.8 min including the function check. (6.2)
 - Missiles: load, selection, two channels, letter change, emergency launch and the range indicator's missile sweeps
   are modelled, and so is the 10-minute hold limit with the flashing ammunition lamp. (6.3)
-- Search radar: the beam switch doesn't affect detection; no IFF; 2 s sweep instead of 33 rpm. (6.4)
+- Search radar: 33 rpm, the elevation beams decide what it sees, the MTI works to 35 km, IFF replies ride on its tracks
+  in the EM path. (6.4)
 - Tracking radar capture: azimuth, range and elevation (the antenna's 1° beam on the target; during ЦУ it scans the
   search beam). The scan period is an estimate, and in the automatic beam programmes the beam searched is the one the
   echo is seen in, not the real search radar's beam commands. Manual capture has no slow elevation scan of its own:
@@ -189,9 +190,10 @@ roadmap phase 6:
 - Targets: terrain following, low strike runs, pop-up helicopters and evasion on launch or lock are scenario behaviours
   (9.3); the aircraft is still a constant-speed, turn-rate-limited point (no energy, no g limit).
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario
-  block (7.6). No emplacements, nets or dummy positions yet.
+  block (7.6), and so are emplacements, nets and dummy positions (drawn in Unreal: `ASimPositionWork`). The tank's level
+  shows on the driver's fuel gauge (7.4); the drive's own consumption is not modelled. No smoke generators.
 - PU-12 board and voice designations are built (7.1, 7.2); the board's picture is the regiment radars' (P-19, P-40: range and horizon only; no clutter, terrain or blind cone) when the scenario lists them.
 
-Radios and intercom: `simcore/crew_comms.hpp` reads the console's R-123M and R-124 controls and tells the command network which set hears and whether the commander is on the radio, and the EM link what the squelch and the antenna cost; orders to crew go through the R-124 (`ScenarioRunner::GiveOrder`). Receive-only: nothing transmits from the vehicle yet.
+Radios and intercom: `simcore/crew_comms.hpp` reads the console's R-123M and R-124 controls and tells the command network which set hears and whether the commander is on the radio, and the EM link what the squelch and the antenna cost; orders to crew go through the R-124 (`ScenarioRunner::GiveOrder`). The commander's reports go out only on a set that can transmit (`CrewComms::CanTransmit`, `ScenarioRunner::SayOnRadio`), and the presets are set up by hand (`simcore/radio_setup.hpp`).
 
 Command sources: `simcore/c2_sources.hpp` (`C2Network`) gives the engagement model the crew's air picture from the active of several sources; the PU-12 board is one of them (`docs/research/EM_C2_SOURCES_2026-10.md`).

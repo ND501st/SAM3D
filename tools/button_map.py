@@ -42,7 +42,7 @@ DISPLAY_SOURCES = {
         "soc_ppi": ["m:search", "m:iff"], "ssc_range": ["m:track", "m:launcher"], "beta_c": ["c:ssc.az_wheel", "c:ssc.az_light"],
         "soc_counters": ["m:track"], "tov_monitor": ["m:track", "c:tov.fov"],
         "epsilon_c": ["c:ssc.el_wheel", "c:ssc.el_light"], "dts_voltmeter": ["m:track"], "qc_setter": ["c:orient.qc"],
-        "elev_search": ["m:elev"], "or31_qc": ["m:orient"], "lat_scale": ["c:orient.latitude"],
+        "elev_search": ["m:elev"], "or31_qc": ["m:orient"], "lat_scale": ["c:orient.latitude"], "fuel_gauge": ["m:fuel"],
     },
 }
 
@@ -255,6 +255,15 @@ class MapBuilder:
             for key in ("synced_input", "qc_known_input", "oriented_input"):
                 if orient.get(key):
                     self.add_edge("m:orient", "i:" + orient[key], "signal", "sets this signal")
+
+        fuel = self.con.get("fuel")
+        if fuel:  # the tank the power sources burn from (roadmap 7.4)
+            self.add_node("m:fuel", t="model", label="Fuel: the tank, what burns it, the cut at half", notes=fuel.get("notes"),
+                          source=fuel.get("source"), conf=fuel.get("confidence"))
+            for src in fuel.get("sources", []):
+                if "s:" + src["subsystem"] in self.nodes:
+                    self.add_edge("s:" + src["subsystem"], "m:fuel", "feed", "burns fuel")
+            # Its power cut at the reserve (power_cut_input) stops the same sources: not drawn, it would be a cycle.
 
         radios = self.con.get("radios")
         if radios:  # the two R-123M sets: the commander's source selection (roadmap 7.8)

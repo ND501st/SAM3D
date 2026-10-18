@@ -131,7 +131,7 @@ Lamps: АНТЕННА СОЦ ЗАСТОПОРЕНА, СИСТЕМА СТАБ., �
 
 Duties: Drives; The gas-turbine power unit and the take-off generator; The left R-123M; Holds the gyro arrest 40 s at start-up.
 
-Displays: none.
+Displays: `fuel_gauge`.
 
 Lamps: R-123M left: настройка антенны, R-123M left: готова, R-123M left: прогрев, generator on line, ОТКАЗ Ψ, Θ, ГТА running.
 

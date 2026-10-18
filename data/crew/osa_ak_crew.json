@@ -32,7 +32,7 @@
       "displays": ["ssc_range"], "source": "flak11; wrk; voenizdat_osa_1991 p246", "confidence": "high" },
     { "station": "driver", "number": 4, "title_ru": "Механик-водитель", "title_en": "Driver-mechanic",
       "duties": ["Drives", "The gas-turbine power unit and the take-off generator", "The left R-123M", "Holds the gyro arrest 40 s at start-up"],
-      "displays": [], "source": "wrk; voenizdat_osa_1991 p246", "confidence": "high" }
+      "displays": ["fuel_gauge"], "source": "wrk; voenizdat_osa_1991 p246", "confidence": "high" }
   ],
 
   "callouts": [

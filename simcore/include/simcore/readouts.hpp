@@ -80,8 +80,10 @@ inline int CounterReading(const std::string& readout, const ConsoleData& console
 // network client draws the server's value).
 //   gyro_heading  the gyro half-compass's heading in degrees (the Qc scale of block OR-31M, which turns while the gyro is
 //                 being slaved to the course setter and stops once they agree: voenizdat_osa_1991 p48)
-inline double DialReading(const CabinDisplay& display, const ConsoleData& console, double gyro_heading_deg) {
+//   fuel          the tank's level in litres (the driver's fuel gauge; 0 without a fuel model)
+inline double DialReading(const CabinDisplay& display, const ConsoleData& console, double gyro_heading_deg, double fuel_l = -1.0) {
     if (display.readout == "gyro_heading") return gyro_heading_deg;
+    if (display.readout == "fuel") return fuel_l > 0.0 ? fuel_l : 0.0;
     return console.panel.GetValue(display.control);
 }
 

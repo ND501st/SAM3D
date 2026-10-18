@@ -930,8 +930,11 @@ private:
         if (disp.kind == CabinDisplayKind::Dial && d.Find("readout") != nullptr) {
             if (d.Find("control") != nullptr) return Fail(Join(path, "readout"), "a dial reads a control or a readout, not both");
             if (!RequireString(d, path, "readout", disp.readout)) return false;
-            if (disp.readout != "gyro_heading") return Fail(Join(path, "readout"), "must be gyro_heading");
-            if (!console.has_orientation) return Fail(Join(path, "readout"), "gyro_heading needs the console's orientation block");
+            if (disp.readout != "gyro_heading" && disp.readout != "fuel") return Fail(Join(path, "readout"), "must be gyro_heading or fuel");
+            if (disp.readout == "gyro_heading" && !console.has_orientation) {
+                return Fail(Join(path, "readout"), "gyro_heading needs the console's orientation block");
+            }
+            if (disp.readout == "fuel" && !console.has_fuel) return Fail(Join(path, "readout"), "fuel needs the console's fuel block");
         } else if (disp.kind == CabinDisplayKind::Dial || disp.kind == CabinDisplayKind::Meter) {
             if (!RequireString(d, path, "control", disp.control)) return false;
             if (!console.panel.Has(disp.control)) {

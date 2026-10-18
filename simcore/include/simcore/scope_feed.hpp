@@ -13,6 +13,7 @@
 
 #include "simcore/em/replication.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
 
 namespace simcore {
@@ -28,6 +29,7 @@ struct ScopeFeed {
     double antenna_el_deg = 0.0;
     double indicated_to_true_deg = 0.0;
     double gyro_heading_deg = 0.0;  // the gyro half-compass's heading (the OR-31M Qc scale)
+    double fuel_l = -1.0;           // the tank's level (the driver's fuel gauge), -1 without a fuel model
     double missile_range_m[2] = {-1.0, -1.0};
     Vec3 unit_position;
     std::vector<ScopeStrobe> strobes;  // jamming strobes (EM layer)
@@ -42,7 +44,7 @@ struct ScopeFeed {
     double MissileRangeM(int channel) const { return channel == 1 || channel == 2 ? missile_range_m[channel - 1] : -1.0; }
 };
 
-inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher, double now_s) {
+inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher, double now_s, const FuelModel* fuel = nullptr) {
     ScopeFeed f;
     f.valid = true;
     f.search = e.SearchPicture();
@@ -54,6 +56,7 @@ inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher,
     f.antenna_el_deg = e.AntennaElevationDeg();
     f.indicated_to_true_deg = e.IndicatedToTrueDeg(0.0);
     f.gyro_heading_deg = e.GyroHeadingDeg();
+    f.fuel_l = fuel != nullptr ? fuel->LevelL() : -1.0;
     if (launcher != nullptr) {
         f.missile_range_m[0] = launcher->MissileRangeM(1, now_s);
         f.missile_range_m[1] = launcher->MissileRangeM(2, now_s);
@@ -105,6 +108,7 @@ inline em::ViewScope ToViewScope(const ScopeFeed& f, EchoKeys& keys) {
     v.antenna_el_deg = f.antenna_el_deg;
     v.indicated_to_true_deg = f.indicated_to_true_deg;
     v.gyro_heading_deg = f.gyro_heading_deg;
+    v.fuel_l = f.fuel_l;
     v.missile_range_m[0] = f.missile_range_m[0];
     v.missile_range_m[1] = f.missile_range_m[1];
     v.unit_position = f.unit_position;
@@ -138,6 +142,7 @@ inline ScopeFeed FromViewScope(const em::ViewScope& v) {
     f.antenna_el_deg = v.antenna_el_deg;
     f.indicated_to_true_deg = v.indicated_to_true_deg;
     f.gyro_heading_deg = v.gyro_heading_deg;
+    f.fuel_l = v.fuel_l;
     f.missile_range_m[0] = v.missile_range_m[0];
     f.missile_range_m[1] = v.missile_range_m[1];
     f.unit_position = v.unit_position;

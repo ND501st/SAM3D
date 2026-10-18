@@ -360,7 +360,7 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const bool bMirror = Sim->IsMirrorOnly();
 	const simcore::em::ViewScope* Mirrored = bMirror ? Sim->GetMirroredScope() : nullptr;
 	Feed = Mirrored != nullptr ? simcore::FromViewScope(*Mirrored)
-	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time());
+	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time(), Runner->Fuel());
 	auto StepSeconds = [&]() {
 		if (bMirror)
 		{
@@ -793,7 +793,7 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 		return;
 	}
 	// A control's value, or for a readout dial (the OR-31M Qc scale) the simulation's, from the feed (the server's on a client).
-	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg) / Display.value_per_turn;
+	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) / Display.value_per_turn;
 	Canvas->K2_DrawLine(C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
 	Disc(Canvas, C, 0.06 * R, Ink);
 }
