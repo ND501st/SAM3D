@@ -2584,6 +2584,12 @@ private:
                     break;
                 }
             }
+            // The search radar has lost a low target he gave, but НЛЦ is lit under the azimuth line (the deputy's
+            // "НЛЦ!"): the TV looks along the line.
+            if (known.empty() && !assigned_target_.empty() && console_.equipment.GetInput("target_too_low")) {
+                NpcGive("order_low_target", 30.0);
+                return;
+            }
             if (known.empty()) return;
             std::size_t pick = 0;
             if (known.size() > 1 && npc_choice_for_ != known.front().target) {
@@ -2614,6 +2620,9 @@ private:
                 }
             }
             assigned_target_ = k.target;
+            // НЛЦ with the azimuth line on it (the deputy's "НЛЦ!"): the radar can't take it, so the angles by the TV
+            // (track_low_target: samsim_osa p25-26), the range then by ПОЛУАВТОМАТ (below).
+            if (console_.equipment.GetInput("target_too_low") && NpcGive("order_low_target", 30.0)) return;
             if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_) {  // no number from the PU-12: by its azimuth
                 callouts_->Say(time_, "order_take_contact", Cmdr(), {{"azimuth", MilsText(k.azimuth_deg)}});
             }
@@ -2659,6 +2668,13 @@ private:
         if (m == TrackMethod::RadarOnJam) {
             NpcGive("order_jammer", 40.0);
             return;
+        }
+        // The TV holds it with the tracking radar up: the operator ranges on it with the radar alone (ПОЛУАВТОМАТ,
+        // samsim_osa p26: while the deputy tracks the angles with the TV).
+        const TrackSensorDef& tr = console_.track;
+        if (m == TrackMethod::Tv && !tr.range_only_mode.empty() && !console_.equipment.IsReady(tr.range_only_mode) &&
+            console_.equipment.IsReady(tr.transmitter)) {
+            NpcGive("order_semi_auto", 30.0);
         }
         if (!npc_prepared_) {
             npc_prepared_ = NpcGive("order_prepare", 20.0);
@@ -3065,6 +3081,16 @@ private:
                     case EngagementEvent::Kind::TrackLost:
                         // not a target just shot down, nor one the crew let go
                         if (NpcAt("operator") && TargetRange(e.target) >= 0.0 && e.detail != "dropped") Say("lock_lost", "operator");
+                        // With nothing in the air the deputy's launch drill has no target to wait for: under the NPC
+                        // commander (who orders it again with the next lock) he leaves it, so the seat is free to take the
+                        // target again (by the radar or the TV), and the permission lapses.
+                        if (NpcCommanderActive() && !engagement_.ShotsInFlight() && SeatHolder("deputy_commander").empty()) {
+                            if (CrewMember* dep = MemberAt("deputy_commander")) {
+                                const std::string id = dep->IsBusy() ? dep->Tracker().GetProcedure().id : std::string();
+                                if (id == "launch" || id == "prepare_firing") dep->CancelOrder();
+                            }
+                            npc_permit_s_ = -1e9;
+                        }
                         break;
                     case EngagementEvent::Kind::IffNoReply: {
                         KnownTarget k;  // the senior operator saw no reply mark beside the echo

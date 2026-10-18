@@ -180,7 +180,7 @@
     { "callout": "order_hv_off", "procedures": [ { "station": "senior_operator", "procedure": "hv_off" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_hv_on", "procedures": [ { "station": "senior_operator", "procedure": "hv_on" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_tv_watch", "needs": ["tracked"], "procedures": [ { "station": "deputy_commander", "procedure": "tv_watch" } ], "source": "sam3d", "confidence": "estimate" },
-    { "callout": "order_low_target", "needs": ["tracked"], "procedures": [ { "station": "deputy_commander", "procedure": "track_low_target" } ], "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_low_target", "procedures": [ { "station": "deputy_commander", "procedure": "track_low_target" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_semi_auto", "needs": ["tracked"], "procedures": [ { "station": "operator", "procedure": "track_range_semi_auto" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_prepare", "needs": ["missiles"], "procedures": [ { "station": "deputy_commander", "procedure": "prepare_firing" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "fire_permitted", "needs": ["tracked", "missiles"], "task": "launched", "procedures": [ { "station": "deputy_commander", "procedure": "launch" } ], "source": "sam3d", "confidence": "estimate" },

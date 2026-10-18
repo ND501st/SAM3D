@@ -461,6 +461,21 @@ public:
         if (em::RadarState* r = Radar(track_)) r->has_designation = false;
     }
 
+    // Point the tracking antenna (true azimuth from north and elevation, degrees) with no designation: the TV holding a
+    // target turns the antenna it sits on, so the radar's beam looks where the TV looks (its range-only mode ranges on the
+    // echo there). Ignored while the radar holds a lock or a jammer of its own.
+    void PointTrackAntenna(double true_az_deg, double el_deg) {
+        em::RadarState* r = Radar(track_);
+        if (r == nullptr || r->locked_track != 0 || r->on_jam) return;
+        em::EmitterState* e = world_.Scene().FindEmitter(r->emitter_id);
+        if (e == nullptr) return;
+        const double turn = 2.0 * DegToRad(180.0);
+        double az = std::fmod(DegToRad(true_az_deg), turn);
+        if (az < 0.0) az += turn;
+        e->pointing_az_rad = az;
+        e->pointing_el_rad = DegToRad(el_deg);
+    }
+
     // Break the tracking radar's lock (the operator dropped it, or the antenna was released).
     void ClearLock() {
         em::RadarState* r = Radar(track_);

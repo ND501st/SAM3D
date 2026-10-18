@@ -247,7 +247,7 @@ Lamps: R-123M left: настройка антенны, R-123M left: готова
 | `vehicle_stopped` | the vehicle (driver) | driver | – | `apu_free`, `external_supply`, `pto_generator` | `deploy_at_halt` step 1, `pto_on_line` step 1 | `halted` |
 | `target_near_zone` | engagement model | operator, deputy_commander | – | – | – | `target_near_zone` |
 | `target_in_zone` | engagement model | operator, deputy_commander | – | `missile_prep` | `launch` step 1, `fire_at_jammer` step 6 | `target_in_zone` |
-| `target_too_low` | engagement model | – | – | – | `track_low_target` step 1 | `too_low` |
+| `target_too_low` | engagement model | – | – | – | – | `too_low` |
 | `target_captured` | engagement model | senior_operator, operator, deputy_commander | `capture_mode` ready, `ssc_transmitter` ready, `antenna_drives` ready | `auto_tracking` | – | `captured` |
 | `target_tv_tracked` | engagement model | deputy_commander, senior_operator | `tv_angle_track` ready | – | – | `tv_track` |
 | `target_fills_crosshair` | engagement model (sensors) | – | – | – | `emcon_tv_engagement` step 11 | – |
@@ -444,7 +444,7 @@ Lamps: R-123M left: настройка антенны, R-123M left: готова
 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|
-| 1 | `tov.power` | 1 | input `target_too_low`=true | – |
+| 1 | `tov.power` | 1 | – | – |
 | 2 | `fo.ru` | 1 | – | – |
 | 3 | `fo.pa` | 1 | `tov_camera` ready | driver, operator |
 

@@ -1273,10 +1273,9 @@
     {
       "id": "track_low_target", "name": "Tracking a target at ultra-low altitude",
       "source": "samsim_osa p25–26", "confidence": "high",
-      "notes": "Deputy commander. The operator tracks range at the same time (track_range_semi_auto). The azimuth wheel is the senior operator's.",
+      "notes": "Deputy commander. The operator tracks range at the same time (track_range_semi_auto). The azimuth wheel is the senior operator's. НЛЦ starts the drill (the commander orders it on the deputy's 'НЛЦ!'); the first step does not wait for the lamp again (sam3d): with the azimuth line sweeping a sector for a lost low target, it lights only as the line passes the target.",
       "steps": [
-        { "control": "tov.power", "position": 1, "description": "НЛЦ is lit: РАБ.РЕЖ. ВКЛ, TOV camera on",
-          "wait_for": [ { "input": "target_too_low", "is": true } ] },
+        { "control": "tov.power", "position": 1, "description": "НЛЦ is lit: РАБ.РЕЖ. ВКЛ, TOV camera on" },
         { "control": "fo.ru", "position": 1, "description": "РУ, manual tracking mode. Then bring the target under the TV crosshair with the azimuth and elevation wheels" },
         { "control": "fo.pa", "position": 1, "description": "ПА, angle tracking with the TOV camera",
           "wait_for": [ { "subsystem": "tov_camera", "is": "ready" } ] }

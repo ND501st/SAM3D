@@ -667,3 +667,45 @@ SC_TEST("tv 6.6: the reticle's 3-thousandth marks fall where the lens field puts
     if (!wide.empty()) SC_EXPECT_NEAR(wide.back(), 0.75, 1e-12);
     SC_EXPECT(ReticleMarks(0.0, 0.18).empty() && ReticleMarks(1.0, 0.0).empty());
 }
+
+// ------------------------------------------------------------------------------------------ the low flier: TV and range-only
+
+// A drone at 40 m: the tracking radar's lock breaks as the echo sinks into the ground (НЛЦ); the deputy leaves his launch
+// drill, the commander sends the TV along the azimuth line and, once it holds the target, orders ПОЛУАВТОМАТ (samsim_osa
+// p25-26). With no jamming the radar ranges on the echo alone and the crew fires.
+SC_TEST("low flier: the lock breaks, the TV takes the angles, range-only the range, and the crew fires") {
+    const std::string text = ReplaceAll(ReadFile(kData + "/scenarios/osa_low_flier_em.json"), "\"on_at_s\": 125", "\"on_at_s\": 100000");
+    const Run r = Play(text, 600.0);
+    SC_EXPECT(r.loaded);
+    SC_EXPECT(Has(r, "track lost: radar lost the echo"));
+    SC_EXPECT(Has(r, "aborted    launch"));
+    SC_EXPECT(Has(r, "Низколетящая! Углы — по ТВ!"));
+    SC_EXPECT(Has(r, "TV track"));
+    SC_EXPECT(Has(r, "Полуавтомат!"));
+    SC_EXPECT(r.debrief.find("range-only: no echo") == std::string::npos);
+    SC_EXPECT(r.summary.launches >= 1);
+    SC_EXPECT(Has(r, "HIT") || Has(r, "MISS"));
+}
+
+// The same drone's noise pod comes on once range-only has it: the echo is drowned, the range-only radar has nothing to
+// range on (after the TV's 5 s memory), and the range is the deputy's from the target's size in the TV picture.
+SC_TEST("low flier: a noise pod drowns the range-only radar's echo; the range comes from the TV picture") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_low_flier_em.json", kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    bool range_only = false, tv_size_after = false;
+    while (!runner.Finished() && runner.Time() < 600.0) {
+        runner.Step(0.1);
+        const EngagementModel& e = runner.Engagement();
+        if (e.Method() != TrackMethod::Tv || !runner.Console().equipment.IsReady("range_semi_auto")) continue;
+        if (runner.Time() < 124.0 && !e.RangeFromTvSize(runner.Console())) range_only = true;  // before the pod
+        if (runner.Time() > 131.0 && e.RangeFromTvSize(runner.Console())) tv_size_after = true;   // past the memory
+    }
+    const std::string d = runner.Debrief();
+    SC_EXPECT(range_only && tv_size_after);
+    SC_EXPECT(d.find("range-only: no echo in the beam") != std::string::npos);
+    SC_EXPECT(d.find("Дальность по телевизору") != std::string::npos);
+    SC_EXPECT(runner.Log().Summary().launches >= 1);
+    if (!range_only || !tv_size_after) std::printf("%s\n", d.c_str());
+}

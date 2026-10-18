@@ -551,7 +551,9 @@ follows a noise jammer in angle when the jamming drowns its echo (`RunTrackRadar
   `jam_el_rad`, `jam_jn_db`, `jam_range_m` hold the state; `ClearLock` resets it.
 
 The engagement layer's side (method Н, the range by hand from the search scope or the PU-12, the fuse) is in
-`data/gameplay/README.md` and `simcore/engagement.hpp`. Not modelled: the range-only mode being jammed, home-on-jam by
+`data/gameplay/README.md` and `simcore/engagement.hpp`. The range-only mode ranges on the echo the tracking
+radar sees where the TV points its antenna (`EmSensorLink::PointTrackAntenna`, `EngagementModel::RangeOnlyEcho`, coasting
+on the TV's memory time): a noise jammer drowns it. Not modelled: home-on-jam by
 the missile (the Osa's missile is command-guided), sidelobe blanking or frequency agility against the jammer.
 
 ## 32. The search scope from the EM radar (roadmap E3, 18 October 2026)

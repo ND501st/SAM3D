@@ -1334,6 +1334,10 @@ private:
                 if (!g.alive || g.range_m > d.max_range_m) continue;
                 if ((is_locked && kv.first == locked) || em_->EchoVisible(kv.first)) {
                     track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
+                    if (kv.first == tracked_) {
+                        range_echo_for_ = tracked_;
+                        range_echo_s_ = time_;
+                    }
                 }
             }
             return;
@@ -1395,7 +1399,8 @@ private:
     RangeSource RangeFrom(const ConsoleData& console) const {
         if (method_ == TrackMethod::Radar) return RangeSource::Radar;
         const TrackSensorDef& d = console.track;
-        if (method_ == TrackMethod::Tv && !d.range_only_mode.empty() && console.equipment.IsReady(d.range_only_mode)) {
+        if (method_ == TrackMethod::Tv && !d.range_only_mode.empty() && console.equipment.IsReady(d.range_only_mode) &&
+            RangeOnlyEcho()) {
             return RangeSource::RangeOnly;
         }
         if (method_ == TrackMethod::Tv || method_ == TrackMethod::RadarOnJam) {
@@ -1404,6 +1409,13 @@ private:
         }
         if (method_ == TrackMethod::Tv && tv_range_estimate_m_ > 0.0) return RangeSource::TvSize;
         return RangeSource::None;
+    }
+    // The range-only radar ranges on the tracked target's echo in its beam. With the EM layer the echo can be drowned (a
+    // noise jammer on the target, too far, under the ground): then there is no range from it, and the range is by hand.
+    // It coasts through a short fade on the TV's memory time (the same memory mode: ePap).
+    bool RangeOnlyEcho() const {
+        if (em_ == nullptr) return true;
+        return range_echo_for_ == tracked_ && !tracked_.empty() && time_ - range_echo_s_ <= tuning_.tv_memory_s + 1e-9;
     }
     static bool ByHand(RangeSource s) { return s == RangeSource::Search || s == RangeSource::Board || s == RangeSource::TvSize; }
 
@@ -1425,6 +1437,31 @@ private:
             if (c.target_id == id) return &c;
         }
         return nullptr;
+    }
+
+    // The TV and the tracking antenna are one mount: with the TV on the target the radar's beam is too.
+    void SlaveAntennaToTv(const ConsoleData& console) {
+        if (em_ == nullptr) return;
+        em_->ClearDesignation();
+        const TrackSensorDef& d = console.track;
+        em_->PointTrackAntenna(IndicatedToTrueDeg(console.panel.GetValue(d.az_wheel)), console.panel.GetValue(d.el_wheel));
+    }
+
+    // ПОЛУАВТОМАТ engaged with no echo to range on (drowned in the jamming): said once for each target, and again when
+    // the echo comes back.
+    void NoteRangeOnlyEcho(double t, const ConsoleData& console, SessionLog& log) {
+        const TrackSensorDef& d = console.track;
+        const bool engaged = !d.range_only_mode.empty() && console.equipment.IsReady(d.range_only_mode);
+        const bool lost = engaged && !RangeOnlyEcho();
+        if (tracked_ != range_only_for_) {
+            range_only_for_ = tracked_;
+            range_only_lost_ = false;
+        }
+        if (lost == range_only_lost_) return;
+        range_only_lost_ = lost;
+        log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_,
+                    lost ? "range-only: no echo in the beam (too weak, or jammed), the range by hand"
+                         : "range-only: the echo is back, the range from the radar"});
     }
 
     // The range by hand: an NPC range operator turns the wheel onto the tracked target's blip on the search scope, or
@@ -1535,9 +1572,10 @@ private:
             }
         }
         if (RangeFrom(console) == RangeSource::RangeOnly) console.panel.SetValue(d.range_wheel, g.range_m);
+        NoteRangeOnlyEcho(t, console, log);
         FollowRangeByHand(dt, console, crew);
         antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = console.panel.GetValue(d.el_wheel);
-        if (em_ != nullptr) em_->ClearDesignation();
+        SlaveAntennaToTv(console);
         return true;
     }
 
@@ -1613,7 +1651,10 @@ private:
                 console.panel.SetValue(d.el_wheel, el_deg);
                 if (RangeKnown(console)) console.panel.SetValue(d.range_wheel, range_m);
                 antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = el_deg;
-                if (em_ != nullptr && method_ == TrackMethod::Tv) em_->ClearDesignation();
+                if (method_ == TrackMethod::Tv) {
+                    NoteRangeOnlyEcho(t, console, log);
+                    SlaveAntennaToTv(console);
+                }
                 return;
             } else {
                 log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
@@ -1985,6 +2026,10 @@ private:
     std::vector<ScopeStrobe> strobes_;
     double search_antenna_az_deg_ = kNoAntenna;
     std::vector<Contact> track_returns_;
+    std::string range_echo_for_;    // the tracked target whose echo the tracking radar saw last, and when
+    double range_echo_s_ = -1e9;
+    std::string range_only_for_;    // the target NoteRangeOnlyEcho last spoke of
+    bool range_only_lost_ = false;  // ... and whether range-only had no echo then
     std::set<std::string> seen_by_search_;
     std::set<std::string> replied_;
     std::set<std::string> asked_;   // on the scope during the interrogation going on
