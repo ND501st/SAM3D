@@ -118,3 +118,5 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
   halt" task never completes and *К бою!* never greys as done (the NPC commander gets there through the drill
   master). The tutorial waits for the search radar instead. The engagement doesn't need the TV.
 - Multiplayer: the views and the guide are each player's own; time keys work on the server only.
+- Frame rate: about 100 fps in every view at 1600x900 on the development PC (19 Oct 2026). If the cabin runs slowly,
+  `sam3d.CabinDisplayHz 15` and `sam3d.TvHz 10` in the console (~) lower how often the instruments and the TV redraw.

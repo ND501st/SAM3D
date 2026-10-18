@@ -69,6 +69,19 @@ private:
 	TUniquePtr<simcore::ElevationScope> ElevScope;
 	int32 ElevRaster = INDEX_NONE;
 	double LastSimTimeSeconds = -1.0;
+	/** Redrawing costs the render thread hundreds of canvas lines: only while the camera is in the cabin, at most
+	 *  sam3d.CabinDisplayHz times a second (the TV's picture sam3d.TvHz); the frame time since the last drawing. */
+	float RedrawSecondsLeft = 0.0f;
+	float DeltaSinceDraw = 0.0f;
+	/** The owner's camera is in its cabin (or the owner isn't a vehicle): the instruments are seen. */
+	bool IsSeen() const;
+	/** For a picture that only changes with a few values (a dial, a meter, a tube switched off): those values hashed into
+	 *  Key. False for a moving picture (a lit scope, the counters, the post's boards), which is redrawn at the set rate. */
+	bool ContentKey(const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, uint32& Key) const;
+	uint32 DrawnKey = 0;
+	bool bDrawnKeyValid = false;
+	/** The search scope's fixed face (the azimuth scale and its numbers), drawn once and stamped under each picture. */
+	void DrawPpiFace(const FVector2D& Size);
 	bool bTvWasOn = false;
 	FRandomStream Noise;
 	// The IT-45's sweep (rad clockwise from north) and the turns it has made (its speckle is redrawn each turn).
@@ -82,6 +95,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextureRenderTarget2D> Target;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> FaceTarget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> ScreenMaterial;

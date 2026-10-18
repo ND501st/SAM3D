@@ -72,7 +72,15 @@ director's ScenarioFile (set the director's **Mission Menu** to Always to see th
   the crew's grades. A networked game only resumes or quits, and runs on meanwhile.
 - Scripted check: `-SimMenuTest=<folder> -SimMenuPick=<mission>:<vehicle>:<seat>` photographs the menu (`menu.png`,
   `menu_pick.png`), starts the pick, photographs the player's first view (`started.png`) and the mission's menu
-  (`mission_menu.png`), then quits. Test `SAM3D.Missions.Menu`.
+  (`mission_menu.png`), then quits, logging each view's frame rate and game, render and GPU times and checking the view mode stayed lit
+(`-SimViewShotLast=N`: only the last N views, the cabin's).
+
+Performance (19 Oct 2026, the tutorial at 1600x900: about 100 fps in every view, from 9): the cabin's instruments are
+drawn only while the camera is in the cabin, at most `sam3d.CabinDisplayHz` times a second (default 30), and only when
+their picture changes (a dial, a meter, a tube switched off); all their lines, rings and discs go to the canvas as one
+triangle list per picture (each canvas item costs the render thread a draw of its own); the search scope's scale is
+drawn once. The TOV monitor films the world at `sam3d.TvHz` (default 15) while it is on and the camera is in the cabin.
+`sam3d.CabinDisplaySkipKinds` (a bit mask of display kinds) is there to find the next expensive one. Test `SAM3D.Missions.Menu`.
 
 **The first playable test** (`docs/PLAYING.md`): `.\tools\play.ps1 -Tutorial` opens the tutorial straight away (the
 missions menu's first entry: the first shoot on the Kesmark range with the guide, `data/tutorials/first_shoot.json`, on

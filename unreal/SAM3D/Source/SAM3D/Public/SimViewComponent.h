@@ -140,8 +140,11 @@ private:
 	void PlaceCamera(APlayerController* Pc, float DeltaSeconds);
 	void HandleTimeKeys(APlayerController* Pc);
 	void ReportToTutorial();
-	/** -SimViewShots: the next view of the scripted check, its picture, the end. */
-	void RunViewShots(float DeltaSeconds);
+	/** -SimViewShots: the next view of the scripted check (its key pressed as a player would), its picture and frame
+	 *  timings, the end. */
+	void RunViewShots(APlayerController* Pc, float DeltaSeconds);
+	/** The engine's development key bindings on the F keys (wireframe on F1...) taken off this player's input. */
+	void ClearDebugKeyBindings(APlayerController* Pc);
 	/** Camera at Location looking at Target, with this lens. */
 	void Aim(const FVector& Location, const FVector& Target, float FovDeg);
 
@@ -176,6 +179,10 @@ private:
 	int32 ShotStep = INDEX_NONE;
 	float ShotClock = 0.0f;
 	bool bShotsAsked = false;
+	FKey ShotKeyDown;
+	int32 ShotFrames = 0;
+	double ShotSeconds = 0.0;
+	bool bDebugKeysCleared = false;
 
 	FString Message;
 	float MessageSeconds = 0.0f;

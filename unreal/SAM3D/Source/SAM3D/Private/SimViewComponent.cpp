@@ -2,7 +2,12 @@
 
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerInput.h"
+#include "InputKeyEventArgs.h"
+#include "DynamicRHI.h"
+#include "RenderTimer.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
@@ -349,13 +354,41 @@ void USimViewComponent::UpdateViews(APlayerController* Pc, float DeltaSeconds)
 			Press(K.Mode);
 		}
 	}
-	RunViewShots(DeltaSeconds);
+	ClearDebugKeyBindings(Pc);
+	RunViewShots(Pc, DeltaSeconds);
 	HandleTimeKeys(Pc);
 	PlaceCamera(Pc, DeltaSeconds);
 	ReportToTutorial();
 }
 
-void USimViewComponent::RunViewShots(float DeltaSeconds)
+void USimViewComponent::ClearDebugKeyBindings(APlayerController* Pc)
+{
+	if (bDebugKeysCleared || Pc->PlayerInput == nullptr)
+	{
+		return;
+	}
+	bDebugKeysCleared = true;
+	// Config/DefaultInput.ini takes them off too; this keeps the views working whatever a user's own input config says.
+	static const FKey FKeys[] = {EKeys::F1, EKeys::F2, EKeys::F3, EKeys::F4, EKeys::F5, EKeys::F6, EKeys::F7, EKeys::F8,
+		EKeys::F9, EKeys::F10, EKeys::F11, EKeys::F12};
+	const int32 Removed = Pc->PlayerInput->DebugExecBindings.RemoveAll([](const FKeyBind& B)
+		{
+			for (const FKey& K : FKeys)
+			{
+				if (B.Key == K)
+				{
+					return true;
+				}
+			}
+			return false;
+		});
+	if (Removed > 0)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Views: %d engine debug bindings taken off the F keys"), Removed);
+	}
+}
+
+void USimViewComponent::RunViewShots(APlayerController* Pc, float DeltaSeconds)
 {
 	if (!bShotsAsked)
 	{
@@ -375,20 +408,49 @@ void USimViewComponent::RunViewShots(float DeltaSeconds)
 	}
 	// Each view as a player meets it: the vehicle, a fly-by of it, the aircraft and its chase, the nearest from the
 	// vehicle, the ground units and the next, the map, the free camera, the cabin and its next seat.
-	static const ESimView Sequence[] = {ESimView::Vehicle, ESimView::FlyBy, ESimView::Air, ESimView::Chase, ESimView::NearestAir,
-		ESimView::Ground, ESimView::Ground, ESimView::Map, ESimView::Free, ESimView::Cabin, ESimView::Cabin};
-	constexpr int32 Count = UE_ARRAY_COUNT(Sequence);
+	// The keys go in through the player controller as a player's do, so the engine's own bindings on them would show.
+	static const FKey Sequence[] = {EKeys::F2, EKeys::F3, EKeys::F8, EKeys::F4, EKeys::F5, EKeys::F7, EKeys::F7, EKeys::F10,
+		EKeys::F11, EKeys::F1, EKeys::F1, EKeys::F1};
+	// -SimViewShotLast=N: only the last N of them (the cabin's seats: 3).
+	int32 Count = UE_ARRAY_COUNT(Sequence);
+	int32 First = 0;
+	int32 Last = 0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("SimViewShotLast="), Last) && Last > 0 && Last < Count)
+	{
+		First = Count - Last;
+		Count = Last;
+	}
+	auto Key = [Pc](const FKey& K, EInputEvent E) { Pc->InputKey(FInputKeyEventArgs::CreateSimulated(K, E, E == IE_Pressed ? 1.0f : 0.0f)); };
+	if (ShotKeyDown.IsValid())
+	{
+		Key(ShotKeyDown, IE_Released);
+		ShotKeyDown = FKey();
+	}
 	const float Before = ShotClock;
 	ShotClock += DeltaSeconds;
 	if (Before < 0.0f && ShotClock >= 0.0f && ShotStep < Count)
 	{
-		Press(Sequence[ShotStep]);
+		Key(Sequence[First + ShotStep], IE_Pressed);
+		ShotKeyDown = Sequence[First + ShotStep];
+	}
+	// The frame timings over the second before the picture, once the view has settled.
+	if (ShotClock >= 1.5f && ShotClock < 2.5f)
+	{
+		++ShotFrames;
+		ShotSeconds += DeltaSeconds;
 	}
 	if (Before < 2.5f && ShotClock >= 2.5f && ShotStep < Count)
 	{
 		const FString File = FPaths::Combine(ShotFolder, FString::Printf(TEXT("%02d_%s.png"), ShotStep + 1, *KeyOf(View)));
 		FScreenshotRequest::RequestScreenshot(File, true, false);
-		UE_LOG(LogSAM3D, Log, TEXT("View shot: %s  (%s)"), *File, *GetViewLabel());
+		const UGameViewportClient* Viewport = GetWorld()->GetGameViewport();
+		const double Fps = ShotSeconds > 0.0 ? ShotFrames / ShotSeconds : 0.0;
+		UE_LOG(LogSAM3D, Log, TEXT("View shot: %s  (%s)  %.1f fps; game %.1f ms, render %.1f ms, GPU %.1f ms; view mode %s"), *File,
+			*GetViewLabel(), Fps, FPlatformTime::ToMilliseconds(GGameThreadTime), FPlatformTime::ToMilliseconds(GRenderThreadTime),
+			FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()),
+			Viewport != nullptr && Viewport->ViewModeIndex == VMI_Lit ? TEXT("lit") : TEXT("NOT LIT"));
+		ShotFrames = 0;
+		ShotSeconds = 0.0;
 	}
 	if (ShotClock >= 3.5f)
 	{
@@ -401,7 +463,8 @@ void USimViewComponent::RunViewShots(float DeltaSeconds)
 			ShotStep = INDEX_NONE;
 			return;
 		}
-		Press(Sequence[ShotStep]);
+		Key(Sequence[First + ShotStep], IE_Pressed);
+		ShotKeyDown = Sequence[First + ShotStep];
 	}
 }
 
