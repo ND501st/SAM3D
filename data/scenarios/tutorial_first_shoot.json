@@ -1,0 +1,53 @@
+{
+  "scenario_id": "tutorial_first_shoot",
+  "name": "Tutorial: your first shoot, in command of the Osa 21",
+  "description": "The first playable test, with the guide (data/tutorials/first_shoot.json) on the screen. Battery 21's Osa stands cold in its position south-west of the Kesmark bridges, the command post, the reload vehicle and the fuel truck beside it. A practice drone flies in slowly from the north-west, and a second one from the south-west later. Nobody gives the crew orders but you: the guide shows you the camera views (F1 to F11), takes you into the commander's seat, and walks you through К бою, the search, taking the target, preparing and permitting the launch, and watching the missile fly. Fictional; placeholder target numbers.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Positions as in kesmark_range_test.json (battery 21 at places_pannonia bty21_v1, its support vehicles round it; heights on the map's ground). No other launchers, so the targets are the player's. No crew_commander: the crew waits for the player's orders (the commander's seat's crew menu, O). The drones' numbers are PLACEHOLDERS: slow and steady so a first-time player has the time to learn the views and the orders (sim time can be sped up, Ctrl+Z). The first drone is in the sky from the start, far out, so the aircraft views (F5, F8) have something to show.",
+  "seed": 7,
+  "origin": { "lat_deg": 46.817217, "lon_deg": 19.77862, "alt_m": 107.6 },
+  "terrain": { "type": "map", "map": "maps/kesmark_range.json" },
+  "weather": "clear",
+  "battery": {
+    "own": { "id": "21", "callsign": "21" },
+    "vehicles": [
+      { "id": "PU-12", "kind": "command_post", "position": { "east_m": 400, "north_m": -400, "up_m": 3.9 } },
+      { "id": "TZM", "kind": "reload", "position": { "east_m": -1000, "north_m": -2300, "up_m": 3.8 } },
+      { "id": "ATZ", "kind": "fuel", "position": { "east_m": -800, "north_m": -2600, "up_m": 4.1 } }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 290,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    {
+      "id": "d1", "name": "Practice drone 1, from the north-west (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
+      "start": { "east_m": -42000, "north_m": 38000, "up_m": 1200 },
+      "waypoints": [ { "east_m": 3000, "north_m": 2000, "up_m": 1000 }, { "east_m": 40000, "north_m": -30000, "up_m": 1000 } ],
+      "speed_mps": 110, "rcs_m2": 0.8, "appear_at_s": 5,
+      "notes": "Placeholder numbers. About 57 km out at the start: some 7 minutes of sim time to the firing zone, time to bring the crew to readiness from cold."
+    },
+    {
+      "id": "d2", "name": "Practice drone 2, from the south-west (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone",
+      "start": { "east_m": -36000, "north_m": -24000, "up_m": 1500 },
+      "waypoints": [ { "east_m": -2000, "north_m": -3000, "up_m": 1200 }, { "east_m": 36000, "north_m": 22000, "up_m": 1200 } ],
+      "speed_mps": 130, "rcs_m2": 0.8, "appear_at_s": 600,
+      "notes": "Placeholder numbers. A second go, once the first is down or past."
+    }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 1800, "when_targets_gone": true }
+}

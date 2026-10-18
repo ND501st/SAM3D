@@ -188,6 +188,19 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 			Sim->SetGeoreference(Geo);
 		}
 	}
+	// ?SimTutorial=tutorials/<file>.json (the missions menu's tutorial) or -SimTutorial=: the guide over the scenario.
+	const FString Guide = Sim->GetLaunchOption(TEXT("SimTutorial"));
+	if (!Guide.IsEmpty())
+	{
+		if (!Guide.StartsWith(TEXT("tutorials/")) || Guide.Contains(TEXT("..")) || Guide.Contains(TEXT("\\")))
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Tutorial '%s' refused: a guide is tutorials/<file>.json"), *Guide);
+		}
+		else if (!Sim->LoadTutorial(Guide, Error) && GEngine != nullptr)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Red, FString::Printf(TEXT("Tutorial failed to load: %s"), *Error));
+		}
+	}
 	if (bSpawnPlayerVehicle)
 	{
 		SpawnPlayerVehicle(Sim);

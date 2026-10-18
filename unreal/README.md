@@ -74,12 +74,24 @@ director's ScenarioFile (set the director's **Mission Menu** to Always to see th
   `menu_pick.png`), starts the pick, photographs the player's first view (`started.png`) and the mission's menu
   (`mission_menu.png`), then quits. Test `SAM3D.Missions.Menu`.
 
+**The first playable test** (`docs/PLAYING.md`): `.\tools\play.ps1 -Tutorial` opens the tutorial straight away (the
+missions menu's first entry: the first shoot on the Kesmark range with the guide, `data/tutorials/first_shoot.json`, on
+the screen; N skips a step). The camera views are on the F keys as in DCS (`USimViewComponent`): F1 the cabin and its
+seats, F2 your vehicle, F3 fly-by, F4 chase, F5 the nearest aircraft from your vehicle, F6 your missile, F7 the ground
+units, F8 the aircraft, F10 the map, F11 a free camera; the same key again for the next of its kind. Ctrl+Z / Alt+Z /
+Shift+Z speed time up, slow it, set it back. G shows every key. `Config/DefaultInput.ini` takes the engine's debug view
+modes off F1-F5, F9 and F11. Test `SAM3D.Missions.Tutorial`. Scripted check: `-SimViewShots=<folder>` (with
+`-SimShotDelay=<s>`, default 15) steps through the views in the running game and photographs each with the HUD, then
+quits.
+
 In play:
 
 | Keys | Action |
 |---|---|
 | W / S, A / D, Space | Drive, steer, brake. Stopping tells the sim the vehicle is at a halt. |
-| Right mouse + drag | Orbit the camera |
+| F1-F8, F10, F11 | Camera views (`docs/PLAYING.md`); right mouse + drag turns the camera, the wheel zooms |
+| Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |
+| G | Every key |
 | 1 | Power up: driver starts the GTA (`power_up`), operator switches on the equipment (`equipment_on`) |
 | 2 | Senior operator: search on the march (waits for power) |
 | 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line, deputy commander orients the vehicle (gyro to the crew chief's Qc, `orient_vehicle`) |

@@ -261,6 +261,7 @@ public:
         return engagement_.MissilesInFlight(time_, world_, eng_targets_);
     }
     SessionLog& Log() { return log_; }
+    const SessionLog& Log() const { return log_; }
     // The crew members, in the scenario's order (their slips, omissions, skill: the balance tool, the debrief).
     const std::vector<CrewMember>& CrewMembers() const { return crew_; }
     const AcmiWriter& Acmi() const { return acmi_; }

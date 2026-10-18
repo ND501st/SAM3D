@@ -113,7 +113,18 @@ void ASimEntityActor::Tick(float DeltaSeconds)
 
 	if (State.bAlive)
 	{
-		SetActorLocationAndRotation(State.Location, State.Rotation);
+		FVector At = State.Location;
+		if (State.bIsGround)
+		{
+			// A ground vehicle's sim position is where its antennas are, a few metres up: draw it on the ground below.
+			FHitResult Hit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(SimEntityGround), false, this);
+			if (MyWorld->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 2000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+			{
+				At = Hit.ImpactPoint;
+			}
+		}
+		SetActorLocationAndRotation(At, State.Rotation);
 		if (Mast != nullptr)
 		{
 			// a battery's post raises its mast and sets the AB-1 out when it deploys, at the mast's own pace

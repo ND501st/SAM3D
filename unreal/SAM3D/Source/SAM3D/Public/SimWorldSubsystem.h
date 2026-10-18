@@ -412,8 +412,53 @@ struct SAM3D_API FSimMission
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	FString Level;
 
+	/** The guide shown over it (data/tutorials/, the SimTutorial option); empty: none. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Tutorial;
+
+	/** Where the menu starts the player by default: a seat id, "outside", or empty for the commander's seat. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Start;
+
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	TArray<FSimMissionVehicle> Vehicles;
+};
+
+/** The tutorial guide's step on the screen (data/tutorials/, simcore/tutorial.hpp). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimTutorialStep
+{
+	GENERATED_BODY()
+
+	/** The guide's title. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Guide;
+
+	/** 1-based, of Count. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	int32 Number = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	int32 Count = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Title;
+
+	/** What to do, a sentence or two each. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	TArray<FString> Lines;
+
+	/** The keys for it, one line. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Hint;
+
+	/** The last step: it stays. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bLast = false;
+
+	/** Real seconds since this step came up (to mark a new step). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	float ShownSeconds = 0.0f;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
@@ -699,6 +744,32 @@ public:
 	/** Absolute path of the data folder in use. */
 	FString GetDataDirectory() const { return ResolveDataDirectory(); }
 
+	// ------------------------------------------------------------------ the tutorial guide (simcore/tutorial.hpp)
+
+	/** Show a guide (relative to the data folder, e.g. "tutorials/first_shoot.json") over the running scenario. Load the
+	 *  scenario first; loading another drops the guide. False with OutError if it doesn't load or names what the
+	 *  scenario hasn't got. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	bool LoadTutorial(const FString& TutorialFile, FString& OutError);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
+	bool HasTutorial() const { return Tutorial.IsValid(); }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
+	FSimTutorialStep GetTutorialStep() const;
+
+	/** The player moves on without doing the step (N). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	void SkipTutorialStep();
+
+	/** What the screen shows now, for the guide's conditions: the camera view ("F1".."F11"), the cabin seat, the seat
+	 *  the player holds ("" none). The view component calls it each frame. */
+	void SetTutorialView(const FString& ViewKey, bool bInCabin, const FString& Seat, const FString& Holding);
+
+	/** A front-end event the guide may wait for (simcore::TutorialUiEvents: keys_card, time_faster, crew_menu, ...). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	void NoteTutorialEvent(const FString& Event);
+
 	// ------------------------------------------------------------------ terrain and Cesium
 
 	/** Use this georeference for all ENU <-> Unreal conversions (null = flat mapping). */
@@ -966,6 +1037,11 @@ private:
 	TUniquePtr<simcore::BodyData> CrewBodies;
 	TUniquePtr<simcore::VoiceData> CrewVoices;
 	TUniquePtr<simcore::GridTerrain> SampledTerrain;
+	/** The tutorial guide over the scenario, what the front end reports to it, and when its step came up. */
+	TUniquePtr<simcore::TutorialGuide> Tutorial;
+	simcore::TutorialUi TutorialUiState;
+	double TutorialStepShownAt = 0.0;
+	void UpdateTutorial(float DeltaTime);
 	double ScenarioStepSeconds = 0.05;
 	size_t DebriefEntriesSent = 0;
 

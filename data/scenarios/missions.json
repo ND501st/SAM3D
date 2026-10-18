@@ -5,6 +5,14 @@
   "source": "sam3d",
   "groups": [
     {
+      "id": "tutorial", "label": "Tutorial",
+      "notes": "Start here. A guide on the screen takes you through the camera views (F1 to F11), the commander's seat and a whole engagement, step by step: the crew waits for your orders. G shows every key at any time.",
+      "missions": [
+        { "file": "scenarios/tutorial_first_shoot.json", "title": "Your first shoot: in command of the Osa 21", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/first_shoot.json", "start": "outside" }
+      ]
+    },
+    {
       "id": "missions", "label": "Missions",
       "notes": "NPC commanders run the crew and the battery by the drill. Take a seat and do your part when you are told, or take the commander's seat and give the orders yourself.",
       "missions": [

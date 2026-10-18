@@ -73,6 +73,7 @@ add_executable(simcore_tests
   tests/test_pu12m_cabin.cpp
   tests/test_battery_link.cpp
   tests/test_missions.cpp
+  tests/test_tutorial.cpp
   tests/test_em_guidance.cpp
   tests/test_em_threats.cpp
   tests/test_ranges_history.cpp

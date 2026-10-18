@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 #include "SimOsaVehicle.h"
+#include "SimViewComponent.h"
 #include "SimWorldSubsystem.h"
 
 void ASimCabinHUD::DrawHUD()
@@ -19,6 +20,25 @@ void ASimCabinHUD::DrawHUD()
 	}
 	const APlayerController* Pc = OwnerPc;
 	const ASimOsaVehicle* Vehicle = Pc != nullptr ? Cast<ASimOsaVehicle>(Pc->GetPawn()) : nullptr;
+	// G: every key; N: the guide's next step.
+	if (OwnerPc != nullptr && Vehicle != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::G))
+	{
+		bShowKeys = !bShowKeys;
+		if (bShowKeys && Sim != nullptr)
+		{
+			Sim->NoteTutorialEvent(TEXT("keys_card"));
+		}
+	}
+	if (OwnerPc != nullptr && Sim != nullptr && Sim->HasTutorial() && Vehicle != nullptr && !Vehicle->IsMissionMenuOpen() &&
+		OwnerPc->WasInputKeyJustPressed(EKeys::N))
+	{
+		Sim->SkipTutorialStep();
+	}
+	if (Vehicle != nullptr && Sim != nullptr && Canvas != nullptr && Sim->IsScenarioRunning() && !Vehicle->IsMissionMenuOpen())
+	{
+		DrawView(Sim, Vehicle);
+		DrawGuide(Sim);
+	}
 	if (Sim != nullptr && Canvas != nullptr && (Vehicle == nullptr || !Vehicle->IsMissionMenuOpen()))
 	{
 		DrawRadio(Sim, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f);
@@ -32,6 +52,10 @@ void ASimCabinHUD::DrawHUD()
 		if (Vehicle->IsMissionMenuOpen())
 		{
 			DrawMissionMenu(Sim, Vehicle);
+			if (bShowKeys)
+			{
+				DrawKeys(Vehicle);
+			}
 			return;
 		}
 		if (Sim->IsScenarioFinished())
@@ -47,12 +71,18 @@ void ASimCabinHUD::DrawHUD()
 	}
 	// A battery link: the other vehicle is a key away.
 	const FString SwitchHint = Sim != nullptr && Sim->IsBatteryLink() ? FString::Printf(TEXT("   V to %s"), *Sim->GetOtherLinkedVehicle()) : FString();
-	if (Vehicle != nullptr && !Vehicle->IsInCabin() && Canvas != nullptr && !SwitchHint.IsEmpty())
+	if (Vehicle != nullptr && !Vehicle->IsInCabin() && Canvas != nullptr && Sim != nullptr && Sim->IsScenarioRunning())
 	{
-		DrawText(FString::Printf(TEXT("C into the cabin%s"), *SwitchHint), FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 20.0f,
-			Canvas->ClipY - 40.0f, GEngine != nullptr ? GEngine->GetMediumFont() : nullptr);
+		const bool bFree = Vehicle->GetViews() != nullptr && Vehicle->GetViews()->IsFreeCamera();
+		DrawText(FString::Printf(TEXT("%s   F1 the cabin   F2-F11 views   right mouse turns, wheel zooms   Ctrl+Z time   G keys   Esc menu%s"),
+					 bFree ? TEXT("W A S D Q E fly") : TEXT("W A S D drive"), *SwitchHint),
+			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 20.0f, Canvas->ClipY - 40.0f, GEngine != nullptr ? GEngine->GetMediumFont() : nullptr);
 	}
-	if (Vehicle == nullptr || !Vehicle->IsInCabin() || Canvas == nullptr)
+	if (bShowKeys && Vehicle != nullptr && Canvas != nullptr)
+	{
+		DrawKeys(Vehicle);
+	}
+	if (Vehicle == nullptr || !Vehicle->IsInCabin() || Canvas == nullptr || bShowKeys)
 	{
 		return;
 	}
@@ -74,7 +104,7 @@ void ASimCabinHUD::DrawHUD()
 		DrawText(Feedback, FLinearColor(1.0f, 0.4f, 0.3f), Cx + 16.0f, Cy + 32.0f, Font);
 	}
 	const FString CommanderStation = Sim != nullptr ? Sim->GetCommanderStation() : FString(TEXT("commander"));
-	DrawText(FString::Printf(TEXT("%s%s   |   C leave cabin   Tab next seat   T %s   O %s   H help   B plotting board%s"),
+	DrawText(FString::Printf(TEXT("%s%s   |   F1/Tab next seat   C or F2 outside   T %s   O %s   H help   B board   G keys%s"),
 				 *Vehicle->GetCabinStationLabel(), Vehicle->IsHoldingSeat() ? TEXT(" (your seat)") : TEXT(""),
 				 Vehicle->IsHoldingSeat() ? TEXT("give the seat back") : TEXT("take this seat"),
 				 Vehicle->GetStationId() == CommanderStation ? TEXT("orders") : TEXT("reports"), *SwitchHint),
@@ -83,6 +113,183 @@ void ASimCabinHUD::DrawHUD()
 	if (Sim != nullptr && Vehicle->IsCommandPost())
 	{
 		DrawPost(Sim, Vehicle, Font);
+	}
+}
+
+TArray<FString> ASimCabinHUD::Wrap(const FString& Text, float Width, UFont* Font)
+{
+	TArray<FString> Words;
+	Text.ParseIntoArray(Words, TEXT(" "), true);
+	TArray<FString> Lines;
+	FString Line;
+	for (const FString& Word : Words)
+	{
+		const FString Try = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+		float W = 0.0f;
+		float H = 0.0f;
+		GetTextSize(Try, W, H, Font);
+		if (W > Width && !Line.IsEmpty())
+		{
+			Lines.Add(Line);
+			Line = Word;
+		}
+		else
+		{
+			Line = Try;
+		}
+	}
+	if (!Line.IsEmpty())
+	{
+		Lines.Add(Line);
+	}
+	return Lines;
+}
+
+void ASimCabinHUD::DrawView(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle)
+{
+	UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+	const USimViewComponent* Views = Vehicle->GetViews();
+	float Y = 12.0f;
+	if (Views != nullptr && !Vehicle->IsInCabin())
+	{
+		const FString Label = Views->GetViewLabel();
+		float W = 0.0f;
+		float H = 0.0f;
+		GetTextSize(Label, W, H, Medium);
+		DrawBacking(20.0f, Y, W, H);
+		DrawText(Label, FLinearColor(0.95f, 0.95f, 0.85f), 20.0f, Y, Medium);
+		Y += H + 6.0f;
+	}
+	const FString Note = Views != nullptr ? Views->GetViewMessage() : FString();
+	if (!Note.IsEmpty())
+	{
+		DrawText(Note, FLinearColor(1.0f, 0.78f, 0.35f), 20.0f, Vehicle->IsInCabin() ? Canvas->ClipY * 0.5f + 52.0f : Y, Medium);
+	}
+	// Time compression: always on the screen while it is on.
+	const float Scale = Sim->GetTimeScale();
+	if (Scale != 1.0f)
+	{
+		const FString T = FString::Printf(TEXT("TIME x%g"), Scale);
+		float W = 0.0f;
+		float H = 0.0f;
+		GetTextSize(T, W, H, Medium);
+		DrawBacking((Canvas->ClipX - W) * 0.5f, 44.0f, W, H);
+		DrawText(T, FLinearColor(1.0f, 0.78f, 0.35f), (Canvas->ClipX - W) * 0.5f, 44.0f, Medium);
+	}
+}
+
+void ASimCabinHUD::DrawGuide(USimWorldSubsystem* Sim)
+{
+	if (!Sim->HasTutorial() || bShowKeys)
+	{
+		return;
+	}
+	const FSimTutorialStep Step = Sim->GetTutorialStep();
+	if (Step.Count == 0)
+	{
+		return;
+	}
+	UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const float Width = FMath::Min(560.0f, Canvas->ClipX * 0.36f);
+	// The top right; the left, under the help, while the plotting board fills the right.
+	const float X = bShowBoard ? 20.0f : Canvas->ClipX - Width - 24.0f;
+	const float Top = bShowBoard ? Canvas->ClipY * 0.42f : 70.0f;
+	TArray<TPair<FString, FLinearColor>> Rows;
+	const FLinearColor Amber(1.0f, 0.78f, 0.35f);
+	const FLinearColor Paper(0.93f, 0.92f, 0.86f);
+	const FLinearColor Dim(0.65f, 0.7f, 0.62f);
+	for (const FString& L : Step.Lines)
+	{
+		for (const FString& W : Wrap(L, Width - 16.0f, Small))
+		{
+			Rows.Emplace(W, Paper);
+		}
+		Rows.Emplace(FString(), Paper);
+	}
+	if (!Step.Hint.IsEmpty())
+	{
+		for (const FString& W : Wrap(Step.Hint, Width - 16.0f, Small))
+		{
+			Rows.Emplace(W, FLinearColor(0.55f, 0.95f, 0.65f));
+		}
+	}
+	const float Height = 50.0f + 16.0f * Rows.Num() + 22.0f;
+	// A new step flashes its frame for a moment.
+	const float Flash = FMath::Clamp(1.0f - Step.ShownSeconds / 2.0f, 0.0f, 1.0f);
+	DrawRect(FLinearColor(0.02f, 0.03f, 0.02f, 0.72f), X, Top, Width, Height);
+	DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.35f + 0.65f * Flash), X, Top, Width, 3.0f);
+	DrawText(FString::Printf(TEXT("%s   %d / %d"), *Step.Guide, Step.Number, Step.Count), Dim, X + 8.0f, Top + 8.0f, Small);
+	DrawText(Step.Title, Amber, X + 8.0f, Top + 24.0f, Medium);
+	float Y = Top + 50.0f;
+	for (const TPair<FString, FLinearColor>& R : Rows)
+	{
+		DrawText(R.Key, R.Value, X + 8.0f, Y, Small);
+		Y += 16.0f;
+	}
+	DrawText(Step.bLast ? TEXT("G every key   Esc the menu") : TEXT("N skip this step   G every key"), Dim, X + 8.0f, Y + 4.0f, Small);
+}
+
+void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
+{
+	UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const FLinearColor Amber(1.0f, 0.78f, 0.35f);
+	const FLinearColor Paper(0.93f, 0.92f, 0.86f);
+	struct FGroup
+	{
+		const TCHAR* Title;
+		TArray<const TCHAR*> Lines;
+	};
+	const TArray<FGroup> Left = {
+		{TEXT("Camera views"),
+			{TEXT("F1    the cabin; again: the next seat"), TEXT("F2    your vehicle; again: closer / further"),
+				TEXT("F3    fly-by of what the camera follows"), TEXT("F4    chase; again: from ahead"),
+				TEXT("F5    the nearest aircraft from your vehicle; again: the next"), TEXT("F6    your missile in flight; again: the next"),
+				TEXT("F7    the battery's vehicles; again: the next"), TEXT("F8    the aircraft; again: the next"),
+				TEXT("F10   the map from above (wheel: height, right drag: pan)"), TEXT("F11   free camera (W A S D Q E, Shift faster)"),
+				TEXT("Right mouse + drag   turn the camera"), TEXT("Wheel   closer / further, the lens on F5")}},
+		{TEXT("Time"), {TEXT("Ctrl+Z   faster (x2 .. x32)"), TEXT("Alt+Z    slower"), TEXT("Shift+Z  normal time")}},
+		{TEXT("The game"), {TEXT("Esc   pause: resume, restart, the missions, quit; the debrief"), TEXT("G     this card"), TEXT("N     the guide's next step (tutorial)")}},
+	};
+	const TArray<FGroup> Right = {
+		{TEXT("Driving (outside)"), {TEXT("W / S   throttle, reverse"), TEXT("A / D   steer"), TEXT("Space   brake: a halt for the crew")}},
+		{TEXT("In the cabin"),
+			{TEXT("C   in and out of the cabin"), TEXT("Tab / F1   the next seat"), TEXT("Mouse   look round; the cross names the control"),
+				TEXT("Left click   switch on, step forward, press"), TEXT("Right click   step back"),
+				TEXT("Drag or wheel on a hand wheel   turn it")}},
+		{TEXT("The crew"),
+			{TEXT("T   take this seat, or give it back"), TEXT("O   orders (commander's seat) or reports; 1-9 pick, 0 next page"),
+				TEXT("H   training overlay: guided, hint, demonstrate, off"), TEXT("1-9   quick crew drills (outside the crew menu)"),
+				TEXT("B   the PU-12 plotting board"), TEXT("V   the other vehicle (battery link)")}},
+		{TEXT("PU-12M seats"), {TEXT("[ ]   pick a target"), TEXT("1-5   give it to a launcher (commander)"), TEXT("P   plot it (plotter)")}},
+	};
+	const float W = FMath::Min(1180.0f, Canvas->ClipX - 40.0f);
+	const float X = (Canvas->ClipX - W) * 0.5f;
+	const float Y0 = FMath::Max(20.0f, Canvas->ClipY * 0.08f);
+	DrawRect(FLinearColor(0.015f, 0.02f, 0.015f, 0.88f), X, Y0, W, FMath::Min(Canvas->ClipY - Y0 - 20.0f, 600.0f));
+	DrawText(TEXT("Keys   (G closes)"), Amber, X + 16.0f, Y0 + 10.0f, Medium);
+	auto Column = [&](const TArray<FGroup>& Groups, float Cx)
+	{
+		float Y = Y0 + 44.0f;
+		for (const FGroup& G : Groups)
+		{
+			DrawText(G.Title, Amber, Cx, Y, Small);
+			Y += 18.0f;
+			for (const TCHAR* L : G.Lines)
+			{
+				DrawText(L, Paper, Cx + 8.0f, Y, Small);
+				Y += 16.0f;
+			}
+			Y += 8.0f;
+		}
+	};
+	Column(Left, X + 16.0f);
+	Column(Right, X + W * 0.52f);
+	if (Vehicle->GetViews() != nullptr)
+	{
+		DrawText(FString::Printf(TEXT("Now: %s"), *Vehicle->GetViews()->GetViewLabel()), FLinearColor(0.55f, 0.95f, 0.65f), X + W * 0.52f,
+			Y0 + 10.0f, Small);
 	}
 }
 
@@ -105,8 +312,9 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 	DrawText(Sim->GetScenarioName(), Paper, X, Y, Medium);
 	Y += 34.0f;
 	const bool bLeave = Vehicle->CanLeaveMission();
-	const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit")};
-	for (int32 I = 0; I < 4; ++I)
+	const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit"),
+		TEXT("G      every key")};
+	for (int32 I = 0; I < 5; ++I)
 	{
 		if (!bLeave && (I == 1 || I == 2))
 		{

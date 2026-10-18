@@ -40,6 +40,7 @@
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_voice.hpp"
 #include "simcore/missions.hpp"
+#include "simcore/tutorial.hpp"
 #include "simcore/air_war.hpp"
 #include "simcore/command.hpp"
 #include "simcore/noise.hpp"

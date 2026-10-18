@@ -36,8 +36,9 @@ public:
 	/** Reopen the level with the selected mission. */
 	void StartSelected();
 
-	/** The level options that start a mission in that vehicle and seat (seat "" = outside the vehicle). */
-	static FString OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId);
+	/** The level options that start a mission in that vehicle and seat (seat "" = outside the vehicle), with its tutorial
+	 *  guide if it has one (?SimTutorial). */
+	static FString OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial = FString());
 
 	const TArray<FSimMission>& GetMissions() const { return Missions; }
 

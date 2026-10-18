@@ -61,8 +61,20 @@ TArray<ASimMissionMenuHUD::FStartChoice> ASimMissionMenuHUD::StartChoices(const 
 
 int32 ASimMissionMenuHUD::DefaultStart(const FSimMission& Mission) const
 {
-	// The first vehicle's commanding seat: the commander's view of the whole drill.
 	const TArray<FStartChoice> Choices = StartChoices(Mission);
+	// The mission's own choice (missions.json "start": the tutorial starts outside, to show the views first).
+	if (!Mission.Start.IsEmpty() && Mission.Vehicles.Num() > 0)
+	{
+		const FString Seat = Mission.Start == TEXT("outside") ? FString() : Mission.Start;
+		for (int32 I = 0; I < Choices.Num(); ++I)
+		{
+			if (Choices[I].Vehicle == Mission.Vehicles[0].Id && Choices[I].Seat == Seat)
+			{
+				return I;
+			}
+		}
+	}
+	// Otherwise the first vehicle's commanding seat: the commander's view of the whole drill.
 	if (Mission.Vehicles.Num() > 0)
 	{
 		for (int32 I = 0; I < Choices.Num(); ++I)
@@ -103,7 +115,7 @@ bool ASimMissionMenuHUD::Select(const FString& MissionId, const FString& Vehicle
 	return false;
 }
 
-FString ASimMissionMenuHUD::OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId)
+FString ASimMissionMenuHUD::OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial)
 {
 	FString Options = FString::Printf(TEXT("SimMission=%s"), *MissionId);
 	if (!VehicleId.IsEmpty())
@@ -113,6 +125,10 @@ FString ASimMissionMenuHUD::OptionsFor(const FString& MissionId, const FString& 
 	if (!SeatId.IsEmpty())
 	{
 		Options += FString::Printf(TEXT("?SimSeat=%s"), *SeatId);
+	}
+	if (!Tutorial.IsEmpty())
+	{
+		Options += FString::Printf(TEXT("?SimTutorial=%s"), *Tutorial);
 	}
 	return Options;
 }
@@ -128,7 +144,7 @@ void ASimMissionMenuHUD::StartSelected()
 	{
 		return;
 	}
-	const FString Options = OptionsFor(Missions[Selected].Id, Choices[StartIndex].Vehicle, Choices[StartIndex].Seat);
+	const FString Options = OptionsFor(Missions[Selected].Id, Choices[StartIndex].Vehicle, Choices[StartIndex].Seat, Missions[Selected].Tutorial);
 	// A mission on a map of its own (missions.json "level") opens that level; the rest reopen this one.
 	const FString Level = Missions[Selected].Level.IsEmpty() ? UGameplayStatics::GetCurrentLevelName(this, true) : Missions[Selected].Level;
 	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: starting %s in %s (%s)"), *Missions[Selected].Id, *Level, *Options);

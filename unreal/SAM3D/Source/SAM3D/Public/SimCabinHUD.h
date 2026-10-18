@@ -5,8 +5,9 @@
 #include "SimCabinHUD.generated.h"
 
 /**
- * Placeholder HUD for the 3D cabin: a crosshair, the name and state of the control under it, feedback from the
- * last action, and the key help. Draws nothing while the player's ASimOsaVehicle is outside the cabin.
+ * The player's HUD: in the cabin a crosshair, the name and state of the control under it, feedback from the last action
+ * and the key help; outside, the camera view's name (F1-F11). Everywhere the radio lines, the time compression, the
+ * tutorial guide's step (N skips it) and the keys card (G).
  */
 UCLASS()
 class SAM3D_API ASimCabinHUD : public AHUD
@@ -15,6 +16,10 @@ class SAM3D_API ASimCabinHUD : public AHUD
 
 public:
 	virtual void DrawHUD() override;
+
+	/** Show every key (toggled with G). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Guide")
+	bool bShowKeys = false;
 
 	/** Show the PU-12 plotting board (toggled with B). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Board")
@@ -37,6 +42,14 @@ private:
 	void DrawCrew(const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	void DrawBoard(class USimWorldSubsystem* Sim, class UFont* Font);
 	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
+	/** The camera view's name, the view's last note and the time compression, at the top. */
+	void DrawView(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
+	/** The tutorial guide's step: a panel at the top right (the left while the board is up). */
+	void DrawGuide(class USimWorldSubsystem* Sim);
+	/** Every key, by what it is for (G). */
+	void DrawKeys(const class ASimOsaVehicle* Vehicle);
+	/** Text broken into lines no wider than Width. */
+	TArray<FString> Wrap(const FString& Text, float Width, class UFont* Font);
 	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
 	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 };

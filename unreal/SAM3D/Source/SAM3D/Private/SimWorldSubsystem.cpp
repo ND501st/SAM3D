@@ -224,6 +224,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 			++Steps;
 		}
 		BroadcastNewDebriefEntries();
+		UpdateTutorial(DeltaTime);
 		return;
 	}
 
@@ -359,6 +360,8 @@ FString USimWorldSubsystem::ResolveDataDirectory() const
 
 void USimWorldSubsystem::ClearScenario()
 {
+	Tutorial.Reset();
+	TutorialUiState = simcore::TutorialUi();
 	Runner = nullptr;
 	Link.Reset();
 	OwnedRunner.Reset();
@@ -700,6 +703,96 @@ bool USimWorldSubsystem::IsLampLit(const FString& LampId) const
 	return false;
 }
 
+// ---------------------------------------------------------------------------------------------- the tutorial guide
+
+bool USimWorldSubsystem::LoadTutorial(const FString& TutorialFile, FString& OutError)
+{
+	Tutorial.Reset();
+	TutorialUiState = simcore::TutorialUi();
+	if (!Runner)
+	{
+		OutError = TEXT("no scenario running");
+		return false;
+	}
+	simcore::TutorialDef Def;
+	std::string Error;
+	if (!simcore::LoadTutorialFile(ToStd(ResolveDataDirectory()), ToStd(TutorialFile), Def, &Error) ||
+		!simcore::CheckTutorialAgainst(Def, *Runner, &Error))
+	{
+		OutError = ToF(Error);
+		return false;
+	}
+	Tutorial = MakeUnique<simcore::TutorialGuide>(std::move(Def));
+	TutorialStepShownAt = 0.0;
+	UE_LOG(LogSAM3D, Log, TEXT("Tutorial: %s, %d steps"), *TutorialFile, static_cast<int32>(Tutorial->Count()));
+	return true;
+}
+
+FSimTutorialStep USimWorldSubsystem::GetTutorialStep() const
+{
+	FSimTutorialStep Out;
+	const simcore::TutorialStep* Step = Tutorial ? Tutorial->Current() : nullptr;
+	if (Step == nullptr)
+	{
+		return Out;
+	}
+	Out.Guide = ToF(Tutorial->Def().title);
+	Out.Number = static_cast<int32>(Tutorial->Index()) + 1;
+	Out.Count = static_cast<int32>(Tutorial->Count());
+	Out.Title = ToF(Step->title);
+	for (const std::string& L : Step->lines)
+	{
+		Out.Lines.Add(ToF(L));
+	}
+	Out.Hint = ToF(Step->hint);
+	Out.bLast = Tutorial->AtEnd();
+	Out.ShownSeconds = static_cast<float>(TutorialUiState.real_time_s - TutorialStepShownAt);
+	return Out;
+}
+
+void USimWorldSubsystem::SkipTutorialStep()
+{
+	if (Tutorial && Runner && !Tutorial->AtEnd())
+	{
+		Tutorial->Skip(Runner->Time(), TutorialUiState.real_time_s);
+		TutorialStepShownAt = TutorialUiState.real_time_s;
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: skipped to step %d"), static_cast<int32>(Tutorial->Index()) + 1);
+	}
+}
+
+void USimWorldSubsystem::SetTutorialView(const FString& ViewKey, bool bInCabin, const FString& Seat, const FString& Holding)
+{
+	TutorialUiState.view = ToStd(ViewKey);
+	TutorialUiState.views_used.insert(TutorialUiState.view);
+	TutorialUiState.in_cabin = bInCabin;
+	TutorialUiState.seat = ToStd(Seat);
+	TutorialUiState.holding = ToStd(Holding);
+}
+
+void USimWorldSubsystem::NoteTutorialEvent(const FString& Event)
+{
+	if (Tutorial)
+	{
+		TutorialUiState.events.insert(ToStd(Event));
+	}
+}
+
+void USimWorldSubsystem::UpdateTutorial(float DeltaTime)
+{
+	if (!Tutorial || !Runner)
+	{
+		return;
+	}
+	TutorialUiState.real_time_s += DeltaTime;  // not while paused: the tick returns before this
+	const std::size_t Was = Tutorial->Index();
+	if (Tutorial->Update(*Runner, TutorialUiState))
+	{
+		TutorialStepShownAt = TutorialUiState.real_time_s;
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: step %d done at t=%.0f s, now '%s'"), static_cast<int32>(Was) + 1, Runner->Time(),
+			Tutorial->Current() != nullptr ? *ToF(Tutorial->Current()->title) : TEXT("-"));
+	}
+}
+
 bool USimWorldSubsystem::IsScenarioFinished() const
 {
 	return Runner && Runner->Finished();
@@ -761,6 +854,8 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 			Out.Description = ToF(M.description);
 			Out.bLink = M.link;
 			Out.Level = ToF(M.level);
+			Out.Tutorial = ToF(M.tutorial);
+			Out.Start = ToF(M.start);
 			for (const simcore::MissionVehicle& V : M.vehicles)
 			{
 				FSimMissionVehicle& OutV = Out.Vehicles.AddDefaulted_GetRef();

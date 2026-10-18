@@ -16,6 +16,7 @@
 #include "SimCrewBodiesComponent.h"
 #include "SimCrewVoiceComponent.h"
 #include "SimPu12MastComponent.h"
+#include "SimViewComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UObjectIterator.h"
@@ -89,6 +90,7 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CrewBodies = CreateDefaultSubobject<USimCrewBodiesComponent>(TEXT("CrewBodies"));
 	CrewBodies->SetupAttachment(Cabin);
 	CrewVoice = CreateDefaultSubobject<USimCrewVoiceComponent>(TEXT("CrewVoice"));
+	Views = CreateDefaultSubobject<USimViewComponent>(TEXT("Views"));
 	CabinCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CabinCamera"));
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);
@@ -164,7 +166,12 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 		HandleMissionMenu(Pc);
 		return;
 	}
-	Drive(DeltaSeconds, Pc);
+	// The camera views (F1-F11) and the time keys; the free camera's W A S D are its own, not the driver's.
+	if (!bTouring && ShotDelayLeft < 0.0f)
+	{
+		Views->UpdateViews(Pc, DeltaSeconds);
+	}
+	Drive(DeltaSeconds, Views->IsFreeCamera() ? nullptr : Pc);
 	FollowGround();
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
@@ -277,6 +284,7 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 	// O: the crew menu. 1-9 choose a line, 0 the next page, O or Escape close it.
 	if (Pc->WasInputKeyJustPressed(EKeys::O))
 	{
+		Sim->NoteTutorialEvent(TEXT("crew_menu"));
 		bMenuOpen = !bMenuOpen;
 		MenuPage = 0;
 		MenuEntries = Sim->GetCrewMenu(StationId);
@@ -834,10 +842,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	if (Pc->WasInputKeyJustPressed(NextStationKey))
 	{
-		Station = (Station + 1) % FMath::Max(1, Cabin->GetNumStations());
-		LookYawDeg = 0.0;
-		LookPitchDeg = 0.0;
-		DraggedWheel = INDEX_NONE;
+		NextStation();
 	}
 
 	// Mouse: turns the dragged hand wheel, otherwise turns the head.
@@ -895,6 +900,18 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	else if (Pc->WasInputKeyJustPressed(EKeys::RightMouseButton))
 	{
 		ShowFeedback(Cabin->ClickItem(HoveredItem, -1));
+	}
+}
+
+void ASimOsaVehicle::NextStation()
+{
+	Station = (Station + 1) % FMath::Max(1, Cabin->GetNumStations());
+	LookYawDeg = 0.0;
+	LookPitchDeg = 0.0;
+	DraggedWheel = INDEX_NONE;
+	if (bInCabin)
+	{
+		ApplyStationView();
 	}
 }
 

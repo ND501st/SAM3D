@@ -1,0 +1,128 @@
+{
+  "tutorial_id": "first_shoot",
+  "title": "Tutorial: your first shoot",
+  "scenario": "scenarios/tutorial_first_shoot.json",
+  "status": "The first playable test's guide (loaded by simcore/tutorial.hpp, shown by the game's HUD; docs/PLAYING.md).",
+  "source": "sam3d",
+  "notes": "A training aid over the game, like the training overlay: it tells the player what to do and moves on when he has done it; it never tells the crew anything. The order names are the crew data's (data/crew/osa_ak_crew.json), shown in the crew menu in Russian with the English beside them.",
+  "steps": [
+    {
+      "id": "welcome",
+      "title": "Welcome to SAM3D",
+      "lines": [
+        "You command the Osa 21, a 9K33M2 Osa-AK of battery 21, standing cold in its position by the Kesmark bridges. Two practice drones will fly at you, and your crew of four waits for your orders.",
+        "This guide follows what you do and moves on by itself. N skips a step, G shows every key, Esc pauses the game."
+      ],
+      "hint": "Right mouse + drag: turn the camera round your vehicle.   Mouse wheel: closer or further.",
+      "done_when": [ "ui:orbit", "ui:zoom", "after:30" ]
+    },
+    {
+      "id": "views",
+      "title": "The camera views (F1 to F11)",
+      "lines": [
+        "As in DCS, the F keys choose the camera: F1 the cabin, F2 your vehicle, F3 a fly-by, F4 the chase, F5 the nearest aircraft seen from your vehicle, F6 your missile, F7 the battery's vehicles, F8 the aircraft, F10 the map from above, F11 a free camera.",
+        "Press the same key again for the next of its kind. The first drone is already in the sky, far to the north-west: F8 finds it.",
+        "Try four views."
+      ],
+      "hint": "F2 F3 F4 F5 F7 F8 F10 F11.   In F11: W A S D Q E fly, right mouse looks, Shift is faster.",
+      "done_when": [ "views:4" ]
+    },
+    {
+      "id": "cabin",
+      "title": "Into the cabin",
+      "lines": [
+        "F1 puts you in the cabin. F1 again (or Tab) moves you to the next seat: the driver, the deputy commander, the senior operator and the operator are your crew, each at his own panels.",
+        "Look round with the mouse; the cross names whatever it is on. Then come to the commander's seat."
+      ],
+      "hint": "F1: the cabin, then the next seat.   Mouse: look round.   C: in and out of the cabin.",
+      "done_when": [ "seat:commander" ]
+    },
+    {
+      "id": "take_seat",
+      "title": "Take command",
+      "lines": [
+        "T takes the seat: it is yours now, and the crew takes its orders from you.",
+        "(In the other half of the game you sit in one of the crew's seats and an NPC commander gives you the orders.)"
+      ],
+      "hint": "T: take this seat, or give it back.",
+      "done_when": [ "holding:commander" ]
+    },
+    {
+      "id": "k_boyu",
+      "title": "К бою! Action stations!",
+      "lines": [
+        "O opens your orders. Give the first: К бою! (Action stations!), with its number.",
+        "The driver starts the turbine, the operator switches the equipment on and unlocks the antenna-launcher unit, the deputy commander orients the vehicle. They call each step on the intercom: the lines at the bottom left."
+      ],
+      "hint": "O: the orders, then the line's number (0 the next page, Esc closes).",
+      "done_when": [ "order:order_k_boyu", "task:searching" ]
+    },
+    {
+      "id": "readiness",
+      "title": "Coming to readiness",
+      "lines": [
+        "From cold the Osa takes a few minutes to come to readiness: the turbine, the equipment warming up, the antenna-launcher unit unlocked, the vehicle oriented, the search radar. Speed time up while you wait: Ctrl+Z faster (x2, x4, x8), Shift+Z back to normal.",
+        "Watch it from outside (F2): the search antenna rises and starts to turn. Or sit with the crew (F1) and watch them work. The step is done when the senior operator calls Готов СОЦ! (Search radar ready!)."
+      ],
+      "hint": "Ctrl+Z faster, Alt+Z slower, Shift+Z normal time.   H in a seat: the training overlay.",
+      "done_when": [ "task:searching" ]
+    },
+    {
+      "id": "search",
+      "title": "Search",
+      "lines": [
+        "The search radar is up and the senior operator is searching (if the antenna stands still, order Поиск! (Search!)).",
+        "Wait for his report of a contact on the intercom: an azimuth and a range. Until then Цель номер … — взять! (Take target!) is greyed in your orders, 'no target reported'. F5 looks at the drone from your vehicle."
+      ],
+      "hint": "Ctrl+Z speeds the wait.   O: the orders.",
+      "done_when": [ "order:order_take_target", "task:captured" ]
+    },
+    {
+      "id": "take_target",
+      "title": "Take the target",
+      "lines": [
+        "Give Цель номер … — взять! (Take target!). The crew turns the tracking radar onto the contact and captures it: the ЗАХВАТ lamp."
+      ],
+      "hint": "O: the orders.   F1 again to watch the operators at their scopes.",
+      "done_when": [ "task:captured" ]
+    },
+    {
+      "id": "prepare",
+      "title": "Prepare to launch",
+      "lines": [
+        "The target is held. Give Приготовиться к пуску! (Prepare to launch!): the deputy commander prepares the missiles."
+      ],
+      "hint": "O: the orders.",
+      "done_when": [ "order:order_prepare", "order:fire_permitted", "debrief:LAUNCH" ]
+    },
+    {
+      "id": "permit",
+      "title": "Permit the launch",
+      "lines": [
+        "When the drone comes into the firing zone (the ЦЕЛЬ В ЗОНЕ lamp), Пуск разрешаю! (Launch permitted!) stops being greyed. Give it, and the deputy commander launches."
+      ],
+      "hint": "O: the orders.   Shift+Z: normal time for the shot.",
+      "done_when": [ "debrief:LAUNCH" ]
+    },
+    {
+      "id": "missile",
+      "title": "Missile away",
+      "lines": [
+        "F6 follows your missile, F3 watches it fly by. The crew guides it: the tracking radar holds the drone and the command link steers the missile to it."
+      ],
+      "hint": "F6: the missile.   F3: fly-by.   F4: chase (again: from ahead).",
+      "done_when": [ "debrief:HIT", "debrief:MISS" ]
+    },
+    {
+      "id": "after",
+      "title": "After the shot",
+      "lines": [
+        "HIT or MISS is on the radio and in the debrief. After a miss, Вторая — пуск! (Second missile, launch!) or permit again while the drone is in the zone.",
+        "A second drone comes from the south-west after ten minutes of sim time: take it on your own, with H for the training overlay.",
+        "Esc: the menu (the debrief once the scenario has ended); R restarts, M the missions. In the Missions group an NPC commander runs the crew while you take any seat."
+      ],
+      "hint": "G: every key.   Esc: the menu.",
+      "done_when": []
+    }
+  ]
+}

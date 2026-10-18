@@ -32,7 +32,7 @@ SC_TEST("missions: the catalogue loads and every mission in it starts, with its 
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("    %zu missions in %zu groups, loaded in %.0f ms\n", c.Count(), c.groups.size(), ms);
-    SC_EXPECT(c.Count() == 16 + 6 + 7 + 1 && c.groups.size() == 5);  // + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
+    SC_EXPECT(c.Count() == 1 + 16 + 6 + 7 + 1 && c.groups.size() == 6);  // the tutorial, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
     for (const MissionGroup& g : c.groups) {
         SC_EXPECT(!g.label.empty() && !g.notes.empty());
         for (const MissionDef& m : g.missions) {
@@ -90,7 +90,7 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
         if (!listed) std::printf("    not in the menu: scenarios/%s\n", name.c_str());
         SC_EXPECT(listed);
     }
-    SC_EXPECT(files == 18 + 6 + 7 + 1);  // + ranges and history, + data/scenarios/air_war_*.json, + the test range
+    SC_EXPECT(files == 1 + 18 + 6 + 7 + 1);  // the tutorial, + ranges and history, + data/scenarios/air_war_*.json, + the test range
 }
 
 SC_TEST("missions: a mission that would not start is refused, naming its place in the list") {
@@ -105,4 +105,21 @@ SC_TEST("missions: a mission that would not start is refused, naming its place i
     SC_EXPECT(Refused(head + R"({"file": "scenarios/osa_practice.json", "title": "x"}, {"file": "scenarios/osa_practice.json", "title": "y"})" + tail,
                       "listed twice"));
     SC_EXPECT(Refused(R"({"catalog_id": "t", "groups": []})", "groups: required"));
+}
+
+SC_TEST("missions: the tutorial comes first, with its guide, starting outside on the test range's map") {
+    MissionCatalog c;
+    SC_EXPECT(LoadMissionCatalog(kData, c));
+    SC_EXPECT(!c.groups.empty() && c.groups.front().id == "tutorial");
+    const MissionDef* t = c.Find("tutorial_first_shoot");
+    SC_EXPECT(t != nullptr && t->group == "tutorial");
+    if (t != nullptr) {
+        SC_EXPECT(t->tutorial == "tutorials/first_shoot.json" && t->start == "outside");
+        SC_EXPECT(t->level == "/Game/Maps/KesmarkRange");
+    }
+    // A guide written for another scenario, and a start that is no seat, are refused.
+    const std::string entry = "{\"catalog_id\": \"x\", \"groups\": [{\"id\": \"g\", \"label\": \"G\", \"missions\": [";
+    SC_EXPECT(Refused(entry + "{\"file\": \"scenarios/osa_practice.json\", \"title\": \"T\", \"tutorial\": \"tutorials/first_shoot.json\"}]}]}",
+                      "is written for scenarios/tutorial_first_shoot.json"));
+    SC_EXPECT(Refused(entry + "{\"file\": \"scenarios/osa_practice.json\", \"title\": \"T\", \"start\": \"gunner\"}]}]}", "'gunner' is not"));
 }

@@ -11,6 +11,7 @@ class USimCabinComponent;
 class USimCrewBodiesComponent;
 class USimCrewVoiceComponent;
 class USimPu12MastComponent;
+class USimViewComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
@@ -61,6 +62,8 @@ struct FSimCabinTourView
  * right mouse drag orbits the camera. C enters the 3D cabin (USimCabinComponent): mouse looks around, Tab
  * changes seat, left/right click works switches, selectors, keys, covers and buttons, drag or scroll turns hand
  * wheels. Kinematic for now: swap in Chaos Vehicles once there is a real vehicle mesh with wheel bones.
+ *
+ * The camera views (F1-F11, as in DCS) and the time keys (Ctrl/Alt/Shift+Z) are its USimViewComponent's.
  */
 UCLASS(Blueprintable)
 class SAM3D_API ASimOsaVehicle : public APawn
@@ -162,6 +165,14 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetCabinStationLabel() const { return StationLabel; }
+
+	/** The next seat of the cabin (Tab, or F1 again). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void NextStation();
+
+	/** The camera views (F1-F11) and the time keys. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Views")
+	USimViewComponent* GetViews() const { return Views; }
 
 	// ---- The crew (phase 8, docs/crew/): H the training overlay, O the crew menu (orders at the commander's seat,
 	// reports elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back.
@@ -314,6 +325,10 @@ protected:
 	/** The crew's voices: their callouts on the intercom and the battery net (roadmap 8.10). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USimCrewVoiceComponent> CrewVoice;
+
+	/** The camera views on the F keys (docs/PLAYING.md). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimViewComponent> Views;
 
 	/** First-person camera at the current station's eye point. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")

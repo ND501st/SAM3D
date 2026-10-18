@@ -27,6 +27,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. Also our side's chain of command, its places and the means of signal (`chain_pannonia.json`, `places_pannonia.json`, `signal_means.json`; `simcore/command/`). |
 | `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
 | `data/air_war/` | The enemy air command: the fictional theatre, the four adversaries (rebels, neutral neighbour, Warsaw Pact, NATO) with doctrine, intelligence, politics, aircraft, squadrons and officers, and the quirk catalogue. Balance numbers in `data/gameplay/air_war.json`. |
+| `data/tutorials/` | Tutorial guides (`simcore/tutorial.hpp`): steps with what to do and the conditions that finish them, shown over a mission named in `missions.json` (`"tutorial"`). See `docs/PLAYING.md`. |
 | `data/scenery/` | Presentation data: the ultra-basic models of every asset (`basic_models.json`: archetype, size, colour per type; the air war's aircraft ids). Placeholders until real models exist. |
 | `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. |
 | `data/weather/` | Weather presets a scenario names (`"weather"`): winds, cloud layers, the air (`simcore/weather.hpp`). |
@@ -52,6 +53,9 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign as a page: the enemy's mind beside what our side learned
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
+
+# Play the game (docs/PLAYING.md): the missions menu, or straight into the tutorial
+.\tools\play.ps1 [-Tutorial] [-Build]
 
 # Python prototype and tools
 python -m pytest prototype tools -q

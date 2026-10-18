@@ -118,7 +118,10 @@ its done-when criteria is `docs/crew/09_IMPLEMENTATION_PLAN.md`.
 **The way in done 18 Oct 2026:** the game opens on a missions menu (`data/scenarios/missions.json`,
 `simcore/missions.hpp`, Unreal `ASimMissionMenuHUD`): every mission with its scenario's description, started in the
 vehicle and seat the player picks (the commander's: in command; any other: in the crew); Esc in a mission pauses it
-with restart, the missions and quit, and shows the debrief when it ends (`unreal/README.md`). Left for M2: a person
+with restart, the missions and quit, and shows the debrief when it ends (`unreal/README.md`). **The first playable test
+done 19 Oct 2026** (`docs/PLAYING.md`, `tools/play.ps1 -Tutorial`): a tutorial mission first in the menu with a guide on
+the screen (`data/tutorials/`, `simcore/tutorial.hpp`; played through headless in `test_tutorial.cpp`), DCS-style camera
+views on F1-F11 (`USimViewComponent`), time compression on Ctrl/Alt/Shift+Z, every key on G. Left for M2: a person
 playing them through.
 
 ## Phase 9 - Threats
