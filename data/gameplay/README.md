@@ -8,6 +8,11 @@ to arrive, and the chance of a hit.
 group's `source`; those only decide when a lamp lights (e.g. the zone the SAM Simulator manual gives). Everything
 else is there to make the game play well, and can be changed freely.
 
+**Anti-radiation missiles** (the optional `"arm"` group, roadmap E6): how an ARM fired at this vehicle comes out (its hit
+chance, how far the vehicle must have moved, how close a decoy must be to draw it), its echo, and the crew's side of the
+drill (the closing speed that makes an echo an ARM, how long the radars stay off, how much earlier our own missile must
+arrive to be guided in first). A gameplay rule, not a seeker model (`docs/EM_ARCHITECTURE.md` §35).
+
 **Calibration targets (roadmap 6.7).** The NVA's published single-missile kill-probability ranges for the Osa-AK
 (`flak11`, `docs/research/OSA_RESEARCH_2026-10.md` §5) are the yardstick for `hit_chance`: manoeuvring targets
 0.55–0.85, strike aircraft at 10 m 0.12–0.55, helicopters at 10 m 0.07–0.12, cruise missiles at 10 m 0.12–0.38. They

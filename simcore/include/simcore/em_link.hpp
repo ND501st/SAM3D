@@ -150,6 +150,7 @@ public:
         int beam = -1;  // the search radar's elevation beam its last echo came in (-1 unknown)
         double snr_db = 0.0;  // the last echo's signal to noise and jamming (dB): how bright it paints
         bool no_range = false;  // angles only (the tracking radar on a jammer): range_m and position mean nothing
+        double closing_mps = 0.0;  // from the track's velocity: how fast it closes on the antenna
     };
 
     EmSensorLink(const GeoPoint& origin, const Terrain* terrain, unsigned seed, const EmLinkDef& def, const Vec3& unit_position)
@@ -505,7 +506,17 @@ public:
             if (beam >= 0 && static_cast<std::size_t>(beam) < d.emitter.beams.size()) {
                 el_tolerance_deg = std::max(el_tolerance_deg, RadToDeg(d.emitter.beams[static_cast<std::size_t>(beam)].height_rad));
             }
-            std::string id = ResolveTarget(t.Position(), true, claimed, el_tolerance_deg);
+            // The target it was matched to before keeps it while it is still within the gates (a missile leaving its
+            // launcher, aircraft in close formation: the label doesn't jump to the neighbour).
+            std::string id;
+            const auto prev = track_label_.find(t.id);
+            if (prev != track_label_.end() && std::find(claimed.begin(), claimed.end(), prev->second) == claimed.end() &&
+                ResolveTarget(t.Position(), true, Others(prev->second), el_tolerance_deg) == prev->second) {
+                id = prev->second;
+            } else {
+                id = ResolveTarget(t.Position(), true, claimed, el_tolerance_deg);
+            }
+            if (!id.empty()) track_label_[t.id] = id;
             const bool ghost = id.empty();
             // An echo standing still on the ground (the battery's own vehicles, its dummy positions) is ground clutter
             // to the operator, not a contact: he reports moving echoes and anything in the air.
@@ -520,6 +531,8 @@ public:
             c.iff = !ghost && t.iff_replies > 0 && world_.Time() - t.last_iff_s <= kIffHoldS;
             c.beam = BeamOfTrack(t.id);
             c.snr_db = t.last_snr_db;
+            const Vec3 rel = t.Position() - Antenna();
+            if (rel.LengthSquared() > 1.0) c.closing_mps = -Dot(t.Velocity(), rel.Normalized());
             out.push_back(c);
         }
         // A second track on a target already shown (the tracker split it when the target manoeuvred: a pull-up, a jink)
@@ -888,6 +901,14 @@ private:
     // radar, by range): the nearest target inside the gates that no better track has claimed. It reads the targets'
     // true positions, because the game needs to know which target a lock or a launch is about; the crew's picture
     // only gets the label, never the truth, and a track with no target near it stays a ghost.
+    // Every scenario target but one (ResolveTarget then only considers that one).
+    std::vector<std::string> Others(const std::string& keep) const {
+        std::vector<std::string> out;
+        for (const auto& t : targets_) {
+            if (t.first != keep) out.push_back(t.first);
+        }
+        return out;
+    }
     std::string ResolveTarget(const Vec3& track_position, bool use_range, const std::vector<std::string>& claimed,
                               double el_tolerance_deg = kResolveElDeg) const {
         const Vec3 a = Antenna();
@@ -1011,6 +1032,9 @@ private:
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
     std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
     std::map<std::string, bool> jam_switch_;             // target id -> the instructor's jammer switch
+    // Search track id -> the target it was last matched to: the referee's bookkeeping for the labels (SearchPicture is
+    // const to the crew's side; this only keeps a label from jumping between neighbours).
+    mutable std::map<int, std::string> track_label_;
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {

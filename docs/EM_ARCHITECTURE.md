@@ -616,5 +616,47 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
   reach, the commander keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
   the antenna turning); it stays on once one is near. Drills marked `situational` are never pulled into a plan by the
   drill master.
-* **Not modelled here:** anti-radiation missiles and the drills against them.
+* Anti-radiation missiles and the drills against them: §35.
 * Tests: `test_em_threats.cpp`.
+
+## 35. Anti-radiation missiles and the drill (roadmap E6, 18 October 2026)
+
+A gameplay rule in the runner (`ScenarioRunner::UpdateArms`), **not a seeker model**: what an ARM comes to is decided
+at its arrival from what our emitters did, with game values (`gameplay/osa_ak.json` `"arm"`). The drill it tests is
+the sources': stop any emission and change position (ePap, `samsim_thread`); the search radar on briefly, the radar off
+(`video_osa`, unverified).
+
+* **Who fires.** A target with `"arms": {"count", "range_m", "speed_mps", "memory_s"}` fires one ARM (at most every
+  `fire_interval_s`) at the nearest of our emitters that radiates within its range and that it can see: the vehicle's
+  radars (search or tracking transmitter on) or a decoy emitter (own_unit.em.decoys, a prepared position's dummies; on
+  by their modes). The ARM is a scenario target of its own (`arm-<n>`, class `arm`, a small echo) flying at where the
+  emitter was; the boards don't plot it and the battery's launchers don't take it.
+* **What it comes to**, at its arrival:
+  * the emitter radiating, or silent for less than the ARM's memory (0: none), still holds it; else another emitter
+    radiating within `reacquire_m` of its aim draws it (a decoy that came on as the radar went off); else it **loses
+    it** ("lost");
+  * on a decoy: **decoyed**, the decoy destroyed;
+  * on our radar: radiating now, it homes on it; silent but remembered, it flies at the remembered spot and **misses a
+    vehicle that moved** more than `moved_m`; else a draw against `hit_chance`: a **hit** puts the vehicle's radars out
+    of action and ends the scenario.
+  `ScenarioRunner::Arms()` counts each outcome (`ArmsFired()`, `UnitHitByArm()`, `ArmSilence()`).
+* **What the crew knows** comes by instruments and voice only. The senior operator calls an echo whose measured closing
+  speed (the search radar's track) is beyond `alarm_closing_mps` ("Пуск ПРР! Азимут..., дальность...!"); it is then not
+  a target to take. The deputy, watching the launcher on the TV, sees the missile come off it ("С цели пуск ракеты!").
+  The battery command post's air observers (optics, 8-25 km) call launches on the battery net ("Всем! Пуск ПРР...!");
+  the call goes over the post's radio link, so a VHF barrage can lose it.
+* **The drill** (doctrine `arm_drill`, on by default): the commander, having heard one of those calls, has both
+  transmitters off ("ПРР! Излучение выключить!": `hv_off`, `ssc_tx_off`) and calls off the engagement drills under way;
+  if the missile he is guiding will arrive `margin_s` before the ARM by the reported range and closing speed, he guides
+  it in first. The radars stay off for `quiet_s` (the crew is then silent: the TV and the designations, the 9.2 EMCON
+  engagement); then "Излучение включить!".
+* **Shoot and scoot** (doctrine `relocate`: `after_launch` or `after_arm`, with `own_unit.alternate_positions` and a
+  battery that drives the vehicle): the crew stows ("Смена позиции!"), the battery's new order `relocate` drives the
+  vehicle along its prepared route at march speed to the next alternate position, and the readiness drills set it up
+  there ("На запасной позиции!").
+* **Label continuity** (`EmSensorLink::SearchPicture`): a search track keeps the target it was matched to while that
+  target is still within the gates, so a missile leaving its launcher (or aircraft in close formation) doesn't take its
+  neighbour's label.
+* Scenarios: `osa_sead_hunters.json` (a single vehicle: ARMs without and with memory, a decoy emitter, bursts),
+  `osa_sead_scoot.json` (the battery: the post's warnings, a VHF barrage on the nets, shoot and scoot). Tests:
+  `test_em_arm.cpp`.

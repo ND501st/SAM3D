@@ -109,6 +109,17 @@ a `ProcedureTracker` so the debrief records early and out-of-order actions.
 | Research review | Done (PR #8): research file, briefing, re-plan; the user's video transcript analysed (Korovin's «Техника и вооружение» series added as a tier-1 source) |
 | **6 Accuracy pass** | **6.1 done** (branch `feature/five-man-crew`): five seats, one seat per procedure, aiming split per wheel, red start-position dots. Next: 6.2 |
 
+### Anti-radiation missiles and the drill (18 October 2026)
+
+E6 finished (`docs/EM_ARCHITECTURE.md` §35): hunters fire ARMs at whatever radiates (our radars, decoy emitters); a
+gameplay rule decides what each comes to (lost past its memory, decoyed, missed a vehicle that moved, hit). The crew
+learns of them only by instruments and voice (the senior operator's call by the measured closing speed, the deputy's TV,
+the post's observers on the battery net, which a VHF barrage can silence) and runs the drill: both transmitters off and
+kept off, the engagement drills called off, shoot and scoot to alternate positions (the battery's new `relocate`
+order). Missions `osa_sead_hunters.json`, `osa_sead_scoot.json`; tests `test_em_arm.cpp`. Fixed on the way: a search
+track's label jumping to a missile leaving its launcher, a launch drill waiting for ever once the radars went off. The
+enemy air command's raids will fire their ARMs through this (its MissionBridge drops its own list).
+
 ### The trainer's instructor (18 October 2026)
 
 Roadmap 10.3: the 9Ф632 trainer's instructor seat (`flak11`, ePap). `simcore/instructor.hpp` and

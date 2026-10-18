@@ -187,7 +187,7 @@ listed are the defaults of §2.**
 | V17 | C2 lost (PU-12 destroyed, radio jammed) | No designations | Switch source; autonomous search | Late detection |
 | V18 | Equipment faults | A subsystem out | Channel fault → КАНАЛЫ to the good channel, single missiles (`voenizdat_osa_1991`); power fault → generator | Reduced capability |
 | V19 | Out of missiles / fuel | L | TZM / fuel truck (`battery.hpp`) | Down time |
-| V20 | Under threat of strike (anti-radiation weapons, a strike on the position) | Radiating is dangerous | Short radiation; relocate after firing (`video_osa`); **the threat itself is not modelled** | – |
+| V20 | Under threat of strike (anti-radiation weapons, a strike on the position) | Radiating is dangerous | Short radiation (`search_bursts`); an ARM called by the senior operator, the deputy or the post's observers: both transmitters off (`order_arm_silence`) and kept off; relocate after firing or after the ARM (`order_relocate`, doctrine `relocate`) (`video_osa`, ePap) | `osa_sead_hunters`, `osa_sead_scoot` |
 
 ## 5. The player in a seat
 

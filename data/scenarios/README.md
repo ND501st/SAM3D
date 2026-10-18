@@ -44,7 +44,9 @@ the readiness state they start in (march, deployed, powered).
   "environment": { "visibility_km": 40, "daylight": true },  // optional: the air and the light for the TV sight (em/optical.hpp)
   "doctrine": { "tv_check": true,                     // optional (roadmap E6): warned of decoys, look on the TV before a launch
                 "search_bursts": { "on_s": 4, "off_s": 16 },  // emission discipline: the search radar in bursts while nothing is near
-                "salvo": 2 },                         // missiles per target at once (roadmap 10.1): 2 sends the second before the first arrives
+                "salvo": 2,                           // missiles per target at once (roadmap 10.1): 2 sends the second before the first arrives
+                "arm_drill": true,                    // the drill against ARMs (default true; E6, docs/EM_ARCHITECTURE.md §35)
+                "relocate": "after_launch" },         // shoot and scoot: "never" (default), "after_launch", "after_arm"; needs own_unit.alternate_positions
   "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
@@ -206,6 +208,14 @@ each change. The 24 h is the only figure a source gives (`video_osa`, unverified
 post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are
 silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
 `"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/71 at 45 km, 00-71").
+
+A target can carry anti-radiation missiles (roadmap E6): `"arms": { "count": 2, "range_m": 24000, "speed_mps": 600,
+"memory_s": 20 }` (memory 0: none). It fires at the nearest of our emitters radiating within range (the vehicle's radars,
+a decoy emitter); the ARM becomes a target `arm-<n>`; what it comes to is a gameplay rule (`docs/EM_ARCHITECTURE.md` §35,
+game values in the tuning's `"arm"` group). `own_unit.alternate_positions` (a list of positions) are where shoot and scoot
+takes the vehicle; they need a `battery` block with `"drive_own": true`. A battery order `relocate` sends one vehicle
+(`"vehicle"`, "" for ours) to its new position: `{ "battery_order": "relocate", "vehicle": "22", "points": [ {...} ] }`.
+`osa_sead_hunters.json` and `osa_sead_scoot.json` are the SEAD missions.
 
 A trigger can give the trainer's instructor's orders (roadmap 10.3, `simcore/instructor.hpp`): `{ "instructor": "turn",
 "target": "t1", "to": 270 }`. Orders: `take`, `release`, `turn` (`to`: the true heading, degrees), `height` (`to`: metres

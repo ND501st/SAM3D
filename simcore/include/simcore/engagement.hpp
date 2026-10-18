@@ -149,6 +149,17 @@ struct EngagementTuning {
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
+    // Anti-radiation missiles fired at this vehicle (roadmap E6; the optional "arm" group). Game values: how an ARM's
+    // arrival is decided (ScenarioRunner), its echo, and the crew's side of the drill.
+    double arm_hit_chance = 0.45;       // the emitter still radiating (or within the ARM's memory) and the vehicle there
+    double arm_moved_m = 150.0;         // the vehicle this far from where it radiated when the ARM was fired: a miss
+    double arm_reacquire_m = 2000.0;    // its emitter silent, an ARM turns onto another radiating one this close to its aim
+    double arm_fire_interval_s = 10.0;  // one ARM per aircraft at most this often
+    double arm_rcs_m2 = 0.1;            // the ARM's echo on our radars
+    double arm_size_m = 0.4;            // its critical dimension for the TV
+    double arm_alarm_closing_mps = 400.0;  // an echo closing faster than this is called an ARM (no aircraft closes so fast)
+    double arm_quiet_s = 40.0;          // the radars stay off this long after the last ARM was called
+    double arm_margin_s = 6.0;          // our missile is guided on if it arrives this much before the ARM would
 
     double MethodFactor(const char* method) const {
         const auto it = method_factor.find(method);
@@ -242,7 +253,7 @@ namespace detail {
 class TuningLoader : public ConsoleLoader {
 public:
     bool LoadTuning(const json::Value& root, EngagementTuning& t) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome"}) ||
+        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome", "arm"}) ||
             !RequireString(root, "", "system_id", t.system_id)) {
             return false;
         }
@@ -268,6 +279,18 @@ public:
             }
             if (t.tv_error_factor_min > 1.0) return Fail("tv.error_factor_min", "must be from 0 to 1");
             t.has_tv_manual = true;
+        }
+        if (root.Find("arm") != nullptr) {
+            if (!Group(root, "arm", {"hit_chance", "moved_m", "reacquire_m", "fire_interval_s", "rcs_m2", "size_m", "alarm_closing_mps",
+                                     "quiet_s", "margin_s"}, g) ||
+                !Num(*g, "arm", "hit_chance", t.arm_hit_chance, 0.0) || !Num(*g, "arm", "moved_m", t.arm_moved_m, 0.0) ||
+                !Num(*g, "arm", "reacquire_m", t.arm_reacquire_m, 0.0) || !Num(*g, "arm", "fire_interval_s", t.arm_fire_interval_s, 0.0) ||
+                !Num(*g, "arm", "rcs_m2", t.arm_rcs_m2, 1e-6) || !Num(*g, "arm", "size_m", t.arm_size_m, 0.01) ||
+                !Num(*g, "arm", "alarm_closing_mps", t.arm_alarm_closing_mps, 0.0) || !Num(*g, "arm", "quiet_s", t.arm_quiet_s, 0.0) ||
+                !Num(*g, "arm", "margin_s", t.arm_margin_s, 0.0)) {
+                return false;
+            }
+            if (t.arm_hit_chance > 1.0) return Fail("arm.hit_chance", "must be from 0 to 1");
         }
         if (root.Find("methods") != nullptr) {
             if (!Group(root, "methods", {"low_target_elevation_deg", "gorka_max_agl_m"}, g) ||
@@ -527,6 +550,7 @@ struct Contact {
     int beam = -1;               // search echoes with the EM layer: the elevation beam it came in (0 = I ...), else -1
     double snr_db = kUnknownSnrDb;  // search echoes with the EM layer: signal to noise and jamming (dB); unknown otherwise
     static constexpr double kUnknownSnrDb = -1000.0;
+    double closing_mps = 0.0;  // search echoes: how fast it closes, as the radar measures it (its track)
 };
 
 // A noise jammer's strobe on the search scope: its direction (crew frame, like the echoes) and strength (J/N, dB).
@@ -557,6 +581,7 @@ struct EngagementEvent {
     double range_m = 0.0;
     TrackMethod method = TrackMethod::None;
     std::string detail;
+    double closing_mps = 0.0;  // Contact: how fast the echo closes, as the search radar measures it (its track)
 };
 
 // Which aiming seats have an NPC in them. A seat the player sits in (or nobody) is left alone.
@@ -801,6 +826,14 @@ public:
             if (!s.done) return true;
         }
         return false;
+    }
+    // How long until the last missile in the air arrives (0: none in the air).
+    double ShotsTimeLeft(double t) const {
+        double left = 0.0;
+        for (const Shot& s : shots_) {
+            if (!s.done) left = std::max(left, s.launch_t + s.flight_time_s - t);
+        }
+        return left;
     }
     // Missiles in the air at one target (a salvo's first, before the second goes).
     int ShotsInFlightAt(const std::string& target_id) const {
@@ -1080,12 +1113,12 @@ private:
                 Contact blip{c.target_id, c.range_m, az, c.el_deg};
                 blip.beam = c.beam;
                 blip.snr_db = c.snr_db;
+                blip.closing_mps = c.closing_mps;
                 picture_.push_back(blip);
                 if (seen_by_search_.insert(c.target_id).second) {
                     events_.push_back({EngagementEvent::Kind::Contact, t, c.target_id, az, c.range_m, TrackMethod::None, std::string()});
-                    char detail[96];
-                    std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", c.range_m / 1000.0, az);
-                    log.Record({t, DebriefEntry::Kind::Scenario, "SOC", c.target_id, detail});
+                    events_.back().closing_mps = c.closing_mps;
+                    log.Record({t, DebriefEntry::Kind::Scenario, "SOC", c.target_id, ContactText(c.range_m, az, c.closing_mps)});
                 }
             }
             for (const EmSensorLink::Strobe& st : em_->SearchStrobes()) {
@@ -1098,13 +1131,25 @@ private:
             if (!g.alive || !g.los || g.range_m < window.first || g.range_m > window.second) continue;
             if (mti ? g.range_m > d.mti_max_range_m : g.agl_m < tuning_.clutter_altitude_m) continue;
             picture_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
+            picture_.back().closing_mps = g.closing_mps;
             if (seen_by_search_.insert(kv.first).second) {
                 events_.push_back({EngagementEvent::Kind::Contact, t, kv.first, g.az_deg, g.range_m, TrackMethod::None, std::string()});
-                char detail[96];
-                std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", g.range_m / 1000.0, g.az_deg);
-                log.Record({t, DebriefEntry::Kind::Scenario, "SOC", kv.first, detail});
+                events_.back().closing_mps = g.closing_mps;
+                log.Record({t, DebriefEntry::Kind::Scenario, "SOC", kv.first, ContactText(g.range_m, g.az_deg, g.closing_mps)});
             }
         }
+    }
+
+    // The debrief's line for a new echo; one closing faster than any aircraft says so.
+    std::string ContactText(double range_m, double az_deg, double closing_mps) const {
+        char detail[128];
+        if (closing_mps > tuning_.arm_alarm_closing_mps) {
+            std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg, closing at %.0f m/s", range_m / 1000.0, az_deg,
+                          closing_mps);
+        } else {
+            std::snprintf(detail, sizeof(detail), "contact %.1f km, azimuth %.0f deg", range_m / 1000.0, az_deg);
+        }
+        return detail;
     }
 
     static double Toward(double from, double to, double max_step) {

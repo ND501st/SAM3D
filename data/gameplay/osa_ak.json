@@ -58,6 +58,13 @@
     "notes": "Game pacing only: the delay between launch and result is range / average_speed. max_flight_time_s follows the manual's 24–27 s (p27)."
   },
 
+  "arm": {
+    "hit_chance": 0.45, "moved_m": 150, "reacquire_m": 2000, "fire_interval_s": 10, "rcs_m2": 0.1, "size_m": 0.4,
+    "alarm_closing_mps": 400, "quiet_s": 40, "margin_s": 6,
+    "source": "Game values (sam3d), not data of any weapon: the gameplay rule for anti-radiation missiles fired at this vehicle (roadmap E6, simcore/scenario_runner.hpp). The drill they test is samsim_thread (ePap: stop any emission and change position) and video_osa (unverified).",
+    "notes": "hit_chance: the emitter still radiating, or silent for less than the ARM's memory (the target's arms.memory_s), and the vehicle where it radiated (0.45 is the air war's arm_pk). moved_m: farther than this from where it radiated when the ARM was fired, the vehicle is missed. reacquire_m: its emitter silent past its memory, an ARM turns onto another radiating emitter (a decoy) this close to its aim. fire_interval_s: one ARM per aircraft at most this often. rcs_m2 and size_m: the ARM's echo and its size for the TV. alarm_closing_mps: the senior operator calls an echo closing faster than this an ARM. quiet_s: the radars stay off this long after the call. margin_s: the missile being guided is guided in if it arrives this much before the ARM would."
+  },
+
   "outcome": {
     "hit_chance": { "default": 0.6, "drone": 0.8, "helicopter": 0.65, "fighter": 0.55, "bomber": 0.7 },
     "low_altitude": {

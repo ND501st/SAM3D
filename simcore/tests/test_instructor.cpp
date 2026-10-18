@@ -3,6 +3,7 @@
 // back to their routes, and enters new targets into the picture; a scenario can script him. Target numbers are
 // placeholders.
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <fstream>
 #include <memory>
@@ -53,11 +54,23 @@ void Run(ScenarioRunner& r, double seconds) {
     while (r.Time() < until - 1e-9 && !r.Finished()) r.Step(0.1);
 }
 
-const ScenarioRunner::InstructorTrack* Track(const std::vector<ScenarioRunner::InstructorTrack>& picture, const std::string& id) {
+// A copy of the target's line of the instructor's picture (the picture is a temporary); found false if it isn't there.
+struct Seen {
+    bool found = false;
+    ScenarioRunner::InstructorTrack t;
+    const ScenarioRunner::InstructorTrack* operator->() const { return &t; }
+    bool operator!=(std::nullptr_t) const { return found; }
+    bool operator==(std::nullptr_t) const { return !found; }
+};
+Seen Track(const std::vector<ScenarioRunner::InstructorTrack>& picture, const std::string& id) {
+    Seen out;
     for (const auto& t : picture) {
-        if (t.id == id) return &t;
+        if (t.id == id) {
+            out.found = true;
+            out.t = t;
+        }
     }
-    return nullptr;
+    return out;
 }
 
 InstructorOrder Order(InstructorOrder::Kind k, const std::string& target, double value = 0.0) {
@@ -95,9 +108,9 @@ SC_TEST("instructor: he takes a target and turns it; it turns at its own rate; l
     SC_EXPECT(r->Instruct(Order(InstructorOrder::Kind::Turn, "k1", 90.0), &why));
     SC_EXPECT(r->InstructorTargets().size() == 1);
     Run(*r, 5.0);  // 6 deg/s: half-way round after 5 s of the 15
-    const auto* mid = Track(r->InstructorPicture(), "k1");
+    const Seen mid = Track(r->InstructorPicture(), "k1");
     Run(*r, 25.0);
-    const auto* done = Track(r->InstructorPicture(), "k1");
+    const Seen done = Track(r->InstructorPicture(), "k1");
     SC_EXPECT(mid != nullptr && done != nullptr);
     if (mid == nullptr || done == nullptr) return;
     std::printf("    heading %.0f deg after 5 s, %.0f deg after 30 s\n", mid->heading_deg, done->heading_deg);
@@ -109,7 +122,7 @@ SC_TEST("instructor: he takes a target and turns it; it turns at its own rate; l
     SC_EXPECT(r->Instruct(Order(InstructorOrder::Kind::Release, "k1"), &why));
     SC_EXPECT(r->InstructorTargets().empty());
     Run(*r, 40.0);
-    const auto* back = Track(r->InstructorPicture(), "k1");
+    const Seen back = Track(r->InstructorPicture(), "k1");
     SC_EXPECT(back != nullptr && !back->held && back->heading_deg > 150.0 && back->heading_deg < 230.0);
     SC_EXPECT(!r->Instruct(Order(InstructorOrder::Kind::Release, "k1"), &why) && why.find("not held") != std::string::npos);
 }
@@ -125,9 +138,9 @@ SC_TEST("instructor: sent down it descends smoothly to his height over the groun
     SC_EXPECT(why.find("80 to 700") != std::string::npos);
     SC_EXPECT(r->Instruct(Order(InstructorOrder::Kind::Speed, "k1", 180.0), &why));
     Run(*r, 20.0);
-    const auto* going = Track(r->InstructorPicture(), "k1");
+    const Seen going = Track(r->InstructorPicture(), "k1");
     Run(*r, 100.0);
-    const auto* there = Track(r->InstructorPicture(), "k1");
+    const Seen there = Track(r->InstructorPicture(), "k1");
     SC_EXPECT(going != nullptr && there != nullptr);
     if (going == nullptr || there == nullptr) return;
     std::printf("    %.0f m up after 20 s, %.0f m after 120 s; %.0f m/s\n", going->agl_m, there->agl_m, there->speed_mps);
@@ -172,7 +185,7 @@ SC_TEST("instructor: an ordered manoeuvre is a jink, and can be ordered again on
     SC_EXPECT(r->Instruct(Order(InstructorOrder::Kind::Evade, "k1"), &why));
     SC_EXPECT(!r->Instruct(Order(InstructorOrder::Kind::Evade, "k1"), &why) && why.find("manoeuvring already") != std::string::npos);
     Run(*r, 20.0);  // a 15 s jink, then back on his heading (south, as it was)
-    const auto* t = Track(r->InstructorPicture(), "k1");
+    const Seen t = Track(r->InstructorPicture(), "k1");
     SC_EXPECT(t != nullptr && std::fabs(t->heading_deg - 180.0) < 2.0);
     SC_EXPECT(r->Instruct(Order(InstructorOrder::Kind::Evade, "k1"), &why));
     SC_EXPECT(r->Debrief().find("makes it manoeuvre: jinks (hard turns left and right)") != std::string::npos);
@@ -183,7 +196,7 @@ SC_TEST("instructor: his switch turns a target's noise pod off and on; one witho
     SC_EXPECT(r != nullptr);
     if (r == nullptr) return;
     Run(*r, 310.0);  // the first striker is in the air, its pod on from the start
-    const auto* s1 = Track(r->InstructorPicture(), "s1");
+    Seen s1 = Track(r->InstructorPicture(), "s1");
     SC_EXPECT(s1 != nullptr && s1->has_jammer && s1->jamming);
     std::string why;
     SC_EXPECT(r->Instruct(Order(InstructorOrder::Kind::Jam, "s1", 0.0), &why));

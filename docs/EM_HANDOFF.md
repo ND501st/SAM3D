@@ -217,8 +217,8 @@ Anti-radiation missiles are not modelled in this track.
 * **E4**: done; the saturated voice net measured in `test_c2_sources.cpp`.
 * **E5**: the TV sight as a passive optical sensor, the command link and the missile's responders as emitters, a
   target's RWR (§33).
-* **E6**: decoy drones the TV unmasks, a stand-off jammer escort, emission discipline (§34). No anti-radiation
-  missiles.
+* **E6**: decoy drones the TV unmasks, a stand-off jammer escort, emission discipline (§34); anti-radiation missiles
+  as a gameplay rule and the drill against them, shoot and scoot, the post's warnings on the battery net (§35).
 * **E1**: the command link and the responder entered (estimates as marked); the other open data items still lack a
   registered source.
 

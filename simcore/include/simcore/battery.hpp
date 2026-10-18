@@ -94,7 +94,7 @@ struct BatteryVehicleDef {
 };
 
 struct BatteryOrder {
-    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon };
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon, Relocate };
     Kind kind = Kind::March;
     double at_s = 0.0;
     std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
@@ -103,7 +103,7 @@ struct BatteryOrder {
     bool bounding = false;    // CombatFormation: the pairs move one at a time, the others staying deployed
     bool roving = false;      // Ambush: the pairs move on to the next point every ambush_dwell_s
     double width_m = 100.0;   // RiverCrossing: the river's width
-    std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
+    std::string vehicle;      // Reload, Refuel: the vehicle served; Relocate: the vehicle that moves ("" : the player's)
     bool radiate = false;     // Emcon: the radars may radiate again (false: radiation off, the battery fights silent)
 };
 
@@ -120,6 +120,7 @@ inline const char* BatteryOrderName(BatteryOrder::Kind k) {
         case BatteryOrder::Kind::Reload: return "reload";
         case BatteryOrder::Kind::Refuel: return "refuel";
         case BatteryOrder::Kind::Emcon: return "emcon";
+        case BatteryOrder::Kind::Relocate: return "relocate";
     }
     return "?";
 }
@@ -128,7 +129,7 @@ inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
     for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
                                  BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume, BatteryOrder::Kind::Ambush,
                                  BatteryOrder::Kind::RiverCrossing, BatteryOrder::Kind::FarBankHeld, BatteryOrder::Kind::Reload,
-                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon}) {
+                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon, BatteryOrder::Kind::Relocate}) {
         if (s == BatteryOrderName(k)) {
             out = k;
             return true;
@@ -222,6 +223,9 @@ public:
         int crossing_stage = 0;  // 0 waiting on the near side, 1 to the water's edge, 2 in the water, 3 to the far slot
         bool afloat = false;
         bool waiting = false;    // bounding or crossing: holding until its pair's turn
+        // Shoot and scoot (roadmap E6): driving cross-country to its alternate position, then setting up there.
+        bool relocating = false;
+        bool settling = false;
     };
 
     struct Event {
@@ -361,6 +365,17 @@ public:
             case BatteryOrder::Kind::Reload:
                 RequestService(o.vehicle, Service::Reload, t);
                 break;
+            case BatteryOrder::Kind::Relocate: {  // one vehicle to its alternate position; the rest stay as they are
+                Vehicle* v = o.vehicle.empty() ? OwnMutable() : FindMutable(o.vehicle);
+                if (v == nullptr || o.route.empty()) return;
+                v->goal = o.route.front();
+                v->relocating = true;
+                v->settling = false;
+                v->deployed = false;
+                v->deploy_done_s = -1.0;
+                events_.push_back({t, v->def.callsign, "to the alternate position, " + Fmt(Dist(v->position, v->goal)) + " m"});
+                return;
+            }
             case BatteryOrder::Kind::Refuel:
                 RequestService(o.vehicle, Service::Refuel, t);
                 break;
@@ -423,6 +438,10 @@ public:
                                                                 : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
+            if (v.relocating || v.settling) {  // a vehicle changing position goes on whatever the battery does
+                StepRelocate(v, t, dt);
+                continue;
+            }
             if (!v.serving.empty()) {  // a service run goes on whatever the battery does
                 StepService(v, t, dt);
                 continue;
@@ -447,6 +466,12 @@ public:
                 }
             }
         }
+    }
+
+    // Is the vehicle ("" : the player's) on its way to, or setting up in, its alternate position?
+    bool Relocating(const std::string& vehicle) const {
+        const Vehicle* v = vehicle.empty() ? Own() : Find(vehicle);
+        return v != nullptr && (v->relocating || v->settling);
     }
 
     // ---- Service runs: a TZM (reload; it carries fuel too) or a fuel truck goes alongside a vehicle ("" : the player's).
@@ -718,6 +743,38 @@ private:
         v.alongside = false;
         events_.push_back({t, v.def.callsign, why + ": going back"});
     }
+    Vehicle* FindMutable(const std::string& id) {
+        for (Vehicle& v : vehicles_)
+            if (v.def.id == id) return &v;
+        return nullptr;
+    }
+    Vehicle* OwnMutable() {
+        for (Vehicle& v : vehicles_)
+            if (v.def.own) return &v;
+        return nullptr;
+    }
+
+    // Shoot and scoot: along the reconnoitred route to the prepared alternate position at march speed (sam3d: the
+    // routes between a battery's positions are prepared in advance), then set up there. The player's vehicle sets up by
+    // its crew's own drills (the runner); the others take deploy_s.
+    void StepRelocate(Vehicle& v, double t, double dt) {
+        if (v.relocating) {
+            Move(v, tactics_.march_speed_mps, dt, false);
+            if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) return;
+            v.relocating = false;
+            v.settling = true;
+            v.speed_mps = 0.0;
+            v.deploy_done_s = t + (v.def.own ? 0.0 : tactics_.deploy_s);
+            events_.push_back({t, v.def.callsign, "at the alternate position: setting up"});
+            return;
+        }
+        v.speed_mps = 0.0;
+        if (t < v.deploy_done_s) return;
+        v.settling = false;
+        v.deployed = true;
+        events_.push_back({t, v.def.callsign, "in its new position, deployed"});
+    }
+
     void StepService(Vehicle& v, double t, double dt) {
         const Vehicle* target = Find(v.serving);
         if (target == nullptr) {

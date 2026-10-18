@@ -16,7 +16,9 @@
           "vehicles": [ { "id": "osa", "label": "the Osa 21" }, { "id": "post", "label": "the PU-12M" } ] },
         { "file": "scenarios/osa_mission_march.json", "title": "Osa: march, raid, fight, march on" },
         { "file": "scenarios/osa_decoys.json", "title": "Osa: decoy drones, then the strike" },
-        { "file": "scenarios/osa_soj_strike.json", "title": "Osa: a strike under stand-off jamming" }
+        { "file": "scenarios/osa_soj_strike.json", "title": "Osa: a strike under stand-off jamming" },
+        { "file": "scenarios/osa_sead_hunters.json", "title": "Osa: SEAD hunters and anti-radiation missiles" },
+        { "file": "scenarios/osa_sead_scoot.json", "title": "The battery against SEAD: bursts, fire and move" }
       ]
     },
     {

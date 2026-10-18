@@ -94,7 +94,8 @@ the rules and the list in readable form.
 |---|---|---|---|---|
 | `order_reload` | Перезарядка! | Reload! | Vehicle de-energised; the TZM is called (`reload`) | sam3d; de-energised: `mon_2112_80` |
 | `order_refuel` | Заправка! | Refuel! | The fuel truck is called (`refuel`) | sam3d |
-| `order_relocate` | Смена позиции! | Change position! | `order_march`, then drive to the new position | sam3d |
+| `order_relocate` | Смена позиции! | Change position! | stow (as `order_march`), then the battery drives the vehicle to its next alternate position (shoot and scoot, doctrine `relocate`) | sam3d; ePap |
+| `order_arm_silence` | ПРР! Излучение выключить! | ARM! Radiation off! | `hv_off`, `ssc_tx_off`; the engagement drills under way called off; the radars kept off `arm.quiet_s` | sam3d; ePap, `video_osa` |
 | `order_source` | Перейти на {source}! | Switch to {source}! | `RequestC2Source` | sam3d |
 
 ### 3.5 Acknowledgements (any seat → whoever ordered)
@@ -167,3 +168,9 @@ Each NPC has a patience (`05`): how long it waits on another seat's condition be
 says `remind` naming the seat and the thing ("Оператор, приводы!"); after a second patience the commander gives
 `remind_order` by name. In training the same moment raises the overlay on the player's control (`08`). The debrief
 records every reminder against the seat that was waited for.
+
+**Anti-radiation missiles (roadmap E6, `docs/EM_ARCHITECTURE.md` §35).** Reports that start the drill: `arm_launch`
+(senior operator: "Пуск ПРР! Азимут {azimuth}, дальность {range_km}!", an echo closing faster than any aircraft),
+`launch_seen` (deputy commander: "С цели пуск ракеты!", seen on the TV), `battery_arm_warning` (the battery command post
+on the net: "Всем! Пуск ПРР, азимут {azimuth}!"); after a relocation the driver reports `in_new_position` ("На запасной
+позиции!").

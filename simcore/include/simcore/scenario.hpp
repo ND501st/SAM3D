@@ -46,6 +46,18 @@ struct ScenarioCrew {
     std::string skill;               // a tier of data/crew/skill_levels.json (docs/crew/05_SKILL.md); empty: none
 };
 
+// Anti-radiation missiles a target carries (roadmap E6): "arms": {"count", "range_m", "speed_mps", "memory_s"}. While
+// one of our emitters radiates within range_m it fires one at the nearest such emitter (at most one every few seconds).
+// The ARM flies at where the emitter was; at its arrival a gameplay rule decides (ScenarioRunner, outcome numbers in the
+// tuning's "arm" group): the emitter silent for longer than memory_s (0: no memory) loses it; the vehicle having moved
+// away from that point makes it miss; otherwise a hit chance. No seeker is modelled. PLACEHOLDER numbers per scenario.
+struct ArmLoadDef {
+    int count = 0;
+    double range_m = 25000.0;
+    double speed_mps = 600.0;
+    double memory_s = 20.0;
+};
+
 struct ScenarioTarget {
     std::string id;
     std::string name;
@@ -71,6 +83,9 @@ struct ScenarioTarget {
     // A decoy (roadmap E6): a drone whose echo is made to look like an aircraft's (radar reflectors). The radar can't
     // tell; the TV can, close enough to make out its type (em/optical.hpp), when the crew looks.
     bool decoy = false;
+    ArmLoadDef arms;  // its anti-radiation missiles ("arms"; none by default)
+    // An anti-radiation missile in flight (made by the runner when a target fires one): who fired it, where it aims.
+    std::string arm_of;
 };
 
 // How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
@@ -86,6 +101,15 @@ struct CrewDoctrineDef {
     // (3-5 s), before the first's result (korovin_tiv_2010; flak11: two missiles selected at ВНИМАНИЕ). 1: one, and
     // the second only after a miss.
     int salvo = 1;
+    // The drill against anti-radiation missiles (roadmap E6; ePap in samsim_thread: stop any emission and change
+    // position): told of an ARM, the commander has both transmitters off at once (unless the missile he is guiding will
+    // get there first), keeps them off for a while and fights by the TV and the designations meanwhile. False: a crew
+    // that doesn't know it (a contrast for training).
+    bool arm_drill = true;
+    // Shoot and scoot: after an ARM attack ("after_arm") or after each engagement ("after_launch") the crew stows and the
+    // battery drives the vehicle to its next alternate position (own_unit.alternate_positions), where it sets up again.
+    enum class Relocate { Never, AfterArm, AfterLaunch };
+    Relocate relocate = Relocate::Never;
 };
 
 struct TriggerAction {
@@ -146,7 +170,8 @@ struct ScenarioDef {
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
     em::OpticalConditions optics;  // "environment": the visibility and the daylight the TV sight works in
-    CrewDoctrineDef doctrine;      // "doctrine": the TV check against decoys, search bursts
+    CrewDoctrineDef doctrine;      // "doctrine": the TV check against decoys, search bursts, the ARM drill, shoot and scoot
+    std::vector<Vec3> alternate_positions;  // own_unit.alternate_positions: where the vehicle moves to (doctrine.relocate)
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
     // "empty_containers": the launcher's containers that start without a missile (e.g. ["1-I", "1-II"]): a mission that
@@ -268,6 +293,12 @@ public:
         if (!LoadEnvironment(root, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
+        if (!out.alternate_positions.empty() && (!out.has_battery || !out.battery_drive_own)) {
+            return Fail("own_unit.alternate_positions", "needs a battery block with \"drive_own\": true (the battery drives the vehicle)");
+        }
+        if (out.doctrine.relocate != CrewDoctrineDef::Relocate::Never && out.alternate_positions.empty()) {
+            return Fail("doctrine.relocate", "needs own_unit.alternate_positions");
+        }
         return LoadEnd(root, out);
     }
 
@@ -365,7 +396,7 @@ private:
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
             !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
-                                   "position", "heading_deg", "inputs", "empty_containers"})) {
+                                   "position", "heading_deg", "inputs", "empty_containers", "alternate_positions"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -504,6 +535,13 @@ private:
             !LoadPosition(*pos, "own_unit.position", frame_, out.unit_position) ||
             !OptionalNumber(*u, "own_unit", "heading_deg", out.unit_heading_deg)) {
             return false;
+        }
+        if (const json::Value* alt = OptionalArray(*u, "own_unit", "alternate_positions")) {
+            for (std::size_t i = 0; i < alt->items.size(); ++i) {
+                Vec3 at;
+                if (!LoadPosition(alt->items[i], Index("own_unit.alternate_positions", i), frame_, at)) return false;
+                out.alternate_positions.push_back(at);
+            }
         }
         if (const json::Value* ec = OptionalArray(*u, "own_unit", "empty_containers")) {
             for (std::size_t i = 0; i < ec->items.size(); ++i) {
@@ -657,10 +695,19 @@ private:
     bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
         const json::Value* d = root.Find("doctrine");
         if (d == nullptr) return true;
-        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "notes"}) ||
+        std::string relocate;
+        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "arm_drill", "relocate", "notes"}) ||
             !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check) ||
-            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo)) {
+            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo) ||
+            !OptionalBool(*d, "doctrine", "arm_drill", out.doctrine.arm_drill) || !OptionalString(*d, "doctrine", "relocate", relocate)) {
             return false;
+        }
+        if (relocate == "after_arm") {
+            out.doctrine.relocate = CrewDoctrineDef::Relocate::AfterArm;
+        } else if (relocate == "after_launch") {
+            out.doctrine.relocate = CrewDoctrineDef::Relocate::AfterLaunch;
+        } else if (!relocate.empty() && relocate != "never") {
+            return Fail("doctrine.relocate", "must be \"never\", \"after_arm\" or \"after_launch\"");
         }
         if (out.doctrine.salvo < 1 || out.doctrine.salvo > 2) return Fail("doctrine.salvo", "must be 1 or 2");
         if (const json::Value* b = d->Find("search_bursts")) {
@@ -684,7 +731,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "arms", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -706,6 +753,18 @@ private:
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
+            if (const json::Value* arms = t.Find("arms")) {
+                const std::string ap = Join(p, "arms");
+                if (!Keys(*arms, ap, {"count", "range_m", "speed_mps", "memory_s", "notes"}) ||
+                    !OptionalInt(*arms, ap, "count", tg.arms.count) || !OptionalNumber(*arms, ap, "range_m", tg.arms.range_m) ||
+                    !OptionalNumber(*arms, ap, "speed_mps", tg.arms.speed_mps) ||
+                    !OptionalNumber(*arms, ap, "memory_s", tg.arms.memory_s)) {
+                    return false;
+                }
+                if (tg.arms.count < 1) return Fail(Join(ap, "count"), "must be >= 1");
+                if (tg.arms.range_m <= 0.0 || tg.arms.speed_mps <= 0.0) return Fail(ap, "range_m and speed_mps must be > 0");
+                if (tg.arms.memory_s < 0.0) return Fail(Join(ap, "memory_s"), "must be >= 0 (0: no memory)");
+            }
             if (!tg.rwr.empty()) {
                 if (!out.has_em) return Fail(Join(p, "rwr"), "needs own_unit.em: the warning receiver is an EM receiver");
                 const int e = out.em.library.Esm(tg.rwr);
@@ -1157,12 +1216,19 @@ private:
     bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
             return Fail(p, "unknown battery order '" + kind_text +
-                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon)");
+                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon, relocate)");
         }
         if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
             !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle) ||
             !OptionalBool(o, p, "radiate", out.radiate)) {
             return false;
+        }
+        if (out.kind == BatteryOrder::Kind::Relocate) {  // {"battery_order": "relocate", "vehicle": "22", "points": [ {...} ]}
+            const json::Value* pts = OptionalArray(o, p, "points");
+            if (pts == nullptr || pts->items.size() != 1) return message_.empty() ? Fail(Join(p, "points"), "a relocation needs its one new position") : false;
+            Vec3 v;
+            if (!LoadPosition(pts->items[0], Index(Join(p, "points"), 0), frame_, v)) return false;
+            out.route.push_back(v);
         }
         if (out.kind == BatteryOrder::Kind::Ambush) {
             const json::Value* pts = OptionalArray(o, p, "points");

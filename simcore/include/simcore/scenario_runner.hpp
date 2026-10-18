@@ -172,6 +172,7 @@ public:
         if (finished_) return;
         time_ += dt;
         UpdateTargets(dt);
+        UpdateArms();
         DeliverOrders();
         UpdateBattery(dt);
         UpdateC2();
@@ -883,6 +884,8 @@ private:
         bool gone = false;
         int world_id = -1;
         TargetPilot pilot;  // terrain following, pop-up, evasion (target_behaviour.hpp)
+        int arms_left = 0;           // anti-radiation missiles still aboard (roadmap E6)
+        double last_arm_s = -1e9;
         // Held by the instructor (roadmap 10.3): it flies his heading, height and speed; its own pilot and route wait.
         bool held = false;
         double held_heading_rad = 0.0;
@@ -927,6 +930,7 @@ private:
             a.waypoints = t.waypoints;
             targets_[i].pilot = TargetPilot(t.behaviour, t.evade);
             targets_[i].pilot.OnSpawn(a);
+            targets_[i].arms_left = t.arms.count;
             targets_[i].world_id = world_.AddAircraft(std::move(a));
             targets_[i].spawned = true;
             eng_targets_[i].world_id = targets_[i].world_id;
@@ -1324,7 +1328,7 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
-            if (a == nullptr || !a->alive) continue;
+            if (a == nullptr || !a->alive || !def_.targets[i].arm_of.empty()) continue;  // an ARM isn't plotted
             const ScenarioTarget& t = def_.targets[i];
             BoardContact c;
             c.target_id = t.id;
@@ -1345,7 +1349,7 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
-            if (a == nullptr || !a->alive) continue;
+            if (a == nullptr || !a->alive || !def_.targets[i].arm_of.empty()) continue;  // an ARM isn't plotted
             const ScenarioTarget& t = def_.targets[i];
             BoardContact c;
             c.target_id = t.id;
@@ -2043,6 +2047,8 @@ private:
     void UpdateNpcCommander() {
         if (!NpcCommanderActive() || !drill_ || time_ + 1e-9 < npc_next_think_s_) return;
         npc_next_think_s_ = time_ + 1.0;
+        NpcArmDrill();
+        if (NpcRelocate()) return;
         // A stop while the battery forms its column or marches is not a halt: nobody deploys for it.
         const bool column = battery_ && def_.battery_drive_own &&
                             (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
@@ -2052,7 +2058,7 @@ private:
         // Emission control (the battery's EMCON, an ambush not yet sprung): ready with the radars silent, the search
         // transmitter off; when it lifts, radiation on again.
         const bool silent = NpcSilent();
-        if (silent && halted && console_.equipment.IsReady("soc_transmitter")) NpcGive("order_emcon_off", 30.0);
+        if (silent && halted && console_.equipment.IsReady("soc_transmitter") && !ArmSilence()) NpcGive("order_emcon_off", 30.0);
         if (!silent && npc_was_silent_) NpcGive("order_emcon_on", 30.0);
         npc_was_silent_ = silent;
         // Emission discipline (doctrine search_bursts): between bursts the transmitter off, the antenna turning; the
@@ -2166,7 +2172,7 @@ private:
             };
             for (const KnownTarget& k : recent) {
                 if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k) &&
-                    decoys_known_.count(k.target) == 0) {
+                    decoys_known_.count(k.target) == 0 && arms_called_.count(k.target) == 0) {
                     known.push_back(k);
                 }
             }
@@ -2377,6 +2383,7 @@ private:
     }
     // The battery's EMCON, or an ambush not yet sprung: sprung once a hostile is designated within 15 km (sam3d).
     bool NpcSilent() {
+        if (time_ < arm_silent_until_) return true;  // after an ARM call (the drill)
         if (!battery_) return false;
         if (battery_->Emcon()) return true;
         if (battery_->CurrentMode() != Battery::Mode::Ambush) {
@@ -2592,6 +2599,10 @@ private:
                 std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
                 switch (e.kind) {
                     case EngagementEvent::Kind::Contact:
+                        if (e.closing_mps > def_.tuning.arm_alarm_closing_mps) {  // closing faster than any aircraft: an ARM
+                            ArmCalled(e);
+                            break;
+                        }
                         if (NpcAt("senior_operator")) {
                             KnownTarget k;
                             k.target = e.target;
@@ -2652,7 +2663,7 @@ private:
         if (engagement_on_ && NpcAt("senior_operator") && engagement_.Method() == TrackMethod::None && time_ >= next_contact_update_s_) {
             const KnownTarget* nearest = nullptr;
             for (const KnownTarget& k : pictures_["senior_operator"].All()) {
-                if (time_ - k.time_s > 2.0 || !k.has_range || k.friendly) continue;
+                if (time_ - k.time_s > 2.0 || !k.has_range || k.friendly || arms_called_.count(k.target) != 0) continue;
                 if (nearest == nullptr || k.range_m < nearest->range_m) nearest = &k;
             }
             if (nearest != nullptr) {
@@ -2784,7 +2795,7 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
-            if (a == nullptr || !a->alive) continue;
+            if (a == nullptr || !a->alive || !def_.targets[i].arm_of.empty()) continue;  // the other launchers don't fire at ARMs
             BatteryFireTarget t;
             t.id = def_.targets[i].id;
             t.position = a->position;
@@ -3051,18 +3062,6 @@ public:
             if (o.id == t.id) return fail("there is a target '" + t.id + "' already");
         }
         if (t.waypoints.empty()) return fail(t.id + " needs a route (one waypoint at least)");
-        t.appear_at_s = time_;
-        EngagementTarget e;
-        e.id = t.id;
-        e.target_class = t.target_class;
-        e.evade_on_launch = t.evade_on_launch;
-        e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
-        e.friendly = t.friendly;
-        e.size_m = t.size_m;
-        eng_targets_.push_back(e);
-        targets_.emplace_back();
-        rwr_warned_.push_back(0);
-        if (em_link_ && !t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);
         const Vec3 rel = t.start - def_.unit_position;
         double az = RadToDeg(std::atan2(rel.x, rel.y));
         if (az < 0.0) az += 360.0;
@@ -3070,10 +3069,29 @@ public:
         std::snprintf(text, sizeof(text), "enters %s: %.1f km out at %03.0f degrees, %.0f m up", t.name.c_str(),
                       std::hypot(rel.x, rel.y) / 1000.0, az, t.start.z);
         const std::string id = t.id;
-        def_.targets.push_back(std::move(t));
+        AppendTarget(std::move(t));
         Instructed(id, text);
         return true;
     }
+
+    // ---- Anti-radiation missiles (roadmap E6) ----
+    // What the ARMs fired at us came to: lost (the emitter silent past its memory), decoyed (onto a decoy emitter),
+    // missed because the vehicle had moved, missed on the draw, hit; and shot down.
+    struct ArmTally {
+        int fired = 0;
+        int lost = 0;
+        int decoyed = 0;
+        int moved = 0;
+        int missed = 0;
+        int hit = 0;
+        int shot_down = 0;
+    };
+    const ArmTally& Arms() const { return arm_tally_; }
+    int ArmsFired() const { return arm_tally_.fired; }
+    bool UnitHitByArm() const { return arm_tally_.hit > 0; }
+    // The radars silent now because an ARM was called (the drill), and shoot and scoot under way.
+    bool ArmSilence() const { return time_ < arm_silent_until_; }
+    bool Relocating() const { return reloc_stage_ != RelocStage::None; }
 
     // The targets he holds now (at most kInstructorTargets).
     std::vector<std::string> InstructorTargets() const {
@@ -3124,6 +3142,354 @@ private:
     static constexpr double kHeldMinSpeedMps = 80.0;
     static constexpr double kHeldMaxSpeedMps = 700.0;
     static constexpr double kHeldRotorMaxMps = 90.0;
+
+    // A target entering the picture now (the instructor's, or an ARM fired): the engagement model, the EM link and the
+    // warning receivers learn of it like any other.
+    void AppendTarget(ScenarioTarget t) {
+        t.appear_at_s = time_;
+        EngagementTarget e;
+        e.id = t.id;
+        e.target_class = t.target_class;
+        e.evade_on_launch = t.evade_on_launch;
+        e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
+        e.friendly = t.friendly;
+        e.size_m = t.size_m;
+        eng_targets_.push_back(e);
+        targets_.emplace_back();
+        rwr_warned_.push_back(0);
+        if (em_link_ && !t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);
+        def_.targets.push_back(std::move(t));
+    }
+
+    // Our emitters an ARM can be fired at: the vehicle's radars (index 0), then the decoy emitters copying the search
+    // radar (own_unit.em.decoys and the prepared position's dummies), each on by its mode.
+    struct ArmEmitter {
+        Vec3 position;
+        bool on = false;
+    };
+    bool OwnRadiating() const {
+        return console_.equipment.IsReady(console_.search.transmitter) || console_.equipment.IsReady(console_.track.transmitter);
+    }
+    std::vector<ArmEmitter> ArmEmitters() const {
+        std::vector<ArmEmitter> out;
+        out.push_back({def_.unit_position, OwnRadiating()});
+        if (!def_.has_em || !em_link_) return out;
+        const bool search_on = console_.equipment.IsReady(console_.search.transmitter);
+        const auto on_by = [search_on](em::DecoyMode m) {
+            return m == em::DecoyMode::Always || (m == em::DecoyMode::WithRadar ? search_on : !search_on);
+        };
+        for (const EmDecoyDef& d : def_.em.decoys) out.push_back({d.position, on_by(d.mode)});
+        for (const EmDummyDef& d : def_.em.dummies) {
+            if (d.decoy) out.push_back({d.position, on_by(d.mode)});
+        }
+        for (std::size_t k = 1; k < out.size(); ++k) {
+            if (k - 1 < decoy_dead_.size() && decoy_dead_[k - 1]) out[k].on = false;  // an ARM destroyed it
+        }
+        return out;
+    }
+
+    struct ArmFlight {
+        std::size_t target = 0;  // the ARM's index in def_.targets
+        std::string from;        // the aircraft that fired it
+        Vec3 aim;                // where the emitter was when it was fired
+        std::size_t emitter = 0; // which (ArmEmitters: 0 our radars)
+        double memory_s = 0.0;
+        bool done = false;
+    };
+
+    // Each step: who fires, and what the ARMs in the air come to. A gameplay rule (roadmap E6), not a seeker model.
+    void UpdateArms() {
+        const std::vector<ArmEmitter> em = ArmEmitters();
+        decoy_dead_.resize(em.size() - 1, 0);
+        emitter_last_on_s_.resize(em.size(), -1e9);
+        for (std::size_t k = 0; k < em.size(); ++k) {
+            if (em[k].on) emitter_last_on_s_[k] = time_;
+        }
+        const Terrain& terrain = world_.GetTerrain();
+        const LocalFrame& frame = world_.Frame();
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            TargetState& s = targets_[i];
+            const ScenarioTarget& t = def_.targets[i];
+            if (!s.spawned || s.gone || s.arms_left <= 0 || t.friendly || time_ - s.last_arm_s < def_.tuning.arm_fire_interval_s) continue;
+            const Aircraft* a = world_.FindAircraft(s.world_id);
+            if (a == nullptr || !a->alive) continue;
+            // The nearest radiating emitter within its range that it can see.
+            std::size_t pick = em.size();
+            double best = t.arms.range_m;
+            for (std::size_t k = 0; k < em.size(); ++k) {
+                if (!em[k].on) continue;
+                const double d = (a->position - em[k].position).HorizontalLength();
+                if (d > best) continue;
+                if (!HasLineOfSight(terrain, em[k].position, frame.AltitudeOf(em[k].position), a->position, frame.AltitudeOf(a->position), 100.0)) {
+                    continue;
+                }
+                best = d;
+                pick = k;
+            }
+            if (pick < em.size()) FireArm(i, *a, em[pick], pick);
+        }
+        for (ArmFlight& f : arm_flights_) {
+            if (!f.done) ResolveArm(f, em);
+        }
+        for (auto w = arm_warnings_.begin(); w != arm_warnings_.end();) {
+            if (w->first > time_) {
+                ++w;
+                continue;
+            }
+            // Over the battery net: a radio link the EM layer carries can be jammed (the post's link to the vehicle).
+            double p = 1.0;
+            if (c2_link_) {
+                for (const C2SourceDef& src : def_.c2_sources) {
+                    if (src.id == def_.c2_policy.primary && c2_link_->HasRadio(src)) p = c2_link_->DeliveryProbability(src, def_.unit_position, time_);
+                }
+            }
+            if (callouts_ && NetHears() && Uniform01(rng_) < p) {
+                const Vec3 rel = w->second - def_.unit_position;
+                callouts_->Say(time_, "battery_arm_warning", "battery", {{"azimuth", MilsText(RadToDeg(std::atan2(rel.x, rel.y)))}});
+            } else if (callouts_) {
+                Event("battery", "the post's ARM warning didn't get through on the battery net");
+            }
+            w = arm_warnings_.erase(w);
+        }
+    }
+
+    void FireArm(std::size_t launcher, const Aircraft& a, const ArmEmitter& emitter, std::size_t which) {
+        // Copies: the target lists grow below (AppendTarget), which moves them.
+        const ScenarioTarget lt = def_.targets[launcher];
+        const Vec3 from = a.position;
+        targets_[launcher].arms_left -= 1;
+        targets_[launcher].last_arm_s = time_;
+        ++arm_tally_.fired;
+        ScenarioTarget arm;
+        arm.id = "arm-" + std::to_string(arm_tally_.fired);
+        arm.name = "Anti-radiation missile from " + lt.id;
+        arm.type = "Weapon+Missile";
+        arm.target_class = "arm";
+        arm.start = from;
+        Vec3 ahead = emitter.position - from;
+        ahead.z = 0.0;
+        ahead = ahead.LengthSquared() > 1.0 ? ahead.Normalized() : Vec3{0.0, 1.0, 0.0};
+        arm.waypoints = {emitter.position, emitter.position + ahead * 5000.0};
+        arm.speed_mps = lt.arms.speed_mps;
+        arm.max_turn_rate_rad_s = DegToRad(30.0);
+        arm.rcs_m2 = def_.tuning.arm_rcs_m2;
+        arm.size_m = def_.tuning.arm_size_m;
+        arm.arm_of = lt.id;
+        ArmFlight f;
+        f.target = def_.targets.size();
+        f.from = lt.id;
+        f.aim = emitter.position;
+        f.emitter = which;
+        f.memory_s = lt.arms.memory_s;
+        arm_flights_.push_back(f);
+        const std::string id = arm.id;
+        AppendTarget(std::move(arm));
+        char text[200];
+        std::snprintf(text, sizeof(text), "fires an anti-radiation missile (%s) at %s, %.1f km", id.c_str(),
+                      which == 0 ? "our radar" : "a decoy emitter", (from - emitter.position).HorizontalLength() / 1000.0);
+        Event(lt.id, text);
+        // The battery command post's air observers (optics, 8-25 km: video_osa) see the launch and warn the battery on
+        // its net, a few seconds later.
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (v.def.kind != BatteryVehicleKind::CommandPost || (v.position - from).HorizontalLength() > kObserverRangeM) continue;
+                arm_warnings_.push_back({time_ + kObserverDelayS, from});
+                break;
+            }
+        }
+        // The deputy, watching the launcher on the TV, sees the missile come off it.
+        if (engagement_on_ && NpcAt("deputy_commander") && engagement_.TrackedTarget() == lt.id &&
+            !console_.track.tv_camera.empty() && console_.equipment.IsReady(console_.track.tv_camera) &&
+            engagement_.TvLook(console_, lt.id).seen) {
+            Say("launch_seen", "deputy_commander");
+        }
+    }
+
+    void ResolveArm(ArmFlight& f, const std::vector<ArmEmitter>& em) {
+        TargetState& s = targets_[f.target];
+        const std::string& id = def_.targets[f.target].id;
+        if (!s.spawned) return;
+        Aircraft* a = world_.FindAircraft(s.world_id);
+        if (a == nullptr || !a->alive) {  // our missile got it, or it is gone
+            f.done = true;
+            if (a != nullptr || s.gone) {
+                ++arm_tally_.shot_down;
+                Event(id, "ARM: shot down before it arrived");
+            }
+            return;
+        }
+        const Vec3 to_aim = f.aim - a->position;
+        if (to_aim.Length() > kArmArriveM && Dot(a->velocity, to_aim) > 0.0) return;  // still on its way
+        f.done = true;
+        a->alive = false;
+        s.gone = true;
+        // The emitter it was fired at: radiating, or silent for less than its memory, still holds it.
+        const std::size_t k = f.emitter;
+        const double silent_s = time_ - (k < emitter_last_on_s_.size() ? emitter_last_on_s_[k] : -1e9);
+        const bool held = k < em.size() && (em[k].on || (f.memory_s > 0.0 && silent_s <= f.memory_s));
+        std::size_t ends_on = em.size();
+        if (held) {
+            ends_on = k;
+        } else {  // silent past its memory: another emitter radiating close to its aim draws it
+            double best = def_.tuning.arm_reacquire_m;
+            for (std::size_t j = 0; j < em.size(); ++j) {
+                const double d = (em[j].position - f.aim).HorizontalLength();
+                if (em[j].on && d <= best) {
+                    best = d;
+                    ends_on = j;
+                }
+            }
+        }
+        char text[220];
+        if (ends_on == em.size()) {
+            ++arm_tally_.lost;
+            if (f.memory_s > 0.0) {
+                std::snprintf(text, sizeof(text), "ARM: lost it - the radar went silent %.0f s before it arrived, past its %.0f s memory",
+                              silent_s, f.memory_s);
+            } else {
+                std::snprintf(text, sizeof(text), "ARM: lost it - the radar was silent when it arrived (no memory)");
+            }
+            Event(id, text);
+            return;
+        }
+        if (ends_on != 0) {
+            ++arm_tally_.decoyed;
+            const bool was_alive = decoy_dead_[ends_on - 1] == 0;
+            decoy_dead_[ends_on - 1] = 1;
+            Event(id, was_alive ? "ARM: decoyed - it dived onto a decoy emitter, which is destroyed"
+                                : "ARM: decoyed - it dived onto the wreck of a decoy emitter");
+            return;
+        }
+        // Our radar radiating now: the ARM homes on it where it is. Silent (its memory): it flies at the remembered spot,
+        // and a vehicle that has moved away from it is missed.
+        const double moved = (def_.unit_position - f.aim).HorizontalLength();
+        if (!em[0].on && moved > def_.tuning.arm_moved_m) {
+            ++arm_tally_.moved;
+            std::snprintf(text, sizeof(text), "ARM: missed - the vehicle had moved %.0f m from where it radiated", moved);
+            Event(id, text);
+            return;
+        }
+        const double draw = Uniform01(rng_);
+        if (draw < def_.tuning.arm_hit_chance) {
+            ++arm_tally_.hit;
+            std::snprintf(text, sizeof(text), "ARM: hit - chance %.2f, draw %.2f: the vehicle's radars are out of action",
+                          def_.tuning.arm_hit_chance, draw);
+            Event(id, text);
+            Finish("our vehicle was hit by an anti-radiation missile");
+            return;
+        }
+        ++arm_tally_.missed;
+        std::snprintf(text, sizeof(text), "ARM: missed - chance %.2f, draw %.2f", def_.tuning.arm_hit_chance, draw);
+        Event(id, text);
+    }
+
+    // The senior operator: an echo closing faster than any aircraft is an ARM ("Пуск ПРР!"); it is not a target to take.
+    void ArmCalled(const EngagementEvent& e) {
+        if (!arms_called_.insert(e.target).second) return;
+        arm_call_s_ = time_;
+        arm_call_range_m_ = e.range_m;
+        arm_call_closing_mps_ = e.closing_mps;
+        if (NpcAt("senior_operator")) {
+            char range[16];
+            std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
+            Say("arm_launch", "senior_operator", {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}});
+        }
+    }
+
+    // The drill (doctrine arm_drill; ePap: stop any emission and change position): told of an ARM, the commander has
+    // both transmitters off at once - unless the missile he is guiding will arrive first by a margin, by the ARM's range
+    // and closing speed as reported - and keeps them off for a while (arm_quiet_s); the TV and the designations meanwhile.
+    void NpcArmDrill() {
+        if (!def_.doctrine.arm_drill || arm_alarm_heard_s_ <= arm_alarm_done_s_) return;
+        const double eta_s = arm_call_closing_mps_ > 1.0 ? arm_call_range_m_ / arm_call_closing_mps_ - (time_ - arm_call_s_) : 0.0;
+        const double ours_s = engagement_on_ ? engagement_.ShotsTimeLeft(time_) : 0.0;
+        if (ours_s > 0.0 && ours_s + def_.tuning.arm_margin_s < eta_s) {
+            if (!arm_guiding_noted_) {
+                char text[160];
+                std::snprintf(text, sizeof(text), "guides our missile in first: it arrives in %.0f s, the ARM in about %.0f s", ours_s, eta_s);
+                Event(Cmdr(), text);
+                arm_guiding_noted_ = true;
+            }
+            return;
+        }
+        arm_alarm_done_s_ = arm_alarm_heard_s_;
+        arm_guiding_noted_ = false;
+        arm_silent_until_ = time_ + def_.tuning.arm_quiet_s;
+        // The engagement drills under way are called off (a launch would wait for ПУСК ГОТОВ for ever with the radars off).
+        for (const char* seat : {"deputy_commander", "operator", "senior_operator"}) {
+            CrewMember* m = MemberAt(seat);
+            if (m == nullptr || !SeatHolder(seat).empty() || !m->IsBusy()) continue;
+            const std::string& id = m->Tracker().GetProcedure().id;
+            if (id == "launch" || id == "prepare_firing" || id == "ready_capture" || id == "capture_with_ssc" || id == "azimuth_onto_target") {
+                m->CancelOrder();
+            }
+        }
+        GiveCrewOrder("order_arm_silence");
+        if (def_.doctrine.relocate == CrewDoctrineDef::Relocate::AfterArm) relocate_pending_ = true;
+    }
+
+    // Shoot and scoot (doctrine relocate): stow, the battery drives the vehicle to its next alternate position, and the
+    // readiness drills set it up again there. True while it is under way (nothing else is ordered meanwhile).
+    enum class RelocStage { None, Stowing, Moving };
+    bool NpcRelocate() {
+        if (def_.doctrine.relocate == CrewDoctrineDef::Relocate::Never || !battery_ || !def_.battery_drive_own ||
+            def_.alternate_positions.empty()) {
+            return false;
+        }
+        const bool fighting = engagement_on_ && (engagement_.ShotsInFlight() || engagement_.Method() != TrackMethod::None);
+        if (def_.doctrine.relocate == CrewDoctrineDef::Relocate::AfterLaunch && launches_ > relocated_at_launches_ && !fighting) {
+            relocate_pending_ = true;
+        }
+        switch (reloc_stage_) {
+            case RelocStage::None:
+                if (!relocate_pending_ || fighting) return false;
+                relocate_pending_ = false;
+                relocated_at_launches_ = launches_;
+                reloc_stage_ = RelocStage::Stowing;
+                GiveCrewOrder("order_relocate");
+                Event(def_.id, "shoot and scoot: the crew stows to change position");
+                return true;
+            case RelocStage::Stowing: {
+                const CrewTask* stowed = def_.crew_data.FindTask("stowed");
+                if (stowed != nullptr && !console_.equipment.AllHold(stowed->conditions, console_.panel)) return true;
+                BatteryOrder o;
+                o.kind = BatteryOrder::Kind::Relocate;
+                o.route = {def_.alternate_positions[next_alternate_ % def_.alternate_positions.size()]};
+                ++next_alternate_;
+                battery_->Order(o, time_);
+                reloc_stage_ = RelocStage::Moving;
+                return true;
+            }
+            case RelocStage::Moving:
+                if (battery_->Relocating("")) return true;
+                reloc_stage_ = RelocStage::None;
+                Event(def_.id, "in the alternate position: to readiness again");
+                if (NpcAt("driver")) Say("in_new_position", "driver");
+                return false;
+        }
+        return false;
+    }
+    // ARMs (roadmap E6): the ones in the air, what they came to, our emitters' last radiation, the crew's calls.
+    std::vector<ArmFlight> arm_flights_;
+    ArmTally arm_tally_;
+    std::vector<double> emitter_last_on_s_;
+    std::vector<char> decoy_dead_;
+    static constexpr double kArmArriveM = 300.0;
+    static constexpr double kObserverRangeM = 25000.0;  // the post's optics (video_osa: targets at 8-25 km)
+    static constexpr double kObserverDelayS = 4.0;      // to see it, say it and key the radio (sam3d)
+    std::vector<std::pair<double, Vec3>> arm_warnings_;  // the post's warnings due: when, and where the launch was
+    std::set<std::string> arms_called_;  // echoes the senior operator called ARMs: not targets to take
+    double arm_call_s_ = -1e9;
+    double arm_call_range_m_ = 0.0;
+    double arm_call_closing_mps_ = 0.0;
+    double arm_alarm_heard_s_ = -1e9;
+    double arm_alarm_done_s_ = -1e9;
+    bool arm_guiding_noted_ = false;
+    double arm_silent_until_ = -1e9;
+    RelocStage reloc_stage_ = RelocStage::None;
+    bool relocate_pending_ = false;
+    int relocated_at_launches_ = 0;
+    std::size_t next_alternate_ = 0;
 
     void Instructed(const std::string& target, const std::string& what) {
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Instructor", target, what});
@@ -3599,6 +3965,15 @@ private:
     void SeeInstruments() {
         if (!engagement_on_ || !def_.has_crew_data) return;
         for (const Contact& c : engagement_.SearchPicture()) {
+            if (c.closing_mps > def_.tuning.arm_alarm_closing_mps && arms_called_.count(c.target_id) == 0) {  // its speed shows now
+                EngagementEvent e;
+                e.target = c.target_id;
+                e.az_deg = c.azimuth_deg;
+                e.range_m = c.range_m;
+                e.closing_mps = c.closing_mps;
+                ArmCalled(e);
+            }
+            if (arms_called_.count(c.target_id) != 0) continue;  // not a target
             KnownTarget k;
             k.target = c.target_id;
             k.has_azimuth = k.has_range = true;
@@ -3622,6 +3997,9 @@ private:
     // A callout was heard: what it says about a target goes into each listener's picture. An NPC listener may not take
     // it in (his tier's miss chance, more under stress): he says "Повторите!" and the speaker says it again (once).
     void Hear(const SpokenCallout& s) {
+        // An ARM called (the senior operator's scope, the deputy's TV, the post's observers on the battery net): the
+        // commander has it now (the drill: NpcArmDrill).
+        if ((s.id == "arm_launch" || s.id == "launch_seen" || s.id == "battery_arm_warning") && s.from != Cmdr()) arm_alarm_heard_s_ = time_;
         if (s.channel != "intercom") return;
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             CrewMember& c = crew_[i];

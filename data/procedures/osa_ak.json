@@ -752,6 +752,12 @@
       "steps": [ { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, the SOC transmitter on", "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] } ]
     },
     {
+      "id": "ssc_tx_off", "name": "Tracking transmitter off (radiation off: an ARM)", "situational": true,
+      "source": "sam3d; samsim_thread (ePap: stop any emission and change position)", "confidence": "estimate",
+      "notes": "Operator, with hv_off (the senior operator), on the commander's ПРР! Излучение выключить! (roadmap E6). The guard stays open and the drives on, so radiating again is one switch.",
+      "steps": [ { "control": "ssc.tx", "position": 0, "description": "ПЕРЕДАТЧИК ОТКЛ, the SSC transmitter off" } ]
+    },
+    {
       "id": "tv_watch", "name": "Look at the tracked target on the TV", "situational": true,
       "source": "sam3d", "confidence": "estimate",
       "notes": "Deputy commander, with the radar holding the target: the TV camera on and the narrow lens, to see what the radar holds (a decoy drone shows small where its echo says aircraft: roadmap E6, em/optical.hpp). Ordered when the scenario's doctrine says to check on the TV before a launch.",
