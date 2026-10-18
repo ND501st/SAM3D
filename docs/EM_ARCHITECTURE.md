@@ -553,3 +553,68 @@ follows a noise jammer in angle when the jamming drowns its echo (`RunTrackRadar
 The engagement layer's side (method Н, the range by hand from the search scope or the PU-12, the fuse) is in
 `data/gameplay/README.md` and `simcore/engagement.hpp`. Not modelled: the range-only mode being jammed, home-on-jam by
 the missile (the Osa's missile is command-guided), sidelobe blanking or frequency agility against the jammer.
+
+## 32. The search scope from the EM radar (roadmap E3, 18 October 2026)
+
+* **Echoes by strength.** A search echo carries its EM track's last signal to noise and jamming (`Contact::snr_db`);
+  the PPI paints it 0.35 bright at the detection threshold (about 13 dB) and full from 38 dB (`SearchScope::EchoStrength`,
+  a display choice). The gameplay rules have no SNR and paint full.
+* **Jamming strobes.** The search radar's strobe tracks (a noise jammer's direction, no range) reach the scope
+  (`ScopeFeed::strobes`, `EmSensorLink::SearchStrobes`) and paint as a grainy bright spoke along the jammer's azimuth as
+  the sweep passes, as bright as the J/N (`StrobeStrength`). Replicated to network clients with the echoes' strength
+  (`em::ViewScope::strobes`, `ViewEcho::snr_db`).
+* **The sweep and the antenna.** The PPI's sweep follows the EM search antenna (`ScopeFeed::search_antenna_az_deg`): an
+  echo paints when the beam passes it. The vehicle's search antenna turns with it (`USimWorldSubsystem::GetSearchAntennaAzimuth`).
+* **Overlays on the scenario.** `sam3d.em.Scenario 1` draws the running scenario's own EM world with the `sam3d.em.Debug`
+  overlays (radars, strobes, the command link, the targets' warning receivers) on its terrain.
+* **The picture's ghosts.** A search track that lines up with no target is a ghost; one over the unit's own ground
+  objects (the battery's vehicles, its dummies: within 1 km, a young track's error), or slower than any aircraft
+  within 10 km of the vehicle (clutter false alarms), is ground clutter to the operator and not reported; any other
+  ghost is reported once it has held four updates. Chaff clouds stay on the scope.
+* Tests: `test_scope_feed.cpp` (brightness, strobes painted by the sweep, the sweep following the antenna, a stand-off
+  jammer's strobe at its azimuth through the stream to a client).
+
+## 33. Missiles and optics (roadmap E5, 18 October 2026)
+
+* **The TV sight as an optical sensor** (`em/optical.hpp`). The target's apparent contrast against the sky falls as
+  exp(-3.912 R / V), Koschmieder's law with V the meteorological visibility (Middleton, *Vision through the
+  Atmosphere*, 1952); it must stay above the camera and operator's threshold, and the target must span enough camera
+  lines (Johnson's criteria, 1958: detection at 2 lines, recognition at 8) through the lens in use (the console's 4.8°
+  and 1.44° fields). The threshold is anchored, not invented: it puts a target at the tuning's TV range (20 km, a game
+  value) in a 40 km visibility, so a clear day plays as before. The camera's 575 lines and the 0.3 inherent contrast
+  are estimates. At night it sees nothing. Scenario `environment` {`visibility_km`, `daylight`}, target `size_m`.
+  Mirrored in the Python prototype.
+* **The command link** (`data/em/osa_ak.json` `osa_ak_command_link_1`, `_2`). The two channels' command transmitters
+  (СПК) are emitters on the vehicle, on the vehicle's two grid frequencies (`mon_2112_80` p67: fixed frequencies,
+  neighbouring vehicles interleaved, the 1st vehicle on 3 and 1); СМЕНА ЛИТ. moves each to the other (SAM3D's reading of
+  the letter change). They radiate from ВНИМАНИЕ (switched on then, `mon_2112_80` p67) along the tracking antenna's
+  line of sight; into the equivalent load until the launch only in a peacetime check
+  (`own_unit.em.command_link_in_load`). The band is the I band NATO's view gives (FM 100-2-3); power, pulse and antenna
+  are estimates.
+* **The missile's responder** (`9m33_responder`, kind `missile_responder`): each missile in flight is an EM platform
+  carrying it (`EmSensorLink::SyncMissiles`); every value an estimate. Missiles give no echo to their own search radar
+  (a simplification).
+* **A target's warning receiver.** Target `rwr` (an EM receiver of kind rwr, e.g. NATO's ALR-46 class): its contacts,
+  named through its threat library, warn the pilot of a lock (steady illumination from an emitter named "track") and a
+  launch (an entry of kind `missile_guidance`, NATO's SA-8 command-guidance entry). The pilot then evades on what he
+  hears, not on the truth; the debrief notes the first warning of each. Because the command link radiates from
+  ВНИМАНИЕ, the warning comes before the missile.
+* Tests: `test_em_guidance.cpp`.
+
+## 34. Threats without anti-radiation missiles (roadmap E6, 18 October 2026)
+
+* **Decoy drones** (target `decoy`): a drone whose echo is made to look like an aircraft's. The radar can't tell.
+  Warned of decoys (scenario `doctrine.tv_check`), the commander has the deputy look through the narrow lens (the
+  situational drill `tv_watch`) and permits a launch only at what the TV has made out (recognised, §33); a decoy is
+  called ("Ложная цель — беспилотник!"), the launch forbidden, the track dropped, and the aiming crew leaves it alone
+  after. At night or in a haze, if the TV can't see it by the time it is in the zone, he goes by the radar. The deputy's
+  tier may miss it. The tactic follows secondary accounts of June 1982 (EM research §5).
+* **A stand-off jammer escort** is a target carrying a scripted jammer on a racetrack beyond the missiles' reach
+  (`osa_soj_strike.json`): its strobe lies across the search scope and the strikers show late; one striker's
+  self-protection pod is fought on its angle by method Н (9.1).
+* **Emission discipline** (`doctrine.search_bursts` {on_s, off_s}): while no hostile is within the tracking radar's
+  reach, the commander keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
+  the antenna turning); it stays on once one is near. Drills marked `situational` are never pulled into a plan by the
+  drill master.
+* **Not modelled here:** anti-radiation missiles and the drills against them.
+* Tests: `test_em_threats.cpp`.

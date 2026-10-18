@@ -1,5 +1,6 @@
 // The battery's early-warning and command sources (roadmap E4 / 7.8): the library, what each source can see, shared voice
 // nets, the crew switching source (by hand and by the commander's fallback), links that fail, and the scenario hooks.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -826,4 +827,32 @@ SC_TEST("regiment: in a scenario the PU-12 plots the target once a radar of the 
     SC_EXPECT(covered.find("on the board") != std::string::npos);
     const std::string uncovered = run(R"({ "id": "p19_far", "type": "p19", "position": { "east_m": 600000, "north_m": 600000, "up_m": 0 } })");
     SC_EXPECT(uncovered.find("on the board") == std::string::npos);
+}
+
+SC_TEST("c2: a saturated voice net (E4): one designation at a time, so with many targets each is stale before it is told again") {
+    // The PU-12 reads one designation onto the net at a time (4 s for the operator, 8 s on the air, 2 s to pass it on:
+    // estimates, data/command/pu12.json) and writes its board once a minute: three targets fit in a minute, eight don't.
+    auto run = [](int targets) {
+        C2Policy policy;
+        C2Network n(policy, 1);
+        n.AddSource(Pu12(), Vec3{});
+        std::vector<BoardContact> truth;
+        for (int i = 0; i < targets; ++i) {
+            truth.push_back(At("t" + std::to_string(i), 1000.0 * i, 30000.0 + 1000.0 * i, 1000.0));
+        }
+        Run(n, 0.0, 330.0, truth);
+        double oldest = 0.0;
+        std::size_t known = 0;
+        for (const BoardMark& m : n.Known(330.0)) {
+            oldest = std::max(oldest, 330.0 - m.time_s);
+            ++known;
+        }
+        return std::make_pair(oldest, known);
+    };
+    const auto few = run(3);
+    const auto many = run(8);
+    std::printf("    3 targets: %zu known, the oldest plotted %.0f s ago; 8 targets: %zu known, the oldest %.0f s ago\n", few.second,
+                few.first, many.second, many.first);
+    SC_EXPECT(few.second == 3 && few.first <= 60.0 + 30.0 + 1.0);  // all from the last plot, or the one before at worst
+    SC_EXPECT(many.first > few.first + 30.0);                      // the net can't keep up: the crew aims by older marks
 }
