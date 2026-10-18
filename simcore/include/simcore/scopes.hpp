@@ -20,6 +20,24 @@
 
 namespace simcore {
 
+// The range rings the search scope draws on range scale `scale_index` (metres from the radar): the console's own list
+// for that scale (sensors.search.range_rings_m, as the operators describe the Osa's scope), else every 5 km (10 km on a
+// scale more than 20 km deep) inside the scale's window.
+inline std::vector<double> ScopeRingsM(const SearchSensorDef& s, int scale_index) {
+    if (scale_index >= 0 && scale_index < static_cast<int>(s.range_rings_m.size())) {
+        return s.range_rings_m[static_cast<std::size_t>(scale_index)];
+    }
+    double lo = 0.0, hi = 45000.0;
+    if (scale_index >= 0 && scale_index < static_cast<int>(s.range_scales_m.size())) {
+        lo = s.range_scales_m[static_cast<std::size_t>(scale_index)].first;
+        hi = s.range_scales_m[static_cast<std::size_t>(scale_index)].second;
+    }
+    const double step = hi - lo > 20000.0 ? 10000.0 : 5000.0;
+    std::vector<double> out;
+    for (double k = std::ceil((lo + 1.0) / step) * step; k <= hi + 1.0; k += step) out.push_back(k);
+    return out;
+}
+
 class SearchScope {
 public:
     struct Blip {

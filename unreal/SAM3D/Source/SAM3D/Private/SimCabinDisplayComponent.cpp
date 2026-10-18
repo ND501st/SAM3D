@@ -505,11 +505,13 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	const double Span = FMath::Max(1.0, MaxM - MinM);
 	auto RadiusOf = [&](double RangeM) { return (RangeM - MinM) / Span * R; };
 
-	// Range rings every 5 km (10 km on long scales), bearing ticks every 30 degrees.
-	const double Ring = Span > 20000.0 ? 10000.0 : 5000.0;
-	for (double K = FMath::CeilToDouble((MinM + 1.0) / Ring) * Ring; K <= MaxM + 1.0; K += Ring)
+	// Range rings for the scale (the console's list, as the operators describe the scope), bearing ticks every 30 degrees.
+	for (const double K : simcore::ScopeRingsM(Search, ScaleIndex))
 	{
-		Circle(Canvas, C, RadiusOf(K), Phosphor * 0.3f, 1.6f);
+		if (K > MinM && K <= MaxM + 1.0)
+		{
+			Circle(Canvas, C, RadiusOf(K), Phosphor * 0.3f, 1.6f);
+		}
 	}
 	for (int32 I = 0; I < 12; ++I)
 	{
