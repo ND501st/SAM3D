@@ -83,6 +83,7 @@ struct EmitterSignature {
     double pulse_width_s = 0.0;
     std::string library_id;       // best threat-library match, "" = unknown emitter
     std::string library_name;
+    std::string library_kind;     // the entry's kind: "search", "track", "missile_guidance", ... (what an RWR warns of)
     double library_confidence = 0.0;
     bool hostile = false;         // the library says this emitter type belongs to the other side
     bool steady = false;          // continuous illumination seen (a tracking radar locked on)

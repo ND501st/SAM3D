@@ -122,3 +122,15 @@ def test_ellipses_and_covariance_intersection():
     x, pf = em.covariance_intersect([1000, 2000, 300], p, [1000, 2000, 300], p)
     assert pf[0][0] == pytest.approx(p[0][0])  # the same report twice must not look more certain
     assert x == pytest.approx([1000, 2000, 300])
+
+
+def test_optics_match_cpp():
+    # simcore/tests/test_em_guidance.cpp: the same hand calculations.
+    assert em.apparent_contrast(0.3, 20000.0, 40000.0) == pytest.approx(0.042420, abs=1e-5)
+    th = em.apparent_contrast(0.3, 20000.0, em.REFERENCE_VISIBILITY_M)
+    assert em.contrast_range_m(0.3, th, 40000.0) == pytest.approx(20000.0, abs=1e-6)
+    assert em.contrast_range_m(0.3, th, 10000.0) == pytest.approx(5000.0, abs=1e-6)
+    wide = math.radians(4.8 * 0.75)
+    narrow = math.radians(1.44 * 0.75)
+    assert em.lines_across(4.5, 20000.0, wide) == pytest.approx(4.5 / 20000.0 / 1.09273e-4, abs=1e-3)
+    assert em.lines_across(1.5, 10000.0, narrow) == pytest.approx(1.5 / 10000.0 / 3.27819e-5, abs=1e-3)

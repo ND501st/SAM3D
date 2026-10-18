@@ -206,6 +206,20 @@ public:
     }
 
     // Shots still flying (their numbers), for the runner to ask the outcome model about.
+    // A channel's command transmitter (roadmap E5, the EM layer's emitter): 0 off, 1 on (ВКЛ ВЫС: a missile selected,
+    // the transmitter's high voltage on), 2 guiding its missile in flight. Whether it radiates before the launch is
+    // the EM layer's assumption (into its equivalent load until then).
+    int TransmitterState(int channel) const {
+        if (channel < 1 || channel > 2) return 0;
+        const Channel& c = channels_[static_cast<std::size_t>(channel - 1)];
+        return c.flying ? 2 : (c.selected >= 0 ? 1 : 0);
+    }
+    // The shot guided on a channel now (0: none).
+    int ShotOn(int channel) const {
+        if (channel < 1 || channel > 2) return 0;
+        const Channel& c = channels_[static_cast<std::size_t>(channel - 1)];
+        return c.flying ? c.shot : 0;
+    }
     std::vector<int> ShotsFlying() const {
         std::vector<int> out;
         for (const Channel& c : channels_) {

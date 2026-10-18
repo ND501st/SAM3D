@@ -81,6 +81,7 @@ inline void Identify(const EmScene& s, const EsmDef& def, Side my_side, EsmConta
     if (m.entry == nullptr) {
         c.sig.library_id.clear();
         c.sig.library_name.clear();
+        c.sig.library_kind.clear();
         c.sig.library_confidence = 0.0;
         c.sig.hostile = false;
         c.sig.max_speed_mps = 0.0;
@@ -88,6 +89,7 @@ inline void Identify(const EmScene& s, const EsmDef& def, Side my_side, EsmConta
     }
     c.sig.library_id = m.entry->id;
     c.sig.library_name = m.entry->name;
+    c.sig.library_kind = m.entry->kind;
     c.sig.library_confidence = m.confidence;
     c.sig.hostile = m.entry->owner != Side::Neutral && m.entry->owner != my_side;
     c.sig.max_speed_mps = m.entry->max_speed_mps;

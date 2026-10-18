@@ -61,6 +61,7 @@
 #include "simcore/crew_knowledge.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/em_link.hpp"
+#include "simcore/em/optical.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
@@ -501,6 +502,7 @@ struct EngagementTarget {
     bool evade_on_launch = false;
     double evade_turn_rate_rad_s = 0.0;
     bool friendly = false;  // replies to IFF interrogation
+    double size_m = 4.5;    // critical dimension for the TV sight (em/optical.hpp; a fighter's side, estimate)
 };
 
 // RadarOnJam: the tracking radar follows a noise jammer in angle; its echo is drowned, so there is no radar range.
@@ -697,6 +699,16 @@ public:
     void SetUnitPosition(const Vec3& unit_position) { unit_ = unit_position; }
     // The hull's true heading, degrees clockwise from north (driven by the player or the scenario).
     void SetUnitHeading(double heading_deg) { unit_heading_deg_ = heading_deg; }
+    // The light and the air for the TV sight (scenario "environment"; em/optical.hpp).
+    void SetOpticalConditions(const em::OpticalConditions& c) { optics_ = c; }
+    const em::OpticalConditions& OpticalConditions() const { return optics_; }
+    // What the TV sight makes of a target through the lens selected now: seen, recognised (a drone told from an
+    // aircraft), or why not. Passive: nothing radiates.
+    em::OpticalLook TvLook(const ConsoleData& console, const std::string& target_id) const {
+        auto it = geo_.find(target_id);
+        if (it == geo_.end() || !it->second.alive) return em::OpticalLook{};
+        return TvLookAt(console, it->second);
+    }
     double UnitHeadingDeg() const { return unit_heading_deg_; }
     // The heading the gyro holds (its idea of the hull's heading), and the frame conversion: an azimuth in the
     // crew's frame (wheels, scope) to true azimuth from north.
@@ -787,6 +799,7 @@ private:
         double agl_m = 0.0;
         double true_az_deg = 0.0;  // from north; az_deg is in the crew's frame
         bool friendly = false;
+        double size_m = 4.5;  // critical dimension for the TV
         double closing_mps = 0.0;
         double speed_mps = 0.0;
         double parameter_m = 0.0;  // crossing parameter: distance from the unit to the target's course, over the ground
@@ -856,6 +869,7 @@ private:
             Geometry& g = geo_[tg.id];
             g.target_class = tg.target_class;
             g.friendly = tg.friendly;
+            g.size_m = tg.size_m;
             const Aircraft* a = tg.world_id >= 0 ? world.FindAircraft(tg.world_id) : nullptr;
             g.alive = a != nullptr && a->alive;
             if (!g.alive) continue;
@@ -1266,8 +1280,18 @@ private:
             return nullptr;
         }
         if (d.tv_mode.empty() || !eq.IsReady(d.tv_mode) || !eq.IsReady(d.tv_camera)) return "TV tracking off";
-        if (g.range_m > tuning_.tv_max_range_m) return "beyond TV range";
+        const em::OpticalLook look = TvLookAt(console, g);
+        if (!look.seen) return look.why_not;
         return nullptr;
+    }
+
+    // The TV's look at a target's geometry: contrast against the anchored threshold, lines through the lens in use.
+    em::OpticalLook TvLookAt(const ConsoleData& console, const Geometry& g) const {
+        const double threshold = optical_.contrast_threshold > 0.0
+                                     ? optical_.contrast_threshold
+                                     : em::AnchorThreshold(optical_.inherent_contrast, tuning_.tv_max_range_m, em::kReferenceVisibilityM);
+        const double fov_h = DegToRad(TvFieldOfViewDeg(console) * console.track.fov_height_ratio);
+        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los);
     }
 
     // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by
@@ -1340,8 +1364,8 @@ private:
             problem = "antenna not free to turn";
         } else if (d.tv_mode.empty() || !eq.IsReady(d.tv_mode) || !eq.IsReady(d.tv_camera)) {
             problem = "TV tracking off";
-        } else if (g.range_m > tuning_.tv_max_range_m) {
-            problem = "beyond TV range";
+        } else if (const char* unseen = TvLookAt(console, g).why_not) {
+            if (std::strcmp(unseen, "no line of sight") != 0) problem = unseen;  // masked: the memory below carries it
         }
         const double wheel_az = console.panel.GetValue(d.az_wheel);
         const double wheel_el = console.panel.GetValue(d.el_wheel);
@@ -1853,6 +1877,8 @@ private:
     double iff_until_s_ = -1.0;
     bool iff_control_ = false;
     double unit_heading_deg_ = 0.0;
+    em::OpticalSensorDef optical_;    // the TV sight as a camera (em/optical.hpp)
+    em::OpticalConditions optics_;    // the light and the air (scenario "environment")
     double last_unit_heading_deg_ = 0.0;
     double gyro_heading_deg_ = 0.0;
     bool fast_sync_ = false;

@@ -123,7 +123,7 @@
           "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-132 ('probably operates in the H band', ~30 km), p. 5-138 (H acquisition)", "confidence": "low" },
         { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll, J band)", "kind": "track", "owner": "red", "platform": "ground",
           "freq_min_hz": 10.0e9, "freq_max_hz": 20.0e9, "source": "fm100_2_3 p. 5-132 ('probably ... J band', 20-25 km), p. 5-138 (J tracking)", "confidence": "low" },
-        { "id": "sa8_command_guidance", "name": "SA-8 command-guidance radars (two, I band, different frequencies)", "kind": "track", "owner": "red", "platform": "ground",
+        { "id": "sa8_command_guidance", "name": "SA-8 command-guidance radars (two, I band, different frequencies)", "kind": "missile_guidance", "owner": "red", "platform": "ground",
           "freq_min_hz": 8.0e9, "freq_max_hz": 10.0e9, "source": "fm100_2_3 p. 5-132 ('two I-band guidance radars ... each one responding to a different frequency to frustrate ECM')", "confidence": "low",
           "notes": "The Polish manual (mon_2112_80 p67) confirms two command-link frequencies per vehicle chosen from a grid." },
         { "id": "sa6_straight_flush_acq", "name": "SA-6 Straight Flush, acquisition (G/H)", "kind": "search", "owner": "red", "platform": "ground",

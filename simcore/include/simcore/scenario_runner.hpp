@@ -109,8 +109,11 @@ public:
             e.evade_on_launch = t.evade_on_launch;
             e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
             e.friendly = t.friendly;
+            e.size_m = t.size_m;
             eng_targets_.push_back(e);
         }
+        engagement_.SetOpticalConditions(def_.optics);
+        rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
@@ -131,6 +134,9 @@ public:
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
             if (em_link_->Ok()) {
                 engagement_.SetEmLink(em_link_.get());
+                for (const ScenarioTarget& t : def_.targets) {
+                    if (!t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);  // made with the target's platform
+                }
             } else {
                 em_link_.reset();  // the loader checked the radars; fall back to the gameplay rules rather than crash
             }
@@ -171,11 +177,16 @@ public:
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
-            // A radar lock is heard by the target's warning receiver; a TV track is not.
+            // A radar lock is heard by the target's warning receiver; a TV track is not. With the EM layer, a target with
+            // a warning receiver of its own goes by what it hears (CueFromWarnings).
             const TrackMethod m = engagement_.Method();
-            if (m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) CueTarget(engagement_.TrackedTarget(), false);
+            if ((m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) && !HasRwr(engagement_.TrackedTarget())) {
+                CueTarget(engagement_.TrackedTarget(), false);
+            }
         }
         UpdateLauncher();
+        UpdateGuidanceEm();
+        CueFromWarnings();
         UpdateFuel(dt);
         UpdatePositionPower();
         EvaluateTriggers();
@@ -940,6 +951,50 @@ private:
         }
     }
 
+    // The guidance channels in the EM layer (roadmap E5): each channel's command transmitter radiates from ВНИМАНИЕ
+    // (into its equivalent load until a missile flies, in a peacetime check), on its letter's frequency, along the
+    // tracking antenna's line of sight; each missile in flight carries its responder.
+    void UpdateGuidanceEm() {
+        if (!em_link_ || !launcher_ || !engagement_on_) return;
+        const double az = DegToRad(em_link_->AntennaAzimuthDeg());
+        const double el = DegToRad(em_link_->AntennaElevationDeg());
+        const Vec3 toward = engagement_.UnitPosition() + Vec3{std::sin(az) * std::cos(el), std::cos(az) * std::cos(el), std::sin(el)} * 10000.0;
+        for (int ch = 1; ch <= 2; ++ch) {
+            const int ts = launcher_->TransmitterState(ch);
+            const int state = ts == 2 ? 2 : (ts == 1 ? (def_.em.command_link_in_load ? 1 : 2) : 0);
+            em_link_->SetCommandLink(ch, state, launcher_->LetterChanges(), toward);
+        }
+        std::vector<EmSensorLink::GuidedMissile> missiles;
+        for (const EngagementModel::MissileView& m : engagement_.MissilesInFlight(time_, world_, eng_targets_)) {
+            missiles.push_back({m.number, m.position, m.velocity});
+        }
+        em_link_->SyncMissiles(missiles);
+    }
+
+    // The target carries a radar warning receiver in the EM layer.
+    bool HasRwr(const std::string& target_id) const { return em_link_ && em_link_->HasRwr(target_id); }
+
+    // Targets with a warning receiver: the pilot reacts to what it warns of (a lock, the command link of a launch), and
+    // the debrief notes the first warning of each kind.
+    void CueFromWarnings() {
+        if (!em_link_) return;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (t.rwr.empty() || !targets_[i].spawned || targets_[i].gone) continue;
+            const EmSensorLink::RwrWarning w = em_link_->WarningOf(t.id);
+            if (w.lock && (rwr_warned_[i] & 1) == 0) {
+                rwr_warned_[i] |= 1;
+                Event(t.id, "warning receiver: locked by " + w.lock_by);
+            }
+            if (w.launch && (rwr_warned_[i] & 2) == 0) {
+                rwr_warned_[i] |= 2;
+                Event(t.id, "warning receiver: missile guidance, " + w.launch_by);
+            }
+            if (w.launch) CueTarget(t.id, true);
+            if (w.lock) CueTarget(t.id, false);
+        }
+    }
+
     // A missile was launched at a target (`launch`), or the tracking radar holds it: its pilot may evade.
     void CueTarget(const std::string& id, bool launch) {
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
@@ -1408,7 +1463,7 @@ private:
             if (engagement_on_) {
                 const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
                 engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
-                CueTarget(engagement_.TrackedTarget(), true);
+                if (!HasRwr(engagement_.TrackedTarget())) CueTarget(engagement_.TrackedTarget(), true);
             }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
@@ -1508,6 +1563,7 @@ private:
     std::mt19937 rng_;
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
+    std::vector<int> rwr_warned_;            // per target: 1 a lock warning noted, 2 a launch warning noted
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;

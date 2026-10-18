@@ -26,6 +26,7 @@
 #include "simcore/crew_data.hpp"
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
+#include "simcore/em/optical.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
@@ -62,6 +63,10 @@ struct ScenarioTarget {
     int formation = 1;                     // aircraft in its formation, as the board notes it
     TargetBehaviourDef behaviour;          // terrain following, pop-up (target_behaviour.hpp)
     EvadeDef evade;                        // evasion on launch or lock (takes the place of evade_on_launch)
+    double size_m = 4.5;                   // critical dimension for the TV sight (em/optical.hpp; estimate for a fighter)
+    // Its radar warning receiver: an ESM receiver of the EM library (kind rwr). With one, the pilot evades when it warns
+    // of the lock or the launch (the command link heard: roadmap E5), not on the truth.
+    std::string rwr;
 };
 
 struct TriggerAction {
@@ -120,6 +125,7 @@ struct ScenarioDef {
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
+    em::OpticalConditions optics;  // "environment": the visibility and the daylight the TV sight works in
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
     // "empty_containers": the launcher's containers that start without a missile (e.g. ["1-I", "1-II"]): a mission that
@@ -196,7 +202,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "triggers", "end", "assistance"})) {
+                             "targets", "triggers", "end", "assistance", "environment"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -238,6 +244,7 @@ public:
                 return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
             }
         }
+        if (!LoadEnvironment(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -385,7 +392,7 @@ private:
             std::string library, search, track;
             if (!em->Is(json::Type::Object) ||
                 !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps", "rain_mmh",
-                                           "jammers", "chaff", "decoys", "notes"}) ||
+                                           "jammers", "chaff", "decoys", "command_link_in_load", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
                 !RequireString(*em, "own_unit.em", "track_radar", track)) {
@@ -401,7 +408,10 @@ private:
                 return false;
             }
             if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error, extras)) return Fail("own_unit.em", error);
-            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh)) return false;
+            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh) ||
+                !OptionalBool(*em, "own_unit.em", "command_link_in_load", out.em.command_link_in_load)) {
+                return false;
+            }
             if (out.em.rain_mmh < 0.0) return Fail("own_unit.em.rain_mmh", "must be >= 0");
             if (const json::Value* w = em->Find("wind_mps")) {
                 if (!Keys(*w, "own_unit.em.wind_mps", {"east", "north", "notes"}) ||
@@ -607,6 +617,21 @@ private:
         return true;
     }
 
+    // "environment": {"visibility_km": 40, "daylight": true}: the air and the light (the TV sight, em/optical.hpp).
+    bool LoadEnvironment(const json::Value& root, ScenarioDef& out) {
+        const json::Value* env = root.Find("environment");
+        if (env == nullptr) return true;
+        double visibility_km = out.optics.visibility_m / 1000.0;
+        if (!Keys(*env, "environment", {"visibility_km", "daylight", "notes"}) ||
+            !OptionalNumber(*env, "environment", "visibility_km", visibility_km) ||
+            !OptionalBool(*env, "environment", "daylight", out.optics.daylight)) {
+            return false;
+        }
+        if (visibility_km <= 0.0) return Fail("environment.visibility_km", "must be > 0");
+        out.optics.visibility_m = visibility_km * 1000.0;
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         const json::Value* arr = OptionalArray(root, "", "targets");
         if (arr == nullptr) return message_.empty();
@@ -615,7 +640,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -632,6 +657,16 @@ private:
                 return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
             }
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
+            if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr)) return false;
+            if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
+            if (!tg.rwr.empty()) {
+                if (!out.has_em) return Fail(Join(p, "rwr"), "needs own_unit.em: the warning receiver is an EM receiver");
+                const int e = out.em.library.Esm(tg.rwr);
+                if (e < 0) return Fail(Join(p, "rwr"), "'" + tg.rwr + "' is not an ESM receiver of the EM libraries");
+                if (out.em.library.esm[static_cast<std::size_t>(e)].kind != em::EsmKind::Rwr) {
+                    return Fail(Join(p, "rwr"), "'" + tg.rwr + "' is not a radar warning receiver");
+                }
+            }
             tg.evade_turn_rate_rad_s = DegToRad(evade_deg_s);
             const json::Value* start = nullptr;
             if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||

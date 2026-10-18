@@ -14,6 +14,8 @@
       "notes": "Search radar coverage 45 km, 0-30 deg; beams I 0-4, II 4-8, III 8-28 deg; tracking radar 0-28 km, -12 to +78 deg, slew 15 deg/s." },
     { "id": "western_bands", "title": "9K33 Osa, English Wikipedia (citing Western references): Land Roll search radar H band (6-8 GHz), tracking radar J band (14.5 GHz)", "url": "https://en.wikipedia.org/wiki/9K33_Osa", "tier": "4/5",
       "notes": "Only used for the band centre (propagation, ESM band checks) and for NATO's threat-library view. Its 'frequency-agile' claim is not adopted: mon_2112_80 describes fixed working frequencies on a channel grid." },
+    { "id": "fm100_2_3", "title": "US Army FM 100-2-3, The Soviet Army: Troops, Organization and Equipment, 6 June 1991 (distribution unlimited): SA-8 description p. 5-132", "tier": "1 (for what NATO believed)",
+      "notes": "Used here only for the command link's band: 'two I-band guidance radars ... each one responding to a different frequency'. What the US Army believed, with 'probably'." },
     { "id": "r123_refs", "title": "R-123 'Magnolia': English Wikipedia; greenradio.de Eastern Mobiles R-123M page", "url": "https://en.wikipedia.org/wiki/R-123", "tier": "4",
       "notes": "20-51.5 MHz in two sub-bands, 4 preset channels, 25 kHz spacing, ~20 W, 2.5 uV sensitivity." }
   ],
@@ -140,6 +142,62 @@
                 "confidence": "low",
                 "notes": "mon_2112_80 p16-17: the two-channel monopulse resists repeater *angle* jamming; nothing public on range-gate pull-off." },
       "source": "korovin_tiv_2010; mon_2112_80; flak11; estimates as marked", "confidence": "medium"
+    }
+  ],
+
+  "emitters": [
+    {
+      "id": "osa_ak_command_link_1", "name": "Osa-AK command transmitter, channel I (СПК)", "kind": "missile_uplink",
+      "freq_hz": { "value": 8.6e9, "source": "estimate: frequency 3 of an eight-frequency grid spread over the I band fm100_2_3 gives", "confidence": "estimate",
+                   "notes": "mon_2112_80 p67: the command transmitter works on fixed frequencies, neighbouring vehicles interleaved (the 1st vehicle on 3 and 1, the 2nd on 4 and 2, the 3rd on 7 and 5, the 4th on 8 and 6); the frequencies themselves are not public." },
+      "channels_hz": [8.6e9, 8.2e9],
+      "agility": "channels",
+      "prf_hz": { "value": 1000, "source": "estimate", "confidence": "estimate", "notes": "Pulsed command words; nothing public on the format." },
+      "pulse_width_s": { "value": 1.0e-6, "source": "estimate", "confidence": "estimate" },
+      "peak_power_w": { "value": 5000, "source": "estimate", "confidence": "estimate" },
+      "tx_loss_db": { "value": 1.5, "source": "estimate", "confidence": "estimate" },
+      "antenna": {
+        "gain_db": { "value": 28, "source": "estimate", "confidence": "estimate", "notes": "A beam wide enough to hold the missile from the launch to the narrow beam." },
+        "beamwidth_az_deg": { "value": 6, "source": "estimate", "confidence": "estimate" },
+        "beamwidth_el_deg": { "value": 6, "source": "estimate", "confidence": "estimate" },
+        "sidelobe_db": { "value": -25, "source": "estimate", "confidence": "estimate" }
+      },
+      "scan": "tracking",
+      "notes": "channels_hz: the vehicle's two grid frequencies (the 1st vehicle's 3 and 1, mon_2112_80 p67); СМЕНА ЛИТ. moves the channel to the other one (SAM3D's reading of the letter change). Switched on at ВНИМАНИЕ and radiating from then in combat; into its equivalent load only for peacetime checks (mon_2112_80 p67; scenario own_unit.em.command_link_in_load).",
+      "source": "mon_2112_80 p67; fm100_2_3 (band); estimates as marked", "confidence": "low"
+    },
+    {
+      "id": "osa_ak_command_link_2", "name": "Osa-AK command transmitter, channel II (СПК)", "kind": "missile_uplink",
+      "freq_hz": { "value": 8.2e9, "source": "estimate: frequency 1 of the same grid", "confidence": "estimate",
+                   "notes": "mon_2112_80 p67 (the vehicle's second frequency); see channel I." },
+      "channels_hz": [8.2e9, 8.6e9],
+      "agility": "channels",
+      "prf_hz": { "value": 1000, "source": "estimate", "confidence": "estimate" },
+      "pulse_width_s": { "value": 1.0e-6, "source": "estimate", "confidence": "estimate" },
+      "peak_power_w": { "value": 5000, "source": "estimate", "confidence": "estimate" },
+      "tx_loss_db": { "value": 1.5, "source": "estimate", "confidence": "estimate" },
+      "antenna": {
+        "gain_db": { "value": 28, "source": "estimate", "confidence": "estimate" },
+        "beamwidth_az_deg": { "value": 6, "source": "estimate", "confidence": "estimate" },
+        "beamwidth_el_deg": { "value": 6, "source": "estimate", "confidence": "estimate" },
+        "sidelobe_db": { "value": -25, "source": "estimate", "confidence": "estimate" }
+      },
+      "scan": "tracking",
+      "source": "mon_2112_80 p67; fm100_2_3 (band); estimates as marked", "confidence": "low"
+    },
+    {
+      "id": "9m33_responder", "name": "9M33 missile responder", "kind": "missile_responder",
+      "freq_hz": { "value": 14.2e9, "source": "estimate: in the tracking radar's band, whose antenna receives it", "confidence": "estimate" },
+      "prf_hz": { "value": 1000, "source": "estimate: answering the command words", "confidence": "estimate" },
+      "pulse_width_s": { "value": 0.5e-6, "source": "estimate", "confidence": "estimate" },
+      "peak_power_w": { "value": 10, "source": "estimate", "confidence": "estimate" },
+      "tx_loss_db": { "value": 1.0, "source": "estimate", "confidence": "estimate" },
+      "antenna": {
+        "gain_db": { "value": 0, "source": "estimate", "confidence": "estimate" }
+      },
+      "scan": "omni",
+      "notes": "The missile answers the station so its tracking antenna can follow it (the launcher's ЗАХВАТ, СР.Л, УЗКИЙ ЛУЧ lamps: captured in the wide, the medium, the narrow beam). Nothing public on its signal: every value is an estimate.",
+      "source": "estimates", "confidence": "estimate"
     }
   ],
 
