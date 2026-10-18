@@ -31,6 +31,8 @@
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/target_behaviour.hpp"
+#include "simcore/terrain_map.hpp"
+#include "simcore/weather_data.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -67,6 +69,8 @@ struct ScenarioTarget {
     // Its radar warning receiver: an ESM receiver of the EM library (kind rwr). With one, the pilot evades when it warns
     // of the lock or the launch (the command link heard: roadmap E5), not on the truth.
     std::string rwr;
+    // The model it is drawn with (data/scenery/basic_models.json; "" its class's): presentation only.
+    std::string model;
     // A decoy (roadmap E6): a drone whose echo is made to look like an aircraft's (radar reflectors). The radar can't
     // tell; the TV can, close enough to make out its type (em/optical.hpp), when the crew looks.
     bool decoy = false;
@@ -129,6 +133,14 @@ struct ScenarioDef {
     GeoPoint origin;
     double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
     std::vector<TerrainRidge> ridges;     // straight ridges on it, for cover (terrain.ridges)
+    // "terrain": {"type": "map", "map": "maps/kesmark_range.json"}: the ground of a generated map (terrain_map.hpp)
+    // under the scenario, whatever its origin. ground_height_m is then the map's ground under the origin.
+    std::string map_file;
+    std::shared_ptr<const MapData> map;
+    // "weather": a preset of data/weather/presets.json (by id, or the air war's clear/cloudy/poor): the winds, the
+    // cloud and the air (weather.hpp). Without one, still standard air and no cloud.
+    bool has_weather = false;
+    WeatherPreset weather;
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
     std::string crew_file;         // the crew data (own_unit.crew_data, or data/crew/<system>_crew.json when it exists)
     bool has_crew_data = false;
@@ -221,7 +233,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "triggers", "end", "assistance", "environment", "doctrine"})) {
+                             "targets", "triggers", "end", "assistance", "environment", "doctrine", "weather"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -232,7 +244,7 @@ public:
         if (!OptionalInt(root, "", "seed", seed)) return false;
         if (seed < 0) return Fail("seed", "must be >= 0");
         out.seed = static_cast<unsigned>(seed);
-        if (!LoadOrigin(root, out) || !LoadTerrain(root, out)) return false;
+        if (!LoadOrigin(root, out) || !LoadTerrain(root, data_dir, out)) return false;
         if (!LoadOwnUnit(root, data_dir, out, console)) return false;
         if (!OptionalString(root, "", "command_post", out.command_post_file)) return false;
         if (!out.command_post_file.empty()) {
@@ -263,7 +275,7 @@ public:
                 return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
             }
         }
-        if (!LoadEnvironment(root, out) || !LoadDoctrine(root, out)) return false;
+        if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -319,12 +331,21 @@ private:
         return true;
     }
 
-    bool LoadTerrain(const json::Value& root, ScenarioDef& out) {
+    bool LoadTerrain(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
         const json::Value* t = nullptr;
-        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m", "ridges", "notes"})) return false;
+        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m", "map", "ridges", "notes"})) return false;
         std::string type;
         if (!RequireString(*t, "terrain", "type", type)) return false;
-        if (type != "flat") return Fail("terrain.type", "only \"flat\" is supported so far");
+        if (type == "map") {  // a generated map's ground (terrain_map.hpp); no ridges: the map has its own hills
+            if (!RequireString(*t, "terrain", "map", out.map_file)) return false;
+            if (t->Find("ridges") != nullptr || t->Find("height_m") != nullptr) return Fail("terrain", "a map has its own ground: no height_m or ridges");
+            std::string error;
+            out.map = LoadMapCached(data_dir, out.map_file, &error);
+            if (!out.map) return Fail("terrain.map", error);
+            out.ground_height_m = MapTerrain(out.map, out.origin).HeightAt(0.0, 0.0);
+            return true;
+        }
+        if (type != "flat") return Fail("terrain.type", "must be \"flat\" or \"map\"");
         if (!RequireNumber(*t, "terrain", "height_m", out.ground_height_m)) return false;
         // "ridges": [ { "from": { "east_m", "north_m" }, "to": {...}, "height_m": 120, "width_m": 1000 } ]
         const json::Value* rs = OptionalArray(*t, "terrain", "ridges");
@@ -651,6 +672,21 @@ private:
         return true;
     }
 
+    // "weather": "cloudy" (a preset id, or the air war's clear/cloudy/poor). Without an "environment" the preset's
+    // surface visibility is the TV's; without own_unit.em.rain_mmh its rain falls on the radars.
+    bool LoadWeather(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* w = root.Find("weather");
+        if (w == nullptr) return true;
+        if (!w->Is(json::Type::String) || w->string.empty()) return Fail("weather", "expected a preset id (data/weather/presets.json)");
+        std::string error;
+        if (!FindWeatherPreset(data_dir, w->string, out.weather, &error)) return Fail("weather", error);
+        out.has_weather = true;
+        const json::Value* env = root.Find("environment");
+        if (env == nullptr || env->Find("visibility_km") == nullptr) out.optics.visibility_m = out.weather.visibility_km * 1000.0;
+        if (out.has_em && out.em.rain_mmh <= 0.0) out.em.rain_mmh = out.weather.rain_mmh;
+        return true;
+    }
+
     // "doctrine": {"tv_check": true, "search_bursts": {"on_s": 4, "off_s": 20}, "salvo": 2}.
     bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
         const json::Value* d = root.Find("doctrine");
@@ -682,7 +718,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -700,7 +736,7 @@ private:
             }
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
             if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr) ||
-                !OptionalBool(t, p, "decoy", tg.decoy)) {
+                !OptionalBool(t, p, "decoy", tg.decoy) || !OptionalString(t, p, "model", tg.model)) {
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");

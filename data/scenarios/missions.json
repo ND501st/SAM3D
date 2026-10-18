@@ -44,6 +44,26 @@
         { "file": "scenarios/osa_angola_night.json", "title": "Angola: dug in, a night raid, a Puma in the canyon" },
         { "file": "scenarios/osa_cuito_1988.json", "title": "Cuito Cuanavale, 20 February 1988: Mirage F1AZs" }
       ]
+    },
+    {
+      "id": "air_war", "label": "Air war",
+      "notes": "Raids planned by the enemy air command against battery 21 (docs/air_war/): officers with characters choose the targets, the time, the way in and the package from what their intelligence believes. These are samples from campaigns against each adversary; the whole campaign runs in simcore (air_war_demo) and comes to the game next. NPC commanders run the crew and the battery: take a seat, or command the vehicle.",
+      "missions": [
+        { "file": "scenarios/air_war_rebels_strike.json", "title": "Rebels: light aircraft at dusk" },
+        { "file": "scenarios/air_war_neutral_recce.json", "title": "Neutral neighbour: a light jet looks for you" },
+        { "file": "scenarios/air_war_pact_massed_strike.json", "title": "Warsaw Pact: a massed blow" },
+        { "file": "scenarios/air_war_pact_dead.json", "title": "Warsaw Pact: MiG-25BMs hunt the battery" },
+        { "file": "scenarios/air_war_nato_decoys.json", "title": "NATO: decoys first" },
+        { "file": "scenarios/air_war_nato_strike.json", "title": "NATO: a strike package goes by" },
+        { "file": "scenarios/air_war_nato_dead.json", "title": "NATO: DEAD on the battery" }
+      ]
+    },
+    {
+      "id": "test_range", "label": "Test range",
+      "notes": "The Kesmark test map (data/maps/kesmark_range.json): 40 by 40 km of ground with its towns, woods, roads and military sites, the airspace and the weather beyond it. NPC commanders fight; take any seat to watch or join in.",
+      "missions": [
+        { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" }
+      ]
     }
   ]
 }

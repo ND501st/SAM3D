@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "SimBasicModels.h"
 #include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
@@ -40,6 +41,34 @@ void ASimEntityActor::UseGroundStandIn()
 		Mesh->SetRelativeRotation(FRotator::ZeroRotator);
 		Mesh->SetRelativeLocation(FVector(0.0, 0.0, 50.0));  // the box stands on the ground
 	}
+}
+
+bool ASimEntityActor::UseBasicModel(const FString& ModelId)
+{
+	if (ModelId.IsEmpty() || ModelId == BasicModel)
+	{
+		return !ModelId.IsEmpty();
+	}
+	TArray<UStaticMeshComponent*> Parts;
+	if (FSimBasicModels::Build(ModelId, Root, &Parts) == 0)
+	{
+		return false;
+	}
+	for (TObjectPtr<UStaticMeshComponent>& Old : ModelParts)
+	{
+		if (Old != nullptr)
+		{
+			Old->DestroyComponent();
+		}
+	}
+	ModelParts.Reset();
+	for (UStaticMeshComponent* P : Parts)
+	{
+		ModelParts.Add(P);
+	}
+	Mesh->SetVisibility(false);
+	BasicModel = ModelId;
+	return true;
 }
 
 bool ASimEntityActor::UseVehicleModel(const FString& Kind)

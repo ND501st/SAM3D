@@ -140,6 +140,8 @@ private:
 
 	void StartScenario(USimWorldSubsystem* Sim);
 	void ShowMissionMenu();
+	/** The air war's campaign screen (ASimCampaignHUD), for ?SimCampaign. */
+	void ShowCampaignScreen();
 	bool ShouldShowMissionMenu() const;
 	void RunMenuCheck(float DeltaSeconds);
 	void SpawnPlayerVehicle(USimWorldSubsystem* Sim);

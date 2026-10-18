@@ -59,3 +59,13 @@ the TV view (Unreal). Without the group the old behaviour stays: the servo drive
 Losing the track during the flight loses the missile (command guidance), and a shot whose flight time would exceed
 `missile.max_flight_time_s` runs out. The debrief prints every factor and the random draw for each shot, and the
 draw comes from the scenario seed, so a run can be repeated exactly.
+
+## air_war.json (the enemy air command)
+
+Game-balance numbers of the enemy air command (`simcore/air_war/`, `docs/air_war/`): the planner's utility weights, the
+abstract attrition and strike model (with the guns around targets), the intelligence's ageing and deception, adaptation,
+politics, the repair of what is wrecked, the day's weather, the pacing of the player's missions, the raid scenarios and
+the mission bridge's weapon effects, and what our side learns. Tuned against the period's shapes in the balance pass
+(`docs/air_war/09_BALANCE.md`, `simcore/examples/air_war_balance.cpp`).
+Every key is listed with its default in `TuningTable::Defaults` (`simcore/air_war/data.hpp`); an unknown key fails the
+load and `test_air_war` checks the file names them all.

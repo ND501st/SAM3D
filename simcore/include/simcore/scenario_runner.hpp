@@ -78,6 +78,15 @@ public:
           engagement_on_(!def_.tuning_file.empty()),
           engagement_(def_.tuning, def_.unit_position) {
         assist_level_ = def_.assistance;
+        if (def_.map) {  // a generated map's ground under the whole scenario (terrain_map.hpp)
+            map_ground_ = std::make_unique<MapTerrain>(def_.map, def_.origin);
+            world_.SetTerrain(map_ground_.get());
+        }
+        if (def_.has_weather) {  // the winds and the cloud over the whole airspace (weather.hpp)
+            weather_ = Weather(def_.weather, def_.ground_height_m, noise::Mix64(def_.seed + 0x3EA7u));
+            if (def_.map) weather_.SetRoughnessM(def_.map->Def().roughness_m);
+            world_.SetWeather(&weather_);
+        }
         for (std::size_t i = 0; i < def_.crew.size(); ++i) {
             const ScenarioCrew& c = def_.crew[i];
             const double u = Uniform01(rng_);
@@ -169,6 +178,7 @@ public:
     void Step(double dt) {
         if (finished_) return;
         time_ += dt;
+        weather_.SetTime(time_);  // the clouds drift
         UpdateTargets(dt);
         DeliverOrders();
         UpdateBattery(dt);
@@ -269,12 +279,16 @@ public:
         engagement_.SetUnitHeading(heading_deg);
     }
 
-    // Replace the scenario's flat ground, e.g. with heights sampled from Cesium. Null restores the flat ground.
-    // The terrain must outlive the runner or be replaced first.
+    // Replace the scenario's ground, e.g. with heights sampled from Cesium. Null restores the scenario's own (its map's,
+    // or the flat ground). The terrain must outlive the runner or be replaced first.
     void SetTerrain(const Terrain* terrain) {
-        world_.SetTerrain(terrain != nullptr ? terrain : &ground_);
+        world_.SetTerrain(terrain != nullptr ? terrain : (map_ground_ ? static_cast<const Terrain*>(map_ground_.get()) : &ground_));
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
     }
+
+    // The scenario's weather (its winds and clouds, drifted to now) and its map's ground (null on flat ground).
+    const Weather& GetWeather() const { return weather_; }
+    const MapTerrain* MapGround() const { return map_ground_.get(); }
 
     // The battery command post's plotting board: the player's own when the vehicle is the post, else the scenario's
     // "command_post" (null when there is none).
@@ -1566,6 +1580,8 @@ private:
     ScenarioDef def_;
     ConsoleData console_;
     RidgeTerrain ground_;  // the scenario's flat ground and its ridges
+    std::unique_ptr<MapTerrain> map_ground_;  // or its map's ground (terrain.type "map")
+    Weather weather_;      // the scenario's "weather" (still, clear air without one)
     World world_;
     AcmiWriter acmi_;
     std::mt19937 rng_;

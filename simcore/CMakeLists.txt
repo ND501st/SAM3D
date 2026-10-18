@@ -75,7 +75,11 @@ add_executable(simcore_tests
   tests/test_missions.cpp
   tests/test_em_guidance.cpp
   tests/test_em_threats.cpp
-  tests/test_ranges_history.cpp)
+  tests/test_ranges_history.cpp
+  tests/test_air_war.cpp
+  tests/test_command.cpp
+  tests/test_scenery.cpp
+  tests/test_world_map.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -136,3 +140,15 @@ add_test(NAME em_demo
 # Scaling benchmark for the electromagnetic layer (not a test: timing depends on the machine).
 add_executable(em_bench examples/em_bench.cpp)
 simcore_configure_target(em_bench)
+
+# The enemy air command over many seeds, every faction and two battery postures (roadmap A12,
+# docs/air_war/09_BALANCE.md). Not a test: a table to read.
+add_executable(air_war_balance examples/air_war_balance.cpp)
+simcore_configure_target(air_war_balance)
+
+# The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
+# as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact.
+add_executable(air_war_demo examples/air_war_demo.cpp)
+simcore_configure_target(air_war_demo)
+add_test(NAME air_war_demo
+         COMMAND air_war_demo warsaw_pact 2 "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/air_war" 1)

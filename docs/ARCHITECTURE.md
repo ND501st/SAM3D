@@ -152,11 +152,23 @@ published ranges; data in `data/em/`. It runs at 10 Hz (`EmWorld::Step`), determ
 overlay primitives drawn by Unreal (`FSimEmLayer`, `sam3d.em.Debug`) and by `tools/em_view.py`. It is not yet linked
 to the Osa scenario's engagement model (roadmap E2). Full design: `docs/EM_ARCHITECTURE.md`.
 
+## The enemy air command
+
+`simcore/include/simcore/air_war/` (namespace `simcore::airwar`, umbrella `air_war.hpp`; design `docs/air_war/`) is a
+campaign layer above the scenarios: an enemy staff of officers with characters plans air tasking orders on an
+intelligence picture that never reads the truth; raids are resolved abstractly by the same rules the planner estimates
+with, or, when they come through the player's battery's sector, become scenario JSON for the existing loader and runner
+(NPC crew and battery, PU-12, C2, EM layer, prepared position) with a mission bridge that adds weapon release, ARMs and
+the enemy's ELINT and brings the outcome back. The campaign then applies damage, losses, pilots' claims, sightings and
+fixes, the officers' lessons, grudges and careers, politics, logistics and repair, and writes what our side learns.
+Deterministic for a seed. `examples/air_war_demo.cpp` runs it end to end.
+
 ## Known limitations (deliberate, for now)
 
 Generic simcore models (used by the demo, not by the Osa's outcomes):
 
-- Aircraft: constant speed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances.
+- Aircraft: constant airspeed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
+- Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's obstacle grid (woods, buildings) is not yet used by line of sight (E9).
 - Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
   deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
 - Radar physics: single-look SNR threshold, no clutter or multipath.

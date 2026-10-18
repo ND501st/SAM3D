@@ -51,6 +51,7 @@ struct MissionDef {
     std::string name;         // the scenario's (the link's) name
     std::string description;  // and description
     bool link = false;        // a battery link: the player chooses the vehicle
+    std::string level;        // the game level it plays in ("" the menu's own; "/Game/Maps/KesmarkRange" for the map)
     std::vector<MissionVehicle> vehicles;
 
     const MissionVehicle* Vehicle(const std::string& vehicle_id) const {
@@ -135,11 +136,12 @@ public:
 
 private:
     bool LoadMission(const json::Value& e, const std::string& p, MissionDef& m) {
-        if (!Keys(e, p, {"file", "title", "vehicles"}) || !RequireString(e, p, "file", m.file) ||
-            !RequireString(e, p, "title", m.title)) {
+        if (!Keys(e, p, {"file", "title", "vehicles", "level"}) || !RequireString(e, p, "file", m.file) ||
+            !RequireString(e, p, "title", m.title) || !OptionalString(e, p, "level", m.level)) {
             return false;
         }
         m.id = MissionIdOf(m.file);
+        if (!m.level.empty() && m.level.rfind("/Game/", 0) != 0) return Fail(Join(p, "level"), "a level path starting /Game/");
         const std::string path = data_dir_ + "/" + m.file;
         std::string text;
         if (!ReadTextFile(path, text)) return Fail(Join(p, "file"), "cannot open " + m.file);

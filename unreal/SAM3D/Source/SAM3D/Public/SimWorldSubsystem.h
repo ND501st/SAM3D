@@ -51,6 +51,11 @@ struct SAM3D_API FSimEntityState
 	/** A battery vehicle set up in position (its mast raised, for the PU-12M). */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	bool bDeployed = false;
+
+	/** The basic model it is drawn with (data/scenery/basic_models.json, docs/scenery/): the scenario target's own
+	 *  model, else its class's; our missiles' and the battery vehicles' by their kind. Empty: no model known. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	FString Model;
 };
 
 /** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
@@ -402,6 +407,10 @@ struct SAM3D_API FSimMission
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	bool bLink = false;
+
+	/** The level it plays in (e.g. /Game/Maps/KesmarkRange); empty: the menu's own level. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Level;
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	TArray<FSimMissionVehicle> Vehicles;

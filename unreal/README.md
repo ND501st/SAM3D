@@ -116,6 +116,23 @@ faults red) and go to the Output Log (`LogSAM3D`). Driving off with the АПУ u
 **Your Cesium ion token** is saved by the plugin under `Content/CesiumSettings/`, which is git-ignored so it
 never reaches the repository.
 
+## The Kesmark test range (no Cesium)
+
+`Content/Maps/KesmarkRange` (made by `tools/ue_build_kesmark_range.py` through the editor commandlet, with the map's
+vertex-colour material `/Game/SAM3D/Map/M_SimMapVertexColor`) draws the generated 40 km map
+(`data/maps/kesmark_range.json`) and the weather at play time: `ASimMapActor` (ground, ribbons, instanced boxes, in the
+scenario's frame, curved with the Earth), `ASimSkyWeatherActor` (sun from `simcore/solar.hpp`, physically based sky with
+the day's haze, volumetric cloud on the weather's main layer; `-SimCloudCells` adds the sim's own cloud as boxes), and a
+director with Cesium off playing `scenarios/kesmark_range_test.json`. The missions menu's "Test range" opens it.
+`docs/TEST_RANGE.md` has the details.
+
+```
+UnrealEditor.exe SAM3D.uproject /Game/Maps/KesmarkRange -game -SimScenario=scenarios/kesmark_range_test.json
+UnrealEditor.exe SAM3D.uproject /Game/Maps/KesmarkRange -game -RenderOffscreen -SimScenario=scenarios/kesmark_range_test.json -SimMapShots=C:/dev/SAM3D/out/map_shots
+```
+
+From Git Bash, pass the level from PowerShell or cmd: Git Bash rewrites `/Game/...` into a Windows path.
+
 ## Hands-free test run
 
 Tick **Cabin Tour** on the Sim Scenario Director, or start the editor with the environment variable
@@ -181,7 +198,11 @@ must run with the tour on), records sim time, equipment, lamps, the track and a 
 | `SimCabinComponent` | Builds the cabin's panels, controls and lamps from the loaded cabin layout and shows the console state on them every frame; tracing, hover text, clicks and wheel turns for the vehicle. |
 | `SimCabinDisplayComponent` | One instrument: draws the scope, range indicator, dial or meter into a render target every frame (or films the TV picture with a scene capture) and shows it on a quad on the panel. Uses the ProceduralMeshComponent plugin and the engine's `Widget3DPassThrough_Opaque` material. |
 | `SimCabinHUD` | Crosshair, hover text, feedback and key help while in the cabin. |
+| `SimMapActor` | Draws a generated map (`simcore/terrain_map.hpp`) in the running scenario's frame: ground tiles with collision, roads/rail/river ribbons, every building, wood block and site part as instanced boxes. `-SimMapShots=<folder>` photographs it. |
+| `SimSkyWeatherActor` | The sun, sky atmosphere, sky light and volumetric cloud from the sim's weather and the sun's place. |
 | `SimEntityActor` | Visual proxy for one target or missile. Subclass in Blueprint for real meshes and effects. |
+| `SimAirCampaignSubsystem` | The air war's campaign (`simcore::airwar::AirCampaign`), kept by the game instance across level loads: starts and saves campaigns, advances to the next raid, writes the raid's scenario to `Saved/AirWar/`, steps the mission bridge while it plays, brings the outcome back. |
+| `SimCampaignHUD` | The campaign screen between raids: the map of what our side knows, the intelligence summary, the enemy staff's dossiers, the raids seen, the battery's posture, the raid warning and the choice to fight it or let it pass, the reveal at the end. |
 
 ## Electromagnetic layer (radar, ESM, jamming, C2)
 
@@ -258,6 +279,41 @@ ScenarioFile to `scenarios/osa_crew_practice.json`, NPC commander, or `scenarios
   ```
   UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.Crew;Quit" -unattended -nullrhi
   ```
+
+## Air war campaign (docs/air_war/)
+
+The missions menu has an **AIR WAR CAMPAIGN** box: **1-4** start a campaign against the rebels, the neutral neighbour,
+the Warsaw Pact or NATO (a fresh seed each time); **C** continues the campaign under way, or the one saved in
+`Saved/AirWar/campaign.json` (written after every step: a campaign survives quitting the game). The level reopens with
+`?SimCampaign` and `ASimScenarioDirector` shows the campaign screen (`ASimCampaignHUD`):
+
+- the game is first person (`docs/command/`): the screen shows only what has reached the player's character through
+  the chain of command (`simcore/command/`, owned by the subsystem and fed after every step of the campaign);
+- the map (left): the enemy's front and entry points, our objects (where they are, not how they stand: damage only as
+  it was reported to the player), towns and the district's villages and posts, battery 21 with its 10 km reach and its
+  dummies, the raids reported to the player in the last day (brighter through the battery's sector); a click marks a
+  position, **M** moves the battery there (30 km at most, not within 8 km of the front);
+- the panels (right, **Tab** or **1-4**): **What you know** (each delivery: when, who, by what means, where; the paper
+  or only the summary), **Your chain** (the player's post, superior, contacts and people, where each is now, the coming
+  briefings, visits, courier runs and news), the battery's posture (Up/Down a row, Left/Right change it: emission, EMCON
+  discipline, radio discipline, dummy traffic, decoy emitters, nets, fight silent, move every N hours), the raids
+  reported to the player;
+- **Space** runs the war until a raid comes through the battery's sector (or a day passes); then the warning shows as
+  it reached the player ("'Vozdukh!' 05:14, the regiment's duty officer on the radio ..."), or that none came in time;
+  **[ ]** choose the seat, **Enter** fights it, **L** lets it pass (fought without you, abstractly);
+- **E** ends the campaign and reveals the enemy's staff as it really was; **Q**/**Esc** back to the missions menu.
+
+Fighting a raid writes `Saved/AirWar/raid_<id>.json` (on the Kesmark range map's ground and with the day's weather when
+the map exists: `data/maps/kesmark_range.json`) and opens `/Game/Maps/KesmarkRange` (else the current level) with
+`?SimAirWarRaid=<id>&SimSeat=<seat>`; the director plays it like any mission. While it plays the subsystem steps the
+mission bridge (`simcore/air_war/mission_bridge.hpp`: weapon release, ARMs at a radiating radar, the enemy's ELINT);
+when the scenario ends (or our vehicle is hit) the outcome goes into the campaign and the campaign screen comes back
+after 20 s. A raid left early (Esc → the missions, restart, quit) counts as far as it went. Standalone games only for
+now (a networked campaign would live on the server).
+
+Checks: `UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.AirWar;Quit" -unattended -nullrhi`
+(a campaign's raid written, loaded by the world subsystem, read by the bridge, completed); `-game -SimCampaignTest=<folder>`
+photographs the campaign screen (`campaign.png`), advances to a raid and photographs it (`campaign_raid.png`), then quits.
 
 ## Not done yet
 

@@ -1,0 +1,355 @@
+{
+  "scenario_id": "kesmark_range_test",
+  "name": "Kesmark test range: battery 21 at the bridges, a raid from the west, a MiG-21 patrol, broken cloud",
+  "description": "The test map (data/maps/kesmark_range.json): battery 21 in its position south-west of the Kesmark bridges, the other three launchers, the TZM, the fuel truck and the PU-12M round it. A pair of strike aircraft comes in low from the western border over the map's woods and hills at the bridges, a reconnaissance jet crosses high through the cloud from the north-east, and a friendly MiG-21 pair patrols north of the town. Broken stratocumulus at 1.1 km under altostratus (weather preset 'cloudy'): the TV loses targets in the cloud, the radars do not. NPC commanders run the crew and the battery. Fictional; placeholder target numbers.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Positions from the map (battery 21's vehicles at places_pannonia bty21_v1..v4); heights on the map's ground (map_dump --height). The origin is vehicle 21-1's position. Target speeds, heights, routes and RCS are PLACEHOLDER numbers. Aircraft start 100-150 km out, beyond the map, over the far ground.",
+  "seed": 21,
+  "origin": {
+    "lat_deg": 46.817217,
+    "lon_deg": 19.77862,
+    "alt_m": 107.6
+  },
+  "terrain": {
+    "type": "map",
+    "map": "maps/kesmark_range.json"
+  },
+  "weather": "cloudy",
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12"
+  },
+  "battery": {
+    "share_picture": true,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 900,
+          "north_m": -700,
+          "up_m": 4.3
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": -600,
+          "north_m": -1200,
+          "up_m": 4.3
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 300,
+          "north_m": -1700,
+          "up_m": 5.2
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": -1000,
+          "north_m": -2300,
+          "up_m": 3.8
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": -800,
+          "north_m": -2600,
+          "up_m": 4.1
+        }
+      },
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 400,
+          "north_m": -400,
+          "up_m": 3.9
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 3
+    },
+    "heading_deg": 290,
+    "inputs": {
+      "vehicle_stopped": true
+    },
+    "prepared_position": {
+      "emplacement": true,
+      "nets": true,
+      "wire": true,
+      "dummies": [
+        {
+          "position": {
+            "east_m": -1500,
+            "north_m": -200,
+            "up_m": -1.5
+          },
+          "decoy": "when_radar_off"
+        },
+        {
+          "position": {
+            "east_m": 4700,
+            "north_m": -300,
+            "up_m": 2.7
+          }
+        }
+      ]
+    }
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class2"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [
+    {
+      "id": "t1",
+      "name": "Strike pair from the west (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": -156000,
+        "north_m": 7200,
+        "up_m": 200
+      },
+      "waypoints": [
+        {
+          "east_m": -66000,
+          "north_m": -2800,
+          "agl_m": 120
+        },
+        {
+          "east_m": -28000,
+          "north_m": 1200,
+          "agl_m": 120
+        },
+        {
+          "east_m": -12000,
+          "north_m": -4800,
+          "agl_m": 120
+        },
+        {
+          "east_m": 6000,
+          "north_m": 3200,
+          "agl_m": 120
+        },
+        {
+          "east_m": 34000,
+          "north_m": -10800,
+          "agl_m": 120
+        },
+        {
+          "east_m": 144000,
+          "north_m": -30800,
+          "agl_m": 120
+        }
+      ],
+      "speed_mps": 240,
+      "max_turn_rate_deg_s": 8,
+      "rcs_m2": 5,
+      "appear_at_s": 240,
+      "formation": 2,
+      "behaviour": {
+        "kind": "terrain_following",
+        "agl_m": 120,
+        "max_climb_mps": 50,
+        "lookahead_s": 6
+      },
+      "evade": {
+        "on": "lock",
+        "kind": "jink",
+        "turn_rate_deg_s": 12
+      },
+      "notes": "Placeholder numbers. From the NATO border (theatre entry W3) low over the far ground and the Lazne woods, across the battery's position to the road bridge."
+    },
+    {
+      "id": "t2",
+      "name": "Reconnaissance jet, high through the cloud (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": 84000,
+        "north_m": 119200,
+        "up_m": 7000
+      },
+      "waypoints": [
+        {
+          "east_m": 8000,
+          "north_m": 5200,
+          "up_m": 6400
+        },
+        {
+          "east_m": -66000,
+          "north_m": -80800,
+          "up_m": 6400
+        },
+        {
+          "east_m": -166000,
+          "north_m": -150800,
+          "up_m": 6400
+        }
+      ],
+      "speed_mps": 250,
+      "rcs_m2": 4,
+      "appear_at_s": 420,
+      "notes": "Placeholder numbers. Above both cloud layers on the way in, but the TV looks up through them."
+    },
+    {
+      "id": "f1",
+      "name": "MiG-21 pair on patrol (friendly)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": -46000,
+        "north_m": 25200,
+        "up_m": 4000
+      },
+      "waypoints": [
+        {
+          "east_m": -16000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 29200,
+          "up_m": 4000
+        }
+      ],
+      "speed_mps": 220,
+      "max_turn_rate_deg_s": 10,
+      "rcs_m2": 3,
+      "appear_at_s": 0,
+      "formation": 2,
+      "iff": "friend",
+      "notes": "Placeholder numbers. Our own fighters: they answer the interrogator."
+    }
+  ],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 1500,
+    "when_targets_gone": false
+  },
+  "crew_commander": "npc",
+  "battery_commander": "npc"
+}

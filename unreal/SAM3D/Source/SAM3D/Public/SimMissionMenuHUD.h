@@ -53,6 +53,11 @@ private:
 	void MoveSelection(int32 Step);
 	float DrawWrapped(const FString& Text, float X, float Y, float Width, UFont* Font, const FLinearColor& Colour, float LineGap = 2.0f);
 	void HandleInput();
+	/** The air war: start a campaign against adversary 0-3 (rebels, neutral, Warsaw Pact, NATO) and open its screen. */
+	void StartCampaign(int32 Index);
+	/** Continue the campaign under way, or the saved one. */
+	void ContinueCampaign();
+	void DrawCampaignBox(float X, float Y, float Width);
 	void RunScriptedCheck(float DeltaSeconds);
 
 	TArray<FSimMission> Missions;
@@ -62,6 +67,8 @@ private:
 	/** Where each mission's row and the Start button were drawn, for the mouse. */
 	TArray<FBox2D> RowBoxes;
 	FBox2D StartBox = FBox2D(ForceInit);
+	/** The air war box: the four adversaries and "continue". */
+	TArray<FBox2D> CampaignBoxes;
 
 	FString TestFolder;
 	FString TestPick;

@@ -1,0 +1,312 @@
+// simcore/air_war/mission_bridge.hpp — a raid played as a scenario, brought back into the campaign
+// (docs/air_war/07_INTEGRATION.md).
+//
+// The runner (scenario_runner.hpp) flies the raid's aircraft, the crew fights them and the engagement model decides
+// the shots. What the runner doesn't do, the bridge does, from the runner's public state each step:
+//   * weapon release: a strike, DEAD or helicopter aircraft alive at its release point drops its load; it lands after
+//     `scenario.weapon_fall_s` where it was aimed (where the enemy believed the target was) and hurts what is really
+//     there: our vehicle, the battery's other vehicles, a dummy, the defended object (game values in
+//     data/gameplay/air_war.json);
+//   * anti-radiation missiles: a SEAD or hunter aircraft in range while our search or tracking radar radiates fires
+//     one; it flies at `scenario.arm_speed_mps` and hits if the radar still radiates when it arrives, or radiated
+//     within the seeker's memory if it has one (roadmap E6 will make the ARM an EM missile; until then this is the
+//     gameplay model);
+//   * what the enemy learns: every second our radars radiate (ELINT), every launch an enemy aircraft sees.
+// Every event goes into the runner's log, so the debrief shows it. Finish() turns it all into a PackageOutcome for
+// AirCampaign::CompletePlayerMission.
+#pragma once
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <string>
+#include <vector>
+
+#include "simcore/air_war/raid_scenario.hpp"
+#include "simcore/air_war/state.hpp"
+#include "simcore/air_war/types.hpp"
+#include "simcore/scenario_runner.hpp"
+
+namespace simcore {
+namespace airwar {
+
+class MissionBridge {
+public:
+    MissionBridge(const RaidManifest& m, const AirWarData& d, unsigned seed) : m_(m), d_(&d), rng_(seed * 2654435761u + 99u) {
+        state_.assign(m_.aircraft.size(), AircraftState{});
+        for (std::size_t i = 0; i < m_.aircraft.size(); ++i) state_[i].arms_left = m_.aircraft[i].arms;
+    }
+
+    // Call after every runner.Step().
+    void Step(ScenarioRunner& r) {
+        const TuningTable& tune = d_->tuning;
+        const double t = r.Time();
+        const double dt = t - last_t_;
+        last_t_ = t;
+        if (unit_destroyed_) return;
+        const ConsoleData& con = r.Console();
+        const bool search = con.equipment.IsReady(con.search.antenna) && con.equipment.IsReady(con.search.transmitter);
+        const bool track = con.equipment.IsReady(con.track.transmitter);
+        const bool radiating = search || track;
+        if (radiating && dt > 0.0) {
+            emitted_s_ += dt;
+            last_radiating_t_ = t;
+        }
+        // Launches the enemy sees.
+        if (r.Launches() > launches_seen_) {
+            launches_seen_ = r.Launches();
+            for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                if (!r.TargetAlive(m_.aircraft[i].target_id)) continue;
+                if (Dist2d(r.TargetPosition(m_.aircraft[i].target_id), m_.own_enu) < tune.Get("scenario.revealed_by_launch_m")) {
+                    launch_seen_ = true;
+                    break;
+                }
+            }
+        }
+        for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+            const RaidAircraft& a = m_.aircraft[i];
+            AircraftState& s = state_[i];
+            if (!r.TargetAlive(a.target_id)) continue;
+            const Vec3 pos = r.TargetPosition(a.target_id);
+            s.last_pos = pos;
+            s.seen = true;
+            // Weapons at the release point.
+            if (a.has_release && !s.released && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
+                s.released = true;
+                if (a.role == FlightRole::Recce) {
+                    photographed_ = true;
+                    Log(r, a.target_id, "photographs the area");
+                } else {
+                    Impact imp;
+                    imp.t = t + tune.Get("scenario.weapon_fall_s");
+                    imp.aircraft = static_cast<int>(i);
+                    const double scatter = 120.0 + 200.0 * rng_.Uniform();
+                    const double ang = rng_.Uniform(0.0, 6.283185307179586);
+                    imp.where = a.aim_enu + Vec3{std::cos(ang) * scatter, std::sin(ang) * scatter, 0.0};
+                    impacts_.push_back(imp);
+                    Log(r, a.target_id, a.helicopter ? "fires its rockets" : "releases its bombs");
+                }
+            }
+            // Anti-radiation missiles at a radiating radar.
+            if (s.arms_left > 0 && radiating && t - s.last_arm_t > 10.0) {
+                const double range = Dist2d(pos, m_.own_enu);
+                if (range < a.arm_range_m) {
+                    --s.arms_left;
+                    s.last_arm_t = t;
+                    Arm arm;
+                    arm.t = t + range / tune.Get("scenario.arm_speed_mps");
+                    arm.aircraft = static_cast<int>(i);
+                    arm.memory = a.arm_memory;
+                    arms_.push_back(arm);
+                    ++arms_fired_;
+                    Log(r, a.target_id, "fires an anti-radiation missile at the radar (" + std::to_string(static_cast<int>(range / 1000.0 + 0.5)) + " km)");
+                }
+            }
+        }
+        // Weapons arriving.
+        for (Impact& imp : impacts_) {
+            if (imp.done || imp.t > t) continue;
+            imp.done = true;
+            Explode(r, imp);
+            if (unit_destroyed_) return;
+        }
+        for (Arm& arm : arms_) {
+            if (arm.done || arm.t > t) continue;
+            arm.done = true;
+            const bool on = radiating || (arm.memory && t - last_radiating_t_ < tune.Get("scenario.arm_memory_s"));
+            const std::string who = m_.aircraft[static_cast<std::size_t>(arm.aircraft)].target_id;
+            if (!on) {
+                radar_silenced_ = true;
+                Log(r, who, "ARM: the radar went silent, the missile lost it");
+                continue;
+            }
+            if (rng_.Chance(tune.Get("scenario.arm_pk"))) {
+                radar_killed_ = true;
+                unit_destroyed_ = true;
+                Log(r, who, "ARM: hit the vehicle's radar - our vehicle is out of action");
+            } else {
+                Log(r, who, "ARM: missed");
+            }
+        }
+    }
+
+    bool UnitDestroyed() const { return unit_destroyed_; }
+    double EmittedSeconds() const { return emitted_s_; }
+    int ArmsFired() const { return arms_fired_; }
+
+    // What happened, for AirCampaign::CompletePlayerMission.
+    PackageOutcome Finish(ScenarioRunner& r) {
+        PackageOutcome o;
+        o.package_id = m_.package_id;
+        o.played = true;
+        o.truth_applied = false;
+        // Which aircraft went down: our missiles' hits (the engagement model's HIT), the battery's other launchers
+        // ("destroyed by <launcher>") and anything else the world destroyed ("destroyed").
+        std::vector<bool> down(m_.aircraft.size(), false);
+        for (const DebriefEntry& e : r.Log().Entries()) {
+            const bool hit = e.kind == DebriefEntry::Kind::Hit;
+            const bool destroyed = e.kind == DebriefEntry::Kind::Scenario && e.detail.compare(0, 9, "destroyed") == 0;
+            if (!hit && !destroyed) continue;
+            for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                if (m_.aircraft[i].target_id == e.what) down[i] = true;
+            }
+        }
+        const std::size_t nf = m_.flight_in.size();
+        std::vector<bool> flight_released(nf, false), flight_has_release(nf, false), flight_alive(nf, false);
+        for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+            const RaidAircraft& a = m_.aircraft[i];
+            const std::size_t fi = static_cast<std::size_t>(std::max(0, a.flight));
+            if (fi >= flight_released.size()) continue;
+            if (a.has_release) flight_has_release[fi] = true;
+            if (state_[i].released) flight_released[fi] = true;
+            if (!down[i]) flight_alive[fi] = true;
+            if (!down[i] || a.drone) continue;
+            LossRecord l;
+            l.flight = a.flight;
+            l.by = m_.own_object;
+            l.where = state_[i].last_pos;
+            l.officer = a.officer;
+            l.captured = rng_.Chance(0.5);
+            o.losses.push_back(l);
+        }
+        for (std::size_t fi = 0; fi < flight_released.size(); ++fi) {
+            if (flight_released[fi]) o.released_flights.push_back(static_cast<int>(fi));
+            else if (flight_has_release[fi] && flight_alive[fi]) o.aborted_flights.push_back(static_cast<int>(fi));
+        }
+        o.delivered = delivered_;
+        o.hit_nothing = delivered_ && !hit_something_;
+        o.damage = damage_;
+        o.decoys_hit = decoys_hit_;
+        o.destroyed = destroyed_;
+        o.missiles_spent = r.Launches();
+        o.arms_fired = arms_fired_;
+        if (emitted_s_ > 0.0) o.AddEmission(m_.own_object, emitted_s_);
+        if (launch_seen_) o.fired.push_back(m_.own_object);
+        if (radar_killed_) {
+            o.radars_killed.push_back(m_.own_object);
+        } else if (radar_silenced_) {
+            o.radars_suppressed.push_back(m_.own_object);
+        }
+        if (photographed_) o.recce_seen.push_back(m_.own_object);
+        o.notes = notes_;
+        return o;
+    }
+
+private:
+    struct AircraftState {
+        bool released = false;
+        bool seen = false;
+        int arms_left = 0;
+        double last_arm_t = -1e9;
+        Vec3 last_pos;
+    };
+    struct Impact {
+        double t = 0.0;
+        int aircraft = -1;
+        Vec3 where;
+        bool done = false;
+    };
+    struct Arm {
+        double t = 0.0;
+        int aircraft = -1;
+        bool memory = false;
+        bool done = false;
+    };
+
+    RaidManifest m_;
+    const AirWarData* d_;
+    Rng rng_;
+    std::vector<AircraftState> state_;
+    std::vector<Impact> impacts_;
+    std::vector<Arm> arms_;
+    double last_t_ = 0.0;
+    double emitted_s_ = 0.0;
+    double last_radiating_t_ = -1e9;
+    int launches_seen_ = 0;
+    bool launch_seen_ = false;
+    bool unit_destroyed_ = false;
+    bool radar_killed_ = false;
+    bool radar_silenced_ = false;
+    bool photographed_ = false;
+    bool delivered_ = false;
+    bool hit_something_ = false;
+    int arms_fired_ = 0;
+    std::vector<std::pair<std::string, double>> damage_;
+    std::vector<std::string> decoys_hit_;
+    std::vector<std::string> destroyed_;
+    std::vector<std::string> notes_;
+
+    void Log(ScenarioRunner& r, const std::string& who, const std::string& what) {
+        r.Log().Record({r.Time(), DebriefEntry::Kind::Scenario, "enemy air", who, what});
+        notes_.push_back(who + " " + what);
+    }
+
+    void AddDamage(const std::string& id, double x) {
+        for (auto& e : damage_) {
+            if (e.first == id) {
+                e.second += x;
+                return;
+            }
+        }
+        damage_.push_back({id, x});
+    }
+
+    void Explode(ScenarioRunner& r, const Impact& imp) {
+        const TuningTable& tune = d_->tuning;
+        const RaidAircraft& a = m_.aircraft[static_cast<std::size_t>(imp.aircraft)];
+        const double lethal = tune.Get("scenario.bomb_lethal_m") * (a.helicopter ? 0.6 : 1.0);
+        const double pk = (a.helicopter ? tune.Get("scenario.rocket_pk_vehicle") : tune.Get("scenario.bomb_pk_vehicle")) *
+                          std::min(1.5, std::max(0.2, a.strike_power * 2.0));
+        delivered_ = true;
+        bool hit = false;
+        // Our vehicle.
+        if (Dist2d(imp.where, m_.own_enu) < lethal) {
+            hit = true;
+            if (rng_.Chance(pk)) {
+                unit_destroyed_ = true;
+                AddDamage(m_.own_object, 0.25);
+                Log(r, a.target_id, "bombs: our vehicle is hit and out of action");
+                hit_something_ = true;
+                return;
+            }
+            Log(r, a.target_id, "bombs: near miss on our vehicle");
+        }
+        // The battery's other vehicles: each one lost costs the battery a quarter of its strength.
+        for (const auto& v : m_.battery) {
+            if (Dist2d(imp.where, v.second) < lethal && rng_.Chance(pk)) {
+                hit = true;
+                hit_something_ = true;
+                AddDamage(m_.own_object, v.first == "PU-12" ? 0.15 : 0.2);
+                Log(r, a.target_id, "bombs: vehicle " + v.first + " of the battery is hit");
+            }
+        }
+        // Dummies.
+        for (const auto& dm : m_.dummies) {
+            if (Dist2d(imp.where, dm.second) < tune.Get("strike.decoy_area_m") * 0.4) {
+                hit = true;
+                if (std::find(decoys_hit_.begin(), decoys_hit_.end(), dm.first) == decoys_hit_.end()) {
+                    decoys_hit_.push_back(dm.first);
+                    destroyed_.push_back(dm.first);
+                    Log(r, a.target_id, "bombs: a dummy position is destroyed");
+                }
+            }
+        }
+        // Other objects (a bridge, a depot) inside the scenario.
+        for (const auto& ob : m_.objects) {
+            if (Dist2d(imp.where, ob.second) > tune.Get("strike.stale_miss_m") * 0.5) continue;
+            const TheatreObject* def = d_->theatre.Find(ob.first);
+            const double hard = def != nullptr ? def->hardness : 0.5;
+            if (rng_.Chance(tune.Get("strike.hit_chance"))) {
+                const double x = a.strike_power * (1.0 - 0.7 * hard);
+                AddDamage(ob.first, x);
+                hit = true;
+                hit_something_ = true;
+                Log(r, a.target_id, "bombs: " + (def != nullptr ? def->name : ob.first) + " hit");
+            }
+        }
+        if (!hit) Log(r, a.target_id, "bombs fall on empty ground");
+    }
+};
+
+}  // namespace airwar
+}  // namespace simcore

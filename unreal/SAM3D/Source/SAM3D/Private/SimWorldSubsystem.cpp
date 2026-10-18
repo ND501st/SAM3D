@@ -1,5 +1,7 @@
 #include "SimWorldSubsystem.h"
 
+#include "SimBasicModels.h"
+
 #include "Misc/FileHelper.h"
 
 #include <algorithm>
@@ -758,6 +760,7 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 			Out.Name = ToF(M.name);
 			Out.Description = ToF(M.description);
 			Out.bLink = M.link;
+			Out.Level = ToF(M.level);
 			for (const simcore::MissionVehicle& V : M.vehicles)
 			{
 				FSimMissionVehicle& OutV = Out.Vehicles.AddDefaulted_GetRef();
@@ -1274,13 +1277,32 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 	{
 		return Out;
 	}
+	// Each aircraft's basic model: its scenario target's own, else its class's (docs/scenery/).
+	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
 	for (const simcore::Aircraft& A : W->AircraftList())
 	{
-		Out.Add(MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity));
+		FSimEntityState S = MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity);
+		if (Models != nullptr && Runner)
+		{
+			for (const simcore::ScenarioTarget& T : Runner->Def().targets)
+			{
+				if (T.name == A.name || T.id == A.name)
+				{
+					S.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
+					break;
+				}
+			}
+		}
+		Out.Add(S);
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
-		Out.Add(MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity));
+		FSimEntityState S = MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity);
+		if (Models != nullptr)
+		{
+			S.Model = ToF(Models->ForTarget(std::string(), "missile", std::string()));
+		}
+		Out.Add(S);
 	}
 	// The battery's other vehicles and the dummy positions (roadmap 7.7).
 	{
@@ -1295,6 +1317,10 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 				S.bIsGround = true;
 				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
 				S.bDeployed = V.deployed;
+				if (Models != nullptr)
+				{
+					S.Model = ToF(Models->ForGround(V.kind));
+				}
 				Out.Add(S);
 			}
 		}

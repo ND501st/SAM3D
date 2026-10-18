@@ -827,6 +827,7 @@ private:
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
         bool los = false;
+        double cloud_transmission = 1.0;  // the light the cloud lets through between the unit and the target (weather.hpp)
         std::vector<std::array<double, 3>> history;  // (time, az, el) of the last few seconds, for a lagging operator
         Vec3 prev_velocity;
         Vec3 prev_los_dir;
@@ -902,6 +903,7 @@ private:
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
             g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
+            g.cloud_transmission = world.GetWeather().HasClouds() ? world.GetWeather().CloudTransmission(unit_, unit_alt, a->position, alt) : 1.0;
             const Vec3 dir = los.Normalized();
             g.closing_mps = -Dot(a->velocity, dir);
             g.speed_mps = a->velocity.Length();
@@ -1319,7 +1321,7 @@ private:
                                      ? optical_.contrast_threshold
                                      : em::AnchorThreshold(optical_.inherent_contrast, tuning_.tv_max_range_m, em::kReferenceVisibilityM);
         const double fov_h = DegToRad(TvFieldOfViewDeg(console) * console.track.fov_height_ratio);
-        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los);
+        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los, g.cloud_transmission);
     }
 
     // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by

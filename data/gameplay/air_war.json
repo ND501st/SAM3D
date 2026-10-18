@@ -1,0 +1,58 @@
+{
+  "tuning_id": "air_war",
+  "status": "First pass, 18 October 2026. Game-balance numbers of the enemy air command (simcore/air_war/; docs/air_war/). Not system data.",
+  "source": "game value: tuned by sam3d against the shapes in docs/research/ENEMY_AIR_RESEARCH_2026-10.md (staleness of mobile targets: wiki_model5; EMCON against ARMs: wiki_black_buck, vr_1985_plss; inflated claims: afmag_2000_kosovo, design reference only)",
+  "confidence": "estimate",
+  "notes": "Every key here is read by simcore/air_war (TuningTable::Defaults lists them with their defaults; an unknown key fails the load). Chances are per aircraft per pass unless said otherwise.",
+  "utility": {
+    "value_weight": 10.0, "loss_cost": 4.0, "noise_at_zero_skill": 3.0, "quirk_scale": 2.0, "grudge_weight": 0.4,
+    "stale_penalty": 4.0, "exploration": 1.0, "min_value": 0.5, "min_effect": 0.05,
+    "notes": "The planner's utility: value_weight x worth x chance it is there and works x chance of delivery x effect, minus loss_cost x expected losses x loss aversion (which grows as the faction's daily loss tolerance shrinks), plus quirk_scale x habits, minus the memory of losses that way, plus exploration x creativity / sqrt(1 + uses), plus noise that shrinks with planning skill. Packages below min_value are not flown."
+  },
+  "attrition": {
+    "low_vs_long_range_sam": 0.35, "medium_vs_guns": 0.0, "high_vs_short_range": 0.0, "sead_suppression": 0.45, "jamming": 0.25,
+    "night": 0.7, "poor_weather": 0.8, "emcon_lethality": 0.6, "arm_kill": 0.35, "arm_kill_no_memory_off": 0.05,
+    "escort_fighter_kill": 0.03, "max_per_pass": 0.6, "target_guns_troops": 0.04, "target_guns_site": 0.015,
+    "notes": "low_vs_long_range_sam: a low flier is masked from a long-range SAM's radar (radius above 15 km) for most of a pass (Dugman 5's low approach traded SAMs for guns: wiki_model5). sead_suppression with two or more SEAD aircraft, scaled by the SEAD officer's skill and the package's coordination. night and poor_weather apply to optical defences. emcon_lethality: a SAM fighting silent (TV, the PU-12's designations) engages late. arm_kill_no_memory_off: an ARM without memory against a radar that switched off in time (wiki_black_buck). An ARM's hit takes out one fire-control radar (an Osa battery has four). target_guns_troops and target_guns_site: light guns and shoulder-fired missiles around a target without its own air defence, per aircraft attacking it low or by helicopter (Dugman 5: most aircraft were hit by guns at the low approach height, wiki_model5); troops carry the most."
+  },
+  "strike": {
+    "hit_chance": 0.6, "night_accuracy": 0.6, "poor_weather_accuracy": 0.5, "toss_accuracy": 0.6, "stale_miss_m": 1500.0,
+    "decoy_area_m": 1500.0, "collateral_m": 3000.0,
+    "notes": "stale_miss_m: the aim point must be within this of the real target, or the bombs fall on empty ground (a battery that moved). decoy_area_m: a dummy this close to the aim point takes the bombs. collateral_m: bombs aimed this close to a town's edge risk civilian casualties."
+  },
+  "intel": {
+    "mobile_sigma_growth_mps": 0.15, "mobile_confidence_half_life_h": 18.0, "fixed_function_recovery": 0.5, "decoy_spot_skill": 0.6,
+    "ghost_fix_chance": 0.35, "claim_destroy_when_off": 0.5, "launch_sighting_m": 20000.0, "recce_corridor_m": 12000.0,
+    "suspect_after_loss": 0.5,
+    "notes": "A mobile unit's believed position spreads at mobile_sigma_growth_mps and the belief that it is there halves every mobile_confidence_half_life_h. fixed_function_recovery: how fast the enemy assumes a struck fixed target is repaired (share per 48 h). ghost_fix_chance: an ELINT fix lands between the battery and a dummy whose decoy emitter radiates on its parameters (vr_1985_plss: active dummies). claim_destroy_when_off: pilots report a radar that went silent under ARM attack as destroyed."
+  },
+  "adapt": {
+    "learning_rate": 0.5, "stress_per_loss": 0.08, "stress_recovery_per_day": 0.15, "reputation_per_success": 0.05,
+    "reputation_per_loss": 0.04, "relieve_below": 0.2, "promote_above": 0.9, "exposure_lesson_m": 40000.0, "reopen_margin": 0.2,
+    "notes": "learning_rate is scaled by each officer's rigidity and method. An officer whose reputation falls below relieve_below is relieved; an ambitious one above promote_above is promoted away. reopen_margin: a campaign whose phase ended on the believed air defences goes back to it when they are believed this much above the line again (the rollback resumes when the sites come back)."
+  },
+  "politics": {
+    "pressure_per_quiet_day": 0.08, "pressure_relief_per_success": 0.04, "support_per_excess_loss": 0.03, "pow_pressure": 0.05,
+    "collateral_restriction_m": 2000.0,
+    "notes": "Pressure from above grows on days without results; support falls with losses beyond the faction's tolerance; prisoners add pressure; civilian casualties widen the no-strike zone around towns (Rolling Thunder's restricted zones: nmusaf_sanctuaries)."
+  },
+  "repair": {
+    "restored_function": 0.5,
+    "notes": "Damage is repaired in the field at 1/repair_h of the whole an hour. A wrecked object is out until its replacement comes, repair_h after it was wrecked (a span, a battery from the reserve, new vehicles), and comes back at restored_function; the field repair completes it."
+  },
+  "weather": { "clear_share": 0.5, "poor_share": 0.15, "notes": "Each day's weather is drawn at the start: clear, cloudy or poor." },
+  "pacing": {
+    "min_gap_h": 3.0, "max_per_day": 3.0, "sector_m": 10000.0,
+    "notes": "Which of the enemy's raids the player flies: those that come within sector_m of the battery (or at it), no closer than min_gap_h apart, at most max_per_day. The rest are resolved abstractly. The pacing chooses; it never adds raids (l4d_director_2007, used only for this)."
+  },
+  "scenario": {
+    "clip_m": 70000.0, "prep_s": 150.0, "margin_s": 240.0, "flight_spacing_m": 800.0, "max_targets": 24.0, "release_capture_m": 2000.0,
+    "weapon_fall_s": 15.0, "arm_speed_mps": 600.0, "arm_pk": 0.45, "arm_memory_s": 20.0, "bomb_lethal_m": 150.0, "bomb_pk_vehicle": 0.5,
+    "rocket_pk_vehicle": 0.3, "revealed_by_launch_m": 15000.0,
+    "notes": "A raid as the player's scenario: the flights inside clip_m of the battery, prep_s before the first aircraft appears; the mission bridge's weapon effects (roadmap E6 will replace the ARM with an EM missile)."
+  },
+  "own_intel": {
+    "reveal_per_observation": 0.12, "pow_chance": 0.4, "warning_s": 300.0, "leak_warning_s": 900.0,
+    "notes": "What the player's side learns: a prisoner talks with pow_chance; the warning net gives warning_s before the first aircraft, leak_warning_s when the enemy's planner has loose lips."
+  }
+}

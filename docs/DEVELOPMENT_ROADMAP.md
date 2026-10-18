@@ -137,6 +137,49 @@ playing them through.
 | 10.1 | **Done in simcore, 18 Oct 2026.** Range days in the style of Ashuluk (from cold, two La-17M drones, one high in the search radar's beam III), Ustka (P-15 targets from the sea, a two-missile salvo at each: `doctrine.salvo`, the second 3-5 s after the first, `korovin_tiv_2010`) and Kapustin Yar (a target entering the zone at its far edge: the missile goes at 8-10 km, the preparation starting in the zone). NAMFI (Crete) left for later |
 | 10.2 | **Done in simcore, 18 Oct 2026.** The Bekaa, 24 July 1982 (an F-4E pair over the mountains, hidden until the crest); Angola from the Pavlov memoir (dug in under nets, a night raid by Buccaneers and an Impala fought by the radars alone, a Puma hidden in a canyon); Cuito Cuanavale, 20 February 1988 (Mirage F1AZs tossing their bombs). The events are sourced, the profiles placeholders (`data/scenarios/README.md`, "Ranges and history"); the missions menu's "Ranges and history" group. Night moves with the search radar on are left for the march mission. Found and fixed on the way: targets circling a waypoint inside their turn circle for ever (after a jink), pull-ups that read as 100+ deg/s manoeuvres in the outcome, a high target's track losing its name in beam III, a manoeuvring target's split track and a kill's last blip reported as new echoes, НЛЦ lit by a target hidden behind the ground and called again at every flicker |
 | 10.3 | Instructor mode modelled on the 9Ф632 trainer: a second player changes target behaviour live |
+| 10.4 | **First pass done, 18 Oct 2026** (`docs/TEST_RANGE.md`). The Kesmark test range: a 40 km generated map of the theatre's district (ground, river, bridges, towns, woods, military sites, ground out to 150 km), weather over the whole airspace (winds aloft and the boundary layer, cloud layers the TV cannot see through, the day's air), the sun's place; the sim and the picture share the ground and the cloud. `/Game/Maps/KesmarkRange`, the missions menu's "Test range". Next: a person flying and driving it; E9 using its obstacle grid; missiles in the wind |
+
+## Phase 11 - The enemy air command (the other side's air war)
+
+Started 18 October 2026 at the project owner's request: the enemy air forces of 1980-85 (a rebel faction, a small neutral
+neighbour, the Warsaw Pact, NATO) planned by officers who feel like real people and react to everything the player
+does. Design: `docs/air_war/` (plan and done-when: `docs/air_war/08_IMPLEMENTATION_PLAN.md`); research:
+`docs/research/ENEMY_AIR_RESEARCH_2026-10.md`; code `simcore/include/simcore/air_war/`; data `data/air_war/`,
+`data/gameplay/air_war.json`.
+
+| # | Task |
+|---|---|
+| A0-A9 | **Done in simcore, 18 Oct 2026.** Research and sources; the theatre and four factions as data; the air staff (traits, skills, 31 quirks, memory, stress, reputation, careers); the intelligence picture (satellite, reconnaissance, ELINT, radio intercept, agents, pilots' claims, ageing, ghosts, dummies); the planner (apportionment, utility, packages, approval, interference, reasons); abstract resolution; the campaign (lessons, politics and events, logistics, repair, relocation, our side's INTSUM and dossiers); raids through the battery's sector as scenarios played by the runner with the NPC crew, and the mission bridge back (`examples/air_war_demo.cpp`); seven sample raids in the missions menu ("Air war"); 14 tests |
+| A10 | **Built 18 Oct 2026:** the Unreal campaign screen (`USimAirCampaignSubsystem`, `ASimCampaignHUD`, the missions menu's campaign box): map, INTSUM, dossiers, posture and relocation, the raid warning, fight or let pass, the reveal; raids played as missions and brought back. Left: a person playing a campaign through |
+| A13 | **Done 18 Oct 2026:** save and load (`air_war/save.hpp`: the seed and the player's actions replayed exactly; saved after every step in the game) |
+| A12 | **First pass done 18 Oct 2026:** the balance pass (`examples/air_war_balance.cpp`, `docs/air_war/09_BALANCE.md`): every adversary over 20 seeds and two battery postures; the believed air defences, wreck-and-replace repair, a front-line belt for the neutral, the Pact's surge, wartime SAM posture, radars per battery, guns at the target, NATO's ARM stock, the rollback resuming. A person playing a campaign through is the second half |
+| A11 | The ARM as an EM missile and the crew's ARM drill (EM track E6) |
+
+## Phase 12 - Our side's chain of command and the information pipeline (first person)
+
+The project owner, 18 Oct 2026: the game is first person; intelligence, early warning and after-action reports reach
+the player's character only through people and means of communication, with a realistic chain of command, senior
+officers included, on a map of a small city, towns, villages, works and countryside (`docs/command/`, research
+`docs/research/CHAIN_OF_COMMAND_RESEARCH_2026-10.md`).
+
+| # | Task |
+|---|---|
+| C0-C4 | **Done in simcore, 18 Oct 2026.** Research and sources (`utin_2018`, `uvs_rf_2007`, `basta_lm`, `valka_lm`); the chain (38 posts from the national sector to a driver, the town's offices), the places (the city, the town, five villages, the posts), the means of signal (12) and the routines (briefings, visits, courier runs, the news) as data; the pipeline (`simcore/command/info_net.hpp`: facts travel hop by hop by the best means each pair has, routine news waits for contacts, carriers lost where bombs fall, wire cut, papers and summaries, the player's character passes nothing on by itself; deterministic); the air war's news fed in at its first knowers (`air_war_feed.hpp`); 6 tests |
+| C5 | **Built 18 Oct 2026:** the campaign screen shows only what reached the player's character, who told them and how; their chain and its coming contacts; the raid warning as received |
+| P1-P3 | Next: deliveries in the world (an officer who walks up and speaks, the telephone, the radio voice, the courier, papers, the evening briefing as a scene); the player telling people, by the means they choose; the pipeline's radio calls feeding the air war's intercept service (`docs/command/07_IMPLEMENTATION_PLAN.md`) |
+
+## Scenery: ultra-basic models of every asset (18 Oct 2026)
+
+`data/scenery/basic_models.json`, `simcore/scenery/basic_models.hpp`, `FSimBasicModels` (`docs/scenery/`): 79 models
+built from primitives (every aircraft the four adversaries fly, our MiG-21, missiles, the Osa battery's vehicles, our
+other air defences and army vehicles, buildings, trees, bridges); scenario targets name their model; the director draws
+aircraft, missiles and battery vehicles with them at their real size. Checks: `test_scenery.cpp`, the gallery
+(`-SimModelGallery`), scenario photographs (`-SimShots`). First test on the Kesmark range map (`/Game/Maps/KesmarkRange`,
+the map workstream): the NATO and Pact sample raids played on it with the NPC crew, photographed; the campaign's raids are
+written on the map's ground and fought in that level, the battery and its dummies set on the nearest open ground (the
+test found a battery inside a wood); the game mode's stand-in pawn no longer floats over the battery. Next: real models
+where they matter most (the Osa, the PU-12M and the TZM have them), the player's own Osa as the 9A33 model, wrecks, the
+map's sites drawn with these models, woods in the sim's line of sight (E9).
 
 ## Electromagnetic (EM) track
 

@@ -68,8 +68,9 @@ inline double LinesAcross(const OpticalSensorDef& d, double size_m, double range
 }
 
 // One look at a target. `threshold` is the contrast threshold in use (the anchored one when the def's is 0).
+// `cloud_transmission`: the light a cloud between lets through (weather.hpp); the contrast falls with it.
 inline OpticalLook Look(const OpticalSensorDef& d, double threshold, const OpticalConditions& c, double range_m,
-                        double size_m, double fov_height_rad, bool line_of_sight) {
+                        double size_m, double fov_height_rad, bool line_of_sight, double cloud_transmission = 1.0) {
     OpticalLook l;
     if (!c.daylight) {
         l.why_not = "no daylight for the TV";
@@ -79,10 +80,10 @@ inline OpticalLook Look(const OpticalSensorDef& d, double threshold, const Optic
         l.why_not = "no line of sight";
         return l;
     }
-    l.contrast = ApparentContrast(d.inherent_contrast, range_m, c.visibility_m);
+    l.contrast = ApparentContrast(d.inherent_contrast, range_m, c.visibility_m) * cloud_transmission;
     l.lines = LinesAcross(d, size_m, range_m, fov_height_rad);
     if (l.contrast < threshold) {
-        l.why_not = c.visibility_m < kReferenceVisibilityM ? "lost in the haze" : "beyond TV range";
+        l.why_not = cloud_transmission < 0.5 ? "in cloud" : (c.visibility_m < kReferenceVisibilityM ? "lost in the haze" : "beyond TV range");
         return l;
     }
     if (l.lines < d.detect_lines) {

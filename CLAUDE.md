@@ -12,6 +12,9 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 |---|---|
 | `simcore/` | **Header-only C++17 sim core** (radar, missile, aircraft, procedures, crew, world). Engine-agnostic. |
 | `simcore/include/simcore/em/` | **Electromagnetic layer** (`simcore::em`): propagation, calibrated radar, ESM/TDOA, jamming, tracking, knowledge, comms/C2, doctrine, debug overlays. See `docs/EM_ARCHITECTURE.md`, `docs/EM_HANDOFF.md`. |
+| `simcore/include/simcore/command/` | **Our side's chain of command and the information pipeline** (`simcore::command`): who is who and where, the means of signal, how a fact reaches the player's character (first person: nothing else does), the air war's news fed in. See `docs/command/`. |
+| `simcore/include/simcore/scenery/` | **Ultra-basic models** (`simcore::scenery`): every aircraft, vehicle, site and building as a few primitives, from `data/scenery/basic_models.json`; drawn by Unreal's `FSimBasicModels`. See `docs/scenery/`. |
+| `simcore/include/simcore/air_war/` | **Enemy air command** (`simcore::airwar`): the other side's air staff as people, its intelligence picture, the planning cycle, abstract resolution, raids generated as scenarios and the mission bridge back. See `docs/air_war/`. |
 | `simcore/tests/` | Dependency-free unit tests (`SC_TEST`, `SC_EXPECT_NEAR`). |
 | `simcore/examples/` | `engagement_demo`: one radar vs one target, writes a Tacview `.acmi`. |
 | `prototype/` | Pure-Python mirror of simcore for fast experiments (runs on the Mac too). |
@@ -21,8 +24,12 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
-| `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. |
+| `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. Also our side's chain of command, its places and the means of signal (`chain_pannonia.json`, `places_pannonia.json`, `signal_means.json`; `simcore/command/`). |
 | `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
+| `data/air_war/` | The enemy air command: the fictional theatre, the four adversaries (rebels, neutral neighbour, Warsaw Pact, NATO) with doctrine, intelligence, politics, aircraft, squadrons and officers, and the quirk catalogue. Balance numbers in `data/gameplay/air_war.json`. |
+| `data/scenery/` | Presentation data: the ultra-basic models of every asset (`basic_models.json`: archetype, size, colour per type; the air war's aircraft ids). Placeholders until real models exist. |
+| `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. |
+| `data/weather/` | Weather presets a scenario names (`"weather"`): winds, cloud layers, the air (`simcore/weather.hpp`). |
 | `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
 | `docs/crew/` | **Crew and teamwork reference** (the design pillars below): roles and knowledge, interdependence, behaviour paths, commands and callouts, skill, the drill master, commander mode, training. `generated/` is written by `tools/crew_map.py`. |
@@ -41,6 +48,9 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/scenario_demo                     # play data/scenarios/osa_practice.json, print the debrief, write .acmi
 ./simcore/build/battery_link_demo                 # the Osa and the PU-12M in one battery (battery_link_practice.json): both debriefs
 ./simcore/build/em_demo data out/em_demo.json out/em_demo.acmi   # EM layer MVP: timeline + 11 checks
+./simcore/build/air_war_demo nato 5 data out/air_war 1          # enemy air command: a campaign, its raids played as scenarios, the journal
+python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign as a page: the enemy's mind beside what our side learned
+./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Python prototype and tools
@@ -55,6 +65,8 @@ python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json
 ./simcore/build/crew_pose_dump data out/crew_poses.json [pu12m]   # the crew's bodies posed; draw them: tools/blender/render_crew_poses.py
 blender --background --python tools/blender/pu12m_interior_check.py -- --poses out/crew_poses_pu12m.json   # PU-12M interior: what intersects
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
+./simcore/build/map_dump data maps/kesmark_range.json out/kesmark_range_map.json   # the test map's layout (or --height e_km n_km)
+python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 
 # Everything at once
@@ -140,5 +152,19 @@ Modelling equipment from photographs: always follow `docs/MODELLING_FROM_PHOTOS.
 photo to mm, trace in 3D with heights, overlap tests, then check the model rendered from the photo's own camera.
 
 Multiplayer: the server simulates, clients mirror; players take crew seats (`docs/MULTIPLAYER.md`).
+
+Enemy air command (roadmap phase 11, `docs/air_war/`): officers with characters plan the other side's raids on what their
+intelligence believes and learn from what they think happened; raids through the battery's sector become scenarios the
+runner plays; the game's missions menu starts a campaign (1-4) and its campaign screen (`ASimCampaignHUD`) runs it, saved
+after every step; a first balance pass is done (`docs/air_war/09_BALANCE.md`). Next: a person playing a campaign through,
+the ARM drill (E6).
+
+**First person** (project owner, 18 Oct 2026; roadmap phase 12, `docs/command/`): the player's character knows only what
+reaches them through people and means of signal. Intelligence, warnings and after-action reports are facts held by posts
+of our side's chain of command (the national sector, the army, the division, the regiment, the battery, the town's
+offices, placed on a map of a small city, a town, villages, works and countryside) and travel by in person, runners,
+despatch riders, couriers, telephone, radio, the warning net, sirens, the post and the news (`simcore/command/`). Never
+add an omniscient HUD panel: route new information through the pipeline. Next: deliveries as scenes in the world, the
+player telling people.
 
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).
