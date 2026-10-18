@@ -148,6 +148,10 @@ the gameplay-level model, not by physics (`DEVELOPMENT_ROADMAP.md`, "Decision").
 | Lebanon, 24 July 1982 | First combat use: one vehicle downs an F-4E while others are attacked | `wapo_1982` (`janes` as quoted) |
 | Angola, 1983–88 | An Osa-AK unit on the border and the north–south road (dug in, night moves, night bombing by Impala, Mirage, Buccaneer; a Puma low in a canyon); Cuito Cuanavale 1987–88, Mirage F1AZ 20 February 1988 | `korovin_tiv_2010` (Pavlov memoir), `samsim_osa` p31, `kuito_memoirs` |
 
+Played as scenarios (roadmap 10.1, 10.2; checked by `simcore/tests/test_ranges_history.cpp`): `osa_range_ashuluk.json`,
+`osa_range_ustka.json`, `osa_range_kapustin_yar.json`, `osa_bekaa_1982.json`, `osa_angola_night.json`,
+`osa_cuito_1988.json` in `data/scenarios/`. The events are from the sources above; the flight profiles are placeholders.
+
 The S-75/S-125 events (U-2 1960, Vietnam, F-117 1999) belong to later systems.
 
 ## Tools and formats

@@ -344,6 +344,7 @@ public:
         em::Platform* p = world_.Scene().FindPlatform(pid);
         if (p == nullptr || !p->alive) return;
         if (!alive) {
+            downed_.push_back({p->position, world_.Time()});
             world_.DestroyPlatform(pid);
             return;
         }
@@ -473,11 +474,17 @@ public:
         for (const em::SensorTrack& t : r->tracker.Tracks()) {
             if (t.status != em::TrackStatus::Confirmed || t.consecutive_misses != 0) continue;
             if (world_.Time() - t.last_update_s > hold_s) continue;
-            std::string id = ResolveTarget(t.Position(), true, claimed);
+            // Its height is only known to the beam it was seen in: a tall beam (III, 19 degrees) allows more.
+            double el_tolerance_deg = kResolveElDeg;
+            const int beam = BeamOfTrack(t.id);
+            if (beam >= 0 && static_cast<std::size_t>(beam) < d.emitter.beams.size()) {
+                el_tolerance_deg = std::max(el_tolerance_deg, RadToDeg(d.emitter.beams[static_cast<std::size_t>(beam)].height_rad));
+            }
+            std::string id = ResolveTarget(t.Position(), true, claimed, el_tolerance_deg);
             const bool ghost = id.empty();
             // An echo standing still on the ground (the battery's own vehicles, its dummy positions) is ground clutter
             // to the operator, not a contact: he reports moving echoes and anything in the air.
-            if (ghost && (IsGroundClutter(t) || t.updates < kGhostUpdates)) continue;
+            if (ghost && (IsGroundClutter(t) || t.updates < kGhostUpdates || JustDowned(t))) continue;
             if (ghost) {
                 id = "T" + std::to_string(t.id);
             } else {
@@ -490,6 +497,10 @@ public:
             c.snr_db = t.last_snr_db;
             out.push_back(c);
         }
+        // A second track on a target already shown (the tracker split it when the target manoeuvred: a pull-up, a jink)
+        // is the same echo on the scope, one blip, not a new contact. Not beside chaff: those echoes he sees apart.
+        out.erase(std::remove_if(out.begin(), out.end(), [&](const Contact& c) { return c.ghost && DuplicateOf(c, claimed); }),
+                  out.end());
         std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
     }
@@ -850,7 +861,8 @@ private:
     // radar, by range): the nearest target inside the gates that no better track has claimed. It reads the targets'
     // true positions, because the game needs to know which target a lock or a launch is about; the crew's picture
     // only gets the label, never the truth, and a track with no target near it stays a ghost.
-    std::string ResolveTarget(const Vec3& track_position, bool use_range, const std::vector<std::string>& claimed) const {
+    std::string ResolveTarget(const Vec3& track_position, bool use_range, const std::vector<std::string>& claimed,
+                              double el_tolerance_deg = kResolveElDeg) const {
         const Vec3 a = Antenna();
         const Vec3 tr = track_position - a;
         const double tr_az = RadToDeg(AzimuthOf(tr)), tr_el = RadToDeg(ElevationOf(tr));
@@ -864,7 +876,7 @@ private:
             double daz = std::fabs(RadToDeg(AzimuthOf(rel)) - tr_az);
             if (daz > 180.0) daz = 360.0 - daz;
             const double del = std::fabs(RadToDeg(ElevationOf(rel)) - tr_el);
-            if (daz > kResolveAzDeg || del > kResolveElDeg) continue;
+            if (daz > kResolveAzDeg || del > el_tolerance_deg) continue;
             if (use_range && std::fabs(rel.Length() - tr.Length()) > kResolveRangeM) continue;
             const double score = daz * daz + (del / 5.0) * (del / 5.0);
             if (score < best_score) {
@@ -897,6 +909,33 @@ private:
         }
         return true;
     }
+    bool DuplicateOf(const Contact& c, const std::vector<std::string>& shown) const {
+        const em::EmScene& s = world_.Scene();
+        for (const em::ChaffCloud& cl : s.chaff) {
+            if (ChaffRcs(cl, s.time_s) > 0.0 && (cl.position - c.position).Length() < 1500.0) return false;
+        }
+        for (const std::string& id : shown) {
+            const int pid = PlatformOf(id);
+            const em::Platform* p = pid != 0 ? s.FindPlatform(pid) : nullptr;
+            if (p == nullptr || !p->alive) continue;
+            const Vec3 rel = p->position - Antenna();
+            double daz = std::fabs(RadToDeg(AzimuthOf(rel)) - (c.true_az_deg));
+            daz = std::fmod(daz, 360.0);
+            if (daz > 180.0) daz = 360.0 - daz;
+            if (daz <= kResolveAzDeg && std::fabs(rel.Length() - c.range_m) <= kResolveRangeM) return true;
+        }
+        return false;
+    }
+    // The last blip of a target just destroyed, held until the next look: the crew watched it go down there, so it is
+    // not a new contact.
+    bool JustDowned(const em::SensorTrack& t) const {
+        for (const auto& d : downed_) {
+            if (world_.Time() - d.second < kDownedHoldS && (d.first - t.Position()).Length() < kDownedM) return true;
+        }
+        return false;
+    }
+    static constexpr double kDownedHoldS = 15.0;
+    static constexpr double kDownedM = 1500.0;
     static constexpr double kOwnObjectM = 1000.0;       // a young search track errs by several hundred metres
     static constexpr double kClutterSpeedMps = 50.0;    // slower than an aircraft (a young track's speed is noisy)
     static constexpr double kClutterRangeM = 10000.0;   // where ground clutter makes false alarms
@@ -943,6 +982,7 @@ private:
     Vec3 last_unit_;
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
+    std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {

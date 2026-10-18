@@ -802,6 +802,12 @@ public:
         }
         return false;
     }
+    // Missiles in the air at one target (a salvo's first, before the second goes).
+    int ShotsInFlightAt(const std::string& target_id) const {
+        int n = 0;
+        for (const Shot& s : shots_) n += !s.done && s.target_id == target_id ? 1 : 0;
+        return n;
+    }
 
 private:
     static constexpr int kMissileAcmiBase = 0x7F000;
@@ -1857,12 +1863,13 @@ private:
             eq.SetInput(d.near_zone_input, near_zone);
         }
         if (!d.too_low_input.empty()) {
-            // НЛЦ: the target under the azimuth line (or being tracked) is too low for the radar.
+            // НЛЦ: the target under the azimuth line (or being tracked) is too low for the radar. One hidden behind the
+            // ground lights nothing: the radar has nothing of it.
             bool low = false;
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             for (const auto& kv : geo_) {
                 const Geometry& tg = kv.second;
-                if (!tg.alive || tg.range_m > d.max_range_m) continue;
+                if (!tg.alive || !tg.los || tg.range_m > d.max_range_m) continue;
                 const bool aimed = std::fabs(WheelAzimuth(tg.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= 5.0;
                 if ((aimed || kv.first == tracked_) && tg.agl_m < tuning_.track_min_altitude_m) low = true;
             }

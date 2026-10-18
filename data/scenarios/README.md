@@ -43,7 +43,8 @@ the readiness state they start in (march, deployed, powered).
   },
   "environment": { "visibility_km": 40, "daylight": true },  // optional: the air and the light for the TV sight (em/optical.hpp)
   "doctrine": { "tv_check": true,                     // optional (roadmap E6): warned of decoys, look on the TV before a launch
-                "search_bursts": { "on_s": 4, "off_s": 16 } },  // emission discipline: the search radar in bursts while nothing is near
+                "search_bursts": { "on_s": 4, "off_s": 16 },  // emission discipline: the search radar in bursts while nothing is near
+                "salvo": 2 },                         // missiles per target at once (roadmap 10.1): 2 sends the second before the first arrives
   "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
@@ -205,4 +206,19 @@ each change. The 24 h is the only figure a source gives (`video_osa`, unverified
 post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are
 silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
 `"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/71 at 45 km, 00-71").
+
+## Ranges and history (roadmap 10.1, 10.2)
+
+The missions menu's "Ranges and history" group. Each file's `notes` name the sources of its event and mark everything
+else, the flight profiles first, as SAM3D's placeholders; `test_ranges_history.cpp` checks that each plays as its sources
+describe.
+
+| File | What | Checked |
+|---|---|---|
+| `osa_range_ashuluk.json` | Ashuluk: from cold to readiness, then two La-17M drones, one at 4 km | the readiness time against the norm; both drones engaged, the high one in the search radar's tall beam III |
+| `osa_range_ustka.json` | Ustka: two P-15 targets in from the sea; `doctrine.salvo` 2 | a two-missile salvo at each, the second 3-8 s after the first (`korovin_tiv_2010`: 3-5 s) |
+| `osa_range_kapustin_yar.json` | Kapustin Yar: a slow drone entering the zone at its far edge | the missile goes at 8-10.3 km (preparation starts in the zone, `flak11`; the 2013 kill at 10.3 km was an Osa-AKM's) |
+| `osa_bekaa_1982.json` | The Bekaa, 24 July 1982 (`wapo_1982`): an F-4E pair over the mountains | the ridge hides the pair (seen over 5 km later than over flat ground); the crew engages; the pair's warning receivers hear the command link |
+| `osa_angola_night.json` | Angola, the Pavlov memoir (`korovin_tiv_2010`): dug in under nets, a night raid, a Puma in a canyon | by the radars at night (no TV); the Puma first seen out of the canyon's mouth |
+| `osa_cuito_1988.json` | Cuito Cuanavale, 20 February 1988 (`samsim_osa` p31): Mirage F1AZs toss their bombs | missiles away between the pull-up and the turn away |
 

@@ -1,0 +1,39 @@
+{
+  "scenario_id": "osa_range_ashuluk",
+  "name": "Range day at Ashuluk: from cold to two La-17M target drones",
+  "description": "A live-fire range shoot in the style of Ashuluk, the air-defence range in the Astrakhan steppe (roadmap 10.1). The vehicle stands cold at its firing point; the crew comes to readiness on the range's order and the debrief times it. Then two La-17M target drones are flown at the battery one after the other: the first high and straight in, the second low and to the side, below the search radar's clutter height unless the operator selects СДЦ. The NPC commander runs the crew; take any seat, or his.",
+  "source": "sam3d", "confidence": "estimate",
+  "notes": "The range and the La-17M target follow docs/research/OSA_RESEARCH_2026-10.md section 9 (samsim_thread, ilya_prosto, korovin_tiv_2010). PLACEHOLDERS: the drones' speeds, heights, courses and echoes (range targets often carry reflectors; the size of the echo here is a guess), the time between them, the steppe's height (Ashuluk lies a little below sea level; 0 m here).",
+  "seed": 17,
+  "origin": { "lat_deg": 47.4, "lon_deg": 47.9, "alt_m": 0 },
+  "terrain": { "type": "flat", "height_m": 0, "notes": "The steppe: flat." },
+  "environment": { "visibility_km": 40, "daylight": true },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "la1", "name": "La-17M target drone, high (placeholder profile)", "type": "Air+FixedWing+Drone", "class": "drone", "size_m": 7.5,
+      "start": { "east_m": -2000, "north_m": 45000, "up_m": 4000 }, "waypoints": [ { "east_m": -2000, "north_m": -30000, "up_m": 4000 } ],
+      "speed_mps": 200, "rcs_m2": 1.0, "appear_at_s": 300,
+      "notes": "Straight in at 4 km, 2 km to the side, once the crew has had time to come to readiness. Placeholder numbers." },
+    { "id": "la2", "name": "La-17M target drone, low (placeholder profile)", "type": "Air+FixedWing+Drone", "class": "drone", "size_m": 7.5,
+      "start": { "east_m": 4000, "north_m": 40000, "up_m": 300 }, "waypoints": [ { "east_m": 4000, "north_m": -30000, "up_m": 300 } ],
+      "speed_mps": 200, "rcs_m2": 1.0, "appear_at_s": 560,
+      "notes": "Low, 4 km to the side. Placeholder numbers." }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 1000, "when_targets_gone": true }
+}

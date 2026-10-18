@@ -103,3 +103,17 @@ def test_acmi_header_and_first_appearance_properties():
     assert t.startswith("FileType=text/acmi/tacview\nFileVersion=2.2\n")
     assert t.count("Name=Bandit") == 1
     assert "#0.50\n1,T=" in t
+
+
+def test_waypoint_inside_turn_circle_is_passed():
+    """Mirror of test_threats.cpp: a waypoint inside the turn circle is passed for the next, not circled for ever."""
+    a = Aircraft("a", Vec3(0, 0, 1000), speed_mps=230.0, velocity=Vec3(0, 230, 0),
+                 waypoints=[Vec3(1100, 500, 1000), Vec3(20000, 0, 1000)], max_turn_rate_rad_s=math.radians(6.0))
+    for _ in range(600):
+        a.step(0.1)
+    assert a.next_wp >= 1
+    assert a.position.x > 8000.0
+    b = Aircraft("b", Vec3(0, 0, 1000), speed_mps=230.0, velocity=Vec3(0, 230, 0), waypoints=[Vec3(0, 3000, 1000)])
+    for _ in range(120):
+        b.step(0.1)
+    assert b.next_wp == 1 and abs(b.position.x) < 1.0
