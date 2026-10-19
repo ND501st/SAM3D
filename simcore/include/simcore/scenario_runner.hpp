@@ -135,6 +135,7 @@ public:
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
         if (def_.has_post) post_ = std::make_unique<CommandPost>(def_.post_aspd, def_.post_board, def_.unit_position, def_.seed ^ 0x51ed27u);
+        StartRadios(ready_state != nullptr);
         if (!def_.c2_sources.empty()) {
             c2_ = std::make_unique<C2Network>(def_.c2_policy, def_.seed);
             for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
@@ -185,6 +186,7 @@ public:
         DeliverOrders();
         UpdateBattery(dt);
         UpdateC2();
+        UpdateRadios();
         UpdatePost();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
@@ -303,6 +305,9 @@ public:
     // The command post's information chain when the player's vehicle is the post (null otherwise): the IT-45's tracks,
     // the navigation error (command_post.hpp).
     const CommandPost* Post() const { return post_.get(); }
+    // The post's R-111 and R-407 worked as sets (nullptr when the console has none).
+    const R111* GetR111() const { return r111_.get(); }
+    const R407* GetR407() const { return r407_.get(); }
     // The IT-45 as it shows now: the tracks on the scale the console's scale switch is at (its position picks the
     // ASPD-U's scale), while the tube has a picture. Empty otherwise.
     std::vector<CommandPost::ScopeMark> PostScope() const {
@@ -1260,6 +1265,8 @@ private:
         for (const Battery::Event& e : battery_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.who, "battery", e.text});
             Radio("battery net", e.who, e.text);
+            // The post speaking on its battery net (FuG-4): a strong transmitter beside the R-111 for the while.
+            if (def_.has_post && e.who == "Battery commander") own_tx_until_["fug4"] = time_ + kOwnTransmissionS;
         }
     }
 
@@ -1295,6 +1302,158 @@ private:
         }
     }
 
+    // ---- The post's R-111 and R-407 worked as sets (radio_sets.hpp, docs/research/PU12_RADIOS_2026-10.md).
+    std::unique_ptr<R111> r111_;
+    std::unique_ptr<R407> r407_;
+    struct MessageState {
+        double next_s = 0.0;
+        int said = 0;
+        bool done = false;
+    };
+    std::vector<MessageState> messages_;
+    std::map<std::string, double> own_tx_until_;  // the post's own sets on the air: id -> until when
+    double r111_call_until_ = -1.0;
+    double r111_tx_until_ = -1.0;
+    double r407_call_until_ = -1.0;
+    bool r407_link_ = false;
+    static constexpr double kOwnTransmissionS = 5.0;  // sam3d: one spoken order or receipt on the air
+
+    void SetRadioInput(const std::string& id, bool value) {
+        if (!id.empty() && console_.equipment.GetInput(id) != value) console_.equipment.SetInput(id, value);
+    }
+    // A wheel behind a lock (the R-407's drums behind their СТОПОР): unlock, turn, lock again as it was.
+    void SetLockedWheel(const std::string& wheel, const std::string& lock, double value) {
+        const int was = console_.panel.Get(lock);
+        if (!lock.empty()) console_.panel.Set(lock, 1);
+        console_.panel.SetValue(wheel, value);
+        if (!lock.empty() && was >= 0) console_.panel.Set(lock, was);
+    }
+    double RegimentDistanceM() const {
+        if (!def_.post_regiment.has_position) return 0.0;
+        const Vec3& r = def_.post_regiment.position;
+        return (Vec3{r.x, r.y, 0.0} - Vec3{def_.unit_position.x, def_.unit_position.y, 0.0}).Length();
+    }
+    // The regiment's net now: nobody sending (an outage), or noise on it (an interference outage).
+    void RegimentAir(bool& off_air, bool& interference) const {
+        off_air = false;
+        interference = false;
+        for (const C2Outage& o : def_.post_regiment.outages) {
+            if (time_ + 1e-9 < o.from_s || time_ >= o.to_s) continue;
+            (o.interference ? interference : off_air) = true;
+        }
+    }
+
+    // The sets as the session starts: the drums and the scale on the plan if they were set in the park; a set that
+    // starts warm (a readiness state) is on preset 1 and tuned for the antenna it feeds.
+    void StartRadios(bool warm) {
+        if (!def_.has_radio_sets) return;
+        const RadioPlan& plan = def_.radio_plan;
+        if (console_.r111.present) {
+            r111_ = std::make_unique<R111>(def_.radio_sets.r111);
+            const double first = plan.presets_hz[0];
+            if (plan.prepared && first > 0.0) {
+                console_.panel.SetValue(console_.r111.Control("dial"), r111_->DialFor(first));
+                console_.panel.Set(console_.r111.Control("subband"), first < def_.radio_sets.r111.subband_split_hz ? kR111SubbandI : kR111SubbandII);
+            }
+            const R111Inputs in = ReadR111(console_);
+            if (warm && in.mode >= kR111Duty && plan.prepared && first > 0.0) r111_->Prepare(1, plan, in);
+        }
+        if (console_.r407.present) {
+            r407_ = std::make_unique<R407>(def_.radio_sets.r407);
+            if (plan.prepared && plan.telecode_hz > 0.0) {
+                const double back = plan.telecode_return_hz > 0.0 ? plan.telecode_return_hz : plan.telecode_hz - def_.radio_sets.r407.duplex_offset_hz;
+                SetLockedWheel(console_.r407.Control("rx_freq"), console_.r407.Control("rx_lock"), plan.telecode_hz / 1.0e6);
+                SetLockedWheel(console_.r407.Control("tx_freq"), console_.r407.Control("tx_lock"), back / 1.0e6);
+            }
+        }
+        messages_.assign(plan.messages.size(), MessageState{});
+        for (std::size_t i = 0; i < plan.messages.size(); ++i) messages_[i].next_s = plan.messages[i].at_s;
+        UpdateRadios();
+    }
+
+    void UpdateRadios() {
+        if (!r111_ && !r407_) return;
+        const RadioPlan& plan = def_.radio_plan;
+        bool off_air = false, interference = false;
+        RegimentAir(off_air, interference);
+        const double distance = RegimentDistanceM();
+        if (r111_) {
+            const RadioSetBinding& b = console_.r111;
+            const R111Inputs in = ReadR111(console_);
+            std::vector<double> cosite;
+            for (const auto& n : plan.own_nets_hz) {
+                const auto it = own_tx_until_.find(n.first);
+                if (it != own_tx_until_.end() && time_ < it->second) cosite.push_back(n.second);
+            }
+            const bool was_protected = r111_->Protected();
+            r111_->Update(time_, in, plan, cosite);
+            if (r111_->Protected() && !was_protected) Event("R-111", "ЗАЩИТА ВХОДА: a set beside it transmitting too near its frequency tripped the receiver's protection");
+            if (r111_->DialToSet() >= 0.0) console_.panel.SetValue(b.Control("dial"), r111_->DialToSet());
+            const double net = plan.command_net_hz > 0.0 ? plan.command_net_hz : plan.presets_hz[0];
+            const bool on_air = !off_air && !interference;
+            const bool hear = on_air && r111_->Hears(in, net, distance, plan.regiment_mast);
+            const bool heard_back = on_air && r111_->Reaches(in, time_, net, distance, plan.regiment_mast);
+            // The regiment's messages: heard when said, receipted when the post can answer, said again until it does.
+            for (std::size_t i = 0; i < messages_.size(); ++i) {
+                MessageState& m = messages_[i];
+                if (m.done || time_ + 1e-9 < m.next_s) continue;
+                const std::string& text = plan.messages[i].text;
+                ++m.said;
+                if (hear) {
+                    Radio("regiment net", "Regiment", text);
+                    r111_call_until_ = time_ + r111_->Def().call_s;
+                    if (heard_back) {
+                        r111_tx_until_ = time_ + kOwnTransmissionS;
+                        m.done = true;
+                        Event("regiment net", "heard and receipted: " + text);
+                        continue;
+                    }
+                    Event("regiment net", "heard, but the post cannot answer (the R-111 not tuned, too little power, or out of reach): " + text);
+                } else {
+                    Event("regiment net", "not heard on the R-111: " + text);
+                }
+                if (m.said > plan.repeats) {
+                    m.done = true;
+                    Event("regiment net", "the regiment gave up: the message never got through: " + text);
+                } else {
+                    m.next_s = time_ + plan.repeat_s;
+                }
+            }
+            if (in.call_pressed && r111_->CanTransmit(in, time_)) r111_tx_until_ = time_ + 2.0;
+            const bool tx = in.mode >= kR111Power1 && (r111_->Tuning(time_) || time_ < r111_tx_until_);
+            SetRadioInput(b.Input("net"), hear && heard_back);
+            SetRadioInput(b.Input("hear"), hear);
+            SetRadioInput(b.Input("tuning_um"), r111_->TuningUm(time_));
+            SetRadioInput(b.Input("tuning_sau"), r111_->TuningSau(time_));
+            SetRadioInput(b.Input("tuned"), r111_->UmTuned() && !r111_->Tuning(time_));
+            SetRadioInput(b.Input("sau_tuned"), r111_->SauTuned(in.antenna_mast) && !r111_->Tuning(time_));
+            SetRadioInput(b.Input("protect"), r111_->Protected());
+            SetRadioInput(b.Input("rx"), in.mode >= kR111Duty && in.supply && !tx);
+            SetRadioInput(b.Input("tx"), tx);
+            SetRadioInput(b.Input("call_radio"), time_ < r111_call_until_);
+            const char* windows[] = {"zpch_1", "zpch_2", "zpch_3", "zpch_4"};
+            for (int k = 0; k < 4; ++k) SetRadioInput(b.Input(windows[k]), in.mode >= kR111Duty && in.supply && r111_->Preset() == k + 1);
+        }
+        if (r407_) {
+            const RadioSetBinding& b = console_.r407;
+            const R407Inputs in = ReadR407(console_);
+            const double regiment_tx = plan.telecode_hz > 0.0 ? plan.telecode_hz : in.rx_mhz * 1.0e6;
+            // The regiment not sending its telecode at all (peacetime: the ASPD-U left off) is the channel off the air.
+            const bool link = r407_->Link(in, regiment_tx, distance, off_air || !def_.post_regiment.telecode, interference);
+            if (link && !r407_link_) {
+                r407_call_until_ = time_ + r407_->Def().call_s;  // the regiment calls the post up
+                Event("R-407", "the regiment's telecode channel comes in");
+            } else if (!link && r407_link_) {
+                Event("R-407", interference && in.apch ? "the telecode channel lost: the АПЧ chases the interference" : "the telecode channel lost");
+            }
+            r407_link_ = link;
+            SetRadioInput(b.Input("link"), link);
+            SetRadioInput(b.Input("telecode"), link && R407::ToEquipment(in));
+            SetRadioInput(b.Input("call_radio"), time_ < r407_call_until_);
+            SetRadioInput(b.Input("call_wire"), false);
+        }
+    }
+
     // ---- The player's vehicle is the command post (docs/PU12_DEVELOPMENT.md P3, command_post.hpp).
     std::unique_ptr<CommandPost> post_;
     std::map<std::string, double> post_first_mark_;  // first mark of each target on the post's board (the log)
@@ -1307,8 +1466,11 @@ private:
     bool fire_banned_ = false;
     void ReceiveRegimentCommands() {
         const bool telecode = console_.equipment.IsReady(console_.post_telecode);
-        const bool voice = !console_.post_regiment_net.empty() && console_.equipment.IsReady(console_.post_regiment_net) &&
-                           post_->RegimentNetInReach(def_.post_regiment, time_);
+        // By voice: the R-111 worked as a set hears the net (radio_sets.hpp); without the set, the console's net subsystem
+        // within the R-111's published reach.
+        const bool voice = r111_ ? console_.equipment.GetInput(console_.r111.Input("hear"))
+                                 : !console_.post_regiment_net.empty() && console_.equipment.IsReady(console_.post_regiment_net) &&
+                                       post_->RegimentNetInReach(def_.post_regiment, time_);
         if (!telecode && !voice) return;  // nothing comes on either net: it waits
         const std::vector<RegimentCommand>& cmds = def_.post_regiment.commands;
         while (next_command_ < cmds.size() && cmds[next_command_].at_s <= time_ + 1e-9) {
@@ -1347,8 +1509,10 @@ private:
     void UpdatePost() {
         if (!post_) return;
         post_->MoveTo(def_.unit_position);
-        const bool reach = post_->TelecodeInReach(def_.post_regiment, time_);
-        if (reach != console_.equipment.GetInput(console_.post_telecode_input)) console_.equipment.SetInput(console_.post_telecode_input, reach);
+        if (!r407_) {  // without the set worked as a set: the R-407 net's published reach (aspd_u.json)
+            const bool reach = post_->TelecodeInReach(def_.post_regiment, time_);
+            if (reach != console_.equipment.GetInput(console_.post_telecode_input)) console_.equipment.SetInput(console_.post_telecode_input, reach);
+        }
         const bool oriented = console_.equipment.IsReady(console_.post_oriented);
         if (oriented != post_->IsOriented()) {
             if (oriented) {

@@ -1,0 +1,63 @@
+{
+  "name": "r111_drawing",
+  "notes": "The R-111's front as r111_to fig. 4 draws it (the radiotract.ru scan p102.png, 3204 x 2058 px, not kept), flattened into the same mm frame as tools/traces/r111_front.json: the second reference (the labels, the positions of the controls under covers). Scale: the plate 600 mm wide (see r111_front.json).",
+  "photo_size": [
+    3204,
+    2058
+  ],
+  "height_mm": 314.3,
+  "edges": {
+    "h_top_a": [
+      1000,
+      1250,
+      95,
+      160
+    ],
+    "h_top_b": [
+      1850,
+      2100,
+      120,
+      185
+    ],
+    "h_top_c": [
+      2850,
+      3000,
+      140,
+      205
+    ],
+    "h_bot_a": [
+      950,
+      1250,
+      1620,
+      1690
+    ],
+    "h_bot_b": [
+      1650,
+      1850,
+      1640,
+      1700
+    ],
+    "v_left": [
+      300,
+      1400,
+      110,
+      195
+    ],
+    "v_right": [
+      450,
+      1300,
+      3000,
+      3090
+    ]
+  },
+  "width_mm": 600.0,
+  "offset": [
+    500,
+    100
+  ],
+  "plate_edges": {
+    "top": 177.0,
+    "left": 669.0,
+    "bottom": 1720.0
+  }
+}

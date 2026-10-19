@@ -46,8 +46,11 @@ radiotelephone operator (the radios and the mast), the squad leader (orienting t
 regiment's picture onto the board) and the battery commander (deploying the post, then a target to a launcher with the
 DT-2 marker and the ДХ keys).
 
-In the PU-12M the plotting board hangs open before the operator-plotter's place. He writes on it what the regiment
-reads out on the air-picture net, square by square, out to 200 km, and what the IT-45 shows nearer. The battery commander
+In the PU-12M the plotting board folds on its hinge; the operator-plotter swings it open by its latch. He writes on it
+what the regiment reads out on the air-picture net, square by square, out to 200 km, and what the IT-45 shows nearer: with
+the cross on the board the mouse wheel picks the number (a small chip beside the cross), a click writes it there. Within
+5 cm of the right square the mark is exact; further off it lands off the target. The air-picture lines fade in a few
+seconds: remember the square. The battery commander
 reads it for warning: his aids line gives each track's range and when it will be here, and the regiment's last
 two-digit command. On the ДХ, СВ / Ч / ГР / Н1-Н3 set friend, foe, group and height zone on the target in the window; the
 ФР block's КОНТРОЛЬ position puts a training echo on the tube; the switch on the ФР block picks the cabled radar's type.
@@ -126,7 +129,8 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | 1-9 | Quick crew drills (outside the crew menu) |
 | B | In the PU-12M: its plotting board. In a launcher: the designations the crew has heard (the board is in the post) |
 | V | The other vehicle (a battery link) |
-| [ ], 1-5, P | PU-12M seats: pick a target, give it to a launcher, plot it (the plotter picks a report heard on the air-picture net, or a track on the IT-45) |
+| [ ], 1-5 | PU-12M battery commander: pick a board target, give it to a launcher |
+| Wheel, click on the board | PU-12M plotter: pick the number to write, write it where you click |
 | G | Every key |
 | Enter | A lesson's reading step: continue |
 | L | A lesson: look at what the step lights up (from the lesson's seat) |

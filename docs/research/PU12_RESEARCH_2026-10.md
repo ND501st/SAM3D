@@ -148,7 +148,8 @@ orients with the PAB-2 and sets the GAK and KP-4; the operator switches on the A
 ## Open questions
 
 1. The ASPD-U panels' controls and their labels (only the ДХ keypad and the ФР block are seen in a photograph).
-2. The R-407's and R-111's panels (public photographs exist; not yet traced).
+2. ~~The R-407's and R-111's panels.~~ Read and traced (19 Oct 2026): `docs/research/PU12_RADIOS_2026-10.md` (the
+   R-111's ТО with its front drawn and named; the R-407's instruction plate and photographs).
 3. The deployment drill's order and the mast's raising time.
 4. ~~Who sits where behind the front seats.~~ Read off the plan for P6 (17 Oct 2026): a bench across the compartment,
    facing forward, three places (cushions 1288-1343 px, backs 1350-1385 px, across 338-600 px); the right place is
@@ -161,5 +162,5 @@ orients with the PAB-2 and sets the GAK and KP-4; the operator switches on the A
    plan's item 24, a plexiglass board). The console follows since the interior pass (18 Oct 2026): the ФР block's
    switches are the commander's. The RTK-1 stands on the desk at the right wall under the IT-2M (SAM3D's choice; the plan
    draws it over the tube's front, out of his seated reach).
-5. The telecode's message rate and range on the R-407 (only "to 15 km" for the set).
+5. The telecode's message rate on the R-407 (its reach by antenna: `docs/research/PU12_RADIOS_2026-10.md`).
 6. The NVA plotters' handbook (1980) for the plotting drill: still to acquire.

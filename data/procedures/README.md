@@ -51,6 +51,16 @@ missile containers (`docs/re/osa.md` → "Corrections from operators").
   "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode",
             "plotter": "operator", "oriented": "oriented", "scale": "fr.scale", "source": "...", "confidence": "medium" },
 
+  // Optional: the radio sets worked as sets (simcore/radio_sets.hpp: the R-111 and the R-407 of the PU-12M). The file of
+  // their cited data, then for each set the console's controls, subsystems and inputs by role (radio_sets.hpp lists the
+  // roles; a missing one fails the load). The runner sets the inputs every step (the set heard, tuned, protected, the
+  // channel up); a cabin meter can show a set's own reading ("reading": "r111_indicator" or "r407_meter").
+  "radios": { "file": "systems/pu12m_radios.json",
+              "r111": { "controls": { "mode": "radio.fug3.mode", "dial": "radio.fug3.dial", ... },
+                        "subsystems": { "settled": "fug3", "cathodes": "fug3_cathodes", ... },
+                        "inputs": { "net": "r111_net", "tuned": "r111_tuned", ... } },
+              "r407": { "controls": { ... }, "subsystems": { ... }, "inputs": { "telecode": "regiment_telecode", ... } } },
+
   "readiness": {
     "deployed": { "description": "...", "controls": { "pwr.gta": 1, "apu.lock": 1 }, "inputs": { "vehicle_stopped": true },
                   "ready": [ "gta", "power", "equipment_warm" ], "oriented": true, "source": "...", "confidence": "medium" }

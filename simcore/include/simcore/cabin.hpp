@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/radio_sets.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
 
@@ -292,6 +293,7 @@ struct CabinDisplay {
     std::vector<Condition> lit_when;     // dial backlight: all must hold (empty = lit whenever powered)
     // dial and meter
     std::string control;                 // the control whose value the needle shows
+    std::string reading;                 // meter: or a reading worked out from the console (radio_sets.hpp), 0..1 of the swing
     int marks = 12;                      // labelled divisions on the scale
     // dial: one needle revolution = value_per_turn; the scale reads 0..labels_per_turn around it
     double value_per_turn = 360.0;
@@ -314,6 +316,13 @@ struct CabinDisplay {
     // aspd_scope: the grid glass over the tube, with the plotting board's marks on it
     bool glass = false;
 };
+
+// What a meter's needle reads now, in its display units: its control's value times `scale`, or its reading (0..1 of the
+// swing, radio_sets.hpp) times `full_scale`. Worked out from the console alone, so a mirrored console reads the same.
+inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
+    if (!d.reading.empty()) return RadioMeterReading(d.reading, console) * d.full_scale;
+    return console.panel.GetValue(d.control) * d.scale;
+}
 
 // A rectangle of floor a crewman can walk on, in plan (body frame x and y, metres).
 // A part that swings on a hinge (the PU-12M's plotting board): its panels (with everything on them) and shell meshes
@@ -1009,7 +1018,7 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "readouts", "glass", "source", "confidence", "notes"})) {
+                                "readouts", "glass", "reading", "source", "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -1069,7 +1078,7 @@ private:
             allowed = {"control", "marks", "value_per_turn", "labels_per_turn"};
         } else if (kind == "meter") {
             disp.kind = CabinDisplayKind::Meter;
-            allowed = {"control", "marks", "scale", "full_scale", "unit"};
+            allowed = {"control", "reading", "marks", "scale", "full_scale", "unit"};
         } else if (kind == "counters") {
             disp.kind = CabinDisplayKind::Counters;
             allowed = {"readouts"};
@@ -1091,14 +1100,22 @@ private:
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope, "
                                             "status_board, plot_board or keypad_window");
         }
-        for (const char* key : {"control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
+        for (const char* key : {"control", "reading", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
                                 "range_window_m", "readouts", "glass"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
         }
-        if (disp.kind == CabinDisplayKind::Dial || disp.kind == CabinDisplayKind::Meter) {
+        if (disp.kind == CabinDisplayKind::Meter && d.Find("reading") != nullptr) {
+            // A meter that reads the set rather than a control: one of the radio sets' readings, and that set on the console.
+            if (d.Find("control") != nullptr) return Fail(path, "a meter shows a control or a reading, not both");
+            if (!RequireString(d, path, "reading", disp.reading)) return false;
+            if (!KnownRadioReading(disp.reading)) return Fail(Join(path, "reading"), "unknown reading '" + disp.reading + "'");
+            if ((disp.reading == "r111_indicator" && !console.r111.present) || (disp.reading == "r407_meter" && !console.r407.present)) {
+                return Fail(Join(path, "reading"), "the console has no such radio set");
+            }
+        } else if (disp.kind == CabinDisplayKind::Dial || disp.kind == CabinDisplayKind::Meter) {
             if (!RequireString(d, path, "control", disp.control)) return false;
             if (!console.panel.Has(disp.control)) {
                 return Fail(Join(path, "control"), "unknown control '" + disp.control + "'");

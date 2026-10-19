@@ -30,6 +30,7 @@
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_sets.hpp"
 #include "simcore/target_behaviour.hpp"
 #include "simcore/terrain_map.hpp"
 #include "simcore/weather_data.hpp"
@@ -179,6 +180,10 @@ struct ScenarioDef {
     PlottingTuning post_plotting;    // the player's hand on the board ("post.plotting"; the defaults without it)
     bool has_post_radar = false;
     RegimentRadar post_radar;
+    // The post's R-111 and R-407 (the console's "radios"): their numbers, and the scenario's frequency plan for them.
+    bool has_radio_sets = false;
+    RadioSetsDef radio_sets;
+    RadioPlan radio_plan;
     // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
     // scenario's "c2" block. Empty: no command network.
     C2Policy c2_policy;
@@ -1049,7 +1054,8 @@ private:
             return true;
         }
         if (!console.has_post) return Fail("post", "the console is not a command post (no \"post\" block)");
-        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "codes", "plotting", "library", "regiment", "radar", "notes"})) {
+        if (!p->Is(json::Type::Object) ||
+            !Keys(*p, "post", {"board", "aspd", "codes", "plotting", "library", "regiment", "radar", "radios", "notes"})) {
             return message_.empty() ? Fail("post", "expected an object") : false;
         }
         std::string board_file, aspd_file, codes_file, plotting_file, library_file, error;
@@ -1087,7 +1093,8 @@ private:
         if (const json::Value* r = p->Find("regiment")) {
             const std::string rp = "post.regiment";
             if (!r->Is(json::Type::Object) ||
-                !Keys(*r, rp, {"position", "radars", "outages", "telecode", "designate_within_m", "commands", "notes"}) ||
+                !Keys(*r, rp, {"position", "radars", "outages", "telecode", "designate_within_m", "commands", "command_net_mhz",
+                               "telecode_mhz", "telecode_return_mhz", "mast", "messages", "notes"}) ||
                 !OptionalBool(*r, rp, "telecode", out.post_regiment.telecode) ||
                 !OptionalNumber(*r, rp, "designate_within_m", out.post_regiment.designate_within_m)) {
                 return message_.empty() ? Fail(rp, "expected an object") : false;
@@ -1111,6 +1118,28 @@ private:
             } else if (!message_.empty()) {
                 return false;
             }
+            RadioPlan& plan = out.radio_plan;
+            double net = 0.0, tc = 0.0, tc_back = 0.0;
+            if (!OptionalNumber(*r, rp, "command_net_mhz", net) || !OptionalNumber(*r, rp, "telecode_mhz", tc) ||
+                !OptionalNumber(*r, rp, "telecode_return_mhz", tc_back) || !OptionalBool(*r, rp, "mast", plan.regiment_mast)) {
+                return false;
+            }
+            plan.command_net_hz = net * 1.0e6;
+            plan.telecode_hz = tc * 1.0e6;
+            plan.telecode_return_hz = tc_back * 1.0e6;
+            if (const json::Value* msgs = OptionalArray(*r, rp, "messages")) {
+                for (std::size_t j = 0; j < msgs->items.size(); ++j) {
+                    const std::string mp = Index(Join(rp, "messages"), j);
+                    RegimentMessage m;
+                    if (!Keys(msgs->items[j], mp, {"at_s", "text"}) || !RequireNumber(msgs->items[j], mp, "at_s", m.at_s) ||
+                        !RequireString(msgs->items[j], mp, "text", m.text)) {
+                        return false;
+                    }
+                    plan.messages.push_back(std::move(m));
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
             if (const json::Value* pos = r->Find("position")) {
                 if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(rp, "position"), frame_, out.post_regiment.position)) {
                     return message_.empty() ? Fail(Join(rp, "position"), "expected an object") : false;
@@ -1130,10 +1159,16 @@ private:
                 for (std::size_t j = 0; j < outs->items.size(); ++j) {
                     const std::string op = Index(Join(rp, "outages"), j);
                     C2Outage o;
-                    if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
-                        !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason)) {
+                    std::string kind;
+                    if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason", "kind"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
+                        !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason) ||
+                        !OptionalString(outs->items[j], op, "kind", kind)) {
                         return false;
                     }
+                    if (!kind.empty() && kind != "off_air" && kind != "interference") {
+                        return Fail(Join(op, "kind"), "must be off_air or interference");
+                    }
+                    o.interference = kind == "interference";
                     if (o.to_s <= o.from_s) return Fail(Join(op, "to_s"), "must be after from_s");
                     out.post_regiment.outages.push_back(o);
                 }
@@ -1146,7 +1181,58 @@ private:
             if (!radar_of(*r, "post.radar", false, out.post_radar)) return false;
             out.has_post_radar = true;
         }
+        if (!LoadPostRadios(*p, data_dir, out, console)) return false;
         out.has_post = true;
+        return true;
+    }
+
+    // The post's radio sets (the console's "radios"): their data file, every role bound, and the plan the scenario gives
+    // them: "radios": { "r111_presets_mhz": [4 frequencies], "own_nets_mhz": { "fug1": 24.4, ... }, "prepared": true }.
+    bool LoadPostRadios(const json::Value& p, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* r = p.Find("radios");
+        if (!console.r111.present && !console.r407.present) {
+            return r == nullptr ? true : Fail("post.radios", "the console has no radio sets (" + std::string("radios") + ")");
+        }
+        std::string error;
+        if (!LoadRadioSetsFile(data_dir + "/" + console.radios_file, out.radio_sets, &error)) return Fail("post", "the console's radios: " + error);
+        for (const auto& set : {std::make_pair(true, &console.r111), std::make_pair(false, &console.r407)}) {
+            if (!set.second->present) continue;
+            const std::string missing = MissingRadioRole(*set.second, set.first);
+            if (!missing.empty()) return Fail("post", std::string("the console's radios.") + (set.first ? "r111." : "r407.") + missing + " is not bound");
+        }
+        out.has_radio_sets = true;
+        RadioPlan& plan = out.radio_plan;
+        if (r == nullptr) return true;
+        const std::string rp = "post.radios";
+        if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"r111_presets_mhz", "own_nets_mhz", "prepared", "repeat_s", "repeats", "notes"}) ||
+            !OptionalBool(*r, rp, "prepared", plan.prepared) || !OptionalNumber(*r, rp, "repeat_s", plan.repeat_s) ||
+            !OptionalInt(*r, rp, "repeats", plan.repeats)) {
+            return message_.empty() ? Fail(rp, "expected an object") : false;
+        }
+        if (const json::Value* list = OptionalArray(*r, rp, "r111_presets_mhz")) {
+            if (list->items.size() > 4) return Fail(Join(rp, "r111_presets_mhz"), "the R-111 has four presets");
+            for (std::size_t i = 0; i < list->items.size(); ++i) {
+                const json::Value& v = list->items[i];
+                const double mhz = v.Is(json::Type::Number) ? v.number : -1.0;
+                if (mhz != 0.0 && (mhz * 1.0e6 < out.radio_sets.r111.freq_min_hz || mhz * 1.0e6 > out.radio_sets.r111.freq_max_hz)) {
+                    return Fail(Index(Join(rp, "r111_presets_mhz"), i), "outside the R-111's band (0: not prepared)");
+                }
+                plan.presets_hz[i] = mhz * 1.0e6;
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* nets = r->Find("own_nets_mhz")) {
+            if (!nets->Is(json::Type::Object)) return Fail(Join(rp, "own_nets_mhz"), "expected an object of set: MHz");
+            for (std::size_t i = 0; i < nets->keys.size(); ++i) {
+                if (!nets->items[i].Is(json::Type::Number) || !(nets->items[i].number > 0.0)) {
+                    return Fail(Join(Join(rp, "own_nets_mhz"), nets->keys[i]), "expected a frequency in MHz");
+                }
+                plan.own_nets_hz.emplace_back(nets->keys[i], nets->items[i].number * 1.0e6);
+            }
+        }
+        if (!(plan.repeat_s > 0.0) || plan.repeats < 0) return Fail(rp, "repeat_s must be > 0, repeats >= 0");
+        plan.present = true;
         return true;
     }
 

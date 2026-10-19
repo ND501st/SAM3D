@@ -57,7 +57,7 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 |---|---|
 | Data (telecode) | **ASPD-U**: the RPS-M rack with the S23-1 block, the 220N instrument, the FR phase-sweep block, the IT-45 overview indicator (the round air-picture tube), DT-2 information sensor, DCh characteristics sensor; the PU-12 had ASPD-12 (R, S, P blocks, SSP drive, IT indicator, DI and DTP encoders) |
 | Radios | 3 x R-123M (air target information to the vehicles, commands and reports), 1 x R-111 (to the higher command post, air situation), 1 x R-407 (commands; coded secondary data from other PU-12s); R-124 intercom; RTK-1 radiotelephone concentrator; PVS-1/-2/-3 consoles; 2 x TA-57 field telephones; RK-1V / RK-3U junction boxes; telescopic antenna mast |
-| Ranges | R-407 15 km, R-123 15-20 km, R-111 25-30 km |
+| Ranges | R-407 15 km, R-123 15-20 km, R-111 25-30 km (`flak11`). The sets' own documents: the R-111 35 km whip to whip, 45 with one end on a mast, 60 with both (`r111_to`); the R-407 3-4 km on its whip, 10 on its 5 m support, 20 on an 11 m mast (`r407_to`). Both sets: `docs/research/PU12_RADIOS_2026-10.md` |
 | Topographic | GAK (1G13M) gyro direction indicator, KP-4 course plotter, distance sensor, VO orientation telescope, PAB-2 (2AM) aiming circle, TZK commander's telescope; maps 1:50 000 to 1:200 000 |
 | Status display | IT-1 and IT-2 information boards (subunit status, vehicle activity, ammunition); the air-situation plotting board |
 | Power | AB-1-P/30 petrol generator set (220 V, 50 Hz) with URB control; G-290B generator on the move; VS-27 rectifier, regulators, filters; 2 x 6ST-75 batteries |
@@ -80,7 +80,9 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
    the GAK, KP-4 and PAB-2 orientation drill (the error is what the drill leaves).
 4. The IT-1/IT-2 boards show each vehicle's status and ammunition. **Not modelled**: needs the vehicles' reports
    (battery net), which the battery model can now produce.
-5. R-407: coded data from other PU-12s; R-111: the higher command post. **Partly** (C2 sources, neighbour feeds).
+5. R-407: the regiment's telecode; R-111: the higher command post's command net. **Modelled** as sets
+   (`simcore/radio_sets.hpp`): their controls, warm-up, frequencies, tuning and reach, the R-407's channel and АПЧ, the
+   R-111's presets and its input protection; the regiment's orders on the R-111 net (see Status, the radios).
 
 ## 3. What SAM3D needs to build
 
@@ -161,8 +163,42 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     again after each new fix; his tier sets his pace. A player in the seat writes the marks himself.
   - The navigation error comes from the orientation drill: up to 5 degrees and 3 km until the post is oriented with the
     aiming circle (flak11), then small (his tier's), growing on the move by up to 1 % of the distance (the KP-4).
-  - Not yet: the telecode through the EM layer's link budget (its reach is the R-407's published range, jamming an
-    outage); the IT-45 drawn in Unreal (P6).
+  - Not yet: the telecode through the EM layer's link budget (its reach is the R-407's antennas' published range,
+    jamming an outage or interference); the IT-45 drawn in Unreal (P6).
+- **The R-111 and the R-407 as sets (19 Oct 2026).** `docs/research/PU12_RADIOS_2026-10.md` (the R-111's ТО, tier 1, with
+  its front drawn and every control named; the R-407's ТО data and its own instruction plate, tier 1), `simcore/radio_sets.hpp`,
+  `data/systems/pu12m_radios.json`; tests `simcore/tests/test_radio_sets.cpp`.
+  - **The R-111 (FuG-3), the radio operator's.** РЕЖ. РАБОТЫ (ОТКЛ., ДЕЖ. ПР., 1 / 20 / 100 %), ИНДИКАТОР and its meter,
+    ВИД РАБОТЫ (eight positions), the preset buttons ПЛ and 1-4, ДИАПАЗ., the frequency knob and its scale, НАСТРОЙКА УМ
+    and САУ, ВЫЗОВ, ПШ, ТЛК, the two levels, and the antenna distributor ШТЫРЬ / ТЕЛЕСКОП on the SAU block (at the
+    commander's place: he sets it, the radio operator tunes after). The scale settles in 5 min; the cathodes want 3 min
+    at 20 % before the set is tuned; a preset turns the mechanism and the set tunes itself (45 s in all). It hears the
+    regiment on the net's frequency with ТЛФ (or a relay position), transmits tuned for its frequency and antenna, its
+    reach the ТО's by the antennas each end has up and the fourth root of the power. A set of the post's own within 10 %
+    (or 8 or 16 MHz off) trips its input protection (ЗАЩИТА ВХОДА) until it is reset.
+  - **The regiment's command net.** A scenario's `post.regiment.messages` are said on it; the post hears them on its
+    R-111 and, with the set tuned and in reach, receipts them; else the regiment says them again (twice, 2 min apart:
+    SAM3D). The radio log has them; the debrief has what was heard, receipted, or never got through.
+  - **The R-407 (FuG-5), the battery commander's.** ПИТАНИЕ, РОД РАБОТЫ (ДУПЛЕКС, ДЕЖ. ПРИЕМ – СИМПЛЕКС, ТА), АПЧ, УЗКАЯ /
+    ШИРОКАЯ, ПУ, the modes switch, the meter switch, the receiver's and the transmitter's drums behind their СТОПОР levers,
+    КАЛИБРАТОР – СВЕТ, ВЫЗОВ, ИЗМЕРИТ. УРОВЕНЬ, the three levels. The regiment's telecode reaches the ASPD-U when the set
+    is warm, in a radio mode, its receiver on the regiment's channel (within the АПЧ's 15 kHz, else 7), its duplex pair 4
+    MHz apart and off the plate's spurious channels, the channel on the 4-wire terminals, within the mast's 15 km (4 km
+    with the mast down). In interference (`"kind": "interference"` on a regiment outage) the АПЧ chases the noise: АПЧ off
+    holds the channel (the plate).
+  - **The frequency plan.** The scenario's `post.regiment` (`command_net_mhz`, `telecode_mhz`, `telecode_return_mhz`,
+    `mast`) and `post.radios` (the R-111's four presets, the post's own R-123M nets, `prepared`: the drums and the scale
+    set in the park). The numbers are placeholders.
+  - **The drills.** The radio operator's `tune_r111` (after the mast), the commander's R-407 steps and the R-111's antenna
+    in `deploy_command_radios`, `stow_antenna`, and the situational `r111_protection`, `r407_interference`,
+    `r407_apch_on`, with their orders and reports in `data/crew/pu12m_crew.json`. The NPC commander has the R-111 tuned
+    as part of the post deployed (`fug3_tuned`).
+  - **The fronts traced and modelled** (`docs/MODELLING_FROM_PHOTOS.md`): the R-111 from a square-on photograph and the
+    ТО's fig. 4 (`tools/traces/r111_front.json`, `tools/blender/r111_trace.py`), the R-407 from a sale photograph and its
+    labels' close-ups (`r407_front.json`, `r407_trace.py`); one builder for both (`tools/blender/radio_front_model.py`,
+    `build_pu12m_radios.py`: `art/pu12m_interior/SM_RadioR111.fbx`, `SM_RadioR407.fbx`), proved on their photographs from
+    the solved cameras (`check_pu12m_radios.py`). The cabin layout places them with bare panels in their fronts' planes,
+    every control, lamp and display where the set has it (the meters read the set: `"reading"` in a meter display).
 - **P4 done (simcore):** the battery commander in the post. Scenario `data/scenarios/pu12m_battery.json` (four NPC
   launchers, a TZM, a raid with a friend in it); tests `simcore/tests/test_pu12m_battery.cpp`.
   - Designations go by voice on the battery net (the post's FuG-4 up and the mast raised), one message at a time:
@@ -314,13 +350,18 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 
 - The plan's item 24 is the plotter's air-situation map (`rwd_mb3`); its grid, range circles and the pencil's colours
   are SAM3D's.
-- Heights, the seats' cushions and the desk, the faces of the blocks not photographed (the S block, the ŠČK, the R-111,
-  the R-407, the power boards), the lamps' meanings. Of the ДХ's keys only the digits, ЦУ and СБР work (the console does
+- Heights, the seats' cushions and the desk, the faces of the blocks not photographed (the S block, the ŠČK, the power
+  boards), the lamps' meanings. Of the ДХ's keys only the digits, ЦУ and СБР work (the console does
   not model the characteristics, the height zone or the other keys); what its window shows is SAM3D's.
 - The IT-45's symbols and sweep period, the IT boards' lamp-to-report mapping and which board stands where (the NVA
   catalogue's two pages disagree), the lamps' timings (`docs/research/PU12_VISUALS_2026-10.md` §9).
 - The two whips' bases inside: the plan's items 3 and 28 stand elsewhere than the exterior's whips (placed from the
   photographs); left out of the interior until the photographs are read again.
+- The radios (`docs/research/PU12_RADIOS_2026-10.md`, decisions and open questions): the R-111's front width (scaled
+  from the plan, about 5 %), the R-407's (from its overall size, about 3 %); which antenna the mast carries for each set;
+  the ASPD-U on the R-407's 4-wire terminals; the split of the R-111's 45 s retune; the regiment's frequencies and how
+  often it repeats a message; the R-407 standing on the floor behind the commander, its back to the side (the plan draws
+  it smaller than the set is), the BP-3 on its bracket lifted over it.
 
 ## Sources
 

@@ -86,6 +86,7 @@ struct C2Outage {
     double from_s = 0.0;
     double to_s = 1e18;  // open-ended unless set
     std::string reason;
+    bool interference = false;  // noise on the net rather than nobody sending (a set's АПЧ off may ride it out: radio_sets.hpp)
 };
 
 // A radar of the regiment's control battery that feeds the PU-12M (roadmap 7.1): a target is on the PU-12's board only if

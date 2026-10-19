@@ -162,7 +162,7 @@ def windscreens(b):
 # ---------------------------------------------------------------------------------------------- equipment
 
 EQUIPMENT_SKIP = {'seat_squad_leader', 'seat_driver', 'bench', 'bench_back', 'mast', 'winch', 'dash', 'r123_fug1',
-                  'r123_fug2', 'r123_fug4', 'map_board'}
+                  'r123_fug2', 'r123_fug4', 'r111', 'r407', 'map_board'}   # the radios and the board are meshes of their own
 
 
 def face_inset(b, it):
@@ -300,7 +300,7 @@ def build_item(b, it):
                        'Bakelite_Black' if k % 3 else 'Metal_Steel', seg=12)
         return
     x0, x1, y0, y1 = face_inset(b, it)
-    if iid in ('telecode_tx', 'telecode_rx', 'r407', 'r111', 'scr', 'bp48', 'vs27'):
+    if iid in ('telecode_tx', 'telecode_rx', 'scr', 'bp48', 'vs27'):
         handles(b, dict(it, x0=x0, x1=x1, y0=y0, y1=y1), face)
     if iid in ('telecode_tx', 'telecode_rx'):
         # the cabinet's two doors (the drawings' diagonal hatching): seams on its face
@@ -538,7 +538,9 @@ def main():
         bpy.data.objects.remove(o, do_unlink=True)
     os.makedirs(OUT, exist_ok=True)
     objs = build_all()
-    manifest = {}
+    # keep the entries of the meshes other scripts build into the same folder (the radios: build_pu12m_radios.py)
+    path = os.path.join(OUT, 'manifest.json')
+    manifest = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
     for obj in objs:
         export(obj)
         # a reused mesh's centre is in its own frame (the layout adds where each copy stands)

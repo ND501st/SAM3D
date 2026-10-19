@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <fstream>
 #include <initializer_list>
+#include <map>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -257,6 +258,25 @@ struct ConsoleStation {
     std::string label;
 };
 
+// One radio set on the console as a set (simcore/radio_sets.hpp; "radios" in the console file): which control, subsystem and
+// input plays each role. The roles each set needs are fixed (radio_sets.hpp: kR111Roles, kR407Roles).
+struct RadioSetBinding {
+    bool present = false;
+    std::map<std::string, std::string> controls;    // role -> control id
+    std::map<std::string, std::string> subsystems;  // role -> subsystem id
+    std::map<std::string, std::string> inputs;      // role -> input id
+    const std::string& Control(const std::string& role) const { return Get(controls, role); }
+    const std::string& Subsystem(const std::string& role) const { return Get(subsystems, role); }
+    const std::string& Input(const std::string& role) const { return Get(inputs, role); }
+
+private:
+    static const std::string& Get(const std::map<std::string, std::string>& m, const std::string& role) {
+        static const std::string none;
+        const auto it = m.find(role);
+        return it == m.end() ? none : it->second;
+    }
+};
+
 struct ConsoleData {
     std::string system_id;
     std::string display_name;
@@ -306,6 +326,11 @@ struct ConsoleData {
     std::string post_keypad_zone[3];                                     // Н1, Н2, Н3 (optional)
     std::string post_marker_azimuth;
     std::string post_marker_range;
+    // The post's radio sets worked as sets ("radios"): the R-111 (the regiment's command net) and the R-407 (the
+    // regiment's telecode), and the data file with their numbers (relative to the data directory).
+    std::string radios_file;
+    RadioSetBinding r111;
+    RadioSetBinding r407;
     std::vector<ReadinessState> readiness;
 
     const ReadinessState* FindReadiness(const std::string& id) const {
@@ -336,7 +361,8 @@ class ConsoleLoader {
 public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
-                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors", "post"})) {
+                             "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors", "post",
+                             "radios"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -351,6 +377,7 @@ public:
         if (!LoadLauncher(root, out) || !LoadComms(root, out)) return false;
         if (!LoadFuel(root, out)) return false;
         if (!LoadPost(root, out)) return false;
+        if (!LoadRadios(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
     }
@@ -777,6 +804,48 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             d.sources.push_back(s);
         }
         out.has_fuel = true;
+        return true;
+    }
+
+    // The post's radio sets ("radios": { "file", "r111": { "controls", "subsystems", "inputs" }, "r407": {...} }): each role
+    // named once, to a control, subsystem or input of this console (the roles: radio_sets.hpp).
+    bool LoadRadios(const json::Value& root, ConsoleData& out) {
+        const json::Value* r = root.Find("radios");
+        if (r == nullptr) return true;
+        if (!r->Is(json::Type::Object) || !Keys(*r, "radios", {"file", "r111", "r407", "source", "confidence", "notes"}) ||
+            !Provenance(*r, "radios") || !RequireString(*r, "radios", "file", out.radios_file)) {
+            return message_.empty() ? Fail("radios", "expected an object") : false;
+        }
+        for (const auto& set : {std::make_pair("r111", &out.r111), std::make_pair("r407", &out.r407)}) {
+            const json::Value* b = r->Find(set.first);
+            if (b == nullptr) continue;
+            const std::string bp = Join("radios", set.first);
+            if (!b->Is(json::Type::Object) || !Keys(*b, bp, {"controls", "subsystems", "inputs"})) {
+                return message_.empty() ? Fail(bp, "expected an object") : false;
+            }
+            RadioSetBinding& binding = *set.second;
+            for (const char* group : {"controls", "subsystems", "inputs"}) {
+                const json::Value* g = b->Find(group);
+                if (g == nullptr || !g->Is(json::Type::Object)) return Fail(Join(bp, group), "required, an object");
+                for (std::size_t i = 0; i < g->keys.size(); ++i) {
+                    const std::string& role = g->keys[i];
+                    const std::string rp = Join(Join(bp, group), role);
+                    if (!g->items[i].Is(json::Type::String)) return Fail(rp, "expected an id");
+                    const std::string& id = g->items[i].string;
+                    if (std::string(group) == "controls") {
+                        if (out.panel.Find(id) == nullptr) return Fail(rp, "unknown control '" + id + "'");
+                        binding.controls[role] = id;
+                    } else if (std::string(group) == "subsystems") {
+                        if (out.equipment.Def(id) == nullptr) return Fail(rp, "unknown subsystem '" + id + "'");
+                        binding.subsystems[role] = id;
+                    } else {
+                        if (!out.equipment.HasInput(id)) return Fail(rp, "unknown input '" + id + "'");
+                        binding.inputs[role] = id;
+                    }
+                }
+            }
+            binding.present = true;
+        }
         return true;
     }
 

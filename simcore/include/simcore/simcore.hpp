@@ -27,6 +27,7 @@
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "simcore/command_post.hpp"
+#include "simcore/radio_sets.hpp"
 #include "simcore/cabin.hpp"
 #include "simcore/scopes.hpp"
 #include "simcore/readouts.hpp"

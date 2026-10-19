@@ -178,3 +178,25 @@ squelch opening, the voice in the radio's band (two filters each side), driven i
 squelch's tail; the radio callouts go through the same chain. On screen each radio net has its own colour (amber the air
 picture, cyan the command net, blue the battery net), a bar down the line's left edge and the net's name in capitals;
 intercom lines and orders shouted in the cabin stay plain.
+
+## Folding, glass and plotting by hand (20 Oct 2026)
+
+* **Folding.** The board swings on its hinge (data/cabins/pu12m.json `hinges`; `SM_PU12MMapBoard`): folded, it lies
+  along the centreline behind the hinge as the ČSLA plan draws it; open, across before the plotter. The plotter works it
+  (`map.board`, subsystem `map_open`, 4 s each way, an estimate; `deploy_map`, `stow_map`; the NPC crew opens it as part
+  of the deployment). Folded, nothing can be written: the reports heard wait, and are forgotten after a minute.
+* **Glass.** The board is drawn through a translucent material (`M_CabinGlassBoard`, tools/ue_make_glass_material.py):
+  clear plexiglass, the etching frosted into it (range rings every 50 km to 200 km, azimuth ticks, the PVO grid's big
+  squares with their two digits and their ninths), the grease pencil in yellow (blue for friends), each cross labelled
+  with its minute.
+* **Plotting by hand** (the player at the plotter's seat). With the cross on the board, the mouse wheel turns through the
+  numbers he can write, the reports heard first, then the tube's tracks, shown in a small chip beside the cross; a
+  click writes the picked one where the cross is. Within 5 cm of the report's square (or the tube's track) the mark goes
+  exactly there; up to 20 cm it goes off the right place by more than 5 cm but no more than the miss; beyond, further off
+  still (data/gameplay/plotting.json, the project owner's numbers; simcore/command_post.hpp `PlotAt`). The board is
+  0.36 m across for 200 km each side, so 5 cm is about 55 km: generous, so that the plotter remembers the square rather
+  than every figure. The air-picture lines fade from the screen in 6 s; the reports are remembered or lost.
+* **The regiment's two nets.** Its commands come by telecode on the R-407 (two digits on the tube) and by voice on its
+  command net through the R-111 (in violet, read through the radio voice), whichever is up; the R-111 and R-407 are
+  worked as sets (simcore/radio_sets.hpp, docs/research/PU12_RADIOS_2026-10.md), the regiment's telecode off (the range
+  day) is their channel off the air.
