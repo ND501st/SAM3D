@@ -12,7 +12,7 @@
   "seats": [
     { "station": "battery_commander", "number": 0, "title_ru": "Командир батареи (командир боевого расчёта)", "title_en": "Battery commander",
       "duties": ["Commands the post's crew and the battery", "Watches the air picture on the IT-45 and the board", "Gives the launchers their targets by voice on the battery net (FuG-4)", "The regiment's telecode on the R-407 (FuG-5): its channel and its АПЧ (r407_plate); the R-111's antenna distributor on the SAU block at his place", "The RTK-1 telephones"],
-      "displays": ["it45", "it2"], "stand_for": ["radio.fug5.power", "radio.fug5.lines", "radio.fug5.meter", "radio.fug5.measure"], "source": "ru_pu12_text (командир боевого расчёта); flak11 (PU12-0: designations by voice, azimuth and range); csla_pu12_manual (his workplace)", "confidence": "high" },
+      "displays": ["it45", "it2"], "stand_for": ["radio.fug3.antenna"], "source": "ru_pu12_text (командир боевого расчёта); flak11 (PU12-0: designations by voice, azimuth and range); csla_pu12_manual (his workplace)", "confidence": "high" },
     { "station": "squad_leader", "number": 1, "title_ru": "Командир отделения управления", "title_en": "Squad leader",
       "duties": ["Orients the post: the PAB-2 aiming circle, the GAK, the KP-4, the DTP", "The air-picture net (FuG-1)", "The IT-1 status board", "Leads the crew's deployment and the march"],
       "displays": ["it1"], "stand_for": ["dtp.parallax"], "source": "ru_pu12_text (No. 1); csla_pu12_manual (his workplace: KP-4, GAK panel, IT-1, DTP, R-123M)", "confidence": "high" },

@@ -127,6 +127,9 @@ UnrealEditor.exe SAM3D.uproject "/Game/Maps/KesmarkRange?SimMission=school_opera
 - With the player in command, «К бою!» leaves the TV off (`docs/PLAYING.md`, known limits); the commander's lesson orders
   the TV look separately.
 - English only: the cards and the instructor; the crew's words are in Russian with their English beside them.
+- Seen from the battery commander's place, the R-407's transmitter drum knob (30 mm proud) covers the boss of its
+  СТОПОР lever 33 mm below it (as on the set, `r407_photos`): point at the lever's arm. The autoplay, aiming at the
+  boss, warns on "Free the transmitter's knob".
 - Seen from the deputy commander's seat, the ЗК-4 knob at the gyro panel's far end is hidden behind a part of the cabin
   model; L steps him in front of the panel, where it shows (crewmates' bodies within 60 cm of his eyes are hidden while
   he stands there).

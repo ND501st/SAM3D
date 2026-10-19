@@ -359,8 +359,10 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 - The radios (`docs/research/PU12_RADIOS_2026-10.md`, decisions and open questions): the R-111's front width (scaled
   from the plan, about 5 %), the R-407's (from its overall size, about 3 %); which antenna the mast carries for each set;
   the ASPD-U on the R-407's 4-wire terminals; the split of the R-111's 45 s retune; the regiment's frequencies and how
-  often it repeats a message; the R-407 standing on the floor behind the commander, its back to the side (the plan draws
-  it smaller than the set is), the BP-3 on its bracket lifted over it.
+  often it repeats a message; the R-407 on a bracket at the side behind the commander's seat back, over the BP-3 (the
+  plan's front and forward edge, the set larger than drawn; its height from the commander's workplace drawing, item 25
+  upright with its upper half above the seat back: 1.31-1.84 m, an estimate); the SAU block's antenna distributor on the
+  block's inboard end (the plan shows it from above only), which he stands to reach.
 
 ## Sources
 
