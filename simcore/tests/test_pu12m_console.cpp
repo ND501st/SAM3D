@@ -208,17 +208,21 @@ SC_TEST("pu12m crew: with no orders scripted, the NPC battery commander has the 
     SC_EXPECT(LoadScenarioFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_deploy.json", SIMCORE_DATA_DIR, def, console, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
     ScenarioRunner r(std::move(def), std::move(console));
-    double deployed_s = -1.0, picture_s = -1.0, first_mark_s = -1.0;
+    double deployed_s = -1.0, picture_s = -1.0, air_net_s = -1.0, first_mark_s = -1.0;
     while (!r.Finished() && r.Time() < 1500.0) {
         r.Step(0.1);
         if (deployed_s < 0.0 && Deployed(r.Console())) deployed_s = r.Time();
         if (picture_s < 0.0 && r.Console().equipment.IsReady("telecode_reception")) picture_s = r.Time();
+        if (air_net_s < 0.0 && r.Console().equipment.IsReady("air_net")) air_net_s = r.Time();
         if (first_mark_s < 0.0 && r.Board() != nullptr && !r.Board()->Marks().empty()) first_mark_s = r.Time();
     }
-    std::printf("    deployed at %.0f s; the picture from %.0f s, the first mark at %.0f s\n", deployed_s, picture_s, first_mark_s);
-    // The post's own board fills only once its ASPD-U receives the regiment's picture (the target is on the regiment's
-    // picture from the start).
-    SC_EXPECT(picture_s > 0.0 && first_mark_s >= picture_s && first_mark_s < picture_s + 15.0);
+    std::printf("    deployed at %.0f s; the air-picture net from %.0f s, the tube's picture from %.0f s, the first mark at %.0f s\n", deployed_s,
+                air_net_s, picture_s, first_mark_s);
+    // The post's own board fills once it hears the regiment's air-picture net (FuG-1 warm, the mast up) or its ASPD-U
+    // receives the telecode, whichever is first: the first report takes a reading (7 s) and the plotter's mark (6 s).
+    const double first_source_s = air_net_s > 0.0 && (picture_s < 0.0 || air_net_s < picture_s) ? air_net_s : picture_s;
+    SC_EXPECT(picture_s > 0.0 && air_net_s > 0.0);
+    SC_EXPECT(first_mark_s >= first_source_s && first_mark_s < first_source_s + 30.0);
     SC_EXPECT(r.Board() != nullptr && r.Board()->Marks().size() >= 10);  // once a minute since
     SC_EXPECT(deployed_s > 0.0 && deployed_s <= 1080.0);
     auto said = [&](const std::string& id, const std::string& from) {

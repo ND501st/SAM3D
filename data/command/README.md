@@ -22,8 +22,10 @@ When the player's vehicle is the PU-12M itself, the scenario has a `"post"` bloc
 `{ "board": "command/pu12.json", "aspd": "command/aspd_u.json", "library": "command/regiment_radars.json", "regiment":
 { "position", "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ] }, "radar": { "type",
 "position" } }`. The regiment's command post sends its radars' picture by telecode while the post is within the R-407's
-reach of it and its net is on the air; `radar` is one cabled to the post (the primary picture). The post's board is then
-written by its own plotter from the IT-45, one mark at a time (`ScenarioRunner::Post`, `PostScope`, `PlayerPlot`).
+reach of it and its net is on the air; `radar` is one cabled to the post (the primary picture). The regiment's radar
+battery also reads its picture out on the air-picture voice net (FuG-1, `aspd_u.json` `air_net_*`), out to the board's
+200 km. The post's board is written by its own plotter, what he hears on that net first, then the IT-45, one mark at a
+time (`ScenarioRunner::Post`, `PostScope`, `PlayerPlot`; `docs/research/PLOTTING_BOARD_2026-10.md`).
 
 Every value is `{"value": ..., "source": "...", "confidence": "..."}`, cited like `data/systems/` (`docs/SOURCES.md`).
 

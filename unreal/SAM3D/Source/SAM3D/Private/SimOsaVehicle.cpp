@@ -886,7 +886,10 @@ TArray<int32> ASimOsaVehicle::PickList() const
 	{
 		return Sim->GetPostBoardNumbers();
 	}
-	return Sim->GetPostTrackNumbers();
+	// The plotter: what he heard on the air-picture net first (the board's numbers), then the tube's tracks.
+	TArray<int32> List = Sim->GetPostHeardNumbers();
+	List.Append(Sim->GetPostTrackNumbers());
+	return List;
 }
 
 void ASimOsaVehicle::PickTarget(int32 Direction)

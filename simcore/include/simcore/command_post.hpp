@@ -1,14 +1,19 @@
 // simcore/command_post.hpp — the PU-12M battery command post as the player's own vehicle (docs/PU12_DEVELOPMENT.md P3).
 //
-// The post's chain of information (docs/research/PU12_RESEARCH_2026-10.md):
+// The post's chain of information (docs/research/PU12_RESEARCH_2026-10.md, docs/research/PLOTTING_BOARD_2026-10.md):
 //   * The regiment's command post sends its air picture by telecode on the R-407 net (FuG-5) every cycle. The post
-//     receives it while its ASPD-U is working and it is within the net's reach (data/command/aspd_u.json).
+//     receives it while its ASPD-U is working and it is within the net's reach (data/command/aspd_u.json). The sending
+//     post takes its targets off its own indicator by hand, so with many targets each comes less often, and in steps.
+//   * The regiment's radar battery reads the air picture out by voice on the air-picture net (FuG-1, the plotters'
+//     net): one report at a time, each target about once a minute, out to the board's extent (beyond the tube's
+//     100 km). The plotter writes what he hears first: the board is the long-range picture, the tube the near one.
 //   * Or a radar cabled to the post gives the primary picture, which the operator tracks semi-automatically: up to 12
 //     targets, 2-3 s to take each off (ru_pu12_text).
 //   * The ASPD-U shows the picture on the IT-45 tube: up to 100 tracks, each with its number, its height in 0.2 km steps
 //     and zone H1-H3, and its speed as a vector in 12.5 m/s steps (AspdTrack, Scope).
-//   * The operator-plotter writes the tube's targets on the glass board by hand, one mark at a time (the board's
-//     cadence is his work, not a constant). The battery commander gives targets out from the board and the tube (P4).
+//   * The operator-plotter writes the heard reports, then the tube's targets, on the glass board by hand, one mark at
+//     a time (the board's cadence is his work, not a constant). The battery commander gives targets out from the board
+//     and the tube (P4).
 // Everything the post shows carries its navigation error: the largest published (5 degrees, 3 km, flak11) until the post
 // is oriented with the aiming circle, then small; on the move it grows with the distance driven (the KP-4: 1 %).
 // The crew, the console's subsystems and the scenario decide the inputs; the runner feeds them (scenario_runner.hpp).
@@ -16,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <random>
@@ -53,6 +59,21 @@ struct AspdDef {
     double drift_fraction = 0.01;
     double unoriented_az_error_deg = 5.0;
     double unoriented_position_error_m = 3000.0;
+    // The regiment's telecode as its sending post makes it (optional; 0: off): the targets are taken off that post's
+    // indicator by hand, one every `telecode_take_off_s`, so with many targets each is refreshed less often than once a
+    // cycle; and the coordinates go in steps of `telecode_step_m` (p19_to: 1 000 m on the 100 km scale).
+    double telecode_take_off_s = 0.0;
+    double telecode_step_m = 0.0;
+    // The air-picture voice net (FuG-1, the plotters' net; optional, `air_net_report_s` 0: none): the regiment's radar
+    // battery reads one report at a time (number, azimuth and range from its radar, identity and size, height, minute),
+    // each target at most once every `air_net_period_s`; the post hears it within `air_net_range_m` of the regiment's
+    // post. The plotter writes what he hears; the reports carry the radar's steps of `air_net_az_step_deg` and
+    // `air_net_range_step_m`.
+    double air_net_report_s = 0.0;
+    double air_net_period_s = 60.0;
+    double air_net_range_m = 20000.0;
+    double air_net_az_step_deg = 1.0;
+    double air_net_range_step_m = 1000.0;
 };
 
 namespace detail {
@@ -70,9 +91,18 @@ public:
         if (!Keys(*a, "aspd", {"max_targets", "semi_auto_tracks", "take_off_s", "height_step_m", "speed_step_mps", "max_speed_mps",
                                "zone1_top_m", "zone2_top_m", "scales_m", "telecode_period_s", "telecode_range_m", "radar_period_s",
                                "plot_mark_s", "oriented_az_error_deg", "oriented_position_error_m", "drift_fraction",
-                               "unoriented_az_error_deg", "unoriented_position_error_m"})) {
+                               "unoriented_az_error_deg", "unoriented_position_error_m", "telecode_take_off_s", "telecode_step_m",
+                               "air_net_report_s", "air_net_period_s", "air_net_range_m", "air_net_az_step_deg", "air_net_range_step_m"})) {
             return false;
         }
+        // Optional: the telecode's sending post and the air-picture voice net (absent: off, or the defaults).
+        for (const auto& f : {std::make_pair("telecode_take_off_s", &d.telecode_take_off_s), std::make_pair("telecode_step_m", &d.telecode_step_m),
+                              std::make_pair("air_net_report_s", &d.air_net_report_s), std::make_pair("air_net_period_s", &d.air_net_period_s),
+                              std::make_pair("air_net_range_m", &d.air_net_range_m), std::make_pair("air_net_az_step_deg", &d.air_net_az_step_deg),
+                              std::make_pair("air_net_range_step_m", &d.air_net_range_step_m)}) {
+            if (a->Find(f.first) != nullptr && !Cited(*a, f.first, *f.second)) return false;
+        }
+        if (d.air_net_report_s > 0.0 && !(d.air_net_period_s > 0.0)) return Fail("aspd.air_net_period_s", "must be > 0");
         for (const auto& f : {std::make_pair("max_targets", &d.max_targets), std::make_pair("semi_auto_tracks", &d.semi_auto_tracks),
                               std::make_pair("take_off_s", &d.take_off_s), std::make_pair("height_step_m", &d.height_step_m),
                               std::make_pair("speed_step_mps", &d.speed_step_mps), std::make_pair("max_speed_mps", &d.max_speed_mps),
@@ -249,12 +279,13 @@ public:
     }
 
     // ---- The regiment's net: within the R-407's reach of the regiment's post and not off the air.
-    bool TelecodeInReach(const PostRegiment& r, double t) const {
-        for (const C2Outage& o : r.outages) {
-            if (t + 1e-9 >= o.from_s && t < o.to_s) return false;
-        }
-        if (!r.has_position) return true;
-        return (Vec3{r.position.x, r.position.y, 0.0} - Vec3{position_.x, position_.y, 0.0}).Length() <= def_.telecode_range_m;
+    bool TelecodeInReach(const PostRegiment& r, double t) const { return InReach(r, t, def_.telecode_range_m); }
+    // The air-picture voice net: within the R-123M's reach of the regiment's post and not off the air.
+    bool AirNetInReach(const PostRegiment& r, double t) const { return InReach(r, t, def_.air_net_range_m); }
+    // Where the air-picture net's reports are measured from (the regiment's radar); the post itself until set.
+    void SetAirNetSource(const Vec3& at) {
+        air_source_ = at;
+        has_air_source_ = true;
     }
     // The targets the regiment's radars cover (all of them without radars).
     static std::vector<BoardContact> RegimentSees(const PostRegiment& r, const std::vector<BoardContact>& truth) {
@@ -280,6 +311,7 @@ public:
     struct Inputs {
         bool telecode = false;       // the ASPD-U receiving the regiment's telecode (console telecode_reception)
         bool primary = false;        // a radar cabled to the post and the ASPD-U showing it (console primary_picture)
+        bool air_net = false;        // the post listening on the air-picture net (console air_net, within its reach)
         bool operator_free = false;  // the operator-plotter at his place, not busy with a drill
         double operator_speed = 1.0; // his tier's speed at handwork (1 = a trained operator)
     };
@@ -293,9 +325,12 @@ public:
             ReceiveTelecode(t, regiment);
         }
         if (!in.telecode) telecode_started_ = false;
-        // A track not refreshed for three of its cycles goes off the tube: the telecode's, or the operator's round of
-        // the semi-automatic tracks (12 targets at 2-3 s each).
-        const double telecode_stale = 3.0 * def_.telecode_period_s;
+        // The air-picture net talks whether the post listens or not; what the post hears waits for the plotter.
+        if (def_.air_net_report_s > 0.0) ReadAirNet(t, regiment, in.air_net);
+        // A track not refreshed for three of its rounds goes off the tube: the telecode's (a cycle, or the sending
+        // post's round of its targets taken off by hand), or the operator's round of the semi-automatic tracks (12
+        // targets at 2-3 s each).
+        const double telecode_stale = 3.0 * std::max(def_.telecode_period_s, telecode_round_s_);
         const double primary_stale = 3.0 * std::max(def_.radar_period_s, def_.semi_auto_tracks * def_.take_off_s);
         tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
                                      [&](const AspdTrack& k) { return t - k.time_s > (k.primary ? primary_stale : telecode_stale); }),
@@ -310,7 +345,45 @@ public:
                 return;
             }
         }
+        // What he heard on the air-picture net before the tube: a report is read out once.
+        if (!heard_.empty()) {
+            WriteHeard(t, 0, speed);
+            return;
+        }
         if (const AspdTrack* k = NextToPlot()) Write(t, *k, speed);
+    }
+
+    // ---- The air-picture voice net (FuG-1; rwd_mb3 pu12e: the board carries the targets' tracks in the designation
+    // grid's squares about the radar; flak11 PU12-1: the air-picture net, the plotters').
+    struct AirReport {
+        BoardContact contact;  // where the report puts the target: the radar's steps, the post's own error in it
+        int number = 0;        // the board's number of the target
+        double heard_s = 0.0;  // when its reading ended
+        std::string text;      // as read out
+    };
+    // Reports heard and not yet written on the board, oldest first. One not written within a reporting period is
+    // forgotten (the next report of that target has come or is coming).
+    const std::vector<AirReport>& Heard() const { return heard_; }
+    // Every report read out on the net since the last call, and whether the post heard it (for the radio log).
+    struct Spoken {
+        AirReport report;
+        bool heard = false;
+    };
+    std::vector<Spoken> TakeSpoken() {
+        std::vector<Spoken> out;
+        out.swap(spoken_);
+        return out;
+    }
+    // The plotter (a player) writes the heard report of the target with this board number. False if none is waiting
+    // or he is still writing the last one.
+    bool PlotHeard(double t, int board_number, double speed) {
+        if (t + 1e-9 < operator_free_s_) return false;
+        for (std::size_t i = 0; i < heard_.size(); ++i) {
+            if (heard_[i].number != board_number) continue;
+            WriteHeard(t, i, speed > 0.0 ? speed : 1.0);
+            return true;
+        }
+        return false;
     }
 
     // The plotter (a player) writes the track with this ASPD-U number on the board. False if no track has it or he is
@@ -373,6 +446,13 @@ public:
 
 private:
     double U() { return static_cast<double>(rng_()) / 4294967296.0; }
+    bool InReach(const PostRegiment& r, double t, double range_m) const {
+        for (const C2Outage& o : r.outages) {
+            if (t + 1e-9 >= o.from_s && t < o.to_s) return false;
+        }
+        if (!r.has_position) return true;
+        return (Vec3{r.position.x, r.position.y, 0.0} - Vec3{position_.x, position_.y, 0.0}).Length() <= range_m;
+    }
     Vec3 RandomOffset(double max_m) {
         const double r = max_m * std::sqrt(U());
         const double a = 2.0 * kPi * U();
@@ -419,7 +499,102 @@ private:
 
     void ReceiveTelecode(double t, const std::vector<BoardContact>& regiment) {
         last_telecode_s_ = t;
-        for (const BoardContact& c : regiment) Fix(t, c, false, RegimentNumber(c.target_id));
+        if (!(def_.telecode_take_off_s > 0.0)) {
+            for (const BoardContact& c : regiment) Fix(t, Telecoded(c), false, RegimentNumber(c.target_id));
+            return;
+        }
+        // The sending post's operator takes its targets off by hand (p19_to: semi-automatic take-off), one every
+        // telecode_take_off_s: in a cycle those never sent first (nearest the post), then those sent longest ago.
+        const std::size_t budget = static_cast<std::size_t>(std::max(1.0, std::floor(def_.telecode_period_s / def_.telecode_take_off_s + 1e-9)));
+        const std::size_t rounds = regiment.empty() ? 1 : (regiment.size() + budget - 1) / budget;
+        telecode_round_s_ = static_cast<double>(rounds) * def_.telecode_period_s;
+        for (std::size_t n = 0; n < budget; ++n) {
+            const BoardContact* best = nullptr;
+            double best_key = 1e18;
+            for (const BoardContact& c : regiment) {
+                const auto it = telecode_sent_.find(c.target_id);
+                if (it != telecode_sent_.end() && it->second + 1e-9 >= t) continue;  // sent this cycle
+                const double key = it == telecode_sent_.end() ? -1e12 + (c.position - position_).HorizontalLength() : it->second;
+                if (key < best_key) {
+                    best_key = key;
+                    best = &c;
+                }
+            }
+            if (best == nullptr) break;
+            telecode_sent_[best->target_id] = t;
+            Fix(t, Telecoded(*best), false, RegimentNumber(best->target_id));
+        }
+    }
+    // A target as the telecode carries it: its coordinates in the sending post's steps (p19_to).
+    BoardContact Telecoded(const BoardContact& c) const {
+        if (!(def_.telecode_step_m > 0.0)) return c;
+        BoardContact q = c;
+        q.position.x = std::round(c.position.x / def_.telecode_step_m) * def_.telecode_step_m;
+        q.position.y = std::round(c.position.y / def_.telecode_step_m) * def_.telecode_step_m;
+        return q;
+    }
+
+    // The regiment's radar battery reads its next report once the net is free: a target never reported first (the
+    // nearest to the radar), else the one reported longest ago, each at most once a reporting period, within the
+    // board's extent. A report heard goes to the plotter; the net goes on whether the post listens or not.
+    void ReadAirNet(double t, const std::vector<BoardContact>& regiment, bool listening) {
+        for (std::size_t i = 0; i < air_pending_.size();) {
+            if (air_pending_[i].heard_s > t + 1e-9) {
+                ++i;
+                continue;
+            }
+            spoken_.push_back({air_pending_[i], listening});
+            if (listening) heard_.push_back(air_pending_[i]);
+            air_pending_.erase(air_pending_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        heard_.erase(std::remove_if(heard_.begin(), heard_.end(), [&](const AirReport& r) { return t - r.heard_s > def_.air_net_period_s; }),
+                     heard_.end());
+        if (t + 1e-9 < air_free_s_) return;
+        const Vec3 src = has_air_source_ ? air_source_ : position_;
+        const BoardContact* best = nullptr;
+        double best_key = 1e18;
+        for (const BoardContact& c : regiment) {
+            if ((c.position - position_).HorizontalLength() > board_.Def().max_range_m) continue;
+            const auto it = air_said_.find(c.target_id);
+            if (it != air_said_.end() && t - it->second + 1e-9 < def_.air_net_period_s) continue;
+            const double key = it == air_said_.end() ? -1e12 + (c.position - src).HorizontalLength() : it->second;
+            if (key < best_key) {
+                best_key = key;
+                best = &c;
+            }
+        }
+        if (best == nullptr) return;
+        // The report: azimuth and range from the radar in its steps (degrees, kilometres), the identity and size, the
+        // height in hectometres and the minute (bguir_tsp: the azimuth-range form of the air-situation report).
+        const Vec3 rel = best->position - src;
+        double az_deg = RadToDeg(std::atan2(rel.x, rel.y));
+        if (az_deg < 0.0) az_deg += 360.0;
+        const double az_step = def_.air_net_az_step_deg > 0.0 ? def_.air_net_az_step_deg : 1.0;
+        const double r_step = def_.air_net_range_step_m > 0.0 ? def_.air_net_range_step_m : 1000.0;
+        az_deg = std::fmod(std::round(az_deg / az_step) * az_step, 360.0);
+        const double range = std::round(rel.HorizontalLength() / r_step) * r_step;
+        AirReport r;
+        r.contact = *best;
+        r.contact.position = Shown(Vec3{src.x + range * std::sin(DegToRad(az_deg)), src.y + range * std::cos(DegToRad(az_deg)), best->position.z});
+        r.number = board_.NumberFor(best->target_id);
+        r.heard_s = t + def_.air_net_report_s;
+        const int height_hm = static_cast<int>(std::lround(best->altitude_m / 100.0));
+        const int code = best->type * 10 + (best->formation > 9 ? 9 : best->formation);
+        const int minute = static_cast<int>(t / 60.0) + 1;
+        char text[96];
+        std::snprintf(text, sizeof(text), "%04d: azimuth %03.0f, %.0f km, %02d, height %d, minute %02d", r.number, az_deg, range / 1000.0, code,
+                      height_hm, minute % 100);
+        r.text = text;
+        air_pending_.push_back(r);
+        air_said_[best->target_id] = t;
+        air_free_s_ = r.heard_s;
+    }
+    void WriteHeard(double t, std::size_t index, double speed) {
+        const AirReport r = heard_[index];
+        heard_.erase(heard_.begin() + static_cast<std::ptrdiff_t>(index));
+        board_.PlotByHand(t, r.contact);
+        plotted_[r.contact.target_id] = t;
+        operator_free_s_ = t + def_.plot_mark_s / speed;
     }
 
     // The primary target to take off next: one already held whose fix is oldest, else the nearest new one while fewer
@@ -510,6 +685,15 @@ private:
     std::map<std::string, int> regiment_numbers_;
     std::map<std::string, int> post_numbers_;
     std::map<std::string, double> plotted_;
+    std::map<std::string, double> telecode_sent_;  // when the sending post last took each target off
+    double telecode_round_s_ = 0.0;                // how long its round of all the targets takes
+    Vec3 air_source_;
+    bool has_air_source_ = false;
+    double air_free_s_ = 0.0;                      // when the air-picture net is next free
+    std::map<std::string, double> air_said_;       // when each target was last reported on it
+    std::vector<AirReport> air_pending_;           // being read out (heard_s: when the reading ends)
+    std::vector<AirReport> heard_;
+    std::vector<Spoken> spoken_;
 };
 
 }  // namespace simcore

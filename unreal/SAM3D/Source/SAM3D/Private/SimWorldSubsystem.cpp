@@ -2030,6 +2030,16 @@ TArray<int32> USimWorldSubsystem::GetPostBoardNumbers() const
 	return Out;
 }
 
+TArray<int32> USimWorldSubsystem::GetPostHeardNumbers() const
+{
+	TArray<int32> Out;
+	for (int N : GetPostFeed().heard)
+	{
+		Out.Add(N);
+	}
+	return Out;
+}
+
 TArray<FSimLauncherStatus> USimWorldSubsystem::GetLauncherStatus() const
 {
 	TArray<FSimLauncherStatus> Out;

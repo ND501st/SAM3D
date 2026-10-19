@@ -427,6 +427,16 @@ public:
 
     void SetCentre(const Vec3& centre) { centre_ = centre; }
 
+    // The board's number of a target: the radar battery's two digits, then its own sequence (given at first sight).
+    int NumberFor(const std::string& id) {
+        for (const auto& n : numbers_) {
+            if (n.first == id) return n.second;
+        }
+        const int number = def_.radar_battery_number * 100 + static_cast<int>(numbers_.size() % 99) + 1;
+        numbers_.emplace_back(id, number);
+        return number;
+    }
+
 private:
     static Vec3 Rotate(const Vec3& v, double rad) {  // clockwise, as an azimuth error
         const double c = std::cos(rad), s = std::sin(rad);
@@ -465,15 +475,6 @@ private:
         msg.air_end_s = ch->free_s;
         msg.known_s = ch->free_s + def_.pass_on_s + pass_on_extra_s_;
         messages_.push_back(msg);
-    }
-
-    int NumberFor(const std::string& id) {
-        for (const auto& n : numbers_) {
-            if (n.first == id) return n.second;
-        }
-        const int number = def_.radar_battery_number * 100 + static_cast<int>(numbers_.size() % 99) + 1;
-        numbers_.emplace_back(id, number);
-        return number;
     }
 
     PlottingBoardDef def_;

@@ -2,7 +2,7 @@
   "aspd_id": "aspd_u",
   "display_name": "ASPD-U data equipment of the PU-12M (IT-45 picture, telecode, plotting)",
   "status": "P3 of docs/PU12_DEVELOPMENT.md: the PU-12M's information chain when the player's vehicle is the post (simcore/command_post.hpp). Research: docs/research/PU12_RESEARCH_2026-10.md.",
-  "notes": "Every number cited or an estimate. The telecode cycle and the plotter's time per mark are not published in what was read: the cycle is taken as one turn of the regiment's early-warning radar, the plotting time is fitted so a board of about ten targets takes a minute, SAM Simulator's cadence.",
+  "notes": "Every number cited or an estimate. The telecode cycle and the plotter's time per mark are not published in what was read: the cycle is taken as one turn of the regiment's early-warning radar, the plotting time is fitted so a board of about ten targets takes a minute, SAM Simulator's cadence. The air-picture voice net (air_net_*) feeds the plotter's board from the regiment's radar battery: docs/research/PLOTTING_BOARD_2026-10.md.",
   "aspd": {
     "max_targets": { "value": 100, "source": "ru_pu12_text (information on a hundred targets, numbers 00 to 99)", "confidence": "medium" },
     "semi_auto_tracks": { "value": 12, "source": "ru_pu12_text (targets tracked in the semi-automatic mode: 12)", "confidence": "medium" },
@@ -22,6 +22,16 @@
     "drift_fraction": { "value": 0.01, "source": "flak11 (PU12-0: the KP-4 course plotter's coordinates to at most 1 % of the distance travelled)", "confidence": "high" },
     "unoriented_az_error_deg": { "value": 5, "source": "flak11 (PU12-0: designation errors up to 5 degrees in azimuth working with the navigation equipment)", "confidence": "medium",
       "notes": "Used for a post whose GAK was never set from the aiming circle: the largest published error." },
-    "unoriented_position_error_m": { "value": 3000, "source": "flak11 (PU12-0: and 3 000 m in range)", "confidence": "medium" }
+    "unoriented_position_error_m": { "value": 3000, "source": "flak11 (PU12-0: and 3 000 m in range)", "confidence": "medium" },
+    "telecode_take_off_s": { "value": 2.5, "source": "ru_pu12_text (semi-automatic take-off and sending of one target's coordinates: 2-3 s); flak11 (PU12-0: a post coupled to a radar sends its picture on by telecode); rwd_mb3 (pu12: the received radar information is passed on without recomputing the coordinates)", "confidence": "low",
+      "notes": "The regiment's sending post takes its targets off by hand like the PU-12M's own operator, about four in a 10 s cycle: with twelve targets each is refreshed every 30 s. That the sender works this way is sam3d's reading." },
+    "air_net_report_s": { "value": 7, "source": "estimate (one air-situation report read out in the azimuth-range form of bguir_tsp: number, azimuth, range, identity and size, height, minute: six groups of digits)", "confidence": "estimate" },
+    "air_net_period_s": { "value": 60, "source": "bguir_tsp (a fix's time is given in minutes of the hour; heights at least every fifth report at up to two minutes between reports); narodna_armiya_2018 (the plotters' information comes every 1-2 min); samsim_osa p20 (each target's place updated every minute)", "confidence": "medium",
+      "notes": "Each target reported at most once a minute; with more targets than the net can read out in a minute, less often." },
+    "air_net_range_m": { "value": 20000, "source": "flak11 (PU12-1: FuG-1, an R-123, 15-20 km, the air-picture net, designation net no. 2, the plotters)", "confidence": "medium",
+      "notes": "Measured from the regiment's post, as the telecode's reach is." },
+    "air_net_az_step_deg": { "value": 1, "source": "bguir_tsp (the azimuth-range report: azimuth in degrees)", "confidence": "medium",
+      "notes": "SAM3D reads the reports in the azimuth-range form. The PVO grid's coded squares are the other form (pvo_bu_x_1984; rwd_mb3 pu12e: the board's tracks in the designation grid's squares about the radar)." },
+    "air_net_range_step_m": { "value": 1000, "source": "bguir_tsp (the azimuth-range report: range in kilometres)", "confidence": "medium" }
   }
 }

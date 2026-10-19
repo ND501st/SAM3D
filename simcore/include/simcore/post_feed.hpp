@@ -28,6 +28,7 @@ struct PostFeed {
     std::string keypad;                             // the ДХ window: the target's number ("" none)
     bool keypad_designating = false;                // ЦУ pressed, waiting for the launcher's place
     std::string keypad_last;                        // the last designation ("05>22")
+    std::vector<int> heard;                         // air-picture reports heard, not yet written (board numbers, oldest first)
 };
 
 // The board's targets as the commander reads them: each number's latest mark.
@@ -82,6 +83,7 @@ inline PostFeed FromViewExtras(const em::ViewExtras& x) {
     f.keypad = x.post_keypad;
     f.keypad_designating = x.post_keypad_designating;
     f.keypad_last = x.post_keypad_last;
+    f.heard = x.post_heard;
     return f;
 }
 
@@ -107,6 +109,7 @@ inline void ToViewExtras(const PostFeed& f, em::ViewExtras& x) {
     x.post_keypad = f.keypad;
     x.post_keypad_designating = f.keypad_designating;
     x.post_keypad_last = f.keypad_last;
+    x.post_heard = f.heard;
 }
 
 }  // namespace simcore

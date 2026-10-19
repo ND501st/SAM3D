@@ -649,7 +649,7 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 		{TEXT("The crew"),
 			{TEXT("T   take this seat, or give it back"), TEXT("O   orders (commander's seat) or reports; 1-9 pick, 0 next page"),
 				TEXT("H   training overlay: guided, hint, demonstrate, off"), TEXT("1-9   quick crew drills (outside the crew menu)"),
-				TEXT("B   the PU-12 plotting board"), TEXT("V   the other vehicle (battery link)")}},
+				TEXT("B   the PU-12 board (in a launcher: the designations heard)"), TEXT("V   the other vehicle (battery link)")}},
 		{TEXT("PU-12M seats"), {TEXT("[ ]   pick a target"), TEXT("1-5   give it to a launcher (commander)"), TEXT("P   plot it (plotter)")}},
 	};
 	const float W = FMath::Min(1180.0f, Canvas->ClipX - 40.0f);
@@ -746,24 +746,25 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 {
 	// The PU-12M's aids (the cabin's IT-45, glass and IT boards are the real picture): what the seat can pick and the
 	// keys. At the commander's seat the board's targets and the launchers as the IT boards show them; at the plotter's
-	// the IT-45's numbers.
+	// the reports heard on the air-picture net and not yet written (the board's four-digit numbers), then the IT-45's.
 	const bool bCommander = Vehicle->GetStationId() == Sim->GetCommanderStation();
 	const bool bPlotter = Vehicle->GetStationId() == Sim->GetPlotterStation();
 	if (!bCommander && !bPlotter)
 	{
 		return;
 	}
-	const TArray<int32> Numbers = bCommander ? Sim->GetPostBoardNumbers() : Sim->GetPostTrackNumbers();
-	FString Line = bCommander ? TEXT("Board: ") : TEXT("IT-45: ");
-	for (int32 N : Numbers)
+	auto Numbered = [Vehicle](FString Line, const TArray<int32>& Numbers, bool bTwoDigits)
 	{
-		const FString Num = bCommander ? FString::FromInt(N) : FString::Printf(TEXT("%02d"), N);
-		Line += N == Vehicle->GetPickedTarget() ? FString::Printf(TEXT("[%s] "), *Num) : Num + TEXT(" ");
-	}
-	if (Numbers.Num() == 0)
-	{
-		Line += TEXT("(nothing)");
-	}
+		for (int32 N : Numbers)
+		{
+			const FString Num = bTwoDigits ? FString::Printf(TEXT("%02d"), N) : FString::FromInt(N);
+			Line += N == Vehicle->GetPickedTarget() ? FString::Printf(TEXT("[%s] "), *Num) : Num + TEXT(" ");
+		}
+		return Numbers.Num() == 0 ? Line + TEXT("(nothing)  ") : Line;
+	};
+	const FString Line = bCommander ? Numbered(TEXT("Board: "), Sim->GetPostBoardNumbers(), false)
+									: Numbered(TEXT("Heard: "), Sim->GetPostHeardNumbers(), false) + TEXT("  ") +
+										  Numbered(TEXT("IT-45: "), Sim->GetPostTrackNumbers(), true);
 	const float X = 20.0f;
 	float Y = PostAidsTop(Sim, Vehicle);
 	const FLinearColor Ink(0.85f, 0.95f, 0.85f);
@@ -787,8 +788,8 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 	}
 	else
 	{
-		DrawText(Vehicle->IsHoldingSeat() ? TEXT("[ ] pick a target, P write it on the board")
-										  : TEXT("[ ] pick a target, P write it on the board (take the seat first: T)"),
+		DrawText(Vehicle->IsHoldingSeat() ? TEXT("[ ] pick a report heard or a track on the tube, P write it on the board")
+										  : TEXT("[ ] pick a report heard or a track on the tube, P write it on the board (take the seat first: T)"),
 			Ink, X, Y, Font);
 	}
 }
@@ -931,8 +932,11 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
 
 void ASimCabinHUD::DrawBoard(USimWorldSubsystem* Sim, UFont* Font)
 {
-	// The battery commander's glass plotting board (samsim_osa p20): range rings at 50-200 km, the battery at the centre,
-	// north up, each target's marks with its number, height over code, and the minute stamp; older plots dimmer.
+	// In the command post its glass plotting board (samsim_osa p20): range rings at 50-200 km, the battery at the centre,
+	// north up, each target's marks with its number, height over code, and the minute stamp; older plots dimmer. In a
+	// launcher the board is not in front of the crew (it is in the post): the same page holds only the designations the
+	// crew has heard on the net, each target's latest (a training aid; first person).
+	const bool bPost = Sim->IsCommandPost();
 	const float Size = Canvas->ClipY * 0.7f;
 	const FVector2D Origin(Canvas->ClipX - Size - 30.0f, 40.0f);
 	const FVector2D Centre = Origin + FVector2D(Size, Size) * 0.5f;
@@ -1004,6 +1008,8 @@ void ASimCabinHUD::DrawBoard(USimWorldSubsystem* Sim, UFont* Font)
 			}
 		}
 	}
-	DrawText(FString::Printf(TEXT("PU-12 plotting board   plot %d   (B to close)"), Newest), Grid, Origin.X + 8.f, Origin.Y + Size - 18.f, Font);
+	DrawText(bPost ? FString::Printf(TEXT("PU-12 plotting board   plot %d   (B to close)"), Newest)
+				   : FString::Printf(TEXT("Designations heard from the PU-12 (%d)   (B to close)"), Last.Num()),
+		Grid, Origin.X + 8.f, Origin.Y + Size - 18.f, Font);
 }
 

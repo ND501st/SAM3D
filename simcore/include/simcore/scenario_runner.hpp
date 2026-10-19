@@ -315,11 +315,12 @@ public:
         const int pos = console_.post_scale.empty() ? 0 : console_.panel.Get(console_.post_scale);
         return s[static_cast<std::size_t>(std::min<int>(std::max(pos, 0), static_cast<int>(s.size()) - 1))];
     }
-    // The player at the plotter's seat writes one target from the IT-45 on the board (its ASPD-U number). False if the
-    // vehicle is no post, the seat isn't the player's, the number isn't on the tube, or he is still writing the last one.
-    bool PlayerPlot(int aspd_number) {
+    // The player at the plotter's seat writes one target on the board: from the IT-45 (its ASPD-U number, 00-99), or a
+    // report he heard on the air-picture net (the board's four-digit number). False if the vehicle is no post, the seat
+    // isn't the player's, the number is neither on the tube nor in a report waiting, or he is still writing the last one.
+    bool PlayerPlot(int number) {
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
-        if (!post_->PlotTrack(time_, aspd_number, PlotterSpeed())) return false;
+        if (!post_->PlotTrack(time_, number, PlotterSpeed()) && !post_->PlotHeard(time_, number, PlotterSpeed())) return false;
         ++plots_made_;
         return true;
     }
@@ -424,16 +425,20 @@ public:
     static constexpr std::size_t kRadioKept = 64;
     const std::vector<RadioMessage>& RadioLog() const { return radio_; }
 
-    // What the player's crew has in front of it besides its knowledge (roadmap 7.7): the PU-12 board's marks of the last
-    // five plots, the last `radio_count` radio messages, and the battery's other vehicles and dummy positions.
+    // What the player's crew has in front of it besides its knowledge (roadmap 7.7): in the command post its own board's
+    // marks of the last five plots; in a launcher only the designations its crew has heard on the net (the board is in
+    // the post: first person); the last `radio_count` radio messages, and the battery's other vehicles and dummy positions.
     em::ViewExtras ViewExtrasNow(std::size_t radio_count = 8) const {
         em::ViewExtras x;
         x.valid = true;
         if (post_) {
             ToViewExtras(PostFeedNow(), x);  // the post's own board (killed targets wiped off) and instruments
-        } else if (const PlottingBoard* b = Board()) {
-            for (const BoardMark& m : b->Marks()) {
-                if (m.stamp + 4 < b->Stamp()) continue;
+        } else if (c2_ != nullptr || Board() != nullptr) {
+            const std::vector<BoardMark> heard = c2_ != nullptr ? c2_->Known(time_) : Board()->Known(time_);
+            int newest = 0;
+            for (const BoardMark& m : heard) newest = std::max(newest, m.stamp);
+            for (const BoardMark& m : heard) {
+                if (m.stamp + 4 < newest || reported_kills_.count(m.target_id) != 0) continue;
                 x.board.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
             }
         }
@@ -1269,10 +1274,22 @@ private:
         CommandPost::Inputs in;
         in.telecode = console_.equipment.IsReady(console_.post_telecode);
         in.primary = console_.equipment.IsReady(console_.post_primary);
+        // The air-picture net: the regiment's radar battery reads from its radar (the regiment's first, else its post).
+        if (!def_.post_regiment.radars.empty()) {
+            post_->SetAirNetSource(def_.post_regiment.radars.front().position);
+        } else if (def_.post_regiment.has_position) {
+            post_->SetAirNetSource(def_.post_regiment.position);
+        }
+        in.air_net = !console_.post_air_net.empty() && console_.equipment.IsReady(console_.post_air_net) &&
+                     post_->AirNetInReach(def_.post_regiment, time_);
         const CrewMember* plotter = MemberAt(console_.post_plotter);
         in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
         in.operator_speed = PlotterSpeed();
         post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person).
+        for (const CommandPost::Spoken& s : post_->TakeSpoken()) {
+            if (s.heard) Radio("air picture", "Regiment", s.report.text);
+        }
         for (const BoardMark& m : post_->Board().Marks()) {
             if (post_first_mark_.count(m.target_id) != 0) continue;
             post_first_mark_[m.target_id] = m.time_s;
@@ -3379,6 +3396,7 @@ public:
         }
         f.keypad_designating = keypad_.designating;
         f.keypad_last = keypad_.last;
+        for (const CommandPost::AirReport& r : post_->Heard()) f.heard.push_back(r.number);
         return f;
     }
     const PostKeypad& Keypad() const { return keypad_; }

@@ -69,8 +69,10 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 ### 2.4 How it works (what the sim already does, and what is missing)
 
 1. Higher command (the regiment's radars, P-19/P-40) sends the air picture by telecode to the ASPD-U; it shows on the
-   IT-45 tube and the plotter writes it on the glass board once a minute (`samsim_osa` p20). **Modelled**:
-   `PlottingBoard`, `RegimentRadars`.
+   IT-45 tube. The regiment's radar battery also reads it out on the air-picture voice net (FuG-1), and the plotter
+   writes what he hears on the glass board, the battery's long-range picture (`rwd_mb3` pu12e, `flak11` PU12-1,
+   `pvo_bu_x_1984`). **Modelled**: `PlottingBoard`, `RegimentRadars`, `CommandPost` (the air-picture net, 19 Oct 2026:
+   `docs/research/PLOTTING_BOARD_2026-10.md`).
 2. The battery commander designates targets to the vehicles by voice, azimuth and range, on the R-123M (`flak11`).
    **Modelled**: voice designations, EM voice messages, the two R-123M sets in the Osa.
 3. The board carries the PU-12M's navigation error, up to 5 degrees and 3 km (`flak11`). **Modelled**; to come: from

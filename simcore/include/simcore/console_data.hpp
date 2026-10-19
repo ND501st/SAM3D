@@ -289,6 +289,7 @@ struct ConsoleData {
     std::string post_oriented;        // subsystem: the post oriented (its navigation error small)
     std::string post_scale;           // control: the IT-45's scale switch, one position per scale of the ASPD-U ("" none)
     std::string post_battery_net;     // subsystem: the battery net up, for designations and reports ("" always up)
+    std::string post_air_net;         // subsystem: the air-picture voice net heard (FuG-1; "" none: the post never hears it)
     // The ДХ characteristics keypad (optional "keypad"): its ten digit keys, the designation key (ЦУ) and the reset; the
     // station that works it. And the DT-2 coordinate pickup (optional "marker"): two wheels that move the marker on the
     // IT-45 in azimuth (deg) and range (a fraction of the scale).
@@ -649,9 +650,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadPost(const json::Value& root, ConsoleData& out) {
         const json::Value* p = root.Find("post");
         if (p == nullptr) return true;
-        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "keypad", "marker",
-                               "source", "confidence", "notes"}) ||
+        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "air_net", "keypad",
+                               "marker", "source", "confidence", "notes"}) ||
             !OptionalString(*p, "post", "scale", out.post_scale) || !OptionalString(*p, "post", "battery_net", out.post_battery_net) ||
+            !OptionalString(*p, "post", "air_net", out.post_air_net) ||
             !Provenance(*p, "post") || !RequireString(*p, "post", "telecode", out.post_telecode) ||
             !RequireString(*p, "post", "primary", out.post_primary) || !RequireString(*p, "post", "telecode_input", out.post_telecode_input) ||
             !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
@@ -665,6 +667,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!out.post_scale.empty() && out.panel.Find(out.post_scale) == nullptr) return Fail("post.scale", "unknown control '" + out.post_scale + "'");
         if (!out.post_battery_net.empty() && out.equipment.Def(out.post_battery_net) == nullptr) {
             return Fail("post.battery_net", "unknown subsystem '" + out.post_battery_net + "'");
+        }
+        if (!out.post_air_net.empty() && out.equipment.Def(out.post_air_net) == nullptr) {
+            return Fail("post.air_net", "unknown subsystem '" + out.post_air_net + "'");
         }
         if (!out.stations.empty() && out.FindStation(out.post_plotter) == nullptr) {
             return Fail("post.plotter", "'" + out.post_plotter + "' is not a station");

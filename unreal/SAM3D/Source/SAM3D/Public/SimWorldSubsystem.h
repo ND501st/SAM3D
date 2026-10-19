@@ -1064,6 +1064,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	TArray<int32> GetPostBoardNumbers() const;
 
+	/** The reports heard on the air-picture net and not yet written on the board (the board's numbers), oldest first. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	TArray<int32> GetPostHeardNumbers() const;
+
 	/** The IT-1 / IT-2 boards: each launcher as the post last heard it. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	TArray<FSimLauncherStatus> GetLauncherStatus() const;

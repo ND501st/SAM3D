@@ -116,9 +116,9 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | O | Orders (at the commander's seat) or reports (any other); 1-9 pick, 0 next page, Esc close |
 | H | Training overlay: guided, hint, demonstrate, off |
 | 1-9 | Quick crew drills (outside the crew menu) |
-| B | The PU-12 plotting board |
+| B | In the PU-12M: its plotting board. In a launcher: the designations the crew has heard (the board is in the post) |
 | V | The other vehicle (a battery link) |
-| [ ], 1-5, P | PU-12M seats: pick a target, give it to a launcher, plot it |
+| [ ], 1-5, P | PU-12M seats: pick a target, give it to a launcher, plot it (the plotter picks a report heard on the air-picture net, or a track on the IT-45) |
 | G | Every key |
 | Enter | A lesson's reading step: continue |
 | L | A lesson: look at what the step lights up (from the lesson's seat) |

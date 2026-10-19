@@ -704,9 +704,9 @@
     {
       "id": "acquire_with_soc", "name": "Autonomous target acquisition with the SOC radar",
       "source": "samsim_osa p21–24; seats: flak11 (9A33-3)", "confidence": "high",
-      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator). The manual then selects the beam the echo appeared in; SAM3D's crew leaves АВТ. I–III on, where target designation searches the beam the echo is seen in.",
+      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator). The manual then selects the beam the echo appeared in; SAM3D's crew leaves АВТ. I–III on, where target designation searches the beam the echo is seen in. SAM Simulator has the crew watch the PU-12's plotting board; the board is in the battery's post, and the vehicle gets the target by voice from the battery commander, azimuth and range (flak11), so the cue here is his designation.",
       "steps": [
-        { "control": "soc.search", "position": 1, "description": "When the target nears 50 km on the plotting board: ПОИСК ВКЛ, SOC antenna rotation on" },
+        { "control": "soc.search", "position": 1, "description": "When the battery commander's designation puts the target near 50 km: ПОИСК ВКЛ, SOC antenna rotation on" },
         { "control": "soc.hv_cover", "position": 1, "description": "Remove the guard over ВЫСОКОЕ" },
         { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, SOC transmitter on" },
         { "control": "soc.beam", "position": 3, "description": "АВТ. I–III ЛУЧ, scan all three height beams" },
@@ -822,12 +822,12 @@
       ]
     },
     {
-      "id": "emcon_tv_azimuth", "name": "Emissions control: azimuth onto the plotting-board track",
-      "source": "samsim_osa p33–35; seat: flak11 (9A33-3)", "confidence": "high",
-      "notes": "Senior operator, with emcon_tv_engagement (deputy commander).",
+      "id": "emcon_tv_azimuth", "name": "Emissions control: azimuth onto the designated target",
+      "source": "samsim_osa p33–35; seat: flak11 (9A33-3); the designation by voice: flak11 (PU12-0)", "confidence": "high",
+      "notes": "Senior operator, with emcon_tv_engagement (deputy commander). SAM Simulator takes the azimuth from the PU-12's plotting board; the crew has it from the battery commander's designation by voice (flak11), a minute old at worst.",
       "steps": [
         { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
-        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel, then turn towards the target's azimuth from the plotting board" }
+        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel, then turn towards the azimuth in the battery commander's designation" }
       ]
     },
     {
@@ -835,7 +835,7 @@
       "source": "samsim_osa p33–35", "confidence": "high",
       "notes": "Deputy commander; the senior operator turns the azimuth (emcon_tv_azimuth). Range is judged from the target's size in the narrow-lens crosshair, so ЦЕЛЬ В ЗОНЕ is not awaited. The TV can't look within 16° of the sun (voenizdat_osa_1991 p251).",
       "steps": [
-        { "control": "tov.power", "position": 1, "description": "When the target nears 50 km on the plotting board: РАБ.РЕЖ. ВКЛ, TOV camera on" },
+        { "control": "tov.power", "position": 1, "description": "When the battery commander's designation puts the target near 50 km: РАБ.РЕЖ. ВКЛ, TOV camera on" },
         { "control": "ssc.el_light", "position": 1, "description": "ПОДСВЕТКА, light the elevation indicator" },
         { "control": "ssc.el_lock", "position": 1, "description": "Unlock the elevation wheel (p23), then scan slowly upwards until the target shows on the TV and bring it into the crosshair" },
         { "control": "fo.pa", "position": 1, "description": "ПА, angle tracking with the TOV camera",

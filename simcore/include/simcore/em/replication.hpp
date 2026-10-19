@@ -171,6 +171,7 @@ struct ViewExtras {
     std::string post_keypad;
     bool post_keypad_designating = false;
     std::string post_keypad_last;
+    std::vector<int> post_heard;  // air-picture reports waiting for the plotter (board numbers)
 };
 
 struct KnowledgeView {
@@ -550,6 +551,8 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
     w.Str(x.post_keypad);
     w.U8(x.post_keypad_designating ? 1 : 0);
     w.Str(x.post_keypad_last);
+    w.U32(static_cast<std::uint32_t>(x.post_heard.size()));
+    for (int n : x.post_heard) w.I32(n);
     return w.bytes;
 }
 inline bool GetExtras(Reader& r, ViewExtras& x) {
@@ -625,6 +628,9 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
     x.post_keypad = r.Str();
     x.post_keypad_designating = r.U8() != 0;
     x.post_keypad_last = r.Str();
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) x.post_heard.push_back(r.I32());
     return r.ok;
 }
 

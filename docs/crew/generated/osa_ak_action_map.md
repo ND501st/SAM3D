@@ -376,7 +376,7 @@ Lamps: R-123M left: готова, R-123M left: прогрев, generator on line
 | 1 | `ssc.az_light` | 1 | – | – |
 | 2 | `ssc.az_lock` | 1 | – | – |
 
-### `emcon_tv_azimuth` (senior_operator): Emissions control: azimuth onto the plotting-board track — ordered by `order_emcon_tv`
+### `emcon_tv_azimuth` (senior_operator): Emissions control: azimuth onto the designated target — ordered by `order_emcon_tv`
 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|

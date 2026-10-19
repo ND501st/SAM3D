@@ -251,16 +251,23 @@ SC_TEST("prepared position: emplacement and nets shrink the vehicle's echo; dumm
     SC_EXPECT(r.Acmi().Text().find("Dummy position") != std::string::npos);
 }
 
-SC_TEST("battery view: the board's marks, the radio traffic and the battery's vehicles reach a player through the stream") {
+SC_TEST("battery view: the designations heard, the radio traffic and the battery's vehicles reach a player through the stream") {
     ScenarioDef def;
     ConsoleData console;
     std::string error;
     SC_EXPECT(LoadScenario(BatteryScenario(""), kData, def, console, &error));
     ScenarioRunner r(std::move(def), std::move(console));
-    for (int i = 0; i < 1300; ++i) r.Step(0.1);  // 130 s: three plots, the column formed and marching
+    // 130 s: the PU-12 has plotted the drone three times, but it is still beyond 50 km: nothing told to the vehicle, so
+    // the launcher's view of the board is empty (the board is in the post: first person).
+    for (int i = 0; i < 1300; ++i) r.Step(0.1);
+    SC_EXPECT(r.Board() != nullptr && !r.Board()->Marks().empty());
+    SC_EXPECT(r.ViewExtrasNow().board.empty());
+    // 210 s: inside 50 km at the 180 s plot, read out and passed on: the view holds what the crew heard, and only that.
+    for (int i = 0; i < 800; ++i) r.Step(0.1);
     const em::ViewExtras x = r.ViewExtrasNow();
     std::printf("    %zu board marks, %zu radio messages, %zu battery vehicles\n", x.board.size(), x.radio.size(), x.battery.size());
-    SC_EXPECT(!x.board.empty());
+    SC_EXPECT(!x.board.empty() && x.board.size() == r.C2()->Known(r.Time()).size());
+    if (x.board.empty()) return;
     SC_EXPECT(!x.radio.empty());
     SC_EXPECT(x.battery.size() == 3);
     bool column = false;
