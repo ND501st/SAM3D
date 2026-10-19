@@ -336,11 +336,12 @@ def build():
                  'csla_pu12_manual item 18).')
 
     # ---------------------------------------------------------------------------------------------- the plotter
-    p = L.panel('map_panel', 'Air-situation map', 'operator', 'map_board', (0.33, 0.37), color='lightgrey',
-                notes='The plotter\'s map board (csla_pu12_manual item 24, planšet vzdušné situace; rwd_mb3: the '
-                      'Luftlagekarte, a plexiglass board on a hinge, etched with a grid and range circles).')
+    p = L.panel('map_panel', 'Air-situation map', 'operator', 'map_board', (0.37, 0.35), color='lightgrey',
+                notes='The plotter\'s map board (csla_pu12_manual item 24, planšet vzdušné situace: drawn folded on the '
+                      'centreline before his place; rwd_mb3: the Luftlagekarte, a plexiglass board on a hinge, etched with a '
+                      'grid and range circles), swung open across the compartment facing him. ' + VISUALS)
     L.displays.append({'id': 'map', 'label': 'Air-situation map', 'kind': 'plot_board', 'panel': p, 'at_m': [0.0, 0.0],
-                       'size_m': [0.32, 0.36],
+                       'size_m': [0.36, 0.34],
                        'source': 'rwd_mb3 (Luftlagekarte: the targets\' tracks drawn by hand in the designation squares, '
                                  'azimuth and range taken off it; the photograph: a plexiglass board with a grid and range '
                                  'circles); data/command/pu12.json (the board\'s notation: number, height over the code)',
@@ -545,9 +546,15 @@ def dch(L):
     for x in (118, 160, 203, 245, 288):
         items.append((x, 240, 'toggle', 0.008, None, None))
     keys = [('ВР', '', 'ТС'), ('СР', 'СМ', '*'), ('СВ', 'Ч', 'ГР'), ('Н1', 'Н2', 'Н3'), ('Н', '22', None)]
+    # The characteristics keys that work (rwd_mb3 pu12a: friend or foe, group, the height zone): controls, the rest drawn.
+    working = {'СВ': 'friend', 'Ч': 'foe', 'ГР': 'group', 'Н1': 'h1', 'Н2': 'h2', 'Н3': 'h3'}
     for row, y in zip(keys, (300, 330, 362, 393, 425)):
         for lab, x in zip(row, (145, 190, 240)):
             if lab is None:
+                continue
+            if lab in working:
+                L.control('dch.key.' + working[lab], p, L.at_photo(size, ext, x, y), 'button',
+                          {'kind': 'button', 'size_m': 0.016, 'color': 'ivory', 'label': lab})
                 continue
             items.append((x, y, 'button', 0.016, 'red' if lab == '*' else 'ivory', None if lab in ('', '*') else lab))
     items += [(175, 603, 'button', 0.016, 'ivory', 'М'), (228, 603, 'button', 0.016, 'ivory', 'ПВ'),
@@ -578,6 +585,10 @@ def fr(L):
     L.control('fr.scale', p, L.at_photo(size, ext, 305, 180), 'rotary',
               {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black'})
     L.control('aspd.power', p, L.at_photo(size, ext, 360, 215), 'toggle')
+    # The primary radar's source switch (rwd_mb3 pu12e/pu12f: "Umschalter für die Quelle der Funkmess-Primärinformation",
+    # on the back of the commander's rack beside the DTP): SAM3D puts it on the ФР block's face, in his reach.
+    L.control('aspd.radar_source', p, L.at_photo(size, ext, 405, 450), 'rotary',
+              {'kind': 'pointer_knob', 'size_m': 0.024, 'color': 'black'})
     src = 'shilka_narod (photograph of the ФР block: small lamps beside the selectors)'
     L.lamp('aspd_warming', 'ПРОГРЕВ', p, L.at_photo(size, ext, 100, 135), 'amber', warming('aspd_warm'),
            src + '; what each shows is sam3d')

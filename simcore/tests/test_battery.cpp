@@ -464,3 +464,75 @@ SC_TEST("battery fire: in free fire each launcher takes the targets in its secto
     SC_EXPECT(BatteryFire::InSector(fire.Shooters()[0], Vec3{-100.0, -100.0, 0.0}));
     SC_EXPECT(!fire.SetSector("99", 0.0, 90.0));
 }
+
+#include "simcore/board_reading.hpp"
+
+SC_TEST("board reading: two crosses a minute apart give course, speed, the time to the post and to the zone's edge") {
+    // Placeholder numbers: a track 100 km north closing at 200 m/s, a minute between its crosses.
+    const std::vector<BoardFix> fixes = {{"a", 6201, Vec3{0, 112000, 0}, 0.0}, {"a", 6201, Vec3{0, 100000, 0}, 60.0},
+                                         {"b", 6202, Vec3{30000, 0, 0}, 50.0},
+                                         {"c", 6203, Vec3{0, -40000, 0}, 0.0}, {"c", 6203, Vec3{0, -46000, 0}, 60.0}};
+    const std::vector<BoardReading> r = ReadBoard(fixes, Vec3{}, 10000.0);
+    SC_EXPECT(r.size() == 3);
+    if (r.size() != 3) return;
+    SC_EXPECT(r[0].has_speed && r[0].number == 6201);
+    SC_EXPECT_NEAR(r[0].velocity_mps.y, -200.0, 1e-9);
+    SC_EXPECT_NEAR(r[0].arrival_s, 500.0, 1e-6);   // 100 km at 200 m/s
+    SC_EXPECT_NEAR(r[0].to_zone_s, 450.0, 1e-6);   // to 10 km
+    SC_EXPECT(!r[1].has_speed && r[1].arrival_s < 0.0 && r[1].to_zone_s < 0.0);  // one cross: a place, no speed
+    SC_EXPECT(r[2].has_speed && r[2].closing_mps < 0.0 && r[2].arrival_s < 0.0);  // going away
+    // Crosses closer together than the gap are not read for speed (the same minute's two marks).
+    const std::vector<BoardReading> quick = ReadBoard({{"a", 1, Vec3{0, 100100, 0}, 50.0}, {"a", 1, Vec3{0, 100000, 0}, 60.0}}, Vec3{}, 0.0);
+    SC_EXPECT(quick.size() == 1 && !quick[0].has_speed);
+}
+
+namespace {
+
+// The battery waiting deployed, the PU-12 plotting a target coming straight in from 150 km at `speed_mps`.
+std::string WarningScenario(double speed_mps) {
+    char target[512];
+    std::snprintf(target, sizeof(target),
+                  R"({ "id": "t1", "name": "T", "class": "fighter", "start": { "east_m": 0, "north_m": 150000, "up_m": 5000 },
+                       "waypoints": [ { "east_m": 0, "north_m": -30000, "up_m": 5000 } ], "speed_mps": %.0f })", speed_mps);
+    return std::string(R"({
+      "scenario_id": "warn", "name": "Warning", "source": "sam3d", "confidence": "estimate", "seed": 2,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "command_post": "command/pu12.json",
+      "battery": { "own": { "id": "21", "callsign": "21" },
+        "vehicles": [ { "id": "22", "kind": "launcher", "position": { "east_m": 300, "north_m": 0, "up_m": 3 } } ] },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" } ],
+      "targets": [ )") + target + R"( ],
+      "end": { "time_limit_s": 1500, "when_targets_gone": false } })";
+}
+
+double WarnedAt(double speed_mps) {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(WarningScenario(speed_mps), kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (!r.Finished() && r.Time() < 1400.0) {
+        r.Step(0.5);
+        if (r.GetBattery() != nullptr && r.GetBattery()->AirThreat()) return r.Time();
+    }
+    return -1.0;
+}
+
+}  // namespace
+
+SC_TEST("battery readiness: the commander reads the board; a fast track 150 km out is warned of long before a slow one") {
+    // The tactics file: the launchers need 408 s from cold (flak11), counted to the zone's 10 km edge.
+    BatteryTactics t;
+    std::string error;
+    SC_EXPECT(LoadBatteryTacticsFile(kData + "/command/battery_tactics.json", t, &error));
+    SC_EXPECT_NEAR(t.warning_s, 408.0, 1e-9);
+    SC_EXPECT_NEAR(t.zone_edge_m, 10000.0, 1e-9);
+    const double fast = WarnedAt(300.0);  // at the zone in about 7.8 min from the start: warned at the second cross
+    const double slow = WarnedAt(100.0);  // 23 min: warned only at 50 km, the range alone
+    std::printf("    warned of the 300 m/s track at %.0f s, of the 100 m/s one at %.0f s\n", fast, slow);
+    SC_EXPECT(fast > 0.0 && fast < 200.0);
+    SC_EXPECT(slow > 900.0);
+}

@@ -175,6 +175,7 @@ struct ScenarioDef {
     PlottingBoardDef post_board;
     AspdDef post_aspd;
     PostRegiment post_regiment;
+    AspdCodeTable post_codes;        // the regiment's two-digit commands' meanings ("post.codes"; empty: none)
     bool has_post_radar = false;
     RegimentRadar post_radar;
     // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
@@ -733,7 +734,7 @@ private:
             if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
             if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation)) return false;
             if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
-                return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
+                return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 2 training target, 8 enemy, 9 no IFF...)");
             }
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
             if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr) ||
@@ -1035,7 +1036,9 @@ private:
 
     // The player's vehicle is the command post: "post": { "board": "command/pu12.json", "aspd": "command/aspd_u.json",
     //   "library": "command/regiment_radars.json",
-    //   "regiment": { "position": {...}, "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ] },
+    //   "codes": "command/aspd_codes.json",
+    //   "regiment": { "position": {...}, "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ],
+    //                 "telecode": true, "designate_within_m": 40000, "commands": [ { "at_s", "code" } ] },
     //   "radar": { "type": "p19", "position": {...} } }  (a radar cabled to the post; optional)
     // Required when the console has "post", refused otherwise.
     bool LoadPost(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
@@ -1045,16 +1048,17 @@ private:
             return true;
         }
         if (!console.has_post) return Fail("post", "the console is not a command post (no \"post\" block)");
-        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "library", "regiment", "radar", "notes"})) {
+        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "codes", "library", "regiment", "radar", "notes"})) {
             return message_.empty() ? Fail("post", "expected an object") : false;
         }
-        std::string board_file, aspd_file, library_file, error;
+        std::string board_file, aspd_file, codes_file, library_file, error;
         if (!RequireString(*p, "post", "board", board_file) || !RequireString(*p, "post", "aspd", aspd_file) ||
-            !OptionalString(*p, "post", "library", library_file)) {
+            !OptionalString(*p, "post", "codes", codes_file) || !OptionalString(*p, "post", "library", library_file)) {
             return false;
         }
         if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
         if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);
+        if (!codes_file.empty() && !LoadAspdCodesFile(data_dir + "/" + codes_file, out.post_codes, &error)) return Fail("post.codes", error);
         RegimentRadarLibrary lib;
         if (!library_file.empty() && !LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail("post.library", error);
         auto radar_of = [&](const json::Value& e, const std::string& rp, bool with_id, RegimentRadar& radar) {
@@ -1077,8 +1081,30 @@ private:
         };
         if (const json::Value* r = p->Find("regiment")) {
             const std::string rp = "post.regiment";
-            if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"position", "radars", "outages", "notes"})) {
+            if (!r->Is(json::Type::Object) ||
+                !Keys(*r, rp, {"position", "radars", "outages", "telecode", "designate_within_m", "commands", "notes"}) ||
+                !OptionalBool(*r, rp, "telecode", out.post_regiment.telecode) ||
+                !OptionalNumber(*r, rp, "designate_within_m", out.post_regiment.designate_within_m)) {
                 return message_.empty() ? Fail(rp, "expected an object") : false;
+            }
+            if (const json::Value* cmds = OptionalArray(*r, rp, "commands")) {
+                for (std::size_t j = 0; j < cmds->items.size(); ++j) {
+                    const std::string cp = Index(Join(rp, "commands"), j);
+                    RegimentCommand c;
+                    double code = -1.0;
+                    if (!Keys(cmds->items[j], cp, {"at_s", "code", "notes"}) || !RequireNumber(cmds->items[j], cp, "at_s", c.at_s) ||
+                        !RequireNumber(cmds->items[j], cp, "code", code)) {
+                        return false;
+                    }
+                    if (code < 0.0 || code > 99.0 || code != std::floor(code)) return Fail(Join(cp, "code"), "a two-digit number, 00-99");
+                    c.code = static_cast<int>(code);
+                    if (!out.post_regiment.commands.empty() && c.at_s < out.post_regiment.commands.back().at_s) {
+                        return Fail(Join(cp, "at_s"), "the commands in time order");
+                    }
+                    out.post_regiment.commands.push_back(c);
+                }
+            } else if (!message_.empty()) {
+                return false;
             }
             if (const json::Value* pos = r->Find("position")) {
                 if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(rp, "position"), frame_, out.post_regiment.position)) {

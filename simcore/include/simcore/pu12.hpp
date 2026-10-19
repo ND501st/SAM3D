@@ -3,7 +3,7 @@
 // The regiment's radars feed the battery command post an air picture, which the crew writes on a glass plotting
 // board once a minute (samsim_osa p20). Each target gets a mark: a four-digit number (the tactical number of the
 // radar battery that found it, then a sequence number), its height in hectometres over a two-digit code (the tens
-// digit is the target's type, e.g. 1 friend, 7 practice target, 9 no IFF; the ones digit is the formation size),
+// digit is the target's type, e.g. 1 friend, 2 training target (bguir_tsp), 9 no IFF; the ones digit is the formation size),
 // and a minute stamp. Positions carry the PU-12M's navigation error (flak11: up to 5 degrees and 3 km), drawn once
 // per board from the scenario's seed.
 //
@@ -67,7 +67,7 @@ struct BoardMark {
     double time_s = 0.0;
     Vec3 position;          // where the board puts it (ENU, with the navigation error)
     int height_hm = 0;      // height above sea level in hectometres
-    int type = 9;           // tens digit of the code: 0 jamming, 1 friend, ..., 7 practice, 8 enemy, 9 no IFF
+    int type = 9;           // tens digit of the code: 0 jamming, 1 friend, 2 training target, ..., 8 enemy, 9 no IFF
     int formation = 1;      // ones digit: aircraft in the formation
 
     // The code under the height, as written on the board (e.g. 71: practice target, one aircraft).

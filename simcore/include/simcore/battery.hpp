@@ -47,6 +47,8 @@ struct BatteryTactics {
     double halt_duration_s = 1.5 * 3600.0;
     double night_halt_s = 3600.0;
     double threat_range_m = 50000.0;
+    double warning_s = 0.0;       // the launchers' warm-up: a track that reaches the zone within it raises readiness (0: off)
+    double zone_edge_m = 10000.0; // the far edge of the launchers' zone, where that time is counted to
     double water_speed_mps = 2.2;
     double river_standoff_m = 2000.0;
     double ambush_dwell_s = 1200.0;
@@ -157,6 +159,19 @@ public:
             {"river_standoff_m", &t.river_standoff_m},     {"ambush_dwell_s", &t.ambush_dwell_s},
             {"alongside_offset_m", &t.alongside_offset_m}, {"tzm_capacity", &t.tzm_capacity},
             {"fuel_truck_capacity_l", &t.fuel_truck_capacity_l}};
+        // Optional: the board's warning time (board_reading.hpp).
+        const std::pair<const char*, double*> optional[] = {{"warning_s", &t.warning_s}, {"zone_edge_m", &t.zone_edge_m}};
+        for (const auto& f : optional) {
+            const std::string p = Join("tactics", f.first);
+            const json::Value* v = b->Find(f.first);
+            if (v == nullptr) continue;
+            if (!v->Is(json::Type::Object) || !Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) {
+                return message_.empty() ? Fail(p, "expected {value, source, confidence}") : false;
+            }
+            const json::Value* n = v->Find("value");
+            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number > 0.0)) return Fail(Join(p, "value"), "a number > 0");
+            *f.second = n->number;
+        }
         for (const auto& f : fields) {
             const std::string p = Join("tactics", f.first);
             const json::Value* v = b->Find(f.first);

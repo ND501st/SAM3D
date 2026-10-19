@@ -63,6 +63,7 @@
         { "file": "scenarios/osa_range_ashuluk.json", "title": "Ashuluk: from cold to two La-17M drones" },
         { "file": "scenarios/osa_range_ustka.json", "title": "Ustka: P-15 targets from the sea, a salvo at each" },
         { "file": "scenarios/osa_range_kapustin_yar.json", "title": "Kapustin Yar: a target at the zone's far edge" },
+        { "file": "scenarios/pu12m_range_day.json", "title": "PU-12M range day: the picture by voice, the ASPD-U off" },
         { "file": "scenarios/osa_bekaa_1982.json", "title": "The Bekaa, 24 July 1982: F-4Es over the mountains" },
         { "file": "scenarios/osa_angola_night.json", "title": "Angola: dug in, a night raid, a Puma in the canyon" },
         { "file": "scenarios/osa_cuito_1988.json", "title": "Cuito Cuanavale, 20 February 1988: Mirage F1AZs" }

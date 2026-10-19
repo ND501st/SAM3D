@@ -1,6 +1,10 @@
 // The battery commander in the PU-12M (docs/PU12_DEVELOPMENT.md P4): targets given out by voice on the battery net from
 // the post's board and tube, the launchers' reports onto the IT-1 and IT-2 boards, the NPC commander and the player.
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -215,4 +219,96 @@ SC_TEST("pu12m battery: the commander puts the DT-2 marker on a target, presses 
     r->SeatSet("battery_commander", "dch.key.reset", 1, &why);
     r->Step(0.1);
     SC_EXPECT(r->Keypad().entry.empty());
+}
+
+SC_TEST("pu12m battery: the regiment's commands come by telecode as two digits; a fire ban stops the NPC's designations") {
+    // The shipped battery: code 10 (readiness no. 1) at 5 s; here a fire ban (20) at 30 s, lifted (21) at 400 s.
+    std::ifstream f(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_battery.json");
+    std::stringstream text;
+    text << f.rdbuf();
+    std::string s = text.str();
+    const std::string from = "\"commands\": [ { \"at_s\": 5, \"code\": 10 } ]";
+    const std::size_t at = s.find(from);
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    s.replace(at, from.size(), "\"commands\": [ { \"at_s\": 5, \"code\": 10 }, { \"at_s\": 30, \"code\": 20 }, { \"at_s\": 400, \"code\": 21 } ]");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(s, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    int before_ban = 0, during_ban = 0;
+    // Counted at the ban's start and end only (the debrief is rebuilt each time it is read).
+    while (!r.Finished() && r.Time() < 30.5) r.Step(0.1);
+    before_ban = Count(r.Debrief(), "by voice: azimuth");
+    while (!r.Finished() && r.Time() < 100.0) r.Step(0.1);
+    SC_EXPECT(r.PostFeedNow().command == 20 && r.PostFeedNow().command_text.find("fire ban") != std::string::npos);
+    while (!r.Finished() && r.Time() < 399.0) r.Step(0.1);
+    during_ban = Count(r.Debrief(), "by voice: azimuth") - before_ban;
+    while (!r.Finished() && r.Time() < 600.0) r.Step(0.1);
+    const std::string d = r.Debrief();
+    std::printf("    designations before the ban %d, during it %d, by 600 s %d\n", before_ban, during_ban, Count(d, "by voice: azimuth"));
+    SC_EXPECT(d.find("10 on the IT-45: readiness no. 1") != std::string::npos);
+    SC_EXPECT(during_ban == 0);
+    SC_EXPECT(Count(d, "by voice: azimuth") > before_ban);  // lifted at 400 s
+    // The codes ride in the knowledge stream.
+    em::KnowledgeView v;
+    v.extras = r.ViewExtrasNow();
+    em::KnowledgeView back;
+    SC_EXPECT(em::DecodeView(em::EncodeView(v), back) && back.extras.post_command == 21);
+}
+
+SC_TEST("pu12m battery: the ДХ's СВ and Н3 keys set the target in the window a friend in the third height zone") {
+    std::unique_ptr<ScenarioRunner> r = LoadBattery();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("battery_commander", "Player"));
+    while (r->Time() < 140.0) r->Step(0.1);
+    const std::vector<CommandPost::ScopeMark> tube = r->PostScope();
+    SC_EXPECT(!tube.empty());
+    if (tube.empty()) return;
+    const int number = tube[0].number;
+    std::string why;
+    char digits[4];
+    std::snprintf(digits, sizeof(digits), "%02d", number);
+    for (int i = 0; i < 2; ++i) {
+        r->SeatSet("battery_commander", std::string("dch.key.") + digits[i], 1, &why);
+        r->Step(0.1);
+    }
+    SC_EXPECT(r->KeypadTarget() == number);
+    r->SeatSet("battery_commander", "dch.key.friend", 1, &why);
+    r->Step(0.1);
+    r->SeatSet("battery_commander", "dch.key.h3", 1, &why);
+    r->Step(0.1);
+    bool set = false;
+    for (const AspdTrack& k : r->Post()->Tracks()) {
+        if (k.number == number) set = k.friendly && k.zone == 3;
+    }
+    SC_EXPECT(set);
+    SC_EXPECT(r->Keypad().last.find("Н3") != std::string::npos);
+}
+
+SC_TEST("pu12m range day: the ASPD-U off, the tube dark; the board from the air-picture net warns early and the battery shoots") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_range_day.json", SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(!def.post_regiment.telecode);
+    ScenarioRunner r(std::move(def), std::move(console));
+    bool telecode = false, tube = false;
+    double far_mark_km = 0.0;
+    while (!r.Finished() && r.Time() < 1500.0) {
+        r.Step(0.1);
+        telecode = telecode || r.Console().equipment.IsReady("telecode_reception");
+        tube = tube || !r.PostScope().empty();
+        for (const BoardMark& m : r.Board()->Marks()) far_mark_km = std::max(far_mark_km, m.position.HorizontalLength() / 1000.0);
+    }
+    const std::string d = r.Debrief();
+    std::printf("    the farthest mark %.0f km out; %d targets destroyed\n", far_mark_km, Count(d, "destroys "));
+    SC_EXPECT(!telecode && !tube);        // no telecode, nothing on the IT-45
+    SC_EXPECT(far_mark_km > 120.0);       // the board reaches far beyond the tube's 100 km
+    SC_EXPECT(d.find("from the board:") != std::string::npos);  // readiness from the board's warning
+    SC_EXPECT(Count(d, "destroys ") >= 2);
 }

@@ -43,17 +43,28 @@ what is proposed. Sources are in `docs/SOURCES.md`.
 
 ### The identity digit: a conflict
 
-SAM Simulator's index: 1 friend, 7 practice target, 9 no IFF (`samsim_osa` p20). `bguir_tsp`'s examples use 7 for an
-unexplained real target and **2** for "training air target". The full table (in the *Instruction on composing and passing
-reports*) was not found. SAM3D keeps SAM Simulator's digits for now; both are recorded here.
+* SAM Simulator's index (`samsim_osa` p20): 0 jamming, 1 friend, 2 identified, 3 border violator, 4 supervisor, 5 own
+  target, 6 rule violator, 7 practice, 8 enemy, 9 no IFF.
+* `bguir_tsp`'s worked examples: 7 in ordinary reports (meaning not given), and **2** for "учебная воздушная цель" in
+  the reports of an exercise.
+* A second Belarusian text of the same department (*Специальная подготовка*, Dedyaev, BGUIR 2010, on the same veterans'
+  site) lists the ten "main indices" in order (own fighter; with an IFF reply; foreign aircraft over the border; control
+  aircraft; own aircraft on request; own aircraft breaking the flying rules; training target; air enemy; no IFF reply;
+  jammer) but every digit is printed "00". The order is SAM Simulator's table exactly, which puts the training target 7th.
+* **Decision (project owner, 19 Oct 2026): the training target is 2**, `bguir_tsp`'s exercise index. 7 is left
+  unassigned. The order of the second text argues for 7; if the table itself turns up, revisit.
 
-### A source not used
+### The P-19's technical description
 
-The P-19 radar's technical description (*РЛС П-19Ш, Техническое описание ЕИ1.001.015 ТО/с*), found on the same veterans'
-site, gives the P-19's built-in ASPD's scales, baud rates and coordinate steps. It is marked **secret** (ТО/с). Under
-the project's rules (public and declassified only) none of its figures are used; the project owner decides whether it
-may be. The figure that would have come from it is the telecode's coordinate step (`telecode_step_m`), left off in
-`data/command/aspd_u.json`.
+The P-19 radar's technical description (*РЛС П-19Ш, Техническое описание ЕИ1.001.015 ТО/с*, `p19_to`), found on the same
+veterans' site, is marked **secret** (ТО/с). **Used by the project owner's decision of 19 Oct 2026** (CLAUDE.md, the data
+rules). From it: the P-19's built-in ASPD (ХЛ2.390.012) has scales of 40, 50 and 100 km; it sends at 234 or 468 baud in
+messages of 32 or 40 bits, once or repeated; it passes target coordinates in steps of 500 m (40 and 50 km scales) and
+1 000 m (100 km); the operator takes the coordinates off the ASPD's indicator by hand; the indicator shows the primary
+picture, the received secondary one, control points, the electronic marker, the check-back of a sent mark and the
+received target's symbols; the antenna turns at 6 or 12 rpm; the P-19 is the 1RL134. SAM3D uses the 1 000 m step
+(`telecode_step_m`), the semi-automatic take-off, the 10 s turn (`telecode_period_s`, `radar_period_s`) and the index
+(the primary radar switch's position).
 
 ## The ASPD-U and the IT-45 against the sources
 
@@ -63,13 +74,13 @@ may be. The figure that would have come from it is the telecode's coordinate ste
 | Scales | `flak11` 50/100; `ru_pu12_text` 35/50/100; the ФР block's three positions | 35/50/100 | Correct |
 | 100 targets, numbers 00-99, H1-H3, height in 0.2 km, speed vector in 12.5 m/s, friend/foe, group | `ru_pu12_text`, `rwd_mb3` pu12 | Yes | Correct |
 | The target's time of approach | `rwd_mb3` pu12 | Yes (the marked target's) | Correct |
-| The DT-2 picks a target, the ДХ keypad sets number, height zone, attributes, heights, and the **designation with an address** | `rwd_mb3` pu12a | Marker, number, ЦУ + address | Attributes not entered (proposal 6) |
+| The DT-2 picks a target, the ДХ keypad sets number, height zone, attributes, heights, and the **designation with an address** | `rwd_mb3` pu12a | Marker, number, ЦУ + address | **Done:** СВ, Ч, ГР, Н1-Н3 set on the target |
 | Semi-automatic take-off of a cabled radar's targets: 12 tracks, 2-3 s each | `ru_pu12_text` | Yes | Correct |
-| The telecode passes the radar information without recomputing coordinates; the sender takes targets off by hand (2-3 s) | `rwd_mb3` pu12, `ru_pu12_text`, `flak11` | Every target refreshed every 10 s cycle | **Changed:** the sender's round, about four targets a cycle |
-| Commands and reports carried as decimal numbers and shown on the tube | `rwd_mb3` pu12, `flak11` PU12-0 | Launchers' reports on the IT boards only | Proposal 5 |
-| **Receiving** addressed designations from the regiment | `flak11` PU12-0 | Not modelled | Proposal 4 |
-| The ФР block makes the sweep, the range marks **and an imitated echo** (a training signal) | `rwd_mb3` pu12a | Not modelled | Proposal 7 |
-| A switch for the primary radar's type (1RL14/131, 1RL111/128, 1RL13/134) | `rwd_mb3` pu12e | A generic cabled radar | Proposal 8 |
+| The telecode passes the radar information without recomputing coordinates; the sender takes targets off by hand (2-3 s); coordinates in 1 km steps | `rwd_mb3` pu12, `ru_pu12_text`, `flak11`, `p19_to` | Every target refreshed every 10 s cycle, exact | **Changed:** the sender's round, about four targets a cycle; 1 km steps |
+| Commands and reports carried as decimal numbers and shown on the tube | `rwd_mb3` pu12, `flak11` PU12-0 | Launchers' reports on the IT boards only | **Done:** the regiment's codes on the tube |
+| **Receiving** addressed designations from the regiment | `flak11` PU12-0 | Not modelled | **Done:** a diamond on the tube; the NPC gives them out first |
+| The ФР block makes the sweep, the range marks **and an imitated echo** (a training signal) | `rwd_mb3` pu12a | Not modelled | **Done:** at КОНТРОЛЬ |
+| A switch for the primary radar's type (1RL14/131, 1RL111/128, 1RL13/134) | `rwd_mb3` pu12e | A generic cabled radar | **Done:** the switch and the library's positions |
 | The PU-12M's RK-1U selects the ASPD-U's code or the S-23's (the automated field command system's) | `rwd_mb3` pu12b | Not modelled | Not needed for the 1980s battery |
 | The navigation error: 5 degrees and 3 km unoriented, 1 % of the distance with the KP-4 | `flak11`, `rwd_mb3` pu12 | Yes | Correct |
 
@@ -111,25 +122,59 @@ So the board's game is the commander's, and the plotter's:
   a launcher by voice from the tube or the board.
 * **The launcher crews:** never see the board. They hear the designation and the readiness orders, and act on them.
 
-## Proposed next (not done)
+## The proposals, done (19 Oct 2026)
 
-1. **Readiness from the board.** The NPC battery commander raises the launchers' readiness from the board's time to
-   arrival, not only a threat range (`battery_tactics.threat_range_m`). Score the player commander on the warning time
-   he gave the launchers.
-2. **Speed and arrival read off the board.** Two marks a minute apart give the speed; show the commander an estimate of
-   arrival from the board as he would make it by eye (the IT-45 already shows the marked target's).
-3. **The tube copied once a minute.** The plotter now copies a tube track at every new fix (about every 10-30 s); the
-   sources' board runs on minutes. Limit a target to one mark a minute, whichever source it came from.
-4. **Designations from the regiment.** The ASPD-U receives addressed designations; let the regiment's post assign
-   targets to the battery (a fire task from above), shown on the IT-45.
-5. **Commands as two-digit codes.** The ASPD-U carries commands and reports as decimal numbers (readiness, fire ban,
-   cease fire): show the regiment's on the tube and the IT boards.
-6. **The ДХ's attributes.** Let the commander set friend/foe, group and height for a track he takes off.
-7. **The imitated echo.** The ФР block's training echo: an IT-45 drill without a radar, for the plotter's and the
-   commander's lessons.
-8. **The primary radar switch.** The three positions of `rwd_mb3` pu12e for the radar cabled to the post.
-9. **Grid squares.** The PVO grid's coded squares as the reports' form (the designation grid about the radar); the
-   azimuth-range form is the one used now.
-10. **Peacetime realism.** Range days with the ASPD-U off and the picture by voice (`shilka_narod`).
-11. **Sources to find:** the NVA plotters' handbook (1980); the report index table; the ASPD-U's own technical
-    description; the timing of a report read out on the air-picture net.
+1. **Readiness from the board** (`simcore/board_reading.hpp`, `ScenarioRunner::CommanderBoard`; `battery_tactics.json`
+   `warning_s` 408 s, `zone_edge_m` 10 km, `flak11`). The NPC battery commander raises readiness when a track will reach
+   the zone's edge within the launchers' warm-up from cold, its range alone when it has one cross. The debrief says why
+   ("from the board: 6203 at 132 km, 300 m/s: at the zone in 6.8 min") and, for each target, how much warning the
+   battery had at the zone's edge. Test: a 300 m/s track 150 km out is warned of at 61 s, a 100 m/s one at 1021 s.
+2. **Speed and arrival read off the board**: from the two newest crosses of a track at least 30 s apart, by their
+   minute labels. The commander's HUD line gives each board number's range and "here in N min".
+3. **The tube copied once a minute**: a target goes on the board from the tube again only after a board period.
+4. **Designations from the regiment**: the scenario's `post.regiment.designate_within_m`; the telecode carries them, the
+   IT-45 draws a diamond round the symbol, the NPC commander gives them out first.
+5. **Commands as two-digit codes**: `post.regiment.commands`, the table `data/command/aspd_codes.json` (the codes are
+   SAM3D's placeholders: no table was found). On the tube's top left and the commander's HUD line; the NPC acts on
+   readiness, fire ban, fire permitted and cease fire.
+6. **The ДХ's attributes**: the keys СВ, Ч, ГР, Н1-Н3 set friend or foe, group and the height zone on the target in the
+   window; they stay through later fixes and go on the board (a friend is never given out).
+7. **The imitated echo**: the ФР block at КОНТРОЛЬ draws a training target going round the post at 30 km, taken off like
+   a cabled radar's echo, never written on the board.
+8. **The primary radar switch** (`aspd.radar_source`, positions 1RL14/1RL131, 1RL111/1RL128, 1RL13/1RL134): a cabled
+   radar's picture comes through only with the switch at its type (`regiment_radars.json` `switch_position`: P-19 3,
+   P-40 2). In the cabin on the ФР block's face (the real one is on the back of the commander's rack).
+9. **Grid squares** (`simcore/pvo_grid.hpp`; `aspd_u.json` `air_net_grid_levels` 2): the air-picture net reads each
+   target's PVO grid square to the small square ("square 8265"); the plotter marks its centre, up to some 7 km off. The
+   zone and sector numbering and the coding tables are not in the source: SAM3D gives the big square's row and column
+   from the whole degree, then the medium and small ninths. The commander designates from the tube when the target is
+   on it (finer), else from the board.
+10. **Peacetime realism**: the mission "PU-12M range day: the picture by voice, the ASPD-U off"
+    (`data/scenarios/pu12m_range_day.json`, `post.regiment.telecode: false`): the tube stays dark, the board fills from
+    the net out to 166 km, the battery is warned and shoots.
+11. **Sources searched**: the NVA plotters' handbook (1980) is listed by booksellers and the Deutsche Nationalbibliothek,
+    no scan online; the index table: only the blanked list above; the ASPD-U's own technical description: not found; the
+    time to read a report: not found (7 s stays an estimate).
+
+## The board's place in the PU-12M (19 Oct 2026)
+
+The ČSLA equipment plan (`csla_pu12_manual`, the scan on `valka_pu12`) draws item 24, "planšet vzdušné situace", as a
+thin strip on the centreline just before the bench's middle place (1218-1311 x 468-482 px): 0.40 m long, 6 cm across, a
+board folded edge-on. The NVA catalogue's photograph (`rwd_mb3` pu12e, pu12_llk1) shows the board open, square, the hinge
+bar down its left edge, the commander's ДХ keypad and DT-2 behind it as seen from the plotter's place. SAM3D
+(`tools/blender/pu12m_interior_trace.py` MAP_BOARD) now hinges it at the front end of the plan's strip, on the strip's
+line, and swings it a quarter turn to stand across the compartment, 0.40 m wide from the hinge to the right, facing the
+plotter 0.45 m ahead of his eyes and a little to his right, hanging from a roof bracket over the hinge, 1.26-1.64 m from
+the ground (SAM3D: its top below the commander's line of sight to the ДХ). The plotter's eye looks down at it (yaw 20,
+pitch -38). From the commander's place the board's top edge crosses the lower left of the tube, as the photograph's view
+suggests. The plotter reaches it seated; the crew bodies stand when a reach fails (`crew_body.hpp`), but writing a mark
+is not animated (plotting is not a control).
+
+## Radio traffic: heard and seen (19 Oct 2026)
+
+Every line of the radio log that is not a crew callout (the command net's designations, the air-picture net's reports,
+the battery's own traffic) is read aloud in an English voice through the radio chain (`SimCrewVoiceComponent`): the
+squelch opening, the voice in the radio's band (two filters each side), driven into the set's limiter, hiss, the
+squelch's tail; the radio callouts go through the same chain. On screen each radio net has its own colour (amber the air
+picture, cyan the command net, blue the battery net), a bar down the line's left edge and the net's name in capitals;
+intercom lines and orders shouted in the cabin stay plain.

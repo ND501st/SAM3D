@@ -97,6 +97,7 @@ struct RegimentRadar {
     Vec3 position;        // ENU (east, north)
     double max_range_m = 0.0;
     double antenna_height_m = 0.0;
+    int switch_position = 0;  // the PU-12M's primary-source switch position for this radar's type (rwd_mb3 pu12e; 0: any)
 };
 
 struct RegimentRadarLibrary {
@@ -231,7 +232,8 @@ public:
             const json::Value& e = list->items[i];
             const std::string p = "radars[" + std::to_string(i) + "]";
             RegimentRadar r;
-            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "notes"}) || !RequireString(e, p, "id", r.id) ||
+            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "switch_position", "notes"}) ||
+                !RequireString(e, p, "id", r.id) ||
                 !RequireString(e, p, "display_name", r.name)) {
                 return false;
             }
@@ -241,6 +243,12 @@ public:
             cite_path_ = p;
             if (!Cited(e, "max_range_m", r.max_range_m) || !Cited(e, "antenna_height_m", r.antenna_height_m)) return false;
             if (r.max_range_m <= 0.0) return Fail(Join(p, "max_range_m"), "must be > 0");
+            if (e.Find("switch_position") != nullptr) {
+                double pos = 0.0;
+                if (!Cited(e, "switch_position", pos)) return false;
+                if (pos < 1.0 || pos > 3.0 || pos != std::floor(pos)) return Fail(Join(p, "switch_position"), "1, 2 or 3");
+                r.switch_position = static_cast<int>(pos);
+            }
             lib.types.push_back(std::move(r));
         }
         return true;

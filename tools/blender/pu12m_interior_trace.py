@@ -239,11 +239,17 @@ rect('r123_fug4', 22, 'R-123M (FuG-4, battery command net)', 1290, 1360, 202, 25
      note='on the desk, facing inboard')
 rect('bp_fug4', 23, 'R-123M power unit', 1300, 1355, 268, 318, FLOOR_Z, FLOOR_Z + 0.26, dy=0.012, note='under the desk')
 # The air-situation map (the plan's item 24, "planšet vzdušné situace"): a square plexiglass board on a hinge (rwd_mb3's
-# photograph of the Luftlagekarte), drawn in the plan folded edge-on, 0.40 m long, on the centreline before the middle
-# place (1218-1311 x 468-482 px). SAM3D shows it swung open to face the plotter, hanging from a bracket at the roof.
-MAP_BOARD = {'x': px_x(1218) - 0.003, 'y0': -0.18, 'y1': 0.16, 'z0': 1.32, 'z1': 1.70}
+# photograph of the Luftlagekarte, pu12_llk1: the board face-on from the plotter's place, the hinge bar down its left edge,
+# the commander's ДХ and DT-2 behind it). The plan draws it folded edge-on, 0.40 m long, on the centreline before the
+# middle place (1218-1311 x 468-482 px): stowed for the march. Deployed it swings on its hinge at the strip's front end
+# (1218 px, on the strip's line) through a quarter turn, to stand across the compartment facing the plotter, 0.40 m wide
+# from the hinge to the right, hanging from a bracket at the roof over the hinge. Its height is SAM3D's: the plotter's
+# chest height seated, its top below the commander's line of sight over it to the ДХ keypad.
+MAP_HINGE_Y = py_y(475)
+MAP_BOARD = {'x': px_x(1218) - 0.003, 'y0': MAP_HINGE_Y - 0.40, 'y1': MAP_HINGE_Y, 'z0': 1.26, 'z1': 1.64}
 _add('map_board', 24, 'Air-situation map board', MAP_BOARD['x'] - 0.018, MAP_BOARD['x'], MAP_BOARD['y0'], MAP_BOARD['y1'],
-     MAP_BOARD['z0'], MAP_BOARD['z1'], mat='Metal_Steel', note="open, facing the plotter; the plan draws it folded")
+     MAP_BOARD['z0'], MAP_BOARD['z1'], mat='Metal_Steel',
+     note="deployed: swung open on its hinge (the left edge, at the front end of the plan's folded strip), facing the plotter")
 rect('bp3', 21, 'BP-3 power unit', 1382, 1430, 262, 285, 1.05, 1.30, note='on a bracket on the side, beside the R-407')
 rect('r407', 25, 'R-407 radio (FuG-5, telecode)', 1375, 1440, 285, 327, FLOOR_Z, FLOOR_Z + 0.52,
      note='behind the operator, its face inboard (the drawing: lower right)')
@@ -358,8 +364,9 @@ STATIONS = {
     # tube's desk the battery commander's workplace).
     'battery_commander': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][0]), SEAT_Z + EYE_ABOVE_SEAT),
                           'yaw': 9.0, 'pitch': -16.0},
-    'operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][1]), SEAT_Z + EYE_ABOVE_SEAT), 'yaw': 6.0,
-                 'pitch': -16.0},
+    # the plotter looks down at the map board swung open before him (its centre 0.45 m ahead, a little to his right)
+    'operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][1]), SEAT_Z + EYE_ABOVE_SEAT), 'yaw': 20.0,
+                 'pitch': -38.0},
     'radio_operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][2]), SEAT_Z + EYE_ABOVE_SEAT),
                        'yaw': -8.0, 'pitch': -16.0},
 }

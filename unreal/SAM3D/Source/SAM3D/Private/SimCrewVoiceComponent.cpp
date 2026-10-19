@@ -63,18 +63,86 @@ namespace
 		return false;
 	}
 
-	// Over the radio: a little hiss under the voice and the squelch's tail after it.
-	void AddRadioNoise(TArray<int16>& Pcm, int32 SampleRate)
+	// A second-order filter (RBJ biquad), high-pass or low-pass, run over the samples in place.
+	void Biquad(TArray<float>& X, float SampleRate, float Hz, bool bHighPass)
+	{
+		const float W = 2.0f * PI * FMath::Clamp(Hz, 20.0f, SampleRate * 0.45f) / SampleRate;
+		const float Cw = FMath::Cos(W), Alpha = FMath::Sin(W) / (2.0f * 0.7071f);
+		const float B0 = bHighPass ? (1.0f + Cw) * 0.5f : (1.0f - Cw) * 0.5f;
+		const float B1 = bHighPass ? -(1.0f + Cw) : 1.0f - Cw;
+		const float A0 = 1.0f + Alpha, A1 = -2.0f * Cw, A2 = 1.0f - Alpha;
+		float X1 = 0.0f, X2 = 0.0f, Y1 = 0.0f, Y2 = 0.0f;
+		for (float& S : X)
+		{
+			const float Y = (B0 * S + B1 * X1 + B0 * X2 - A1 * Y1 - A2 * Y2) / A0;
+			X2 = X1;
+			X1 = S;
+			Y2 = Y1;
+			Y1 = Y;
+			S = Y;
+		}
+	}
+
+	// Over the radio (an R-123M's FM voice channel): the squelch opening with a burst of noise, the voice squeezed into
+	// the radio's band (two filters each side, steeper than the audio component's), driven hard into the set's limiter
+	// so it is loud and a little rough, hiss under it, and the squelch's tail after it.
+	void MakeRadioVoice(TArray<int16>& Pcm, int32 SampleRate, double LowHz, double HighHz)
 	{
 		FRandomStream Rng(Pcm.Num());
-		const int32 Tail = SampleRate / 6;
-		const int32 Start = Pcm.Num();
-		Pcm.AddZeroed(Tail);
+		const int32 Open = SampleRate / 14;  // ~70 ms
+		const int32 Tail = SampleRate / 5;   // ~200 ms
+		TArray<float> X;
+		X.SetNumZeroed(Open + Pcm.Num() + Tail);
+		float Peak = 1.0f;
 		for (int32 I = 0; I < Pcm.Num(); ++I)
 		{
-			const float Hiss = (Rng.FRand() * 2.0f - 1.0f) * (I < Start ? 500.0f : 2200.0f);
-			Pcm[I] = static_cast<int16>(FMath::Clamp(static_cast<float>(Pcm[I]) + Hiss, -32767.0f, 32767.0f));
+			Peak = FMath::Max(Peak, FMath::Abs(static_cast<float>(Pcm[I])));
 		}
+		for (int32 I = 0; I < Pcm.Num(); ++I)
+		{
+			X[Open + I] = static_cast<float>(Pcm[I]) / Peak;
+		}
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			Biquad(X, static_cast<float>(SampleRate), static_cast<float>(LowHz), true);
+			Biquad(X, static_cast<float>(SampleRate), static_cast<float>(HighHz), false);
+		}
+		const float Drive = 3.5f;
+		for (int32 I = 0; I < X.Num(); ++I)
+		{
+			const bool bVoice = I >= Open && I < Open + Pcm.Num();
+			const float Noise = (Rng.FRand() * 2.0f - 1.0f) * (bVoice ? 0.03f : (I < Open ? 0.35f * (1.0f - static_cast<float>(I) / Open) + 0.05f : 0.3f));
+			const float V = FMath::Tanh(Drive * X[I]) / FMath::Tanh(Drive);
+			X[I] = FMath::Clamp(0.8f * V + Noise, -1.0f, 1.0f);
+		}
+		// The tail's noise shaped like the radio's too, then out as 16-bit.
+		Biquad(X, static_cast<float>(SampleRate), static_cast<float>(LowHz), true);
+		Biquad(X, static_cast<float>(SampleRate), static_cast<float>(HighHz), false);
+		Pcm.SetNumUninitialized(X.Num());
+		for (int32 I = 0; I < X.Num(); ++I)
+		{
+			Pcm[I] = static_cast<int16>(FMath::Clamp(X[I] * 30000.0f, -32767.0f, 32767.0f));
+		}
+	}
+
+	// A radio log line as it is read out: the four-digit numbers in pairs ("62 01"), the way a report is spoken.
+	FString RadioSpeech(const FString& Text)
+	{
+		FString Out;
+		for (int32 I = 0; I < Text.Len(); ++I)
+		{
+			const bool bFour = I + 3 < Text.Len() && FChar::IsDigit(Text[I]) && FChar::IsDigit(Text[I + 1]) && FChar::IsDigit(Text[I + 2]) &&
+							   FChar::IsDigit(Text[I + 3]) && (I == 0 || !FChar::IsDigit(Text[I - 1])) &&
+							   (I + 4 >= Text.Len() || !FChar::IsDigit(Text[I + 4]));
+			if (bFour)
+			{
+				Out += Text.Mid(I, 2) + TEXT(" ") + Text.Mid(I + 2, 2);
+				I += 3;
+				continue;
+			}
+			Out.AppendChar(Text[I]);
+		}
+		return Out;
 	}
 }
 
@@ -150,7 +218,7 @@ void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const F
 	}
 	if (Settings.radio)
 	{
-		AddRadioNoise(Pcm, SampleRate);
+		MakeRadioVoice(Pcm, SampleRate, Settings.low_hz, Settings.high_hz);
 	}
 	USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>(this);
 	Wave->SetSampleRate(SampleRate);
@@ -310,6 +378,45 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		R.Rate = Settings.rate;
 		R.VoiceIndex = SeatIndex;
 		Pending.Add(R.Id, FPendingLine{Channel, Settings, Line.start_s});
+		Speech.Request(R);
+	}
+	VoiceRadioLog(*Sim, *Runner, *Voices, Speech);
+}
+
+void USimCrewVoiceComponent::VoiceRadioLog(USimWorldSubsystem& Sim, const simcore::ScenarioRunner& Runner, const simcore::VoiceData& Voices,
+	FSimSpeech& Speech)
+{
+	// The radio traffic that is not on the callout bus: the command net's designations, the air-picture net's reports, the
+	// battery's own messages. Each is read through the radio (one voice per net), in an English voice: the log is English.
+	const bool bVoice = Speech.IsReady() && Speech.NumVoices(TEXT("en")) > 0 && Sim.GetTimeScale() <= 1.5f && !Sim.IsSimPaused();
+	for (const FSimRadioMessage& M : Sim.GetRadioMessages(16))
+	{
+		const FString Key = M.Net + TEXT("|") + M.From + TEXT("|") + M.Text;
+		if (M.TimeSeconds < LastRadioS || (M.TimeSeconds == LastRadioS && RadioAtLast.Contains(Key)))
+		{
+			continue;
+		}
+		if (M.TimeSeconds > LastRadioS)
+		{
+			LastRadioS = M.TimeSeconds;
+			RadioAtLast.Reset();
+		}
+		RadioAtLast.Add(Key);
+		if (!bVoice || M.bCallout || M.Net.StartsWith(TEXT("cabin")) || Runner.Time() - M.TimeSeconds > 4.0)
+		{
+			continue;  // a callout (voiced from the bus), shouted in the cabin, or too late to matter
+		}
+		simcore::VoiceSettings Settings;
+		Settings.radio = true;
+		Settings.low_hz = Voices.radio_low_hz;
+		Settings.high_hz = Voices.radio_high_hz;
+		FSimSpeechRequest R;
+		R.Id = NextRequest++;
+		R.Text = RadioSpeech(M.Text);
+		R.Language = TEXT("en");
+		R.Rate = 1;  // a report read out briskly
+		R.VoiceIndex = M.Net == TEXT("air picture") ? 1 : 0;  // the regiment's radar battery: another man
+		Pending.Add(R.Id, FPendingLine{TEXT("radio:") + M.Net, Settings, M.TimeSeconds});
 		Speech.Request(R);
 	}
 }

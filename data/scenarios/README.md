@@ -205,7 +205,7 @@ each change. The 24 h is the only figure a source gives (`video_osa`, unverified
 (`simcore/pu12.hpp`, `data/command/README.md`): it plots every target once a minute with the manual's notation, off by the
 post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are
 silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
-`"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/71 at 45 km, 00-71").
+`"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/21 at 45 km, 00-71").
 
 ## Ranges and history (roadmap 10.1, 10.2)
 

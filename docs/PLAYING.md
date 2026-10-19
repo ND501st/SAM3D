@@ -46,6 +46,14 @@ radiotelephone operator (the radios and the mast), the squad leader (orienting t
 regiment's picture onto the board) and the battery commander (deploying the post, then a target to a launcher with the
 DT-2 marker and the ДХ keys).
 
+In the PU-12M the plotting board hangs open before the operator-plotter's place. He writes on it what the regiment
+reads out on the air-picture net, square by square, out to 200 km, and what the IT-45 shows nearer. The battery commander
+reads it for warning: his aids line gives each track's range and when it will be here, and the regiment's last
+two-digit command. On the ДХ, СВ / Ч / ГР / Н1-Н3 set friend, foe, group and height zone on the target in the window; the
+ФР block's КОНТРОЛЬ position puts a training echo on the tube; the switch on the ФР block picks the cabled radar's type.
+Radio traffic is spoken through a radio voice and drawn in its net's colour (amber the air picture, cyan the command
+net, blue the battery net). docs/research/PLOTTING_BOARD_2026-10.md.
+
 How a step works:
 
 - **The card** (top right) says where you are (the lesson, the chapter, step n of N), what to do, the control and the

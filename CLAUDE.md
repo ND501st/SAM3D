@@ -96,6 +96,8 @@ After changing Unreal C++, ask the user to build (or run UnrealBuildTool from th
 ## Realism and data rules
 
 - **Public and declassified sources only.** Never ask for, use or add classified or export-controlled material.
+  Exception by the project owner's decision (19 Oct 2026): `p19_to`, the P-19 radar's Soviet technical description,
+  marked secret but publicly posted by veterans, is used (`docs/SOURCES.md`).
 - **Prefer sources from countries that operated the system** (tiers in `docs/SOURCES.md`): official documents and
   historic records first, then operator accounts, then SAM Simulator, then operator-country reference pages. Don't
   base decisions on Western "facts and stats" pages. When sources disagree, record both and say which was used.

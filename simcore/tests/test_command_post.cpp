@@ -111,7 +111,7 @@ SC_TEST("command post: the regiment's telecode arrives once a cycle; tracks carr
     SC_EXPECT(p.Tracks().empty());
 }
 
-SC_TEST("command post: the plotter writes one mark at a time, new targets first and nearest first, a target again only after a new fix") {
+SC_TEST("command post: the plotter writes one mark at a time, new targets first and nearest first, each again a minute on") {
     CommandPost p = Exact();
     CommandPost::Inputs in;
     in.telecode = true;
@@ -119,7 +119,7 @@ SC_TEST("command post: the plotter writes one mark at a time, new targets first 
     const std::vector<BoardContact> regiment = {Target("far", 0, 40000, 2000), Target("near", 0, 20000, 2000), Target("mid", 0, 30000, 2000)};
     std::vector<double> times;
     std::vector<std::string> order;
-    for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) {
+    for (double t = 0.0; t < 90.0 - 1e-9; t += 0.5) {
         const std::size_t before = p.Board().Marks().size();
         p.Update(t, regiment, {}, in);
         if (p.Board().Marks().size() > before) {
@@ -127,17 +127,24 @@ SC_TEST("command post: the plotter writes one mark at a time, new targets first 
             order.push_back(p.Board().Marks().back().target_id);
         }
     }
-    // One mark every 5 s (the placeholder's time per mark): the three in order of range, then each again once the next
-    // cycle's fix (at 10 s, 20 s) is in.
-    SC_EXPECT(order.size() >= 5);
+    // One mark every 5 s (the placeholder's time per mark): the three in order of range; then each again only once a
+    // board period (60 s: the crosses are labelled with minutes) has passed and a newer fix is in.
+    SC_EXPECT(order.size() == 6);
     if (order.size() >= 3) SC_EXPECT(order[0] == "near" && order[1] == "mid" && order[2] == "far");
-    if (times.size() >= 3) SC_EXPECT_NEAR(times[1] - times[0], 5.0, 1e-9);
+    if (times.size() >= 4) {
+        SC_EXPECT_NEAR(times[1] - times[0], 5.0, 1e-9);
+        SC_EXPECT(times[3] >= 60.0 && order[3] == "near");
+    }
     SC_EXPECT(p.Board().Marks()[0].number == 6201);  // the board's own numbering
-    // A slower plotter (half the speed) writes half as many.
+    // A slower plotter (half the speed) takes twice as long over the three.
     CommandPost slow = Exact();
     in.operator_speed = 0.5;
-    for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) slow.Update(t, regiment, {}, in);
-    SC_EXPECT(slow.Board().Marks().size() * 2 <= p.Board().Marks().size() + 1);
+    double slow_third = -1.0;
+    for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) {
+        slow.Update(t, regiment, {}, in);
+        if (slow_third < 0.0 && slow.Board().Marks().size() == 3) slow_third = t;
+    }
+    SC_EXPECT_NEAR(slow_third, 20.0, 1e-9);
     // An operator busy elsewhere writes nothing.
     CommandPost busy = Exact();
     in.operator_free = false;
@@ -351,10 +358,10 @@ SC_TEST("command post scenario: the board fills from the regiment's telecode, st
         if (r.Time() > 210.0 && r.Time() < 390.0) reception_lost = reception_lost || !r.Console().equipment.IsReady("telecode_reception");
     }
     std::printf("    marks: %zu by 235 s, %zu by 400 s, %zu by 600 s\n", marks_at_235, marks_at_400, r.Board()->Marks().size());
-    SC_EXPECT(marks_at_235 >= 10);                         // a deployed post plots from the start
+    SC_EXPECT(marks_at_235 >= 4);                          // a deployed post plots from the start, the target once a minute
     SC_EXPECT(reception_lost);                             // the R-407 net jammed: no telecode
     SC_EXPECT(marks_at_400 == marks_at_235);               // and nothing new to write
-    SC_EXPECT(r.Board()->Marks().size() > marks_at_400 + 5);  // back on the air
+    SC_EXPECT(r.Board()->Marks().size() >= marks_at_400 + 3);  // back on the air
     // The deployed post is oriented: its error is the aiming circle's, not the 5 degrees of a post never oriented.
     SC_EXPECT(r.Post()->IsOriented() && std::fabs(RadToDeg(r.Post()->AzErrorRad())) < 1.5 && r.Post()->OffsetM().HorizontalLength() < 300.0);
     SC_EXPECT(r.Debrief().find("navigation") != std::string::npos);
@@ -397,7 +404,7 @@ SC_TEST("command post scenario: the regiment's air-picture net is heard in the p
     for (int i = 0; i < 300; ++i) r.Step(0.1);  // 30 s: reports heard, nobody writes
     SC_EXPECT(r.Console().equipment.IsReady("air_net"));
     bool logged = false;
-    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) logged = logged || (m.net == "air picture" && m.text.find("km") != std::string::npos);
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) logged = logged || (m.net == "air picture" && m.text.find("square") != std::string::npos);
     SC_EXPECT(logged);  // in the post's radio log: the plotter's headset
     const PostFeed f = r.PostFeedNow();
     SC_EXPECT(!f.heard.empty() && r.Board()->Marks().empty());
@@ -429,4 +436,130 @@ SC_TEST("command post: the IT boards' lamps for a launcher's report") {
     s.missiles = 0;
     s.state = LauncherStatus::State::Empty;
     SC_EXPECT(BoardLampsOf(s).load == 0 && !BoardLampsOf(s).ready);  // out of missiles: КОМПЛЕКТ dark
+}
+
+SC_TEST("command post: the regiment's designations to the battery ride with its telecode and are marked on the tube") {
+    CommandPost p = Exact();
+    p.SetRegimentDesignationRange(25000);  // placeholder
+    CommandPost::Inputs in;
+    in.telecode = true;
+    p.Update(0.0, {Target("near", 0, 20000, 2000), Target("far", 0, 40000, 2000)}, {}, in);
+    SC_EXPECT(p.Tracks().size() == 2);
+    for (const AspdTrack& k : p.Tracks()) SC_EXPECT(k.designated == (k.target_id == "near"));
+    int designated = 0;
+    for (const CommandPost::ScopeMark& m : p.Scope(50000)) designated += m.designated ? 1 : 0;
+    SC_EXPECT(designated == 1);
+}
+
+SC_TEST("command post: the ДХ's characteristics stay with the target through later fixes and go on the board") {
+    CommandPost p = Exact();
+    CommandPost::Inputs in;
+    in.telecode = true;
+    const std::vector<BoardContact> regiment = {Target("a", 0, 20000, 2500)};
+    p.Update(0.0, regiment, {}, in);
+    const int number = p.Tracks().front().number;
+    CommandPost::Attributes a;
+    a.friendly = 1;
+    a.group = 1;
+    a.zone = 3;
+    SC_EXPECT(p.SetAttributes(number, a));
+    SC_EXPECT(!p.SetAttributes(77, a));  // no such track
+    p.Update(10.0, regiment, {}, in);    // a new fix keeps them
+    const AspdTrack& k = p.Tracks().front();
+    SC_EXPECT(k.friendly && k.type == 1 && k.group && k.zone == 3);
+    in.operator_free = true;
+    p.Update(11.0, regiment, {}, in);
+    SC_EXPECT(!p.Board().Marks().empty() && p.Board().Marks().back().type == 1 && p.Board().Marks().back().Code() == 12);
+}
+
+SC_TEST("command post: the ФР block at КОНТРОЛЬ shows an imitated echo, taken off like a radar's, never written on the board") {
+    CommandPost p = Exact();
+    CommandPost::Inputs in;
+    in.imitation = true;
+    in.operator_free = true;
+    p.Update(0.0, {}, {}, in);
+    bool echo = false, track = false;
+    for (const CommandPost::ScopeMark& m : p.Scope(35000)) {
+        echo = echo || (m.imitated && m.number < 0);
+        track = track || (m.imitated && m.number >= 0);
+    }
+    SC_EXPECT(echo && track);  // the echo, and taken off at once by the free operator
+    for (double t = 0.5; t < 90.0; t += 0.5) p.Update(t, {}, {}, in);
+    SC_EXPECT(p.Board().Marks().empty());  // nothing to write: there is no aircraft
+    in.imitation = false;
+    p.Update(90.5, {}, {}, in);
+    SC_EXPECT(p.Tracks().empty() && p.Scope(35000).empty());
+}
+
+SC_TEST("command post: the code table loads; every effect is one the battery knows") {
+    AspdCodeTable t;
+    std::string error;
+    SC_EXPECT(LoadAspdCodesFile(std::string(SIMCORE_DATA_DIR) + "/command/aspd_codes.json", t, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(t.Find(10) != nullptr && t.Find(10)->effect == "readiness");
+    SC_EXPECT(t.Find(20) != nullptr && t.Find(20)->effect == "fire_ban");
+    SC_EXPECT(t.Find(99) == nullptr);
+}
+
+SC_TEST("command post scenario: the primary radar's switch must be on the cabled radar's type for its picture") {
+    std::string t = ReadFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_deploy.json");
+    t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }", "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\"");
+    t = ReplaceOnce(t, "\"regiment\": {",
+                    "\"radar\": { \"type\": \"p19\", \"position\": { \"east_m\": 150, \"north_m\": -200, \"up_m\": 2 } }, \"regiment\": {");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.has_post_radar && def.post_radar.switch_position == 3);
+    ScenarioRunner r(std::move(def), std::move(console));
+    for (int i = 0; i < 20; ++i) r.Step(0.1);
+    SC_EXPECT(r.Console().equipment.GetInput("radar_coupled"));  // the switch starts at 1RL13 / 1RL134: the P-19's
+    r.PlayerSet("aspd.radar_source", 0);                           // 1RL14 / 1RL131: a P-18's
+    for (int i = 0; i < 20; ++i) r.Step(0.1);
+    SC_EXPECT(!r.Console().equipment.GetInput("radar_coupled") && !r.Console().equipment.IsReady("primary_picture"));
+    r.PlayerSet("aspd.radar_source", 2);
+    for (int i = 0; i < 20; ++i) r.Step(0.1);
+    SC_EXPECT(r.Console().equipment.GetInput("radar_coupled"));
+}
+
+#include "simcore/pvo_grid.hpp"
+
+SC_TEST("PVO grid: the medium and small squares numbered 1-9 clockwise from the top left, 9 in the middle; plotted at the centre") {
+    // A big square from 47 N, 18 E (1 degree by 1 degree 30'); the place 47.95 N, 18.10 E: the top row, left column (1),
+    // then within it the bottom row, left column of its ninth (7).
+    const std::string sq = pvo_grid::Encode(47.95, 18.10, 2);
+    SC_EXPECT(sq.size() == 4 && sq[2] == '1');
+    double lat = 0.0, lon = 0.0;
+    SC_EXPECT(pvo_grid::Centre(sq, 47.0, 18.0, lat, lon));
+    SC_EXPECT(std::fabs(lat - 47.95) <= 1.0 / 18.0 && std::fabs(lon - 18.10) <= 1.5 / 18.0);  // within half a small square
+    SC_EXPECT(pvo_grid::Encode(47.5, 18.75, 1).back() == '9');  // the middle
+    SC_EXPECT(pvo_grid::Encode(47.9, 19.45, 1).back() == '3');  // top right
+    SC_EXPECT(pvo_grid::Encode(47.1, 19.45, 1).back() == '5');  // bottom right
+    SC_EXPECT(pvo_grid::Encode(47.1, 18.05, 1).back() == '7');  // bottom left
+    // The additional square narrows it to a ninth again.
+    const std::string fine = pvo_grid::Encode(47.95, 18.10, 3);
+    SC_EXPECT(fine.size() == 5 && pvo_grid::Centre(fine, 47.0, 18.0, lat, lon));
+    SC_EXPECT(std::fabs(lat - 47.95) <= 1.0 / 54.0 && std::fabs(lon - 18.10) <= 1.5 / 54.0);
+}
+
+SC_TEST("command post: on the grid the air-picture net reads the target's square, and the mark goes at its centre") {
+    AspdDef d = PlaceholderAspd();
+    d.air_net_report_s = 5;
+    d.air_net_period_s = 60;
+    d.air_net_grid_levels = 2;
+    CommandPost p = Exact(d);
+    p.SetFrame(LocalFrame(GeoPoint::FromDegrees(47.3, 18.6, 100.0)));
+    CommandPost::Inputs in;
+    in.air_net = true;
+    in.operator_free = true;
+    for (double t = 0.0; t < 15.0; t += 0.5) p.Update(t, {Target("a", 20000, 90000, 3000)}, {}, in);
+    const std::vector<CommandPost::Spoken> spoken = p.TakeSpoken();
+    SC_EXPECT(spoken.size() == 1 && spoken[0].report.text.find("square ") != std::string::npos);
+    SC_EXPECT(p.Board().Marks().size() == 1);
+    if (!p.Board().Marks().empty()) {
+        const double off = (p.Board().Marks()[0].position - Vec3{20000, 90000, 0}).HorizontalLength();
+        std::printf("    %s: the mark %.1f km from the target\n", spoken.empty() ? "?" : spoken[0].report.text.c_str(), off / 1000.0);
+        SC_EXPECT(off < 9000.0);  // inside its small square (about 12 x 11 km)
+    }
 }

@@ -765,12 +765,32 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 	const FString Line = bCommander ? Numbered(TEXT("Board: "), Sim->GetPostBoardNumbers(), false)
 									: Numbered(TEXT("Heard: "), Sim->GetPostHeardNumbers(), false) + TEXT("  ") +
 										  Numbered(TEXT("IT-45: "), Sim->GetPostTrackNumbers(), true);
+	// As the commander reads the board by eye: each track's range and, from two crosses a minute apart, when it is here.
+	FString Read = TEXT("");
+	if (bCommander)
+	{
+		const FString Command = Sim->GetPostCommandText();
+		if (!Command.IsEmpty())
+		{
+			Read += FString::Printf(TEXT("Regiment: %s   |   "), *Command);
+		}
+		for (const FVector4f& R : Sim->GetPostBoardReadings())
+		{
+			Read += R.W >= 0.0f ? FString::Printf(TEXT("%04d %.0f km, here in %.1f min   "), FMath::RoundToInt(R.X), R.Y, R.W)
+								: FString::Printf(TEXT("%04d %.0f km   "), FMath::RoundToInt(R.X), R.Y);
+		}
+	}
 	const float X = 20.0f;
 	float Y = PostAidsTop(Sim, Vehicle);
 	const FLinearColor Ink(0.85f, 0.95f, 0.85f);
 	DrawBacking(X, Y, Canvas->ClipX - 2.0f * X, Canvas->ClipY - 52.0f - Y);
 	DrawText(Line, Ink, X, Y, Font);
 	Y += 22.0f;
+	if (!Read.IsEmpty())
+	{
+		DrawText(Read, FLinearColor(1.0f, 0.85f, 0.45f), X, Y, Font);
+		Y += 22.0f;
+	}
 	if (bCommander)
 	{
 		FString Launchers = TEXT("");
@@ -881,7 +901,7 @@ float ASimCabinHUD::PostAidsTop(USimWorldSubsystem* Sim, const ASimOsaVehicle* V
 	{
 		if (Vehicle->GetStationId() == Sim->GetCommanderStation())
 		{
-			return Canvas->ClipY - 118.0f;
+			return Canvas->ClipY - 140.0f;  // with the board's reading line
 		}
 		if (Vehicle->GetStationId() == Sim->GetPlotterStation())
 		{
@@ -898,10 +918,18 @@ void ASimCabinHUD::DrawBacking(float X, float Y, float W, float H)
 
 void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
 {
-	// The lines still fresh, packed at the bottom: the oldest fades.
+	// The lines still fresh, packed at the bottom: the oldest fades. What came over a radio stands out from the rest of
+	// the screen: a colour per net, a bar down its left edge and the net's name in capitals; orders shouted in the cabin
+	// stay plain.
 	const double Now = Sim->GetSimTimeSeconds();
 	const TArray<FSimRadioMessage> Messages = Sim->GetRadioMessages(RadioLines);
-	TArray<TPair<FString, float>> Lines;
+	struct FLine
+	{
+		FString Text;
+		FLinearColor Ink;
+		bool bRadio = false;
+	};
+	TArray<FLine> Lines;
 	float Widest = 0.0f;
 	for (const FSimRadioMessage& M : Messages)
 	{
@@ -910,12 +938,19 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
 		{
 			continue;
 		}
-		const FString Text = FString::Printf(TEXT("[%s] %s: %s"), *M.Net, *M.From, *M.Text);
+		const bool bRadio = !M.Net.StartsWith(TEXT("cabin")) && M.Net != TEXT("intercom");
+		FLinearColor Ink = M.Net == TEXT("air picture")	 ? FLinearColor(1.0f, 0.72f, 0.25f)	 // amber: the regiment's air picture
+						   : M.Net == TEXT("command net") ? FLinearColor(0.35f, 0.85f, 1.0f)  // cyan: designations
+						   : bRadio						  ? FLinearColor(0.6f, 0.7f, 1.0f)	 // blue: the battery net
+														  : FLinearColor(0.85f, 0.85f, 0.8f);
+		Ink.A = FMath::Clamp(1.0f - static_cast<float>(Age) / RadioLineSeconds, 0.35f, 1.0f);
+		const FString Text = bRadio ? FString::Printf(TEXT("RADIO %s  %s: %s"), *M.Net.ToUpper(), *M.From, *M.Text)
+									: FString::Printf(TEXT("[%s] %s: %s"), *M.Net, *M.From, *M.Text);
 		float W = 0.0f;
 		float H = 0.0f;
 		GetTextSize(Text, W, H, Font);
-		Widest = FMath::Max(Widest, W);
-		Lines.Emplace(Text, FMath::Clamp(1.0f - static_cast<float>(Age) / RadioLineSeconds, 0.35f, 1.0f));
+		Widest = FMath::Max(Widest, W + 10.0f);
+		Lines.Add({Text, Ink, bRadio});
 	}
 	if (Lines.Num() == 0)
 	{
@@ -923,9 +958,13 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
 	}
 	float Y = Bottom - 16.0f * Lines.Num();
 	DrawBacking(20.0f, Y, Widest, 16.0f * Lines.Num());
-	for (const TPair<FString, float>& L : Lines)
+	for (const FLine& L : Lines)
 	{
-		DrawText(L.Key, FLinearColor(0.75f, 0.95f, 0.75f, L.Value), 20.0f, Y, Font);
+		if (L.bRadio)
+		{
+			DrawRect(L.Ink, 20.0f, Y + 1.0f, 3.0f, 14.0f);
+		}
+		DrawText(L.Text, L.Ink, L.bRadio ? 30.0f : 20.0f, Y, Font);
 		Y += 16.0f;
 	}
 }

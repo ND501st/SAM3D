@@ -13,11 +13,14 @@
   "post": {
     "board": "command/pu12.json",
     "aspd": "command/aspd_u.json",
+    "codes": "command/aspd_codes.json",
     "library": "command/regiment_radars.json",
     "regiment": {
       "position": { "east_m": -4000, "north_m": -7000, "up_m": 2 },
       "radars": [ { "id": "p19_regiment", "type": "p19", "position": { "east_m": -4200, "north_m": -7000, "up_m": 2 } } ],
-      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery."
+      "designate_within_m": 40000,
+      "commands": [ { "at_s": 5, "code": 10 } ],
+      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery. It designates to the battery every target within 40 km of it (sam3d) and orders readiness no. 1 at the start (code 10, data/command/aspd_codes.json)."
     }
   },
   "battery": {

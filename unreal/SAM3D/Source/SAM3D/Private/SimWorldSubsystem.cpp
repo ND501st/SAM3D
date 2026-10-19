@@ -2030,6 +2030,32 @@ TArray<int32> USimWorldSubsystem::GetPostBoardNumbers() const
 	return Out;
 }
 
+TArray<FVector4f> USimWorldSubsystem::GetPostBoardReadings() const
+{
+	// By eye, from the crosses' minute labels (simcore/board_reading.hpp), as the glass shows them.
+	const simcore::PostFeed Feed = GetPostFeed();
+	std::vector<simcore::BoardFix> Fixes;
+	for (const simcore::em::ViewBoardMark& M : Feed.glass)
+	{
+		Fixes.push_back({std::to_string(M.number), M.number, M.position, 60.0 * M.stamp});
+	}
+	std::vector<simcore::BoardReading> Read = simcore::ReadBoard(Fixes, Feed.position);
+	std::sort(Read.begin(), Read.end(), [](const simcore::BoardReading& A, const simcore::BoardReading& B) { return A.range_m < B.range_m; });
+	TArray<FVector4f> Out;
+	for (const simcore::BoardReading& R : Read)
+	{
+		Out.Add(FVector4f(static_cast<float>(R.number), static_cast<float>(R.range_m / 1000.0),
+			R.has_speed ? static_cast<float>(R.velocity_mps.HorizontalLength()) : -1.0f,
+			R.arrival_s >= 0.0 ? static_cast<float>(R.arrival_s / 60.0) : -1.0f));
+	}
+	return Out;
+}
+
+FString USimWorldSubsystem::GetPostCommandText() const
+{
+	return FString(UTF8_TO_TCHAR(GetPostFeed().command_text.c_str()));
+}
+
 TArray<int32> USimWorldSubsystem::GetPostHeardNumbers() const
 {
 	TArray<int32> Out;
@@ -2149,6 +2175,7 @@ TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) co
 		M.Net = UTF8_TO_TCHAR(R.net.c_str());
 		M.From = UTF8_TO_TCHAR(R.from.c_str());
 		M.Text = UTF8_TO_TCHAR(R.text.c_str());
+		M.bCallout = R.callout;
 		Out.Add(M);
 	}
 	return Out;

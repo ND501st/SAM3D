@@ -33,6 +33,7 @@
 #include "simcore/c2_sources.hpp"
 #include "simcore/json.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/pvo_grid.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -74,6 +75,9 @@ struct AspdDef {
     double air_net_range_m = 20000.0;
     double air_net_az_step_deg = 1.0;
     double air_net_range_step_m = 1000.0;
+    // The reports' form: 0 azimuth and range from the radar; 2 the PVO grid to the small square (the usual report,
+    // bguir_tsp), 3 with the additional square (pvo_grid.hpp). The board's mark goes at the square's centre.
+    double air_net_grid_levels = 0.0;
 };
 
 namespace detail {
@@ -92,17 +96,22 @@ public:
                                "zone1_top_m", "zone2_top_m", "scales_m", "telecode_period_s", "telecode_range_m", "radar_period_s",
                                "plot_mark_s", "oriented_az_error_deg", "oriented_position_error_m", "drift_fraction",
                                "unoriented_az_error_deg", "unoriented_position_error_m", "telecode_take_off_s", "telecode_step_m",
-                               "air_net_report_s", "air_net_period_s", "air_net_range_m", "air_net_az_step_deg", "air_net_range_step_m"})) {
+                               "air_net_report_s", "air_net_period_s", "air_net_range_m", "air_net_az_step_deg", "air_net_range_step_m",
+                               "air_net_grid_levels"})) {
             return false;
         }
         // Optional: the telecode's sending post and the air-picture voice net (absent: off, or the defaults).
         for (const auto& f : {std::make_pair("telecode_take_off_s", &d.telecode_take_off_s), std::make_pair("telecode_step_m", &d.telecode_step_m),
                               std::make_pair("air_net_report_s", &d.air_net_report_s), std::make_pair("air_net_period_s", &d.air_net_period_s),
                               std::make_pair("air_net_range_m", &d.air_net_range_m), std::make_pair("air_net_az_step_deg", &d.air_net_az_step_deg),
-                              std::make_pair("air_net_range_step_m", &d.air_net_range_step_m)}) {
+                              std::make_pair("air_net_range_step_m", &d.air_net_range_step_m),
+                              std::make_pair("air_net_grid_levels", &d.air_net_grid_levels)}) {
             if (a->Find(f.first) != nullptr && !Cited(*a, f.first, *f.second)) return false;
         }
         if (d.air_net_report_s > 0.0 && !(d.air_net_period_s > 0.0)) return Fail("aspd.air_net_period_s", "must be > 0");
+        if (d.air_net_grid_levels != 0.0 && d.air_net_grid_levels != 2.0 && d.air_net_grid_levels != 3.0) {
+            return Fail("aspd.air_net_grid_levels.value", "0 (azimuth and range), 2 or 3 (the grid's squares)");
+        }
         for (const auto& f : {std::make_pair("max_targets", &d.max_targets), std::make_pair("semi_auto_tracks", &d.semi_auto_tracks),
                               std::make_pair("take_off_s", &d.take_off_s), std::make_pair("height_step_m", &d.height_step_m),
                               std::make_pair("speed_step_mps", &d.speed_step_mps), std::make_pair("max_speed_mps", &d.max_speed_mps),
@@ -170,12 +179,98 @@ struct AspdTrack {
     double height_m = 0.0;  // in the ASPD-U's 0.2 km steps
     int zone = 1;           // H1, H2, H3
     Vec3 velocity;          // course and speed, the speed in 12.5 m/s steps (zero until the second fix)
-    int type = 9;           // the board's code tens digit as sent (1 friend, 7 practice, 8 enemy, 9 no IFF)
+    int type = 9;           // the board's code tens digit as sent (1 friend, 2 training target, 8 enemy, 9 no IFF)
     bool friendly = false;
     bool group = false;
     bool primary = false;   // from a radar cabled to the post (else the regiment's telecode)
+    bool designated = false;  // the regiment's designation to this battery came with it (ЦУ with the battery's address)
+    bool imitated = false;    // the ФР block's imitated echo (КОНТРОЛЬ: a training target, no aircraft)
     double time_s = 0.0;    // last fix
 };
+
+// A command the regiment's post sends by telecode: a two-digit decimal shown on the IT-45 (rwd_mb3 pu12: commands and
+// reports "in Form von Dezimalzahlen"; flak11 PU12-0: "in Form zweistelliger Ziffern"). What each code means is the
+// table's (data/command/aspd_codes.json).
+struct RegimentCommand {
+    double at_s = 0.0;
+    int code = 0;
+};
+
+// The code table: each code's meaning and what the battery does on it.
+struct AspdCode {
+    int code = 0;
+    std::string meaning;
+    std::string effect;  // "readiness", "fire_ban", "fire_free", "cease_fire" or "" (shown only)
+};
+struct AspdCodeTable {
+    std::string id;
+    std::vector<AspdCode> codes;
+    const AspdCode* Find(int code) const {
+        for (const AspdCode& c : codes) {
+            if (c.code == code) return &c;
+        }
+        return nullptr;
+    }
+};
+
+namespace detail {
+
+class AspdCodeLoader : public BoardLoader {
+public:
+    bool Load(const json::Value& root, AspdCodeTable& t) {
+        if (!Keys(root, "", {"codes_id", "display_name", "status", "notes", "source", "confidence", "codes"}) ||
+            !RequireString(root, "", "codes_id", t.id) || !Provenance(root, "")) {
+            return false;
+        }
+        const json::Value* list = root.Find("codes");
+        if (list == nullptr || !list->Is(json::Type::Array)) return Fail("codes", "required, a list");
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const json::Value& e = list->items[i];
+            const std::string p = "codes[" + std::to_string(i) + "]";
+            AspdCode c;
+            double code = -1.0;
+            if (e.Find("code") == nullptr) return Fail(Join(p, "code"), "required");
+            if (!Keys(e, p, {"code", "meaning", "effect", "notes"}) || !OptionalNumber(e, p, "code", code) ||
+                !RequireString(e, p, "meaning", c.meaning) || !OptionalString(e, p, "effect", c.effect)) {
+                return false;
+            }
+            if (code < 0.0 || code > 99.0 || code != std::floor(code)) return Fail(Join(p, "code"), "a two-digit number, 00-99");
+            if (!c.effect.empty() && c.effect != "readiness" && c.effect != "fire_ban" && c.effect != "fire_free" && c.effect != "cease_fire") {
+                return Fail(Join(p, "effect"), "readiness, fire_ban, fire_free or cease_fire");
+            }
+            c.code = static_cast<int>(code);
+            if (t.Find(c.code) != nullptr) return Fail(Join(p, "code"), "duplicate");
+            t.codes.push_back(std::move(c));
+        }
+        return true;
+    }
+};
+
+}  // namespace detail
+
+inline bool LoadAspdCodesFile(const std::string& path, AspdCodeTable& out, std::string* error = nullptr) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) *error = "cannot open " + path;
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text.str(), root, &parse_error)) {
+        if (error != nullptr) *error = path + ": " + parse_error;
+        return false;
+    }
+    AspdCodeTable t;
+    detail::AspdCodeLoader loader;
+    if (!loader.Load(root, t)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = std::move(t);
+    return true;
+}
 
 // One launcher on the IT-1 / IT-2 boards: what its reports on the battery net have told the post (valka_pu12: the
 // boards show the units' state, the vehicles' activity and their ammunition).
@@ -229,6 +324,9 @@ struct PostRegiment {
     Vec3 position;                     // ENU; the R-407 net's reach is measured from here
     std::vector<RegimentRadar> radars;  // empty: the regiment sees every target
     std::vector<C2Outage> outages;
+    bool telecode = true;              // false: the regiment sends no telecode (peacetime: the ASPD-U left off)
+    double designate_within_m = 0.0;   // the regiment designates to the battery the targets this near it (0: none)
+    std::vector<RegimentCommand> commands;  // two-digit commands sent by telecode, oldest first
 };
 
 class CommandPost {
@@ -278,14 +376,56 @@ public:
         return position_ + Vec3{rel.x * c + rel.y * s, -rel.x * s + rel.y * c, rel.z} + offset_;
     }
 
-    // ---- The regiment's net: within the R-407's reach of the regiment's post and not off the air.
-    bool TelecodeInReach(const PostRegiment& r, double t) const { return InReach(r, t, def_.telecode_range_m); }
+    // ---- The regiment's net: within the R-407's reach of the regiment's post, not off the air, and sending at all.
+    bool TelecodeInReach(const PostRegiment& r, double t) const { return r.telecode && InReach(r, t, def_.telecode_range_m); }
+    // The regiment designates to this battery the targets within this range of it (ЦУ with the battery's address, carried
+    // by the telecode; flak11 PU12-0: "Empfang und Abgabe adressierter Zielzuweisungen"). 0: it designates none.
+    void SetRegimentDesignationRange(double m) { designate_within_m_ = m; }
+
+    // The ДХ keypad's characteristics for a track (rwd_mb3 pu12a: the Pult DCh enters friend or foe, group, the height
+    // zone): kept on that target through later fixes. False if no track has the number.
+    struct Attributes {
+        int friendly = -1;  // -1 unchanged, 0 foe, 1 friend
+        int group = -1;     // -1 unchanged, 0 single, 1 group
+        int zone = 0;       // 0 unchanged, 1-3 H1-H3
+    };
+    bool SetAttributes(int number, const Attributes& a) {
+        for (AspdTrack& k : tracks_) {
+            if (k.number != number) continue;
+            Attributes& o = overrides_[k.target_id];
+            if (a.friendly >= 0) o.friendly = a.friendly;
+            if (a.group >= 0) o.group = a.group;
+            if (a.zone > 0) o.zone = a.zone;
+            ApplyOverrides(k);
+            return true;
+        }
+        return false;
+    }
+
+    // The ФР block's imitated echo (rwd_mb3 pu12a: the ФР makes the sweep, the range marks and an imitated echo signal):
+    // with the block at КОНТРОЛЬ a training target goes round the post, 30 km out at 200 m/s and 2 000 m (SAM3D's),
+    // and is taken off the tube like a cabled radar's echo.
+    static BoardContact ImitatedEcho(double t) {
+        const double r = 30000.0, v = 200.0;
+        const double a = t * v / r;
+        BoardContact c;
+        c.target_id = "imitation";
+        c.position = Vec3{r * std::sin(a), r * std::cos(a), 2000.0};
+        c.altitude_m = 2000.0;
+        c.type = 9;
+        return c;
+    }
     // The air-picture voice net: within the R-123M's reach of the regiment's post and not off the air.
     bool AirNetInReach(const PostRegiment& r, double t) const { return InReach(r, t, def_.air_net_range_m); }
     // Where the air-picture net's reports are measured from (the regiment's radar); the post itself until set.
     void SetAirNetSource(const Vec3& at) {
         air_source_ = at;
         has_air_source_ = true;
+    }
+    // The scenario's frame, for the reports' grid squares (latitude and longitude).
+    void SetFrame(const LocalFrame& frame) {
+        frame_ = frame;
+        has_frame_ = true;
     }
     // The targets the regiment's radars cover (all of them without radars).
     static std::vector<BoardContact> RegimentSees(const PostRegiment& r, const std::vector<BoardContact>& truth) {
@@ -312,6 +452,7 @@ public:
         bool telecode = false;       // the ASPD-U receiving the regiment's telecode (console telecode_reception)
         bool primary = false;        // a radar cabled to the post and the ASPD-U showing it (console primary_picture)
         bool air_net = false;        // the post listening on the air-picture net (console air_net, within its reach)
+        bool imitation = false;      // the ФР block at КОНТРОЛЬ: the imitated echo on the tube (console imitation)
         bool operator_free = false;  // the operator-plotter at his place, not busy with a drill
         double operator_speed = 1.0; // his tier's speed at handwork (1 = a trained operator)
     };
@@ -336,10 +477,16 @@ public:
                                      [&](const AspdTrack& k) { return t - k.time_s > (k.primary ? primary_stale : telecode_stale); }),
                       tracks_.end());
         // The operator's hands: semi-automatic take-off of the primary picture first, then the board.
+        imitation_on_ = in.imitation;
+        imitation_t_ = t;
+        if (!in.imitation) {
+            tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [](const AspdTrack& k) { return k.imitated; }), tracks_.end());
+        }
         const double speed = in.operator_speed > 0.0 ? in.operator_speed : 1.0;
         if (!in.operator_free || t + 1e-9 < operator_free_s_) return;
-        if (in.primary) {
-            if (const BoardContact* c = NextTakeOff(t, radar)) {
+        if (in.primary || in.imitation) {
+            const std::vector<BoardContact> echoes = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : radar;
+            if (const BoardContact* c = NextTakeOff(t, echoes)) {
                 TakeOff(t, *c);
                 operator_free_s_ = t + def_.take_off_s / speed;
                 return;
@@ -350,7 +497,7 @@ public:
             WriteHeard(t, 0, speed);
             return;
         }
-        if (const AspdTrack* k = NextToPlot()) Write(t, *k, speed);
+        if (const AspdTrack* k = NextToPlot(t)) Write(t, *k, speed);
     }
 
     // ---- The air-picture voice net (FuG-1; rwd_mb3 pu12e: the board carries the targets' tracks in the designation
@@ -412,10 +559,24 @@ public:
         bool friendly = false;
         bool group = false;
         bool primary = false;  // a cabled radar's track: its echo is on the tube too
+        bool designated = false;  // the regiment's designation to this battery
+        bool imitated = false;    // the ФР block's imitated echo (number -1: the echo not yet taken off)
     };
     std::vector<ScopeMark> Scope(double scale_m) const {
         std::vector<ScopeMark> out;
         if (!(scale_m > 0.0)) return out;
+        if (imitation_on_) {  // the imitated echo itself, taken off or not
+            const Vec3 rel = Shown(ImitatedEcho(imitation_t_).position) - position_;
+            if (rel.HorizontalLength() <= scale_m) {
+                ScopeMark m;
+                m.number = -1;
+                m.x = rel.x / scale_m;
+                m.y = rel.y / scale_m;
+                m.primary = true;
+                m.imitated = true;
+                out.push_back(m);
+            }
+        }
         for (const AspdTrack& k : tracks_) {
             const Vec3 rel = k.position - position_;
             if (rel.HorizontalLength() > scale_m) continue;
@@ -429,6 +590,8 @@ public:
             m.friendly = k.friendly;
             m.group = k.group;
             m.primary = k.primary;
+            m.designated = k.designated;
+            m.imitated = k.imitated;
             out.push_back(m);
         }
         return out;
@@ -486,7 +649,21 @@ private:
         k->friendly = c.type == 1;
         k->group = c.formation > 1;
         k->primary = primary;
+        k->imitated = c.target_id == "imitation";
+        // The regiment's designation to this battery rides with its telecode (its own picture decides it).
+        k->designated = !primary && designate_within_m_ > 0.0 && (c.position - position_).HorizontalLength() <= designate_within_m_;
         k->time_s = t;
+        ApplyOverrides(*k);
+    }
+    void ApplyOverrides(AspdTrack& k) const {
+        const auto it = overrides_.find(k.target_id);
+        if (it == overrides_.end()) return;
+        if (it->second.friendly >= 0) {
+            k.friendly = it->second.friendly == 1;
+            k.type = k.friendly ? 1 : 8;
+        }
+        if (it->second.group >= 0) k.group = it->second.group == 1;
+        if (it->second.zone > 0) k.zone = it->second.zone;
     }
 
     int RegimentNumber(const std::string& id) {
@@ -581,9 +758,23 @@ private:
         const int height_hm = static_cast<int>(std::lround(best->altitude_m / 100.0));
         const int code = best->type * 10 + (best->formation > 9 ? 9 : best->formation);
         const int minute = static_cast<int>(t / 60.0) + 1;
-        char text[96];
-        std::snprintf(text, sizeof(text), "%04d: azimuth %03.0f, %.0f km, %02d, height %d, minute %02d", r.number, az_deg, range / 1000.0, code,
-                      height_hm, minute % 100);
+        char text[112];
+        const int levels = static_cast<int>(def_.air_net_grid_levels);
+        if (levels > 0 && has_frame_) {
+            // The PVO grid's squares (pvo_grid.hpp): the plotter puts the mark at the square's centre.
+            const GeoPoint g = frame_.EnuToGeodetic(best->position);
+            const double lat = RadToDeg(g.lat_rad), lon = RadToDeg(g.lon_rad);
+            const std::string sq = pvo_grid::Encode(lat, lon, levels);
+            double clat = lat, clon = lon;
+            pvo_grid::Centre(sq, std::floor(lat / pvo_grid::kBigLatDeg) * pvo_grid::kBigLatDeg,
+                             std::floor(lon / pvo_grid::kBigLonDeg) * pvo_grid::kBigLonDeg, clat, clon);
+            const Vec3 centre = frame_.GeodeticToEnu(GeoPoint::FromDegrees(clat, clon, g.alt_m));
+            r.contact.position = Shown(Vec3{centre.x, centre.y, best->position.z});
+            std::snprintf(text, sizeof(text), "%04d: square %s, %02d, height %d, minute %02d", r.number, sq.c_str(), code, height_hm, minute % 100);
+        } else {
+            std::snprintf(text, sizeof(text), "%04d: azimuth %03.0f, %.0f km, %02d, height %d, minute %02d", r.number, az_deg, range / 1000.0,
+                          code, height_hm, minute % 100);
+        }
         r.text = text;
         air_pending_.push_back(r);
         air_said_[best->target_id] = t;
@@ -647,15 +838,18 @@ private:
 
     // The track to write on the board next: one never written (the nearest first), else the one written longest ago
     // that has had a fix since.
-    const AspdTrack* NextToPlot() const {
+    // A target is written again once a board period (a minute: the crosses are labelled with minutes, bguir_tsp) has
+    // passed since its last mark and the tube has a newer fix. The imitated echo is never written: there is no aircraft.
+    const AspdTrack* NextToPlot(double t) const {
         const AspdTrack* best = nullptr;
         double best_key = 1e18;
         for (const AspdTrack& k : tracks_) {
+            if (k.imitated) continue;
             const auto it = plotted_.find(k.target_id);
             double key;
             if (it == plotted_.end()) {
                 key = -1e12 + (k.position - position_).HorizontalLength();  // never written: before any other
-            } else if (k.time_s > it->second + 1e-9) {
+            } else if (k.time_s > it->second + 1e-9 && t - it->second + 1e-9 >= board_.Def().update_period_s) {
                 key = it->second;
             } else {
                 continue;
@@ -686,9 +880,15 @@ private:
     std::map<std::string, int> post_numbers_;
     std::map<std::string, double> plotted_;
     std::map<std::string, double> telecode_sent_;  // when the sending post last took each target off
+    double designate_within_m_ = 0.0;
+    std::map<std::string, Attributes> overrides_;   // the ДХ's characteristics, by target
+    bool imitation_on_ = false;
+    double imitation_t_ = 0.0;
     double telecode_round_s_ = 0.0;                // how long its round of all the targets takes
     Vec3 air_source_;
     bool has_air_source_ = false;
+    LocalFrame frame_;
+    bool has_frame_ = false;
     double air_free_s_ = 0.0;                      // when the air-picture net is next free
     std::map<std::string, double> air_said_;       // when each target was last reported on it
     std::vector<AirReport> air_pending_;           // being read out (heard_s: when the reading ends)

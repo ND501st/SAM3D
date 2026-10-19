@@ -74,7 +74,7 @@ struct SAM3D_API FSimBoardMark
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
 	int32 HeightHm = 0;
 
-	/** Type and formation digits (e.g. 71: practice target, one aircraft). */
+	/** Type and formation digits (e.g. 21: training target, one aircraft; bguir_tsp). */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
 	int32 Code = 0;
 
@@ -122,6 +122,10 @@ struct SAM3D_API FSimRadioMessage
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
 	FString Text;
+
+	/** A crew callout (voiced from the callout bus), not the radio log's own line. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	bool bCallout = false;
 };
 
 /** A seat's best next move from the drill master (docs/crew/06_REFERENCE_PERFORMER.md): the assistance overlay's data. */
@@ -1063,6 +1067,14 @@ public:
 	/** The targets' numbers on the post's board now (each target's latest mark), nearest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	TArray<int32> GetPostBoardNumbers() const;
+
+	/** Each target on the post's board read as the commander reads it (its crosses' minutes): X the number, Y the range
+	 *  (km), Z the speed (m/s), W the minutes until it reaches the post (-1: no speed yet, or not closing); nearest first. */
+	TArray<FVector4f> GetPostBoardReadings() const;
+
+	/** The regiment's last two-digit command on the IT-45 with its meaning ("20 fire ban"; empty: none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	FString GetPostCommandText() const;
 
 	/** The reports heard on the air-picture net and not yet written on the board (the board's numbers), oldest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")

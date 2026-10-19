@@ -290,6 +290,9 @@ struct ConsoleData {
     std::string post_scale;           // control: the IT-45's scale switch, one position per scale of the ASPD-U ("" none)
     std::string post_battery_net;     // subsystem: the battery net up, for designations and reports ("" always up)
     std::string post_air_net;         // subsystem: the air-picture voice net heard (FuG-1; "" none: the post never hears it)
+    std::string post_imitation;       // subsystem: the ФР block at КОНТРОЛЬ, the imitated echo on the tube ("" none)
+    std::string post_radar_switch;    // control: the primary radar's source switch, positions 0-2 = the library's 1-3 ("" none)
+    std::string post_radar_input;     // input: set while a cabled radar's picture comes through (the switch on its type)
     // The ДХ characteristics keypad (optional "keypad"): its ten digit keys, the designation key (ЦУ) and the reset; the
     // station that works it. And the DT-2 coordinate pickup (optional "marker"): two wheels that move the marker on the
     // IT-45 in azimuth (deg) and range (a fraction of the scale).
@@ -297,6 +300,8 @@ struct ConsoleData {
     std::string post_keypad_designate;
     std::string post_keypad_reset;
     std::string post_keypad_station;
+    std::string post_keypad_friend, post_keypad_foe, post_keypad_group;  // СВ, Ч, ГР (optional)
+    std::string post_keypad_zone[3];                                     // Н1, Н2, Н3 (optional)
     std::string post_marker_azimuth;
     std::string post_marker_range;
     std::vector<ReadinessState> readiness;
@@ -650,10 +655,12 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadPost(const json::Value& root, ConsoleData& out) {
         const json::Value* p = root.Find("post");
         if (p == nullptr) return true;
-        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "air_net", "keypad",
-                               "marker", "source", "confidence", "notes"}) ||
+        if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "air_net", "imitation",
+                               "radar_switch", "radar_input", "keypad", "marker", "source", "confidence", "notes"}) ||
             !OptionalString(*p, "post", "scale", out.post_scale) || !OptionalString(*p, "post", "battery_net", out.post_battery_net) ||
-            !OptionalString(*p, "post", "air_net", out.post_air_net) ||
+            !OptionalString(*p, "post", "air_net", out.post_air_net) || !OptionalString(*p, "post", "imitation", out.post_imitation) ||
+            !OptionalString(*p, "post", "radar_switch", out.post_radar_switch) ||
+            !OptionalString(*p, "post", "radar_input", out.post_radar_input) ||
             !Provenance(*p, "post") || !RequireString(*p, "post", "telecode", out.post_telecode) ||
             !RequireString(*p, "post", "primary", out.post_primary) || !RequireString(*p, "post", "telecode_input", out.post_telecode_input) ||
             !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
@@ -671,14 +678,29 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!out.post_air_net.empty() && out.equipment.Def(out.post_air_net) == nullptr) {
             return Fail("post.air_net", "unknown subsystem '" + out.post_air_net + "'");
         }
+        if (!out.post_imitation.empty() && out.equipment.Def(out.post_imitation) == nullptr) {
+            return Fail("post.imitation", "unknown subsystem '" + out.post_imitation + "'");
+        }
+        if (!out.post_radar_switch.empty() && out.panel.Find(out.post_radar_switch) == nullptr) {
+            return Fail("post.radar_switch", "unknown control '" + out.post_radar_switch + "'");
+        }
+        if (!out.post_radar_input.empty() && !out.equipment.HasInput(out.post_radar_input)) {
+            return Fail("post.radar_input", "unknown input '" + out.post_radar_input + "'");
+        }
         if (!out.stations.empty() && out.FindStation(out.post_plotter) == nullptr) {
             return Fail("post.plotter", "'" + out.post_plotter + "' is not a station");
         }
         if (const json::Value* k = p->Find("keypad")) {
             const std::string kp = "post.keypad";
-            if (!Keys(*k, kp, {"digits", "designate", "reset", "station"}) ||
+            if (!Keys(*k, kp, {"digits", "designate", "reset", "friend", "foe", "group", "zone1", "zone2", "zone3", "station"}) ||
                 !RefControl(*k, kp, "designate", out.panel, ControlKind::Momentary, true, out.post_keypad_designate) ||
                 !RefControl(*k, kp, "reset", out.panel, ControlKind::Momentary, true, out.post_keypad_reset) ||
+                !RefControl(*k, kp, "friend", out.panel, ControlKind::Momentary, false, out.post_keypad_friend) ||
+                !RefControl(*k, kp, "foe", out.panel, ControlKind::Momentary, false, out.post_keypad_foe) ||
+                !RefControl(*k, kp, "group", out.panel, ControlKind::Momentary, false, out.post_keypad_group) ||
+                !RefControl(*k, kp, "zone1", out.panel, ControlKind::Momentary, false, out.post_keypad_zone[0]) ||
+                !RefControl(*k, kp, "zone2", out.panel, ControlKind::Momentary, false, out.post_keypad_zone[1]) ||
+                !RefControl(*k, kp, "zone3", out.panel, ControlKind::Momentary, false, out.post_keypad_zone[2]) ||
                 !RequireString(*k, kp, "station", out.post_keypad_station)) {
                 return false;
             }

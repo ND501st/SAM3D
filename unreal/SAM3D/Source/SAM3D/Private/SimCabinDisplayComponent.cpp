@@ -1331,6 +1331,10 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 		const int32 KeypadTarget = Post.keypad.empty() ? -1 : FCString::Atoi(UTF8_TO_TCHAR(Post.keypad.c_str()));
 		for (const simcore::CommandPost::ScopeMark& M : Post.scope)
 		{
+			if (M.number < 0)
+			{
+				continue;  // the ФР block's imitated echo not yet taken off: only its echo
+			}
 			const bool bMarked = M.number == Post.marked;
 			const bool bKeyed = M.number == KeypadTarget;
 			const FVector2D At = ScreenOf(M.x, M.y);
@@ -1378,6 +1382,25 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			{
 				Text(Canvas, ArrivalText(Post.marked_arrival_s), At + FVector2D(2.0 * K, 1.4 * K), OnFace(AspdSymbol * 0.9f), 1.0f, false);
 			}
+			if (M.designated)
+			{
+				// the regiment's designation to this battery (ЦУ with its address): a diamond round the symbol
+				const double D = 2.4 * K;
+				const FVector2D N = At + FVector2D(0.0, -D), E = At + FVector2D(D, 0.0), So = At + FVector2D(0.0, D), W = At + FVector2D(-D, 0.0);
+				Line(Canvas, N, E, 1.2f, Ink);
+				Line(Canvas, E, So, 1.2f, Ink);
+				Line(Canvas, So, W, 1.2f, Ink);
+				Line(Canvas, W, N, 1.2f, Ink);
+			}
+		}
+
+		// The regiment's last command by telecode: its two digits at the tube's top left (rwd_mb3: commands and reports
+		// shown on the indicator as decimal numbers).
+		if (Post.command >= 0)
+		{
+			const double Gw = 0.016 * S;
+			StrokeNumber(Canvas, FString::Printf(TEXT("%02d"), Post.command), C + FVector2D(-0.62 * R, -0.62 * R), Gw, 1.6 * Gw, 1.8f,
+				OnFace(AspdSymbol * 0.9f), 0.0, false);
 		}
 
 		// The DT-2's marker: a small ring open at the quarters.

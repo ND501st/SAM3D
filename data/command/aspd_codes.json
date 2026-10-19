@@ -1,0 +1,17 @@
+{
+  "codes_id": "aspd_codes",
+  "display_name": "The regiment's two-digit commands on the ASPD-U (IT-45)",
+  "status": "Code table for simcore/command_post.hpp (RegimentCommand, AspdCodeTable): what each two-digit command the regiment's post sends by telecode means, and what the battery does on it. Proposal 5 of docs/research/PLOTTING_BOARD_2026-10.md.",
+  "notes": "That the ASPD-U carries commands and reports as two-digit decimals and shows them on the tube is documented (rwd_mb3 pu12; flak11 PU12-0). The table of codes itself has not been found: the codes and their meanings are SAM3D's placeholders, chosen to cover the commands an air-defence regiment gives a battery (readiness, fire ban and permission, cease fire, friendly aircraft in the zone).",
+  "source": "rwd_mb3 (pu12: Übertragung und Empfang von Kommandos und Meldungen sowie deren Darstellung auf dem Sichtgerät in Form von Dezimalzahlen); flak11 (PU12-0: Kommandos oder Meldungen in Form zweistelliger Ziffern); the code values are a sam3d placeholder",
+  "confidence": "low",
+  "codes": [
+    { "code": 10, "meaning": "readiness no. 1", "effect": "readiness", "notes": "The battery to full readiness: the launchers up and manned." },
+    { "code": 11, "meaning": "readiness no. 2", "notes": "Shown only." },
+    { "code": 20, "meaning": "fire ban", "effect": "fire_ban", "notes": "No designations to the launchers until it is lifted." },
+    { "code": 21, "meaning": "fire permitted", "effect": "fire_free" },
+    { "code": 30, "meaning": "cease fire", "effect": "cease_fire" },
+    { "code": 40, "meaning": "own aircraft in the zone", "notes": "Shown only: check every target's IFF before firing." },
+    { "code": 50, "meaning": "air raid expected", "effect": "readiness" }
+  ]
+}

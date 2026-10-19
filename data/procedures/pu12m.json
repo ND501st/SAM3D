@@ -118,7 +118,28 @@
       "source": "rwd_mb3 (Geber der Koordinaten Block DT-2 / DI: the marker on the indicator, flak11 PU12-0 scheme: Marker)", "confidence": "low",
       "notes": "SAM3D works the coordinate pickup as two wheels, azimuth and range; the real block's handle is not described. The azimuth turns round without a stop (a marker on a round tube; sam3d)." },
     { "id": "dt2.range", "label": "DT-2 marker: range", "station": "battery_commander", "kind": "wheel", "min": 0, "max": 1, "initial_value": 0.5, "unit": "of the scale",
-      "source": "rwd_mb3 (Geber der Koordinaten Block DT-2)", "confidence": "low" }
+      "source": "rwd_mb3 (Geber der Koordinaten Block DT-2)", "confidence": "low" },
+    { "id": "dch.key.friend", "label": "ДХ: СВ (friend: свой)", "station": "battery_commander", "kind": "button",
+      "source": "rwd_mb3 (pu12a: the Pult DCh enters friend or foe, the group, the height zone and heights); shilka_narod (photograph: the keys СВ, Ч, ГР, Н1, Н2, Н3; labels read at low resolution)", "confidence": "low",
+      "notes": "Sets the characteristic on the target in the ДХ window (typed, or under the DT-2 marker); it stays with that target through later fixes and goes on the board." },
+    { "id": "dch.key.foe", "label": "ДХ: Ч (foe: чужой)", "station": "battery_commander", "kind": "button",
+      "source": "rwd_mb3 (pu12a: the Pult DCh enters friend or foe, the group, the height zone and heights); shilka_narod (photograph: the keys СВ, Ч, ГР, Н1, Н2, Н3; labels read at low resolution)", "confidence": "low",
+      "notes": "Sets the characteristic on the target in the ДХ window (typed, or under the DT-2 marker); it stays with that target through later fixes and goes on the board." },
+    { "id": "dch.key.group", "label": "ДХ: ГР (group)", "station": "battery_commander", "kind": "button",
+      "source": "rwd_mb3 (pu12a: the Pult DCh enters friend or foe, the group, the height zone and heights); shilka_narod (photograph: the keys СВ, Ч, ГР, Н1, Н2, Н3; labels read at low resolution)", "confidence": "low",
+      "notes": "Sets the characteristic on the target in the ДХ window (typed, or under the DT-2 marker); it stays with that target through later fixes and goes on the board." },
+    { "id": "dch.key.h1", "label": "ДХ: Н1 (height zone 1, 0-1.4 km)", "station": "battery_commander", "kind": "button",
+      "source": "rwd_mb3 (pu12a: the Pult DCh enters friend or foe, the group, the height zone and heights); shilka_narod (photograph: the keys СВ, Ч, ГР, Н1, Н2, Н3; labels read at low resolution)", "confidence": "low",
+      "notes": "Sets the characteristic on the target in the ДХ window (typed, or under the DT-2 marker); it stays with that target through later fixes and goes on the board." },
+    { "id": "dch.key.h2", "label": "ДХ: Н2 (height zone 2, 1.6-3.0 km)", "station": "battery_commander", "kind": "button",
+      "source": "rwd_mb3 (pu12a: the Pult DCh enters friend or foe, the group, the height zone and heights); shilka_narod (photograph: the keys СВ, Ч, ГР, Н1, Н2, Н3; labels read at low resolution)", "confidence": "low",
+      "notes": "Sets the characteristic on the target in the ДХ window (typed, or under the DT-2 marker); it stays with that target through later fixes and goes on the board." },
+    { "id": "dch.key.h3", "label": "ДХ: Н3 (height zone 3, 3.2-25.2 km)", "station": "battery_commander", "kind": "button",
+      "source": "rwd_mb3 (pu12a: the Pult DCh enters friend or foe, the group, the height zone and heights); shilka_narod (photograph: the keys СВ, Ч, ГР, Н1, Н2, Н3; labels read at low resolution)", "confidence": "low",
+      "notes": "Sets the characteristic on the target in the ДХ window (typed, or under the DT-2 marker); it stays with that target through later fixes and goes on the board." },
+    { "id": "aspd.radar_source", "label": "Primary radar source switch", "station": "battery_commander", "kind": "switch", "position_labels": ["1RL14 / 1RL131", "1RL111 / 1RL128", "1RL13 / 1RL134"], "initial": 2,
+      "source": "rwd_mb3 (pu12e: Umschalter für die Quelle der Funkmess-Primärinformation, selecting the type of radar that gives the picture: RBS 1RL14 / 1RL131, 1RL111 / 1RL128, 1RL13 / 1RL134; pu12f: on the back of the commander's rack)", "confidence": "medium",
+      "notes": "A cabled radar's picture comes through only with the switch at its type (data/command/regiment_radars.json switch_position). In the cabin SAM3D puts it on the ФР block's face, in the commander's reach." }
   ],
 
   "subsystems": [
@@ -200,6 +221,9 @@
     { "id": "battery_net", "name": "The battery net up (designations to the launchers)", "enable": [ { "subsystem": "fug4", "is": "ready" }, { "subsystem": "mast_up", "is": "ready" } ],
       "source": "flak11 (PU12-0: designations to the launchers by voice; PU12-1: FuG-4)", "confidence": "medium",
       "notes": "Up once the set is warm and on the mast antenna; the whip alone is not modelled." },
+    { "id": "aspd_control", "name": "ФР at КОНТРОЛЬ: the imitated echo on the tube", "enable": [ { "control": "fr.mode", "is": 1 }, { "subsystem": "aspd_warm", "is": "ready" } ],
+      "source": "rwd_mb3 (pu12a: the ФР block forms the radial-circular sweep, the range marks and an imitated echo signal); shilka_narod (the ФР block's РАБОТА / КОНТРОЛЬ selector)", "confidence": "low",
+      "notes": "SAM3D's reading: at КОНТРОЛЬ the tube shows the imitated echo for practice (a training target going round the post), no picture from outside." },
     { "id": "air_net", "name": "The air-picture net heard (the regiment's radar battery reads the air picture)", "enable": [ { "subsystem": "fug1", "is": "ready" }, { "subsystem": "mast_up", "is": "ready" } ],
       "source": "flak11 (PU12-1: FuG-1, the air-picture net, designation net no. 2, the plotters); pvo_bu_x_1984 (art. 23: the plotter takes the reports on targets from the radio operator and plots them; art. 29: the designation (warning) nets carry the air enemy to the posts and the AA units)", "confidence": "medium",
       "notes": "The plotter writes what this net says on the board (simcore/command_post.hpp). Up once the set is warm and on the mast antenna." }
@@ -274,9 +298,10 @@
       ] }
   ],
 
-  "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode", "plotter": "operator", "oriented": "oriented", "scale": "fr.scale", "battery_net": "battery_net", "air_net": "air_net",
+  "post": { "telecode": "telecode_reception", "primary": "primary_picture", "telecode_input": "regiment_telecode", "plotter": "operator", "oriented": "oriented", "scale": "fr.scale", "battery_net": "battery_net", "air_net": "air_net", "imitation": "aspd_control", "radar_switch": "aspd.radar_source", "radar_input": "radar_coupled",
             "keypad": { "digits": ["dch.key.0", "dch.key.1", "dch.key.2", "dch.key.3", "dch.key.4", "dch.key.5", "dch.key.6", "dch.key.7", "dch.key.8", "dch.key.9"],
-                        "designate": "dch.key.cu", "reset": "dch.key.reset", "station": "battery_commander" },
+                        "designate": "dch.key.cu", "reset": "dch.key.reset", "friend": "dch.key.friend", "foe": "dch.key.foe", "group": "dch.key.group",
+                        "zone1": "dch.key.h1", "zone2": "dch.key.h2", "zone3": "dch.key.h3", "station": "battery_commander" },
             "marker": { "azimuth": "dt2.azimuth", "range": "dt2.range" },
             "source": "flak11 (PU12-0: the ASPD-U receives the air picture by telecode, or the primary picture from a radar cabled to the post, and shows it on the IT-45); ru_pu12_text (the operator-plotter, No. 2)", "confidence": "medium",
             "notes": "The post's information chain (simcore/command_post.hpp, the scenario's \"post\" block): the regiment's telecode or a cabled radar onto the IT-45; the regiment's voice reports on the air-picture net (FuG-1); the plotter's marks on the board, what he hears first; the navigation error from the orientation." },

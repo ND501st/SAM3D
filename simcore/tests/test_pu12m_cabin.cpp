@@ -62,7 +62,9 @@ SC_TEST("pu12m cabin: five seats, every control placed, the IT-45 and the status
     SC_EXPECT(map != nullptr && window != nullptr && plotter != nullptr);
     if (map != nullptr && plotter != nullptr) {
         const Vec3 to_map = layout.FindPanel(map->panel_id)->centre_m - plotter->eye_m;
-        SC_EXPECT(to_map.y > 0.3 && to_map.y < 0.7 && std::fabs(to_map.x) < 0.1);
+        // Swung open on its hinge at the plan's folded strip (on the centreline before his place): ahead of him, a little
+        // to his right, below his eye.
+        SC_EXPECT(to_map.y > 0.3 && to_map.y < 0.7 && to_map.x > 0.05 && to_map.x < 0.3 && to_map.z < -0.2);
     }
     // The panels take the equipment's paint.
     const CabinPanel* fr = layout.FindPanel("fr_panel");

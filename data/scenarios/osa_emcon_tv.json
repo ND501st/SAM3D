@@ -25,7 +25,7 @@
   ],
   "targets": [
     {
-      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 7,
+      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 2,
       "start": { "east_m": 1500, "north_m": 40000, "up_m": 800 },
       "waypoints": [ { "east_m": 1500, "north_m": -30000, "up_m": 800 } ],
       "speed_mps": 150, "rcs_m2": 0.5, "appear_at_s": 200,

@@ -33,7 +33,7 @@
     { "name": "Driver", "role": "driver", "skill": "class2" }
   ],
   "targets": [
-    { "id": "t1", "name": "Practice target (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 7,
+    { "id": "t1", "name": "Practice target (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 2,
       "start": { "east_m": 5000, "north_m": 90000, "up_m": 2000 }, "waypoints": [ { "east_m": 5000, "north_m": -60000, "up_m": 2000 } ],
       "speed_mps": 120, "rcs_m2": 1, "appear_at_s": 0,
       "notes": "Placeholder numbers. On the regiment's picture from the start; the post's board shows it once the post is deployed." }

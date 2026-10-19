@@ -74,6 +74,18 @@
       "source": "video_osa (at night shorter halts of about 1 h without breaking formation)",
       "confidence": "low"
     },
+    "warning_s": {
+      "value": 408,
+      "source": "flak11 (preliminary preparation from cold: 3.8 min switch-on and 3.0 min function check, 6.8 min)",
+      "confidence": "medium",
+      "notes": "The warning the launchers need: the NPC battery commander raises readiness when the board shows a track that will reach the edge of the zone in this time or less (simcore/board_reading.hpp). Without a speed (one mark) the threat range below decides."
+    },
+    "zone_edge_m": {
+      "value": 10000,
+      "source": "flak11 (Osa-AK engagement zone head-on to 10 km)",
+      "confidence": "medium",
+      "notes": "Where the warning time is counted to: the far edge of the launchers' zone, from the battery."
+    },
     "threat_range_m": {
       "value": 50000,
       "source": "samsim_osa p21 (the crew waits until a target approaches the 50 km circle): a designated target inside this makes the battery open the column (sam3d)",
