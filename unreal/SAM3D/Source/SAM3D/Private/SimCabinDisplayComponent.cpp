@@ -592,7 +592,7 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Console.panel.GetValue(Display.control) * 100.0)));
 		return true;
 	case simcore::CabinDisplayKind::Meter:
-		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Console.panel.GetValue(Display.control) * 1000.0)));
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console) * 1000.0)));
 		return true;
 	case simcore::CabinDisplayKind::Ppi:
 		// Off: the dead tube behind its filter, with the scale round it.
@@ -1111,7 +1111,7 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 	}
 	Text(Canvas, FString::Printf(TEXT("%s  %s"), *FString(UTF8_TO_TCHAR(Display.label.c_str())), *FString(UTF8_TO_TCHAR(Display.unit.c_str()))),
 		FVector2D(0.5 * Size.X, 0.55 * Size.Y), Ink, 1.3f);
-	const double Reading = bOn ? Console.panel.GetValue(Display.control) * Display.scale : 0.0;
+	const double Reading = bOn ? simcore::MeterValue(Display, Console) : 0.0;
 	const double Fraction = FMath::Clamp(Reading / Display.full_scale, 0.0, 1.0);
 	const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * Fraction);
 	Line(Canvas, Pivot, Polar(Pivot, A, 0.95 * R), 2.5f, FLinearColor(0.7f, 0.05f, 0.02f));

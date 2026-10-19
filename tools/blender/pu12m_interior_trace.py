@@ -346,6 +346,44 @@ def _fit_r123m():
 
 _fit_r123m()
 
+# The R-111's and the R-407's meshes (art/pu12m_interior SM_RadioR111, SM_RadioR407, traced from photographs and the R-111's
+# ТО: tools/blender/build_pu12m_radios.py writes these into the manifest; tools/tests/test_pu12m_interior_trace.py keeps
+# them equal): the box (width, depth, height, the front's knobs and hood included) and where the front plate stands from
+# its centre (ahead, up).
+R111_SIZE = (0.585, 0.446, 0.3223)
+R111_PLATE = (0.177, -0.0)
+R407_SIZE = (0.42, 0.284, 0.5298)
+R407_PLATE = (0.108, -0.0098)
+
+
+def _fit_radios():
+    """Stand the R-111 and the R-407 at their plan places at their real size: the R-111 on its stand, its front where the
+    plan has it, centred across it; the R-407 on the floor, its front where the plan has it, centred along it (the plan
+    draws it 0.28 x 0.19 m; the set is 0.42 m across its latches and 0.25 m deep, r407_to)."""
+    r111 = item('r111')
+    w, d, h = R111_SIZE
+    cy = 0.5 * (r111['y0'] + r111['y1'])
+    r111['x1'] = min(r111['x0'] + d, item('r111_power')['x0'] - 0.002)    # its back against its power unit
+    r111['x0'] = r111['x1'] - d
+    r111['y0'], r111['y1'] = cy - w / 2, cy + w / 2
+    r111['z1'] = r111['z0'] + h
+    r407 = item('r407')
+    w, d, h = R407_SIZE
+    cx = 0.5 * (r407['x0'] + r407['x1'])
+    r407['x0'], r407['x1'] = cx - w / 2, cx + w / 2
+    r407['y0'] = -(half_width(cx, r407['z0']) - 0.01)      # its back against the side, its front 0.28 m inboard
+    r407['y1'] = r407['y0'] + d
+    r407['z1'] = r407['z0'] + h
+    # the BP-3 power unit on its bracket over it (the plan draws it beside the set, at the side)
+    bp3 = item('bp3')
+    lift = r407['z1'] + 0.01 - bp3['z0']
+    if lift > 0:
+        bp3['z0'] += lift
+        bp3['z1'] += lift
+
+
+_fit_radios()
+
 # ---------------------------------------------------------------------------------------------- the stations
 
 # Eye points: the body model's sitting eye above a cushion (data/crew/body.json: 0.79 m, so 1.22 m above the floor), over

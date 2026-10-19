@@ -200,6 +200,10 @@ roadmap phase 6:
   block (7.6). No emplacements, nets or dummy positions yet.
 - PU-12 board and voice designations are built (7.1, 7.2); the board's picture is the regiment radars' (P-19, P-40: range and horizon only; no clutter, terrain or blind cone) when the scenario lists them.
 
+The PU-12M's R-111 and R-407 (`simcore/radio_sets.hpp`): their reach is the documents' range by antenna and the fourth
+root of the power, not the EM layer's link budget over the terrain; interference on the telecode is a scenario outage
+(`"kind": "interference"`), not a jammer; the R-111's other modes (telegraphy, relay, remote control) are positions only.
+
 Radios and intercom: `simcore/crew_comms.hpp` reads the console's R-123M and R-124 controls and tells the command network which set hears and whether the commander is on the radio, and the EM link what the squelch and the antenna cost; orders to crew go through the R-124 (`ScenarioRunner::GiveOrder`). Receive-only: nothing transmits from the vehicle yet.
 
 Command sources: `simcore/c2_sources.hpp` (`C2Network`) gives the engagement model the crew's air picture from the active of several sources; the PU-12 board is one of them (`docs/research/EM_C2_SOURCES_2026-10.md`).

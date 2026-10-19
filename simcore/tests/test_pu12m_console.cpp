@@ -186,6 +186,7 @@ SC_TEST("pu12m data: the readiness states warm what they list; stowing brings th
         SC_EXPECT(Deployed(c));
         Crew crew(c);
         crew.Order("stow_aspd");
+        crew.Order("stow_antenna");  // the R-111 back on its whip (the SAU block at the commander's place) before the mast comes down
         crew.Order("stow_mast");
         crew.Order("stow_power");
         double t = 0.0;

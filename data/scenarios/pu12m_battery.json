@@ -17,8 +17,10 @@
     "regiment": {
       "position": { "east_m": -4000, "north_m": -7000, "up_m": 2 },
       "radars": [ { "id": "p19_regiment", "type": "p19", "position": { "east_m": -4200, "north_m": -7000, "up_m": 2 } } ],
-      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery."
-    }
+      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery.",
+      "command_net_mhz": 31.5, "telecode_mhz": 56.0, "telecode_return_mhz": 52.0, "mast": true, "messages": [{"at_s": 60, "text": "Regiment to the battery: readiness one; targets in the north-west sector."}]
+    },
+    "radios": {"r111_presets_mhz": [31.5, 34.2, 41.0, 46.5], "own_nets_mhz": {"fug1": 24.4, "fug2": 27.2, "fug4": 44.0}, "notes": "The frequencies are SAM3D placeholders (a 1980s regiment's are not public): the command net on the R-111's preset 1, the post's own R-123M nets at least 10 % from it and not 8 or 16 MHz off (r111_to p. 3), the R-407's duplex pair 4 MHz apart and off its spurious channels (r407_plate)."}
   },
   "battery": {
     "deployed": true,

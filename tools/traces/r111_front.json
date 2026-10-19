@@ -1,0 +1,93 @@
+{
+  "name": "r111_front",
+  "notes": "The R-111's front (tools/blender/r111_trace.py). Main photo: r111_photos, valka.cz topic 38123 attachment 1746955541_1.JPG (1824 x 1368 px, nearly square-on; not kept). Second reference: r111_to fig. 4 (tools/traces/r111_drawing.json). Scale: the plate 600 mm wide, scaled from csla_pu12_manual's plan where the R-123M on the set reads at its true 481 mm (about 5 %); the height from the flattened photo. The lower strip (the connectors) lies in a recess (r111_to p. 60: the panel's lower, recessed part): its edges are not in the upper plate's plane and are not used to flatten.",
+  "photo_size": [
+    1824,
+    1368
+  ],
+  "height_mm": 314.3,
+  "edges": {
+    "h_top_a": [
+      600,
+      950,
+      240,
+      285
+    ],
+    "h_top_b": [
+      1090,
+      1300,
+      240,
+      285
+    ],
+    "h_label_t": [
+      120,
+      290,
+      565,
+      605
+    ],
+    "h_label_b": [
+      120,
+      290,
+      812,
+      852
+    ],
+    "h_meter": [
+      615,
+      760,
+      300,
+      335
+    ],
+    "v_label_l": [
+      600,
+      820,
+      82,
+      118
+    ],
+    "v_label_r": [
+      600,
+      820,
+      293,
+      328
+    ],
+    "v_meter_l": [
+      335,
+      540,
+      585,
+      618
+    ],
+    "v_meter_r": [
+      335,
+      540,
+      755,
+      788
+    ],
+    "h_um_t": [
+      800,
+      975,
+      425,
+      452
+    ],
+    "v_um_l": [
+      445,
+      545,
+      780,
+      806
+    ],
+    "v_vyzov_l": [
+      452,
+      545,
+      1030,
+      1054
+    ]
+  },
+  "width_mm": 600.0,
+  "offset": [
+    500,
+    100
+  ],
+  "plate_edges": {
+    "top": 353.2,
+    "left": 509.0,
+    "bottom": 1280.9
+  }
+}

@@ -59,6 +59,7 @@ MATERIALS = {
     'Paint_Letters': ((0.5, 0.48, 0.42), 0.5, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),   # engraved letters filled cream
     'Paint_Red': ((0.3, 0.035, 0.012), 0.35, 0.0, 0.05, 'PaintN', 0.05, 4.0, None),
     'Metal_Brass': ((0.42, 0.3, 0.12), 0.38, 1.0, 0.35, 'PaintN', 0.1, 4.0, None),   # brass screw heads (r123_kuzmin)
+    'Lens_Amber': ((0.45, 0.17, 0.02), 0.22, 0.0, 0.05, 'PaintN', 0.02, 4.0, None),   # the R-111's lamp lenses, unlit (r111_photos)
     'PanelFace': ((1.0, 1.0, 1.0), 0.5, 0.0, 0.0, 'PaintN', 0.18, 2.0, None),
 }
 

@@ -1,0 +1,87 @@
+{
+  "name": "r407_front",
+  "notes": "The R-407's front (tools/blender/r407_trace.py). Main photo: r407_photos, an olx.ua sale listing (960 x 1280 px, square-on; not kept). Labels read off otechestvoussr.ru's 1920 px close-ups (r407_photos). Scale: the set 420 mm wide with its side latches (r407_to: 250 x 420 x 510 mm with the protruding parts; every photograph shows the front taller than wide). The flattened plate is 711 x 953 px; the set 878 px across its latches and about 1114 px tall with its folded handle and feet: 420 mm over the first gives 0.478 mm a pixel, 510 mm over the second 0.458; the mean, 0.468 (about 3 percent), makes the plate 332.9 x 446.1 mm.",
+  "photo_size": [
+    960,
+    1280
+  ],
+  "height_mm": 446.1,
+  "edges": {
+    "h_top": [
+      320,
+      690,
+      115,
+      140
+    ],
+    "h_bot": [
+      460,
+      820,
+      1110,
+      1137
+    ],
+    "h_dial_t": [
+      330,
+      690,
+      195,
+      215
+    ],
+    "h_dial_b": [
+      330,
+      690,
+      432,
+      452
+    ],
+    "h_lab_t": [
+      728,
+      818,
+      262,
+      278
+    ],
+    "h_lab_b": [
+      728,
+      818,
+      419,
+      435
+    ],
+    "v_left": [
+      300,
+      1000,
+      90,
+      116
+    ],
+    "v_right": [
+      350,
+      950,
+      830,
+      848
+    ],
+    "v_dial_l": [
+      215,
+      430,
+      292,
+      312
+    ],
+    "v_dial_r": [
+      215,
+      430,
+      694,
+      716
+    ],
+    "v_lab_l": [
+      280,
+      415,
+      710,
+      726
+    ]
+  },
+  "width_mm": 332.9,
+  "offset": [
+    500,
+    100
+  ],
+  "plate_edges": {
+    "top": 209.2,
+    "left": 624.2,
+    "bottom": 1162.3
+  }
+}

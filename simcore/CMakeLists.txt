@@ -69,6 +69,7 @@ add_executable(simcore_tests
   tests/test_crew_training.cpp
   tests/test_crew_systems.cpp
   tests/test_pu12m_console.cpp
+  tests/test_radio_sets.cpp
   tests/test_command_post.cpp
   tests/test_pu12m_battery.cpp
   tests/test_pu12m_cabin.cpp

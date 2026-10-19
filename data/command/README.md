@@ -20,9 +20,17 @@ A scenario's `"c2"` block makes instances (`id`, library `type`, `position`, `ne
 
 When the player's vehicle is the PU-12M itself, the scenario has a `"post"` block instead of `"command_post"`:
 `{ "board": "command/pu12.json", "aspd": "command/aspd_u.json", "library": "command/regiment_radars.json", "regiment":
-{ "position", "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ] }, "radar": { "type",
-"position" } }`. The regiment's command post sends its radars' picture by telecode while the post is within the R-407's
-reach of it and its net is on the air; `radar` is one cabled to the post (the primary picture). The regiment's radar
+{ "position", "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason", "kind" } ],
+"command_net_mhz", "telecode_mhz", "telecode_return_mhz", "mast", "messages": [ { "at_s", "text" } ] }, "radar": { "type",
+"position" }, "radios": { "r111_presets_mhz": [4], "own_nets_mhz": { "fug1": ... }, "prepared", "repeat_s", "repeats",
+"notes" } }`. The regiment's command post sends its radars' picture by telecode while the post is within the R-407's
+reach of it and its net is on the air; with the frequency plan (`telecode_mhz`, `post.radios`) and a console that binds
+its sets (`"radios"`, `data/procedures/README.md`) the R-407 itself must be on that channel (`simcore/radio_sets.hpp`,
+`data/systems/pu12m_radios.json`), and an outage of `"kind": "interference"` jams the channel instead of taking it off
+the air. The regiment's `messages` are said on its command net (`command_net_mhz`) and heard on the post's R-111, repeated
+`repeats` times `repeat_s` apart until it receipts them. `r111_presets_mhz` are the R-111's four presets (0 for none,
+the first the net), `own_nets_mhz` the post's R-123Ms (their transmissions can trip the R-111's input protection), and
+`prepared` false leaves the sets' scales and drums for the crew to set; `radar` is one cabled to the post (the primary picture). The regiment's radar
 battery also reads its picture out on the air-picture voice net (FuG-1, `aspd_u.json` `air_net_*`), out to the board's
 200 km. The post's board is written by its own plotter, what he hears on that net first, then the IT-45, one mark at a
 time (`ScenarioRunner::Post`, `PostScope`, `PlayerPlot`; `docs/research/PLOTTING_BOARD_2026-10.md`).

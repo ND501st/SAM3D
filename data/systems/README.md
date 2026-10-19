@@ -13,5 +13,8 @@ Rules:
    (`docs/research/OSA_RESEARCH_2026-10.md` §10 lists the known conflicts for the Osa).
 4. Values are SI (m, s, kg, N, W, Hz, dB, radians unless the key ends in `_deg`).
 
+Besides one file per system: `pu12m_radios.json`, the PU-12M's R-111 and R-407 as sets (`simcore/radio_sets.hpp`,
+`docs/research/PU12_RADIOS_2026-10.md`), named by the console's `"radios"` block.
+
 `_template.json` shows the schema. Copy it to e.g. `osa.json` and fill it in as you research.
 None of the demo or test numbers in the code come from any real system; they are generic placeholders.

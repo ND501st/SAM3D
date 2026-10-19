@@ -7,7 +7,7 @@ The steps of docs/MODELLING_FROM_PHOTOS.md that work on the photos; each reads t
     python tools/photo_trace.py rectify  CONFIG PHOTO [--check]        # fit the in-plane edges, flatten: front_mm.png (+ lines)
     python tools/photo_trace.py tiles    CONFIG [--step 110]           # the flattened front cut in gridded mm tiles, to read off
     python tools/photo_trace.py circles  CONFIG NAME=X,Y,R ...         # RANSAC circle fits near guesses (mm), as JSON
-    python tools/photo_trace.py camera   CONFIG PHOTO                  # solve the photo's camera from the plate: camera.json
+    python tools/photo_trace.py camera   CONFIG PHOTO [--focal-35mm F] # solve the photo's camera from the plate: camera.json
     python tools/photo_trace.py ellipses CONFIG PHOTO2 NAME=PX,PY,R0,R1 ...  # round parts in a raw photo (px): their centres
     python tools/photo_trace.py align    CONFIG PHOTO2 NAME=PX,PY:X,Y ...   # map a second photo into the mm frame by matched points
     python tools/photo_trace.py overlay  CONFIG RENDER [--photo PHOTO] # a render on the flattened front (or on the photo): blend/edges
@@ -330,10 +330,20 @@ def cmd_camera(cfg, args):
     img = cv2.perspectiveTransform(np.array([[[(x + m) * k, (y + m) * k]] for x, y in pts], np.float64), Hi)
     img = img.reshape(-1, 2).astype(np.float32)
     w, h = im.shape[1], im.shape[0]
-    K0 = np.array([[2.0 * w, 0, w / 2], [0, 2.0 * w, h / 2], [0, 0, 1]], np.float64)
-    flags = (cv2.CALIB_USE_INTRINSIC_GUESS | cv2.CALIB_FIX_PRINCIPAL_POINT | cv2.CALIB_FIX_ASPECT_RATIO |
-             cv2.CALIB_ZERO_TANGENT_DIST | cv2.CALIB_FIX_K1 | cv2.CALIB_FIX_K2 | cv2.CALIB_FIX_K3)
-    err, K, _, rv, tv = cv2.calibrateCamera([obj], [img], (w, h), K0, np.zeros(5), flags=flags)
+    if args.focal_35mm:
+        # A photo taken nearly square-on has too little perspective to find its focal length: hold it (the EXIF's 35 mm
+        # equivalent, or an assumed one) and solve the pose alone.
+        f = args.focal_35mm / 36.0 * w
+        K = np.array([[f, 0, w / 2], [0, f, h / 2], [0, 0, 1]], np.float64)
+        ok, rv0, tv0 = cv2.solvePnP(obj, img, K, np.zeros(5), flags=cv2.SOLVEPNP_ITERATIVE)
+        proj, _ = cv2.projectPoints(obj, rv0, tv0, K, np.zeros(5))
+        err = float(np.sqrt(((proj.reshape(-1, 2) - img) ** 2).sum(1).mean()))
+        rv, tv = [rv0], [tv0]
+    else:
+        K0 = np.array([[2.0 * w, 0, w / 2], [0, 2.0 * w, h / 2], [0, 0, 1]], np.float64)
+        flags = (cv2.CALIB_USE_INTRINSIC_GUESS | cv2.CALIB_FIX_PRINCIPAL_POINT | cv2.CALIB_FIX_ASPECT_RATIO |
+                 cv2.CALIB_ZERO_TANGENT_DIST | cv2.CALIB_FIX_K1 | cv2.CALIB_FIX_K2 | cv2.CALIB_FIX_K3)
+        err, K, _, rv, tv = cv2.calibrateCamera([obj], [img], (w, h), K0, np.zeros(5), flags=flags)
     R, _ = cv2.Rodrigues(rv[0])
     t = tv[0].ravel()
     C = -R.T @ t
@@ -435,6 +445,8 @@ def main():
         p.add_argument('photo')
         if name == 'rectify':
             p.add_argument('--check', action='store_true')
+        if name == 'camera':
+            p.add_argument('--focal-35mm', type=float, help='hold the focal length (35 mm equivalent, from the EXIF)')
     p = sub.add_parser('tiles')
     p.add_argument('config')
     p.add_argument('--step', type=float, default=110.0)

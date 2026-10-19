@@ -19,7 +19,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `simcore/examples/` | `engagement_demo`: one radar vs one target, writes a Tacview `.acmi`. |
 | `prototype/` | Pure-Python mirror of simcore for fast experiments (runs on the Mac too). |
 | `unreal/SAM3D/` | UE5 C++ project. Includes simcore through `SimCoreIncludes.h` only. |
-| `data/systems/` | Per-system parameters. **Every value needs a source.** |
+| `data/systems/` | Per-system parameters. **Every value needs a source.** `pu12m_radios.json`: the PU-12M's R-111 and R-407 as sets (`simcore/radio_sets.hpp`). |
 | `data/procedures/` | Per-system consoles: controls, subsystems, procedures (loaded by `console_data.hpp`). Same sourcing rules. |
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions, the floor a crewman walks on up from his seat (`walk`), the display each hand wheel is worked against (`watch`) (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
@@ -72,6 +72,7 @@ python tools/em_view.py                           # EM overlays in a browser fro
 ./simcore/build/map_dump data maps/kesmark_range.json out/kesmark_range_map.json   # the test map's layout (or --height e_km n_km)
 python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
+blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)
 
 # Everything at once
 ./tools/verify.sh          # Mac/Linux
@@ -148,7 +149,9 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore, and the PU-12M command post built through its plan's P0-P8 (console, crew, information chain, battery commander, exterior, interior and cabin, multiplayer, and P8 the post and the player's Osa in one battery, `simcore/battery_link.hpp`: `docs/PU12_DEVELOPMENT.md`); phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 10.1-10.2, range days (Ashuluk, Ustka, Kapustin Yar) and battles (the Bekaa 1982, Angola, Cuito Cuanavale 1988) as scenarios, done in simcore (the missions menu's "Ranges and history"); phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); the game opens on a missions menu (`data/scenarios/missions.json`, `simcore/missions.hpp`, `ASimMissionMenuHUD`: pick a mission, a vehicle and a seat; Esc pauses with restart, the missions, the debrief); next a person playing the missions through; the EM track has E0-E7 and E10 done (E6 without anti-radiation missiles: decoys, stand-off jamming, emission discipline; E5 the TV as an optical sensor and the command link as an emitter), E8 and E9 started) and `docs/HANDOFF.md`. Known gaps are listed in
+See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore, and the PU-12M command post built through its plan's P0-P8 (console, crew, information chain, battery commander, exterior, interior and cabin, multiplayer, and P8 the post and the player's Osa in one battery, `simcore/battery_link.hpp`: `docs/PU12_DEVELOPMENT.md`; its R-111 and
+R-407 worked as sets, the regiment's command net and telecode on their frequencies, `simcore/radio_sets.hpp`,
+`docs/research/PU12_RADIOS_2026-10.md`); phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 10.1-10.2, range days (Ashuluk, Ustka, Kapustin Yar) and battles (the Bekaa 1982, Angola, Cuito Cuanavale 1988) as scenarios, done in simcore (the missions menu's "Ranges and history"); phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); the game opens on a missions menu (`data/scenarios/missions.json`, `simcore/missions.hpp`, `ASimMissionMenuHUD`: pick a mission, a vehicle and a seat; Esc pauses with restart, the missions, the debrief); next a person playing the missions through; the EM track has E0-E7 and E10 done (E6 without anti-radiation missiles: decoys, stand-off jamming, emission discipline; E5 the TV as an optical sensor and the command link as an emitter), E8 and E9 started) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 
