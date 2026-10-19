@@ -587,6 +587,8 @@ static ESimPlayerActionResult ToActionResult(simcore::StepResult Result)
 	case simcore::StepResult::WaitRequired: return ESimPlayerActionResult::NotYet;
 	case simcore::StepResult::Blocked: return ESimPlayerActionResult::Blocked;
 	case simcore::StepResult::ProcedureComplete: return ESimPlayerActionResult::Moved;
+	// A multi-position switch turned one click toward the position its step wants: a move on the way, not a mistake.
+	case simcore::StepResult::Toward: return ESimPlayerActionResult::Moved;
 	case simcore::StepResult::UnknownControl:
 	case simcore::StepResult::InvalidPosition: break;
 	}
@@ -633,18 +635,7 @@ ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& Contr
 	}
 	const simcore::StepResult Result = Runner->PlayerSet(ToStd(ControlId), Position);
 	BroadcastNewDebriefEntries();
-	switch (Result)
-	{
-	case simcore::StepResult::Accepted: return ESimPlayerActionResult::Accepted;
-	case simcore::StepResult::AcceptedEarly: return ESimPlayerActionResult::AcceptedEarly;
-	case simcore::StepResult::NotNextStep: return ESimPlayerActionResult::OutOfOrder;
-	case simcore::StepResult::WaitRequired: return ESimPlayerActionResult::NotYet;
-	case simcore::StepResult::Blocked: return ESimPlayerActionResult::Blocked;
-	case simcore::StepResult::ProcedureComplete: return ESimPlayerActionResult::Moved;
-	case simcore::StepResult::UnknownControl:
-	case simcore::StepResult::InvalidPosition: break;
-	}
-	return ESimPlayerActionResult::Invalid;
+	return ToActionResult(Result);
 }
 
 bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
@@ -723,41 +714,173 @@ bool USimWorldSubsystem::LoadTutorial(const FString& TutorialFile, FString& OutE
 		return false;
 	}
 	Tutorial = MakeUnique<simcore::TutorialGuide>(std::move(Def));
+	if (!Tutorial->Bind(*Runner, &Error))
+	{
+		OutError = ToF(Error);
+		Tutorial.Reset();
+		return false;
+	}
+	Tutorial->SetPlayerName(simcore::ScenarioRunner::kPlayerName);
 	TutorialStepShownAt = 0.0;
-	UE_LOG(LogSAM3D, Log, TEXT("Tutorial: %s, %d steps"), *TutorialFile, static_cast<int32>(Tutorial->Count()));
+	TutorialLastDone.Reset();
+	TutorialLastDoneAt = -1000.0;
+	bTutorialFastForward = false;
+	UE_LOG(LogSAM3D, Log, TEXT("Tutorial: %s, %d steps%s"), *TutorialFile, static_cast<int32>(Tutorial->Count()),
+		Tutorial->Def().strict ? TEXT(", strict") : TEXT(""));
+	OnTutorialStep();
 	return true;
 }
 
 FSimTutorialStep USimWorldSubsystem::GetTutorialStep() const
 {
 	FSimTutorialStep Out;
-	const simcore::TutorialStep* Step = Tutorial ? Tutorial->Current() : nullptr;
+	const simcore::TutorialStep* Step = Tutorial && Runner ? Tutorial->Current() : nullptr;
 	if (Step == nullptr)
 	{
 		return Out;
 	}
+	const simcore::TutorialStatus St = Tutorial->Status(*Runner, TutorialUiState);
 	Out.Guide = ToF(Tutorial->Def().title);
+	Out.Chapter = ToF(St.chapter);
 	Out.Number = static_cast<int32>(Tutorial->Index()) + 1;
 	Out.Count = static_cast<int32>(Tutorial->Count());
+	Out.Id = ToF(Step->id);
 	Out.Title = ToF(Step->title);
 	for (const std::string& L : Step->lines)
 	{
 		Out.Lines.Add(ToF(L));
 	}
+	Out.Why = ToF(Step->why);
 	Out.Hint = ToF(Step->hint);
+	switch (St.phase)
+	{
+	case simcore::TutorialStatus::Phase::Read: Out.Phase = ESimTutorialPhase::Read; break;
+	case simcore::TutorialStatus::Phase::Wait: Out.Phase = ESimTutorialPhase::Wait; break;
+	case simcore::TutorialStatus::Phase::Act: Out.Phase = ESimTutorialPhase::Act; break;
+	case simcore::TutorialStatus::Phase::Watch: Out.Phase = ESimTutorialPhase::Watch; break;
+	case simcore::TutorialStatus::Phase::End: Out.Phase = ESimTutorialPhase::End; break;
+	default: Out.Phase = ESimTutorialPhase::None; break;
+	}
+	Out.WaitText = ToF(St.wait_text);
+	Out.Control = ToF(St.control);
+	Out.ControlLabel = ToF(St.control_label);
+	Out.Station = ToF(St.station);
+	Out.Position = St.position;
+	Out.PositionLabel = ToF(St.position_label);
+	Out.CurrentPosition = St.current_position;
+	Out.bWheel = St.wheel;
+	Out.bTargetKnown = St.target_known;
+	Out.Target = St.target;
+	Out.Tolerance = St.tolerance;
+	Out.Value = St.value;
+	Out.bWraps = St.wraps;
+	Out.bOnMark = St.on_mark;
+	Out.Order = ToF(St.order);
+	Out.OrderRu = ToF(St.order_ru);
+	Out.OrderEn = ToF(St.order_en);
+	Out.bReport = St.report;
+	Out.Look = Step->look.empty() ? Out.Control : ToF(Step->look);
+	Out.Feedback = ToF(St.feedback);
+	Out.bFastForward = St.fast_forward;
+	Out.Seat = ToF(Tutorial->Def().seat);
+	Out.bStrict = Tutorial->Def().strict;
+	for (const simcore::TutorialCondition& C : Step->done_when)
+	{
+		Out.DoneWhen.Add(ToF(C.text));
+	}
 	Out.bLast = Tutorial->AtEnd();
+	Out.bReview = St.review;
+	Out.bInstructor = St.instructor;
+	Out.bCanGoBack = Tutorial->Index() > 0;
 	Out.ShownSeconds = static_cast<float>(TutorialUiState.real_time_s - TutorialStepShownAt);
+	Out.LastDone = TutorialLastDone;
+	Out.LastDoneSeconds = static_cast<float>(TutorialUiState.real_time_s - TutorialLastDoneAt);
 	return Out;
 }
 
 void USimWorldSubsystem::SkipTutorialStep()
 {
-	if (Tutorial && Runner && !Tutorial->AtEnd())
+	if (Tutorial && Runner && CanSkipTutorialStep())
 	{
-		Tutorial->Skip(Runner->Time(), TutorialUiState.real_time_s);
-		TutorialStepShownAt = TutorialUiState.real_time_s;
-		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: skipped to step %d"), static_cast<int32>(Tutorial->Index()) + 1);
+		// Passed at once, or the instructor does it and the step finishes as if the learner had (the next comes up then).
+		const size_t Was = Tutorial->Index();
+		Tutorial->Skip(*Runner, TutorialUiState);
+		if (Tutorial->Index() != Was)
+		{
+			TutorialStepShownAt = TutorialUiState.real_time_s;
+			OnTutorialStep();
+		}
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: step %d skipped%s"), static_cast<int32>(Was) + 1,
+			Tutorial->Index() != Was ? TEXT("") : TEXT(": the instructor does it"));
 	}
+}
+
+bool USimWorldSubsystem::CanSkipTutorialStep() const
+{
+	return Tutorial && !Tutorial->AtEnd();
+}
+
+void USimWorldSubsystem::BackTutorialStep()
+{
+	if (Tutorial && Runner && Tutorial->Back(*Runner, TutorialUiState))
+	{
+		TutorialStepShownAt = TutorialUiState.real_time_s;
+		OnTutorialStep();
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: back to step %d"), static_cast<int32>(Tutorial->Index()) + 1);
+	}
+}
+
+void USimWorldSubsystem::NoteTutorialContinue()
+{
+	if (Tutorial)
+	{
+		++TutorialUiState.continues;
+	}
+}
+
+FString USimWorldSubsystem::GetTutorialRefusal(const FString& ControlId) const
+{
+	return Tutorial && Runner ? ToF(Tutorial->Refusal(*Runner, ToStd(ControlId), TutorialUiState)) : FString();
+}
+
+FString USimWorldSubsystem::GetTutorialMenuRefusal(const FString& CalloutId) const
+{
+	return Tutorial && Runner ? ToF(Tutorial->MenuRefusal(*Runner, ToStd(CalloutId), TutorialUiState)) : FString();
+}
+
+bool USimWorldSubsystem::IsTutorialStrict() const
+{
+	return Tutorial && Tutorial->Def().strict;
+}
+
+bool USimWorldSubsystem::TakeTutorialSpeech(FString& OutLine)
+{
+	if (TutorialSpeech.IsEmpty())
+	{
+		return false;
+	}
+	OutLine = MoveTemp(TutorialSpeech);
+	TutorialSpeech.Reset();
+	return true;
+}
+
+void USimWorldSubsystem::OnTutorialStep()
+{
+	// The instructor says the new step: its title, and its first line when it is an action (a reading step's lines are
+	// read on the card).
+	const simcore::TutorialStep* Step = Tutorial ? Tutorial->Current() : nullptr;
+	if (Step == nullptr)
+	{
+		return;
+	}
+	std::string Words = simcore::InstructorSpeech(Step->title);
+	if (!Step->continue_key && !Step->lines.empty())
+	{
+		const char Last = Words.empty() ? '.' : Words.back();
+		Words += Last == '!' || Last == '?' || Last == '.' || Last == ':' ? " " : ". ";
+		Words += simcore::InstructorSpeech(Step->lines[0]);
+	}
+	TutorialSpeech = ToF(Words);
 }
 
 void USimWorldSubsystem::SetTutorialView(const FString& ViewKey, bool bInCabin, const FString& Seat, const FString& Holding)
@@ -788,8 +911,29 @@ void USimWorldSubsystem::UpdateTutorial(float DeltaTime)
 	if (Tutorial->Update(*Runner, TutorialUiState))
 	{
 		TutorialStepShownAt = TutorialUiState.real_time_s;
+		TutorialLastDone = ToF(Tutorial->Def().steps[Was].title);
+		TutorialLastDoneAt = TutorialUiState.real_time_s;
+		OnTutorialStep();
 		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: step %d done at t=%.0f s, now '%s'"), static_cast<int32>(Was) + 1, Runner->Time(),
 			Tutorial->Current() != nullptr ? *ToF(Tutorial->Current()->title) : TEXT("-"));
+	}
+	// A step that only waits (for the turbine, a warm-up, the target to come in) runs time faster, as the lesson says; the
+	// learner's own choice of time (Ctrl+Z) wins, and time goes back to normal when there is something to do.
+	const simcore::TutorialStatus St = Tutorial->Status(*Runner, TutorialUiState);
+	const bool bWaiting = St.fast_forward &&
+		(St.phase == simcore::TutorialStatus::Phase::Wait || St.phase == simcore::TutorialStatus::Phase::Watch);
+	if (bWaiting && !bTutorialFastForward && GetTimeScale() <= 1.0f)
+	{
+		SetTimeScale(8.0f);
+		bTutorialFastForward = true;
+	}
+	else if (!bWaiting && bTutorialFastForward)
+	{
+		if (GetTimeScale() == 8.0f)
+		{
+			SetTimeScale(1.0f);
+		}
+		bTutorialFastForward = false;
 	}
 }
 

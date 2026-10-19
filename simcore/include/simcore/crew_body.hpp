@@ -11,7 +11,8 @@
 //   TwoBoneIk        the elbow (knee) of a two-segment chain
 //   TouchOf          where a hand meets a control: the point, the panel's normal, a finger or a grip
 //   PlanReach        the hand, bend and twist (or standing) that reach a control from a seat, the head, the chest and
-//                    the knees kept out of the equipment and under the roof (ReachSpace)
+//                    the knees kept out of the equipment and under the roof, and clear of the other seats' crewmen
+//                    sitting at rest; standing, he sidesteps along the panel to keep clear (ReachSpace)
 //   SolveBody        the whole pose from the hands' targets, the bend and the gaze
 //   PartsOf          the pose as rigid parts (origin, bone, up, length) for a renderer (Unreal, Blender)
 //   BodyAnimator     a seat's body over time from what its crewmate is doing (SeatActivity)
@@ -439,15 +440,27 @@ struct ReachPlan {
     double shoulder_distance_m = 0.0;  // from the nearer shoulder sitting upright (the reach check's measure)
 };
 
-// What a reaching body keeps out of: the equipment behind each panel's face (a slab `behind_m` deep) and the roof
-// (the cabin's ceiling_m). Balls stand for the head, the chest and, standing, the knees and shins. Without a cabin
-// nothing is in the way.
+// What a reaching body keeps out of: the equipment behind each panel's face (a slab `behind_m` deep), the roof (the
+// cabin's ceiling_m) and the other crewmen sitting in their seats (balls: head, chest, hips, knees). Balls stand for
+// the reacher's head, chest, arm and, standing, his hips, knees and shins. Without a cabin nothing is in the way.
 struct ReachSpace {
     const CabinLayout* cabin = nullptr;
     double behind_m = 0.20;
+    std::vector<Vec3> crew_c;      // the seated crew's balls: centres
+    std::vector<double> crew_r;    // and radii
 
-    // A ball at `c` of `radius` clear of every panel's slab?
+    // A ball at `c` of `radius` clear of the seated crew?
+    bool ClearOfCrew(const Vec3& c, double radius) const {
+        for (std::size_t i = 0; i < crew_c.size(); ++i) {
+            const double reach = radius + crew_r[i];
+            if ((c - crew_c[i]).LengthSquared() < reach * reach) return false;
+        }
+        return true;
+    }
+
+    // A ball at `c` of `radius` clear of every panel's slab and of the seated crew?
     bool Clear(const Vec3& c, double radius) const {
+        if (!ClearOfCrew(c, radius)) return false;
         if (cabin == nullptr) return true;
         for (const CabinPanel& pn : cabin->panels) {
             const Vec3 rel = c - pn.centre_m;
@@ -465,6 +478,25 @@ struct ReachSpace {
     bool UnderRoof(double z) const { return cabin == nullptr || cabin->ceiling_m <= 0.0 || z <= cabin->ceiling_m - 0.02; }
 };
 
+// The crewmen sitting at rest in every seat but `except`, as balls: the head, the chest, the hips and the knees.
+inline void AddSeatedCrew(ReachSpace& space, const CabinLayout& cabin, const BodyDims& d, const std::string& except) {
+    const Vec3 up{0.0, 0.0, 1.0};
+    for (const CabinStation& st : cabin.stations) {
+        if (st.id == except) continue;
+        const Vec3 forward{std::sin(st.yaw_rad), std::cos(st.yaw_rad), 0.0};
+        const Vec3 right{std::cos(st.yaw_rad), -std::sin(st.yaw_rad), 0.0};
+        const Vec3 hip = st.eye_m - up * (d.SittingEye() - d.hip_above_seat_m) - forward * d.eye_ahead_m;
+        const double torso_h = st.eye_m.z - hip.z;
+        const Vec3 balls[] = {st.eye_m - forward * d.eye_ahead_m, hip + up * (0.55 * torso_h), hip + up * 0.08,
+                              hip + forward * d.Thigh() - right * d.HipHalf(), hip + forward * d.Thigh() + right * d.HipHalf()};
+        const double radii[] = {0.12, 0.16, 0.16, 0.08, 0.08};
+        for (std::size_t i = 0; i < 5; ++i) {
+            space.crew_c.push_back(balls[i]);
+            space.crew_r.push_back(radii[i]);
+        }
+    }
+}
+
 namespace detail {
 
 // The upper body of a lean clear of the equipment and the roof: the head (a ball over the neck and one towards
@@ -476,6 +508,16 @@ inline bool UpperBodyClear(const TorsoFrame& tf, const BodyDims& d, const Vec3& 
     const Vec3 face = to.Length() > 1e-6 ? pivot + to.Normalized() * 0.10 : pivot;
     return space.UnderRoof((tf.chest + tf.up * head_top).z) && space.Clear(pivot + tf.up * 0.09, 0.10) &&
            space.Clear(face, 0.10) && space.Clear(tf.hip + tf.up * (0.65 * d.Torso()), 0.11);
+}
+
+// The arm from the shoulder to the wrist (bent as SolveBody bends it) clear of the seated crew: the elbow and the
+// forearm's middle. Nothing to test without crew.
+inline bool ArmClearOfCrew(const TorsoFrame& tf, const Vec3& shoulder, const Vec3& wrist, int side, const BodyDims& d,
+                           const ReachSpace& space) {
+    if (space.crew_c.empty()) return true;
+    const Vec3 pole = (-tf.up + tf.right * (0.7 * side) - tf.forward * 0.4).Normalized();
+    const IkResult ik = TwoBoneIk(shoulder, wrist, d.UpperArm(), d.Forearm(), pole);
+    return space.ClearOfCrew(ik.mid, 0.05) && space.ClearOfCrew((ik.mid + ik.end) * 0.5, 0.045) && space.ClearOfCrew(ik.end, 0.05);
 }
 
 // Standing with the hips `crouch` down from `hip` facing `forward`: the knees and shins clear of the equipment? The legs
@@ -523,7 +565,8 @@ inline bool SearchLean(const Vec3& hip, const Vec3& forward, const ControlTouch&
                         const TorsoFrame tf = TorsoFrameOf(hip, PelvisForward(forward, l), TorsoLean{0.0, fwd, sd, tw, crouch}, d);
                         const Vec3 sh = tf.Shoulder(side, d);
                         const WristTarget w = WristFor(t.point, t.normal, t.shape, sh, d);
-                        if ((w.wrist - sh).Length() <= d.ArmLength() - 0.01 && UpperBodyClear(tf, d, t.point, space)) {
+                        if ((w.wrist - sh).Length() <= d.ArmLength() - 0.01 && UpperBodyClear(tf, d, t.point, space) &&
+                            ArmClearOfCrew(tf, sh, w.wrist, side, d, space)) {
                             best = l;
                             best_cost = cost;
                             found = true;
@@ -538,24 +581,17 @@ inline bool SearchLean(const Vec3& hip, const Vec3& forward, const ControlTouch&
 
 }  // namespace detail
 
-// `cabin` (may be null) is what the body keeps out of: its panels' equipment and its roof (ReachSpace).
-inline ReachPlan PlanReach(const SeatFrame& seat, const BodyDims& d, const ControlTouch& t, const CabinLayout* cabin = nullptr) {
-    ReachSpace space;
-    space.cabin = cabin;
-    ReachPlan plan;
-    plan.valid = true;
-    const TorsoFrame upright = TorsoFrameOf(seat.hip, seat.forward, TorsoLean(), d);
-    const double dl = (t.point - upright.Shoulder(-1, d)).Length();
-    const double dr = (t.point - upright.Shoulder(1, d)).Length();
-    plan.shoulder_distance_m = dl < dr ? dl : dr;
-    // The hand on the control's side of him first; the other hand only if it bends less.
+namespace detail {
+
+// Seated: the cheapest lean of either hand (the hand on the control's side first).
+inline bool SeatedReach(const SeatFrame& seat, const BodyDims& d, const ControlTouch& t, const ReachSpace& space, ReachPlan& plan) {
     const int preferred = Dot(t.point - seat.hip, seat.right) >= 0.0 ? 1 : -1;
     double best_cost = 1e9;
     bool found = false;
     for (int side : {preferred, -preferred}) {
         TorsoLean l;
         double cost = 1e9;
-        if (detail::SearchLean(seat.hip, seat.forward, t, d, side, 0.0, space, l, cost)) {
+        if (SearchLean(seat.hip, seat.forward, t, d, side, 0.0, space, l, cost)) {
             if (side != preferred) cost += 0.15;
             if (!found || cost < best_cost) {
                 plan.side = side;
@@ -565,38 +601,72 @@ inline ReachPlan PlanReach(const SeatFrame& seat, const BodyDims& d, const Contr
             }
         }
     }
-    if (found) return plan;
-    // Out of seated reach: he stands in front of the panel, facing it, and reaches from there; a step further back
-    // when a crouch under a low roof would put his knees into it.
-    plan.seated = false;
+    return found;
+}
+
+// Standing in front of the panel, facing it: a step further back when a crouch under a low roof would put his knees
+// into it, a step to the side when a seated crewman is where he would stand.
+inline bool StandingReach(const SeatFrame& seat, const BodyDims& d, const ControlTouch& t, const ReachSpace& space, ReachPlan& plan) {
     Vec3 n_h{t.normal.x, t.normal.y, 0.0};
     n_h = n_h.Length() > 1e-6 ? n_h.Normalized() : -seat.forward;
-    plan.stand_forward = -n_h;
-    const Vec3 standing_right = Cross(plan.stand_forward, Vec3{0.0, 0.0, 1.0}).Normalized();
+    const Vec3 stand_forward = -n_h;
+    const Vec3 standing_right = Cross(stand_forward, Vec3{0.0, 0.0, 1.0}).Normalized();
     const double hip_h = d.hip_frac * d.stature_m;
-    found = false;
-    for (int step = 0; step <= 3; ++step) {
-        const double back = 0.08 * step;
-        const Vec3 at_panel = t.point + n_h * (d.standing_off_m + back);
-        const Vec3 hip{at_panel.x, at_panel.y, seat.floor_z + hip_h};
-        const int stand_pref = Dot(t.point - hip, standing_right) >= 0.0 ? 1 : -1;
-        for (int side : {stand_pref, -stand_pref}) {
-            TorsoLean l;
-            double cost = 1e9;
-            if (detail::SearchLean(hip, plan.stand_forward, t, d, side, hip_h, space, l, cost)) {
-                cost += back * 1.5;
-                if (!found || cost < best_cost) {
-                    plan.side = side;
-                    plan.lean = l;
-                    plan.stand_hip = hip;
-                    best_cost = cost;
-                    found = true;
+    double best_cost = 1e9;
+    bool found = false;
+    // The nearest spots first: straight in front, then 10 cm further aside each round, until a round's sidestep alone
+    // costs more than the best reach found.
+    for (int ring = 0; ring <= 5 && !(found && 0.1 * ring * 1.5 >= best_cost); ++ring) {
+        for (int sign : {1, -1}) {
+            if (ring == 0 && sign < 0) continue;
+            const double aside = 0.1 * ring * sign;
+            for (int step = 0; step <= 3; ++step) {
+                const double back = 0.08 * step;
+                const Vec3 at_panel = t.point + n_h * (d.standing_off_m + back) + standing_right * aside;
+                const Vec3 hip{at_panel.x, at_panel.y, seat.floor_z + hip_h};
+                if (!space.ClearOfCrew(hip, 0.16)) continue;
+                const int stand_pref = Dot(t.point - hip, standing_right) >= 0.0 ? 1 : -1;
+                for (int side : {stand_pref, -stand_pref}) {
+                    TorsoLean l;
+                    double cost = 1e9;
+                    if (SearchLean(hip, stand_forward, t, d, side, hip_h, space, l, cost)) {
+                        cost += back * 1.5 + std::fabs(aside) * 1.5;
+                        if (!found || cost < best_cost) {
+                            plan.side = side;
+                            plan.lean = l;
+                            plan.stand_hip = hip;
+                            best_cost = cost;
+                            found = true;
+                        }
+                    }
                 }
             }
         }
     }
+    plan.stand_forward = stand_forward;
     if (!found) plan.stand_hip = Vec3{t.point.x + n_h.x * d.standing_off_m, t.point.y + n_h.y * d.standing_off_m, seat.floor_z + hip_h};
-    plan.reachable = found;
+    return found;
+}
+
+}  // namespace detail
+
+// `cabin` (may be null) is what the body keeps out of: its panels' equipment, its roof and the other seats' crewmen
+// (ReachSpace). Sitting if he can (clear of his neighbours if he can, else as near as the seat allows); else standing,
+// clear of them if he can.
+inline ReachPlan PlanReach(const SeatFrame& seat, const BodyDims& d, const ControlTouch& t, const CabinLayout* cabin = nullptr) {
+    ReachSpace bare;
+    bare.cabin = cabin;
+    ReachSpace crowded = bare;
+    if (cabin != nullptr) AddSeatedCrew(crowded, *cabin, d, seat.station);
+    ReachPlan plan;
+    plan.valid = true;
+    const TorsoFrame upright = TorsoFrameOf(seat.hip, seat.forward, TorsoLean(), d);
+    const double dl = (t.point - upright.Shoulder(-1, d)).Length();
+    const double dr = (t.point - upright.Shoulder(1, d)).Length();
+    plan.shoulder_distance_m = dl < dr ? dl : dr;
+    if (detail::SeatedReach(seat, d, t, crowded, plan) || detail::SeatedReach(seat, d, t, bare, plan)) return plan;
+    plan.seated = false;
+    plan.reachable = detail::StandingReach(seat, d, t, crowded, plan) || detail::StandingReach(seat, d, t, bare, plan);
     return plan;
 }
 

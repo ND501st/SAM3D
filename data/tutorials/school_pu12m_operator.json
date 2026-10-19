@@ -1,0 +1,23 @@
+{
+  "tutorial_id": "school_pu12m_operator",
+  "title": "PU-12M lesson 4: the operator-plotter",
+  "scenario": "scenarios/school_pu12m_operator.json",
+  "seat": "operator",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/pu12m.json: none (the post deployed)) and the crew data's reports (data/crew/pu12m_crew.json), with their sources",
+  "notes": "The post starts deployed; the targets come in on cue.",
+  "steps": [
+    {"id": "hello", "chapter": "Your seat", "title": "The operator-plotter's seat", "lines": ["You are the operator-plotter (No. 2): on the bench, in the middle.", "The regiment's radars send the air picture to the post by telecode; it shows on the IT-45 tube. You write each target on the air-situation board, so that the battery commander can give it to a launcher.", "Each step lights up what to use; only that works. Read, then press Enter."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "tour_map", "title": "The air-situation board", "look": "map_panel", "lines": ["In front of you: the board, a map under glass. The targets you plot are written on it, with their number, height and time."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_it45", "title": "The IT-45 tube", "look": "it45_panel", "lines": ["At your right: the IT-45, the round tube with the regiment's picture. Each target is a mark with its number."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_p", "title": "The telecode receiver", "look": "p_panel", "lines": ["At your left, the P receiver: the telecode coming in from the regiment."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "target", "chapter": "Plotting", "title": "A target", "on_start": ["release:t1"], "lines": ["A target comes in on the regiment's picture."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "pick", "title": "Pick it: ] ", "done_when": ["ui:pick"], "wait_text": "a target picked", "lines": ["Press ] (or [) to pick a target on the tube: its number shows at the bottom of the screen."], "why": "You plot one target at a time, the nearest first.", "hint": "] next target, [ the one before."},
+    {"id": "plot", "title": "Plot it: P", "done_when": ["plotted"], "wait_text": "the target written on the board", "lines": ["Press P: you write the picked target on the board. It takes a few seconds of handwork."], "why": "The commander gives the launchers targets from the board: one that isn't written isn't given.", "hint": "P: plot the picked target."},
+    {"id": "second", "title": "Another", "on_start": ["release:t2"], "lines": ["A second target comes in."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "plot2", "title": "Pick it and plot it", "done_when": ["plotted"], "wait_text": "the second target written", "lines": ["] to pick it, P to plot it. Keep the board up to date: a target's mark is replotted as it moves."], "hint": "] pick, P plot."},
+    {"id": "given", "title": "Keep plotting: the commander gives a target", "done_when": ["plotted", "designated"], "wait_text": "the battery commander's designation", "lines": ["Keep the board up to date: pick and plot the targets again as they come closer.", "The battery commander reads your board and gives a target to a launcher on the battery net once its fresh mark is within a launcher's reach: listen."], "why": "He gives targets only from marks under two minutes old: an old mark is where the target was, not where it is.", "hint": "] pick, P plot, again every so often."},
+    {"id": "end", "chapter": "Done", "title": "The operator-plotter's part: done", "lines": ["That is your part: the regiment's picture written on the board, target by target, for the commander.", "Esc, then M: the missions menu, and the next seat's lesson."]}
+  ]
+}

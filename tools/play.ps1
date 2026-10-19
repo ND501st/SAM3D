@@ -3,13 +3,17 @@
     Play SAM3D: the game in its own window, without the editor (docs/PLAYING.md).
 
 .DESCRIPTION
-    Opens the missions menu, or with -Tutorial goes straight into the tutorial (the first shoot on the Kesmark test range,
-    with the guide on the screen). With -Build it first builds the game's code (close the editor first: Live Coding
-    blocks command-line builds).
+    Opens the missions menu, or with -Tutorial goes straight into the first lesson (the camera, the cabin and the controls
+    on the Kesmark test range), or with -Lesson into one seat's lesson (docs/TUTORIALS.md). With -Build it first builds
+    the game's code (close the editor first: Live Coding blocks command-line builds).
 
     Run from anywhere:
-        .\tools\play.ps1                 # the missions menu (the tutorial is the first entry)
-        .\tools\play.ps1 -Tutorial       # straight into the tutorial
+        .\tools\play.ps1                          # the missions menu (the lessons come first)
+        .\tools\play.ps1 -Tutorial                # straight into the first lesson
+        .\tools\play.ps1 -Lesson senior_operator  # a seat's lesson: driver, operator, senior_operator,
+                                                  # deputy_commander or commander; the PU-12M's:
+                                                  # pu12m_driver, pu12m_radio_operator, pu12m_squad_leader,
+                                                  # pu12m_operator, pu12m_battery_commander
         .\tools\play.ps1 -Tutorial -Build
         .\tools\play.ps1 -Fullscreen
 
@@ -17,6 +21,9 @@
 #>
 param(
     [switch]$Tutorial,
+    [ValidateSet('', 'driver', 'operator', 'senior_operator', 'deputy_commander', 'commander',
+                 'pu12m_driver', 'pu12m_radio_operator', 'pu12m_squad_leader', 'pu12m_operator', 'pu12m_battery_commander')]
+    [string]$Lesson = '',
     [switch]$Build,
     [switch]$Fullscreen,
     [int]$ResX = 1600,
@@ -35,16 +42,24 @@ if ($Build) {
     if ($LASTEXITCODE -ne 0) { throw 'Build failed (is the editor still open?)' }
 }
 
-# The level and its options: the tutorial opens the Kesmark test range with its mission and guide; otherwise the default
-# map, whose director shows the missions menu.
+# The level and its options: a lesson opens the Kesmark test range with its mission, its seat and its guide; otherwise
+# the default map, whose director shows the missions menu.
 $arguments = @("`"$project`"")
-if ($Tutorial) {
-    $arguments += '/Game/Maps/KesmarkRange?SimMission=tutorial_first_shoot?SimTutorial=tutorials/first_shoot.json'
+$what = 'the missions menu'
+if ($Lesson) {
+    # ${...}: PowerShell reads "$Lesson?SimSeat" as one variable's name.
+    $seat = if ($Lesson.StartsWith('pu12m_')) { $Lesson.Substring(6) } else { $Lesson }
+    $arguments += "/Game/Maps/KesmarkRange?SimMission=school_${Lesson}?SimSeat=${seat}?SimTutorial=tutorials/school_${Lesson}.json"
+    $what = "the $($Lesson -replace '_', ' ')'s lesson"
+} elseif ($Tutorial) {
+    $arguments += '/Game/Maps/KesmarkRange?SimMission=tutorial_basics?SimTutorial=tutorials/basics.json'
+    $what = 'the first lesson'
 }
 $arguments += '-game'
 if ($Fullscreen) { $arguments += '-fullscreen' } else { $arguments += @('-windowed', "-ResX=$ResX", "-ResY=$ResY") }
 $arguments += '-log'
 
-Write-Host "==> SAM3D: $(if ($Tutorial) { 'the tutorial' } else { 'the missions menu' })" -ForegroundColor Cyan
-Write-Host '    F1-F11 views, G every key, Esc the menu. The log: unreal\SAM3D\Saved\Logs\SAM3D.log'
+Write-Host "==> SAM3D: $what" -ForegroundColor Cyan
+Write-Host '    Enter continues a lesson, L looks at its control, F1-F11 views, G every key, Esc the menu.'
+Write-Host '    The log: unreal\SAM3D\Saved\Logs\SAM3D.log'
 Start-Process -FilePath $editor -ArgumentList $arguments

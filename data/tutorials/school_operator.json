@@ -1,0 +1,214 @@
+{
+  "tutorial_id": "school_operator",
+  "title": "Seat lesson 2: the operator",
+  "scenario": "scenarios/school_operator.json",
+  "seat": "operator",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/osa_ak.json: equipment_on, deploy_at_halt, capture_with_ssc) with their sources",
+  "notes": "The commander's orders are given by the lesson (on_start) at the learner's pace. Explanations follow the procedures' and subsystems' own notes and sources.",
+  "steps": [
+    {
+      "id": "hello", "chapter": "Your seat", "title": "The operator's seat",
+      "lines": [
+        "You are the operator (оператор дальности): seat 1 of the Osa 21, in the middle of the compartment, facing the left wall.",
+        "You bring the equipment to life at К бою, you unlock the turret and switch on its drives, and in the fight you run the tracking radar's range: its transmitter, its range gate, and the capture.",
+        "Each step lights up what to use; only that works. Read, then press Enter."
+      ],
+      "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
+      "continue": true
+    },
+    {
+      "id": "tour_cabinet", "title": "The distribution cabinet 0096-9M1", "look": "pwr_cabinet",
+      "lines": [
+        "Behind you, at the back of the compartment: the distribution cabinet. Its switches feed the turbine's power to everything else: the equipment, the search antenna's stabilisation, the TV sight, the drives, and the turret's travel lock.",
+        "Its lamps tell you what is running."
+      ],
+      "hint": "L: look at it.   Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_panel", "title": "Your panel: the tracking radar's range", "look": "op_panel",
+      "lines": [
+        "In front of you: the range panel of the tracking radar (СОЦ searches, ССЦ tracks). ПЕРЕДАТЧИК, the transmitter, sits under a red guard; beside it СДЦ, the moving-target filter, and the РАБОТА — КОНТРОЛЬ switch; below, the range wheel."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_scope", "title": "The range indicator", "look": "ssc_range",
+      "lines": [
+        "The range indicator shows what the tracking radar hears along its beam: two sweeps, the lower one magnified round the range gate. A target's echo stands up from the sweep as a spike; the gate is the bright mark you move with the range wheel.",
+        "The counter above it reads the gate's range in metres."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "order_k_boyu", "chapter": "Action stations (К бою)", "title": "The commander: «К бою!»",
+      "lines": [
+        "«К бою!» (Action stations!) brings the whole crew to readiness. Your part: switch the equipment on, then unlock the turret and switch on its drives.",
+        "Listen: the crew acknowledges on the intercom, «Есть!». The driver starts the gas-turbine unit: you need its power first."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_k_boyu"],
+      "continue": true
+    },
+    {
+      "id": "equipment", "title": "Switch the equipment on", "control": "pwr.equipment", "position": 1, "procedure": "equipment_on",
+      "lines": ["On the distribution cabinet: flip АППАРАТУРА up to ВКЛ."],
+      "why": "It feeds the turbine's 220 V 400 Hz to all the racks: the radars, the computer, the drives. Their sweeps show after a minute; the transmitters are ready (ГОТОВ) after three.",
+      "hint": "Left click flips a switch.",
+      "wait_text": "the driver's turbine to give power (about a minute; the lesson runs time faster)",
+      "fast_forward": true
+    },
+    {
+      "id": "stabilisation", "title": "Stabilisation on", "control": "stab.power", "position": 1, "procedure": "equipment_on",
+      "lines": ["Flip СИСТЕМА СТАБ. up to ВКЛ."],
+      "why": "The search antenna's stabilisation keeps its beam level while the hull rocks. Once it runs, the antenna rises from its travel position.",
+      "hint": "Left click."
+    },
+    {
+      "id": "rotation", "title": "Free the search antenna", "control": "soc.rotation_lock", "position": 1, "procedure": "equipment_on",
+      "lines": ["Flip РАССТОПОР. — СТОПОР. to РАССТОПОР."],
+      "why": "It frees the search antenna to turn: the senior operator will set it rotating for the search.",
+      "hint": "Left click."
+    },
+    {
+      "id": "tov", "title": "Power the TV sight", "control": "tov.supply", "position": 1, "procedure": "equipment_on",
+      "lines": ["Flip ТОВ — ОТКЛ. to ТОВ."],
+      "why": "It powers the TV sight on the turret: the deputy commander's camera, which sees the target when the radars can't or mustn't.",
+      "hint": "Left click."
+    },
+    {
+      "id": "apu", "title": "Unlock the turret: «Расстопорить АПУ!»", "control": "apu.lock", "position": 1, "procedure": "deploy_at_halt",
+      "lines": ["Flip the АПУ travel lock to unlocked (the vehicle must be standing still: it is)."],
+      "why": "The antenna-launcher unit (АПУ): the turret with the tracking radar and the six missiles. It is locked for the march; unlocked, it can turn. Never drive off with it unlocked: it faults.",
+      "hint": "Left click."
+    },
+    {
+      "id": "drive_az", "title": "Azimuth drive on", "control": "drv.az", "position": 1, "procedure": "deploy_at_halt",
+      "lines": ["Flip ПРИВОД βн up to ВКЛ."],
+      "why": "The motor that turns the turret in azimuth (βн): without it the tracking radar can't be pointed.",
+      "hint": "Left click."
+    },
+    {
+      "id": "drive_el", "title": "Elevation drives on", "control": "drv.el", "position": 1, "procedure": "deploy_at_halt",
+      "lines": ["Flip ПРИВОДЫ εн, СВР-I, СВР-II up to ВКЛ."],
+      "why": "The tracking radar's elevation drive (εн) and the two missile trackers' (СВР-I and II), which follow the missiles in flight.",
+      "hint": "Left click."
+    },
+    {
+      "id": "report_apu", "title": "Report it: «АПУ расстопорено!»", "report": "apu_free",
+      "lines": ["Tell the crew: open your reports with O and pick «АПУ расстопорено!» (Launcher-antenna unit unlocked!). The deputy commander waits for it."],
+      "why": "Knowledge moves only by voice: in the real crew nobody can see your switches, so you say what you did.",
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "warmup", "title": "Warming up", "done_when": ["subsystem:hv_ready=ready"], "fast_forward": true,
+      "lines": [
+        "The transmitters need three minutes before high voltage. Your ГОТОВ lamp lights when they are ready.",
+        "Meanwhile the search antenna rises and the deputy commander orients the vehicle. The lesson runs time faster."
+      ],
+      "wait_text": "the transmitters to warm up (ГОТОВ, three minutes)"
+    },
+    {
+      "id": "target", "chapter": "Capture", "title": "A target",
+      "lines": [
+        "A practice drone is flying at you from the north-west. The senior operator searches for it with the search radar and calls its azimuth and range on the intercom.",
+        "When the commander orders it taken, you capture it with the tracking radar."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["release:d1"],
+      "continue": true
+    },
+    {
+      "id": "wait_contact", "title": "Search", "done_when": ["contact:commander"], "fast_forward": true,
+      "lines": ["Listen for the senior operator's report: «Цель, азимут …, дальность …!»"],
+      "wait_text": "the senior operator to find the target and report it"
+    },
+    {
+      "id": "order_take", "title": "The commander: «Цель — взять!»",
+      "lines": [
+        "«Цель номер … — взять!» (Take the target!). The senior operator turns the tracking radar onto it in azimuth and the deputy commander presses ЦУ: the radar searches up and down that line for it. Your part: the range, and the transmitter."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_take_target"],
+      "continue": true
+    },
+    {
+      "id": "work_mode", "title": "Range indicator to РАБОТА", "control": "ssc.check_mode", "position": 0, "procedure": "capture_with_ssc",
+      "lines": ["Turn РАБОТА / КОНТРОЛЬ / КАЛИБР. back to РАБОТА (it stands at КОНТРОЛЬ)."],
+      "why": "РАБОТА shows the radar's real picture; КОНТРОЛЬ and КАЛИБР. are test modes.",
+      "hint": "Right click steps a selector back, left click steps it on."
+    },
+    {
+      "id": "mti", "title": "СДЦ on", "control": "ssc.mti", "position": 1, "procedure": "capture_with_ssc",
+      "lines": ["Flip СДЦ / ШТ. to СДЦ."],
+      "why": "СДЦ, the moving-target filter, drops the echoes of the ground that don't move, so the radar can hold a low target in the clutter.",
+      "hint": "Left click."
+    },
+    {
+      "id": "tx_cover", "title": "Lift the guard over ПЕРЕДАТЧИК", "control": "ssc.tx_cover", "position": 1, "procedure": "capture_with_ssc",
+      "lines": ["Lift the red guard over ПЕРЕДАТЧИК."],
+      "why": "Guards keep the switches that radiate or fire from being flipped by accident: the switch under one can't move until it is up.",
+      "hint": "Left click opens the guard."
+    },
+    {
+      "id": "tx", "title": "Transmitter on: ПЕРЕДАТЧИК ВКЛ.", "control": "ssc.tx", "position": 1, "procedure": "capture_with_ssc",
+      "lines": ["Flip ПЕРЕДАТЧИК up to ВКЛ. once the deputy commander has pressed ЦУ."],
+      "why": "The tracking radar radiates: the range indicator shows the echoes along its beam, and the capture circuit (АЗ) can take the target.",
+      "hint": "Left click.",
+      "wait_text": "the deputy commander's ЦУ (it points the tracking radar at the target)",
+      "fast_forward": true
+    },
+    {
+      "id": "range", "title": "Put the range gate on the echo", "wheel": "ssc.range_wheel", "aim": "contact_range", "tolerance": 600, "hold": true,
+      "done_when": ["task:captured"],
+      "lines": [
+        "Turn the range wheel until the gate sits on the target's echo: the range counter at the range the senior operator called, then on the spike on your indicator. Keep it on: the radar captures by itself when the gate holds the echo, and ТСЦ and АВТОМАТ light."
+      ],
+      "why": "The capture circuit needs the gate within about 750 m of the echo, and the drone keeps closing: follow it.",
+      "hint": "Hold the left button on the wheel and drag sideways, or roll the mouse wheel over it. The card shows the gate and the mark.",
+      "wait_text": "a range for the target (the senior operator's report, or its echo on your indicator)"
+    },
+    {
+      "id": "report_capture", "title": "Report it: «Захват!»", "report": "captured",
+      "lines": ["Tell the crew: O, then «Захват!» (Captured!). The commander waits for it before he orders the missiles prepared."],
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "prepare", "chapter": "Firing", "title": "The commander: «Приготовиться к пуску!»", "done_when": ["subsystem:missile_prep=ready"],
+      "fast_forward": true,
+      "lines": [
+        "The deputy commander prepares the missiles and puts the key in. Your job now is to keep the capture: the radar tracks by itself (АВТОМАТ), and you watch the echo stays in the gate."
+      ],
+      "on_start": ["order:order_prepare"],
+      "wait_text": "the missiles' preparation"
+    },
+    {
+      "id": "zone", "title": "Into the zone", "done_when": ["input:target_in_zone"], "fast_forward": true,
+      "lines": ["Wait for ЦЕЛЬ В ЗОНЕ: the drone inside the missiles' reach. The deputy commander calls «Цель в зоне!»."],
+      "wait_text": "the target to come into the firing zone"
+    },
+    {
+      "id": "launch", "title": "The commander: «Пуск разрешаю!»", "done_when": ["debrief:LAUNCH"],
+      "lines": ["Launch permitted: the deputy commander turns the key and presses ПУСК. Press F6 to follow the missile, F1 to come back."],
+      "on_start": ["order:fire_permitted"],
+      "wait_text": "the launch"
+    },
+    {
+      "id": "result", "title": "Missile away", "done_when": ["debrief:HIT", "debrief:MISS"],
+      "lines": ["The missile flies on the tracking radar's commands: your capture is what guides it. Keep watching your range indicator, or follow the missile with F6."],
+      "wait_text": "the missile to reach the drone"
+    },
+    {
+      "id": "end", "chapter": "Done", "title": "The operator's part: done",
+      "lines": [
+        "That is the operator's part of the drill: the equipment on at К бою, the turret unlocked and its drives on, and in the fight the transmitter, the range gate and the capture.",
+        "Practise it without the highlights: the Missions group's «Osa: crew practice, one target», starting in the operator's seat, with H set to hint. Or the next lesson: the senior operator.",
+        "Esc: the menu."
+      ]
+    }
+  ]
+}

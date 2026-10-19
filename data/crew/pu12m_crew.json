@@ -60,7 +60,7 @@
     { "callout": "order_deploy", "task": "ready_halted",
       "procedures": [ { "station": "driver", "procedure": "deploy_power" }, { "station": "radio_operator", "procedure": "deploy_mast" },
                       { "station": "squad_leader", "procedure": "deploy_orient" }, { "station": "battery_commander", "procedure": "deploy_aspd" },
-                      { "station": "battery_commander", "procedure": "deploy_command_radios" } ],
+                      { "station": "battery_commander", "procedure": "deploy_command_radios", "queue": true } ],
       "source": "sam3d (each seat's part of the deployment, data/procedures/pu12m.json)", "confidence": "estimate" },
     { "callout": "order_stow", "task": "stowed",
       "procedures": [ { "station": "battery_commander", "procedure": "stow_aspd" }, { "station": "radio_operator", "procedure": "stow_mast" },

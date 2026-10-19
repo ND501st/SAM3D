@@ -3,6 +3,12 @@
   "status": "The PU-12M's fighting compartment from the ČSLA manual's equipment plan and workplace drawings (csla_pu12_manual, the valka_pu12 scans) and a veteran's photographs (shilka_narod): five places (driver front left, squad leader front right, the operator, the battery commander and the radio operator on the bench across the middle facing forward), the equipment where the plan puts it.",
   "notes": "Written by tools/pu12m_cabin.py from tools/blender/pu12m_interior_trace.py and art/pu12m_interior/manifest.json: edit those and run it again, not this file. Body frame: metres, x right, y forward, z up, from the ground under the middle of the wheelbase (the exterior model's origin). Lamp sources use the source ids of data/procedures/pu12m.json. ceiling_m: the roof's lining (1.40 m over the floor), under which a crewman getting up for a low panel crouches.",
   "ceiling_m": 2.025,
+  "stand_eye_m": 1.93,
+  "walk": [
+    {"from_m": [-0.6, -0.86], "to_m": [0.7, -0.62], "notes": "The knee room between the bench and the boards in front of it (the IT-45, the map, the radio operator's sets, their faces at y = -0.27 to -0.47): a crewman gets up and moves along the bench. SAM3D estimate from the cabin layout."},
+    {"from_m": [-0.18, 0.1], "to_m": [0.18, 1.45], "notes": "The aisle between the operator's P and R units (their faces at x = -0.33 and 0.32). SAM3D estimate."},
+    {"from_m": [-0.15, 1.45], "to_m": [0.05, 2.45], "notes": "Between the driver's and the squad leader's seats. SAM3D estimate."}
+  ],
   "stations": [
     {"id": "driver", "label": "Driver", "eye_m": [-0.4062, 2.16, 1.84], "yaw_deg": 0.0, "pitch_deg": -8.0, "notes": "Front left, at the wheel (csla_pu12_manual: the squad leader and driver drawing; the plan's seat at 548-648 x 512-602 px). The GAK and its converter behind him, the PVS-3 and the ŠČV input board on the side at his left. Eye 0.79 m above the cushion, 1.22 m above the floor (data/crew/body.json)."},
     {"id": "squad_leader", "label": "Squad leader", "eye_m": [0.3024, 2.16, 1.84], "yaw_deg": 0.0, "pitch_deg": -22.0, "notes": "Front right (the plan's seat at 543-648 x 338-462 px): the KP-4 and the VO telescope ahead, the IT-1 board, the PVS-2 and the DTP at his right, the GAK's panel and his R-123M (FuG-1) on the side behind them. Eye 0.79 m above the cushion, 1.22 m above the floor (data/crew/body.json)."},
@@ -69,8 +75,8 @@
     {"control": "dch.key.0", "panel": "dch_panel", "at_m": [-0.0239, -0.1365], "style": "button", "look": {"kind": "button", "size_m": 0.016, "color": "ivory", "label": "0"}},
     {"control": "dch.key.cu", "panel": "dch_panel", "at_m": [0.0273, -0.0355], "style": "button", "look": {"kind": "button", "size_m": 0.016, "color": "ivory", "label": "ЦУ"}},
     {"control": "dch.key.reset", "panel": "dch_panel", "at_m": [-0.0239, -0.1574], "style": "button", "look": {"kind": "button", "size_m": 0.016, "color": "red", "label": "СБР"}},
-    {"control": "dt2.azimuth", "panel": "dt2_panel", "at_m": [-0.04, -0.01], "style": "wheel", "units_per_turn": 90, "look": {"kind": "knob", "size_m": 0.045, "color": "black"}},
-    {"control": "dt2.range", "panel": "dt2_panel", "at_m": [0.04, -0.01], "style": "wheel", "units_per_turn": 0.25, "look": {"kind": "knob", "size_m": 0.045, "color": "black"}},
+    {"control": "dt2.azimuth", "panel": "dt2_panel", "at_m": [-0.04, -0.01], "style": "wheel", "units_per_turn": 90, "watch": "it45", "look": {"kind": "knob", "size_m": 0.045, "color": "black"}},
+    {"control": "dt2.range", "panel": "dt2_panel", "at_m": [0.04, -0.01], "style": "wheel", "units_per_turn": 0.25, "watch": "it45", "look": {"kind": "knob", "size_m": 0.045, "color": "black"}},
     {"control": "fr.mode", "panel": "fr_panel", "at_m": [-0.0278, 0.0432], "style": "rotary", "look": {"kind": "pointer_knob", "size_m": 0.03, "color": "black"}},
     {"control": "fr.scale", "panel": "fr_panel", "at_m": [0.035, 0.0432], "style": "rotary", "look": {"kind": "pointer_knob", "size_m": 0.03, "color": "black"}},
     {"control": "aspd.power", "panel": "fr_panel", "at_m": [0.0616, 0.0264], "style": "toggle"},

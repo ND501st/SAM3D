@@ -1,0 +1,183 @@
+{
+  "tutorial_id": "school_senior_operator",
+  "title": "Seat lesson 3: the senior operator",
+  "scenario": "scenarios/school_senior_operator.json",
+  "seat": "senior_operator",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedure acquire_with_soc (data/procedures/osa_ak.json; samsim_osa p21-24) and the crew data's reports, with their sources",
+  "notes": "The commander's orders are given by the lesson (on_start) at the learner's pace. The contact report and the azimuth wheel are the seat's work the NPC does when nobody holds it.",
+  "steps": [
+    {
+      "id": "hello", "chapter": "Your seat", "title": "The senior operator's seat",
+      "lines": [
+        "You are the senior operator (оператор поиска): seat 2 of the Osa 21, facing the left wall, between the deputy commander and the operator.",
+        "You are the crew's eyes. You run the search radar (СОЦ, the antenna that turns on the roof), you ask the contacts who they are (IFF), you call them to the commander, and when he orders one taken you put the tracking radar on it in azimuth.",
+        "Each step lights up what to use; only that works. Read, then press Enter."
+      ],
+      "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
+      "continue": true
+    },
+    {
+      "id": "tour_panel", "title": "Your panel", "look": "so_panel",
+      "lines": [
+        "In front of you: the search radar's panel. ПОИСК sets the antenna turning; ВЫСОКОЕ, under a red guard, is its transmitter; ЛУЧ chooses the height beams; ДАЛЬНОСТЬ the scope's range scale; СДЦ the moving-target filter; ЗАПРОС asks the IFF."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_ppi", "title": "The search scope", "look": "soc_ppi",
+      "lines": [
+        "The round scope is the search picture, north at the top and the Osa at the centre. A line sweeps round as the antenna turns; an echo shows as a bright smear that fades until the sweep comes round again. The scale round the edge is the azimuth in hundreds of thousandths (0 to 59: 60-00 to the circle).",
+        "An amber line from the centre marks where the tracking radar points: your azimuth wheel moves it."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_wheel", "title": "The azimuth wheel and βс", "look": "ssc.az_wheel",
+      "lines": [
+        "Below: the АЗИМУТ hand wheel with its lock, and the βс dial that shows the tracking radar's azimuth once its ПОДСВЕТКА (light) is on."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "order_k_boyu", "chapter": "Action stations (К бою)", "title": "The commander: «К бою!»",
+      "lines": [
+        "«К бою!» (Action stations!). Your part: bring up the search radar and set it to search.",
+        "The driver starts the turbine and the operator switches the equipment on: your radar needs both, and three minutes to warm up. You set your switches now; it radiates when it is ready."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_k_boyu"],
+      "continue": true
+    },
+    {
+      "id": "search", "title": "Antenna turning: ПОИСК", "control": "soc.search", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["Flip ПОИСК up to ВКЛ."],
+      "why": "It sets the search antenna turning (33 times a minute) once the antenna is up: the sweep on your scope follows it round.",
+      "hint": "Left click flips a switch."
+    },
+    {
+      "id": "hv_cover", "title": "Lift the guard over ВЫСОКОЕ", "control": "soc.hv_cover", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["Lift the red guard over ВЫСОКОЕ."],
+      "why": "Guards keep the switches that radiate from being flipped by accident.",
+      "hint": "Left click opens the guard."
+    },
+    {
+      "id": "hv", "title": "Transmitter on: ВЫСОКОЕ", "control": "soc.hv", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["Flip ВЫСОКОЕ up to ВКЛ."],
+      "why": "High voltage to the search radar's transmitter: once the equipment is warm (ГОТОВ) it radiates and echoes appear on your scope.",
+      "hint": "Left click."
+    },
+    {
+      "id": "beam", "title": "All three height beams: ЛУЧ АВТ. I–III", "control": "soc.beam", "position": 3, "procedure": "acquire_with_soc",
+      "lines": ["Turn the ЛУЧ selector from I to АВТ. I–III: three clicks on."],
+      "why": "The search radar looks in three height beams, low, middle and high; АВТ. I–III takes them in turn, so nothing slips under or over the search. The lamps I, II, III ЛУЧ show which beam is on.",
+      "hint": "Left click steps a selector on, right click back."
+    },
+    {
+      "id": "range_long", "title": "The long range scale: ДАЛЬНОСТЬ 10–45 km", "control": "soc.range", "position": 2, "procedure": "acquire_with_soc",
+      "lines": ["Turn ДАЛЬНОСТЬ one click on, to 10–45 km."],
+      "why": "The long scale first, to see targets coming from far off; the scope's centre is then 10 km out.",
+      "hint": "Left click steps it on."
+    },
+    {
+      "id": "warmup", "title": "Warming up", "done_when": ["subsystem:soc_transmitter=ready"], "fast_forward": true,
+      "lines": ["Your ГОТОВ lamp lights when the transmitters are warm (three minutes from the equipment going on); then ВЫСОК. lights and the sweep paints. The lesson runs time faster."],
+      "wait_text": "the search radar to radiate"
+    },
+    {
+      "id": "report_ready", "title": "Report it: «Готов СОЦ!»", "report": "soc_ready",
+      "lines": ["Tell the commander the search radar is ready: O, then «Готов СОЦ!» (Search radar ready!)."],
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "target", "chapter": "The target", "title": "Watch your scope",
+      "lines": [
+        "A practice drone is flying at you from the north-west, about 29 km out. Watch the top left of your scope: its echo shows there when the sweep passes it."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["release:d1"],
+      "continue": true
+    },
+    {
+      "id": "iff", "title": "Ask who it is: ЗАПРОС", "control": "iff.query", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["When the echo shows, press ЗАПРОС."],
+      "why": "The interrogator asks the contact's IFF. A friend answers with an arc beside its mark on your scope; no arc means it is not one of ours: «Ответа нет!»",
+      "hint": "Left click presses a button.",
+      "wait_until": ["contact:senior_operator"],
+      "wait_text": "the drone's echo on your scope",
+      "fast_forward": true
+    },
+    {
+      "id": "report_contact", "title": "Call it: «Цель, азимут …, дальность …!»", "report": "contact",
+      "lines": ["Report the contact to the commander: O, then «Цель…». The sim reads its azimuth and range off your scope for you."],
+      "why": "The commander can't see your scope. He orders a target taken only once he has heard where it is.",
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "az_lock", "title": "Unlock the azimuth wheel", "control": "ssc.az_lock", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["Flip the azimuth wheel's lock to unlocked."],
+      "why": "The wheel is locked so it can't be knocked off the target by accident.",
+      "hint": "Left click."
+    },
+    {
+      "id": "az_light", "title": "Light the βс dial: ПОДСВЕТКА", "control": "ssc.az_light", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["Flip ПОДСВЕТКА (βс) up to ВКЛ."],
+      "why": "It lights the βс dial, which reads the tracking radar's azimuth.",
+      "hint": "Left click."
+    },
+    {
+      "id": "range_short", "title": "At 35 km: ДАЛЬНОСТЬ 0–35 km", "control": "soc.range", "position": 1, "procedure": "acquire_with_soc",
+      "lines": ["When the drone is inside 35 km, turn ДАЛЬНОСТЬ one click back, to 0–35 km."],
+      "why": "The shorter scale spreads the near picture out, so you can put the azimuth line on the mark precisely.",
+      "hint": "Right click steps a selector back.",
+      "wait_until": ["contact_in:senior_operator=35000"],
+      "wait_text": "the drone to close to 35 km",
+      "fast_forward": true
+    },
+    {
+      "id": "azimuth", "title": "Put the tracking radar on it: the АЗИМУТ wheel", "wheel": "ssc.az_wheel", "aim": "contact_azimuth", "tolerance": 1.2, "hold": true,
+      "done_when": ["task:captured"],
+      "lines": [
+        "The commander orders it taken. Turn the АЗИМУТ wheel until the amber line on your scope crosses the drone's mark, and keep it there: the deputy commander points the tracking radar along your line (ЦУ), the operator switches its transmitter on, and it captures the drone («Захват!»)."
+      ],
+      "why": "The tracking radar captures only within about 1.5° of where you point it, and the drone keeps moving: follow it until the capture.",
+      "hint": "Hold the left button on the wheel and drag sideways, or roll the mouse wheel over it. The card shows the line and the mark.",
+      "on_start": ["order:order_take_target"],
+      "wait_text": "the drone's mark on your scope"
+    },
+    {
+      "id": "prepare", "chapter": "Firing", "title": "«Приготовиться к пуску!»", "done_when": ["control:fo.key=1"], "fast_forward": true,
+      "lines": ["Captured: the radar tracks the drone by itself now. The deputy commander prepares the missiles and puts the launch key in. Keep your eyes on your scope for other contacts."],
+      "on_start": ["order:order_prepare"],
+      "wait_text": "the launch key"
+    },
+    {
+      "id": "zone", "title": "Into the zone", "done_when": ["input:target_in_zone"], "fast_forward": true,
+      "lines": ["Wait for «Цель в зоне!»: the drone inside the missiles' reach."],
+      "wait_text": "the target to come into the firing zone"
+    },
+    {
+      "id": "launch", "title": "«Пуск разрешаю!»", "done_when": ["debrief:LAUNCH"],
+      "lines": ["Launch permitted. Press F6 to follow the missile, F1 to come back."],
+      "on_start": ["order:fire_permitted"],
+      "wait_text": "the launch"
+    },
+    {
+      "id": "result", "title": "Missile away", "done_when": ["debrief:HIT", "debrief:MISS"],
+      "lines": ["The missile flies on the tracking radar's commands. On your scope the drone's echo goes out when it is hit."],
+      "wait_text": "the missile to reach the drone"
+    },
+    {
+      "id": "end", "chapter": "Done", "title": "The senior operator's part: done",
+      "lines": [
+        "That is the senior operator's part of the drill: the search radar up and searching, the contact asked and called, the scale changed at 35 km, and the azimuth line held on the target until the capture.",
+        "Practise it without the highlights: the Missions group's «Osa: crew practice, one target», starting in the senior operator's seat, with H set to hint. Or the next lesson: the deputy commander.",
+        "Esc: the menu."
+      ]
+    }
+  ]
+}

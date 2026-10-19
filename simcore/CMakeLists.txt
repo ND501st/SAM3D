@@ -16,7 +16,8 @@ option(SIMCORE_STRICT "Build with Unreal-like settings: no exceptions/RTTI, warn
 function(simcore_configure_target tgt)
   target_link_libraries(${tgt} PRIVATE simcore)
   if(MSVC)
-    target_compile_options(${tgt} PRIVATE /W4 /permissive- /utf-8)
+    # /MP: the test files compile side by side (one after another, a header change costs a long rebuild).
+    target_compile_options(${tgt} PRIVATE /W4 /permissive- /utf-8 /MP)
     if(SIMCORE_STRICT)
       target_compile_options(${tgt} PRIVATE /WX /GR-)
     endif()

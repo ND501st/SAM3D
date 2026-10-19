@@ -1,0 +1,166 @@
+{
+  "scenario_id": "tutorial_basics",
+  "name": "Start here: the camera, the cabin and the controls",
+  "description": "The first lesson (data/tutorials/basics.json): turn the camera, the views on F1 to F11, into the cabin and from seat to seat, then your hands on the panels: a switch, a selector, a lock and a hand wheel, the keys card and time. Nothing to fight; a pair of our MiG-21s patrols to the north. Fictional.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. The Kesmark range, the Osa cold at a halt, no orders. The MiG-21 pair is our own (they answer the IFF). PLACEHOLDER aircraft numbers.",
+  "seed": 11,
+  "origin": {
+    "lat_deg": 46.817217,
+    "lon_deg": 19.77862,
+    "alt_m": 107.6
+  },
+  "terrain": {
+    "type": "map",
+    "map": "maps/kesmark_range.json"
+  },
+  "weather": "clear",
+  "battery": {
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 400,
+          "north_m": -400,
+          "up_m": 3.9
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": -1000,
+          "north_m": -2300,
+          "up_m": 3.8
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": -800,
+          "north_m": -2600,
+          "up_m": 4.1
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 3
+    },
+    "heading_deg": 290,
+    "inputs": {
+      "vehicle_stopped": true
+    }
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class1"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class1"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class1"
+    }
+  ],
+  "targets": [
+    {
+      "id": "f1",
+      "name": "MiG-21 pair on patrol (friendly)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": -30000,
+        "north_m": 21200,
+        "up_m": 4000
+      },
+      "waypoints": [
+        {
+          "east_m": 14000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 21200,
+          "up_m": 4000
+        },
+        {
+          "east_m": 14000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 29200,
+          "up_m": 4000
+        },
+        {
+          "east_m": -16000,
+          "north_m": 21200,
+          "up_m": 4000
+        }
+      ],
+      "speed_mps": 220,
+      "max_turn_rate_deg_s": 10,
+      "rcs_m2": 3,
+      "appear_at_s": 0,
+      "formation": 2,
+      "iff": "friend",
+      "notes": "Placeholder numbers. Our own fighters, there to look at with the aircraft views."
+    }
+  ],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 3600,
+    "when_targets_gone": false
+  }
+}

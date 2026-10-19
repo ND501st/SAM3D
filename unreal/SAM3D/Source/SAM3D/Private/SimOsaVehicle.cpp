@@ -171,7 +171,12 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		Views->UpdateViews(Pc, DeltaSeconds);
 	}
-	Drive(DeltaSeconds, Views->IsFreeCamera() ? nullptr : Pc);
+	// W A S D are the walker's feet while he is up in the cabin, not the driver's.
+	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() ? nullptr : Pc);
+	if (bAutoBrake && SpeedMps == 0.0)
+	{
+		bAutoBrake = false;  // the lesson autoplay's halt is made
+	}
 	FollowGround();
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
@@ -215,9 +220,323 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			HandlePost(Pc);
 		}
 	}
-	// The body at the camera's seat isn't drawn (first person); the overlay's ghost hand shows the advised move.
-	CrewBodies->SetHiddenStation(bInCabin && !bViewOverride ? Cabin->GetStationId(Station) : FString());
-	CrewBodies->SetGhostHand(StationId, bAssist && Advice.bValid ? Advice.Control : FString());
+	// A lesson's highlight wins over the training overlay's (it is set after HandleCrew's).
+	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(Pc, Sim, DeltaSeconds) : FString();
+	// The body at the camera's seat isn't drawn (first person); the ghost hand shows the advised move.
+	// Walking, his own body is the one he walks in: the seat he holds is empty (another's seat keeps its crewman).
+	const FString Own = bWalking ? (bHoldingSeat ? StationId : FString()) : Cabin->GetStationId(Station);
+	CrewBodies->SetHiddenStation(bInCabin && !bViewOverride ? Own : FString());
+	// Nothing of a crewmate inside his head: a hand's breadth seated, more on his feet among them.
+	const bool bStanding = bInCabin && !bViewOverride && StandStation == Station;
+	CrewBodies->SetClearAround(CabinCamera->GetComponentLocation(), !bInCabin || bViewOverride ? 0.0f : (bStanding ? 60.0f : (bWalking ? 35.0f : 22.0f)));
+	// In a lesson only the lesson's hand (the drill master's advice could point elsewhere).
+	const bool bLesson = Sim != nullptr && Sim->HasTutorial();
+	CrewBodies->SetGhostHand(StationId, bLesson ? LessonHand : (bAssist && Advice.bValid ? Advice.Control : FString()));
+}
+
+// ---------------------------------------------------------------------------------------------- lessons
+
+int32 ASimOsaVehicle::FindStation(const FString& Id) const
+{
+	for (int32 I = 0; I < Cabin->GetNumStations(); ++I)
+	{
+		if (Cabin->GetStationId(I) == Id)
+		{
+			return I;
+		}
+	}
+	return INDEX_NONE;
+}
+
+FString ASimOsaVehicle::HandleLesson(APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds)
+{
+	const FSimTutorialStep Step = Sim->GetTutorialStep();
+	if (Pc != nullptr && !bMenuOpen)
+	{
+		// Enter: a reading step is read (always the same key, always shown on the card).
+		if (Pc->WasInputKeyJustPressed(EKeys::Enter))
+		{
+			Sim->NoteTutorialContinue();
+		}
+		// L: the head onto what the step shows.
+		if (Pc->WasInputKeyJustPressed(EKeys::L))
+		{
+			LookAtLessonTarget();
+		}
+	}
+	// The step's control pulses in the cabin (while it waits too: the learner finds it ahead), or a tour step's control
+	// or lamp; the ghost hand reaches for it from the lesson's seat when it is time.
+	const bool bAction = Step.Phase == ESimTutorialPhase::Act || Step.Phase == ESimTutorialPhase::Wait;
+	Cabin->SetAdvisedControl(bAction && !Step.Control.IsEmpty() ? Step.Control : Step.Look);
+	RunLessonAutoplay(Sim, Step, DeltaSeconds);
+	// The ghost hand is the last of the growing hints (with the card's "Press L"): a demonstration for a learner who
+	// hasn't found the control in 25 s. From the start it would cover the very control and its label.
+	const bool bAtSeat = bInCabin && (Step.Seat.IsEmpty() || StationId == Step.Seat);
+	// A skipped step: it shows the instructor's move at once.
+	return Step.Phase == ESimTutorialPhase::Act && !Step.Control.IsEmpty() && bAtSeat && (Step.ShownSeconds > 25.0f || Step.bInstructor)
+		? Step.Control : FString();
+}
+
+void ASimOsaVehicle::LookAtLessonTarget()
+{
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr || !Sim->HasTutorial())
+	{
+		return;
+	}
+	const FSimTutorialStep Step = Sim->GetTutorialStep();
+	const FString Target = !Step.Look.IsEmpty() ? Step.Look : Step.Control;
+	if (Target.IsEmpty())
+	{
+		FeedbackText = TEXT("Nothing to look at in this step");
+		FeedbackSecondsLeft = 2.0f;
+		return;
+	}
+	// From the lesson's seat: into the cabin, or back to it (sitting down if he was up and walking).
+	bWalking = false;
+	const int32 Seat = Step.Seat.IsEmpty() ? INDEX_NONE : FindStation(Step.Seat);
+	if (Seat != INDEX_NONE && Seat != Station)
+	{
+		Station = Seat;
+		DraggedWheel = INDEX_NONE;
+	}
+	if (!bInCabin && !SetInCabin(true))
+	{
+		return;
+	}
+	FVector World;
+	FVector Facing;
+	FString Label;
+	FVector Eye;
+	FRotator View;
+	FString SeatLabel;
+	if (!Cabin->GetHighlightTarget(Target, World, Label, Facing) || !Cabin->GetStationView(Station, Eye, View, SeatLabel))
+	{
+		return;
+	}
+	// The eye and the target in the vehicle's frame (the cabin camera sits at Eye on the root). A control of this seat
+	// beyond arm's reach: he gets up and steps in front of it (simcore/crew_body.hpp), 70 cm off its panel, his eye at
+	// the seat's height (the compartment is too low to stand straight). From the seat the deputy commander's gyro panel
+	// is nearly edge-on, 1.5 m off, and its switches hide one another.
+	const FVector At = GetActorTransform().InverseTransformPosition(World);
+	const int32 TargetItem = Cabin->FindItem(Target);
+	// Out of reach, or behind him past the head's turn (the PU-12M driver's input board at his back).
+	const bool bBehind = FMath::Abs(FRotator::NormalizeAxis((At - Eye).Rotation().Yaw - View.Yaw)) > 130.0;
+	const bool bOwnFar = TargetItem != INDEX_NONE && Cabin->GetItemStation(TargetItem) == Cabin->GetStationId(Station) &&
+		((At - Eye).Size() > 0.9 * CabinReachCm || bBehind);
+	FVector Front = At + GetActorTransform().InverseTransformVectorNoScale(Facing).GetSafeNormal() * 70.0;
+	Front.Z = Eye.Z;
+	StandOffset = bOwnFar ? Front - Eye : FVector::ZeroVector;
+	StandStation = bOwnFar ? Station : INDEX_NONE;
+	const FRotator Want = (At - Eye - StandOffset).Rotation();
+	LookYawDeg = FMath::Clamp(FRotator::NormalizeAxis(Want.Yaw - View.Yaw), -135.0, 135.0);
+	LookPitchDeg = FMath::Clamp(FRotator::NormalizeAxis(Want.Pitch - View.Pitch), -70.0, 60.0);
+	ApplyStationView();
+	Sim->NoteTutorialEvent(TEXT("look"));
+}
+
+void ASimOsaVehicle::RunLessonAutoplay(USimWorldSubsystem* Sim, const FSimTutorialStep& Step, float DeltaSeconds)
+{
+	if (!bAutoplayAsked)
+	{
+		bAutoplayAsked = true;
+		FParse::Value(FCommandLine::Get(), TEXT("SimTutorialAutoplay="), AutoplayFolder);
+		if (!AutoplayFolder.IsEmpty())
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Lesson autoplay: into %s"), *AutoplayFolder);
+		}
+	}
+	if (AutoplayFolder.IsEmpty() || Step.Count == 0)
+	{
+		return;
+	}
+	if (Step.Number != AutoStep)
+	{
+		AutoStep = Step.Number;
+		AutoClock = 0.0f;
+		bAutoLooked = bAutoShot = bAutoUi = bAutoReachChecked = bAutoWatched = false;
+		AutoClicks = 0;
+	}
+	AutoClock += DeltaSeconds;
+	// Look where the step points, photograph the step as the learner sees it, then do it as he would.
+	if (AutoClock > 0.5f && !bAutoLooked && bInCabin && (!Step.Look.IsEmpty() || !Step.Control.IsEmpty()))
+	{
+		LookAtLessonTarget();
+		bAutoLooked = true;
+		// A wheel worked against a display: the photograph shows what the learner sees holding it (the watch view).
+		const int32 Wheel = Step.bWheel ? Cabin->FindItem(Step.Control) : INDEX_NONE;
+		FVector Shown;
+		FVector Facing;
+		FString Label;
+		const FString Watch = Wheel != INDEX_NONE ? Cabin->GetWheelWatch(Wheel) : FString();
+		if (!Watch.IsEmpty() && Cabin->GetHighlightTarget(Watch, Shown, Label, Facing) && LookAnglesTo(Shown, LookYawDeg, LookPitchDeg))
+		{
+			ApplyStationView();
+			bAutoWatched = true;
+		}
+	}
+	if (bAutoWatched && AutoClock > 1.9f)
+	{
+		LookAtLessonTarget();  // back to the wheel, as letting it go does
+		bAutoWatched = false;
+	}
+	const bool bReady = Step.Phase == ESimTutorialPhase::Read || Step.Phase == ESimTutorialPhase::Act || Step.Phase == ESimTutorialPhase::End;
+	if (AutoClock > 1.5f && !bAutoShot && bReady)
+	{
+		const FString File = FPaths::Combine(AutoplayFolder, FString::Printf(TEXT("%02d_%s.png"), Step.Number, *Step.Id));
+		FScreenshotRequest::RequestScreenshot(File, true, false);
+		UE_LOG(LogSAM3D, Log, TEXT("Lesson autoplay: step %d/%d '%s' (%s) at t=%.0f s"), Step.Number, Step.Count, *Step.Title,
+			*StaticEnum<ESimTutorialPhase>()->GetNameStringByValue(static_cast<int64>(Step.Phase)), Sim->GetSimTimeSeconds());
+		bAutoShot = true;
+	}
+	if (Step.Phase == ESimTutorialPhase::End)
+	{
+		AutoEndClock = AutoEndClock < 0.0f ? 0.0f : AutoEndClock + DeltaSeconds;
+		if (AutoEndClock > 4.0f)
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Lesson autoplay: done"));
+			FGenericPlatformMisc::RequestExit(false);
+			AutoplayFolder.Reset();
+		}
+		return;
+	}
+	// An order or a report: the crew menu opens first, as the learner opens it (the photograph shows the line marked).
+	if (Step.Phase == ESimTutorialPhase::Act && !Step.Order.IsEmpty() && AutoClock > 0.8f && AutoClicks == 0 && !bMenuOpen && bInCabin)
+	{
+		OpenCrewMenu(Sim);
+	}
+	if (AutoClock < 2.2f)
+	{
+		return;
+	}
+	if (Step.Phase == ESimTutorialPhase::Read)
+	{
+		Sim->NoteTutorialContinue();
+		AutoClock = -100.0f;  // until the next step comes up
+		return;
+	}
+	if (Step.Phase == ESimTutorialPhase::Act && (Step.bWheel || !Step.Control.IsEmpty() || !Step.Order.IsEmpty()))
+	{
+		// As a person would: after L, the cross is on the step's control and in reach (the autoplay's own hand doesn't
+		// need it, so it says so here).
+		if (!bAutoReachChecked && !Step.Control.IsEmpty())
+		{
+			bAutoReachChecked = true;
+			const int32 Want = Cabin->FindItem(Step.Control);
+			if (HoveredItem != Want)
+			{
+				UE_LOG(LogSAM3D, Warning, TEXT("Lesson autoplay: step %d '%s': after L the cross isn't on %s (on: %s)"), Step.Number, *Step.Title,
+					*Step.Control, HoveredItem == INDEX_NONE ? TEXT("nothing in reach") : *Cabin->GetItemControl(HoveredItem));
+			}
+		}
+		if (Step.bWheel)
+		{
+			// By hand: at most 15 degrees or 1.5 km a second, onto the mark.
+			const double Err = Step.bWraps ? FMath::Fmod(Step.Target - Step.Value + 540.0, 360.0) - 180.0 : Step.Target - Step.Value;
+			const double Rate = (Step.bWraps ? 15.0 : 1500.0) * DeltaSeconds;
+			if (Sim->GetTutorialRefusal(Step.Control).IsEmpty())
+			{
+				Sim->PlayerTurnWheel(Step.Control, Step.Value + FMath::Clamp(Err, -Rate, Rate));
+			}
+			return;
+		}
+		if (!Step.Control.IsEmpty() && AutoClock > 2.2f + 0.8f * static_cast<float>(AutoClicks))
+		{
+			// A click on the item, the way the step's position lies (a selector steps one position a click).
+			const int32 Item = Cabin->FindItem(Step.Control);
+			if (Item != INDEX_NONE && Sim->GetTutorialRefusal(Step.Control).IsEmpty())
+			{
+				ShowFeedback(Cabin->ClickItem(Item, Step.Position >= Step.CurrentPosition ? 1 : -1));
+			}
+			++AutoClicks;
+			return;
+		}
+		if (!Step.Order.IsEmpty() && AutoClock > 2.2f + 1.5f * static_cast<float>(AutoClicks))
+		{
+			// The crew menu's line, as a learner picks it.
+			bMenuOpen = false;
+			if (Sim->GetTutorialMenuRefusal(Step.Order).IsEmpty())
+			{
+				FString Why;
+				const bool bOk = Step.bReport ? Sim->PlayerSay(Step.Seat, Step.Order) : Sim->TryCrewOrder(Step.Order, Why);
+				FeedbackText = FString::Printf(TEXT("%s %s%s"), Step.bReport ? TEXT("Report:") : TEXT("Order:"), *Step.OrderRu,
+					bOk ? TEXT("") : *FString::Printf(TEXT("  (not now: %s)"), *Why));
+				FeedbackSecondsLeft = 3.0f;
+			}
+			++AutoClicks;
+		}
+		return;
+	}
+	// The front end's own conditions (the basics): the views, the cabin, the seats, the keys, driving.
+	if (bAutoUi)
+	{
+		return;
+	}
+	bAutoUi = true;
+	for (const FString& C : Step.DoneWhen)
+	{
+		FString Head;
+		FString Arg;
+		if (!C.Split(TEXT(":"), &Head, &Arg))
+		{
+			Head = C;
+		}
+		if (Head == TEXT("view"))
+		{
+			Views->SetViewByKey(Arg);
+		}
+		else if (Head == TEXT("cabin"))
+		{
+			SetInCabin(true);
+		}
+		else if (Head == TEXT("seat"))
+		{
+			const int32 Seat = FindStation(Arg);
+			if (Seat != INDEX_NONE)
+			{
+				Station = Seat;
+				SetInCabin(true);
+			}
+		}
+		else if (Head == TEXT("ui"))
+		{
+			if (Arg == TEXT("time_faster"))
+			{
+				Sim->SetTimeScale(2.0f);
+			}
+			else if (Arg == TEXT("time_normal"))
+			{
+				Sim->SetTimeScale(1.0f);
+			}
+			Sim->NoteTutorialEvent(Arg);
+		}
+		else if (Head == TEXT("plotted"))
+		{
+			// The plotter: ] then P, as the learner does.
+			PickTarget(1);
+			PlotPicked();
+			bAutoUi = false;  // and again a little later if it didn't take (still writing the last), or to keep the board
+			AutoClock = Step.DoneWhen.Contains(TEXT("designated")) ? -13.0f : 1.0f;  // fresh for the commander
+		}
+		else if (Head == TEXT("designated") && !Step.DoneWhen.Contains(TEXT("plotted")) && StationId != Sim->GetCommanderStation())
+		{
+			// The plotter waiting for the commander: the board kept fresh, the next target again every 15 s or so.
+			PickTarget(1);
+			PlotPicked();
+			bAutoUi = false;
+			AutoClock = -13.0f;
+		}
+		else if (Head == TEXT("moved"))
+		{
+			AutoThrottle = 1.0;
+			bAutoBrake = false;
+		}
+		else if (Head == TEXT("input") && Arg == TEXT("vehicle_stopped"))
+		{
+			AutoThrottle = 0.0;
+			bAutoBrake = true;
+		}
+	}
 }
 
 void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds)
@@ -231,7 +550,12 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		return;
 	}
 	// T: take this seat (its NPC stops and its orders become yours), or give it back.
-	if (Pc->WasInputKeyJustPressed(EKeys::T))
+	if (Pc->WasInputKeyJustPressed(EKeys::T) && Sim->IsTutorialStrict())
+	{
+		FeedbackText = TEXT("The lesson keeps you in your seat");
+		FeedbackSecondsLeft = 2.5f;
+	}
+	else if (Pc->WasInputKeyJustPressed(EKeys::T))
 	{
 		if (bHoldingSeat)
 		{
@@ -285,9 +609,14 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 	if (Pc->WasInputKeyJustPressed(EKeys::O))
 	{
 		Sim->NoteTutorialEvent(TEXT("crew_menu"));
-		bMenuOpen = !bMenuOpen;
-		MenuPage = 0;
-		MenuEntries = Sim->GetCrewMenu(StationId);
+		if (bMenuOpen)
+		{
+			bMenuOpen = false;
+		}
+		else
+		{
+			OpenCrewMenu(Sim);
+		}
 	}
 	if (!bMenuOpen)
 	{
@@ -315,13 +644,34 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		{
 			continue;
 		}
-			const FSimCrewMenuEntry& E = MenuEntries[Index];
+		const FSimCrewMenuEntry& E = MenuEntries[Index];
+		// A lesson: only the line its step asks for.
+		const FString Refusal = Sim->GetTutorialMenuRefusal(E.Id);
+		if (!Refusal.IsEmpty())
+		{
+			FeedbackText = Refusal;
+			FeedbackSecondsLeft = 3.0f;
+			continue;
+		}
 		FString Reason;
 		const bool bOk = E.bOrder ? Sim->TryCrewOrder(E.Id, Reason) : Sim->PlayerSay(StationId, E.Id);
 		const FString NotNow = FString::Printf(TEXT("  (not now: %s)"), Reason.IsEmpty() ? TEXT("can't") : *Reason);
 		FeedbackText = FString::Printf(TEXT("%s %s%s"), E.bOrder ? TEXT("Order:") : TEXT("Report:"), *E.Ru, bOk ? TEXT("") : *NotNow);
 		FeedbackSecondsLeft = 3.0f;
 		bMenuOpen = false;
+	}
+}
+
+void ASimOsaVehicle::OpenCrewMenu(USimWorldSubsystem* Sim)
+{
+	bMenuOpen = true;
+	MenuEntries = Sim->GetCrewMenu(StationId);
+	MenuPage = 0;
+	const FString Want = Sim->HasTutorial() ? Sim->GetTutorialStep().Order : FString();
+	const int32 At = Want.IsEmpty() ? INDEX_NONE : MenuEntries.IndexOfByPredicate([&Want](const FSimCrewMenuEntry& E) { return E.Id == Want; });
+	if (At != INDEX_NONE)
+	{
+		MenuPage = At / 9;
 	}
 }
 
@@ -337,6 +687,12 @@ void ASimOsaVehicle::Drive(float DeltaSeconds, APlayerController* Pc)
 		Steer = (Pc->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (Pc->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0);
 		bBrake = Pc->IsInputKeyDown(EKeys::SpaceBar);
 	}
+	// The lesson autoplay's feet (when no key is down): forward, under 0.4 of full speed, or braking to a halt.
+	if (Throttle == 0.0 && AutoThrottle != 0.0 && FMath::Abs(SpeedMps) < 0.4 * MaxSpeedMps)
+	{
+		Throttle = AutoThrottle;
+	}
+	bBrake = bBrake || bAutoBrake;
 	if (bBrake || Throttle == 0.0)
 	{
 		const double Decel = (bBrake ? BrakingMps2 : 0.5 * BrakingMps2) * Dt;
@@ -497,6 +853,10 @@ void ASimOsaVehicle::HandleHotkeys(APlayerController* Pc, USimWorldSubsystem* Si
 	{
 		return;
 	}
+	if (Sim->IsTutorialStrict())
+	{
+		return;  // a lesson gives the orders itself
+	}
 	for (const FSimCrewHotkey& H : CrewHotkeys)
 	{
 		if (!Pc->WasInputKeyJustPressed(H.Key))
@@ -540,6 +900,10 @@ void ASimOsaVehicle::PickTarget(int32 Direction)
 	const int32 At = List.IndexOfByKey(PickedTarget);
 	const int32 Next = At == INDEX_NONE ? (Direction >= 0 ? 0 : List.Num() - 1) : (At + (Direction >= 0 ? 1 : -1) + List.Num()) % List.Num();
 	PickedTarget = List[Next];
+	if (USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+	{
+		Sim->NoteTutorialEvent(TEXT("pick"));  // a lesson's "pick it" step
+	}
 }
 
 bool ASimOsaVehicle::DesignatePicked(int32 LauncherIndex)
@@ -681,6 +1045,8 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 		return false;
 	}
 	bInCabin = bEnter;
+	StandStation = INDEX_NONE;  // in or out, he sits down
+	bWalking = false;
 	Camera->SetActive(!bEnter);
 	CabinCamera->SetActive(bEnter);
 	// The placeholder hull's boxes enclose the cabin: from inside they would close the windows to Lumen's sky light
@@ -770,12 +1136,18 @@ void ASimOsaVehicle::ApplyStationView()
 		CabinCamera->SetRelativeLocationAndRotation(OverrideLocation, OverrideRotation);
 		return;
 	}
+	if (bWalking)
+	{
+		CabinCamera->SetRelativeLocationAndRotation(WalkEye, FRotator(WalkPitchDeg, WalkYawDeg, 0.0));
+		return;
+	}
 	FVector Eye;
 	FRotator View;
 	if (Cabin->GetStationView(Station, Eye, View, StationLabel))
 	{
+		const FVector Stand = StandStation == Station ? StandOffset : FVector::ZeroVector;
 		CabinCamera->SetRelativeLocationAndRotation(
-			Eye, FRotator(FMath::Clamp(View.Pitch + LookPitchDeg, -85.0, 85.0), View.Yaw + LookYawDeg, 0.0));
+			Eye + Stand, FRotator(FMath::Clamp(View.Pitch + LookPitchDeg, -85.0, 85.0), View.Yaw + LookYawDeg, 0.0));
 	}
 }
 
@@ -844,15 +1216,39 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		NextStation();
 	}
+	if (Pc->WasInputKeyJustPressed(StandKey))
+	{
+		ToggleWalking();
+	}
+	if (bWalking)
+	{
+		// His feet: W A S D along where he looks, on the floor the cabin has.
+		const double Fwd = (Pc->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (Pc->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0);
+		const double Side = (Pc->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (Pc->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0);
+		const FVector Move = FRotator(0.0, WalkYawDeg, 0.0).Vector() * Fwd + FRotator(0.0, WalkYawDeg + 90.0, 0.0).Vector() * Side;
+		if (!Move.IsNearlyZero())
+		{
+			WalkEye = Cabin->WalkStep(WalkEye, WalkEye + Move.GetSafeNormal() * WalkSpeedCmPerS * DeltaSeconds);
+		}
+	}
 
 	// Mouse: turns the dragged hand wheel, otherwise turns the head.
 	float Dx = 0.0f;
 	float Dy = 0.0f;
 	Pc->GetInputMouseDelta(Dx, Dy);
-	if (DraggedWheel != INDEX_NONE && !Pc->IsInputKeyDown(EKeys::LeftMouseButton))
+	// A lesson playing itself (-SimTutorialAutoplay) takes no mouse: a hand on the desk would move its head and its wheels.
+	const bool bAutoplaying = !AutoplayFolder.IsEmpty();
+	if (bAutoplaying)
+	{
+		Dx = Dy = 0.0f;
+	}
+	if (DraggedWheel != INDEX_NONE && (bAutoplaying || !Pc->IsInputKeyDown(EKeys::LeftMouseButton)))
 	{
 		DraggedWheel = INDEX_NONE;
+		bWatchReturn = bWheelWatch;  // let go: the head comes back to the wheel
+		bWheelWatch = false;
 	}
+	const double Ease = 1.0 - FMath::Exp(-10.0 * static_cast<double>(DeltaSeconds));  // about a tenth of a second
 	if (DraggedWheel != INDEX_NONE)
 	{
 		if (Dx != 0.0f && !Cabin->TurnWheel(DraggedWheel, Dx * WheelTurnsPerMouseUnit))
@@ -860,21 +1256,62 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 			FeedbackText = TEXT("Locked: release the wheel lock first");
 			FeedbackSecondsLeft = 2.0f;
 		}
+		// Eyes on the display the wheel is worked against (the range gate on the echo, the line on the target).
+		if (bWheelWatch)
+		{
+			LookYawDeg += (WatchYawDeg - LookYawDeg) * Ease;
+			LookPitchDeg += (WatchPitchDeg - LookPitchDeg) * Ease;
+		}
+	}
+	else if (bWalking)
+	{
+		// On his feet he turns all the way round.
+		WalkYawDeg = FRotator::NormalizeAxis(WalkYawDeg + Dx * CabinLookDegPerMouseUnit);
+		WalkPitchDeg = FMath::Clamp(WalkPitchDeg + Dy * CabinLookDegPerMouseUnit, -80.0, 70.0);
 	}
 	else
 	{
 		// Head and shoulders: far enough round to reach the distribution cabinet behind the rear seat.
 		LookYawDeg = FMath::Clamp(LookYawDeg + Dx * CabinLookDegPerMouseUnit, -135.0, 135.0);
 		LookPitchDeg = FMath::Clamp(LookPitchDeg + Dy * CabinLookDegPerMouseUnit, -70.0, 60.0);
+		if (bWatchReturn && (Dx != 0.0f || Dy != 0.0f))
+		{
+			bWatchReturn = false;  // he looks round himself
+		}
+		if (bWatchReturn)
+		{
+			LookYawDeg += (ReturnYawDeg - LookYawDeg) * Ease;
+			LookPitchDeg += (ReturnPitchDeg - LookPitchDeg) * Ease;
+			bWatchReturn = FMath::Abs(ReturnYawDeg - LookYawDeg) + FMath::Abs(ReturnPitchDeg - LookPitchDeg) > 0.05;
+		}
 	}
 	ApplyStationView();
 
+	// An arm's length for anything; further for this seat's own controls, which the crewman stands and steps to.
 	const FVector Start = CabinCamera->GetComponentLocation();
-	const FVector End = Start + CabinCamera->GetForwardVector() * CabinReachCm;
-	HoveredItem = DraggedWheel != INDEX_NONE ? DraggedWheel : Cabin->TraceItem(Start, End);
+	const FVector Forward = CabinCamera->GetForwardVector();
+	int32 Reached = Cabin->TraceItem(Start, Start + Forward * CabinReachCm);
+	if (Reached == INDEX_NONE && !StationId.IsEmpty())
+	{
+		const int32 Far = Cabin->TraceItem(Start, Start + Forward * StandingReachCm);
+		Reached = Far != INDEX_NONE && Cabin->GetItemStation(Far) == StationId ? Far : INDEX_NONE;
+	}
+	HoveredItem = DraggedWheel != INDEX_NONE ? DraggedWheel : Reached;
 	Cabin->SetHighlightedItem(HoveredItem);
 	HoverText = Cabin->DescribeItem(HoveredItem);
 	if (HoveredItem == INDEX_NONE)
+	{
+		return;
+	}
+	// A lesson that only lets the step's control work says why another won't move.
+	USimWorldSubsystem* LessonSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	const FString Refusal = LessonSim != nullptr ? LessonSim->GetTutorialRefusal(Cabin->GetItemControl(HoveredItem)) : FString();
+	auto Refuse = [this, &Refusal]()
+	{
+		FeedbackText = Refusal;
+		FeedbackSecondsLeft = 3.0f;
+	};
+	if (bAutoplaying)
 	{
 		return;
 	}
@@ -882,29 +1319,123 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
 		{
-			DraggedWheel = HoveredItem;
+			if (Refusal.IsEmpty())
+			{
+				DraggedWheel = HoveredItem;
+				StartWheelWatch(HoveredItem);
+			}
+			else
+			{
+				Refuse();
+			}
 		}
 		const double Notches = (Pc->WasInputKeyJustPressed(EKeys::MouseScrollUp) ? 1.0 : 0.0) -
 							   (Pc->WasInputKeyJustPressed(EKeys::MouseScrollDown) ? 1.0 : 0.0);
-		if (Notches != 0.0 && !Cabin->TurnWheel(HoveredItem, Notches * WheelTurnsPerScrollNotch))
+		if (Notches != 0.0 && !Refusal.IsEmpty())
+		{
+			Refuse();
+		}
+		else if (Notches != 0.0 && !Cabin->TurnWheel(HoveredItem, Notches * WheelTurnsPerScrollNotch))
 		{
 			FeedbackText = TEXT("Locked: release the wheel lock first");
 			FeedbackSecondsLeft = 2.0f;
 		}
 		return;
 	}
-	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	const bool bLeft = Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton);
+	const bool bRight = Pc->WasInputKeyJustPressed(EKeys::RightMouseButton);
+	if ((bLeft || bRight) && !Refusal.IsEmpty())
+	{
+		Refuse();
+	}
+	else if (bLeft)
 	{
 		ShowFeedback(Cabin->ClickItem(HoveredItem, 1));
 	}
-	else if (Pc->WasInputKeyJustPressed(EKeys::RightMouseButton))
+	else if (bRight)
 	{
 		ShowFeedback(Cabin->ClickItem(HoveredItem, -1));
 	}
 }
 
+bool ASimOsaVehicle::LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const
+{
+	FVector Eye;
+	FRotator View;
+	FString Label;
+	if (!Cabin->GetStationView(Station, Eye, View, Label))
+	{
+		return false;
+	}
+	const FVector Stand = StandStation == Station ? StandOffset : FVector::ZeroVector;
+	const FRotator Want = (GetActorTransform().InverseTransformPosition(World) - Eye - Stand).Rotation();
+	OutYawDeg = FMath::Clamp(FRotator::NormalizeAxis(Want.Yaw - View.Yaw), -135.0, 135.0);
+	OutPitchDeg = FMath::Clamp(FRotator::NormalizeAxis(Want.Pitch - View.Pitch), -70.0, 60.0);
+	return true;
+}
+
+void ASimOsaVehicle::StartWheelWatch(int32 Item)
+{
+	bWheelWatch = false;
+	bWatchReturn = false;
+	const FString Display = Cabin->GetWheelWatch(Item);
+	FVector World;
+	FVector Facing;
+	FString Label;
+	if (Display.IsEmpty() || !Cabin->GetHighlightTarget(Display, World, Label, Facing) || !LookAnglesTo(World, WatchYawDeg, WatchPitchDeg))
+	{
+		return;
+	}
+	ReturnYawDeg = LookYawDeg;
+	ReturnPitchDeg = LookPitchDeg;
+	bWheelWatch = true;
+}
+
+void ASimOsaVehicle::ToggleWalking()
+{
+	if (bWalking)
+	{
+		const int32 Seat = Cabin->SeatNear(WalkEye, 60.0);
+		if (Seat == INDEX_NONE)
+		{
+			FeedbackText = TEXT("No seat here: walk up to one, then X sits you down (Tab: back to a seat)");
+			FeedbackSecondsLeft = 3.0f;
+			return;
+		}
+		bWalking = false;
+		Station = Seat;
+		LookYawDeg = 0.0;
+		LookPitchDeg = 0.0;
+		ApplyStationView();
+		FeedbackText = FString::Printf(TEXT("Sat down: %s%s"), *StationLabel, TEXT("   (T takes the seat over)"));
+		FeedbackSecondsLeft = 3.0f;
+		return;
+	}
+	FVector Eye;
+	FVector SeatEye;
+	FRotator View;
+	FString Label;
+	if (!Cabin->GetStandUpPoint(Station, Eye) || !Cabin->GetStationView(Station, SeatEye, View, Label))
+	{
+		FeedbackText = TEXT("No room to get up here");
+		FeedbackSecondsLeft = 2.0f;
+		return;
+	}
+	bWalking = true;
+	StandStation = INDEX_NONE;
+	DraggedWheel = INDEX_NONE;
+	bWheelWatch = bWatchReturn = false;
+	WalkEye = Eye;
+	WalkYawDeg = FRotator::NormalizeAxis(View.Yaw + LookYawDeg);
+	WalkPitchDeg = FMath::Clamp(View.Pitch + LookPitchDeg, -80.0, 70.0);
+	ApplyStationView();
+	FeedbackText = TEXT("On your feet: W A S D walk, X sits you down at a seat");
+	FeedbackSecondsLeft = 3.0f;
+}
+
 void ASimOsaVehicle::NextStation()
 {
+	bWalking = false;
 	Station = (Station + 1) % FMath::Max(1, Cabin->GetNumStations());
 	LookYawDeg = 0.0;
 	LookPitchDeg = 0.0;

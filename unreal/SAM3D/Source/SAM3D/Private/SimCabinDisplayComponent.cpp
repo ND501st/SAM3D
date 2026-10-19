@@ -130,6 +130,32 @@ namespace
 		Polygon(Canvas, Centre, Radius, 48, Color);
 	}
 
+	// A sector of the tube from angle A0 to A1 (clockwise from up), Inner to Outer radius.
+	void Wedge(UCanvas* Canvas, const FVector2D& Centre, double A0, double A1, double Inner, double Outer, const FLinearColor& Color)
+	{
+		const FVector2D I0 = Polar(Centre, A0, Inner), I1 = Polar(Centre, A1, Inner), O0 = Polar(Centre, A0, Outer), O1 = Polar(Centre, A1, Outer);
+		Tri(Canvas, I0, O0, O1, Color);
+		Tri(Canvas, I0, O1, I1, Color);
+	}
+
+	// A trace on a phosphor as the eye sees it: a wide faint bloom, a softer shoulder and the bright core (a long
+	// afterglow screen's line is never a hard edge).
+	void Glow(UCanvas* Canvas, const FVector2D& A, const FVector2D& B, float Thickness, const FLinearColor& Color)
+	{
+		Line(Canvas, A, B, Thickness * 5.0f, Color * 0.06f);
+		Line(Canvas, A, B, Thickness * 2.2f, Color * 0.22f);
+		Line(Canvas, A, B, Thickness, Color);
+	}
+
+	// The colour of a В screen's light as it decays (radiolamp_elt: a white flash, a long yellow afterglow), seen through
+	// the amber filter: pale yellow fresh, sinking to amber, at brightness Fresh (1 just struck, 0 gone).
+	FLinearColor SearchGlow(double Fresh)
+	{
+		const float F = static_cast<float>(FMath::Clamp(Fresh, 0.0, 1.0));
+		const FLinearColor Flash(1.0f, 0.95f, 0.72f);
+		return FLinearColor::LerpUsingHSV(Phosphor * 0.8f, Flash, F * F) * F;
+	}
+
 	void Text(UCanvas* Canvas, const FString& S, const FVector2D& At, const FLinearColor& Color, float Scale, bool bCentre = true)
 	{
 		FlushShapes();
@@ -649,29 +675,101 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	const double Span = FMath::Max(1.0, MaxM - MinM);
 	auto RadiusOf = [&](double RangeM) { return (RangeM - MinM) / Span * R; };
 
-	// Range rings every 5 km (10 km on long scales), bearing ticks every 30 degrees.
+	// The sweep, counted round: everything it paints fades from when it passed.
+	const bool bTurning = Console.equipment.IsReady(Search.antenna);
+	const double Sweep = Scope->SweepAzimuthRad();
+	if (bPpiSweepKnown)
+	{
+		double Step = FMath::Fmod(Sweep - PpiLastSweepRad, UE_DOUBLE_TWO_PI);
+		if (Step < 0.0)
+		{
+			Step += UE_DOUBLE_TWO_PI;
+		}
+		PpiTurns += Step / UE_DOUBLE_TWO_PI;
+	}
+	PpiLastSweepRad = Sweep;
+	bPpiSweepKnown = true;
+	const double Period = FMath::Max(0.5, Display.sweep_period_s);
+	const double Persist = FMath::Max(0.3, Display.afterglow_s);
+	// How long ago the sweep passed an azimuth (s), and how bright what it painted there still is (0..1).
+	auto AgeAt = [&](double A)
+	{
+		double Behind = FMath::Fmod(Sweep - A, UE_DOUBLE_TWO_PI);
+		if (Behind < 0.0)
+		{
+			Behind += UE_DOUBLE_TWO_PI;
+		}
+		return Behind / UE_DOUBLE_TWO_PI * Period;
+	};
+	auto Left = [&](double A) { return bTurning ? FMath::Exp(-AgeAt(A) / Persist) : 0.35; };
+
+	const bool bRadiating = Console.equipment.IsReady(Search.transmitter) && Console.equipment.IsReady(Search.antenna);
+	// The swept face still faintly lit behind the sweep, darkest just ahead of it (the screen's own glow: noise and the
+	// defocused trace spread over the phosphor).
+	constexpr int32 Sectors = 90;
+	if (bTurning)
+	{
+		for (int32 K = 0; K < Sectors; ++K)
+		{
+			const double A0 = Sweep - UE_DOUBLE_TWO_PI * (K + 1) / Sectors;
+			const double A1 = Sweep - UE_DOUBLE_TWO_PI * K / Sectors;
+			const double Fresh = FMath::Exp(-(Period * (K + 0.5) / Sectors) / Persist);
+			Wedge(Canvas, C, A0, A1, 0.0, R, Phosphor * static_cast<float>((bRadiating ? 0.07 : 0.03) * Fresh));
+		}
+	}
+
+	// The range marks: painted by the sweep as it passes, fading behind it. Every 5 km (10 km on the long scales).
 	const double Ring = Span > 20000.0 ? 10000.0 : 5000.0;
 	for (double K = FMath::CeilToDouble((MinM + 1.0) / Ring) * Ring; K <= MaxM + 1.0; K += Ring)
 	{
-		Circle(Canvas, C, RadiusOf(K), Phosphor * 0.3f, 1.6f);
+		const double Rr = RadiusOf(K);
+		for (int32 I = 0; I < Sectors; ++I)
+		{
+			const double A0 = UE_DOUBLE_TWO_PI * I / Sectors;
+			const double A1 = UE_DOUBLE_TWO_PI * (I + 1) / Sectors;
+			const double Fresh = Left(0.5 * (A0 + A1));
+			Wedge(Canvas, C, A0, A1, Rr - 2.2, Rr + 2.2, Phosphor * static_cast<float>(0.05 * Fresh));
+			Wedge(Canvas, C, A0, A1, Rr - 0.8, Rr + 0.8, SearchGlow(0.12 + 0.55 * Fresh) * 0.8f);
+		}
+	}
+
+	// Receiver noise: a speckle the sweep lays down while it radiates, each grain where it fell until the sweep comes round
+	// again (seeded by the sweep's pass over its sector), fading with the afterglow. Ground clutter round the centre
+	// without MTI (picture only; the model hides low targets in it).
+	const bool bMti = !Search.mti_control.empty() && Console.panel.Get(Search.mti_control) == 1;
+	if (bRadiating)
+	{
+		const double ClutterR = MinM <= 0.0 && !bMti ? RadiusOf(4000.0) : 0.0;
+		for (int32 K = 0; K < Sectors; ++K)
+		{
+			const double A0 = UE_DOUBLE_TWO_PI * K / Sectors;
+			const double Fresh = Left(A0 + 0.5 * UE_DOUBLE_TWO_PI / Sectors);
+			if (Fresh < 0.04)
+			{
+				continue;
+			}
+			// The pass that painted this sector: the sweep's turns, less how far behind it the sector lies.
+			const int32 Pass = FMath::FloorToInt32(PpiTurns - AgeAt(A0) / Period + 1e-6);
+			FRandomStream Grain(K * 7919 + Pass * 104729);
+			for (int32 I = 0; I < 14; ++I)
+			{
+				const double A = A0 + Grain.FRand() * UE_DOUBLE_TWO_PI / Sectors;
+				const double Rr = R * FMath::Sqrt(Grain.FRand());
+				const float Spark = Grain.FRandRange(0.15f, 0.55f);
+				Polygon(Canvas, Polar(C, A, Rr), 1.1, 4, SearchGlow(Fresh * Spark));
+			}
+			for (int32 I = 0; ClutterR > 0.0 && I < 4; ++I)
+			{
+				const double A = A0 + Grain.FRand() * UE_DOUBLE_TWO_PI / Sectors;
+				const FVector2D P = Polar(C, A, ClutterR * FMath::Sqrt(Grain.FRand()));
+				Polygon(Canvas, P, 1.5, 4, SearchGlow(Fresh * Grain.FRandRange(0.25f, 0.6f)) * 0.8f);  // speckle, never a solid patch
+			}
+		}
 	}
 	for (int32 I = 0; I < 12; ++I)
 	{
 		const double A = UE_DOUBLE_TWO_PI * I / 12.0;
-		Line(Canvas, Polar(C, A, R * 0.95), Polar(C, A, R), 1.5f, Phosphor * 0.5f);
-	}
-
-	const bool bRadiating = Console.equipment.IsReady(Search.transmitter) && Console.equipment.IsReady(Search.antenna);
-	const bool bMti = !Search.mti_control.empty() && Console.panel.Get(Search.mti_control) == 1;
-	if (bRadiating && !bMti && MinM <= 0.0)
-	{
-		// Ground clutter around the centre without MTI (picture only; the model hides low targets in it).
-		const double ClutterR = RadiusOf(4000.0);
-		for (int32 I = 0; I < 90; ++I)
-		{
-			const FVector2D P = Polar(C, Noise.FRandRange(0.0, UE_DOUBLE_TWO_PI), ClutterR * FMath::Sqrt(Noise.FRand()));
-			Polygon(Canvas, P, 1.5, 4, Phosphor * Noise.FRandRange(0.2f, 0.7f));
-		}
+		Line(Canvas, Polar(C, A, R * 0.95), Polar(C, A, R), 1.5f, Phosphor * 0.35f);
 	}
 
 	// Fading echoes, and IFF replies as arcs just beyond the echo: 20 degrees wide in open reception, narrow when
@@ -683,16 +781,12 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		{
 			// A noise jammer's strobe (roadmap E3): a grainy bright spoke along its azimuth across the whole scale, as
 			// bright as the jamming is strong; it has no range.
-			const float Glow = static_cast<float>(B.brightness);
-			for (int32 K = -2; K <= 2; ++K)
+			const float Strength = static_cast<float>(B.brightness);
+			Glow(Canvas, C, Polar(C, B.azimuth_rad, R), 2.5f, SearchGlow(0.9) * Strength);
+			for (int32 I = 0; I < 40; ++I)
 			{
-				const double A = B.azimuth_rad + FMath::DegreesToRadians(0.6 * K);
-				Line(Canvas, C, Polar(C, A, R), K == 0 ? 3.0f : 1.5f, Phosphor * (Glow * (K == 0 ? 0.9f : 0.4f)));
-			}
-			for (int32 I = 0; I < 28; ++I)
-			{
-				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-0.015, 0.015), R * Noise.FRand());
-				Polygon(Canvas, P, 1.5, 4, Phosphor * (Glow * Noise.FRandRange(0.3f, 1.0f)));
+				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-0.02, 0.02), R * Noise.FRand());
+				Polygon(Canvas, P, 1.3, 4, SearchGlow(Noise.FRandRange(0.4f, 1.0f)) * Strength);
 			}
 			continue;
 		}
@@ -700,38 +794,36 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		{
 			continue;
 		}
+		const float Strength = static_cast<float>(B.brightness);
 		if (B.iff_reply)
 		{
 			const double Half = FMath::DegreesToRadians(bGated ? 2.0 : 10.0);
-			const float Glow = static_cast<float>(B.brightness);
 			for (int32 Arc = 0; Arc < (B.control_reply ? 2 : 1); ++Arc)
 			{
 				const double Rr = RadiusOf(B.range_m) + 9.0 + 5.0 * Arc;
-				for (int32 I = 0; I < 8; ++I)
-				{
-					const double A0 = B.azimuth_rad - Half + 2.0 * Half * I / 8.0;
-					const double A1 = B.azimuth_rad - Half + 2.0 * Half * (I + 1) / 8.0;
-					Line(Canvas, Polar(C, A0, Rr), Polar(C, A1, Rr), 2.0f, Phosphor * Glow);
-				}
+				Wedge(Canvas, C, B.azimuth_rad - Half, B.azimuth_rad + Half, Rr - 3.0, Rr + 3.0, Phosphor * (0.12f * Strength));
+				Wedge(Canvas, C, B.azimuth_rad - Half, B.azimuth_rad + Half, Rr - 1.0, Rr + 1.0, SearchGlow(Strength));
 			}
 			continue;
 		}
-		// A bright arc-shaped smear when fresh, fading with the afterglow.
-		const float Glow = static_cast<float>(B.brightness);
-		const FVector2D P = Polar(C, B.azimuth_rad, RadiusOf(B.range_m));
-		Disc(Canvas, P, 7.0, Phosphor * (0.35f * Glow));
-		Disc(Canvas, P, 4.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+		// The echo: a short arc as wide as the beam and as deep as the pulse, a white flash when struck sinking through
+		// yellow to amber, with the bloom of an overdriven spot round it.
+		const double Rr = RadiusOf(B.range_m);
+		const double HalfBeam = FMath::DegreesToRadians(1.2);
+		Wedge(Canvas, C, B.azimuth_rad - 2.5 * HalfBeam, B.azimuth_rad + 2.5 * HalfBeam, Rr - 7.0, Rr + 7.0, Phosphor * (0.07f * Strength));
+		Wedge(Canvas, C, B.azimuth_rad - 1.6 * HalfBeam, B.azimuth_rad + 1.6 * HalfBeam, Rr - 3.5, Rr + 3.5, SearchGlow(Strength) * 0.45f);
+		Wedge(Canvas, C, B.azimuth_rad - HalfBeam, B.azimuth_rad + HalfBeam, Rr - 1.6, Rr + 1.6, SearchGlow(Strength));
 	}
 
-	// The sweep, with a short fading trail.
-	if (Console.equipment.IsReady(Search.antenna))
+	// The sweep: the bright trace itself, with the freshly struck phosphor glowing just behind it.
+	if (bTurning)
 	{
-		const double Sweep = Scope->SweepAzimuthRad();
-		for (int32 I = 6; I >= 0; --I)
+		for (int32 I = 4; I >= 1; --I)
 		{
-			const double A = Sweep - FMath::DegreesToRadians(2.5 * I);
-			Beam(Canvas, C, Polar(C, A, R), 2.0f, Phosphor * (I == 0 ? 0.9f : 0.25f / I));
+			const double A = Sweep - FMath::DegreesToRadians(0.8 * I);
+			Line(Canvas, C, Polar(C, A, R), 2.0f, SearchGlow(0.55 / I) * 0.5f);
 		}
+		Glow(Canvas, C, Polar(C, Sweep, R), 1.8f, SearchGlow(1.0) * (bRadiating ? 0.95f : 0.6f));
 	}
 
 	// The SSC azimuth line and its range gate, which the range officer puts on the target mark.
@@ -792,14 +884,29 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 				Line(Canvas, FVector2D(XOf(M), Y + 3.0), FVector2D(XOf(M), Y + (bMajor ? 11.0 : 7.0)), 1.0f, TraceGreen * 0.4f);
 			}
 		}
-		double PrevX = X0;
-		double PrevY = Y;
-		for (double X = X0; X <= X1; X += 3.0)
+		// The baseline and its grass: the noise differs every sweep, the phosphor keeps the last few, so the eye sees a
+		// fuzzy band with the newest sweep brightest on it (ap3302: "the centreline is not sharp due to the presence of
+		// noise"); an echo stands in the same place sweep after sweep.
+		for (int32 Back = 3; Back >= 0; --Back)
 		{
-			const double Ny = bRadiating ? Noise.FRandRange(0.0, 3.0) : 0.0;
-			Beam(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.2f, TraceGreen * 0.8f);
-			PrevX = X;
-			PrevY = Y - Ny;
+			FRandomStream Grass((RangeSweeps - Back) * 7919 + static_cast<int32>(Y));
+			const float Fade = Back == 0 ? 1.0f : 0.35f / Back;
+			double PrevX = X0;
+			double PrevY = Y;
+			for (double X = X0; X <= X1; X += 2.5)
+			{
+				const double Ny = bRadiating ? Grass.FRandRange(0.0, 1.0) * Grass.FRandRange(0.0, 9.0) : 0.0;
+				if (Back == 0)
+				{
+					Glow(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.6f, TraceGreen);
+				}
+				else
+				{
+					Line(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.0f, TraceGreen * (0.5f * Fade));
+				}
+				PrevX = X;
+				PrevY = Y - Ny;
+			}
 		}
 		auto Spike = [&](double RangeM)
 		{
@@ -807,9 +914,13 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			{
 				return;
 			}
+			// A pulse: its rise and fall a few pixels apart, the top a little rounded, slightly different each
+			// sweep (the receiver's noise rides on it).
 			const double X = XOf(RangeM);
-			Beam(Canvas, FVector2D(X - 3.0, Y), FVector2D(X, Y - SpikeH), 1.6f, TraceGreen);
-			Beam(Canvas, FVector2D(X, Y - SpikeH), FVector2D(X + 3.0, Y), 1.6f, TraceGreen);
+			const double H = SpikeH * Noise.FRandRange(0.93, 1.0);
+			Glow(Canvas, FVector2D(X - 4.0, Y), FVector2D(X - 1.5, Y - H), 1.4f, TraceGreen);
+			Glow(Canvas, FVector2D(X - 1.5, Y - H), FVector2D(X + 1.5, Y - H * 0.97), 1.4f, TraceGreen);
+			Glow(Canvas, FVector2D(X + 1.5, Y - H * 0.97), FVector2D(X + 4.0, Y), 1.4f, TraceGreen);
 		};
 		if (bMissileSweep)
 		{
@@ -834,6 +945,7 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			}
 		}
 	};
+	++RangeSweeps;  // a new pair of sweeps each picture (the tube's own sweeps are far faster than the redraw)
 	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false);
 	const double Half = 0.5 * Display.magnified_window_m;
 	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0);
@@ -885,30 +997,72 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	};
 	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
 
-	// The raster: faint horizontal lines over the beam's band, with its outline.
-	for (double Y = Top; Y <= Bottom; Y += 4.0)
+	// The tube's face lit faintly from behind the amber filter, darker to the rim (the dead tube's filter, lit).
+	for (int32 I = 0; I < 6; ++I)
 	{
-		Line(Canvas, FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.1f);
+		Disc(Canvas, C, R * (0.98 - 0.12 * I), Phosphor * (0.012f + 0.008f * I));
 	}
+	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
+	++ElevFrames;
+	// The raster: the scan lines across the beam's band, each a little brighter or dimmer than its neighbour (a raster
+	// on a long-persistence В screen is never even), and while the radar radiates, the receiver's noise on them as short
+	// flecks that change every picture (the same "grass" as the range sweep's, drawn as the raster writes it).
+	FRandomStream Grass((ElevFrames / 2) * 4099 + LayoutIndex);
+	int32 Row = 0;
+	for (double Y = Top; Y <= Bottom; Y += 4.0, ++Row)
+	{
+		const float Even = 0.07f + 0.04f * static_cast<float>((Row * 37) % 5) / 4.0f;
+		Line(Canvas, FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * Even);
+		if (!bRadiating)
+		{
+			continue;
+		}
+		const int32 Flecks = Grass.RandRange(1, 4);
+		for (int32 K = 0; K < Flecks; ++K)
+		{
+			const double X = Grass.FRandRange(Left, Right - 6.0);
+			const double W = Grass.FRandRange(2.0, 7.0);
+			Line(Canvas, FVector2D(X, Y), FVector2D(X + W, Y), 1.2f, SearchGlow(Grass.FRandRange(0.15, 0.4)));
+		}
+	}
+	// The band's edges and the range marks: engraved on the filter, so seen in the tube's own light only faintly.
 	Line(Canvas, FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
 	Line(Canvas, FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
 	Line(Canvas, FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
 	Line(Canvas, FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	for (int32 I = -2; I <= 2; ++I)
+	{
+		const double X = C.X + I * 0.5 * Half;
+		Line(Canvas, FVector2D(X, Bottom + 2.0), FVector2D(X, Bottom + (I == 0 ? 9.0 : 5.0)), 1.0f, Phosphor * 0.3f);
+	}
 	// The range gate sits in the middle of the range window.
 	Line(Canvas, FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
 
-	// Where the antenna points now: a brighter line while the tracking radar radiates.
-	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
+	// Where the antenna points now: the raster's brightest line, with the phosphor's bloom round it, while the tracking
+	// radar radiates; a dim line otherwise.
 	const double AntennaY = YOfEl(Feed.antenna_el_deg);
-	Line(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 3.0f, Phosphor * (bRadiating ? 1.0f : 0.45f));
+	if (bRadiating)
+	{
+		Glow(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.4f, SearchGlow(0.85));
+	}
+	else
+	{
+		Line(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * 0.35f);
+	}
 
-	// Target marks: bright spots fading with the afterglow.
+	// Target marks: a blip drawn along the raster's lines (the echo is as long as the pulse, a few lines high), struck
+	// pale yellow and sinking to amber with the afterglow.
 	for (const simcore::ElevationScope::Mark& M : ElevScope->Marks())
 	{
-		const float Glow = static_cast<float>(M.brightness);
+		const double Fresh = M.brightness;
 		const FVector2D P(XOfOffset(M.range_offset_m), YOfEl(M.elevation_deg));
-		Disc(Canvas, P, 9.0, Phosphor * (0.5f * Glow));
-		Disc(Canvas, P, 5.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+		const FLinearColor Ink = SearchGlow(Fresh);
+		Disc(Canvas, P, 11.0, Ink * 0.12f);
+		for (int32 L = -2; L <= 2; ++L)
+		{
+			const double W = (L == 0 ? 9.0 : L == 1 || L == -1 ? 7.0 : 4.0);
+			Glow(Canvas, P + FVector2D(-W, 2.0 * L), P + FVector2D(W, 2.0 * L), 1.4f, Ink * (L == 0 ? 1.0f : 0.7f));
+		}
 	}
 }
 

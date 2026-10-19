@@ -1,0 +1,27 @@
+{
+  "tutorial_id": "school_pu12m_radio_operator",
+  "title": "PU-12M lesson 2: the radiotelephone operator",
+  "scenario": "scenarios/school_pu12m_radio_operator.json",
+  "seat": "radio_operator",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/pu12m.json: deploy_mast) and the crew data's reports (data/crew/pu12m_crew.json), with their sources",
+  "notes": "The battery commander's orders are given by the lesson (on_start) at the learner's pace.",
+  "steps": [
+    {"id": "hello", "chapter": "Your seat", "title": "The radiotelephone operator's seat", "lines": ["You are the radiotelephone operator (No. 3): on the bench at the left.", "You keep the post in touch: the R-123M FuG-2 and the R-111 FuG-3 to the regiment, the mast that lifts their aerials, and the power board that feeds the equipment.", "Each step lights up what to use; only that works. Read, then press Enter."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "tour_r111", "title": "The R-111 (FuG-3)", "look": "r111_panel", "lines": ["In front of you, low: the R-111, the long-range set to the regiment's command post (25-30 km)."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_fug2", "title": "The R-123M (FuG-2)", "look": "r123_fug2_panel", "lines": ["Above it, an R-123M: the covered unit's net."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_scr", "title": "The ŠČR distribution board", "look": "scr_panel", "lines": ["On the wall at your left: the ŠČR board, which switches the 220 V to the equipment, and the VS-27 rectifier that keeps the batteries charged."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_winch", "title": "The mast's winch", "look": "winch_panel", "lines": ["Across the post: the winch of the telescopic mast, 16 m up when raised and guyed."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "order", "chapter": "Deploying the post", "title": "The commander: «Пункт управления развернуть!»", "on_start": ["order:order_deploy"], "lines": ["The battery commander orders the post deployed. Your part: the radios, the mast, and the power to the equipment."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "fug2", "title": "The R-123M on: ПИТАНИЕ", "control": "radio.fug2.power", "position": 1, "procedure": "deploy_mast", "lines": ["Switch the R-123M (FuG-2) on: ПИТАНИЕ."], "why": "A radio's valves take a while to warm: on first, used later.", "hint": "Point the cross at it, left click."},
+    {"id": "fug3", "title": "The R-111 on", "control": "radio.fug3.power", "position": 1, "procedure": "deploy_mast", "lines": ["And the R-111 (FuG-3)."], "hint": "Point the cross at it, left click."},
+    {"id": "mast", "title": "Raise the mast", "control": "mast.raise", "position": 1, "procedure": "deploy_mast", "lines": ["Raise the mast: get up and work the winch (it is beyond your seat; L takes you there)."], "why": "Up 16 m the aerials see over the trees and the folds of the ground: the regiment's net reaches the post.", "hint": "L: step to it.   Left click."},
+    {"id": "equipment", "title": "220 V to the equipment: ŠČR on", "control": "pwr.equipment", "position": 1, "procedure": "deploy_mast", "fast_forward": true, "lines": ["When the driver has the AB-1 on line, switch the 220 V through to the equipment on the ŠČR board."], "why": "The board waits for the driver's power: switched on before, it would switch nothing.", "hint": "Point the cross at it, left click."},
+    {"id": "rectifier", "title": "The VS-27 rectifier on", "control": "pwr.rectifier", "position": 1, "procedure": "deploy_mast", "lines": ["Switch the VS-27 on: it charges the batteries from the 220 V."], "hint": "Point the cross at it, left click."},
+    {"id": "report_mast", "title": "Report it: «Мачта поднята!»", "report": "mast_up", "wait_until": ["subsystem:mast_up=ready"], "wait_text": "the mast up and guyed", "fast_forward": true, "lines": ["Tell the commander: O, then «Мачта поднята!» (Mast up!)."], "hint": "O: your reports, then the highlighted line's number."},
+    {"id": "report_radios", "title": "Report it: «Связь с КП полка есть!»", "report": "radios_ready", "wait_until": ["subsystem:fug3=ready"], "wait_text": "the R-111 warmed up", "fast_forward": true, "lines": ["When the R-111 has warmed up: O, then «Связь с КП полка есть!» (In touch with the regiment!)."], "hint": "O: your reports, then the highlighted line's number."},
+    {"id": "crew", "title": "The crew deploys", "done_when": ["task:ready_halted"], "wait_text": "the post deployed", "fast_forward": true, "lines": ["Your part is done. The squad leader orients the post, the commander turns on the ASPD-U and his radios."]},
+    {"id": "end", "chapter": "Done", "title": "The radiotelephone operator's part: done", "lines": ["That is your part: the radios on, the mast up, the power through to the equipment, and your reports.", "Esc, then M: the missions menu, and the next seat's lesson."]}
+  ]
+}

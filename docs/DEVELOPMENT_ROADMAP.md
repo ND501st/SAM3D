@@ -121,8 +121,16 @@ vehicle and seat the player picks (the commander's: in command; any other: in th
 with restart, the missions and quit, and shows the debrief when it ends (`unreal/README.md`). **The first playable test
 done 19 Oct 2026** (`docs/PLAYING.md`, `tools/play.ps1 -Tutorial`): a tutorial mission first in the menu with a guide on
 the screen (`data/tutorials/`, `simcore/tutorial.hpp`; played through headless in `test_tutorial.cpp`), DCS-style camera
-views on F1-F11 (`USimViewComponent`), time compression on Ctrl/Alt/Shift+Z, every key on G. Left for M2: a person
-playing them through.
+views on F1-F11 (`USimViewComponent`), time compression on Ctrl/Alt/Shift+Z, every key on G. **The lessons reworked
+19 Oct 2026** (`docs/TUTORIALS.md`, research `docs/research/TUTORIAL_DESIGN_2026-10.md`): a first lesson (the camera,
+the cabin, each kind of control) and a lesson for each of the Osa's five seats, step by step, each step's control lit
+in the cabin and marked on the screen, the next step only once it is done; strict in the seat lessons; an instructor's
+voice; every lesson played through headless by a perfect student. **After the first playtest (19 Oct 2026):** Backspace
+back a step, N skips one (the instructor does it); the PU-12M's five seat lessons; walking in the cabin (X: up from the
+seat, W A S D, X by a seat sits down; `CabinLayout::walk`); a held hand wheel turns the head to its display
+(`CabinControl::watch`); a crewman getting up for a far panel keeps out of his seated crewmates (`AddSeatedCrew`); the
+search scope and range indicator drawn with a long-afterglow phosphor's persistence, speckle and bloom. Left for M2: a
+person playing them through.
 
 ## Phase 9 - Threats
 

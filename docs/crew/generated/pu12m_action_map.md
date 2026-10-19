@@ -227,7 +227,7 @@ Rows wait for columns: the drills of the row's seat that wait on something the c
 
 | Order | ru | en | Starts | Task |
 |---|---|---|---|---|
-| `order_deploy` | Пункт управления развернуть! | Deploy the post! | driver: `deploy_power`; radio_operator: `deploy_mast`; squad_leader: `deploy_orient`; battery_commander: `deploy_aspd`; battery_commander: `deploy_command_radios` | `ready_halted` |
+| `order_deploy` | Пункт управления развернуть! | Deploy the post! | driver: `deploy_power`; radio_operator: `deploy_mast`; squad_leader: `deploy_orient`; battery_commander: `deploy_aspd`; battery_commander: `deploy_command_radios` (queued) | `ready_halted` |
 | `order_stow` | Пункт управления свернуть! | Stow the post! | battery_commander: `stow_aspd`; radio_operator: `stow_mast`; driver: `stow_power` | `stowed` |
 | `order_mast` | Мачту поднять! | Raise the mast! | radio_operator: `deploy_mast` | – |
 | `order_orient` | Пункт сориентировать! | Orient the post! | squad_leader: `deploy_orient` | – |

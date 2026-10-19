@@ -221,6 +221,8 @@ struct CabinControl {
     bool auto_placed = false;       // a guard placed over the control it guards
     int red_dot = -1;               // toggles and rotaries: the position a red dot marks on the panel, or -1
     CabinLook look;                 // optional appearance (kind Default = by style)
+    std::string watch;              // wheels: the display its crewman watches while he turns it ("" none): the front
+                                    // end turns his head onto it while the wheel is held
 };
 
 struct CabinLamp {
@@ -313,9 +315,17 @@ struct CabinDisplay {
     bool glass = false;
 };
 
+// A rectangle of floor a crewman can walk on, in plan (body frame x and y, metres).
+struct CabinWalkArea {
+    double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
+    bool Contains(double x, double y) const { return x >= x0 && x <= x1 && y >= y0 && y <= y1; }
+};
+
 struct CabinLayout {
     std::string system_id;
     double ceiling_m = 0.0;  // the roof's inside in the body frame, where a crewman getting up must keep his head under (0: none)
+    std::vector<CabinWalkArea> walk;  // the floor he can walk on, up from his seat ("walk"); none: he stays seated
+    double stand_eye_m = 0.0;         // his eye's height on his feet (stooping under a low roof; "stand_eye_m")
     std::vector<CabinStation> stations;
     std::vector<CabinPanel> panels;
     std::vector<CabinControl> controls;
@@ -407,6 +417,64 @@ struct CabinLayout {
         return DisplayOn(d, panel, equipment) && equipment.AllHold(d.lit_when, panel);
     }
 
+    // Walking (a player up from his seat, roadmap 8 mobility): the plan point is on the floor he can walk on.
+    bool Walkable(double x, double y) const {
+        for (const CabinWalkArea& a : walk) {
+            if (a.Contains(x, y)) return true;
+        }
+        return false;
+    }
+
+    // The nearest walkable plan point to (x, y) (the point itself if walkable); false without walking floor.
+    bool NearestWalkable(double x, double y, double& out_x, double& out_y) const {
+        double best = 1e18;
+        for (const CabinWalkArea& a : walk) {
+            const double cx = x < a.x0 ? a.x0 : (x > a.x1 ? a.x1 : x);
+            const double cy = y < a.y0 ? a.y0 : (y > a.y1 ? a.y1 : y);
+            const double d2 = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+            if (d2 < best) {
+                best = d2;
+                out_x = cx;
+                out_y = cy;
+            }
+        }
+        return !walk.empty();
+    }
+
+    // One step of walking from `from` towards `to` (the eye; z kept): all of it if the floor allows, else along x or y
+    // alone (sliding along an edge), else none.
+    Vec3 WalkStep(const Vec3& from, const Vec3& to) const {
+        if (Walkable(to.x, to.y)) return Vec3{to.x, to.y, from.z};
+        if (Walkable(to.x, from.y)) return Vec3{to.x, from.y, from.z};
+        if (Walkable(from.x, to.y)) return Vec3{from.x, to.y, from.z};
+        return from;
+    }
+
+    // Where a crewman stands when he gets up from a seat: the walkable point nearest his eye, at standing eye height.
+    bool StandUpFrom(const CabinStation& seat, Vec3& out) const {
+        double x = 0.0, y = 0.0;
+        if (!NearestWalkable(seat.eye_m.x, seat.eye_m.y, x, y)) return false;
+        out = Vec3{x, y, stand_eye_m};
+        return true;
+    }
+
+    // The seat a standing crewman can sit down in from where he is: the nearest whose standing-up point is within
+    // `radius_m` (plan distance); null if none.
+    const CabinStation* SeatNear(const Vec3& eye, double radius_m) const {
+        const CabinStation* best = nullptr;
+        double best_d = radius_m;
+        for (const CabinStation& st : stations) {
+            Vec3 up;
+            if (!StandUpFrom(st, up)) continue;
+            const double d = std::sqrt((up.x - eye.x) * (up.x - eye.x) + (up.y - eye.y) * (up.y - eye.y));
+            if (d <= best_d) {
+                best_d = d;
+                best = &st;
+            }
+        }
+        return best;
+    }
+
     // Console controls the layout doesn't place (a cabin should usually place them all).
     std::vector<std::string> UnplacedControls(const ControlPanel& panel) const {
         std::vector<std::string> out;
@@ -422,21 +490,68 @@ namespace detail {
 class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "ceiling_m", "stations", "panels", "controls", "lamps",
-                             "displays", "blocks", "fixtures", "shell"})) {
+        if (!Keys(root, "", {"system_id", "status", "notes", "ceiling_m", "walk", "stand_eye_m", "stations", "panels",
+                             "controls", "lamps", "displays", "blocks", "fixtures", "shell"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
         if (!OptionalNumber(root, "", "ceiling_m", out.ceiling_m)) return false;
+        if (!LoadWalk(root, out)) return false;
         if (out.system_id != console.system_id) {
             return Fail("system_id", "'" + out.system_id + "' doesn't match the console's '" + console.system_id + "'");
         }
         return LoadSeats(root, console, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
                PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out) &&
-               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out);
+               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out) && CheckWatches(out);
     }
 
 private:
+    // The walking floor: rectangles from_m -> to_m in plan, and the standing eye's height (under the roof).
+    bool LoadWalk(const json::Value& root, CabinLayout& out) {
+        if (!OptionalNumber(root, "", "stand_eye_m", out.stand_eye_m)) return false;
+        const json::Value* arr = OptionalArray(root, "", "walk");
+        if (arr == nullptr) return message_.empty();
+        if (!(out.stand_eye_m > 0.0)) return Fail("stand_eye_m", "required with walk");
+        if (out.ceiling_m > 0.0 && out.stand_eye_m > out.ceiling_m - 0.08) {
+            return Fail("stand_eye_m", "must leave the head under the ceiling (8 cm from the eye to the roof at least)");
+        }
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("walk", i);
+            const json::Value& w = arr->items[i];
+            if (!Keys(w, path, {"from_m", "to_m", "notes"})) return false;
+            double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
+            if (!Number2(w, path, "from_m", ax, ay) || !Number2(w, path, "to_m", bx, by)) return false;
+            CabinWalkArea area;
+            area.x0 = ax < bx ? ax : bx;
+            area.x1 = ax < bx ? bx : ax;
+            area.y0 = ay < by ? ay : by;
+            area.y1 = ay < by ? by : ay;
+            if (area.x1 - area.x0 < 0.05 || area.y1 - area.y0 < 0.05) return Fail(path, "too narrow to walk in");
+            out.walk.push_back(area);
+        }
+        return true;
+    }
+
+    // A wheel's "watch" names a display of the same seat.
+    bool CheckWatches(const CabinLayout& out) {
+        for (std::size_t i = 0; i < out.controls.size(); ++i) {
+            const CabinControl& c = out.controls[i];
+            if (c.watch.empty()) continue;
+            const CabinDisplay* d = nullptr;
+            for (const CabinDisplay& x : out.displays) {
+                if (x.id == c.watch) d = &x;
+            }
+            const std::string path = Index("controls", i) + ".watch";
+            if (d == nullptr) return Fail(path, "no display '" + c.watch + "'");
+            const CabinPanel* mine = out.FindPanel(c.panel_id);
+            const CabinPanel* theirs = out.FindPanel(d->panel_id);
+            if (mine != nullptr && theirs != nullptr && mine->station != theirs->station) {
+                return Fail(path, "'" + c.watch + "' is another seat's display");
+            }
+        }
+        return true;
+    }
+
     bool Number3(const json::Value& obj, const std::string& path, const char* key, Vec3& out) {
         const json::Value* v = obj.Find(key);
         if (v == nullptr) return Fail(Join(path, key), "required");
@@ -562,7 +677,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
-            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "look", "notes"})) {
+            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "look", "watch", "notes"})) {
                 return false;
             }
             CabinControl item;
@@ -605,6 +720,8 @@ private:
             if (const json::Value* look = c.Find("look")) {
                 if (!LoadLook(*look, Join(path, "look"), false, item.look)) return false;
             }
+            if (!OptionalString(c, path, "watch", item.watch)) return false;
+            if (!item.watch.empty() && item.style != CabinStyle::Wheel) return Fail(Join(path, "watch"), "for wheels only");
             out.controls.push_back(std::move(item));
         }
         return true;

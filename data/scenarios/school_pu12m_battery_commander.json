@@ -1,0 +1,28 @@
+{
+  "scenario_id": "school_pu12m_battery_commander",
+  "name": "PU-12M lesson 5: the battery commander, in command",
+  "description": "A step-by-step lesson in the battery commander's seat of the PU-12M, the battery's command post, with the lesson's guide (data/tutorials/school_pu12m_battery_commander.json) on the screen: the seat, its equipment and what each control does, then deploying the post by your order, the ASPD-U and your radios on, then a target given to a launcher with the DT-2 marker and the ДХ keys, one switch at a time, each highlighted, the next only once it is done.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. The Kesmark range (as the Osa's seat lessons), the PU-12M at a halt. No crew_commander: the lesson gives the battery commander's orders (simcore/tutorial.hpp on_start) when the learner isn't him. Crew class 1. The targets' numbers are PLACEHOLDERS, held on cue. The regiment's post and its P-19 as in pu12m_deploy.json.",
+  "seed": 21,
+  "origin": {"lat_deg": 46.817217, "lon_deg": 19.77862, "alt_m": 107.6},
+  "terrain": {"type": "map", "map": "maps/kesmark_range.json"},
+  "weather": "clear",
+  "post": {"board": "command/pu12.json", "aspd": "command/aspd_u.json", "library": "command/regiment_radars.json", "regiment": {"position": {"east_m": -6000, "north_m": -5000, "up_m": 2}, "radars": [{"id": "p19_regiment", "type": "p19", "position": {"east_m": -6200, "north_m": -5000, "up_m": 2}}], "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery: inside the R-407 net's 15 km."}},
+  "battery_commander": "player",
+  "battery": {"deployed": true, "own": {"id": "20", "callsign": "20"}, "launchers": {"console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json"}, "vehicles": [{"id": "21", "kind": "launcher", "position": {"east_m": -2500, "north_m": 1500, "up_m": 3}}, {"id": "22", "kind": "launcher", "position": {"east_m": 2500, "north_m": 1500, "up_m": 3}}]},
+  "own_unit": {"console": "procedures/pu12m.json", "position": {"east_m": 400, "north_m": -400, "up_m": 3.9}, "heading_deg": 290, "inputs": {"vehicle_stopped": true}},
+  "crew": [
+    {"name": "Battery commander", "role": "battery_commander", "skill": "class1"},
+    {"name": "Squad leader", "role": "squad_leader", "skill": "class1"},
+    {"name": "Operator", "role": "operator", "skill": "class1"},
+    {"name": "Radio operator", "role": "radio_operator", "skill": "class1"},
+    {"name": "Driver", "role": "driver", "skill": "class1"}
+  ],
+  "targets": [
+    {"id": "t1", "name": "Practice target (placeholder)", "type": "Air+FixedWing", "class": "fighter", "board_type": 7, "start": {"east_m": 6000, "north_m": 45000, "up_m": 2000}, "waypoints": [{"east_m": 6000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 6000, "up_m": 2000}, {"east_m": -14000, "north_m": 40000, "up_m": 2000}, {"east_m": 6000, "north_m": 40000, "up_m": 2000}], "speed_mps": 150, "rcs_m2": 3.0, "on_cue": true, "notes": "Placeholder numbers. Held until the lesson brings it in (on_cue), then a racetrack 6 to 40 km north of the post for some 40 minutes: on the IT-45 (scale M50) whenever the learner gets to it, and in the launchers' reach on its near leg."}
+  ],
+  "triggers": [],
+  "end": {"time_limit_s": 3600, "when_targets_gone": false}
+}

@@ -199,6 +199,20 @@ void USimViewComponent::SetView(ESimView NewView)
 	}
 }
 
+bool USimViewComponent::SetViewByKey(const FString& Key)
+{
+	for (ESimView V : {ESimView::Cabin, ESimView::Vehicle, ESimView::FlyBy, ESimView::Chase, ESimView::NearestAir, ESimView::Weapon,
+			 ESimView::Ground, ESimView::Air, ESimView::Map, ESimView::Free})
+	{
+		if (KeyOf(V) == Key)
+		{
+			Press(V);
+			return true;
+		}
+	}
+	return false;
+}
+
 void USimViewComponent::Press(ESimView InView)
 {
 	ASimOsaVehicle* V = Vehicle();

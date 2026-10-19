@@ -1,0 +1,28 @@
+{
+  "tutorial_id": "school_pu12m_squad_leader",
+  "title": "PU-12M lesson 3: the squad leader",
+  "scenario": "scenarios/school_pu12m_squad_leader.json",
+  "seat": "squad_leader",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/pu12m.json: deploy_orient) and the crew data's reports (data/crew/pu12m_crew.json), with their sources",
+  "notes": "The battery commander's orders are given by the lesson (on_start) at the learner's pace.",
+  "steps": [
+    {"id": "hello", "chapter": "Your seat", "title": "The squad leader's seat", "lines": ["You are the squad leader (No. 1): front right.", "You orient the post: you measure which way it faces with the PAB-2 aiming circle, hold that direction with the GAK gyro, and plot the post's position with the KP-4. Every azimuth the post gives the launchers is only as good as your orientation.", "Each step lights up what to use; only that works. Read, then press Enter."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "tour_gak", "title": "The GAK's control panel", "look": "gak_panel", "lines": ["At your right: the GAK, the gyro direction indicator. Once given a measured direction it holds it as the post stands."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_pab2", "title": "The PAB-2 aiming circle", "look": "pab2_panel", "lines": ["Its case: the PAB-2, set up on its tripod outside to measure a direction from a landmark."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_kp4", "title": "The KP-4 plotter", "look": "kp4_panel", "lines": ["Ahead of you: the KP-4 coordinate and course plotter."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "tour_it1", "title": "The IT-1M status board", "look": "it1_panel", "lines": ["And the IT-1M board: a column of lamps for each launcher, ready, on a target, launched, its missiles."], "hint": "L: look at it.   Enter: next.", "continue": true},
+    {"id": "order", "chapter": "Deploying the post", "title": "The commander: «Пункт управления развернуть!»", "on_start": ["order:order_deploy"], "lines": ["The battery commander orders the post deployed. Your part: your radio, and the orientation."], "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.", "continue": true},
+    {"id": "fug1", "title": "Your R-123M on: ПИТАНИЕ", "control": "radio.fug1.power", "position": 1, "procedure": "deploy_orient", "lines": ["Switch your R-123M (FuG-1) on: the air-picture net."], "hint": "Point the cross at it, left click."},
+    {"id": "gak", "title": "The GAK on", "control": "gak.power", "position": 1, "procedure": "deploy_orient", "lines": ["Switch the GAK on: its gyro runs up."], "why": "A gyro needs minutes to run up and settle: start it first.", "hint": "Point the cross at it, left click."},
+    {"id": "pab2", "title": "Set up the PAB-2", "control": "nav.pab2", "position": 1, "procedure": "deploy_orient", "lines": ["Set up the PAB-2 aiming circle outside: the switch stands for carrying it out, levelling it and measuring the direction from a landmark."], "why": "The aiming circle is the post's compass: its measured direction is what the GAK will hold.", "hint": "Point the cross at it, left click."},
+    {"id": "enter", "title": "Enter the measured direction into the GAK", "control": "gak.enter_heading", "position": 1, "procedure": "deploy_orient", "fast_forward": true, "lines": ["When the GAK has run up and the direction is measured, press the GAK's button to enter it."], "why": "From now on the GAK knows which way the post faces.", "hint": "Point the cross at it, left click."},
+    {"id": "stow_pab2", "title": "Bring the PAB-2 back in", "control": "nav.pab2", "position": 0, "procedure": "deploy_orient", "fast_forward": true, "lines": ["The post is oriented: bring the aiming circle back in."], "hint": "Point the cross at it, left click."},
+    {"id": "kp4", "title": "The KP-4 on", "control": "kp4.power", "position": 1, "procedure": "deploy_orient", "lines": ["Switch the KP-4 on."], "hint": "Point the cross at it, left click."},
+    {"id": "dtp", "title": "The DTP's parallax set", "control": "dtp.parallax", "position": 1, "procedure": "deploy_orient", "lines": ["Set the DTP's parallax: the post's offset from the reference point, for the telecode (it is low by your knee: L takes you there)."], "hint": "L: step to it.   Left click."},
+    {"id": "report", "title": "Report it: «Ориентирование закончено!»", "report": "oriented", "wait_until": ["subsystem:oriented=ready"], "wait_text": "the post oriented", "fast_forward": true, "lines": ["Tell the commander: O, then «Ориентирование закончено!» (Post oriented!)."], "hint": "O: your reports, then the highlighted line's number."},
+    {"id": "crew", "title": "The crew deploys", "done_when": ["task:ready_halted"], "wait_text": "the post deployed", "fast_forward": true, "lines": ["Your part is done. The others finish theirs."]},
+    {"id": "end", "chapter": "Done", "title": "The squad leader's part: done", "lines": ["That is your part: your radio on, the post oriented with the PAB-2 and the GAK, the KP-4 and the DTP set.", "Esc, then M: the missions menu, and the next seat's lesson."]}
+  ]
+}

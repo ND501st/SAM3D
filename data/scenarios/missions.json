@@ -6,10 +6,25 @@
   "groups": [
     {
       "id": "tutorial", "label": "Tutorial",
-      "notes": "Start here. A guide on the screen takes you through the camera views (F1 to F11), the commander's seat and a whole engagement, step by step: the crew waits for your orders. G shows every key at any time.",
+      "notes": "Start here, then learn the Osa one seat at a time. Each step lights up the switch, button or wheel to use and waits until you have used it; the rest of the crew are NPCs and the commander's orders come at your pace. G shows every key at any time.",
       "missions": [
-        { "file": "scenarios/tutorial_first_shoot.json", "title": "Your first shoot: in command of the Osa 21", "level": "/Game/Maps/KesmarkRange",
-          "tutorial": "tutorials/first_shoot.json", "start": "outside" }
+        { "file": "scenarios/tutorial_basics.json", "title": "Start here: the camera, the cabin, the controls", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/basics.json", "start": "outside" },
+        { "file": "scenarios/school_driver.json", "title": "Seat lesson 1: the driver", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_driver.json", "start": "driver" },
+        { "file": "scenarios/school_operator.json", "title": "Seat lesson 2: the operator", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_operator.json", "start": "operator" },
+        { "file": "scenarios/school_senior_operator.json", "title": "Seat lesson 3: the senior operator", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_senior_operator.json", "start": "senior_operator" },
+        { "file": "scenarios/school_deputy_commander.json", "title": "Seat lesson 4: the deputy commander", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_deputy_commander.json", "start": "deputy_commander" },
+        { "file": "scenarios/school_commander.json", "title": "Seat lesson 5: the commander, in command", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_commander.json", "start": "commander" },
+        {"file": "scenarios/school_pu12m_driver.json", "title": "PU-12M lesson 1: the driver-electrician", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_driver.json", "start": "driver"},
+        {"file": "scenarios/school_pu12m_radio_operator.json", "title": "PU-12M lesson 2: the radiotelephone operator", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_radio_operator.json", "start": "radio_operator"},
+        {"file": "scenarios/school_pu12m_squad_leader.json", "title": "PU-12M lesson 3: the squad leader", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_squad_leader.json", "start": "squad_leader"},
+        {"file": "scenarios/school_pu12m_operator.json", "title": "PU-12M lesson 4: the operator-plotter", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_operator.json", "start": "operator"},
+        {"file": "scenarios/school_pu12m_battery_commander.json", "title": "PU-12M lesson 5: the battery commander, in command", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_battery_commander.json", "start": "battery_commander"}
       ]
     },
     {

@@ -1,20 +1,21 @@
 # Playing SAM3D
 
-The player's guide to the first playable test: how to start, the tutorial, the camera views, and every key. The game
-itself carries the same guide: the tutorial mission shows it step by step, and **G** shows every key at any time.
+The player's guide to the first playable test: how to start, the lessons, the camera views, and every key. The game
+itself carries the same guide: the lessons teach it step by step, and **G** shows every key at any time.
 
 ## Starting
 
 Build once (or let the editor build on opening the project), then:
 
 ```
-.\tools\play.ps1 -Tutorial      # straight into the tutorial
-.\tools\play.ps1                # the missions menu
-.\tools\play.ps1 -Build -Tutorial   # build the code first (close the editor)
+.\tools\play.ps1 -Tutorial                  # straight into the first lesson
+.\tools\play.ps1 -Lesson senior_operator    # a seat's lesson (driver, operator, senior_operator, deputy_commander, commander)
+.\tools\play.ps1                            # the missions menu
+.\tools\play.ps1 -Build -Tutorial           # build the code first (close the editor)
 ```
 
 `play.ps1` runs the game in its own window (`UnrealEditor.exe SAM3D.uproject -game`); the engine is `D:\UE_5.8` unless
-`UE_ROOT` says otherwise. The tutorial plays on the Kesmark test range, which needs no Cesium token or internet. Playing
+`UE_ROOT` says otherwise. The lessons play on the Kesmark test range, which needs no Cesium token or internet. Playing
 from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from the vehicle,
 F11 the immersive view): use the standalone game for the full set of views.
 
@@ -25,35 +26,46 @@ quit. The groups:
 
 | Group | What it is |
 |---|---|
-| **Tutorial** | Start here: the first shoot, with the guide on the screen. You command; the crew waits for your orders. |
+| **Tutorial** | Start here (the camera, the cabin, the controls), then a lesson for each seat of the Osa. |
 | Missions | NPC commanders run the crew and the battery by the drill. Take a seat and do your part, or command. |
 | Drills | Scripted shoots: the scenario gives the orders. Watch, or take a seat and keep up. |
 | Ranges and history | Range days and the Osa's battles. |
 | Air war | Raids planned by the enemy air command (and the campaign screen). |
 | Test range | The Kesmark map with a raid at the bridges. |
 
-## The tutorial: your first shoot
+## The lessons
 
-You command the Osa 21, cold in its position by the Kesmark bridges, the PU-12M, the reload vehicle and the fuel truck
-beside it. Two slow practice drones fly at you, the second ten minutes after the first. Nobody gives the crew orders
-but you. The guide (top right) moves on as you do each step; **N** skips a step.
+Eleven lessons, first in the missions menu (`docs/TUTORIALS.md` lists what each teaches). Start with **Start here**: the
+camera, the views, the cabin, and one of each kind of control. Then the seats, in any order: **the driver**, **the
+operator**, **the senior operator**, **the deputy commander**, and **the commander, in command**. Each seat lesson puts
+you in that seat of the Osa 21, cold at a halt by the Kesmark bridges, with the rest of the crew at their posts. It
+shows you your panels first, then takes you through your part of the drill one switch at a time, from «К бою!»
+(action stations) to the launch at a practice drone. The commander's orders come when you are ready for them.
+Then the **PU-12M**, the battery's command post, seat by seat: the driver-electrician (the AB-1 generator), the
+radiotelephone operator (the radios and the mast), the squad leader (orienting the post), the operator-plotter (the
+regiment's picture onto the board) and the battery commander (deploying the post, then a target to a launcher with the
+DT-2 marker and the ДХ keys).
 
-1. **Welcome.** Right mouse + drag turns the camera, the wheel zooms.
-2. **The camera views.** Try four of F1-F11 (below). F8 finds the first drone, far to the north-west.
-3. **Into the cabin.** F1, then F1 or Tab from seat to seat; come back to the commander's.
-4. **Take command.** T: the seat is yours.
-5. **К бою! (Action stations!)** O opens your orders; pick it by its number. The crew calls each step on the intercom.
-6. **Coming to readiness.** Some minutes from cold: Ctrl+Z speeds time up. Done when the senior operator calls
-   *Готов СОЦ!* (search radar ready).
-7. **Search.** Wait for his contact report. *Цель … — взять!* (Take target!) is greyed until a contact is reported.
-8. **Take the target.** Give it; the crew captures (ЗАХВАТ).
-9. **Prepare to launch.** *Приготовиться к пуску!*
-10. **Permit the launch.** *Пуск разрешаю!* opens once the drone is in the zone (ЦЕЛЬ В ЗОНЕ).
-11. **Missile away.** F6 follows your missile, F3 watches it fly past.
-12. **After the shot.** HIT or MISS; the second drone; Esc for the menu and, at the end, the debrief.
+How a step works:
 
-A headless player does exactly these steps in `simcore/tests/test_tutorial.cpp` and launches some 7.5 minutes of sim
-time in.
+- **The card** (top right) says where you are (the lesson, the chapter, step n of N), what to do, the control and the
+  position to set it to (or the order or report to give), why, and the keys. Its last line always says what happens
+  next: *Enter: continue* to read on, *Your move*, or *Waiting for ...* when the drill isn't ready for the move yet.
+- **The control is lit**: it pulses green in the cabin with a small lamp on it, a green bracket on the screen marks it
+  with the position to set, and an arrow at the edge of the screen points to it when it is out of view. **L** turns
+  your head onto it.
+- **Only the lit control works** in a seat lesson; anything else says why not. Do the step and the next one comes up,
+  with a tick at the top of the screen. A hand wheel shows a gauge: where the wheel is, the mark, which way to turn.
+- **Orders and reports**: O opens the crew menu on the page with the step's line, marked *<-- this one*; pick it by its
+  number. It counts at once; the intercom says it when it is free.
+- **Waits** run time faster on their own (the turbine spinning up, the radar warming); it goes back to normal for your
+  next move.
+- **The instructor** reads each new step aloud (English; `sam3d.InstructorVoice 0` in the console silences him).
+- **Backspace** goes back a step to read it again (what was done stays done; Enter goes on). **N** skips a step: the
+  instructor does it for you (his ghost hand shows the move), so the drill goes on as if you had.
+
+A headless perfect student plays every lesson through in `simcore/tests/test_tutorial.cpp`; each seat lesson ends with
+a launch some 7.5 minutes of sim time in.
 
 ## Camera views
 
@@ -98,7 +110,8 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | Tab | The next seat |
 | Mouse (cabin) | Look round; the cross names the control |
 | Left / right click | Switch on, step forward, press / step back |
-| Drag or wheel on a hand wheel | Turn it |
+| Drag or wheel on a hand wheel | Turn it; held, your eyes go to the display it is worked against (the scope, the range indicator, the IT-45) and come back when you let go |
+| X | Get up and walk in the cabin (W A S D, the mouse looks round, any control in arm's reach works); X by a seat sits you down in it, T then takes it over |
 | T | Take this seat, or give it back |
 | O | Orders (at the commander's seat) or reports (any other); 1-9 pick, 0 next page, Esc close |
 | H | Training overlay: guided, hint, demonstrate, off |
@@ -107,7 +120,10 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | V | The other vehicle (a battery link) |
 | [ ], 1-5, P | PU-12M seats: pick a target, give it to a launcher, plot it |
 | G | Every key |
-| N | The tutorial's next step |
+| Enter | A lesson's reading step: continue |
+| L | A lesson: look at what the step lights up (from the lesson's seat) |
+| N | A lesson: skip a step (the instructor does it) |
+| Backspace | A lesson: back a step |
 | Esc | Pause: resume, restart, the missions, quit; the debrief at the end |
 
 ## Known limits of this test
@@ -116,7 +132,9 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
   vehicles are drawn on the ground under their sim position (which is at their antennas).
 - With the player in command, *К бою!* doesn't switch the deputy commander's TV on, so the crew data's "ready at a
   halt" task never completes and *К бою!* never greys as done (the NPC commander gets there through the drill
-  master). The tutorial waits for the search radar instead. The engagement doesn't need the TV.
-- Multiplayer: the views and the guide are each player's own; time keys work on the server only.
+  master). The commander's lesson waits for the search radar instead and orders the TV look on its own. The
+  engagement doesn't need the TV.
+- The lessons are in English; the crew's words are Russian with the English beside them.
+- Multiplayer: the views and the lessons are each player's own; time keys work on the server only.
 - Frame rate: about 100 fps in every view at 1600x900 on the development PC (19 Oct 2026). If the cabin runs slowly,
   `sam3d.CabinDisplayHz 15` and `sam3d.TvHz 10` in the console (~) lower how often the instruments and the TV redraw.

@@ -352,7 +352,12 @@ void USimCrewBodiesComponent::TickComponent(float DeltaTime, ELevelTick TickType
 				A = X;
 			}
 		}
-		const bool bShow = Body.Station != HiddenStation;
+		bool bShow = Body.Station != HiddenStation;
+		for (int32 I = 0; bShow && ClearRadiusCm > 0.0f && I < Body.Parts.Num(); ++I)
+		{
+			const UStaticMeshComponent* Mesh = Body.Parts[I].Mesh;
+			bShow = Mesh == nullptr || Mesh->Bounds.GetBox().ComputeSquaredDistanceToPoint(ClearAt) >= FMath::Square(static_cast<double>(ClearRadiusCm));
+		}
 		if (bShow != Body.bVisible)
 		{
 			for (FPart& P : Body.Parts)

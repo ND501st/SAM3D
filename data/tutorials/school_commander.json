@@ -1,0 +1,129 @@
+{
+  "tutorial_id": "school_commander",
+  "title": "Seat lesson 5: the commander, in command",
+  "scenario": "scenarios/school_commander.json",
+  "seat": "commander",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each order highlighted in the crew menu, the next step only once it is given.",
+  "source": "sam3d; the orders, the drills they start and the reports that answer them are the crew data's (data/crew/osa_ak_crew.json), with their sources",
+  "notes": "The commander's half of the game: the learner gives the orders, the NPC crew carries them out. Orders that can't be carried out yet are greyed in the menu with the reason (the order menu's honest greying).",
+  "steps": [
+    {
+      "id": "hello", "chapter": "Your seat", "title": "The commander's seat",
+      "lines": [
+        "You are the vehicle commander (командир боевой машины): seat 0 of the Osa 21, front right, beside the driver.",
+        "You command the crew: you bring them to readiness, you decide which target to take and when to fire, and you keep in touch with the battery on the radio. Your crew does the rest, at their seats, on your orders, and tells you what they see and do.",
+        "Each step highlights the order to give; only that one works. Read, then press Enter."
+      ],
+      "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
+      "continue": true
+    },
+    {
+      "id": "tour_panel", "title": "Your panel", "look": "commander_panel",
+      "lines": [
+        "In front of you: the hatches switch (the launch circuit stays open with a hatch open) and ПРОХОД ПОД МОСТОМ, which lowers the search antenna to pass under a bridge on the march. The lamps tell you the power, the turret's lock and a fault."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_radio", "title": "The right radio and your intercom", "look": "radio_right_panel",
+      "lines": [
+        "Beside you on the right: the right R-123M radio set and your intercom box (Р-124). On the radio you hear the battery's command post: its warnings and target designations."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_menu", "title": "Your orders: the crew menu", "done_when": ["ui:crew_menu"],
+      "lines": [
+        "You give orders through the crew menu: press O to open it. It lists the orders of the drill; an order the crew can't carry out yet is greyed, with the reason. O or Esc closes it.",
+        "Open it now (O), look, and close it."
+      ],
+      "hint": "O: the crew menu."
+    },
+    {
+      "id": "k_boyu", "chapter": "Action stations (К бою)", "title": "Give «К бою!»", "order": "order_k_boyu",
+      "lines": ["O, then «К бою!» (Action stations!)."],
+      "why": "It brings the whole crew to readiness from cold: the driver starts the turbine, the operator switches the equipment on and unlocks the turret, the senior operator brings up the search radar, the deputy commander orients the vehicle.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "readiness", "title": "The crew at work", "done_when": ["task:searching"], "fast_forward": true,
+      "lines": [
+        "Listen to them: «Есть!», «Питание подано!», «АПУ расстопорено!», «Готов СОЦ!». From cold this takes some minutes; the lesson runs time faster.",
+        "F1 or Tab: visit their seats and watch them work. F1 back to yours."
+      ],
+      "wait_text": "the search radar to come up («Готов СОЦ!»)"
+    },
+    {
+      "id": "target", "chapter": "The target", "title": "A target",
+      "lines": ["A practice drone is flying at you from the north-west. The senior operator searches for it; when he finds it he asks it (IFF) and calls it to you."],
+      "hint": "Enter: next.",
+      "on_start": ["release:d1"],
+      "continue": true
+    },
+    {
+      "id": "contact", "title": "Search", "done_when": ["contact:commander"], "fast_forward": true,
+      "lines": ["Wait for his report: «Цель, азимут …, дальность …!», and «Ответа нет!»: not one of ours."],
+      "wait_text": "the senior operator's report"
+    },
+    {
+      "id": "take", "title": "Give «Цель — взять!»", "order": "order_take_target",
+      "lines": ["O, then «Цель номер … — взять!» (Take the target!)."],
+      "why": "You decide what to engage. The senior operator puts the tracking radar's azimuth on it, the deputy commander designates it (ЦУ), the operator switches the transmitter on: the radar captures it.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "captured", "title": "The capture", "done_when": ["task:captured"], "fast_forward": true,
+      "lines": ["Wait for the operator's «Захват!»."],
+      "wait_text": "the capture"
+    },
+    {
+      "id": "tv", "chapter": "Look before you shoot", "title": "Give «Цель осмотреть по ТВ!»", "order": "order_tv_watch",
+      "lines": ["O, then «Цель осмотреть по ТВ!» (Look the target over on the TV!)."],
+      "why": "The radar holds an echo; the TV shows what it is. Decoys and false targets look small where their echo says aircraft.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "tv_look", "title": "What the TV shows", "done_when": ["subsystem:tov_camera=ready"], "fast_forward": true,
+      "lines": ["The deputy commander switches the camera on and takes the narrow lens. Go and look at his monitor if you like (Tab), then come back (F1)."],
+      "wait_text": "the TV camera"
+    },
+    {
+      "id": "prepare", "chapter": "Firing", "title": "Give «Приготовиться к пуску!»", "order": "order_prepare",
+      "lines": ["O, then «Приготовиться к пуску!» (Prepare to launch!)."],
+      "why": "The deputy commander sets live firing and puts the launch key in.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "zone", "title": "Into the zone", "done_when": ["input:target_in_zone"], "fast_forward": true,
+      "lines": ["Wait for the deputy commander's «Цель в зоне!»: the drone inside the missiles' reach. Until then «Пуск разрешаю!» is greyed in your menu: «Цель не в зоне»."],
+      "wait_text": "the target to come into the firing zone"
+    },
+    {
+      "id": "fire", "title": "Give «Пуск разрешаю!»", "order": "fire_permitted",
+      "lines": ["O, then «Пуск разрешаю!» (Launch permitted!)."],
+      "why": "Only you permit a launch. The deputy commander turns the key and presses ПУСК.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "launch", "title": "Launch", "done_when": ["debrief:LAUNCH"],
+      "lines": ["«Пуск!», «Сход!»: the missile is away. Press F6 to follow it, F1 to come back."],
+      "wait_text": "the launch"
+    },
+    {
+      "id": "result", "title": "Missile away", "done_when": ["debrief:HIT", "debrief:MISS"],
+      "lines": ["Wait for the deputy commander's report: «Цель поражена!» or «Промах!». After a miss you can order «Вторая — пуск!» while the drone is still in the zone."],
+      "wait_text": "the missile to reach the drone"
+    },
+    {
+      "id": "end", "chapter": "Done", "title": "In command: done",
+      "lines": [
+        "That is the commander's drill for one target: К бою, the search, the target taken, looked at on the TV, the missiles prepared, and the launch permitted in the zone.",
+        "Practise it without the highlights: the Missions group's «Osa: crew practice, one target» in the commander's seat; then the battery fight, and the ranges and battles.",
+        "Esc: the menu."
+      ]
+    }
+  ]
+}

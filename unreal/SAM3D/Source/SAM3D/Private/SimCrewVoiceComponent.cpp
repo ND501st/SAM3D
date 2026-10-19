@@ -16,6 +16,8 @@ namespace
 	TAutoConsoleVariable<FString> CVarVoiceLanguage(TEXT("sam3d.VoiceLanguage"), TEXT("auto"),
 		TEXT("The crew's language: auto (the first of data/crew/voices.json's languages with a voice installed), ru or en."), ECVF_Default);
 	TAutoConsoleVariable<float> CVarVoiceVolume(TEXT("sam3d.VoiceVolume"), 1.0f, TEXT("The crew's voices' volume, 0 to 2."), ECVF_Default);
+	TAutoConsoleVariable<int32> CVarInstructorVoice(TEXT("sam3d.InstructorVoice"), 1,
+		TEXT("A lesson's instructor reads each new step aloud (an English voice): 1 on, 0 off."), ECVF_Default);
 
 	FString ToF(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
 	std::string ToStd(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
@@ -194,30 +196,70 @@ bool USimCrewVoiceComponent::PlayRecorded(const simcore::SpokenCallout& Line, co
 	return false;
 }
 
+void USimCrewVoiceComponent::SpeakInstructor(USimWorldSubsystem& Sim, FSimSpeech& Speech)
+{
+	// Taken only once the engine can speak it: the first step's words wait for the voices to be listed.
+	FString Line;
+	if (!Speech.IsReady() || !Sim.TakeTutorialSpeech(Line) || CVarInstructorVoice.GetValueOnGameThread() == 0 ||
+		Speech.NumVoices(TEXT("en")) == 0)
+	{
+		return;
+	}
+	FSimSpeechRequest R;
+	R.Id = NextRequest++;
+	R.Text = Line;
+	R.Language = TEXT("en");
+	R.Rate = -1;  // a touch slower than the crew: he is explaining
+	InstructorRequest = R.Id;
+	Speech.Request(R);
+	UE_LOG(LogSAM3D, Log, TEXT("Instructor: %s"), *Line);
+}
+
 void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-	const simcore::ScenarioRunner* Runner = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
-	const simcore::VoiceData* Voices = Sim != nullptr ? Sim->GetVoiceData() : nullptr;
-	if (Runner == nullptr || Voices == nullptr || Runner->Callouts() == nullptr || CVarVoice.GetValueOnGameThread() == 0)
+	if (Sim == nullptr)
 	{
 		return;
 	}
-	if (Runner != LastRunner)  // a new scenario: start from its first line
+	const simcore::ScenarioRunner* Runner = Sim->GetScenarioRunner();
+	const simcore::VoiceData* Voices = Sim->GetVoiceData();
+	FSimSpeech& Speech = FSimSpeech::Get();
+	// The lesson's instructor talks whatever the crew's voices are doing.
+	SpeakInstructor(*Sim, Speech);
+	const bool bCrew = Runner != nullptr && Voices != nullptr && Runner->Callouts() != nullptr && CVarVoice.GetValueOnGameThread() != 0;
+	if (bCrew && Runner != LastRunner)  // a new scenario: start from its first line
 	{
 		LastRunner = Runner;
 		LastSeq = 0;
 		Pending.Reset();
 	}
-	ChooseLanguage(*Voices);
-	FSimSpeech& Speech = FSimSpeech::Get();
+	if (bCrew)
+	{
+		ChooseLanguage(*Voices);
+	}
 	// Lines synthesised since the last frame.
 	FSimSpeechResult Done;
 	while (Speech.TakeResult(Done))
 	{
+		if (Done.Id == InstructorRequest)
+		{
+			InstructorRequest = 0;
+			if (Done.bOk)
+			{
+				// In the room, not on the intercom: the whole band, no hiss.
+				simcore::VoiceSettings Room;
+				Room.low_hz = 80.0;
+				Room.high_hz = 12000.0;
+				const float Seconds = static_cast<float>(Done.Pcm.Num()) / static_cast<float>(FMath::Max(1, Done.SampleRate));
+				Play(MoveTemp(Done.Pcm), Done.SampleRate, TEXT("instructor"), Room);
+				UE_LOG(LogSAM3D, Log, TEXT("Instructor: spoken (%.1f s)"), Seconds);
+			}
+			continue;
+		}
 		FPendingLine Line;
-		if (!Pending.RemoveAndCopyValue(Done.Id, Line) || !Done.bOk)
+		if (!bCrew || !Pending.RemoveAndCopyValue(Done.Id, Line) || !Done.bOk)
 		{
 			continue;
 		}
@@ -226,6 +268,10 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			continue;  // too late to matter (the engine was slow, or time ran fast)
 		}
 		Play(MoveTemp(Done.Pcm), Done.SampleRate, Line.Channel, Line.Settings);
+	}
+	if (!bCrew)
+	{
+		return;
 	}
 	// New lines on the bus.
 	const std::vector<simcore::SeatActivity> Activity = Runner->CrewActivity();

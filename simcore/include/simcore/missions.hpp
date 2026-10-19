@@ -145,10 +145,15 @@ private:
             return false;
         }
         if (!m.tutorial.empty()) {
+            // The lesson loads, is written for this scenario, and everything it names is in it.
             TutorialDef guide;
             std::string error;
             if (!LoadTutorialFile(data_dir_, m.tutorial, guide, &error)) return Fail(Join(p, "tutorial"), error);
             if (guide.scenario != m.file) return Fail(Join(p, "tutorial"), m.tutorial + " is written for " + guide.scenario);
+            ScenarioDef scenario;
+            ConsoleData console;
+            if (!LoadScenarioFile(data_dir_ + "/" + m.file, data_dir_, scenario, console, &error)) return Fail(Join(p, "file"), error);
+            if (!BindTutorial(guide, scenario, console, &error)) return Fail(Join(p, "tutorial"), m.tutorial + ": " + error);
         }
         m.id = MissionIdOf(m.file);
         if (!m.level.empty() && m.level.rfind("/Game/", 0) != 0) return Fail(Join(p, "level"), "a level path starting /Game/");

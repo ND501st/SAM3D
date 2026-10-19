@@ -1,0 +1,224 @@
+{
+  "tutorial_id": "school_deputy_commander",
+  "title": "Seat lesson 4: the deputy commander",
+  "scenario": "scenarios/school_deputy_commander.json",
+  "seat": "deputy_commander",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/osa_ak.json: orient_vehicle, ready_capture, tv_watch, prepare_firing, launch) and the crew data's reports, with their sources",
+  "notes": "The commander's orders are given by the lesson (on_start) at the learner's pace. The crew chief's Qc comes from the scenario's log (the orientation line), as an NPC deputy is given it.",
+  "steps": [
+    {
+      "id": "hello", "chapter": "Your seat", "title": "The deputy commander's seat",
+      "lines": [
+        "You are the deputy commander (заместитель командира, the guidance operator): seat 3 of the Osa 21, facing the left wall at the front of the compartment.",
+        "You orient the vehicle at the halt, you point the tracking radar at the target the senior operator found (ЦУ), you look at it on the TV, and you launch the missiles.",
+        "Each step lights up what to use; only that works. Read, then press Enter."
+      ],
+      "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
+      "continue": true
+    },
+    {
+      "id": "tour_panel", "title": "Your panel", "look": "fo_panel",
+      "lines": [
+        "In front of you: the panel of the elevation, the TV sight and the launch. The TV monitor at the top; РОД РАБОТЫ, the working mode; ЦУ, the target designation button; the elevation wheel УГОЛ МЕСТА; at the bottom the launch key ЗАПРЕТ ПУСКА and the ПУСК button."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_lamps", "title": "The lamps you fire by", "look": "in_zone",
+      "lines": [
+        "ЦЕЛЬ В ЗОНЕ lights when the tracked target is inside the missiles' reach; ПУСК ГОТОВ when a prepared missile and the launch circuit are ready. You launch only with both lit."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_gyro", "title": "The gyro panel 0005-8M", "look": "gyro_panel",
+      "lines": [
+        "Up to your right: the gyro panel, with which you orient the vehicle. АК — ЗК connects the course setter; ЗК-4 is the setter's wheel; РЕЛЕ — Qc and СОГЛАСОВАНИЕ slave the gyro half-compass to it."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "order_k_boyu", "chapter": "Action stations (К бою)", "title": "The commander: «К бою!»",
+      "lines": [
+        "«К бою!» (Action stations!). Your part: orient the vehicle. Until it is oriented, every azimuth the crew reads is off by the hull's heading, and a designation from the command post points at nothing.",
+        "You need the gyro first: the driver starts the turbine and erects it (40 s)."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_k_boyu"],
+      "continue": true
+    },
+    {
+      "id": "ak_zk", "title": "Connect the course setter: АК — ЗК to ЗК", "control": "orient.ak_zk", "position": 1, "procedure": "orient_vehicle",
+      "lines": ["Flip АК — ЗК to ЗК."],
+      "why": "АК is the gyro half-compass running on its own; ЗК connects it to the course setter, where you are about to set the hull's true heading.",
+      "hint": "Left click flips a switch.",
+      "wait_text": "the gyro to erect (the driver's АРРЕТИР., 40 s)",
+      "fast_forward": true
+    },
+    {
+      "id": "qc", "title": "Set the crew chief's Qc on the ЗК-4", "wheel": "orient.qc", "aim": "qc", "tolerance": 1.0,
+      "lines": [
+        "The commander reads the hull's heading off the compass and gives it to you: the Qc. Turn the ЗК-4 wheel until its dial shows it (the card gives the number)."
+      ],
+      "why": "The Qc is the hull's true heading, measured with the compass. The gyro takes it from the setter and then holds it as the vehicle stands.",
+      "hint": "Hold the left button on the wheel and drag sideways, or roll the mouse wheel over it.",
+      "wait_text": "the commander's Qc"
+    },
+    {
+      "id": "relay", "title": "Slave the gyro: РЕЛЕ — Qc to Qc", "control": "orient.relay", "position": 1, "procedure": "orient_vehicle",
+      "lines": ["Flip РЕЛЕ — Qc to Qc."],
+      "why": "The gyro half-compass now turns towards the setter's heading.",
+      "hint": "Left click."
+    },
+    {
+      "id": "sync", "title": "Bring them together: СОГЛАСОВАНИЕ", "control": "orient.sync", "position": 1, "procedure": "orient_vehicle",
+      "lines": ["Press СОГЛАСОВАНИЕ: the gyro turns fast onto the Qc, and stops when they agree."],
+      "why": "Slaved, the gyro creeps towards the setter; СОГЛАСОВАНИЕ makes it turn fast.",
+      "hint": "Left click presses a button."
+    },
+    {
+      "id": "ak", "title": "Scales agree: АК — ЗК back to АК", "control": "orient.ak_zk", "position": 0, "procedure": "orient_vehicle",
+      "lines": ["When the scales have stopped, flip АК — ЗК back to АК."],
+      "why": "The gyro half-compass runs on its own again, now holding the true heading.",
+      "hint": "Left click.",
+      "wait_text": "the gyro's scale to stop on the Qc"
+    },
+    {
+      "id": "relay_back", "title": "РЕЛЕ — Qc back to РЕЛЕ", "control": "orient.relay", "position": 0, "procedure": "orient_vehicle",
+      "lines": ["Flip РЕЛЕ — Qc back to РЕЛЕ. The vehicle is oriented."],
+      "hint": "Left click."
+    },
+    {
+      "id": "readiness", "title": "The crew comes to readiness", "done_when": ["task:searching"], "fast_forward": true,
+      "lines": ["The operator unlocks the turret and switches its drives on; the senior operator brings up the search radar (three minutes to warm up). The lesson runs time faster."],
+      "wait_text": "the search radar to come up («Готов СОЦ!»)"
+    },
+    {
+      "id": "target", "chapter": "The target", "title": "A target",
+      "lines": ["A practice drone is flying at you from the north-west. The senior operator searches for it and calls it to the commander."],
+      "hint": "Enter: next.",
+      "on_start": ["release:d1"],
+      "continue": true
+    },
+    {
+      "id": "contact", "title": "Search", "done_when": ["contact:commander"], "fast_forward": true,
+      "lines": ["Listen for «Цель, азимут …, дальность …!»"],
+      "wait_text": "the senior operator to find the target"
+    },
+    {
+      "id": "order_take", "title": "The commander: «Цель — взять!»",
+      "lines": ["«Цель номер … — взять!» (Take the target!). Your part: ready the tracking radar's elevation and designate the target to it (ЦУ). The senior operator puts the azimuth line on the drone; the operator switches the transmitter on."],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_take_target"],
+      "continue": true
+    },
+    {
+      "id": "el_lock", "title": "Unlock the elevation wheel", "control": "ssc.el_lock", "position": 1, "procedure": "ready_capture",
+      "lines": ["Flip the elevation wheel's lock to unlocked."],
+      "why": "The wheel is locked so it can't be knocked by accident.",
+      "hint": "Left click."
+    },
+    {
+      "id": "el_light", "title": "Light the εс dial: ПОДСВЕТКА", "control": "ssc.el_light", "position": 1, "procedure": "ready_capture",
+      "lines": ["Flip ПОДСВЕТКА (εс) up to ВКЛ."],
+      "why": "It lights the εс dial, which reads the tracking radar's elevation.",
+      "hint": "Left click."
+    },
+    {
+      "id": "cu", "title": "Designate it: ЦУ", "control": "fo.cu_az", "position": 1, "procedure": "ready_capture",
+      "lines": ["Press ЦУ."],
+      "why": "Target designation: the tracking radar turns to the senior operator's azimuth line and searches up and down it in elevation; АЗ lights, auto-capture armed. When the operator's transmitter goes on, it captures the drone by itself.",
+      "hint": "Left click presses a button."
+    },
+    {
+      "id": "captured", "title": "The capture", "done_when": ["task:captured"], "fast_forward": true,
+      "lines": ["Watch your elevation-search indicator and the lamps: the operator's ТСЦ and АВТОМАТ, your ЗАХВАТ. The operator calls «Захват!»."],
+      "wait_text": "the capture"
+    },
+    {
+      "id": "tv_order", "chapter": "Look before you shoot", "title": "The commander: «Цель осмотреть по ТВ!»",
+      "lines": ["«Цель осмотреть по ТВ!» (Look the target over on the TV!): before he fires, the commander wants to know what the radar is holding. A decoy shows small where its echo says aircraft."],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_tv_watch"],
+      "continue": true
+    },
+    {
+      "id": "tv_on", "title": "TV camera on: РАБ.РЕЖ.", "control": "tov.power", "position": 1, "procedure": "tv_watch",
+      "lines": ["Flip РАБ.РЕЖ. up to ВКЛ."],
+      "why": "The TV sight's camera on the turret looks along the tracking radar; your monitor shows its picture.",
+      "hint": "Left click."
+    },
+    {
+      "id": "tv_narrow", "title": "The narrow lens: УГОЛ ЗРЕНИЯ УЗКИЙ", "control": "tov.fov", "position": 1, "procedure": "tv_watch",
+      "lines": ["Flip УГОЛ ЗРЕНИЯ to УЗКИЙ, and look at your TV monitor: the drone in the crosshair."],
+      "why": "The narrow lens magnifies: the target fills more of the picture and you can tell what it is.",
+      "hint": "Left click.   L: look at the monitor."
+    },
+    {
+      "id": "order_prepare", "chapter": "Firing", "title": "The commander: «Приготовиться к пуску!»",
+      "lines": ["«Приготовиться к пуску!» (Prepare to launch!). Two moves: live firing, and the launch key in."],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_prepare"],
+      "continue": true
+    },
+    {
+      "id": "mode", "title": "Live firing: РОД РАБОТЫ to БР", "control": "fo.mode", "position": 0, "procedure": "prepare_firing",
+      "lines": ["Turn РОД РАБОТЫ back from ТР to БР: one click back."],
+      "why": "БР is combat work, live firing; ТР is training, in which nothing leaves the rails; ФК runs the function check.",
+      "hint": "Right click steps a selector back."
+    },
+    {
+      "id": "key_in", "title": "The launch key in: ЗАПРЕТ ПУСКА", "control": "fo.key", "position": 1, "procedure": "prepare_firing",
+      "lines": ["Insert the launch key into ЗАПРЕТ ПУСКА."],
+      "why": "Without the key turned the launch circuit stays open, whatever else is lit: the last safety.",
+      "hint": "Left click puts the key in (another click turns it, later)."
+    },
+    {
+      "id": "zone", "title": "Into the zone", "done_when": ["input:target_in_zone"], "fast_forward": true,
+      "lines": ["Wait for ЦЕЛЬ В ЗОНЕ to light: the drone inside the missiles' reach. The ДЦ voltmeter reads its range (10 V for 10 km)."],
+      "wait_text": "the target to come into the firing zone"
+    },
+    {
+      "id": "report_zone", "title": "Report it: «Цель в зоне!»", "report": "target_in_zone",
+      "lines": ["Tell the commander: O, then «Цель в зоне!» (Target in the zone!). He permits the launch when he hears it."],
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "key_turn", "title": "«Пуск разрешаю!»: turn the key", "control": "fo.key", "position": 2, "procedure": "launch",
+      "lines": ["The commander permits the launch. With ПУСК ГОТОВ and ЦЕЛЬ В ЗОНЕ lit, turn the launch key."],
+      "why": "The key closes the launch circuit: with live firing (БР), the hatches shut and a missile prepared, the launch is armed.",
+      "hint": "Left click turns the key.",
+      "on_start": ["order:fire_permitted"]
+    },
+    {
+      "id": "launch", "title": "Launch: ПУСК", "control": "fo.launch", "position": 1, "procedure": "launch",
+      "lines": ["Press ПУСК."],
+      "why": "The missile leaves its container and flies on the tracking radar's commands; СХОД lights as it goes.",
+      "hint": "Left click presses a button.   Then F6 follows the missile."
+    },
+    {
+      "id": "report_launch", "title": "Report it: «Пуск!»", "report": "launch",
+      "lines": ["Tell the crew: O, then «Пуск!» (Launch!)."],
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "result", "title": "Missile away", "done_when": ["debrief:HIT", "debrief:MISS"],
+      "lines": ["Watch your TV monitor: the missile comes into the picture as it closes on the drone. Or F6 to follow it."],
+      "wait_text": "the missile to reach the drone"
+    },
+    {
+      "id": "end", "chapter": "Done", "title": "The deputy commander's part: done",
+      "lines": [
+        "That is the deputy commander's part of the drill: the vehicle oriented at the halt, the target designated to the tracking radar, looked at on the TV, and the launch: live firing, the key in, turned at the commander's permission, ПУСК.",
+        "If it was a hit, say «Цель поражена!»; if a miss, «Промах!»: both are in your reports (O).",
+        "Practise it without the highlights: the Missions group's «Osa: crew practice, one target», starting in the deputy commander's seat, with H set to hint. Or the last lesson: the commander.",
+        "Esc: the menu."
+      ]
+    }
+  ]
+}

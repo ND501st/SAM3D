@@ -84,6 +84,15 @@ private:
 	void DrawPpiFace(const FVector2D& Size);
 	bool bTvWasOn = false;
 	FRandomStream Noise;
+	/** The search scope's sweep, counted round (turns, with the fraction): the noise a sweep paints stays where it fell
+	 *  until the sweep comes round again. */
+	double PpiTurns = 0.0;
+	double PpiLastSweepRad = 0.0;
+	bool bPpiSweepKnown = false;
+	/** The range indicator's sweeps, counted: its grass changes each sweep, the phosphor keeps the last few. */
+	int32 RangeSweeps = 0;
+	/** The elevation indicator's pictures, counted: its raster's noise changes each one. */
+	int32 ElevFrames = 0;
 	// The IT-45's sweep (rad clockwise from north) and the turns it has made (its speckle is redrawn each turn).
 	double AspdSweepRad = 0.0;
 	int32 AspdTurns = 0;

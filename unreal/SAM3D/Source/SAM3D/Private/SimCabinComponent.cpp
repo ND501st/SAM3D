@@ -148,6 +148,38 @@ void USimCabinComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		bHiddenApplied = bHidden;
 	}
 	Animate(Sim, DeltaTime);
+	UpdateAdvisedLamp();
+}
+
+void USimCabinComponent::UpdateAdvisedLamp()
+{
+	FVector World;
+	FVector Facing;
+	FString Label;
+	const bool bOn = !bHidden && !AdvisedControl.IsEmpty() && GetHighlightTarget(AdvisedControl, World, Label, Facing);
+	if (bOn && AdvisedLamp == nullptr)
+	{
+		// A soft light a hand's breadth in front of it (no source: presentation, like the seats' fill lights).
+		AdvisedLamp = NewObject<UPointLightComponent>(GetOwner());
+		AdvisedLamp->SetupAttachment(this);
+		AdvisedLamp->SetIntensityUnits(ELightUnits::Lumens);
+		AdvisedLamp->SetIntensity(25.0f);
+		AdvisedLamp->SetAttenuationRadius(60.0f);
+		AdvisedLamp->SetSourceRadius(8.0f);
+		AdvisedLamp->SetLightColor(FLinearColor(1.0f, 0.95f, 0.85f));
+		AdvisedLamp->SetCastShadows(false);
+		AdvisedLamp->LightingChannels.bChannel0 = false;  // the cabin's channel only (UseCabinLighting)
+		AdvisedLamp->LightingChannels.bChannel1 = true;
+		AdvisedLamp->RegisterComponent();
+	}
+	if (AdvisedLamp != nullptr)
+	{
+		AdvisedLamp->SetVisibility(bOn);
+		if (bOn)
+		{
+			AdvisedLamp->SetWorldLocation(World + Facing.GetSafeNormal() * 20.0);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------- building
@@ -1150,7 +1182,7 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		}
 		Item.PressedFor = FMath::Max(0.0f, Item.PressedFor - DeltaTime);
 		AnimateControl(Sim, Item);
-		// The drill master's next control pulses green (the pointer's highlight wins while it is on it).
+		// The drill master's next control (or the lesson's) pulses green (the pointer's highlight wins while it is on it).
 		const bool bAdvised = !bHighlighted && !AdvisedControl.IsEmpty() && Item.ControlId == AdvisedControl;
 		const float Pulse = bAdvised ? 0.35f + 0.3f * FMath::Sin(GetWorld()->GetTimeSeconds() * 6.0f) : 0.0f;
 		const FLinearColor AdviceColor(0.2f, 1.0f, 0.35f);
@@ -1386,6 +1418,146 @@ bool USimCabinComponent::IsWheel(int32 Item) const
 {
 	return Items.IsValidIndex(Item) && Items[Item].LampId.IsEmpty() &&
 		   Items[Item].Style == static_cast<uint8>(simcore::CabinStyle::Wheel);
+}
+
+namespace
+{
+	// The vehicle's frame (cm, X forward) to the cabin layout's body frame (m, x right, y forward): BodyPoint's inverse.
+	simcore::Vec3 ToBody(const FVector& V) { return simcore::Vec3{V.Y / 100.0, V.X / 100.0, V.Z / 100.0}; }
+}
+
+bool USimCabinComponent::CanWalk() const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	return Layout != nullptr && !Layout->walk.empty();
+}
+
+bool USimCabinComponent::GetStandUpPoint(int32 Station, FVector& OutEye) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	simcore::Vec3 Up;
+	if (Layout == nullptr || Station < 0 || Station >= static_cast<int32>(Layout->stations.size()) ||
+		!Layout->StandUpFrom(Layout->stations[Station], Up))
+	{
+		return false;
+	}
+	OutEye = BodyPoint(Up);
+	return true;
+}
+
+FVector USimCabinComponent::WalkStep(const FVector& From, const FVector& To) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	return Layout != nullptr ? BodyPoint(Layout->WalkStep(ToBody(From), ToBody(To))) : From;
+}
+
+int32 USimCabinComponent::SeatNear(const FVector& Eye, double RadiusCm) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	const simcore::CabinStation* Seat = Layout != nullptr ? Layout->SeatNear(ToBody(Eye), RadiusCm / 100.0) : nullptr;
+	return Seat != nullptr ? static_cast<int32>(Seat - Layout->stations.data()) : INDEX_NONE;
+}
+
+FString USimCabinComponent::GetWheelWatch(int32 Item) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	if (!IsWheel(Item) || Layout == nullptr || Items[Item].LayoutIndex < 0 ||
+		Items[Item].LayoutIndex >= static_cast<int32>(Layout->controls.size()))
+	{
+		return FString();
+	}
+	return ToF(Layout->controls[Items[Item].LayoutIndex].watch);
+}
+
+FString USimCabinComponent::GetItemStation(int32 Item) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	if (!Items.IsValidIndex(Item) || Items[Item].ControlId.IsEmpty() || Sim == nullptr || Sim->GetScenarioRunner() == nullptr)
+	{
+		return FString();
+	}
+	const simcore::ControlDef* Def = Sim->GetScenarioRunner()->Console().panel.Find(ToStd(Items[Item].ControlId));
+	return Def != nullptr ? ToF(Def->station) : FString();
+}
+
+int32 USimCabinComponent::FindItem(const FString& ControlOrLampId) const
+{
+	if (ControlOrLampId.IsEmpty())
+	{
+		return INDEX_NONE;
+	}
+	for (int32 I = 0; I < Items.Num(); ++I)
+	{
+		if (Items[I].ControlId == ControlOrLampId || Items[I].LampId == ControlOrLampId)
+		{
+			return I;
+		}
+	}
+	return INDEX_NONE;
+}
+
+bool USimCabinComponent::GetHighlightTarget(const FString& Id, FVector& OutWorld, FString& OutLabel, FVector& OutFacing) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	if (Layout == nullptr || Id.IsEmpty())
+	{
+		return false;
+	}
+	const FTransform& T = GetComponentTransform();
+	const int32 Item = FindItem(Id);
+	if (Item != INDEX_NONE)
+	{
+		const FSimCabinItem& It = Items[Item];
+		// The middle of what is drawn of it: a guard's flap stands out in front of its button, a lock's lever beside its
+		// wheel. Aimed at its place on the panel, the cross would find whatever is in front.
+		FBox Drawn(ForceInit);
+		for (const UStaticMeshComponent* Part : {It.Base.Get(), It.Moving.Get(), It.Pointer.Get()})
+		{
+			if (Part != nullptr && Part->IsVisible())
+			{
+				Drawn += Part->Bounds.GetBox();
+			}
+		}
+		OutWorld = Drawn.IsValid ? Drawn.GetCenter() : T.TransformPosition(It.Location);
+		OutFacing = T.TransformVectorNoScale(It.Normal);
+		const simcore::ControlDef* Def = !It.ControlId.IsEmpty() && Sim->GetScenarioRunner() != nullptr
+			? Sim->GetScenarioRunner()->Console().panel.Find(ToStd(It.ControlId)) : nullptr;
+		OutLabel = Def != nullptr ? ToF(Def->label)
+			: (!It.LampId.IsEmpty() && It.LayoutIndex >= 0 && It.LayoutIndex < static_cast<int32>(Layout->lamps.size())
+				? ToF(Layout->lamps[It.LayoutIndex].label) : Id);
+		return true;
+	}
+	const std::string Want = ToStd(Id);
+	for (const simcore::CabinDisplay& D : Layout->displays)
+	{
+		if (D.id != Want)
+		{
+			continue;
+		}
+		const simcore::CabinPanel* Panel = Layout->FindPanel(D.panel_id);
+		if (Panel == nullptr)
+		{
+			return false;
+		}
+		OutWorld = T.TransformPosition(BodyPoint(Panel->PointAt(D.u_m, D.v_m)));
+		OutFacing = T.TransformVectorNoScale(BodyDir(Panel->Normal()));
+		OutLabel = ToF(D.label);
+		return true;
+	}
+	if (const simcore::CabinPanel* Panel = Layout->FindPanel(Want))
+	{
+		OutWorld = T.TransformPosition(BodyPoint(Panel->centre_m));
+		OutFacing = T.TransformVectorNoScale(BodyDir(Panel->Normal()));
+		OutLabel = ToF(Panel->label);
+		return true;
+	}
+	return false;
 }
 
 FString USimCabinComponent::DescribeItem(int32 Item) const

@@ -82,9 +82,13 @@ triangle list per picture (each canvas item costs the render thread a draw of it
 drawn once. The TOV monitor films the world at `sam3d.TvHz` (default 15) while it is on and the camera is in the cabin.
 `sam3d.CabinDisplaySkipKinds` (a bit mask of display kinds) is there to find the next expensive one. Test `SAM3D.Missions.Menu`.
 
-**The first playable test** (`docs/PLAYING.md`): `.\tools\play.ps1 -Tutorial` opens the tutorial straight away (the
-missions menu's first entry: the first shoot on the Kesmark range with the guide, `data/tutorials/first_shoot.json`, on
-the screen; N skips a step). The camera views are on the F keys as in DCS (`USimViewComponent`): F1 the cabin and its
+**The first playable test** (`docs/PLAYING.md`): `.\tools\play.ps1 -Tutorial` opens the first lesson straight away,
+`-Lesson <seat>` a seat's lesson (the missions menu's Tutorial group: `data/tutorials/`, `docs/TUTORIALS.md`). The
+lesson's card is `ASimCabinHUD::DrawGuide` (with the bracket or edge arrow on the step's control from
+`USimCabinComponent::GetHighlightTarget`, the wheel gauge, the done tick, the menu line); `ASimOsaVehicle::HandleLesson`
+takes Enter and L and refuses what a strict lesson doesn't allow (`USimWorldSubsystem::GetTutorialRefusal`); the
+instructor's voice is `USimCrewVoiceComponent`. Tests `SAM3D.Missions.Tutorial`, `SAM3D.Missions.SeatLesson`; scripted
+check `-SimTutorialAutoplay=<folder>` plays the lesson and photographs each step (`docs/TUTORIALS.md`). The camera views are on the F keys as in DCS (`USimViewComponent`): F1 the cabin and its
 seats, F2 your vehicle, F3 fly-by, F4 chase, F5 the nearest aircraft from your vehicle, F6 your missile, F7 the ground
 units, F8 the aircraft, F10 the map, F11 a free camera; the same key again for the next of its kind. Ctrl+Z / Alt+Z /
 Shift+Z speed time up, slow it, set it back. G shows every key. `Config/DefaultInput.ini` takes the engine's debug view

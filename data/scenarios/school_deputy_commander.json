@@ -1,0 +1,133 @@
+{
+  "scenario_id": "school_deputy_commander",
+  "name": "Seat lesson 4: the deputy commander",
+  "description": "A step-by-step lesson in the deputy commander's seat of the Osa 21, with the lesson's guide (data/tutorials/school_deputy_commander.json) on the screen: the seat, the panels and what each control does, then your part of the drill from cold, one switch at a time, each highlighted, the next only once it is done. The rest of the crew are NPCs and the commander's orders come at your pace. A practice drone comes in when the lesson is ready for it. Fictional.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. The Kesmark range (as kesmark_range_test.json), the vehicle cold at a halt. No crew_commander: the lesson gives the commander's orders (simcore/tutorial.hpp on_start). Crew class 1 so the demonstration around the learner is clean. The drone's numbers are PLACEHOLDERS; it is held on cue. when_targets_gone off: the lesson ends the mission, not the drone.",
+  "seed": 11,
+  "origin": {
+    "lat_deg": 46.817217,
+    "lon_deg": 19.77862,
+    "alt_m": 107.6
+  },
+  "terrain": {
+    "type": "map",
+    "map": "maps/kesmark_range.json"
+  },
+  "weather": "clear",
+  "battery": {
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 400,
+          "north_m": -400,
+          "up_m": 3.9
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": -1000,
+          "north_m": -2300,
+          "up_m": 3.8
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": -800,
+          "north_m": -2600,
+          "up_m": 4.1
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 3
+    },
+    "heading_deg": 290,
+    "inputs": {
+      "vehicle_stopped": true
+    }
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class1"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class1"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class1"
+    }
+  ],
+  "targets": [
+    {
+      "id": "d1",
+      "name": "Practice drone (placeholder)",
+      "type": "Air+FixedWing+Drone",
+      "class": "drone",
+      "start": {
+        "east_m": -21000,
+        "north_m": 20000,
+        "up_m": 1500
+      },
+      "waypoints": [
+        {
+          "east_m": 1500,
+          "north_m": 800,
+          "up_m": 1200
+        },
+        {
+          "east_m": 30000,
+          "north_m": -24000,
+          "up_m": 1200
+        }
+      ],
+      "speed_mps": 110,
+      "rcs_m2": 1.0,
+      "on_cue": true,
+      "notes": "Placeholder numbers. Held until the lesson brings it in (on_cue): about 29 km out from the north-west, slow and steady, so a first-time crew has time for every step."
+    }
+  ],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 3600,
+    "when_targets_gone": false
+  }
+}

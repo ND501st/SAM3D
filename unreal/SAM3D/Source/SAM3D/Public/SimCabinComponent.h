@@ -13,6 +13,7 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class UMeshComponent;
 class UProceduralMeshComponent;
+class UPointLightComponent;
 
 /** One control or lamp built in the cabin, with the meshes that show it. */
 USTRUCT()
@@ -129,6 +130,28 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsWheel(int32 Item) const;
 
+	/** Walking in the cabin (simcore CabinLayout::walk): the layout has floor a crewman can walk on. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool CanWalk() const;
+
+	/** Where a crewman's eye is when he gets up from a seat (cm, the vehicle's frame); false without floor. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool GetStandUpPoint(int32 Station, FVector& OutEye) const;
+
+	/** One step of walking from an eye point towards another (cm, the vehicle's frame): as far as the floor allows,
+	 *  sliding along its edges. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FVector WalkStep(const FVector& From, const FVector& To) const;
+
+	/** The seat a crewman standing with his eye at Eye can sit down in (within RadiusCm of where its crewman gets up),
+	 *  else INDEX_NONE. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	int32 SeatNear(const FVector& Eye, double RadiusCm) const;
+
+	/** The display a hand wheel's crewman watches while he turns it (the layout's "watch"; "" none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetWheelWatch(int32 Item) const;
+
 	/** Click a switch, selector, key, cover or button. Direction +1 (left click) or -1 (right click). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	ESimPlayerActionResult ClickItem(int32 Item, int32 Direction);
@@ -141,10 +164,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	void SetHighlightedItem(int32 Item) { HighlightedItem = Item; }
 
-	/** The training overlay (docs/crew/08_TRAINING_AND_ASSISTANCE.md): the control the drill master advises next pulses
-	 *  green ("" for none). */
+	/** The training overlay (docs/crew/08_TRAINING_AND_ASSISTANCE.md) and the lessons: the control (or lamp) to look at
+	 *  pulses green, and a small lamp lights it, so it shows in a dark corner of the cabin ("" for none). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	void SetAdvisedControl(const FString& ControlId) { AdvisedControl = ControlId; }
+
+	/**
+	 * Where a lesson's highlight is in the world (simcore/tutorial.hpp): a control, lamp, display or panel of the layout by
+	 * its id, with its name and the way its face looks (out of the panel). False if the layout has no such thing.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	bool GetHighlightTarget(const FString& Id, FVector& OutWorld, FString& OutLabel, FVector& OutFacing) const;
+
+	/** The item that shows a console control or a lamp (INDEX_NONE if none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	int32 FindItem(const FString& ControlOrLampId) const;
+
+	/** The seat whose control an item is (the console's station; "" for a lamp or no item). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetItemStation(int32 Item) const;
+
+	/** The console control an item works ("" for a lamp or no item). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetItemControl(int32 Item) const { return Items.IsValidIndex(Item) ? Items[Item].ControlId : FString(); }
 
 	/** A station's console id (e.g. "senior_operator"); "" if there is no such station. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
@@ -201,6 +243,8 @@ private:
 	bool AnimatePart(const simcore::ControlPanel& Panel, const simcore::CabinControl& Control, const simcore::ControlDef& Def,
 		int32 Position, FSimCabinItem& Item);
 	void Paint(UMeshComponent* Mesh, const FLinearColor& Color) const;
+	/** The advised control's lamp follows it (made on first use; kept across rebuilds). */
+	void UpdateAdvisedLamp();
 	USimWorldSubsystem* GetSim() const;
 
 	UPROPERTY(Transient)
@@ -258,6 +302,10 @@ private:
 
 	/** Panels showing a baked face (their labels are in it). */
 	TSet<FString> FacedPanels;
+
+	/** The light on the advised control (UpdateAdvisedLamp). */
+	UPROPERTY(Transient)
+	TObjectPtr<UPointLightComponent> AdvisedLamp;
 
 	/** The layout the parts were built from; rebuilt when the subsystem loads another. */
 	const simcore::CabinLayout* BuiltLayout = nullptr;

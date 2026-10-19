@@ -97,12 +97,14 @@ class Layout:
         return pid
 
     # -- items on panels ----------------------------------------------------------------------------------------
-    def control(self, cid, panel, at, style=None, look=None, units_per_turn=None):
+    def control(self, cid, panel, at, style=None, look=None, units_per_turn=None, watch=None):
         c = {'control': cid, 'panel': panel, 'at_m': [r4(at[0]), r4(at[1])]}
         if style:
             c['style'] = style
         if units_per_turn:
             c['units_per_turn'] = units_per_turn
+        if watch:
+            c['watch'] = watch
         if look:
             c['look'] = look
         self.controls.append(c)
@@ -305,8 +307,11 @@ def build():
     p = L.panel('dt2_panel', 'DT-2 coordinate pickup', 'battery_commander', 'di', (0.17, 0.17),
                 notes='The marker\'s pickup on the desk (rwd_mb3: Geber der Koordinaten DT-2; the ČSLA plan\'s item 20, '
                       'DI). SAM3D works it as two wheels: the marker\'s azimuth and its range.')
-    L.control('dt2.azimuth', p, (-0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=90)
-    L.control('dt2.range', p, (0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=0.25)
+    # The DT-2's wheels move the marker on the IT-45's tube: the commander watches the tube as he turns them.
+    L.control('dt2.azimuth', p, (-0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=90,
+              watch='it45')
+    L.control('dt2.range', p, (0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=0.25,
+              watch='it45')
     L.nameplate(p, (-0.04, 0.045), 'АЗ', 0.025)
     L.nameplate(p, (0.04, 0.045), 'Д', 0.025)
     L.nameplate(p, (0.0, -0.065), 'ДТ-2', 0.04)
@@ -646,6 +651,18 @@ def layout_json():
                  'origin). Lamp sources use the source ids of data/procedures/pu12m.json. ceiling_m: the roof\'s '
                  'lining (1.40 m over the floor), under which a crewman getting up for a low panel crouches.',
         'ceiling_m': round(I.ROOF_IN_Z, 3),
+        # Up from his seat (a player walking in the cabin): his stooping eye under the roof, and the floor he can walk
+        # on (SAM3D estimates from the layout).
+        'stand_eye_m': 1.93,
+        'walk': [
+            {'from_m': [-0.6, -0.86], 'to_m': [0.7, -0.62],
+             'notes': "The knee room between the bench and the boards in front of it (the IT-45, the map, the radio "
+                      "operator's sets, their faces at y = -0.27 to -0.47): a crewman gets up and moves along the bench. "
+                      "SAM3D estimate from the cabin layout."},
+            {'from_m': [-0.18, 0.1], 'to_m': [0.18, 1.45],
+             'notes': "The aisle between the operator's P and R units (their faces at x = -0.33 and 0.32). SAM3D estimate."},
+            {'from_m': [-0.15, 1.45], 'to_m': [0.05, 2.45], 'notes': "Between the driver's and the squad leader's seats. SAM3D estimate."},
+        ],
         'stations': L.stations, 'panels': L.panels, 'controls': L.controls, 'lamps': L.lamps, 'displays': L.displays,
         'blocks': L.blocks, 'fixtures': L.fixtures, 'shell': L.shell,
     }

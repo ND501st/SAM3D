@@ -176,7 +176,14 @@ SC_TEST("crew body: the deputy stands up at the gyro panel to orient the vehicle
     a.act_in_s = 0.0;
     anim.Update(dt, a, nullptr);
     SC_EXPECT_NEAR(anim.Pose().standing, 1.0, 1e-6);
-    SC_EXPECT((anim.Pose().hip - plan.stand_hip).Length() < 0.35);  // up at the panel (crouched a little, maybe)
+    const Vec3 off = anim.Pose().hip - plan.stand_hip;
+    if (off.Length() >= 0.35) {
+        std::printf("    stand_hip (%.2f, %.2f, %.2f), hip (%.2f, %.2f, %.2f), lean fwd %.2f side %.2f twist %.2f crouch %.2f\n",
+                    plan.stand_hip.x, plan.stand_hip.y, plan.stand_hip.z, anim.Pose().hip.x, anim.Pose().hip.y, anim.Pose().hip.z,
+                    plan.lean.forward_rad, plan.lean.side_rad, plan.lean.twist_rad, plan.lean.crouch_m);
+    }
+    // Up where he planned to stand (crouched, maybe: the cab is low between the seats), clear of the driver beside it.
+    SC_EXPECT(std::hypot(off.x, off.y) < 0.05 && -off.z <= plan.lean.crouch_m + 0.05);
     ControlTouch t;
     SC_EXPECT(TouchOf(o.cabin, "orient.qc", t));
     const int hand = SideIndex(plan.side);
@@ -438,4 +445,63 @@ SC_TEST("crew body: in the PU-12M, a crewman reaching for any control keeps his 
         if (!plan.seated) ++stood;
     }
     SC_EXPECT(stood == 2);  // the DTP and the mast's winch, crouching under the roof
+}
+
+namespace {
+
+// Every crewman reaching for every control of his seat, posed: his head, chest and arm against the other seats'
+// crewmen sitting at rest (AddSeatedCrew's balls). The intrusions, printed.
+int Intrusions(const CabinLayout& cabin, const ConsoleData& console, const BodyData& body) {
+    int bad = 0;
+    for (const CabinControl& c : cabin.controls) {
+        const ControlDef* def = console.panel.Find(c.control_id);
+        if (def == nullptr || def->station.empty()) continue;
+        BodyAnimator anim(&cabin, &body, def->station);
+        if (!anim.Valid()) continue;
+        const ReachPlan& plan = anim.PlanFor(c.control_id);
+        SeatActivity a;
+        a.station = def->station;
+        a.control = c.control_id;
+        a.standing = !plan.seated;
+        a.stand_control = plan.seated ? "" : c.control_id;
+        for (double t = 0.0; t < 3.0; t += 0.05) {
+            a.act_in_s = 3.0 - t;
+            anim.Update(0.05, a, &console.panel);
+        }
+        a.act_in_s = 0.0;
+        anim.Update(0.05, a, &console.panel);
+        const BodyPose& p = anim.Pose();
+        ReachSpace others;
+        AddSeatedCrew(others, cabin, body.dims, def->station);
+        const int i = SideIndex(plan.side);
+        const bool head = others.ClearOfCrew(p.head + p.head_up * 0.06, 0.10);
+        const bool chest = others.ClearOfCrew(p.torso.chest - p.torso.up * 0.12, 0.13);
+        const bool arm = others.ClearOfCrew(p.elbow[i], 0.04) && others.ClearOfCrew((p.elbow[i] + p.wrist[i]) * 0.5, 0.035);
+        if (!head || !chest || !arm) {
+            ++bad;
+            std::printf("    %s (%s, %s): into a seated crewman with his %s%s%s\n", c.control_id.c_str(), def->station.c_str(),
+                        plan.seated ? "sitting" : "standing", head ? "" : "head ", chest ? "" : "chest ", arm ? "" : "arm");
+        }
+    }
+    return bad;
+}
+
+}  // namespace
+
+SC_TEST("crew body: a crewman reaching for his controls keeps out of his seated crewmates (the deputy at the gyro panel beside the driver)") {
+    OsaBody o = LoadOsaBody();
+    SC_EXPECT(o.ok);
+    SC_EXPECT(Intrusions(o.cabin, o.console, o.body) == 0);
+    // The deputy stands for the orientation, clear of the driver's seat beside the gyro panel.
+    BodyAnimator deputy(&o.cabin, &o.body, "deputy_commander");
+    const ReachPlan& qc = deputy.PlanFor("orient.qc");
+    ReachSpace driver;
+    AddSeatedCrew(driver, o.cabin, o.body.dims, "deputy_commander");
+    SC_EXPECT(!qc.seated && qc.reachable && driver.ClearOfCrew(qc.stand_hip, 0.16));
+}
+
+SC_TEST("crew body: in the PU-12M too, a reaching crewman keeps out of the others") {
+    Pu12mBody o = LoadPu12mBody();
+    SC_EXPECT(o.ok);
+    SC_EXPECT(Intrusions(o.cabin, o.console, o.body) == 0);
 }

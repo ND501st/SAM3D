@@ -1,0 +1,134 @@
+{
+  "tutorial_id": "basics",
+  "title": "Start here: the camera, the cabin, the controls",
+  "scenario": "scenarios/tutorial_basics.json",
+  "status": "The first lesson (docs/TUTORIALS.md): the views and the cabin, then each kind of control once, before the seat lessons.",
+  "source": "sam3d",
+  "notes": "Free (not strict): nothing in it can break a drill. The practice controls are harmless with the vehicle cold: a dial's light, the search radar's range scale, the azimuth wheel and its lock.",
+  "steps": [
+    {
+      "id": "welcome", "chapter": "Looking around", "title": "Welcome to SAM3D",
+      "lines": [
+        "You are with the crew of the Osa 21, a 9K33M2 Osa-AK surface-to-air missile vehicle of battery 21, standing cold in its position by the Kesmark bridges. Nothing is going to attack you in this lesson.",
+        "This lesson shows you how to look around, move between the crew's seats and work the switches. Then the seat lessons teach each crewman's job, step by step.",
+        "Press Enter to go on. Each step waits until you have done what it asks."
+      ],
+      "hint": "Enter: next.   G: every key.   Esc: pause.",
+      "continue": true
+    },
+    {
+      "id": "orbit", "title": "Turn the camera", "done_when": ["ui:orbit"],
+      "lines": ["Hold the right mouse button and move the mouse: the camera turns round the vehicle."],
+      "hint": "Right mouse button + move the mouse."
+    },
+    {
+      "id": "zoom", "title": "Closer and further", "done_when": ["ui:zoom"],
+      "lines": ["Roll the mouse wheel: closer, further."],
+      "hint": "Mouse wheel."
+    },
+    {
+      "id": "views", "chapter": "The views (F1 to F11)", "title": "The camera views",
+      "lines": [
+        "Like DCS, the F keys choose the camera: F1 the cabin, F2 your vehicle, F3 a fly-by, F4 the chase, F5 the nearest aircraft seen from your vehicle, F6 your missile, F7 the battery's vehicles, F8 the aircraft, F10 the map, F11 a free camera.",
+        "Press a key again for the next of its kind. The views show you the world; they tell the crew nothing."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "air", "title": "F8: the aircraft", "done_when": ["view:F8"],
+      "lines": ["Press F8: a pair of our MiG-21s on patrol to the north. F8 again shows the other."],
+      "hint": "F8."
+    },
+    {
+      "id": "chase", "title": "F4: the chase", "done_when": ["view:F4"],
+      "lines": ["Press F4: the camera follows what you were looking at from behind. F4 again: from ahead."],
+      "hint": "F4."
+    },
+    {
+      "id": "ground", "title": "F7: the battery's vehicles", "done_when": ["view:F7"],
+      "lines": ["Press F7: your Osa, then (F7 again) the battery's command post PU-12M, the reload vehicle and the fuel truck."],
+      "hint": "F7, and again."
+    },
+    {
+      "id": "map", "title": "F10: the map", "done_when": ["view:F10"],
+      "lines": ["Press F10: the ground from above. The mouse wheel sets the height; right mouse + drag moves the map."],
+      "hint": "F10.   Wheel: height.   Right mouse + drag: move."
+    },
+    {
+      "id": "free", "title": "F11: a free camera", "done_when": ["view:F11"],
+      "lines": ["Press F11 and fly: W A S D, Q down, E up, Shift faster, right mouse to look. (W A S D drive the vehicle in every other view.)"],
+      "hint": "F11, then W A S D Q E, right mouse."
+    },
+    {
+      "id": "back", "title": "F2: back to your vehicle", "done_when": ["view:F2"],
+      "lines": ["Press F2: round your own vehicle again."],
+      "hint": "F2."
+    },
+    {
+      "id": "cabin", "chapter": "Inside", "title": "Into the cabin: F1", "done_when": ["cabin"],
+      "lines": ["Press F1: you are inside, in a crewman's seat. The mouse turns your head; the cross in the middle names what it is on."],
+      "hint": "F1.   C also goes in and out."
+    },
+    {
+      "id": "seats", "title": "From seat to seat", "done_when": ["seat:senior_operator"],
+      "lines": [
+        "Five men sit in the Osa: the commander and the driver in front, and facing the left wall the deputy commander, the senior operator and the operator. F1 again (or Tab) moves you to the next seat.",
+        "Go to the senior operator's seat: the round search scope in front of you."
+      ],
+      "hint": "F1 or Tab: the next seat."
+    },
+    {
+      "id": "switch", "chapter": "Your hands on the panels", "title": "A switch", "control": "ssc.az_light", "position": 1,
+      "lines": ["Look at the highlighted switch, ПОДСВЕТКА (βс), and click it with the left button: it lights the βс dial."],
+      "why": "A switch flips between its two positions with each click. The highlight, the bracket on the screen and the card's arrow show you which; L turns your head onto it.",
+      "hint": "Point the cross at it, left click.   L: look at it."
+    },
+    {
+      "id": "selector", "title": "A selector: one click a position", "control": "soc.range", "position": 2,
+      "lines": ["The ДАЛЬНОСТЬ selector chooses the search scope's range scale. Step it on one position, to 10–45 km: left click."],
+      "why": "A selector (a rotary switch) moves one position a click: left click on, right click back.",
+      "hint": "Left click: on.   Right click: back."
+    },
+    {
+      "id": "selector_back", "title": "And back", "control": "soc.range", "position": 1,
+      "lines": ["Now step it back to 0–35 km: right click."],
+      "hint": "Right click: back."
+    },
+    {
+      "id": "lock", "title": "A lock", "control": "ssc.az_lock", "position": 1,
+      "lines": ["The azimuth wheel has a lock so it can't be knocked off a target. Unlock it: click the highlighted lock."],
+      "why": "Locks and the red guards over transmitters and launch switches must be opened first: the control under them won't move.",
+      "hint": "Left click."
+    },
+    {
+      "id": "wheel", "title": "A hand wheel", "wheel": "ssc.az_wheel", "aim": "value", "target": 90, "tolerance": 2.5,
+      "lines": ["Turn the АЗИМУТ wheel until the βс dial reads 15 (90°): hold the left button on the wheel and drag sideways, or roll the mouse wheel over it. Watch the amber line on the scope turn with it."],
+      "why": "Hand wheels point the tracking radar: the senior operator's in azimuth, the deputy commander's in elevation, the operator's in range.",
+      "hint": "Drag the wheel sideways, or roll the mouse wheel over it."
+    },
+    {
+      "id": "keys", "chapter": "Keys and time", "title": "Every key: G", "done_when": ["ui:keys_card"],
+      "lines": ["Press G: the card with every key. G again closes it."],
+      "hint": "G."
+    },
+    {
+      "id": "faster", "title": "Time: faster", "done_when": ["ui:time_faster"],
+      "lines": ["A cold Osa takes minutes to come to readiness. Ctrl+Z runs time faster (x2, x4, x8); the top of the screen says so."],
+      "hint": "Ctrl+Z."
+    },
+    {
+      "id": "normal", "title": "Time: back to normal", "done_when": ["ui:time_normal"],
+      "lines": ["Shift+Z: normal time again. (Alt+Z slows it.)"],
+      "hint": "Shift+Z."
+    },
+    {
+      "id": "end", "chapter": "Done", "title": "Ready for the seats",
+      "lines": [
+        "You can look around, move between the seats and work every kind of control.",
+        "Next, the seat lessons, in the order the drill runs: 1 the driver (the power), 2 the operator (the equipment and the range), 3 the senior operator (the search), 4 the deputy commander (the orientation and the launch), 5 the commander (the orders).",
+        "Esc, then M: the missions menu."
+      ]
+    }
+  ]
+}

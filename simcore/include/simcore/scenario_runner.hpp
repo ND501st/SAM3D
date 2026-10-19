@@ -210,6 +210,7 @@ public:
             c.Update(dt, console_.panel, &console_.equipment);
         }
         player_.Update(dt);
+        for (Seat& st : seats_) st.tracker.Update(dt);  // a seat's min_wait_s counts as the single player's does
         for (WheelWatch& w : wheels_) {  // who is turning a hand wheel (the bodies, roadmap 8.10)
             const double v = console_.panel.GetValue(w.id);
             if (std::fabs(v - w.value) > 1e-9) w.moved_s = time_;
@@ -318,8 +319,12 @@ public:
     // vehicle is no post, the seat isn't the player's, the number isn't on the tube, or he is still writing the last one.
     bool PlayerPlot(int aspd_number) {
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
-        return post_->PlotTrack(time_, aspd_number, PlotterSpeed());
+        if (!post_->PlotTrack(time_, aspd_number, PlotterSpeed())) return false;
+        ++plots_made_;
+        return true;
     }
+    // Targets the player at the plotter's seat has written on the board so far.
+    int PlotsMade() const { return plots_made_; }
 
     // The commander's order to a crew member. It goes by the R-124 intercom, so it arrives at once; with the commander's
     // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
@@ -390,6 +395,8 @@ public:
         const bool was_complete = player_.IsComplete();
         const StepResult r = player_.Attempt(console_.panel, control_id, position, &console_.equipment);
         log_.RecordAttempt(time_, kPlayerName, player_, r);
+        const ControlDef* def = console_.panel.Find(control_id);
+        seat_actions_.push_back({time_, def != nullptr ? def->station : std::string(), control_id, position, 0.0, false, Moved(r), r});
         if (!was_complete && player_.IsComplete()) {
             log_.Record({time_, DebriefEntry::Kind::Completed, kPlayerName, player_.GetProcedure().id, std::string()});
         }
@@ -397,7 +404,13 @@ public:
     }
 
     // Turn a hand wheel to a value. Wheel work isn't a procedure step (data/procedures/README.md).
-    bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
+    bool PlayerTurn(const std::string& wheel_id, double value) {
+        const bool moved = console_.panel.SetValue(wheel_id, value);
+        const ControlDef* def = console_.panel.Find(wheel_id);
+        seat_actions_.push_back({time_, def != nullptr ? def->station : std::string(), wheel_id, 0, value, true, moved,
+                                 StepResult::ProcedureComplete});
+        return moved;
+    }
 
     const ProcedureTracker& PlayerTracker() const { return player_; }
     // Radio and intercom traffic the crew heard, oldest first (the last kRadioKept): the command net (designations, source
@@ -503,6 +516,7 @@ public:
         if (!def_.has_crew_data) return false;
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
+        orders_given_.push_back({time_, order_id});
         SpeakOrder(order_id);
         if (order_id == "order_drop_target") drop_at_s_ = time_ + SpeakDelayS("operator") + 1.5;  // the wheels off the target
         quiet_orders_ = true;  // the order's own words were spoken: its drills don't each speak an order
@@ -760,6 +774,7 @@ public:
         const bool was_complete = st->tracker.IsComplete();
         const StepResult r = st->tracker.Attempt(console_.panel, control_id, position, &console_.equipment);
         log_.RecordAttempt(time_, st->player, st->tracker, r);
+        seat_actions_.push_back({time_, role, control_id, position, 0.0, false, Moved(r), r});
         if (!was_complete && st->tracker.IsComplete() && !st->tracker.GetProcedure().id.empty()) {
             log_.Record({time_, DebriefEntry::Kind::Completed, st->player, st->tracker.GetProcedure().id, std::string()});
             if (!st->queued.empty()) {
@@ -774,7 +789,55 @@ public:
         Seat* st = FindSeat(role);
         if (st == nullptr || !AtStation(role, wheel_id, why)) return false;
         st->last_action_s = time_;
-        return console_.panel.SetValue(wheel_id, value);
+        const bool moved = console_.panel.SetValue(wheel_id, value);
+        seat_actions_.push_back({time_, role, wheel_id, 0, value, true, moved, StepResult::ProcedureComplete});
+        return moved;
+    }
+
+    // Every move players made, at held seats or not, in order (a lesson reads the learner's: simcore/tutorial.hpp).
+    struct SeatAction {
+        double time_s = 0.0;
+        std::string station;
+        std::string control;
+        int position = 0;       // a switch, selector, key, cover or button
+        double value = 0.0;     // a wheel
+        bool wheel = false;
+        bool moved = false;     // the control moved (not blocked, not refused)
+        StepResult result = StepResult::Accepted;
+    };
+    const std::vector<SeatAction>& SeatActions() const { return seat_actions_; }
+
+    // Every order of the crew data given (GiveCrewOrder: the menu's, a lesson's, the scenario's), in order, spoken or not.
+    struct GivenOrder {
+        double time_s = 0.0;
+        std::string order;
+    };
+    const std::vector<GivenOrder>& OrdersGiven() const { return orders_given_; }
+
+    // Targets the battery commander has given the launchers so far (DesignateByVoice: the keys, the menu, the NPC).
+    int DesignationsMade() const { return designations_made_; }
+    // Targets on the post's board now (the plotter's latest marks).
+    std::size_t PostMarkCount() const { return PostMarks().size(); }
+
+    // Every report a player made (PlayerSay: the crew menu's), in order, when he made it: the intercom says it when it is
+    // free.
+    struct MadeReport {
+        double time_s = 0.0;
+        std::string station;
+        std::string callout;
+    };
+    const std::vector<MadeReport>& ReportsMade() const { return reports_made_; }
+
+    // A target held "on_cue" appears now (a lesson brings it in at the learner's pace). False if there is no such
+    // target held.
+    bool ReleaseTarget(const std::string& target_id) {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id != target_id || targets_[i].spawned || !def_.targets[i].on_cue) continue;
+            def_.targets[i].on_cue = false;
+            def_.targets[i].appear_at_s = time_;
+            return true;
+        }
+        return false;
     }
     // The console's whole state for the players' machines (console_sync.hpp).
     std::vector<std::uint8_t> ConsoleSnapshot(std::uint32_t seq) const { return EncodeConsoleState(console_, seq, time_); }
@@ -922,7 +985,7 @@ private:
     void UpdateTargets(double dt) {
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             const ScenarioTarget& t = def_.targets[i];
-            if (targets_[i].spawned || time_ + 1e-9 < t.appear_at_s) continue;
+            if (targets_[i].spawned || t.on_cue || time_ + 1e-9 < t.appear_at_s) continue;
             Aircraft a;
             a.name = t.name;
             a.type = t.type;
@@ -1578,6 +1641,15 @@ private:
         }
     }
 
+    static bool Moved(StepResult r) {
+        return r == StepResult::Accepted || r == StepResult::AcceptedEarly || r == StepResult::NotNextStep ||
+               r == StepResult::ProcedureComplete || r == StepResult::Toward;
+    }
+    std::vector<SeatAction> seat_actions_;
+    std::vector<GivenOrder> orders_given_;
+    std::vector<MadeReport> reports_made_;
+    int designations_made_ = 0;
+    int plots_made_ = 0;
     ScenarioDef def_;
     ConsoleData console_;
     RidgeTerrain ground_;  // the scenario's flat ground and its ridges
@@ -3165,6 +3237,7 @@ private:
         }
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign,
                      std::string("target ") + n + " by voice: azimuth " + MilsText(d.azimuth_deg) + ", range " + r + " km"});
+        ++designations_made_;
         return true;
     }
     // A designation heard: the launcher's crew looks where it was told and takes the nearest target there within
@@ -3485,9 +3558,12 @@ public:
             char r[16];
             std::snprintf(r, sizeof(r), "%.0f", nearest->range_m / 1000.0);
             callouts_->Say(time_, callout_id, station, {{"azimuth", MilsText(nearest->azimuth_deg)}, {"range_km", r}}, 0.0, &k);
+            reports_made_.push_back({time_, station, callout_id});
             return true;
         }
-        return callouts_->Say(time_, callout_id, station);
+        if (!callouts_->Say(time_, callout_id, station)) return false;
+        reports_made_.push_back({time_, station, callout_id});
+        return true;
     }
 
 private:

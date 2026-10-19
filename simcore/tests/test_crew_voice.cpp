@@ -76,6 +76,14 @@ SC_TEST("crew voice: abbreviations spelled out, whole words only") {
     SC_EXPECT(SpeechText(Line("", "MTI on!"), "en", o.voices) == "M T I on!");
 }
 
+SC_TEST("crew voice: the instructor says the Russian in Latin letters") {
+    SC_EXPECT(InstructorSpeech("Order «К бою»") == "Order K boyu");
+    SC_EXPECT(InstructorSpeech("ЩЁЛКь, ГОТОВ") == "ShchYoLK, GOTOV");  // the soft sign is silent
+    // A dash is a pause, an unfilled field silent, everything else as it was.
+    SC_EXPECT(InstructorSpeech("Range — 35 km, target …") == "Range , 35 km, target ");
+    SC_EXPECT(InstructorSpeech("Qc = 15 deg (Ctrl+Z)") == "Qc = 15 deg (Ctrl+Z)");
+}
+
 SC_TEST("crew voice: every seat has a voice; stress and the radio change it") {
     OsaVoices o = LoadOsaVoices();
     SC_EXPECT(o.ok);

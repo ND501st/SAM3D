@@ -3,6 +3,13 @@
   "status": "Seat arrangement from the Polish Osa-AK manual's cabin plan (mon_2112_80 Fig. 3, pp. 23–25), confirmed by WZU camera views of a Polish crew at work (grezicki_wzu Fig. 4): driver front left, commander front right, the three operators on one bench along the left wall facing the main console SŁ-2M, front to rear guidance (deputy commander), search (senior operator), range (operator). The operator panels are SAM Simulator's photographs of the three columns (samsim_panels), at 1 mm per pixel: every control, lamp and screen sits where it is in those photos, cross-checked against real-cabin photos (cabin_photos) and the game's sprite positions. Distances between seats, the columns' height above the floor and the controls the game has no picture for are SAM3D estimates that only need to be reachable and readable. Lamp meanings follow the SAM Simulator manual where it gives them.",
   "notes": "Body frame: metres, x right, y forward, z up, from the ground under the hull centre. The placeholder hull in Unreal is 9.1 x 2.8 m with its roof at 2.2 m. Lamp sources use the source ids of data/procedures/osa_ak.json. Red dots (red_dot) are only given where a picture shows one: they mark a control's working position, not where it starts (docs/research/OSA_CONSOLE_MAP_2026-10.md §12).",
 
+  "stand_eye_m": 1.96,
+  "walk": [
+    { "from_m": [-0.08, 0.95], "to_m": [0.42, 3.45], "notes": "The aisle behind the operators' bench (its edge at x = -0.144) and in front of the right-hand racks SP-1M and SP-2M (their faces at x = 0.56-0.61), from the operator's seat to behind the cab seats (mon_2112_80 Fig. 3). Standing eye: under the roof lining at 2.10 m (tools/blender/build_cabin_interior.py ROOF_Z) a crewman stoops. SAM3D estimate." },
+    { "from_m": [0.15, 0.5], "to_m": [0.42, 0.95], "notes": "Past the operator's seat towards the rear, beside the CGW-10P box on the floor (x -0.1 to 0.1) and clear of the 0096 cabinet. SAM3D estimate." },
+    { "from_m": [-0.1, 3.45], "to_m": [0.1, 3.95], "notes": "The gap between the driver's and the commander's seats, to the gear lever. SAM3D estimate." }
+  ],
+
   "stations": [
     { "id": "driver", "label": "Driver", "eye_m": [-0.36, 3.72, 1.82], "yaw_deg": 0, "pitch_deg": -20,
       "notes": "Front left, in the same compartment as the operators, beside rack SŁ-1M; steering column ahead, gas-turbine control panel PU-303 at his left (mon_2112_80 Fig. 3 (plan and wall views of the 9A33BM2, scaled from SŁ-2M = 1.89 m, about 4.7 mm per pixel of the extracted drawing))." },
@@ -95,7 +102,7 @@
     { "control": "ssc.az_light", "panel": "so_panel", "at_m": [-0.257, -0.247],
       "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "ПОДСВЕТКА"} },
     { "control": "ssc.az_lock", "panel": "so_panel", "at_m": [0.038, -0.364] },
-    { "control": "ssc.az_wheel", "panel": "so_panel", "at_m": [0.038, -0.279], "units_per_turn": 60,
+    { "control": "ssc.az_wheel", "panel": "so_panel", "at_m": [0.038, -0.279], "units_per_turn": 60, "watch": "soc_ppi",
       "notes": "One turn of the hand wheel = 60 degrees of azimuth (SAM3D estimate, for playability).", "look": {"size_m": 0.095, "color": "black"} },
     { "control": "ssc.tx", "panel": "op_panel", "at_m": [-0.29, 0.324],
       "look": {"kind": "button", "size_m": 0.03, "color": "grey", "ring": "chrome", "label": "ПЕРЕДАТЧИК ВКЛ."} },
@@ -114,7 +121,7 @@
     { "control": "apu.lock", "panel": "pwr_cabinet", "at_m": [0.12, -0.12] },
     { "control": "ssc.target_select", "panel": "op_panel", "at_m": [0.2, 0.326],
       "look": {"kind": "pointer_knob", "size_m": 0.028, "color": "black", "label": "Р I — ЦЕЛЬ — Р II"} },
-    { "control": "ssc.range_wheel", "panel": "op_panel", "at_m": [0.135, -0.314], "units_per_turn": 5000,
+    { "control": "ssc.range_wheel", "panel": "op_panel", "at_m": [0.135, -0.314], "units_per_turn": 5000, "watch": "ssc_range",
       "notes": "SAM3D estimate, for playability. The wheel's unit is in data/procedures/osa_ak.json.", "look": {"size_m": 0.15, "color": "white"} },
     { "control": "tov.power", "panel": "fo_panel", "at_m": [-0.265, 0.358],
       "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "РАБ. РЕЖ. ВКЛ."} },
@@ -149,7 +156,7 @@
     { "control": "ssc.el_light", "panel": "fo_panel", "at_m": [-0.114, -0.237],
       "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "ПОДСВЕТКА"} },
     { "control": "ssc.el_lock", "panel": "fo_panel", "at_m": [0.26, -0.329] },
-    { "control": "ssc.el_wheel", "panel": "fo_panel", "at_m": [0.257, -0.244], "units_per_turn": 20,
+    { "control": "ssc.el_wheel", "panel": "fo_panel", "at_m": [0.257, -0.244], "units_per_turn": 20, "watch": "elev_search",
       "notes": "One turn = 20 degrees of elevation (SAM3D estimate, for playability).", "look": {"size_m": 0.095, "color": "black"} },
     { "control": "fo.key", "panel": "fo_panel", "at_m": [0.165, -0.099], "look": {"label": "ЗАПРЕТ ПУСКА"} },
     { "control": "fo.launch", "panel": "fo_panel", "at_m": [0.113, -0.089],

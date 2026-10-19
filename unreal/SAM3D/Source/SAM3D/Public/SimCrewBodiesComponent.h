@@ -36,6 +36,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	void SetHiddenStation(const FString& Station) { HiddenStation = Station; }
 
+	/** Bodies within RadiusCm of a point are hidden too (0: none): the player standing at a far panel has a crewmate's
+	 *  head where his eyes are. */
+	void SetClearAround(const FVector& WorldLocation, float RadiusCm)
+	{
+		ClearAt = WorldLocation;
+		ClearRadiusCm = RadiusCm;
+	}
+
 	/** The ghost hand of the training overlay: a hand from Station's seat on Control, pulsing ("" hides it). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	void SetGhostHand(const FString& Station, const FString& Control);
@@ -100,6 +108,8 @@ private:
 	const simcore::CabinLayout* BuiltLayout = nullptr;
 	const simcore::ScenarioRunner* BuiltRunner = nullptr;
 	FString HiddenStation;
+	FVector ClearAt = FVector::ZeroVector;
+	float ClearRadiusCm = 0.0f;
 	FString GhostStation;
 	FString GhostControl;
 	float GhostClock = 0.0f;

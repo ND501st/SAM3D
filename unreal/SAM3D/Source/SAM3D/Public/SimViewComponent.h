@@ -78,6 +78,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Views")
 	void SetView(ESimView NewView);
 
+	/** The view on that F key ("F1".."F11"), as if pressed (again: the next of its kind). False for a key with no view. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Views")
+	bool SetViewByKey(const FString& Key);
+
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Views")
 	ESimView GetView() const { return View; }
 

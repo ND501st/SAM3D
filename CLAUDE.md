@@ -22,12 +22,12 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/systems/` | Per-system parameters. **Every value needs a source.** |
 | `data/procedures/` | Per-system consoles: controls, subsystems, procedures (loaded by `console_data.hpp`). Same sourcing rules. |
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
-| `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
+| `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions, the floor a crewman walks on up from his seat (`walk`), the display each hand wheel is worked against (`watch`) (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. Also our side's chain of command, its places and the means of signal (`chain_pannonia.json`, `places_pannonia.json`, `signal_means.json`; `simcore/command/`). |
 | `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
 | `data/air_war/` | The enemy air command: the fictional theatre, the four adversaries (rebels, neutral neighbour, Warsaw Pact, NATO) with doctrine, intelligence, politics, aircraft, squadrons and officers, and the quirk catalogue. Balance numbers in `data/gameplay/air_war.json`. |
-| `data/tutorials/` | Tutorial guides (`simcore/tutorial.hpp`): steps with what to do and the conditions that finish them, shown over a mission named in `missions.json` (`"tutorial"`). See `docs/PLAYING.md`. |
+| `data/tutorials/` | The lessons (`simcore/tutorial.hpp`): a first lesson and one per seat of the Osa and of the PU-12M, each step one action on a lit control, shown over a mission named in `missions.json` (`"tutorial"`). See `docs/TUTORIALS.md`. |
 | `data/scenery/` | Presentation data: the ultra-basic models of every asset (`basic_models.json`: archetype, size, colour per type; the air war's aircraft ids). Placeholders until real models exist. |
 | `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. |
 | `data/weather/` | Weather presets a scenario names (`"weather"`): winds, cloud layers, the air (`simcore/weather.hpp`). |
@@ -54,8 +54,8 @@ python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
-# Play the game (docs/PLAYING.md): the missions menu, or straight into the tutorial
-.\tools\play.ps1 [-Tutorial] [-Build]
+# Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson
+.\tools\play.ps1 [-Tutorial | -Lesson senior_operator] [-Build]
 
 # Python prototype and tools
 python -m pytest prototype tools -q

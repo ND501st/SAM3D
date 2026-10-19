@@ -126,6 +126,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey NextStationKey = EKeys::Tab;
 
+	/** Up from the seat and walking in the cabin, or down into the seat beside you. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey StandKey = EKeys::X;
+
+	/** Walking pace in the cabin (cm/s): a crewman stooping under a low roof. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	double WalkSpeedCmPerS = 90.0;
+
 	/** In a battery link: to the other vehicle (the Osa <-> the PU-12M). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey SwitchVehicleKey = EKeys::V;
@@ -146,12 +154,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	double CabinReachCm = 150.0;
 
+	/** How far for the seat's own controls (cm): the crewman stands and steps to a far panel of his seat (simcore's
+	 *  crew_body.hpp: it costs drill time, it isn't out of reach), e.g. the deputy commander's gyro panel, 1.5-1.75 m. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	double StandingReachCm = 220.0;
+
 	/** HUD drawn for the possessing player (crosshair and control names in the cabin). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	TSubclassOf<class AHUD> CabinHUDClass;
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsInCabin() const { return bInCabin; }
+
+	/** Up from the seat, walking in the cabin. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsWalking() const { return bInCabin && bWalking; }
+
+	/** X: up from the seat onto the cabin's floor, or down into the seat he stands by (FeedbackText says why not). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void ToggleWalking();
 
 	/** Enter or leave the cabin. Entering needs a loaded cabin layout. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -169,10 +190,22 @@ public:
 	/** The next seat of the cabin (Tab, or F1 again). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	void NextStation();
+	/** The head's turn (yaw and pitch from the seat's view) that looks at a point in the world from where the eye is now
+	 *  (the seat, or standing at a far panel). False if the seat has no view. */
+	bool LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const;
+	/** The wheel just grabbed: start turning the head onto its display, if it has one. */
+	void StartWheelWatch(int32 Item);
 
 	/** The camera views (F1-F11) and the time keys. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Views")
 	USimViewComponent* GetViews() const { return Views; }
+
+	/** The 3D cabin (the HUD finds a lesson's highlight in it). */
+	USimCabinComponent* GetCabin() const { return Cabin; }
+
+	/** A lesson (simcore/tutorial.hpp): turn the head onto what the step highlights, from the lesson's seat (L). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	void LookAtLessonTarget();
 
 	// ---- The crew (phase 8, docs/crew/): H the training overlay, O the crew menu (orders at the commander's seat,
 	// reports elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back.
@@ -353,6 +386,15 @@ private:
 	void UpdateTour(float DeltaSeconds);
 	void ShowTourView();
 	void HandleCrew(class APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds);
+	/** A lesson: Enter, L, its highlight in the cabin; returns the control the ghost hand should reach for. */
+	FString HandleLesson(class APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds);
+	/** -SimTutorialAutoplay=<folder>: the lesson played as a learner would, through the same clicks, wheel turns and
+	 *  menu lines, each step photographed as he sees it before it is done; the game quits at the end. */
+	void RunLessonAutoplay(USimWorldSubsystem* Sim, const struct FSimTutorialStep& Step, float DeltaSeconds);
+	/** The crew menu opens (O): this seat's orders or reports, on the page with the lesson's line if one is asked for. */
+	void OpenCrewMenu(USimWorldSubsystem* Sim);
+	/** The cabin seat with this station id (INDEX_NONE if none). */
+	int32 FindStation(const FString& StationId) const;
 	void ConfigureForScenario(USimWorldSubsystem* Sim);
 	void HandlePost(class APlayerController* Pc);
 	TArray<int32> PickList() const;
@@ -370,11 +412,30 @@ private:
 	void HandleMissionMenu(APlayerController* Pc);
 	int32 Station = 0;
 	FString StationLabel;
+	/** Standing at a far panel of the seat (L onto one of its controls beyond arm's reach): the eye's step from the seat
+	 *  (cm, the vehicle's frame), for the seat StandStation only; another seat, or the cabin left, sits down again. */
+	FVector StandOffset = FVector::ZeroVector;
+	int32 StandStation = INDEX_NONE;
+	/** Walking (X): the eye (cm, the vehicle's frame) and where he looks (yaw, pitch in the vehicle's frame). The seat he
+	 *  got up from stays his (Station): his orders and reports, and the seat he holds. */
+	bool bWalking = false;
+	FVector WalkEye = FVector::ZeroVector;
+	double WalkYawDeg = 0.0;
+	double WalkPitchDeg = 0.0;
+
 	/** Head turn from the station's view direction (degrees). */
 	double LookYawDeg = 0.0;
 	double LookPitchDeg = 0.0;
 	int32 HoveredItem = INDEX_NONE;
 	int32 DraggedWheel = INDEX_NONE;
+	/** Holding a hand wheel turns the head onto the display it is worked against (the layout's "watch"), and back to
+	 *  where it was when the wheel is let go: the look to turn to, and the look to come back to. */
+	bool bWheelWatch = false;
+	bool bWatchReturn = false;
+	double WatchYawDeg = 0.0;
+	double WatchPitchDeg = 0.0;
+	double ReturnYawDeg = 0.0;
+	double ReturnPitchDeg = 0.0;
 	FString HoverText;
 	FString FeedbackText;
 	float FeedbackSecondsLeft = 0.0f;
@@ -401,6 +462,21 @@ private:
 	/** The sky lights dimmed by SetDaylightShut, with their own intensities. */
 	TMap<TWeakObjectPtr<class USkyLightComponent>, float> ShutSkyLights;
 	int32 PickedTarget = INDEX_NONE;
+
+	FString AutoplayFolder;
+	bool bAutoplayAsked = false;
+	int32 AutoStep = INDEX_NONE;
+	float AutoClock = 0.0f;
+	bool bAutoLooked = false;
+	bool bAutoShot = false;
+	bool bAutoUi = false;
+	bool bAutoReachChecked = false;
+	bool bAutoWatched = false;
+	int32 AutoClicks = 0;
+	float AutoEndClock = -1.0f;
+	/** The autoplay's hands on the controls: throttle forward, and the brake. */
+	double AutoThrottle = 0.0;
+	bool bAutoBrake = false;
 
 	bool bTouring = false;
 	FString ShotFolder;

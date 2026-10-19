@@ -424,15 +424,35 @@ struct SAM3D_API FSimMission
 	TArray<FSimMissionVehicle> Vehicles;
 };
 
-/** The tutorial guide's step on the screen (data/tutorials/, simcore/tutorial.hpp). */
+/** What a lesson's step asks of the learner now (simcore::TutorialStatus::Phase). */
+UENUM(BlueprintType)
+enum class ESimTutorialPhase : uint8
+{
+	None,
+	/** Read, then Enter. */
+	Read,
+	/** The action can't be done yet: WaitText says what for. */
+	Wait,
+	/** Do it: the highlighted control, wheel, order or report. */
+	Act,
+	/** Nothing to do: the step waits for the crew or the world (WaitText). */
+	Watch,
+	/** The lesson's last step. */
+	End
+};
+
+/** The lesson's step on the screen (data/tutorials/, simcore/tutorial.hpp): what it says, what it asks, and its state. */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimTutorialStep
 {
 	GENERATED_BODY()
 
-	/** The guide's title. */
+	/** The lesson's title. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	FString Guide;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Chapter;
 
 	/** 1-based, of Count. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
@@ -442,23 +462,134 @@ struct SAM3D_API FSimTutorialStep
 	int32 Count = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	FString Title;
 
 	/** What to do, a sentence or two each. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	TArray<FString> Lines;
 
+	/** One sentence: what the action is for. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Why;
+
 	/** The keys for it, one line. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	FString Hint;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	ESimTutorialPhase Phase = ESimTutorialPhase::None;
+
+	/** What the step waits for, in words (Wait and Watch). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString WaitText;
+
+	/** The control or wheel to work ("" none), its label and its station. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Control;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString ControlLabel;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Station;
+
+	/** The position to set and its label; the position now. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	int32 Position = -1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString PositionLabel;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	int32 CurrentPosition = -1;
+
+	/** A wheel: the mark (when known), how close, the wheel now, whether it wraps at 360 and is on the mark. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bWheel = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bTargetKnown = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	double Target = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	double Tolerance = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	double Value = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bWraps = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bOnMark = false;
+
+	/** An order to give or a report to make from the crew menu: its id and words. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Order;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString OrderRu;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString OrderEn;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bReport = false;
+
+	/** A panel, display, lamp or control to point at (a tour step), else the step's control. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Look;
+
+	/** The learner's last move off the step, in words. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Feedback;
+
+	/** The lesson runs time faster while this step waits. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bFastForward = false;
+
+	/** The lesson's seat ("" any) and whether only the step's control works. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Seat;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bStrict = false;
+
+	/** The step's finishing conditions as written (for scripted checks). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	TArray<FString> DoneWhen;
 
 	/** The last step: it stays. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	bool bLast = false;
 
+	/** Gone back to (Backspace): shown again to read; Enter moves on. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bReview = false;
+
+	/** Skipped (N): the instructor is doing it. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bInstructor = false;
+
+	/** There is a step to go back to. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	bool bCanGoBack = false;
+
 	/** Real seconds since this step came up (to mark a new step). */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	float ShownSeconds = 0.0f;
+
+	/** The step done just before this one and how long ago (real s), for the tick that marks it done. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString LastDone;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	float LastDoneSeconds = 1000.0f;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
@@ -746,7 +877,7 @@ public:
 
 	// ------------------------------------------------------------------ the tutorial guide (simcore/tutorial.hpp)
 
-	/** Show a guide (relative to the data folder, e.g. "tutorials/first_shoot.json") over the running scenario. Load the
+	/** Show a guide (relative to the data folder, e.g. "tutorials/basics.json") over the running scenario. Load the
 	 *  scenario first; loading another drops the guide. False with OutError if it doesn't load or names what the
 	 *  scenario hasn't got. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
@@ -758,9 +889,37 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
 	FSimTutorialStep GetTutorialStep() const;
 
-	/** The player moves on without doing the step (N). */
+	/** Skip the step (N): passed if there is nothing to do, else the instructor does it (simcore TutorialGuide::Skip). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
 	void SkipTutorialStep();
+
+	/** Any step but the last can be skipped. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
+	bool CanSkipTutorialStep() const;
+
+	/** Back a step (Backspace), to read it again; what was done stays done. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	void BackTutorialStep();
+
+	/** The continue key (Enter): a reading step is done. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	void NoteTutorialContinue();
+
+	/** A strict lesson is on: only the step's control works ("" for any control the learner may use now). The reason
+	 *  otherwise, to show him. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
+	FString GetTutorialRefusal(const FString& ControlId) const;
+
+	/** The same for an order or report from the crew menu. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
+	FString GetTutorialMenuRefusal(const FString& CalloutId) const;
+
+	/** A strict lesson is on (the crew hotkeys and giving up the seat are off). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Tutorial")
+	bool IsTutorialStrict() const;
+
+	/** The instructor's next line to say (a new step), once; false if there is none. */
+	bool TakeTutorialSpeech(FString& OutLine);
 
 	/** What the screen shows now, for the guide's conditions: the camera view ("F1".."F11"), the cabin seat, the seat
 	 *  the player holds ("" none). The view component calls it each frame. */
@@ -1041,7 +1200,13 @@ private:
 	TUniquePtr<simcore::TutorialGuide> Tutorial;
 	simcore::TutorialUi TutorialUiState;
 	double TutorialStepShownAt = 0.0;
+	FString TutorialLastDone;
+	double TutorialLastDoneAt = -1000.0;
+	FString TutorialSpeech;
+	/** The lesson set time faster for a wait (and sets it back after). */
+	bool bTutorialFastForward = false;
 	void UpdateTutorial(float DeltaTime);
+	void OnTutorialStep();
 	double ScenarioStepSeconds = 0.05;
 	size_t DebriefEntriesSent = 0;
 

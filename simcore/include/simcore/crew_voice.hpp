@@ -6,6 +6,7 @@
 //                    on the speech engine's -10..10 scale, intercom or radio), what stress does to it, the band of the
 //                    intercom and the radio, and how the crew pronounces its abbreviations in each language
 //   SpeechText       a callout's words with the azimuths in mils, the numbers and the abbreviations spelled out
+//   InstructorSpeech a lesson's words for an English voice (tutorial.hpp): the Russian in Latin letters
 //   RussianNumber    0..999 in words
 //   VoiceFor         the voice settings for a speaker, stressed or not
 //
@@ -193,6 +194,59 @@ inline std::string SpeechText(const SpokenCallout& c, const std::string& languag
     }
     const auto it = v.say.find(language);
     return it != v.say.end() ? detail::ReplaceWords(out, it->second) : out;
+}
+
+// A lesson's words for an English voice (the instructor of tutorial.hpp): an English engine skips Cyrillic, so the
+// Russian goes into Latin letters as an English reader would say them (BGN/PCGN, without diacritics); the quote marks
+// go, a dash is a pause, and "..." (a field nobody has filled yet) is silent. "Order «К бою»" -> "Order K boyu".
+inline std::string InstructorSpeech(const std::string& text) {
+    static const char* const letters[] = {"a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p",
+                                          "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"};
+    std::string out;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const unsigned b0 = static_cast<unsigned char>(text[i]);
+        if (b0 < 0x80u) {
+            out += text[i++];
+            continue;
+        }
+        std::size_t len = b0 >= 0xF0u ? 4 : b0 >= 0xE0u ? 3 : b0 >= 0xC0u ? 2 : 1;
+        if (i + len > text.size()) len = text.size() - i;
+        if (len == 2) {
+            const unsigned b1 = static_cast<unsigned char>(text[i + 1]);
+            const unsigned cp = ((b0 & 0x1Fu) << 6u) | (b1 & 0x3Fu);
+            if (cp >= 0x410u && cp <= 0x44Fu) {  // А..Я, а..я
+                std::string latin = letters[(cp - 0x410u) % 32u];
+                if (cp < 0x430u && !latin.empty()) latin[0] = static_cast<char>(latin[0] - 'a' + 'A');
+                out += latin;
+                i += 2;
+                continue;
+            }
+            if (cp == 0x401u || cp == 0x451u) {  // Ё, ё
+                out += cp == 0x401u ? "Yo" : "yo";
+                i += 2;
+                continue;
+            }
+            if (cp == 0xABu || cp == 0xBBu) {  // « »
+                i += 2;
+                continue;
+            }
+        } else if (len == 3 && b0 == 0xE2u && static_cast<unsigned char>(text[i + 1]) == 0x80u) {
+            const unsigned b2 = static_cast<unsigned char>(text[i + 2]);
+            if (b2 == 0x93u || b2 == 0x94u) {  // – —
+                out += ",";
+                i += 3;
+                continue;
+            }
+            if (b2 == 0xA6u) {  // …
+                i += 3;
+                continue;
+            }
+        }
+        out.append(text, i, len);
+        i += len;
+    }
+    return out;
 }
 
 namespace detail {

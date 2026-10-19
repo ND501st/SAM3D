@@ -25,6 +25,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Board")
 	bool bShowBoard = false;
 
+	/** The lesson card's lower edge this frame (0: no card); the crew menu opens below it. */
+	float GuideBottom = 0.0f;
+
 	/** Radio lines shown at the bottom left, and how long one stays (sim seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Radio")
 	int32 RadioLines = 5;
@@ -44,12 +47,24 @@ private:
 	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	/** The camera view's name, the view's last note and the time compression, at the top. */
 	void DrawView(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
-	/** The tutorial guide's step: a panel at the top right (the left while the board is up). */
-	void DrawGuide(class USimWorldSubsystem* Sim);
+	/** The lesson's step card (docs/research/TUTORIAL_DESIGN_2026-10.md): where it is, the action in one line, the
+	 *  control and its position, what for, and a status line that always says what happens next. Top right (the left
+	 *  while the board is up). */
+	void DrawGuide(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
+	/** The step's control on the screen: a bracket round it with the position to set beside it, or an arrow at the
+	 *  screen's edge pointing to it when it is out of view. */
+	void DrawLessonMarker(const struct FSimTutorialStep& Step, const class ASimOsaVehicle* Vehicle);
+	/** A wheel step: where the wheel is against the mark, and which way to turn it. Its height; drawn only with bDraw.
+	 *  S is the card's size factor, TextScale its words'. */
+	float DrawWheelGauge(const struct FSimTutorialStep& Step, float X, float Y, float Width, float S, float TextScale, bool bDraw);
+	/** A tick, drawn (the engine's font has no glyph for one); its box is Size square from the top left. */
+	void DrawTick(float X, float Y, float Size, const FLinearColor& Color);
+	/** An arrowhead pointing along Dir, its tip at Tip. */
+	void DrawArrowhead(FVector2f Tip, FVector2f Dir, float Size, const FLinearColor& Color, float Thickness);
 	/** Every key, by what it is for (G). */
 	void DrawKeys(const class ASimOsaVehicle* Vehicle);
 	/** Text broken into lines no wider than Width. */
-	TArray<FString> Wrap(const FString& Text, float Width, class UFont* Font);
+	TArray<FString> Wrap(const FString& Text, float Width, class UFont* Font, float Scale = 1.0f);
 	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
 	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 };

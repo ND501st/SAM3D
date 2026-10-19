@@ -57,6 +57,7 @@ struct ScenarioTarget {
     double max_turn_rate_rad_s = DegToRad(6.0);
     double rcs_m2 = 5.0;
     double appear_at_s = 0.0;
+    bool on_cue = false;                   // held until something releases it (a lesson: ScenarioRunner::ReleaseTarget)
     std::string target_class = "default";  // picks the hit chance in the gameplay tuning
     bool evade_on_launch = false;          // breaks away onto a beam heading when a missile is launched at it
     double evade_turn_rate_rad_s = DegToRad(12.0);
@@ -718,13 +719,13 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
             double turn_deg_s = RadToDeg(tg.max_turn_rate_rad_s);
             double evade_deg_s = RadToDeg(tg.evade_turn_rate_rad_s);
-            if (!OptionalString(t, p, "class", tg.target_class) ||
+            if (!OptionalBool(t, p, "on_cue", tg.on_cue) || !OptionalString(t, p, "class", tg.target_class) ||
                 !OptionalBool(t, p, "evade_on_launch", tg.evade_on_launch) || !LoadIff(t, p, tg.friendly) ||
                 !OptionalNumber(t, p, "evade_turn_rate_deg_s", evade_deg_s)) {
                 return false;

@@ -359,6 +359,75 @@ SC_TEST("cabin: the loader rejects bad layouts with a path to the problem") {
                             "needs lit_when"));
 }
 
+SC_TEST("cabin: a hand wheel names the display its crewman watches while turning it") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    std::string error;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
+    const CabinControl* az = layout.FindControl("ssc.az_wheel");
+    const CabinControl* range = layout.FindControl("ssc.range_wheel");
+    const CabinControl* el = layout.FindControl("ssc.el_wheel");
+    SC_EXPECT(az != nullptr && az->watch == "soc_ppi");
+    SC_EXPECT(range != nullptr && range->watch == "ssc_range");
+    SC_EXPECT(el != nullptr && el->watch == "elev_search");
+    SC_EXPECT(ErrorContains(
+        Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0], "watch": "x" } ])"), "for wheels only"));
+    SC_EXPECT(ErrorContains(
+        Small(R"(, "controls": [ { "control": "ssc.az_wheel", "panel": "p", "at_m": [0, 0], "watch": "nope" } ])"),
+        "controls[0].watch: no display 'nope'"));
+}
+
+SC_TEST("cabin: a crewman up from his seat walks the floor, slides along its edges and sits down where he stands by a seat") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout cabin;
+    std::string error;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, cabin, &error));
+    SC_EXPECT(!cabin.walk.empty() && cabin.stand_eye_m > 1.83);
+    // Every seat can get up onto the floor, and is the seat found where he gets up.
+    for (const CabinStation& st : cabin.stations) {
+        Vec3 up;
+        SC_EXPECT(cabin.StandUpFrom(st, up) && cabin.Walkable(up.x, up.y));
+        SC_EXPECT_NEAR(up.z, cabin.stand_eye_m, 1e-9);
+        const CabinStation* near = cabin.SeatNear(up, 0.05);
+        SC_EXPECT(near != nullptr && near->id == st.id);
+    }
+    // The commander gets up into the gap between the cab seats and walks back down the aisle to the operator.
+    Vec3 at;
+    SC_EXPECT(cabin.StandUpFrom(*cabin.FindStation("commander"), at));
+    SC_EXPECT_NEAR(at.x, 0.1, 1e-9);
+    SC_EXPECT_NEAR(at.y, 3.72, 1e-9);
+    // Into the right-hand racks: he slides along them instead.
+    const Vec3 slid = cabin.WalkStep(Vec3{0.3, 3.0, at.z}, Vec3{0.9, 2.8, at.z});
+    SC_EXPECT_NEAR(slid.x, 0.3, 1e-9);
+    SC_EXPECT_NEAR(slid.y, 2.8, 1e-9);
+    // Into a rack straight on: he stays.
+    const Vec3 stopped = cabin.WalkStep(Vec3{0.42, 2.0, at.z}, Vec3{0.6, 2.0, at.z});
+    SC_EXPECT_NEAR(stopped.x, 0.42, 1e-9);
+    for (int i = 0; i < 400; ++i) at = cabin.WalkStep(at, at + Vec3{0.0, -0.01, 0.0});
+    const CabinStation* seat = cabin.SeatNear(at, 0.6);
+    SC_EXPECT(seat != nullptr && seat->id == "operator");
+    // A walk needs the standing eye, under the roof; an area must be wide enough to stand in.
+    SC_EXPECT(ErrorContains(Small(R"(, "walk": [ { "from_m": [0, 0], "to_m": [1, 1] } ])"), "stand_eye_m: required with walk"));
+    SC_EXPECT(ErrorContains(Small(R"(, "stand_eye_m": 1.9, "walk": [ { "from_m": [0, 0], "to_m": [0.02, 1] } ])"),
+                            "walk[0]: too narrow"));
+}
+
+SC_TEST("cabin: the PU-12M's crew can get up too") {
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/pu12m.json", console, &error));
+    CabinLayout cabin;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/pu12m.json", console, cabin, &error));
+    SC_EXPECT(cabin.stand_eye_m < cabin.ceiling_m - 0.08);
+    for (const CabinStation& st : cabin.stations) {
+        Vec3 up;
+        SC_EXPECT(cabin.StandUpFrom(st, up));
+        SC_EXPECT((Vec3{up.x, up.y, 0.0} - Vec3{st.eye_m.x, st.eye_m.y, 0.0}).Length() < 0.6);  // beside his seat
+    }
+}
+
 SC_TEST("cabin: player moves go through a procedure tracker into the debrief") {
     ScenarioDef def;
     ConsoleData console;

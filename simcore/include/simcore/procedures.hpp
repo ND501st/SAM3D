@@ -45,6 +45,8 @@ enum class StepResult {
     AcceptedEarly,     // correct next step done before its wait_for held; moved, advanced, counted as a deviation
     NotNextStep,       // control moved, but it wasn't the expected step (counted as a deviation)
     WaitRequired,      // correct step but before min_wait_s; control NOT moved
+    Toward,            // the step's selector moved one position on toward the step's position: moved, not yet the step,
+                       // not judged (a rotary clicked through its positions)
     UnknownControl,
     InvalidPosition,
     Blocked,           // physically blocked (cover closed, or a stepwise jump); control NOT moved, not judged
@@ -91,6 +93,16 @@ public:
             return StepResult::ProcedureComplete;
         }
         const ProcedureStep& step = procedure_.steps[next_];
+        // A selector on its way to the step's position (clicked through the positions between): not a deviation.
+        if (step.control_id == control_id && step.value != value) {
+            const ControlDef* def = panel.Find(control_id);
+            const int now = panel.Get(control_id);
+            if (def != nullptr && def->kind == ControlKind::Discrete && def->positions > 2 &&
+                ((now < value && value < step.value) || (step.value < value && value < now))) {
+                panel.Set(control_id, value);
+                return StepResult::Toward;
+            }
+        }
         if (step.control_id == control_id && step.value == value) {
             if (elapsed_since_step_s_ < step.min_wait_s) return StepResult::WaitRequired;
             const bool ready = ConditionsHold(step.wait_for, panel, equipment);
