@@ -46,6 +46,23 @@ public:
 	/** Render-target pixels along the display's longer side. */
 	static constexpr int32 PixelsPerLongSide = 512;
 
+	/** The plotting board's reach from its centre (its outer ring): 200 km (data/command/pu12.json's rings). */
+	static constexpr double PlotBoardRadiusM = 200000.0;
+
+	simcore::CabinDisplayKind GetKind() const { return Kind; }
+
+	/**
+	 * Where a ray from WorldStart to WorldEnd meets the display's face, wherever its panel is now (a hinge turns the plotting
+	 * board): OutUvM in metres from its centre (right, up the face), OutDistanceCm along the ray. False if it misses.
+	 */
+	bool RayHit(const FVector& WorldStart, const FVector& WorldEnd, FVector2D& OutUvM, double& OutDistanceCm) const;
+
+	/**
+	 * The plotting board: the ground point (ENU east, north) under a point of its face (UvM from its centre) and its scale
+	 * (metres of ground per metre of board). The post at the centre, north up the face.
+	 */
+	bool BoardGround(const FVector2D& UvM, double& OutEastM, double& OutNorthM, double& OutMetresPerBoardM) const;
+
 private:
 	USimWorldSubsystem* GetSim() const;
 	void DrawPpi(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display, simcore::ScenarioRunner& Runner, bool bOn);
@@ -98,6 +115,14 @@ private:
 	int32 AspdTurns = 0;
 	// The status board's lamps, each easing on and off (a row of nine per launcher).
 	TArray<float> BoardGlow;
+
+	// The face as built, in the screen mesh's own space (cm): its centre, its axes and size.
+	FVector FaceCentre = FVector::ZeroVector;
+	FVector FaceNormal = FVector::ForwardVector;
+	FVector FaceRight = FVector::RightVector;
+	FVector FaceUp = FVector::UpVector;
+	double FaceWidthCm = 0.0;
+	double FaceHeightCm = 0.0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Screen;

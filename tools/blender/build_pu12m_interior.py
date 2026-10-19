@@ -162,7 +162,7 @@ def windscreens(b):
 # ---------------------------------------------------------------------------------------------- equipment
 
 EQUIPMENT_SKIP = {'seat_squad_leader', 'seat_driver', 'bench', 'bench_back', 'mast', 'winch', 'dash', 'r123_fug1',
-                  'r123_fug2', 'r123_fug4'}
+                  'r123_fug2', 'r123_fug4', 'map_board'}
 
 
 def face_inset(b, it):
@@ -322,6 +322,13 @@ def build_equipment():
     return C.finish(b, bevel=0.003)
 
 
+def build_map_board():
+    # The plotting board on its own (its hinge turns it: data/cabins/pu12m.json hinges), drawn open.
+    b = C.Builder('SM_PU12MMapBoard')
+    build_item(b, I.item('map_board'))
+    return C.finish(b, bevel=0.002)
+
+
 def build_bench():
     b = C.Builder('SM_PU12MBench')
     bench, back = I.item('bench'), I.item('bench_back')
@@ -441,8 +448,8 @@ def build_mast_foot():
 
 
 def build_all():
-    return [build_lining(), build_equipment(), build_bench(), build_front_seat(), build_steering(), build_pedals(),
-            build_driver(), build_mast_foot()]
+    return [build_lining(), build_equipment(), build_map_board(), build_bench(), build_front_seat(), build_steering(),
+            build_pedals(), build_driver(), build_mast_foot()]
 
 
 def export(obj):

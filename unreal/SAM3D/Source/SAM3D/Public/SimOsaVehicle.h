@@ -306,6 +306,9 @@ public:
 	/** The target number picked at this seat (board or IT-45; -1: none; the IT-45's numbers start at 00). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	int32 GetPickedTarget() const { return PickedTarget; }
+	bool IsCrossOnBoard() const { return bOnBoard; }
+	float GetLastPlotMissCm() const { return LastPlotMissCm; }
+	float GetLastPlotTime() const { return LastPlotTime; }
 
 	/** Pick the next (+1) or previous (-1) target on this seat's picture: the board at the commander's, the IT-45 at the
 	 *  plotter's. */
@@ -319,6 +322,8 @@ public:
 	/** At the plotter's seat: write the picked IT-45 target on the board. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
 	bool PlotPicked();
+	/** The plotting board under the cross (the plotter's): the mouse wheel picks the number, a click writes it there. */
+	void HandleBoard(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
@@ -462,6 +467,11 @@ private:
 	/** The sky lights dimmed by SetDaylightShut, with their own intensities. */
 	TMap<TWeakObjectPtr<class USkyLightComponent>, float> ShutSkyLights;
 	int32 PickedTarget = INDEX_NONE;
+	/** The cross is on the plotting board (HandleBoard): the HUD draws the picked number beside it. */
+	bool bOnBoard = false;
+	/** The last mark written by hand: how far the click was (cm), and when (world seconds), for a moment's feedback. */
+	float LastPlotMissCm = -1.0f;
+	float LastPlotTime = -100.0f;
 
 	FString AutoplayFolder;
 	bool bAutoplayAsked = false;

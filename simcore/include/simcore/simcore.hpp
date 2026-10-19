@@ -36,6 +36,7 @@
 #include "simcore/scope_feed.hpp"
 #include "simcore/post_feed.hpp"
 #include "simcore/board_reading.hpp"
+#include "simcore/pvo_grid.hpp"
 #include "simcore/battery_link.hpp"
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_body.hpp"

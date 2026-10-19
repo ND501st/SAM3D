@@ -316,6 +316,19 @@ struct CabinDisplay {
 };
 
 // A rectangle of floor a crewman can walk on, in plan (body frame x and y, metres).
+// A part that swings on a hinge (the PU-12M's plotting board): its panels (with everything on them) and shell meshes
+// turn about a vertical axis through `pivot_m`, by `folded_rad` (clockwise seen from above) when folded and not at all
+// when open, as the console's `subsystem` goes from off to ready (its progress in between).
+struct CabinHinge {
+    std::string id;
+    std::string label;
+    std::vector<std::string> panels;
+    std::vector<std::string> shell;
+    Vec3 pivot_m;
+    double folded_rad = 0.0;
+    std::string subsystem;
+};
+
 struct CabinWalkArea {
     double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
     bool Contains(double x, double y) const { return x >= x0 && x <= x1 && y >= y0 && y <= y1; }
@@ -325,6 +338,7 @@ struct CabinLayout {
     std::string system_id;
     double ceiling_m = 0.0;  // the roof's inside in the body frame, where a crewman getting up must keep his head under (0: none)
     std::vector<CabinWalkArea> walk;  // the floor he can walk on, up from his seat ("walk"); none: he stays seated
+    std::vector<CabinHinge> hinges;   // parts that swing (CabinHinge)
     double stand_eye_m = 0.0;         // his eye's height on his feet (stooping under a low roof; "stand_eye_m")
     std::vector<CabinStation> stations;
     std::vector<CabinPanel> panels;
@@ -491,7 +505,7 @@ class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
         if (!Keys(root, "", {"system_id", "status", "notes", "ceiling_m", "walk", "stand_eye_m", "stations", "panels",
-                             "controls", "lamps", "displays", "blocks", "fixtures", "shell"})) {
+                             "controls", "lamps", "displays", "blocks", "fixtures", "shell", "hinges"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -502,7 +516,7 @@ public:
         }
         return LoadSeats(root, console, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
                PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out) &&
-               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out) && CheckWatches(out);
+               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out) && LoadHinges(root, console, out) && CheckWatches(out);
     }
 
 private:
@@ -868,6 +882,47 @@ private:
                 if (other.id == block.id) return Fail(Join(path, "id"), "duplicate block '" + block.id + "'");
             }
             out.blocks.push_back(std::move(block));
+        }
+        return true;
+    }
+
+    bool LoadHinges(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "hinges");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("hinges", i);
+            const json::Value& v = arr->items[i];
+            if (!Keys(v, path, {"id", "label", "panels", "shell", "pivot_m", "folded_deg", "subsystem", "source", "confidence", "notes"})) {
+                return false;
+            }
+            CabinHinge h;
+            if (!RequireString(v, path, "id", h.id) || !OptionalString(v, path, "label", h.label) || !Number3(v, path, "pivot_m", h.pivot_m) ||
+                !Degrees(v, path, "folded_deg", h.folded_rad) || !RequireString(v, path, "subsystem", h.subsystem) || !Provenance(v, path)) {
+                return false;
+            }
+            for (const char* key : {"panels", "shell"}) {
+                const json::Value* list = OptionalArray(v, path, key);
+                if (list == nullptr) {
+                    if (!message_.empty()) return false;
+                    continue;
+                }
+                for (std::size_t k = 0; k < list->items.size(); ++k) {
+                    if (!list->items[k].Is(json::Type::String)) return Fail(Index(Join(path, key), k), "expected an id");
+                    const std::string id = list->items[k].string;
+                    if (std::string(key) == "panels") {
+                        if (out.FindPanel(id) == nullptr) return Fail(Index(Join(path, key), k), "unknown panel '" + id + "'");
+                        h.panels.push_back(id);
+                    } else {
+                        bool found = false;
+                        for (const CabinShellPart& part : out.shell) found = found || part.id == id;
+                        if (!found) return Fail(Index(Join(path, key), k), "unknown shell part '" + id + "'");
+                        h.shell.push_back(id);
+                    }
+                }
+            }
+            if (h.panels.empty() && h.shell.empty()) return Fail(path, "swings nothing: give panels or shell parts");
+            if (console.equipment.Def(h.subsystem) == nullptr) return Fail(Join(path, "subsystem"), "unknown subsystem '" + h.subsystem + "'");
+            out.hinges.push_back(std::move(h));
         }
         return true;
     }

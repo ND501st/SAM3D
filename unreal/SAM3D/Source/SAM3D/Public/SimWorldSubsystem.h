@@ -1080,6 +1080,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	TArray<int32> GetPostHeardNumbers() const;
 
+	/** The plotter (the player, at his seat) writes a report he heard or a tube track where he clicked on the board
+	 *  (ENU east, north; the board's scale). How near he came decides where the mark goes. Its miss in cm, -1 if refused. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
+	float PlotPostAt(int32 Number, double EastM, double NorthM, double MetresPerBoardM);
+
+	/** The plotting board swung open (or the vehicle has no board to swing). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
+	bool IsPostBoardOpen() const;
+
 	/** The IT-1 / IT-2 boards: each launcher as the post last heard it. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	TArray<FSimLauncherStatus> GetLauncherStatus() const;

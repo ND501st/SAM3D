@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
+#include <cctype>
 #include <array>
 #include <map>
 #include <memory>
@@ -325,6 +326,24 @@ public:
         ++plots_made_;
         return true;
     }
+    // The player at the plotter's seat puts a mark where he clicks on the board (east, north: the board's point under his
+    // click, ENU; metres_per_board_m: the board's scale): a report he heard (its board number) or a tube track (its ASPD-U
+    // number). How near he came decides where it goes (the scenario's post.plotting, CommandPost::PlotAt).
+    CommandPost::PlotResult PlayerPlotAt(int number, double east_m, double north_m, double metres_per_board_m) {
+        CommandPost::PlotResult r;
+        if (!post_ || SeatHolder(console_.post_plotter).empty()) return r;
+        r = post_->PlotAt(time_, number, Vec3{east_m, north_m, 0.0}, metres_per_board_m, def_.post_plotting, PlotterSpeed());
+        if (r.ok) {
+            ++plots_made_;
+            last_plot_ = r;
+            char text[96];
+            std::snprintf(text, sizeof(text), "%d plotted by hand: %.0f cm off, the mark %.0f cm from the right place", number,
+                          100.0 * r.miss_board_m, 100.0 * r.error_board_m);
+            Event("plotter", text);
+        }
+        return r;
+    }
+    const CommandPost::PlotResult& LastPlot() const { return last_plot_; }
     // Targets the player at the plotter's seat has written on the board so far.
     int PlotsMade() const { return plots_made_; }
 
@@ -1280,21 +1299,32 @@ private:
     std::unique_ptr<CommandPost> post_;
     std::map<std::string, double> post_first_mark_;  // first mark of each target on the post's board (the log)
 
-    // ---- The regiment's two-digit commands by telecode (proposal 5 of docs/research/PLOTTING_BOARD_2026-10.md): the
-    // newest due is on the tube while the telecode is received; the battery acts on its effect (the code table's).
+    // ---- The regiment's commands (proposal 5 of docs/research/PLOTTING_BOARD_2026-10.md): by telecode on the R-407 as a
+    // two-digit code on the tube, and by voice on the regiment's command net (the R-111). Each is taken by whichever is up
+    // when it is due, and waits while neither is; the battery acts on its effect (the code table's).
     std::size_t next_command_ = 0;
     int post_command_ = -1;
     bool fire_banned_ = false;
     void ReceiveRegimentCommands() {
-        if (!console_.equipment.IsReady(console_.post_telecode)) return;  // nothing comes without the telecode
+        const bool telecode = console_.equipment.IsReady(console_.post_telecode);
+        const bool voice = !console_.post_regiment_net.empty() && console_.equipment.IsReady(console_.post_regiment_net) &&
+                           post_->RegimentNetInReach(def_.post_regiment, time_);
+        if (!telecode && !voice) return;  // nothing comes on either net: it waits
         const std::vector<RegimentCommand>& cmds = def_.post_regiment.commands;
         while (next_command_ < cmds.size() && cmds[next_command_].at_s <= time_ + 1e-9) {
             const RegimentCommand& c = cmds[next_command_++];
-            post_command_ = c.code;
             const AspdCode* code = def_.post_codes.Find(c.code);
             char text[96];
-            std::snprintf(text, sizeof(text), "%02d on the IT-45: %s", c.code, code != nullptr ? code->meaning.c_str() : "(not in the table)");
-            Event("regiment", text);
+            if (telecode) {
+                post_command_ = c.code;
+                std::snprintf(text, sizeof(text), "%02d on the IT-45: %s", c.code, code != nullptr ? code->meaning.c_str() : "(not in the table)");
+                Event("regiment", text);
+            }
+            if (voice && code != nullptr) {
+                std::string said = code->meaning;
+                if (!said.empty()) said[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(said[0])));
+                Radio("regiment net", "Regiment", said + "!");
+            }
             if (code == nullptr) continue;
             if (code->effect == "fire_ban" || code->effect == "cease_fire") fire_banned_ = true;
             if (code->effect == "fire_free") fire_banned_ = false;
@@ -1361,6 +1391,7 @@ private:
         in.air_net = !console_.post_air_net.empty() && console_.equipment.IsReady(console_.post_air_net) &&
                      post_->AirNetInReach(def_.post_regiment, time_);
         in.imitation = !console_.post_imitation.empty() && console_.equipment.IsReady(console_.post_imitation);
+        in.board_open = console_.post_board_open.empty() || console_.equipment.IsReady(console_.post_board_open);
         const CrewMember* plotter = MemberAt(console_.post_plotter);
         in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
         in.operator_speed = PlotterSpeed();
@@ -1764,6 +1795,7 @@ private:
     std::vector<MadeReport> reports_made_;
     int designations_made_ = 0;
     int plots_made_ = 0;
+    CommandPost::PlotResult last_plot_;
     ScenarioDef def_;
     ConsoleData console_;
     RidgeTerrain ground_;  // the scenario's flat ground and its ridges
@@ -3581,6 +3613,16 @@ public:
         }
         const bool ok = DesignateBatteryTarget(callsign, number);
         if (!ok && why) *why = "the net is down, the launcher is unknown or empty, or the number is not on the board";
+        return ok;
+    }
+    // A player's plot at a point of the board through his seat: only the plotter's.
+    bool SeatPlotAt(const std::string& seat, int number, double east_m, double north_m, double metres_per_board_m, std::string* why = nullptr) {
+        if (!post_ || seat != console_.post_plotter) {
+            if (why) *why = "the board is the " + console_.post_plotter + "'s";
+            return false;
+        }
+        const bool ok = PlayerPlotAt(number, east_m, north_m, metres_per_board_m).ok;
+        if (!ok && why) *why = "the board folded, the number neither heard nor on the tube, or the last mark still being written";
         return ok;
     }
     // A player's plot through his seat: only the plotter's.

@@ -143,12 +143,18 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                     break;
                 case TutorialCondition::Kind::Ui: ui.events.insert(c.arg); break;
                 case TutorialCondition::Kind::Plotted:
-                    // The plotter: P on a target of the tube he hasn't written yet, a try a second (each takes him a while).
+                    // The plotter: a report he heard clicked on the board where it said (or a tube track he hasn't
+                    // written yet), a try a second (each takes him a while).
                     if (r->Time() >= next_move_s) {
-                        for (const CommandPost::ScopeMark& m : r->PostScope()) {
-                            if (plotted.count(m.number) != 0) continue;
-                            if (r->PlayerPlot(m.number)) plotted.insert(m.number);
-                            break;
+                        if (r->Post() != nullptr && !r->Post()->Heard().empty()) {
+                            const CommandPost::AirReport& h = r->Post()->Heard().front();
+                            r->PlayerPlotAt(h.number, h.contact.position.x, h.contact.position.y, 200000.0 / 0.17);
+                        } else {
+                            for (const AspdTrack& k : r->Post() != nullptr ? r->Post()->Tracks() : std::vector<AspdTrack>()) {
+                                if (plotted.count(k.number) != 0 || k.imitated) continue;
+                                if (r->PlayerPlotAt(k.number, k.position.x, k.position.y, 200000.0 / 0.17).ok) plotted.insert(k.number);
+                                break;
+                            }
                         }
                         next_move_s = r->Time() + 1.0;
                     }
@@ -162,7 +168,12 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                         for (const CommandPost::ScopeMark& m : tube) {
                             if (nearest == nullptr || std::hypot(m.x, m.y) < std::hypot(nearest->x, nearest->y)) nearest = &m;
                         }
-                        if (nearest != nullptr) r->PlayerPlot(nearest->number);
+                        if (r->Post() != nullptr && !r->Post()->Heard().empty()) {
+                            const CommandPost::AirReport& h = r->Post()->Heard().front();
+                            r->PlayerPlotAt(h.number, h.contact.position.x, h.contact.position.y, 200000.0 / 0.17);
+                        } else if (nearest != nullptr) {
+                            r->PlayerPlot(nearest->number);
+                        }
                         next_replot_s = r->Time() + 15.0;
                     }
                     break;

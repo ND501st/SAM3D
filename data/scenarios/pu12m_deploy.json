@@ -10,7 +10,7 @@
   "terrain": { "type": "flat", "height_m": 110 },
   "post": {
     "board": "command/pu12.json",
-    "aspd": "command/aspd_u.json",
+    "aspd": "command/aspd_u.json", "plotting": "gameplay/plotting.json",
     "library": "command/regiment_radars.json",
     "regiment": {
       "position": { "east_m": -6000, "north_m": -5000, "up_m": 2 },

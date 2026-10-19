@@ -41,6 +41,7 @@ class Layout:
     def __init__(self):
         self.stations, self.panels, self.controls, self.lamps = [], [], [], []
         self.displays, self.blocks, self.fixtures, self.shell = [], [], [], []
+        self.hinges = []
         self._frames = {}
 
     # -- panels -------------------------------------------------------------------------------------------------
@@ -340,6 +341,19 @@ def build():
                 notes='The plotter\'s map board (csla_pu12_manual item 24, planšet vzdušné situace: drawn folded on the '
                       'centreline before his place; rwd_mb3: the Luftlagekarte, a plexiglass board on a hinge, etched with a '
                       'grid and range circles), swung open across the compartment facing him. ' + VISUALS)
+    # The latch on the frame's free edge: swing the board open, fold it back (the console's map.board).
+    L.control('map.board', p, (0.165, -0.15), 'toggle', {'kind': 'latch', 'size_m': 0.03, 'color': 'chrome'})
+    # The hinge (csla_pu12_manual: drawn folded edge-on on the centreline, 1218-1311 px; rwd_mb3: hinged at its left
+    # edge): open, the board stands across facing the plotter; folded, it turns a quarter turn clockwise (seen from
+    # above) about its left edge to lie along the centreline, back towards the bench, as the plan draws it.
+    hx, hy, _ = I.to_body(I.MAP_BOARD['x'], I.MAP_HINGE_Y, 0.0)
+    L.hinges.append({'id': 'map_board', 'label': 'Plotting board hinge', 'panels': [p], 'shell': ['mapboard'],
+                     'pivot_m': [r4(hx), r4(hy), round(0.5 * (I.MAP_BOARD['z0'] + I.MAP_BOARD['z1']), 3)],
+                     'folded_deg': 90.0, 'subsystem': 'map_open',
+                     'source': 'csla_pu12_manual (item 24 drawn folded on the centreline); rwd_mb3 (pu12e: the hinge bar)',
+                     'confidence': 'medium',
+                     'notes': 'Turns with map_open\'s progress: 0 folded, 1 open. The direction of the fold is SAM3D\'s '
+                              'reading of the plan\'s strip and the photograph\'s hinge.'})
     L.displays.append({'id': 'map', 'label': 'Air-situation map', 'kind': 'plot_board', 'panel': p, 'at_m': [0.0, 0.0],
                        'size_m': [0.36, 0.34],
                        'source': 'rwd_mb3 (Luftlagekarte: the targets\' tracks drawn by hand in the designation squares, '
@@ -450,6 +464,10 @@ def build():
                              'Its size and tilt are estimates. The driver\'s hands rest on it (data/crew/body.json).'),
         'SM_PU12MPedals': ('The pedals', 'csla_pu12_manual (the squad leader and driver drawing)', 'low',
                            'Estimates. The driver\'s feet rest on them (data/crew/body.json).'),
+        'SM_PU12MMapBoard': ('The plotting board (the plan\'s item 24): the plexiglass in its frame, the hanger to the roof '
+                             'over its hinge', 'csla_pu12_manual (item 24, drawn folded); rwd_mb3 (pu12e: the board open, '
+                             'its hinge bar down its left edge)', 'medium',
+                             'Drawn open; its hinge folds it along the centreline (hinges). Its height is an estimate.'),
         'SM_PU12MMastFoot': ('The mast\'s fixed section from the floor through the roof, its clamps and its hand winch',
                              'csla_pu12_manual (the plan\'s item 10; the mast drawings: the winch, cables and pulleys)',
                              'medium', 'The winch\'s size is an estimate.'),
@@ -675,7 +693,7 @@ def layout_json():
             {'from_m': [-0.15, 1.45], 'to_m': [0.05, 2.45], 'notes': "Between the driver's and the squad leader's seats. SAM3D estimate."},
         ],
         'stations': L.stations, 'panels': L.panels, 'controls': L.controls, 'lamps': L.lamps, 'displays': L.displays,
-        'blocks': L.blocks, 'fixtures': L.fixtures, 'shell': L.shell,
+        'blocks': L.blocks, 'fixtures': L.fixtures, 'shell': L.shell, 'hinges': L.hinges,
     }
     if not doc['blocks']:
         del doc['blocks']

@@ -2056,6 +2056,21 @@ FString USimWorldSubsystem::GetPostCommandText() const
 	return FString(UTF8_TO_TCHAR(GetPostFeed().command_text.c_str()));
 }
 
+float USimWorldSubsystem::PlotPostAt(int32 Number, double EastM, double NorthM, double MetresPerBoardM)
+{
+	if (!Runner || IsMirrorOnly())
+	{
+		return -1.0f;
+	}
+	const simcore::CommandPost::PlotResult R = Runner->PlayerPlotAt(Number, EastM, NorthM, MetresPerBoardM);
+	return R.ok ? static_cast<float>(100.0 * R.miss_board_m) : -1.0f;
+}
+
+bool USimWorldSubsystem::IsPostBoardOpen() const
+{
+	return !Runner || Runner->Post() == nullptr || Runner->Post()->BoardOpen();
+}
+
 TArray<int32> USimWorldSubsystem::GetPostHeardNumbers() const
 {
 	TArray<int32> Out;

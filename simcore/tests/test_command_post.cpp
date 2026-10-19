@@ -563,3 +563,81 @@ SC_TEST("command post: on the grid the air-picture net reads the target's square
         SC_EXPECT(off < 9000.0);  // inside its small square (about 12 x 11 km)
     }
 }
+
+SC_TEST("command post: the player's mark goes exactly where the report is within 5 cm, off by up to his miss to 20 cm, further beyond") {
+    AspdDef d = PlaceholderAspd();
+    d.air_net_report_s = 1;
+    CommandPost::Inputs in;
+    in.air_net = true;
+    in.operator_free = false;  // the player holds the plotter's seat
+    PlottingTuning tu;          // 5 cm, 20 cm, 1.0-1.6 (data/gameplay/plotting.json's)
+    const double mpb = 200000.0 / 0.17;  // a board 0.34 m across for 200 km each side
+    auto plot = [&](double miss_board_m, unsigned seed) {
+        CommandPost p = Exact(d);
+        (void)seed;
+        p.Update(0.0, {Target("a", 0, 100000, 3000)}, {}, in);
+        p.Update(2.0, {Target("a", 0, 100000, 3000)}, {}, in);
+        const int number = p.Heard().empty() ? -1 : p.Heard().front().number;
+        const Vec3 right = p.Heard().empty() ? Vec3{} : p.Heard().front().contact.position;
+        return p.PlotAt(3.0, number, right + Vec3{miss_board_m * mpb, 0.0, 0.0}, mpb, tu, 1.0);
+    };
+    const CommandPost::PlotResult exact = plot(0.04, 1);
+    SC_EXPECT(exact.ok && exact.error_board_m == 0.0);
+    for (int i = 0; i < 20; ++i) {
+        const CommandPost::PlotResult mid = plot(0.15, static_cast<unsigned>(i));
+        SC_EXPECT(mid.ok && mid.error_board_m >= 0.05 - 1e-9 && mid.error_board_m <= 0.15 + 1e-9);
+        const CommandPost::PlotResult far = plot(0.30, static_cast<unsigned>(i));
+        SC_EXPECT(far.ok && far.error_board_m >= 0.30 - 1e-9 && far.error_board_m <= 0.48 + 1e-9);
+    }
+    // The mark is where the result says, on the board.
+    CommandPost p = Exact(d);
+    p.Update(0.0, {Target("a", 0, 100000, 3000)}, {}, in);
+    p.Update(2.0, {Target("a", 0, 100000, 3000)}, {}, in);
+    const CommandPost::PlotResult r = p.PlotAt(3.0, p.Heard().front().number, Vec3{0, 100000, 0}, mpb, tu, 1.0);
+    SC_EXPECT(r.ok && p.Board().Marks().size() == 1);
+    SC_EXPECT_NEAR((p.Board().Marks()[0].position - r.placed).HorizontalLength(), 0.0, 1e-6);
+    // Nothing waiting under that number, or a hand still writing: no mark.
+    SC_EXPECT(!p.PlotAt(3.5, 9999, Vec3{}, mpb, tu, 1.0).ok);
+}
+
+SC_TEST("command post: a folded board takes no marks; the reports wait and are forgotten") {
+    AspdDef d = PlaceholderAspd();
+    d.air_net_report_s = 1;
+    CommandPost p = Exact(d);
+    CommandPost::Inputs in;
+    in.air_net = true;
+    in.operator_free = true;
+    in.board_open = false;
+    for (double t = 0.0; t < 20.0; t += 0.5) p.Update(t, {Target("a", 0, 50000, 3000)}, {}, in);
+    SC_EXPECT(p.Board().Marks().empty() && !p.Heard().empty() && !p.BoardOpen());
+    SC_EXPECT(!p.PlotHeard(20.0, p.Heard().front().number, 1.0));
+    in.board_open = true;
+    p.Update(20.5, {Target("a", 0, 50000, 3000)}, {}, in);
+    SC_EXPECT(p.Board().Marks().size() == 1);  // opened: the plotter writes what he heard
+}
+
+SC_TEST("command post: the plotting tuning loads") {
+    PlottingTuning t;
+    std::string error;
+    SC_EXPECT(LoadPlottingTuningFile(std::string(SIMCORE_DATA_DIR) + "/gameplay/plotting.json", t, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT_NEAR(t.exact_board_m, 0.05, 1e-12);
+    SC_EXPECT_NEAR(t.scatter_board_m, 0.20, 1e-12);
+}
+
+SC_TEST("command post scenario: the regiment's commands come by voice on the R-111 when the telecode is off") {
+    std::string t = ReadFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_range_day.json");
+    t = ReplaceOnce(t, "\"telecode\": false", "\"telecode\": false, \"commands\": [ { \"at_s\": 20, \"code\": 20 } ]");
+    t = ReplaceOnce(t, "\"plotting\": \"gameplay/plotting.json\",", "\"plotting\": \"gameplay/plotting.json\", \"codes\": \"command/aspd_codes.json\",");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    for (int i = 0; i < 300; ++i) r.Step(0.1);
+    bool heard = false;
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) heard = heard || (m.net == "regiment net" && m.text.find("Fire ban") != std::string::npos);
+    SC_EXPECT(heard);                          // by voice, on the R-111
+    SC_EXPECT(r.PostFeedNow().command < 0);    // not on the tube: no telecode
+}

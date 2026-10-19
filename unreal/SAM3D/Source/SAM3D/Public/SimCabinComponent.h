@@ -118,6 +118,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	int32 TraceItem(const FVector& WorldStart, const FVector& WorldEnd) const;
 
+	/**
+	 * Where a ray meets the plotting board's face (wherever its hinge has it): its point in metres from the board's centre
+	 * (right, up the face), the distance along the ray, and the ground under that point (ENU east, north, and the board's
+	 * scale in metres of ground per metre of board). False if it misses, or the cabin has no board.
+	 */
+	bool TraceBoard(const FVector& WorldStart, const FVector& WorldEnd, FVector2D& OutUvM, double& OutDistanceCm, double& OutEastM,
+		double& OutNorthM, double& OutMetresPerBoardM) const;
+
 	/** Puts a cabin part on the cabin's own lighting channel (1), lit by the cabin lamps and never directly by the sun:
 	 * a sunlit patch would burn white at the cabin's fixed indoor exposure. Daylight still comes in through the windows
 	 * as Lumen's sky light, which the shell's meshes shade. Call before registering the component. */
@@ -236,6 +244,12 @@ private:
 	void AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up, double ItemHeightM,
 		const FString& Text);
 	void DestroyParts();
+	/** The layout's hinges (the PU-12M's plotting board): a pivot for each, the components its panels and shell parts were
+	 *  built into hung from it (tagged while they were built), turned by its subsystem's progress (Animate). */
+	void BuildHinges(const simcore::CabinLayout& Layout);
+	/** The owner's components now, and a tag on each made since: what one build call made. */
+	TSet<UActorComponent*> SnapshotComponents() const;
+	void TagSince(const TSet<UActorComponent*>& Before, const FName& Tag);
 	UStaticMeshComponent* AddMesh(UStaticMesh* Mesh, const FLinearColor& Color);
 	void Animate(const USimWorldSubsystem* Sim, float DeltaTime);
 	void AnimateControl(const USimWorldSubsystem* Sim, FSimCabinItem& Item);
@@ -302,6 +316,15 @@ private:
 
 	/** Panels showing a baked face (their labels are in it). */
 	TSet<FString> FacedPanels;
+
+	/** The hinges' pivots, their subsystems and their folded angles (clockwise from above, degrees). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USceneComponent>> HingePivots;
+	TArray<FString> HingeSubsystems;
+	TArray<double> HingeFoldedDeg;
+	/** Panels and shell parts that hang from a hinge (by id): their components are tagged as they are built. */
+	TSet<FString> HingedPanels;
+	TSet<FString> HingedShell;
 
 	/** The light on the advised control (UpdateAdvisedLamp). */
 	UPROPERTY(Transient)

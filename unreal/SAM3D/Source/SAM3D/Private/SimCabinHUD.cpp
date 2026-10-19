@@ -106,6 +106,19 @@ void ASimCabinHUD::DrawHUD()
 	{
 		DrawText(Hover, FLinearColor(1.0f, 0.9f, 0.4f), Cx + 16.0f, Cy + 12.0f, Font);
 	}
+	if (Vehicle->IsCrossOnBoard())
+	{
+		// The plotter's pencil on the board: the number he would write, small beside the cross; the wheel turns it.
+		const int32 Picked = Vehicle->GetPickedTarget();
+		const FString Chip = Picked >= 0 ? (Picked >= 100 ? FString::Printf(TEXT("%d"), Picked) : FString::Printf(TEXT("IT-45 %02d"), Picked))
+										 : FString(TEXT("—"));
+		UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : Font;
+		float W = 0.0f, H = 0.0f;
+		GetTextSize(Chip, W, H, Small);
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), Cx + 12.0f, Cy - 26.0f, W + 10.0f, H + 4.0f);
+		DrawText(Chip, FLinearColor(1.0f, 0.82f, 0.2f), Cx + 17.0f, Cy - 24.0f, Small);
+		DrawText(TEXT("wheel: number   click: write"), FLinearColor(1.0f, 1.0f, 1.0f, 0.35f), Cx + 14.0f, Cy + 12.0f, Small);
+	}
 	const FString Feedback = Vehicle->GetCabinFeedbackText();
 	if (!Feedback.IsEmpty())
 	{
@@ -650,7 +663,8 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 			{TEXT("T   take this seat, or give it back"), TEXT("O   orders (commander's seat) or reports; 1-9 pick, 0 next page"),
 				TEXT("H   training overlay: guided, hint, demonstrate, off"), TEXT("1-9   quick crew drills (outside the crew menu)"),
 				TEXT("B   the PU-12 board (in a launcher: the designations heard)"), TEXT("V   the other vehicle (battery link)")}},
-		{TEXT("PU-12M seats"), {TEXT("[ ]   pick a target"), TEXT("1-5   give it to a launcher (commander)"), TEXT("P   plot it (plotter)")}},
+		{TEXT("PU-12M seats"), {TEXT("[ ] then 1-5   a board target to a launcher (commander)"),
+		TEXT("Wheel over the board   the number to write (plotter)"), TEXT("Click on the board   write it there (plotter)")}},
 	};
 	const float W = FMath::Min(1180.0f, Canvas->ClipX - 40.0f);
 	const float X = (Canvas->ClipX - W) * 0.5f;
@@ -744,12 +758,11 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 
 void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle, UFont* Font)
 {
-	// The PU-12M's aids (the cabin's IT-45, glass and IT boards are the real picture): what the seat can pick and the
-	// keys. At the commander's seat the board's targets and the launchers as the IT boards show them; at the plotter's
-	// the reports heard on the air-picture net and not yet written (the board's four-digit numbers), then the IT-45's.
+	// The PU-12M's aids at the battery commander's seat (the cabin's IT-45, glass and IT boards are the real picture): the
+	// board's targets, his reading of it, and the launchers as the IT boards show them. The plotter has none: he picks and
+	// writes on the board itself (the wheel and a click: ASimOsaVehicle::HandleBoard).
 	const bool bCommander = Vehicle->GetStationId() == Sim->GetCommanderStation();
-	const bool bPlotter = Vehicle->GetStationId() == Sim->GetPlotterStation();
-	if (!bCommander && !bPlotter)
+	if (!bCommander)
 	{
 		return;
 	}
@@ -762,9 +775,7 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 		}
 		return Numbers.Num() == 0 ? Line + TEXT("(nothing)  ") : Line;
 	};
-	const FString Line = bCommander ? Numbered(TEXT("Board: "), Sim->GetPostBoardNumbers(), false)
-									: Numbered(TEXT("Heard: "), Sim->GetPostHeardNumbers(), false) + TEXT("  ") +
-										  Numbered(TEXT("IT-45: "), Sim->GetPostTrackNumbers(), true);
+	const FString Line = Numbered(TEXT("Board: "), Sim->GetPostBoardNumbers(), false);
 	// As the commander reads the board by eye: each track's range and, from two crosses a minute apart, when it is here.
 	FString Read = TEXT("");
 	if (bCommander)
@@ -805,12 +816,6 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 		Y += 22.0f;
 		DrawText(TEXT("Or on the instruments: the DT-2's wheels put the marker on a target (its number in the ДХ window), ЦУ then the ")
 			TEXT("launcher's place (1-5) on the ДХ's keys; СБР clears"), Ink, X, Y, Font);
-	}
-	else
-	{
-		DrawText(Vehicle->IsHoldingSeat() ? TEXT("[ ] pick a report heard or a track on the tube, P write it on the board")
-										  : TEXT("[ ] pick a report heard or a track on the tube, P write it on the board (take the seat first: T)"),
-			Ink, X, Y, Font);
 	}
 }
 
@@ -903,10 +908,7 @@ float ASimCabinHUD::PostAidsTop(USimWorldSubsystem* Sim, const ASimOsaVehicle* V
 		{
 			return Canvas->ClipY - 140.0f;  // with the board's reading line
 		}
-		if (Vehicle->GetStationId() == Sim->GetPlotterStation())
-		{
-			return Canvas->ClipY - 96.0f;
-		}
+
 	}
 	return Canvas->ClipY - 54.0f;
 }
@@ -934,16 +936,18 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
 	for (const FSimRadioMessage& M : Messages)
 	{
 		const double Age = Now - M.TimeSeconds;
-		if (Age > RadioLineSeconds && Now > 0.0)
+		const float Life = M.Net == TEXT("air picture") ? AirPictureLineSeconds : RadioLineSeconds;
+		if (Age > Life && Now > 0.0)
 		{
 			continue;
 		}
 		const bool bRadio = !M.Net.StartsWith(TEXT("cabin")) && M.Net != TEXT("intercom");
 		FLinearColor Ink = M.Net == TEXT("air picture")	 ? FLinearColor(1.0f, 0.72f, 0.25f)	 // amber: the regiment's air picture
 						   : M.Net == TEXT("command net") ? FLinearColor(0.35f, 0.85f, 1.0f)  // cyan: designations
+						   : M.Net == TEXT("regiment net") ? FLinearColor(0.78f, 0.55f, 1.0f) // violet: the regiment (the R-111)
 						   : bRadio						  ? FLinearColor(0.6f, 0.7f, 1.0f)	 // blue: the battery net
 														  : FLinearColor(0.85f, 0.85f, 0.8f);
-		Ink.A = FMath::Clamp(1.0f - static_cast<float>(Age) / RadioLineSeconds, 0.35f, 1.0f);
+		Ink.A = FMath::Clamp(1.0f - static_cast<float>(Age) / Life, M.Net == TEXT("air picture") ? 0.0f : 0.35f, 1.0f);
 		const FString Text = bRadio ? FString::Printf(TEXT("RADIO %s  %s: %s"), *M.Net.ToUpper(), *M.From, *M.Text)
 									: FString::Printf(TEXT("[%s] %s: %s"), *M.Net, *M.From, *M.Text);
 		float W = 0.0f;

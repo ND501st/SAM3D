@@ -954,16 +954,18 @@ void ASimOsaVehicle::HandlePost(APlayerController* Pc)
 	{
 		PickedTarget = INDEX_NONE;
 	}
-	if (Pc->WasInputKeyJustPressed(EKeys::RightBracket))
-	{
-		PickTarget(1);
-	}
-	if (Pc->WasInputKeyJustPressed(EKeys::LeftBracket))
-	{
-		PickTarget(-1);
-	}
 	if (StationId == Sim->GetCommanderStation())
 	{
+		// The commander picks a board number with [ ] and gives it to a launcher with 1-5. (The plotter picks his on the
+		// board itself, with the mouse wheel: HandleBoard.)
+		if (Pc->WasInputKeyJustPressed(EKeys::RightBracket))
+		{
+			PickTarget(1);
+		}
+		if (Pc->WasInputKeyJustPressed(EKeys::LeftBracket))
+		{
+			PickTarget(-1);
+		}
 		static const FKey Digits[5] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five};
 		for (int32 I = 0; I < 5; ++I)
 		{
@@ -973,9 +975,72 @@ void ASimOsaVehicle::HandlePost(APlayerController* Pc)
 			}
 		}
 	}
-	else if (Pc->WasInputKeyJustPressed(EKeys::P))
+}
+
+void ASimOsaVehicle::HandleBoard(APlayerController* Pc, const FVector& Start, const FVector& Forward)
+{
+	// The plotter's hands on the plotting board: the cross on its glass, the mouse wheel turns through the numbers he
+	// can write (the reports heard, then the tube's tracks), a click writes the picked one where the cross is.
+	bOnBoard = false;
+	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Pc == nullptr || Sim == nullptr || !bIsPost || StationId.IsEmpty() || StationId != Sim->GetPlotterStation() || Cabin == nullptr)
 	{
-		PlotPicked();
+		return;
+	}
+	FVector2D Uv;
+	double DistanceCm = 0.0, East = 0.0, North = 0.0, Mpb = 0.0;
+	if (!Sim->IsPostBoardOpen() || !Cabin->TraceBoard(Start, Start + Forward * StandingReachCm, Uv, DistanceCm, East, North, Mpb))
+	{
+		return;
+	}
+	// The latch on its frame wins (to fold the board).
+	if (HoveredItem != INDEX_NONE && Cabin->GetItemControl(HoveredItem) == TEXT("map.board"))
+	{
+		return;
+	}
+	bOnBoard = true;
+	HoveredItem = INDEX_NONE;
+	Cabin->SetHighlightedItem(INDEX_NONE);
+	HoverText.Empty();
+	if (!PickList().Contains(PickedTarget))
+	{
+		PickedTarget = INDEX_NONE;
+	}
+	const int32 Notches = (Pc->WasInputKeyJustPressed(EKeys::MouseScrollUp) ? 1 : 0) - (Pc->WasInputKeyJustPressed(EKeys::MouseScrollDown) ? 1 : 0);
+	if (Notches != 0)
+	{
+		PickTarget(Notches > 0 ? 1 : -1);
+	}
+	if (PickedTarget == INDEX_NONE && PickList().Num() > 0)
+	{
+		PickedTarget = PickList()[0];  // the oldest report waiting first
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		if (!IsHoldingSeat())
+		{
+			FeedbackText = TEXT("Take the seat first: T");
+		}
+		else if (PickedTarget < 0)
+		{
+			FeedbackText = TEXT("Nothing to write: listen for a report");
+		}
+		else
+		{
+			const float Miss = Sim->PlotPostAt(PickedTarget, East, North, Mpb);
+			if (Miss >= 0.0f)
+			{
+				LastPlotMissCm = Miss;
+				LastPlotTime = GetWorld()->GetTimeSeconds();
+				FeedbackText = FString::Printf(TEXT("%d written (%.0f cm off)"), PickedTarget, Miss);
+				PickedTarget = INDEX_NONE;
+			}
+			else
+			{
+				FeedbackText = TEXT("Not now: finish the last mark first");
+			}
+		}
+		FeedbackSecondsLeft = 2.0f;
 	}
 }
 
@@ -1302,6 +1367,14 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	HoveredItem = DraggedWheel != INDEX_NONE ? DraggedWheel : Reached;
 	Cabin->SetHighlightedItem(HoveredItem);
 	HoverText = Cabin->DescribeItem(HoveredItem);
+	if (DraggedWheel == INDEX_NONE && AutoplayFolder.IsEmpty())
+	{
+		HandleBoard(Pc, Start, Forward);
+		if (bOnBoard)
+		{
+			return;
+		}
+	}
 	if (HoveredItem == INDEX_NONE)
 	{
 		return;

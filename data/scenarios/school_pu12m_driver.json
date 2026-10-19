@@ -9,7 +9,7 @@
   "origin": {"lat_deg": 46.817217, "lon_deg": 19.77862, "alt_m": 107.6},
   "terrain": {"type": "map", "map": "maps/kesmark_range.json"},
   "weather": "clear",
-  "post": {"board": "command/pu12.json", "aspd": "command/aspd_u.json", "library": "command/regiment_radars.json", "regiment": {"position": {"east_m": -6000, "north_m": -5000, "up_m": 2}, "radars": [{"id": "p19_regiment", "type": "p19", "position": {"east_m": -6200, "north_m": -5000, "up_m": 2}}], "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery: inside the R-407 net's 15 km."}},
+  "post": {"board": "command/pu12.json", "aspd": "command/aspd_u.json", "plotting": "gameplay/plotting.json", "library": "command/regiment_radars.json", "regiment": {"position": {"east_m": -6000, "north_m": -5000, "up_m": 2}, "radars": [{"id": "p19_regiment", "type": "p19", "position": {"east_m": -6200, "north_m": -5000, "up_m": 2}}], "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery: inside the R-407 net's 15 km."}},
   "own_unit": {"console": "procedures/pu12m.json", "position": {"east_m": 400, "north_m": -400, "up_m": 3.9}, "heading_deg": 290, "inputs": {"vehicle_stopped": true}},
   "crew": [
     {"name": "Battery commander", "role": "battery_commander", "skill": "class1"},

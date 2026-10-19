@@ -176,6 +176,7 @@ struct ScenarioDef {
     AspdDef post_aspd;
     PostRegiment post_regiment;
     AspdCodeTable post_codes;        // the regiment's two-digit commands' meanings ("post.codes"; empty: none)
+    PlottingTuning post_plotting;    // the player's hand on the board ("post.plotting"; the defaults without it)
     bool has_post_radar = false;
     RegimentRadar post_radar;
     // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
@@ -1048,13 +1049,17 @@ private:
             return true;
         }
         if (!console.has_post) return Fail("post", "the console is not a command post (no \"post\" block)");
-        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "codes", "library", "regiment", "radar", "notes"})) {
+        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "codes", "plotting", "library", "regiment", "radar", "notes"})) {
             return message_.empty() ? Fail("post", "expected an object") : false;
         }
-        std::string board_file, aspd_file, codes_file, library_file, error;
+        std::string board_file, aspd_file, codes_file, plotting_file, library_file, error;
         if (!RequireString(*p, "post", "board", board_file) || !RequireString(*p, "post", "aspd", aspd_file) ||
-            !OptionalString(*p, "post", "codes", codes_file) || !OptionalString(*p, "post", "library", library_file)) {
+            !OptionalString(*p, "post", "codes", codes_file) || !OptionalString(*p, "post", "plotting", plotting_file) ||
+            !OptionalString(*p, "post", "library", library_file)) {
             return false;
+        }
+        if (!plotting_file.empty() && !LoadPlottingTuningFile(data_dir + "/" + plotting_file, out.post_plotting, &error)) {
+            return Fail("post.plotting", error);
         }
         if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
         if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);

@@ -106,3 +106,25 @@ SC_TEST("pu12m cabin: an aspd_scope or a status_board needs the console's post b
     SC_EXPECT(!LoadCabin(text, osa, layout, &error));
     SC_EXPECT(error.find("post block") != std::string::npos);
 }
+
+SC_TEST("pu12m cabin: the plotting board swings on its hinge with its panel and its mesh; folded it lies along the centreline") {
+    ConsoleData console;
+    CabinLayout layout;
+    SC_EXPECT(LoadPu12m(console, layout));
+    SC_EXPECT(layout.hinges.size() == 1);
+    if (layout.hinges.empty()) return;
+    const CabinHinge& h = layout.hinges[0];
+    SC_EXPECT(h.subsystem == "map_open" && h.panels.size() == 1 && h.panels[0] == "map_panel" && h.shell.size() == 1);
+    SC_EXPECT(std::fabs(h.folded_rad - DegToRad(90.0)) < 1e-9);
+    // Folded: the panel's centre turned a quarter turn clockwise about the pivot lies behind the hinge, on the centreline.
+    const CabinPanel* map = layout.FindPanel("map_panel");
+    SC_EXPECT(map != nullptr);
+    if (map == nullptr) return;
+    const Vec3 rel = map->centre_m - h.pivot_m;
+    const double c = std::cos(h.folded_rad), s = std::sin(h.folded_rad);
+    const Vec3 folded{rel.x * c + rel.y * s, -rel.x * s + rel.y * c, rel.z};  // clockwise from above
+    std::printf("    open: %.2f m right of the hinge; folded: %.2f m behind it, %.2f m aside\n", rel.x, -folded.y, folded.x);
+    SC_EXPECT(rel.x > 0.1 && std::fabs(rel.y) < 0.05);           // open: across, to the right of the hinge
+    SC_EXPECT(folded.y < -0.1 && std::fabs(folded.x) < 0.05);    // folded: behind the hinge, along the centreline
+    SC_EXPECT(std::fabs(h.pivot_m.x) < 0.06);                    // the hinge on the plan's strip, on the centreline
+}

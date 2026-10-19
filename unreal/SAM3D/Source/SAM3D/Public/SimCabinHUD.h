@@ -35,6 +35,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Radio")
 	float RadioLineSeconds = 40.f;
 
+	/** The air-picture net's reports fade much sooner: the plotter writes from what he heard, not from the screen. */
+	UPROPERTY(EditAnywhere, Category = "SAM3D|HUD")
+	float AirPictureLineSeconds = 6.f;
+
 private:
 	/** The radio lines, the newest at the bottom, ending above Bottom (clear of the PU-12M's aids). */
 	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font, float Bottom);

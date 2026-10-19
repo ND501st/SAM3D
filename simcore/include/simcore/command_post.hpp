@@ -78,6 +78,8 @@ struct AspdDef {
     // The reports' form: 0 azimuth and range from the radar; 2 the PVO grid to the small square (the usual report,
     // bguir_tsp), 3 with the additional square (pvo_grid.hpp). The board's mark goes at the square's centre.
     double air_net_grid_levels = 0.0;
+    // The regiment's command net (FuG-3, the R-111): its post's voice reaches this far (flak11: 25-30 km).
+    double regiment_net_range_m = 30000.0;
 };
 
 namespace detail {
@@ -97,7 +99,7 @@ public:
                                "plot_mark_s", "oriented_az_error_deg", "oriented_position_error_m", "drift_fraction",
                                "unoriented_az_error_deg", "unoriented_position_error_m", "telecode_take_off_s", "telecode_step_m",
                                "air_net_report_s", "air_net_period_s", "air_net_range_m", "air_net_az_step_deg", "air_net_range_step_m",
-                               "air_net_grid_levels"})) {
+                               "air_net_grid_levels", "regiment_net_range_m"})) {
             return false;
         }
         // Optional: the telecode's sending post and the air-picture voice net (absent: off, or the defaults).
@@ -105,7 +107,8 @@ public:
                               std::make_pair("air_net_report_s", &d.air_net_report_s), std::make_pair("air_net_period_s", &d.air_net_period_s),
                               std::make_pair("air_net_range_m", &d.air_net_range_m), std::make_pair("air_net_az_step_deg", &d.air_net_az_step_deg),
                               std::make_pair("air_net_range_step_m", &d.air_net_range_step_m),
-                              std::make_pair("air_net_grid_levels", &d.air_net_grid_levels)}) {
+                              std::make_pair("air_net_grid_levels", &d.air_net_grid_levels),
+                              std::make_pair("regiment_net_range_m", &d.regiment_net_range_m)}) {
             if (a->Find(f.first) != nullptr && !Cited(*a, f.first, *f.second)) return false;
         }
         if (d.air_net_report_s > 0.0 && !(d.air_net_period_s > 0.0)) return Fail("aspd.air_net_period_s", "must be > 0");
@@ -247,6 +250,63 @@ public:
 };
 
 }  // namespace detail
+
+// The player's hand on the board (data/gameplay/plotting.json; game values, not system data): he clicks where he thinks
+// the report put the target. Within `exact_board_m` of the right place (on the board's surface) his mark goes exactly
+// there; up to `scatter_board_m` it goes somewhere off the right place, further than exact but within his own miss;
+// beyond, further off still, by `far_min` to `far_max` times his miss.
+struct PlottingTuning {
+    double exact_board_m = 0.05;
+    double scatter_board_m = 0.20;
+    double far_min = 1.0;
+    double far_max = 1.6;
+};
+
+namespace detail {
+
+class PlottingTuningLoader : public BoardLoader {
+public:
+    bool Load(const json::Value& root, PlottingTuning& t) {
+        if (!Keys(root, "", {"plotting_id", "status", "notes", "source", "confidence", "exact_board_m", "scatter_board_m", "far_min", "far_max"}) ||
+            !Provenance(root, "")) {
+            return false;
+        }
+        for (const auto& f : {std::make_pair("exact_board_m", &t.exact_board_m), std::make_pair("scatter_board_m", &t.scatter_board_m),
+                              std::make_pair("far_min", &t.far_min), std::make_pair("far_max", &t.far_max)}) {
+            if (!OptionalNumber(root, "", f.first, *f.second)) return false;
+            if (!(*f.second > 0.0)) return Fail(f.first, "must be > 0");
+        }
+        if (t.scatter_board_m < t.exact_board_m) return Fail("scatter_board_m", "must be at least exact_board_m");
+        if (t.far_max < t.far_min) return Fail("far_max", "must be at least far_min");
+        return true;
+    }
+};
+
+}  // namespace detail
+
+inline bool LoadPlottingTuningFile(const std::string& path, PlottingTuning& out, std::string* error = nullptr) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        if (error != nullptr) *error = "cannot open " + path;
+        return false;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text.str(), root, &parse_error)) {
+        if (error != nullptr) *error = path + ": " + parse_error;
+        return false;
+    }
+    PlottingTuning t;
+    detail::PlottingTuningLoader loader;
+    if (!loader.Load(root, t)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = t;
+    return true;
+}
 
 inline bool LoadAspdCodesFile(const std::string& path, AspdCodeTable& out, std::string* error = nullptr) {
     std::ifstream file(path, std::ios::binary);
@@ -415,6 +475,8 @@ public:
         c.type = 9;
         return c;
     }
+    // The regiment's command net (the R-111): within its reach of the regiment's post and not off the air.
+    bool RegimentNetInReach(const PostRegiment& r, double t) const { return InReach(r, t, def_.regiment_net_range_m); }
     // The air-picture voice net: within the R-123M's reach of the regiment's post and not off the air.
     bool AirNetInReach(const PostRegiment& r, double t) const { return InReach(r, t, def_.air_net_range_m); }
     // Where the air-picture net's reports are measured from (the regiment's radar); the post itself until set.
@@ -453,6 +515,7 @@ public:
         bool primary = false;        // a radar cabled to the post and the ASPD-U showing it (console primary_picture)
         bool air_net = false;        // the post listening on the air-picture net (console air_net, within its reach)
         bool imitation = false;      // the ФР block at КОНТРОЛЬ: the imitated echo on the tube (console imitation)
+        bool board_open = true;      // the board swung open (console board_open); folded, nothing can be written
         bool operator_free = false;  // the operator-plotter at his place, not busy with a drill
         double operator_speed = 1.0; // his tier's speed at handwork (1 = a trained operator)
     };
@@ -479,11 +542,22 @@ public:
         // The operator's hands: semi-automatic take-off of the primary picture first, then the board.
         imitation_on_ = in.imitation;
         imitation_t_ = t;
+        board_open_ = in.board_open;
         if (!in.imitation) {
             tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [](const AspdTrack& k) { return k.imitated; }), tracks_.end());
         }
         const double speed = in.operator_speed > 0.0 ? in.operator_speed : 1.0;
         if (!in.operator_free || t + 1e-9 < operator_free_s_) return;
+        if (!in.board_open) {  // the board folded: only the tube's take-off; nothing is written
+            if (in.primary || in.imitation) {
+                const std::vector<BoardContact> echoes = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : radar;
+                if (const BoardContact* c = NextTakeOff(t, echoes)) {
+                    TakeOff(t, *c);
+                    operator_free_s_ = t + def_.take_off_s / speed;
+                }
+            }
+            return;
+        }
         if (in.primary || in.imitation) {
             const std::vector<BoardContact> echoes = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : radar;
             if (const BoardContact* c = NextTakeOff(t, echoes)) {
@@ -524,7 +598,7 @@ public:
     // The plotter (a player) writes the heard report of the target with this board number. False if none is waiting
     // or he is still writing the last one.
     bool PlotHeard(double t, int board_number, double speed) {
-        if (t + 1e-9 < operator_free_s_) return false;
+        if (!board_open_ || t + 1e-9 < operator_free_s_) return false;
         for (std::size_t i = 0; i < heard_.size(); ++i) {
             if (heard_[i].number != board_number) continue;
             WriteHeard(t, i, speed > 0.0 ? speed : 1.0);
@@ -536,7 +610,7 @@ public:
     // The plotter (a player) writes the track with this ASPD-U number on the board. False if no track has it or he is
     // still writing the last one.
     bool PlotTrack(double t, int number, double speed) {
-        if (t + 1e-9 < operator_free_s_) return false;
+        if (!board_open_ || t + 1e-9 < operator_free_s_) return false;
         for (const AspdTrack& k : tracks_) {
             if (k.number != number) continue;
             Write(t, k, speed > 0.0 ? speed : 1.0);
@@ -544,6 +618,38 @@ public:
         }
         return false;
     }
+    // The plotter (a player) puts the mark of a report he heard (its board number) or of a tube track (its ASPD-U number)
+    // where he clicks on the board: `clicked` in ENU, `metres_per_board_m` the board's scale. How near he came decides
+    // where the mark really goes (PlottingTuning). Not ok if the board is folded, nothing has the number, or he is still
+    // writing the last one.
+    struct PlotResult {
+        bool ok = false;
+        double miss_board_m = 0.0;   // how far his click was from the right place, on the board
+        double error_board_m = 0.0;  // how far the mark went from it
+        Vec3 placed;
+    };
+    PlotResult PlotAt(double t, int number, const Vec3& clicked, double metres_per_board_m, const PlottingTuning& tuning, double speed) {
+        PlotResult out;
+        if (!board_open_ || t + 1e-9 < operator_free_s_ || !(metres_per_board_m > 0.0)) return out;
+        const double sp = speed > 0.0 ? speed : 1.0;
+        for (std::size_t i = 0; i < heard_.size(); ++i) {
+            if (heard_[i].number != number) continue;
+            heard_[i].contact.position = Placed(heard_[i].contact.position, clicked, metres_per_board_m, tuning, out);
+            WriteHeard(t, i, sp);
+            out.ok = true;
+            return out;
+        }
+        for (const AspdTrack& k : tracks_) {
+            if (k.number != number || k.imitated) continue;
+            AspdTrack copy = k;
+            copy.position = Placed(k.position, clicked, metres_per_board_m, tuning, out);
+            Write(t, copy, sp);
+            out.ok = true;
+            return out;
+        }
+        return out;
+    }
+    bool BoardOpen() const { return board_open_; }
     // When the operator's hands are next free.
     double OperatorFreeS() const { return operator_free_s_; }
 
@@ -609,6 +715,21 @@ public:
 
 private:
     double U() { return static_cast<double>(rng_()) / 4294967296.0; }
+    // Where the player's mark goes: exact within the tuning's first radius, else off by a random amount in a random way.
+    Vec3 Placed(const Vec3& right, const Vec3& clicked, double mpb, const PlottingTuning& tu, PlotResult& out) {
+        const double miss = Vec3{clicked.x - right.x, clicked.y - right.y, 0.0}.Length() / mpb;
+        double off = 0.0;
+        if (miss > tu.scatter_board_m) {
+            off = miss * (tu.far_min + (tu.far_max - tu.far_min) * U());
+        } else if (miss > tu.exact_board_m) {
+            off = tu.exact_board_m + (miss - tu.exact_board_m) * U();
+        }
+        const double a = 2.0 * kPi * U();
+        out.miss_board_m = miss;
+        out.error_board_m = off;
+        out.placed = Vec3{right.x + off * mpb * std::sin(a), right.y + off * mpb * std::cos(a), right.z};
+        return out.placed;
+    }
     bool InReach(const PostRegiment& r, double t, double range_m) const {
         for (const C2Outage& o : r.outages) {
             if (t + 1e-9 >= o.from_s && t < o.to_s) return false;
@@ -884,6 +1005,7 @@ private:
     std::map<std::string, Attributes> overrides_;   // the ДХ's characteristics, by target
     bool imitation_on_ = false;
     double imitation_t_ = 0.0;
+    bool board_open_ = true;
     double telecode_round_s_ = 0.0;                // how long its round of all the targets takes
     Vec3 air_source_;
     bool has_air_source_ = false;
