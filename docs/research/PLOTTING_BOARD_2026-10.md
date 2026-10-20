@@ -17,6 +17,9 @@ what is proposed. Sources are in `docs/SOURCES.md`.
 | The PU-12 has a plotter's place (Platz des Planzeichners) beside the commander-operator's place at the tube | `rwd_mb3` (pu12f) | 1 |
 | The post's FuG-1 (an R-123, 15-20 km) works the **air-picture net (designation net no. 2, the plotters)** | `flak11` (PU12-1, after the NVA handbooks) | 1 |
 | The plotter is responsible for clear, timely and correct display of the air situation; he prepares the board, knows the symbols, the target numbering and the signals; **takes the signals and reports on targets from the radio operator and plots them**; reports targets' appearance, actions, identity and size, jamming, and targets leaving cover or lost | `pvo_bu_x_1984` art. 23 | 1 |
+| The **operator (operator-plotter)**, the PU-12's own title for No. 2, has wider duties than the plotter: knows the equipment, its modes and its protection against jamming and anti-radiation weapons, keeps it ready, checks and services it and readies the station for work; searches, detects, identifies and tracks targets and **reports their coordinates, characteristics and motion, and the type and strength of jamming, to the station chief (squad leader)**; knows the radio procedure and works the radio and the intercom; stands ready to replace the station chief | `pvo_bu_x_1984` art. 20 | 1 |
+| Every crew member: knows the mission and the warning, control and cooperation signals; takes and leaves the position, readies the equipment; **keeps watch on the air and ground enemy and reports him to the commander at once**; tells own aircraft from the enemy's by sight; uses ground, cover and protection, camouflages, digs in; self- and mutual aid; repairs the vehicle when damaged | `pvo_bu_x_1984` art. 19 | 1 |
+| The commander alone assesses the air situation and **makes the decisions**; he directly leads the post's operators (operator-plotters), shares the targets among them and sets and checks the order in which they give the air data; he commands by voice, by orders, commands and signals | `pvo_bu_x_1984` art. 16-17 | 1 |
 | A troop air-defence radar company's mobile post holds the ASPD's remote indicators **and the boards of the general air situation and of each radar** | `pvo_bu_x_1984` art. 26 | 1 |
 | The designation (warning) nets carry the air enemy to the command posts and the AA units; target data may be passed in clear; positions go by the automated systems or by **coded squares of the PVO grid**; sector boundaries are drawn on the indicators and the boards | `pvo_bu_x_1984` art. 29-30, 37 | 1 |
 | The automated chain ends at the PU-12; from there designations go to the launchers **by voice, azimuth and range** | `flak11` (PU12-0) | 1 |
@@ -25,7 +28,7 @@ what is proposed. Sources are in `docs/SOURCES.md`.
 | Tracks are drawn as a cross a fix, labelled with the minute (40, 41, 42...), the number, the index, height and speed at the head | `bguir_tsp` (table 2) | 2 |
 | The plotters stand behind the glass and write in mirror image so the officers in front read it the right way round; grease pencil on edge-lit Piacryl | `planchette_dewiki`, `rwd_mb3` (llk72), `narodna_armiya_2018` | 4 |
 | Information to the plotters every 1-2 min; the boards kept as the back-up of the automated system | `narodna_armiya_2018` | 4 |
-| NVA plotters were conscripts; trained from the *Handbuch für Planzeichner und Funkorter der Truppenluftabwehr* (1980) | `flak11`, NVA veterans' pages | 1 (handbook to acquire) |
+| NVA plotters were conscripts; trained from the *Handbuch für Planzeichner und Funkorter der Truppenluftabwehr* (1980) | `flak11`, NVA veterans' pages | 1 (handbook to acquire: offered as an original, below) |
 | In the troops the ASPD-U was **rarely switched on** (no real situation to use it for) and not used at platoon firings | `shilka_narod` | 2 |
 
 ### Who used it, when
@@ -41,6 +44,34 @@ what is proposed. Sources are in `docs/SOURCES.md`.
 * **When:** whenever the battery is deployed and the net is up. In peacetime, training and range days most of all,
   because the ASPD-U was seldom on (`shilka_narod`). Automation did not retire it: today's Ukrainian radio-technical
   troops keep their boards as the back-up (`narodna_armiya_2018`).
+
+### The plotter's other duties, and his part in decisions (20 Oct 2026)
+
+Part X of the regulations (`pvo_bu_x_1984`) is written for radar companies, so for the PU-12M it is an analogy, not the
+post's own manual. It gives the role three layers (table above):
+
+* **The plotter** (art. 23): the board, and speaking: he reports targets appearing, their actions, identity and size,
+  jamming, and targets leaving cover or lost.
+* **The operator (operator-plotter)** (art. 20), the PU-12's title for No. 2 (`ru_pu12_text`; the troop air-defence
+  tactics text on [studfile](https://studfile.net/preview/9392907/page:22/) lists the same crew): a radar operator who
+  also plots. He keeps and services the equipment, searches and tracks, reports to the squad leader, works the radio and
+  the intercom, and is the squad leader's stand-in. The ČSLA title *pátrač-kreslič* (searcher-draughtsman) says the same.
+* **Every crew member** (art. 19): watch for the enemy and report him at once, recognise aircraft by sight, take and
+  leave the position, camouflage, dig in, repair.
+
+**Decisions:** none of the sources give him a part in them. The commander assesses the situation and decides
+(art. 17); the operator-plotter's voice is his reports, which the commander decides on. Nothing found has him advise or
+propose. The NVA plotters' handbook may say more.
+
+**For SAM3D (proposed, not built):** the plotter speaks the art. 23 reports aloud to the commander (a new target on the
+board, jamming reported on the net, a target lost), not only writes them; as the operator of art. 20 he can stand in for
+the squad leader; and the art. 19 duties (watching, camouflage, digging in) are the whole crew's at deployment.
+
+**The NVA handbook:** no scan online. The NVA book dealer [nva.4mg.com](http://nva.4mg.com/shopbaus.htm) lists
+*Handbuch für Funkorter und Planzeichner der Truppenluftabwehr* (order no. 11065H, €49.95, marked as an original, stock
+low; seen 20 Oct 2026). An older *Handbuch für Aufklärer, Planzeichner, E-Messer der Truppenluftabwehr* (Militärverlag
+der DDR, 1972) was on [booklooker](https://www.booklooker.de/B%C3%BCcher/Ministerium-f%C3%BCr-Nationale-Verteidigung-der-DDR+Handbuch-f%C3%BCr-Aufkl%C3%A4rer-Planzeichner-E-Messer-der/id/A02hXdZE01ZZV)
+at €85.
 
 ### The identity digit: a conflict
 

@@ -104,7 +104,7 @@ Lamps: КП-4, ГАК ГОТОВ, РАЗГОН, ОРИЕНТИРОВАН, РСТ
 
 ### Operator-plotter (No. 2) (`operator`): Оператор-планшетист
 
-Duties: The plotting board: swings it open and folds it (its latch); Writes on it what the regiment reads out on the air-picture net, report by report (pvo_bu_x_1984 art. 23); not the tube, which is the commander's.
+Duties: The plotting board: swings it open and folds it (its latch); Writes on it what the regiment reads out on the air-picture net, report by report (pvo_bu_x_1984 art. 23); not the tube, which is the commander's; Reports to the commander targets appearing, their actions, identity and size, jamming, and targets leaving cover or lost (pvo_bu_x_1984 art. 23; not yet voiced); As the operator of pvo_bu_x_1984 art. 20: keeps and services the equipment, works the radio and the intercom, stands ready to replace the squad leader; No part in decisions in any source read: the commander decides (pvo_bu_x_1984 art. 17); his voice is his reports.
 
 Displays: `map`, `it45`.
 

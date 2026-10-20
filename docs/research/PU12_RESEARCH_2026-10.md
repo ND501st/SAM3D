@@ -168,4 +168,6 @@ orients with the PAB-2 and sets the GAK and KP-4; the operator switches on the A
    switches are the commander's. The RTK-1 stands on the desk at the right wall under the IT-2M (SAM3D's choice; the plan
    draws it over the tube's front, out of his seated reach).
 5. The telecode's message rate on the R-407 (its reach by antenna: `docs/research/PU12_RADIOS_2026-10.md`).
-6. The NVA plotters' handbook (1980) for the plotting drill: still to acquire.
+6. The NVA plotters' handbook (1980) for the plotting drill: still to acquire; offered as an original by an NVA book
+   dealer (20 Oct 2026, `docs/research/PLOTTING_BOARD_2026-10.md` → "The plotter's other duties"). The operator-plotter's
+   duties beyond the board (`pvo_bu_x_1984` art. 19, 20, 23) and his part in decisions (none found) are recorded there.
