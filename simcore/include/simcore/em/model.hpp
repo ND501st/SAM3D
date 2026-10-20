@@ -537,6 +537,62 @@ struct LinkState {
     bool up = false;
 };
 
+// An anti-radiation missile (roadmap E6, em/arm.hpp): a missile whose passive seeker homes on a radar's emission. Set at
+// launch to the signal its carrier's receiver heard; it hears what is in its band, on that signal, inside its field of
+// view, and cannot tell two such emitters inside its resolution apart (it homes on their middle). With a memory it flies
+// on to where its last line of sight met the ground when the emission stops; without one it goes ballistic.
+struct ArmDef {
+    std::string id;
+    std::string name;
+    double freq_min_hz = 0.0;  // the seeker head's band
+    double freq_max_hz = 0.0;
+    double tune_fraction = 0.0;  // heard only within this fraction of the frequency it was set to (0: its whole band)
+    double prf_fraction = 0.0;   // and of the repetition rate (0: any)
+    double sensitivity_dbw = -70.0;
+    double antenna_gain_db = 0.0;
+    double fov_rad = 0.35;          // half-angle about the missile's nose it can hear in
+    double angle_sigma_rad = 0.02;  // the seeker's angle error at a strong signal (one sigma, each axis)
+    double resolution_rad = 0.05;   // emitters closer together than this are one direction to it
+    double smoothing = 0.3;         // how much of each new measurement the line of sight takes per tick (0..1)
+    bool memory = false;
+    double speed_mps = 600.0;       // average flight speed
+    double max_flight_s = 70.0;     // after this it falls (motor and energy spent)
+    double max_accel_mps2 = 150.0;  // steering limit
+    double loft_rad = 0.2;          // launched this far above the line to the believed target
+    double lethal_radius_m = 20.0;  // a platform within this of the burst is put out of action
+    double rcs_m2 = 0.1;            // its echo (the crew's "small mark")
+    double min_range_m = 3000.0;    // the carrier fires only between these ranges to the believed target
+    double max_range_m = 40000.0;
+    std::string source;
+    std::string confidence;
+};
+
+enum class ArmOutcome { Flying, Hit, Missed };
+
+struct ArmState {
+    int id = 0;
+    int def_index = -1;
+    int platform_id = 0;
+    int shooter_platform_id = 0;
+    double launched_s = 0.0;
+    double tuned_freq_hz = 0.0;  // the signal it was set to at launch
+    double tuned_prf_hz = 0.0;
+    Vec3 aim_point;               // where its carrier believed the radar was (it pitches over toward it until it hears)
+    Vec3 los;                     // the seeker's smoothed line of sight (unit vector)
+    bool has_los = false;
+    double last_heard_s = -1e9;
+    bool remembering = false;
+    Vec3 memory_point;            // where the last line of sight met the ground
+    ArmOutcome outcome = ArmOutcome::Flying;
+    int hit_platform = 0;         // what it put out of action (0: nothing)
+    int nearest_platform = 0;     // the nearest ground platform at the burst, and how far
+    double miss_m = -1.0;
+    Vec3 burst_point;
+    double burst_s = -1.0;
+    int debug_truth_emitter = 0;  // what it last homed on (overlays and tests only)
+    mutable PathCache paths{50.0};
+};
+
 // ------------------------------------------------------------------------------- library
 
 struct EmLibrary {
@@ -546,6 +602,7 @@ struct EmLibrary {
     std::vector<RadioDef> radios;
     std::vector<EmitterDef> emitters;  // stand-alone emitters (navaids, decoy emitters)
     std::vector<ThreatLibrary> threat_libraries;
+    std::vector<ArmDef> arms;  // anti-radiation missiles (em/arm.hpp)
 
     template <typename T>
     static int IndexOf(const std::vector<T>& v, const std::string& id) {
@@ -558,6 +615,7 @@ struct EmLibrary {
     int Jammer(const std::string& id) const { return IndexOf(jammers, id); }
     int Radio(const std::string& id) const { return IndexOf(radios, id); }
     int Emitter(const std::string& id) const { return IndexOf(emitters, id); }
+    int Arm(const std::string& id) const { return IndexOf(arms, id); }
     const ThreatLibrary* Library(const std::string& id) const {
         for (const ThreatLibrary& l : threat_libraries)
             if (l.id == id) return &l;
@@ -683,6 +741,7 @@ struct EmScene {
     std::vector<DecoyLink> decoys;
     std::vector<DummyTraffic> dummy_traffic;  // outcomes of voice messages (the sender collects them)
     std::vector<LinkState> links;
+    std::vector<ArmState> arms;  // anti-radiation missiles in flight and spent
     std::vector<EmEvent> events;
     EmStats stats;
 
@@ -742,6 +801,8 @@ struct EmScene {
     NodeState* FindNode(int id) { return FindIn(nodes, id); }
     const NodeState* FindNode(int id) const { return FindIn(nodes, id); }
     NetState* FindNet(int id) { return FindIn(nets, id); }
+    ArmState* FindArm(int id) { return FindIn(arms, id); }
+    const ArmState* FindArm(int id) const { return FindIn(arms, id); }
     const NetState* FindNet(int id) const { return FindIn(nets, id); }
 
     // Elevation angle (rad) of `to` seen from `from`, over a 4/3 Earth (independent of where the

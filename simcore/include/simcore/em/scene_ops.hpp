@@ -25,6 +25,22 @@ inline void UpdatePlatforms(EmScene& s) {
     s.grid.Rebuild(s.platforms);
 }
 
+// Destroying a platform silences everything on it and kills its nodes.
+inline void DestroyPlatformIn(EmScene& s, int id) {
+    Platform* p = s.FindPlatform(id);
+    if (p == nullptr || !p->alive) return;
+    p->alive = false;
+    for (RadarState& r : s.radars)
+        if (r.platform_id == id) r.on = false;
+    for (JammerState& j : s.jammers)
+        if (j.platform_id == id) j.on = false;
+    for (NodeState& n : s.nodes) {
+        if (n.platform_id != id || !n.alive) continue;
+        n.alive = false;
+        s.Log(EmEventKind::NodeDestroyed, n.id, id, n.name + " destroyed");
+    }
+}
+
 inline void UpdateEmitters(EmScene& s, double dt) {
     for (EmitterState& e : s.emitters) {
         const Platform* p = s.FindPlatform(e.platform_id);

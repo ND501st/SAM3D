@@ -1,6 +1,7 @@
 // simcore/em/world.hpp — EmWorld: builds the scene and runs the electromagnetic systems in order.
 //
 // Per Step(dt) (dt = 0.1 s is the intended rate; docs/EM_ARCHITECTURE.md, "Update rates"):
+//   0. anti-radiation missiles: seeker, guidance, flight, fuze (arm.hpp)
 //   1. platforms: altitude, height above ground, spatial grid
 //   2. doctrine and EMCON schedules (decisions from knowledge)
 //   3. emitters: scan rotation, jammer pointing; chaff drift
@@ -17,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/em/arm.hpp"
 #include "simcore/em/comms_system.hpp"
 #include "simcore/em/deception.hpp"
 #include "simcore/em/doctrine.hpp"
@@ -282,20 +284,15 @@ public:
     }
 
     // Destroying a platform silences everything on it and kills its nodes.
-    void DestroyPlatform(int id) {
-        Platform* p = s_.FindPlatform(id);
-        if (p == nullptr || !p->alive) return;
-        p->alive = false;
-        for (RadarState& r : s_.radars)
-            if (r.platform_id == id) r.on = false;
-        for (JammerState& j : s_.jammers)
-            if (j.platform_id == id) j.on = false;
-        for (NodeState& n : s_.nodes) {
-            if (n.platform_id != id || !n.alive) continue;
-            n.alive = false;
-            s_.Log(EmEventKind::NodeDestroyed, n.id, id, n.name + " destroyed");
-        }
+    // Fire an anti-radiation missile of library entry `arm_id` from a platform at `aim_point` (where the carrier believes
+    // the radar is), set to the signal its carrier heard (arm.hpp). `direction`: how it leaves (null: lofted at the point).
+    // Returns the ARM's id (0: no such missile or carrier).
+    int FireArm(int shooter_platform_id, const std::string& arm_id, const Vec3& aim_point, double freq_hz, double prf_hz,
+                const Vec3* direction = nullptr) {
+        return LaunchArm(s_, shooter_platform_id, s_.lib.Arm(arm_id), aim_point, freq_hz, prf_hz, direction);
     }
+
+    void DestroyPlatform(int id) { DestroyPlatformIn(s_, id); }
 
     void Step(double dt) {
         using Clock = std::chrono::steady_clock;
@@ -309,6 +306,7 @@ public:
         if (rates_.profile) t0 = Clock::now();
         s_.time_s += dt;
         ++s_.tick;
+        RunArms(s_, dt);
         UpdatePlatforms(s_);
         lap(s_.stats.ns_platforms);
         ApplyEmconSteps(s_, emcon_);
