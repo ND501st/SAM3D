@@ -7,10 +7,12 @@
 //     `scenario.weapon_fall_s` where it was aimed (where the enemy believed the target was) and hurts what is really
 //     there: our vehicle, the battery's other vehicles, a dummy, the defended object (game values in
 //     data/gameplay/air_war.json);
-//   * anti-radiation missiles: a SEAD or hunter aircraft in range while our search or tracking radar radiates fires
-//     one; it flies at `scenario.arm_speed_mps` and hits if the radar still radiates when it arrives, or radiated
-//     within the seeker's memory if it has one (roadmap E6 will make the ARM an EM missile; until then this is the
-//     gameplay model);
+//   * anti-radiation missiles: with the EM layer a SEAD or hunter aircraft with a warning receiver carries EM ARMs
+//     (the target's "arms", em/arm.hpp): the runner fires and flies them, and the bridge reads their ends (the vehicle
+//     hit, a dummy taken, a miss) from ScenarioRunner::ArmResults (roadmap A11). Without (no EM layer, no warning
+//     receiver) the gameplay model: in range while our search or tracking radar radiates it fires one; it flies at
+//     `scenario.arm_speed_mps` and hits if the radar still radiates when it arrives, or radiated within the seeker's
+//     memory if it has one;
 //   * what the enemy learns: every second our radars radiate (ELINT), every launch an enemy aircraft sees.
 // Every event goes into the runner's log, so the debrief shows it. Finish() turns it all into a PackageOutcome for
 // AirCampaign::CompletePlayerMission.
@@ -88,7 +90,7 @@ public:
                 }
             }
             // Anti-radiation missiles at a radiating radar.
-            if (s.arms_left > 0 && radiating && t - s.last_arm_t > 10.0) {
+            if (!a.em_arms && s.arms_left > 0 && radiating && t - s.last_arm_t > 10.0) {
                 const double range = Dist2d(pos, m_.own_enu);
                 if (range < a.arm_range_m) {
                     --s.arms_left;
@@ -103,6 +105,8 @@ public:
                 }
             }
         }
+        ReadEmArms(r);
+        if (unit_destroyed_) return;
         // Weapons arriving.
         for (Impact& imp : impacts_) {
             if (imp.done || imp.t > t) continue;
@@ -132,7 +136,7 @@ public:
 
     bool UnitDestroyed() const { return unit_destroyed_; }
     double EmittedSeconds() const { return emitted_s_; }
-    int ArmsFired() const { return arms_fired_; }
+    int ArmsFired() const { return arms_fired_ + em_arms_fired_; }
 
     // What happened, for AirCampaign::CompletePlayerMission.
     PackageOutcome Finish(ScenarioRunner& r) {
@@ -179,7 +183,8 @@ public:
         o.decoys_hit = decoys_hit_;
         o.destroyed = destroyed_;
         o.missiles_spent = r.Launches();
-        o.arms_fired = arms_fired_;
+        ReadEmArms(r);
+        o.arms_fired = arms_fired_ + em_arms_fired_;
         if (emitted_s_ > 0.0) o.AddEmission(m_.own_object, emitted_s_);
         if (launch_seen_) o.fired.push_back(m_.own_object);
         if (radar_killed_) {
@@ -231,10 +236,47 @@ private:
     bool delivered_ = false;
     bool hit_something_ = false;
     int arms_fired_ = 0;
+    int em_arms_fired_ = 0;
+    std::size_t em_arms_read_ = 0;
     std::vector<std::pair<std::string, double>> damage_;
     std::vector<std::string> decoys_hit_;
     std::vector<std::string> destroyed_;
     std::vector<std::string> notes_;
+
+    // The EM ARMs' ends (the runner logs each itself): on our vehicle, the radar is killed and the vehicle out of
+    // action; on a dummy, that dummy is destroyed; a miss means the crew beat it (silent in time, or a decoy).
+    void ReadEmArms(ScenarioRunner& r) {
+        em_arms_fired_ = r.ArmsFired();
+        const std::vector<EmSensorLink::ArmResult>& res = r.ArmResults();
+        for (; em_arms_read_ < res.size(); ++em_arms_read_) {
+            const EmSensorLink::ArmResult& a = res[em_arms_read_];
+            if (a.hit && a.hit_what == "unit") {
+                radar_killed_ = true;
+                unit_destroyed_ = true;
+                notes_.push_back(a.carrier + " ARM: hit the vehicle's radar - our vehicle is out of action");
+                continue;
+            }
+            if (a.hit && a.hit_what == "dummy") {
+                const std::string* best = nullptr;
+                double best_m = 1e18;
+                for (const auto& dm : m_.dummies) {
+                    const double d = Dist2d(dm.second, a.burst_point);
+                    if (d < best_m) {
+                        best_m = d;
+                        best = &dm.first;
+                    }
+                }
+                if (best != nullptr && std::find(decoys_hit_.begin(), decoys_hit_.end(), *best) == decoys_hit_.end()) {
+                    decoys_hit_.push_back(*best);
+                    destroyed_.push_back(*best);
+                }
+                notes_.push_back(a.carrier + " ARM: a dummy position is hit");
+                continue;
+            }
+            radar_silenced_ = true;
+            notes_.push_back(a.carrier + " ARM: missed");
+        }
+    }
 
     void Log(ScenarioRunner& r, const std::string& who, const std::string& what) {
         r.Log().Record({r.Time(), DebriefEntry::Kind::Scenario, "enemy air", who, what});

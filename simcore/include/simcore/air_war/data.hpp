@@ -141,6 +141,10 @@ struct AircraftType {
     int arms = 0;                  // anti-radiation missiles per sortie
     double arm_range_m = 0.0;
     bool arm_memory = false;       // the seeker remembers the radar's position after it stops radiating
+    // The EM library's anti-radiation missile it carries (em/arm.hpp; roadmap E6, A11). With the EM layer and a warning
+    // receiver the raid's scenario fires it as an EM missile; otherwise the mission bridge's gameplay model does. Default:
+    // the HARM class with a memory, else the Shrike class.
+    std::string arm_em;
     double strike_power = 0.0;     // effect of one aircraft's load on a target (game value, 0..1 of a "standard" target)
     double recce_quality = 0.0;    // camera or sensor, 0..1
     double air_to_air = 0.0;       // value as an escort, 0..1
@@ -760,7 +764,7 @@ public:
             std::vector<std::string> roles;
             if (!Keys(a, p, {"id", "name", "roles", "class", "helicopter", "drone", "rcs_m2", "cruise_mps", "attack_mps",
                              "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em",
-                             "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "strike_power",
+                             "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "strike_power",
                              "recce_quality", "air_to_air", "evasion", "source", "confidence", "notes"}) ||
                 !RequireString(a, p, "id", t.id) || !RequireString(a, p, "name", t.name) ||
                 !StringList(a, p, "roles", roles) || !OptionalString(a, p, "class", t.target_class) ||
@@ -772,7 +776,8 @@ public:
                 !OptionalBool(a, p, "all_weather", t.all_weather) || !OptionalString(a, p, "rwr_em", t.rwr_em) ||
                 !OptionalString(a, p, "self_jammer_em", t.self_jammer_em) ||
                 !OptionalString(a, p, "standoff_jammer_em", t.standoff_jammer_em) || !Int(a, p, "arms", t.arms, 0, 8) ||
-                !OptionalBool(a, p, "arm_memory", t.arm_memory) || !Num(a, p, "strike_power", t.strike_power, 0.0, 2.0) ||
+                !OptionalBool(a, p, "arm_memory", t.arm_memory) || !OptionalString(a, p, "arm_em", t.arm_em) ||
+                !Num(a, p, "strike_power", t.strike_power, 0.0, 2.0) ||
                 !Num(a, p, "recce_quality", t.recce_quality, 0.0, 1.0) || !Num(a, p, "air_to_air", t.air_to_air, 0.0, 1.0) ||
                 !Num(a, p, "evasion", t.evasion, 0.0, 1.0) || !Provenance(a, p) ||
                 !OptionalString(a, p, "source", t.source) || !OptionalString(a, p, "confidence", t.confidence) ||
@@ -782,6 +787,7 @@ public:
             double arm_km = 0.0;
             if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0)) return false;
             t.arm_range_m = arm_km * 1000.0;
+            if (t.arms > 0 && t.arm_em.empty()) t.arm_em = t.arm_memory ? "agm88a_class_harm" : "agm45_class_shrike";
             if (roles.empty()) return Fail(Join(p, "roles"), "at least one role");
             for (const std::string& r : roles) {
                 FlightRole fr;
