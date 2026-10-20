@@ -105,6 +105,35 @@ SC_TEST("battery: on a short halt each vehicle pulls off the road, alternating s
     for (const Battery::Vehicle& v : b.Vehicles()) SC_EXPECT(v.deployed);
 }
 
+SC_TEST("battery: a target within 20 km stops the column where it is; beyond, all pull off the road away from it") {
+    // voenizdat_osa_1991 p254, mon_2112_80 p66.
+    SC_EXPECT_NEAR(Tactics().short_halt_in_column_m, 20000.0, 1e-9);
+    for (int beyond = 0; beyond < 2; ++beyond) {
+        Battery b(Tactics(), Vehicles());
+        b.SetDriveOwn(true);
+        double t = 0.0;
+        b.Order(MarchNorth(), t);
+        Run(b, t, 600.0);
+        BatteryOrder halt;
+        halt.kind = BatteryOrder::Kind::ShortHalt;
+        halt.threat_range_m = beyond == 1 ? 25000.0 : 15000.0;
+        halt.threat_has_azimuth = true;
+        halt.threat_az_deg = 90.0;  // east of the road, which runs north
+        b.Order(halt, t);
+        Run(b, t, 60.0);
+        for (const Battery::Vehicle& v : b.Vehicles()) {
+            const double x = v.position.x;  // the road runs along x = 0
+            if (beyond == 1) {
+                SC_EXPECT(std::fabs(x + 40.0) < 2.0);  // all 40 m to the west, away from the target
+            } else {
+                SC_EXPECT(std::fabs(x) < 2.0);  // in the column
+            }
+        }
+        Run(b, t, 240.0);
+        for (const Battery::Vehicle& v : b.Vehicles()) SC_EXPECT(v.deployed);
+    }
+}
+
 SC_TEST("battery: the combat formation puts launchers in pairs 3 km apart, 200 m within, 2 km behind; the TZM 500 m back") {
     Battery b(Tactics(), Vehicles());
     b.SetDriveOwn(true);
@@ -127,7 +156,7 @@ SC_TEST("battery: the combat formation puts launchers in pairs 3 km apart, 200 m
     SC_EXPECT(v[5].position.y < 2500.0);             // the PU-12 further back
 }
 
-SC_TEST("battery: a halt every 3.5 h on the march, 1.5 h long, 1 h at night") {
+SC_TEST("battery: a halt every 3.5 h on the march, up to 1 h long, by day or night (voenizdat_osa_1991 p238)") {
     for (int night = 0; night < 2; ++night) {
         BatteryTactics tac = Tactics();
         Battery b(tac, Vehicles());
@@ -138,7 +167,7 @@ SC_TEST("battery: a halt every 3.5 h on the march, 1.5 h long, 1 h at night") {
         Run(b, t, 3.5 * 3600.0 + 600.0, 2.0);
         SC_EXPECT(b.CurrentMode() == Battery::Mode::Halted);
         const double y0 = b.Vehicles()[0].position.y;
-        Run(b, t, (night == 1 ? 3600.0 : 5400.0) - 900.0, 2.0);
+        Run(b, t, 3600.0 - 900.0, 2.0);
         SC_EXPECT(b.CurrentMode() == Battery::Mode::Halted && std::fabs(b.Vehicles()[0].position.y - y0) < 1.0);
         Run(b, t, 1200.0, 2.0);
         SC_EXPECT(b.CurrentMode() != Battery::Mode::Halted);

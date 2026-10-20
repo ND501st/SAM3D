@@ -1119,9 +1119,10 @@ private:
         }
     }
 
-    // The guidance channels in the EM layer (roadmap E5): each channel's command transmitter radiates from ВНИМАНИЕ
-    // (into its equivalent load until a missile flies, in a peacetime check), on its letter's frequency, along the
-    // tracking antenna's line of sight; each missile in flight carries its responder.
+    // The guidance channels in the EM layer (roadmap E5): each channel's command transmitter is on from ВНИМАНИЕ but
+    // works into its equivalent load, for concealment, until its missile is launched (voenizdat_osa_1991 p21, p140,
+    // p155: the launch switches АНТЕННА — ЭКВИВАЛЕНТ to the antenna); then it radiates on its letter's frequency, along
+    // the tracking antenna's line of sight. Each missile in flight carries its responder.
     void UpdateGuidanceEm() {
         if (!em_link_ || !launcher_ || !engagement_on_) return;
         const double az = DegToRad(em_link_->AntennaAzimuthDeg());
@@ -1129,8 +1130,7 @@ private:
         const Vec3 toward = engagement_.UnitPosition() + Vec3{std::sin(az) * std::cos(el), std::cos(az) * std::cos(el), std::sin(el)} * 10000.0;
         for (int ch = 1; ch <= 2; ++ch) {
             const int ts = launcher_->TransmitterState(ch);
-            const int state = ts == 2 ? 2 : (ts == 1 ? (def_.em.command_link_in_load ? 1 : 2) : 0);
-            em_link_->SetCommandLink(ch, state, launcher_->LetterChanges(), toward);
+            em_link_->SetCommandLink(ch, ts, launcher_->LetterChanges(), toward);
         }
         std::vector<EmSensorLink::GuidedMissile> missiles;
         for (const EngagementModel::MissileView& m : engagement_.MissilesInFlight(time_, world_, eng_targets_)) {
@@ -3469,12 +3469,13 @@ private:
             }
         }
         if (!engagement_on_) return;
-        if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once (mon_2112_80 p63-68)
+        if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once, in the column
+                        // (mon_2112_80 p66; voenizdat_osa_1991 p254)
             for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
                 if (!k.has_range || k.friendly || k.range_m > 20000.0 || npc_halt_ordered_) continue;
                 npc_halt_ordered_ = true;
                 SpeakOrder("order_halt");
-                if (battery_ && def_.battery_drive_own) {  // the battery drives us: its short halt (off the road, deploy)
+                if (battery_ && def_.battery_drive_own) {  // the battery drives us: its short halt (inside 20 km: in the column)
                     BatteryOrder o;
                     o.kind = BatteryOrder::Kind::ShortHalt;
                     battery_->Order(o, time_);
@@ -3605,6 +3606,11 @@ private:
             const SkillTier* t = CommanderTier();
             const bool slow = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->branch_error_chance;
             npc_branch_at_ = time_ + (slow ? 10.0 : 0.0);
+                    o.threat_range_m = k.range_m;
+                    if (k.has_azimuth && k.true_azimuth) {
+                        o.threat_has_azimuth = true;
+                        o.threat_az_deg = k.azimuth_deg;
+                    }
         }
         if (branch && time_ < npc_branch_at_) return;
         if (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) {

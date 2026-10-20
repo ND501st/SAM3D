@@ -42,14 +42,11 @@ struct ZoneWindow {
 
 namespace detail {
 
+// The launch zone `in_s` from now (the meeting point's zone: engagement.hpp, LaunchZoneFor).
 inline EngagementTuning::ZoneKind ZoneAt(const EngagementTuning& t, const DecisionTrack& d, double in_s) {
     const Vec3 p = d.position + d.velocity * in_s;
-    const double range = p.Length();
-    if (range < 1.0) return EngagementTuning::ZoneKind::None;
-    const double closing = -Dot(d.velocity, p / range);
-    const double vh = std::hypot(d.velocity.x, d.velocity.y);
-    const double parameter = vh > 1.0 ? std::fabs(p.x * d.velocity.y - p.y * d.velocity.x) / vh : std::hypot(p.x, p.y);
-    return t.ZoneFor(range, d.agl_m, d.velocity.Length(), closing, parameter);
+    if (p.Length() < 1.0) return EngagementTuning::ZoneKind::None;
+    return t.LaunchZoneFor(p, d.velocity, d.agl_m);
 }
 
 }  // namespace detail
@@ -71,7 +68,7 @@ inline ZoneWindow ZoneWindowOf(const EngagementTuning& t, const DecisionTrack& d
 // One launch `in_s` from now.
 struct LaunchOption {
     double launch_in_s = 0.0;
-    double flight_s = 0.0;           // to the intercept, at the missile's average speed
+    double flight_s = 0.0;           // to the intercept, at the missile's average speed (engagement.hpp, MeetingFor)
     double intercept_range_m = 0.0;
     bool in_zone = false;            // the target in the zone at the launch (the outcome model's zone factor)
     bool reachable = true;           // the intercept within the missile's flight time
@@ -85,12 +82,11 @@ inline LaunchOption EvaluateLaunch(const EngagementTuning& t, const DecisionTrac
                                    const ZoneWindow& window) {
     LaunchOption o;
     o.launch_in_s = in_s;
-    const double vm = t.missile_average_speed_mps > 0.0 ? t.missile_average_speed_mps : 500.0;
-    double tf = (d.position + d.velocity * in_s).Length() / vm;
-    for (int i = 0; i < 8; ++i) tf = (d.position + d.velocity * (in_s + tf)).Length() / vm;  // fixed point: the meeting
+    const EngagementTuning::Meeting m = t.MeetingFor(d.position + d.velocity * in_s, d.velocity, d.agl_m);
+    const double tf = m.ok ? m.time_s : 1e9;
     o.flight_s = tf;
-    o.intercept_range_m = (d.position + d.velocity * (in_s + tf)).Length();
-    o.reachable = t.missile_max_flight_time_s <= 0.0 || tf <= t.missile_max_flight_time_s;
+    o.intercept_range_m = m.range_m;
+    o.reachable = m.ok && (t.missile_max_flight_time_s <= 0.0 || tf <= t.missile_max_flight_time_s);
     o.in_zone = detail::ZoneAt(t, d, in_s) != EngagementTuning::ZoneKind::None;
     const double zone = o.in_zone ? 1.0 : t.outside_zone_factor;
     o.chance = o.reachable ? t.HitChanceFor(d.target_class) * zone * t.LowAltitudeFactor(d.target_class, d.agl_m) : 0.0;

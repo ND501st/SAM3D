@@ -215,8 +215,7 @@ public:
                 s.phase = Phase::Acquiring;
                 continue;
             }
-            const double closing = -Dot(tg->velocity, rel.Normalized());
-            const bool in_zone = tuning_.ZoneFor(range, tg->agl_m, tg->velocity.Length(), closing) != EngagementTuning::ZoneKind::None;
+            const bool in_zone = tuning_.LaunchZoneFor(rel, tg->velocity, tg->agl_m) != EngagementTuning::ZoneKind::None;
             if (s.phase == Phase::Tracking) {
                 if (t < s.next_s || !in_zone || s.missiles <= 0) continue;
                 s.phase = Phase::Preparing;
@@ -231,7 +230,8 @@ public:
                 }
                 --s.missiles;
                 ++s.launches;
-                double flight = range / tuning_.missile_average_speed_mps;
+                const EngagementTuning::Meeting meet = tuning_.MeetingFor(rel, tg->velocity, tg->agl_m);
+                double flight = meet.ok ? meet.time_s : tuning_.missile_max_flight_time_s;
                 if (flight > tuning_.missile_max_flight_time_s) flight = tuning_.missile_max_flight_time_s;
                 s.chance = tuning_.HitChanceFor(tg->target_class) * tuning_.LowAltitudeFactor(tg->target_class, tg->agl_m);
                 s.phase = Phase::InFlight;

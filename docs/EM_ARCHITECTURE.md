@@ -585,12 +585,13 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
   are estimates. At night it sees nothing. Scenario `environment` {`visibility_km`, `daylight`}, target `size_m`.
   Mirrored in the Python prototype.
 * **The command link** (`data/em/osa_ak.json` `osa_ak_command_link_1`, `_2`). The two channels' command transmitters
-  (СПК) are emitters on the vehicle, on the vehicle's two grid frequencies (`mon_2112_80` p67: fixed frequencies,
-  neighbouring vehicles interleaved, the 1st vehicle on 3 and 1); СМЕНА ЛИТ. moves each to the other (SAM3D's reading of
-  the letter change). They radiate from ВНИМАНИЕ (switched on then, `mon_2112_80` p67) along the tracking antenna's
-  line of sight; into the equivalent load until the launch only in a peacetime check
-  (`own_unit.em.command_link_in_load`). The band is the I band NATO's view gives (FM 100-2-3); power, pulse and antenna
-  are estimates.
+  (СПК) are emitters on the vehicle, on the vehicle's two letter frequencies (`mon_2112_80` p67, `voenizdat_osa_1991`
+  Table 5.1: neighbouring vehicles interleaved, the 1st vehicle on 3 and 1); СМЕНА ЛИТ. swaps the two channels'
+  frequencies and codes (`voenizdat_osa_1991` p148). They are switched on at ВНИМАНИЕ but work into their equivalent
+  loads, for concealment, until the launch switches them to the antenna (`voenizdat_osa_1991` p21, p140, p155); then
+  they radiate along the tracking antenna's line of sight, so a target's RWR hears the launch, not the preparation. 100
+  kW, 0.75 µs pulses at a quarter of the radars' 2800 Hz, the medium beam 1.8-2.4° (`voenizdat_osa_1991` p92, p138);
+  the band is the I band NATO's view gives (FM 100-2-3).
 * **The missile's responder** (`9m33_responder`, kind `missile_responder`): each missile in flight is an EM platform
   carrying it (`EmSensorLink::SyncMissiles`); every value an estimate. Missiles give no echo to their own search radar
   (a simplification).

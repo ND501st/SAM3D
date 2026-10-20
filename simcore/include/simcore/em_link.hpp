@@ -86,9 +86,6 @@ struct EmLinkDef {
     double unit_rcs_m2 = 0.0;         // the vehicle's echo for the other side (0: the EM layer's default)
     Vec3 wind_mps;  // chaff drift
     double rain_mmh = 0.0;  // rain rate over the scene (ITU-R P.838)
-    // The command transmitters go into their equivalent load until a missile flies (peacetime checks, mon_2112_80
-    // p67); otherwise they radiate from ВНИМАНИЕ, as in combat.
-    bool command_link_in_load = false;
     em::EmLibrary library;
 };
 

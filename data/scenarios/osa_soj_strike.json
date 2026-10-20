@@ -3,7 +3,7 @@
   "name": "Osa-AK against a strike under stand-off jamming",
   "description": "A fictional strike on the vehicle's position. A stand-off jammer orbits beyond the missiles' reach and jams the search radar's band: its strobe lies across the search scope and the strike aircraft show late, out of the noise. Two strikers come in low with warning receivers; one carries a self-protection noise pod in the tracking radar's band, so the crew takes it in angle on the jammer and fires by method Н. The NPC commander runs the crew; take any seat, or his.",
   "source": "sam3d", "confidence": "estimate",
-  "notes": "Placeholder numbers throughout: the stand-off jammer's racetrack (about 55-60 km out), the ALQ-99-class jammer's band 8 (em/nato_1985.json, class values), the pod (em/generic.json), the strikers' speeds and heights. The strikers carry NATO's warning receiver and jink when it warns of a launch (in combat the command link is on the air from ВНИМАНИЕ, so the warning comes before the missile). Roadmap E6.",
+  "notes": "Placeholder numbers throughout: the stand-off jammer's racetrack (about 55-60 km out), the ALQ-99-class jammer's band 8 (em/nato_1985.json, class values), the pod (em/generic.json), the strikers' speeds and heights. The strikers carry NATO's warning receiver and jink when it warns of a launch (the command link waits in its load until the launch, voenizdat_osa_1991 p21, so the warning comes with the missile). Roadmap E6.",
   "seed": 5,
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "terrain": { "type": "flat", "height_m": 110 },

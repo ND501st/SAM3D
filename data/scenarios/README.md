@@ -159,8 +159,8 @@ scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking 
 `own_unit.em` also takes the electromagnetic environment's scripted effects (`docs/EM_ARCHITECTURE.md` §25):
 `"extra_libraries": ["em/nato_1985.json"]` merges more library files (jammers, threat libraries);
 `"decoys": [ { "position": {...}, "mode": "with_radar" | "when_radar_off" | "always" } ]` puts decoy emitters copying the search radar at dummy positions (roadmap E7);
-`"command_link_in_load": true` keeps the command transmitters in their equivalent load until a missile flies (a
-peacetime check, `mon_2112_80` p67; in combat they radiate from ВНИМАНИЕ, so a target's RWR warns before the launch);
+(the command transmitters are on from ВНИМАНИЕ but work into their equivalent loads until the launch, `voenizdat_osa_1991`
+p21, p140, p155: a target's RWR hears the command link with the missile, not before it);
 `"rain_mmh": 25` puts rain over the scene (ITU-R P.838: it costs Ku-band and C-band paths, not VHF; never part of a radar's calibration);
 `"jammers": [ { "jammer": "<library id>", "target": "<target id>" | "position": {...}, "on_at_s": 270, "off_at_s": 400 } ]`
 puts a jammer on a target (self-screening) or at a stand-off point, aimed at the unit; `"chaff": [ { "target": "<id>",

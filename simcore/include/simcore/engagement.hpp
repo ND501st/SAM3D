@@ -90,6 +90,17 @@ struct EngagementTuning {
     std::vector<SpeedBand> head_on;  // ascending speed
     SpeedBand pursuit;               // a receding target
     double pursuit_max_range_m = 0.0;
+    double pursuit_range_loss_s = 0.0;  // the receding edge comes in by this many metres per m/s of target speed
+    // Head-on: the slant parameter (the distance from the unit to the target's course, through its height) at most
+    // max_slant_parameter_m less slant_parameter_loss_s metres per m/s of target speed (0: not checked).
+    double max_slant_parameter_m = 0.0;
+    double slant_parameter_loss_s = 0.0;
+    // The crews' far edge of the launch zone head-on: the target's range at launch, by its height (points of height AGL
+    // m, range m; linear between them, flat beyond), for targets up to launch_split_speed_mps and for faster ones.
+    bool has_launch_ranges = false;
+    double launch_split_speed_mps = 0.0;
+    std::vector<std::pair<double, double>> launch_range_slow;
+    std::vector<std::pair<double, double>> launch_range_fast;
     SpeedBand optical;               // slow or hovering targets close to the ground ("F"); needs its own range
     double optical_min_range_m = 0.0;
     double optical_max_range_m = 0.0;
@@ -131,7 +142,7 @@ struct EngagementTuning {
     // (one field height apart) swept in turn. 0 = none: the wheels sit on the designation.
     double tv_search_half_deg = 0.0;
     int tv_search_bars = 1;
-    // Missile pacing (not a flight model).
+    // Missile pacing (not a flight model): the missile flies along the line of sight at its average speed.
     double missile_average_speed_mps = 0.0;
     double missile_max_flight_time_s = 0.0;
     // Outcome.
@@ -204,14 +215,106 @@ struct EngagementTuning {
             for (const SpeedBand& b : head_on) {
                 if (speed_mps <= b.max_speed_mps) {
                     if (b.max_parameter_m > 0.0 && parameter_m > b.max_parameter_m) return ZoneKind::None;
+                    if (max_slant_parameter_m > 0.0 && parameter_m >= 0.0 &&
+                        std::hypot(parameter_m, agl_m) > max_slant_parameter_m - slant_parameter_loss_s * speed_mps) {
+                        return ZoneKind::None;
+                    }
                     return agl_m >= b.min_alt_m && agl_m <= b.max_alt_m ? ZoneKind::HeadOn : ZoneKind::None;
                 }
             }
             return ZoneKind::None;
         }
-        const bool in = speed_mps <= pursuit.max_speed_mps && range_m >= zone_min_range_m && range_m <= pursuit_max_range_m &&
+        const double pursuit_edge_m = pursuit_max_range_m - pursuit_range_loss_s * speed_mps;
+        const bool in = speed_mps <= pursuit.max_speed_mps && range_m >= zone_min_range_m && range_m <= pursuit_edge_m &&
                         agl_m >= pursuit.min_alt_m && agl_m <= pursuit.max_alt_m;
         return in ? ZoneKind::Pursuit : ZoneKind::None;
+    }
+
+    // Where the missile meets the target (voenizdat_osa_1991 p122-123: the fire-control computer takes the target as
+    // flying on straight at its speed; p129: the missile's flight time to the zone's far edge): the missile flies along
+    // the line of sight at its average speed. `rel` is the target from the unit (ENU m). ok false: it can't catch it.
+    struct Meeting {
+        bool ok = false;
+        double time_s = 0.0;       // from the launch
+        double range_m = 0.0;      // slant range to the meeting point
+        double height_m = 0.0;     // the target's height above the ground there (the ground taken as level)
+        double closing_mps = 0.0;  // > 0: the target still approaching there (before its course's nearest point)
+    };
+    Meeting MeetingFor(const Vec3& rel, const Vec3& velocity, double agl_m) const {
+        Meeting m;
+        const double vm = missile_average_speed_mps;
+        if (!(vm > 0.0)) return m;
+        // |rel + velocity t| = vm t:  (v.v - vm^2) t^2 + 2 (rel.v) t + rel.rel = 0, the smallest positive root.
+        const double a = Dot(velocity, velocity) - vm * vm;
+        const double b = 2.0 * Dot(rel, velocity);
+        const double c = Dot(rel, rel);
+        double t = -1.0;
+        if (std::fabs(a) < 1e-9) {
+            if (b < 0.0) t = -c / b;
+        } else {
+            const double disc = b * b - 4.0 * a * c;
+            if (disc >= 0.0) {
+                const double sq = std::sqrt(disc);
+                const double r1 = (-b - sq) / (2.0 * a);
+                const double r2 = (-b + sq) / (2.0 * a);
+                const double lo = std::fmin(r1, r2);
+                const double hi = std::fmax(r1, r2);
+                t = lo > 0.0 ? lo : hi;
+            }
+        }
+        if (!(t > 0.0)) return m;
+        const Vec3 at = rel + velocity * t;
+        m.ok = true;
+        m.time_s = t;
+        m.range_m = at.Length();
+        m.height_m = agl_m + velocity.z * t;
+        m.closing_mps = m.range_m > 1.0 ? -Dot(velocity, at / m.range_m) : 0.0;
+        return m;
+    }
+
+    // The crews' far edge of the launch zone head-on for a target at this height and speed (0: no table).
+    double LaunchRangeFor(double agl_m, double speed_mps) const {
+        if (!has_launch_ranges) return 0.0;
+        return Interpolate(speed_mps <= launch_split_speed_mps ? launch_range_slow : launch_range_fast, agl_m);
+    }
+
+    // The launch zone (voenizdat_osa_1991 p14: the targets that, when a missile goes, meet it inside the zone; the
+    // computer's ЦЕЛЬ В ЗОНЕ, p121-129): the zone the meeting point is in, within the missile's flight time; head-on also
+    // the target's range at most the crews' far edge for its height and speed (p257, Table 7.1), which carries the
+    // computer's own speed functions that the book doesn't print.
+    ZoneKind LaunchZoneFor(const Vec3& rel, const Vec3& velocity, double agl_m) const {
+        const Meeting m = MeetingFor(rel, velocity, agl_m);
+        if (!m.ok || (missile_max_flight_time_s > 0.0 && m.time_s > missile_max_flight_time_s)) return ZoneKind::None;
+        const double speed = velocity.Length();
+        const double vh = std::hypot(velocity.x, velocity.y);
+        const double parameter = vh > 1.0 ? std::fabs(rel.x * velocity.y - rel.y * velocity.x) / vh : std::hypot(rel.x, rel.y);
+        const ZoneKind k = ZoneFor(m.range_m, m.height_m, speed, m.closing_mps, parameter);
+        if (k == ZoneKind::HeadOn && has_launch_ranges && rel.Length() > LaunchRangeFor(agl_m, speed)) return ZoneKind::None;
+        return k;
+    }
+
+    // ВНИМАНИЕ (voenizdat_osa_1991 p121, p129, eq. 2.24): the launch zone, or an approaching target within the zone's far
+    // edge plus the missile's flight time to it and the warning time at its speed over the ground:
+    // range <= Rmax + (Rmax / vm + warning) x Vground (10.3 km + 36 s x Vground on the Osa).
+    bool AttentionFor(const Vec3& rel, const Vec3& velocity, double agl_m) const {
+        if (LaunchZoneFor(rel, velocity, agl_m) != ZoneKind::None) return true;
+        const double range = rel.Length();
+        if (range < 1.0 || !(missile_average_speed_mps > 0.0) || -Dot(velocity, rel / range) <= 0.0) return false;
+        const double vh = std::hypot(velocity.x, velocity.y);
+        return range <= zone_max_range_m + (zone_max_range_m / missile_average_speed_mps + zone_warning_s) * vh;
+    }
+
+    // Piecewise linear through (x, y) points in ascending x, flat beyond the ends.
+    static double Interpolate(const std::vector<std::pair<double, double>>& pts, double x) {
+        if (pts.empty()) return 0.0;
+        if (x <= pts.front().first) return pts.front().second;
+        for (std::size_t i = 1; i < pts.size(); ++i) {
+            if (x <= pts[i].first) {
+                const double f = (x - pts[i - 1].first) / (pts[i].first - pts[i - 1].first);
+                return pts[i - 1].second + f * (pts[i].second - pts[i - 1].second);
+            }
+        }
+        return pts.back().second;
     }
 
     enum class GuidanceMethod { ThreePoint, ZoomClimb, Optical, Jammer };
@@ -373,7 +476,14 @@ private:
 
     bool LoadZones(const json::Value& root, EngagementTuning& t) {
         const json::Value* z = nullptr;
-        if (!Group(root, "zones", {"head_on", "pursuit", "optical"}, z)) return false;
+        if (!Group(root, "zones", {"head_on", "pursuit", "optical", "max_slant_parameter_m", "slant_parameter_loss_s", "launch_range_m"}, z) ||
+            !OptionalNumber(*z, "zones", "max_slant_parameter_m", t.max_slant_parameter_m) ||
+            !OptionalNumber(*z, "zones", "slant_parameter_loss_s", t.slant_parameter_loss_s)) {
+            return false;
+        }
+        if (t.max_slant_parameter_m < 0.0) return Fail("zones.max_slant_parameter_m", "must be >= 0");
+        if (t.slant_parameter_loss_s < 0.0) return Fail("zones.slant_parameter_loss_s", "must be >= 0");
+        if (z->Find("launch_range_m") != nullptr && !LoadLaunchRanges(*z->Find("launch_range_m"), t)) return false;
         const json::Value* ho = z->Find("head_on");
         if (ho == nullptr || !ho->Is(json::Type::Array) || ho->items.empty()) {
             return Fail("zones.head_on", "expected a non-empty list of speed bands");
@@ -394,16 +504,44 @@ private:
         const json::Value* pu = z->Find("pursuit");
         const json::Value* op = z->Find("optical");
         if (pu == nullptr || op == nullptr) return Fail("zones", "needs head_on, pursuit and optical");
-        if (!Keys(*pu, "zones.pursuit", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "max_range_m"}) ||
+        if (!Keys(*pu, "zones.pursuit", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "max_range_m", "range_loss_s"}) ||
             !LoadSpeedBand(*pu, "zones.pursuit", t.pursuit) ||
             !Num(*pu, "zones.pursuit", "max_range_m", t.pursuit_max_range_m, t.zone_min_range_m + 1.0) ||
+            !OptionalNumber(*pu, "zones.pursuit", "range_loss_s", t.pursuit_range_loss_s) ||
             !Keys(*op, "zones.optical", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "min_range_m", "max_range_m"}) ||
             !LoadSpeedBand(*op, "zones.optical", t.optical) ||
             !Num(*op, "zones.optical", "min_range_m", t.optical_min_range_m, 0.0) ||
             !Num(*op, "zones.optical", "max_range_m", t.optical_max_range_m, t.optical_min_range_m + 1.0)) {
             return false;
         }
+        if (t.pursuit_range_loss_s < 0.0) return Fail("zones.pursuit.range_loss_s", "must be >= 0");
         t.has_zones = true;
+        return true;
+    }
+
+    // zones.launch_range_m: { "split_speed_mps": v, "slow": [[height_m, range_m], ...], "fast": [...] }.
+    bool LoadLaunchRanges(const json::Value& v, EngagementTuning& t) {
+        const char* p = "zones.launch_range_m";
+        if (!Keys(v, p, {"split_speed_mps", "slow", "fast"}) || !Num(v, p, "split_speed_mps", t.launch_split_speed_mps, 1.0) ||
+            !LoadPoints(v, Join(p, "slow"), "slow", t.launch_range_slow) || !LoadPoints(v, Join(p, "fast"), "fast", t.launch_range_fast)) {
+            return false;
+        }
+        t.has_launch_ranges = true;
+        return true;
+    }
+
+    // A required non-empty list of [x, y] points, x ascending, y > 0.
+    bool LoadPoints(const json::Value& obj, const std::string& path, const char* key, std::vector<std::pair<double, double>>& out) {
+        const json::Value* list = obj.Find(key);
+        if (list == nullptr || !list->Is(json::Type::Array) || list->items.empty()) return Fail(path, "expected a non-empty list of [x, y]");
+        for (const json::Value& pt : list->items) {
+            if (!pt.Is(json::Type::Array) || pt.items.size() != 2 || !pt.items[0].Is(json::Type::Number) ||
+                !pt.items[1].Is(json::Type::Number) || !(pt.items[1].number > 0.0) ||
+                (!out.empty() && !(pt.items[0].number > out.back().first))) {
+                return Fail(path, "expected [x, y] pairs in ascending x with y > 0");
+            }
+            out.emplace_back(pt.items[0].number, pt.items[1].number);
+        }
         return true;
     }
 
@@ -631,10 +769,13 @@ public:
         s.in_zone = s.zone != EngagementTuning::ZoneKind::None;
         s.guidance = tuning_.MethodFor(g.agl_m, g.el_deg, g.speed_mps, jam_switch);
         s.range_known = range_known_now_;
-        s.flight_time_s = g.range_m / tuning_.missile_average_speed_mps;
-        s.out_of_reach = s.flight_time_s > tuning_.missile_max_flight_time_s;
+        // The missile flies to where it meets the target (the target flying on straight); beyond its flight time it
+        // destroys itself (voenizdat_osa_1991 p22: at 25-28 s).
+        const EngagementTuning::Meeting meet = tuning_.MeetingFor(g.rel, g.velocity, g.agl_m);
+        s.flight_time_s = meet.ok ? meet.time_s : tuning_.missile_max_flight_time_s;
+        s.out_of_reach = !meet.ok || s.flight_time_s > tuning_.missile_max_flight_time_s;
         if (s.out_of_reach) s.flight_time_s = tuning_.missile_max_flight_time_s;
-        char detail[300];
+        char detail[340];
         std::snprintf(detail, sizeof(detail), "guided at %s, %.1f km, %s track%s", tracked_.c_str(), g.range_m / 1000.0,
                       ToString(method_), s.in_zone ? ", in the zone" : ", OUTSIDE the zone");
         if (tuning_.has_zones || tuning_.has_methods) {
@@ -645,6 +786,10 @@ public:
         if (!s.range_known) {
             const std::size_t n = std::strlen(detail);
             std::snprintf(detail + n, sizeof(detail) - n, "; NO RANGE%s", jam_switch ? " (method N)" : ", ПОМЕХА off");
+        }
+        if (meet.ok) {
+            const std::size_t n = std::strlen(detail);
+            std::snprintf(detail + n, sizeof(detail) - n, "; meeting at %.1f km in %.0f s", meet.range_m / 1000.0, meet.time_s);
         }
         log.Record({t, DebriefEntry::Kind::Scenario, who, tracked_, detail});
         shots_.push_back(s);
@@ -824,6 +969,8 @@ private:
         double closing_mps = 0.0;
         double speed_mps = 0.0;
         double parameter_m = 0.0;  // crossing parameter: distance from the unit to the target's course, over the ground
+        Vec3 rel;                  // the target from the unit (ENU m)
+        Vec3 velocity;
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
         bool los = false;
@@ -905,6 +1052,8 @@ private:
             g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
             g.cloud_transmission = world.GetWeather().HasClouds() ? world.GetWeather().CloudTransmission(unit_, unit_alt, a->position, alt) : 1.0;
             const Vec3 dir = los.Normalized();
+            g.rel = los;
+            g.velocity = a->velocity;
             g.closing_mps = -Dot(a->velocity, dir);
             g.speed_mps = a->velocity.Length();
             const double vh = std::hypot(a->velocity.x, a->velocity.y);
@@ -969,8 +1118,13 @@ private:
         em_->Advance(dt);
     }
 
+    // The launch zone at the range the system has: `g.range_m` may be the range set by hand (along the true line of sight).
     EngagementTuning::ZoneKind ZoneOf(const Geometry& g) const {
-        return tuning_.ZoneFor(g.range_m, g.agl_m, g.speed_mps, g.closing_mps, g.parameter_m);
+        return tuning_.LaunchZoneFor(RelAtRange(g), g.velocity, g.agl_m);
+    }
+    static Vec3 RelAtRange(const Geometry& g) {
+        const double r = g.rel.Length();
+        return r > 1.0 ? g.rel * (g.range_m / r) : g.rel;
     }
     bool InZone(const Geometry& g) const { return ZoneOf(g) != EngagementTuning::ZoneKind::None; }
 
@@ -1858,11 +2012,7 @@ private:
             eq.SetInput(d.crosshair_input, method_ == TrackMethod::Tv && !tracked_.empty() && InZone(geo_.at(tracked_)));
         }
         if (!d.near_zone_input.empty()) {
-            bool near_zone = in_zone;
-            if (range_known && !in_zone && g->closing_mps > 0.0 && g->range_m > tuning_.zone_max_range_m) {
-                near_zone = (g->range_m - tuning_.zone_max_range_m) / g->closing_mps <= tuning_.zone_warning_s;
-            }
-            eq.SetInput(d.near_zone_input, near_zone);
+            eq.SetInput(d.near_zone_input, range_known && tuning_.AttentionFor(RelAtRange(*g), g->velocity, g->agl_m));
         }
         if (!d.too_low_input.empty()) {
             // НЛЦ: the target under the azimuth line (or being tracked) is too low for the radar. One hidden behind the

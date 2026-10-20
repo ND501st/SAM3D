@@ -5,8 +5,8 @@
 
   "zone": {
     "min_range_m": 1500, "max_range_m": 10300, "min_altitude_m": 25, "max_altitude_m": 5000, "warning_s": 15,
-    "source": "max range, altitude limits: SAM Simulator Osa-AK manual p9, p14; warning time: p29 (ВНИМАНИЕ 15 s ahead). min_range_m is a game value.",
-    "notes": "Used for the ЦЕЛЬ В ЗОНЕ and ВНИМАНИЕ lamps and the outcome's zone factor."
+    "source": "voenizdat_osa_1991 p15 (zone at 300 m/s: 1500-10300 m, 25-5000 m), p121 and p129 (ВНИМАНИЕ at least 15 s before the meeting point enters the zone; eq. 2.24); SAM Simulator Osa-AK manual p9, p14, p29 agrees.",
+    "notes": "The kill zone, judged at the meeting point (engagement.hpp, LaunchZoneFor): ЦЕЛЬ В ЗОНЕ lights while a missile launched now would meet the target inside it. ВНИМАНИЕ lights for an approaching target within max_range_m + (max_range_m / missile average speed + warning_s) x its speed over the ground (10.3 km + 36 s x V)."
   },
 
   "zones": {
@@ -14,10 +14,16 @@
       { "max_speed_mps": 300, "min_altitude_m": 25, "max_altitude_m": 5000, "max_parameter_m": 6000 },
       { "max_speed_mps": 500, "min_altitude_m": 100, "max_altitude_m": 5000, "max_parameter_m": 4000 }
     ],
-    "pursuit": { "max_speed_mps": 300, "min_altitude_m": 100, "max_altitude_m": 5000, "max_range_m": 6500 },
+    "pursuit": { "max_speed_mps": 300, "min_altitude_m": 100, "max_altitude_m": 5000, "max_range_m": 8700, "range_loss_s": 8 },
     "optical": { "max_speed_mps": 100, "min_altitude_m": 10, "max_altitude_m": 25, "min_range_m": 2000, "max_range_m": 6500 },
-    "source": "flak11 (Osa-AK engagement zones: head-on 1.5-10 km, 25-5000 m at up to 300 m/s and 100-5000 m at up to 500 m/s; pursuit to 6.5 km, 100-5000 m, up to 300 m/s; optical 'F' zone for targets at up to 100 m/s or hovering, 2-6.5 km, 10-25 m); docs/research/OSA_RESEARCH_2026-10.md section 5. max_parameter_m: mon_2112_80 p10-12 (crossing parameter up to 6 km at 300 m/s, up to 4 km at 500 m/s), flak11 (6 / 4 km), korovin_tiv_2010 (summary table: 6 km for the Osa-AK).",
-    "notes": "The head-on range limits are the 'zone' box above (1.5-10.3 km: the SAM Simulator manual's 10.3 km against the NVA's 10 km; the manual's was kept). The crossing parameter is how far the target's course passes from the unit, over the ground: beyond the band's limit a head-on target is outside the zone. A target is 'approaching' when its closing speed is positive; otherwise it is in the pursuit zone or outside."
+    "max_slant_parameter_m": 8700, "slant_parameter_loss_s": 8,
+    "launch_range_m": {
+      "split_speed_mps": 300,
+      "slow": [ [50, 8000], [100, 11000], [150, 13000], [200, 16000] ],
+      "fast": [ [50, 9000], [100, 12000], [150, 14000], [200, 15000] ]
+    },
+    "source": "voenizdat_osa_1991 p15 (head-on at 300 m/s: 25-5000 m, 1.5-10.3 km, crossing parameter to 6 km; at 500 m/s: 100-5000 m, 1.5-10 km, parameter to 4 km; helicopters hovering or to 100 m/s on the TV: 10-25 m, 2-6.5 km), p124-128 (the fire-control computer's zone: slant parameter <= 8700 - 8 V, eq. 2.18; a receding meeting point <= 8700 - 8 V, eq. 2.19), p257 (Table 7.1: the far edge of the launch zone head-on, by height, up to 300 m/s and faster; 25-50 m, 100, 150, 200-5000 m). flak11 (the same bands; pursuit to 6.5 km, 100-5000 m, up to 300 m/s), mon_2112_80 p10-12 (parameter 6 / 4 km), korovin_tiv_2010 (6 km); docs/research/OSA_RESEARCH_2026-10.md section 5, OSA_MANUALS_2026-10.md.",
+    "notes": "Each band is judged at the meeting point (engagement.hpp, MeetingFor: the target straight on, the missile along the line of sight at its average speed). The crossing parameter is how far the target's course passes from the unit, over the ground; the slant parameter adds its height. A meeting point still approaching is head-on, otherwise pursuit; the pursuit edge is 8700 m less 8 m per m/s (7.1 km at 200 m/s; flak11's flat 6.5 km is close at 275 m/s). launch_range_m is the crews' Table 7.1 (the target's range at launch, linear between the heights, flat beyond): the computer's own speed functions (eqs. 2.17, 2.20, 2.23) are not printed, and the table carries their effect on low and fast targets (8 km at 25-50 m against 16 km at altitude). The inner limits after the crossing point (eqs. 2.21-2.22) are not modelled."
   },
 
   "tv": {
@@ -54,8 +60,9 @@
   },
 
   "missile": {
-    "average_speed_mps": 450, "max_flight_time_s": 26,
-    "notes": "Game pacing only: the delay between launch and result is range / average_speed. max_flight_time_s follows the manual's 24–27 s (p27)."
+    "average_speed_mps": 490, "max_flight_time_s": 26,
+    "source": "average_speed_mps: voenizdat_osa_1991 p129 (21 s of flight to the zone's far edge, 10.3 km: 490 m/s); max_flight_time_s: voenizdat_osa_1991 p22, p180 (self-destruct at 25-28 s), p177 (maximum flight 24-27 s); SAM Simulator Osa-AK manual p27 (24-27 s).",
+    "notes": "Not a flight model: the missile flies along the line of sight at its average speed to where it meets the target flying straight on, and the result comes then. A meeting later than max_flight_time_s is out of reach (the missile destroys itself)."
   },
 
   "outcome": {

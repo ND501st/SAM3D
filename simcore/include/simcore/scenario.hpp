@@ -612,7 +612,7 @@ private:
             std::string library, search, track;
             if (!em->Is(json::Type::Object) ||
                 !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps", "rain_mmh",
-                                           "jammers", "chaff", "decoys", "command_link_in_load", "notes"}) ||
+                                           "jammers", "chaff", "decoys", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
                 !RequireString(*em, "own_unit.em", "track_radar", track)) {
@@ -628,10 +628,7 @@ private:
                 return false;
             }
             if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error, extras)) return Fail("own_unit.em", error);
-            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh) ||
-                !OptionalBool(*em, "own_unit.em", "command_link_in_load", out.em.command_link_in_load)) {
-                return false;
-            }
+            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh)) return false;
             if (out.em.rain_mmh < 0.0) return Fail("own_unit.em.rain_mmh", "must be >= 0");
             if (const json::Value* w = em->Find("wind_mps")) {
                 if (!Keys(*w, "own_unit.em.wind_mps", {"east", "north", "notes"}) ||

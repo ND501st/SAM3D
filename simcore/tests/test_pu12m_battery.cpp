@@ -312,5 +312,8 @@ SC_TEST("pu12m range day: the ASPD-U off, the tube dark; the board from the air-
     SC_EXPECT(!telecode && !tube);        // no telecode, nothing on the IT-45
     SC_EXPECT(far_mark_km > 120.0);       // the board reaches far beyond the tube's 100 km
     SC_EXPECT(d.find("from the board:") != std::string::npos);  // readiness from the board's warning
-    SC_EXPECT(Count(d, "destroys ") >= 2);
+    // The battery shoots at two of the strikers and brings one down at least (the draws decide the rest; a receding
+    // target is out of the zone once the meeting point is past 8700 - 8 V m, voenizdat_osa_1991 eq. 2.19).
+    SC_EXPECT(Count(d, "launches at ") >= 2);
+    SC_EXPECT(Count(d, "destroys ") >= 1);
 }

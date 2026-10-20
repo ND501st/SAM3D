@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -192,11 +193,14 @@ SC_TEST("engagement: launching beyond reach runs out of flight time") {
           "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
                   { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
     // The NPC deputy waits until the target fills the crosshair (within range); a player in his seat launches as soon as
-    // the TV holds it, at 19 km.
+    // the TV holds it and a missile is ready, about 17 km out. Against a slow target (50 m/s) the missile would meet it
+    // only after 30 s: beyond its flight time.
+    const std::string slow = R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 19000, "up_m": 800 },
+        "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 800 } ], "speed_mps": 50, "appear_at_s": 230 })";
     ScenarioDef def;
     ConsoleData console;
     std::string error;
-    SC_EXPECT(LoadScenario(Engage(Target(19000, 800), emcon), kData, def, console, &error));
+    SC_EXPECT(LoadScenario(Engage(slow, emcon), kData, def, console, &error));
     ScenarioRunner runner(std::move(def), std::move(console));
     while (!runner.Finished() && runner.Time() < 700.0) {
         runner.Step(0.1);
@@ -506,7 +510,13 @@ EngagementTuning OsaTuning() {
 SC_TEST("zones: the Osa's zones, methods and low-altitude points load; bad ones are refused with paths") {
     const EngagementTuning t = OsaTuning();
     SC_EXPECT(t.has_zones && t.has_methods && t.head_on.size() == 2);
-    SC_EXPECT_NEAR(t.pursuit_max_range_m, 6500.0, 1e-9);
+    // The fire-control computer's limits (voenizdat_osa_1991 p124-128) and the crews' Table 7.1 (p257).
+    SC_EXPECT_NEAR(t.pursuit_max_range_m, 8700.0, 1e-9);
+    SC_EXPECT_NEAR(t.pursuit_range_loss_s, 8.0, 1e-9);
+    SC_EXPECT_NEAR(t.max_slant_parameter_m, 8700.0, 1e-9);
+    SC_EXPECT_NEAR(t.slant_parameter_loss_s, 8.0, 1e-9);
+    SC_EXPECT(t.has_launch_ranges && t.launch_range_slow.size() == 4 && t.launch_range_fast.size() == 4);
+    SC_EXPECT_NEAR(t.launch_split_speed_mps, 300.0, 1e-9);
     SC_EXPECT_NEAR(t.low_target_elevation_deg, 1.8, 1e-9);
     SC_EXPECT(t.low_altitude.count("default") == 1 && t.low_altitude.count("helicopter") == 1);
 
@@ -533,6 +543,10 @@ SC_TEST("zones: the Osa's zones, methods and low-altitude points load; bad ones 
               error.find("outcome.low_altitude.default") != std::string::npos);
     SC_EXPECT(!LoadEngagementTuning(broken("\"gorka_max_agl_m\": 100", "\"gorka_max_agl\": 100"), out, &error) &&
               error.find("methods.gorka_max_agl: unknown key") != std::string::npos);
+    SC_EXPECT(!LoadEngagementTuning(broken("[100, 11000], [150, 13000]", "[150, 11000], [100, 13000]"), out, &error) &&
+              error.find("zones.launch_range_m.slow") != std::string::npos);
+    SC_EXPECT(!LoadEngagementTuning(broken("\"range_loss_s\": 8", "\"range_loss_s\": -8"), out, &error) &&
+              error.find("zones.pursuit.range_loss_s") != std::string::npos);
 }
 
 SC_TEST("zones: head-on, pursuit and optical zones follow the NVA's limits") {
@@ -546,9 +560,11 @@ SC_TEST("zones: head-on, pursuit and optical zones follow the NVA's limits") {
     SC_EXPECT(t.ZoneFor(8000.0, 150.0, 600.0, 600.0) == Z::None);   // faster than 500 m/s
     SC_EXPECT(t.ZoneFor(11000.0, 1000.0, 200.0, 200.0) == Z::None);  // beyond 10.3 km
     SC_EXPECT(t.ZoneFor(1000.0, 1000.0, 200.0, 200.0) == Z::None);   // inside 1.5 km
-    // Pursuit: a receding target to 6.5 km, 100-5000 m, up to 300 m/s.
-    SC_EXPECT(t.ZoneFor(6000.0, 500.0, 200.0, -200.0) == Z::Pursuit);
-    SC_EXPECT(t.ZoneFor(7000.0, 500.0, 200.0, -200.0) == Z::None);
+    // Pursuit: a receding target to 8700 - 8 V m (7.1 km at 200 m/s), 100-5000 m, up to 300 m/s.
+    SC_EXPECT(t.ZoneFor(7000.0, 500.0, 200.0, -200.0) == Z::Pursuit);
+    SC_EXPECT(t.ZoneFor(7200.0, 500.0, 200.0, -200.0) == Z::None);
+    SC_EXPECT(t.ZoneFor(6000.0, 500.0, 300.0, -300.0) == Z::Pursuit);  // 6.3 km at 300 m/s
+    SC_EXPECT(t.ZoneFor(6400.0, 500.0, 300.0, -300.0) == Z::None);
     SC_EXPECT(t.ZoneFor(6000.0, 500.0, 400.0, -400.0) == Z::None);
     SC_EXPECT(t.ZoneFor(6000.0, 50.0, 200.0, -200.0) == Z::None);    // low and receding
     // Optical: slow or hovering, 2-6.5 km, 10-25 m.
@@ -557,11 +573,97 @@ SC_TEST("zones: head-on, pursuit and optical zones follow the NVA's limits") {
     SC_EXPECT(t.ZoneFor(7000.0, 15.0, 0.0, 0.0) == Z::None);
     SC_EXPECT(t.ZoneFor(3000.0, 40.0, 0.0, 0.0) == Z::None);
     SC_EXPECT(t.ZoneFor(3000.0, 15.0, 150.0, 150.0) == Z::None);     // too fast for the optical zone, too low for head-on
+    // Head-on, the slant parameter (crossing parameter through the height) at most 8700 - 8 V m (eq. 2.18).
+    SC_EXPECT(t.ZoneFor(8000.0, 3000.0, 250.0, 100.0, 5500.0) == Z::HeadOn);   // hypot 6265 <= 6700
+    SC_EXPECT(t.ZoneFor(8000.0, 4000.0, 250.0, 100.0, 5500.0) == Z::None);     // hypot 6801 > 6700
     // Without the zones block the one box is every target's zone.
     EngagementTuning plain = t;
     plain.has_zones = false;
     SC_EXPECT(plain.ZoneFor(8000.0, 30.0, 600.0, 600.0) == Z::HeadOn);
     SC_EXPECT(plain.ZoneFor(6000.0, 500.0, 200.0, -200.0) == Z::HeadOn);
+}
+
+SC_TEST("zones: the meeting point: the target straight on, the missile along the line of sight at 490 m/s") {
+    const EngagementTuning t = OsaTuning();
+    SC_EXPECT_NEAR(t.missile_average_speed_mps, 490.0, 1e-9);  // 10.3 km in 21 s (voenizdat_osa_1991 p129)
+    // Head-on at 300 m/s from 15.8 km: 15800 - 300 t = 490 t, t = 20 s, met at 9.8 km.
+    EngagementTuning::Meeting m = t.MeetingFor(Vec3{0.0, 15800.0, 0.0}, Vec3{0.0, -300.0, 0.0}, 1000.0);
+    SC_EXPECT(m.ok);
+    SC_EXPECT_NEAR(m.time_s, 20.0, 1e-9);
+    SC_EXPECT_NEAR(m.range_m, 9800.0, 1e-6);
+    SC_EXPECT_NEAR(m.height_m, 1000.0, 1e-9);
+    SC_EXPECT(m.closing_mps > 0.0);
+    // Receding at 200 m/s from 4 km: 4000 + 200 t = 490 t, t = 13.793 s, met at 6758.6 m, still receding.
+    m = t.MeetingFor(Vec3{0.0, 4000.0, 0.0}, Vec3{0.0, 200.0, 0.0}, 500.0);
+    SC_EXPECT(m.ok && m.closing_mps < 0.0);
+    SC_EXPECT_NEAR(m.time_s, 4000.0 / 290.0, 1e-9);
+    SC_EXPECT_NEAR(m.range_m, 490.0 * 4000.0 / 290.0, 1e-6);
+    // A climbing target is met higher, by its climb rate times the flight time (4900^2 + (100 t)^2 = (490 t)^2: 10.2 s).
+    m = t.MeetingFor(Vec3{0.0, 4900.0, 0.0}, Vec3{0.0, 0.0, 100.0}, 1000.0);
+    SC_EXPECT(m.ok);
+    SC_EXPECT_NEAR(m.height_m, 1000.0 + 100.0 * m.time_s, 1e-9);
+    // Receding faster than the missile: never met.
+    SC_EXPECT(!t.MeetingFor(Vec3{0.0, 4000.0, 0.0}, Vec3{0.0, 600.0, 0.0}, 500.0).ok);
+}
+
+SC_TEST("zones: ЦЕЛЬ В ЗОНЕ is the meeting point's zone, within the crews' far edge of the launch zone (Table 7.1)") {
+    const EngagementTuning t = OsaTuning();
+    using Z = EngagementTuning::ZoneKind;
+    const Vec3 inbound300{0.0, -300.0, 0.0};
+    // At 1000 m, up to 300 m/s, the far edge of the launch zone is 16 km (voenizdat_osa_1991 p257): from 15.8 km the
+    // missile meets the target at 9.8 km; from 16.1 km it would meet it at 10.0 km, but that is past the crews' edge.
+    SC_EXPECT_NEAR(t.LaunchRangeFor(1000.0, 300.0), 16000.0, 1e-9);
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 15800.0, 0.0}, inbound300, 1000.0) == Z::HeadOn);
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 16100.0, 0.0}, inbound300, 1000.0) == Z::None);
+    // Without the table the edge is where the meeting reaches 10.3 km: 10300 x 790 / 490 = 16606 m.
+    EngagementTuning no_table = t;
+    no_table.has_launch_ranges = false;
+    SC_EXPECT(no_table.LaunchZoneFor(Vec3{0.0, 16500.0, 0.0}, inbound300, 1000.0) == Z::HeadOn);
+    SC_EXPECT(no_table.LaunchZoneFor(Vec3{0.0, 16700.0, 0.0}, inbound300, 1000.0) == Z::None);
+    // Inside 10.3 km the meeting point can be too close: from 2.5 km at 300 m/s it is met at 1.55 km; from 2.4 km at
+    // 1.49 km, inside the near edge.
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 2500.0, 0.0}, inbound300, 1000.0) == Z::HeadOn);
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 2400.0, 0.0}, inbound300, 1000.0) == Z::None);
+    // A low target: 8 km at 25-50 m, 9.5 km at 75 m (halfway to 11 km at 100 m); faster than 300 m/s, 9 km.
+    SC_EXPECT_NEAR(t.LaunchRangeFor(40.0, 250.0), 8000.0, 1e-9);
+    SC_EXPECT_NEAR(t.LaunchRangeFor(75.0, 250.0), 9500.0, 1e-9);
+    SC_EXPECT_NEAR(t.LaunchRangeFor(40.0, 450.0), 9000.0, 1e-9);
+    SC_EXPECT_NEAR(t.LaunchRangeFor(3000.0, 450.0), 15000.0, 1e-9);
+    const Vec3 inbound250{0.0, -250.0, 0.0};
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 7900.0, 0.0}, inbound250, 40.0) == Z::HeadOn);
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 8100.0, 0.0}, inbound250, 40.0) == Z::None);
+    // Pursuit: receding at 200 m/s from 4 km the meeting point is 6.76 km out (in); from 5 km, 8.45 km (beyond 7.1 km).
+    const Vec3 outbound200{0.0, 200.0, 0.0};
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 4000.0, 0.0}, outbound200, 500.0) == Z::Pursuit);
+    SC_EXPECT(t.LaunchZoneFor(Vec3{0.0, 5000.0, 0.0}, outbound200, 500.0) == Z::None);
+    // A meeting later than the missile's flight time is out of reach.
+    EngagementTuning short_flight = t;
+    short_flight.missile_max_flight_time_s = 15.0;
+    SC_EXPECT(short_flight.LaunchZoneFor(Vec3{0.0, 15800.0, 0.0}, inbound300, 1000.0) == Z::None);  // 20 s
+}
+
+SC_TEST("zones: ВНИМАНИЕ lights for an approaching target within 10.3 km + (21 s + 15 s) x its speed (eq. 2.24)") {
+    const EngagementTuning t = OsaTuning();
+    // 10300 + (10300 / 490 + 15) x 300 = 21106 m.
+    const Vec3 inbound300{0.0, -300.0, 0.0};
+    SC_EXPECT(t.AttentionFor(Vec3{0.0, 21000.0, 0.0}, inbound300, 1000.0));
+    SC_EXPECT(!t.AttentionFor(Vec3{0.0, 21200.0, 0.0}, inbound300, 1000.0));
+    SC_EXPECT(!t.AttentionFor(Vec3{0.0, 15000.0, 0.0}, Vec3{0.0, 300.0, 0.0}, 1000.0));  // receding beyond the zone
+    SC_EXPECT(t.AttentionFor(Vec3{0.0, 4000.0, 0.0}, Vec3{0.0, 200.0, 0.0}, 500.0));     // receding, in the pursuit zone
+}
+
+SC_TEST("engagement: the crew launches before the target is within 10.3 km, and the missile meets it inside") {
+    const Run r = Play(Engage(Target(24000, 1000), kAcquireAndFire));
+    const std::size_t at = r.debrief.find("guided at t1, ");
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const double launch_km = std::atof(r.debrief.c_str() + at + 14);
+    const std::size_t meet = r.debrief.find("meeting at ", at);
+    SC_EXPECT(meet != std::string::npos);
+    if (meet == std::string::npos) return;
+    const double meet_km = std::atof(r.debrief.c_str() + meet + 11);
+    std::printf("    launched at %.1f km, met at %.1f km\n", launch_km, meet_km);
+    SC_EXPECT(launch_km > 10.3 && meet_km <= 10.3 + 0.05);
 }
 
 SC_TEST("zones: the guidance method follows height, elevation and speed") {

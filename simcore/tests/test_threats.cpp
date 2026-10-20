@@ -305,9 +305,13 @@ SC_TEST("zones: the crossing parameter limits the head-on zone (6 km at 300 m/s,
     SC_EXPECT(t.ZoneFor(8000.0, 1000.0, 450.0, 300.0, 3500.0) == Z::HeadOn);
     SC_EXPECT(t.ZoneFor(8000.0, 1000.0, 450.0, 300.0, 4500.0) == Z::None);
     SC_EXPECT(t.ZoneFor(8000.0, 1000.0, 250.0, 100.0) == Z::HeadOn);  // parameter unknown: not checked
-    // A target whose course passes 7 km to the side never lights ЦЕЛЬ В ЗОНЕ, though it comes within 10 km.
-    const std::string wide = R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 7000, "north_m": 24000, "up_m": 1000 },
-        "waypoints": [ { "east_m": 7000, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150, "appear_at_s": 230 })";
+    // A target whose course passes 8 km to the side never lights ЦЕЛЬ В ЗОНЕ, though it comes within 10 km: beyond the
+    // head-on band's 6 km, and never within the receding edge (8700 - 8 x 150 = 7.5 km, voenizdat_osa_1991 eq. 2.19).
+    // At 7 km aside it would, briefly: 1 km before abeam the missile meets it 1.2 km past, 7.17 km out, receding.
+    SC_EXPECT(t.LaunchZoneFor(Vec3{7000.0, 1000.0, 1000.0}, Vec3{0.0, -150.0, 0.0}, 1000.0) == Z::Pursuit);
+    SC_EXPECT(t.LaunchZoneFor(Vec3{8000.0, 1000.0, 1000.0}, Vec3{0.0, -150.0, 0.0}, 1000.0) == Z::None);  // 8.2 km out
+    const std::string wide = R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 8000, "north_m": 24000, "up_m": 1000 },
+        "waypoints": [ { "east_m": 8000, "north_m": -20000, "up_m": 1000 } ], "speed_mps": 150, "appear_at_s": 230 })";
     const Run r = Play(Engage(wide, kAcquireAndFire));
     SC_EXPECT(r.summary.launches == 0);
     SC_EXPECT(Has(r, "radar track"));
