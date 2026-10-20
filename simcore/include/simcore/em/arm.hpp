@@ -77,6 +77,7 @@ inline int LaunchArm(EmScene& s, int shooter_platform_id, int def_index, const V
     a.tuned_freq_hz = freq_hz;
     a.tuned_prf_hz = prf_hz;
     a.aim_point = aim_point;
+    a.loft_s = direction != nullptr ? 0.0 : 0.5 * (aim_point - shooter->position).Length() / d.speed_mps;
     s.arms.push_back(a);
     s.Log(EmEventKind::Info, a.id, p.id, shooter->name + " fires " + d.name);
     return a.id;
@@ -225,12 +226,16 @@ inline void RunArms(EmScene& s, double dt) {
         } else if (a.has_los && !a.remembering && d.memory && s.time_s - a.last_heard_s > 0.3) {
             a.remembering = ArmGroundPoint(s, p->position, a.los, 100000.0, a.memory_point);
         }
-        // Guidance: pursue the line of sight, or fly to the remembered point; with nothing, ballistic.
+        // Guidance: pursue the line of sight, or fly to the remembered point; with nothing, ballistic. A lofted launch
+        // is flown as one: over the first half of the expected flight the autopilot holds the flight path above the line
+        // of sight, by the loft angle falling away to nothing, so the missile climbs and comes down on the radar.
+        const double loft = a.loft_s > 0.0 && flown_s < a.loft_s ? d.loft_rad * (1.0 - flown_s / a.loft_s) : 0.0;
+        auto lofted = [&](const Vec3& los) { return DirectionFromAzEl(AzimuthOf(los), ElevationOf(los) + loft); };
         const bool hearing = a.has_los && s.time_s - a.last_heard_s <= 0.3;
         Vec3 want;
         bool guided = false;
         if (powered && hearing) {
-            want = a.los;
+            want = lofted(a.los);
             guided = true;
         } else if (powered && a.remembering) {
             want = (a.memory_point - p->position).Normalized();
@@ -244,7 +249,7 @@ inline void RunArms(EmScene& s, double dt) {
         } else if (powered && !a.has_los) {
             // Out from the launch toward the believed point, pitching over from the loft, until it hears something.
             const Vec3 nose = p->velocity.Normalized();
-            const Vec3 dir = TurnToward(nose, (a.aim_point - p->position).Normalized(), kArmPitchOverMps2 / d.speed_mps * dt);
+            const Vec3 dir = TurnToward(nose, lofted((a.aim_point - p->position).Normalized()), kArmPitchOverMps2 / d.speed_mps * dt);
             p->velocity = dir * d.speed_mps;
         } else {
             p->velocity.z -= kArmGravity * dt;  // lost or spent: it falls

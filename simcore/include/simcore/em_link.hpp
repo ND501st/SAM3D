@@ -193,6 +193,7 @@ public:
         for (const EmDecoyDef& dd : def.decoys) {
             const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
             const int dp = world_.AddGroundPlatform("Decoy", em::Side::Red, dd.position.x, dd.position.y, mast);
+            decoy_platforms_.push_back(dp);
             decoy_emitters_.push_back(world_.AddDecoy(dp, search_, dd.mode));
         }
         jammer_ids_.assign(def.jammers.size(), 0);
@@ -481,7 +482,7 @@ public:
             const bool ghost = id.empty();
             // An echo standing still on the ground (the battery's own vehicles, its dummy positions) is ground clutter
             // to the operator, not a contact: he reports moving echoes and anything in the air.
-            if (ghost && (IsGroundClutter(t) || t.updates < kGhostUpdates || JustDowned(t))) continue;
+            if (ghost && (IsGroundClutter(t) || (t.updates < kGhostUpdates && !FastClosing(t)) || JustDowned(t))) continue;
             if (ghost) {
                 id = "T" + std::to_string(t.id);
             } else {
@@ -710,6 +711,115 @@ public:
         return false;
     }
 
+    // ---- Anti-radiation missiles (roadmap E6, em/arm.hpp). A carrier's warning receiver hears a radar in its weapon's
+    // band on the bearing of the place its briefing gives (within `bearing_tol_rad` of `aim_bearing_rad`): the signal it
+    // measured, from the strongest such contact heard in the last second that its threat library calls a hostile search,
+    // tracking or fire-control radar, or doesn't know (a pre-briefed launch needs an emitter where the target was
+    // briefed, not its name). False: none.
+    struct RwrSignal {
+        double freq_hz = 0.0;
+        double prf_hz = 0.0;
+        double bearing_rad = 0.0;  // true azimuth from the carrier
+        std::string name;          // what its threat library calls it ("" unknown)
+    };
+    bool RwrRadarInBand(const std::string& target_id, double freq_min_hz, double freq_max_hz, double aim_bearing_rad, double bearing_tol_rad,
+                        RwrSignal& out) const {
+        double best = -1e300;
+        for (const auto& r : rwrs_) {
+            if (r.target != target_id || r.esm == 0) continue;
+            const em::EsmState* es = world_.Scene().FindEsm(r.esm);
+            if (es == nullptr || !es->on) continue;
+            for (const em::EsmContact& c : es->contacts) {
+                if (world_.Time() - c.last_seen_s > 1.0) continue;
+                const std::string& k = c.sig.library_kind;
+                const bool known_radar = c.sig.hostile && (k == "search" || k == "track" || k == "fire_control");
+                if (!known_radar && !c.sig.library_id.empty()) continue;  // a friend, a jammer, a radio: not its target
+                if (std::fabs(std::remainder(c.bearing_rad - aim_bearing_rad, 2.0 * kPi)) > bearing_tol_rad) continue;
+                if (c.sig.freq_hz < freq_min_hz || c.sig.freq_hz > freq_max_hz || c.power_dbw <= best) continue;
+                best = c.power_dbw;
+                out.freq_hz = c.sig.freq_hz;
+                out.prf_hz = c.sig.prf_hz;
+                out.bearing_rad = c.bearing_rad;
+                out.name = c.sig.library_name;
+            }
+        }
+        return best > -1e300;
+    }
+    // Fire library ARM `arm_id` from the target's platform at `aim` (where it believes the radar is), set to `sig`.
+    // Returns the ARM's id (0: no such missile, or the target has no platform yet).
+    int LaunchArmFrom(const std::string& target_id, const std::string& arm_id, const Vec3& aim, const RwrSignal& sig) {
+        const int pid = PlatformOf(target_id);
+        if (pid == 0) return 0;
+        const int id = world_.FireArm(pid, arm_id, aim, sig.freq_hz, sig.prf_hz);
+        if (id != 0) arm_carriers_.emplace_back(id, target_id);
+        return id;
+    }
+    // The ARMs in flight, for display (Tacview, Unreal): each a missile platform of the EM world.
+    struct ArmView {
+        int id = 0;
+        std::string name;
+        std::string carrier;  // the scenario target that fired it
+        Vec3 position;
+        Vec3 velocity;
+    };
+    std::vector<ArmView> ArmsInFlight() const {
+        std::vector<ArmView> out;
+        const em::EmScene& s = world_.Scene();
+        for (const em::ArmState& a : s.arms) {
+            if (a.outcome != em::ArmOutcome::Flying) continue;
+            const em::Platform* p = s.FindPlatform(a.platform_id);
+            if (p == nullptr || !p->alive) continue;
+            out.push_back({a.id, s.lib.arms[static_cast<std::size_t>(a.def_index)].name, CarrierOf(a.id), p->position, p->velocity});
+        }
+        return out;
+    }
+    bool ArmsFlying() const {
+        for (const em::ArmState& a : world_.Scene().arms) {
+            if (a.outcome == em::ArmOutcome::Flying) return true;
+        }
+        return false;
+    }
+    // An ARM's end: what it put out of action ("unit": the vehicle; "dummy", "decoy": one of the position's; else the
+    // EM platform's name; "" nothing), how near it burst to the nearest ground object, and where.
+    struct ArmResult {
+        int id = 0;
+        std::string weapon;   // the library's id
+        std::string carrier;  // the scenario target that fired it
+        bool hit = false;
+        std::string hit_what;
+        std::string nearest_what;
+        double miss_m = -1.0;
+        double burst_s = 0.0;
+        Vec3 burst_point;
+    };
+    // The ARMs that ended since the last call.
+    std::vector<ArmResult> TakeArmResults() {
+        std::vector<ArmResult> out;
+        const em::EmScene& s = world_.Scene();
+        for (const em::ArmState& a : s.arms) {
+            if (a.outcome == em::ArmOutcome::Flying) continue;
+            if (std::find(arms_reported_.begin(), arms_reported_.end(), a.id) != arms_reported_.end()) continue;
+            arms_reported_.push_back(a.id);
+            ArmResult r;
+            r.id = a.id;
+            r.weapon = s.lib.arms[static_cast<std::size_t>(a.def_index)].id;
+            r.carrier = CarrierOf(a.id);
+            r.hit = a.outcome == em::ArmOutcome::Hit;
+            r.hit_what = r.hit ? WhatIs(a.hit_platform) : std::string();
+            r.nearest_what = WhatIs(a.nearest_platform);
+            r.miss_m = a.miss_m;
+            r.burst_s = a.burst_s;
+            r.burst_point = a.burst_point;
+            out.push_back(r);
+        }
+        return out;
+    }
+    // The unit's own platform is out of action (an ARM burst on it).
+    bool UnitDestroyed() const {
+        const em::Platform* u = world_.Scene().FindPlatform(unit_id_);
+        return u != nullptr && !u->alive;
+    }
+
     // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates. Chaff echoes are not drawn here yet.
@@ -854,6 +964,20 @@ private:
             if (t.first == id) return t.second;
         return 0;
     }
+    std::string CarrierOf(int arm_id) const {
+        for (const auto& c : arm_carriers_)
+            if (c.first == arm_id) return c.second;
+        return std::string();
+    }
+    // A ground object of the EM world as the debrief names it.
+    std::string WhatIs(int platform_id) const {
+        if (platform_id == 0) return std::string();
+        if (platform_id == unit_id_) return "unit";
+        if (std::find(dummy_platforms_.begin(), dummy_platforms_.end(), platform_id) != dummy_platforms_.end()) return "dummy";
+        if (std::find(decoy_platforms_.begin(), decoy_platforms_.end(), platform_id) != decoy_platforms_.end()) return "decoy";
+        const em::Platform* p = world_.Scene().FindPlatform(platform_id);
+        return p != nullptr ? p->name : std::string("?");
+    }
     // Referee-side association of a radar track with a scenario target by angle from the antenna (and, for the search
     // radar, by range): the nearest target inside the gates that no better track has claimed. It reads the targets'
     // true positions, because the game needs to know which target a lock or a launch is about; the crew's picture
@@ -906,6 +1030,15 @@ private:
         }
         return true;
     }
+    // A young track much faster than any aircraft, coming at the vehicle (an ARM's mark, roadmap E6): no clutter track
+    // wandering off a parked vehicle (their noisy speed points anywhere), so it is shown once confirmed.
+    bool FastClosing(const em::SensorTrack& t) const {
+        const Vec3 rel = t.Position() - Antenna();
+        const Vec3 v = t.Velocity();
+        const double speed = v.Length();
+        return speed > kFastMarkMps && rel.Length() > 1.0 && -Dot(v, rel.Normalized()) > 0.9 * speed;
+    }
+    static constexpr double kFastMarkMps = 450.0;
     bool DuplicateOf(const Contact& c, const std::vector<std::string>& shown) const {
         const em::EmScene& s = world_.Scene();
         for (const em::ChaffCloud& cl : s.chaff) {
@@ -966,7 +1099,10 @@ private:
     };
     std::vector<RadioSource> radio_sources_;
     std::vector<int> decoy_emitters_;
+    std::vector<int> decoy_platforms_;
     std::vector<int> dummy_platforms_;
+    std::vector<std::pair<int, std::string>> arm_carriers_;  // ARM id <-> the scenario target that fired it
+    std::vector<int> arms_reported_;                         // ARMs whose end TakeArmResults gave
     int node_ = 0;
     double antenna_height_m_ = 0.0;
     int capture_looks_ = 40;

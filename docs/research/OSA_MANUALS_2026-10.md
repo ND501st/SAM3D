@@ -657,7 +657,10 @@ preparation, firing under jamming, kill assessment (246-267).
 
 ### Recorded, not built
 
-- The ARM drill (emission discipline by Table 7.3, the 2-in-3-4 search bursts, ARM signs): roadmap E6's next step.
+- (Built 20 Oct 2026, roadmap E6, `docs/EM_ARCHITECTURE.md` §35: the ARM drill, pp262-264. The search bursts, Table
+  7.3 in `data/gameplay/osa_ak.json` `arm`, the tracking transmitter off after the burst, the search radar off while the
+  tracking radar holds a target alone, the PPI signs and the turn away. Still not built from that page: the signs on the
+  tracking radar's indicators and on the TV, the TV for tracking under the threat with the range by short bursts, p264.)
 - Kill assessment from the instruments' signs (the crew now learns the result from the outcome model).
 - Group targets (selection rules in a designation), small drones' signs, helicopter sectors and duty launchers.
 - The stabilisation's ДР mode and ПРЕДЕЛЬНЫЙ УГОЛ fault, ventilation summer / winter, pressurisation, the noise strip

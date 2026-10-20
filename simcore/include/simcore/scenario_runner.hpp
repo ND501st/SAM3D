@@ -208,6 +208,7 @@ public:
         UpdateLauncher();
         UpdateGuidanceEm();
         CueFromWarnings();
+        UpdateArms();
         UpdateFuel(dt);
         UpdatePositionPower();
         EvaluateTriggers();
@@ -233,6 +234,8 @@ public:
             log_.CollectCrewReports(c.Name(), std::move(reports), time_);
         }
         SeeInstruments();
+        WatchScope();
+        ArmEmission();
         UpdateGrades();
         UpdateCallouts();
         UpdateStress();
@@ -1161,6 +1164,104 @@ private:
             if (w.launch) CueTarget(t.id, true);
             if (w.lock) CueTarget(t.id, false);
         }
+    }
+
+    // ---- Anti-radiation missiles (roadmap E6, em/arm.hpp). A carrier (a target's "arms") fires on what its warning
+    // receiver hears: a hostile radar in its weapon's band, with the place it believes the radar is within its launch
+    // range; each ARM is set to the signal heard. After its last one it turns away (the sign the crew watches for:
+    // voenizdat_osa_1991 p262). The ARM itself is no scenario target: on the scope it is a ghost mark. Each one's end is
+    // logged; one that bursts on the vehicle ends the scenario.
+    struct ArmCarrierState {
+        int fired = 0;
+        double last_s = -1e9;
+        bool turned = false;
+    };
+    std::vector<ArmCarrierState> arm_carriers_;
+    std::vector<EmSensorLink::ArmResult> arm_results_;
+    int arms_fired_ = 0;
+    static constexpr int kArmAcmiBase = 0x7E000;
+    static constexpr double kArmBearingTolRad = 0.35;  // sam3d: about 20 degrees, a warning receiver's bearing on the briefed target
+    std::vector<int> arm_acmi_shown_;
+
+    void UpdateArms() {
+        if (!em_link_ || finished_) return;
+        arm_carriers_.resize(def_.targets.size());
+        for (const EmSensorLink::ArmResult& r : em_link_->TakeArmResults()) {
+            arm_results_.push_back(r);
+            char m[32];
+            std::snprintf(m, sizeof(m), "%.0f", r.miss_m);
+            const std::string who = r.carrier.empty() ? std::string("ARM") : r.carrier;
+            if (r.hit && r.hit_what == "unit") {
+                Event(who, std::string("its anti-radiation missile bursts ") + m + " m from the vehicle: out of action");
+                Finish("the vehicle was hit by an anti-radiation missile");
+                return;
+            }
+            if (r.hit) {
+                Event(who, std::string("its anti-radiation missile bursts ") + m + " m from the " + r.hit_what + ": out of action");
+            } else if (!r.nearest_what.empty()) {
+                Event(who, std::string("its anti-radiation missile misses: it bursts ") + m + " m from the " + r.nearest_what);
+            } else {
+                Event(who, "its anti-radiation missile misses");
+            }
+        }
+        const em::EmLibrary& lib = em_link_->World().Scene().lib;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (t.arms.count <= 0 || !targets_[i].spawned || targets_[i].gone) continue;
+            Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            const int w = lib.Arm(t.arms.weapon);
+            if (a == nullptr || !a->alive || w < 0) continue;
+            const em::ArmDef& weapon = lib.arms[static_cast<std::size_t>(w)];
+            ArmCarrierState& c = arm_carriers_[i];
+            const Vec3 aim = t.arms.has_aim ? t.arms.aim : def_.unit_position;
+            if (c.fired < t.arms.count) {
+                if (time_ - c.last_s < t.arms.interval_s) continue;
+                EmSensorLink::RwrSignal sig;
+                if (!em_link_->RwrRadarInBand(t.id, weapon.freq_min_hz, weapon.freq_max_hz, AzimuthOf(aim - a->position), kArmBearingTolRad, sig)) continue;
+                const double range = (aim - a->position).Length();
+                if (range > t.arms.launch_range_m || range < t.arms.min_range_m) continue;
+                if (em_link_->LaunchArmFrom(t.id, t.arms.weapon, aim, sig) == 0) continue;
+                ++c.fired;
+                ++arms_fired_;
+                c.last_s = time_;
+                char km[32];
+                std::snprintf(km, sizeof(km), "%.1f", range / 1000.0);
+                Event(t.id, "fires an anti-radiation missile (" + weapon.name + ") at " + (sig.name.empty() ? std::string("a radar") : sig.name) +
+                                ", " + km + " km");
+            } else if (t.arms.turn_away && !c.turned && time_ - c.last_s >= 1.0) {
+                c.turned = true;
+                Vec3 away = a->position - aim;
+                away.z = 0.0;
+                away = away.LengthSquared() > 1.0 ? away.Normalized() : Vec3{0.0, 1.0, 0.0};
+                a->waypoints = {Vec3{a->position.x + away.x * 40000.0, a->position.y + away.y * 40000.0, a->position.z}};
+                a->next_waypoint = 0;
+                a->max_turn_rate_rad_s = std::max(a->max_turn_rate_rad_s, t.evade_turn_rate_rad_s);  // a hard turn
+                Event(t.id, "turns away from the radar");
+            }
+        }
+    }
+
+public:
+    // Anti-radiation missiles in flight (roadmap E6), for display: empty without the EM layer.
+    std::vector<EmSensorLink::ArmView> ArmsInFlight() const {
+        return em_link_ ? em_link_->ArmsInFlight() : std::vector<EmSensorLink::ArmView>{};
+    }
+    // Every ARM that has ended, in order (hit or missed, by how far, what was hit); and how many the carriers fired.
+    const std::vector<EmSensorLink::ArmResult>& ArmResults() const { return arm_results_; }
+    int ArmsFired() const { return arms_fired_; }
+
+private:
+    void WriteArmsAcmi() {
+        if (!em_link_) return;
+        std::vector<int> shown;
+        for (const EmSensorLink::ArmView& v : em_link_->ArmsInFlight()) {
+            acmi_.WriteObject(kArmAcmiBase + v.id, v.position, v.velocity, "Type=Weapon+Missile,Name=" + v.name + ",Color=Blue");
+            shown.push_back(v.id);
+        }
+        for (int id : arm_acmi_shown_) {
+            if (std::find(shown.begin(), shown.end(), id) == shown.end()) acmi_.RemoveObject(kArmAcmiBase + id);
+        }
+        arm_acmi_shown_ = shown;
     }
 
     // A missile was launched at a target (`launch`), or the tracking radar holds it: its pilot may evade.
@@ -2855,6 +2956,7 @@ private:
         acmi_.WriteObject(kUnitAcmiId, def_.unit_position, Vec3{},
                           "Type=Ground+AntiAircraft,Name=" + console_.display_name + ",Color=Red");
         if (engagement_on_) engagement_.WriteAcmi(acmi_, time_, world_, eng_targets_);
+        WriteArmsAcmi();
         for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
             acmi_.WriteObject(kUnitAcmiId + 100 + static_cast<int>(i), def_.prepared.dummies[i].position, Vec3{},
                               "Type=Ground+Static,Name=Dummy position,Color=Red");
@@ -2879,6 +2981,7 @@ private:
         }
         if (!def_.end_when_targets_gone || def_.targets.empty()) return;
         if (engagement_on_ && engagement_.ShotsInFlight()) return;
+        if (em_link_ && em_link_->ArmsFlying()) return;  // an ARM still in the air decides the vehicle's fate
         for (const TargetState& s : targets_) {
             if (!s.spawned || !s.gone) return;
         }
@@ -3405,7 +3508,49 @@ private:
         const bool column = battery_ && def_.battery_drive_own &&
                             (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
         const bool halted = console_.equipment.GetInput("vehicle_stopped") && !column;
-        const bool stowing = npc_stow_ordered_ && !npc_resumed_;
+        const bool stowing = (npc_stow_ordered_ && !npc_resumed_) || (npc_arm_stow_ordered_ && !arm_relocated_);
+        if (engagement_on_ && engagement_.Method() != npc_track_method_) {
+            npc_track_method_ = engagement_.Method();
+            npc_track_since_s_ = time_;
+        }
+        // The ARM drill (voenizdat_osa_1991 p262): a sign of an ARM launch heard and nothing of ours in the air (a missile
+        // in flight is guided to its burst first): every transmitter off at once, «Излучение выключить!», and the target
+        // let go. Radiation comes back on through the EMCON path when the silence is over (arm_silence_s).
+        // Until the silence is over he sees to it: a drill that would radiate (a capture under way) is stopped, and a
+        // transmitter found on again is ordered off again.
+        if (ArmSilent() && time_ - npc_arm_off_s_ >= 10.0) {
+            bool acted = false;
+            for (CrewMember& m : crew_) {
+                const std::string d = m.Tracker().GetProcedure().id;
+                if (SeatHolder(m.Role()).empty() && m.IsBusy() &&
+                    (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc")) {
+                    m.CancelOrder();
+                    acted = true;
+                }
+            }
+            if (engagement_on_ && engagement_.Method() != TrackMethod::None) {
+                GiveCrewOrder("order_drop_target");
+                acted = true;
+            }
+            if (console_.panel.Get("soc.hv") == 1 || console_.panel.Get("soc.search") == 1) {
+                GiveCrewOrder("order_emcon_off");
+                npc_ordered_["order"] = {"order_emcon_off", time_};
+                acted = true;
+            }
+            if (console_.panel.Get("ssc.tx") == 1) {
+                GiveCrewOrder("order_ssc_off");
+                acted = true;
+            }
+            if (acted) {
+                npc_arm_off_s_ = time_;
+                Event(Cmdr(), "radiation off against the ARM");
+            }
+        }
+        // Under the threat of ARMs, the tracking transmitter off after the missile's burst (p262).
+        if (npc_ssc_off_due_ && engagement_on_ && !engagement_.ShotsInFlight() && engagement_.Method() == TrackMethod::None) {
+            npc_ssc_off_due_ = false;
+            if (console_.panel.Get("ssc.tx") == 1) GiveCrewOrder("order_ssc_off");
+        }
         // Readiness: the next drill of each idle seat toward the task.
         // Emission control (the battery's EMCON, an ambush not yet sprung): ready with the radars silent, the search
         // transmitter off; when it lifts, radiation on again.
@@ -3429,8 +3574,10 @@ private:
             const bool was_quiet = quiet_orders_;
             quiet_orders_ = true;  // the words once for all the drills given now
             std::vector<std::pair<std::string, std::string>> given;
+            // Under the least emission against ARMs the senior operator works his transmitter himself (ArmEmission).
+            const bool own_bursts = def_.doctrine.arm_threat && halted && !silent && console_.panel.Get("soc.search") == 1;
             for (const DrillPlan::Seat& s : plan.seats) {
-                if (!SeatFree(s.station)) continue;
+                if (!SeatFree(s.station) || (own_bursts && s.station == "senior_operator")) continue;
                 for (const std::string& drill : s.procedures) {
                     if (NpcOrdered(s.station, drill, 60.0)) continue;
                     if (NpcOrder(s.station, drill)) given.emplace_back(s.station, drill);
@@ -3530,7 +3677,7 @@ private:
             };
             for (const KnownTarget& k : recent) {
                 if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k) &&
-                    decoys_known_.count(k.target) == 0) {
+                    decoys_known_.count(k.target) == 0 && arms_heard_.count(k.target) == 0) {
                     known.push_back(k);
                 }
             }
@@ -3563,7 +3710,7 @@ private:
                 }
                 return;
             }
-            if (k.range_m > reach || !console_.equipment.IsReady("hv_ready")) {
+            if (k.range_m > std::min(reach, TrackOnRangeM(k.target)) || !console_.equipment.IsReady("hv_ready")) {
                 NpcIdentify();  // meanwhile: who is it?
                 return;
             }
@@ -3715,6 +3862,7 @@ private:
     // Emission discipline (doctrine search_bursts): halted, nothing tracked and no hostile he knows of within the
     // tracking radar's reach, the search radar radiates in bursts, on for on_s and off for off_s.
     bool NpcBurstOff(bool halted) {
+        if (def_.doctrine.arm_threat) return false;  // the senior operator's own rhythm (ArmEmission), not the commander's
         if (def_.doctrine.search_on_s <= 0.0 || !halted || engagement_.Method() != TrackMethod::None) return false;
         const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
         for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
@@ -3739,8 +3887,218 @@ private:
             return;
         }
     }
+    // ---- The ARM drill (roadmap E6; voenizdat_osa_1991 pp262-264). The senior operator watches his scope for the signs
+    // of an anti-radiation missile's launch: a smaller mark coming at the vehicle much faster than any aircraft, at a
+    // crossing parameter near zero (the ARM itself); and, warned of ARMs (doctrine arm_threat), a target that came at the
+    // battery at zero parameter turning away out at stand-off range (its launch made). A mark's motion is what his scope
+    // showed over its last looks, never the truth. His tier may not know the sign (a "basic" tier: the standard drills
+    // only) or miss it (its miss chance, more under stress). The commander acts on hearing it (Hear), not on the truth.
+    struct ScopeTrail {
+        std::vector<std::pair<double, Vec3>> marks;  // when and where (the crew's frame, the vehicle at the origin)
+        double last_seen_s = 0.0;
+        bool heading_in = false;
+        bool called = false;
+    };
+    std::map<std::string, ScopeTrail> scope_trails_;
+    std::set<std::string> arms_known_;  // marks the senior operator has called ARMs: not targets
+    std::set<std::string> arms_heard_;  // and the commander has heard called so
+    double arm_sign_s_ = -1e9;          // when the commander last heard a sign of an ARM launch
+    double arm_seen_s_ = -1e9;          // when the senior operator last called one
+    double arm_reported_s_ = -1e9;
+    bool arm_attacked_ = false;
+    bool arm_relocated_ = false;
+    bool npc_arm_stow_ordered_ = false;
+    double npc_arm_off_s_ = -1e9;
+    bool npc_ssc_off_due_ = false;
+    TrackMethod npc_track_method_ = TrackMethod::None;
+    double npc_track_since_s_ = 0.0;
+    static constexpr double kArmMarkSpeedMps = 450.0;  // sam3d: faster than the aircraft the battery meets (ARMs 600-1000 m/s)
+    static constexpr double kZeroParameterCos = 0.9;   // the mark's motion within about 25 degrees of straight at the vehicle
+    static constexpr double kTurnAwayMinRangeM = 8000.0;  // a turn out at stand-off range, not a target passing overhead
+    static constexpr double kTurnWindowS = 10.0;       // the marks a turn is judged by (across a gap between bursts)
+    static constexpr double kSameBlipM = 2500.0;       // a new mark this near where a lost one was heading is the same blip
+    static constexpr int kArmBeamProgram = 4;          // ЛУЧ АВТ. I–II (data/procedures/osa_ak.json soc.beam)
+    static constexpr double kStableTrackS = 5.0;       // a lock held this long is the textbook's "устойчивое сопровождение"
+
+    void WatchScope() {
+        if (!engagement_on_ || !def_.has_crew_data || !NpcAt("senior_operator")) return;
+        for (const Contact& c : engagement_.SearchPicture()) {
+            const double a = DegToRad(c.azimuth_deg);
+            const Vec3 p{c.range_m * std::sin(a), c.range_m * std::cos(a), 0.0};
+            if (scope_trails_.count(c.target_id) == 0) InheritTrail(c.target_id, p);
+            ScopeTrail& tr = scope_trails_[c.target_id];
+            tr.last_seen_s = time_;
+            if (!tr.marks.empty() && (tr.marks.back().second - p).Length() < 1.0) continue;  // the same look
+            tr.marks.push_back({time_, p});
+            while (tr.marks.size() > 2 && time_ - tr.marks.front().first > 10.0) tr.marks.erase(tr.marks.begin());
+            if (tr.called || arms_known_.count(c.target_id) != 0) continue;
+            const double span = time_ - tr.marks.front().first;
+            if (span < 1.5) continue;
+            const Vec3 v = (p - tr.marks.front().second) / span;
+            const double speed = v.Length();
+            const double closing = p.Length() > 1.0 ? -Dot(v, p.Normalized()) : 0.0;
+            const bool at_us = speed > 1.0 && closing > kZeroParameterCos * speed;
+            if (speed > kArmMarkSpeedMps && at_us) {
+                tr.called = true;
+                ArmSignSeen(c, "arm_launch");
+                continue;
+            }
+            if (!def_.doctrine.arm_threat || span < 3.0) continue;
+            if (at_us && speed > 100.0) tr.heading_in = true;
+            // The turn by its last few seconds' marks (the long window lags a turn).
+            std::size_t k = 0;
+            while (k + 1 < tr.marks.size() && time_ - tr.marks[k + 1].first >= 1.5 && time_ - tr.marks[k].first > kTurnWindowS) ++k;
+            const double recent_s = time_ - tr.marks[k].first;
+            if (!tr.heading_in || recent_s < 1.5) continue;
+            const Vec3 vr = (p - tr.marks[k].second) / recent_s;
+            const double closing_now = -Dot(vr, p.Normalized());
+            if (closing_now < 0.3 * vr.Length() && c.range_m > kTurnAwayMinRangeM) {
+                tr.called = true;
+                ArmSignSeen(c, "arm_turn_away");
+            }
+        }
+        for (auto it = scope_trails_.begin(); it != scope_trails_.end();) {
+            if (time_ - it->second.last_seen_s > 30.0) {
+                it = scope_trails_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    // A new mark where one he was watching went out of sight and was heading (the radar's track broke, e.g. between
+    // bursts while the target turned): to him it is the same blip, so its trail goes on under the new mark.
+    void InheritTrail(const std::string& id, const Vec3& p) {
+        std::string best;
+        double best_m = kSameBlipM;
+        for (const auto& kv : scope_trails_) {
+            const ScopeTrail& o = kv.second;
+            if (o.marks.size() < 2 || o.last_seen_s >= time_ - 0.05 || time_ - o.last_seen_s > 15.0) continue;
+            const auto& f = o.marks.front();
+            const auto& l = o.marks.back();
+            const double span = l.first - f.first;
+            const Vec3 v = span > 0.5 ? (l.second - f.second) / span : Vec3{};
+            const double m = (l.second + v * (time_ - l.first) - p).Length();
+            if (m < best_m) {
+                best_m = m;
+                best = kv.first;
+            }
+        }
+        if (best.empty()) return;
+        ScopeTrail moved = scope_trails_[best];
+        scope_trails_.erase(best);
+        scope_trails_[id] = moved;
+    }
+    // The mark's speed as the senior operator's scope shows it (< 0: not known yet).
+    double ScopeSpeedMps(const std::string& target) const {
+        const auto it = scope_trails_.find(target);
+        if (it == scope_trails_.end() || it->second.marks.size() < 2) return -1.0;
+        const auto& m = it->second.marks;
+        const double span = m.back().first - m.front().first;
+        return span >= 1.5 ? (m.back().second - m.front().second).Length() / span : -1.0;
+    }
+    void ArmSignSeen(const Contact& c, const std::string& callout) {
+        const bool launch = callout == "arm_launch";
+        const SkillTier* t = TierAt("senior_operator");
+        if (t != nullptr && t->knows == "basic") {
+            Event("senior_operator", launch ? "does not know the mark of an ARM for what it is" : "takes the target's turn for nothing");
+            return;
+        }
+        const CrewMember* so = MemberAt("senior_operator");
+        const double miss = t != nullptr ? t->miss_chance * (so != nullptr && so->Stressed() ? t->stress_factor : 1.0) : 0.0;
+        if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
+            Event("senior_operator", launch ? "misses the mark of an ARM on his scope" : "misses the target's turn away");
+            return;
+        }
+        if (launch) {
+            arms_known_.insert(c.target_id);
+            for (auto& kv : pictures_) kv.second.Forget(c.target_id);
+        }
+        arm_seen_s_ = time_;  // he holds his next burst off himself (ArmEmission)
+        KnownTarget k;
+        k.target = c.target_id;
+        k.has_azimuth = true;
+        k.azimuth_deg = c.azimuth_deg;
+        k.time_s = time_;
+        Event("senior_operator", launch ? "sees a small fast mark coming straight at the vehicle: an ARM" : "sees a target that came at the battery turn away");
+        Say(callout, "senior_operator", {{"azimuth", MilsText(c.azimuth_deg)}}, &k);
+    }
+    // The commander heard a sign of an ARM launch: the missile in the air is guided to its burst, then every transmitter
+    // goes off (ArmSilent); the attack is reported up the battery net.
+    void ArmSignHeard(const SpokenCallout& s) {
+        if (!arm_attacked_) Event(Cmdr(), "hears the sign of an ARM launch: radiation off once the missile in the air has burst");
+        arm_attacked_ = true;
+        arm_sign_s_ = time_;
+        if (battery_ && callouts_ && time_ - arm_reported_s_ > 60.0) {
+            arm_reported_s_ = time_;
+            callouts_->Say(time_, "report_arm_attack", Cmdr(), {{"callsign", OwnCallsign()}, {"azimuth", MilsText(s.about.azimuth_deg)}}, 3.0);
+        }
+    }
+    // Silent against an ARM: from the sign (once nothing of ours is in the air) for arm_silence_s.
+    bool ArmSilent() const {
+        return time_ - arm_sign_s_ < def_.doctrine.arm_silence_s && !engagement_.ShotsInFlight();
+    }
+    double SearchTurnS() {
+        if (em_link_) {
+            const em::RadarState* r = em_link_->SearchRadar();
+            const em::EmLibrary& lib = em_link_->World().Scene().lib;
+            if (r != nullptr && r->def_index >= 0 && static_cast<std::size_t>(r->def_index) < lib.radars.size()) {
+                const double p = lib.radars[static_cast<std::size_t>(r->def_index)].emitter.scan_period_s;
+                if (p > 0.0) return p;
+            }
+        }
+        return 60.0 / 33.0;  // 33 rpm
+    }
+    // The range at which the commander has the tracking transmitter put on a target: its reach, and under the threat of
+    // ARMs (doctrine arm_threat) Table 7.3's far-edge range for the target's speed as the scope shows it (unknown: fast).
+    double TrackOnRangeM(const std::string& target) const {
+        const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
+        const EngagementTuning& t = def_.tuning;
+        if (!def_.doctrine.arm_threat || !t.has_arm_table) return reach;
+        const double speed = ScopeSpeedMps(target);
+        const double table = speed >= 0.0 && speed < t.arm_split_speed_mps ? t.arm_track_on_slow_far_m : t.arm_track_on_fast_far_m;
+        return std::min(reach, table);
+    }
+    // The least emission under the threat of ARMs (doctrine arm_threat, voenizdat_osa_1991 p262): the search
+    // transmitter's high voltage off now? Off while the tracking radar holds a stable track with nothing else about;
+    // with nothing tracked, on for 2 antenna turns after every arm_search_off_turns.
+    bool ArmSearchOff() {
+        const TrackMethod m = engagement_.Method();
+        if (m != TrackMethod::None) {
+            if (m != TrackMethod::Radar || time_ - npc_track_since_s_ < kStableTrackS) return false;
+            const std::string tracked = engagement_.TrackedTarget();
+            for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
+                if (k.has_range && !k.friendly && k.target != tracked && arms_heard_.count(k.target) == 0) return false;
+            }
+            return true;
+        }
+        const double turn = SearchTurnS();
+        return std::fmod(time_, turn * (2.0 + def_.doctrine.arm_search_off_turns)) >= 2.0 * turn;
+    }
+
+    // Under the threat of ARMs (doctrine arm_threat) the senior operator keeps the least emission himself, his duty under
+    // the doctrine as ЗАПРОС is with a new echo: ВЫСОКОЕ on and off by ArmSearchOff while the search runs at a halt. A
+    // player in his seat does it by hand.
+    void ArmEmission() {
+        if (!def_.doctrine.arm_threat || !engagement_on_ || !NpcAt("senior_operator")) return;
+        if (!console_.equipment.GetInput("vehicle_stopped") || console_.panel.Get("soc.search") != 1 || NpcSilent()) return;
+        if (!console_.equipment.IsReady("hv_ready") || (npc_arm_stow_ordered_ && !arm_relocated_) || (npc_stow_ordered_ && !npc_resumed_)) return;
+        CrewMember* so = MemberAt("senior_operator");
+        if (so == nullptr || so->IsBusy()) return;
+        if (console_.panel.Get("soc.beam") != kArmBeamProgram) {  // both low beams in each two-turn burst
+            if (const Procedure* p = console_.FindProcedure("arm_beams")) {
+                so->Order(*p);
+                return;
+            }
+        }
+        // Having seen a sign of an ARM launch himself he gives no more bursts until the silence is over.
+        const bool off = ArmSearchOff() || time_ - arm_seen_s_ < def_.doctrine.arm_silence_s;
+        if (console_.panel.Get("soc.hv") != (off ? 1 : 0)) return;
+        if (const Procedure* p = console_.FindProcedure(off ? "hv_off" : "hv_on")) so->Order(*p);
+    }
+
     // The battery's EMCON, or an ambush not yet sprung: sprung once a hostile is designated within 15 km (sam3d).
     bool NpcSilent() {
+        if (ArmSilent()) return true;
         if (!battery_) return false;
         if (battery_->Emcon()) return true;
         if (battery_->CurrentMode() != Battery::Mode::Ambush) {
@@ -3799,6 +4157,29 @@ private:
         if (!hostile && is_ready && !npc_checked_ && !npc_fought_ && started_cold_) {
             npc_checked_ = NpcGive("order_function_check", 600.0);
             return npc_checked_;
+        }
+        // Attacked by ARMs, with the regiment's standing order to change position after it (doctrine relocate_after_arm;
+        // the battery commander changes position only on the regiment commander's order, voenizdat_osa_1991 p238): when
+        // the fight is over and the silence too, the crew stows and the battery moves to its reserve position, keeping its
+        // order; there it deploys, and the crew makes ready again.
+        if (def_.doctrine.relocate_after_arm && battery_ && arm_attacked_ && !arm_relocated_ && npc_fought_ && !hostile &&
+            !ArmSilent() && time_ - npc_last_hostile_s_ > 90.0 && time_ - arm_sign_s_ > def_.doctrine.arm_silence_s + 30.0) {
+            if (!npc_arm_stow_ordered_) {
+                npc_arm_stow_ordered_ = GiveCrewOrder("order_march");
+                return true;
+            }
+            const CrewTask* stowed = def_.crew_data.FindTask("stowed");
+            if (stowed != nullptr && console_.equipment.AllHold(stowed->conditions, console_.panel)) {
+                arm_relocated_ = true;
+                npc_fought_ = false;
+                if (NpcAt("driver")) Say("ready_to_march", "driver");
+                BatteryOrder o;
+                o.kind = BatteryOrder::Kind::Relocate;
+                o.covered = def_.doctrine.relocate_to;
+                battery_->Order(o, time_);
+                Event(def_.id, "attacked by ARMs: the crew is stowed and the battery changes position (the regiment's standing order)");
+            }
+            return true;
         }
         // A reload under way (the launcher not full and a TZM in the battery): the crew waits for it before marching on.
         const bool reloading = launcher_ && battery_ && launcher_->LoadedCount() < launcher_->Capacity() && BatteryHasTzm();
@@ -3941,7 +4322,9 @@ private:
         for (std::size_t i = 0; i < def_.crew_data.reports.size(); ++i) {
             const AutoReportDef& r = def_.crew_data.reports[i];
             const bool now = console_.equipment.Holds(r.when, console_.panel);
-            const bool flicker = time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS;
+            // Under the least emission against ARMs the search transmitter goes on every few turns: "Готов СОЦ!" once is enough.
+            const bool bursting = def_.doctrine.arm_threat && r.callout == "soc_ready" && time_ - report_said_s_[i] < 120.0;
+            const bool flicker = bursting || (time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS);
             if (now && report_state_[i] == 0 && NpcAt(r.from) && !flicker) {
                 Say(r.callout, r.from);
                 report_said_s_[i] = time_;
@@ -3999,6 +4382,7 @@ private:
                         }
                         break;
                     case EngagementEvent::Kind::Hit:
+                        if (def_.doctrine.arm_threat) npc_ssc_off_due_ = true;  // the tracking transmitter off after the burst
                         if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
                         HeardDestroyed(e.target);
                         OwnReport(BatteryFire::Event::Kind::Hit, e.target);
@@ -4873,6 +5257,7 @@ private:
     void SeeInstruments() {
         if (!engagement_on_ || !def_.has_crew_data) return;
         for (const Contact& c : engagement_.SearchPicture()) {
+            if (arms_known_.count(c.target_id) != 0) continue;  // an ARM's mark he has called: not a target
             KnownTarget k;
             k.target = c.target_id;
             k.has_azimuth = k.has_range = true;
@@ -4923,6 +5308,15 @@ private:
                 }
             }
             if (!s.has_about) continue;
+            // The signs of an ARM launch (the ARM drill): the ARM's mark is not a target; the commander acts on either.
+            if (s.id == "arm_launch" || s.id == "arm_turn_away") {
+                if (s.id == "arm_launch") pictures_[c.Role()].Forget(s.about.target);
+                if (c.Role() == Cmdr() && npc) {
+                    if (s.id == "arm_launch") arms_heard_.insert(s.about.target);
+                    ArmSignHeard(s);
+                }
+                continue;
+            }
             KnownTarget k = s.about;
             k.time_s = s.start_s;
             k.source = "told by " + SpeakerName(s.from);

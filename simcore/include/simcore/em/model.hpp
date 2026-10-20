@@ -578,6 +578,7 @@ struct ArmState {
     double tuned_freq_hz = 0.0;  // the signal it was set to at launch
     double tuned_prf_hz = 0.0;
     Vec3 aim_point;               // where its carrier believed the radar was (it pitches over toward it until it hears)
+    double loft_s = 0.0;          // a lofted launch: the flight path held above the line of sight until then (0: none)
     Vec3 los;                     // the seeker's smoothed line of sight (unit vector)
     bool has_los = false;
     double last_heard_s = -1e9;

@@ -87,6 +87,12 @@ the rules and the list in readable form.
 | `order_emcon_off` | Излучение выключить! | Radiation off! | Senior op `stop_search` (high voltage off); operator: SSC transmitter off | sam3d |
 | `order_emcon_on` | Излучение включить! | Radiation on! | The reverse | sam3d |
 | `order_emcon_tv` | Работать без излучения! | Engage without radiating! | Senior op `emcon_tv_azimuth`; deputy `emcon_tv_engagement` | sam3d, after `samsim_osa` p33–35 |
+| `order_ssc_off` | Высокое ССЦ выключить! | Tracking transmitter off! | Operator `ssc_tx_off` (ПЕРЕДАТЧИК ОТКЛ): after the burst under the ARM threat, and with «Излучение выключить!» against an ARM | sam3d phrasing; the act `voenizdat_osa_1991` p262 |
+
+The ARM drill's reports (roadmap E6): `arm_launch` «Пуск ПРР! Азимут {azimuth}!» and `arm_turn_away` «Цель, азимут
+{azimuth}, отвернула — возможен пуск ПРР!» (the senior operator, on the signs of `voenizdat_osa_1991` p262; sam3d
+phrasing), and on the battery net `report_arm_attack` «{callsign}: пуск ПРР, азимут {azimuth}!». The commander reacts
+to hearing them, not to the truth (`docs/EM_ARCHITECTURE.md` §35).
 
 ### 3.4 Logistics and command orders
 

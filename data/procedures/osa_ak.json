@@ -785,6 +785,18 @@
       "steps": [ { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, the SOC transmitter on", "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] } ]
     },
     {
+      "id": "arm_beams", "name": "Both low beams in each burst (against ARMs)", "situational": true,
+      "source": "sam3d; the bursts: voenizdat_osa_1991 p262 (the search transmitter's high voltage on for 2 turns after every 3-4); the programmes: samsim_osa (ЛУЧ АВТ. I–II)", "confidence": "estimate",
+      "notes": "Senior operator, under the least emission against ARMs (scenario doctrine arm_threat): ЛУЧ to АВТ. I–II, a two-turn programme, so each two-turn burst lights beams I and II. Under АВТ. I–III a burst lights only two of the three beams, and the low beam is dark in every third burst (roadmap E6).",
+      "steps": [ { "control": "soc.beam", "position": 4, "description": "ЛУЧ АВТ. I–II, the two low beams in turn" } ]
+    },
+    {
+      "id": "ssc_tx_off", "name": "Tracking transmitter off (against ARMs)", "situational": true,
+      "source": "voenizdat_osa_1991 p262 (firing under the threat of ARMs: the tracking transmitter's high voltage off after the missile's burst); the switch: samsim_osa p22-24 (ПЕРЕДАТЧИК)", "confidence": "medium",
+      "notes": "Operator, at the commander's order (order_ssc_off): ПЕРЕДАТЧИК ОТКЛ, the guard left open so the next target is one switch (roadmap E6, the ARM drill).",
+      "steps": [ { "control": "ssc.tx", "position": 0, "description": "ПЕРЕДАТЧИК ОТКЛ, the SSC transmitter off" } ]
+    },
+    {
       "id": "tv_watch", "name": "Look at the tracked target on the TV", "situational": true,
       "source": "sam3d", "confidence": "estimate",
       "notes": "Deputy commander, with the radar holding the target: the TV camera on and the narrow lens, to see what the radar holds (a decoy drone shows small where its echo says aircraft: roadmap E6, em/optical.hpp). Ordered when the scenario's doctrine says to check on the TV before a launch.",

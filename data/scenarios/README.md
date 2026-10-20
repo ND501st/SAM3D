@@ -193,6 +193,31 @@ equipment without the turbine or the take-off generator and burns no fuel; it dr
 
 `own_unit.prepared_position` (optional, roadmap 7.6): `{ "emplacement": true, "nets": true, "wire": true, "dummies": [ { "position": {...}, "decoy": "when_radar_off" } ] }`; values from `command/prepared_positions.json`.
 
+**Anti-radiation missiles (roadmap E6, `simcore/em/arm.hpp`, `docs/EM_ARCHITECTURE.md` §35).** A target with a warning
+receiver (`"rwr"`, so `own_unit.em` with the library that has it) can carry ARMs: `"arms": { "weapon": "agm88a_class_harm",
+"count": 1, "launch_range_km": 22, "min_range_km": 3, "interval_s": 4, "aim": {...}, "turn_away": true }`. `weapon` is an
+`arms` entry of the EM libraries (`em/nato_1985.json`: `agm45_class_shrike`, `agm88a_class_harm`, `kh58_class`);
+`launch_range_km` and `min_range_km` default to the weapon's; `aim` is where its intelligence has the radar (default the
+unit's position, a pre-briefed launch). It fires when its warning receiver hears a radar in the weapon's band on the aim's
+bearing (one its library calls hostile search, tracking or fire control, or one it doesn't know) and the aim is within
+range; each ARM is set to the signal heard; after its last it turns away hard. The ARM flies in the EM layer: on our scope
+it is a ghost mark `T<n>`, in Tacview a `Weapon+Missile`; one that bursts on the vehicle ends the scenario ("the vehicle
+was hit by an anti-radiation missile"), one on a dummy or decoy is logged (`ScenarioRunner::ArmResults`).
+
+`"doctrine": { "arm_threat": true, "arm_silence_s": 60, "arm_search_off_turns": 3, "relocate_after_arm": { "to": {...} } }`:
+the crew warned of ARMs fights with the least emission (`voenizdat_osa_1991` pp262-264): the senior operator puts the
+search transmitter's high voltage on for 2 antenna turns after every `arm_search_off_turns` (3-4 in the textbook), with
+ЛУЧ АВТ. I–II so that both low beams are in each burst, and off while the tracking radar holds a target alone; the
+commander puts the tracking transmitter on only from Table 7.3's range for the target's speed
+(`data/gameplay/osa_ak.json` `arm`) and has it off after the burst. Every crew reacts to the signs of a launch (the
+senior operator's "Пуск ПРР!": a small mark coming at the vehicle faster than 450 m/s at zero parameter; warned of ARMs,
+also a target that came at the battery turning away), if his tier knows the drill (class2 and up): the missile in the
+air is guided to its burst, then «Излучение выключить!» for `arm_silence_s`, and the attack is reported up the battery
+net. `relocate_after_arm` (needs a battery with `drive_own`) is the regiment's standing order: when the fight is over
+the crew stows and the battery moves to `to` in its order (battery order `relocate`, with `covered`, the own vehicle's
+new place), and deploys there. `osa_arm_drill.json` (HARM class) and `osa_arm_drill_shrike.json` (Shrike class) are the
+drill's missions.
+
 `osa_battery_practice.json` is the EM practice shoot with the whole battery in a prepared position (the practice map's scenario).
 
 `own_unit.position_power` (optional, roadmap 7.6) is a prepared position's supply, and sets `external_power` itself every
