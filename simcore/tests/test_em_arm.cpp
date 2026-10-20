@@ -83,6 +83,42 @@ SC_TEST("em arm: the library's ARM classes load with their bands, memory and ran
     SC_EXPECT(lib.arms[static_cast<std::size_t>(harm)].freq_max_hz > 14.5e9);
 }
 
+SC_TEST("em arm: the seeker's one-way power, its tuning and the memory point match hand calculations") {
+    // One-way radar equation: 100 kW EIRP at 7 GHz heard 10 km away (prototype/tests/test_em.py checks the same).
+    const double lambda = kSpeedOfLight / 7.0e9;
+    const double hand = 1.0e5 * lambda * lambda / (16.0 * kPi * kPi * 1.0e8);
+    SC_EXPECT_NEAR(OneWayReceivedPowerW(1.0e5, 0.0, 7.0e9, 10000.0, 0.0), hand, hand * 1e-12);
+    SC_EXPECT_NEAR(hand, 1.1617e-8, 1.2e-11);
+    // Tuned +-10 % around the signal heard at launch.
+    ArmDef d;
+    d.freq_min_hz = 2e9;
+    d.freq_max_hz = 20e9;
+    d.tune_fraction = 0.1;
+    d.prf_fraction = 0.1;
+    ArmState a;
+    a.tuned_freq_hz = 7.0e9;
+    a.tuned_prf_hz = 2800.0;
+    EmitterState e;
+    e.def.waveform.prf_hz = 2800.0;
+    e.freq_hz = 7.3e9;
+    SC_EXPECT(ArmTunedTo(d, a, e));
+    e.freq_hz = 14.5e9;
+    SC_EXPECT(!ArmTunedTo(d, a, e));
+    // Lofted 10 degrees above the line to a point level with it.
+    const Vec3 dir = ArmLaunchDirection({0.0, -10000.0, 0.0}, {0.0, 0.0, 0.0}, DegToRad(10.0));
+    SC_EXPECT_NEAR(dir.x, 0.0, 1e-12);
+    SC_EXPECT_NEAR(RadToDeg(ElevationOf(dir)), 10.0, 1e-9);
+    // The memory point from 1000 m up, the line of sight 10 degrees down, over flat ground at the origin's height:
+    // 1000 / tan 10 = 5671 m, and the Earth's drop over that distance (d^2 / 2R) carries it about 14 m further.
+    EmWorld w(GeoPoint{}, nullptr, 1);
+    Vec3 p;
+    SC_EXPECT(ArmGroundPoint(w.Scene(), {0.0, 0.0, 1000.0}, DirectionFromAzEl(0.0, DegToRad(-10.0)), 100000.0, p));
+    const double flat = 1000.0 / std::tan(DegToRad(10.0));
+    const double drop = flat * flat / (2.0 * 6371000.0) / std::tan(DegToRad(10.0));
+    SC_EXPECT_NEAR(p.HorizontalLength(), flat + drop, 1.5);
+    SC_EXPECT(!ArmGroundPoint(w.Scene(), {0.0, 0.0, 1000.0}, DirectionFromAzEl(0.0, 0.1), 20000.0, p));
+}
+
 SC_TEST("em arm: a radar left on is hit, by either class") {
     int shrike_hits = 0, harm_hits = 0;
     for (std::uint64_t seed = 1; seed <= 4; ++seed) {
