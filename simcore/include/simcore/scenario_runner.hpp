@@ -3478,6 +3478,11 @@ private:
                 if (battery_ && def_.battery_drive_own) {  // the battery drives us: its short halt (inside 20 km: in the column)
                     BatteryOrder o;
                     o.kind = BatteryOrder::Kind::ShortHalt;
+                    o.threat_range_m = k.range_m;
+                    if (k.has_azimuth && k.true_azimuth) {
+                        o.threat_has_azimuth = true;
+                        o.threat_az_deg = k.azimuth_deg;
+                    }
                     battery_->Order(o, time_);
                 } else if (NpcAt("driver")) {  // our driver stops the vehicle
                     npc_halt_at_ = time_ + SpeakDelayS("driver") + 2.0;
@@ -3606,11 +3611,6 @@ private:
             const SkillTier* t = CommanderTier();
             const bool slow = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->branch_error_chance;
             npc_branch_at_ = time_ + (slow ? 10.0 : 0.0);
-                    o.threat_range_m = k.range_m;
-                    if (k.has_azimuth && k.true_azimuth) {
-                        o.threat_has_azimuth = true;
-                        o.threat_az_deg = k.azimuth_deg;
-                    }
         }
         if (branch && time_ < npc_branch_at_) return;
         if (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) {
