@@ -241,9 +241,8 @@ def build():
         L.fixture(p, (u, 0.05), 'lamp', 0.009, 'red')
     L.nameplate(p, (-0.22, 0.05), 'ПУ-12М', 0.07)
     p = L.panel('pvs3_panel', 'PVS-3 intercom box', 'driver', 'pvs3', (0.20, 0.13))
-    L.control('intercom.pvs3', p, (0.05, -0.02), 'toggle')
-    L.nameplate(p, (-0.04, 0.045), 'ПВС-3')
-    L.fixture(p, (-0.05, -0.02), 'socket', 0.028, 'chrome')
+    pvs_box(L, p, 'pvs3', 'driver', (-0.05, -0.02))
+    L.nameplate(p, (-0.06, 0.045), 'ПВС-3')
     L.fixture(p, (0.05, 0.02), 'knob', 0.018, 'black')
     p = L.panel('scv_panel', 'ŠČV input board', 'driver', 'scv', (0.27, 0.19),
                 notes='The input board (ЩВ; csla_pu12_manual item 32, valka_pu12): the 220 V supply\'s selector and the '
@@ -292,15 +291,14 @@ def build():
         L.fixture(p, (u, -0.02), 'knob', 0.018, 'black')
     L.nameplate(p, (0.0, 0.07), 'ДТП', 0.04)
     p = L.panel('pvs2_panel', 'PVS-2 intercom box', 'squad_leader', 'pvs2', (0.17, 0.13))
-    L.control('intercom.pvs2', p, (0.04, -0.02), 'toggle')
-    L.nameplate(p, (-0.03, 0.045), 'ПВС-2')
-    L.fixture(p, (-0.04, -0.02), 'socket', 0.028, 'chrome')
+    pvs_box(L, p, 'pvs2', 'squad_leader', (-0.05, -0.02))
+    L.nameplate(p, (-0.055, 0.045), 'ПВС-2')
     status_board(L, 'it1', 'IT-1M status board', 'squad_leader', 'it1', 'ИТ-1М', '4',
                  'At the vehicle commander\'s (the squad leader\'s) place (rwd_mb3: "Tableau IT-1M in PU-12M am Platz des '
                  'Kommandeurs"; csla_pu12_manual item 4).')
     p = L.r123m_panel('r123_fug1_panel', 'R-123M (FuG-1)', 'squad_leader', 'r123_fug1')
     radio_lamps(L, p, 'fug1')
-    L.control('radio.fug1.power', p, (-0.112, -0.0935), 'toggle')
+    r123m_controls(L, p, 'fug1')
     p = L.panel('pab2_panel', 'PAB-2 aiming circle case', 'squad_leader', 'pab2_case', (0.26, 0.18),
                 notes='The aiming circle\'s case (SAM3D: the plan doesn\'t show where it is stowed). Opening it stands for '
                       'taking the PAB-2 out and setting it up on the ground (nav.pab2).')
@@ -426,20 +424,24 @@ def build():
     for u in (-0.08, -0.04, 0.0, 0.04, 0.08):
         L.fixture(p, (u, -0.03), 'toggle', 0.012)
     L.nameplate(p, (0.0, 0.08), 'ЩК', 0.04)
-    p = L.r123m_panel('r123_fug4_panel', 'R-123M (FuG-4)', 'battery_commander', 'r123_fug4')
-    radio_lamps(L, p, 'fug4')
-    L.control('radio.fug4.power', p, (-0.112, -0.0935), 'toggle')
+    p = L.r123m_panel('r123_fug2_panel', 'R-123M (FuG-2)', 'battery_commander', 'r123_fug2')
+    radio_lamps(L, p, 'fug2')
+    r123m_controls(L, p, 'fug2')
     r407(L, manifest)
 
     # ---------------------------------------------------------------------------------------------- the radio operator
     r111(L, manifest)
-    p = L.r123m_panel('r123_fug2_panel', 'R-123M (FuG-2)', 'radio_operator', 'r123_fug2')
-    radio_lamps(L, p, 'fug2')
-    L.control('radio.fug2.power', p, (-0.112, -0.0935), 'toggle')
+    p = L.r123m_panel('r123_fug4_panel', 'R-123M (FuG-4)', 'radio_operator', 'r123_fug4')
+    radio_lamps(L, p, 'fug4')
+    r123m_controls(L, p, 'fug4')
     p = L.panel('pvs1_panel', 'PVS-1 intercom box', 'radio_operator', 'pvs1', (0.19, 0.13))
-    L.control('intercom.pvs1', p, (0.05, -0.02), 'toggle')
-    L.nameplate(p, (-0.03, 0.045), 'ПВС-1')
-    L.fixture(p, (-0.05, -0.02), 'socket', 0.028, 'chrome')
+    pvs_box(L, p, 'pvs1', 'radio_operator', (-0.05, -0.02))
+    L.nameplate(p, (-0.06, 0.045), 'ПВС-1')
+    rk1u(L)
+    document(L, 'radio_data_panel', 'Radio data (радиоданные)', 'radio_operator', 'table51', (0.0, 0.0), 'radio_data',
+             "The radio data on the radio operator's table: each net's frequencies by number, the call signs, the changes.")
+    document(L, 'talk_tables_panel', 'Talk tables ПТ-1, ПТ-2', 'battery_commander', 'desk', (-0.10, -0.22), 'talk_tables',
+             "The talk tables on the commander's desk, in front of his R-123M (FuG-2), clear of the ДИ block.")
     p = L.panel('vs27_panel', 'VS-27 rectifier', 'radio_operator', 'vs27', (0.25, 0.14))
     L.control('pwr.rectifier', p, (0.08, -0.03), 'toggle')
     L.lamp('rectifier_on', 'ЗАРЯД', p, (0.08, 0.03), 'green', ready('rectifier'),
@@ -776,30 +778,91 @@ def sblock(L):
         L.fixture(p, (u, 0.03), 'lamp', 0.008, 'green')
 
 
+R123M_AT = {'power': (-0.112, -0.0935), 'mode': (-0.1045, 0.0726), 'squelch': (-0.1492, 0.0798), 'preset': (0.0754, -0.0496),
+            'volume': (0.1612, -0.0484)}   # where the Osa cabin has them on the same traced front (data/cabins/osa_ak.json)
+
+
+def r123m_controls(L, p, sid):
+    """An R-123M's working controls on its traced front, where the Osa's sets have them."""
+    L.control('radio.%s.power' % sid, p, R123M_AT['power'], 'toggle')
+    L.control('radio.%s.mode' % sid, p, R123M_AT['mode'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
+    L.control('radio.%s.squelch' % sid, p, R123M_AT['squelch'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.026, 'color': 'black'})
+    L.control('radio.%s.preset' % sid, p, R123M_AT['preset'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.075, 'color': 'black'})
+    L.control('radio.%s.volume' % sid, p, R123M_AT['volume'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
+
+
+RST_SRC = ('rwd_mb3 (the PVS boxes and the RTK-1: four lamps over РСТ-1 to РСТ-4); lit while that set hears its net (SAM3D: '
+           'the R-145BM\'s radio-busy lamps, andryushchenko_2004)')
+RST_LIT = {1: [{'input': 'fug1_net', 'is': True}], 2: [{'input': 'fug2_net', 'is': True}], 3: [{'input': 'r111_hear', 'is': True}],
+           4: [{'input': 'fug4_net', 'is': True}]}
+
+
+def pvs_box(L, p, box, station, sockets_at):
+    """A PVS box's face: its selector (ВС / РСТ-1..4), the call to the RTK-1, the headset's jack, the four РСТ lamps."""
+    L.control('intercom.' + box, p, (0.05, -0.02), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.024, 'color': 'black'})
+    L.control(box + '.call', p, (0.0, -0.035), 'button', {'kind': 'button', 'size_m': 0.012, 'color': 'black', 'label': 'РТК'})
+    L.control('headset.' + station, p, sockets_at, 'toggle', {'kind': 'jack', 'size_m': 0.028, 'color': 'chrome', 'label': 'ШЛЕМОФОН'})
+    for n in (1, 2, 3, 4):
+        L.lamp('%s_rst%d' % (box, n), 'РСТ-%d' % n, p, (0.0 + 0.02 * (n - 1), 0.045), 'amber', RST_LIT[n], RST_SRC, 'medium')
+    L.lamp(box + '_called', 'ВЫЗОВ', p, (0.075, 0.045), 'red', [{'input': box + '_call', 'is': True}],
+           'rwd_mb3 (an orange lamp on each PVS box); lit while the RTK-1 calls it (SAM3D)', 'low')
+
+
+def document(L, pid, label, station, iid, at, kind_of, notes):
+    """A paper kept at a seat (a talk table, the radio data): a sheet lying on a desk, drawn from the scenario's own."""
+    p = L.panel(pid, label, station, iid, (0.15, 0.105), at=at, face='top', color='ivory',
+                notes=notes + " The sheet lies on the desk; its content is the scenario's (docs/crew/12_COMMUNICATIONS.md).")
+    L.displays.append({'id': pid.replace('_panel', ''), 'label': label, 'kind': 'document', 'document': kind_of, 'panel': p,
+                       'at_m': [0.0, 0.0], 'size_m': [0.15, 0.105],
+                       'source': 'pvo_bu_x_1984 (the posts keep talk tables, signal tables, coded maps and call-sign tables); '
+                                 'rrs_1986 (radio data issued against signature, kept at the station); fsrbit_pt',
+                       'confidence': 'medium',
+                       'notes': "What the paper holds is the scenario's: placeholders in the period's form."})
+
+
+def rk1u(L):
+    """The RK-1U at the radio operator's table (csla_pu12_manual item 38): its ПРИЕМ and ПЕРЕДАЧА rotaries and the
+    С-23 / АСПД-У toggle (rwd_mb3's photograph)."""
+    p = L.panel('rk1_panel', 'RK-1U junction box', 'radio_operator', 'rk1', (0.12, 0.10),
+                notes='The RK-1U (csla_pu12_manual item 38; rwd_mb3: two five-position rotaries ПЕРЕДАЧА and ПРИЕМ, ВЫКЛ / '
+                      '...123 / ...111 / ...407 / ПРОВОД, and toggles С-23 / АСПД-У): the ASPD-U\'s data path.')
+    L.control('rk1.rx', p, (-0.035, -0.02), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПРИЕМ'})
+    L.control('rk1.tx', p, (-0.035, 0.015), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПЕРЕДАЧА'})
+    L.control('rk1.code', p, (0.0, -0.03), 'toggle')
+    L.nameplate(p, (0.0, 0.035), 'РК-1У', 0.05)
+
+
 def rtk1(L):
-    """The RTK-1, after the photograph (shilka_narod; its outline 20-504 x 20-355 px in the crop)."""
+    """The RTK-1, after the photograph (shilka_narod; its outline 20-504 x 20-355 px in the crop) read with the NVA
+    catalogue's description (rwd_mb3: four РСТ lamp push-buttons, five numbered lines each a lamp over a lever, the
+    calls ПВС-1/2/3 and ЦИРКУЛЯР, a headset jack). Which knob is which selector is SAM3D's reading."""
     size = (0.40, 0.22)
     p = L.panel('rtk1_panel', 'RTK-1 radiotelephone concentrator', 'battery_commander', 'rtk1', size,
                 notes='The RTK-1 (csla_pu12_manual item 16; flak11 PU12-1: field telephone lines and an acoustic signal), '
-                      'as the photograph shows it (shilka_narod): windows with the lines\' names, lever switches, knobs. '
-                      'Its power switch is SAM3D\'s.')
+                      'as the photograph shows it (shilka_narod) and the NVA catalogue describes it (rwd_mb3): the lines\' '
+                      'windows over their levers and lamps, the РСТ lamps, the call buttons, the talk and second-receiver '
+                      'selectors, the headset\'s jack. Its power switch is SAM3D\'s.')
     ext = (20, 20, 504, 355)
-    L.control('rtk1.power', p, L.at_photo(size, ext, 460, 230), 'toggle')
-    L.lamp('rtk1_on', 'РТК-1', p, L.at_photo(size, ext, 460, 150), 'green', ready('rtk1'),
-           'flak11 (PU12-1: RTK-1); the lamp is sam3d')
-    items = [(90, 50, 'nameplate', (0.06, 0.012), None, 'РТК-1')]
-    for x in (270, 302, 334, 366, 398):
-        items.append((x, 95, 'window', (0.022, 0.022), 'white', None))
-    for x in (105, 140, 175, 210):
-        items.append((x, 160, 'window', (0.026, 0.014), 'white', None))
-    for x in (295, 330, 370, 410):
-        items.append((x, 180, 'lever', (0.03, 0.01), 'black', None))
-        items.append((x + 15, 260, 'knob', 0.014, 'black', None))
-    items += [(135, 215, 'knob', 0.03, 'black', None), (230, 250, 'pointer_knob', 0.03, 'black', None),
-              (195, 315, 'socket', 0.04, 'chrome', None)]
-    for x in (300, 330, 360, 390):
-        items.append((x, 60, 'lamp', 0.007, 'red', None))
-    L.photo(p, size, ext, items)
+    at = lambda x, y: L.at_photo(size, ext, x, y)
+    L.control('rtk1.power', p, at(460, 230), 'toggle')
+    L.lamp('rtk1_on', 'РТК-1', p, at(460, 150), 'green', ready('rtk1'), 'flak11 (PU12-1: RTK-1); the lamp is sam3d')
+    line_src = 'flak11 (PU12-1: five telephone lines and an acoustic signal on the RTK-1); rwd_mb3 (a lamp over each line\'s lever)'
+    for n, x in enumerate((270, 302, 334, 366, 398), 1):
+        L.control('rtk1.line%d' % n, p, at(x, 140), 'toggle', {'kind': 'lever', 'size_m': 0.02, 'color': 'black', 'label': str(n)})
+        L.lamp('rtk1_line%d' % n, 'ЛИНИЯ %d' % n, p, at(x, 60), 'red', [{'input': 'line%d_call' % n, 'is': True}], line_src, 'medium')
+    for n, x in enumerate((105, 140, 175, 210), 1):
+        L.lamp('rtk1_rst%d' % n, 'РСТ-%d' % n, p, at(x, 160), 'amber', RST_LIT[n], RST_SRC, 'medium',
+               look={'kind': 'legend', 'size_m': 0.026, 'label': 'РСТ-%d' % n})
+    for n, x in ((1, 295), (2, 330), (3, 370)):
+        L.control('rtk1.call_pvs%d' % n, p, at(x, 260), 'button', {'kind': 'button', 'size_m': 0.013, 'color': 'black', 'label': 'ПВС-%d' % n})
+    L.control('rtk1.circular', p, at(410, 260), 'button', {'kind': 'button', 'size_m': 0.013, 'color': 'red', 'label': 'ЦИРК'})
+    L.control('rtk1.ring', p, at(430, 300), 'button', {'kind': 'button', 'size_m': 0.013, 'color': 'black', 'label': 'ВЫЗОВ'})
+    L.lamp('rtk1_called', 'ВЫЗОВ', p, at(430, 100), 'red', [{'input': 'rtk1_call', 'is': True}],
+           'rwd_mb3 (the RTK-1\'s call lamps); lit while a PVS box calls it (SAM3D)', 'low')
+    L.control('rtk1.channel', p, at(230, 250), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black', 'label': 'КАНАЛ'})
+    L.control('rtk1.monitor', p, at(135, 215), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПРИЕМ 2'})
+    L.control('headset.battery_commander', p, at(195, 315), 'toggle', {'kind': 'jack', 'size_m': 0.03, 'color': 'chrome', 'label': 'ШЛЕМОФОН'})
+    L.photo(p, size, ext, [(90, 50, 'nameplate', (0.06, 0.012), None, 'РТК-1')])
 
 
 def layout_json():

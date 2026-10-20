@@ -101,7 +101,6 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
     double next_move_s = 0.0;
     Vec3 at = r->UnitPosition();
     bool driving = false;
-    std::set<int> plotted;
     double next_replot_s = 0.0;
     for (int i = 0; i < static_cast<int>(limit_s / dt) && !g.AtEnd(); ++i) {
         r->Step(dt);
@@ -143,38 +142,25 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                     break;
                 case TutorialCondition::Kind::Ui: ui.events.insert(c.arg); break;
                 case TutorialCondition::Kind::Plotted:
-                    // The plotter: a report he heard clicked on the board where it said (or a tube track he hasn't
-                    // written yet), a try a second (each takes him a while).
+                    // The plotter: a report he heard clicked on the board where it said, a try a second (each takes
+                    // him a while).
                     if (r->Time() >= next_move_s) {
                         if (r->Post() != nullptr && !r->Post()->Heard().empty()) {
                             const CommandPost::AirReport& h = r->Post()->Heard().front();
                             r->PlayerPlotAt(h.number, h.contact.position.x, h.contact.position.y, 200000.0 / 0.17);
-                        } else {
-                            for (const AspdTrack& k : r->Post() != nullptr ? r->Post()->Tracks() : std::vector<AspdTrack>()) {
-                                if (plotted.count(k.number) != 0 || k.imitated) continue;
-                                if (r->PlayerPlotAt(k.number, k.position.x, k.position.y, 200000.0 / 0.17).ok) plotted.insert(k.number);
-                                break;
-                            }
                         }
                         next_move_s = r->Time() + 1.0;
                     }
                     break;
                 case TutorialCondition::Kind::Designated:
-                    // At the plotter's seat, waiting for the commander: he keeps the board fresh, the nearest target
-                    // again every 15 s (PlayerPlot refuses at any other seat).
+                    // At the plotter's seat, waiting for the commander: he keeps the board fresh, each report as it
+                    // comes (PlayerPlotAt refuses at any other seat).
                     if (r->Time() >= next_replot_s) {
-                        const CommandPost::ScopeMark* nearest = nullptr;
-                        const std::vector<CommandPost::ScopeMark> tube = r->PostScope();
-                        for (const CommandPost::ScopeMark& m : tube) {
-                            if (nearest == nullptr || std::hypot(m.x, m.y) < std::hypot(nearest->x, nearest->y)) nearest = &m;
-                        }
                         if (r->Post() != nullptr && !r->Post()->Heard().empty()) {
                             const CommandPost::AirReport& h = r->Post()->Heard().front();
                             r->PlayerPlotAt(h.number, h.contact.position.x, h.contact.position.y, 200000.0 / 0.17);
-                        } else if (nearest != nullptr) {
-                            r->PlayerPlot(nearest->number);
                         }
-                        next_replot_s = r->Time() + 15.0;
+                        next_replot_s = r->Time() + 1.0;
                     }
                     break;
                 case TutorialCondition::Kind::Moved:
@@ -388,11 +374,15 @@ SC_TEST("tutorial: a strict lesson works only the step's control, after its wait
     // A reading step: nothing works, Enter moves on.
     SC_EXPECT(g.Status(*r, ui).phase == TutorialStatus::Phase::Read);
     SC_EXPECT(!g.Refusal(*r, "pwr.equipment", ui).empty());
-    while (g.Current()->id != "equipment") {
+    for (int i = 0; i < 2000 && g.Current()->id != "equipment"; ++i) {
+        // The headset on, and «Третий готов!» on the intercom: the steps before the drill.
+        if (g.Current()->id == "headset" && r->Console().panel.Get("headset.operator") == 0) r->SeatSet("operator", "headset.operator", 1);
+        if (g.Current()->id == "seat_ready") r->PlayerSay("operator", "seat_ready");
         ++ui.continues;
         r->Step(0.1);
         g.Update(*r, ui);
     }
+    SC_EXPECT(g.Current()->id == "equipment");
     // The equipment switch waits for the turbine's power: it says so, and refuses until then.
     TutorialStatus st = g.Status(*r, ui);
     SC_EXPECT(st.phase == TutorialStatus::Phase::Wait && st.control == "pwr.equipment" && st.position == 1 && st.fast_forward);
@@ -449,6 +439,8 @@ SC_TEST("tutorial: a selector clicked through its positions toward the step's is
     SC_EXPECT(r != nullptr);
     if (!r) return;
     SC_EXPECT(r->TakeSeat("senior_operator", "Player"));
+    r->SeatSet("senior_operator", "headset.senior_operator", 1);  // the lesson starts with it off: the order comes on the intercom
+    r->Step(0.1);
     SC_EXPECT(r->GiveCrewOrder("order_k_boyu"));
     r->Step(0.1);
     // acquire_with_soc: ПОИСК, the guard, ВЫСОКОЕ, then ЛУЧ to АВТ. I–III (position 3) from I (0).
@@ -507,11 +499,15 @@ SC_TEST("tutorial: back shows a step again to read; its orders aren't given twic
     ui.seat = ui.holding = "operator";
     g.Update(*r, ui);
     SC_EXPECT(!g.Back(*r, ui));  // nothing before the first
-    while (g.Current() != nullptr && g.Current()->id != "equipment") {
+    for (int i = 0; i < 2000 && g.Current() != nullptr && g.Current()->id != "equipment"; ++i) {
+        if (g.Current()->id == "headset" && r->Console().panel.Get("headset.operator") == 0) r->SeatSet("operator", "headset.operator", 1);
+        if (g.Current()->id == "seat_ready") r->PlayerSay("operator", "seat_ready");
         ++ui.continues;
         r->Step(0.1);
         g.Update(*r, ui);
     }
+    SC_EXPECT(g.Current() != nullptr && g.Current()->id == "equipment");
+    if (g.Current() == nullptr || g.Current()->id != "equipment") return;
     const std::size_t orders = r->OrdersGiven().size();
     SC_EXPECT(orders == 1);  // «К бою!», at the step before
     SC_EXPECT(g.Back(*r, ui) && g.Current()->id != "equipment");

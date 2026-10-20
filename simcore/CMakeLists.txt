@@ -17,7 +17,7 @@ function(simcore_configure_target tgt)
   target_link_libraries(${tgt} PRIVATE simcore)
   if(MSVC)
     # /MP: the test files compile side by side (one after another, a header change costs a long rebuild).
-    target_compile_options(${tgt} PRIVATE /W4 /permissive- /utf-8 /MP)
+    target_compile_options(${tgt} PRIVATE /W4 /permissive- /utf-8 /MP /bigobj)
     if(SIMCORE_STRICT)
       target_compile_options(${tgt} PRIVATE /WX /GR-)
     endif()
@@ -61,6 +61,7 @@ add_executable(simcore_tests
   tests/test_scope_feed.cpp
   tests/test_battery.cpp
   tests/test_comms.cpp
+  tests/test_voice_comms.cpp
   tests/test_fuel.cpp
   tests/test_threats.cpp
   tests/test_crew.cpp

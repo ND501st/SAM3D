@@ -219,11 +219,10 @@ SC_TEST("pu12m crew: with no orders scripted, the NPC battery commander has the 
     }
     std::printf("    deployed at %.0f s; the air-picture net from %.0f s, the tube's picture from %.0f s, the first mark at %.0f s\n", deployed_s,
                 air_net_s, picture_s, first_mark_s);
-    // The post's own board fills once it hears the regiment's air-picture net (FuG-1 warm, the mast up) or its ASPD-U
-    // receives the telecode, whichever is first: the first report takes a reading (7 s) and the plotter's mark (6 s).
-    const double first_source_s = air_net_s > 0.0 && (picture_s < 0.0 || air_net_s < picture_s) ? air_net_s : picture_s;
+    // The post's own board fills once it hears the regiment's air-picture net (FuG-1 warm, the mast up): the first report
+    // takes a reading (7 s) and the plotter's mark (6 s). The telecode's picture is the tube's, not the board's.
     SC_EXPECT(picture_s > 0.0 && air_net_s > 0.0);
-    SC_EXPECT(first_mark_s >= first_source_s && first_mark_s < first_source_s + 30.0);
+    SC_EXPECT(first_mark_s >= air_net_s && first_mark_s < air_net_s + 30.0);
     SC_EXPECT(r.Board() != nullptr && r.Board()->Marks().size() >= 10);  // once a minute since
     SC_EXPECT(deployed_s > 0.0 && deployed_s <= 1080.0);
     auto said = [&](const std::string& id, const std::string& from) {

@@ -88,6 +88,7 @@ public:
         if (!panel.Has(control_id)) return StepResult::UnknownControl;
         if (!panel.IsValidPosition(control_id, value)) return StepResult::InvalidPosition;
         if (!panel.CanMove(control_id, value)) return StepResult::Blocked;
+        PassChecks(panel, equipment, control_id, value);
         if (IsComplete()) {
             panel.Set(control_id, value);
             return StepResult::ProcedureComplete;
@@ -115,6 +116,18 @@ public:
         panel.Set(control_id, value);
         Log(DeviationKind::OutOfOrder, control_id, value);
         return StepResult::NotNextStep;
+    }
+
+    // A step whose control already sits where the step puts it (a radio's switch left on СИМПЛЕКС, the RK-1U already
+    // on the R-407) is a check, not a move: passed once its wait is over, unless it is the very move being made.
+    void PassChecks(const ControlPanel& panel, const Equipment* equipment, const std::string& moving = std::string(), int value = -1) {
+        while (!IsComplete()) {
+            const ProcedureStep& due = procedure_.steps[next_];
+            if (due.control_id == moving && due.value == value) break;
+            if (!panel.Has(due.control_id) || panel.Get(due.control_id) != due.value) break;
+            if (elapsed_since_step_s_ < due.min_wait_s || !ConditionsHold(due.wait_for, panel, equipment)) break;
+            ++next_;
+        }
     }
 
     bool IsComplete() const { return next_ >= procedure_.steps.size(); }

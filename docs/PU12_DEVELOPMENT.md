@@ -93,7 +93,7 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 | `data/systems/pu12m.json` | The vehicle's numbers (2.1, 2.3), every value cited | `data/systems/osa.json` |
 | `data/procedures/pu12m.json` | Stations (5), controls of each workplace (ASPD-U panel, IT-45 indicator controls, the radios' controls (reuse the R-123M and R-124 definitions), the IT-1/IT-2 boards, the power panel, GAK/KP-4), subsystems (power from AB-1 or G-290, ASPD-U warm-up, radios, mast up/down), inputs, procedures (deploy: 18 min; orientation; switch-on; receive and plot; designate; march) | `console_data.hpp` |
 | The ASPD-U feed | Telecode messages from the regiment as EM data messages (fast, not voice), their loss and jamming; the IT-45 picture as a scope (`scopes.hpp`) | `regiment_radars`, EM comms |
-| The plotting drill | The plotter's work as a crew procedure: read the IT-45, write marks; a minute per plot is the result, not a constant | `pu12.hpp`, `procedures.hpp` |
+| The plotting drill | The plotter's work as a crew procedure: hear the air-picture net, write marks (not the IT-45, the commander's); a minute per plot is the result, not a constant | `pu12.hpp`, `procedures.hpp` |
 | Orientation | GAK gyro drift, KP-4 dead reckoning on the march, PAB-2 orientation at a halt: the navigation error grows on the move and is reset by the drill | `pu12.hpp` (error), Osa orientation (6.x) |
 | Vehicle status boards | The vehicles report state and ammunition on the battery net; IT-1/IT-2 show it | `battery.hpp`, `launcher.hpp` |
 | The battery commander | Player or NPC: assigns targets to vehicles (fire distribution: who takes which), orders (march, short halt, formation, ambush, river crossing, reload); NPC logic from the battery tactics | `battery.hpp`, `c2_sources.hpp` |
@@ -238,7 +238,8 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   - The seats from the plan: the driver front left, the squad leader front right, and **a bench across the compartment
     facing forward with three places**: the operator-plotter at the right (the IT-45 straight ahead of him, the ДХ
     keypad at its left and the ФР block at its right, as the photograph shows), the battery commander in the middle,
-    the radio operator at the left (the R-111 with an R-123M on it ahead, his table between). Eye points 1.22 m above
+    the radio operator at the left (the R-111 with an R-123M on it ahead, his table between); the commander and the
+    plotter swapped later, the commander at the tube (`rwd_mb3`, below). Eye points 1.22 m above
     the floor (the body model's), every control within reach, three of them standing (`stand_for` in the crew data).
   - `tools/blender/build_pu12m_interior.py` builds the lining (light grey, the photographs), the equipment, the bench,
     the front seats, the driver's wheel, pedals and dash, the mast's foot with its hand winch; the Osa's traced R-123M
@@ -254,7 +255,8 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   - Unreal: the player's vehicle wears the PU-12M's exterior and mast when the scenario's own vehicle is the post; the
     director loads the cabin of the scenario's own vehicle (`cabins/<system>.json`). At the battery commander's seat,
     `[` `]` pick a target on the board and 1-5 give it to that launcher; at the plotter's, `[` `]` pick one on the IT-45
-    and P writes it on the board (`ASimOsaVehicle::PickTarget`, `DesignatePicked`, `PlotPicked`). Tests
+    and P writes it on the board (`ASimOsaVehicle::PickTarget`, `DesignatePicked`, `PlotPicked`; since 20 Oct 2026 the
+    plotter writes only the reports he heard, by wheel and click on the board). Tests
     `SAM3D.PU12M.Cabin`, `SAM3D.PU12M.Mast`; photographs of every seat from a scripted offscreen run
     (`-SimScenario=scenarios/pu12m_battery.json -SimCabinShots=<folder>`).
 - **P7 done (18 Oct 2026):** multiplayer. The seats are the crew system's (any station id). The post's instruments ride in

@@ -46,11 +46,16 @@ photograph caption puts the driver on the left.
 | Radio operator (left side, rear) | the radio operator's table (51), an R-123M (40) with power (39), the R-111 (41) with power (37), the RK-1 junction box (38), the PVS-1 intercom box (42); the power boards around him: VS-27 rectifier (43), ŠČR distribution board (44), FP filter (45), RR-361A regulator (47), BP power unit (48) |
 | In the hull (no station) | the R (11) and P (34) telecode transmitter and receiver blocks, the SSP follow-up drive (49), the PT-200C-III converter (31), the ŠČV input board (32), RK-2 (33), the BAF-M antenna filters (35), the batteries (46), the telescopic mast (10), the cable entries (12), fans (50), water tanks (52), hour counters (53), two whip antennas (3, 28) |
 
-The operator works at the IT-45: the photographs (`shilka_narod`) call that place the operator's, with the ДХ keypad
-to the left of the tube and the ФР block to its right; the ČSLA drawing calls the same desk the battery commander's
-workplace. Both work there: the operator marks targets on the tube and plots them, the commander watches the tube and
-the board and gives the targets out. **SAM3D:** the operator sits at the tube's keypad (ДХ, DI), the commander beside
-him with the ŠČK panel, the RTK-1, the IT-2 and the R-123M of the battery net.
+Who works the IT-45 (corrected 18 Oct 2026, `docs/research/PU12_VISUALS_2026-10.md` §2): the NVA catalogue (`rwd_mb3`)
+lists the PU-12M commander's workplace as the IT-45, the ДХ, the IT-2M, the ФР block, the RTK-1 and the DT-2, and names
+the rear places commander-operator, plotter (Planzeichner) and radio operator; the ČSLA drawing calls the tube's desk
+the battery commander's workplace. The photographs (`shilka_narod`, a Shilka battery's post) call that place the
+operator's, with the ДХ keypad to the left of the tube and the ФР block to its right: in the PU-12M the commander is that
+operator. The plotter's place is beside it (`rwd_mb3` pu12f), at the air-situation board (item 24); he takes the reports
+on targets and plots them (`pvo_bu_x_1984` art. 23). **SAM3D:** the battery commander at the tube (ДХ, DT-2, ФР, the
+ŠČK panel, the RTK-1, the IT-2M and the R-123M of the battery net); the operator-plotter at the board, writing what he
+hears on the air-picture net. He does not copy the tube onto the board: no source has him do it, the tube is in front of
+the commander already, and the board is the back-up when the tube is dark (`narodna_armiya_2018`).
 
 ## The equipment
 

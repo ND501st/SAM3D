@@ -327,7 +327,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		const float Gain = bTv ? 4.0f
 			: Kind == simcore::CabinDisplayKind::Counters ? 10.0f
 			: Kind == simcore::CabinDisplayKind::PlotBoard ? 2.5f
-			: Kind == simcore::CabinDisplayKind::StatusBoard ? 4.0f : 6.0f;
+			: Kind == simcore::CabinDisplayKind::StatusBoard ? 4.0f
+			: Kind == simcore::CabinDisplayKind::Document ? 2.5f : 6.0f;
 		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
 			bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f));
 		// The tube's character (M_CabinCRT): curvature, halo (amount, radius), raster lines (strength, count), noise
@@ -590,6 +591,9 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		case simcore::CabinDisplayKind::KeypadWindow:
 			DrawKeypadWindow(Canvas, Size, Sim->GetPostFeed(), bOn);
 			break;
+		case simcore::CabinDisplayKind::Document:
+			DrawDocument(Canvas, Size, Sim->GetDocumentLines(UTF8_TO_TCHAR(Display.document.c_str())));
+			break;
 		case simcore::CabinDisplayKind::Tv:
 			break;
 		}
@@ -616,6 +620,8 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 	case simcore::CabinDisplayKind::RangeScope:
 	case simcore::CabinDisplayKind::ElevationScope:
 		return !bOn;
+	case simcore::CabinDisplayKind::Document:
+		return true;  // the paper doesn't change
 	default:
 		return false;
 	}
@@ -1655,6 +1661,20 @@ void USimCabinDisplayComponent::DrawKeypadWindow(UCanvas* Canvas, const FVector2
 	if (!Post.keypad_last.empty())
 	{
 		Text(Canvas, FString(UTF8_TO_TCHAR(Post.keypad_last.c_str())), FVector2D(0.7 * Size.X, 0.8 * Size.Y), Vfd * 0.7f, 1.1f);
+	}
+}
+
+void USimCabinDisplayComponent::DrawDocument(UCanvas* Canvas, const FVector2D& Size, const TArray<FString>& Lines)
+{
+	// Typed on ivory paper, a line a row, small enough for the table to fit; a thin rule under the heading.
+	Fill(Canvas, FVector2D::ZeroVector, Size, FLinearColor(0.11f, 0.105f, 0.09f));
+	const FLinearColor Ink(0.006f, 0.006f, 0.008f);
+	const int32 Rows = FMath::Max(14, Lines.Num());
+	const double Row = (Size.Y * 0.94) / Rows;
+	const float Scale = static_cast<float>(FMath::Clamp(Row / 18.0, 0.35, 0.8));
+	for (int32 I = 0; I < Lines.Num(); ++I)
+	{
+		Text(Canvas, Lines[I], FVector2D(0.04 * Size.X, 0.03 * Size.Y + Row * I), Ink, Scale, false);
 	}
 }
 

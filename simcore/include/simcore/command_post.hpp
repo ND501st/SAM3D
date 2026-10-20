@@ -6,14 +6,16 @@
 //     post takes its targets off its own indicator by hand, so with many targets each comes less often, and in steps.
 //   * The regiment's radar battery reads the air picture out by voice on the air-picture net (FuG-1, the plotters'
 //     net): one report at a time, each target about once a minute, out to the board's extent (beyond the tube's
-//     100 km). The plotter writes what he hears first: the board is the long-range picture, the tube the near one.
-//   * Or a radar cabled to the post gives the primary picture, which the operator tracks semi-automatically: up to 12
-//     targets, 2-3 s to take each off (ru_pu12_text).
+//     100 km). The board is the long-range picture, the tube the near one.
+//   * Or a radar cabled to the post gives the primary picture, which the battery commander, the post's
+//     commander-operator at the IT-45 (rwd_mb3), tracks semi-automatically: up to 12 targets, 2-3 s to take each off
+//     (ru_pu12_text).
 //   * The ASPD-U shows the picture on the IT-45 tube: up to 100 tracks, each with its number, its height in 0.2 km steps
 //     and zone H1-H3, and its speed as a vector in 12.5 m/s steps (AspdTrack, Scope).
-//   * The operator-plotter writes the heard reports, then the tube's targets, on the glass board by hand, one mark at
-//     a time (the board's cadence is his work, not a constant). The battery commander gives targets out from the board
-//     and the tube (P4).
+//   * The operator-plotter writes what he hears on the air-picture net on the glass board by hand, one mark at a time
+//     (the board's cadence is his work, not a constant; pvo_bu_x_1984 art. 23: he takes the reports and plots them).
+//     He does not copy the tube: it is the commander's, and the board is the back-up when it is dark. The battery
+//     commander gives targets out from the tube and the board (P4).
 // Everything the post shows carries its navigation error: the largest published (5 degrees, 3 km, flak11) until the post
 // is oriented with the aiming circle, then small; on the move it grows with the distance driven (the KP-4: 1 %).
 // The crew, the console's subsystems and the scenario decide the inputs; the runner feeds them (scenario_runner.hpp).
@@ -518,6 +520,13 @@ public:
         bool board_open = true;      // the board swung open (console board_open); folded, nothing can be written
         bool operator_free = false;  // the operator-plotter at his place, not busy with a drill
         double operator_speed = 1.0; // his tier's speed at handwork (1 = a trained operator)
+        bool tube_free = false;      // the commander-operator at the IT-45, free to take the cabled radar's targets off
+        double tube_speed = 1.0;     // his tier's speed at it
+        // The air-picture net through the crew (docs/crew/12_COMMUNICATIONS.md): heard by a seat whose box is on FuG-1, who
+        // reads each report out to the plotter (pvo_bu_x_1984 art. 23); until then it is held. A jammed net loses a
+        // report with this chance.
+        bool relay = false;
+        double air_net_loss = 0.0;
     };
 
     // `regiment`: the targets the regiment sends (RegimentSees); `radar`: those the cabled radar covers.
@@ -530,6 +539,8 @@ public:
         }
         if (!in.telecode) telecode_started_ = false;
         // The air-picture net talks whether the post listens or not; what the post hears waits for the plotter.
+        relay_ = in.relay;
+        air_net_loss_ = in.air_net_loss;
         if (def_.air_net_report_s > 0.0) ReadAirNet(t, regiment, in.air_net);
         // A track not refreshed for three of its rounds goes off the tube: the telecode's (a cycle, or the sending
         // post's round of its targets taken off by hand), or the operator's round of the semi-automatic tracks (12
@@ -539,39 +550,24 @@ public:
         tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
                                      [&](const AspdTrack& k) { return t - k.time_s > (k.primary ? primary_stale : telecode_stale); }),
                       tracks_.end());
-        // The operator's hands: semi-automatic take-off of the primary picture first, then the board.
+        // The commander-operator's hands at the tube take the primary picture off; the plotter's write the board.
         imitation_on_ = in.imitation;
         imitation_t_ = t;
         board_open_ = in.board_open;
         if (!in.imitation) {
             tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [](const AspdTrack& k) { return k.imitated; }), tracks_.end());
         }
-        const double speed = in.operator_speed > 0.0 ? in.operator_speed : 1.0;
-        if (!in.operator_free || t + 1e-9 < operator_free_s_) return;
-        if (!in.board_open) {  // the board folded: only the tube's take-off; nothing is written
-            if (in.primary || in.imitation) {
-                const std::vector<BoardContact> echoes = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : radar;
-                if (const BoardContact* c = NextTakeOff(t, echoes)) {
-                    TakeOff(t, *c);
-                    operator_free_s_ = t + def_.take_off_s / speed;
-                }
-            }
-            return;
-        }
-        if (in.primary || in.imitation) {
+        if ((in.primary || in.imitation) && in.tube_free && t + 1e-9 >= tube_free_s_) {
             const std::vector<BoardContact> echoes = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : radar;
             if (const BoardContact* c = NextTakeOff(t, echoes)) {
                 TakeOff(t, *c);
-                operator_free_s_ = t + def_.take_off_s / speed;
-                return;
+                tube_free_s_ = t + def_.take_off_s / (in.tube_speed > 0.0 ? in.tube_speed : 1.0);
             }
         }
-        // What he heard on the air-picture net before the tube: a report is read out once.
-        if (!heard_.empty()) {
-            WriteHeard(t, 0, speed);
-            return;
-        }
-        if (const AspdTrack* k = NextToPlot(t)) Write(t, *k, speed);
+        // The plotter writes what he heard on the air-picture net, oldest first (a report is read out once); folded,
+        // the board takes nothing.
+        if (!in.board_open || !in.operator_free || t + 1e-9 < operator_free_s_) return;
+        if (!heard_.empty()) WriteHeard(t, 0, in.operator_speed > 0.0 ? in.operator_speed : 1.0);
     }
 
     // ---- The air-picture voice net (FuG-1; rwd_mb3 pu12e: the board carries the targets' tracks in the designation
@@ -585,6 +581,20 @@ public:
     // Reports heard and not yet written on the board, oldest first. One not written within a reporting period is
     // forgotten (the next report of that target has come or is coming).
     const std::vector<AirReport>& Heard() const { return heard_; }
+    // Reports heard on the net and not yet read out to the plotter (Inputs::relay), oldest first; forgotten likewise.
+    const std::vector<AirReport>& Held() const { return held_; }
+    // The report with this board number read out to the plotter now: it waits for his hand. False if none is held.
+    bool ReleaseHeld(int board_number, double t) {
+        for (std::size_t i = 0; i < held_.size(); ++i) {
+            if (held_[i].number != board_number) continue;
+            AirReport r = held_[i];
+            r.heard_s = t;
+            held_.erase(held_.begin() + static_cast<std::ptrdiff_t>(i));
+            heard_.push_back(r);
+            return true;
+        }
+        return false;
+    }
     // Every report read out on the net since the last call, and whether the post heard it (for the radio log).
     struct Spoken {
         AirReport report;
@@ -607,21 +617,9 @@ public:
         return false;
     }
 
-    // The plotter (a player) writes the track with this ASPD-U number on the board. False if no track has it or he is
-    // still writing the last one.
-    bool PlotTrack(double t, int number, double speed) {
-        if (!board_open_ || t + 1e-9 < operator_free_s_) return false;
-        for (const AspdTrack& k : tracks_) {
-            if (k.number != number) continue;
-            Write(t, k, speed > 0.0 ? speed : 1.0);
-            return true;
-        }
-        return false;
-    }
-    // The plotter (a player) puts the mark of a report he heard (its board number) or of a tube track (its ASPD-U number)
-    // where he clicks on the board: `clicked` in ENU, `metres_per_board_m` the board's scale. How near he came decides
-    // where the mark really goes (PlottingTuning). Not ok if the board is folded, nothing has the number, or he is still
-    // writing the last one.
+    // The plotter (a player) puts the mark of a report he heard (its board number) where he clicks on the board: `clicked` in ENU, `metres_per_board_m` the board's scale. How near he came decides
+    // where the mark really goes (PlottingTuning). Not ok if the board is folded, no report waiting has the number, or he
+    // is still writing the last one.
     struct PlotResult {
         bool ok = false;
         double miss_board_m = 0.0;   // how far his click was from the right place, on the board
@@ -639,18 +637,10 @@ public:
             out.ok = true;
             return out;
         }
-        for (const AspdTrack& k : tracks_) {
-            if (k.number != number || k.imitated) continue;
-            AspdTrack copy = k;
-            copy.position = Placed(k.position, clicked, metres_per_board_m, tuning, out);
-            Write(t, copy, sp);
-            out.ok = true;
-            return out;
-        }
         return out;
     }
     bool BoardOpen() const { return board_open_; }
-    // When the operator's hands are next free.
+    // When the plotter's hands are next free.
     double OperatorFreeS() const { return operator_free_s_; }
 
     // The tube at a scale: each track's place as a fraction of the scale's radius (east, north), and its speed vector
@@ -841,12 +831,15 @@ private:
                 ++i;
                 continue;
             }
-            spoken_.push_back({air_pending_[i], listening});
-            if (listening) heard_.push_back(air_pending_[i]);
+            const bool got = listening && !(air_net_loss_ > 0.0 && Uniform() < air_net_loss_);
+            spoken_.push_back({air_pending_[i], got});
+            if (got) (relay_ ? held_ : heard_).push_back(air_pending_[i]);
             air_pending_.erase(air_pending_.begin() + static_cast<std::ptrdiff_t>(i));
         }
         heard_.erase(std::remove_if(heard_.begin(), heard_.end(), [&](const AirReport& r) { return t - r.heard_s > def_.air_net_period_s; }),
                      heard_.end());
+        held_.erase(std::remove_if(held_.begin(), held_.end(), [&](const AirReport& r) { return t - r.heard_s > def_.air_net_period_s; }),
+                    held_.end());
         if (t + 1e-9 < air_free_s_) return;
         const Vec3 src = has_air_source_ ? air_source_ : position_;
         const BoardContact* best = nullptr;
@@ -905,7 +898,6 @@ private:
         const AirReport r = heard_[index];
         heard_.erase(heard_.begin() + static_cast<std::ptrdiff_t>(index));
         board_.PlotByHand(t, r.contact);
-        plotted_[r.contact.target_id] = t;
         operator_free_s_ = t + def_.plot_mark_s / speed;
     }
 
@@ -945,44 +937,6 @@ private:
         Fix(t, c, true, it->second);
     }
 
-    void Write(double t, const AspdTrack& k, double speed) {
-        BoardContact c;
-        c.target_id = k.target_id;
-        c.position = k.position;
-        c.altitude_m = k.height_m;
-        c.type = k.type;
-        c.formation = k.group ? 2 : 1;
-        board_.PlotByHand(t, c);
-        plotted_[k.target_id] = t;
-        operator_free_s_ = t + def_.plot_mark_s / speed;
-    }
-
-    // The track to write on the board next: one never written (the nearest first), else the one written longest ago
-    // that has had a fix since.
-    // A target is written again once a board period (a minute: the crosses are labelled with minutes, bguir_tsp) has
-    // passed since its last mark and the tube has a newer fix. The imitated echo is never written: there is no aircraft.
-    const AspdTrack* NextToPlot(double t) const {
-        const AspdTrack* best = nullptr;
-        double best_key = 1e18;
-        for (const AspdTrack& k : tracks_) {
-            if (k.imitated) continue;
-            const auto it = plotted_.find(k.target_id);
-            double key;
-            if (it == plotted_.end()) {
-                key = -1e12 + (k.position - position_).HorizontalLength();  // never written: before any other
-            } else if (k.time_s > it->second + 1e-9 && t - it->second + 1e-9 >= board_.Def().update_period_s) {
-                key = it->second;
-            } else {
-                continue;
-            }
-            if (key < best_key) {
-                best_key = key;
-                best = &k;
-            }
-        }
-        return best;
-    }
-
     AspdDef def_;
     PlottingBoard board_;
     Vec3 position_;
@@ -997,9 +951,9 @@ private:
     double next_telecode_s_ = 0.0;
     double last_telecode_s_ = -1.0;
     double operator_free_s_ = 0.0;
+    double tube_free_s_ = 0.0;
     std::map<std::string, int> regiment_numbers_;
     std::map<std::string, int> post_numbers_;
-    std::map<std::string, double> plotted_;
     std::map<std::string, double> telecode_sent_;  // when the sending post last took each target off
     double designate_within_m_ = 0.0;
     std::map<std::string, Attributes> overrides_;   // the ДХ's characteristics, by target
@@ -1014,6 +968,10 @@ private:
     double air_free_s_ = 0.0;                      // when the air-picture net is next free
     std::map<std::string, double> air_said_;       // when each target was last reported on it
     std::vector<AirReport> air_pending_;           // being read out (heard_s: when the reading ends)
+    std::vector<AirReport> held_;                  // heard by a seat on FuG-1, not yet read out to the plotter
+    bool relay_ = false;
+    double air_net_loss_ = 0.0;
+    double Uniform() { return static_cast<double>(rng_()) / 4294967296.0; }
     std::vector<AirReport> heard_;
     std::vector<Spoken> spoken_;
 };

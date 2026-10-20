@@ -32,8 +32,9 @@ what is proposed. Sources are in `docs/SOURCES.md`.
 
 * **Where it is:** in the battery's PU-12M (and in the radar companies' and higher posts). Not in the Osa: the 9A33BM2
   has no board. The Osa crew hears the battery commander's designation (azimuth and range) on the R-123M.
-* **Who writes it:** the operator-plotter, from what he hears on the air-picture net (and what the commander's tube
-  shows). **Who reads it:** the battery commander.
+* **Who writes it:** the operator-plotter, from what he hears on the air-picture net (`pvo_bu_x_1984` art. 23: he
+  takes the reports on targets and plots them). Not the tube: it is the commander's own (`rwd_mb3` names him the
+  commander-operator), and the board is the back-up when it is dark. **Who reads it:** the battery commander.
 * **What for:** the air picture beyond the tube. The IT-45 shows 35-100 km; the board carries the regiment's picture
   as far as its radars reach (200 km rings in SAM Simulator). It tells the commander what is coming, from where, how
   high, how many and when, before anything is inside a launcher's 10 km zone: the battery's early warning.
@@ -91,9 +92,9 @@ received target's symbols; the antenna turns at 6 or 12 rpm; the P-19 is the 1RL
   report at a time (7 s, an estimate), each target at most once a minute, nearest new targets first. The reports are in
   the azimuth-range form (1 degree, 1 km) from the regiment's radar, out to the board's 200 km, and reach the post within
   the R-123M's 20 km of the regiment's post. They go on whether the post listens or not. What the post hears goes into
-  its radio log (net "air picture") and waits for the plotter, who writes it before he copies the tube. One not written
-  within a minute is forgotten. A player at the plotter's seat writes a heard report by its board number (`[ ]` then
-  `P`; `ScenarioRunner::PlayerPlot`). The heard reports reach a network client (`PostFeed::heard`, `ViewExtras::post_heard`).
+  its radio log (net "air picture") and waits for the plotter, who writes it. One not written
+  within a minute is forgotten. A player at the plotter's seat writes a heard report by its board number
+  (`ScenarioRunner::PlayerPlotAt`, below). The heard reports reach a network client (`PostFeed::heard`, `ViewExtras::post_heard`).
 * **The telecode** is refreshed at the sending post's take-off rate (`telecode_take_off_s`, 2.5 s): with twelve
   targets each comes every 30 s, not every 10 s, and stays on the tube three of those rounds.
 * **A launcher sees only what it heard.** The Osa's `B` page holds the designations its crew has heard, each target's
@@ -190,8 +191,8 @@ intercom lines and orders shouted in the cabin stay plain.
   squares with their two digits and their ninths), the grease pencil in yellow (blue for friends), each cross labelled
   with its minute.
 * **Plotting by hand** (the player at the plotter's seat). With the cross on the board, the mouse wheel turns through the
-  numbers he can write, the reports heard first, then the tube's tracks, shown in a small chip beside the cross; a
-  click writes the picked one where the cross is. Within 5 cm of the report's square (or the tube's track) the mark goes
+  numbers of the reports he has heard, shown in a small chip beside the cross; a
+  click writes the picked one where the cross is. Within 5 cm of the report's square the mark goes
   exactly there; up to 20 cm it goes off the right place by more than 5 cm but no more than the miss; beyond, further off
   still (data/gameplay/plotting.json, the project owner's numbers; simcore/command_post.hpp `PlotAt`). The board is
   0.36 m across for 200 km each side, so 5 cm is about 55 km: generous, so that the plotter remembers the square rather
@@ -200,3 +201,13 @@ intercom lines and orders shouted in the cabin stay plain.
   command net through the R-111 (in violet, read through the radio voice), whichever is up; the R-111 and R-407 are
   worked as sets (simcore/radio_sets.hpp, docs/research/PU12_RADIOS_2026-10.md), the regiment's telecode off (the range
   day) is their channel off the air.
+
+## The tube is the commander's (20 Oct 2026)
+
+The plotter no longer copies the IT-45's tracks onto the board. The sources put the battery commander at the tube (the
+commander-operator, `rwd_mb3`; the ČSLA drawing) and the plotter at the board taking the reports on targets
+(`pvo_bu_x_1984` art. 23); none has the plotter copying the tube, which is in front of the commander already. So the
+board carries what was heard on the air-picture net, and the commander reads the near picture off the tube: the NPC
+commander gives out targets from both (`ScenarioRunner::PostPicture`), the player from the tube with the DT-2 and the
+ДХ, or from the board. A cabled radar's targets are taken off by the commander's hands at the tube (`Inputs::tube_free`),
+not the plotter's.

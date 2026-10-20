@@ -126,6 +126,75 @@ struct SAM3D_API FSimRadioMessage
 	/** A crew callout (voiced from the callout bus), not the radio log's own line. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
 	bool bCallout = false;
+
+	/** The seats that heard it are known (the voice paths: headsets and boxes, docs/crew/12_COMMUNICATIONS.md). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	bool bRouted = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	TArray<FString> HeardBy;
+
+	/** Did this seat hear it? Everyone when not routed (no voice paths modelled). */
+	bool HeardAt(const FString& Station) const { return !bRouted || HeardBy.Contains(Station); }
+};
+
+/** A seat's voice paths as the man in it has them in front of him: his headset, his box and what it is on, its lamps. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimSeatComms
+{
+	GENERATED_BODY()
+
+	/** The vehicle models headsets and boxes at all. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bVoice = false;
+
+	/** The seat has no box (the PU-12M's plotter): it hears only the cabin. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bUnboxed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bHeadset = false;
+
+	/** The boxes powered (the R-124's A-1 not at ВЫКЛ; the PU-12M's 27 V and, for the RTK-1, its own switch). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bPowered = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	FString BoxName;
+
+	/** What the box is turned to: "ВС", a set's name, or "off". */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	FString Channel;
+
+	/** A second set the box receives (the RTK-1), or empty. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	FString Monitor;
+
+	/** The sets the box reaches, and whether each hears its net now (the РСТ lamps). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	TArray<FString> SetNames;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	TArray<bool> SetLive;
+
+	/** Another box calls this one (its call lamp). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bCalled = false;
+
+	/** Lines ringing on this seat's box (the RTK-1's), 1-5. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	TArray<int32> RingingLines;
+
+	/** The lines raised on the box. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	TArray<int32> LinesUp;
+
+	/** The seat's telephone (the Osa's TA-57) rings, or its handset is taken. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bPhoneRinging = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Voice")
+	bool bPhoneTaken = false;
 };
 
 /** A seat's best next move from the drill master (docs/crew/06_REFERENCE_PERFORMER.md): the assistance overlay's data. */
@@ -1098,14 +1167,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
 	bool DesignateBatteryTarget(const FString& Callsign, int32 Number);
 
-	/** The player at the plotter's seat writes the IT-45's target `Number` on the board. False if it isn't on the tube,
-	 *  the seat isn't the player's, or he is still writing the last one. */
+	/** The player at the plotter's seat writes on the board the report he heard with board number `Number`. False if
+	 *  no report waiting has it, the seat isn't the player's, or he is still writing the last one. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
 	bool PlotPostTrack(int32 Number);
 
 	/** The last radio and intercom messages, oldest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Radio")
 	TArray<FSimRadioMessage> GetRadioMessages(int32 MaxCount = 8) const;
+
+	/** The voice paths at a seat (docs/crew/12_COMMUNICATIONS.md): the HUD's comms strip. */
+	FSimSeatComms GetSeatComms(const FString& Station) const;
+	/** The seat's headset on or off (its control, through the seat like any move). */
+	bool ToggleHeadset(const FString& Station);
+	/** Turn the seat's box selector one position (Direction +1 or -1). */
+	bool TurnBox(const FString& Station, int32 Direction);
+	/** Answer what rings at the seat: the first ringing line's lever up, or the telephone's handset taken (again: put back). */
+	bool AnswerCall(const FString& Station);
+	/** A document kept in the cabin (a cabin display of kind document): its lines of text. */
+	TArray<FString> GetDocumentLines(const FString& Document) const;
 
 	/** The cabin layout of the scenario's own vehicle, relative to the data folder (cabins/<its system>.json), or "" if
 	 *  there is none. */

@@ -605,6 +605,36 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		}
 	}
 	LastVerdict = Sim->GetLastMoveVerdict(StationId);
+	// The voice paths (docs/crew/12_COMMUNICATIONS.md): J the headset on or off, K / Shift+K the box's selector round, Y a
+	// ringing line or telephone answered (again: put down). Each goes through the seat's own control, like a click on it.
+	if (Pc->WasInputKeyJustPressed(EKeys::J))
+	{
+		const FSimSeatComms Before = Sim->GetSeatComms(StationId);
+		const bool bDone = Sim->ToggleHeadset(StationId);
+		FeedbackText = !Before.bVoice || Before.BoxName.IsEmpty() ? FString(TEXT("No headset to plug in at this seat"))
+					   : bDone ? FString(Before.bHeadset ? TEXT("Headset off: you hear only the cabin") : TEXT("Headset on, plugged into ") + Before.BoxName)
+							   : FString(TEXT("Not now"));
+		FeedbackSecondsLeft = 2.5f;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::K))
+	{
+		const bool bBack = Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift);
+		if (Sim->TurnBox(StationId, bBack ? -1 : 1))
+		{
+			const FSimSeatComms After = Sim->GetSeatComms(StationId);
+			FeedbackText = FString::Printf(TEXT("%s on %s"), *After.BoxName, *After.Channel);
+		}
+		else
+		{
+			FeedbackText = TEXT("No box to turn at this seat");
+		}
+		FeedbackSecondsLeft = 2.0f;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Y))
+	{
+		FeedbackText = Sim->AnswerCall(StationId) ? FString(TEXT("Line answered")) : FString(TEXT("Nothing rings here"));
+		FeedbackSecondsLeft = 2.0f;
+	}
 	// O: the crew menu. 1-9 choose a line, 0 the next page, O or Escape close it.
 	if (Pc->WasInputKeyJustPressed(EKeys::O))
 	{
@@ -886,10 +916,8 @@ TArray<int32> ASimOsaVehicle::PickList() const
 	{
 		return Sim->GetPostBoardNumbers();
 	}
-	// The plotter: what he heard on the air-picture net first (the board's numbers), then the tube's tracks.
-	TArray<int32> List = Sim->GetPostHeardNumbers();
-	List.Append(Sim->GetPostTrackNumbers());
-	return List;
+	// The plotter: what he heard on the air-picture net (the board's numbers). The tube is the commander's.
+	return Sim->GetPostHeardNumbers();
 }
 
 void ASimOsaVehicle::PickTarget(int32 Direction)
@@ -980,7 +1008,7 @@ void ASimOsaVehicle::HandlePost(APlayerController* Pc)
 void ASimOsaVehicle::HandleBoard(APlayerController* Pc, const FVector& Start, const FVector& Forward)
 {
 	// The plotter's hands on the plotting board: the cross on its glass, the mouse wheel turns through the numbers he
-	// can write (the reports heard, then the tube's tracks), a click writes the picked one where the cross is.
+	// can write (the reports he heard), a click writes the picked one where the cross is.
 	bOnBoard = false;
 	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	if (Pc == nullptr || Sim == nullptr || !bIsPost || StationId.IsEmpty() || StationId != Sim->GetPlotterStation() || Cabin == nullptr)

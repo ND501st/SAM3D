@@ -76,6 +76,8 @@ private:
 	void DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn, float DeltaTime);
 	void DrawPlotBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn);
 	void DrawKeypadWindow(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn);
+	/** A paper kept at a seat: the talk tables or the radio data (docs/crew/12_COMMUNICATIONS.md), typed lines on ivory. */
+	void DrawDocument(UCanvas* Canvas, const FVector2D& Size, const TArray<FString>& Lines);
 	void UpdateTv(const USimWorldSubsystem* Sim, simcore::ScenarioRunner& Runner, bool bOn);
 
 	int32 LayoutIndex = INDEX_NONE;

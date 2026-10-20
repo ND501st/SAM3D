@@ -253,7 +253,7 @@ inline bool KnownReadout(const std::string& name) {
 // plot_board: the plotter's air-situation map (the board's marks in grease pencil); keypad_window: the ДХ keypad's window
 // (the number it is on, ЦУ). All need the console's post block (keypad_window its keypad).
 enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters, AspdScope, StatusBoard, PlotBoard,
-                              KeypadWindow };
+                              KeypadWindow, Document };
 
 inline const char* ToString(CabinDisplayKind k) {
     switch (k) {
@@ -268,6 +268,7 @@ inline const char* ToString(CabinDisplayKind k) {
         case CabinDisplayKind::StatusBoard: return "status_board";
         case CabinDisplayKind::PlotBoard: return "plot_board";
         case CabinDisplayKind::KeypadWindow: return "keypad_window";
+        case CabinDisplayKind::Document: return "document";
     }
     return "?";
 }
@@ -315,6 +316,9 @@ struct CabinDisplay {
     std::vector<std::string> readouts;
     // aspd_scope: the grid glass over the tube, with the plotting board's marks on it
     bool glass = false;
+    // document: a paper kept at the seat (the talk tables, the radio data: docs/crew/12_COMMUNICATIONS.md), drawn from
+    // the scenario's own (`talk_tables`, `radio_data`)
+    std::string document;
 };
 
 // What a meter's needle reads now, in its display units: its control's value times `scale`, or its reading (0..1 of the
@@ -1018,7 +1022,7 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "readouts", "glass", "reading", "source", "confidence", "notes"})) {
+                                "readouts", "glass", "reading", "document", "source", "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -1096,13 +1100,18 @@ private:
         } else if (kind == "keypad_window") {
             disp.kind = CabinDisplayKind::KeypadWindow;
             if (console.post_keypad_digits.empty()) return Fail(Join(path, "kind"), "a keypad_window needs the console's post keypad");
+        } else if (kind == "document") {
+            disp.kind = CabinDisplayKind::Document;
+            allowed = {"document"};
+            if (!OptionalString(d, path, "document", disp.document)) return false;
+            if (disp.document != "talk_tables" && disp.document != "radio_data") return Fail(Join(path, "document"), "talk_tables or radio_data");
         } else {
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope, "
-                                            "status_board, plot_board or keypad_window");
+                                            "status_board, plot_board, keypad_window or document");
         }
         for (const char* key : {"control", "reading", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
-                                "range_window_m", "readouts", "glass"}) {
+                                "range_window_m", "readouts", "glass", "document"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);

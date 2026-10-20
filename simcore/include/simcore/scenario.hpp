@@ -30,7 +30,9 @@
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_nets.hpp"
 #include "simcore/radio_sets.hpp"
+#include "simcore/talk_tables.hpp"
 #include "simcore/target_behaviour.hpp"
 #include "simcore/terrain_map.hpp"
 #include "simcore/weather_data.hpp"
@@ -165,6 +167,7 @@ struct ScenarioDef {
     // starts part-spent, so that the TZM comes within it (roadmap 8.11).
     std::vector<std::string> empty_containers;
     std::vector<std::pair<std::string, bool>> initial_inputs;
+    std::vector<std::pair<std::string, int>> initial_controls;  // set after the readiness (own_unit.controls)
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
     std::vector<ScenarioTrigger> triggers;
@@ -184,6 +187,11 @@ struct ScenarioDef {
     bool has_radio_sets = false;
     RadioSetsDef radio_sets;
     RadioPlan radio_plan;
+    // The battery's radio data: its nets, frequencies by number, call signs, scheduled changes, jamming, lines; the talk
+    // tables and the communications' game values ("radio_data", docs/crew/12_COMMUNICATIONS.md).
+    RadioDataDef radio_data;
+    TalkTables talk_tables;
+    CommsTuning comms_tuning;
     // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
     // scenario's "c2" block. Empty: no command network.
     C2Policy c2_policy;
@@ -241,7 +249,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "triggers", "end", "assistance", "environment", "doctrine", "weather"})) {
+                             "targets", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -263,6 +271,7 @@ public:
         }
         if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadPost(root, data_dir, out, console)) return false;
+        if (!LoadRadioData(root, data_dir, out, console)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
         if (const json::Value* cc = root.Find("crew_commander")) {
@@ -290,6 +299,169 @@ public:
     }
 
 private:
+    // "radio_data": the battery's nets and lines (radio_nets.hpp). A net's set must be one of the console's voice sets,
+    // its frequencies inside that set's band.
+    bool LoadRadioData(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* r = root.Find("radio_data");
+        if (r == nullptr) return true;
+        const std::string p = "radio_data";
+        if (!Keys(*r, p, {"talk_tables", "comms", "silence", "silence_orders", "jamming_follows_df", "df_jam_s", "nets", "jamming", "lines",
+                          "source", "confidence", "notes"}) ||
+            !Provenance(*r, p)) {
+            return false;
+        }
+        RadioDataDef& d = out.radio_data;
+        std::string tables_file, comms_file;
+        if (!OptionalString(*r, p, "talk_tables", tables_file) || !OptionalString(*r, p, "comms", comms_file) ||
+            !OptionalBool(*r, p, "silence", d.silence) || !OptionalBool(*r, p, "jamming_follows_df", d.jamming_follows_df) ||
+            !OptionalNumber(*r, p, "df_jam_s", d.df_jam_s)) {
+            return false;
+        }
+        std::string error;
+        if (!tables_file.empty() && !LoadTalkTablesFile(data_dir + "/" + tables_file, out.talk_tables, &error)) return Fail(Join(p, "talk_tables"), error);
+        if (!comms_file.empty() && !LoadCommsTuningFile(data_dir + "/" + comms_file, out.comms_tuning, &error)) return Fail(Join(p, "comms"), error);
+        const json::Value* nets = OptionalArray(*r, p, "nets");
+        if (nets == nullptr) return message_.empty() ? Fail(Join(p, "nets"), "required, a list") : false;
+        for (std::size_t i = 0; i < nets->items.size(); ++i) {
+            const std::string np = Index(Join(p, "nets"), i);
+            const json::Value& e = nets->items[i];
+            RadioNetDef n;
+            if (!Keys(e, np, {"id", "name_ru", "name_en", "set", "main", "own_call_sign", "main_call_sign", "frequencies_mhz", "changes",
+                              "orders", "exempt", "notes"}) ||
+                !RequireString(e, np, "id", n.id) || !RequireString(e, np, "name_ru", n.name_ru) || !RequireString(e, np, "name_en", n.name_en) ||
+                !OptionalString(e, np, "set", n.set) || !OptionalString(e, np, "main", n.main) ||
+                !OptionalString(e, np, "own_call_sign", n.own_call_sign) || !OptionalString(e, np, "main_call_sign", n.main_call_sign) ||
+                !OptionalBool(e, np, "exempt", n.exempt)) {
+                return false;
+            }
+            if (d.Find(n.id) != nullptr) return Fail(Join(np, "id"), "duplicate net '" + n.id + "'");
+            const json::Value* f = OptionalArray(e, np, "frequencies_mhz");
+            if (f == nullptr || f->items.empty()) return message_.empty() ? Fail(Join(np, "frequencies_mhz"), "required: working, spare, ...") : false;
+            const VoiceSetDef* set = nullptr;
+            if (!n.set.empty()) {
+                for (const VoiceSetDef& vs : console.voice.sets) {
+                    if (vs.id == n.set) set = &vs;
+                }
+                if (console.has_voice && set == nullptr) return Fail(Join(np, "set"), "not one of the console's voice sets");
+            }
+            for (std::size_t k = 0; k < f->items.size(); ++k) {
+                const json::Value& x = f->items[k];
+                if (!x.Is(json::Type::Number) || x.number <= 0.0) return Fail(Index(Join(np, "frequencies_mhz"), k), "a frequency, MHz");
+                if (set != nullptr && set->band_hi_mhz > 0.0 && (x.number < set->band_lo_mhz || x.number > set->band_hi_mhz)) {
+                    return Fail(Index(Join(np, "frequencies_mhz"), k), "outside " + set->name + "'s band");
+                }
+                n.frequencies_mhz.push_back(x.number);
+            }
+            for (const char* key : {"changes", "orders"}) {
+                const json::Value* list = OptionalArray(e, np, key);
+                if (list == nullptr) {
+                    if (!message_.empty()) return false;
+                    continue;
+                }
+                for (std::size_t k = 0; k < list->items.size(); ++k) {
+                    const std::string cp = Index(Join(np, key), k);
+                    RadioNetDef::Change c;
+                    double to = 1.0;
+                    if (!Keys(list->items[k], cp, {"at_s", "to", "notes"}) || !RequireNumber(list->items[k], cp, "at_s", c.at_s) ||
+                        !RequireNumber(list->items[k], cp, "to", to)) {
+                        return false;
+                    }
+                    c.to = static_cast<int>(to);
+                    if (c.to < 1 || static_cast<std::size_t>(c.to) > n.frequencies_mhz.size()) return Fail(Join(cp, "to"), "a frequency number of the net");
+                    (std::string(key) == "changes" ? n.changes : n.orders).push_back(c);
+                }
+            }
+            if (!n.orders.empty() && n.main == "self") return Fail(Join(np, "orders"), "a net this vehicle runs takes its own orders");
+            d.nets.push_back(std::move(n));
+        }
+        const json::Value* jam = OptionalArray(*r, p, "jamming");
+        if (jam == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; jam != nullptr && i < jam->items.size(); ++i) {
+            const std::string jp = Index(Join(p, "jamming"), i);
+            const json::Value& e = jam->items[i];
+            JammingDef j;
+            std::string strength = "strong", kind = "barrage";
+            if (!Keys(e, jp, {"nets", "band_mhz", "from_s", "to_s", "strength", "kind", "follow_s", "notes"}) ||
+                !OptionalNumber(e, jp, "from_s", j.from_s) || !OptionalNumber(e, jp, "to_s", j.to_s) ||
+                !OptionalString(e, jp, "strength", strength) || !OptionalString(e, jp, "kind", kind) ||
+                !OptionalNumber(e, jp, "follow_s", j.follow_s)) {
+                return false;
+            }
+            if (strength != "strong" && strength != "weak") return Fail(Join(jp, "strength"), "strong or weak");
+            if (kind != "barrage" && kind != "spot") return Fail(Join(jp, "kind"), "barrage or spot");
+            j.strong = strength == "strong";
+            j.spot = kind == "spot";
+            if (const json::Value* list = OptionalArray(e, jp, "nets")) {
+                for (std::size_t k = 0; k < list->items.size(); ++k) {
+                    if (!list->items[k].Is(json::Type::String) || d.Find(list->items[k].string) == nullptr) {
+                        return Fail(Index(Join(jp, "nets"), k), "unknown net");
+                    }
+                    j.nets.push_back(list->items[k].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (const json::Value* band = OptionalArray(e, jp, "band_mhz")) {
+                if (band->items.size() != 2 || !band->items[0].Is(json::Type::Number) || !band->items[1].Is(json::Type::Number)) {
+                    return Fail(Join(jp, "band_mhz"), "[lowest, highest] MHz");
+                }
+                j.band_lo_mhz = band->items[0].number;
+                j.band_hi_mhz = band->items[1].number;
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (j.nets.empty() && !(j.band_hi_mhz > j.band_lo_mhz)) return Fail(jp, "nets or a band");
+            if (j.spot && j.nets.size() != 1) return Fail(Join(jp, "nets"), "a spot jammer works one net");
+            if (j.to_s <= j.from_s) return Fail(Join(jp, "to_s"), "after from_s");
+            d.jamming.push_back(std::move(j));
+        }
+        if (const json::Value* so = OptionalArray(*r, p, "silence_orders")) {
+            for (std::size_t i = 0; i < so->items.size(); ++i) {
+                const std::string sp = Index(Join(p, "silence_orders"), i);
+                RadioDataDef::SilenceOrder o;
+                if (!Keys(so->items[i], sp, {"at_s", "on", "notes"}) || !RequireNumber(so->items[i], sp, "at_s", o.at_s) ||
+                    !OptionalBool(so->items[i], sp, "on", o.on)) {
+                    return false;
+                }
+                d.silence_orders.push_back(o);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        const json::Value* lines = OptionalArray(*r, p, "lines");
+        if (lines == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; lines != nullptr && i < lines->items.size(); ++i) {
+            const std::string lp = Index(Join(p, "lines"), i);
+            const json::Value& e = lines->items[i];
+            LineDef l;
+            double n = 0.0;
+            if (!Keys(e, lp, {"line", "to", "to_name", "laid", "calls", "notes"}) || !RequireNumber(e, lp, "line", n) ||
+                !RequireString(e, lp, "to", l.to) || !OptionalString(e, lp, "to_name", l.to_name) || !OptionalBool(e, lp, "laid", l.laid)) {
+                return false;
+            }
+            if (const json::Value* calls = OptionalArray(e, lp, "calls")) {
+                for (std::size_t k = 0; k < calls->items.size(); ++k) {
+                    const std::string cp = Index(Join(lp, "calls"), k);
+                    LineDef::Call c;
+                    if (!Keys(calls->items[k], cp, {"at_s", "text", "notes"}) || !RequireNumber(calls->items[k], cp, "at_s", c.at_s) ||
+                        !RequireString(calls->items[k], cp, "text", c.text)) {
+                        return false;
+                    }
+                    l.calls.push_back(std::move(c));
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            l.line = static_cast<int>(n);
+            if (l.line < 1 || l.line > 5) return Fail(Join(lp, "line"), "1-5 (the RTK-1's levers)");
+            if (d.Line(l.line) != nullptr) return Fail(Join(lp, "line"), "two subscribers on one line");
+            if (l.to_name.empty()) l.to_name = l.to;
+            d.lines.push_back(std::move(l));
+        }
+        d.present = true;
+        return true;
+    }
+
     bool RequireObject(const json::Value& obj, const std::string& path, const char* key, const json::Value*& out) {
         out = obj.Find(key);
         if (out == nullptr) return Fail(Join(path, key), "required");
@@ -392,7 +564,7 @@ private:
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
             !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
-                                   "position", "heading_deg", "inputs", "empty_containers"})) {
+                                   "position", "heading_deg", "inputs", "controls", "empty_containers"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -551,6 +723,19 @@ private:
                 if (!console.equipment.HasInput(in->keys[i])) return Fail(p, "unknown input");
                 if (!in->items[i].Is(json::Type::Bool)) return Fail(p, "expected true or false");
                 out.initial_inputs.emplace_back(in->keys[i], in->items[i].boolean);
+            }
+        }
+        // Controls set at the start after the readiness (a lesson starting with the headset off).
+        if (const json::Value* cs = u->Find("controls")) {
+            if (!cs->Is(json::Type::Object)) return Fail("own_unit.controls", "expected an object of control: position");
+            for (std::size_t i = 0; i < cs->keys.size(); ++i) {
+                const std::string p = Join("own_unit.controls", cs->keys[i]);
+                const ControlDef* c = console.panel.Find(cs->keys[i]);
+                if (c == nullptr) return Fail(p, "unknown control");
+                if (!cs->items[i].Is(json::Type::Number)) return Fail(p, "expected a position");
+                const int at = static_cast<int>(cs->items[i].number);
+                if (at < 0 || at >= c->positions) return Fail(p, "not a position of the control");
+                out.initial_controls.emplace_back(cs->keys[i], at);
             }
         }
         return true;

@@ -88,7 +88,7 @@ SC_TEST("pu12m battery: the player in the commander's seat gives the targets him
     }
     SC_EXPECT(captured);
     const std::string d = r->Debrief();
-    SC_EXPECT(d.find("22, цель") != std::string::npos);
+    SC_EXPECT(d.find("22, я 10: цель") != std::string::npos);  // the call (rrs_1986), then the designation
 }
 
 SC_TEST("pu12m battery: with the battery net's set off the commander can give no targets and hears no reports") {
@@ -160,16 +160,18 @@ SC_TEST("pu12m battery: through the seats only the plotter plots and only the co
     SC_EXPECT(r->TakeSeat("battery_commander", "Player 1"));
     SC_EXPECT(r->TakeSeat("operator", "Player 2"));
     while (r->Time() < 140.0) r->Step(0.1);
-    // With a player at the plotter's seat nobody else writes the board: he plots a target off the tube himself.
+    // With a player at the plotter's seat nobody else writes the board: he writes a report he heard himself.
     SC_EXPECT(r->PostBoard().empty());
-    const std::vector<CommandPost::ScopeMark> tube = r->PostScope();
-    SC_EXPECT(!tube.empty());
-    if (tube.empty()) return;
+    while (r->Time() < 400.0 && r->Post()->Heard().empty()) r->Step(0.1);
+    SC_EXPECT(!r->Post()->Heard().empty());
+    if (r->Post()->Heard().empty()) return;
+    const int heard = r->Post()->Heard().front().number;
     std::string why;
-    SC_EXPECT(!r->SeatPlot("battery_commander", tube[0].number, &why));
+    SC_EXPECT(!r->SeatPlot("battery_commander", heard, &why));
     SC_EXPECT(why.find("operator") != std::string::npos);
-    SC_EXPECT(r->SeatPlot("operator", tube[0].number, &why));
-    while (r->Time() < 160.0 && r->PostBoard().empty()) r->Step(0.1);
+    SC_EXPECT(!r->SeatPlot("operator", r->PostScope().empty() ? 99 : r->PostScope()[0].number, &why));  // the tube: not his
+    SC_EXPECT(r->SeatPlot("operator", heard, &why));
+    while (r->Time() < 420.0 && r->PostBoard().empty()) r->Step(0.1);
     const std::vector<BoardMark> board = r->PostBoard();
     SC_EXPECT(board.size() == 1);
     if (board.empty()) return;

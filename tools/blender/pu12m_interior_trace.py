@@ -235,9 +235,9 @@ rect('it2', 18, 'IT-2M status board', 1190, 1245, 203, 228, 1.66, 1.88, dy=0.10,
 circle('di', 20, 'DI information marker', 1243, 276, 22, 1.37, 1.43, note="in the desk top (the plan's circle is 31 px)")
 rect('fan_right', 50, 'Fan', 1265, 1290, 196, 218, 1.86, 1.96, dy=0.15, note='high on the sloping wall, above the ŠČK')
 rect('skc', 36, 'ŠČK commander’s panel', 1258, 1318, 225, 250, 1.64, 1.84)
-rect('r123_fug4', 22, 'R-123M (FuG-4, battery command net)', 1290, 1360, 202, 250, 1.375, 1.619, shape='r123m', dx=-0.04,
+rect('r123_fug2', 22, 'R-123M (FuG-2, covered unit net)', 1290, 1360, 202, 250, 1.375, 1.619, shape='r123m', dx=-0.04,
      note='on the desk, facing inboard')
-rect('bp_fug4', 23, 'R-123M power unit', 1300, 1355, 268, 318, FLOOR_Z, FLOOR_Z + 0.26, dy=0.012, note='under the desk')
+rect('bp_fug2', 23, 'R-123M power unit', 1300, 1355, 268, 318, FLOOR_Z, FLOOR_Z + 0.26, dy=0.012, note='under the desk')
 # The air-situation map (the plan's item 24, "planšet vzdušné situace"): a square plexiglass board on a hinge (rwd_mb3's
 # photograph of the Luftlagekarte, pu12_llk1: the board face-on from the plotter's place, the hinge bar down its left edge,
 # the commander's ДХ and DT-2 behind it). The plan draws it folded edge-on, 0.40 m long, on the centreline before the
@@ -261,9 +261,9 @@ rect('r111', 41, 'R-111 radio (FuG-3, regiment net)', 1085, 1188, 505, 640, 0.86
      note='on a stand, facing the bench (the drawing: right foreground, the R-123M on top)')
 rect('r111_stand', None, 'R-111 stand', 1085, 1188, 505, 640, FLOOR_Z, 0.86, mat='Paint_Rack')
 rect('r111_power', 37, 'R-111 power unit', 1072, 1085, 505, 605, FLOOR_Z, 0.95)
-rect('r123_fug2', 40, 'R-123M (FuG-2, covered unit net)', 1150, 1188, 515, 620, 1.22, 1.464, shape='r123m',
+rect('r123_fug4', 40, 'R-123M (FuG-4, battery command net)', 1150, 1188, 515, 620, 1.22, 1.464, shape='r123m',
      note='on top of the R-111, facing the bench')
-rect('bp_fug2', 39, 'R-123M power unit', 1095, 1165, 665, 720, 1.46, 1.62)
+rect('bp_fug4', 39, 'R-123M power unit', 1095, 1165, 665, 720, 1.46, 1.62)
 rect('rk1', 38, 'RK-1 junction box', 1078, 1135, 650, 688, 1.30, 1.44, dy=-0.03)
 rect('pvs1', 42, 'PVS-1 intercom box', 1190, 1240, 660, 708, 1.50, 1.66)
 rect('vs27', 43, 'VS-27 rectifier', 1255, 1320, 680, 722, 1.36, 1.52)
@@ -310,7 +310,7 @@ WINDSCREENS = [(2.62, py_y(557)), (2.62, py_y(400))]
 
 # Paint (rwd_mb3's colour photographs): the ASPD-U's cabinets and blocks, the power boards and the junction boxes
 # blue-grey; the IT-45, the ДХ, the IT-2M and the GAK light grey; the radios hammer grey; the lining cream.
-BLUE_GREY = {'fr_block', 'telecode_tx', 'telecode_rx', 'ssp', 'kv', 'rk1', 'rk2', 'rk3', 'bp_fug1', 'bp_fug2', 'bp_fug4',
+BLUE_GREY = {'fr_block', 'telecode_tx', 'telecode_rx', 'ssp', 'kv', 'rk1', 'rk2', 'rk3', 'bp_fug1', 'bp_fug4', 'bp_fug2',
              'bp3', 'bp48', 'vs27', 'scr', 'pvs1', 'pvs2', 'pvs3', 'baf', 'rr361', 'gak_panel', 'it1', 'skc', 'dtp', 'kp4', 'pt200',
              'fp', 'r111_power', 'sau', 'scv', 'rtk1'}
 for _it in ITEMS:
@@ -324,8 +324,8 @@ FACES = {
     'kp4': 'rear', 'it1': 'left', 'dtp': 'left', 'pvs2': 'left', 'gak_panel': 'left', 'r123_fug1': 'left',
     'telecode_tx': 'left', 'kv': 'left', 'pvs3': 'right', 'gak': 'right', 'scv': 'right', 'rk2': 'right',
     'telecode_rx': 'right', 'baf': 'right', 'rtk1': 'left', 'it45': 'rear', 'dch': 'rear', 'fr_block': 'rear',
-    'rk3': 'left', 'it2': 'left', 'skc': 'left', 'r123_fug4': 'left', 'r407': 'left', 'r111': 'rear', 'r123_fug2': 'rear',
-    'bp_fug2': 'right', 'rk1': 'right', 'pvs1': 'right', 'vs27': 'right', 'scr': 'right', 'fp': 'rear', 'rr361': 'right',
+    'rk3': 'left', 'it2': 'left', 'skc': 'left', 'r123_fug2': 'left', 'r407': 'left', 'r111': 'rear', 'r123_fug4': 'rear',
+    'bp_fug4': 'right', 'rk1': 'right', 'pvs1': 'right', 'vs27': 'right', 'scr': 'right', 'fp': 'rear', 'rr361': 'right',
     'bp48': 'front', 'winch': 'left', 'dash': 'rear', 'pab2_case': 'left', 'map_board': 'rear', 's23': 'right', 'di': 'top',
 }
 

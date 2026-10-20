@@ -6,7 +6,7 @@
   "strict": true,
   "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
   "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/osa_ak.json: orient_vehicle, ready_capture, tv_watch, prepare_firing, launch) and the crew data's reports, with their sources",
-  "notes": "The commander's orders are given by the lesson (on_start) at the learner's pace. The crew chief's Qc comes from the scenario's log (the orientation line), as an NPC deputy is given it.",
+  "notes": "The lesson's scenario starts with the headset off. The commander's orders are given by the lesson (on_start) at the learner's pace. The crew chief's Qc comes from the scenario's log (the orientation line), as an NPC deputy is given it.",
   "steps": [
     {
       "id": "hello", "chapter": "Your seat", "title": "The deputy commander's seat",
@@ -17,6 +17,15 @@
       ],
       "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
       "continue": true
+    },
+    {
+      "id": "headset", "title": "Your headset (шлемофон)", "control": "headset.deputy_commander", "position": 1, "look": "r124_a2_panel",
+      "lines": [
+        "First your шлемофон: put it on and plug its cord into your Р-124 box.",
+        "Without it you hear only the cabin, and the commander's orders come on the intercom. Your A-2 box can also put you on the left R-123M."
+      ],
+      "why": "The Osa's crew work in their headsets: the turbine and the fans drown a voice in the cabin (r124_refs; voenizdat_osa_1991).",
+      "hint": "J: put it on (or point the cross at it, left click)."
     },
     {
       "id": "tour_panel", "title": "Your panel", "look": "fo_panel",
@@ -51,6 +60,14 @@
       "hint": "Enter: next.",
       "on_start": ["order:order_k_boyu"],
       "continue": true
+    },
+    {
+      "id": "seat_ready", "title": "Report your seat: «Первый готов!»", "report": "seat_ready",
+      "lines": [
+        "At your place, your headset on: report to the commander on the intercom: O, then «Первый готов!» (Seat one ready!)."
+      ],
+      "why": "The intercom check: each seat says it is in place and hears the commander (voenizdat_osa_1991 p. 246). The R-124 runs on the vehicle's 27 V: it works before the turbine is up.",
+      "hint": "O: your reports, then the highlighted line's number."
     },
     {
       "id": "ak_zk", "title": "Connect the course setter: АК — ЗК to ЗК", "control": "orient.ak_zk", "position": 1, "procedure": "orient_vehicle",

@@ -69,6 +69,7 @@ public:
         bool asked_tzm = false;
         double reload_clock_s = 0.0;
         bool external = false;      // simulated elsewhere (the player's own Osa, battery_link.hpp): set, not stepped
+        bool on_own = false;        // off the battery net (jammed, a missed frequency change): searches and fires on its own
         bool has_sector = false;    // its sector of fire (true azimuth from its position, clockwise from..to)
         double sector_from_deg = 0.0;
         double sector_to_deg = 0.0;
@@ -135,6 +136,13 @@ public:
     }
     // Free fire: shooters with no target take the nearest hostile in reach (and in their sector) themselves.
     void SetAutonomous(bool on) { autonomous_ = on; }
+    // A launcher that has lost the battery net searches and fires on its own (pvo_bu_ix_1984: independently; wrk:
+    // sudden targets engaged at once and reported afterwards).
+    void SetOnOwn(const std::string& callsign, bool on) {
+        for (Shooter& s : shooters_) {
+            if (s.callsign == callsign) s.on_own = on;
+        }
+    }
 
     // A launcher simulated elsewhere (the player's own Osa when its battery's post is a linked PU-12M, battery_link.hpp):
     // it keeps its place in the battery and in the fire distribution, but its missiles, target and phase are set from
@@ -173,7 +181,7 @@ public:
             if (s.external) continue;  // its own crew fights it
             Reload(s, t, battery);
             if (!s.deployed) continue;
-            if (s.target.empty() && autonomous_ && s.missiles > 0) TakeNearest(s, targets, t);
+            if (s.target.empty() && (autonomous_ || s.on_own) && s.missiles > 0) TakeNearest(s, targets, t);
             const BatteryFireTarget* tg = FindTarget(targets, s.target);
             if (s.phase == Phase::InFlight) {
                 if (t < s.next_s) continue;

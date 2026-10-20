@@ -53,6 +53,7 @@
   },
   "own_unit": {
     "console": "procedures/osa_ak.json",
+    "controls": {"headset.commander": 0},
     "tuning": "gameplay/osa_ak.json",
     "em": {
       "library": "em/osa_ak.json",

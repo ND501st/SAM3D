@@ -122,6 +122,8 @@ struct ViewRadio {
     std::string from;
     std::string text;
     bool callout = false;  // a crew callout, voiced from the callout bus
+    bool routed = false;   // the seats that heard it are known (the voice paths, docs/crew/12_COMMUNICATIONS.md)
+    std::vector<std::string> heard_by;
 };
 
 struct ViewVehicle {
@@ -519,7 +521,9 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Str(r.net);
         w.Str(r.from);
         w.Str(r.text);
-        w.U8(r.callout ? 1 : 0);
+        w.U8(static_cast<std::uint8_t>((r.callout ? 1 : 0) | (r.routed ? 2 : 0)));
+        w.U32(static_cast<std::uint32_t>(r.heard_by.size()));
+        for (const std::string& h : r.heard_by) w.Str(h);
     }
     w.U32(static_cast<std::uint32_t>(x.battery.size()));
     for (const ViewVehicle& v : x.battery) {
@@ -587,7 +591,12 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         m.net = r.Str();
         m.from = r.Str();
         m.text = r.Str();
-        m.callout = r.U8() != 0;
+        const std::uint8_t flags = r.U8();
+        m.callout = (flags & 1) != 0;
+        m.routed = (flags & 2) != 0;
+        const std::uint32_t heard = r.U32();
+        if (!r.ok || heard > 64u) return false;
+        for (std::uint32_t k = 0; k < heard && r.ok; ++k) m.heard_by.push_back(r.Str());
         x.radio.push_back(m);
     }
     n = r.U32();

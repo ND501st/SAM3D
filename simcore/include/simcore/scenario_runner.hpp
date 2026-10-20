@@ -56,6 +56,7 @@
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
+#include "simcore/voice_comms.hpp"
 #include "simcore/world.hpp"
 
 namespace simcore {
@@ -128,11 +129,13 @@ public:
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
+        for (const auto& c : def_.initial_controls) console_.panel.Set(c.first, c.second);
         if (console_.has_launcher) {
             launcher_ = std::make_unique<Launcher>(console_.launcher);
             for (const std::string& c : def_.empty_containers) launcher_->Unload(c);
         }
         if (console_.has_comms) comms_ = std::make_unique<CrewComms>(console_.comms);
+        StartVoice();
         if (console_.has_fuel) fuel_ = std::make_unique<FuelModel>(console_.fuel, def_.fuel_fraction);
         if (def_.has_post) post_ = std::make_unique<CommandPost>(def_.post_aspd, def_.post_board, def_.unit_position, def_.seed ^ 0x51ed27u);
         StartRadios(ready_state != nullptr);
@@ -184,6 +187,9 @@ public:
         weather_.SetTime(time_);  // the clouds drift
         UpdateTargets(dt);
         DeliverOrders();
+        UpdateVoice();
+        UpdateOsaNet();
+        UpdateIntercomCheck();
         UpdateBattery(dt);
         UpdateC2();
         UpdateRadios();
@@ -322,17 +328,17 @@ public:
         const int pos = console_.post_scale.empty() ? 0 : console_.panel.Get(console_.post_scale);
         return s[static_cast<std::size_t>(std::min<int>(std::max(pos, 0), static_cast<int>(s.size()) - 1))];
     }
-    // The player at the plotter's seat writes one target on the board: from the IT-45 (its ASPD-U number, 00-99), or a
-    // report he heard on the air-picture net (the board's four-digit number). False if the vehicle is no post, the seat
-    // isn't the player's, the number is neither on the tube nor in a report waiting, or he is still writing the last one.
+    // The player at the plotter's seat writes on the board a report he heard on the air-picture net (its board number).
+    // False if the vehicle is no post, the seat isn't the player's, no report waiting has the number, or he is still
+    // writing the last one. The tube is the commander's: the plotter does not copy it.
     bool PlayerPlot(int number) {
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
-        if (!post_->PlotTrack(time_, number, PlotterSpeed()) && !post_->PlotHeard(time_, number, PlotterSpeed())) return false;
+        if (!post_->PlotHeard(time_, number, PlotterSpeed())) return false;
         ++plots_made_;
         return true;
     }
     // The player at the plotter's seat puts a mark where he clicks on the board (east, north: the board's point under his
-    // click, ENU; metres_per_board_m: the board's scale): a report he heard (its board number) or a tube track (its ASPD-U
+    // click, ENU; metres_per_board_m: the board's scale): a report he heard (its board number
     // number). How near he came decides where it goes (the scenario's post.plotting, CommandPost::PlotAt).
     CommandPost::PlotResult PlayerPlotAt(int number, double east_m, double north_m, double metres_per_board_m) {
         CommandPost::PlotResult r;
@@ -357,12 +363,12 @@ public:
     // (roadmap 7.8). The same path serves the scenario's triggers and the player's order menu.
     void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
         SayOrder(crew.Role(), procedure.id);
-        const double delay = comms_ ? comms_->OrderDelayS(crew.Role(), console_) : 0.0;
+        const double delay = OrderDelayS(crew.Role());
         if (delay <= 0.0) {
             Hand(crew, procedure, queue);
             return;
         }
-        pending_orders_.push_back({time_ + delay, crew.Name(), &procedure, queue});
+        pending_orders_.push_back({time_ + delay, crew.Name(), procedure.id, queue});
         Radio("cabin (shouted)", "Commander", crew.Name() + ": " + procedure.id);
         char detail[160];
         std::snprintf(detail, sizeof(detail), "'%s' to %s is shouted, it arrives in %.1f s", procedure.id.c_str(), crew.Name().c_str(), delay);
@@ -447,6 +453,17 @@ public:
         std::string from;
         std::string text;
         bool callout = false;  // a crew callout (the voice speaks it from the callout bus already)
+        // The seats that heard it (docs/crew/12_COMMUNICATIONS.md): a player hears only what reaches his seat. Not routed:
+        // no voice paths modelled, everyone.
+        bool routed = false;
+        std::vector<std::string> heard_by;
+        bool HeardAt(const std::string& station) const {
+            if (!routed) return true;
+            for (const std::string& h : heard_by) {
+                if (h == station) return true;
+            }
+            return false;
+        }
     };
     static constexpr std::size_t kRadioKept = 64;
     const std::vector<RadioMessage>& RadioLog() const { return radio_; }
@@ -470,7 +487,7 @@ public:
         }
         const std::size_t from = radio_.size() > radio_count ? radio_.size() - radio_count : 0;
         for (std::size_t i = from; i < radio_.size(); ++i) {
-            x.radio.push_back({radio_[i].time_s, radio_[i].net, radio_[i].from, radio_[i].text, radio_[i].callout});
+            x.radio.push_back({radio_[i].time_s, radio_[i].net, radio_[i].from, radio_[i].text, radio_[i].callout, radio_[i].routed, radio_[i].heard_by});
         }
         if (battery_) {
             for (const Battery::Vehicle& v : battery_->Vehicles()) {
@@ -549,6 +566,19 @@ public:
         if (!def_.has_crew_data) return false;
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
+        // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
+        if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
+            order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment") {
+            bool done = false;
+            if (order_id == "order_battery_spare") done = OrderBatteryNetSpare("Battery commander");
+            if (order_id == "order_battery_duty") done = OrderBatteryDuty(true, "Battery commander");
+            if (order_id == "order_battery_simplex") done = OrderBatteryDuty(false, "Battery commander");
+            if (order_id == "order_warn_covered") done = WarnCovered(Cmdr(), true);
+            if (order_id == "order_all_clear_covered") done = WarnCovered(Cmdr(), false);
+            if (order_id == "order_report_regiment") done = ReportToRegiment();
+            if (done) orders_given_.push_back({time_, order_id});
+            return done;
+        }
         orders_given_.push_back({time_, order_id});
         SpeakOrder(order_id);
         if (order_id == "order_drop_target") drop_at_s_ = time_ + SpeakDelayS("operator") + 1.5;  // the wheels off the target
@@ -586,6 +616,23 @@ public:
         };
         const OrderDef* o = def_.has_crew_data ? def_.crew_data.FindOrder(order_id) : nullptr;
         if (o == nullptr) return refuse("нет такого приказа", "no such order");
+        // The orders on the nets: whoever must talk on the net can (his box on its set, the set transmitting).
+        const auto net_of = [&]() -> std::string {
+            if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
+            if (order_id == "order_warn_covered" || order_id == "order_all_clear_covered") return "covered";
+            if (order_id == "order_report_regiment") return "regiment";
+            return std::string();
+        };
+        const std::string net = net_of();
+        if (!net.empty()) {
+            std::string why = CanTalkOnNet(Cmdr(), net);
+            if (!why.empty() && net != "battery") {  // the squad leader or the radiotelephonist may talk for him
+                const std::string other = net == "covered" ? "squad_leader" : "radio_operator";
+                if (CanTalkOnNet(other, net).empty() && (MemberAtConst(other) != nullptr && SeatHolder(other).empty())) why.clear();
+            }
+            if (!why.empty()) return refuse("нет связи: " + why, "no way on the net: " + why);
+            return out;
+        }
         if (!o->task.empty()) {
             const CrewTask* t = def_.crew_data.FindTask(o->task);
             if (t != nullptr && !t->conditions.empty() && console_.equipment.AllHold(t->conditions, console_.panel)) {
@@ -804,6 +851,15 @@ public:
         if (!AtStation(role, control_id, why)) return StepResult::Blocked;
         JudgeMove(role, control_id, position);
         st->last_action_s = time_;
+        // A drill with only checks left (its switches already where it puts them) is done: the next one ordered is due.
+        for (int guard = 0; guard < 8 && !st->tracker.IsComplete() && !st->queued.empty(); ++guard) {
+            st->tracker.PassChecks(console_.panel, &console_.equipment, control_id, position);
+            if (!st->tracker.IsComplete()) break;
+            log_.Record({time_, DebriefEntry::Kind::Completed, st->player, st->tracker.GetProcedure().id, std::string()});
+            const Procedure* next = console_.FindProcedure(st->queued.front());
+            st->queued.erase(st->queued.begin());
+            if (next != nullptr) st->tracker.Reset(*next);
+        }
         const bool was_complete = st->tracker.IsComplete();
         const StepResult r = st->tracker.Attempt(console_.panel, control_id, position, &console_.equipment);
         log_.RecordAttempt(time_, st->player, st->tracker, r);
@@ -1298,7 +1354,11 @@ private:
             }
             const PendingOrder o = pending_orders_[i];
             pending_orders_.erase(pending_orders_.begin() + static_cast<std::ptrdiff_t>(i));
-            if (CrewMember* c = Crew(o.crew)) Hand(*c, *o.procedure, o.queue);
+            // By id: the order's procedure may have been a copy (a drill master's plan) that is gone by now.
+            const Procedure* pr = console_.FindProcedure(o.procedure);
+            if (CrewMember* c = Crew(o.crew)) {
+                if (pr != nullptr) Hand(*c, *pr, o.queue);
+            }
         }
     }
 
@@ -1391,6 +1451,9 @@ private:
             if (r111_->DialToSet() >= 0.0) console_.panel.SetValue(b.Control("dial"), r111_->DialToSet());
             const double net = plan.command_net_hz > 0.0 ? plan.command_net_hz : plan.presets_hz[0];
             const bool on_air = !off_air && !interference;
+            const bool on_box = !voice_ || !voice_->SetListeners("fug3").empty() || console_.voice.sets.empty();
+            const bool talker = !voice_ || CanTalkOnNet("radio_operator", "regiment").empty() || CanTalkOnNet(Cmdr(), "regiment").empty() ||
+                                def_.radio_data.Find("regiment") == nullptr;
             const bool hear = on_air && r111_->Hears(in, net, distance, plan.regiment_mast);
             const bool heard_back = on_air && r111_->Reaches(in, time_, net, distance, plan.regiment_mast);
             // The regiment's messages: heard when said, receipted when the post can answer, said again until it does.
@@ -1399,10 +1462,11 @@ private:
                 if (m.done || time_ + 1e-9 < m.next_s) continue;
                 const std::string& text = plan.messages[i].text;
                 ++m.said;
-                if (hear) {
+                if (hear && on_box) {
                     Radio("regiment net", "Regiment", text);
                     r111_call_until_ = time_ + r111_->Def().call_s;
-                    if (heard_back) {
+                    if (heard_back && talker) {
+                        Transmitted("regiment", "Radiotelephone operator", 3.0);
                         r111_tx_until_ = time_ + kOwnTransmissionS;
                         m.done = true;
                         Event("regiment net", "heard and receipted: " + text);
@@ -1448,12 +1512,879 @@ private:
             }
             r407_link_ = link;
             SetRadioInput(b.Input("link"), link);
-            SetRadioInput(b.Input("telecode"), link && R407::ToEquipment(in));
+            const bool rk1 = console_.panel.Find("rk1.rx") == nullptr ||
+                             (console_.panel.Get("rk1.rx") == 3 && (console_.panel.Find("rk1.code") == nullptr || console_.panel.Get("rk1.code") == 1));
+            SetRadioInput(b.Input("telecode"), link && R407::ToEquipment(in) && rk1);
             SetRadioInput(b.Input("call_radio"), time_ < r407_call_until_);
             SetRadioInput(b.Input("call_wire"), false);
         }
     }
 
+    // ---- The crew's voice paths and the battery's nets (docs/crew/12_COMMUNICATIONS.md; voice_comms.hpp, radio_nets.hpp).
+    // A seat hears the intercom, a set or a line only through its headset and box (VoiceComms); a set hears its net only
+    // on, warm, turned up, on the net's present frequency and not jammed out (RadioNets). Every message that reaches the
+    // crew asks who hears it; whatever no one hears is lost.
+    std::unique_ptr<VoiceComms> voice_;
+    std::unique_ptr<RadioNets> nets_;
+    std::map<std::string, double> jam_heard_s_;      // net -> when its jamming was first heard here (-1: recognised)
+    std::map<std::string, double> jam_order_due_s_;  // a net this post runs -> when the commander takes it off the jammed frequency
+    std::map<std::string, double> own_lost_s_;       // a net whose change the post missed -> when
+    std::size_t next_silence_order_ = 0;
+    struct LineState {
+        std::size_t next_call = 0;
+        bool ringing = false;
+        double ring_from_s = 0.0;
+        std::string text;                            // what the far end will say once answered
+    };
+    std::map<int, LineState> lines_;
+    std::map<std::string, double> box_call_until_;   // an input -> lit until
+    bool battery_duty_ = false;                      // the launchers on duty reception (the commander's order)
+    double launchers_tx_from_s_ = 0.0;               // when their sets can transmit again (3 min after Д. ПРИЁМ)
+    double covered_warned_s_ = -1.0;                 // the covered unit warned of this raid («Воздух»), and when
+    double covered_due_s_ = -1.0;                    // a hostile came inside the warning range
+    int readbacks_heard_ = 0;
+    int readbacks_missed_ = 0;
+
+    void StartVoice() {
+        if (console_.has_voice) voice_ = std::make_unique<VoiceComms>(console_.voice);
+        if (def_.radio_data.present) nets_ = std::make_unique<RadioNets>(def_.radio_data, def_.comms_tuning, def_.seed * 2654435761u + 11u);
+        if (voice_) voice_->Update(console_);
+    }
+    const CommsTuning& Tuning() const { return def_.comms_tuning; }
+    // A word across the cabin without the intercom: quick in a quiet cabin, slow over the turbine.
+    double ShoutS() const {
+        if (!voice_) return comms_ ? comms_->ShoutS(console_) : 1.5;
+        for (const std::string& id : console_.voice.noisy) {
+            if (console_.equipment.IsReady(id)) return console_.voice.shout_noisy_s;
+        }
+        return console_.voice.shout_quiet_s;
+    }
+    bool AnyOnRadio() const {
+        if (!voice_) return false;
+        for (const VoiceBoxDef& b : console_.voice.boxes) {
+            if (voice_->OnBox(b.station) && !voice_->HearsIntercom(b.station)) return true;
+        }
+        return false;
+    }
+    // How a callout goes (CalloutBus::Router): the intercom when the speaker's box is on it (a moment to turn it there
+    // if it is on a set); aloud in the cabin to a seat with no box, or from a seat without a headset (shouted); made with
+    // the call when urgent or when its listener's box is on the radio (ВЫЗ, ЦИРКУЛЯР).
+    CalloutBus::Route RouteCallout(const CalloutDef& def, const std::string& from) {
+        CalloutBus::Route r;
+        r.channel = def.kind == CalloutKind::Radio ? "battery net" : "intercom";
+        if (def.kind == CalloutKind::Radio || !voice_ || console_.FindStation(from) == nullptr) return r;
+        if (!def.to.empty() && voice_->Unboxed(def.to)) {
+            r.channel = "cabin";
+            return r;
+        }
+        if (!voice_->OnBox(from)) {
+            r.channel = "cabin";
+            r.extra_s = ShoutS();
+            return r;
+        }
+        if (!voice_->TalksOnIntercom(from)) r.extra_s = Tuning().box_select_s;
+        const bool to_seat = console_.FindStation(def.to) != nullptr;
+        r.call = def.priority == 0 || (to_seat && !voice_->HearsIntercom(def.to)) || ((def.to == "crew" || def.to == "any") && AnyOnRadio());
+        return r;
+    }
+    // Who heard a callout: the intercom's listeners (with the call, every box), everyone for the cabin, the net's for
+    // the battery net. Empty: no voice paths modelled (everyone).
+    std::vector<std::string> CalloutHearers(const SpokenCallout& s) const {
+        std::vector<std::string> out;
+        if (!voice_) return out;
+        if (s.channel == "battery net") return BatteryNetHearers();
+        for (const ConsoleStation& st : console_.stations) {
+            if (s.channel == "cabin" || voice_->HearsIntercom(st.id) || (s.call && voice_->HearsCall(st.id)) || st.id == s.from) {
+                out.push_back(st.id);
+            }
+        }
+        return out;
+    }
+
+    // ---- the sets
+    const RadioNetDef* NetOnSet(const std::string& set) const { return def_.radio_data.OnSet(set); }
+    // The set a net is on: the radio data's, else the console's set whose own net it is.
+    std::string SetOfNet(const std::string& net) const {
+        if (const RadioNetDef* n = def_.radio_data.Find(net)) return n->set;
+        for (const VoiceSetDef& s : console_.voice.sets) {
+            if (s.net == net) return s.id;
+        }
+        return std::string();
+    }
+    const VoiceSetDef* SetDef(const std::string& set) const { return voice_ ? voice_->FindSet(set) : nullptr; }
+    // The seat that works a set (turns its preset): the R-123M's preset control's, the R-111's preset buttons'.
+    std::string AttendantOf(const VoiceSetDef& s) const {
+        const std::string control = s.kind == "r111" ? console_.r111.Control("zpch_1") : s.preset;
+        const ControlDef* c = console_.panel.Find(control);
+        return c != nullptr ? c->station : std::string();
+    }
+    // The set is on, warm, turned up and on its net's present frequency (the jamming aside). The R-111 by its own model.
+    bool SetTuned(const std::string& set, std::string* why = nullptr) const {
+        const VoiceSetDef* s = SetDef(set);
+        if (s == nullptr) return false;
+        if (s->kind == "r111") {
+            const bool hear = r111_ ? console_.equipment.GetInput(console_.r111.Input("hear"))
+                                    : !console_.post_regiment_net.empty() && console_.equipment.IsReady(console_.post_regiment_net);
+            if (!hear && why != nullptr) *why = "the R-111 is not on the regiment's net";
+            return hear;
+        }
+        std::string reason;
+        if (console_.panel.Get(s->power) != 1) {
+            reason = s->name + " is switched off";
+        } else if (!console_.equipment.IsReady(s->warm)) {
+            reason = s->name + " is still warming up";
+        } else if (!s->volume.empty() && console_.panel.Get(s->volume) != 1) {
+            reason = s->name + " has its volume right down";
+        } else if (nets_ != nullptr) {
+            const RadioNetDef* n = NetOnSet(set);
+            if (n != nullptr && console_.panel.Get(s->preset) + 1 != nets_->Current(n->id)) {
+                reason = s->name + " is not on its net's frequency (preset " + std::to_string(console_.panel.Get(s->preset) + 1) +
+                         ", the net on no. " + std::to_string(nets_->Current(n->id)) + ")";
+            }
+        }
+        if (why != nullptr) *why = reason;
+        return reason.empty();
+    }
+    // Tuned, and its net not jammed out here.
+    bool SetHears(const std::string& set) const {
+        if (!SetTuned(set)) return false;
+        const RadioNetDef* n = NetOnSet(set);
+        return nets_ == nullptr || n == nullptr || nets_->Jam(n->id, time_) < 2;
+    }
+    // Tuned and able to transmit: СИМПЛЕКС 3 min since Д. ПРИЁМ (the R-111: tuned and on a transmitting power).
+    bool SetCanTransmit(const std::string& set, std::string* why = nullptr) const {
+        const VoiceSetDef* s = SetDef(set);
+        if (s == nullptr) return true;
+        if (!SetTuned(set, why)) return false;
+        if (s->kind == "r111") {
+            const bool can = !r111_ || console_.equipment.GetInput(console_.r111.Input("net"));
+            if (!can && why != nullptr) *why = "the R-111 cannot answer: not tuned to transmit, or on duty reception";
+            return can;
+        }
+        if (console_.panel.Get(s->mode) != s->simplex_position) {
+            if (why != nullptr) *why = s->name + " is on Д. ПРИЁМ: receive only";
+            return false;
+        }
+        if (!console_.equipment.IsReady(s->transmit)) {
+            if (why != nullptr) *why = s->name + "'s transmitter valves are still warming (3 min after Д. ПРИЁМ)";
+            return false;
+        }
+        return true;
+    }
+    // The seats whose boxes are on a set that hears its net now.
+    std::vector<std::string> NetHearers(const std::string& net) const {
+        const std::string set = SetOfNet(net);
+        if (!voice_ || set.empty() || !SetHears(set)) return {};
+        return voice_->SetListeners(set);
+    }
+    // Who hears the battery net here: the post's seats on its set; in the Osa, the seats on the set the commander's
+    // headset switch picks, while the network says he hears (empty with no voice paths: see NetHears).
+    std::vector<std::string> BatteryNetHearers() const {
+        if (!voice_) return {};
+        if (post_) return NetHearers("battery");
+        std::vector<std::string> out;
+        if (c2_ && c2_->Hearing()) {
+            const std::string set = c2_->ListeningSet() == 0 ? "left" : "right";
+            out = voice_->SetListeners(set);
+        }
+        return out;
+    }
+    // Why a seat cannot talk on a net now ("" : it can). An NPC turns his box to the set himself; a player must have.
+    std::string CanTalkOnNet(const std::string& station, const std::string& net) const {
+        const std::string set = SetOfNet(net);
+        if (!voice_ || set.empty()) return std::string();
+        if (!voice_->TalksOnSet(station, set)) {
+            std::string control;
+            int position = 0;
+            const bool npc = MemberAtConst(station) != nullptr && SeatHolder(station).empty();
+            if (!(npc && voice_->HeadsetOn(station) && voice_->PositionFor(station, set, control, position))) {
+                return voice_->WhyNot(station, set);
+            }
+        }
+        std::string why;
+        if (!SetCanTransmit(set, &why)) return why;
+        return std::string();
+    }
+    const CrewMember* MemberAtConst(const std::string& station) const {
+        for (const CrewMember& c : crew_) {
+            if (c.Role() == station) return &c;
+        }
+        return nullptr;
+    }
+    // A transmission made: time on air (direction finding), and under radio silence on a net that is not exempt, a breach.
+    void Transmitted(const std::string& net, const std::string& who, double seconds) {
+        if (!nets_ || def_.radio_data.Find(net) == nullptr) return;
+        if (nets_->Transmitted(net, time_, seconds)) {
+            ++silence_breaches_;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, who, net, "transmitted under radio silence"});
+        }
+    }
+    int silence_breaches_ = 0;
+    // The radio log's word for a net.
+    static std::string NetLabel(const std::string& net) {
+        if (net == "air_picture") return "air picture";
+        if (net == "regiment") return "regiment net";
+        if (net == "battery") return "battery net";
+        if (net == "covered") return "covered net";
+        return net;
+    }
+    static std::string NetIdOf(const std::string& label) {
+        if (label == "air picture") return "air_picture";
+        if (label == "regiment net") return "regiment";
+        if (label == "battery net") return "battery";
+        if (label == "covered net") return "covered";
+        return label;
+    }
+    // Who hears a line in the radio log (null: no voice paths, everyone).
+    std::vector<std::string> HeardBy(const std::string& label) const {
+        if (!voice_) return {};
+        std::vector<std::string> out;
+        if (label == "cabin" || label == "cabin (shouted)") {
+            for (const ConsoleStation& st : console_.stations) out.push_back(st.id);
+            return out;
+        }
+        if (label == "intercom") {
+            for (const ConsoleStation& st : console_.stations) {
+                if (voice_->HearsIntercom(st.id)) out.push_back(st.id);
+            }
+            return out;
+        }
+        if (label.compare(0, 5, "line ") == 0) {
+            const int line = std::atoi(label.c_str() + 5);
+            for (const ConsoleStation& st : console_.stations) {
+                if (voice_->HearsLine(st.id, line)) out.push_back(st.id);
+            }
+            return out;
+        }
+        if (label == "battery net") return BatteryNetHearers();
+        if (label == "command net") return post_ ? std::vector<std::string>() : BatteryNetHearers();
+        return NetHearers(NetIdOf(label));
+    }
+
+    // ---- once a step
+    void UpdateVoice() {
+        if (voice_) voice_->Update(console_);
+        UpdateBoxCalls();
+        if (!nets_) return;
+        for (const RadioNets::Due& d : nets_->Step(time_)) OnNetMoved(d);
+        for (const RadioNets::Event& e : nets_->TakeEvents()) Event(e.net.empty() ? std::string("radio") : e.net, e.text);
+        for (const VoiceSetDef& s : console_.voice.sets) {
+            if (s.kind == "r123m") SetRadioInput(console_.equipment.HasInput(s.id + "_net") ? s.id + "_net" : std::string(), SetHears(s.id));
+        }
+        UpdateSilenceOrders();
+        UpdateJamming();
+        UpdateBatteryMembers();
+        UpdateOwnNets();
+        UpdateLines();
+        UpdateCoveredWarning();
+        UpdateRegimentReport();
+    }
+
+    // A net run by another main station moved: scheduled (silently: the NPC attendant turns the set at the time, a player
+    // must keep the radio data's times himself) or ordered on air (heard only by whoever is on it).
+    void OnNetMoved(const RadioNets::Due& d) {
+        const RadioNetDef* n = def_.radio_data.Find(d.net);
+        if (n == nullptr || n->main == "self") return;
+        if (!d.ordered) {
+            Event(d.net, "scheduled change to frequency no. " + std::to_string(d.to));
+            RetuneOwn(d.net, d.to);
+            return;
+        }
+        // The order is said on the old frequency: whoever hears the net now hears it (twice, as a circular command).
+        const TalkEntry* e = def_.talk_tables.ByEffect("spare_frequency");
+        const std::string group = e != nullptr ? e->code : std::string("переходите на запасную частоту");
+        const std::string words = "Всем, я " + n->main_call_sign + ": " + group + ". " + group + ".";
+        const RadioNetDef* nd = n;
+        const int was = d.to == 1 ? 2 : 1;
+        bool heard = false;
+        if (voice_ && SetTunedTo(nd->set, d.net, was)) {
+            heard = !voice_->SetListeners(nd->set).empty() && nets_->JamOn(d.net, was, time_) < 2 && nets_->GetsThrough(d.net, time_, true);
+        }
+        if (heard) {
+            Radio(NetLabel(d.net), n->main_call_sign, words, false, voice_->SetListeners(nd->set));
+            Event(d.net, "the main station orders frequency no. " + std::to_string(d.to) + ": heard");
+            RetuneOwn(d.net, d.to);
+        } else {
+            own_lost_s_[d.net] = time_;
+            Event(d.net, "the main station's order to change frequency was not heard here");
+        }
+    }
+    // The set was on the given number of its net (before a move).
+    bool SetTunedTo(const std::string& set, const std::string& net, int number) const {
+        const VoiceSetDef* s = SetDef(set);
+        if (s == nullptr) return false;
+        if (s->kind == "r111") return r111_ && r111_->Preset() == number;
+        (void)net;
+        return console_.panel.Get(s->power) == 1 && console_.equipment.IsReady(s->warm) && console_.panel.Get(s->preset) + 1 == number;
+    }
+    // The set's attendant turns it to the net's number: an NPC by his drill. A player who heard it on his own box does it
+    // himself; one who did not is told by the commander, who heard it on his (the R-111 on the RTK-1's second receiver).
+    void RetuneOwn(const std::string& net, int number) {
+        const RadioNetDef* n = def_.radio_data.Find(net);
+        const VoiceSetDef* s = n != nullptr ? SetDef(n->set) : nullptr;
+        if (s == nullptr || number > 2) return;
+        const std::string pid = (s->kind == "r111" ? std::string("r111") : s->id) + (number == 1 ? "_working" : "_spare");
+        const std::string attendant = AttendantOf(*s);
+        const Procedure* pr = console_.FindProcedure(pid);
+        CrewMember* c = MemberAt(attendant);
+        if (pr == nullptr || c == nullptr) return;
+        if (!NpcAt(attendant)) {
+            if (attendant == Cmdr() || !NpcAt(Cmdr()) || !voice_ || voice_->HearsSet(attendant, s->id)) return;
+            if (!voice_->HearsSet(Cmdr(), s->id)) return;
+            GiveOrder(*c, *pr, true);  // «Р-111 на запасную!»: his words, the player's hand
+            return;
+        }
+        const bool quiet = quiet_orders_;
+        quiet_orders_ = true;
+        GiveOrder(*c, *pr, true);
+        quiet_orders_ = quiet;
+    }
+    // A net the post missed a change on: after the clock (rrs_1986: 5 min, both frequencies) its NPC attendant finds it.
+    void UpdateOwnNets() {
+        for (auto it = own_lost_s_.begin(); it != own_lost_s_.end();) {
+            const RadioNetDef* n = def_.radio_data.Find(it->first);
+            if (n == nullptr || SetTuned(n->set)) {
+                it = own_lost_s_.erase(it);
+                continue;
+            }
+            if (time_ - it->second >= Tuning().both_frequencies_s) {
+                Event(it->first, "no contact for 5 min: the set tried on both frequencies");
+                RetuneOwn(it->first, nets_->Current(it->first));
+                it = own_lost_s_.erase(it);
+                continue;
+            }
+            ++it;
+        }
+    }
+
+    // The regiment's orders of radio silence (ПТ-1 on its command net): the regime is the regiment's; the post keeps it
+    // when it hears the order (its NPCs put their sets on duty reception).
+    void UpdateSilenceOrders() {
+        const std::vector<RadioDataDef::SilenceOrder>& so = def_.radio_data.silence_orders;
+        while (next_silence_order_ < so.size() && so[next_silence_order_].at_s <= time_ + 1e-9) {
+            const bool on = so[next_silence_order_++].on;
+            nets_->SetSilence(on, time_, "the regiment");
+            const TalkEntry* e = def_.talk_tables.ByEffect(on ? "silence_on" : "silence_off");
+            const RadioNetDef* r = def_.radio_data.Find("regiment");
+            const std::vector<std::string> ears = NetHearers("regiment");
+            if (r == nullptr || ears.empty()) {
+                Event("regiment net", std::string("an order of radio silence ") + (on ? "" : "lifted ") + "was not heard");
+                continue;
+            }
+            const std::string group = e != nullptr ? e->code : std::string(on ? "радиомолчание" : "радиомолчание отменить");
+            Radio("regiment net", r->main_call_sign, "Всем, я " + r->main_call_sign + ": " + group + ". " + group + ".", false, ears);
+            DecodeHeard(ears, e);
+            ApplySilence(on);
+        }
+    }
+    void ApplySilence(bool on) {
+        for (const char* pid : {"silence_radio_operator", "silence_commander"}) {
+            const std::string id = on ? std::string(pid) : std::string("silence_off_") + (std::string(pid).substr(8));
+            const Procedure* pr = console_.FindProcedure(id);
+            if (pr == nullptr) continue;
+            const std::string seat = std::string(pid).substr(8) == "commander" ? Cmdr() : std::string("radio_operator");
+            CrewMember* c = MemberAt(seat);
+            if (c != nullptr && NpcAt(seat)) GiveOrder(*c, *pr, true);
+        }
+    }
+    // An NPC who heard a group of a talk table reads it against his table and tells the commander what it means.
+    void DecodeHeard(const std::vector<std::string>& ears, const TalkEntry* e) {
+        if (e == nullptr || !callouts_) return;
+        std::string npc;
+        for (const std::string& s : ears) {
+            if (NpcAt(s) && s != Cmdr() && npc.empty()) npc = s;
+        }
+        if (npc.empty()) return;
+        const TalkTable* t = nullptr;
+        def_.talk_tables.Decode(e->code, &t);
+        Say("decoded", npc, {{"table", t != nullptr ? t->name_ru : std::string("ПТ")}, {"code", e->code}, {"meaning", e->ru}, {"meaning_en", e->en}});
+    }
+
+    // Jamming: heard as noise by whoever is on the net's set; recognised after a trained listener's moment, said to the
+    // commander, logged and reported (rrs_1986, pvo_bu_ix_1984). On a net this post runs, the commander then takes the
+    // net to its spare frequency (an NPC after `order_spare_s`; a player by his order).
+    void UpdateJamming() {
+        for (const RadioNetDef& n : def_.radio_data.nets) {
+            const int j = nets_->Jam(n.id, time_);
+            auto it = jam_heard_s_.find(n.id);
+            if (j == 0 || n.set.empty() || !SetTuned(n.set)) {
+                if (it != jam_heard_s_.end() && j == 0) {
+                    Event(NetLabel(n.id), "the jamming has stopped");
+                    jam_heard_s_.erase(it);
+                    jam_order_due_s_.erase(n.id);
+                }
+                continue;
+            }
+            const std::vector<std::string> ears = voice_ ? voice_->SetListeners(n.set) : std::vector<std::string>();
+            if (it == jam_heard_s_.end()) {
+                jam_heard_s_[n.id] = time_;
+                if (!ears.empty()) Radio(NetLabel(n.id), "", j >= 2 ? "(помехи: шум забивает связь)" : "(помехи: шум в эфире)", false, ears);
+                continue;
+            }
+            if (it->second < 0.0 || ears.empty() || time_ - it->second < Tuning().recognise_jamming_s) continue;
+            it->second = -1.0;
+            std::string who;
+            for (const std::string& s : ears) {
+                if (who.empty() && NpcAt(s)) who = s;
+            }
+            if (!who.empty() && who != Cmdr()) Say("net_jammed", who, {{"net", n.name_ru}, {"net_en", n.name_en}});
+            log_.Record({time_, DebriefEntry::Kind::Scenario, who.empty() ? std::string("post") : SpeakerName(who), n.name_en,
+                         j >= 2 ? "strong jamming recognised, logged and reported" : "jamming recognised, logged and reported"});
+            if (n.main == "self") jam_order_due_s_[n.id] = time_ + Tuning().order_spare_s;
+        }
+        for (auto it = jam_order_due_s_.begin(); it != jam_order_due_s_.end();) {
+            if (time_ < it->second) {
+                ++it;
+                continue;
+            }
+            const std::string net = it->first;
+            it = jam_order_due_s_.erase(it);
+            if (net == "battery" && NpcAt(Cmdr()) && nets_->Jam(net, time_) > 0) OrderBatteryNetSpare("Battery commander");
+        }
+    }
+
+    // ---- the battery net this post runs (its main station)
+    std::string OwnCallSignOn(const std::string& net) const {
+        const RadioNetDef* n = def_.radio_data.Find(net);
+        return n != nullptr && !n->own_call_sign.empty() ? n->own_call_sign : std::string("10");
+    }
+    // The commander moves the battery net to its spare frequency (or back): a circular command said twice, no receipt
+    // (rrs_1986). Each launcher that gets it turns its set and waits for his call; one that misses it is off the net
+    // until its own clock finds it. The post's own FuG-4 is turned by the radiotelephonist (at his table).
+    bool OrderBatteryNetSpare(const std::string& by) {
+        const RadioNetDef* n = def_.radio_data.Find("battery");
+        if (!post_ || !nets_ || n == nullptr || n->main != "self") return false;
+        const int to = nets_->Current("battery") == 1 ? 2 : 1;
+        if (to > nets_->Numbers("battery")) return false;
+        const std::string why = CanTalkOnNet(Cmdr(), "battery");
+        if (!why.empty()) {
+            last_refusal_ = why;
+            return false;
+        }
+        const TalkEntry* e = def_.talk_tables.ByEffect("spare_frequency");
+        const std::string group = e != nullptr ? e->code : std::string("переходите на запасную частоту");
+        Radio("battery net", by, "Всем, я " + n->own_call_sign + ": " + group + ". " + group + ".", false, BatteryNetHearers());
+        Transmitted("battery", by, 4.0);
+        if (battery_fire_) {
+            for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                RadioNets::Member& m = nets_->MemberOf("battery", s.callsign);
+                if (m.on != nets_->Current("battery")) continue;  // already off the net: it doesn't hear it
+                if (nets_->GetsThrough("battery", time_, true)) {
+                    m.on = to;
+                    m.waiting = true;
+                    m.lost_s = -1.0;
+                } else if (nets_->Jam("battery", time_) > 0) {
+                    // The order jammed out, but an Osa has two R-123M (mon_2112_80): a station with two receivers watches
+                    // the spare frequency without being told (rrs_1986 art. 33), so it hears the main station there.
+                    m.on = to;
+                    m.waiting = true;
+                    m.lost_s = -1.0;
+                    Event(s.callsign, "missed the order in the jamming, but its second set watches the spare: it hears the post there");
+                } else {
+                    m.lost_s = time_;
+                    Event(s.callsign, "did not hear the order to change frequency");
+                }
+            }
+        }
+        nets_->MoveTo("battery", to, time_, "the battery commander's order");
+        battery_net_orders_.push_back(to);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", "to frequency no. " + std::to_string(to)});
+        const Procedure* pr = console_.FindProcedure(to == 1 ? "fug4_working" : "fug4_spare");
+        CrewMember* ro = MemberAt("radio_operator");
+        if (pr != nullptr && ro != nullptr) {
+            GiveOrder(*ro, *pr, true);  // the commander's word to the radiotelephonist; a player there must do it himself
+        } else {
+            RetuneOwn("battery", to);
+        }
+        return true;
+    }
+    std::vector<int> battery_net_orders_;  // for a linked Osa (battery_link.hpp)
+    std::string last_refusal_;
+    // The launchers on the battery net: each one's clock after a missed order, the main station's call to those waiting
+    // on the new frequency, and a launcher off the net (or jammed out) fighting on its own.
+    void UpdateBatteryMembers() {
+        const RadioNetDef* n = def_.radio_data.Find("battery");
+        if (!post_ || !battery_fire_ || n == nullptr || n->main != "self") return;
+        for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+            if (s.external) continue;
+            const std::string did = nets_->StepMember("battery", s.callsign, time_);
+            if (!did.empty()) Event(s.callsign, did);
+            RadioNets::Member& m = nets_->MemberOf("battery", s.callsign);
+            if (m.waiting && m.on == nets_->Current("battery") && SetTuned(n->set) && time_ - nets_->MovedS("battery") > 5.0 &&
+                nets_->GetsThrough("battery", time_)) {
+                m.waiting = false;
+                Radio("battery net", n->own_call_sign, s.callsign + ", я " + n->own_call_sign + ", как слышите? Приём.", false, BatteryNetHearers());
+                Radio("battery net", s.callsign, n->own_call_sign + ", я " + s.callsign + ", слышу хорошо. Приём.", false, BatteryNetHearers());
+                Transmitted("battery", "Battery commander", 2.0);
+            }
+            const bool off = !nets_->MemberOnNet("battery", s.callsign) || nets_->Jam("battery", time_) >= 2;
+            if (off != s.on_own) Event(s.callsign, off ? "off the battery net: searches and fires on its own" : "back on the battery net");
+            battery_fire_->SetOnOwn(s.callsign, off);
+        }
+    }
+    // The commander puts the launchers on duty reception (receive only) or back to transmit (3 min before they can).
+    bool OrderBatteryDuty(bool duty, const std::string& by) {
+        const std::string why = CanTalkOnNet(Cmdr(), "battery");
+        if (!post_ || !nets_ || !why.empty()) {
+            if (!why.empty()) last_refusal_ = why;
+            return false;
+        }
+        if (duty == battery_duty_) return false;
+        const TalkEntry* e = def_.talk_tables.ByEffect(duty ? "silence_on" : "silence_off");
+        const std::string group = e != nullptr ? e->code : std::string(duty ? "дежурный приём" : "симплекс");
+        Radio("battery net", by, "Всем, я " + OwnCallSignOn("battery") + ": " + group + ". " + group + ".", false, BatteryNetHearers());
+        Transmitted("battery", by, 4.0);
+        battery_duty_ = duty;
+        if (!duty) launchers_tx_from_s_ = time_ + 180.0;  // r123m_training: 3 min for the transmitter valves
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", duty ? "the launchers to duty reception" : "the launchers back to simplex"});
+        return true;
+    }
+    // Can a launcher answer on the battery net (read back, report)? Not on duty reception, nor in the 3 min after it.
+    bool LaunchersCanTransmit() const { return !battery_duty_ && time_ >= launchers_tx_from_s_; }
+
+    // ---- lines (the RTK-1's five) and the boxes' calls
+    void UpdateLines() {
+        for (const LineDef& l : def_.radio_data.lines) {
+            if (!l.laid) continue;
+            LineState& st = lines_[l.line];
+            const std::string lamp = "line" + std::to_string(l.line) + "_call";
+            if (!st.ringing && st.next_call < l.calls.size() && l.calls[st.next_call].at_s <= time_ + 1e-9) {
+                st.ringing = true;
+                st.ring_from_s = time_;
+                st.text = l.calls[st.next_call++].text;
+                Event("line " + std::to_string(l.line), l.to_name + " rings");
+            }
+            if (st.ringing) {
+                // Answered: the commander's lever up with his headset on (an NPC commander raises it himself).
+                if (voice_ && NpcAt(Cmdr()) && time_ - st.ring_from_s >= Tuning().answer_line_s && !voice_->LineUp(Cmdr(), l.line)) {
+                    const VoiceBoxDef* b = voice_->BoxOf(Cmdr());
+                    if (b != nullptr && static_cast<std::size_t>(l.line) <= b->lines.size()) {
+                        console_.panel.Set(b->lines[static_cast<std::size_t>(l.line - 1)], 1);
+                        voice_->Update(console_);
+                    }
+                }
+                if (voice_ && voice_->HearsLine(Cmdr(), l.line)) {
+                    st.ringing = false;
+                    Radio("line " + std::to_string(l.line), l.to_name, st.text, false, HeardBy("line " + std::to_string(l.line)));
+                    log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "line " + std::to_string(l.line), "answered: " + st.text});
+                } else if (time_ - st.ring_from_s > 90.0) {
+                    st.ringing = false;
+                    log_.Record({time_, DebriefEntry::Kind::Scenario, l.to_name, "line " + std::to_string(l.line), "rang and was not answered"});
+                }
+            }
+            SetRadioInput(console_.equipment.HasInput(lamp) ? lamp : std::string(), st.ringing);
+        }
+    }
+    // A line laid to a launcher (for a designation without emission, past any jamming).
+    const LineDef* LineToLauncher(const std::string& callsign) const { return def_.radio_data.LineTo(callsign); }
+    void UpdateBoxCalls() {
+        if (!voice_) return;
+        struct Call {
+            const char* button;
+            const char* lamp;
+        };
+        static const Call calls[] = {{"rtk1.call_pvs1", "pvs1_call"}, {"rtk1.call_pvs2", "pvs2_call"}, {"rtk1.call_pvs3", "pvs3_call"},
+                                     {"pvs1.call", "rtk1_call"}, {"pvs2.call", "rtk1_call"}, {"pvs3.call", "rtk1_call"}};
+        for (const Call& c : calls) {
+            if (console_.panel.Find(c.button) != nullptr && console_.panel.Get(c.button) == 1) box_call_until_[c.lamp] = time_ + 3.0;
+        }
+        if (console_.panel.Find("rtk1.circular") != nullptr && console_.panel.Get("rtk1.circular") == 1) {
+            for (const char* lamp : {"pvs1_call", "pvs2_call", "pvs3_call"}) box_call_until_[lamp] = time_ + 3.0;
+        }
+        for (const char* lamp : {"pvs1_call", "pvs2_call", "pvs3_call", "rtk1_call"}) {
+            const auto it = box_call_until_.find(lamp);
+            SetRadioInput(console_.equipment.HasInput(lamp) ? std::string(lamp) : std::string(), it != box_call_until_.end() && time_ < it->second);
+        }
+    }
+
+    // ---- the covered unit (FuG-2): warned of the air enemy («Воздух», ПТ-2) once a hostile comes inside the warning
+    // range, the all clear («Отбой») once none is left (pvo_bu_x_1984: air defence warns the troops it covers). The NPC
+    // squad leader gives it on the commander's order (an NPC commander's own, or a player's from the orders menu).
+    void UpdateCoveredWarning() {
+        if (!post_ || def_.radio_data.Find("covered") == nullptr) return;
+        bool inside = false;
+        for (const BoardMark& m : PostPicture()) {
+            if (m.type == 1) continue;
+            inside = inside || (m.position - def_.unit_position).HorizontalLength() <= Tuning().warn_covered_m;
+        }
+        if (inside && covered_due_s_ < 0.0) covered_due_s_ = time_;
+        if (inside && covered_warned_s_ < 0.0 && NpcAt(Cmdr()) && time_ - covered_due_s_ >= 5.0) WarnCovered(Cmdr(), true);
+        if (!inside && covered_warned_s_ >= 0.0 && covered_due_s_ >= 0.0 && NpcAt(Cmdr())) WarnCovered(Cmdr(), false);
+    }
+    // The warning (or the all clear) goes out on FuG-2 from whoever can talk on it: the squad leader (his box on РСТ-2),
+    // else the commander himself.
+    bool WarnCovered(const std::string& by, bool warning) {
+        const RadioNetDef* n = def_.radio_data.Find("covered");
+        if (n == nullptr) return false;
+        std::string talker;
+        for (const std::string& s : {std::string("squad_leader"), Cmdr()}) {
+            if (talker.empty() && CanTalkOnNet(s, "covered").empty() && (NpcAt(s) || voice_->TalksOnSet(s, n->set))) talker = s;
+        }
+        if (talker.empty()) {
+            last_refusal_ = CanTalkOnNet(by, "covered");
+            if (last_refusal_.empty()) last_refusal_ = "nobody can talk on the covered unit's net";
+            return false;
+        }
+        const TalkEntry* e = def_.talk_tables.ByEffect(warning ? "air_warning" : "all_clear");
+        const std::string group = e != nullptr ? e->code + " (" + e->ru + ")" : std::string(warning ? "Воздух" : "Отбой");
+        Radio("covered net", SpeakerName(talker), n->main_call_sign + ", я " + n->own_call_sign + ": " + group + ". " + group + ".", false,
+              NetHearers("covered"));
+        Transmitted("covered", SpeakerName(talker), 4.0);
+        char text[96];
+        std::snprintf(text, sizeof(text), "%s, %.0f s after the first hostile came inside %.0f km", warning ? "warned («Воздух»)" : "all clear («Отбой»)",
+                      covered_due_s_ >= 0.0 ? time_ - covered_due_s_ : 0.0, Tuning().warn_covered_m / 1000.0);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(talker), "covered unit", text});
+        if (warning) {
+            covered_warned_s_ = time_;
+        } else {
+            covered_warned_s_ = -1.0;
+            covered_due_s_ = -1.0;
+        }
+        return true;
+    }
+
+    // The battery ready, reported up to the regiment on its command net (voenizdat_osa_1991 p. 251: the battery commander
+    // reports to the regiment's commander): by the commander on РСТ-3, or the radiotelephonist for him.
+    bool regiment_reported_ = false;
+    bool ReportToRegiment() {
+        const RadioNetDef* rn = def_.radio_data.Find("regiment");
+        if (!post_ || rn == nullptr) return false;
+        std::string talker;
+        for (const std::string& st : {Cmdr(), std::string("radio_operator")}) {
+            if (talker.empty() && CanTalkOnNet(st, "regiment").empty() && (st == Cmdr() || NpcAt(st))) talker = st;
+        }
+        if (talker.empty()) {
+            last_refusal_ = CanTalkOnNet(Cmdr(), "regiment");
+            return false;
+        }
+        int ready = 0, missiles = 0;
+        for (const LauncherStatus& l : status_boards_) {
+            if (l.state != LauncherStatus::State::Empty) ++ready;
+            missiles += l.missiles > 0 ? l.missiles : 0;
+        }
+        char text[160];
+        std::snprintf(text, sizeof(text), "%s, я %s: к бою готова, пусковых %d, ракет %d. Приём.", rn->main_call_sign.c_str(),
+                      rn->own_call_sign.c_str(), ready, missiles);
+        Radio("regiment net", SpeakerName(talker), text, false, NetHearers("regiment"));
+        Transmitted("regiment", SpeakerName(talker), 5.0);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(talker), "regiment", text});
+        regiment_reported_ = true;
+        return true;
+    }
+    // The NPC commander reports once the post's communications are ready and every launcher has reported ready.
+    void UpdateRegimentReport() {
+        if (regiment_reported_ || !post_ || !NpcAt(Cmdr()) || def_.radio_data.Find("regiment") == nullptr) return;
+        if (!console_.equipment.IsReady("comms_ready") || status_boards_.empty()) return;
+        for (const LauncherStatus& l : status_boards_) {
+            if (l.state != LauncherStatus::State::Ready) return;
+        }
+        ReportToRegiment();
+    }
+
+public:
+    // ---- what the voice paths expose (the HUD, the orders menu, the tests)
+    const VoiceComms* Voice() const { return voice_.get(); }
+    const RadioNets* Nets() const { return nets_.get(); }
+    const TalkTables& GetTalkTables() const { return def_.talk_tables; }
+    const RadioDataDef& RadioData() const { return def_.radio_data; }
+    int SilenceBreaches() const { return silence_breaches_; }
+    int ReadbacksHeard() const { return readbacks_heard_; }
+    int ReadbacksMissed() const { return readbacks_missed_; }
+    double CoveredWarnedS() const { return covered_warned_s_; }
+    const std::string& LastRefusal() const { return last_refusal_; }
+    // Did a seat hear this callout (its headset, its box; everyone for a word in the cabin)? The voice plays only those.
+    bool CalloutHeardAt(const SpokenCallout& s, const std::string& station) const {
+        if (!voice_) return true;
+        for (const std::string& h : CalloutHearers(s)) {
+            if (h == station) return true;
+        }
+        return false;
+    }
+    // A set on, warm, turned up, on its net's present frequency and not jammed out (the boxes' РСТ lamps).
+    bool SetHearsItsNet(const std::string& set) const { return voice_ != nullptr && SetHears(set); }
+    // Can this seat hear a net now (its box on the net's set, the set on it)? For the HUD's comms strip.
+    bool SeatHearsNet(const std::string& station, const std::string& net) const {
+        for (const std::string& s : NetHearers(net)) {
+            if (s == station) return true;
+        }
+        return false;
+    }
+    // The battery commander's orders on his own net (the orders menu): the spare frequency (or back), duty reception, and
+    // the covered unit's warning. False with LastRefusal() saying why.
+    bool CommanderOrderSpare() { return OrderBatteryNetSpare("Battery commander"); }
+    bool CommanderOrderDuty(bool duty) { return OrderBatteryDuty(duty, "Battery commander"); }
+    bool CommanderWarnCovered(bool warning) { return WarnCovered(Cmdr(), warning); }
+    // A linked Osa (battery_link.hpp): the battery net's present number, and the orders to change it since the last call.
+    int BatteryNetNumber() const { return nets_ ? nets_->Current("battery") : 1; }
+    std::vector<int> TakeBatteryNetOrders() {
+        std::vector<int> out;
+        out.swap(battery_net_orders_);
+        return out;
+    }
+    // The player at the radiotelephonist's seat (or any seat hearing the air picture) reads the oldest held report out to
+    // the plotter. False if none is held, or his box isn't on the air-picture net.
+    bool PlayerReadOutAirReport(const std::string& seat) {
+        if (!post_ || !callouts_ || post_->Held().empty() || !SeatHearsNet(seat, "air_picture")) return false;
+        const CommandPost::AirReport r = post_->Held().front();
+        ReadOut(seat, r);
+        return true;
+    }
+
+private:
+    // A held report read out to the plotter (the callout "air_report", aloud beside him); heard, it goes to his hand.
+    std::set<int> reading_out_;
+    void ReadOut(const std::string& seat, const CommandPost::AirReport& r) {
+        if (reading_out_.count(r.number) != 0) return;
+        reading_out_.insert(r.number);
+        KnownTarget k;
+        k.target = r.contact.target_id;
+        k.number = r.number;
+        callouts_->Say(time_, "air_report", seat, {{"report", r.text}}, NpcAt(seat) ? SpeakDelayS(seat) : 0.0, &k);
+    }
+    void RelayAirPicture() {
+        if (!post_ || !voice_ || !callouts_) return;
+        for (const CommandPost::AirReport& r : post_->Held()) {
+            if (reading_out_.count(r.number) != 0) continue;
+            std::string reader;
+            for (const std::string& s : NetHearers("air_picture")) {
+                if (reader.empty() && NpcAt(s) && s != console_.post_plotter) reader = s;
+            }
+            if (!reader.empty()) ReadOut(reader, r);
+        }
+    }
+
+    // How long the commander's order takes to reach a seat: at once on the intercom (a moment to turn his box to ВС if it
+    // is on a set; the call reaches a box on the radio); shouted over the cabin when either has no headset or no box.
+    double OrderDelayS(const std::string& role) const {
+        if (!voice_) return comms_ ? comms_->OrderDelayS(role, console_) : 0.0;
+        if (role == Cmdr()) return 0.0;
+        const bool speaks = voice_->OnBox(Cmdr());
+        const bool hears = voice_->HearsIntercom(role) || voice_->HearsCall(role);
+        if (speaks && hears) return voice_->TalksOnIntercom(Cmdr()) ? 0.0 : Tuning().box_select_s;
+        return ShoutS();
+    }
+
+    // ---- the Osa on its battery's net (a linked PU-12M: battery_link.hpp)
+    double osa_net_lost_s_ = -1.0;
+    std::vector<int> own_readbacks_;
+    // The commander reads a designation back on the net (rrs_1986: a command acknowledged at once by its repetition):
+    // only on a set that can transmit (not Д. ПРИЁМ). The post hears it through the link.
+    void OsaReadBack(const C2Network::Event& e) {
+        if (!callouts_ || !NpcAt(Cmdr())) return;
+        if (comms_ && c2_) {
+            const int set = c2_->ListeningSet();
+            if (!comms_->Transmitting(set, console_)) {
+                Event("battery net", "the designation can't be read back: the set is on Д. ПРИЁМ or its transmitter is warming");
+                return;
+            }
+        }
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", e.number);
+        callouts_->Say(time_, "readback", Cmdr(), {{"number", n}, {"callsign", OwnCallsign()}, {"post", "10"}}, SpeakDelayS(Cmdr()));
+        if (LinkedToPost()) own_readbacks_.push_back(e.number);
+    }
+    // «К бою»: the deputy and the operators check the intercom and report «Первый (второй, третий) готов»
+    // (voenizdat_osa_1991 pp. 246-247), each as he takes up his drill (the R-124 runs on the vehicle's 27 V), or at once
+    // in a vehicle already powered. Checked again after the vehicle has been stood down (its power off).
+    std::set<std::string> intercom_checked_;
+    bool check_power_was_ready_ = false;
+    void UpdateIntercomCheck() {
+        if (!voice_ || post_ || !callouts_ || console_.FindReadiness("powered") == nullptr) return;
+        const bool power = console_.equipment.IsReady("power");
+        if (check_power_was_ready_ && !power) intercom_checked_.clear();
+        check_power_was_ready_ = power;
+        static const char* const seats[3][2] = {{"deputy_commander", "Первый"}, {"senior_operator", "Второй"}, {"operator", "Третий"}};
+        for (const auto& s : seats) {
+            const std::string st = s[0];
+            if (intercom_checked_.count(st) != 0 || !NpcAt(st) || !voice_->HearsIntercom(st)) continue;
+            const CrewMember* c = MemberAtConst(st);
+            if (c == nullptr || (c->Status() == CrewStatus::Idle && !power)) continue;
+            intercom_checked_.insert(st);
+            Say("seat_ready", st, {{"seat_number", s[1]}, {"seat_number_en", std::to_string(&s - seats + 1)}});
+        }
+    }
+    // After a missed order to change the battery net's frequency: the NPC commander finds it after 5 min (rrs_1986).
+    void UpdateOsaNet() {
+        if (post_ || !c2_ || osa_net_lost_s_ < 0.0) return;
+        if (c2_->Hearing()) {
+            osa_net_lost_s_ = -1.0;
+            return;
+        }
+        if (NpcAt(Cmdr()) && time_ - osa_net_lost_s_ >= Tuning().both_frequencies_s) {
+            const int k = c2_->PresetOfSource(def_.c2_policy.primary);
+            if (k > 0) c2_->TuneSet(c2_->ListeningSet(), k, time_, "Commander");
+            Event("battery net", "no contact for 5 min: the commander tries the other frequency and finds the net");
+            osa_net_lost_s_ = -1.0;
+        }
+    }
+
+public:
+    // The battery commander moved the battery net (a linked post's order, battery_link.hpp): heard on the Osa's set if
+    // it hears the net; the NPC commander then turns his set to it. Missed, the Osa is off the net until its clock.
+    void HearBatteryNetOrder(int to) {
+        if (!c2_) return;
+        const bool heard = c2_->Hearing();
+        c2_->MoveSource(def_.c2_policy.primary, to, time_);
+        if (heard) {
+            const TalkEntry* e = def_.talk_tables.ByEffect("spare_frequency");
+            const std::string group = e != nullptr ? e->code : std::string("переходите на запасную частоту");
+            Radio("battery net", "10", "Всем, я 10: " + group + ". " + group + ".");
+            if (NpcAt(Cmdr())) c2_->TuneSet(c2_->ListeningSet(), to, time_, "Commander");
+        } else {
+            osa_net_lost_s_ = time_;
+            Event("battery net", "the order to change frequency was not heard");
+        }
+    }
+    // A lesson's cues (tutorial.hpp): a net's main station orders it to its other frequency now; a strong spot jammer
+    // comes on a net; the far end of a line rings.
+    bool ExternalNetOrder(const std::string& net) {
+        const RadioNetDef* n = def_.radio_data.Find(net);
+        if (!nets_ || n == nullptr || n->main == "self" || nets_->Numbers(net) < 2) return false;
+        const int to = nets_->Current(net) == 1 ? 2 : 1;
+        if (!nets_->MoveTo(net, to, time_, "ordered by " + n->main)) return false;
+        OnNetMoved({net, to, true});
+        return true;
+    }
+    bool StartJamming(const std::string& net) {
+        if (!nets_ || def_.radio_data.Find(net) == nullptr) return false;
+        JammingDef j;
+        j.nets = {net};
+        j.from_s = time_;
+        j.strong = true;
+        j.spot = true;
+        nets_->AddJamming(j);
+        return true;
+    }
+    bool RingLine(int line) {
+        const LineDef* l = def_.radio_data.Line(line);
+        if (l == nullptr || !l->laid) return false;
+        LineState& st = lines_[line];
+        st.ringing = true;
+        st.ring_from_s = time_;
+        st.text = !l->calls.empty() ? l->calls.front().text : std::string("Проверка связи.");
+        Event("line " + std::to_string(line), l->to_name + " rings");
+        return true;
+    }
+    std::vector<int> TakeReadbacks() {
+        std::vector<int> out;
+        out.swap(own_readbacks_);
+        return out;
+    }
+    // The post hears a launcher's read-back (a linked Osa's) if its box is on the battery net and the net carries it.
+    void HearReadback(const std::string& callsign, int number) {
+        const bool heard = NetHears() && (!nets_ || nets_->GetsThrough("battery", time_));
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", number);
+        if (heard) {
+            ++readbacks_heard_;
+            Radio("battery net", callsign, OwnCallSignOn("battery") + ", я " + callsign + ": цель " + n + ", понял. Приём.");
+        } else {
+            ++readbacks_missed_;
+            Event(callsign, std::string("read back ") + n + ", not heard at the post");
+        }
+    }
+
+private:
     // ---- The player's vehicle is the command post (docs/PU12_DEVELOPMENT.md P3, command_post.hpp).
     std::unique_ptr<CommandPost> post_;
     std::map<std::string, double> post_first_mark_;  // first mark of each target on the post's board (the log)
@@ -1468,9 +2399,10 @@ private:
         const bool telecode = console_.equipment.IsReady(console_.post_telecode);
         // By voice: the R-111 worked as a set hears the net (radio_sets.hpp); without the set, the console's net subsystem
         // within the R-111's published reach.
-        const bool voice = r111_ ? console_.equipment.GetInput(console_.r111.Input("hear"))
-                                 : !console_.post_regiment_net.empty() && console_.equipment.IsReady(console_.post_regiment_net) &&
-                                       post_->RegimentNetInReach(def_.post_regiment, time_);
+        bool voice = r111_ ? console_.equipment.GetInput(console_.r111.Input("hear"))
+                           : !console_.post_regiment_net.empty() && console_.equipment.IsReady(console_.post_regiment_net) &&
+                                 post_->RegimentNetInReach(def_.post_regiment, time_);
+        if (voice_ && !SetOfNet("regiment").empty()) voice = voice && !NetHearers("regiment").empty();
         if (!telecode && !voice) return;  // nothing comes on either net: it waits
         const std::vector<RegimentCommand>& cmds = def_.post_regiment.commands;
         while (next_command_ < cmds.size() && cmds[next_command_].at_s <= time_ + 1e-9) {
@@ -1482,11 +2414,18 @@ private:
                 std::snprintf(text, sizeof(text), "%02d on the IT-45: %s", c.code, code != nullptr ? code->meaning.c_str() : "(not in the table)");
                 Event("regiment", text);
             }
-            if (voice && code != nullptr) {
+            const bool got = voice && (!nets_ || def_.radio_data.Find("regiment") == nullptr || nets_->GetsThrough("regiment", time_, true));
+            const TalkEntry* te = def_.talk_tables.ByAspd(c.code);
+            const RadioNetDef* rn = def_.radio_data.Find("regiment");
+            if (got && code != nullptr && te != nullptr && rn != nullptr) {  // a group of ПТ-1: decoded by whoever keeps the table
+                Radio("regiment net", rn->main_call_sign, rn->own_call_sign + ", я " + rn->main_call_sign + ": " + te->code + ". Приём.");
+                DecodeHeard(NetHearers("regiment"), te);
+            } else if (got && code != nullptr) {
                 std::string said = code->meaning;
                 if (!said.empty()) said[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(said[0])));
                 Radio("regiment net", "Regiment", said + "!");
             }
+            if (!telecode && !got) continue;  // jammed out: lost
             if (code == nullptr) continue;
             if (code->effect == "fire_ban" || code->effect == "cease_fire") fire_banned_ = true;
             if (code->effect == "fire_free") fire_banned_ = false;
@@ -1559,11 +2498,24 @@ private:
         const CrewMember* plotter = MemberAt(console_.post_plotter);
         in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
         in.operator_speed = PlotterSpeed();
+        if (voice_) {  // through the crew: a seat's box on FuG-1, the set on its net; read out to the plotter
+            in.air_net = in.air_net && !NetHearers("air_picture").empty();
+            in.relay = true;
+            in.air_net_loss = nets_ && nets_->Jam("air_picture", time_) == 1 ? Tuning().weak_jam_loss : 0.0;
+        }
+        // The tube is the commander-operator's (rwd_mb3): his hands take the cabled radar's targets off, an NPC's when
+        // he is free, a player's with the ASPD-U's semi-automatic take-off.
+        const CrewMember* commander = MemberAt(Cmdr());
+        in.tube_free = commander != nullptr && (!SeatHolder(Cmdr()).empty() || !commander->IsBusy());
+        in.tube_speed = SeatSpeed(Cmdr());
         post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
         // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person).
         for (const CommandPost::Spoken& s : post_->TakeSpoken()) {
             if (s.heard) Radio("air picture", "Regiment", s.report.text);
         }
+        RelayAirPicture();
+        SetRadioInput(console_.equipment.HasInput("air_report_waiting") ? std::string("air_report_waiting") : std::string(),
+                      !post_->Held().empty());
         for (const BoardMark& m : post_->Board().Marks()) {
             if (post_first_mark_.count(m.target_id) != 0) continue;
             post_first_mark_[m.target_id] = m.time_s;
@@ -1654,9 +2606,10 @@ private:
     }
     // The plotter's handwork speed (his tier's), and how well the squad leader orients (his tier's azimuth error
     // against the reference tier's: 1 for a trained one).
-    double PlotterSpeed() const {
+    double PlotterSpeed() const { return SeatSpeed(console_.post_plotter); }
+    double SeatSpeed(const std::string& station) const {
         for (std::size_t i = 0; i < crew_.size(); ++i) {
-            if (crew_[i].Role() != console_.post_plotter) continue;
+            if (crew_[i].Role() != station) continue;
             if (const SkillTier* t = SkillOf(def_.crew[i])) return t->wheel_rate_factor;
         }
         return 1.0;
@@ -1725,6 +2678,7 @@ private:
                 log_.Record({time_, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
             }
         }
+        if (voice_ && !voice_->HeadsetOn(Cmdr())) c2_->SetCommanderOnRadio(false);  // no headset: no net
         c2_->Update(time_, contacts, def_.unit_position);
         for (const C2Network::Event& e : c2_->PeekEvents()) {
             Radio("command net", e.actor, e.subject + ": " + e.text);
@@ -1733,6 +2687,7 @@ private:
             if (e.actor == "Commander" && e.number > 0 && reported_kills_.count(e.subject) == 0) {
                 designations_.push_back(e);
                 designations_heard_.push_back(e);
+                OsaReadBack(e);
                 KnownTarget k;
                 k.target = e.subject;
                 k.number = e.number;
@@ -1977,7 +2932,7 @@ private:
     struct PendingOrder {
         double at_s = 0.0;
         std::string crew;
-        const Procedure* procedure = nullptr;
+        std::string procedure;
         bool queue = false;
     };
     std::vector<PendingOrder> pending_orders_;
@@ -2057,7 +3012,18 @@ private:
     std::unique_ptr<Battery> battery_;
     std::vector<RadioMessage> radio_;
     void Radio(const std::string& net, const std::string& from, const std::string& text, bool callout = false) {
-        radio_.push_back({time_, net, from, text, callout});
+        Radio(net, from, text, callout, HeardBy(net));
+    }
+    void Radio(const std::string& net, const std::string& from, const std::string& text, bool callout, const std::vector<std::string>& heard_by) {
+        RadioMessage m;
+        m.time_s = time_;
+        m.net = net;
+        m.from = from;
+        m.text = text;
+        m.callout = callout;
+        m.routed = voice_ != nullptr;
+        m.heard_by = heard_by;
+        radio_.push_back(std::move(m));
         if (radio_.size() > kRadioKept) radio_.erase(radio_.begin());
     }
     std::vector<char> battery_orders_done_;
@@ -2287,6 +3253,7 @@ private:
     void StartCallouts() {
         if (!def_.has_crew_data) return;
         callouts_ = std::make_unique<CalloutBus>(&def_.crew_data);
+        if (voice_) callouts_->SetRouter([this](const CalloutDef& d, const std::string& from) { return RouteCallout(d, from); });
         drill_ = std::make_unique<DrillMaster>(console_, &def_.crew_data, def_.has_skills && def_.skills.Reference() != nullptr
                                                                              ? def_.skills.Reference()->reaction_s : 0.55);
         for (const AutoReportDef& r : def_.crew_data.reports) {
@@ -3142,7 +4109,7 @@ private:
         callouts_->Step(time_);
         for (const SpokenCallout& s : callouts_->TakeHeard()) {
             const std::string who = s.from == "battery" ? std::string("Battery") : SpeakerName(s.from);
-            Radio(s.channel, who, s.ru + " (" + s.en + ")", true);
+            Radio(s.channel, who, s.ru + " (" + s.en + ")", true, CalloutHearers(s));
             log_.Record({s.start_s, DebriefEntry::Kind::Scenario, who, "says", s.ru + " (" + s.en + ")"});
             Hear(s);
         }
@@ -3190,7 +4157,7 @@ private:
         // What the other vehicles see (geometric sensors), with each target's number on the board: the post's own when
         // the player's vehicle is the post, else what the commander has been told.
         std::vector<BatteryFireTarget> targets;
-        std::vector<BoardMark> marks = post_ ? PostMarks() : c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
+        std::vector<BoardMark> marks = post_ ? PostPicture() : c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
@@ -3207,7 +4174,7 @@ private:
             }
             targets.push_back(t);
         }
-        // The NPC battery commander: each hostile on the board that nobody has goes to the nearest ready launcher that
+        // The NPC battery commander: each hostile on the board or the tube that nobody has goes to the nearest ready launcher that
         // can reach it soon (our own vehicle's target is ours).
         // In the post, he does it from his board by voice on the battery net, and only while he is an NPC and the net is up.
         const bool distribute = post_ ? NpcAt(Cmdr()) && BatteryNetUp() : c2_ != nullptr;
@@ -3406,7 +4373,9 @@ private:
     // A launcher's report on the battery net (its own abstract crew's, a linked Osa's, or, in that Osa, the post's other
     // launchers'): the log, the words if the vehicle hears the net, the IT boards in the post.
     void LauncherReport(const LinkReport& r) {
-        const bool hears = NetHears();
+        // The post hears a launcher on its net through any jamming, while the launchers can transmit (not Д. ПРИЁМ).
+        const bool hears = NetHears() && (!post_ || !nets_ || ((nets_->GetsThrough("battery", time_)) && (LaunchersCanTransmit() ||
+                                                                                                       r.kind == BatteryFire::Event::Kind::Assigned)));
         char n[16];
         std::snprintf(n, sizeof(n), "%04d", r.number);
         const std::string number = r.number > 0 ? std::string(n) : r.target;
@@ -3519,7 +4488,10 @@ private:
         BoardMark mark;
         Vec3 point;            // where he told it to look (the IT-45's fix led along its speed vector)
         double heard_s = 0.0;  // the launcher's commander has it (the message ended)
+        bool by_line = false;  // on a telephone line: no emission, no jamming
+        int repeats = 0;       // said again for want of a read-back
     };
+    int designations_lost_ = 0;
     std::vector<VoiceDesignation> designations_out_;
     double battery_net_free_s_ = 0.0;
     std::vector<LauncherStatus> status_boards_;
@@ -3531,10 +4503,14 @@ private:
     std::map<std::string, bool> reported_deployed_;
 
     bool BatteryNetUp() const {
+        if (post_ && voice_ && !SetOfNet("battery").empty()) return CanTalkOnNet(Cmdr(), "battery").empty();
         return post_ && (console_.post_battery_net.empty() || console_.equipment.IsReady(console_.post_battery_net));
     }
     // Does the player's vehicle hear the battery net's reports? (Always, unless it is the post with its set down.)
-    bool NetHears() const { return !post_ || BatteryNetUp(); }
+    bool NetHears() const {
+        if (!voice_) return !post_ || BatteryNetUp();
+        return !BatteryNetHearers().empty();
+    }
     bool DesignationPending(const std::string& target) const {
         for (const VoiceDesignation& d : designations_out_) {
             if (d.mark.target_id == target) return true;
@@ -3564,32 +4540,83 @@ private:
         }
         return out;
     }
+    // A track on the IT-45 as the commander reads it: its ASPD-U number, its place and height off the tube.
+    static BoardMark TubeMark(const AspdTrack& k) {
+        BoardMark m;
+        m.target_id = k.target_id;
+        m.number = k.number;
+        m.time_s = k.time_s;
+        m.position = k.position;
+        m.height_hm = static_cast<int>(std::lround(k.height_m / 100.0));
+        m.type = k.type;
+        return m;
+    }
+    // The commander's picture: the board (what the plotter wrote from the air-picture net), and the tube's tracks the
+    // board does not carry (he sits at the IT-45, rwd_mb3). Not the imitated echo, not the ones he heard destroyed.
+    std::vector<BoardMark> PostPicture() const {
+        std::vector<BoardMark> out = PostMarks();
+        if (!post_) return out;
+        for (const AspdTrack& k : post_->Tracks()) {
+            if (k.imitated || reported_kills_.count(k.target_id) != 0) continue;
+            bool on_board = false;
+            for (const BoardMark& m : out) on_board = on_board || m.target_id == k.target_id;
+            if (!on_board) out.push_back(TubeMark(k));
+        }
+        return out;
+    }
     // One designation read out on the battery net: number, azimuth and range from the launcher (flak11: by voice,
     // azimuth and range), one message at a time (the board's operator delay and message time).
-    bool DesignateByVoice(const std::string& callsign, const BoardMark& m) {
-        if (!battery_fire_ || !BatteryNetUp()) return false;
+    bool DesignateByVoice(const std::string& callsign, const BoardMark& m, int repeats = 0) {
+        if (!battery_fire_) return false;
         const BatteryFire::Shooter* sh = battery_fire_->Find(callsign);
         if (sh == nullptr || sh->missiles <= 0) return false;
+        // On a line laid to the launcher with its lever up: no emission, no jamming (an NPC commander raises it when the
+        // net is jammed out or the launcher is off it). Else on the battery net: his box on FuG-4, the set transmitting.
+        const LineDef* line = voice_ ? LineToLauncher(callsign) : nullptr;
+        if (line != nullptr && NpcAt(Cmdr()) && nets_ && (nets_->Jam("battery", time_) >= 2 || !nets_->MemberOnNet("battery", callsign))) {
+            const VoiceBoxDef* b = voice_->BoxOf(Cmdr());
+            if (b != nullptr && static_cast<std::size_t>(line->line) <= b->lines.size()) {
+                for (std::size_t k = 0; k < b->lines.size(); ++k) console_.panel.Set(b->lines[k], static_cast<int>(k) + 1 == line->line ? 1 : 0);
+                voice_->Update(console_);
+            }
+        }
+        const bool by_line = line != nullptr && voice_->HearsLine(Cmdr(), line->line);
+        if (!by_line && !BatteryNetUp()) {
+            if (voice_) last_refusal_ = CanTalkOnNet(Cmdr(), "battery");
+            return false;
+        }
         const PlottingBoardDef& bd = post_->Board().Def();
         const double start = std::max(time_, battery_net_free_s_) + bd.operator_delay_s;
-        battery_net_free_s_ = start + bd.message_s;
+        // Under jamming a command is said twice (rrs_1986).
+        const bool twice = !by_line && nets_ && nets_->Jam("battery", time_) > 0;
+        battery_net_free_s_ = start + bd.message_s * (twice ? 2.0 : 1.0);
         // He reads the number off the board and the place off the IT-45: its latest fix, led along its speed vector to
         // when the launcher will have it (the tube shows the vector, ru_pu12_text). Not on the tube: the board's mark.
         BoardMark at = m;
         for (const AspdTrack& k : post_->Tracks()) {
             if (k.target_id == m.target_id) at.position = k.position + k.velocity * (battery_net_free_s_ - k.time_s);
         }
-        designations_out_.push_back({callsign, m, at.position, battery_net_free_s_});
+        designations_out_.push_back({callsign, m, at.position, battery_net_free_s_, by_line, repeats});
         if (ExternalLauncher(callsign)) linked_out_.push_back({callsign, at, start, battery_net_free_s_});
         const PlottingBoard::Designation d = PlottingBoard::Designate(at, sh->position);
-        char n[16], r[16];
+        char n[16], r[16], az[16];
         std::snprintf(n, sizeof(n), "%04d", m.number);
         std::snprintf(r, sizeof(r), "%.0f", d.range_m / 1000.0);
-        if (callouts_) {
-            callouts_->Say(time_, "order_assign", Cmdr(), {{"callsign", callsign}, {"number", n}, {"azimuth", MilsText(d.azimuth_deg)}, {"range_km", r}});
+        std::snprintf(az, sizeof(az), "%03.0f", std::fmod(d.azimuth_deg + 360.0, 360.0));  // degrees on the battery net (bguir_tsp)
+        if (by_line) {
+            const std::string label = "line " + std::to_string(line->line);
+            Radio(label, "Battery commander", callsign + ", я " + OwnCallSignOn("battery") + ": цель " + n + ", азимут " + az + ", дальность " + r +
+                                                  " — уничтожить!");
+        } else {
+            if (callouts_) {
+                callouts_->Say(time_, "order_assign", Cmdr(), {{"callsign", callsign}, {"own", OwnCallSignOn("battery")}, {"number", n},
+                                                                {"azimuth", az}, {"range_km", r}});
+            }
+            Transmitted("battery", "Battery commander", bd.message_s * (twice ? 2.0 : 1.0));
         }
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign,
-                     std::string("target ") + n + " by voice: azimuth " + MilsText(d.azimuth_deg) + ", range " + r + " km"});
+                     std::string("target ") + n + (by_line ? " by line" : twice ? " by voice, said twice" : " by voice") + ": azimuth " + az +
+                         ", range " + r + " km"});
         ++designations_made_;
         return true;
     }
@@ -3609,6 +4636,15 @@ private:
                 battery_fire_->SetExternalState(d.callsign, -1, d.mark.target_id, BatteryFire::Phase::Acquiring);
                 continue;
             }
+            // The launcher hears it only on the battery net's present frequency and through any jamming (a line always).
+            if (!d.by_line && nets_ && def_.radio_data.Find("battery") != nullptr &&
+                (!nets_->MemberOnNet("battery", d.callsign) || !nets_->GetsThrough("battery", time_, nets_->Jam("battery", time_) > 0))) {
+                ++designations_lost_;
+                Event(d.callsign, "the designation did not get through (jammed, or off the battery net)");
+                // No read-back: the NPC commander says it again (twice more at most).
+                if (NpcAt(Cmdr()) && d.repeats < 2 && reported_kills_.count(d.mark.target_id) == 0) DesignateByVoice(d.callsign, d.mark, d.repeats + 1);
+                continue;
+            }
             const BatteryFireTarget* best = nullptr;
             double best_d = kDesignationSearchM;
             for (const BatteryFireTarget& t : targets) {
@@ -3626,6 +4662,20 @@ private:
             }
             if (best->id != d.mark.target_id) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
             battery_fire_->Assign(d.callsign, best->id, d.mark.number, time_);
+            // Its read-back (rrs_1986): heard at the post if the launcher can transmit and the post hears the net.
+            char rn[16];
+            std::snprintf(rn, sizeof(rn), "%04d", d.mark.number);
+            if (d.by_line) {
+                Radio("line " + std::to_string(LineToLauncher(d.callsign)->line), d.callsign,
+                      OwnCallSignOn("battery") + ", я " + d.callsign + ": цель " + rn + ", понял.");
+                ++readbacks_heard_;
+            } else if (LaunchersCanTransmit() && NetHears() && (!nets_ || nets_->GetsThrough("battery", time_))) {
+                if (callouts_) callouts_->Say(time_, "readback", "battery", {{"post", OwnCallSignOn("battery")}, {"callsign", d.callsign}, {"number", rn}}, 1.0);
+                ++readbacks_heard_;
+            } else {
+                ++readbacks_missed_;
+                Event(d.callsign, std::string("read back ") + rn + ": not heard at the post");
+            }
         }
     }
     LauncherStatus& Status(const std::string& callsign, LauncherStatus::State state, int missiles, int target_number) {
@@ -3760,14 +4810,7 @@ public:
         for (const BoardMark& m : PostMarks()) {
             if (m.target_id == track->target_id) return DesignateByVoice(callsign, m);
         }
-        BoardMark m;
-        m.target_id = track->target_id;
-        m.number = aspd_number;
-        m.time_s = track->time_s;
-        m.position = track->position;
-        m.height_hm = static_cast<int>(std::lround(track->height_m / 100.0));
-        m.type = track->type;
-        return DesignateByVoice(callsign, m);
+        return DesignateByVoice(callsign, TubeMark(*track));
     }
     // A player's designation through his seat (multiplayer): only the commanding seat gives the launchers targets.
     bool SeatDesignate(const std::string& seat, const std::string& callsign, int number, std::string* why = nullptr) {
@@ -3786,17 +4829,17 @@ public:
             return false;
         }
         const bool ok = PlayerPlotAt(number, east_m, north_m, metres_per_board_m).ok;
-        if (!ok && why) *why = "the board folded, the number neither heard nor on the tube, or the last mark still being written";
+        if (!ok && why) *why = "the board folded, no report heard with that number, or the last mark still being written";
         return ok;
     }
     // A player's plot through his seat: only the plotter's.
-    bool SeatPlot(const std::string& seat, int aspd_number, std::string* why = nullptr) {
+    bool SeatPlot(const std::string& seat, int board_number, std::string* why = nullptr) {
         if (!post_ || seat != console_.post_plotter) {
             if (why) *why = "the board is the " + console_.post_plotter + "'s";
             return false;
         }
-        const bool ok = PlayerPlot(aspd_number);
-        if (!ok && why) *why = "not on the tube, or the last mark is still being written";
+        const bool ok = PlayerPlot(board_number);
+        if (!ok && why) *why = "no report heard with that number, or the last mark is still being written";
         return ok;
     }
     // The post's board as the commander reads it now: each target's latest mark of the last two minutes, the ones
@@ -3847,10 +4890,16 @@ private:
     // A callout was heard: what it says about a target goes into each listener's picture. An NPC listener may not take
     // it in (his tier's miss chance, more under stress): he says "Повторите!" and the speaker says it again (once).
     void Hear(const SpokenCallout& s) {
-        if (s.channel != "intercom") return;
+        if (s.id == "air_report" && post_) {  // read out to the plotter: it waits for his hand now
+            post_->ReleaseHeld(s.about.number, time_);
+            reading_out_.erase(s.about.number);
+            return;
+        }
+        if (s.channel != "intercom" && s.channel != "cabin") return;
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             CrewMember& c = crew_[i];
             if (c.Role() == s.from) continue;
+            if (voice_ && s.channel == "intercom" && !voice_->HearsIntercom(c.Role()) && !(s.call && voice_->HearsCall(c.Role()))) continue;
             const bool addressed = s.to == "crew" || s.to == "any" || s.to == c.Role();
             if (!addressed) continue;
             const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
@@ -3908,8 +4957,55 @@ public:
 
     // A player in a seat speaks a report of the crew data (the UI's report buttons): what it says comes from his own
     // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.
+    // A report's words as the player's menu shows them (Russian, English): the blanks his seat can fill filled (the
+    // report he would read out to the plotter, his seat's number), any other blank «…».
+    std::pair<std::string, std::string> ReportWords(const std::string& station, const std::string& callout_id) const {
+        const CalloutDef* c = def_.crew_data.FindCallout(callout_id);
+        if (c == nullptr) return {std::string(), std::string()};
+        std::map<std::string, std::string> f;
+        if (callout_id == "air_report") {
+            f["report"] = post_ && !post_->Held().empty() ? post_->Held().front().text : std::string("(нет донесения / no report waiting)");
+        }
+        if (callout_id == "seat_ready") {
+            static const char* const words[3][3] = {{"deputy_commander", "Первый", "1"}, {"senior_operator", "Второй", "2"}, {"operator", "Третий", "3"}};
+            for (const auto& w : words) {
+                if (station != w[0]) continue;
+                f["seat_number"] = w[1];
+                f["seat_number_en"] = w[2];
+            }
+        }
+        auto blanks = [](std::string t) {
+            for (std::size_t a = t.find('{'); a != std::string::npos; a = t.find('{', a)) {
+                const std::size_t b = t.find('}', a);
+                if (b == std::string::npos) break;
+                t.replace(a, b - a + 1, "…");
+            }
+            return t;
+        };
+        return {blanks(FillCallout(c->ru, f)), blanks(FillCallout(c->en, f))};
+    }
     bool PlayerSay(const std::string& station, const std::string& callout_id) {
         if (!callouts_ || def_.crew_data.FindCallout(callout_id) == nullptr) return false;
+        if (callout_id == "seat_ready") {  // «Первый (второй, третий) готов» (voenizdat_osa_1991 p. 247)
+            static const char* const words[3][3] = {{"deputy_commander", "Первый", "1"}, {"senior_operator", "Второй", "2"}, {"operator", "Третий", "3"}};
+            for (const auto& w : words) {
+                if (station != w[0]) continue;
+                if (!voice_ || !voice_->HearsIntercom(station)) {
+                    last_refusal_ = "your headset is not on the intercom";
+                    return false;
+                }
+                if (!callouts_->Say(time_, callout_id, station, {{"seat_number", w[1]}, {"seat_number_en", w[2]}})) return false;
+                intercom_checked_.insert(station);
+                reports_made_.push_back({time_, station, callout_id});
+                return true;
+            }
+            return false;
+        }
+        if (callout_id == "air_report") {  // the radiotelephonist reads the oldest report he heard to the plotter
+            if (!PlayerReadOutAirReport(station)) return false;
+            reports_made_.push_back({time_, station, callout_id});
+            return true;
+        }
         if (callout_id == "contact" && engagement_on_) {
             const Contact* nearest = nullptr;
             for (const Contact& c : engagement_.SearchPicture()) {

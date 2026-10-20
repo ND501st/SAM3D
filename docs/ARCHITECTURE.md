@@ -204,6 +204,14 @@ The PU-12M's R-111 and R-407 (`simcore/radio_sets.hpp`): their reach is the docu
 root of the power, not the EM layer's link budget over the terrain; interference on the telecode is a scenario outage
 (`"kind": "interference"`), not a jammer; the R-111's other modes (telegraphy, relay, remote control) are positions only.
 
-Radios and intercom: `simcore/crew_comms.hpp` reads the console's R-123M and R-124 controls and tells the command network which set hears and whether the commander is on the radio, and the EM link what the squelch and the antenna cost; orders to crew go through the R-124 (`ScenarioRunner::GiveOrder`). Receive-only: nothing transmits from the vehicle yet.
+Radios and intercom: `simcore/crew_comms.hpp` reads the console's R-123M and R-124 controls and tells the command network which set hears and whether the commander is on the radio, and the EM link what the squelch and the antenna cost; orders to crew go through the R-124 (`ScenarioRunner::GiveOrder`).
+
+Voice paths (`simcore/voice_comms.hpp`, `simcore/radio_nets.hpp`, `docs/crew/12_COMMUNICATIONS.md`): who hears a callout is
+decided by headsets, boxes and selectors, and a net's reach by its set being on, warm, on the net's numbered frequency
+and not jammed out; the reach of a voice net is not the EM layer's link budget over the terrain (the R-123M nets are
+assumed to reach within the battery). Jamming is a scenario's or a lesson's (barrage or spot, weak or strong, a
+direction-finding fix bringing a follow-on jammer), not an EM jammer's J/S. The talk tables' groups are SAM3D's
+placeholders (the real tables are not public); a regiment's group heard on the R-111 is decoded by an NPC, never by the
+player's hand. Which PVS/RTK-1 position reaches which set is SAM3D's reading of museum photographs (medium confidence).
 
 Command sources: `simcore/c2_sources.hpp` (`C2Network`) gives the engagement model the crew's air picture from the active of several sources; the PU-12 board is one of them (`docs/research/EM_C2_SOURCES_2026-10.md`).

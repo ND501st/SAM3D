@@ -22,7 +22,10 @@
 // itself when only one procedure of the seat has it) and the lesson's own "wait_until" conditions; until then the step
 // says what it waits for. "on_start" actions run when the step comes up: "order:<id>" (the commander, an NPC in a seat
 // lesson, gives that order: the lesson keeps the drill at the learner's pace) and "release:<target>" (a target held
-// with "on_cue" appears). "fast_forward": the front end may run time faster while the step only waits.
+// with "on_cue" appears); for the voice paths (docs/crew/12_COMMUNICATIONS.md) "net_order:<net>" (the net's main station
+// orders it to its other frequency now, on air), "jam:<net>" (a strong spot jammer comes on the net now) and
+// "line_call:<n>" (the far end of the RTK-1's line n rings). "fast_forward": the front end may run time faster while the
+// step only waits.
 // "conditions_only": the step's action is shown and asked for, but only its "done_when" finishes it (the ДХ's launcher
 // key: done when the designation has gone out, not when the key is pressed).
 //
@@ -93,7 +96,7 @@ struct TutorialCondition {
 };
 
 struct TutorialAction {
-    enum class Kind { Order, Release };
+    enum class Kind { Order, Release, NetOrder, Jam, LineCall };
     Kind kind = Kind::Order;
     std::string arg;
     std::string text;
@@ -365,8 +368,11 @@ inline bool ParseTutorialAction(const std::string& text, TutorialAction& out, st
     out.arg = colon == std::string::npos ? std::string() : text.substr(colon + 1);
     if (head == "order") out.kind = TutorialAction::Kind::Order;
     else if (head == "release") out.kind = TutorialAction::Kind::Release;
+    else if (head == "net_order") out.kind = TutorialAction::Kind::NetOrder;
+    else if (head == "jam") out.kind = TutorialAction::Kind::Jam;
+    else if (head == "line_call") out.kind = TutorialAction::Kind::LineCall;
     else {
-        why = "'" + text + "': unknown action (order, release)";
+        why = "'" + text + "': unknown action (order, release, net_order, jam, line_call)";
         return false;
     }
     if (out.arg.empty()) {
@@ -603,6 +609,12 @@ inline bool BindTutorial(TutorialDef& def, const ScenarioDef& scenario, const Co
             if (a.kind == TutorialAction::Kind::Order && (crew == nullptr || crew->FindOrder(a.arg) == nullptr)) {
                 return fail(", '" + a.text + "': no such order in the crew data");
             }
+            if ((a.kind == TutorialAction::Kind::NetOrder || a.kind == TutorialAction::Kind::Jam) && scenario.radio_data.Find(a.arg) == nullptr) {
+                return fail(", '" + a.text + "': no net '" + a.arg + "' in the scenario's radio data");
+            }
+            if (a.kind == TutorialAction::Kind::LineCall && scenario.radio_data.Line(std::atoi(a.arg.c_str())) == nullptr) {
+                return fail(", '" + a.text + "': no line " + a.arg + " in the scenario's radio data");
+            }
             if (a.kind == TutorialAction::Kind::Release) {
                 bool held = false;
                 for (const ScenarioTarget& t : scenario.targets) held = held || (t.id == a.arg && t.on_cue);
@@ -787,6 +799,11 @@ public:
             if (words != nullptr) {
                 st.order_ru = words->ru;
                 st.order_en = words->en;
+            }
+            if (words != nullptr && st.report && !def_.seat.empty()) {  // his words: the report he reads out, his seat's number
+                const std::pair<std::string, std::string> w = r.ReportWords(def_.seat, st.order);
+                st.order_ru = w.first;
+                st.order_en = w.second;
             }
         }
         st.instructor = auto_;
@@ -1195,6 +1212,9 @@ private:
         for (const TutorialAction& a : s->on_start) {
             if (a.kind == TutorialAction::Kind::Order) r.GiveCrewOrder(a.arg);
             if (a.kind == TutorialAction::Kind::Release) r.ReleaseTarget(a.arg);
+            if (a.kind == TutorialAction::Kind::NetOrder) r.ExternalNetOrder(a.arg);
+            if (a.kind == TutorialAction::Kind::Jam) r.StartJamming(a.arg);
+            if (a.kind == TutorialAction::Kind::LineCall) r.RingLine(std::atoi(a.arg.c_str()));
         }
     }
 

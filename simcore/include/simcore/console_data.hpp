@@ -141,6 +141,57 @@ struct CommsDef {
     std::vector<std::string> noisy;          // subsystems whose running makes the cabin too loud to talk
 };
 
+// The crew's voice paths ("voice", simcore/voice_comms.hpp, docs/crew/12_COMMUNICATIONS.md): each seat's headset and
+// intercom box, and the radio sets the boxes reach. A seat hears the intercom, a set or a line only through its headset,
+// worn and plugged into its box, with the box turned to it.
+struct VoiceSetDef {
+    std::string id;                    // "fug1", "right": what a box position names
+    std::string name;                  // "R-123M FuG-1"
+    std::string kind;                  // "r123m" (worked here) or "r111" (radio_sets.hpp works it)
+    std::string power, mode, preset, volume, squelch;  // the R-123M's controls (mode: Д. ПРИЁМ / СИМПЛЕКС; preset: ФИКС. 1-4)
+    int simplex_position = 1;          // the mode switch's СИМПЛЕКС
+    std::string warm, transmit;        // subsystems: warmed up (10 min); able to transmit (3 min after Д. ПРИЁМ)
+    double band_lo_mhz = 0.0, band_hi_mhz = 0.0;  // the frequencies it may work (a diplexer's share of the band); 0: any
+    std::string net;                   // the net it works when the scenario's radio data names none ("battery", ...)
+};
+
+struct VoiceBoxDef {
+    std::string id;                    // "a1", "rtk1", "pvs1"
+    std::string name;                  // "А-1", "РТК-1", "ПВС-1"
+    std::string station;
+    std::string headset;               // control: СНЯТ / НАДЕТ
+    std::string selector;              // control ("" : a box with no switch, always on the intercom)
+    std::vector<std::string> positions;  // per selector position: "off", "intercom", "radio" or a set's id
+    std::string radio;                 // the set "radio" names, if fixed
+    std::string radio_select;          // or the control that picks it (the Osa's headset switch)
+    std::vector<std::string> radio_select_sets;  // per position of radio_select
+    std::string monitor;               // a second set heard (the RTK-1: it receives on two sets)
+    std::vector<std::string> monitor_positions;  // "off" or a set's id
+    std::vector<std::string> lines;    // line levers (the RTK-1's five lines): down / up
+    std::string circular;              // the circular call button (ЦИРКУЛЯР)
+    std::string power;                 // a subsystem this box needs besides the network's ("" : none)
+    bool keeps_intercom = false;       // on a set it still hears and talks on the intercom (the commander's A-1, the RTK-1)
+};
+
+struct VoicePhoneDef {
+    std::string id;                    // "ta57"
+    std::string handset;               // control: on the hook / taken
+    std::string station;               // the seat that answers it
+};
+
+struct VoiceDef {
+    std::string system;                // "R-124" or "ПВС / РТК-1"
+    std::string power;                 // subsystem: the boxes powered
+    bool intercom_on_radio = false;    // a box on a set still hears the intercom (the PVS family) or leaves it (the R-124)
+    std::vector<VoiceSetDef> sets;
+    std::vector<VoiceBoxDef> boxes;
+    std::vector<std::string> unboxed;  // seats with no box (the PU-12M's plotter)
+    std::vector<VoicePhoneDef> phones;
+    double shout_quiet_s = 1.5;        // a word across the cabin without the intercom (SAM3D estimates, as the Osa's comms)
+    double shout_noisy_s = 4.0;
+    std::vector<std::string> noisy;    // subsystems whose running makes the cabin too loud to talk
+};
+
 struct LauncherContainerDef {
     std::string id;           // e.g. "1-I"
     int channel = 1;          // 1 = channel I, 2 = channel II
@@ -296,6 +347,8 @@ struct ConsoleData {
     LauncherDef launcher;
     bool has_comms = false;
     CommsDef comms;
+    bool has_voice = false;
+    VoiceDef voice;
     bool has_fuel = false;
     FuelDef fuel;
     // A command post's own information chain ("post", simcore/command_post.hpp): the subsystems that show the regiment's
@@ -362,7 +415,7 @@ public:
     bool Load(const json::Value& root, ConsoleData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "sources", "stations", "inputs",
                              "controls", "subsystems", "procedures", "launch", "launcher", "comms", "fuel", "readiness", "sensors", "post",
-                             "radios"})) {
+                             "radios", "voice"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
@@ -378,6 +431,7 @@ public:
         if (!LoadFuel(root, out)) return false;
         if (!LoadPost(root, out)) return false;
         if (!LoadRadios(root, out)) return false;
+        if (!LoadVoice(root, out)) return false;
         if (!LoadReadiness(root, out)) return false;
         return LoadSensors(root, out);
     }
@@ -997,6 +1051,169 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         out.has_comms = true;
+        return true;
+    }
+
+    // A list of strings (empty when absent); `vet` checks each one ("" : fine, else the complaint).
+    template <typename Vet>
+    bool StringList(const json::Value& obj, const std::string& path, const char* key, std::vector<std::string>& out, Vet vet) {
+        const json::Value* a = OptionalArray(obj, path, key);
+        if (a == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const json::Value& e = a->items[i];
+            if (!e.Is(json::Type::String)) return Fail(Index(Join(path, key), i), "expected a string");
+            const std::string why = vet(e.string);
+            if (!why.empty()) return Fail(Index(Join(path, key), i), why);
+            out.push_back(e.string);
+        }
+        return true;
+    }
+
+    bool LoadVoice(const json::Value& root, ConsoleData& out) {
+        const json::Value* v = root.Find("voice");
+        if (v == nullptr) return true;
+        const std::string p = "voice";
+        if (!Keys(*v, p, {"system", "power", "intercom_on_radio", "sets", "boxes", "unboxed", "phones", "shout_quiet_s", "shout_noisy_s", "noisy",
+                          "source", "confidence", "notes"}) ||
+            !Provenance(*v, p)) {
+            return false;
+        }
+        VoiceDef& d = out.voice;
+        const Equipment& eq = out.equipment;
+        if (!RequireString(*v, p, "system", d.system) || !RefSubsystem(*v, p, "power", eq, true, d.power) ||
+            !OptionalBool(*v, p, "intercom_on_radio", d.intercom_on_radio) || !OptionalNumber(*v, p, "shout_quiet_s", d.shout_quiet_s) ||
+            !OptionalNumber(*v, p, "shout_noisy_s", d.shout_noisy_s) ||
+            !StringList(*v, p, "noisy", d.noisy, [&eq](const std::string& id) { return eq.Has(id) ? std::string() : "unknown subsystem '" + id + "'"; })) {
+            return false;
+        }
+        const json::Value* sets = OptionalArray(*v, p, "sets");
+        if (sets == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; sets != nullptr && i < sets->items.size(); ++i) {
+            const std::string sp = Index(Join(p, "sets"), i);
+            const json::Value& e = sets->items[i];
+            VoiceSetDef s;
+            if (!Keys(e, sp, {"id", "name", "kind", "power", "mode", "preset", "volume", "squelch", "simplex_position", "warm", "transmit",
+                              "band_mhz", "net", "notes"}) ||
+                !RequireString(e, sp, "id", s.id) || !RequireString(e, sp, "name", s.name) || !RequireString(e, sp, "kind", s.kind) ||
+                !OptionalString(e, sp, "net", s.net) ||
+                !OptionalInt(e, sp, "simplex_position", s.simplex_position) || !RefSubsystem(e, sp, "warm", eq, false, s.warm) ||
+                !RefSubsystem(e, sp, "transmit", eq, false, s.transmit)) {
+                return false;
+            }
+            if (s.kind != "r123m" && s.kind != "r111") return Fail(Join(sp, "kind"), "r123m or r111");
+            const bool r123 = s.kind == "r123m";
+            if (!RefControl(e, sp, "power", out.panel, ControlKind::Discrete, r123, s.power) ||
+                !RefControl(e, sp, "mode", out.panel, ControlKind::Discrete, r123, s.mode) ||
+                !RefControl(e, sp, "preset", out.panel, ControlKind::Discrete, r123, s.preset) ||
+                !RefControl(e, sp, "volume", out.panel, ControlKind::Discrete, false, s.volume) ||
+                !RefControl(e, sp, "squelch", out.panel, ControlKind::Discrete, false, s.squelch)) {
+                return false;
+            }
+            if (r123 && (s.warm.empty() || s.transmit.empty())) return Fail(sp, "an R-123M needs warm and transmit subsystems");
+            if (const json::Value* band = OptionalArray(e, sp, "band_mhz")) {
+                if (band->items.size() != 2 || !band->items[0].Is(json::Type::Number) || !band->items[1].Is(json::Type::Number) ||
+                    !(band->items[0].number < band->items[1].number)) {
+                    return Fail(Join(sp, "band_mhz"), "[lowest, highest] MHz");
+                }
+                s.band_lo_mhz = band->items[0].number;
+                s.band_hi_mhz = band->items[1].number;
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (r123 && out.panel.Find(s.preset)->positions != 4) return Fail(Join(sp, "preset"), "four positions (ФИКС. 1-4)");
+            for (const VoiceSetDef& o : d.sets) {
+                if (o.id == s.id) return Fail(Join(sp, "id"), "duplicate set '" + s.id + "'");
+            }
+            d.sets.push_back(std::move(s));
+        }
+        auto set_known = [&d](const std::string& id) {
+            for (const VoiceSetDef& s : d.sets) {
+                if (s.id == id) return true;
+            }
+            return false;
+        };
+        auto station_known = [&out](const std::string& st) {
+            if (out.stations.empty()) return true;
+            for (const ConsoleStation& s : out.stations) {
+                if (s.id == st) return true;
+            }
+            return false;
+        };
+        const json::Value* boxes = OptionalArray(*v, p, "boxes");
+        if (boxes == nullptr) return message_.empty() ? Fail(Join(p, "boxes"), "required, a list") : false;
+        for (std::size_t i = 0; i < boxes->items.size(); ++i) {
+            const std::string bp = Index(Join(p, "boxes"), i);
+            const json::Value& e = boxes->items[i];
+            VoiceBoxDef b;
+            if (!Keys(e, bp, {"id", "name", "station", "headset", "selector", "positions", "radio", "radio_select", "radio_select_sets",
+                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "notes"}) ||
+                !RequireString(e, bp, "id", b.id) || !RequireString(e, bp, "name", b.name) || !RequireString(e, bp, "station", b.station) ||
+                !RefControl(e, bp, "headset", out.panel, ControlKind::Discrete, true, b.headset) ||
+                !RefControl(e, bp, "selector", out.panel, ControlKind::Discrete, false, b.selector) ||
+                !OptionalString(e, bp, "radio", b.radio) ||
+                !RefControl(e, bp, "radio_select", out.panel, ControlKind::Discrete, false, b.radio_select) ||
+                !RefControl(e, bp, "monitor", out.panel, ControlKind::Discrete, false, b.monitor) ||
+                !RefControl(e, bp, "circular", out.panel, ControlKind::Momentary, false, b.circular) ||
+                !RefSubsystem(e, bp, "power", eq, false, b.power) || !OptionalBool(e, bp, "keeps_intercom", b.keeps_intercom)) {
+                return false;
+            }
+            if (!station_known(b.station)) return Fail(Join(bp, "station"), "unknown station '" + b.station + "'");
+            const auto channel = [&](const std::string& c) -> std::string {
+                if (c == "off" || c == "intercom" || c == "radio" || set_known(c)) return std::string();
+                return "unknown channel '" + c + "' (off, intercom, radio or a set's id)";
+            };
+            const auto a_set = [&](const std::string& c) -> std::string {
+                return c == "off" || set_known(c) ? std::string() : "unknown set '" + c + "'";
+            };
+            if (!StringList(e, bp, "positions", b.positions, channel) || !StringList(e, bp, "radio_select_sets", b.radio_select_sets, a_set) ||
+                !StringList(e, bp, "monitor_positions", b.monitor_positions, a_set)) {
+                return false;
+            }
+            const auto lever = [&](const std::string& c) -> std::string {
+                const ControlDef* cd = out.panel.Find(c);
+                return cd != nullptr && cd->kind == ControlKind::Discrete ? std::string() : "unknown line lever '" + c + "'";
+            };
+            if (!StringList(e, bp, "lines", b.lines, lever)) return false;
+            if (!b.selector.empty() && static_cast<int>(b.positions.size()) != out.panel.Find(b.selector)->positions) {
+                return Fail(Join(bp, "positions"), "one per position of " + b.selector);
+            }
+            if (b.selector.empty() && !b.positions.empty()) return Fail(Join(bp, "positions"), "a box without a selector has none");
+            if (!b.monitor.empty() && static_cast<int>(b.monitor_positions.size()) != out.panel.Find(b.monitor)->positions) {
+                return Fail(Join(bp, "monitor_positions"), "one per position of " + b.monitor);
+            }
+            if (!b.radio.empty() && !set_known(b.radio)) return Fail(Join(bp, "radio"), "unknown set '" + b.radio + "'");
+            if (!b.radio_select.empty() && static_cast<int>(b.radio_select_sets.size()) != out.panel.Find(b.radio_select)->positions) {
+                return Fail(Join(bp, "radio_select_sets"), "one per position of " + b.radio_select);
+            }
+            bool names_radio = false;
+            for (const std::string& c : b.positions) names_radio = names_radio || c == "radio";
+            if (names_radio && b.radio.empty() && b.radio_select.empty()) return Fail(bp, "\"radio\" needs radio or radio_select");
+            for (const VoiceBoxDef& o : d.boxes) {
+                if (o.id == b.id) return Fail(Join(bp, "id"), "duplicate box '" + b.id + "'");
+                if (o.station == b.station) return Fail(Join(bp, "station"), "one box a seat");
+            }
+            d.boxes.push_back(std::move(b));
+        }
+        if (!StringList(*v, p, "unboxed", d.unboxed, [&](const std::string& s) {
+                return station_known(s) ? std::string() : "unknown station '" + s + "'";
+            })) {
+            return false;
+        }
+        const json::Value* phones = OptionalArray(*v, p, "phones");
+        if (phones == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; phones != nullptr && i < phones->items.size(); ++i) {
+            const std::string pp = Index(Join(p, "phones"), i);
+            const json::Value& e = phones->items[i];
+            VoicePhoneDef ph;
+            if (!Keys(e, pp, {"id", "handset", "station", "notes"}) || !RequireString(e, pp, "id", ph.id) ||
+                !RefControl(e, pp, "handset", out.panel, ControlKind::Discrete, true, ph.handset) ||
+                !RequireString(e, pp, "station", ph.station)) {
+                return false;
+            }
+            if (!station_known(ph.station)) return Fail(Join(pp, "station"), "unknown station '" + ph.station + "'");
+            d.phones.push_back(std::move(ph));
+        }
+        out.has_voice = true;
         return true;
     }
 

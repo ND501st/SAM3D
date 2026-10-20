@@ -6,7 +6,7 @@
   "strict": true,
   "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
   "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/osa_ak.json: power_up, pto_on_line) and the crew data's reports (data/crew/osa_ak_crew.json), with their sources",
-  "notes": "The commander's orders are given by the lesson (on_start) at the learner's pace.",
+  "notes": "The lesson's scenario starts with the headset off. The commander's orders are given by the lesson (on_start) at the learner's pace.",
   "steps": [
     {
       "id": "hello", "chapter": "Your seat", "title": "The driver's seat",
@@ -17,6 +17,15 @@
       ],
       "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
       "continue": true
+    },
+    {
+      "id": "headset", "title": "Your headset (шлемофон)", "control": "headset.driver", "position": 1,
+      "lines": [
+        "First your шлемофон: put it on and plug its cord into your Р-124 box.",
+        "Without it you hear only the cabin, and over the engine little of it. Your ПВ box can also put you on the left R-123M."
+      ],
+      "why": "The Osa's crew work in their headsets: the turbine and the fans drown a voice in the cabin (r124_refs; voenizdat_osa_1991).",
+      "hint": "J: put it on (or point the cross at it, left click)."
     },
     {
       "id": "tour_pu303", "title": "The power-supply panel ПУ-303", "look": "pu303_panel",

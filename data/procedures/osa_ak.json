@@ -159,6 +159,32 @@
     "notes": "Burning = the power source's subsystem is not off (it burns while starting). The take-off generator is taken as 25 l/h whether or not the vehicle moves (it only runs at a halt). At the reserve the crew asks for fuel (debrief) and both power sources are cut so the rest stays for driving; this reads 'half the tank is kept for driving' as a hard limit on the power sources. refuel_lpm 60 is a sam3d estimate (no source gives a refuelling rate): a full tank from the reserve in 2.5 min."
   },
 
+  "voice": {
+    "system": "R-124",
+    "power": "r124_intercom",
+    "intercom_on_radio": false,
+    "sets": [
+      { "id": "left", "name": "R-123M left", "kind": "r123m", "power": "radio.left.power", "mode": "radio.left.mode", "preset": "radio.left.preset", "volume": "radio.left.volume", "squelch": "radio.left.squelch", "warm": "r123m_left", "transmit": "r123m_left_tx" },
+      { "id": "right", "name": "R-123M right", "kind": "r123m", "power": "radio.right.power", "mode": "radio.right.mode", "preset": "radio.right.preset", "volume": "radio.right.volume", "squelch": "radio.right.squelch", "warm": "r123m_right", "transmit": "r123m_right_tx" }
+    ],
+    "boxes": [
+      { "id": "a1", "name": "А-1", "station": "commander", "headset": "headset.commander", "selector": "intercom.a1", "positions": ["off", "intercom", "radio"], "radio_select": "radio.headset", "radio_select_sets": ["left", "right"], "keeps_intercom": true },
+      { "id": "a2", "name": "А-2", "station": "deputy_commander", "headset": "headset.deputy_commander", "selector": "intercom.a2", "positions": ["intercom", "radio"], "radio": "left" },
+      { "id": "a3", "name": "А-3", "station": "senior_operator", "headset": "headset.senior_operator" },
+      { "id": "a4", "name": "А-4", "station": "operator", "headset": "headset.operator" },
+      { "id": "pv", "name": "ПВ", "station": "driver", "headset": "headset.driver", "selector": "intercom.pv", "positions": ["intercom", "radio"], "radio": "left" }
+    ],
+    "phones": [
+      { "id": "ta57", "handset": "ta57.handset", "station": "commander" }
+    ],
+    "shout_quiet_s": 1.5,
+    "shout_noisy_s": 4.0,
+    "noisy": ["gta", "pto_generator"],
+    "source": "r124_refs; r124_bmp2 (A-1 ВЫКЛ / ВС / Р-123 / Р-112, A-2 Р-112 / ВС / Р-123: two radios; the chest switch's ВЫЗ pulls those on the radio back); r123m_training (the one on the radio leaves the intercom); mon_2112_80 (two R-123M, the R-124, a TA-57)",
+    "confidence": "medium",
+    "notes": "A-1 on Р-123 keeps the intercom (the chest switch's ПРМ: receive and the intercom, r124_bmp2; SAM3D as before); A-2 and the driver's ПВ on the radio leave it, and the call (ВЫЗ) brings them back. Which seat holds A-2 to A-5 on the Osa is not documented: A-2 the deputy commander (the ZSU-23-4 analogue, tpu_zsu; the NVA's deputy with the lock-on button), the rest by seat. A-2 and the driver's ПВ reach the left set (SAM3D's choice)."
+  },
+
   "readiness": {
     "powered": {
       "description": "powered on the march: turbine running, equipment and stabilisation warm, search possible on the move",
@@ -274,7 +300,8 @@
     { "id": "target_too_low", "description": "Target too low for the SSC radar to track in angle (НЛЦ lamp)", "source": "samsim_osa p25", "confidence": "high" },
     { "id": "target_captured", "description": "SSC is on the target azimuth and the target is inside the range gate, so it captures automatically", "source": "samsim_osa p24", "confidence": "high" },
     { "id": "target_tv_tracked", "description": "The target is in the TOV crosshair and the operators are tracking it by hand (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p25, p34 (ПА: angle tracking with the TOV camera)", "confidence": "medium" },
-    { "id": "target_fills_crosshair", "description": "The TV-tracked target fills the narrow-lens crosshair: by its size it is about within range (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p33-35 (range judged from the target's size in the narrow-lens crosshair); taken as the target within the firing zone at its true range: sam3d estimate", "confidence": "estimate" }
+    { "id": "target_fills_crosshair", "description": "The TV-tracked target fills the narrow-lens crosshair: by its size it is about within range (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p33-35 (range judged from the target's size in the narrow-lens crosshair); taken as the target within the firing zone at its true range: sam3d estimate", "confidence": "estimate" },
+    { "id": "ta57_call", "description": "The TA-57 rings: a call on the line laid to the vehicle", "source": "the sim sets it (docs/crew/12_COMMUNICATIONS.md §2.8)", "confidence": "medium" }
   ],
 
   "controls": [
@@ -474,7 +501,13 @@
       "source": "samsim_sprites osa042–043; samsim_osa p29 photo; start: samsim_game", "confidence": "medium" },
     { "id": "msl.emergency", "label": "АВАРИЙНЫЙ ПУСК", "station": "deputy_commander", "kind": "button", "guard": "msl.emergency_cover",
       "source": "samsim_osa p29 photo; samsim_thread (ePap, 29–30 Jun 2013)", "confidence": "medium",
-      "notes": "Throws the missile ИЗДЕЛИЯ is set to off unguided, when the launcher has lost power or to get rid of missiles fast. It climbs 24-27 s and self-destructs (launcher.emergency)." }
+      "notes": "Throws the missile ИЗДЕЛИЯ is set to off unguided, when the launcher has lost power or to get rid of missiles fast. It climbs 24-27 s and self-destructs (launcher.emergency)." },
+    { "id": "headset.commander", "label": "Headset (шлемофон): commander (A-1)", "station": "commander", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.deputy_commander", "label": "Headset (шлемофон): deputy commander (A-2)", "station": "deputy_commander", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.senior_operator", "label": "Headset (шлемофон): senior operator (A-3)", "station": "senior_operator", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.operator", "label": "Headset (шлемофон): operator (A-4)", "station": "operator", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.driver", "label": "Headset (шлемофон): driver (ПВ)", "station": "driver", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "ta57.handset", "label": "ТА-57: трубка", "station": "commander", "kind": "switch", "position_labels": ["НА РЫЧАГЕ", "СНЯТА"], "initial": 0, "source": "mon_2112_80 (p. 26: a TA-57 for a subscriber outside the vehicle at a halt); airbase_ek32_2012 (crews held the handset under the headset for the command post's night checks)", "confidence": "medium", "notes": "Taken: the commander hears the line (the battery command post's, where one is laid)." }
   ],
 
   "subsystems": [

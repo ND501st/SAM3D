@@ -49,7 +49,8 @@ void ASimCabinHUD::DrawHUD()
 	}
 	if (Sim != nullptr && Canvas != nullptr && (Vehicle == nullptr || !Vehicle->IsMissionMenuOpen()))
 	{
-		DrawRadio(Sim, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f);
+		const float CommsH = DrawComms(Sim, Vehicle, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f);
+		DrawRadio(Sim, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f - CommsH, Vehicle != nullptr ? Vehicle->GetStationId() : FString());
 		if (bShowBoard)
 		{
 			DrawBoard(Sim, SmallFont);
@@ -663,6 +664,9 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 			{TEXT("T   take this seat, or give it back"), TEXT("O   orders (commander's seat) or reports; 1-9 pick, 0 next page"),
 				TEXT("H   training overlay: guided, hint, demonstrate, off"), TEXT("1-9   quick crew drills (outside the crew menu)"),
 				TEXT("B   the PU-12 board (in a launcher: the designations heard)"), TEXT("V   the other vehicle (battery link)")}},
+		{TEXT("Headset and radios"),
+			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
+				TEXT("Y   answer a ringing line or telephone (again: put it down)")}},
 		{TEXT("PU-12M seats"), {TEXT("[ ] then 1-5   a board target to a launcher (commander)"),
 		TEXT("Wheel over the board   the number to write (plotter)"), TEXT("Click on the board   write it there (plotter)")}},
 	};
@@ -918,11 +922,89 @@ void ASimCabinHUD::DrawBacking(float X, float Y, float W, float H)
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.38f), X - 6.0f, Y - 3.0f, W + 12.0f, H + 6.0f);
 }
 
-void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
+float ASimCabinHUD::DrawComms(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle, UFont* Font, float Bottom)
 {
-	// The lines still fresh, packed at the bottom: the oldest fades. What came over a radio stands out from the rest of
-	// the screen: a colour per net, a bar down its left edge and the net's name in capitals; orders shouted in the cabin
-	// stay plain.
+	// What is in front of the man in the seat: his headset, his box and what it is on, the РСТ lamps of the sets it reaches,
+	// a call or a ringing line. Nothing about nets he is not on (first person, docs/command/).
+	if (Vehicle == nullptr || !Vehicle->IsInCabin() || Vehicle->GetStationId().IsEmpty())
+	{
+		return 0.0f;
+	}
+	const FSimSeatComms C = Sim->GetSeatComms(Vehicle->GetStationId());
+	if (!C.bVoice)
+	{
+		return 0.0f;
+	}
+	TArray<TPair<FString, FLinearColor>> Lines;
+	const FLinearColor Plain(0.85f, 0.85f, 0.8f, 0.9f);
+	const FLinearColor Warn(1.0f, 0.45f, 0.3f, 1.0f);
+	if (C.bUnboxed)
+	{
+		Lines.Add({TEXT("No intercom box at this seat: you hear the cabin (the radiotelephonist reads the air picture to you)"), Plain});
+	}
+	else if (!C.bHeadset)
+	{
+		Lines.Add({TEXT("Headset off: you hear only the cabin   (J: put it on)"), Warn});
+	}
+	else
+	{
+		FString Lamps;
+		for (int32 I = 0; I < C.SetNames.Num(); ++I)
+		{
+			Lamps += FString::Printf(TEXT("   %s %s"), C.SetLive[I] ? TEXT("●") : TEXT("○"), *C.SetNames[I]);
+		}
+		FString Box = FString::Printf(TEXT("%s: %s"), *C.BoxName, C.bPowered ? *C.Channel : TEXT("no power"));
+		if (!C.Monitor.IsEmpty())
+		{
+			Box += FString::Printf(TEXT(" + %s"), *C.Monitor);
+		}
+		Lines.Add({Box + Lamps + TEXT("   (K: turn the box)"), Plain});
+	}
+	if (C.bCalled)
+	{
+		Lines.Add({TEXT("ВЫЗОВ: another seat calls your box"), Warn});
+	}
+	for (int32 L : C.RingingLines)
+	{
+		Lines.Add({FString::Printf(TEXT("ЛИНИЯ %d rings   (Y: answer)"), L), Warn});
+	}
+	for (int32 L : C.LinesUp)
+	{
+		Lines.Add({FString::Printf(TEXT("On line %d   (Y: put it down)"), L), Plain});
+	}
+	if (C.bPhoneRinging)
+	{
+		Lines.Add({TEXT("ТА-57 rings   (Y: take the handset)"), Warn});
+	}
+	else if (C.bPhoneTaken)
+	{
+		Lines.Add({TEXT("ТА-57 handset taken   (Y: put it back)"), Plain});
+	}
+	float Widest = 0.0f;
+	for (const auto& L : Lines)
+	{
+		float W = 0.0f;
+		float H = 0.0f;
+		GetTextSize(L.Key, W, H, Font);
+		Widest = FMath::Max(Widest, W);
+	}
+	const float Height = 16.0f * Lines.Num();
+	float Y = Bottom - Height;
+	DrawBacking(20.0f, Y, Widest, Height);
+	for (const auto& L : Lines)
+	{
+		DrawText(L.Key, L.Value, 20.0f, Y, Font);
+		Y += 16.0f;
+	}
+	return Height + 8.0f;
+}
+
+void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom, const FString& Station)
+{
+	// The lines still fresh, packed at the bottom: the oldest fades. Only what reached the player's seat: his headset and
+	// box, or the cabin (docs/crew/12_COMMUNICATIONS.md). What came over a radio stands out from the rest of the screen: a
+	// colour per net, a bar down its left edge and the net's name in capitals; a line on a telephone is LINE; orders and
+	// reports said in the cabin stay plain.
 	const double Now = Sim->GetSimTimeSeconds();
 	const TArray<FSimRadioMessage> Messages = Sim->GetRadioMessages(RadioLines);
 	struct FLine
@@ -935,19 +1017,27 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom)
 	float Widest = 0.0f;
 	for (const FSimRadioMessage& M : Messages)
 	{
+		if (!M.HeardAt(Station))
+		{
+			continue;  // not on his headset, not in his cabin
+		}
 		const double Age = Now - M.TimeSeconds;
-		const float Life = M.Net == TEXT("air picture") ? AirPictureLineSeconds : RadioLineSeconds;
+		const bool bReadOut = M.Text.Contains(TEXT("(read out)"));
+		const float Life = M.Net == TEXT("air picture") || bReadOut ? AirPictureLineSeconds : RadioLineSeconds;
 		if (Age > Life && Now > 0.0)
 		{
 			continue;
 		}
 		const bool bRadio = !M.Net.StartsWith(TEXT("cabin")) && M.Net != TEXT("intercom");
-		FLinearColor Ink = M.Net == TEXT("air picture")	 ? FLinearColor(1.0f, 0.72f, 0.25f)	 // amber: the regiment's air picture
-						   : M.Net == TEXT("command net") ? FLinearColor(0.35f, 0.85f, 1.0f)  // cyan: designations
-						   : M.Net == TEXT("regiment net") ? FLinearColor(0.78f, 0.55f, 1.0f) // violet: the regiment (the R-111)
-						   : bRadio						  ? FLinearColor(0.6f, 0.7f, 1.0f)	 // blue: the battery net
-														  : FLinearColor(0.85f, 0.85f, 0.8f);
-		Ink.A = FMath::Clamp(1.0f - static_cast<float>(Age) / Life, M.Net == TEXT("air picture") ? 0.0f : 0.35f, 1.0f);
+		const bool bLine = M.Net.StartsWith(TEXT("line "));
+		FLinearColor Ink = M.Net == TEXT("air picture") || bReadOut ? FLinearColor(1.0f, 0.72f, 0.25f)	 // amber: the air picture
+						   : M.Net == TEXT("command net")  ? FLinearColor(0.35f, 0.85f, 1.0f)  // cyan: designations
+						   : M.Net == TEXT("regiment net") ? FLinearColor(0.78f, 0.55f, 1.0f)  // violet: the regiment (the R-111)
+						   : M.Net == TEXT("covered net")  ? FLinearColor(0.55f, 0.9f, 0.55f)  // green: the covered unit (FuG-2)
+						   : bLine						   ? FLinearColor(0.95f, 0.9f, 0.6f)   // pale yellow: a telephone line
+						   : bRadio						   ? FLinearColor(0.6f, 0.7f, 1.0f)	   // blue: the battery net
+														   : FLinearColor(0.85f, 0.85f, 0.8f);
+		Ink.A = FMath::Clamp(1.0f - static_cast<float>(Age) / Life, M.Net == TEXT("air picture") || bReadOut ? 0.0f : 0.35f, 1.0f);
 		const FString Text = bRadio ? FString::Printf(TEXT("RADIO %s  %s: %s"), *M.Net.ToUpper(), *M.From, *M.Text)
 									: FString::Printf(TEXT("[%s] %s: %s"), *M.Net, *M.From, *M.Text);
 		float W = 0.0f;

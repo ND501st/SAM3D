@@ -527,6 +527,23 @@ public:
         return true;
     }
 
+    // The preset a source is on (1-4; 0: none).
+    int PresetOfSource(const std::string& id) const { return PresetOf(id); }
+    // A source's net moved to another frequency (its main station's order, radio_nets.hpp): it is heard now only on
+    // `preset`, until the crew turns a set to it; what it says meanwhile on the old preset is not there to hear.
+    bool MoveSource(const std::string& id, int preset, double t) {
+        if (Find(id) == nullptr || preset < 1 || preset > kPresets) return false;
+        if (presets_[static_cast<std::size_t>(preset - 1)] == id) return false;
+        for (std::string& slot : presets_) {
+            if (slot == id) slot.clear();
+        }
+        presets_[static_cast<std::size_t>(preset - 1)] = id;
+        const std::string now = off_net_ ? std::string() : presets_[static_cast<std::size_t>(sets_[listening_].preset - 1)];
+        if (now != active_) active_ = now;
+        events_.push_back({t, "net", id, "now on preset " + std::to_string(preset)});
+        return true;
+    }
+
     // The scenario fails a source (destroyed, line cut, net jammed) from t, or restores it.
     void SetFailed(const std::string& id, bool failed, double t, const std::string& reason = std::string()) {
         Source* s = Find(id);

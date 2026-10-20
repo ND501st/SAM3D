@@ -111,51 +111,51 @@ SC_TEST("command post: the regiment's telecode arrives once a cycle; tracks carr
     SC_EXPECT(p.Tracks().empty());
 }
 
-SC_TEST("command post: the plotter writes one mark at a time, new targets first and nearest first, each again a minute on") {
+SC_TEST("command post: the plotter does not copy the tube; he writes what he hears, at his own speed") {
+    // The telecode's tracks are on the IT-45, the commander's tube (rwd_mb3): nothing of them goes on the board.
     CommandPost p = Exact();
     CommandPost::Inputs in;
     in.telecode = true;
     in.operator_free = true;
     const std::vector<BoardContact> regiment = {Target("far", 0, 40000, 2000), Target("near", 0, 20000, 2000), Target("mid", 0, 30000, 2000)};
-    std::vector<double> times;
-    std::vector<std::string> order;
-    for (double t = 0.0; t < 90.0 - 1e-9; t += 0.5) {
-        const std::size_t before = p.Board().Marks().size();
-        p.Update(t, regiment, {}, in);
-        if (p.Board().Marks().size() > before) {
-            times.push_back(t);
-            order.push_back(p.Board().Marks().back().target_id);
+    for (double t = 0.0; t < 90.0 - 1e-9; t += 0.5) p.Update(t, regiment, {}, in);
+    SC_EXPECT(p.Tracks().size() == 3 && p.Board().Marks().empty());
+    // On the air-picture net he writes each report as it ends (5 s a report, 5 s a mark); a slower plotter (half the
+    // speed) takes twice as long over each mark, so the second report waits for him.
+    AspdDef d = PlaceholderAspd();
+    d.air_net_report_s = 5;
+    d.air_net_period_s = 60;
+    d.air_net_range_m = 20000;
+    in.telecode = false;
+    in.air_net = true;
+    const std::vector<BoardContact> two = {Target("near", 0, 20000, 2000), Target("far", 0, 60000, 2000)};
+    auto gap = [&](double speed) {
+        CommandPost q = Exact(d);
+        in.operator_speed = speed;
+        std::vector<double> times;
+        for (double t = 0.0; t < 40.0 - 1e-9; t += 0.5) {
+            const std::size_t before = q.Board().Marks().size();
+            q.Update(t, two, {}, in);
+            if (q.Board().Marks().size() > before) times.push_back(t);
         }
-    }
-    // One mark every 5 s (the placeholder's time per mark): the three in order of range; then each again only once a
-    // board period (60 s: the crosses are labelled with minutes) has passed and a newer fix is in.
-    SC_EXPECT(order.size() == 6);
-    if (order.size() >= 3) SC_EXPECT(order[0] == "near" && order[1] == "mid" && order[2] == "far");
-    if (times.size() >= 4) {
-        SC_EXPECT_NEAR(times[1] - times[0], 5.0, 1e-9);
-        SC_EXPECT(times[3] >= 60.0 && order[3] == "near");
-    }
-    SC_EXPECT(p.Board().Marks()[0].number == 6201);  // the board's own numbering
-    // A slower plotter (half the speed) takes twice as long over the three.
-    CommandPost slow = Exact();
-    in.operator_speed = 0.5;
-    double slow_third = -1.0;
-    for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) {
-        slow.Update(t, regiment, {}, in);
-        if (slow_third < 0.0 && slow.Board().Marks().size() == 3) slow_third = t;
-    }
-    SC_EXPECT_NEAR(slow_third, 20.0, 1e-9);
-    // An operator busy elsewhere writes nothing.
-    CommandPost busy = Exact();
+        return times.size() == 2 ? times[1] - times[0] : -1.0;
+    };
+    const double normal = gap(1.0), slow = gap(0.5);
+    SC_EXPECT_NEAR(normal, 5.0, 1e-9);
+    SC_EXPECT_NEAR(slow, 10.0, 1e-9);
+    // A plotter busy elsewhere writes nothing.
+    CommandPost busy = Exact(d);
+    in.operator_speed = 1.0;
     in.operator_free = false;
-    for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) busy.Update(t, regiment, {}, in);
-    SC_EXPECT(busy.Board().Marks().empty() && !busy.Tracks().empty());
+    for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) busy.Update(t, two, {}, in);
+    SC_EXPECT(busy.Board().Marks().empty() && !busy.Heard().empty());
 }
 
-SC_TEST("command post: a cabled radar's targets are taken off by hand, a few at a time, before anything is plotted") {
+SC_TEST("command post: a cabled radar's targets are taken off by the commander's hand at the tube, a few at a time") {
     CommandPost p = Exact();  // placeholder: 3 semi-automatic tracks, 2 s to take each off
     CommandPost::Inputs in;
     in.primary = true;
+    in.tube_free = true;
     in.operator_free = true;
     const std::vector<BoardContact> radar = {Target("a", 0, 10000, 1000), Target("b", 0, 12000, 1000), Target("c", 0, 14000, 1000),
                                              Target("d", 0, 16000, 1000)};
@@ -167,10 +167,15 @@ SC_TEST("command post: a cabled radar's targets are taken off by hand, a few at 
     p.Update(2.0, {}, radar, in);
     p.Update(4.0, {}, radar, in);
     SC_EXPECT(p.Tracks().size() == 3);  // the third in, the fourth never (3 held)
-    // With the three held and none due again, his hands go to the board.
+    // The plotter does not copy them onto the board.
     p.Update(6.0, {}, radar, in);
-    SC_EXPECT(p.Board().Marks().size() == 1);
+    SC_EXPECT(p.Board().Marks().empty());
     SC_EXPECT(p.Tracks().size() == 3);
+    // A commander busy elsewhere takes nothing off.
+    CommandPost busy = Exact();
+    in.tube_free = false;
+    for (double t = 0.0; t < 10.0; t += 1.0) busy.Update(t, {}, radar, in);
+    SC_EXPECT(busy.Tracks().empty());
 }
 
 SC_TEST("command post: never oriented the post's picture is off by up to 5 deg and 3 km; oriented, little; driving adds 1 % at most") {
@@ -260,7 +265,7 @@ SC_TEST("command post: the air-picture net reads one report at a time, each targ
     for (double t = 0.0; t < 30.0 - 1e-9; t += 0.5) deaf.Update(t, regiment, {}, in);
     const std::vector<CommandPost::Spoken> missed = deaf.TakeSpoken();
     SC_EXPECT(missed.size() == 2 && !missed[0].heard && deaf.Board().Marks().empty() && deaf.Heard().empty());
-    // A plotter busy with the tube's primary picture: the heard reports wait, and are forgotten after a period.
+    // A plotter busy elsewhere: the heard reports wait, and are forgotten after a period.
     CommandPost busy = Exact(d);
     in.air_net = true;
     in.operator_free = false;
@@ -369,7 +374,7 @@ SC_TEST("command post scenario: the board fills from the regiment's telecode, st
     SC_EXPECT(r.Console().panel.Get("fr.scale") == 1 && std::fabs(r.PostScaleM() - 50000.0) < 1e-6);
 }
 
-SC_TEST("command post scenario: the tube's scale switch picks the scale; the player at the plotter's seat writes the marks himself") {
+SC_TEST("command post scenario: the tube's scale switch picks the scale; the player at the plotter's seat cannot copy the tube") {
     std::string t = ReadFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_deploy.json");
     t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }", "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\"");
     ScenarioDef def;
@@ -385,11 +390,9 @@ SC_TEST("command post scenario: the tube's scale switch picks the scale; the pla
     r.PlayerSet("fr.scale", 2);
     r.Step(0.1);
     SC_EXPECT(r.PostScope().size() == 1 && std::fabs(r.PostScaleM() - 100000.0) < 1e-6);
-    const int number = r.Post()->Tracks().front().number;
-    SC_EXPECT(r.PlayerPlot(number));
-    SC_EXPECT(!r.PlayerPlot(number));  // still writing the last one
-    SC_EXPECT(r.Board()->Marks().size() == 1);
-    SC_EXPECT(!r.PlayerPlot(99));  // no such track on the tube
+    // The tube is the commander's: its tracks are not the plotter's to write.
+    SC_EXPECT(!r.PlayerPlot(r.Post()->Tracks().front().number));
+    SC_EXPECT(r.Board()->Marks().empty());
 }
 
 SC_TEST("command post scenario: the regiment's air-picture net is heard in the post, waits for the plotter, and reaches a client") {
@@ -451,7 +454,7 @@ SC_TEST("command post: the regiment's designations to the battery ride with its 
     SC_EXPECT(designated == 1);
 }
 
-SC_TEST("command post: the ДХ's characteristics stay with the target through later fixes and go on the board") {
+SC_TEST("command post: the ДХ's characteristics stay with the target through later fixes; the board is not the tube's") {
     CommandPost p = Exact();
     CommandPost::Inputs in;
     in.telecode = true;
@@ -469,7 +472,7 @@ SC_TEST("command post: the ДХ's characteristics stay with the target through l
     SC_EXPECT(k.friendly && k.type == 1 && k.group && k.zone == 3);
     in.operator_free = true;
     p.Update(11.0, regiment, {}, in);
-    SC_EXPECT(!p.Board().Marks().empty() && p.Board().Marks().back().type == 1 && p.Board().Marks().back().Code() == 12);
+    SC_EXPECT(p.Board().Marks().empty());  // the plotter writes what he hears, not the commander's tube
 }
 
 SC_TEST("command post: the ФР block at КОНТРОЛЬ shows an imitated echo, taken off like a radar's, never written on the board") {
@@ -477,13 +480,14 @@ SC_TEST("command post: the ФР block at КОНТРОЛЬ shows an imitated echo
     CommandPost::Inputs in;
     in.imitation = true;
     in.operator_free = true;
+    in.tube_free = true;
     p.Update(0.0, {}, {}, in);
     bool echo = false, track = false;
     for (const CommandPost::ScopeMark& m : p.Scope(35000)) {
         echo = echo || (m.imitated && m.number < 0);
         track = track || (m.imitated && m.number >= 0);
     }
-    SC_EXPECT(echo && track);  // the echo, and taken off at once by the free operator
+    SC_EXPECT(echo && track);  // the echo, and taken off at once by the commander at the tube
     for (double t = 0.5; t < 90.0; t += 0.5) p.Update(t, {}, {}, in);
     SC_EXPECT(p.Board().Marks().empty());  // nothing to write: there is no aircraft
     in.imitation = false;
@@ -637,7 +641,10 @@ SC_TEST("command post scenario: the regiment's commands come by voice on the R-1
     ScenarioRunner r(std::move(def), std::move(console));
     for (int i = 0; i < 300; ++i) r.Step(0.1);
     bool heard = false;
-    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) heard = heard || (m.net == "regiment net" && m.text.find("Fire ban") != std::string::npos);
-    SC_EXPECT(heard);                          // by voice, on the R-111
+    // By voice on the R-111, as a group of the talk table ПТ-1 (214: fire ban), heard by the commander's RTK-1 on РСТ-3.
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+        heard = heard || (m.net == "regiment net" && m.text.find("Тополь: 214") != std::string::npos && m.HeardAt("battery_commander"));
+    }
+    SC_EXPECT(heard);
     SC_EXPECT(r.PostFeedNow().command < 0);    // not on the tube: no telecode
 }

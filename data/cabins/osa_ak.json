@@ -171,7 +171,13 @@
     { "control": "fo.mc", "panel": "fo_panel", "at_m": [-0.27, 0.058],
       "look": {"kind": "toggle", "size_m": 0.014, "color": "chrome", "label": "МЦ — ОТКЛ."} },
     { "control": "msl.emergency", "panel": "fo_panel", "at_m": [0.251, -0.074],
-      "look": {"kind": "button", "size_m": 0.024, "color": "black", "ring": "chrome", "label": "АВАРИЙНЫЙ ПУСК"} }
+      "look": {"kind": "button", "size_m": 0.024, "color": "black", "ring": "chrome", "label": "АВАРИЙНЫЙ ПУСК"} },
+    { "control": "headset.commander", "panel": "r124_a1_panel", "at_m": [0.0, -0.0496], "style": "toggle", "look": {"kind": "jack", "size_m": 0.026, "color": "chrome", "label": "ШЛЕМОФОН"} },
+    { "control": "headset.deputy_commander", "panel": "r124_a2_panel", "at_m": [-0.0327, 0.0319], "style": "toggle", "look": {"kind": "jack", "size_m": 0.026, "color": "chrome", "label": "ШЛЕМОФОН"} },
+    { "control": "headset.senior_operator", "panel": "so_panel", "at_m": [-0.3045, -0.4464], "style": "toggle", "look": {"kind": "jack", "size_m": 0.026, "color": "chrome", "label": "ШЛЕМОФОН"} },
+    { "control": "headset.operator", "panel": "op_panel", "at_m": [0.208, -0.424], "style": "toggle", "look": {"kind": "jack", "size_m": 0.026, "color": "chrome", "label": "ШЛЕМОФОН"} },
+    { "control": "headset.driver", "panel": "driver_panel", "at_m": [0.2159, -0.1227], "style": "toggle", "look": {"kind": "jack", "size_m": 0.026, "color": "chrome", "label": "ШЛЕМОФОН"} },
+    { "control": "ta57.handset", "panel": "commander_panel", "at_m": [0.4091, 0.075], "style": "toggle", "look": {"kind": "latch", "size_m": 0.05, "color": "black", "label": "ТА-57"} }
   ],
 
   "lamps": [
@@ -396,7 +402,8 @@
       "lit_when": [{"subsystem": "power", "is": "ready"}, {"control": "msl.emergency_cover", "is": 0}],
       "source": "samsim_osa p29 photo; samsim_game (lit at the start, guard closed)", "confidence": "low",
       "notes": "Emergency launch de-energised. Tied to the closed guard in SAM3D (estimate).",
-      "look": {"kind": "legend", "size_m": 0.022, "label": "АВАР. ПУСК ОБЕСТОЧ."} }
+      "look": {"kind": "legend", "size_m": 0.022, "label": "АВАР. ПУСК ОБЕСТОЧ."} },
+    { "id": "ta57_ringing", "label": "ТА-57", "panel": "commander_panel", "at_m": [0.4091, 0.125], "color": "red", "lit_when": [{"input": "ta57_call", "is": true}], "source": "mon_2112_80 (p. 26: the TA-57 for a subscriber outside at a halt); the lamp stands for its bell (sam3d)", "confidence": "low" }
   ],
 
   "displays": [

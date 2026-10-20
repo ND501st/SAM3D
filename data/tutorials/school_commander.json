@@ -6,7 +6,7 @@
   "strict": true,
   "status": "A seat lesson (docs/TUTORIALS.md): step by step, each order highlighted in the crew menu, the next step only once it is given.",
   "source": "sam3d; the orders, the drills they start and the reports that answer them are the crew data's (data/crew/osa_ak_crew.json), with their sources",
-  "notes": "The commander's half of the game: the learner gives the orders, the NPC crew carries them out. Orders that can't be carried out yet are greyed in the menu with the reason (the order menu's honest greying).",
+  "notes": "The lesson's scenario starts with the headset off. The lesson's scenario starts with the headset off. The commander's half of the game: the learner gives the orders, the NPC crew carries them out. Orders that can't be carried out yet are greyed in the menu with the reason (the order menu's honest greying).",
   "steps": [
     {
       "id": "hello", "chapter": "Your seat", "title": "The commander's seat",
@@ -17,6 +17,15 @@
       ],
       "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
       "continue": true
+    },
+    {
+      "id": "headset", "title": "Your headset (шлемофон)", "control": "headset.commander", "position": 1, "look": "r124_a1_panel",
+      "lines": [
+        "First your шлемофон: put it on and plug its cord into your Р-124 box.",
+        "Your orders reach the crew on the intercom; without the headset you hear only the cabin and must shout them over the turbine, slower and not always heard. Your A-1 box puts you on the intercom or on a radio: on a radio you still hear the intercom."
+      ],
+      "why": "The Osa's crew work in their headsets: the turbine and the fans drown a voice in the cabin (r124_refs; voenizdat_osa_1991).",
+      "hint": "J: put it on (or point the cross at it, left click)."
     },
     {
       "id": "tour_panel", "title": "Your panel", "look": "commander_panel",
@@ -51,7 +60,7 @@
     {
       "id": "readiness", "title": "The crew at work", "done_when": ["task:searching"], "fast_forward": true,
       "lines": [
-        "Listen to them: «Есть!», «Питание подано!», «АПУ расстопорено!», «Готов СОЦ!». From cold this takes some minutes; the lesson runs time faster.",
+        "Listen to them: «Есть!», «Первый готов!», «Второй готов!», «Третий готов!» (each seat in place on the intercom), «Питание подано!», «АПУ расстопорено!», «Готов СОЦ!». From cold this takes some minutes; the lesson runs time faster.",
         "F1 or Tab: visit their seats and watch them work. F1 back to yours."
       ],
       "wait_text": "the search radar to come up («Готов СОЦ!»)"

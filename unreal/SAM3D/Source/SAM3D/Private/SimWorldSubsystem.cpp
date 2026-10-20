@@ -50,6 +50,12 @@ namespace
 
 	std::string ToStd(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
 	FString ToF(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
+	// The control moved (or the move went to the server).
+	bool ActionMoved(ESimPlayerActionResult R)
+	{
+		return R == ESimPlayerActionResult::Moved || R == ESimPlayerActionResult::Accepted || R == ESimPlayerActionResult::AcceptedEarly ||
+			   R == ESimPlayerActionResult::OutOfOrder || R == ESimPlayerActionResult::Sent;
+	}
 }
 
 // ---------------------------------------------------------------------------------------------- coordinates
@@ -1334,7 +1340,9 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 	{
 		if (C.kind == simcore::CalloutKind::Report && (C.from == Seat || C.from == "any"))
 		{
-			Out.Add({ToF(C.id), ToF(C.ru), ToF(C.en), false});
+			// The words as he would say them: the report he would read out, his seat's number; other blanks «…».
+			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, C.id);
+			Out.Add({ToF(C.id), ToF(Words.first), ToF(Words.second), false});
 		}
 	}
 	return Out;
@@ -2191,7 +2199,183 @@ TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) co
 		M.From = UTF8_TO_TCHAR(R.from.c_str());
 		M.Text = UTF8_TO_TCHAR(R.text.c_str());
 		M.bCallout = R.callout;
+		M.bRouted = R.routed;
+		for (const std::string& H : R.heard_by)
+		{
+			M.HeardBy.Add(ToF(H));
+		}
 		Out.Add(M);
+	}
+	return Out;
+}
+
+FSimSeatComms USimWorldSubsystem::GetSeatComms(const FString& Station) const
+{
+	FSimSeatComms C;
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	if (V == nullptr || Station.IsEmpty())
+	{
+		return C;
+	}
+	const std::string St = ToStd(Station);
+	const simcore::ConsoleData& Con = Runner->Console();
+	C.bVoice = true;
+	C.bUnboxed = V->Unboxed(St);
+	const simcore::VoiceBoxDef* Box = V->BoxOf(St);
+	if (Box == nullptr)
+	{
+		return C;
+	}
+	C.bHeadset = V->HeadsetOn(St);
+	C.bPowered = V->Powered();
+	C.BoxName = ToF(Box->name);
+	const std::string Sel = V->Selected(St);
+	C.Channel = Sel == "intercom" ? FString(TEXT("ВС")) : ToF(V->Name(Sel));
+	if (!V->Monitored(St).empty())
+	{
+		C.Monitor = ToF(V->Name(V->Monitored(St)));
+	}
+	auto Reaches = [Box](const std::string& Set) {
+		for (const std::string& P : Box->positions)
+		{
+			if (P == Set) return true;
+		}
+		for (const std::string& P : Box->radio_select_sets)
+		{
+			if (P == Set) return true;
+		}
+		return Box->radio == Set;
+	};
+	for (const simcore::VoiceSetDef& S : Con.voice.sets)
+	{
+		if (!Reaches(S.id))
+		{
+			continue;
+		}
+		C.SetNames.Add(ToF(S.name));
+		C.SetLive.Add(Runner->SetHearsItsNet(S.id));
+	}
+	const std::string Called = Box->id + "_call";
+	C.bCalled = Con.equipment.HasInput(Called) && Con.equipment.GetInput(Called);
+	for (int32 N = 1; N <= static_cast<int32>(Box->lines.size()); ++N)
+	{
+		const std::string Id = "line" + std::to_string(N) + "_call";
+		if (Con.equipment.HasInput(Id) && Con.equipment.GetInput(Id))
+		{
+			C.RingingLines.Add(N);
+		}
+	}
+	for (int L : V->LinesUp(St))
+	{
+		C.LinesUp.Add(L);
+	}
+	for (const simcore::VoicePhoneDef& P : Con.voice.phones)
+	{
+		if (P.station != St)
+		{
+			continue;
+		}
+		C.bPhoneTaken = V->PhoneTaken(P.id);
+		C.bPhoneRinging = Con.equipment.HasInput(P.id + "_call") && Con.equipment.GetInput(P.id + "_call");
+	}
+	return C;
+}
+
+bool USimWorldSubsystem::ToggleHeadset(const FString& Station)
+{
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	const simcore::VoiceBoxDef* Box = V != nullptr ? V->BoxOf(ToStd(Station)) : nullptr;
+	if (Box == nullptr)
+	{
+		return false;
+	}
+	const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->headset), V->HeadsetOn(ToStd(Station)) ? 0 : 1);
+	return ActionMoved(R);
+}
+
+bool USimWorldSubsystem::TurnBox(const FString& Station, int32 Direction)
+{
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	const simcore::VoiceBoxDef* Box = V != nullptr ? V->BoxOf(ToStd(Station)) : nullptr;
+	if (Box == nullptr || Box->selector.empty() || Box->positions.empty())
+	{
+		return false;
+	}
+	const int32 N = static_cast<int32>(Box->positions.size());
+	const int32 Now = Runner->Console().panel.Get(Box->selector);
+	const int32 Next = ((Now + (Direction >= 0 ? 1 : -1)) % N + N) % N;
+	const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->selector), Next);
+	return ActionMoved(R);
+}
+
+bool USimWorldSubsystem::AnswerCall(const FString& Station)
+{
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	if (V == nullptr)
+	{
+		return false;
+	}
+	const FSimSeatComms C = GetSeatComms(Station);
+	const simcore::VoiceBoxDef* Box = V->BoxOf(ToStd(Station));
+	if (Box != nullptr && C.RingingLines.Num() > 0)
+	{
+		const int32 L = C.RingingLines[0];
+		const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->lines[static_cast<size_t>(L - 1)]), 1);
+		return ActionMoved(R);
+	}
+	for (const simcore::VoicePhoneDef& P : Runner->Console().voice.phones)
+	{
+		if (P.station != ToStd(Station))
+		{
+			continue;
+		}
+		const ESimPlayerActionResult R = PlayerSetControl(ToF(P.handset), V->PhoneTaken(P.id) ? 0 : 1);
+		return ActionMoved(R);
+	}
+	if (Box != nullptr && C.LinesUp.Num() > 0)  // nothing ringing: put the raised line down
+	{
+		const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->lines[static_cast<size_t>(C.LinesUp[0] - 1)]), 0);
+		return ActionMoved(R);
+	}
+	return false;
+}
+
+TArray<FString> USimWorldSubsystem::GetDocumentLines(const FString& Document) const
+{
+	TArray<FString> Out;
+	if (!Runner)
+	{
+		return Out;
+	}
+	if (Document == TEXT("talk_tables"))
+	{
+		for (const simcore::TalkTable& T : Runner->GetTalkTables().tables)
+		{
+			Out.Add(FString::Printf(TEXT("%s  %s"), *ToF(T.name_ru), *ToF(T.name_en)));
+			for (const simcore::TalkEntry& E : T.entries)
+			{
+				Out.Add(FString::Printf(TEXT("   %s   %s"), *ToF(E.code), *ToF(E.ru)));
+			}
+			Out.Add(FString());
+		}
+	}
+	else if (Document == TEXT("radio_data"))
+	{
+		Out.Add(TEXT("РАДИОДАННЫЕ"));
+		for (const simcore::RadioNetDef& N : Runner->RadioData().nets)
+		{
+			FString Freqs;
+			for (size_t I = 0; I < N.frequencies_mhz.size(); ++I)
+			{
+				Freqs += FString::Printf(TEXT("%s%d: %.3f"), I > 0 ? TEXT("   ") : TEXT(""), static_cast<int32>(I) + 1, N.frequencies_mhz[I]);
+			}
+			Out.Add(ToF(N.name_ru));
+			Out.Add(FString::Printf(TEXT("   %s    я %s, ГС %s"), *Freqs, *ToF(N.own_call_sign), *ToF(N.main_call_sign)));
+			for (const simcore::RadioNetDef::Change& Ch : N.changes)
+			{
+				Out.Add(FString::Printf(TEXT("   смена в %02d:%02d на %d"), static_cast<int32>(Ch.at_s) / 60, static_cast<int32>(Ch.at_s) % 60, Ch.to));
+			}
+		}
 	}
 	return Out;
 }

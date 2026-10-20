@@ -6,6 +6,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
+#include "SimOsaVehicle.h"
 #include "SimSpeech.h"
 #include "SimWorldSubsystem.h"
 #include "Sound/SoundWaveProcedural.h"
@@ -341,7 +342,9 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	{
 		return;
 	}
-	// New lines on the bus.
+	// New lines on the bus: only those the player's seat hears (his headset and box, or the cabin).
+	const ASimOsaVehicle* Vehicle = Cast<ASimOsaVehicle>(GetOwner());
+	const std::string Seat = Vehicle != nullptr ? std::string(TCHAR_TO_UTF8(*Vehicle->GetStationId())) : std::string();
 	const std::vector<simcore::SeatActivity> Activity = Runner->CrewActivity();
 	for (const simcore::SpokenCallout& Line : Runner->Callouts()->Now())
 	{
@@ -350,6 +353,10 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			continue;
 		}
 		LastSeq = Line.seq;
+		if (!Seat.empty() && !Runner->CalloutHeardAt(Line, Seat))
+		{
+			continue;  // not on his headset, not in his cabin
+		}
 		if (Language.IsEmpty() || Sim->GetTimeScale() > 1.5f || Sim->IsSimPaused())
 		{
 			continue;
@@ -389,6 +396,8 @@ void USimCrewVoiceComponent::VoiceRadioLog(USimWorldSubsystem& Sim, const simcor
 	// The radio traffic that is not on the callout bus: the command net's designations, the air-picture net's reports, the
 	// battery's own messages. Each is read through the radio (one voice per net), in an English voice: the log is English.
 	const bool bVoice = Speech.IsReady() && Speech.NumVoices(TEXT("en")) > 0 && Sim.GetTimeScale() <= 1.5f && !Sim.IsSimPaused();
+	const ASimOsaVehicle* Vehicle = Cast<ASimOsaVehicle>(GetOwner());
+	const FString Seat = Vehicle != nullptr ? Vehicle->GetStationId() : FString();
 	for (const FSimRadioMessage& M : Sim.GetRadioMessages(16))
 	{
 		const FString Key = M.Net + TEXT("|") + M.From + TEXT("|") + M.Text;
@@ -402,14 +411,16 @@ void USimCrewVoiceComponent::VoiceRadioLog(USimWorldSubsystem& Sim, const simcor
 			RadioAtLast.Reset();
 		}
 		RadioAtLast.Add(Key);
-		if (!bVoice || M.bCallout || M.Net.StartsWith(TEXT("cabin")) || Runner.Time() - M.TimeSeconds > 4.0)
+		if (!bVoice || M.bCallout || M.Net.StartsWith(TEXT("cabin")) || Runner.Time() - M.TimeSeconds > 4.0 ||
+			(!Seat.IsEmpty() && !M.HeardAt(Seat)) || M.Text.StartsWith(TEXT("(")))
 		{
-			continue;  // a callout (voiced from the bus), shouted in the cabin, or too late to matter
+			continue;  // a callout (voiced from the bus), shouted in the cabin, not heard at his seat, noise, or too late
 		}
 		simcore::VoiceSettings Settings;
-		Settings.radio = true;
-		Settings.low_hz = Voices.radio_low_hz;
-		Settings.high_hz = Voices.radio_high_hz;
+		const bool bLine = M.Net.StartsWith(TEXT("line "));
+		Settings.radio = !bLine;  // a telephone line: the narrow band, no squelch
+		Settings.low_hz = bLine ? 300.0 : Voices.radio_low_hz;
+		Settings.high_hz = bLine ? 3400.0 : Voices.radio_high_hz;
 		FSimSpeechRequest R;
 		R.Id = NextRequest++;
 		R.Text = RadioSpeech(M.Text);

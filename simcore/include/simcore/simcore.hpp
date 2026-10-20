@@ -52,3 +52,6 @@
 #include "simcore/terrain_map.hpp"
 #include "simcore/solar.hpp"
 #include "simcore/scenery.hpp"
+#include "simcore/radio_nets.hpp"
+#include "simcore/talk_tables.hpp"
+#include "simcore/voice_comms.hpp"
