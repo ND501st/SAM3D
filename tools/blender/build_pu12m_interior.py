@@ -282,6 +282,15 @@ def build_item(b, it):
         for x in (it['x0'] + 0.015, it['x1'] - 0.015):
             for y in (it['y0'] + 0.015, it['y1'] - 0.015):
                 b.box(-y - 0.012, -y + 0.012, x - 0.012, x + 0.012, it['z0'], it['z1'] - 0.025, it['mat'])
+        if iid == 'r111_stand':
+            # the rack goes on up beside the R-111 to a shelf under the R-123M and the R-123M's top (wwp_btr60 p. 087:
+            # its tubular posts at the sets' sides)
+            r111, r123 = I.item('r111'), I.item('r123_fug2')
+            shelf0, shelf1 = r111['z1'] + 0.008, r123['z0'] - 0.005
+            b.box(-it['y1'] - 0.024, -it['y0'] + 0.024, it['x0'], it['x1'], shelf0, shelf1, it['mat'])
+            for x in (it['x0'] + 0.012, it['x1'] - 0.012):
+                for y in (r111['y0'] - 0.013, r111['y1'] + 0.013):
+                    b.cylinder(b3(x, y, it['z1']), b3(x, y, r123['z1']), 0.011, it['mat'], seg=12)
         return
     if iid == 'it45':
         # the tube's housing: a box, its back (to the bench) dished round the screen, a hood over the top

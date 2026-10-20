@@ -14,7 +14,8 @@ import pu12m_interior_trace as I  # noqa: E402
 import pu12m_trace as T  # noqa: E402
 
 # Items that are built into one another: the mast's winch on the mast, the R-123M on the R-111, the bench and its back.
-TOUCHING = {frozenset(p) for p in (('mast', 'winch'), ('r111', 'r123_fug2'), ('bench', 'bench_back'))}
+TOUCHING = {frozenset(p) for p in (('mast', 'winch'), ('r111', 'r123_fug2'), ('bench', 'bench_back'),
+                                       ('r111_stand', 'r111_unit'))}
 
 
 def corners(it):

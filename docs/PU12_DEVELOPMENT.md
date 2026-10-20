@@ -198,6 +198,9 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     `build_pu12m_radios.py`: `art/pu12m_interior/SM_RadioR111.fbx`, `SM_RadioR407.fbx`), proved on their photographs from
     the solved cameras (`check_pu12m_radios.py`). The cabin layout places them with bare panels in their fronts' planes,
     every control, lamp and display where the set has it (the meters read the set: `"reading"` in a meter display).
+    The R-407 on its bracket behind the commander's seat back (his workplace drawing); the radio operator's rack an
+    open tubular frame from the floor to a shelf under the R-123M, a dark unit under the R-111 not yet identified
+    (`wwp_btr60`, the ČSLA PU-12's photographs).
 - **P4 done (simcore):** the battery commander in the post. Scenario `data/scenarios/pu12m_battery.json` (four NPC
   launchers, a TZM, a raid with a friend in it); tests `simcore/tests/test_pu12m_battery.cpp`.
   - Designations go by voice on the battery net (the post's FuG-4 up and the mast raised), one message at a time:
