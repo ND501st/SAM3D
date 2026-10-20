@@ -198,9 +198,11 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     `build_pu12m_radios.py`: `art/pu12m_interior/SM_RadioR111.fbx`, `SM_RadioR407.fbx`), proved on their photographs from
     the solved cameras (`check_pu12m_radios.py`). The cabin layout places them with bare panels in their fronts' planes,
     every control, lamp and display where the set has it (the meters read the set: `"reading"` in a meter display).
-    The R-407 on its bracket behind the commander's seat back (his workplace drawing); the radio operator's rack an
-    open tubular frame from the floor to a shelf under the R-123M, a dark unit under the R-111 not yet identified
-    (`wwp_btr60`, the ČSLA PU-12's photographs).
+    The R-407 on its bracket behind the commander's seat back (his workplace drawing). The radio operator's rack an open
+    tubular frame (`wwp_btr60`, the ČSLA PU-12's photographs) in three tiers: the R-123M on the top shelf under the roof,
+    the R-111 on the middle one (1.40-1.73 m, its front just below his seated eye), the lower tier empty. SAM3D's choice
+    (the project owner, 20 Oct 2026): the photograph and the ČSLA drawing have the same stack lower, the R-111 at his
+    knees with a unit under it.
 - **P4 done (simcore):** the battery commander in the post. Scenario `data/scenarios/pu12m_battery.json` (four NPC
   launchers, a TZM, a raid with a friend in it); tests `simcore/tests/test_pu12m_battery.cpp`.
   - Designations go by voice on the battery net (the post's FuG-4 up and the mast raised), one message at a time:
@@ -359,6 +361,8 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   catalogue's two pages disagree), the lamps' timings (`docs/research/PU12_VISUALS_2026-10.md` §9).
 - The two whips' bases inside: the plan's items 3 and 28 stand elsewhere than the exterior's whips (placed from the
   photographs); left out of the interior until the photographs are read again.
+- The radio operator's rack in three tiers with the R-111 raised to his eye (the photographs have it lower, a unit not
+  identified under it).
 - The radios (`docs/research/PU12_RADIOS_2026-10.md`, decisions and open questions): the R-111's front width (scaled
   from the plan, about 5 %), the R-407's (from its overall size, about 3 %); which antenna the mast carries for each set;
   the ASPD-U on the R-407's 4-wire terminals; the split of the R-111's 45 s retune; the regiment's frequencies and how
