@@ -791,6 +791,15 @@
       ]
     },
     {
+      "id": "azimuth_onto_target", "name": "Azimuth onto the target's mark (tracking radar azimuth line)",
+      "source": "samsim_osa p22 (the azimuth wheel brings the tracking radar's azimuth line onto the target's mark on the search scope); flak11 (the senior operator puts the target under the azimuth mark); the steps are acquire_with_soc's last two", "confidence": "medium",
+      "notes": "Senior operator, when the commander orders a target taken. The wheel work itself is not a step (the NPC aims, the player turns the wheel).",
+      "steps": [
+        { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
+        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel and bring the azimuth line onto the target's mark" }
+      ]
+    },
+    {
       "id": "emcon_tv_azimuth", "name": "Emissions control: azimuth onto the plotting-board track",
       "source": "samsim_osa p33–35; seat: flak11 (9A33-3)", "confidence": "high",
       "notes": "Senior operator, with emcon_tv_engagement (deputy commander).",

@@ -178,6 +178,12 @@ public:
 
     bool Has(const std::string& id) const { return index_.count(id) != 0; }
 
+    // A subsystem's definition (null for unknown ids): the drill master reads the dependency graph from it.
+    const SubsystemDef* Def(const std::string& id) const {
+        const auto it = index_.find(id);
+        return it == index_.end() ? nullptr : &units_[it->second].def;
+    }
+
     // Ready at once, skipping the warm-up, if it is commanded on now (a session that starts with the equipment already
     // running). False if it isn't commanded on. Call in dependency order with Update(0) between, so each one sees
     // the states upstream of it.

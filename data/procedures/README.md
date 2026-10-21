@@ -1,6 +1,12 @@
 # Console data files
 
-One JSON file per system: its operator controls, the equipment behind them, and its procedures. Loaded by
+One JSON file per system: its operator controls, the equipment behind them, and its procedures.
+
+The procedures are the crew's **drills**: the sourced order each seat works its controls in. They are what the NPC
+crew carries out, what the player in a seat learns, and what the drill master follows when it computes the perfect
+performance (`docs/crew/06_REFERENCE_PERFORMER.md`). Every control's station makes every action one seat's; the crew
+pillars (teamwork first; every action mapped and interconnected) are in `docs/crew/README.md`, and
+`python tools/crew_map.py` writes the full map of who needs whom. Loaded by
 `simcore::LoadConsoleFile` (`simcore/include/simcore/console_data.hpp`), which rejects unknown keys, missing sources
 and bad references, and reports the path to the problem (e.g. `controls[4].guard: unknown control 'x'`).
 

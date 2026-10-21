@@ -706,6 +706,43 @@ bool USimWorldSubsystem::OrderCrew(const FString& CrewName, const FString& Proce
 	return true;
 }
 
+bool USimWorldSubsystem::GiveCrewOrder(const FString& OrderId)
+{
+	return Runner && Runner->GiveCrewOrder(ToStd(OrderId));
+}
+
+FSimDrillAdvice USimWorldSubsystem::GetDrillAdvice(const FString& Station, const FString& TaskId) const
+{
+	FSimDrillAdvice Out;
+	if (!Runner || Runner->Drill() == nullptr || !Runner->Def().has_crew_data)
+	{
+		return Out;
+	}
+	const simcore::CrewTask* Task = Runner->Def().crew_data.FindTask(ToStd(TaskId));
+	if (Task == nullptr)
+	{
+		return Out;
+	}
+	const simcore::DrillMaster& Drill = *Runner->Drill();
+	const simcore::DrillAdvice A = Drill.NextFor(ToStd(Station), Drill.GoalFor(*Task), Runner->Console());
+	Out.Station = Station;
+	if (A.control.empty())
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Out.Control = ToF(A.control);
+	Out.Position = A.position;
+	Out.Procedure = ToF(A.procedure);
+	Out.Description = ToF(A.description);
+	Out.DueInSeconds = A.due_in_s;
+	for (const std::string& W : A.why)
+	{
+		Out.Why.Add(ToF(W));
+	}
+	return Out;
+}
+
 FString USimWorldSubsystem::GetTrackedTarget() const
 {
 	return (Runner && Runner->EngagementOn()) ? ToF(Runner->Engagement().TrackedTarget()) : FString();

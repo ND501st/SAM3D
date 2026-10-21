@@ -17,6 +17,15 @@ PU-12 and the crew changes ripple through everything after them.
 
 ## Principles
 
+0. **Crew and teamwork (the project owner's design pillars, 16 Oct 2026; `docs/crew/README.md`).** Teamwork with NPC
+   crewmates is paramount. The game has two halves: *in the crew*, the player is one member of the team, learning the
+   drill and how to operate each seat; *in command*, the player gives the orders, first for the single Osa, then for the
+   battery. Every NPC works with every other; every action and command is mapped and interconnected (the generated action
+   map), with behaviour paths, callouts and commands for every environment and outcome. NPC skill levels come from player
+   progression and quests and affect reaction, speed and accuracy everywhere. An ideal progression of events, the drill
+   master's perfect performance, is the reference for the training overlay, like a chess engine that always knows the
+   best move. One crewmate's action depends on others' knowledge and actions (someone must know where the target is,
+   someone must have driven within reach), and that interdependence is mapped.
 1. **simcore is the game, Unreal is the presentation.** Build and test behaviour in simcore first; Unreal only displays it.
 2. **Procedures and consoles are the heart of the game.** Operator procedures, interlocks, crew, battery and scenarios
    come before any deeper physics.
@@ -79,16 +88,33 @@ two-missile salvo, and every lamp in the order the NVA account gives. `tools/ue_
 | 7.7 | **Done in Unreal, 16 Oct 2026 (built; checked over the network with `tools/ue_crew_smoke.ps1`, not yet looked at on screen).** The PU-12 plotting board as a HUD view (B): range rings, the battery at the centre, each target's marks of the last five plots joined into tracks, number, height/code and minute stamp; radio and intercom traffic as HUD lines (`ScenarioRunner::RadioLog`: command net, battery net, shouted orders); the battery's other vehicles and dummy positions on the map as entity actors (box stand-ins). All three also ride the knowledge stream, so network clients see them (`em::ViewExtras`). The practice map now plays `osa_battery_practice.json`. Placeholder models for the TZM, the ATZ fuel truck and the PU-12M (16 Oct 2026). Left: the launchers' and maintenance vehicle's models, the board as an object inside a PU-12 interior (the PU-12M plan: `docs/PU12_DEVELOPMENT.md`) | Unreal: plotting board in the PU-12, radio messages, battery vehicles on the map |
 | 7.9 | **Planned, 16 Oct 2026: `docs/PU12_DEVELOPMENT.md`.** The PU-12M as a vehicle as detailed as the Osa: five stations, ASPD-U telecode and the IT-45 indicator, the radio rack (3 x R-123M, R-111, R-407, R-124, RTK-1), topographic orientation (GAK, KP-4, PAB-2), IT-1/IT-2 status boards, power, deploy in 18 min, the battery commander as player or NPC, a full interior and multiplayer seats (phases P0-P7). A placeholder exterior is on the map now (`SM_PU12M`) | PU-12M console, procedures, crew and interior |
 
-## Phase 8 - Crew and mission (the vertical slice)
+## Phase 8 - Crew and teamwork, and the mission (the vertical slice)
+
+Re-planned 16 October 2026 around the project owner's crew pillars (`docs/crew/README.md`): **teamwork with NPC
+crewmates is paramount**; the game has two halves, **in the crew** (the player as one member of the team, learning the
+drill and every seat) and **in command** (the player giving the orders, first for one Osa, then for the battery); every
+NPC works with every other and every action and command is mapped and interconnected; behaviour paths, callouts and
+commands for every environment and outcome; NPC skill levels from player progression and quests; and an ideal
+progression of events, the "chess engine" reference for the training overlay (the **drill master**). The full plan with
+its done-when criteria is `docs/crew/09_IMPLEMENTATION_PLAN.md`.
 
 | # | Task |
 |---|---|
-| 8.1 | NPC crew bodies, animations, seats, voice-line hooks (five seats) |
-| 8.2 | Order menu (radial or list) on top of the crew API; the player can take any seat |
-| 8.3 | One mission end to end: march, choose a position, orient, deploy, function check, engage, reload, stow, debrief |
-| 8.4 | Playtest and balance |
+| 8.0 | **Done 16 Oct 2026:** the crew reference (`docs/crew/`), the pillars in every document, the generated action map (`tools/crew_map.py`) |
+| 8.1 | **Done 16 Oct 2026:** crew data (`data/crew/`): seats, orders, callouts, tasks, world facts, skill tiers; loader `simcore/crew_data.hpp`; scenario `crew[].skill` |
+| 8.2 | **First pass done:** skill in behaviour: reaction, jitter, slips, omissions, wheel rates, TV lag and aim, range by hand, stress (flag). Left: judgement, communication misses, stress from the situation, calibration tests |
+| 8.3 | **v1 done:** the drill master (`simcore/drill_master.hpp`): plan, ideal timeline, best next move per seat, cost of a move. Left: fault recovery, the engagement's network chart, decisions under uncertainty |
+| 8.4 | **First pass done:** callouts (`simcore/crew_callouts.hpp`): orders, acknowledgements, automatic reports, engagement reports, designations passed on, faults, reminders; HUD radio lines and the debrief |
+| 8.5 | Knowledge per seat: NPCs act on their instruments and what they were told |
+| 8.6 | **Vehicle first pass done:** the NPC vehicle commander (`"crew_commander": "npc"`, scenario `osa_crew_practice.json`): readiness by the drill master's plan, the engagement by the crew data's orders, supervision of a player's seat; the player in command through `GiveCrewOrder`. Left: march, priorities, second missile, logistics, C2 |
+| 8.7 | Assistance overlay and grading (Unreal and debrief). Backend `GetDrillAdvice` done |
+| 8.8 | Commander mode: the order menu (Unreal). Backend `GiveCrewOrder` done |
+| 8.9 | The battery: NPC vehicle commanders, fire distribution, the battery commander's seat |
+| 8.10 | NPC crew bodies, animations, seats, voice lines (five seats) |
+| 8.11 | One mission end to end: march, choose a position, orient, deploy, function check, engage, reload, stow, debrief |
+| 8.12 | Playtest and balance |
 
-**Exit = M2:** a person can play the whole mission without touching the editor.
+**Exit = M2:** a person can play the whole mission without touching the editor, in a seat of the crew or in command.
 
 ## Phase 9 - Threats
 

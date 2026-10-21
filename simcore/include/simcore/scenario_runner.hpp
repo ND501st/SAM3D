@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <array>
+#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -40,6 +41,8 @@
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
+#include "simcore/crew_callouts.hpp"
+#include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
@@ -59,10 +62,14 @@ public:
           rng_(def_.seed),
           engagement_on_(!def_.tuning_file.empty()),
           engagement_(def_.tuning, def_.unit_position) {
-        for (const ScenarioCrew& c : def_.crew) {
+        for (std::size_t i = 0; i < def_.crew.size(); ++i) {
+            const ScenarioCrew& c = def_.crew[i];
             const double u = Uniform01(rng_);
             const double reaction = c.reaction_time_s + (2.0 * u - 1.0) * c.reaction_jitter_s;
             crew_.emplace_back(c.name, c.role, reaction);
+            if (const SkillTier* tier = SkillOf(c)) {  // docs/crew/05_SKILL.md
+                crew_.back().SetSkill(ToCrewSkill(*tier), def_.seed * 7919u + static_cast<unsigned>(i) * 104729u + 17u);
+            }
         }
         UpdateAimCrew();
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
@@ -110,6 +117,7 @@ public:
             if (def_.prepared.present && def_.prepared.emplacement) battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
+        StartCallouts();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -143,7 +151,13 @@ public:
         }
         player_.Update(dt);
         log_.CollectEquipment(console_.equipment);
-        for (CrewMember& c : crew_) log_.CollectCrew(c, time_);
+        for (CrewMember& c : crew_) {
+            std::vector<CrewReport> reports = c.TakeReports();
+            CrewCallouts(c, reports);
+            log_.CollectCrewReports(c.Name(), std::move(reports), time_);
+        }
+        UpdateCallouts();
+        UpdateNpcCommander();
         if (time_ + 1e-9 >= next_acmi_s_) {
             WriteAcmiFrame();
             next_acmi_s_ += 1.0;
@@ -164,6 +178,7 @@ public:
 
     const ScenarioDef& Def() const { return def_; }
     ConsoleData& Console() { return console_; }
+    const ConsoleData& Console() const { return console_; }
     World& GetWorld() { return world_; }
     const World& GetWorld() const { return world_; }
 
@@ -203,6 +218,7 @@ public:
     // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
     // (roadmap 7.8). The same path serves the scenario's triggers and the player's order menu.
     void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
+        SayOrder(crew.Role(), procedure.id);
         const double delay = comms_ ? comms_->OrderDelayS(crew.Role(), console_) : 0.0;
         if (delay <= 0.0) {
             Hand(crew, procedure, queue);
@@ -326,6 +342,34 @@ public:
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
+
+    // ---- The crew's voice (roadmap 8.4, docs/crew/04_COMMANDS_AND_CALLOUTS.md): orders, acknowledgements, reports
+    // and reminders as they were spoken (null without crew data). They also go to the radio log and the debrief.
+    const CalloutBus* Callouts() const { return callouts_.get(); }
+    // The drill master on this console (null without crew data): the best move of any seat toward a task.
+    const DrillMaster* Drill() const { return drill_.get(); }
+    // The order menu's backend (roadmap 8.8): give a whole order of the crew data (an order callout id, e.g.
+    // "order_k_boyu") as the commander: its drills go to their seats (a player's seat gets them as orders for the player).
+    // False if there is no such order. `fields` fill the spoken words ({number}, ...).
+    bool GiveCrewOrder(const std::string& order_id) {
+        if (!def_.has_crew_data) return false;
+        const OrderDef* o = def_.crew_data.FindOrder(order_id);
+        if (o == nullptr) return false;
+        SpeakOrder(order_id);
+        for (const OrderStart& s : o->procedures) {
+            CrewMember* m = MemberAt(s.station);
+            const Procedure* p = console_.FindProcedure(s.procedure);
+            if (m != nullptr && p != nullptr) GiveOrder(*m, *p, s.queue);
+        }
+        return true;
+    }
+    bool NpcCommanderActive() const { return def_.npc_commander && SeatHolder("commander").empty(); }
+
+    // Reminders each seat has been given (the seat that was waited for), for the debrief and grading.
+    int RemindersTo(const std::string& station) const {
+        const auto it = reminders_to_.find(station);
+        return it != reminders_to_.end() ? it->second : 0;
+    }
 
     // ---- Multiplayer crew: players in the crew's seats (one per station role).
     // A player in a seat replaces the NPC there: the NPC stops acting (and stops aiming its wheel), and orders for that
@@ -700,7 +744,13 @@ private:
             }
         }
         c2_->Update(time_, contacts, def_.unit_position);
-        for (const C2Network::Event& e : c2_->PeekEvents()) Radio("command net", e.actor, e.subject + ": " + e.text);
+        for (const C2Network::Event& e : c2_->PeekEvents()) {
+            Radio("command net", e.actor, e.subject + ": " + e.text);
+            if (e.actor == "Commander" && e.number > 0) {  // the commander passes them on
+                designations_.push_back(e);
+                designations_heard_.push_back(e);
+            }
+        }
         SyncRadios();
         for (const C2Network::Event& e : c2_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
@@ -882,6 +932,18 @@ private:
         end_reason_ = reason;
         Event(def_.id, "end: " + reason);
         WriteAcmiFrame();
+        if (callouts_) {  // what the crew was about to say is still said (the last result, a last report)
+            for (double t = time_; t < time_ + 15.0 && (callouts_->Pending() > 0 || callouts_->Speaking("intercom") ||
+                                                          callouts_->Speaking("battery net"));
+                 t += 0.1) {
+                callouts_->Step(t);
+                for (const SpokenCallout& sc : callouts_->TakeHeard()) {
+                    const std::string who = sc.from == "battery" ? std::string("Battery") : SpeakerName(sc.from);
+                    Radio(sc.channel, who, sc.ru + " (" + sc.en + ")");
+                    log_.Record({sc.start_s, DebriefEntry::Kind::Scenario, who, "says", sc.ru + " (" + sc.en + ")"});
+                }
+            }
+        }
     }
 
     ScenarioDef def_;
@@ -976,12 +1038,455 @@ private:
     void UpdateAimCrew() {
         aim_crew_ = AimCrew{};
         if (!engagement_on_) return;
-        for (const CrewMember& c : crew_) {
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            const CrewMember& c = crew_[i];
             if (!SeatHolder(c.Role()).empty()) continue;
-            aim_crew_.azimuth = aim_crew_.azimuth || c.Role() == def_.tuning.aim_az_role;
-            aim_crew_.elevation = aim_crew_.elevation || c.Role() == def_.tuning.aim_el_role;
-            aim_crew_.range = aim_crew_.range || c.Role() == def_.tuning.aim_range_role;
+            const SkillTier* tier = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
+            if (c.Role() == def_.tuning.aim_az_role) {
+                aim_crew_.azimuth = true;
+                if (tier != nullptr) {
+                    aim_crew_.az_rate_factor = tier->wheel_rate_factor;
+                    aim_crew_.az_lag_s = tier->tv_lag_s;
+                    aim_crew_.az_noise_deg = tier->aim_noise_deg;
+                }
+            }
+            if (c.Role() == def_.tuning.aim_el_role) {
+                aim_crew_.elevation = true;
+                if (tier != nullptr) {
+                    aim_crew_.el_rate_factor = tier->wheel_rate_factor;
+                    aim_crew_.el_lag_s = tier->tv_lag_s;
+                    aim_crew_.el_noise_deg = tier->aim_noise_deg;
+                }
+            }
+            if (c.Role() == def_.tuning.aim_range_role) {
+                aim_crew_.range = true;
+                if (tier != nullptr) {
+                    aim_crew_.range_rate_factor = tier->wheel_rate_factor;
+                    aim_crew_.range_error_m = tier->range_error_m;
+                }
+            }
         }
+    }
+    const SkillTier* SkillOf(const ScenarioCrew& c) const {
+        return def_.has_skills && !c.skill.empty() ? def_.skills.Find(c.skill) : nullptr;
+    }
+
+    // ---- Callouts (roadmap 8.4).
+    std::unique_ptr<CalloutBus> callouts_;
+    std::unique_ptr<DrillMaster> drill_;
+    std::vector<char> report_state_;  // each automatic report's condition last step
+    struct WaitWatch {
+        double since_s = -1.0;
+        int reminded = 0;
+    };
+    std::vector<WaitWatch> waits_;  // per crew member
+    std::map<std::string, int> reminders_to_;
+    std::vector<C2Network::Event> designations_;  // heard this step, to pass on
+
+    void StartCallouts() {
+        if (!def_.has_crew_data) return;
+        callouts_ = std::make_unique<CalloutBus>(&def_.crew_data);
+        drill_ = std::make_unique<DrillMaster>(console_, &def_.crew_data, def_.has_skills && def_.skills.Reference() != nullptr
+                                                                             ? def_.skills.Reference()->reaction_s : 0.55);
+        for (const AutoReportDef& r : def_.crew_data.reports) {
+            report_state_.push_back(console_.equipment.Holds(r.when, console_.panel) ? 1 : 0);
+        }
+        waits_.assign(crew_.size(), WaitWatch{});
+    }
+
+    CrewMember* MemberAt(const std::string& station) {
+        for (CrewMember& c : crew_) {
+            if (c.Role() == station) return &c;
+        }
+        return nullptr;
+    }
+    // A seat speaks for itself only when an NPC holds it (a player speaks with his own voice).
+    bool NpcAt(const std::string& station) { return MemberAt(station) != nullptr && SeatHolder(station).empty(); }
+    // How long the crewmate at a seat takes to notice and speak (skill), stressed or not.
+    double SpeakDelayS(const std::string& station) {
+        for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
+            if (crew_[i].Role() != station) continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) {
+                return (t->perception_s + t->callout_delay_s) * (crew_[i].Stressed() ? t->stress_factor : 1.0);
+            }
+        }
+        return 0.6;
+    }
+    std::string SpeakerName(const std::string& station) {
+        if (const CrewMember* c = MemberAt(station)) return c->Name();
+        if (const CrewSeatDef* s = def_.crew_data.FindSeat(station)) return s->title_en;
+        return station;
+    }
+    // The seat's word in a reminder: the start of its Russian title ("Оператор", "Старший оператор").
+    std::string SeatWord(const std::string& station, bool english) const {
+        const CrewSeatDef* s = def_.crew_data.FindSeat(station);
+        if (s == nullptr) return station;
+        std::string t = english ? s->title_en : s->title_ru;
+        const std::size_t cut = t.find(" (");
+        return cut == std::string::npos ? t : t.substr(0, cut);
+    }
+
+    void Say(const std::string& id, const std::string& station, const std::map<std::string, std::string>& fields = {}) {
+        if (callouts_) callouts_->Say(time_, id, station, fields, NpcAt(station) ? SpeakDelayS(station) : 0.0);
+    }
+
+    // The commander's order for a procedure, if the crew data has one: the most specific order that starts it.
+    void SayOrder(const std::string& station, const std::string& procedure) {
+        if (!callouts_) return;
+        const OrderDef* best = nullptr;
+        for (const OrderDef& o : def_.crew_data.orders) {
+            for (const OrderStart& s : o.procedures) {
+                if (s.station == station && s.procedure == procedure && (best == nullptr || o.procedures.size() < best->procedures.size())) best = &o;
+            }
+        }
+        if (best != nullptr) SpeakOrder(best->callout);
+    }
+    // An order's words, filled in from what the crew knows (the latest designation's number); not spoken twice within
+    // 3 s (one order starts several drills) nor with a blank left in it.
+    void SpeakOrder(const std::string& callout_id) {
+        if (!callouts_) return;
+        if (callout_id == last_order_said_ && time_ - last_order_s_ < 3.0) return;
+        const CalloutDef* def = def_.crew_data.FindCallout(callout_id);
+        std::map<std::string, std::string> fields;
+        if (!designations_heard_.empty()) {
+            char n[16];
+            std::snprintf(n, sizeof(n), "%04d", designations_heard_.back().number);
+            fields["number"] = n;
+        }
+        if (def == nullptr || FillCallout(def->ru, fields).find('{') != std::string::npos) return;
+        const std::string from = console_.FindStation(def->from) != nullptr ? def->from : std::string("commander");
+        callouts_->Say(time_, callout_id, from, fields);
+        last_order_said_ = callout_id;
+        last_order_s_ = time_;
+    }
+    std::string last_order_said_;
+    double last_order_s_ = -1e9;
+
+    // ---- The NPC vehicle commander (roadmap 8.6): the crew's orders by doctrine, from what the crew has reported.
+    // Readiness first: the drill master's plan for "ready, halted" (or the search on the march while moving) says which
+    // seat's drill is next; each idle seat gets its drill. Then the engagement: a contact the crew has (the search
+    // scope or a designation) is taken (ready_capture, capture_with_ssc); a held, hostile target is fired at (prepare,
+    // launch; the jammer drill when the radar has only the jammer's angles; the low-target drill on НЛЦ); after a
+    // miss with the target still in the zone, again. The commander thinks at his own pace (every 1 s).
+    double npc_next_think_s_ = 0.0;
+    std::map<std::string, std::pair<std::string, double>> npc_ordered_;  // seat -> (drill, when)
+
+    bool NpcOrdered(const std::string& seat, const std::string& drill, double within_s) const {
+        const auto it = npc_ordered_.find(seat);
+        return it != npc_ordered_.end() && it->second.first == drill && time_ - it->second.second < within_s;
+    }
+    bool NpcOrder(const std::string& seat, const std::string& drill, bool queue = false) {
+        CrewMember* m = MemberAt(seat);
+        const Procedure* p = console_.FindProcedure(drill);
+        if (m == nullptr || p == nullptr) return false;
+        GiveOrder(*m, *p, queue);
+        npc_ordered_[seat] = {drill, time_};
+        return true;
+    }
+    // A seat is free for a new order when an NPC there has nothing to do, or the player there has finished his.
+    bool SeatFree(const std::string& seat) {
+        if (const ProcedureTracker* t = SeatTracker(seat)) return t->GetProcedure().id.empty() || t->IsComplete();
+        const CrewMember* m = MemberAt(seat);
+        return m != nullptr && !m->IsBusy();
+    }
+
+    void UpdateNpcCommander() {
+        if (!NpcCommanderActive() || !drill_ || time_ + 1e-9 < npc_next_think_s_) return;
+        npc_next_think_s_ = time_ + 1.0;
+        const bool halted = console_.equipment.GetInput("vehicle_stopped");
+        // Readiness: the next drill of each idle seat toward the task.
+        const CrewTask* task = def_.crew_data.FindTask(halted ? "ready_halted" : "searching");
+        if (task != nullptr) {
+            const DrillPlan plan = drill_->Plan(drill_->GoalFor(*task), console_.panel, console_.equipment);
+            for (const DrillPlan::Seat& s : plan.seats) {
+                if (!SeatFree(s.station)) continue;
+                for (const std::string& drill : s.procedures) {
+                    if (NpcOrdered(s.station, drill, 60.0)) continue;
+                    NpcOrder(s.station, drill);
+                    break;
+                }
+                if (!s.loose.empty() && SeatFree(s.station) && SeatHolder(s.station).empty()) {  // one switch, no drill: an order of its own
+                    Procedure p;
+                    p.id = "order: " + s.loose.front().control;
+                    p.station = s.station;
+                    ProcedureStep st;
+                    st.control_id = s.loose.front().control;
+                    st.value = s.loose.front().position;
+                    st.description = s.loose.front().description;
+                    st.wait_for = s.loose_waits.front();
+                    p.steps.push_back(st);
+                    if (!NpcOrdered(s.station, p.id, 30.0)) {
+                        if (CrewMember* m = MemberAt(s.station)) {
+                            GiveOrder(*m, p, false);
+                            npc_ordered_[s.station] = {p.id, time_};
+                        }
+                    }
+                }
+            }
+        }
+        if (!engagement_on_ || !halted) return;
+        // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
+        // order_low_target): the seats and drills each order starts are data, not code.
+        const EngagementModel& eng = engagement_;
+        const TrackMethod m = eng.Method();
+        const std::string tracked = eng.TrackedTarget();
+        if (eng.ShotsInFlight()) return;  // a missile in the air: wait for the result
+        if (m == TrackMethod::None) {
+            npc_target_.clear();
+            // Take the nearest contact once it is within the tracking radar's reach (the drill switches the tracking
+            // transmitter on only when the azimuth line is on the target: voenizdat_osa_1991 p250); a designation
+            // from the PU-12 counts when it is that close too.
+            const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
+            double nearest = -1.0, az = 0.0;
+            for (const Contact& c : eng.SearchPicture()) {
+                if (nearest < 0.0 || c.range_m < nearest) {
+                    nearest = c.range_m;
+                    az = c.azimuth_deg;
+                }
+            }
+            if (nearest < 0.0 && !designations_heard_.empty()) nearest = designations_heard_.back().range_m;
+            if (nearest >= 0.0 && nearest <= reach && console_.equipment.IsReady("hv_ready") && NpcGive("order_take_target", 60.0) &&
+                designations_heard_.empty() && callouts_) {  // no number from the PU-12: the contact by its azimuth
+                callouts_->Say(time_, "order_take_contact", "commander", {{"azimuth", MilsText(az)}});
+            }
+            return;
+        }
+        if (eng.KnownFriend(tracked)) return;  // never at a friend: hold
+        if (tracked != npc_target_) {
+            npc_target_ = tracked;
+            npc_prepared_ = false;
+        }
+        if (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) {
+            NpcGive("order_low_target", 30.0);
+            return;
+        }
+        if (m == TrackMethod::RadarOnJam) {
+            NpcGive("order_jammer", 40.0);
+            return;
+        }
+        if (!npc_prepared_) {
+            npc_prepared_ = NpcGive("order_prepare", 20.0);
+            return;
+        }
+        NpcGive("fire_permitted", 8.0);
+    }
+    std::string npc_target_;
+    bool npc_prepared_ = false;
+
+    // Give an order of the crew data unless it was given within `again_s`, and only when every seat it goes to is free.
+    bool NpcGive(const std::string& order_id, double again_s) {
+        const OrderDef* o = def_.crew_data.FindOrder(order_id);
+        if (o == nullptr) return false;
+        if (NpcOrdered("order", order_id, again_s)) return false;
+        for (const OrderStart& st : o->procedures) {
+            if (!SeatFree(st.station)) return false;
+        }
+        GiveCrewOrder(order_id);
+        npc_ordered_["order"] = {order_id, time_};
+        return true;
+    }
+    std::vector<C2Network::Event> designations_heard_;  // every designation so far (the latest last)
+
+    // A crew member's reports as words: acknowledgement, done, can't, fault; and the start of a wait (reminders).
+    void CrewCallouts(const CrewMember& c, const std::vector<CrewReport>& reports) {
+        if (!callouts_ || !SeatHolder(c.Role()).empty()) return;
+        for (const CrewReport& r : reports) {
+            switch (r.kind) {
+                case CrewReport::Kind::Started: Say("ack", c.Role()); break;
+                case CrewReport::Kind::Completed: Say("done", c.Role()); break;
+                case CrewReport::Kind::Aborted: Say("cannot", c.Role(), {{"reason", r.detail}}); break;
+                case CrewReport::Kind::EquipmentFault: {
+                    const SubsystemDef* d = console_.equipment.Def(r.detail);
+                    Say("fault", c.Role(), {{"what", d != nullptr && !d->name.empty() ? d->name : r.detail}});
+                    break;
+                }
+                default: break;
+            }
+        }
+    }
+
+    void UpdateCallouts() {
+        if (!callouts_) {
+            if (engagement_on_) engagement_.TakeEvents();  // nobody to say them
+            return;
+        }
+        // Automatic reports: a seat says it when its condition becomes true.
+        for (std::size_t i = 0; i < def_.crew_data.reports.size(); ++i) {
+            const AutoReportDef& r = def_.crew_data.reports[i];
+            const bool now = console_.equipment.Holds(r.when, console_.panel);
+            if (now && report_state_[i] == 0 && NpcAt(r.from)) Say(r.callout, r.from);
+            report_state_[i] = now ? 1 : 0;
+        }
+        // What the instruments showed.
+        if (engagement_on_) {
+            for (const EngagementEvent& e : engagement_.TakeEvents()) {
+                char range[16];
+                std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
+                switch (e.kind) {
+                    case EngagementEvent::Kind::Contact:
+                        if (NpcAt("senior_operator")) Say("contact", "senior_operator", {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}});
+                        break;
+                    case EngagementEvent::Kind::TrackLost:
+                        if (NpcAt("operator") && TargetRange(e.target) >= 0.0) Say("lock_lost", "operator");  // not a target just shot down
+                        break;
+                    case EngagementEvent::Kind::OnJammer: if (NpcAt("operator")) Say("on_jammer", "operator"); break;
+                    case EngagementEvent::Kind::BurnThrough: if (NpcAt("operator")) Say("captured", "operator"); break;
+                    case EngagementEvent::Kind::IffFriend: if (NpcAt("senior_operator")) Say("iff_friend", "senior_operator"); break;
+                    case EngagementEvent::Kind::Hit: if (NpcAt("deputy_commander")) Say("hit", "deputy_commander"); break;
+                    case EngagementEvent::Kind::Miss: if (NpcAt("deputy_commander")) Say("miss", "deputy_commander"); break;
+                    case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
+                }
+            }
+        }
+        // Designations the commander heard on the radio, passed on to the crew.
+        if (c2_) {
+            for (const C2Network::Event& e : designations_) {
+                if (NpcAt("commander")) {
+                    char az[16], n[16], r[16], h[16];
+                    std::snprintf(az, sizeof(az), "%02d-%02d", e.azimuth_mils / 100, e.azimuth_mils % 100);
+                    std::snprintf(n, sizeof(n), "%04d", e.number);
+                    std::snprintf(r, sizeof(r), "%.0f", e.range_m / 1000.0);
+                    std::snprintf(h, sizeof(h), "%d", e.height_hm);
+                    Say("designation", "commander", {{"number", n}, {"azimuth", az}, {"range_km", r}, {"height_hm", h}});
+                }
+            }
+        }
+        designations_.clear();
+        // Reminders: a crewmate waiting on another seat's work calls that seat after his patience, then the commander.
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            CrewMember& c = crew_[i];
+            WaitWatch& w = waits_[i];
+            const ProcedureStep* step = c.IsBusy() ? c.Tracker().NextStep() : nullptr;
+            if (c.Status() != CrewStatus::Waiting || step == nullptr || !SeatHolder(c.Role()).empty()) {
+                w = WaitWatch{};
+                continue;
+            }
+            if (w.since_s < 0.0) w.since_s = time_;
+            const double patience = c.HasSkill() ? c.Skill().patience_s : 6.0;
+            if (w.reminded >= 2 || time_ - w.since_s < patience * (w.reminded + 1)) continue;
+            // The seat it waits for, and its next action: only a seat that can do it now (not one waiting itself for a
+            // warm-up or for power) and isn't already at it is reminded.
+            std::string seat, what, drill;
+            for (const Condition& cond : step->wait_for) {
+                if (console_.equipment.Holds(cond, console_.panel)) continue;
+                const DrillPlan plan = drill_->Plan(std::vector<Condition>{cond}, console_.panel, console_.equipment);
+                for (const DrillPlan::Seat& s : plan.seats) {
+                    if (s.station == c.Role()) continue;
+                    const CrewMember* other = MemberAt(s.station);
+                    if (other != nullptr && SeatHolder(s.station).empty() && other->Status() == CrewStatus::Working) continue;
+                    if (!s.loose.empty() && console_.equipment.AllHold(s.loose_waits.front(), console_.panel)) {
+                        what = ShortLabel(s.loose.front().control, s.loose.front().position);
+                    } else if (!s.procedures.empty()) {
+                        const ProcedureStep* next = FirstUndoneStep(s.procedures.front());
+                        if (next == nullptr || !console_.equipment.AllHold(next->wait_for, console_.panel)) continue;
+                        what = ShortLabel(next->control_id, next->value);
+                        drill = s.procedures.front();
+                    } else {
+                        continue;
+                    }
+                    seat = s.station;
+                    break;
+                }
+                if (!seat.empty()) break;
+            }
+            if (seat.empty()) {  // waiting for a warm-up, the world, or a seat already at it: nobody to remind yet
+                w.since_s = time_;
+                continue;
+            }
+            ++w.reminded;
+            ++reminders_to_[seat];
+            if (w.reminded == 1) {
+                Say("remind", c.Role(), {{"seat", SeatWord(seat, false)}, {"seat_en", SeatWord(seat, true)}, {"what", what}});
+            } else {
+                Say("remind_order", "commander", {{"seat", SeatWord(seat, false)}, {"seat_en", SeatWord(seat, true)}});
+                // An NPC who was never ordered to do it is ordered now: the crew sorts it out among themselves.
+                CrewMember* other = MemberAt(seat);
+                const Procedure* p = drill.empty() ? nullptr : console_.FindProcedure(drill);
+                if (other != nullptr && SeatHolder(seat).empty() && !other->IsBusy() && p != nullptr) GiveOrder(*other, *p, true);
+            }
+            log_.Record({time_, DebriefEntry::Kind::Scenario, c.Name(), "waits for " + SeatWord(seat, true), what});
+        }
+        SuperviseOrders();
+        // What was said.
+        callouts_->Step(time_);
+        for (const SpokenCallout& s : callouts_->TakeHeard()) {
+            const std::string who = s.from == "battery" ? std::string("Battery") : SpeakerName(s.from);
+            Radio(s.channel, who, s.ru + " (" + s.en + ")");
+            log_.Record({s.start_s, DebriefEntry::Kind::Scenario, who, "says", s.ru + " (" + s.en + ")"});
+        }
+    }
+
+    // The NPC commander watches the orders he gave to players' seats: when the next step could be done (its lamps are
+    // lit) and nothing has moved for his patience, he names it ("Оператор, ПЕРЕДАТЧИК ВКЛ.!"), then orders it again.
+    struct OrderWatch {
+        std::string procedure;
+        std::size_t index = 0;
+        double since_s = -1.0;
+        int reminded = 0;
+    };
+    std::map<std::string, OrderWatch> order_watch_;
+    void SuperviseOrders() {
+        if (!NpcCommanderActive()) return;
+        double patience = 8.0;
+        for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
+            if (crew_[i].Role() != "commander") continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) patience = t->patience_s;
+        }
+        for (const Seat& st : seats_) {
+            const ProcedureTracker& tr = st.tracker;
+            const ProcedureStep* next = tr.GetProcedure().id.empty() ? nullptr : tr.NextStep();
+            OrderWatch& w = order_watch_[st.role];
+            if (next == nullptr) {
+                w = OrderWatch{};
+                continue;
+            }
+            if (w.procedure != tr.GetProcedure().id || w.index != tr.NextIndex()) {  // progress (or a new order)
+                w = OrderWatch{tr.GetProcedure().id, tr.NextIndex(), -1.0, 0};
+            }
+            if (!console_.equipment.AllHold(next->wait_for, console_.panel)) {  // it can't be done yet: not his fault
+                w.since_s = -1.0;
+                continue;
+            }
+            if (w.since_s < 0.0) w.since_s = time_;
+            if (w.reminded >= 2 || time_ - w.since_s < patience * (w.reminded + 1)) continue;
+            ++w.reminded;
+            ++reminders_to_[st.role];
+            const std::string what = ShortLabel(next->control_id, next->value);
+            if (w.reminded == 1) {
+                Say("remind", "commander", {{"seat", SeatWord(st.role, false)}, {"seat_en", SeatWord(st.role, true)}, {"what", what}});
+            } else {
+                Say("remind_order", "commander", {{"seat", SeatWord(st.role, false)}, {"seat_en", SeatWord(st.role, true)}});
+            }
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "waits for " + SeatWord(st.role, true), what});
+        }
+    }
+
+    std::string LabelOfControl(const std::string& id) const {
+        const ControlDef* d = console_.panel.Find(id);
+        return d != nullptr && !d->label.empty() ? d->label : id;
+    }
+    // The first step of a drill whose control isn't where the step puts it (what the seat still has to do).
+    const ProcedureStep* FirstUndoneStep(const std::string& procedure) const {
+        const Procedure* p = console_.FindProcedure(procedure);
+        if (p == nullptr) return nullptr;
+        for (const ProcedureStep& s : p->steps) {
+            if (console_.panel.Get(s.control_id) != s.value) return &s;
+        }
+        return nullptr;
+    }
+    // A control as the crew names it in a reminder: its label up to " — " (the labels give both positions), then the
+    // position's label if the label doesn't already say it ("АППАРАТУРА ВКЛ.", "ПЕРЕДАТЧИК ВКЛ.").
+    std::string ShortLabel(const std::string& id, int position) const {
+        const ControlDef* d = console_.panel.Find(id);
+        if (d == nullptr) return id;
+        std::string l = d->label.empty() ? id : d->label;
+        const std::size_t dash = l.find(" — ");
+        if (dash != std::string::npos) l = l.substr(0, dash);
+        if (position >= 0 && static_cast<std::size_t>(position) < d->position_labels.size()) {
+            const std::string& pos = d->position_labels[static_cast<std::size_t>(position)];
+            if (l.find(pos) == std::string::npos) l += " " + pos;
+        }
+        return l;
     }
     std::vector<EngagementTarget> eng_targets_;
     std::vector<CrewMember> crew_;
