@@ -798,7 +798,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
             return false;
         }
-        for (const auto& sub : {std::make_pair("telecode", &out.post_telecode), std::make_pair("primary", &out.post_primary),
+        for (const auto sub : {std::make_pair("telecode", &out.post_telecode), std::make_pair("primary", &out.post_primary),
                                 std::make_pair("oriented", &out.post_oriented)}) {
             if (out.equipment.Def(*sub.second) == nullptr) return Fail(Join("post", sub.first), "unknown subsystem '" + *sub.second + "'");
         }
@@ -916,7 +916,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !Provenance(*r, "radios") || !RequireString(*r, "radios", "file", out.radios_file)) {
             return message_.empty() ? Fail("radios", "expected an object") : false;
         }
-        for (const auto& set : {std::make_pair("r111", &out.r111), std::make_pair("r407", &out.r407)}) {
+        for (const auto set : {std::make_pair("r111", &out.r111), std::make_pair("r407", &out.r407)}) {
             const json::Value* b = r->Find(set.first);
             if (b == nullptr) continue;
             const std::string bp = Join("radios", set.first);
@@ -1354,7 +1354,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         if (d.attention_input.empty()) return Fail(Join(lp, "attention_input"), "required");
-        for (const auto& t : {std::make_pair("capture_s", &d.capture_s), std::make_pair("medium_s", &d.medium_s),
+        for (const auto t : {std::make_pair("capture_s", &d.capture_s), std::make_pair("medium_s", &d.medium_s),
                               std::make_pair("narrow_s", &d.narrow_s), std::make_pair("fuse_range_m", &d.fuse_range_m),
                               std::make_pair("nominal_flight_s", &d.nominal_flight_s),
                               std::make_pair("min_interval_s", &d.min_interval_s)}) {
