@@ -100,10 +100,15 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CabinCamera->PostProcessSettings.AutoExposureMaxBrightness = CabinExposureBrightness;
 	CabinHUDClass = ASimCabinHUD::StaticClass();
 
+	CrewHotkeys = DefaultCrewHotkeys();
+}
+
+TArray<FSimCrewHotkey> ASimOsaVehicle::DefaultCrewHotkeys()
+{
 	// Placeholder crew orders until the order menu exists (phase 8). Crew names and procedures are the
 	// practice scenario's (data/scenarios/osa_practice.json, data/procedures/osa_ak.json). Each procedure
 	// belongs to one seat, so a key that starts a drill gives each seat involved its part.
-	CrewHotkeys = {
+	return {
 		Hotkey(EKeys::One, TEXT("Driver"), TEXT("power_up")),
 		Hotkey(EKeys::One, TEXT("Operator"), TEXT("equipment_on")),
 		Hotkey(EKeys::Two, TEXT("Senior operator"), TEXT("search_on_march")),
@@ -152,6 +157,10 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	FollowGround();
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
+		if (Pc != nullptr && !bMenuOpen && Sim->IsBatteryLink() && Pc->WasInputKeyJustPressed(SwitchVehicleKey))
+		{
+			Sim->SwitchLinkedVehicle();
+		}
 		ConfigureForScenario(Sim);
 		UpdateSim(Sim);
 		if (!bMenuOpen)
@@ -340,14 +349,53 @@ void ASimOsaVehicle::UpdateSim(USimWorldSubsystem* Sim)
 
 void ASimOsaVehicle::ConfigureForScenario(USimWorldSubsystem* Sim)
 {
-	if (bConfigured)
+	const void* Now = Sim->GetScenarioRunner();
+	if (Now == ConfiguredFor)
 	{
 		return;
 	}
-	bConfigured = true;
+	if (ConfiguredFor != nullptr)
+	{
+		// A battery link: the player moved to the other vehicle. Out of the cabin, the vehicle where that one stands, the
+		// old one's parts gone (its cabin rebuilds from the new layout).
+		SetInCabin(false);
+		SpeedMps = 0.0;
+		const FVector At = Sim->GetUnitLocation();
+		HeadingDeg = Sim->HeadingToYawDeg(At, Sim->GetUnitHeading());
+		SetActorLocation(At - FVector(0.0, 0.0, 300.0));
+		FollowGround();
+		// (renamed first: the next switch makes them again under the same names)
+		if (PostExterior != nullptr)
+		{
+			PostExterior->Rename(*MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("PostExteriorRemoved")).ToString());
+			PostExterior->DestroyComponent();
+			PostExterior = nullptr;
+		}
+		if (PostMast != nullptr)
+		{
+			PostMast->Rename(*MakeUniqueObjectName(this, USimPu12MastComponent::StaticClass(), TEXT("PostMastRemoved")).ToString());
+			PostMast->DestroyComponent();
+			PostMast = nullptr;
+		}
+		CrewHotkeys = DefaultCrewHotkeys();
+		Station = 0;
+		PickedTarget = INDEX_NONE;
+		bMenuOpen = false;
+		FeedbackText = FString::Printf(TEXT("In %s"), Sim->IsCommandPost() ? TEXT("the PU-12M") : TEXT("the Osa"));
+		FeedbackSecondsLeft = 3.0f;
+	}
+	ConfiguredFor = Now;
 	bIsPost = Sim->IsCommandPost();
 	if (!bIsPost)
 	{
+		for (UStaticMeshComponent* Box : {Hull.Get(), Turret.Get(), SearchAntenna.Get()})
+		{
+			if (Box != nullptr)
+			{
+				Box->SetVisibility(!bInCabin);
+			}
+		}
+		Cabin->SetCabinHidden(false);
 		return;
 	}
 	// The PU-12M: its traced exterior (tools/blender/pu12m_model.py, imported to /Game/SAM3D/Vehicles) and its mast

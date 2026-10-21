@@ -164,3 +164,91 @@ bool FSimPu12CabinTest::RunTest(const FString& Parameters)
 }
 
 #endif
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+// The PU-12M as a seat of the Osa's battery (docs/PU12_DEVELOPMENT.md P8): a battery link loads as one scenario, both
+// vehicles step together, and the player moves between them with the vehicle actor, its cabin and its exterior following.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimBatteryLinkTest, "SAM3D.PU12M.BatteryLink",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimBatteryLinkTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, TEXT("SAM3DBatteryLinkTest"));
+	FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+	Context.SetCurrentWorld(World);
+	World->InitializeActorsForPlay(FURL());
+	World->BeginPlay();
+	USimWorldSubsystem* Sim = World->GetSubsystem<USimWorldSubsystem>();
+	FString Error;
+	const bool bLoaded = Sim != nullptr && Sim->LoadScenario(TEXT("scenarios/battery_link_practice.json"), Error);
+	TestTrue(FString::Printf(TEXT("the link loads %s"), *Error), bLoaded);
+	if (!bLoaded)
+	{
+		GEngine->DestroyWorldContext(World);
+		World->DestroyWorld(false);
+		return true;
+	}
+	TestTrue(TEXT("a battery link"), Sim->IsBatteryLink());
+	TestFalse(TEXT("the player starts in the Osa"), Sim->IsCommandPost());
+	TestEqual(TEXT("its cabin"), Sim->GetDefaultCabinFile(), FString(TEXT("cabins/osa_ak.json")));
+	TestTrue(FString::Printf(TEXT("the Osa's cabin loads %s"), *Error), Sim->LoadCabin(Sim->GetDefaultCabinFile(), Error));
+	TestEqual(TEXT("the other vehicle"), Sim->GetOtherLinkedVehicle(), FString(TEXT("the PU-12M")));
+	ASimOsaVehicle* Car = World->SpawnActor<ASimOsaVehicle>(Sim->GetUnitLocation(), FRotator::ZeroRotator);
+	TestNotNull(TEXT("the player's vehicle"), Car);
+	for (int32 I = 0; I < 200; ++I)  // 10 s
+	{
+		Sim->Tick(0.05f);
+		if (Car != nullptr)
+		{
+			Car->Tick(0.05f);
+		}
+	}
+	const simcore::ScenarioRunner* Osa = Sim->GetScenarioRunner();
+	TestTrue(TEXT("the Osa's time runs"), Osa != nullptr && Osa->Time() > 9.0);
+	TestFalse(TEXT("the vehicle is the Osa"), Car != nullptr && Car->IsCommandPost());
+
+	TestTrue(TEXT("to the PU-12M"), Sim->SwitchLinkedVehicle());
+	TestTrue(TEXT("now the post"), Sim->IsCommandPost());
+	TestEqual(TEXT("with its own cabin"), Sim->GetDefaultCabinFile(), FString(TEXT("cabins/pu12m.json")));
+	TestTrue(TEXT("its cabin is loaded"), Sim->GetCabinLayout() != nullptr && Sim->GetCabinLayout()->stations.size() == 5);
+	const simcore::ScenarioRunner* Post = Sim->GetScenarioRunner();
+	TestTrue(TEXT("the post kept time with the Osa"), Post != nullptr && Osa != nullptr && FMath::Abs(Post->Time() - Osa->Time()) < 1e-6);
+	if (Car != nullptr)
+	{
+		Car->Tick(0.05f);
+		TestTrue(TEXT("the vehicle became the post"), Car->IsCommandPost());
+		const FVector Expected = Sim->GetUnitLocation();
+		TestTrue(TEXT("and stands where the post does"), FVector::Dist2D(Car->GetActorLocation(), Expected) < 100.0);
+		TestTrue(TEXT("into its cabin"), Car->SetInCabin(true));
+		USimCabinComponent* Cabin = Car->FindComponentByClass<USimCabinComponent>();
+		if (Cabin != nullptr)
+		{
+			Cabin->TickComponent(0.05f, LEVELTICK_All, nullptr);
+			TestEqual(TEXT("five seats"), Cabin->GetNumStations(), 5);
+		}
+	}
+	for (int32 I = 0; I < 200; ++I)
+	{
+		Sim->Tick(0.05f);
+	}
+	TestTrue(TEXT("the Osa fights on while the player is in the post"), Osa != nullptr && Osa->Time() > 19.0);
+	TestTrue(TEXT("and back to the Osa"), Sim->SwitchLinkedVehicle());
+	if (Car != nullptr)
+	{
+		Car->Tick(0.05f);
+		TestFalse(TEXT("the vehicle is the Osa again"), Car->IsCommandPost());
+		TestFalse(TEXT("out of the cabin"), Car->IsInCabin());
+		bool bExterior = false;
+		for (UActorComponent* C : Car->GetComponents())
+		{
+			bExterior = bExterior || (C->GetName() == TEXT("PostExterior") && IsValid(C) && !C->IsBeingDestroyed());
+		}
+		TestFalse(TEXT("without the post's exterior"), bExterior);
+	}
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+#endif

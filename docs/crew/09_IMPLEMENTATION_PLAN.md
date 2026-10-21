@@ -134,7 +134,8 @@ has against what the NPC commander and crew decide; each gap closed with a test 
 | Kills on the net | A target the crew heard destroyed (its own "Цель поражена!" or the battery net's report) leaves every seat's picture, and a late designation of it is not passed on. |
 
 - **Not yet:**
-  - the PU-12M as a seat with its own console (`docs/PU12_DEVELOPMENT.md`);
+  - ~~the PU-12M as a seat with its own console~~: done 18 Oct 2026 (a battery link of the Osa's runner and the post's,
+    `simcore/battery_link.hpp`; in Unreal single player and networked; `docs/PU12_DEVELOPMENT.md` P8);
   - the other vehicles' crews as full NPC crews;
   - choosing the position;
   - a radial menu;

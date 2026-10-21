@@ -49,6 +49,8 @@ SC_TEST("pu12m battery: the NPC battery commander gives each hostile to a launch
     SC_EXPECT(d.find("no target where it was designated") == std::string::npos);
     // The IT-1 and IT-2 boards: the four launchers with their missiles as reported.
     SC_EXPECT(r->StatusBoards().size() == 4);
+    // In the battery's order, whoever reported first (the ДХ's launcher places count down the boards).
+    for (std::size_t i = 0; i < r->StatusBoards().size(); ++i) SC_EXPECT(r->StatusBoards()[i].callsign == std::to_string(21 + i));
     int missiles = 0;
     for (const LauncherStatus& s : r->StatusBoards()) {
         SC_EXPECT(s.missiles >= 0 && s.reported_s > 0.0);

@@ -103,6 +103,10 @@ public:
         const std::size_t i = IndexOfAircraft(id);
         return i == kNotFound ? nullptr : &aircraft_[i];
     }
+    const Aircraft* FindAircraft(int id) const {
+        const std::size_t i = IndexOfAircraft(id);
+        return i == kNotFound ? nullptr : &aircraft_[i];
+    }
     const Missile* FindMissile(int id) const {
         for (const Missile& m : missiles_) if (m.id == id) return &m;
         return nullptr;

@@ -163,7 +163,9 @@ struct ScenarioDef {
     // triggers give the orders.
     bool npc_commander = false;
     // "battery_commander": "npc" (default) distributes the PU-12's targets to the battery's other launchers; "player": the
-    // player does (ScenarioRunner::AssignBatteryTarget); "none": they fire freely at what is in their reach.
+    // player does (ScenarioRunner::AssignBatteryTarget); "none": they fire freely at what is in their reach; "post": the
+    // battery commander sits in a linked PU-12M (battery_link.hpp), whose launchers the other vehicles are and whose
+    // designations reach this vehicle as the PU-12's.
     std::string battery_commander = "npc";
     // "assistance": the training overlay's level for the player's seat (docs/crew/08_TRAINING_AND_ASSISTANCE.md §2):
     // "demonstrate", "guided", "hint", "unassisted" or "exam". Default: guided.
@@ -225,8 +227,9 @@ public:
             out.npc_commander = cc->string == "npc";
         }
         if (const json::Value* bc = root.Find("battery_commander")) {
-            if (!bc->Is(json::Type::String) || (bc->string != "npc" && bc->string != "player" && bc->string != "none")) {
-                return Fail("battery_commander", "must be \"npc\", \"player\" or \"none\"");
+            if (!bc->Is(json::Type::String) || (bc->string != "npc" && bc->string != "player" && bc->string != "none" &&
+                                                 bc->string != "post")) {
+                return Fail("battery_commander", "must be \"npc\", \"player\", \"none\" or \"post\"");
             }
             out.battery_commander = bc->string;
         }

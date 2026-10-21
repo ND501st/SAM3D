@@ -39,6 +39,7 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/engagement_demo out/demo.acmi     # Windows: simcore\build\Release\engagement_demo.exe
 ./simcore/build/procedure_demo                    # Osa console session + debrief (run from the repo root)
 ./simcore/build/scenario_demo                     # play data/scenarios/osa_practice.json, print the debrief, write .acmi
+./simcore/build/battery_link_demo                 # the Osa and the PU-12M in one battery (battery_link_practice.json): both debriefs
 ./simcore/build/em_demo data out/em_demo.json out/em_demo.acmi   # EM layer MVP: timeline + 11 checks
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
@@ -130,7 +131,7 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore, and the PU-12M command post built through its plan's P0-P7 (console, crew, information chain, battery commander, exterior, interior and cabin, multiplayer: `docs/PU12_DEVELOPMENT.md`); phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); next a person playing the missions on the map, then the PU-12M as a seat; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
+See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore, and the PU-12M command post built through its plan's P0-P8 (console, crew, information chain, battery commander, exterior, interior and cabin, multiplayer, and P8 the post and the player's Osa in one battery, `simcore/battery_link.hpp`: `docs/PU12_DEVELOPMENT.md`); phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); next a person playing the missions on the map (the Osa's, the PU-12M's and the linked battery, `battery_link_practice.json`); the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 
