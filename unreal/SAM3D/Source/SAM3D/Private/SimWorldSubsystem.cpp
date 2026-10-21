@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
+#include "SimKnowledgeComponent.h"
 
 namespace
 {
@@ -157,6 +158,13 @@ void USimWorldSubsystem::SetTimeScale(float Scale)
 
 void USimWorldSubsystem::Tick(float DeltaTime)
 {
+	// After the sim has stepped (whichever way this function returns), the server sends players their knowledge.
+	struct FPumpAfterStep
+	{
+		USimWorldSubsystem* Self;
+		~FPumpAfterStep() { Self->PumpKnowledge(); }
+	} PumpAfterStep{this};
+
 	const double Scale = GetTimeScale();
 	if (EmLayer && EmLayer->IsRunning())
 	{
@@ -822,3 +830,95 @@ double USimWorldSubsystem::GetSimTimeSeconds() const
 	}
 	return SimWorld ? SimWorld->Time() : 0.0;
 }
+
+// ------------------------------------------------------------------ multiplayer knowledge (roadmap E10)
+
+void USimWorldSubsystem::RegisterKnowledgeClient(USimKnowledgeComponent* Client)
+{
+	if (Client == nullptr || KnowledgeClients.Contains(Client))
+	{
+		return;
+	}
+	if (!Replicator)
+	{
+		Replicator = MakeUnique<simcore::em::KnowledgeReplicator>();
+	}
+	const int32 Node = Client->NodeId != 0 ? Client->NodeId : GetDefaultKnowledgeNode();
+	Client->SetReplicatorHandle(Replicator->AddClient(Node));
+	Client->SendAccumulator() = 1e9;  // the first view goes out at once
+	KnowledgeClients.Add(Client);
+}
+
+void USimWorldSubsystem::UnregisterKnowledgeClient(USimKnowledgeComponent* Client)
+{
+	KnowledgeClients.Remove(Client);
+}
+
+void USimWorldSubsystem::AckKnowledge(USimKnowledgeComponent* Client, uint32 Seq)
+{
+	if (Replicator && Client != nullptr && Client->GetReplicatorHandle() != INDEX_NONE)
+	{
+		Replicator->Ack(Client->GetReplicatorHandle(), Seq);
+	}
+}
+
+const simcore::em::EmScene* USimWorldSubsystem::GetActiveEmScene() const
+{
+	if (Runner && Runner->Em() != nullptr)
+	{
+		return &Runner->Em()->World().Scene();
+	}
+	if (EmLayer && EmLayer->IsRunning())
+	{
+		return EmLayer->GetScene();
+	}
+	return nullptr;
+}
+
+int32 USimWorldSubsystem::GetDefaultKnowledgeNode() const
+{
+	return Runner && Runner->Em() != nullptr ? Runner->Em()->UnitNodeId() : 0;
+}
+
+void USimWorldSubsystem::PumpKnowledge()
+{
+	if (!Replicator || KnowledgeClients.Num() == 0 || GetWorld() == nullptr || GetWorld()->GetNetMode() == NM_Client)
+	{
+		return;
+	}
+	const simcore::em::EmScene* Scene = GetActiveEmScene();
+	if (Scene == nullptr)
+	{
+		return;
+	}
+	// Sim time, not frame time: a paused or time-compressed sim sends by its own clock.
+	double Dt = LastKnowledgeSimTime >= 0.0 ? Scene->time_s - LastKnowledgeSimTime : 0.0;
+	if (Dt < 0.0)
+	{
+		Dt = 0.0;  // a new scene started
+	}
+	LastKnowledgeSimTime = Scene->time_s;
+	KnowledgeClients.RemoveAll([](const TWeakObjectPtr<USimKnowledgeComponent>& C) { return !C.IsValid(); });
+	for (const TWeakObjectPtr<USimKnowledgeComponent>& Weak : KnowledgeClients)
+	{
+		USimKnowledgeComponent* Client = Weak.Get();
+		double& Acc = Client->SendAccumulator();
+		Acc += Dt;
+		if (Acc < Client->SendPeriodSeconds)
+		{
+			continue;
+		}
+		Acc = 0.0;
+		const int32 Handle = Client->GetReplicatorHandle();
+		const int32 Node = Client->NodeId != 0 ? Client->NodeId : GetDefaultKnowledgeNode();
+		if (Replicator->Node(Handle) != Node)
+		{
+			Replicator->SetNode(Handle, Node);
+		}
+		const std::vector<std::uint8_t> Bytes = Replicator->Produce(Handle, *Scene);
+		TArray<uint8> Packet;
+		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
+		Client->SendKnowledge(Packet);
+	}
+}
+
