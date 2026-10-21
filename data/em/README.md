@@ -44,3 +44,10 @@ loaded by `simcore/em/data.hpp` (`LoadEmLibraryFile`) and used by the EM layer
   tracks per message, `range_anchor`.
 * `emitters[]`: stand-alone emitters (an aircraft's radar seen only as a signal, decoy emitters).
 * `threat_libraries[]`: `id`, `owner`, `entries[]` with band, PRF and pulse-width windows.
+
+## Missiles and warning receivers (roadmap E5)
+
+Standalone `emitters` may have the kinds `missile_uplink` (a SAM's command transmitter: the library's first is channel I,
+the second channel II; `channels_hz` holds the frequencies the letter change moves between) and `missile_responder`
+(carried by each missile in flight). A scenario target names a receiver of kind `rwr` (`"rwr": "nato_alr46_class_rwr"`);
+its threat library's entries of kind `track` (with steady illumination) and `missile_guidance` are what it warns of.

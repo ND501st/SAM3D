@@ -472,7 +472,15 @@ void ASimOsaVehicle::AnimateFromSim(const USimWorldSubsystem* Sim)
 	TurretPivot->SetRelativeRotation(FRotator(0.0, AzimuthFromNorth - Sim->GetUnitHeading(), 0.0));
 	// 1 = raised (upright), 0 = folded back 90 degrees for transport.
 	const double Raised = Sim->GetSubsystemProgress(SearchAntennaSubsystem);
-	AntennaHinge->SetRelativeRotation(FRotator(-90.0 * (1.0 - Raised), 0.0, 0.0));
+	// The search antenna turns on its own (33 rpm) once raised: with the EM layer, where its beam points (roadmap E3),
+	// relative to the turret it stands on.
+	double AntennaYaw = 0.0;
+	double AntennaTrueAz = 0.0;
+	if (Raised >= 1.0 && Sim->GetSearchAntennaAzimuth(AntennaTrueAz))
+	{
+		AntennaYaw = FRotator::NormalizeAxis(AntennaTrueAz - AzimuthFromNorth);
+	}
+	AntennaHinge->SetRelativeRotation(FRotator(-90.0 * (1.0 - Raised), AntennaYaw, 0.0));
 }
 
 void ASimOsaVehicle::HandleHotkeys(APlayerController* Pc, USimWorldSubsystem* Sim)

@@ -594,7 +594,7 @@ private:
             const Procedure* best = nullptr;
             int best_cover = 0;
             for (const Procedure& p : console_.procedures) {
-                if (p.station != station || std::find(out.begin(), out.end(), p.id) != out.end()) continue;
+                if (p.station != station || p.situational || std::find(out.begin(), out.end(), p.id) != out.end()) continue;
                 int cover = 0;
                 int useful = 0;
                 for (const ProcedureStep& s : p.steps) {

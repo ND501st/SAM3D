@@ -145,6 +145,7 @@ private:
             if (kind == "search_radar") e.kind = EmitterKind::SearchRadar;
             else if (kind == "tracking_radar") e.kind = EmitterKind::TrackingRadar;
             else if (kind == "missile_uplink") e.kind = EmitterKind::MissileUplink;
+            else if (kind == "missile_responder") e.kind = EmitterKind::MissileResponder;
             else if (kind == "iff") e.kind = EmitterKind::Iff;
             else if (kind == "comms") e.kind = EmitterKind::Comms;
             else if (kind == "jammer") e.kind = EmitterKind::Jammer;

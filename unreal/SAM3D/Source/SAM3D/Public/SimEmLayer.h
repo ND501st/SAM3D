@@ -18,6 +18,8 @@ class UWorld;
  *   sam3d.em.Start / sam3d.em.Stop   start or stop the demo
  *   sam3d.em.Debug <mask>            overlay layers (0 = none, -1 = all; bits in simcore/em/debug_draw.hpp)
  *   sam3d.em.Owner <node id>         whose knowledge to draw (0 = command posts, -1 = every node)
+ *   sam3d.em.Scenario 1              draw the running scenario's own EM world (its radars, strobes, the command link,
+ *                                    the targets' warning receivers) with the same overlays, on the scenario's terrain
  */
 class SAM3D_API FSimEmLayer
 {
@@ -37,6 +39,12 @@ public:
 	/** Draw the overlays selected by sam3d.em.Debug for one frame. */
 	void Draw(UWorld* World, TFunctionRef<FVector(const simcore::Vec3&)> ToUnreal);
 
+	/** The same overlays for another scene (the scenario's own EM world: sam3d.em.Scenario). */
+	void DrawScene(UWorld* World, simcore::em::EmScene& Scene, TFunctionRef<FVector(const simcore::Vec3&)> ToUnreal);
+
+	/** sam3d.em.Scenario is on. */
+	static bool ScenarioOverlayOn();
+
 	double GetTimeSeconds() const;
 
 	/** One line per node: name, C2 status, radar states. For HUDs and scripted checks. */
@@ -54,4 +62,6 @@ private:
 	bool bPrimsDirty = true;
 	int32 PrimsMask = 0;
 	int32 PrimsOwner = 0;
+	double PrimsTime = -1.0;
+	const simcore::em::EmScene* PrimsScene = nullptr;
 };

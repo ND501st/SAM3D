@@ -24,6 +24,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -85,6 +86,9 @@ struct EmLinkDef {
     double unit_rcs_m2 = 0.0;         // the vehicle's echo for the other side (0: the EM layer's default)
     Vec3 wind_mps;  // chaff drift
     double rain_mmh = 0.0;  // rain rate over the scene (ITU-R P.838)
+    // The command transmitters go into their equivalent load until a missile flies (peacetime checks, mon_2112_80
+    // p67); otherwise they radiate from ВНИМАНИЕ, as in combat.
+    bool command_link_in_load = false;
     em::EmLibrary library;
 };
 
@@ -143,6 +147,7 @@ public:
         double true_az_deg = 0.0;  // -180..180
         double el_deg = 0.0;
         int beam = -1;  // the search radar's elevation beam its last echo came in (-1 unknown)
+        double snr_db = 0.0;  // the last echo's signal to noise and jamming (dB): how bright it paints
         bool no_range = false;  // angles only (the tracking radar on a jammer): range_m and position mean nothing
     };
 
@@ -332,6 +337,9 @@ public:
             p.velocity = velocity;
             pid = world_.AddPlatform(p);
             targets_.emplace_back(id, pid);
+            for (auto& r : rwrs_) {
+                if (r.target == id && r.esm == 0 && !r.esm_def.empty()) r.esm = world_.AddEsm(pid, r.esm_def);
+            }
         }
         em::Platform* p = world_.Scene().FindPlatform(pid);
         if (p == nullptr || !p->alive) return;
@@ -467,6 +475,9 @@ public:
             if (world_.Time() - t.last_update_s > hold_s) continue;
             std::string id = ResolveTarget(t.Position(), true, claimed);
             const bool ghost = id.empty();
+            // An echo standing still on the ground (the battery's own vehicles, its dummy positions) is ground clutter
+            // to the operator, not a contact: he reports moving echoes and anything in the air.
+            if (ghost && (IsGroundClutter(t) || t.updates < kGhostUpdates)) continue;
             if (ghost) {
                 id = "T" + std::to_string(t.id);
             } else {
@@ -476,10 +487,40 @@ public:
             c.ghost = ghost;
             c.iff = !ghost && t.iff_replies > 0 && world_.Time() - t.last_iff_s <= kIffHoldS;
             c.beam = BeamOfTrack(t.id);
+            c.snr_db = t.last_snr_db;
             out.push_back(c);
         }
         std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
+    }
+
+    // The search radar's jamming strobes: the direction of each noise jammer it hears (true azimuth from north,
+    // -180..180) and how strong (J/N, dB), held as long as an echo is (one beam programme).
+    struct Strobe {
+        double true_az_deg = 0.0;
+        double jn_db = 0.0;
+    };
+    std::vector<Strobe> SearchStrobes() const {
+        std::vector<Strobe> out;
+        const em::RadarState* r = Radar(search_);
+        if (r == nullptr || !r->on) return out;
+        const em::RadarDef& d = DefOf(*r);
+        const double turns = r->beam_program.empty() ? 1.0 : static_cast<double>(r->beam_program.size());
+        const double hold_s = turns * d.emitter.scan_period_s + 0.3;
+        for (const em::StrobeTrack& st : r->strobe_tracks) {
+            if (world_.Time() - st.last_s > hold_s) continue;
+            double az = std::fmod(RadToDeg(st.azimuth_rad) + 180.0, 360.0);
+            if (az < 0.0) az += 360.0;
+            out.push_back({az - 180.0, st.jn_db});
+        }
+        return out;
+    }
+    // Where the search antenna points now (true azimuth from north, 0..360), and whether it is turning (radiating
+    // or not: the antenna turns with the drive on).
+    double SearchAntennaAzimuthDeg() const {
+        const em::RadarState* r = Radar(search_);
+        const em::EmitterState* e = r != nullptr ? world_.Scene().FindEmitter(r->emitter_id) : nullptr;
+        return e != nullptr ? RadToDeg(e->pointing_az_rad) : 0.0;
     }
 
     // The tracking radar holds a target: who, and where its filter puts it now.
@@ -521,6 +562,144 @@ public:
         report.source = em::InfoSource::Network;
         report.received_s = world_.Time();
         if (em::NodeState* n = world_.Scene().FindNode(node_)) n->kb.Upsert(report);
+    }
+
+    // ---- The guidance channels and the missiles (roadmap E5). Each channel's command transmitter is an emitter on the
+    // unit (the library's missile_uplink emitters in order: channel I, channel II), on its letter's frequency; a missile
+    // in flight is a platform carrying the library's missile_responder emitter. Both radiate, so ESM hears a launch and
+    // a target's radar warning receiver warns of it.
+
+    // Channel `channel` (1, 2): `state` 0 off, 1 on into its equivalent load (nothing leaves the antenna), 2
+    // radiating; `letter`: how many times the letter has been changed (the emitter's channels_hz, round); `toward`:
+    // where its antenna points (the tracking antenna's line of sight). Without a missile_uplink in the library it
+    // does nothing.
+    void SetCommandLink(int channel, int state, int letter, const Vec3& toward) {
+        if (channel < 1 || channel > 2 || !Ok()) return;
+        int& id = uplink_ids_[static_cast<std::size_t>(channel - 1)];
+        if (id == 0) {
+            if (state == 0) return;
+            const em::EmitterDef* d = LibraryEmitter(em::EmitterKind::MissileUplink, channel - 1);
+            if (d == nullptr) return;
+            id = world_.AddEmitter(unit_id_, *d);
+        }
+        em::EmitterState* e = world_.Scene().FindEmitter(id);
+        if (e == nullptr) return;
+        const bool was = e->InAir();
+        e->radiating = state >= 1;
+        e->dummy_load = state == 1;
+        const std::vector<double>& letters = e->def.waveform.channels_hz;
+        if (!letters.empty()) e->freq_hz = letters[static_cast<std::size_t>(letter < 0 ? 0 : letter) % letters.size()];
+        const Vec3 d = toward - Antenna();
+        if (d.LengthSquared() > 1.0) {
+            e->pointing_az_rad = AzimuthOf(d);
+            e->pointing_el_rad = ElevationOf(d);
+        }
+        if (e->InAir() != was) {
+            if (e->InAir()) e->on_since_s = world_.Time();
+            world_.Scene().Log(em::EmEventKind::Info, e->id, 0,
+                               std::string("command transmitter ") + (channel == 1 ? "I" : "II") + (e->InAir() ? " radiating" : " silent"));
+        }
+    }
+    // The channel's command transmitter is radiating now, and on what frequency (0: none).
+    bool CommandLinkRadiating(int channel) const {
+        const em::EmitterState* e = UplinkState(channel);
+        return e != nullptr && e->InAir();
+    }
+    double CommandLinkFreqHz(int channel) const {
+        const em::EmitterState* e = UplinkState(channel);
+        return e != nullptr ? e->freq_hz : 0.0;
+    }
+
+    struct GuidedMissile {
+        int number = 0;
+        Vec3 position;
+        Vec3 velocity;
+    };
+    // The missiles in flight now: each a platform with its responder radiating; one no longer listed is gone. A missile
+    // gives no echo here (its own search radar doesn't paint it: a simplification).
+    void SyncMissiles(const std::vector<GuidedMissile>& missiles) {
+        if (!Ok()) return;
+        for (const GuidedMissile& m : missiles) {
+            int pid = 0;
+            for (const auto& km : missiles_) {
+                if (km.first == m.number) pid = km.second;
+            }
+            if (pid == 0) {
+                em::Platform p;
+                p.name = "Missile " + std::to_string(m.number);
+                p.side = em::Side::Red;
+                p.kind = em::PlatformKind::Missile;
+                p.rcs = em::RcsModel{0.0, 0.0, 0.0};
+                p.position = m.position;
+                p.velocity = m.velocity;
+                pid = world_.AddPlatform(p);
+                missiles_.emplace_back(m.number, pid);
+                if (const em::EmitterDef* d = LibraryEmitter(em::EmitterKind::MissileResponder, 0)) {
+                    const int eid = world_.AddEmitter(pid, *d);
+                    if (em::EmitterState* e = world_.Scene().FindEmitter(eid)) {
+                        e->radiating = true;
+                        e->on_since_s = world_.Time();
+                    }
+                }
+            }
+            world_.SetPlatformState(pid, m.position, m.velocity);
+        }
+        for (std::size_t i = 0; i < missiles_.size();) {
+            bool listed = false;
+            for (const GuidedMissile& m : missiles) listed = listed || m.number == missiles_[i].first;
+            if (listed) {
+                ++i;
+                continue;
+            }
+            world_.DestroyPlatform(missiles_[i].second);
+            missiles_.erase(missiles_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
+    // Missiles in flight in the EM world (each with its responder).
+    std::size_t MissilesInWorld() const { return missiles_.size(); }
+
+    // ---- A target's radar warning receiver: a library ESM receiver (kind rwr) on the target's platform, made when the
+    // target first appears. Its contacts, named through its threat library, tell the pilot what illuminates him.
+    void SetTargetRwr(const std::string& target_id, const std::string& esm_id) {
+        for (auto& r : rwrs_) {
+            if (r.target == target_id) {
+                r.esm_def = esm_id;
+                return;
+            }
+        }
+        rwrs_.push_back({target_id, esm_id, 0});
+    }
+    struct RwrWarning {
+        bool lock = false;    // a hostile tracking radar holds him (steady illumination from an emitter named "track")
+        bool launch = false;  // a hostile missile-guidance emitter is on him (an entry of kind "missile_guidance")
+        std::string lock_by;  // the library's names
+        std::string launch_by;
+    };
+    // What the target's RWR says now (heard within the last second). No RWR: nothing.
+    RwrWarning WarningOf(const std::string& target_id) const {
+        RwrWarning w;
+        for (const auto& r : rwrs_) {
+            if (r.target != target_id || r.esm == 0) continue;
+            const em::EsmState* es = world_.Scene().FindEsm(r.esm);
+            if (es == nullptr || !es->on) continue;
+            for (const em::EsmContact& c : es->contacts) {
+                if (!c.sig.hostile || world_.Time() - c.last_seen_s > 1.0) continue;
+                if (c.sig.library_kind == "missile_guidance") {
+                    w.launch = true;
+                    w.launch_by = c.sig.library_name;
+                } else if (c.sig.steady && (c.sig.library_kind == "track" || c.sig.library_kind == "fire_control")) {
+                    w.lock = true;
+                    w.lock_by = c.sig.library_name;
+                }
+            }
+        }
+        return w;
+    }
+    bool HasRwr(const std::string& target_id) const {
+        for (const auto& r : rwrs_) {
+            if (r.target == target_id && !r.esm_def.empty()) return true;
+        }
+        return false;
     }
 
     // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
@@ -700,6 +879,31 @@ private:
     static constexpr double kResolveElDeg = 10.0;  // a search track's height is only known to its beam
     static constexpr double kResolveRangeM = 1500.0;
 
+    // Ground clutter to the operator (a ghost track: it lines up with no target): over one of the unit's own ground
+    // objects (the battery's vehicles, its dummy positions), or near the vehicle and slower than any aircraft (clutter
+    // false alarms the tracker confirmed, a parked vehicle). By place over the ground only: a search track's height is
+    // only its beam's, and a young track's speed is noisy. A drifting chaff cloud stays on the scope (the referee knows
+    // where the clouds are, as it knows the targets: ResolveTarget).
+    bool IsGroundClutter(const em::SensorTrack& t) const {
+        const Vec3 p = t.Position();
+        const em::EmScene& s = world_.Scene();
+        for (const em::Platform& g : s.platforms) {
+            if (!g.alive || g.id == unit_id_ || g.side != em::Side::Red || g.kind != em::PlatformKind::Ground) continue;
+            if ((g.position - p).HorizontalLength() < kOwnObjectM) return true;
+        }
+        if (t.Velocity().Length() >= kClutterSpeedMps || (p - Antenna()).HorizontalLength() > kClutterRangeM) return false;
+        for (const em::ChaffCloud& c : s.chaff) {
+            if (ChaffRcs(c, s.time_s) > 0.0 && (c.position - p).Length() < 1500.0) return false;
+        }
+        return true;
+    }
+    static constexpr double kOwnObjectM = 1000.0;       // a young search track errs by several hundred metres
+    static constexpr double kClutterSpeedMps = 50.0;    // slower than an aircraft (a young track's speed is noisy)
+    static constexpr double kClutterRangeM = 10000.0;   // where ground clutter makes false alarms
+    // A ghost is reported once it has held for this many updates: a young track off a parked vehicle's echo extrapolates
+    // its noisy speed and wanders off the vehicle before it is dropped.
+    static constexpr int kGhostUpdates = 4;
+
     Contact MakeContact(const std::string& id, const Vec3& position) const {
         Contact c;
         c.target_id = id;
@@ -739,6 +943,29 @@ private:
     Vec3 last_unit_;
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
+    std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
+    std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
+    struct Rwr {
+        std::string target;
+        std::string esm_def;
+        int esm;
+    };
+    std::vector<Rwr> rwrs_;
+
+    // The library's `index`-th emitter of a kind (null if it has none).
+    const em::EmitterDef* LibraryEmitter(em::EmitterKind kind, int index) const {
+        int n = 0;
+        for (const em::EmitterDef& d : world_.Scene().lib.emitters) {
+            if (d.kind != kind) continue;
+            if (n++ == index) return &d;
+        }
+        return nullptr;
+    }
+    const em::EmitterState* UplinkState(int channel) const {
+        if (channel < 1 || channel > 2) return nullptr;
+        const int id = uplink_ids_[static_cast<std::size_t>(channel - 1)];
+        return id != 0 ? world_.Scene().FindEmitter(id) : nullptr;
+    }
     std::vector<char> look_record_;  // 1 = the locked track's look was a hit, newest last
     int recorded_track_ = 0;
     int recorded_looks_ = 0;

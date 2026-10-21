@@ -82,6 +82,12 @@ struct ViewEcho {
     double elevation_deg = 0.0;
     int beam = -1;
     bool control_reply = false;
+    double snr_db = -1000.0;  // search echoes: how strong (dB; -1000 unknown)
+};
+
+struct ViewStrobe {  // a noise jammer's strobe on the search scope
+    double azimuth_deg = 0.0;
+    double jn_db = 0.0;
 };
 
 struct ViewScope {
@@ -96,6 +102,8 @@ struct ViewScope {
     double indicated_to_true_deg = 0.0;   // the wheels' azimuth + this = true azimuth
     double missile_range_m[2] = {-1.0, -1.0};  // guidance channels I and II (-1: none in flight)
     Vec3 unit_position;
+    std::vector<ViewStrobe> strobes;      // jamming strobes on the search scope (roadmap E3)
+    double search_antenna_az_deg = -1000.0;  // where the search antenna points (crew frame; -1000 unknown)
 };
 
 // What else the player's crew has in front of it (roadmap 7.7): the PU-12 plotting board's recent marks, the latest
@@ -408,6 +416,7 @@ inline void Get(Reader& r, ViewSensorTrack& t) {
 constexpr double kDegStep = 1e-4;  // degrees, for the scope
 constexpr double kFracStep = 1e-5; // fractions of a scope's scale (the IT-45's tracks)
 constexpr double kSecStep = 0.01;  // seconds (a time of arrival)
+constexpr double kDbStep = 0.01;   // decibels (an echo's strength, a strobe's J/N)
 
 inline void PutEchoes(Writer& w, const std::vector<ViewEcho>& list) {
     w.U32(static_cast<std::uint32_t>(list.size()));
@@ -418,6 +427,7 @@ inline void PutEchoes(Writer& w, const std::vector<ViewEcho>& list) {
         w.Q(e.elevation_deg, kDegStep);
         w.I32(e.beam);
         w.U8(e.control_reply ? 1 : 0);
+        w.Q(e.snr_db, kDbStep);
     }
 }
 inline bool GetEchoes(Reader& r, std::vector<ViewEcho>& list) {
@@ -432,6 +442,7 @@ inline bool GetEchoes(Reader& r, std::vector<ViewEcho>& list) {
         e.elevation_deg = r.Q(kDegStep);
         e.beam = r.I32();
         e.control_reply = r.U8() != 0;
+        e.snr_db = r.Q(kDbStep);
         list.push_back(e);
     }
     return r.ok;
@@ -451,6 +462,12 @@ inline std::vector<std::uint8_t> ScopeBytes(const ViewScope& sc) {
     w.Q(sc.missile_range_m[0], kPosStep);
     w.Q(sc.missile_range_m[1], kPosStep);
     w.V3(sc.unit_position, kPosStep);
+    w.U32(static_cast<std::uint32_t>(sc.strobes.size()));
+    for (const ViewStrobe& st : sc.strobes) {
+        w.Q(st.azimuth_deg, kDegStep);
+        w.Q(st.jn_db, kDbStep);
+    }
+    w.Q(sc.search_antenna_az_deg, kDegStep);
     return w.bytes;
 }
 inline bool GetScope(Reader& r, ViewScope& sc) {
@@ -466,6 +483,15 @@ inline bool GetScope(Reader& r, ViewScope& sc) {
     sc.missile_range_m[0] = r.Q(kPosStep);
     sc.missile_range_m[1] = r.Q(kPosStep);
     sc.unit_position = r.V3(kPosStep);
+    const std::uint32_t strobes = r.U32();
+    if (!r.ok || strobes > 1000u) return false;
+    for (std::uint32_t i = 0; i < strobes && r.ok; ++i) {
+        ViewStrobe st;
+        st.azimuth_deg = r.Q(kDegStep);
+        st.jn_db = r.Q(kDbStep);
+        sc.strobes.push_back(st);
+    }
+    sc.search_antenna_az_deg = r.Q(kDegStep);
     return r.ok;
 }
 

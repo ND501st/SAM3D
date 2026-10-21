@@ -38,7 +38,7 @@ bool FSimMissionsMenuTest::RunTest(const FString& Parameters)
 	TArray<FSimMission> Missions;
 	FString Error;
 	TestTrue(FString::Printf(TEXT("the catalogue loads %s"), *Error), Sim->GetMissions(Missions, Error));
-	TestEqual(TEXT("fourteen missions"), Missions.Num(), 14);
+	TestEqual(TEXT("sixteen missions"), Missions.Num(), 16);
 	const FSimMission* Link = Missions.FindByPredicate([](const FSimMission& M) { return M.Id == TEXT("battery_link_practice"); });
 	TestTrue(TEXT("the battery link, with the Osa and the PU-12M to start in"), Link != nullptr && Link->bLink && Link->Vehicles.Num() == 2);
 	if (Link != nullptr && Link->Vehicles.Num() == 2)

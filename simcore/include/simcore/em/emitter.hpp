@@ -22,7 +22,9 @@
 namespace simcore {
 namespace em {
 
-enum class EmitterKind { SearchRadar, TrackingRadar, MissileUplink, Iff, Comms, Jammer, Navaid, Decoy };
+// MissileUplink: a SAM's command transmitter guiding its missile; MissileResponder: the missile's own transmitter
+// answering it (roadmap E5).
+enum class EmitterKind { SearchRadar, TrackingRadar, MissileUplink, MissileResponder, Iff, Comms, Jammer, Navaid, Decoy };
 enum class ScanKind { Fixed, Circular, Sector, Tracking, Omni };
 enum class AgilityKind { Fixed, Channels, PulseToPulse };
 
@@ -31,6 +33,7 @@ inline const char* EmitterKindName(EmitterKind k) {
         case EmitterKind::SearchRadar: return "search_radar";
         case EmitterKind::TrackingRadar: return "tracking_radar";
         case EmitterKind::MissileUplink: return "missile_uplink";
+        case EmitterKind::MissileResponder: return "missile_responder";
         case EmitterKind::Iff: return "iff";
         case EmitterKind::Comms: return "comms";
         case EmitterKind::Jammer: return "jammer";

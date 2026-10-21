@@ -29,6 +29,8 @@ struct ScopeFeed {
     double indicated_to_true_deg = 0.0;
     double missile_range_m[2] = {-1.0, -1.0};
     Vec3 unit_position;
+    std::vector<ScopeStrobe> strobes;  // jamming strobes (EM layer)
+    double search_antenna_az_deg = EngagementModel::kNoAntenna;  // where the search antenna points (crew frame)
 
     double IndicatedToTrueDeg(double indicated_deg) const {
         double d = std::fmod(indicated_deg + indicated_to_true_deg + 180.0, 360.0);
@@ -55,6 +57,8 @@ inline ScopeFeed ScopeFeedOf(const EngagementModel& e, const Launcher* launcher,
         f.missile_range_m[1] = launcher->MissileRangeM(2, now_s);
     }
     f.unit_position = e.UnitPosition();
+    f.strobes = e.SearchStrobes();
+    f.search_antenna_az_deg = e.SearchAntennaAzimuthDeg();
     return f;
 }
 
@@ -86,6 +90,7 @@ inline em::ViewScope ToViewScope(const ScopeFeed& f, EchoKeys& keys) {
             e.elevation_deg = c.elevation_deg;
             e.beam = c.beam;
             e.control_reply = c.control_reply;
+            e.snr_db = c.snr_db;
             out.push_back(e);
         }
     };
@@ -100,6 +105,8 @@ inline em::ViewScope ToViewScope(const ScopeFeed& f, EchoKeys& keys) {
     v.missile_range_m[0] = f.missile_range_m[0];
     v.missile_range_m[1] = f.missile_range_m[1];
     v.unit_position = f.unit_position;
+    for (const ScopeStrobe& st : f.strobes) v.strobes.push_back({st.azimuth_deg, st.jn_db});
+    v.search_antenna_az_deg = f.search_antenna_az_deg;
     return v;
 }
 
@@ -115,6 +122,7 @@ inline ScopeFeed FromViewScope(const em::ViewScope& v) {
             c.elevation_deg = e.elevation_deg;
             c.beam = e.beam;
             c.control_reply = e.control_reply;
+            c.snr_db = e.snr_db;
             out.push_back(c);
         }
     };
@@ -129,6 +137,8 @@ inline ScopeFeed FromViewScope(const em::ViewScope& v) {
     f.missile_range_m[0] = v.missile_range_m[0];
     f.missile_range_m[1] = v.missile_range_m[1];
     f.unit_position = v.unit_position;
+    for (const em::ViewStrobe& st : v.strobes) f.strobes.push_back({st.azimuth_deg, st.jn_db});
+    f.search_antenna_az_deg = v.search_antenna_az_deg;
     return f;
 }
 

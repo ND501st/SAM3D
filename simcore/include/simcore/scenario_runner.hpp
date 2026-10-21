@@ -109,8 +109,11 @@ public:
             e.evade_on_launch = t.evade_on_launch;
             e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
             e.friendly = t.friendly;
+            e.size_m = t.size_m;
             eng_targets_.push_back(e);
         }
+        engagement_.SetOpticalConditions(def_.optics);
+        rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
@@ -131,6 +134,9 @@ public:
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
             if (em_link_->Ok()) {
                 engagement_.SetEmLink(em_link_.get());
+                for (const ScenarioTarget& t : def_.targets) {
+                    if (!t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);  // made with the target's platform
+                }
             } else {
                 em_link_.reset();  // the loader checked the radars; fall back to the gameplay rules rather than crash
             }
@@ -170,12 +176,18 @@ public:
         UpdatePost();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
+            aim_crew_.ignore = decoys_known_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
-            // A radar lock is heard by the target's warning receiver; a TV track is not.
+            // A radar lock is heard by the target's warning receiver; a TV track is not. With the EM layer, a target with
+            // a warning receiver of its own goes by what it hears (CueFromWarnings).
             const TrackMethod m = engagement_.Method();
-            if (m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) CueTarget(engagement_.TrackedTarget(), false);
+            if ((m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) && !HasRwr(engagement_.TrackedTarget())) {
+                CueTarget(engagement_.TrackedTarget(), false);
+            }
         }
         UpdateLauncher();
+        UpdateGuidanceEm();
+        CueFromWarnings();
         UpdateFuel(dt);
         UpdatePositionPower();
         EvaluateTriggers();
@@ -940,6 +952,50 @@ private:
         }
     }
 
+    // The guidance channels in the EM layer (roadmap E5): each channel's command transmitter radiates from ВНИМАНИЕ
+    // (into its equivalent load until a missile flies, in a peacetime check), on its letter's frequency, along the
+    // tracking antenna's line of sight; each missile in flight carries its responder.
+    void UpdateGuidanceEm() {
+        if (!em_link_ || !launcher_ || !engagement_on_) return;
+        const double az = DegToRad(em_link_->AntennaAzimuthDeg());
+        const double el = DegToRad(em_link_->AntennaElevationDeg());
+        const Vec3 toward = engagement_.UnitPosition() + Vec3{std::sin(az) * std::cos(el), std::cos(az) * std::cos(el), std::sin(el)} * 10000.0;
+        for (int ch = 1; ch <= 2; ++ch) {
+            const int ts = launcher_->TransmitterState(ch);
+            const int state = ts == 2 ? 2 : (ts == 1 ? (def_.em.command_link_in_load ? 1 : 2) : 0);
+            em_link_->SetCommandLink(ch, state, launcher_->LetterChanges(), toward);
+        }
+        std::vector<EmSensorLink::GuidedMissile> missiles;
+        for (const EngagementModel::MissileView& m : engagement_.MissilesInFlight(time_, world_, eng_targets_)) {
+            missiles.push_back({m.number, m.position, m.velocity});
+        }
+        em_link_->SyncMissiles(missiles);
+    }
+
+    // The target carries a radar warning receiver in the EM layer.
+    bool HasRwr(const std::string& target_id) const { return em_link_ && em_link_->HasRwr(target_id); }
+
+    // Targets with a warning receiver: the pilot reacts to what it warns of (a lock, the command link of a launch), and
+    // the debrief notes the first warning of each kind.
+    void CueFromWarnings() {
+        if (!em_link_) return;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (t.rwr.empty() || !targets_[i].spawned || targets_[i].gone) continue;
+            const EmSensorLink::RwrWarning w = em_link_->WarningOf(t.id);
+            if (w.lock && (rwr_warned_[i] & 1) == 0) {
+                rwr_warned_[i] |= 1;
+                Event(t.id, "warning receiver: locked by " + w.lock_by);
+            }
+            if (w.launch && (rwr_warned_[i] & 2) == 0) {
+                rwr_warned_[i] |= 2;
+                Event(t.id, "warning receiver: missile guidance, " + w.launch_by);
+            }
+            if (w.launch) CueTarget(t.id, true);
+            if (w.lock) CueTarget(t.id, false);
+        }
+    }
+
     // A missile was launched at a target (`launch`), or the tracking radar holds it: its pilot may evade.
     void CueTarget(const std::string& id, bool launch) {
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
@@ -1408,7 +1464,7 @@ private:
             if (engagement_on_) {
                 const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
                 engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
-                CueTarget(engagement_.TrackedTarget(), true);
+                if (!HasRwr(engagement_.TrackedTarget())) CueTarget(engagement_.TrackedTarget(), true);
             }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
@@ -1508,6 +1564,7 @@ private:
     std::mt19937 rng_;
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
+    std::vector<int> rwr_warned_;            // per target: 1 a lock warning noted, 2 a launch warning noted
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;
@@ -1964,9 +2021,17 @@ private:
         if (silent && halted && console_.equipment.IsReady("soc_transmitter")) NpcGive("order_emcon_off", 30.0);
         if (!silent && npc_was_silent_) NpcGive("order_emcon_on", 30.0);
         npc_was_silent_ = silent;
+        // Emission discipline (doctrine search_bursts): between bursts the transmitter off, the antenna turning; the
+        // readiness drills then aim at the silent state, so they don't switch it back on or stop the antenna.
+        const bool burst_off = !silent && NpcBurstOff(halted);
+        if (def_.doctrine.search_on_s > 0.0 && halted && !silent && console_.equipment.IsReady("hv_ready")) {
+            if (burst_off && console_.panel.Get("soc.hv") == 1) NpcGive("order_hv_off", 1.0);
+            if (!burst_off && npc_burst_off_ && console_.panel.Get("soc.hv") == 0) NpcGive("order_hv_on", 1.0);
+        }
+        npc_burst_off_ = burst_off;
         // The radios: the commander's set off with a command net to hear (a scenario that starts them off).
         if (c2_ && console_.panel.Get("radio.right.power") == 0) NpcGive("order_radio_on", 120.0);
-        const CrewTask* task = def_.crew_data.FindTask(halted ? (silent ? "ready_silent" : "ready_halted") : "searching_on_march");
+        const CrewTask* task = def_.crew_data.FindTask(halted ? (silent || burst_off ? "ready_silent" : "ready_halted") : "searching_on_march");
         if (task != nullptr && !stowing) {
             const DrillPlan plan = drill_->Plan(drill_->GoalFor(*task), console_.panel, console_.equipment);
             const bool was_quiet = quiet_orders_;
@@ -2065,7 +2130,10 @@ private:
                 return false;
             };
             for (const KnownTarget& k : recent) {
-                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k)) known.push_back(k);
+                if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k) &&
+                    decoys_known_.count(k.target) == 0) {
+                    known.push_back(k);
+                }
             }
             std::sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
             // With the battery commander in a real post, what he gave this vehicle comes first: the latest designation
@@ -2161,6 +2229,7 @@ private:
         // One permission stands until a missile goes (the launch is counted a step after ПУСК); after a miss with the
         // target still in the zone it is given again (re-engage: voenizdat_osa_1991 p257).
         if (npc_permit_launches_ == launches_ && time_ - npc_permit_s_ < 60.0) return;
+        if (!NpcTvCleared(tracked, m)) return;
         // Identified first: interrogated with no reply (the senior operator's report), or designated by the PU-12 (the
         // battery commander's identification). Under EMCON the interrogator is silent too: the designation must do.
         const bool identified = told != nullptr && (told->interrogated || told->number > 0);
@@ -2175,6 +2244,84 @@ private:
             npc_permit_s_ = time_;
         }
     }
+    // Warned of decoys (doctrine tv_check), the commander launches only at what the TV has shown him (roadmap E6): the
+    // deputy looks at what the radar holds through the narrow lens (tv_watch); once he can make its type out
+    // (em/optical.hpp), a decoy (a small drone where the echo says aircraft) is reported, the launch forbidden and the
+    // track dropped, and it is not taken again. If the TV can't see it (night, haze, too far) by the time it is in the
+    // zone, he goes by the radar. The deputy may miss it (his tier's identification error). False: wait.
+    bool NpcTvCleared(const std::string& tracked, TrackMethod m) {
+        if (decoys_known_.count(tracked) != 0) {  // a decoy taken again: let it go at once
+            if (npc_decoy_dropped_ != tracked || time_ - npc_decoy_dropped_s_ > 10.0) {
+                npc_decoy_dropped_ = tracked;
+                npc_decoy_dropped_s_ = time_;
+                GiveCrewOrder("order_drop_target");
+            }
+            return false;
+        }
+        if (!def_.doctrine.tv_check || m != TrackMethod::Radar || npc_tv_cleared_ == tracked) return true;
+        const TrackSensorDef& d = console_.track;
+        const bool narrow = d.fov_control.empty() || console_.panel.Get(d.fov_control) == 1;
+        if (!console_.equipment.IsReady(d.tv_camera) || !narrow) {
+            NpcGive("order_tv_watch", 20.0);
+            return false;
+        }
+        const em::OpticalLook look = engagement_.TvLook(console_, tracked);
+        if (look.recognised) {
+            if (!IsDecoy(tracked)) {
+                npc_tv_cleared_ = tracked;
+                return true;
+            }
+            const SkillTier* dep = TierAt("deputy_commander");
+            const bool missed = dep != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < dep->priority_error_chance;
+            if (missed) {
+                npc_tv_cleared_ = tracked;
+                Event(tracked, "the deputy commander takes the decoy on the TV for an aircraft");
+                return true;
+            }
+            decoys_known_.insert(tracked);
+            if (assigned_target_ == tracked) assigned_target_.clear();
+            npc_decoy_dropped_ = tracked;
+            npc_decoy_dropped_s_ = time_;
+            if (NpcAt("deputy_commander")) Say("false_target", "deputy_commander", {});
+            Event(tracked, "made out on the TV: a decoy drone");
+            SpeakOrder("hold_fire");
+            GiveCrewOrder("order_drop_target");
+            return false;
+        }
+        if (!look.seen && console_.equipment.GetInput("target_in_zone")) {
+            npc_tv_cleared_ = tracked;  // nothing to see on the TV and the target in the zone: by the radar
+            return true;
+        }
+        return false;
+    }
+    bool IsDecoy(const std::string& target_id) const {
+        for (const ScenarioTarget& t : def_.targets) {
+            if (t.id == target_id) return t.decoy;
+        }
+        return false;
+    }
+    const SkillTier* TierAt(const std::string& seat) const {
+        for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
+            if (crew_[i].Role() == seat) return SkillOf(def_.crew[i]);
+        }
+        return nullptr;
+    }
+    // Emission discipline (doctrine search_bursts): halted, nothing tracked and no hostile he knows of within the
+    // tracking radar's reach, the search radar radiates in bursts, on for on_s and off for off_s.
+    bool NpcBurstOff(bool halted) {
+        if (def_.doctrine.search_on_s <= 0.0 || !halted || engagement_.Method() != TrackMethod::None) return false;
+        const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
+            if (k.has_range && !k.friendly && k.range_m <= reach) return false;
+        }
+        return std::fmod(time_, def_.doctrine.search_on_s + def_.doctrine.search_off_s) >= def_.doctrine.search_on_s;
+    }
+    std::string npc_tv_cleared_;
+    std::string npc_decoy_dropped_;
+    double npc_decoy_dropped_s_ = -1e9;
+    std::set<std::string> decoys_known_;
+    bool npc_burst_off_ = false;
+
     // Every hostile he has heard of within the interrogator's reach that isn't identified yet: "Запрос!" (the senior
     // operator's ЗАПРОС). Not one the PU-12 designated (identified by the battery commander), not under EMCON.
     void NpcIdentify() {
@@ -2247,7 +2394,10 @@ private:
         }
         // A reload under way (the launcher not full and a TZM in the battery): the crew waits for it before marching on.
         const bool reloading = launcher_ && battery_ && launcher_->LoadedCount() < launcher_->Capacity() && BatteryHasTzm();
-        if (npc_fought_ && !hostile && !reloading && time_ - npc_last_hostile_s_ > 90.0) {
+        // Stowed and on again only on a march (the battery drives this vehicle on its route) and once no air attack is
+        // expected: a battery deployed in its position stays ready.
+        const bool marching_on = battery_ && def_.battery_drive_own && !battery_->AirThreat();
+        if (marching_on && npc_fought_ && !hostile && !reloading && time_ - npc_last_hostile_s_ > 90.0) {
             if (!npc_stow_ordered_) {
                 npc_stow_ordered_ = GiveCrewOrder("order_march");
                 return true;

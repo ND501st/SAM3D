@@ -579,3 +579,29 @@ def covariance_intersect(xa, pa, xb, pb):
     v = [sum(w * ia[i][j] * xa[j] + (1 - w) * ib[i][j] * xb[j] for j in range(3)) for i in range(3)]
     x = [sum(p[i][j] * v[j] for j in range(3)) for i in range(3)]
     return x, p
+
+
+# ----------------------------------------------------------------------------------- optics (TV sight, roadmap E5)
+
+KOSCHMIEDER = 3.912          # -ln(0.02)
+REFERENCE_VISIBILITY_M = 40000.0
+
+
+def apparent_contrast(inherent: float, range_m: float, visibility_m: float) -> float:
+    """Koschmieder: a target's apparent contrast against the sky at a range (mirrors em/optical.hpp)."""
+    if visibility_m <= 0.0:
+        return 0.0
+    return inherent * math.exp(-KOSCHMIEDER * range_m / visibility_m)
+
+
+def contrast_range_m(inherent: float, threshold: float, visibility_m: float) -> float:
+    if threshold <= 0.0 or inherent <= threshold:
+        return 0.0
+    return math.log(inherent / threshold) * visibility_m / KOSCHMIEDER
+
+
+def lines_across(size_m: float, range_m: float, fov_height_rad: float, tv_lines: float = 575.0) -> float:
+    """Johnson: camera lines across a target's critical dimension."""
+    if range_m <= 0.0 or fov_height_rad <= 0.0:
+        return 1e9
+    return (size_m / range_m) / (fov_height_rad / tv_lines)

@@ -172,9 +172,9 @@ range) more than exact numbers, except where a source gives a number.
 
 ## 11. Known limitations
 
-See `docs/EM_ARCHITECTURE.md` §22. The big ones: not yet connected to the Osa console and scopes; no
-missiles/ARMs/optical sensor in the EM layer; minimal doctrine; single knife-edge; GNN tracker;
-frequency changes are data-only.
+See `docs/EM_ARCHITECTURE.md` §22. The big ones were: not yet connected to the Osa console and scopes (done in E2,
+E3); no missiles or optical sensor (done in E5, §33); minimal doctrine; single knife-edge (E9 started); GNN tracker.
+Anti-radiation missiles are not modelled in this track.
 
 ## 12. Next steps
 
@@ -209,6 +209,18 @@ frequency changes are data-only.
    the link (ghost contacts for chaff and false echoes), antenna at the calibrated height, capture rule as data,
    scripted jammers and chaff in scenarios, the unit as a node with knowledge; IFF replies now come from the EM layer.
    Next EM code: E3 (Unreal scopes from EM output) or E4 (PU-12 node, voice designations as messages).
+
+## 12b. E1, E3-E6 (18 October 2026)
+
+* **E3**: the PPI from the EM radar: echoes painted by signal to noise and jamming, jamming strobes, the sweep and the
+  vehicle's antenna following the EM antenna, `sam3d.em.Scenario 1` (`docs/EM_ARCHITECTURE.md` §32).
+* **E4**: done; the saturated voice net measured in `test_c2_sources.cpp`.
+* **E5**: the TV sight as a passive optical sensor, the command link and the missile's responders as emitters, a
+  target's RWR (§33).
+* **E6**: decoy drones the TV unmasks, a stand-off jammer escort, emission discipline (§34). No anti-radiation
+  missiles.
+* **E1**: the command link and the responder entered (estimates as marked); the other open data items still lack a
+  registered source.
 
 ## 13. Open questions for the owner
 

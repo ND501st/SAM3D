@@ -41,6 +41,9 @@ the readiness state they start in (march, deployed, powered).
     "inputs": { "vehicle_stopped": false },           // starting values of console inputs
     "empty_containers": ["1-I", "1-II"]               // optional: launcher containers that start without a missile
   },
+  "environment": { "visibility_km": 40, "daylight": true },  // optional: the air and the light for the TV sight (em/optical.hpp)
+  "doctrine": { "tv_check": true,                     // optional (roadmap E6): warned of decoys, look on the TV before a launch
+                "search_bursts": { "on_s": 4, "off_s": 16 } },  // emission discipline: the search radar in bursts while nothing is near
   "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
@@ -51,6 +54,9 @@ the readiness state they start in (march, deployed, powered).
       "evade": { "on": "launch", "kind": "break", "turn_rate_deg_s": 12 },   // optional instead (9.3), see below
       "behaviour": { "kind": "terrain_following", "agl_m": 60 },      // optional (9.3), see below
       "iff": "none",                                                  // optional: "friend" replies to IFF
+      "size_m": 4.5,          // optional: its critical dimension for the TV sight (em/optical.hpp; default a fighter's)
+      "rwr": "nato_alr46_class_rwr",  // optional, with own_unit.em: its warning receiver; it evades on what it hears (E5)
+      "decoy": true,          // optional: a drone whose echo looks like an aircraft's; the TV can unmask it (E6)
       "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },   // or { "lat_deg", "lon_deg", "alt_m" }
       "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
       "speed_mps": 150, "max_turn_rate_deg_s": 6, "rcs_m2": 0.5 }
@@ -152,6 +158,8 @@ scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking 
 `own_unit.em` also takes the electromagnetic environment's scripted effects (`docs/EM_ARCHITECTURE.md` §25):
 `"extra_libraries": ["em/nato_1985.json"]` merges more library files (jammers, threat libraries);
 `"decoys": [ { "position": {...}, "mode": "with_radar" | "when_radar_off" | "always" } ]` puts decoy emitters copying the search radar at dummy positions (roadmap E7);
+`"command_link_in_load": true` keeps the command transmitters in their equivalent load until a missile flies (a
+peacetime check, `mon_2112_80` p67; in combat they radiate from ВНИМАНИЕ, so a target's RWR warns before the launch);
 `"rain_mmh": 25` puts rain over the scene (ITU-R P.838: it costs Ku-band and C-band paths, not VHF; never part of a radar's calibration);
 `"jammers": [ { "jammer": "<library id>", "target": "<target id>" | "position": {...}, "on_at_s": 270, "off_at_s": 400 } ]`
 puts a jammer on a target (self-screening) or at a stand-off point, aimed at the unit; `"chaff": [ { "target": "<id>",
