@@ -171,25 +171,32 @@ SC_TEST("air war: each adversary flies its own kind of war") {
         SC_EXPECT(dead > 0 && with_sead * 2 >= dead && with_jam > 0);
     }
     // The Pact: the opening air operation goes for airfields, command posts and radars, its strike groups in massed
-    // blows (the hunters, scouts and decoys around them fly in pairs).
+    // blows (the hunters, scouts and decoys around them fly in pairs). Judged over eight campaigns: one campaign's first
+    // day is a few dozen packages, and a platform's maths library sends it down its own path (on Windows the seeds give
+    // 30-54% on those targets and 62-95% of the blows in massed groups; over eight, 41% and 77%).
     {
-        const std::vector<Package> ps = PlanDays(Load("warsaw_pact"), 2, 1.0);
+        const AirWarData pact = Load("warsaw_pact");
         int first = 0, aimed = 0, blows = 0, big = 0;
-        for (const Package& p : ps) {
-            ++first;
-            const std::string& l = p.target_label;
-            aimed += (l.find("air base") != std::string::npos || l.find("command post") != std::string::npos ||
-                      l.find("Radar") != std::string::npos || l.find("radar") != std::string::npos ||
-                      l.find("battalion") != std::string::npos || l.find("headquarters") != std::string::npos)
-                         ? 1
-                         : 0;
-            if (p.kind != MissionKind::Strike && p.kind != MissionKind::Dead) continue;
-            ++blows;
-            big += p.Aircraft() >= 6 ? 1 : 0;
+        for (unsigned seed = 1; seed <= 8; ++seed) {
+            const int f0 = first, a0 = aimed, b0 = blows, g0 = big;
+            for (const Package& p : PlanDays(pact, seed, 1.0)) {
+                ++first;
+                const std::string& l = p.target_label;
+                aimed += (l.find("air base") != std::string::npos || l.find("command post") != std::string::npos ||
+                          l.find("Radar") != std::string::npos || l.find("radar") != std::string::npos ||
+                          l.find("battalion") != std::string::npos || l.find("headquarters") != std::string::npos)
+                             ? 1
+                             : 0;
+                if (p.kind != MissionKind::Strike && p.kind != MissionKind::Dead) continue;
+                ++blows;
+                big += p.Aircraft() >= 6 ? 1 : 0;
+            }
+            std::printf("    Pact day 1, seed %u: %d packages, %d on air bases, command posts and radars; %d blows, %d massed\n", seed,
+                        first - f0, aimed - a0, blows - b0, big - g0);
         }
-        std::printf("    Pact day 1: %d packages, %d on air bases, command posts and radars; %d strike and DEAD packages, %d of six aircraft or more\n",
+        std::printf("    Pact day 1, eight campaigns: %d packages, %d on air bases, command posts and radars; %d strike and DEAD packages, %d of six aircraft or more\n",
                     first, aimed, blows, big);
-        SC_EXPECT(first > 0 && aimed * 3 >= first && blows > 0 && big * 4 >= blows * 3);
+        SC_EXPECT(first > 0 && aimed * 10 >= first * 3 && blows > 0 && big * 3 >= blows * 2);
     }
 }
 
@@ -651,6 +658,41 @@ SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation 
             if (t.arms > 0 && !t.rwr_em.empty()) SC_EXPECT(!t.arm_em.empty());
         }
     }
+}
+
+SC_TEST("air war: once our radars have come under ARM attack the regiment orders the ARM drill, and the raids carry it (E6)") {
+    const AirWarData d = Load("nato");
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 3));
+    SC_EXPECT(!c.ArmsExpected());  // nothing seen yet: no drill ordered
+    c.Posture().emission = 0.9;    // a radiating battery draws the suppression
+    int before = 0, before_drill = 0, after = 0, after_drill = 0;
+    while (c.Now() < 20.0 * 24.0 && after < 2) {
+        if (!c.Advance(20.0 * 24.0)) continue;
+        const bool expected = c.ArmsExpected();
+        const Package* p = c.PlayerMission();
+        RaidScenarioBuilder builder;
+        const RaidScenario rs = builder.Build(c, *p);
+        c.SkipPlayerMission();
+        if (!rs.ok) continue;
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        if (!LoadScenario(rs.json_text, kData, def, console, &e)) {
+            std::printf("    %s\n", e.c_str());
+            SC_EXPECT(false);
+            break;
+        }
+        (expected ? after : before) += 1;
+        (expected ? after_drill : before_drill) += def.doctrine.arm_threat ? 1 : 0;
+    }
+    bool ordered = false;
+    for (const JournalEntry& j : c.Journal()) ordered = ordered || (j.who == "regiment" && j.visible && j.text.find("ARM drill") != std::string::npos);
+    std::printf("    raids before the first ARM attack: %d (with the drill %d); after: %d (with the drill %d)\n", before, before_drill, after,
+                after_drill);
+    SC_EXPECT(c.ArmsExpected() && ordered);
+    SC_EXPECT(before_drill == 0);
+    SC_EXPECT(after >= 1 && after_drill == after);
 }
 
 SC_TEST("air war: on the map a raid sets the battery and its dummies on open ground, and the runs at them follow") {

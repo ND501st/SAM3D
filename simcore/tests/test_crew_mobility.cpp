@@ -317,6 +317,39 @@ SC_TEST("crew mobility: К машинам lines the crew up beside the vehicle, 
     for (const auto& h : r->Hatches()) SC_EXPECT(!h.second);
 }
 
+SC_TEST("crew mobility: К машине and По местам are orders of the menu, greyed while they hold, each said once") {
+    for (const char* scenario : {"school_deputy_commander.json", "school_pu12m_operator.json"}) {
+        auto r = RunnerFor(scenario);
+        SC_EXPECT(r != nullptr);
+        if (!r) continue;
+        r->Step(0.1);
+        // Everyone in his seat: По местам holds already; К машине can be given.
+        SC_EXPECT(!r->CheckOrder("order_mount").can);
+        SC_EXPECT(r->CheckOrder("order_mount").reason_en == "done already");
+        SC_EXPECT(r->CheckOrder("order_dismount").can);
+        SC_EXPECT(r->GiveCrewOrder("order_dismount"));
+        SC_EXPECT(!r->CheckOrder("order_dismount").can);  // they are on their way to the line-up
+        for (int i = 0; i < 1200; ++i) r->Step(0.1);
+        int on_ground = 0;
+        for (const MoverView& v : r->CrewBodies()) on_ground += v.place == BodyPlace::Ground && v.at == "lineup" ? 1 : 0;
+        std::printf("    %s: %d in the line-up\n", scenario, on_ground);
+        SC_EXPECT(on_ground >= 4);
+        SC_EXPECT(r->CheckOrder("order_mount").can);
+        SC_EXPECT(r->GiveCrewOrder("order_mount"));
+        for (int i = 0; i < 1500; ++i) r->Step(0.1);
+        for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
+        SC_EXPECT(!r->CheckOrder("order_mount").can);
+        int said_dismount = 0, said_mount = 0;
+        if (r->Callouts() != nullptr) {
+            for (const SpokenCallout& c : r->Callouts()->Log()) {
+                said_dismount += c.id == "order_dismount" ? 1 : 0;
+                said_mount += c.id == "order_mount" ? 1 : 0;
+            }
+        }
+        SC_EXPECT(said_dismount == 1 && said_mount == 1);
+    }
+}
+
 SC_TEST("crew mobility: the Osa's crew chief carries the aiming circle out ahead to find Qc, and comes back") {
     auto r = RunnerFor("school_deputy_commander.json");
     SC_EXPECT(r != nullptr);

@@ -224,6 +224,14 @@ private:
             f.text = "The regiment's estimate: " + j.text;
             return true;
         }
+        if (j.who == "regiment") {  // the regiment's order to its batteries (the ARM drill once ARMs have been fired at us)
+            f.kind = FactKind::Order;
+            f.origin = roles_.staff;
+            f.need_level = 4;  // down to the vehicle commanders, who put their crews to it
+            f.precedence = 1;
+            f.summary = "The regiment's order: the batteries to the ARM drill, the enemy fires anti-radiation missiles at our radars.";
+            return true;
+        }
         if (j.who == "battery") {
             f.kind = FactKind::BatteryNews;
             f.origin = roles_.battery;

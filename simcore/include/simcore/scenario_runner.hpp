@@ -260,6 +260,7 @@ public:
         }
         SeeInstruments();
         WatchScope();
+        WatchTrackSigns();
         ArmEmission();
         UpdateGrades();
         UpdateCallouts();
@@ -771,6 +772,11 @@ public:
             return false;
         }
         Say("order_dismount", Cmdr());
+        LineUpCrew();
+        return true;
+    }
+    // The work of the two orders without their words (the order menu's orders speak their own: GiveCrewOrder).
+    void LineUpCrew() {
         for (CrewMember& c : crew_) {  // they leave what they are doing and get out
             Vec3 at;
             if (!SeatHolder(c.Role()).empty() || !def_.vehicle.LineupPoint(c.Role(), at)) continue;
@@ -778,7 +784,10 @@ public:
             c.StayAt("lineup");
         }
         Event(Cmdr(), "К машинам: the crew lines up beside the vehicle");
-        return true;
+    }
+    void MountCrew() {
+        for (CrewMember& c : crew_) c.StayAt(std::string());
+        Event(Cmdr(), "По местам: the crew mounts");
     }
     // The commander's order of one drill to a seat (a situational drill no order of the crew data starts: measure_qc).
     bool GiveDrill(const std::string& station, const std::string& procedure_id, bool queue = false) {
@@ -791,8 +800,7 @@ public:
     bool OrderMount() {
         if (!def_.has_vehicle) return false;
         Say("order_mount", Cmdr());
-        for (CrewMember& c : crew_) c.StayAt(std::string());
-        Event(Cmdr(), "По местам: the crew mounts");
+        MountCrew();
         return true;
     }
     // Can `to` hear `from` speaking aloud (not on the intercom)? Both inside: yes (the compartment). Otherwise by the
@@ -863,6 +871,8 @@ public:
         quiet_orders_ = false;
         for (const std::string& a : o->actions) {
             if (a == "compass_survey" && !engagement_.QcKnown() && !compass_.Running()) StartCompassSurvey();
+            if (a == "dismount" && def_.has_vehicle && def_.vehicle.lineup.present) LineUpCrew();
+            if (a == "mount" && def_.has_vehicle) MountCrew();
         }
         return true;
     }
@@ -917,6 +927,24 @@ public:
             if (t != nullptr && !t->conditions.empty() && console_.equipment.AllHold(t->conditions, console_.panel)) {
                 return refuse("уже выполнено", "done already");
             }
+        }
+        for (const std::string& a : o->actions) {  // К машине and По местам: a vehicle with a line-up; not when it holds
+            if (a != "dismount" && a != "mount") continue;
+            if (!def_.has_vehicle || (a == "dismount" && !def_.vehicle.lineup.present)) {
+                return refuse("построения у машины нет", "no line-up for this vehicle");
+            }
+            bool holds = true;
+            for (const CrewMember& c : crew_) {
+                Vec3 at;
+                if (!SeatHolder(c.Role()).empty()) continue;
+                if (a == "dismount") {
+                    holds = holds && (!def_.vehicle.LineupPoint(c.Role(), at) || c.StaysAt() == "lineup");
+                } else {
+                    const CrewMover* mv = Mover(c.Role());
+                    holds = holds && c.StaysAt().empty() && (mv == nullptr || mv->Place() == BodyPlace::Seated);
+                }
+            }
+            if (holds) return refuse("уже выполнено", "done already");
         }
         for (const std::string& need : o->needs) {
             if (need == "contact") {
@@ -1064,6 +1092,11 @@ public:
     // Where the seat's NPC would bring a hand wheel now (with the helper on): the engagement's aim at the target the crew
     // is on. False when it would leave it where it is.
     bool WheelWant(const std::string& wheel, double& value) const { return engagement_on_ && engagement_.WheelWanted(wheel, value); }
+    // Why the equipment turns a hand wheel itself now ("" if a hand turns it): a player's drag on it does nothing then.
+    std::string WheelDriven(const std::string& wheel) const {
+        const char* why = engagement_on_ ? engagement_.WheelDrivenBy(console_, wheel) : nullptr;
+        return why != nullptr ? std::string(why) : std::string();
+    }
     // The next step of a drill a seat owes (SeatDuty::Kind::Drill): the first whose switch isn't where the step puts it,
     // or whose button that seat hasn't pressed since `since_s`. Null: all done.
     const ProcedureStep* DrillNextStep(const std::string& procedure, const std::string& seat, double since_s) const {
@@ -1213,6 +1246,11 @@ public:
     bool SeatTurn(const std::string& role, const std::string& wheel_id, double value, std::string* why = nullptr) {
         Seat* st = FindSeat(role);
         if (st == nullptr || !AtStation(role, wheel_id, why)) return false;
+        const std::string driven = WheelDriven(wheel_id);
+        if (!driven.empty()) {  // the equipment turns it now: a hand on it changes nothing
+            if (why != nullptr) *why = "Hands off: " + driven;
+            return false;
+        }
         st->last_action_s = time_;
         const bool moved = console_.panel.SetValue(wheel_id, value);
         seat_actions_.push_back({time_, role, wheel_id, 0, value, true, moved, StepResult::ProcedureComplete});
@@ -1269,6 +1307,9 @@ public:
     int KillCalls() const { return kill_calls_; }
     int KillCallsWrong() const { return kill_calls_wrong_; }
     int StillFlyingCalls() const { return still_flying_; }
+    // Kill reports the commander took back on the battery net; whether this runner (a post) holds a target destroyed.
+    int KillReportsTakenBack() const { return kill_reports_taken_back_; }
+    bool BelievesDestroyed(const std::string& target) const { return reported_kills_.count(target) != 0; }
 
     // A target held "on_cue" appears now (a lesson brings it in at the learner's pace). False if there is no such
     // target held.
@@ -5469,17 +5510,26 @@ private:
         const double span = m.back().first - m.front().first;
         return span >= 1.5 ? (m.back().second - m.front().second).Length() / span : -1.0;
     }
+    // Whether the seat takes a sign of an ARM in: a "basic" tier (recruit, class3) doesn't know the signs; the others may
+    // miss one (miss_chance, more under stress). The debrief says which.
+    bool ArmSignNoticed(const std::string& seat, const char* unknown, const char* missed) {
+        const SkillTier* t = TierAt(seat);
+        if (t != nullptr && t->knows == "basic") {
+            Event(seat, unknown);
+            return false;
+        }
+        const CrewMember* m = MemberAt(seat);
+        const double miss = t != nullptr ? t->miss_chance * (m != nullptr && m->Stressed() ? t->stress_factor : 1.0) : 0.0;
+        if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
+            Event(seat, missed);
+            return false;
+        }
+        return true;
+    }
     void ArmSignSeen(const Contact& c, const std::string& callout) {
         const bool launch = callout == "arm_launch";
-        const SkillTier* t = TierAt("senior_operator");
-        if (t != nullptr && t->knows == "basic") {
-            Event("senior_operator", launch ? "does not know the mark of an ARM for what it is" : "takes the target's turn for nothing");
-            return;
-        }
-        const CrewMember* so = MemberAt("senior_operator");
-        const double miss = t != nullptr ? t->miss_chance * (so != nullptr && so->Stressed() ? t->stress_factor : 1.0) : 0.0;
-        if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
-            Event("senior_operator", launch ? "misses the mark of an ARM on his scope" : "misses the target's turn away");
+        if (!ArmSignNoticed("senior_operator", launch ? "does not know the mark of an ARM for what it is" : "takes the target's turn for nothing",
+                            launch ? "misses the mark of an ARM on his scope" : "misses the target's turn away")) {
             return;
         }
         KnownTarget k;
@@ -5497,6 +5547,68 @@ private:
         arm_seen_s_ = time_;  // he holds his next burst off himself (ArmEmission)
         Event("senior_operator", launch ? "sees a small fast mark coming straight at the vehicle: an ARM" : "sees a target that came at the battery turn away");
         Say(callout, "senior_operator", words, &k);
+    }
+    // The other signs of a launch (voenizdat_osa_1991 p262), each from what its instrument shows: on the tracking
+    // radar's indicators the tracked target's pulse grows a moment, then a smaller pulse leaves it closing fast (the
+    // range wheel's seat, at his range indicator); on the TV the tracked target firing it (the TV's seat).
+    std::set<int> arm_signs_track_, arm_signs_tv_;
+    static constexpr double kPulseApartM = 100.0;     // sam3d: two pulses of 0.45 us (67 m) told apart at 1.5 lengths
+    static constexpr double kIndicatorSpanM = 3000.0;  // sam3d: the range indicator's expanded sweep about the gate
+    static constexpr double kTvLaunchM = 1500.0;       // sam3d: the launch seen on the TV within this of the carrier
+    void WatchTrackSigns() {
+        const std::string tracked = engagement_.TrackedTarget();
+        if (!em_link_ || !engagement_on_ || !def_.has_crew_data || tracked.empty()) return;
+        const TrackMethod m = engagement_.Method();
+        const double target_range = TargetRange(tracked);
+        if (m == TrackMethod::None || target_range < 0.0) return;
+        Vec3 target_at;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const Aircraft* a = def_.targets[i].id == tracked && targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+            if (a != nullptr) target_at = a->position;
+        }
+        const Vec3 unit = def_.unit_position;
+        const Vec3 rel_t = target_at - unit;
+        const double true_az = RadToDeg(std::atan2(rel_t.x, rel_t.y));
+        KnownTarget k;
+        k.target = tracked;
+        k.has_azimuth = k.has_range = true;
+        k.azimuth_deg = std::remainder(true_az - engagement_.UnitHeadingDeg() + engagement_.GyroHeadingDeg(), 360.0);  // the crew's frame
+        k.range_m = target_range;
+        k.time_s = time_;
+        const std::map<std::string, std::string> words{{"azimuth", MilsText(k.azimuth_deg)}};
+        const std::string range_seat = def_.tuning.aim_range_role;
+        const std::string tv_seat = def_.tuning.aim_el_role;
+        const bool radar = m == TrackMethod::Radar || m == TrackMethod::RadarOnJam;
+        const bool tv_on = !console_.track.tv_camera.empty() && console_.equipment.IsReady(console_.track.tv_camera);
+        const double tv_half_rad = DegToRad(0.5 * TvFieldOfViewDeg(console_));
+        for (const EmSensorLink::ArmView& a : em_link_->ArmsInFlight()) {
+            const Vec3 rel = a.position - unit;
+            const double range = rel.Length();
+            if (range < 1.0) continue;
+            const double closing = -Dot(a.velocity, rel / range);
+            // The indicators: its own echo in the beam, ahead of the target's pulse, closing faster than any aircraft.
+            if (radar && arm_signs_track_.count(a.id) == 0 && (MemberAt(range_seat) != nullptr || !SeatHolder(range_seat).empty()) &&
+                target_range - range > kPulseApartM && target_range - range < kIndicatorSpanM && closing > kArmMarkSpeedMps &&
+                em_link_->ArmEchoVisible(a.id)) {
+                arm_signs_track_.insert(a.id);
+                if (ArmSignNoticed(range_seat, "does not know the second pulse leaving the target for an ARM", "misses the second pulse leaving the target") &&
+                    NpcDoes(range_seat, SeatDuty::Report(range_seat, "arm_launch_track", "a smaller pulse leaves the tracked target, closing fast: an ARM", words).About(k))) {
+                    Event(range_seat, "sees a smaller pulse leave the tracked target's pulse on his indicator, closing fast: an ARM");
+                    Say("arm_launch_track", range_seat, words, &k);
+                }
+            }
+            // The TV: the launch itself, the missile leaving the target in the field of view.
+            if (tv_on && arm_signs_tv_.count(a.id) == 0 && (MemberAt(tv_seat) != nullptr || !SeatHolder(tv_seat).empty()) &&
+                (a.position - target_at).Length() < kTvLaunchM && AngleBetween(rel, rel_t) < tv_half_rad &&
+                engagement_.TvLook(console_, tracked).seen) {
+                arm_signs_tv_.insert(a.id);
+                if (ArmSignNoticed(tv_seat, "does not know the launch on the TV for an ARM", "misses the launch on the TV") &&
+                    NpcDoes(tv_seat, SeatDuty::Report(tv_seat, "arm_launch_tv", "the tracked target fires a missile on the TV: an ARM", words).About(k))) {
+                    Event(tv_seat, "sees the tracked target fire a missile on the TV: an ARM");
+                    Say("arm_launch_tv", tv_seat, words, &k);
+                }
+            }
+        }
     }
     // The commander heard a sign of an ARM launch: the missile in the air is guided to its burst, then every transmitter
     // goes off (ArmSilent); the attack is reported up the battery net.
@@ -6242,6 +6354,7 @@ public:
         std::string target;
         int number = 0;     // its number on the board (0: not known)
         int missiles = -1;  // missiles left (-1: not said)
+        bool taken_back = false;  // a Miss taking back the Hit reported before: the target flies on
     };
     // The battery commander sits in a linked PU-12M (scenario "battery_commander": "post").
     bool LinkedToPost() const { return def_.battery_commander == "post"; }
@@ -6603,6 +6716,14 @@ private:
                 }
                 break;
             case BatteryFire::Event::Kind::Miss:
+                if (r.taken_back) {  // the kill it reported flies on: back on the board
+                    Event(r.callsign, "takes back the kill of " + r.target);
+                    if (hears) {
+                        reported_kills_.erase(r.target);
+                        if (callouts_) callouts_->Say(time_, "report_not_destroyed", "battery", {{"callsign", r.callsign}, {"number", number}});
+                    }
+                    break;
+                }
                 Event(r.callsign, "misses " + r.target);
                 if (hears) Status(r.callsign, LauncherStatus::State::Engaging, r.missiles, r.number);
                 break;
@@ -6639,6 +6760,7 @@ private:
         }
         r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
         own_reports_.push_back(r);
+        if (kind == BatteryFire::Event::Kind::Hit) results_reported_.insert(target);
         if (!callouts_ || !NpcAt(Cmdr())) {
             OnAir(1.0);  // a player's words go out as he speaks them; the data reaches the post
             return;
@@ -7149,7 +7271,47 @@ private:
     // kill, its report to the battery and its next move follow his call, right or wrong.
     KillAssessment kill_;
     std::map<std::string, double> own_kills_;  // targets our judge called destroyed -> when (looked for again on the scope)
-    int kill_calls_ = 0, kill_calls_wrong_ = 0, still_flying_ = 0;
+    int kill_calls_ = 0, kill_calls_wrong_ = 0, still_flying_ = 0, kill_reports_taken_back_ = 0;
+    std::set<std::string> results_reported_;  // targets the commander reported destroyed on the battery net
+    std::set<std::string> corrections_due_;   // ...that the scope then showed flying on: the report to take back
+    // A target reported destroyed on the battery net that flies on: the commander takes the report back on the net, so
+    // the post puts it back on its board (voenizdat_osa_1991 p267: a target whose motion is unchanged is not destroyed).
+    void CorrectKillReport(const std::string& target) {
+        std::map<std::string, std::string> f = RadioFields();
+        const int number = BoardNumberOf(target);
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", number);
+        f["number"] = number > 0 ? std::string(n) : target;
+        SeatDuty d = SeatDuty::Report(Cmdr(), "report_not_destroyed", "a target reported destroyed flies on: take the report back on the battery net", f);
+        d.target = target;
+        if (NpcDoes(Cmdr(), d) && SayOnRadio("report_not_destroyed", f, false)) KillReportTakenBack(target);
+    }
+    // The correction went on the air: a linked post hears it.
+    void KillReportTakenBack(const std::string& target) {
+        results_reported_.erase(target);
+        ++kill_reports_taken_back_;
+        Event(target, "the kill report taken back on the battery net: it flies on");
+        if (!LinkedToPost()) return;
+        LinkReport r;
+        r.kind = BatteryFire::Event::Kind::Miss;
+        r.callsign = OwnCallsign();
+        r.target = target;
+        r.number = BoardNumberOf(target);
+        r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
+        r.taken_back = true;
+        own_reports_.push_back(r);
+    }
+    // The target's number on the post's board, from its designation or a group's pick (0: none heard).
+    int BoardNumberOf(const std::string& target) const {
+        int number = 0;
+        for (const C2Network::Event& e : designations_heard_) {
+            if (e.subject == target && !e.group_centre) number = e.number;
+        }
+        for (const GroupOrder& g : group_orders_) {
+            if (g.pick == target) number = g.number;
+        }
+        return number;
+    }
     // The seat whose instrument shows a sign: the range indicator the range wheel's, the search scope the azimuth
     // wheel's, the elevation dial, the TV and the launch console's lamps the elevation wheel's (flak11, voenizdat_osa_1991 p17).
     std::string KillSeat(KillInstrument where) const {
@@ -7228,9 +7390,9 @@ private:
                         if (d.subject == j.target && d.number > 0) f["number"] = n;
                     }
                     f["spent"] = std::to_string(launches_);
-                    if (NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "report_result", "a target destroyed: report it on the battery net", f))) {
-                        SayOnRadio("report_result", f, false);
-                    }
+                    SeatDuty d = SeatDuty::Report(Cmdr(), "report_result", "a target destroyed: report it on the battery net", f);
+                    d.target = j.target;
+                    if (NpcDoes(Cmdr(), d) && SayOnRadio("report_result", f, false)) results_reported_.insert(j.target);
                 }
             } else if (j.call == KillAssessment::Call::Miss) {
                 Say("miss", judge);
@@ -7262,6 +7424,8 @@ private:
             }
             it = own_kills_.erase(it);
         }
+        for (const std::string& t : corrections_due_) CorrectKillReport(t);
+        corrections_due_.clear();
     }
     // ---- A group's centre and a selection rule from the battery post (voenizdat_osa_1991 p261, group_designation.hpp):
     // the senior operator counts the group on his scope and reports the aircraft the rule picks; the commander takes it.
@@ -7403,6 +7567,7 @@ private:
             }
             if (s.id == "target_still_flying" && s.has_about && c.Role() == Cmdr() && reported_kills_.erase(s.about.target) != 0) {
                 Event(s.about.target, "not destroyed after all: back in the commander's picture");
+                if (results_reported_.count(s.about.target) != 0) corrections_due_.insert(s.about.target);
                 npc_dropped_kill_.clear();
             }
             if (!s.has_about) continue;
@@ -7413,6 +7578,10 @@ private:
                     if (s.id == "arm_launch") arms_heard_.insert(s.about.target);
                     ArmSignHeard(s);
                 }
+                continue;
+            }
+            if (s.id == "arm_launch_track" || s.id == "arm_launch_tv") {  // about the tracked target that fired it
+                if (c.Role() == Cmdr() && npc) ArmSignHeard(s);
                 continue;
             }
             KnownTarget k = s.about;
@@ -7621,7 +7790,21 @@ public:
         if ((callout_id == "readback" || callout_id == "report_ready") && c2_) return PlayerOnBatteryNet(station, callout_id);
         if (station == "commander") {  // a radio callout of his goes on the air, by his chest switch at ПРД (7.8)
             const CalloutDef* cd = def_.crew_data.FindCallout(callout_id);
-            if (cd != nullptr && cd->kind == CalloutKind::Radio) return SayOnRadio(callout_id, RadioFields(), true);
+            if (cd != nullptr && cd->kind == CalloutKind::Radio) {
+                std::map<std::string, std::string> f = RadioFields();
+                std::string target;  // a report he owes says what his NPC would have (the target's number)
+                for (const SeatDuty& d : owed_) {
+                    if (d.kind != SeatDuty::Kind::Report || d.seat != station || d.id != callout_id) continue;
+                    for (const auto& kv : d.fields) f[kv.first] = kv.second;
+                    target = d.target;
+                    break;
+                }
+                if (!SayOnRadio(callout_id, f, true)) return false;
+                SettleOwedReport(station, callout_id, target);
+                if (callout_id == "report_result" && !target.empty()) results_reported_.insert(target);
+                if (callout_id == "report_not_destroyed" && !target.empty()) KillReportTakenBack(target);
+                return true;
+            }
         }
         const Contact* nearest = nullptr;
         if (callout_id == "contact" && engagement_on_) {

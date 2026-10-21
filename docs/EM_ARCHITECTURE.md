@@ -668,8 +668,16 @@ pp262-264).**
   Азимут ..."); and, warned of ARMs (`doctrine.arm_threat`), a target that came at the battery at zero parameter turning
   away out at stand-off range. A mark lost between bursts and a new one where it was heading are one blip to him.
   A "basic" tier (recruit, class3) doesn't know the signs; the others may miss one (`miss_chance`, more under stress).
-  Not built: the tracking radar's indicators (the tracked pulse briefly growing, a smaller one separating) and the
-  launch seen on the TV.
+* *The signs on the tracking radar's indicators and on the TV* (`WatchTrackSigns`, 21 Oct 2026): while the tracking
+  radar radiates on a target, an ARM's own echo in its beam (the EM layer's look at the missile, `ArmEchoVisible`) more
+  than a pulse ahead of the target's (100 m: 1.5 lengths of the 0.45 us pulse) and within the indicator's sweep about
+  it (3 km), closing faster than any aircraft, is the operator's sign at his range indicator («От цели отделился импульс, идёт на нас — пуск ПРР!»,
+  `arm_launch_track`); with the TV on, a missile leaving the tracked target (within 1.5 km of it) inside the TV's field
+  while the TV sees the target is the deputy commander's («По ТОВ: пуск ПРР с цели!», `arm_launch_tv`). The commander
+  acts on either as on the scope's sign. The same tiers know them and may miss them. The distances are estimates. The
+  radar's own look decides: a HARM-class missile (0.08 m2, an estimate) shows on the indicators only when fired from
+  about 8 km or nearer, for the few tenths of a second before its loft takes it out of the 1 deg beam; from 12 km its
+  echo is 8 dB, below detection (`test_arm_drill.cpp`).
 * *The commander, on hearing a sign*: the missile in the air is guided to its burst, then every transmitter off at
   once (`order_drop_target`, `order_emcon_off`, `order_ssc_off`; a capture under way is stopped) for `arm_silence_s`
   (60 s, an estimate), held so until it is over; radiation then comes back through the EMCON path. He reports the
@@ -680,8 +688,7 @@ pp262-264).**
   two-turn burst lights both low beams (under АВТ. I–III the low beam is dark in every third burst), and off while the
   tracking radar holds a target alone (5 s); the commander has the tracking transmitter put on a target only from Table
   7.3's far-edge range for its speed as the scope shows it (24 km over 300 m/s, 20 km under) and off after the burst.
-  Not built: the TV for tracking under the threat (the angles on the TV without НЛЦ, range by short bursts of the
-  tracking radar, p264).
+  Not built: the TV for tracking under the threat («использования ТОВ для сопровождения цели», p262).
 * *Relocation* (`doctrine.relocate_after_arm`): a position is changed only on the regiment commander's order (p238)
   and the battery commander's map carries the ARM launch lines (p244), so the attack is reported up and the regiment's
   standing order moves the battery when the fight is over: the crew stows (`order_march`), the battery moves to the

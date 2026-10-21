@@ -676,8 +676,9 @@ preparation, firing under jamming, kill assessment (246-267).
 
 - (Built 20 Oct 2026, roadmap E6, `docs/EM_ARCHITECTURE.md` §35: the ARM drill, pp262-264. The search bursts, Table
   7.3 in `data/gameplay/osa_ak.json` `arm`, the tracking transmitter off after the burst, the search radar off while the
-  tracking radar holds a target alone, the PPI signs and the turn away. Still not built from that page: the signs on the
-  tracking radar's indicators and on the TV, the TV for tracking under the threat with the range by short bursts, p264.)
+  tracking radar holds a target alone, the PPI signs and the turn away. The signs on the
+  tracking radar's indicators and on the TV built 21 Oct 2026. Still not built from that page: the TV for tracking under
+  the threat, «использования ТОВ для сопровождения цели».)
 - Small drones' signs, helicopter sectors and duty launchers; the other group rules (the lead or the brightest mark when
   tracking a group; which mark to take when a group splits before or after the launch; two missiles 6-8 s apart).
 - The stabilisation's ДР mode and ПРЕДЕЛЬНЫЙ УГОЛ fault, ventilation summer / winter, pressurisation, the noise strip
@@ -703,7 +704,9 @@ once a sign settles it, no sooner than 2 s, or with what he has at 8 s, and may 
 nothing (a near miss at night: the burst, then the target flying on; a target diving away after a near miss). The crew's
 picture, the report to the battery and the commander's next move (wait for the call; drop a target called destroyed;
 engage again after a miss) follow his call. A target called destroyed that is still on the search scope 10 s later is
-reported flying on and taken back. The World has no wreck, so the wreck's fall, fire and the group and jamming signs are
+reported flying on and taken back; if the commander had reported it destroyed on the battery net he takes that back on
+the net too («21: цель 0012 не поражена, продолжает полёт!», `report_not_destroyed`, 21 Oct 2026), and a linked post
+puts the target back on its board. The World has no wreck, so the wreck's fall, fire and the group and jamming signs are
 drawn; the miss's signs are read from the live target. The game numbers: `data/gameplay/osa_ak.json` `kill_assessment`
 (estimates).
 

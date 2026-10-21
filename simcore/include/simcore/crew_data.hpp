@@ -75,9 +75,11 @@ struct OrderDef {
     std::vector<std::string> needs;
     // Work the order starts that is not a console drill (ScenarioRunner carries it out; IsOrderAction lists them):
     //   compass_survey  the crew chief finds Qc with the artillery compass at a halt (orientation.hpp)
+    //   dismount        the crew out and lined up beside the vehicle (К машине, crew_mobility.hpp)
+    //   mount           the crew back in their seats (По местам)
     std::vector<std::string> actions;
 };
-inline bool IsOrderAction(const std::string& a) { return a == "compass_survey"; }
+inline bool IsOrderAction(const std::string& a) { return a == "compass_survey" || a == "dismount" || a == "mount"; }
 
 // The kinds an order's "needs" may name.
 inline bool KnownOrderNeed(const std::string& n) {

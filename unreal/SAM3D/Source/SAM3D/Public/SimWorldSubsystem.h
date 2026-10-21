@@ -542,6 +542,13 @@ struct SAM3D_API FSimMissionSeat
 	/** Whoever sits here gives the orders (the crew data's commander_seat): the game's "in command" half. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	bool bCommands = false;
+
+	/** The crewman in it and what he does (data/crew/<system>_crew.json), for the menu's choice of who to play. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Title;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FString> Duties;
 };
 
 /** A vehicle a mission can start in: one for a scenario, the Osa and the PU-12M in a battery link. */
@@ -1129,9 +1136,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	ESimPlayerActionResult PlayerSetControl(const FString& ControlId, int32 Position);
 
-	/** The player turning a hand wheel. False if its lock is closed or it isn't a wheel. */
+	/** The player turning a hand wheel. False if its lock is closed, the equipment turns it now, or it isn't a wheel. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool PlayerTurnWheel(const FString& ControlId, double Value);
+
+	/** Why the equipment turns this hand wheel itself now (the tracking servo, the elevation search, ПОЛУАВТОМАТ), or ""
+	 *  if a hand turns it: a drag on it then does nothing. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetWheelDriven(const FString& ControlId) const;
 
 	/** Judge the player's actions against a procedure of the console; empty = free play. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -1475,6 +1487,7 @@ public:
 
 private:
 	FString ResolveDataDirectory() const;
+	static void StopCesiumSplatSubsystem();
 	void RunDemoFireControl();
 	void BroadcastEvents();
 	void BroadcastNewDebriefEntries();

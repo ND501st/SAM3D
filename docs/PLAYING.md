@@ -21,8 +21,10 @@ F11 the immersive view): use the standalone game for the full set of views.
 
 ## The missions menu
 
-Up/Down a mission, Left/Right where to start (a seat of the crew, the commander's seat, or outside), H the helper (Off,
-Hints, On: below), Enter to play, Q to quit. The groups:
+Up/Down a mission, H the helper (Off, Hints, On: below), Enter (or Start) to choose who to play, Q to quit. Choosing
+shows the mission's crew: every crewman of its vehicles, in command or in the crew, with his duties under the one chosen,
+and outside with no seat. Up/Down or 1-9 a crewman, Enter, Play or a second click on him to play, Esc or Back to the
+missions. (Left/Right on the mission's page still pick where to start.) The groups:
 
 | Group | What it is |
 |---|---|
@@ -154,7 +156,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | F9 | The trainer's instructor panel (roadmap 10.3; where the simulation runs: single player or the server) |
 | Right mouse, wheel | Turn the camera, closer / further |
 | Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |
-| W / S, A / D, Space | Drive, steer, brake (a halt for the crew) |
+| W / S, A / D, Space | Drive, steer, brake (a halt for the crew): from the driver's seat only in a mission (from the others the commander orders it) |
 | C | In and out of the cabin |
 | Tab | The next seat |
 | Mouse (cabin) | Look round; the cross names the control |

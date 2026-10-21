@@ -174,8 +174,11 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		Views->UpdateViews(Pc, DeltaSeconds);
 	}
-	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's.
-	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() ? nullptr : Pc);
+	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's. In a mission only
+	// the driver's seat drives the hull (the commander orders it); with no scenario running the hull is the player's.
+	const bool bDriverSeat = bInCabin && Body == EBodyMode::Seat && StationId == TEXT("driver");
+	const bool bMayDrive = bDriverSeat || (Sim == nullptr || !Sim->IsScenarioRunning());
+	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() || !bMayDrive ? nullptr : Pc);
 	if (bAutoBrake && SpeedMps == 0.0)
 	{
 		bAutoBrake = false;  // the lesson autoplay's halt is made
@@ -252,8 +255,8 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	// once the player has waited longer than his seat's NPC would, or when watching the crewman.
 	const bool bLesson = Sim != nullptr && Sim->HasTutorial();
 	const FSimHelpStep* Top = bLesson ? nullptr : HelpTop();
-	const bool bHand = Top != nullptr && (Top->Kind == TEXT("control") || Top->Kind == TEXT("wheel")) &&
-					   (Help.bHesitating || Help.Level == TEXT("demonstrate"));
+	// Not on a hand wheel: following a target is the player's own continuous work, and a hand on it looks like taking over.
+	const bool bHand = Top != nullptr && Top->Kind == TEXT("control") && (Help.bHesitating || Help.Level == TEXT("demonstrate"));
 	CrewBodies->SetGhostHand(StationId, bLesson ? LessonHand : (bHand ? Top->Control : FString()));
 }
 
@@ -1546,7 +1549,9 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		if (Dx != 0.0f && !Cabin->TurnWheel(DraggedWheel, Dx * WheelTurnsPerMouseUnit))
 		{
-			FeedbackText = TEXT("Locked: release the wheel lock first");
+			USimWorldSubsystem* WheelSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+			const FString Driven = WheelSim != nullptr ? WheelSim->GetWheelDriven(Cabin->GetItemControl(DraggedWheel)) : FString();
+			FeedbackText = Driven.IsEmpty() ? FString(TEXT("Locked: release the wheel lock first")) : TEXT("Hands off: ") + Driven;
 			FeedbackSecondsLeft = 2.0f;
 		}
 		// Eyes on the display the wheel is worked against (the range gate on the echo, the line on the target).
@@ -1606,7 +1611,16 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	// A lesson that only lets the step's control work says why another won't move.
 	USimWorldSubsystem* LessonSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-	const FString Refusal = LessonSim != nullptr ? LessonSim->GetTutorialRefusal(Cabin->GetItemControl(HoveredItem)) : FString();
+	FString Refusal = LessonSim != nullptr ? LessonSim->GetTutorialRefusal(Cabin->GetItemControl(HoveredItem)) : FString();
+	// A wheel the equipment turns itself now (the tracking servo, the elevation search): hands off, and say why.
+	if (Refusal.IsEmpty() && LessonSim != nullptr && Cabin->IsWheel(HoveredItem))
+	{
+		const FString Driven = LessonSim->GetWheelDriven(Cabin->GetItemControl(HoveredItem));
+		if (!Driven.IsEmpty())
+		{
+			Refusal = TEXT("Hands off: ") + Driven;
+		}
+	}
 	auto Refuse = [this, &Refusal]()
 	{
 		FeedbackText = Refusal;

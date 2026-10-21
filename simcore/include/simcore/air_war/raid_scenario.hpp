@@ -756,17 +756,21 @@ public:
         }
         Put(root, "triggers", triggers);
         // The crew's orders from above, from what our side knows and the battery's posture: warned of decoys once our
-        // intelligence has seen the enemy use them; search in bursts when the battery keeps emission discipline.
-        if (fmt.doctrine && (c.DecoysExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2)) {
+        // intelligence has seen the enemy use them; the ARM drill once our radars have come under ARM attack; search in
+        // bursts when the battery keeps emission discipline. (The regiment's standing order to relocate after an ARM
+        // attack needs a battery that drives the vehicle, which a raid's battery, deployed in place, doesn't.)
+        if (fmt.doctrine && (c.DecoysExpected() || c.ArmsExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2)) {
             json::Value doc = Obj();
             if (c.DecoysExpected()) Put(doc, "tv_check", Bool(true));
+            if (c.ArmsExpected()) Put(doc, "arm_threat", Bool(true));
             if (posture.emcon_discipline >= 0.6 || posture.emission < 0.2) {
                 json::Value bursts = Obj();
                 Put(bursts, "on_s", Num(4));
                 Put(bursts, "off_s", Num(std::round(10.0 + 30.0 * posture.emcon_discipline)));
                 Put(doc, "search_bursts", bursts);
             }
-            Put(doc, "notes", Str("From the campaign: our intelligence's warning of decoys, and the battery's emission discipline."));
+            Put(doc, "notes", Str("From the campaign: our intelligence's warning of decoys, the ARM drill once our radars have been "
+                                  "attacked by ARMs, and the battery's emission discipline."));
             Put(root, "doctrine", doc);
         }
         if (fmt.environment) {

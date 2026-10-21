@@ -9,12 +9,14 @@
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
+#include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 #include "SimCrewSeatComponent.h"
 #include "SimKnowledgeComponent.h"
+#include "Subsystems/EngineSubsystem.h"
 
 namespace
 {
@@ -132,6 +134,31 @@ void USimWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	ResetSimulation(45.0, 25.0, 0.0);
+	StopCesiumSplatSubsystem();
+}
+
+// Cesium for Unreal 2.30's Gaussian splat subsystem (an engine subsystem, alive across maps) keeps raw pointers to its
+// Niagara actor and the world it spawned it in, invisible to the garbage collector. When a map is opened again (the
+// missions menu, a restart) the new world can come at the old one's address, and its Tick then calls IsValid on the
+// freed actor: "Assertion failed: Index >= 0" in UCesiumGaussianSplatSubsystem::Tick. SAM3D draws no Gaussian splats,
+// so the subsystem is stopped in game worlds: its own Deinitialize turns its tick off and drops the pointers (it runs
+// again harmlessly at exit). The class is private to the plugin, so it is found by name.
+void USimWorldSubsystem::StopCesiumSplatSubsystem()
+{
+	static bool bStopped = false;
+	if (bStopped || GEngine == nullptr)
+	{
+		return;
+	}
+	UClass* SplatClass = FindObject<UClass>(nullptr, TEXT("/Script/CesiumRuntime.CesiumGaussianSplatSubsystem"));
+	UEngineSubsystem* Splats = SplatClass != nullptr ? GEngine->GetEngineSubsystemBase(SplatClass) : nullptr;
+	if (Splats == nullptr)
+	{
+		return;
+	}
+	Splats->Deinitialize();
+	bStopped = true;
+	UE_LOG(LogSAM3D, Log, TEXT("Cesium's Gaussian splat subsystem stopped (no splats drawn; it crashes on a map reload)"));
 }
 
 void USimWorldSubsystem::Deinitialize()
@@ -1022,6 +1049,11 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 					OutS.Id = ToF(S.id);
 					OutS.Label = ToF(S.label);
 					OutS.bCommands = S.commands;
+					OutS.Title = ToF(S.title);
+					for (const std::string& Duty : S.duties)
+					{
+						OutS.Duties.Add(ToF(Duty));
+					}
 				}
 			}
 		}
@@ -1148,6 +1180,11 @@ bool USimWorldSubsystem::SetControlPosition(const FString& ControlId, int32 Posi
 double USimWorldSubsystem::GetWheelValue(const FString& ControlId) const
 {
 	return Runner ? Runner->Console().panel.GetValue(ToStd(ControlId)) : 0.0;
+}
+
+FString USimWorldSubsystem::GetWheelDriven(const FString& ControlId) const
+{
+	return Runner ? ToF(Runner->WheelDriven(ToStd(ControlId))) : FString();
 }
 
 bool USimWorldSubsystem::SetWheelValue(const FString& ControlId, double Value)

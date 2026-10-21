@@ -1638,6 +1638,25 @@ public:
         value = it->second.value;
         return true;
     }
+    // Whether the equipment turns this hand wheel itself now, and why (nullptr: a hand turns it): the tracking servo on a
+    // radar lock (the angles, and the range while the radar has it), the elevation search scanning the antenna while
+    // nothing is tracked, ПОЛУАВТОМАТ's range. A hand on it changes nothing then; the helper offers no such wheel.
+    const char* WheelDrivenBy(const ConsoleData& console, const std::string& wheel) const {
+        const TrackSensorDef& d = console.track;
+        const bool angle = wheel == d.az_wheel || wheel == d.el_wheel;
+        if ((method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam) && !tracked_.empty()) {
+            if (angle) return "the tracking radar holds the target: its servo turns the antenna";
+            if (wheel == d.range_wheel && method_ == TrackMethod::Radar && RangeKnown(console)) return "the tracking radar holds the target's range";
+        }
+        if (method_ == TrackMethod::Tv && wheel == d.range_wheel && RangeFrom(console) == RangeSource::RangeOnly) {
+            return "ПОЛУАВТОМАТ follows the target's range";
+        }
+        if (method_ == TrackMethod::None && wheel == d.el_wheel && el_beam_ >= 0 && !d.el_search_mode.empty() &&
+            console.equipment.IsReady(d.el_search_mode)) {
+            return "the elevation search scans the antenna up and down";
+        }
+        return nullptr;
+    }
 
 private:
 

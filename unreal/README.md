@@ -168,6 +168,12 @@ UnrealEditor.exe SAM3D.uproject /Game/Maps/KesmarkRange -game -RenderOffscreen -
 
 From Git Bash, pass the level from PowerShell or cmd: Git Bash rewrites `/Game/...` into a Windows path.
 
+Cesium for Unreal 2.30's Gaussian splat subsystem crashed the game when a map was opened again (the missions menu, a
+restart): "Assertion failed: Index >= 0" in `UCesiumGaussianSplatSubsystem::Tick`. It keeps raw pointers to its actor
+and world across maps, and a new world at the old address made it call `IsValid` on freed memory. SAM3D draws no
+Gaussian splats, so `USimWorldSubsystem` stops that subsystem in game worlds (`StopCesiumSplatSubsystem`). Remove the
+workaround once a Cesium release tracks those pointers safely.
+
 ## Hands-free test run
 
 Tick **Cabin Tour** on the Sim Scenario Director, or start the editor with the environment variable

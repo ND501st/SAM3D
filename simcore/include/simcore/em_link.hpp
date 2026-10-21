@@ -893,9 +893,16 @@ public:
     // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates. Chaff echoes are not drawn here yet.
-    bool EchoVisible(const std::string& target_id) {
+    bool EchoVisible(const std::string& target_id) { return EchoInTrackBeam(PlatformOf(target_id)); }
+    // The same for an anti-radiation missile in flight (its id from ArmsInFlight): its small echo on the indicators.
+    bool ArmEchoVisible(int arm_id) {
+        for (const em::ArmState& a : world_.Scene().arms) {
+            if (a.id == arm_id) return a.outcome == em::ArmOutcome::Flying && EchoInTrackBeam(a.platform_id);
+        }
+        return false;
+    }
+    bool EchoInTrackBeam(int pid) {
         em::RadarState* r = Radar(track_);
-        const int pid = PlatformOf(target_id);
         if (r == nullptr || !r->on || pid == 0) return false;
         em::EmScene& s = world_.Scene();
         const em::Platform* p = s.FindPlatform(unit_id_);

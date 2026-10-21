@@ -114,6 +114,11 @@ ahead of the vehicle, the commander on the right); `OrderMount` ("По мест�
 man in shutting his hatch. The line-up hears the commander standing with it; an order from inside the shut vehicle does
 not reach it.
 
+Both are orders of the crew data (`order_dismount`, `order_mount` in `data/crew/osa_ak_crew.json` and `pu12m_crew.json`,
+actions `dismount` and `mount`), so the order menu offers them: said once on the intercom, then the same work
+(`LineUpCrew`, `MountCrew`). The menu greys К машине on a vehicle without a line-up or while the crew is lined up or on
+its way there, and По местам while every NPC is in his seat ("уже выполнено").
+
 ## 3. The player (Unreal)
 
 The player's body goes through the same legs; nothing is a teleport.
@@ -156,5 +161,6 @@ as a subsystem's `start_time_s`, and the drill's procedure). The later tasks fit
 | `simcore/crew_mobility.hpp`: the data, the pace, the voice, the mover; `CrewMember` jobs; the runner's movers, earshot, К машинам / По местам | done, `simcore/tests/test_crew_mobility.cpp` |
 | The vehicles' files (Osa, PU-12M) and the first jobs | done (times estimated) |
 | Unreal: the player through the hatch, on the hull, down, over the ground, back; NPCs drawn walking; the job switches walk him out | done, to be tested in the game |
-| The drill master and the lessons knowing the walk's time; the order menu's К машинам / По местам; the dismount on the safe side of a road | next |
+| The order menu's К машине / По местам | done |
+| The drill master and the lessons knowing the walk's time; the dismount on the safe side of a road | next |
 | Wire laying as the first new outside task | next |
