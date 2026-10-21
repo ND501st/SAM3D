@@ -28,9 +28,10 @@ public:
         }
         return crew_.front();
     }
+    // A seat with two drills does them in turn (the battery commander: the radios, then the ФР block).
     void Order(const char* id) {
         const Procedure& p = *c_.FindProcedure(id);
-        At(p.station).Order(p);
+        At(p.station).Queue(p);
     }
     void Tick(double dt = 0.1) {
         c_.equipment.Update(dt, c_.panel);
@@ -76,8 +77,8 @@ void OrderDeployment(Crew& crew) {
     crew.Order("deploy_power");
     crew.Order("deploy_mast");
     crew.Order("deploy_orient");
-    crew.Order("deploy_aspd");
     crew.Order("deploy_command_radios");
+    crew.Order("deploy_aspd");
 }
 
 }  // namespace
@@ -99,7 +100,7 @@ SC_TEST("pu12m data: the PU-12M console loads: five stations, every control at o
     SC_EXPECT(c.FindProcedure("deploy_power")->station == "driver");
     SC_EXPECT(c.FindProcedure("deploy_mast")->station == "radio_operator");
     SC_EXPECT(c.FindProcedure("deploy_orient")->station == "squad_leader");
-    SC_EXPECT(c.FindProcedure("deploy_aspd")->station == "operator");
+    SC_EXPECT(c.FindProcedure("deploy_aspd")->station == "battery_commander");  // the ФР block at the tube (rwd_mb3)
     SC_EXPECT(c.FindProcedure("deploy_command_radios")->station == "battery_commander");
     SC_EXPECT(c.panel.Find("fr.scale")->position_labels[2] == "М100");
     // Cold in the park: only the 27 V network.

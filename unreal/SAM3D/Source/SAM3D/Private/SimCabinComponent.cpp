@@ -742,15 +742,16 @@ void USimCabinComponent::BuildShell(const simcore::CabinShellPart& Part)
 	if (Part.kind == simcore::CabinShellKind::Light)
 	{
 		// An interior lamp reaching as far as the part's size: an incandescent bulb's warm white, or a blackout lamp's
-		// blue. It casts shadows (the racks, seats and crew shade each other), softened by the bulb's size.
+		// blue. It casts shadows (the racks, seats and crew shade each other), softened by the size of the lamp's frosted dome
+		// (SM_DomeLamp, 18 cm across): the whole dome glows.
 		UPointLightComponent* Light = NewObject<UPointLightComponent>(GetOwner());
 		Light->SetupAttachment(this);
 		Light->ComponentTags.Add(CabinLightTag);
 		Light->SetIntensityUnits(ELightUnits::Lumens);
 		Light->SetIntensity(Part.lumens > 0.0 ? static_cast<float>(Part.lumens) : 400.0f);
 		Light->SetAttenuationRadius(static_cast<float>(100.0 * Part.size_m.x));
-		Light->SetSourceRadius(4.0f);
-		Light->SetSoftSourceRadius(6.0f);
+		Light->SetSourceRadius(8.0f);
+		Light->SetSoftSourceRadius(10.0f);
 		Light->SetLightColor(Part.color == "blue" ? FLinearColor(0.25f, 0.45f, 1.0f) : FLinearColor(1.0f, 0.82f, 0.62f));
 		Light->SetCastShadows(Part.color != "blue");
 		Light->LightingChannels.bChannel0 = false;  // the cabin's channel only (UseCabinLighting)

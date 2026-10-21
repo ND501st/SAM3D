@@ -86,11 +86,12 @@ in a seat; a player commander gets the same reports and acknowledgements as an N
 * **Designations and plots go through the seat**: `USimCrewSeatComponent::Designate(Callsign, Number)` and
   `PlotTrack(Number)` (reliable), checked on the server (`ScenarioRunner::SeatDesignate`: the commanding seat only;
   `SeatPlot`: the plotter's only); the answer comes back by `OnActionResult` ("designate", "plot").
-* **Check**, 18 Oct 2026: `tools/ue_crew_smoke.ps1 -Pu12m -TimeScale 8 -ClientSeconds 60`. The operator's client set the
-  IT-45's scale (its own switch) and, at 24 s, saw two targets on its IT-45 and wrote 04 on the board; the commander's
-  client was refused the operator's scale switch ("'fr.scale' is at the operator's station"), saw that target on the
-  board as 6205 and gave it to launcher 22 ("designate moved"); at the end both clients' IT boards showed 22 engaging, the
-  others ready, with the missiles each had reported.
+* **Check**, 18 Oct 2026, after the ФР block went to the battery commander (`docs/PU12_DEVELOPMENT.md`, the interior
+  refined): `tools/ue_crew_smoke.ps1 -Pu12m -TimeScale 8 -ClientSeconds 60`. The operator's client was refused the
+  IT-45's scale ("'fr.scale' is at the battery_commander's station"), saw two targets on the IT-45 and wrote 04 on the
+  board ("plot moved"); the commander's client set the scale (his own switch), saw that target on the board as 6205 and
+  gave it to launcher 22 ("designate moved"); at the end both clients heard 22 report 6205 destroyed with one missile
+  spent, and their IT boards showed every launcher ready with the missiles each had reported.
 
 ## Not done
 

@@ -103,4 +103,8 @@ private:
 	FString GhostStation;
 	FString GhostControl;
 	float GhostClock = 0.0f;
+	// The ghost hand's reach plan, kept while the advice stays on the same control (planning searches every posture).
+	FString GhostPlanKey;
+	const simcore::CabinLayout* GhostPlanLayout = nullptr;
+	simcore::ReachPlan GhostPlan;
 };

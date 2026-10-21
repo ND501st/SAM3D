@@ -12,10 +12,13 @@ Duties: Commands the post's crew and the battery; Watches the air picture on the
 
 Displays: `it45`, `it2`.
 
-Lamps: РТК-1, БАТАРЕЯ, ТК, ПОЛК, R-123M FUG4: готова, R-123M FUG4: прогрев, Р-407 ГОТОВА, ПРОГРЕВ.
+Lamps: ПРОГРЕВ, РАБОТА, ТК, РЛС, РТК-1, БАТАРЕЯ, ТК, ПОЛК, R-123M FUG4: готова, R-123M FUG4: прогрев, Р-407 ГОТОВА, ПРОГРЕВ.
 
 | Control | Label | Positions | Feeds | Drill steps | Orders |
 |---|---|---|---|---|---|
+| `aspd.power` | ASPD-U: power | ВЫКЛ / ВКЛ | `aspd_warm` (enable =1) | `deploy_aspd` 1→1; `stow_aspd` 2→0 | `order_aspd_on`, `order_deploy`, `order_stow` |
+| `fr.mode` | ФР block: РАБОТА / КОНТРОЛЬ | РАБОТА / КОНТРОЛЬ | `aspd_working` (enable =0) | `deploy_aspd` 3→0; `stow_aspd` 1→1 | `order_aspd_on`, `order_deploy`, `order_stow` |
+| `fr.scale` | ФР block: scale | М35 / М50 / М100 | – | `deploy_aspd` 2→1 | `order_aspd_on`, `order_deploy` |
 | `radio.fug4.power` | R-123M (FuG-4): ПИТАНИЕ | ВЫКЛ / ВКЛ | `fug4` (enable =1) | `deploy_command_radios` 1→1 | `order_deploy` |
 | `radio.fug5.power` | R-407 (FuG-5): power | ВЫКЛ / ВКЛ | `fug5` (enable =1) | `deploy_command_radios` 2→1 | `order_deploy` |
 | `rtk1.power` | RTK-1 radiotelephone concentrator | ВЫКЛ / ВКЛ | `rtk1` (enable =1) | `deploy_command_radios` 3→1 | `order_deploy` |
@@ -58,13 +61,10 @@ Duties: The ASPD-U and the IT-45; Marks the targets with the DI marker and the �
 
 Displays: `map`, `it45`.
 
-Lamps: ПРОГРЕВ, РАБОТА, ТК, РЛС, ПЕРЕДАТЧИК, ПРИЁМ ТК, ПИТ, ПРОГР, ПРМ, ПРД.
+Lamps: ПЕРЕДАТЧИК, ПРИЁМ ТК, ПИТ, ПРОГР, ПРМ, ПРД.
 
 | Control | Label | Positions | Feeds | Drill steps | Orders |
 |---|---|---|---|---|---|
-| `aspd.power` | ASPD-U: power | ВЫКЛ / ВКЛ | `aspd_warm` (enable =1) | `deploy_aspd` 1→1; `stow_aspd` 2→0 | `order_aspd_on`, `order_deploy`, `order_stow` |
-| `fr.mode` | ФР block: РАБОТА / КОНТРОЛЬ | РАБОТА / КОНТРОЛЬ | `aspd_working` (enable =0) | `deploy_aspd` 3→0; `stow_aspd` 1→1 | `order_aspd_on`, `order_deploy`, `order_stow` |
-| `fr.scale` | ФР block: scale | М35 / М50 / М100 | – | `deploy_aspd` 2→1 | `order_aspd_on`, `order_deploy` |
 
 ### Radiotelephone operator (No. 3) (`radio_operator`): Радиотелефонист
 
@@ -125,10 +125,10 @@ Lamps: СЕТЬ 27 В, Г-290, АГРЕГАТ, Г-290, СЕТЬ, АГРЕГАТ 
 | `pab2_measured` | Direction measured with the PAB-2 | all of `nav.pab2`=1 [squad_leader], input `vehicle_stopped`=true | 240 | driver, squad_leader | `oriented` | – |
 | `oriented` | Post oriented (the GAK holds the measured direction) | all of `gak.enter_heading`=1 [squad_leader], `gak` ready, `pab2_measured` ready; latching; released by `gak` off | 10 | driver, squad_leader | `kp4` | `oriented` |
 | `kp4` | KP-4 plotting the post's position | all of `kp4.power`=1 [squad_leader], `oriented` ready | 10 | driver, squad_leader | – | – |
-| `aspd_warm` | ASPD-U warmed up | all of `aspd.power`=1 [operator], `equipment_power` ready | 180 | driver, operator, radio_operator | `aspd_working` | – |
-| `aspd_working` | ASPD-U working (ФР on РАБОТА) | all of `fr.mode`=0 [operator], `aspd_warm` ready | – | driver, operator, radio_operator | `primary_picture`, `telecode_reception` | `aspd_ready` |
+| `aspd_warm` | ASPD-U warmed up | all of `aspd.power`=1 [battery_commander], `equipment_power` ready | 180 | battery_commander, driver, radio_operator | `aspd_working` | – |
+| `aspd_working` | ASPD-U working (ФР on РАБОТА) | all of `fr.mode`=0 [battery_commander], `aspd_warm` ready | – | battery_commander, driver, radio_operator | `primary_picture`, `telecode_reception` | `aspd_ready` |
 | `telecode_reception` | The regiment's picture received by telecode | all of `aspd_working` ready, `fug5` ready, `dtp.parallax`=1 [squad_leader], input `regiment_telecode`=true | – | battery_commander, driver, operator, radio_operator, squad_leader | – | `telecode_on` |
-| `primary_picture` | A coupled radar's picture on the IT-45 | all of `aspd_working` ready, input `radar_coupled`=true | – | driver, operator, radio_operator | – | – |
+| `primary_picture` | A coupled radar's picture on the IT-45 | all of `aspd_working` ready, input `radar_coupled`=true | – | battery_commander, driver, operator, radio_operator | – | – |
 | `battery_net` | The battery net up (designations to the launchers) | all of `fug4` ready, `mast_up` ready | – | battery_commander, driver, radio_operator | – | – |
 
 ## 3. Inputs (world facts)
@@ -172,7 +172,7 @@ Lamps: СЕТЬ 27 В, Г-290, АГРЕГАТ, Г-290, СЕТЬ, АГРЕГАТ 
 | 6 | `kp4.power` | 1 | – | – |
 | 7 | `dtp.parallax` | 1 | – | – |
 
-### `deploy_aspd` (operator): Deploy: the ASPD-U on and working — ordered by `order_deploy`, `order_aspd_on`
+### `deploy_aspd` (battery_commander): Deploy: the ASPD-U on and working — ordered by `order_deploy`, `order_aspd_on`
 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|
@@ -192,7 +192,7 @@ Lamps: СЕТЬ 27 В, Г-290, АГРЕГАТ, Г-290, СЕТЬ, АГРЕГАТ 
 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|
-| 1 | `pwr.input` | 0 | `aspd_warm` off | operator, radio_operator |
+| 1 | `pwr.input` | 0 | `aspd_warm` off | battery_commander, radio_operator |
 | 2 | `pwr.ab1_start` | 0 | – | – |
 | 3 | `pwr.ab1_set` | 0 | – | – |
 
@@ -201,10 +201,10 @@ Lamps: СЕТЬ 27 В, Г-290, АГРЕГАТ, Г-290, СЕТЬ, АГРЕГАТ 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|
 | 1 | `pwr.rectifier` | 0 | – | – |
-| 2 | `pwr.equipment` | 0 | `aspd_warm` off | driver, operator |
+| 2 | `pwr.equipment` | 0 | `aspd_warm` off | battery_commander, driver |
 | 3 | `mast.raise` | 0 | – | – |
 
-### `stow_aspd` (operator): Stow: the ASPD-U off — ordered by `order_stow`
+### `stow_aspd` (battery_commander): Stow: the ASPD-U off — ordered by `order_stow`
 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|
@@ -217,21 +217,21 @@ Rows wait for columns: the drills of the row's seat that wait on something the c
 
 | waits → for | battery_commander | squad_leader | operator | radio_operator | driver |
 |---|---|---|---|---|---|
-| **battery_commander** | – | – | – | – | – |
+| **battery_commander** | – | – | – | `deploy_aspd` | `deploy_aspd` |
 | **squad_leader** | – | – | – | – | `deploy_orient` |
-| **operator** | – | – | – | `deploy_aspd` | `deploy_aspd` |
-| **radio_operator** | – | – | `stow_mast` | – | `deploy_mast`, `stow_mast` |
-| **driver** | – | – | `stow_power` | `stow_power` | – |
+| **operator** | – | – | – | – | – |
+| **radio_operator** | `stow_mast` | – | – | – | `deploy_mast`, `stow_mast` |
+| **driver** | `stow_power` | – | – | `stow_power` | – |
 
 ## 6. Orders
 
 | Order | ru | en | Starts | Task |
 |---|---|---|---|---|
-| `order_deploy` | Пункт управления развернуть! | Deploy the post! | driver: `deploy_power`; radio_operator: `deploy_mast`; squad_leader: `deploy_orient`; operator: `deploy_aspd`; battery_commander: `deploy_command_radios` | `ready_halted` |
-| `order_stow` | Пункт управления свернуть! | Stow the post! | operator: `stow_aspd`; radio_operator: `stow_mast`; driver: `stow_power` | `stowed` |
+| `order_deploy` | Пункт управления развернуть! | Deploy the post! | driver: `deploy_power`; radio_operator: `deploy_mast`; squad_leader: `deploy_orient`; battery_commander: `deploy_aspd`; battery_commander: `deploy_command_radios` | `ready_halted` |
+| `order_stow` | Пункт управления свернуть! | Stow the post! | battery_commander: `stow_aspd`; radio_operator: `stow_mast`; driver: `stow_power` | `stowed` |
 | `order_mast` | Мачту поднять! | Raise the mast! | radio_operator: `deploy_mast` | – |
 | `order_orient` | Пункт сориентировать! | Orient the post! | squad_leader: `deploy_orient` | – |
-| `order_aspd_on` | АСПД включить! | ASPD on! | operator: `deploy_aspd` | – |
+| `order_aspd_on` | АСПД включить! | ASPD on! | battery_commander: `deploy_aspd` | – |
 
 ## 7. Tasks
 
@@ -241,9 +241,8 @@ Conditions: `equipment_power` ready, `mast_up` ready, `fug1` ready, `fug2` ready
 
 | Seat | Controls in the chain (alternatives included) |
 |---|---|
-| battery_commander | `radio.fug4.power`=1, `radio.fug5.power`=1, `rtk1.power`=1 |
+| battery_commander | `radio.fug4.power`=1, `radio.fug5.power`=1, `rtk1.power`=1, `fr.mode`=0, `aspd.power`=1 |
 | squad_leader | `radio.fug1.power`=1, `gak.enter_heading`=1, `gak.power`=1, `nav.pab2`=1, `kp4.power`=1 |
-| operator | `fr.mode`=0, `aspd.power`=1 |
 | radio_operator | `pwr.equipment`=1, `mast.raise`=1, `radio.fug2.power`=1, `radio.fug3.power`=1 |
 | driver | `pwr.input`=1, `pwr.ab1_start`=1, `pwr.ab1_set`=1, `pwr.input`=2, `pwr.g290`=1, `pwr.mass`=1, `pwr.input`=3 |
 
@@ -263,7 +262,7 @@ Conditions: `mast_up` off, `ab1_placed` off, `aspd_warm` off.
 
 | Seat | Controls in the chain (alternatives included) |
 |---|---|
-| operator | `aspd.power`=1 |
+| battery_commander | `aspd.power`=1 |
 | radio_operator | `mast.raise`=1, `pwr.equipment`=1 |
 | driver | `pwr.ab1_set`=1, `pwr.input`=1, `pwr.ab1_start`=1, `pwr.input`=2, `pwr.g290`=1, `pwr.mass`=1, `pwr.input`=3 |
 
@@ -275,7 +274,7 @@ Conditions: `mast_up` off, `ab1_placed` off, `aspd_warm` off.
 | `order_stow` | order | battery_commander → crew | Пункт управления свернуть! | Stow the post! | – |
 | `order_mast` | order | battery_commander → radio_operator | Мачту поднять! | Raise the mast! | – |
 | `order_orient` | order | battery_commander → squad_leader | Пункт сориентировать! | Orient the post! | – |
-| `order_aspd_on` | order | battery_commander → operator | АСПД включить! | ASPD on! | – |
+| `order_aspd_on` | order | battery_commander → battery_commander | АСПД включить! | ASPD on! | – |
 | `power_on` | report | driver → battery_commander | Агрегат работает, питание подано! | Generator running, power on! | `power_220` ready |
 | `mast_up` | report | radio_operator → battery_commander | Мачта поднята! | Mast up! | `mast_up` ready |
 | `radios_ready` | report | radio_operator → battery_commander | Связь с КП полка есть! | In touch with the regiment! | `fug3` ready |

@@ -52,7 +52,8 @@ python tools/button_map.py                        # flow chart of every control 
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
 python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json from the PU-12M interior's trace (after build_pu12m_interior.py)
 ./simcore/build/crew_balance data 10              # every crew scenario at every skill tier over 10 seeds (docs/crew/11_*)
-./simcore/build/crew_pose_dump data out/crew_poses.json   # the crew's bodies posed; draw them: tools/blender/render_crew_poses.py
+./simcore/build/crew_pose_dump data out/crew_poses.json [pu12m]   # the crew's bodies posed; draw them: tools/blender/render_crew_poses.py
+blender --background --python tools/blender/pu12m_interior_check.py -- --poses out/crew_poses_pu12m.json   # PU-12M interior: what intersects
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 

@@ -14,11 +14,11 @@
 
   "stations": [
     { "id": "battery_commander", "label": "Battery commander", "source": "ru_pu12_text (командир боевого расчёта), csla_pu12_manual (Pracoviště velitele baterie)", "confidence": "high",
-      "notes": "Works beside the operator at the IT-45 desk: the ŠČK commander's panel, the RTK-1 radiotelephone concentrator, the IT-2 board, the R-123M of the battery net (FuG-4) and the R-407 (FuG-5) behind him (ČSLA plan items 16, 18, 22, 25, 36). Gives the launchers their targets by voice."},
+      "notes": "At the IT-45 tube with the ДХ keypad, the DI marker and the ФР block (rwd_mb3); beside the plotter at the desk: the ŠČK commander's panel, the RTK-1 radiotelephone concentrator, the IT-2 board, the R-123M of the battery net (FuG-4) and the R-407 (FuG-5) behind him (ČSLA plan items 16, 18, 22, 25, 36). Gives the launchers their targets by voice."},
     { "id": "squad_leader", "label": "Squad leader (No. 1)", "source": "ru_pu12_text (командир отделения управления), csla_pu12_manual (Pracoviště velitele družstva a řidiče)", "confidence": "high",
       "notes": "Front right: the KP-4, the GAK's control panel, the VO telescope, the IT-1 board, the DTP, an R-123M (FuG-1, the air-picture net), the PVS-2 box (ČSLA plan items 1-9). Orients the post."},
-    { "id": "operator", "label": "Operator-plotter (No. 2)", "source": "ru_pu12_text (оператор-планшетист), shilka_narod (the operator's place at the IT-45, the ДХ keypad and the ФР block beside it)", "confidence": "high",
-      "notes": "At the IT-45 tube with the ДХ keypad and the DI marker (ČSLA plan items 15, 19, 20); plots on the air-situation board (item 24)."},
+    { "id": "operator", "label": "Operator-plotter (No. 2)", "source": "ru_pu12_text (оператор-планшетист), rwd_mb3 (\"Platz des Planzeichners\" beside the tube; the tube's place, with the ФР block, is the commander's), shilka_narod (the IT-45 with the ДХ keypad and the ФР block)", "confidence": "high",
+      "notes": "Beside the commander at the IT-45 desk; plots on the air-situation board (ČSLA plan item 24) what the tube and the voice nets give. No switches of his own: the ФР block, the ДХ keypad and the DI marker are at the commander's place (items 15, 19, 20)."},
     { "id": "radio_operator", "label": "Radiotelephone operator (No. 3)", "source": "ru_pu12_text (радиотелефонист), csla_pu12_manual (Pracoviště radisty)", "confidence": "high",
       "notes": "Left rear at his table: an R-123M (FuG-2) and the R-111 (FuG-3), the RK-1 box, the PVS-1, and the power boards around him (ŠČR, VS-27, FP, RR-361A; ČSLA plan items 37-48, 51). Raises the mast (a ČSLA caption: the signalman extends the 16 m mast)."},
     { "id": "driver", "label": "Driver-electrician (No. 4)", "source": "ru_pu12_text (водитель-электромеханик), csla_pu12_manual", "confidence": "high",
@@ -74,11 +74,11 @@
     { "id": "intercom.pvs2", "label": "PVS-2 intercom box", "station": "squad_leader", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"], "initial": 1,
       "source": "flak11 (PU12-1), csla_pu12_manual (item 6)", "confidence": "medium" },
 
-    { "id": "aspd.power", "label": "ASPD-U: power", "station": "operator", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"], "initial": 0,
+    { "id": "aspd.power", "label": "ASPD-U: power", "station": "battery_commander", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"], "initial": 0,
       "source": "flak11 (PU12-0: ASPD-U, the UO power block), valka_pu12; the switch is sam3d", "confidence": "estimate" },
-    { "id": "fr.mode", "label": "ФР block: РАБОТА / КОНТРОЛЬ", "station": "operator", "kind": "switch", "position_labels": ["РАБОТА", "КОНТРОЛЬ"], "initial": 1,
+    { "id": "fr.mode", "label": "ФР block: РАБОТА / КОНТРОЛЬ", "station": "battery_commander", "kind": "switch", "position_labels": ["РАБОТА", "КОНТРОЛЬ"], "initial": 1,
       "source": "shilka_narod (photograph of the ФР block: a РАБОТА / КОНТРОЛЬ selector)", "confidence": "low", "notes": "Read from a low-resolution photograph. КОНТРОЛЬ is the self-check; РАБОТА shows the picture." },
-    { "id": "fr.scale", "label": "ФР block: scale", "station": "operator", "kind": "switch", "position_labels": ["М35", "М50", "М100"], "initial": 1,
+    { "id": "fr.scale", "label": "ФР block: scale", "station": "battery_commander", "kind": "switch", "position_labels": ["М35", "М50", "М100"], "initial": 1,
       "source": "ru_pu12_text (scales 35, 50, 100 km); shilka_narod (a three-position switch on the ФР block); flak11 (scales to 100 and 50 km)", "confidence": "medium" },
 
     { "id": "radio.fug4.power", "label": "R-123M (FuG-4): ПИТАНИЕ", "station": "battery_commander", "kind": "switch", "position_labels": ["ВЫКЛ", "ВКЛ"], "initial": 0,
@@ -234,7 +234,7 @@
       ] },
     { "id": "deploy_aspd", "name": "Deploy: the ASPD-U on and working",
       "source": "flak11 (PU12-0: ASPD-U); shilka_narod (the ФР block's РАБОТА / КОНТРОЛЬ and scale); the order is sam3d", "confidence": "estimate",
-      "notes": "Operator-plotter, once the equipment has power.",
+      "notes": "The battery commander at the tube (rwd_mb3: the ФР block is at his workplace), once the equipment has power.",
       "steps": [
         { "control": "aspd.power", "position": 1, "description": "ASPD-U on", "wait_for": [ { "subsystem": "equipment_power", "is": "ready" } ] },
         { "control": "fr.scale", "position": 1, "description": "Scale М50 (the board is watched from 50 km)" },

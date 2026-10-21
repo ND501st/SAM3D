@@ -29,13 +29,13 @@
   "centre_m": [
    0.0098,
    0.5076,
-   1.3275
+   1.322
   ],
   "reuse": false,
   "size_m": [
    2.3804,
    4.7748,
-   1.415
+   1.404
   ]
  },
  "SM_PU12MFrontSeat": {
@@ -93,8 +93,8 @@
  "SM_PU12MSteering": {
   "centre_m": [
    -0.4062,
-   2.72,
-   1.36
+   2.69,
+   1.44
   ],
   "reuse": false,
   "size_m": [

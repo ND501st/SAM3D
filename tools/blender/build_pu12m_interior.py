@@ -198,110 +198,127 @@ def handles(b, it, face):
                     b3(x + (0.02 if face == 'rear' else -0.02), y, cz + h)], 0.006, 'Metal_Steel', seg=8)
 
 
+def build_item(b, it):
+    """One item of the equipment into a Builder (the interior checker builds them one by one)."""
+    iid, face = it['id'], I.FACES.get(it['id'])
+    if it['shape'] == 'cylinder':
+        cx, cy, _ = I.centre(it)
+        r = 0.5 * (it['x1'] - it['x0'])
+        if iid == 'gak':
+            # the gyro: a cylinder with a domed top on a plate, the plate on a stand of four legs over its converter
+            # (rwd_mb3 photographs: light grey in the PU-12M)
+            plate = (-cy - r - 0.05, -cy + r + 0.05, cx - r - 0.05, cx + r + 0.05)
+            b.box(plate[0], plate[1], plate[2], plate[3], it['z0'] - 0.03, it['z0'], 'Paint_Rack')
+            for lx in (plate[0] + 0.015, plate[1] - 0.015):
+                for ly in (plate[2] + 0.015, plate[3] - 0.015):
+                    b.box(lx - 0.012, lx + 0.012, ly - 0.012, ly + 0.012, I.FLOOR_Z, it['z0'] - 0.03, 'Paint_Rack')
+            b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1'] - 0.10), r, it['mat'], seg=40)
+            b.lathe(b3(cx, cy, it['z1'] - 0.10), (0, 0, 1),
+                    [(r, 0.0), (0.97 * r, 0.04), (0.85 * r, 0.075), (0.55 * r, 0.095), (0.0, 0.10)], it['mat'], seg=40)
+            b.cylinder(b3(cx, cy, it['z0'] + 0.02), b3(cx, cy, it['z0'] + 0.05), r + 0.012, 'Metal_Dark', seg=40)
+            for k in range(6):
+                a = 2 * math.pi * k / 6
+                px, py = cx + (r + 0.004) * math.cos(a), cy + (r + 0.004) * math.sin(a)
+                b.cylinder(b3(px, py, it['z0'] + 0.05), b3(px, py, it['z0'] + 0.09), 0.006, 'Metal_Steel', seg=8)
+        elif iid == 'di':
+            # the DT-2 coordinate pickup: a round housing on the desk, its two wheels on top (the cabin's controls)
+            hgt = it['z1'] - it['z0'] - INSET
+            b.lathe(b3(cx, cy, it['z0']), (0, 0, 1),
+                    [(r + 0.006, 0.0), (r + 0.006, 0.008), (r, 0.012), (r, hgt - 0.004), (r - 0.004, hgt), (0.0, hgt)],
+                    'Paint_BlueGrey', seg=48)
+        elif iid == 'vo':
+            # the orientation periscope: a collar at the bow plate, the tube down to an eyepiece head over the KP-4 with
+            # its rubber eyecup toward the squad leader and a handle
+            # (the collar under the sloping plate: its high side touches; the tube goes on up through the plate)
+            zc = min(I.ceiling_z(cx - r * 0.9), I.ceiling_z(cx + r * 0.9))
+            head0, head1 = it['z0'], it['z0'] + 0.10
+            b.cylinder(b3(cx, cy, zc - 0.03), b3(cx, cy, zc - 0.002), r * 0.9, 'Paint_Rack', seg=20)
+            b.cylinder(b3(cx, cy, head1), b3(cx, cy, zc - 0.03), r * 0.5, 'Paint_Rack', seg=20)
+            b.box(-cy - 0.045, -cy + 0.045, cx - 0.05, cx + 0.04, head0, head1, 'Paint_Rack')
+            b.cylinder(b3(cx - 0.05, cy, head0 + 0.05), b3(cx - 0.09, cy, head0 + 0.05), 0.022, 'Rubber_Black', seg=16)
+            b.cylinder(b3(cx - 0.01, cy - 0.045, head0 + 0.03), b3(cx - 0.01, cy - 0.09, head0 + 0.03), 0.008, 'Metal_Dark', seg=8)
+        else:
+            b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1']), r, it['mat'], seg=20)
+        return
+    if iid == 'desk':
+        # the top on the ledge, a front lip and two legs to the floor at its inner edge, the rear one just ahead of
+        # the R-123M's power unit on the floor under it
+        b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
+        b.box(-it['y1'], -it['y1'] + 0.02, it['x0'], it['x1'], it['z0'] - 0.05, it['z0'], 'Paint_Rack')
+        for x in (I.item('bp_fug4')['x1'] + 0.03, it['x1'] - 0.08):
+            b.box(-it['y1'] + 0.005, -it['y1'] + 0.035, x - 0.015, x + 0.015, I.FLOOR_Z, it['z0'], 'Paint_Rack')
+        return
+    if iid == 'table51':
+        # the top on two struts to the R-111's front ahead of it: his knees go under it (no leg to the floor)
+        b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
+        x_set = I.item('r111')['x0'] - 0.006   # short of its front panel
+        for y in (it['y0'] + 0.02, it['y1'] - 0.02):
+            b.box(-y - 0.008, -y + 0.008, it['x0'] + 0.02, x_set, it['z0'] - 0.02, it['z0'], 'Paint_Rack')
+            b.cylinder(b3(it['x0'] + 0.06, y, it['z0'] - 0.01), b3(x_set, y, it['z0'] - 0.15), 0.008, 'Paint_Rack', seg=8)
+        return
+    if iid == 'map_board':
+        # the plexiglass in an aluminium frame (the panel and its display are the glass); a hanger to a roof bracket
+        # at its left edge (rwd_mb3: hinged on its frame)
+        x0, x1 = it['x0'], it['x1'] - INSET
+        for y0, y1, z0, z1 in ((it['y0'], it['y1'], it['z0'], it['z0'] + 0.015), (it['y0'], it['y1'], it['z1'] - 0.015, it['z1']),
+                               (it['y0'], it['y0'] + 0.015, it['z0'], it['z1']), (it['y1'] - 0.015, it['y1'], it['z0'], it['z1'])):
+            b.box(-y1, -y0, x0, x1, z0, z1, 'Metal_Steel')
+        zc = I.ceiling_z(x0)
+        b.box(-it['y1'] - 0.002, -it['y1'] + 0.02, x0 + 0.002, x1 - 0.002, it['z1'], zc - 0.012, 'Metal_Steel')
+        b.box(-it['y1'] - 0.05, -it['y1'] + 0.05, x0 - 0.03, x1 + 0.03, zc - 0.022, zc - 0.001, 'Paint_Rack')
+        return
+    if iid == 'pt200':
+        # the converter: a motor-generator lying along the vehicle on its feet
+        cyy = 0.5 * (it['y0'] + it['y1'])
+        rr = 0.5 * (it['z1'] - it['z0']) - 0.01
+        zc = it['z0'] + 0.02 + rr
+        b.cylinder(b3(it['x0'] + 0.01, cyy, zc), b3(it['x1'] - 0.01, cyy, zc), rr, it['mat'], seg=28)
+        for xx in (it['x0'] + 0.05, it['x1'] - 0.05):
+            b.box(-cyy - rr, -cyy + rr, xx - 0.02, xx + 0.02, it['z0'], zc, 'Paint_Rack')
+        return
+    if iid in ('r111_stand', 'rear_shelf'):
+        # a frame: four posts and a top
+        b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z1'] - 0.025, it['z1'], it['mat'])
+        for x in (it['x0'] + 0.015, it['x1'] - 0.015):
+            for y in (it['y0'] + 0.015, it['y1'] - 0.015):
+                b.box(-y - 0.012, -y + 0.012, x - 0.012, x + 0.012, it['z0'], it['z1'] - 0.025, it['mat'])
+        return
+    if iid == 'it45':
+        # the tube's housing: a box, its back (to the bench) dished round the screen, a hood over the top
+        # the tube's housing, light grey (rwd_mb3), a frame round the screen and a dark strip of knobs and sockets over
+        # it (the photograph)
+        face_inset(b, it)
+        s = I.IT45_SCREEN
+        x = it['x0'] + INSET
+        b.torus(b3(x - 0.004, s['y'], s['z']), (0, 1, 0), s['d'] / 2 + 0.022, 0.014, it['mat'], seg=64, rseg=10)
+        sy0, sy1 = it['y0'] + 0.03, it['y1'] - 0.03
+        ztop = s['z'] + s['d'] / 2
+        b.box(-sy1, -sy0, x - 0.008, x, ztop + 0.035, ztop + 0.085, 'Metal_Dark')
+        for k in range(9):
+            yy = sy0 + (k + 0.5) * (sy1 - sy0) / 9
+            b.cylinder(b3(x - 0.008, yy, ztop + 0.06), b3(x - 0.022, yy, ztop + 0.06), 0.008,
+                       'Bakelite_Black' if k % 3 else 'Metal_Steel', seg=12)
+        return
+    x0, x1, y0, y1 = face_inset(b, it)
+    if iid in ('telecode_tx', 'telecode_rx', 'r407', 'r111', 'scr', 'bp48', 'vs27'):
+        handles(b, dict(it, x0=x0, x1=x1, y0=y0, y1=y1), face)
+    if iid in ('telecode_tx', 'telecode_rx'):
+        # the cabinet's two doors (the drawings' diagonal hatching): seams on its face
+        yl = y1 + 0.002 if face == 'left' else y0 - 0.002
+        for z in (it['z0'] + 0.04, 0.5 * (it['z0'] + it['z1']), it['z1'] - 0.04):
+            b.box(-yl - 0.002, -yl + 0.002, x0 + 0.02, x1 - 0.02, z - 0.003, z + 0.003, 'Metal_Dark')
+    if iid.startswith('battery'):
+        for k in (-1, 1):
+            cx = 0.5 * (it['x0'] + it['x1']) + k * 0.1
+            cy = 0.5 * (it['y0'] + it['y1'])
+            b.cylinder(b3(cx, cy, it['z1']), b3(cx, cy, it['z1'] + 0.025), 0.012, 'Metal_Dark', seg=10)
+
+
 def build_equipment():
     b = C.Builder('SM_PU12MEquipment')
     for it in I.ITEMS:
-        if it['id'] in EQUIPMENT_SKIP:
-            continue
-        iid, face = it['id'], I.FACES.get(it['id'])
-        if it['shape'] == 'cylinder':
-            cx, cy, _ = I.centre(it)
-            r = 0.5 * (it['x1'] - it['x0'])
-            if iid == 'gak':
-                # the gyro: a cylinder with a domed top on a plate, the plate on a stand of four legs over its converter
-                # (rwd_mb3 photographs: light grey in the PU-12M)
-                plate = (-cy - r - 0.05, -cy + r + 0.05, cx - r - 0.05, cx + r + 0.05)
-                b.box(plate[0], plate[1], plate[2], plate[3], it['z0'] - 0.03, it['z0'], 'Paint_Rack')
-                for lx in (plate[0] + 0.015, plate[1] - 0.015):
-                    for ly in (plate[2] + 0.015, plate[3] - 0.015):
-                        b.box(lx - 0.012, lx + 0.012, ly - 0.012, ly + 0.012, I.FLOOR_Z, it['z0'] - 0.03, 'Paint_Rack')
-                b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1'] - 0.10), r, it['mat'], seg=40)
-                b.lathe(b3(cx, cy, it['z1'] - 0.10), (0, 0, 1),
-                        [(r, 0.0), (0.97 * r, 0.04), (0.85 * r, 0.075), (0.55 * r, 0.095), (0.0, 0.10)], it['mat'], seg=40)
-                b.cylinder(b3(cx, cy, it['z0'] + 0.02), b3(cx, cy, it['z0'] + 0.05), r + 0.012, 'Metal_Dark', seg=40)
-                for k in range(6):
-                    a = 2 * math.pi * k / 6
-                    px, py = cx + (r + 0.004) * math.cos(a), cy + (r + 0.004) * math.sin(a)
-                    b.cylinder(b3(px, py, it['z0'] + 0.05), b3(px, py, it['z0'] + 0.09), 0.006, 'Metal_Steel', seg=8)
-            elif iid == 'di':
-                # the DT-2 coordinate pickup: a round housing on the desk, its two wheels on top (the cabin's controls)
-                hgt = it['z1'] - it['z0'] - INSET
-                b.lathe(b3(cx, cy, it['z0']), (0, 0, 1),
-                        [(r + 0.006, 0.0), (r + 0.006, 0.008), (r, 0.012), (r, hgt - 0.004), (r - 0.004, hgt), (0.0, hgt)],
-                        'Paint_BlueGrey', seg=48)
-            elif iid == 'vo':
-                b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1']), r * 0.6, 'Paint_Rack', seg=20)
-                b.cylinder(b3(cx, cy, it['z0'] + 0.02), b3(cx + 0.09, cy, it['z0'] + 0.08), 0.03, 'Rubber_Black', seg=14)
-            else:
-                b.cylinder(b3(cx, cy, it['z0']), b3(cx, cy, it['z1']), r, it['mat'], seg=20)
-            continue
-        if iid == 'desk':
-            # the top on the ledge, a front lip and two legs to the floor at its inner edge
-            b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
-            b.box(-it['y1'], -it['y1'] + 0.02, it['x0'], it['x1'], it['z0'] - 0.05, it['z0'], 'Paint_Rack')
-            for x in (it['x0'] + 0.08, it['x1'] - 0.08):
-                b.box(-it['y1'] + 0.005, -it['y1'] + 0.035, x - 0.015, x + 0.015, I.FLOOR_Z, it['z0'], 'Paint_Rack')
-            continue
-        if iid == 'table51':
-            b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
-            b.box(-it['y1'] + 0.01, -it['y1'] + 0.03, it['x0'] + 0.02, it['x1'] - 0.02, I.FLOOR_Z, it['z0'], 'Paint_Rack')
-            continue
-        if iid == 'map_board':
-            # the plexiglass in an aluminium frame (the panel and its display are the glass); a hanger to a roof bracket
-            # at its left edge (rwd_mb3: hinged on its frame)
-            x0, x1 = it['x0'], it['x1'] - INSET
-            for y0, y1, z0, z1 in ((it['y0'], it['y1'], it['z0'], it['z0'] + 0.015), (it['y0'], it['y1'], it['z1'] - 0.015, it['z1']),
-                                   (it['y0'], it['y0'] + 0.015, it['z0'], it['z1']), (it['y1'] - 0.015, it['y1'], it['z0'], it['z1'])):
-                b.box(-y1, -y0, x0, x1, z0, z1, 'Metal_Steel')
-            zc = I.ceiling_z(x0)
-            b.box(-it['y1'] - 0.002, -it['y1'] + 0.02, x0 + 0.002, x1 - 0.002, it['z1'], zc + 0.01, 'Metal_Steel')
-            b.box(-it['y1'] - 0.05, -it['y1'] + 0.05, x0 - 0.03, x1 + 0.03, zc - 0.012, zc + 0.01, 'Paint_Rack')
-            continue
-        if iid == 'pt200':
-            # the converter: a motor-generator lying along the vehicle on its feet
-            cyy = 0.5 * (it['y0'] + it['y1'])
-            rr = 0.5 * (it['z1'] - it['z0']) - 0.01
-            zc = it['z0'] + 0.02 + rr
-            b.cylinder(b3(it['x0'] + 0.01, cyy, zc), b3(it['x1'] - 0.01, cyy, zc), rr, it['mat'], seg=28)
-            for xx in (it['x0'] + 0.05, it['x1'] - 0.05):
-                b.box(-cyy - rr, -cyy + rr, xx - 0.02, xx + 0.02, it['z0'], zc, 'Paint_Rack')
-            continue
-        if iid in ('r111_stand', 'rear_shelf'):
-            # a frame: four posts and a top
-            b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z1'] - 0.025, it['z1'], it['mat'])
-            for x in (it['x0'] + 0.015, it['x1'] - 0.015):
-                for y in (it['y0'] + 0.015, it['y1'] - 0.015):
-                    b.box(-y - 0.012, -y + 0.012, x - 0.012, x + 0.012, it['z0'], it['z1'] - 0.025, it['mat'])
-            continue
-        if iid == 'it45':
-            # the tube's housing: a box, its back (to the bench) dished round the screen, a hood over the top
-            # the tube's housing, light grey (rwd_mb3), a frame round the screen and a dark strip of knobs and sockets over
-            # it (the photograph)
-            face_inset(b, it)
-            s = I.IT45_SCREEN
-            x = it['x0'] + INSET
-            b.torus(b3(x - 0.004, s['y'], s['z']), (0, 1, 0), s['d'] / 2 + 0.022, 0.014, it['mat'], seg=64, rseg=10)
-            sy0, sy1 = it['y0'] + 0.03, it['y1'] - 0.03
-            ztop = s['z'] + s['d'] / 2
-            b.box(-sy1, -sy0, x - 0.008, x, ztop + 0.035, ztop + 0.085, 'Metal_Dark')
-            for k in range(9):
-                yy = sy0 + (k + 0.5) * (sy1 - sy0) / 9
-                b.cylinder(b3(x - 0.008, yy, ztop + 0.06), b3(x - 0.022, yy, ztop + 0.06), 0.008,
-                           'Bakelite_Black' if k % 3 else 'Metal_Steel', seg=12)
-            continue
-        x0, x1, y0, y1 = face_inset(b, it)
-        if iid in ('telecode_tx', 'telecode_rx', 'r407', 'r111', 'scr', 'bp48', 'vs27'):
-            handles(b, dict(it, x0=x0, x1=x1, y0=y0, y1=y1), face)
-        if iid in ('telecode_tx', 'telecode_rx'):
-            # the cabinet's two doors (the drawings' diagonal hatching): seams on its face
-            yl = y1 + 0.002 if face == 'left' else y0 - 0.002
-            for z in (it['z0'] + 0.04, 0.5 * (it['z0'] + it['z1']), it['z1'] - 0.04):
-                b.box(-yl - 0.002, -yl + 0.002, x0 + 0.02, x1 - 0.02, z - 0.003, z + 0.003, 'Metal_Dark')
-        if iid.startswith('battery'):
-            for k in (-1, 1):
-                cx = 0.5 * (it['x0'] + it['x1']) + k * 0.1
-                cy = 0.5 * (it['y0'] + it['y1'])
-                b.cylinder(b3(cx, cy, it['z1']), b3(cx, cy, it['z1'] + 0.025), 0.012, 'Metal_Dark', seg=10)
+        if it['id'] not in EQUIPMENT_SKIP:
+            build_item(b, it)
     return C.finish(b, bevel=0.003)
 
 
@@ -397,7 +414,8 @@ def build_driver():
     b.cylinder(b3(gx, gy, I.FLOOR_Z), b3(gx - 0.05, gy, I.FLOOR_Z + 0.45), 0.01, 'Metal_Dark', seg=8)
     b.lathe(b3(gx - 0.05, gy, I.FLOOR_Z + 0.45), (0, 0, 1), [(0.0, -0.01), (0.022, 0.0), (0.022, 0.02), (0.0, 0.035)],
             'Bakelite_Black', seg=14)
-    b.box(-gy - 0.06, -gy + 0.06, gx - 0.08, gx + 0.08, I.FLOOR_Z, I.FLOOR_Z + 0.04, 'Rubber_Black')
+    zf = I.floor_z(gx + 0.08) + 0.012   # on the floor plates (the lining's floor rises toward the bow between its sections)
+    b.box(-gy - 0.06, -gy + 0.06, gx - 0.08, gx + 0.08, zf, zf + 0.04, 'Rubber_Black')
     return C.finish(b)
 
 

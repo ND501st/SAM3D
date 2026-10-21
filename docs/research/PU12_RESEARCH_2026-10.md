@@ -158,6 +158,8 @@ orients with the PAB-2 and sets the GAK and KP-4; the operator switches on the A
    **Corrected 18 Oct 2026** (`docs/research/PU12_VISUALS_2026-10.md` §2): the NVA catalogue (`rwd_mb3`) lists the
    PU-12M commander's workplace as the IT-45, the ДХ, the IT-2M, the ФР block, the RTK-1 and the DT-2, so the battery
    commander takes the right place at the IT-45 and the operator-plotter the middle one, at the air-situation map (the
-   plan's item 24, a plexiglass board).
+   plan's item 24, a plexiglass board). The console follows since the interior pass (18 Oct 2026): the ФР block's
+   switches are the commander's. The RTK-1 stands on the desk at the right wall under the IT-2M (SAM3D's choice; the plan
+   draws it over the tube's front, out of his seated reach).
 5. The telecode's message rate and range on the R-407 (only "to 15 km" for the set).
 6. The NVA plotters' handbook (1980) for the plotting drill: still to acquire.

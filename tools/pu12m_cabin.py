@@ -168,13 +168,13 @@ def build():
                         'side behind them.',
         'battery_commander': 'The bench\'s right place, at the IT-45 (csla_pu12_manual: the battery commander\'s '
                              'workplace; rwd_mb3: "Platz des Kommandeurs/Operators"): the tube ahead, the ДХ keypad at its '
-                             'left, the ФР block at its right, the DT-2 marker on the desk, the RTK-1 over the tube, the '
-                             'IT-2M, the ŠČK and the R-123M of the battery net (FuG-4) on the desk at his right, the R-407 '
+                             'left, the ФР block at its right, the DT-2 marker on the desk, the IT-2M over the '
+                             'tube, the RTK-1, the ŠČK and the R-123M of the battery net (FuG-4) on the desk at his right, the R-407 '
                              'behind him. The bench: the plan\'s three places across the compartment facing forward '
                              '(1288-1385 x 338-600 px).',
         'operator': 'The bench\'s middle place, the plotter\'s (rwd_mb3: "Platz des Planzeichners"): the air-situation map '
-                    'ahead of him (the plan\'s item 24), the IT-45 at his right front. He switches the ASPD-U on at the '
-                    'ФР block, leaning over to the commander\'s side.',
+                    'ahead of him (the plan\'s item 24), the IT-45 at his right front. The ФР block is the commander\'s; '
+                    'the plotter\'s work is the map: he plots what the tube and the voice nets give.',
         'radio_operator': 'The bench\'s left place: the R-111 with the R-123M (FuG-2) on top ahead of him, his table '
                           'between, the power boards (ŠČR, VS-27) and the PVS-1 on the side at his left '
                           '(csla_pu12_manual: the radio operator\'s workplace drawing).',
@@ -277,7 +277,7 @@ def build():
     # ---------------------------------------------------------------------------------------------- the commander's workplace
     s = I.IT45_SCREEN
     it45 = I.item('it45')
-    p = L.panel('it45_panel', 'IT-45 indicator', 'battery_commander', 'it45', (0.52, 0.64),
+    p = L.panel('it45_panel', 'IT-45 indicator', 'battery_commander', 'it45', (0.52, 0.80),
                 notes='The IT-45\'s face, light grey (rwd_mb3 and shilka_narod photographs: a 45 cm tube behind an amber '
                       'filter and a grid glass, a strip of knobs over it, the ДХ keypad at its left, the ФР block at its '
                       'right).')
@@ -300,7 +300,7 @@ def build():
                                 'echoes painted by the sweep under their symbols. Symbols, the sweep\'s period (10 s) and the '
                                 'afterglow (6 s: the long-afterglow screens of the Soviet tube table, radiolamp_elt) are '
                                 'SAM3D\'s. ' + VISUALS})
-    L.fixture(p, (-0.2, 0.29), 'nameplate', (0.05, 0.014), label='ИТ-45')
+    L.fixture(p, (-0.2, 0.37), 'nameplate', (0.05, 0.014), label='ИТ-45')
     dch(L)
     p = L.panel('dt2_panel', 'DT-2 coordinate pickup', 'battery_commander', 'di', (0.17, 0.17),
                 notes='The marker\'s pickup on the desk (rwd_mb3: Geber der Koordinaten DT-2; the ČSLA plan\'s item 20, '
@@ -562,7 +562,8 @@ def fr(L):
     """The ФР block, after the photograph (shilka_narod; its outline 15-450 x 20-520 px in the crop)."""
     size = (0.21, 0.24)
     face = I.item('fr_block')
-    p = L.panel('fr_panel', 'ФР block', 'operator', 'fr_block', size, at=(0.0, 1.44 - I.centre(face)[2]),
+    # its controls on the block's lower part, as the photograph shows them
+    p = L.panel('fr_panel', 'ФР block', 'battery_commander', 'fr_block', size, at=(0.0, face['z0'] + 0.03 + size[1] / 2 - I.centre(face)[2]),
                 notes='The ФР block (shilka_narod photograph: БЛОК ФР, a РАБОТА / КОНТРОЛЬ selector, the scale '
                       'selector, a power toggle, brightness knobs and a second РАБОТА / КОНТРОЛЬ toggle) at the tube\'s '
                       'right. The ASPD-U\'s power switch is SAM3D\'s reading of its ВКЛ toggle.')
@@ -594,8 +595,8 @@ def fr(L):
 def sblock(L):
     """The S synchronisation block above the ФР block: its face is not in the photographs (SAM3D's arrangement)."""
     face = I.item('fr_block')
-    p = L.panel('s_panel', 'S synchronisation block', 'operator', 'fr_block', (0.21, 0.10),
-                at=(0.0, 1.635 - I.centre(face)[2]),
+    p = L.panel('s_panel', 'S synchronisation block', 'battery_commander', 'fr_block', (0.21, 0.10),
+                at=(0.0, face['z0'] + 0.34 - I.centre(face)[2]),   # over the ФР block's panel (fr: 0.03-0.27 m up)
                 notes='The S block (csla_pu12_manual item 13; the commander\'s workplace drawing: the blocks with rows of '
                       'switches over the tube). Its face is SAM3D\'s arrangement.')
     L.nameplate(p, (-0.06, 0.03), 'БЛОК С', 0.05)
@@ -642,7 +643,9 @@ def layout_json():
         'notes': 'Written by tools/pu12m_cabin.py from tools/blender/pu12m_interior_trace.py and '
                  'art/pu12m_interior/manifest.json: edit those and run it again, not this file. Body frame: metres, x '
                  'right, y forward, z up, from the ground under the middle of the wheelbase (the exterior model\'s '
-                 'origin). Lamp sources use the source ids of data/procedures/pu12m.json.',
+                 'origin). Lamp sources use the source ids of data/procedures/pu12m.json. ceiling_m: the roof\'s '
+                 'lining (1.40 m over the floor), under which a crewman getting up for a low panel crouches.',
+        'ceiling_m': round(I.ROOF_IN_Z, 3),
         'stations': L.stations, 'panels': L.panels, 'controls': L.controls, 'lamps': L.lamps, 'displays': L.displays,
         'blocks': L.blocks, 'fixtures': L.fixtures, 'shell': L.shell,
     }
