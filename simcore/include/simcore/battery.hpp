@@ -98,11 +98,12 @@ struct BatteryVehicleDef {
 };
 
 struct BatteryOrder {
-    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon };
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon, Relocate };
     Kind kind = Kind::March;
     double at_s = 0.0;
     std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
     Vec3 covered;             // CombatFormation: the covered unit's position. RiverCrossing: the crossing point (near bank)
+                              // Relocate: where the own vehicle goes (the others keep their places around it)
     double axis_deg = 0.0;    // direction of advance, or across the river (true, clockwise from north)
     bool bounding = false;    // CombatFormation: the pairs move one at a time, the others staying deployed
     bool roving = false;      // Ambush: the pairs move on to the next point every ambush_dwell_s
@@ -129,6 +130,7 @@ inline const char* BatteryOrderName(BatteryOrder::Kind k) {
         case BatteryOrder::Kind::Reload: return "reload";
         case BatteryOrder::Kind::Refuel: return "refuel";
         case BatteryOrder::Kind::Emcon: return "emcon";
+        case BatteryOrder::Kind::Relocate: return "relocate";
     }
     return "?";
 }
@@ -137,7 +139,7 @@ inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
     for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
                                  BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume, BatteryOrder::Kind::Ambush,
                                  BatteryOrder::Kind::RiverCrossing, BatteryOrder::Kind::FarBankHeld, BatteryOrder::Kind::Reload,
-                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon}) {
+                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon, BatteryOrder::Kind::Relocate}) {
         if (s == BatteryOrderName(k)) {
             out = k;
             return true;
@@ -309,7 +311,8 @@ public:
     }
 
     void Order(const BatteryOrder& o, double t) {
-        const bool moves = o.kind == BatteryOrder::Kind::March || o.kind == BatteryOrder::Kind::CombatFormation;
+        const bool moves = o.kind == BatteryOrder::Kind::March || o.kind == BatteryOrder::Kind::CombatFormation ||
+                           o.kind == BatteryOrder::Kind::Relocate;
         if (moves && leave_s_ > 0.0) {
             hold_until_s_ = t + leave_s_;
             events_.push_back({t, "Battery commander", "out of the position: clear the nets and climb out (" + Fmt(leave_s_) + " s)"});
@@ -364,6 +367,25 @@ public:
                                                                Fmt(tactics_.pair_separation_m) + " m apart, " +
                                                                Fmt(tactics_.behind_covered_m) + " m behind the covered unit"});
                 break;
+            case BatteryOrder::Kind::Relocate: {
+                // A change of position (after an ARM attack, on the regiment's order: voenizdat_osa_1991 p238): the
+                // whole battery moves across country by the own vehicle's offset to the new position, keeping its order,
+                // and deploys there.
+                const Vehicle* own = Own();
+                if (own == nullptr) return;
+                const Vec3 shift{o.covered.x - own->position.x, o.covered.y - own->position.y, 0.0};
+                mode_ = Mode::Formation;
+                bounding_ = false;
+                for (Vehicle& v : vehicles_) {
+                    v.waiting = false;
+                    v.goal = v.position + shift;
+                    v.deployed = false;
+                    v.deploy_done_s = -1.0;
+                }
+                events_.push_back({t, "Battery commander", "change of position: to the reserve position, " + Fmt(shift.HorizontalLength()) +
+                                                               " m, in the same order"});
+                break;
+            }
             case BatteryOrder::Kind::Ambush:
                 if (o.route.empty()) return;
                 mode_ = Mode::Ambush;

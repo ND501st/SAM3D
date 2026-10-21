@@ -239,7 +239,11 @@ order the runs showed the need:
 
 - A person playing campaigns through on the campaign screen (the second half of A12), and the scenarios' own balance
   (a raid played by the crew against the same raid resolved abstractly).
-- The ARM as an EM missile and the crew's ARM drill (A11, roadmap E6): the abstract model's ARM numbers stay until then.
+- The ARM as an EM missile and the crew's ARM drill are built (A11, roadmap E6, 20 Oct 2026), but only for raids the
+  crew plays: `air_war_balance` resolves every raid abstractly (`resolve.hpp`, `attrition.arm_kill`), so the numbers
+  above are unchanged. Played raids' ARM outcomes against the abstract model's are part of the scenarios' own balance
+  (the first item). In the A11 test (`test_air_war.cpp`, seed 2, a radiating battery, two raids each) NATO fired 12 EM
+  ARMs (2 on the vehicle) and the Pact 16 (1 on the vehicle).
 - Historical loss rates as a check: the tables are read against shapes, not against sourced rates per sortie; the
   period's loss rates (1973, Linebacker II, the Bekaa) are a research item for `docs/research/`.
 

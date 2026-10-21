@@ -82,6 +82,8 @@ add_executable(simcore_tests
   tests/test_helper.cpp
   tests/test_em_guidance.cpp
   tests/test_em_threats.cpp
+  tests/test_em_arm.cpp
+  tests/test_arm_drill.cpp
   tests/test_ranges_history.cpp
   tests/test_air_war.cpp
   tests/test_command.cpp

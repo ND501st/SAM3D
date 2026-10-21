@@ -27,7 +27,7 @@ Hints, On: below), Enter to play, Q to quit. The groups:
 | Group | What it is |
 |---|---|
 | **Tutorial** | Start here (the camera, the cabin, the controls), then a lesson for each seat of the Osa. |
-| Missions | NPC commanders run the crew and the battery by the drill. Take a seat and do your part, or command. |
+| Missions | NPC commanders run the crew and the battery by the drill. Take a seat and do your part, or command. The HARM drill and the Shrike drill are the ARM threat: in the senior operator's seat watch the scope for a small fast mark coming straight at you, or a target that came at you turning away, and call it; in the commander's, everything off once your missile in the air has burst. |
 | Drills | Scripted shoots: the scenario gives the orders. Watch, or take a seat and keep up. |
 | Ranges and history | Range days and the Osa's battles. |
 | Air war | Raids planned by the enemy air command (and the campaign screen). |

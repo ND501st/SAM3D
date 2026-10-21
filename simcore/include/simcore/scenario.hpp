@@ -51,6 +51,22 @@ struct ScenarioCrew {
     std::string skill;               // a tier of data/crew/skill_levels.json (docs/crew/05_SKILL.md); empty: none
 };
 
+// A target's anti-radiation missiles (roadmap E6): "arms": {"weapon", "count", "launch_range_km", "min_range_km",
+// "interval_s", "aim", "turn_away"}. It fires only on what its own warning receiver hears: a hostile radar in the
+// weapon's band (search, track or fire control) heard in the last second, with the place it believes the radar is
+// (its intelligence: "aim", by default the unit's position, a pre-briefed launch) within the launch range. Each ARM is
+// set to the signal heard. After its last one it turns away from the radar (the ARM sign: voenizdat_osa_1991 p262).
+struct ArmCarrierDef {
+    std::string weapon;           // the EM library's ARM id
+    int count = 0;
+    double launch_range_m = 0.0;  // 0: the weapon's max_range_m
+    double min_range_m = -1.0;    // < 0: the weapon's
+    double interval_s = 4.0;      // between two of its ARMs
+    bool has_aim = false;
+    Vec3 aim;                     // ENU; without one, the unit's position
+    bool turn_away = true;
+};
+
 struct ScenarioTarget {
     std::string id;
     std::string name;
@@ -79,6 +95,8 @@ struct ScenarioTarget {
     // A decoy (roadmap E6): a drone whose echo is made to look like an aircraft's (radar reflectors). The radar can't
     // tell; the TV can, close enough to make out its type (em/optical.hpp), when the crew looks.
     bool decoy = false;
+    // Anti-radiation missiles it carries (roadmap E6, em/arm.hpp): "arms". Count 0: none.
+    ArmCarrierDef arms;
 };
 
 // How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
@@ -94,6 +112,21 @@ struct CrewDoctrineDef {
     // (3-5 s), before the first's result (korovin_tiv_2010; flak11: two missiles selected at ВНИМАНИЕ). 1: one, and
     // the second only after a miss.
     int salvo = 1;
+    // Under the threat of anti-radiation missiles ("arm_threat", voenizdat_osa_1991 pp262-264): the least emission. The
+    // search transmitter's high voltage on for 2 antenna turns after every 3-4 («через 3—4 оборота антенны на 2
+    // оборота»); the tracking transmitter's only from the range of Table 7.3 for the target's speed; the search
+    // transmitter off while the tracking radar holds a stable track and nothing else is about; the tracking
+    // transmitter off after the missile's burst. The commander's reaction to the signs of an ARM launch is part of
+    // every crew's drill, threat or not: «Излучение выключить!» once the missile in the air has burst, for
+    // arm_silence_s after the last sign (a SAM3D estimate).
+    bool arm_threat = false;
+    double arm_silence_s = 60.0;
+    double arm_search_off_turns = 3.0;  // the low end of the textbook's 3-4
+    // A standing order from the regiment ("relocate_after_arm": {"to": position}): attacked by ARMs, the battery moves to
+    // its reserve position when the fight is over (only where the battery drives this vehicle, battery_drive_own). The
+    // battery commander changes position only on the regiment commander's order (voenizdat_osa_1991 p238).
+    bool relocate_after_arm = false;
+    Vec3 relocate_to;
 };
 
 struct TriggerAction {
@@ -913,10 +946,26 @@ private:
     bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
         const json::Value* d = root.Find("doctrine");
         if (d == nullptr) return true;
-        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "notes"}) ||
+        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "arm_threat", "arm_silence_s", "arm_search_off_turns",
+                                   "relocate_after_arm", "notes"}) ||
             !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check) ||
-            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo)) {
+            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo) || !OptionalBool(*d, "doctrine", "arm_threat", out.doctrine.arm_threat) ||
+            !OptionalNumber(*d, "doctrine", "arm_silence_s", out.doctrine.arm_silence_s) ||
+            !OptionalNumber(*d, "doctrine", "arm_search_off_turns", out.doctrine.arm_search_off_turns)) {
             return false;
+        }
+        if (out.doctrine.arm_silence_s < 0.0) return Fail("doctrine.arm_silence_s", "must be >= 0");
+        if (out.doctrine.arm_search_off_turns < 0.0) return Fail("doctrine.arm_search_off_turns", "must be >= 0");
+        if (const json::Value* r = d->Find("relocate_after_arm")) {
+            const json::Value* to = nullptr;
+            if (!Keys(*r, "doctrine.relocate_after_arm", {"to", "notes"}) || !RequireObject(*r, "doctrine.relocate_after_arm", "to", to) ||
+                !LoadPosition(*to, "doctrine.relocate_after_arm.to", frame_, out.doctrine.relocate_to)) {
+                return false;
+            }
+            if (!out.has_battery || !out.battery_drive_own) {
+                return Fail("doctrine.relocate_after_arm", "needs a battery that drives this vehicle (battery.drive_own)");
+            }
+            out.doctrine.relocate_after_arm = true;
         }
         if (out.doctrine.salvo < 1 || out.doctrine.salvo > 2) return Fail("doctrine.salvo", "must be 1 or 2");
         if (const json::Value* b = d->Find("search_bursts")) {
@@ -932,6 +981,37 @@ private:
         return true;
     }
 
+    // A target's "arms" (ArmCarrierDef): its warning receiver tells it what to fire at, so it needs one.
+    bool LoadArmCarrier(const json::Value& t, const std::string& tp, const ScenarioDef& out, ScenarioTarget& tg) {
+        const json::Value* a = t.Find("arms");
+        if (a == nullptr) return true;
+        const std::string p = Join(tp, "arms");
+        ArmCarrierDef& d = tg.arms;
+        double launch_km = 0.0, min_km = -1.0;
+        d.count = 1;
+        if (!Keys(*a, p, {"weapon", "count", "launch_range_km", "min_range_km", "interval_s", "aim", "turn_away", "notes"}) ||
+            !RequireString(*a, p, "weapon", d.weapon) || !OptionalInt(*a, p, "count", d.count) ||
+            !OptionalNumber(*a, p, "launch_range_km", launch_km) || !OptionalNumber(*a, p, "min_range_km", min_km) ||
+            !OptionalNumber(*a, p, "interval_s", d.interval_s) || !OptionalBool(*a, p, "turn_away", d.turn_away)) {
+            return false;
+        }
+        if (d.count < 1) return Fail(Join(p, "count"), "must be >= 1");
+        if (d.interval_s < 0.0) return Fail(Join(p, "interval_s"), "must be >= 0");
+        if (!out.has_em) return Fail(p, "needs own_unit.em: an anti-radiation missile is an EM platform");
+        if (tg.rwr.empty()) return Fail(p, "needs the target's rwr: it fires at what its warning receiver hears");
+        const int w = out.em.library.Arm(d.weapon);
+        if (w < 0) return Fail(Join(p, "weapon"), "'" + d.weapon + "' is not an anti-radiation missile of the EM libraries");
+        const em::ArmDef& def = out.em.library.arms[static_cast<std::size_t>(w)];
+        d.launch_range_m = launch_km > 0.0 ? launch_km * 1000.0 : def.max_range_m;
+        d.min_range_m = min_km >= 0.0 ? min_km * 1000.0 : def.min_range_m;
+        if (d.min_range_m >= d.launch_range_m) return Fail(Join(p, "min_range_km"), "must be below the launch range");
+        if (const json::Value* aim = a->Find("aim")) {
+            if (!LoadPosition(*aim, Join(p, "aim"), frame_, d.aim)) return false;
+            d.has_aim = true;
+        }
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         const json::Value* arr = OptionalArray(root, "", "targets");
         if (arr == nullptr) return message_.empty();
@@ -940,7 +1020,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -970,6 +1050,7 @@ private:
                     return Fail(Join(p, "rwr"), "'" + tg.rwr + "' is not a radar warning receiver");
                 }
             }
+            if (!LoadArmCarrier(t, p, out, tg)) return false;
             tg.evade_turn_rate_rad_s = DegToRad(evade_deg_s);
             const json::Value* start = nullptr;
             if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||
@@ -1517,7 +1598,7 @@ private:
     bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
             return Fail(p, "unknown battery order '" + kind_text +
-                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon)");
+                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon, relocate)");
         }
         if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
             !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle) ||
@@ -1547,6 +1628,11 @@ private:
                 if (!LoadPosition(route->items[i], Index(Join(p, "route"), i), frame_, v)) return false;
                 out.route.push_back(v);
             }
+        }
+        if (out.kind == BatteryOrder::Kind::Relocate) {
+            const json::Value* c = o.Find("covered");
+            if (c == nullptr) return Fail(Join(p, "covered"), "a change of position needs the new position (of the own vehicle)");
+            if (!LoadPosition(*c, Join(p, "covered"), frame_, out.covered)) return false;
         }
         if (out.kind == BatteryOrder::Kind::CombatFormation) {
             const json::Value* c = o.Find("covered");

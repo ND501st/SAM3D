@@ -599,6 +599,60 @@ SC_TEST("air war: a raid through the battery's sector becomes a scenario the loa
     SC_EXPECT(played >= 1);
 }
 
+SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation missiles, which the bridge reads back (A11)") {
+    for (const char* adversary : {"nato", "warsaw_pact"}) {
+        const AirWarData d = Load(adversary);
+        AirCampaign c;
+        SC_EXPECT(c.Init(d, 2));
+        c.Posture().emission = 0.9;  // a radiating battery draws the suppression
+        int raids = 0, with_arms = 0, em_fired = 0, abstract_fired = 0, unit_hit = 0;
+        while (c.Now() < 10.0 * 24.0 && with_arms < 2) {
+            if (!c.Advance(10.0 * 24.0)) continue;
+            const Package* p = c.PlayerMission();
+            RaidScenarioBuilder builder;
+            const RaidScenario rs = builder.Build(c, *p);
+            bool carriers = false;
+            for (const RaidAircraft& a : rs.manifest.aircraft) carriers = carriers || a.em_arms;
+            if (!rs.ok || !carriers) {
+                c.SkipPlayerMission();
+                continue;
+            }
+            ++raids;
+            ScenarioDef def;
+            ConsoleData console;
+            std::string e;
+            const bool loaded = LoadScenario(rs.json_text, kData, def, console, &e);
+            if (!loaded) std::printf("    %s\n", e.c_str());
+            SC_EXPECT(loaded);
+            if (!loaded) break;
+            bool written = false;
+            for (const ScenarioTarget& t : def.targets) written = written || t.arms.count > 0;
+            SC_EXPECT(written);
+            SC_EXPECT(def.em.library.Arm(std::string(adversary) == "nato" ? "agm88a_class_harm" : "kh58_class") >= 0);
+            ++with_arms;
+            ScenarioRunner runner(std::move(def), std::move(console));
+            MissionBridge bridge(rs.manifest, c.Data(), 5u);
+            while (!runner.Finished() && !bridge.UnitDestroyed() && runner.Time() < rs.manifest.end_s + 60.0) {
+                runner.Step(0.1);
+                bridge.Step(runner);
+            }
+            const PackageOutcome o = bridge.Finish(runner);
+            em_fired += runner.ArmsFired();
+            abstract_fired += o.arms_fired - runner.ArmsFired();
+            for (const auto& a : runner.ArmResults()) unit_hit += a.hit && a.hit_what == "unit" ? 1 : 0;
+            if (runner.EndReason() == "the vehicle was hit by an anti-radiation missile") SC_EXPECT(bridge.UnitDestroyed() && !o.radars_killed.empty());
+            c.CompletePlayerMission(o, rs.manifest.start_h + runner.Time() / 3600.0);
+        }
+        std::printf("    %s: %d raids with EM ARM carriers, %d EM ARMs fired (%d on the vehicle), %d by the bridge's model\n", adversary, with_arms,
+                    em_fired, unit_hit, abstract_fired);
+        SC_EXPECT(with_arms >= 1);
+        // Every carrier with a warning receiver fires through the EM layer: the bridge's model only for the others.
+        for (const AircraftType& t : d.faction.aircraft) {
+            if (t.arms > 0 && !t.rwr_em.empty()) SC_EXPECT(!t.arm_em.empty());
+        }
+    }
+}
+
 SC_TEST("air war: on the map a raid sets the battery and its dummies on open ground, and the runs at them follow") {
     std::string e;
     const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);

@@ -95,7 +95,7 @@
       "source": "fm100_2_3 (MiG-25 reconnaissance aircraft in the independent reconnaissance regiment); numbers placeholders", "confidence": "low" },
     { "id": "mig25bm", "name": "MiG-25BM", "roles": [ "sead", "hunter" ], "class": "fighter", "rcs_m2": 8, "cruise_mps": 500, "attack_mps": 550,
       "low_agl_m": 1000, "medium_alt_m": 12000, "max_turn_deg_s": 4, "night": true, "all_weather": true, "rwr_em": "generic_rwr",
-      "arms": 2, "arm_range_km": 40, "evasion": 0.75,
+      "arms": 2, "arm_range_km": 40, "arm_em": "kh58_class", "evasion": 0.75,
       "source": "mig25bm_refs (accepted 1981, 40 built 1982-85, the Kh-58 anti-radiation missile, meant to stay outside the air defence's lethal zone); numbers placeholders", "confidence": "low" },
     { "id": "yak28pp", "name": "Yak-28PP", "roles": [ "jammer" ], "class": "bomber", "rcs_m2": 7, "cruise_mps": 220, "attack_mps": 240,
       "low_agl_m": 300, "medium_alt_m": 6000, "max_turn_deg_s": 5, "standoff_jammer_em": "generic_soj_barrage_c", "evasion": 0.4,

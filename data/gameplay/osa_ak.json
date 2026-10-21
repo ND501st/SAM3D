@@ -51,6 +51,12 @@
     "notes": "How close the operator must set the azimuth line and range gate for ЦУ АЗ to capture; below min_altitude_m the radar can't hold angles (НЛЦ) and the TV must be used; below clutter_altitude_m it can't hold the target in the ground clutter unless the operator has СДЦ on (ssc.mti). em_capture_*: with the EM layer the auto-capture circuit takes the lock once the tracking radar has echoed on 22 of its last 40 looks (4 s; a local Pd of about 0.55). A raw lock starts on a lucky echo far out where Swerling I detection is still a few tenths (27 km for a 3 m2 target at 5 km altitude); this rule is tied to the one fitted calibration (Korovin's 23 km at 5 km altitude, Pd 0.5): it captures that target at 21 to 25 km. Raising the Pd does not help his 14 km at 50 m (the full-path Pd of a 50 m target is smooth: 0.5 at 22 km, 0.8 at 18 km). A model choice, not a published figure."
   },
 
+  "arm": {
+    "split_speed_mps": 300, "slow_near_km": 7, "slow_far_km": 20, "fast_near_km": 9, "fast_far_km": 24,
+    "source": "voenizdat_osa_1991 p263, Table 7.3 (read from the page image: the range to the target when the tracking transmitter's high voltage goes on, for the missile to meet it at the near / far edge of the zone; target speed over 300 m/s: 9 / 24 km, under 300 m/s: 7 / 20 km)",
+    "notes": "Firing under the threat of anti-radiation missiles (p262): the tracking transmitter radiates only from these ranges. The NPC commander uses the far-edge column (scenario doctrine arm_threat); the target's speed is what the senior operator's scope shows."
+  },
+
   "aim": {
     "azimuth_role": "senior_operator", "elevation_role": "deputy_commander", "range_role": "operator",
     "az_rate_deg_s": 20, "el_rate_deg_s": 8, "range_rate_mps": 4000,

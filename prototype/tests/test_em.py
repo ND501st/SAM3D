@@ -134,3 +134,27 @@ def test_optics_match_cpp():
     narrow = math.radians(1.44 * 0.75)
     assert em.lines_across(4.5, 20000.0, wide) == pytest.approx(4.5 / 20000.0 / 1.09273e-4, abs=1e-3)
     assert em.lines_across(1.5, 10000.0, narrow) == pytest.approx(1.5 / 10000.0 / 3.27819e-5, abs=1e-3)
+
+
+def test_arm_seeker_power_tuning_and_memory_point():
+    # simcore/tests/test_em_arm.cpp: the same hand calculations. One-way radar equation, 100 kW EIRP at 7 GHz, 10 km.
+    lam = em.C / 7.0e9
+    hand = 1.0e5 * lam * lam / (16.0 * math.pi ** 2 * 1.0e8)
+    assert em.one_way_received_power_w(1.0e5, 0.0, 7.0e9, 10000.0) == pytest.approx(hand, rel=1e-12)
+    assert hand == pytest.approx(1.1617e-8, rel=1e-3)
+    # Tuned +-10 % around the signal heard at launch; a band head hears its whole band.
+    assert em.arm_tuned_to(7.3e9, 2800.0, (2e9, 20e9), 7.0e9, 2800.0, 0.1, 0.1)
+    assert not em.arm_tuned_to(14.5e9, 2800.0, (2e9, 20e9), 7.0e9, 2800.0, 0.1, 0.1)
+    assert not em.arm_tuned_to(14.5e9, 2800.0, (2e9, 10e9), 0.0, 0.0, 0.0, 0.0)
+    # Lofted 10 degrees above the line to a point level with it: 10 degrees up, due north.
+    d = em.arm_launch_direction((0.0, -10000.0, 0.0), (0.0, 0.0, 0.0), math.radians(10.0))
+    assert d[0] == pytest.approx(0.0, abs=1e-12) and math.degrees(math.asin(d[2])) == pytest.approx(10.0, abs=1e-9)
+    # The memory point from 1000 m up, the line of sight 10 degrees down over flat ground: 1000 / tan 10 = 5671 m out,
+    # and the Earth's drop over that distance carries it about 14 m further.
+    los = em.direction_from_az_el(0.0, math.radians(-10.0))
+    p = em.arm_ground_point((0.0, 0.0, 1000.0), los, lambda x, y: 0.0)
+    flat = 1000.0 / math.tan(math.radians(10.0))
+    drop = flat * flat / (2.0 * 6371000.0) / math.tan(math.radians(10.0))
+    assert math.hypot(p[0], p[1]) == pytest.approx(flat + drop, abs=1.5)
+    # A line of sight above the horizon never meets the ground within 20 km.
+    assert em.arm_ground_point((0.0, 0.0, 1000.0), em.direction_from_az_el(0.0, 0.1), lambda x, y: 0.0, 20000.0) is None

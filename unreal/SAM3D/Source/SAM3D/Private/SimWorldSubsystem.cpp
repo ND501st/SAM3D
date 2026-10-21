@@ -20,6 +20,7 @@ namespace
 {
 	constexpr double MetersToCm = 100.0;
 	constexpr int32 MissileIdBase = 100000;  // display ids for engagement-model missiles
+	constexpr int32 ArmIdBase = 150000;      // display ids for anti-radiation missiles (EM layer, roadmap E6)
 	constexpr int32 GroundIdBase = 200000;   // display ids for the battery's vehicles and dummy positions
 
 	ESimEventType ToUnrealEventType(simcore::EventType Type)
@@ -1754,6 +1755,11 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 		{
 			Out.Add(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number), true, true,
 				M.position, M.velocity));
+		}
+		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed).
+		for (const simcore::EmSensorLink::ArmView& A : Runner->ArmsInFlight())
+		{
+			Out.Add(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
 		}
 	}
 	return Out;

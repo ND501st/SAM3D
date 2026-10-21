@@ -110,6 +110,15 @@ struct EngagementTuning {
     bool has_methods = false;
     double low_target_elevation_deg = 0.0;  // below it a low target needs a low-target method
     double gorka_max_agl_m = 0.0;           // the zoom-climb method is used at or below this height
+    // Under the threat of anti-radiation missiles (optional "arm"): the range at which the tracking transmitter's high
+    // voltage goes on, for the missile to meet the target at the near or the far edge of the zone, by the target's
+    // speed (voenizdat_osa_1991 Table 7.3).
+    bool has_arm_table = false;
+    double arm_split_speed_mps = 300.0;
+    double arm_track_on_slow_near_m = 0.0;
+    double arm_track_on_slow_far_m = 0.0;
+    double arm_track_on_fast_near_m = 0.0;
+    double arm_track_on_fast_far_m = 0.0;
     // Manual TV tracking (optional): the TV channel follows the wheels. Without it the servo drives the wheels onto the
     // target by itself once the TV has locked.
     bool has_tv_manual = false;
@@ -352,7 +361,7 @@ namespace detail {
 class TuningLoader : public ConsoleLoader {
 public:
     bool LoadTuning(const json::Value& root, EngagementTuning& t) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome",
+        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "arm", "search", "track", "aim", "missile", "outcome",
                              "kill_assessment", "group"}) ||
             !RequireString(root, "", "system_id", t.system_id)) {
             return false;
@@ -387,6 +396,18 @@ public:
                 return false;
             }
             t.has_methods = true;
+        }
+        if (root.Find("arm") != nullptr) {
+            if (!Group(root, "arm", {"split_speed_mps", "slow_near_km", "slow_far_km", "fast_near_km", "fast_far_km"}, g) ||
+                !Num(*g, "arm", "split_speed_mps", t.arm_split_speed_mps, 1.0) ||
+                !Num(*g, "arm", "slow_near_km", t.arm_track_on_slow_near_m, 0.1) || !Num(*g, "arm", "slow_far_km", t.arm_track_on_slow_far_m, 0.1) ||
+                !Num(*g, "arm", "fast_near_km", t.arm_track_on_fast_near_m, 0.1) || !Num(*g, "arm", "fast_far_km", t.arm_track_on_fast_far_m, 0.1)) {
+                return false;
+            }
+            for (double* m : {&t.arm_track_on_slow_near_m, &t.arm_track_on_slow_far_m, &t.arm_track_on_fast_near_m, &t.arm_track_on_fast_far_m}) {
+                *m *= 1000.0;
+            }
+            t.has_arm_table = true;
         }
         if (!Group(root, "search", {"clutter_altitude_m"}, g) ||
             !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0)) {

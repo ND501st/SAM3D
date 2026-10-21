@@ -82,6 +82,7 @@
     { "id": "order_jammer", "kind": "order", "from": "commander", "to": "deputy_commander", "ru": "По постановщику — метод Н!", "en": "At the jammer, method N!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "order_emcon_off", "kind": "order", "from": "commander", "to": "crew", "ru": "Излучение выключить!", "en": "Radiation off!", "priority": 0, "source": "sam3d", "confidence": "estimate" },
     { "id": "order_emcon_on", "kind": "order", "from": "commander", "to": "crew", "ru": "Излучение включить!", "en": "Radiation on!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "order_ssc_off", "kind": "order", "from": "commander", "to": "operator", "ru": "Высокое ССЦ выключить!", "en": "Tracking transmitter off!", "priority": 0, "source": "sam3d phrasing; the act: voenizdat_osa_1991 p262 (the tracking transmitter's high voltage off after the missile's burst, against ARMs)", "confidence": "estimate" },
     { "id": "order_emcon_tv", "kind": "order", "from": "commander", "to": "crew", "ru": "Работать без излучения!", "en": "Engage without radiating!", "priority": 1, "source": "sam3d, after samsim_osa p33-35", "confidence": "estimate" },
     { "id": "order_reload", "kind": "order", "from": "commander", "to": "crew", "ru": "Перезарядка!", "en": "Reload!", "priority": 1, "source": "sam3d; the vehicle de-energised for reloading: mon_2112_80 p63-68", "confidence": "estimate" },
     { "id": "order_refuel", "kind": "order", "from": "commander", "to": "crew", "ru": "Заправка!", "en": "Refuel!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
@@ -105,6 +106,8 @@
     { "id": "apu_locked", "kind": "report", "from": "operator", "to": "commander", "ru": "АПУ застопорено!", "en": "Launcher-antenna unit locked!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
     { "id": "apu_free", "kind": "report", "from": "operator", "to": "deputy_commander", "ru": "АПУ расстопорено!", "en": "Launcher-antenna unit unlocked!", "priority": 2, "source": "sam3d", "confidence": "estimate" },
     { "id": "contact", "kind": "report", "from": "senior_operator", "to": "crew", "ru": "Цель, азимут {azimuth}, дальность {range_km}!", "en": "Target, azimuth {azimuth}, range {range_km}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "arm_launch", "kind": "report", "from": "senior_operator", "to": "crew", "ru": "Пуск ПРР! Азимут {azimuth}!", "en": "ARM launch! Azimuth {azimuth}!", "priority": 0, "source": "sam3d phrasing; the sign: voenizdat_osa_1991 p262 (on the search PPI a smaller mark separates from the target's and moves faster, at zero parameter, toward the vehicle)", "confidence": "estimate" },
+    { "id": "arm_turn_away", "kind": "report", "from": "senior_operator", "to": "crew", "ru": "Цель, азимут {azimuth}, отвернула — возможен пуск ПРР!", "en": "Target at azimuth {azimuth} turned away: a possible ARM launch!", "priority": 0, "source": "sam3d phrasing; the sign: voenizdat_osa_1991 p262 (a manoeuvre, or a target coming at the battery at a crossing parameter near zero, is a sign of possible ARM use)", "confidence": "estimate" },
     { "id": "contact_lost", "kind": "report", "from": "senior_operator", "to": "crew", "ru": "Цель потерял!", "en": "Lost the target!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "jamming", "kind": "report", "from": "senior_operator", "to": "crew", "ru": "Помеха, азимут {azimuth}!", "en": "Jamming, azimuth {azimuth}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "iff_friend", "kind": "report", "from": "senior_operator", "to": "commander", "ru": "Свой!", "en": "Friend!", "priority": 0, "source": "sam3d", "confidence": "estimate" },
@@ -146,6 +149,7 @@
     { "id": "report_launch", "kind": "radio", "from": "any", "to": "battery", "ru": "{callsign}: пуск по цели {number}!", "en": "{callsign}: launch at target {number}!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "report_result", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign}: цель {number} поражена, израсходовано {spent}!", "en": "{callsign}: target {number} destroyed, {spent} spent!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
     { "id": "request_fuel", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign}: топливо на исходе, прошу заправщик!", "en": "{callsign}: low on fuel, request the fuel truck!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
+    { "id": "report_arm_attack", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign}: пуск ПРР, азимут {azimuth}!", "en": "{callsign}: ARM launch, azimuth {azimuth}!", "priority": 0, "source": "sam3d phrasing; the battery commander's map carries the ARM launch lines (voenizdat_osa_1991 p244), a position is changed only on the regiment commander's order (p238): the attack is reported up", "confidence": "estimate" },
     { "id": "request_tzm", "kind": "radio", "from": "commander", "to": "battery", "ru": "{callsign}: ракет нет, прошу ТЗМ!", "en": "{callsign}: out of missiles, request the TZM!", "priority": 1, "source": "sam3d", "confidence": "estimate" },
 
     { "id": "air_alert", "kind": "warning", "from": "any", "to": "crew", "ru": "Воздух!", "en": "Air!", "priority": 0, "source": "sam3d", "confidence": "estimate" },
@@ -198,6 +202,7 @@
     { "callout": "order_emcon_on", "procedures": [ { "station": "senior_operator", "procedure": "acquire_with_soc" } ], "source": "sam3d", "confidence": "estimate" },
     { "callout": "order_drop_target", "needs": ["tracked"], "source": "sam3d: the track is let go (the operator's and the senior operator's wheels off the target); no switch of its own", "confidence": "estimate" },
     { "callout": "order_emcon_off", "task": "silent", "procedures": [ { "station": "senior_operator", "procedure": "stop_search" } ], "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_ssc_off", "procedures": [ { "station": "operator", "procedure": "ssc_tx_off" } ], "source": "voenizdat_osa_1991 p262 (the tracking transmitter's high voltage off after the burst)", "confidence": "medium" },
     { "callout": "order_emcon_tv", "procedures": [ { "station": "senior_operator", "procedure": "emcon_tv_azimuth" }, { "station": "deputy_commander", "procedure": "emcon_tv_engagement" } ], "source": "sam3d, after samsim_osa p33-35", "confidence": "estimate" }
   ],
 

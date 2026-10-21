@@ -65,10 +65,16 @@ Stepped after every `ScenarioRunner::Step`, from the runner's public state only:
   point drops its load (photographs, for recce); it lands `scenario.weapon_fall_s` later where it was aimed, scattered by
   a couple of hundred metres; our vehicle, the battery's other vehicles, dummies and the objects inside the scenario take
   their chances (`scenario.bomb_lethal_m`, `bomb_pk_vehicle`, `rocket_pk_vehicle`, `strike.hit_chance`);
-- **ARMs**: a SEAD or hunter aircraft in ARM range while our search or tracking transmitter radiates fires (one per
-  10 s); the ARM flies at `scenario.arm_speed_mps`; it hits by `scenario.arm_pk` if the radar radiates when it arrives,
-  or radiated within `scenario.arm_memory_s` and the seeker has memory; otherwise it is logged as lost ("the radar went
-  silent"); a hit puts our vehicle out of action;
+- **ARMs** (A11, 20 Oct 2026): with the EM layer a SEAD or hunter aircraft with a warning receiver carries EM ARMs, the
+  target's `"arms"` written by the generator (its type's `arm_em`, `data/air_war/faction_*.json`: the F-4G's HARM class,
+  the F-4E's Shrike class, the MiG-25BM's Kh-58 class; default the HARM class with `arm_memory`, else the Shrike class),
+  aimed where the enemy's intelligence has the battery, within the type's `arm_range_km`. The runner fires and flies
+  them (`docs/EM_ARCHITECTURE.md` §35); the bridge reads their ends from `ScenarioRunner::ArmResults`: one on our vehicle
+  kills the radar and puts the vehicle out of action, one on a dummy destroys it, a miss counts the radar suppressed.
+  For an aircraft without (no EM layer, no warning receiver) the gameplay model stays: in ARM range while our search or
+  tracking transmitter radiates it fires (one per 10 s); the ARM flies at `scenario.arm_speed_mps`; it hits by
+  `scenario.arm_pk` if the radar radiates when it arrives, or radiated within `scenario.arm_memory_s` and the seeker has
+  memory; otherwise it is logged as lost ("the radar went silent");
 - **what the enemy learns**: every second our radars radiate; every launch seen by an enemy aircraft within
   `scenario.revealed_by_launch_m`.
 
@@ -78,5 +84,7 @@ away, damage, dummies destroyed, missiles spent, ARMs fired, emissions, sighting
 `AirCampaign::CompletePlayerMission` applies it and resolves the rest of the raid (outside the circle, after the
 mission) abstractly without the battery.
 
-Roadmap E6 will make the ARM an EM missile and give the crew its ARM drill (stop emitting, relocate, bursts); until then
-the NPC crew keeps radiating and is often hit by a Pact or NATO suppression package. The player can switch off.
+The crew fights the ARMs by its drill (roadmap E6): a senior operator of class2 or better calls the signs of a launch on
+his scope and the commander has every transmitter off once the missile in the air has burst. The generated raids don't
+set the doctrine `arm_threat` (the least emission) or `relocate_after_arm`: the battery's posture gives `search_bursts`
+as before. The player can switch off too.
