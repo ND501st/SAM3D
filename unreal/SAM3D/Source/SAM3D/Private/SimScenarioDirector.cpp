@@ -164,6 +164,11 @@ void ASimScenarioDirector::SpawnPlayerVehicle(USimWorldSubsystem* Sim)
 	{
 		Vehicle->StartInSeat(StartSeat);
 	}
+	// -SimInstructor: start with the trainer's instructor panel open (roadmap 10.3; F7 in the game).
+	if (Vehicle != nullptr && FParse::Param(FCommandLine::Get(), TEXT("SimInstructor")))
+	{
+		Vehicle->SetInstructorOpen(true);
+	}
 	// -SimCabinShots=<folder>: photograph every seat and instrument of the cabin (after -SimShotDelay= seconds, default
 	// 20), then quit. With -game -RenderOffscreen, a run checked from its pictures alone.
 	FString ShotFolder;

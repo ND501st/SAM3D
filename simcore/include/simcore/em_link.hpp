@@ -28,6 +28,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -321,6 +322,30 @@ public:
 
     // The unit's antenna position now (the hull moved). Its velocity follows from the movement between steps.
     void SetUnit(const Vec3& position) { unit_ = position; }
+
+    // The instructor switches a target's jammer on or off (roadmap 10.3, instructor.hpp): from then on it follows his
+    // switch, not the scenario's times. False if the target carries none.
+    bool SetJammerSwitch(const std::string& target_id, bool on) {
+        if (!CarriesJammer(target_id)) return false;
+        jam_switch_[target_id] = on;
+        return true;
+    }
+    bool CarriesJammer(const std::string& target_id) const {
+        for (const EmJammerDef& j : effects_.jammers) {
+            if (!target_id.empty() && j.target_id == target_id) return true;
+        }
+        return false;
+    }
+    // Is its jammer radiating now (by the scenario's times or the instructor's switch)?
+    bool TargetJamming(const std::string& target_id) const {
+        for (std::size_t i = 0; i < effects_.jammers.size(); ++i) {
+            if (effects_.jammers[i].target_id != target_id || jammer_ids_[i] == 0) continue;
+            for (const em::JammerState& js : world_.Scene().jammers) {
+                if (js.id == jammer_ids_[i] && js.on) return true;
+            }
+        }
+        return false;
+    }
 
     // A target as it is now. Added on first sight; once not alive it stops echoing.
     void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly) {
@@ -828,7 +853,9 @@ private:
             if (jammer_ids_[i] == 0) continue;
             em::JammerState* js = world_.Scene().FindJammer(jammer_ids_[i]);
             if (js == nullptr) continue;
-            const bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            const auto sw = j.target_id.empty() ? jam_switch_.end() : jam_switch_.find(j.target_id);
+            if (sw != jam_switch_.end()) on = sw->second;  // the instructor's switch
             if (on != js->on) {
                 js->on = on;
                 world_.Scene().Log(on ? em::EmEventKind::JammerOn : em::EmEventKind::JammerOff, js->id, 0, j.jammer_id);
@@ -983,6 +1010,7 @@ private:
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
     std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
+    std::map<std::string, bool> jam_switch_;             // target id -> the instructor's jammer switch
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {

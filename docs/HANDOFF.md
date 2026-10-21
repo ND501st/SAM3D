@@ -109,6 +109,15 @@ a `ProcedureTracker` so the debrief records early and out-of-order actions.
 | Research review | Done (PR #8): research file, briefing, re-plan; the user's video transcript analysed (Korovin's «Техника и вооружение» series added as a tier-1 source) |
 | **6 Accuracy pass** | **6.1 done** (branch `feature/five-man-crew`): five seats, one seat per procedure, aiming split per wheel, red start-position dots. Next: 6.2 |
 
+### The trainer's instructor (18 October 2026)
+
+Roadmap 10.3: the 9Ф632 trainer's instructor seat (`flak11`, ePap). `simcore/instructor.hpp` and
+`ScenarioRunner::Instruct` / `InstructorEnter` / `InstructorPicture`: he takes up to two targets and turns them, sends
+them up or down, sets their speed, makes them jink, switches their pods, lets them go back to their routes, and enters
+new targets. Scripted with the trigger action `"instructor"` (`osa_trainer.json`); in Unreal the instructor panel (F7).
+Tests `test_instructor.cpp` (6) and `SAM3D.Instructor.Panel`. Built in a separate worktree (`C:/dev/SAM3D-p10`) while the
+enemy-air-command session builds in the main one.
+
 ### Ranges and history (18 October 2026)
 
 Roadmap 10.1-10.2: six scenarios in the missions menu's "Ranges and history" group (`data/scenarios/README.md`): range

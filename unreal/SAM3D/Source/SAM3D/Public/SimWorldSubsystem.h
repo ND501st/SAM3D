@@ -407,6 +407,45 @@ struct SAM3D_API FSimMission
 	TArray<FSimMissionVehicle> Vehicles;
 };
 
+/** A target as the trainer's instructor sees it (roadmap 10.3): the truth, for his seat only. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimInstructorTrack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	FString Name;
+
+	/** Range from the vehicle, km, and true azimuth from north, degrees. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double RangeKm = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double AzimuthDeg = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double HeadingDeg = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double SpeedMps = 0.0;
+
+	/** Height above the ground, m. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double AglM = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	bool bHeld = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	bool bHasJammer = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	bool bJamming = false;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimDebriefEntry, const FSimDebriefEntry&, Entry);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimTerrainReady, bool, bSucceeded);
@@ -619,6 +658,27 @@ public:
 	/** The order menu: give an order if it can be carried out; otherwise the seat answers and OutReason says why. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	bool TryCrewOrder(const FString& OrderId, FString& OutReason);
+
+	// ------------------------------------------------------------------ the trainer's instructor (roadmap 10.3)
+
+	/** The instructor's seat works where the simulation runs (single player, or the server); a mirror can't. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	bool CanInstruct() const { return Runner != nullptr && !IsMirrorOnly(); }
+
+	/** Every target in the sky as it truly is, nearest first. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	TArray<FSimInstructorTrack> GetInstructorPicture() const;
+
+	/**
+	 * One order: Kind is take, release, turn (Value: the true heading, deg), height (m above the ground), speed (m/s),
+	 * evade or jam (Value 1 on, 0 off). The trainer holds two targets at a time. False, and OutWhy, if it can't be done.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Instructor")
+	bool Instruct(const FString& Target, const FString& Kind, double Value, FString& OutWhy);
+
+	/** Enters a training drone into the air picture, RangeKm out on a true bearing, flying past the vehicle. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Instructor")
+	bool InstructorEnterDrone(double BearingDeg, double RangeKm, double HeightM, FString& OutId, FString& OutWhy);
 
 	/** Whether a task of the crew data holds now (e.g. "ready_halted"). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")

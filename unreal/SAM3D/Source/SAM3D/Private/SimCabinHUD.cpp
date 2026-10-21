@@ -34,6 +34,10 @@ void ASimCabinHUD::DrawHUD()
 			DrawMissionMenu(Sim, Vehicle);
 			return;
 		}
+		if (Vehicle->IsInstructorOpen())
+		{
+			DrawInstructor(Sim, Vehicle);
+		}
 		if (Sim->IsScenarioFinished())
 		{
 			UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
@@ -83,6 +87,47 @@ void ASimCabinHUD::DrawHUD()
 	if (Sim != nullptr && Vehicle->IsCommandPost())
 	{
 		DrawPost(Sim, Vehicle, Font);
+	}
+}
+
+// The trainer's instructor panel (roadmap 10.3): every target in the sky as it is, the ones he holds, his keys.
+void ASimCabinHUD::DrawInstructor(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle)
+{
+	UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const FLinearColor Amber(1.0f, 0.78f, 0.35f);
+	const FLinearColor Paper(0.93f, 0.92f, 0.86f);
+	const FLinearColor Dim(0.62f, 0.64f, 0.58f);
+	const TArray<FSimInstructorTrack> Picture = Sim->GetInstructorPicture();
+	const float W = FMath::Min(Canvas->ClipX - 40.0f, 760.0f);
+	const float X = Canvas->ClipX - W - 20.0f;
+	float Y = 20.0f;
+	const float Rows = static_cast<float>(FMath::Max(1, Picture.Num()));
+	DrawRect(FLinearColor(0.015f, 0.02f, 0.015f, 0.78f), X - 10.0f, Y - 8.0f, W + 20.0f, 96.0f + Rows * 20.0f);
+	DrawText(TEXT("Instructor (9F632 trainer): two targets at a time"), Amber, X, Y, Medium);
+	Y += 28.0f;
+	if (Picture.Num() == 0)
+	{
+		DrawText(TEXT("No target in the sky"), Dim, X, Y, Small);
+		Y += 20.0f;
+	}
+	for (const FSimInstructorTrack& T : Picture)
+	{
+		const bool bPicked = T.Id == Vehicle->GetInstructorPick();
+		const FString Row = FString::Printf(TEXT("%s %-4s %5.1f km %03.0f   heading %03.0f   %5.0f m   %3.0f m/s%s%s   %s"),
+			bPicked ? TEXT(">") : TEXT(" "), *T.Id, T.RangeKm, T.AzimuthDeg, T.HeadingDeg, T.AglM, T.SpeedMps,
+			T.bHeld ? TEXT("   HELD") : TEXT(""), T.bHasJammer ? (T.bJamming ? TEXT("   jammer ON") : TEXT("   jammer off")) : TEXT(""), *T.Name);
+		DrawText(Row, bPicked ? Amber : Paper, X, Y, Small);
+		Y += 20.0f;
+	}
+	Y += 6.0f;
+	DrawText(TEXT("Tab target   Left/Right turn 30   Up/Down height   -/= speed   E manoeuvre   J jammer   R let go   N new drone   F7 close"),
+		Dim, X, Y, Small);
+	Y += 20.0f;
+	const FString Feedback = Vehicle->GetInstructorFeedback();
+	if (!Feedback.IsEmpty())
+	{
+		DrawText(Feedback, Amber, X, Y, Small);
 	}
 }
 

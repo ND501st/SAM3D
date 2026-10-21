@@ -216,6 +216,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
 	bool IsMissionMenuOpen() const { return bMissionMenuOpen; }
 
+	/**
+	 * The trainer's instructor panel (roadmap 10.3): F7 opens and closes it where the simulation runs. While it is open
+	 * it has the keys: Tab the next target, Left/Right turn it 30 degrees, Up/Down send it up or down, -/= its speed,
+	 * E a manoeuvre, J its jammer, R let it go, N enter a training drone ahead of the vehicle.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Instructor")
+	void SetInstructorOpen(bool bOpen);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	bool IsInstructorOpen() const { return bInstructorOpen; }
+
+	/** The target the panel has picked ("" for none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	FString GetInstructorPick() const { return InstructorPick; }
+
+	/** What his last order did, or why it couldn't be done. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	FString GetInstructorFeedback() const { return InstructorFeedback; }
+
 	/** Restart and the missions menu are single player (a networked game only resumes or quits). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
 	bool CanLeaveMission() const;
@@ -353,6 +372,10 @@ private:
 	FString PendingSeat;
 	bool bMissionMenuOpen = false;
 	void HandleMissionMenu(APlayerController* Pc);
+	bool bInstructorOpen = false;
+	FString InstructorPick;
+	FString InstructorFeedback;
+	void HandleInstructor(APlayerController* Pc, USimWorldSubsystem* Sim);
 	int32 Station = 0;
 	FString StationLabel;
 	/** Head turn from the station's view direction (degrees). */

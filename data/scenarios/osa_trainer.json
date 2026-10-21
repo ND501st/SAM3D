@@ -1,0 +1,52 @@
+{
+  "scenario_id": "osa_trainer",
+  "name": "The 9Ф632 trainer: the instructor changes the targets as the crew works",
+  "description": "A drill in the style of the 9Ф632 trainer (roadmap 10.3): the instructor enters the air picture and changes up to two targets' behaviour while the crew works. Here his drill is scripted: a drone comes straight in and he turns it away across the zone; he brings it back low, under the search radar's clutter height; then a strike aircraft comes in and he switches on its noise pod for the jamming drill. The NPC commander runs the crew; take any seat, or his. In the game the instructor can also be a player (the instructor panel).",
+  "source": "sam3d", "confidence": "estimate",
+  "notes": "The trainer: flak11 and ePap (samsim_thread), docs/research/OSA_RESEARCH_2026-10.md section 7: a Ural-375 with every workplace of the vehicle and an instructor's seat; the instructor enters the air picture and changes up to two targets' behaviour live; ECCM drills. The drill's script, the targets' numbers and the pod (em/generic.json, a placeholder) are SAM3D's. The pod stays off until the instructor switches it on.",
+  "seed": 9,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "environment": { "visibility_km": 30, "daylight": true },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
+            "extra_libraries": ["em/generic.json"],
+            "jammers": [
+              { "jammer": "generic_selfscreen_noise_ku", "target": "t2", "on_at_s": 100000,
+                "notes": "Off until the instructor switches it on." }
+            ] },
+    "readiness": "deployed",
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class2" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "t1", "name": "Training target, drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "size_m": 4.0,
+      "start": { "east_m": 1000, "north_m": 40000, "up_m": 2000 }, "waypoints": [ { "east_m": 1000, "north_m": -30000, "up_m": 2000 } ],
+      "speed_mps": 150, "rcs_m2": 1.0, "appear_at_s": 30,
+      "notes": "Straight in, until the instructor takes it. Placeholder numbers." },
+    { "id": "t2", "name": "Training target, strike aircraft with a noise pod (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": -12000, "north_m": 45000, "up_m": 1500 }, "waypoints": [ { "east_m": -2000, "north_m": -30000, "up_m": 1500 } ],
+      "speed_mps": 220, "rcs_m2": 3.0, "appear_at_s": 330,
+      "notes": "In from the north-north-west. Placeholder numbers." }
+  ],
+  "triggers": [
+    { "id": "turn_away", "when": { "target": "t1", "target_within_m": 20000 },
+      "do": [ { "instructor": "turn", "target": "t1", "to": 270 } ] },
+    { "id": "back_low", "when": { "after_s": 260 },
+      "do": [ { "instructor": "height", "target": "t1", "to": 100 }, { "instructor": "turn", "target": "t1", "to": 132 } ] },
+    { "id": "pod_on", "when": { "target": "t2", "target_within_m": 30000 },
+      "do": [ { "instructor": "jam", "target": "t2", "to": 1 } ] }
+  ],
+  "end": { "time_limit_s": 900, "when_targets_gone": true }
+}
