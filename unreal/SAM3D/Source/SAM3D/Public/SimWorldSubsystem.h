@@ -8,6 +8,7 @@
 
 class ACesium3DTileset;
 class USimKnowledgeComponent;
+class USimCrewSeatComponent;
 class ACesiumGeoreference;
 
 /** Snapshot of one simulated entity, converted to Unreal units (cm, degrees). */
@@ -120,7 +121,9 @@ enum class ESimPlayerActionResult : uint8
 	/** Not moved: a closed cover or lock, or a key switch jumping a position. */
 	Blocked,
 	/** Not moved: no such control or position, or no scenario running. */
-	Invalid
+	Invalid,
+	/** Multiplayer crew, network client: sent to the server; the console shows the result when the next snapshot comes. */
+	Sent
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
@@ -374,6 +377,33 @@ public:
 	/** The EM scene players' knowledge comes from: the scenario's EM layer, else the EM demo (null: none). */
 	const simcore::em::EmScene* GetActiveEmScene() const;
 
+	// ------------------------------------------------------------------ multiplayer crew
+
+	/** Server: players' seat components (console snapshots go to each). */
+	void RegisterCrewSeat(USimCrewSeatComponent* Seat);
+	void UnregisterCrewSeat(USimCrewSeatComponent* Seat);
+	/** The local player's seat (cabin clicks go through it when it holds a seat). */
+	void SetLocalCrewSeat(USimCrewSeatComponent* Seat);
+	void ClearLocalCrewSeat(USimCrewSeatComponent* Seat);
+	/** Server: a player takes or leaves a crew seat (a console station id). */
+	bool TakeCrewSeat(const FString& Role, const FString& Player);
+	void LeaveCrewSeat(const FString& Role);
+	/** Server: a seated player's control move / wheel turn. True if the control moved; otherwise Why says why not. */
+	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why);
+	bool SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why);
+	/** Network client: overwrite the local console with the server's snapshot if it is newer than Seq. */
+	bool ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq);
+	/** Server: console snapshots and seat procedures to seated players (called after the sim steps). */
+	void PumpConsole();
+
+	/** Who holds a crew seat ("" the NPC). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetSeatHolder(const FString& Role) const;
+
+	/** True on a network client: the simulation runs on the server, and this machine only mirrors it. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	bool IsMirrorOnly() const;
+
 	/** The node a knowledge component with NodeId 0 sees: the scenario unit's own node (0: none). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Knowledge")
 	int32 GetDefaultKnowledgeNode() const;
@@ -465,4 +495,9 @@ private:
 	TUniquePtr<simcore::em::KnowledgeReplicator> Replicator;
 	TArray<TWeakObjectPtr<USimKnowledgeComponent>> KnowledgeClients;
 	double LastKnowledgeSimTime = -1.0;
+
+	// Multiplayer crew.
+	TArray<TWeakObjectPtr<USimCrewSeatComponent>> CrewSeats;
+	TWeakObjectPtr<USimCrewSeatComponent> LocalCrewSeat;
+	double LastConsoleSimTime = -1.0;
 };

@@ -111,4 +111,6 @@ See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass: all of 6.0-6.8 do
 Modelling equipment from photographs: always follow `docs/MODELLING_FROM_PHOTOS.md` (skill `model-from-photos`): flatten the
 photo to mm, trace in 3D with heights, overlap tests, then check the model rendered from the photo's own camera.
 
+Multiplayer: the server simulates, clients mirror; players take crew seats (`docs/MULTIPLAYER.md`).
+
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).
