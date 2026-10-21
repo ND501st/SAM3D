@@ -170,6 +170,24 @@ SC_TEST("em arm: a decoy on the radar's parameters 150 m away draws the burst of
     SC_EXPECT(radar_hits <= 1);
 }
 
+SC_TEST("em arm: a launch that moves the platforms in memory still starts at the carrier and names it") {
+    ArmRange a(3);
+    SC_EXPECT(a.ok);
+    if (!a.ok) return;
+    EmScene& s = a.world.Scene();
+    s.platforms.shrink_to_fit();  // full: the missile's platform moves them all
+    const Vec3 carrier = s.FindPlatform(a.shooter)->position;
+    const int id = a.world.FireArm(a.shooter, "agm88a_class_harm", s.FindPlatform(a.radar_platform)->position, 7.0e9, 2800.0);
+    SC_EXPECT(id != 0);
+    const ArmState* arm = s.FindArm(id);
+    SC_EXPECT(arm != nullptr);
+    if (arm == nullptr) return;
+    const Platform* m = s.FindPlatform(arm->platform_id);
+    SC_EXPECT(m != nullptr && (m->position - carrier).Length() < 1e-9);
+    SC_EXPECT_NEAR(arm->loft_s, 0.5 * (s.FindPlatform(a.radar_platform)->position - carrier).Length() / s.lib.arms[static_cast<std::size_t>(arm->def_index)].speed_mps, 1e-9);
+    SC_EXPECT(!s.events.empty() && s.events.back().text.rfind("Carrier fires ", 0) == 0);
+}
+
 SC_TEST("em arm: the defenders' radar sees the ARM as a small fast echo") {
     ArmRange a(2);
     const EmScene& s = a.world.Scene();
