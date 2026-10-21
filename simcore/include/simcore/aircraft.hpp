@@ -1,7 +1,7 @@
 // simcore/aircraft.hpp — simple waypoint-following aircraft (targets).
 //
-// Deliberately simple: constant speed, turn-rate-limited steering toward the
-// next waypoint. Replace with an energy-based model (thrust/drag/g limits)
+// Deliberately simple: constant airspeed, turn-rate-limited steering toward the
+// next waypoint, drifting with the wind (weather.hpp). Replace with an energy-based model (thrust/drag/g limits)
 // once the engagement loop works end to end.
 #pragma once
 
@@ -44,9 +44,13 @@ inline bool WaypointInsideTurn(const Aircraft& a, const Vec3& dir, const Vec3& w
     return false;
 }
 
-inline void StepAircraft(Aircraft& a, double dt) {
+// One step along the waypoints at constant airspeed. `wind_mps` (ENU, the way the air moves) carries the aircraft
+// with it: `velocity` is over the ground, and the pilot crabs into the wind so the track over the ground still runs to
+// the next waypoint (the wind triangle: the air vector a with |a| = speed and a + wind along the track).
+inline void StepAircraft(Aircraft& a, double dt, const Vec3& wind_mps = Vec3{}) {
     if (!a.alive) return;
-    Vec3 dir = a.velocity.Normalized();
+    const bool windy = wind_mps.LengthSquared() > 0.0;
+    Vec3 dir = (windy ? a.velocity - wind_mps : a.velocity).Normalized();  // where the nose points
     if (dir.LengthSquared() == 0.0) dir = Vec3{0.0, 1.0, 0.0};
 
     if (a.next_waypoint < a.waypoints.size()) {
@@ -54,10 +58,16 @@ inline void StepAircraft(Aircraft& a, double dt) {
         if (to_wp.Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, dir, a.waypoints[a.next_waypoint])) {
             ++a.next_waypoint;
         } else {
-            dir = TurnToward(dir, to_wp.Normalized(), a.max_turn_rate_rad_s * dt);
+            Vec3 want = to_wp.Normalized();
+            if (windy) {
+                const double gw = Dot(want, wind_mps);
+                const double disc = gw * gw - wind_mps.LengthSquared() + a.speed_mps * a.speed_mps;
+                if (disc > 0.0 && a.speed_mps > 0.0) want = (want * (gw + std::sqrt(disc)) - wind_mps) / a.speed_mps;
+            }
+            dir = TurnToward(dir, want.Normalized(), a.max_turn_rate_rad_s * dt);
         }
     }
-    a.velocity = dir * a.speed_mps;
+    a.velocity = dir * a.speed_mps + (windy ? wind_mps : Vec3{});
     a.position += a.velocity * dt;
 }
 

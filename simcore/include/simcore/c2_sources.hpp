@@ -86,6 +86,7 @@ struct C2Outage {
     double from_s = 0.0;
     double to_s = 1e18;  // open-ended unless set
     std::string reason;
+    bool interference = false;  // noise on the net rather than nobody sending (a set's АПЧ off may ride it out: radio_sets.hpp)
 };
 
 // A radar of the regiment's control battery that feeds the PU-12M (roadmap 7.1): a target is on the PU-12's board only if
@@ -97,6 +98,7 @@ struct RegimentRadar {
     Vec3 position;        // ENU (east, north)
     double max_range_m = 0.0;
     double antenna_height_m = 0.0;
+    int switch_position = 0;  // the PU-12M's primary-source switch position for this radar's type (rwd_mb3 pu12e; 0: any)
 };
 
 struct RegimentRadarLibrary {
@@ -231,7 +233,8 @@ public:
             const json::Value& e = list->items[i];
             const std::string p = "radars[" + std::to_string(i) + "]";
             RegimentRadar r;
-            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "notes"}) || !RequireString(e, p, "id", r.id) ||
+            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "switch_position", "notes"}) ||
+                !RequireString(e, p, "id", r.id) ||
                 !RequireString(e, p, "display_name", r.name)) {
                 return false;
             }
@@ -241,6 +244,12 @@ public:
             cite_path_ = p;
             if (!Cited(e, "max_range_m", r.max_range_m) || !Cited(e, "antenna_height_m", r.antenna_height_m)) return false;
             if (r.max_range_m <= 0.0) return Fail(Join(p, "max_range_m"), "must be > 0");
+            if (e.Find("switch_position") != nullptr) {
+                double pos = 0.0;
+                if (!Cited(e, "switch_position", pos)) return false;
+                if (pos < 1.0 || pos > 3.0 || pos != std::floor(pos)) return Fail(Join(p, "switch_position"), "1, 2 or 3");
+                r.switch_position = static_cast<int>(pos);
+            }
             lib.types.push_back(std::move(r));
         }
         return true;
@@ -340,6 +349,9 @@ public:
         int azimuth_mils = 0;
         double range_m = 0.0;
         int height_hm = 0;
+        // A group's centre the post could not resolve, and the selection rule to pick the aircraft by (BoardMark).
+        bool group_centre = false;
+        int rule = 0;
     };
 
     // What a display shows for one source.
@@ -515,6 +527,23 @@ public:
         }
         pending_ = id;
         events_.push_back({t, by, id, "changes to " + to->def.short_name + tail});
+        return true;
+    }
+
+    // The preset a source is on (1-4; 0: none).
+    int PresetOfSource(const std::string& id) const { return PresetOf(id); }
+    // A source's net moved to another frequency (its main station's order, radio_nets.hpp): it is heard now only on
+    // `preset`, until the crew turns a set to it; what it says meanwhile on the old preset is not there to hear.
+    bool MoveSource(const std::string& id, int preset, double t) {
+        if (Find(id) == nullptr || preset < 1 || preset > kPresets) return false;
+        if (presets_[static_cast<std::size_t>(preset - 1)] == id) return false;
+        for (std::string& slot : presets_) {
+            if (slot == id) slot.clear();
+        }
+        presets_[static_cast<std::size_t>(preset - 1)] = id;
+        const std::string now = off_net_ ? std::string() : presets_[static_cast<std::size_t>(sets_[listening_].preset - 1)];
+        if (now != active_) active_ = now;
+        events_.push_back({t, "net", id, "now on preset " + std::to_string(preset)});
         return true;
     }
 
@@ -815,8 +844,9 @@ private:
             std::snprintf(detail, sizeof(detail), "designation %04d: azimuth %02d-%02d, range %.0f km, height %d hm", m.number,
                           d.azimuth_mils / 100, d.azimuth_mils % 100, d.range_m / 1000.0, m.height_hm);
             std::string text = detail;
+            if (m.group_centre) text += ", a group's centre: rule " + std::to_string(m.rule);
             if (s.def.id != policy_.primary) text += " [" + s.def.short_name + "]";
-            events_.push_back({t, "Commander", m.target_id, text, m.number, d.azimuth_mils, d.range_m, m.height_hm});
+            events_.push_back({t, "Commander", m.target_id, text, m.number, d.azimuth_mils, d.range_m, m.height_hm, m.group_centre, m.rule});
         }
     }
 

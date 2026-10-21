@@ -1,0 +1,111 @@
+{
+  "faction_id": "rebels",
+  "name": "The Rava Liberation Front's air wing",
+  "short_name": "Rava Front",
+  "tier": "inferior",
+  "description": "A rebel faction at the start of a civil war, with light air power: crop sprayers and light aircraft dropping home-made bombs, two transport helicopters with door guns and rocket pods, a couple of light jets that defected. Planned the night before by a handful of pilots. No suppression at all: night, low flying and avoiding known guns are the only defence. A network of sympathisers tells it where things are; nothing else does. Every airframe is irreplaceable; every raid is also propaganda.",
+  "front": "rebels",
+  "source": "croatia_1991_migflug (an improvised air arm of a civil war: An-2s and agricultural, sport and ultralight aircraft with home-made bombs, 1991); every number a game value",
+  "confidence": "low",
+  "notes": "The Rava Liberation Front is fictional. The Croatian air arm of 1991 only gives the shape (later than our period). Every aircraft number is a PLACEHOLDER.",
+  "em_libraries": [],
+  "callsigns": [ "Sokol", "Orao", "Vila", "Jastreb", "Kobac", "Lastavica" ],
+  "doctrine": {
+    "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
+    "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3,
+    "source": "game values: ad hoc planning by a few pilots, night harassment (croatia_1991_migflug: bombs on positions around a besieged town)",
+    "confidence": "estimate",
+    "phases": [
+      { "id": "harassment", "name": "harassment, supply and propaganda",
+        "apportion": { "harassment": 0.4, "helo_raid": 0.25, "strike": 0.2, "recce": 0.15 } }
+    ],
+    "packages": {
+      "strike": { "main_flights": 1, "flight_size": 2, "aircraft": [ "galeb", "utva75", "an2_bomber" ], "profiles": [ "low" ], "day_parts": [ "night", "dawn", "dusk" ] },
+      "harassment": { "main_flights": 1, "flight_size": 2, "aircraft": [ "an2_bomber" ], "profiles": [ "low" ], "day_parts": [ "night" ],
+                      "notes": "Crop sprayers over the lines at night with home-made bombs." },
+      "helo_raid": { "main_flights": 1, "flight_size": 2, "profiles": [ "low" ], "day_parts": [ "dawn", "dusk", "night" ] },
+      "recce": { "main_flights": 1, "flight_size": 1, "profiles": [ "low" ], "day_parts": [ "day", "dawn" ] }
+    }
+  },
+  "intelligence": {
+    "satellite": false, "recce_latency_h": 2,
+    "elint": false,
+    "comint": true, "comint_sigma_m": 5000, "comint_delay_h": 3,
+    "humint_per_day": 4, "humint_delay_h": 6, "humint_sigma_m": 2000, "humint_false": 0.25, "humint_reach_km": 1000,
+    "prior_mobile_sigma_m": 6000, "bda_overclaim": 1.0, "pirep_delay_h": 2, "analyst_skill": 0.25,
+    "source": "game values: sympathisers everywhere (the reach), listening on captured radios, no imagery but a pilot's eyes",
+    "confidence": "estimate"
+  },
+  "logistics": {
+    "replacements_per_day": 0.1, "arm_stock": 0, "arm_resupply_per_day": 0, "damaged_return_h": 96,
+    "source": "game values: a defector now and then, no spares",
+    "confidence": "estimate"
+  },
+  "politics": {
+    "support": 0.8, "pressure": 0.5, "loss_tolerance_per_day": 0.3, "pow_sensitivity": 0.6, "collateral_sensitivity": 0.3,
+    "no_strike_city_radius_km": 0, "max_depth_km": 80, "banned": [ "city" ], "interference_per_cycle": 0.02,
+    "target_weights": { "headquarters": 1.4, "troops": 1.3, "bridge": 1.0, "depot": 1.0, "airfield": 0.7, "sam_site": 0.5, "ew_radar": 0.6, "power_plant": 0.6 },
+    "source": "game values: targets chosen for effect and propaganda; the faction's own people are not bombed",
+    "confidence": "estimate",
+    "events": [
+      { "id": "defector", "name": "A defector", "text": "A pilot of the federal air force has flown his light jet over to the Front.",
+        "day_at_least": 4, "chance": 0.3, "reinforce_squadron": "jet_flight", "reinforce_count": 1 },
+      { "id": "ceasefire", "name": "Ceasefire", "text": "A ceasefire is agreed for the funerals: no flying for a day.",
+        "day_at_least": 6, "chance": 0.2, "pause_h": 24 },
+      { "id": "martyrs", "name": "Martyrs", "text": "The Front buries its airmen with honours and swears revenge.",
+        "losses_today_at_least": 1, "once": false, "sortie_factor": 1.05 }
+    ]
+  },
+  "aircraft": [
+    { "id": "an2_bomber", "name": "An-2 crop sprayer with home-made bombs", "roles": [ "strike" ], "class": "default", "rcs_m2": 4, "cruise_mps": 50, "attack_mps": 45,
+      "low_agl_m": 80, "medium_alt_m": 1500, "max_turn_deg_s": 6, "night": true, "strike_power": 0.15, "evasion": 0.1,
+      "source": "croatia_1991_migflug (An-2 crop dusters dropping makeshift bombs); numbers placeholders", "confidence": "low",
+      "notes": "Night here means willing to fly by moonlight, not equipped for it: accuracy suffers." },
+    { "id": "utva75", "name": "Light aircraft with rockets (UTVA 75 class)", "roles": [ "strike", "recce" ], "class": "default", "rcs_m2": 2, "cruise_mps": 55, "attack_mps": 55,
+      "low_agl_m": 60, "medium_alt_m": 1500, "max_turn_deg_s": 8, "strike_power": 0.08, "recce_quality": 0.3, "evasion": 0.15,
+      "source": "croatia_1991_migflug (UTVA and other civil aircraft); numbers placeholders", "confidence": "low" },
+    { "id": "mi8_doorgun", "name": "Mi-8 with door guns and rocket pods", "roles": [ "helicopter", "recce" ], "class": "helicopter", "helicopter": true,
+      "rcs_m2": 10, "cruise_mps": 55, "attack_mps": 55, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 8, "strike_power": 0.2,
+      "recce_quality": 0.25, "evasion": 0.2,
+      "source": "placeholder: a transport helicopter the faction captured, armed for the game; no value is the real aircraft's", "confidence": "estimate" },
+    { "id": "galeb", "name": "Defected light jet (G-2 Galeb class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 180, "attack_mps": 200,
+      "low_agl_m": 80, "medium_alt_m": 3000, "max_turn_deg_s": 9, "strike_power": 0.25, "recce_quality": 0.4, "evasion": 0.35,
+      "source": "placeholder: a period light jet named for flavour; no value is the real aircraft's", "confidence": "estimate" }
+  ],
+  "squadrons": [
+    { "id": "night_bombers", "name": "The night bomber flight", "aircraft": "an2_bomber", "count": 4, "leader": "reb_cdr" },
+    { "id": "light_flight", "name": "The light flight", "aircraft": "utva75", "count": 3 },
+    { "id": "helo_flight", "name": "The helicopter flight", "aircraft": "mi8_doorgun", "count": 2 },
+    { "id": "jet_flight", "name": "The jet flight", "aircraft": "galeb", "count": 2 }
+  ],
+  "officer_pool": {
+    "ranks": { "commander": "Commander", "planner": "Captain", "intelligence": "Captain", "squadron_leader": "Lieutenant" },
+    "first_names": [ "Ante", "Branko", "Davor", "Goran", "Ivan", "Josip", "Luka", "Marko", "Nikola", "Stjepan", "Vlado", "Zdravko" ],
+    "last_names": [ "Babic", "Horvat", "Kovacevic", "Maric", "Novak", "Pavlovic", "Radic", "Simic", "Tomic", "Vidovic", "Zoric", "Lukic" ],
+    "backgrounds": [ "aero-club instructor", "crop-spraying pilot", "airline first officer", "reserve pilot", "deserter from the federal air force" ],
+    "trait_mean": { "boldness": 0.6, "methodical": 0.35, "creativity": 0.6, "rigidity": 0.3, "ambition": 0.5, "skepticism": 0.35, "vindictiveness": 0.65, "composure": 0.45 },
+    "trait_sd": 0.18,
+    "skill_mean": { "planning": 0.4, "intelligence": 0.5, "sead": 0.05, "airmanship": 0.6, "leadership": 0.6, "politics": 0.5 },
+    "skill_sd": 0.15, "quirks_min": 1, "quirks_max": 2
+  },
+  "officers": [
+    { "id": "reb_cdr", "name": "Ivo Kranjc", "role": "commander", "age": 52, "flies": true,
+      "background": "Airline captain before the war; flew An-2s for the crop-spraying cooperative as a young man",
+      "bio": "Charismatic, reckless, beloved by his pilots. Flies the night raids himself and keeps a list of those who have killed his friends.",
+      "traits": { "boldness": 0.7, "methodical": 0.3, "creativity": 0.75, "rigidity": 0.2, "ambition": 0.5, "skepticism": 0.3, "vindictiveness": 0.8, "composure": 0.5 },
+      "skills": { "planning": 0.45, "intelligence": 0.5, "sead": 0.1, "airmanship": 0.8, "leadership": 0.85, "politics": 0.6 },
+      "quirks": [ "night_owl", "grudge_holder", "flies_himself" ] },
+    { "id": "reb_planner", "name": "Tomislav Babic", "role": "planner", "age": 34,
+      "background": "Aero-club instructor",
+      "bio": "Enthusiastic and talkative; the whole valley knows about his raids before they fly.",
+      "traits": { "boldness": 0.6, "methodical": 0.4, "creativity": 0.6, "rigidity": 0.3, "ambition": 0.6, "skepticism": 0.35, "vindictiveness": 0.5, "composure": 0.45 },
+      "skills": { "planning": 0.45, "intelligence": 0.45, "sead": 0.05, "airmanship": 0.7, "leadership": 0.5, "politics": 0.4 },
+      "quirks": [ "loose_lips", "drip_feeder" ] },
+    { "id": "reb_intel", "name": "Mirko Juric", "role": "intelligence", "age": 41,
+      "background": "Schoolteacher who runs the Front's network of informers",
+      "bio": "Hears everything in the villages; believes most of it.",
+      "traits": { "boldness": 0.4, "methodical": 0.5, "creativity": 0.5, "rigidity": 0.35, "ambition": 0.45, "skepticism": 0.25, "vindictiveness": 0.5, "composure": 0.5 },
+      "skills": { "planning": 0.4, "intelligence": 0.65, "sead": 0.0, "airmanship": 0.1, "leadership": 0.5, "politics": 0.6 },
+      "quirks": [] }
+  ]
+}

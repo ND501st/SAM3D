@@ -17,6 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools' / 'blender'))
 import pu12m_interior_trace as I  # noqa: E402
+import r111_trace  # noqa: E402
+import r407_trace  # noqa: E402
 
 OUT = ROOT / 'data' / 'cabins' / 'pu12m.json'
 MANIFEST = ROOT / 'art' / 'pu12m_interior' / 'manifest.json'
@@ -41,6 +43,7 @@ class Layout:
     def __init__(self):
         self.stations, self.panels, self.controls, self.lamps = [], [], [], []
         self.displays, self.blocks, self.fixtures, self.shell = [], [], [], []
+        self.hinges = []
         self._frames = {}
 
     # -- panels -------------------------------------------------------------------------------------------------
@@ -96,13 +99,51 @@ class Layout:
             del self.shell[-1]['notes']
         return pid
 
+    def radio_set(self, T, iid, mesh, station, manifest, planes, notes):
+        """A traced radio set (tools/blender/r111_trace.py, r407_trace.py): its mesh where the interior's trace stands the
+        set, and a bare panel for each plane of its front the cabin draws on (`planes`: id -> (label, z mm out of the
+        plate, the panel's rect in trace mm or None for the whole plate)). Returns a function from a trace point (mm) and a
+        plane id to that panel's (u, v)."""
+        it = I.item(iid)
+        face = I.FACES[iid]
+        f = FACING[face]
+        nx, ny = {'rear': (-1, 0), 'front': (1, 0), 'left': (0, 1), 'right': (0, -1)}[face]
+        rx, ry = math.sin(math.radians(f)), math.cos(math.radians(f))   # the panel's right, trace X and Y
+        cx, cy, cz = I.centre(it)
+        m = manifest[mesh]
+        plate = m['plate_m']
+        self.shell.append({'id': iid, 'label': it['label'], 'kind': 'mesh', 'mesh': mesh, 'centre_m': body((cx, cy, cz)),
+                           'size_m': list(m['size_m']), 'yaw_deg': f, 'source': PLAN % it['no'], 'confidence': 'medium',
+                           'notes': notes})
+        frames = {}
+        for pid, (label, z_mm, rect) in planes.items():
+            r = rect or T.PLATE
+            pc = ((r[0] + r[2]) / 2, (r[1] + r[3]) / 2)
+            a, b = T.to_m(*pc)
+            ahead = plate['ahead'] + z_mm / 1000.0
+            right = plate['right'] + a
+            c = (cx + nx * ahead + rx * right, cy + ny * ahead + ry * right, cz + plate['up'] + b)
+            self.panels.append({'id': pid, 'label': label, 'station': station, 'centre_m': body(c), 'facing_deg': f,
+                                'tilt_deg': 0, 'size_m': [r4((r[2] - r[0]) / 1000.0), r4((r[3] - r[1]) / 1000.0)], 'bare': True,
+                                'notes': 'A plane of the %s mesh\'s front, %g mm out of its plate (traced from photographs: '
+                                         'tools/blender/%s_trace.py). The set stands where %s puts it.'
+                                         % (mesh, z_mm, T.NAME.lower(), PLAN % it['no'])})
+            frames[pid] = pc
+
+        def uv(pt, pid):
+            pc = frames[pid]
+            return ((pt[0] - pc[0]) / 1000.0, (pc[1] - pt[1]) / 1000.0)
+        return uv
+
     # -- items on panels ----------------------------------------------------------------------------------------
-    def control(self, cid, panel, at, style=None, look=None, units_per_turn=None):
+    def control(self, cid, panel, at, style=None, look=None, units_per_turn=None, watch=None):
         c = {'control': cid, 'panel': panel, 'at_m': [r4(at[0]), r4(at[1])]}
         if style:
             c['style'] = style
         if units_per_turn:
             c['units_per_turn'] = units_per_turn
+        if watch:
+            c['watch'] = watch
         if look:
             c['look'] = look
         self.controls.append(c)
@@ -200,9 +241,8 @@ def build():
         L.fixture(p, (u, 0.05), 'lamp', 0.009, 'red')
     L.nameplate(p, (-0.22, 0.05), 'ПУ-12М', 0.07)
     p = L.panel('pvs3_panel', 'PVS-3 intercom box', 'driver', 'pvs3', (0.20, 0.13))
-    L.control('intercom.pvs3', p, (0.05, -0.02), 'toggle')
-    L.nameplate(p, (-0.04, 0.045), 'ПВС-3')
-    L.fixture(p, (-0.05, -0.02), 'socket', 0.028, 'chrome')
+    pvs_box(L, p, 'pvs3', 'driver', (-0.05, -0.02))
+    L.nameplate(p, (-0.06, 0.045), 'ПВС-3')
     L.fixture(p, (0.05, 0.02), 'knob', 0.018, 'black')
     p = L.panel('scv_panel', 'ŠČV input board', 'driver', 'scv', (0.27, 0.19),
                 notes='The input board (ЩВ; csla_pu12_manual item 32, valka_pu12): the 220 V supply\'s selector and the '
@@ -251,15 +291,14 @@ def build():
         L.fixture(p, (u, -0.02), 'knob', 0.018, 'black')
     L.nameplate(p, (0.0, 0.07), 'ДТП', 0.04)
     p = L.panel('pvs2_panel', 'PVS-2 intercom box', 'squad_leader', 'pvs2', (0.17, 0.13))
-    L.control('intercom.pvs2', p, (0.04, -0.02), 'toggle')
-    L.nameplate(p, (-0.03, 0.045), 'ПВС-2')
-    L.fixture(p, (-0.04, -0.02), 'socket', 0.028, 'chrome')
+    pvs_box(L, p, 'pvs2', 'squad_leader', (-0.05, -0.02))
+    L.nameplate(p, (-0.055, 0.045), 'ПВС-2')
     status_board(L, 'it1', 'IT-1M status board', 'squad_leader', 'it1', 'ИТ-1М', '4',
                  'At the vehicle commander\'s (the squad leader\'s) place (rwd_mb3: "Tableau IT-1M in PU-12M am Platz des '
                  'Kommandeurs"; csla_pu12_manual item 4).')
     p = L.r123m_panel('r123_fug1_panel', 'R-123M (FuG-1)', 'squad_leader', 'r123_fug1')
     radio_lamps(L, p, 'fug1')
-    L.control('radio.fug1.power', p, (-0.112, -0.0935), 'toggle')
+    r123m_controls(L, p, 'fug1')
     p = L.panel('pab2_panel', 'PAB-2 aiming circle case', 'squad_leader', 'pab2_case', (0.26, 0.18),
                 notes='The aiming circle\'s case (SAM3D: the plan doesn\'t show where it is stowed). Opening it stands for '
                       'taking the PAB-2 out and setting it up on the ground (nav.pab2).')
@@ -305,8 +344,11 @@ def build():
     p = L.panel('dt2_panel', 'DT-2 coordinate pickup', 'battery_commander', 'di', (0.17, 0.17),
                 notes='The marker\'s pickup on the desk (rwd_mb3: Geber der Koordinaten DT-2; the ČSLA plan\'s item 20, '
                       'DI). SAM3D works it as two wheels: the marker\'s azimuth and its range.')
-    L.control('dt2.azimuth', p, (-0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=90)
-    L.control('dt2.range', p, (0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=0.25)
+    # The DT-2's wheels move the marker on the IT-45's tube: the commander watches the tube as he turns them.
+    L.control('dt2.azimuth', p, (-0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=90,
+              watch='it45')
+    L.control('dt2.range', p, (0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=0.25,
+              watch='it45')
     L.nameplate(p, (-0.04, 0.045), 'АЗ', 0.025)
     L.nameplate(p, (0.04, 0.045), 'Д', 0.025)
     L.nameplate(p, (0.0, -0.065), 'ДТ-2', 0.04)
@@ -331,11 +373,25 @@ def build():
                  'csla_pu12_manual item 18).')
 
     # ---------------------------------------------------------------------------------------------- the plotter
-    p = L.panel('map_panel', 'Air-situation map', 'operator', 'map_board', (0.33, 0.37), color='lightgrey',
-                notes='The plotter\'s map board (csla_pu12_manual item 24, planšet vzdušné situace; rwd_mb3: the '
-                      'Luftlagekarte, a plexiglass board on a hinge, etched with a grid and range circles).')
+    p = L.panel('map_panel', 'Air-situation map', 'operator', 'map_board', (0.37, 0.35), color='lightgrey',
+                notes='The plotter\'s map board (csla_pu12_manual item 24, planšet vzdušné situace: drawn folded on the '
+                      'centreline before his place; rwd_mb3: the Luftlagekarte, a plexiglass board on a hinge, etched with a '
+                      'grid and range circles), swung open across the compartment facing him. ' + VISUALS)
+    # The latch on the frame's free edge: swing the board open, fold it back (the console's map.board).
+    L.control('map.board', p, (0.165, -0.15), 'toggle', {'kind': 'latch', 'size_m': 0.03, 'color': 'chrome'})
+    # The hinge (csla_pu12_manual: drawn folded edge-on on the centreline, 1218-1311 px; rwd_mb3: hinged at its left
+    # edge): open, the board stands across facing the plotter; folded, it turns a quarter turn clockwise (seen from
+    # above) about its left edge to lie along the centreline, back towards the bench, as the plan draws it.
+    hx, hy, _ = I.to_body(I.MAP_BOARD['x'], I.MAP_HINGE_Y, 0.0)
+    L.hinges.append({'id': 'map_board', 'label': 'Plotting board hinge', 'panels': [p], 'shell': ['mapboard'],
+                     'pivot_m': [r4(hx), r4(hy), round(0.5 * (I.MAP_BOARD['z0'] + I.MAP_BOARD['z1']), 3)],
+                     'folded_deg': 90.0, 'subsystem': 'map_open',
+                     'source': 'csla_pu12_manual (item 24 drawn folded on the centreline); rwd_mb3 (pu12e: the hinge bar)',
+                     'confidence': 'medium',
+                     'notes': 'Turns with map_open\'s progress: 0 folded, 1 open. The direction of the fold is SAM3D\'s '
+                              'reading of the plan\'s strip and the photograph\'s hinge.'})
     L.displays.append({'id': 'map', 'label': 'Air-situation map', 'kind': 'plot_board', 'panel': p, 'at_m': [0.0, 0.0],
-                       'size_m': [0.32, 0.36],
+                       'size_m': [0.36, 0.34],
                        'source': 'rwd_mb3 (Luftlagekarte: the targets\' tracks drawn by hand in the designation squares, '
                                  'azimuth and range taken off it; the photograph: a plexiglass board with a grid and range '
                                  'circles); data/command/pu12.json (the board\'s notation: number, height over the code)',
@@ -368,41 +424,24 @@ def build():
     for u in (-0.08, -0.04, 0.0, 0.04, 0.08):
         L.fixture(p, (u, -0.03), 'toggle', 0.012)
     L.nameplate(p, (0.0, 0.08), 'ЩК', 0.04)
-    p = L.r123m_panel('r123_fug4_panel', 'R-123M (FuG-4)', 'battery_commander', 'r123_fug4')
-    radio_lamps(L, p, 'fug4')
-    L.control('radio.fug4.power', p, (-0.112, -0.0935), 'toggle')
-    p = L.panel('r407_panel', 'R-407 radio (FuG-5)', 'battery_commander', 'r407', (0.26, 0.26), at=(0.0, 0.10),
-                notes='The R-407 (csla_pu12_manual item 25; the commander\'s workplace drawing shows its front behind '
-                      'the seats). Its controls are SAM3D\'s.')
-    L.control('radio.fug5.power', p, (-0.09, -0.09), 'toggle')
-    L.lamp('fug5_ready', 'Р-407 ГОТОВА', p, (-0.09, -0.05), 'green', ready('fug5'),
-           'flak11 (PU12-1: FuG-5 R-407, reception of the regiment\'s automated fire control); the lamp is sam3d')
-    L.lamp('fug5_warm', 'ПРОГРЕВ', p, (-0.06, -0.05), 'amber', warming('fug5'), 'sam3d (warming up)')
-    L.fixture(p, (0.03, 0.03), 'diagram', (0.16, 0.14))
-    L.fixture(p, (0.03, 0.03), 'knob', 0.04, 'black')
-    L.nameplate(p, (0.0, 0.115), 'Р-407', 0.05)
+    p = L.r123m_panel('r123_fug2_panel', 'R-123M (FuG-2)', 'battery_commander', 'r123_fug2')
+    radio_lamps(L, p, 'fug2')
+    r123m_controls(L, p, 'fug2')
+    r407(L, manifest)
 
     # ---------------------------------------------------------------------------------------------- the radio operator
-    p = L.panel('r111_panel', 'R-111 radio (FuG-3)', 'radio_operator', 'r111', (0.56, 0.31),
-                notes='The R-111 (csla_pu12_manual item 41; the radio operator\'s drawing: the big set at his right '
-                      'with the R-123M on it). Its face is SAM3D\'s arrangement.')
-    L.control('radio.fug3.power', p, (-0.23, -0.10), 'toggle')
-    L.lamp('fug3_ready', 'Р-111 ГОТОВА', p, (-0.23, -0.05), 'green', ready('fug3'),
-           'flak11 (PU12-1: FuG-3 R-111, the regiment\'s command net, 25-30 km); the lamp is sam3d')
-    L.lamp('fug3_warm', 'ПРОГРЕВ', p, (-0.20, -0.05), 'amber', warming('fug3'), 'sam3d (warming up)')
-    L.fixture(p, (-0.02, 0.06), 'window', (0.16, 0.05), 'white')
-    for u in (-0.12, -0.04, 0.04, 0.12):
-        L.fixture(p, (u, -0.06), 'knob', 0.03, 'black')
-    for u in (0.19, 0.23):
-        L.fixture(p, (u, 0.05), 'socket', 0.026, 'chrome')
-    L.nameplate(p, (-0.2, 0.12), 'Р-111', 0.05)
-    p = L.r123m_panel('r123_fug2_panel', 'R-123M (FuG-2)', 'radio_operator', 'r123_fug2')
-    radio_lamps(L, p, 'fug2')
-    L.control('radio.fug2.power', p, (-0.112, -0.0935), 'toggle')
+    r111(L, manifest)
+    p = L.r123m_panel('r123_fug4_panel', 'R-123M (FuG-4)', 'radio_operator', 'r123_fug4')
+    radio_lamps(L, p, 'fug4')
+    r123m_controls(L, p, 'fug4')
     p = L.panel('pvs1_panel', 'PVS-1 intercom box', 'radio_operator', 'pvs1', (0.19, 0.13))
-    L.control('intercom.pvs1', p, (0.05, -0.02), 'toggle')
-    L.nameplate(p, (-0.03, 0.045), 'ПВС-1')
-    L.fixture(p, (-0.05, -0.02), 'socket', 0.028, 'chrome')
+    pvs_box(L, p, 'pvs1', 'radio_operator', (-0.05, -0.02))
+    L.nameplate(p, (-0.06, 0.045), 'ПВС-1')
+    rk1u(L)
+    document(L, 'radio_data_panel', 'Radio data (радиоданные)', 'radio_operator', 'table51', (0.0, 0.0), 'radio_data',
+             "The radio data on the radio operator's table: each net's frequencies by number, the call signs, the changes.")
+    document(L, 'talk_tables_panel', 'Talk tables ПТ-1, ПТ-2', 'battery_commander', 'desk', (-0.10, -0.22), 'talk_tables',
+             "The talk tables on the commander's desk, in front of his R-123M (FuG-2), clear of the ДИ block.")
     p = L.panel('vs27_panel', 'VS-27 rectifier', 'radio_operator', 'vs27', (0.25, 0.14))
     L.control('pwr.rectifier', p, (0.08, -0.03), 'toggle')
     L.lamp('rectifier_on', 'ЗАРЯД', p, (0.08, 0.03), 'green', ready('rectifier'),
@@ -444,6 +483,10 @@ def build():
                              'Its size and tilt are estimates. The driver\'s hands rest on it (data/crew/body.json).'),
         'SM_PU12MPedals': ('The pedals', 'csla_pu12_manual (the squad leader and driver drawing)', 'low',
                            'Estimates. The driver\'s feet rest on them (data/crew/body.json).'),
+        'SM_PU12MMapBoard': ('The plotting board (the plan\'s item 24): the plexiglass in its frame, the hanger to the roof '
+                             'over its hinge', 'csla_pu12_manual (item 24, drawn folded); rwd_mb3 (pu12e: the board open, '
+                             'its hinge bar down its left edge)', 'medium',
+                             'Drawn open; its hinge folds it along the centreline (hinges). Its height is an estimate.'),
         'SM_PU12MMastFoot': ('The mast\'s fixed section from the floor through the roof, its clamps and its hand winch',
                              'csla_pu12_manual (the plan\'s item 10; the mast drawings: the winch, cables and pulleys)',
                              'medium', 'The winch\'s size is an estimate.'),
@@ -472,6 +515,127 @@ def build():
     order = ['hull', 'equipment', 'bench', 'driver', 'steering', 'pedals', 'mastfoot', 'seat_driver', 'seat_squad_leader']
     L.shell.sort(key=lambda s: order.index(s['id']) if s['id'] in order else len(order))
     return L
+
+
+def r111(L, manifest):
+    """The R-111 (FuG-3) as traced (tools/blender/r111_trace.py): r111_to fig. 4 and the photographs of r111_photos. Its
+    controls as the console has them (data/procedures/pu12m.json), the antenna distributor on the SAU block."""
+    T = r111_trace
+    uv = L.radio_set(T, 'r111', 'SM_RadioR111', 'radio_operator', manifest, {
+        'r111_panel': ('R-111 radio (FuG-3)', 4.0, None),
+        'r111_strip': ('R-111: the connector strip', -13.0, T.STRIP),
+        'r111_scale': ('R-111: the scale\'s eyepiece', T.Z['hood'] + 4.5, (492.0, 125.0, 522.0, 151.0)),
+    }, 'The R-111 traced from r111_photos and r111_to fig. 4; on its stand, the R-123M (FuG-2) on it (csla_pu12_manual: '
+       'the radio operator\'s workplace).')
+    styles = {'radio.fug3.dial': ('wheel', {'kind': 'knob', 'size_m': 0.058, 'color': 'black'}),
+              'radio.fug3.rx_level': ('wheel', {'kind': 'knob', 'size_m': 0.026, 'color': 'black'}),
+              'radio.fug3.tx_level': ('wheel', {'kind': 'knob', 'size_m': 0.026, 'color': 'black'}),
+              'radio.fug3.mode': ('rotary', {'kind': 'bar_knob', 'size_m': 0.036, 'color': 'black'}),
+              'radio.fug3.indicator': ('rotary', {'kind': 'bar_knob', 'size_m': 0.036, 'color': 'black'}),
+              'radio.fug3.work': ('rotary', {'kind': 'bar_knob', 'size_m': 0.036, 'color': 'black'}),
+              'radio.fug3.subband': ('rotary', {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black'}),
+              'radio.fug3.squelch': ('toggle', None), 'radio.fug3.tlk': ('toggle', None)}
+    for cid, pt in T.CONTROL_MM.items():
+        pid = 'r111_strip' if T.CONTROL_Z.get(cid) == 'lower_strip' else 'r111_panel'
+        style, look = styles.get(cid, ('button', {'kind': 'button', 'size_m': 0.014, 'color': 'black'}))
+        if cid.startswith('radio.fug3.zpch'):
+            look = {'kind': 'button', 'size_m': 0.011, 'color': 'black'}
+        units = {'radio.fug3.dial': 1.0, 'radio.fug3.rx_level': 1.0, 'radio.fug3.tx_level': 1.0}.get(cid)
+        L.control(cid, pid, uv(pt, pid), style, look, units_per_turn=units)
+    src = 'r111_to (fig. 4: items 7, 15, 18, 28, 29)'
+    lamps = [('protect', 'ЗАЩИТА ВХОДА', 'red', 'r111_protect', 0.05, 'ЗАЩИТА'),
+             ('tuning_um', 'НАСТРОЙКА УМ', 'amber', 'r111_tuning_um', 0.022, 'УМ'),
+             ('tuning_sau', 'НАСТРОЙКА САУ', 'amber', 'r111_tuning_sau', 0.022, 'САУ'),
+             ('call_radio', 'ВЫЗОВ РАДИО', 'amber', 'r111_call_radio', 0.022, 'РАДИО'),
+             ('call_line', 'ВЫЗОВ ЛИНИЯ', 'amber', None, 0.022, 'ЛИНИЯ'),
+             ('rx', 'ПРИЕМ', 'amber', 'r111_rx', 0.022, 'ПРИЕМ'), ('tx', 'ПРД', 'amber', 'r111_tx', 0.02, 'ПРД')]
+    for lid, label, color, inp, size, legend in lamps:
+        lit = [{'input': inp, 'is': True}] if inp else [{'input': 'r111_call_radio', 'is': True}, {'input': 'r111_protect', 'is': True},
+                                                       {'input': 'r111_tx', 'is': True}, {'input': 'r111_rx', 'is': True}]
+        notes = None if inp else 'A call on the line: the post works the set from its own place, so the line never calls (never lit).'
+        L.lamp('r111_' + lid, label, 'r111_panel', uv(T.LAMP_MM[lid], 'r111_panel'), color, lit, src, 'high',
+               notes=notes, look={'kind': 'legend', 'size_m': [size, 0.018], 'label': legend})
+    for k in range(1, 5):
+        L.lamp('r111_zpch_%d' % k, 'НОМЕР ЗПЧ: %d' % k, 'r111_panel', uv(T.LAMP_MM['zpch_%d' % k], 'r111_panel'), 'white',
+               [{'input': 'r111_zpch_%d' % k, 'is': True}], src + '; the window\'s one digit drawn as four (sam3d)', 'medium',
+               look={'kind': 'legend', 'size_m': 0.0035, 'label': str(k)})
+    fx0, fy0, fx1, fy1 = T.METER_FACE
+    L.displays.append({'id': 'r111_meter', 'label': 'ИНДИКАТОР', 'kind': 'meter', 'panel': 'r111_panel',
+                       'at_m': [r4(v) for v in uv(((fx0 + fx1) / 2, (fy0 + fy1) / 2), 'r111_panel')],
+                       'size_m': [r4((fx1 - fx0) / 1000.0), r4((fy1 - fy0) / 1000.0)], 'reading': 'r111_indicator',
+                       'marks': 5, 'full_scale': 100, 'unit': '',
+                       'on_when': [{'subsystem': 'net_27v', 'is': 'ready'}],
+                       'source': 'r111_to (fig. 4, item 8; the ИНДИКАТОР switch, item 4: what it reads)', 'confidence': 'medium',
+                       'notes': 'The needle is the set\'s reading (simcore/radio_sets.hpp RadioMeterReading): the ship\'s supply in '
+                                'its sector, the tuning dipping then rising, the levels. The marks are sam3d.'})
+    L.displays.append({'id': 'r111_scale', 'label': 'Шкала (x100 кГц)', 'kind': 'dial', 'panel': 'r111_scale',
+                       'at_m': [0.0, 0.0], 'size_m': [0.024, 0.024], 'control': 'radio.fug3.dial', 'value_per_turn': 1.0,
+                       'labels_per_turn': 10, 'marks': 10,
+                       'on_when': [{'control': 'radio.fug3.mode', 'at_least': 1}, {'subsystem': 'net_27v', 'is': 'ready'}],
+                       'lit_when': [{'control': 'radio.fug3.mode', 'at_least': 1}],
+                       'source': 'r111_to (fig. 4, item 23: the eyepiece onto the scale; p. 6: the scale\'s figures)', 'confidence': 'medium',
+                       'notes': 'Seen through the eyepiece: the hundreds of kHz within the MHz (the whole MHz is the knob\'s position on '
+                                'the scale). SAM3D draws it as a dial on the eyepiece.'})
+    # the SAU block's antenna distributor (r111_to p. 64), on the block in the commander's corner (csla_pu12_manual item 26)
+    p = L.panel('sau_panel', 'R-111 SAU block (antenna distributor)', 'battery_commander', 'sau', (0.16, 0.10), face='left',
+                notes="The R-111's antenna tuner (csla_pu12_manual item 26, under the bench's back, at the commander's place): "
+                      "he sets the antenna distributor for the radio operator (r111_to p. 64: set before work). On the "
+                      "block's inboard end (SAM3D: the plan shows the block from above only), where he can turn round to it.")
+    L.control('radio.fug3.antenna', p, (0.03, 0.0), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black'})
+    L.fixture(p, (-0.045, 0.0), 'socket', 0.022, 'chrome')
+    L.nameplate(p, (0.0, 0.035), 'САУ', 0.04)
+
+
+def r407(L, manifest):
+    """The R-407 (FuG-5) as traced (tools/blender/r407_trace.py): r407_photos and its instruction plate (r407_plate). Its
+    controls as the console has them; the meter's housing a plane of its own."""
+    T = r407_trace
+    uv = L.radio_set(T, 'r407', 'SM_RadioR407', 'battery_commander', manifest, {
+        'r407_panel': ('R-407 radio (FuG-5)', 3.5, None),
+        'r407_meter_face': ('R-407: the meter', T.Z['meter_box'] + 0.5, T.region('meter_box')['rect']),
+    }, 'The R-407 traced from r407_photos (its size r407_to); on a bracket at the side behind the battery commander\'s '
+       'seat back, over the BP-3 (csla_pu12_manual item 25: the plan places it, smaller than the set is; his workplace '
+       'drawing gives its height).')
+    styles = {'radio.fug5.rx_freq': ('wheel', {'kind': 'knob', 'size_m': 0.046, 'color': 'black'}),
+              'radio.fug5.tx_freq': ('wheel', {'kind': 'knob', 'size_m': 0.046, 'color': 'black'}),
+              'radio.fug5.rx_level': ('wheel', {'kind': 'knob', 'size_m': 0.02, 'color': 'black'}),
+              'radio.fug5.measure_level': ('wheel', {'kind': 'knob', 'size_m': 0.02, 'color': 'black'}),
+              'radio.fug5.tx_level': ('wheel', {'kind': 'knob', 'size_m': 0.02, 'color': 'black'}),
+              'radio.fug5.mode': ('rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black'}),
+              'radio.fug5.meter': ('rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black'}),
+              'radio.fug5.pu': ('rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black'}),
+              'radio.fug5.lines': ('rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black'}),
+              'radio.fug5.rx_lock': ('toggle', {'kind': 'lever', 'size_m': 0.022, 'color': 'black'}),
+              'radio.fug5.tx_lock': ('toggle', {'kind': 'lever', 'size_m': 0.022, 'color': 'black'}),
+              'radio.fug5.power': ('toggle', None), 'radio.fug5.apch': ('toggle', None), 'radio.fug5.band': ('toggle', None)}
+    for cid, pt in T.CONTROL_MM.items():
+        style, look = styles.get(cid, ('button', {'kind': 'button', 'size_m': 0.012, 'color': 'black'}))
+        units = {'radio.fug5.rx_freq': 1.0, 'radio.fug5.tx_freq': 1.0}.get(cid, 1.0 if style == 'wheel' else None)
+        L.control(cid, 'r407_panel', uv(pt, 'r407_panel'), style, look, units_per_turn=units)
+    src = 'r407_plate (II.8: a call from the radio lights the green РАДИО lamp; IV.5: from the line, the red ПРОВОД lamp); r407_photos'
+    L.lamp('r407_call_radio', 'РАДИО', 'r407_panel', uv(T.LAMP_MM['call_radio'], 'r407_panel'), 'green',
+           [{'input': 'r407_call_radio', 'is': True}], src, 'high', look={'kind': 'lamp', 'size_m': 0.012})
+    L.lamp('r407_call_wire', 'ПРОВОД', 'r407_panel', uv(T.LAMP_MM['call_wire'], 'r407_panel'), 'red',
+           [{'input': 'r407_call_wire', 'is': True}], src, 'high', look={'kind': 'lamp', 'size_m': 0.012})
+    for did, label, ctl in (('rx', 'ПРИЕМНИК', 'radio.fug5.rx_freq'), ('tx', 'ПЕРЕДАТЧИК', 'radio.fug5.tx_freq')):
+        x, y, r = T.DIALS[did]
+        L.displays.append({'id': 'r407_' + did, 'label': label, 'kind': 'dial', 'panel': 'r407_panel',
+                           'at_m': [r4(v) for v in uv((x, y), 'r407_panel')], 'size_m': [r4(2 * r / 1000.0), r4(2 * r / 1000.0)],
+                           'control': ctl, 'value_per_turn': 1.0, 'labels_per_turn': 10, 'marks': 10,
+                           'on_when': [{'control': 'radio.fug5.power', 'is': 1}], 'lit_when': [{'control': 'radio.fug5.calibrator', 'is': 1}],
+                           'source': 'r407_photos (two drums read through round windows, УСТАНОВКА ЧАСТОТЫ x 100 КГЦ); r407_plate (II.6: '
+                                     'КАЛИБРАТОР – СВЕТ lights them in the dark)', 'confidence': 'medium',
+                           'notes': 'The drum\'s hundreds of kHz within the MHz; SAM3D draws the drum as a dial.'})
+    fx0, fy0, fx1, fy1 = T.METER_FACE
+    L.displays.append({'id': 'r407_meter', 'label': 'x100 мкА', 'kind': 'meter', 'panel': 'r407_meter_face',
+                       'at_m': [r4(v) for v in uv(((fx0 + fx1) / 2, (fy0 + fy1) / 2), 'r407_meter_face')],
+                       'size_m': [r4((fx1 - fx0) / 1000.0), r4((fy1 - fy0) / 1000.0)], 'reading': 'r407_meter',
+                       'marks': 5, 'full_scale': 5, 'unit': 'x100 мкА',
+                       'on_when': [{'control': 'radio.fug5.power', 'is': 1}],
+                       'source': 'r407_photos (the meter, x100 мкА; the meter switch: ИЗМЕРИТ., ПЕРЕДАЧА, ПРИЕМ, НАКАЛ, ТОК АНТ.); '
+                                 'r407_plate (V.4: the levels set on the red mark)', 'confidence': 'medium',
+                       'notes': 'The needle is the set\'s reading (simcore/radio_sets.hpp RadioMeterReading); the red mark at about '
+                                'two-thirds is sam3d.'})
 
 
 def radio_lamps(L, p, sub):
@@ -540,9 +704,15 @@ def dch(L):
     for x in (118, 160, 203, 245, 288):
         items.append((x, 240, 'toggle', 0.008, None, None))
     keys = [('ВР', '', 'ТС'), ('СР', 'СМ', '*'), ('СВ', 'Ч', 'ГР'), ('Н1', 'Н2', 'Н3'), ('Н', '22', None)]
+    # The characteristics keys that work (rwd_mb3 pu12a: friend or foe, group, the height zone): controls, the rest drawn.
+    working = {'СВ': 'friend', 'Ч': 'foe', 'ГР': 'group', 'Н1': 'h1', 'Н2': 'h2', 'Н3': 'h3'}
     for row, y in zip(keys, (300, 330, 362, 393, 425)):
         for lab, x in zip(row, (145, 190, 240)):
             if lab is None:
+                continue
+            if lab in working:
+                L.control('dch.key.' + working[lab], p, L.at_photo(size, ext, x, y), 'button',
+                          {'kind': 'button', 'size_m': 0.016, 'color': 'ivory', 'label': lab})
                 continue
             items.append((x, y, 'button', 0.016, 'red' if lab == '*' else 'ivory', None if lab in ('', '*') else lab))
     items += [(175, 603, 'button', 0.016, 'ivory', 'М'), (228, 603, 'button', 0.016, 'ivory', 'ПВ'),
@@ -573,6 +743,10 @@ def fr(L):
     L.control('fr.scale', p, L.at_photo(size, ext, 305, 180), 'rotary',
               {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black'})
     L.control('aspd.power', p, L.at_photo(size, ext, 360, 215), 'toggle')
+    # The primary radar's source switch (rwd_mb3 pu12e/pu12f: "Umschalter für die Quelle der Funkmess-Primärinformation",
+    # on the back of the commander's rack beside the DTP): SAM3D puts it on the ФР block's face, in his reach.
+    L.control('aspd.radar_source', p, L.at_photo(size, ext, 405, 450), 'rotary',
+              {'kind': 'pointer_knob', 'size_m': 0.024, 'color': 'black'})
     src = 'shilka_narod (photograph of the ФР block: small lamps beside the selectors)'
     L.lamp('aspd_warming', 'ПРОГРЕВ', p, L.at_photo(size, ext, 100, 135), 'amber', warming('aspd_warm'),
            src + '; what each shows is sam3d')
@@ -606,30 +780,91 @@ def sblock(L):
         L.fixture(p, (u, 0.03), 'lamp', 0.008, 'green')
 
 
+R123M_AT = {'power': (-0.112, -0.0935), 'mode': (-0.1045, 0.0726), 'squelch': (-0.1492, 0.0798), 'preset': (0.0754, -0.0496),
+            'volume': (0.1612, -0.0484)}   # where the Osa cabin has them on the same traced front (data/cabins/osa_ak.json)
+
+
+def r123m_controls(L, p, sid):
+    """An R-123M's working controls on its traced front, where the Osa's sets have them."""
+    L.control('radio.%s.power' % sid, p, R123M_AT['power'], 'toggle')
+    L.control('radio.%s.mode' % sid, p, R123M_AT['mode'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
+    L.control('radio.%s.squelch' % sid, p, R123M_AT['squelch'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.026, 'color': 'black'})
+    L.control('radio.%s.preset' % sid, p, R123M_AT['preset'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.075, 'color': 'black'})
+    L.control('radio.%s.volume' % sid, p, R123M_AT['volume'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
+
+
+RST_SRC = ('rwd_mb3 (the PVS boxes and the RTK-1: four lamps over РСТ-1 to РСТ-4); lit while that set hears its net (SAM3D: '
+           'the R-145BM\'s radio-busy lamps, andryushchenko_2004)')
+RST_LIT = {1: [{'input': 'fug1_net', 'is': True}], 2: [{'input': 'fug2_net', 'is': True}], 3: [{'input': 'r111_hear', 'is': True}],
+           4: [{'input': 'fug4_net', 'is': True}]}
+
+
+def pvs_box(L, p, box, station, sockets_at):
+    """A PVS box's face: its selector (ВС / РСТ-1..4), the call to the RTK-1, the headset's jack, the four РСТ lamps."""
+    L.control('intercom.' + box, p, (0.05, -0.02), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.024, 'color': 'black'})
+    L.control(box + '.call', p, (0.0, -0.035), 'button', {'kind': 'button', 'size_m': 0.012, 'color': 'black', 'label': 'РТК'})
+    L.control('headset.' + station, p, sockets_at, 'toggle', {'kind': 'jack', 'size_m': 0.028, 'color': 'chrome', 'label': 'ШЛЕМОФОН'})
+    for n in (1, 2, 3, 4):
+        L.lamp('%s_rst%d' % (box, n), 'РСТ-%d' % n, p, (0.0 + 0.02 * (n - 1), 0.045), 'amber', RST_LIT[n], RST_SRC, 'medium')
+    L.lamp(box + '_called', 'ВЫЗОВ', p, (0.075, 0.045), 'red', [{'input': box + '_call', 'is': True}],
+           'rwd_mb3 (an orange lamp on each PVS box); lit while the RTK-1 calls it (SAM3D)', 'low')
+
+
+def document(L, pid, label, station, iid, at, kind_of, notes):
+    """A paper kept at a seat (a talk table, the radio data): a sheet lying on a desk, drawn from the scenario's own."""
+    p = L.panel(pid, label, station, iid, (0.15, 0.105), at=at, face='top', color='ivory',
+                notes=notes + " The sheet lies on the desk; its content is the scenario's (docs/crew/12_COMMUNICATIONS.md).")
+    L.displays.append({'id': pid.replace('_panel', ''), 'label': label, 'kind': 'document', 'document': kind_of, 'panel': p,
+                       'at_m': [0.0, 0.0], 'size_m': [0.15, 0.105],
+                       'source': 'pvo_bu_x_1984 (the posts keep talk tables, signal tables, coded maps and call-sign tables); '
+                                 'rrs_1986 (radio data issued against signature, kept at the station); fsrbit_pt',
+                       'confidence': 'medium',
+                       'notes': "What the paper holds is the scenario's: placeholders in the period's form."})
+
+
+def rk1u(L):
+    """The RK-1U at the radio operator's table (csla_pu12_manual item 38): its ПРИЕМ and ПЕРЕДАЧА rotaries and the
+    С-23 / АСПД-У toggle (rwd_mb3's photograph)."""
+    p = L.panel('rk1_panel', 'RK-1U junction box', 'radio_operator', 'rk1', (0.12, 0.10),
+                notes='The RK-1U (csla_pu12_manual item 38; rwd_mb3: two five-position rotaries ПЕРЕДАЧА and ПРИЕМ, ВЫКЛ / '
+                      '...123 / ...111 / ...407 / ПРОВОД, and toggles С-23 / АСПД-У): the ASPD-U\'s data path.')
+    L.control('rk1.rx', p, (-0.035, -0.02), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПРИЕМ'})
+    L.control('rk1.tx', p, (-0.035, 0.015), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПЕРЕДАЧА'})
+    L.control('rk1.code', p, (0.0, -0.03), 'toggle')
+    L.nameplate(p, (0.0, 0.035), 'РК-1У', 0.05)
+
+
 def rtk1(L):
-    """The RTK-1, after the photograph (shilka_narod; its outline 20-504 x 20-355 px in the crop)."""
+    """The RTK-1, after the photograph (shilka_narod; its outline 20-504 x 20-355 px in the crop) read with the NVA
+    catalogue's description (rwd_mb3: four РСТ lamp push-buttons, five numbered lines each a lamp over a lever, the
+    calls ПВС-1/2/3 and ЦИРКУЛЯР, a headset jack). Which knob is which selector is SAM3D's reading."""
     size = (0.40, 0.22)
     p = L.panel('rtk1_panel', 'RTK-1 radiotelephone concentrator', 'battery_commander', 'rtk1', size,
                 notes='The RTK-1 (csla_pu12_manual item 16; flak11 PU12-1: field telephone lines and an acoustic signal), '
-                      'as the photograph shows it (shilka_narod): windows with the lines\' names, lever switches, knobs. '
-                      'Its power switch is SAM3D\'s.')
+                      'as the photograph shows it (shilka_narod) and the NVA catalogue describes it (rwd_mb3): the lines\' '
+                      'windows over their levers and lamps, the РСТ lamps, the call buttons, the talk and second-receiver '
+                      'selectors, the headset\'s jack. Its power switch is SAM3D\'s.')
     ext = (20, 20, 504, 355)
-    L.control('rtk1.power', p, L.at_photo(size, ext, 460, 230), 'toggle')
-    L.lamp('rtk1_on', 'РТК-1', p, L.at_photo(size, ext, 460, 150), 'green', ready('rtk1'),
-           'flak11 (PU12-1: RTK-1); the lamp is sam3d')
-    items = [(90, 50, 'nameplate', (0.06, 0.012), None, 'РТК-1')]
-    for x in (270, 302, 334, 366, 398):
-        items.append((x, 95, 'window', (0.022, 0.022), 'white', None))
-    for x in (105, 140, 175, 210):
-        items.append((x, 160, 'window', (0.026, 0.014), 'white', None))
-    for x in (295, 330, 370, 410):
-        items.append((x, 180, 'lever', (0.03, 0.01), 'black', None))
-        items.append((x + 15, 260, 'knob', 0.014, 'black', None))
-    items += [(135, 215, 'knob', 0.03, 'black', None), (230, 250, 'pointer_knob', 0.03, 'black', None),
-              (195, 315, 'socket', 0.04, 'chrome', None)]
-    for x in (300, 330, 360, 390):
-        items.append((x, 60, 'lamp', 0.007, 'red', None))
-    L.photo(p, size, ext, items)
+    at = lambda x, y: L.at_photo(size, ext, x, y)
+    L.control('rtk1.power', p, at(460, 230), 'toggle')
+    L.lamp('rtk1_on', 'РТК-1', p, at(460, 150), 'green', ready('rtk1'), 'flak11 (PU12-1: RTK-1); the lamp is sam3d')
+    line_src = 'flak11 (PU12-1: five telephone lines and an acoustic signal on the RTK-1); rwd_mb3 (a lamp over each line\'s lever)'
+    for n, x in enumerate((270, 302, 334, 366, 398), 1):
+        L.control('rtk1.line%d' % n, p, at(x, 140), 'toggle', {'kind': 'lever', 'size_m': 0.02, 'color': 'black', 'label': str(n)})
+        L.lamp('rtk1_line%d' % n, 'ЛИНИЯ %d' % n, p, at(x, 60), 'red', [{'input': 'line%d_call' % n, 'is': True}], line_src, 'medium')
+    for n, x in enumerate((105, 140, 175, 210), 1):
+        L.lamp('rtk1_rst%d' % n, 'РСТ-%d' % n, p, at(x, 160), 'amber', RST_LIT[n], RST_SRC, 'medium',
+               look={'kind': 'legend', 'size_m': 0.026, 'label': 'РСТ-%d' % n})
+    for n, x in ((1, 295), (2, 330), (3, 370)):
+        L.control('rtk1.call_pvs%d' % n, p, at(x, 260), 'button', {'kind': 'button', 'size_m': 0.013, 'color': 'black', 'label': 'ПВС-%d' % n})
+    L.control('rtk1.circular', p, at(410, 260), 'button', {'kind': 'button', 'size_m': 0.013, 'color': 'red', 'label': 'ЦИРК'})
+    L.control('rtk1.ring', p, at(430, 300), 'button', {'kind': 'button', 'size_m': 0.013, 'color': 'black', 'label': 'ВЫЗОВ'})
+    L.lamp('rtk1_called', 'ВЫЗОВ', p, at(430, 100), 'red', [{'input': 'rtk1_call', 'is': True}],
+           'rwd_mb3 (the RTK-1\'s call lamps); lit while a PVS box calls it (SAM3D)', 'low')
+    L.control('rtk1.channel', p, at(230, 250), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black', 'label': 'КАНАЛ'})
+    L.control('rtk1.monitor', p, at(135, 215), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПРИЕМ 2'})
+    L.control('headset.battery_commander', p, at(195, 315), 'toggle', {'kind': 'jack', 'size_m': 0.03, 'color': 'chrome', 'label': 'ШЛЕМОФОН'})
+    L.photo(p, size, ext, [(90, 50, 'nameplate', (0.06, 0.012), None, 'РТК-1')])
 
 
 def layout_json():
@@ -646,8 +881,20 @@ def layout_json():
                  'origin). Lamp sources use the source ids of data/procedures/pu12m.json. ceiling_m: the roof\'s '
                  'lining (1.40 m over the floor), under which a crewman getting up for a low panel crouches.',
         'ceiling_m': round(I.ROOF_IN_Z, 3),
+        # Up from his seat (a player walking in the cabin): his stooping eye under the roof, and the floor he can walk
+        # on (SAM3D estimates from the layout).
+        'stand_eye_m': 1.93,
+        'walk': [
+            {'from_m': [-0.6, -0.86], 'to_m': [0.7, -0.62],
+             'notes': "The knee room between the bench and the boards in front of it (the IT-45, the map, the radio "
+                      "operator's sets, their faces at y = -0.27 to -0.47): a crewman gets up and moves along the bench. "
+                      "SAM3D estimate from the cabin layout."},
+            {'from_m': [-0.18, 0.1], 'to_m': [0.18, 1.45],
+             'notes': "The aisle between the operator's P and R units (their faces at x = -0.33 and 0.32). SAM3D estimate."},
+            {'from_m': [-0.15, 1.45], 'to_m': [0.05, 2.45], 'notes': "Between the driver's and the squad leader's seats. SAM3D estimate."},
+        ],
         'stations': L.stations, 'panels': L.panels, 'controls': L.controls, 'lamps': L.lamps, 'displays': L.displays,
-        'blocks': L.blocks, 'fixtures': L.fixtures, 'shell': L.shell,
+        'blocks': L.blocks, 'fixtures': L.fixtures, 'shell': L.shell, 'hinges': L.hinges,
     }
     if not doc['blocks']:
         del doc['blocks']

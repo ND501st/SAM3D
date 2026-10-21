@@ -56,7 +56,11 @@ handoff so that no change loses them.
 | `09_IMPLEMENTATION_PLAN.md` | Phases, what is built, what is next |
 | `10_BODIES_AND_VOICES.md` | The crewmates seen and heard: the body model, the reach check of the cabin, the voices |
 | `11_PLAYTEST_AND_BALANCE.md` | Every tier played over many seeds against the published norms, and what that showed |
+| `12_COMMUNICATIONS.md` | Headsets, intercom boxes, radio nets and telephones: who hears what |
+| `13_OUT_OF_THE_VEHICLE.md` | Out of the vehicle and back by its hatches, on the hull and the ground; jobs done outside; the voice out of doors |
+| `14_HELPER.md` | The helper: the move your seat's NPC would make now, shown as a lesson's step is; how it stays up to date |
 | `generated/osa_ak_action_map.md` | Every action of the Osa-AK console and how it connects (`python tools/crew_map.py`) |
+| `generated/helper_coverage.md` | Every mission from every seat, following the helper against the NPC crew (`simcore/build/helper_coverage`) |
 
 ## Words used here
 

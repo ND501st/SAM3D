@@ -14,7 +14,7 @@ import pu12m_interior_trace as I  # noqa: E402
 import pu12m_trace as T  # noqa: E402
 
 # Items that are built into one another: the mast's winch on the mast, the R-123M on the R-111, the bench and its back.
-TOUCHING = {frozenset(p) for p in (('mast', 'winch'), ('r111', 'r123_fug2'), ('bench', 'bench_back'))}
+TOUCHING = {frozenset(p) for p in (('mast', 'winch'), ('r111', 'r123_fug4'), ('bench', 'bench_back'))}
 
 
 def corners(it):
@@ -167,3 +167,18 @@ def test_the_panels_lie_within_their_faces_and_apart():
             apart_u = abs(du) >= (p['size_m'][0] + q['size_m'][0]) / 2 - 0.005
             apart_v = abs(dv) >= (p['size_m'][1] + q['size_m'][1]) / 2 - 0.005
             assert apart_u or apart_v, (p['id'], q['id'])
+
+
+def test_the_radio_sets_stand_at_their_meshes_size():
+    """The R-111's and the R-407's boxes in the trace are their meshes' (art/pu12m_interior/manifest.json, written by
+    tools/blender/build_pu12m_radios.py), and their front plates where the meshes have them."""
+    import json
+    manifest = json.loads((ROOT / 'art' / 'pu12m_interior' / 'manifest.json').read_text(encoding='utf-8'))
+    for iid, mesh, size, plate in (('r111', 'SM_RadioR111', I.R111_SIZE, I.R111_PLATE), ('r407', 'SM_RadioR407', I.R407_SIZE, I.R407_PLATE)):
+        m = manifest[mesh]
+        assert all(abs(a - b) < 1e-3 for a, b in zip(m['size_m'], size)), (mesh, m['size_m'], size)
+        assert abs(m['plate_m']['ahead'] - plate[0]) < 1e-3 and abs(m['plate_m']['up'] - plate[1]) < 1e-3, mesh
+        it = I.item(iid)
+        w, d, h = size
+        dims = sorted((round(it['x1'] - it['x0'], 4), round(it['y1'] - it['y0'], 4)))
+        assert dims == sorted((round(w, 4), round(d, 4))) and abs(it['z1'] - it['z0'] - h) < 1e-6, iid

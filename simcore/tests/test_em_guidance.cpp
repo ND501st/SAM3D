@@ -38,13 +38,12 @@ std::string ReplaceOnce(std::string s, const std::string& from, const std::strin
 }
 
 // The EM practice shoot, its drone given NATO's warning receiver and an evasion (placeholders: a practice drone
-// carries neither), the command link in combat or in its load.
-std::string PracticeWithRwr(const std::string& evade_on, bool in_load, bool rwr = true) {
+// carries neither).
+std::string PracticeWithRwr(const std::string& evade_on, bool rwr = true) {
     std::string s = ReadFile(kData + "/scenarios/osa_practice_em.json");
     s = ReplaceOnce(s, "\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\" }",
-                    std::string("\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\", "
-                                "\"extra_libraries\": [\"em/nato_1985.json\"], \"command_link_in_load\": ") +
-                        (in_load ? "true" : "false") + " }");
+                    "\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\", "
+                    "\"extra_libraries\": [\"em/nato_1985.json\"] }");
     s = ReplaceOnce(s, "\"id\": \"t1\",",
                     std::string("\"id\": \"t1\", ") + (rwr ? "\"rwr\": \"nato_alr46_class_rwr\", " : "") +
                         "\"evade\": { \"on\": \"" + evade_on + "\", \"kind\": \"break\" },");
@@ -141,46 +140,33 @@ SC_TEST("em optical: in a thick haze the emissions-controlled crew's TV can't ta
     SC_EXPECT(night.find("LAUNCH") == std::string::npos);
 }
 
-SC_TEST("em guidance: the command transmitters radiate from ВНИМАНИЕ along the line of sight; a missile in flight carries its responder") {
-    auto r = Runner(PracticeWithRwr("launch", false, false));  // no warning receiver: the drone flies on to the launch
+SC_TEST("em guidance: the command transmitters wait in their loads from ВНИМАНИЕ until the launch, then radiate; a missile in flight carries its responder") {
+    auto r = Runner(PracticeWithRwr("launch", false));  // no warning receiver: the drone flies on to the launch
     SC_EXPECT(r != nullptr && r->Em() != nullptr);
     if (r == nullptr || r->Em() == nullptr) return;
-    double first_on = -1.0, launch_at = -1.0;
-    bool missile_seen = false, silent_before = true;
+    double switched_on = -1.0, first_on = -1.0, launch_at = -1.0;
+    bool missile_seen = false;
     while (!r->Finished() && r->Time() < 700.0) {
         r->Step(0.1);
-        const bool on = r->Em()->CommandLinkRadiating(1);
-        if (on && first_on < 0.0) first_on = r->Time();
-        if (first_on < 0.0 && r->GetLauncher()->TransmitterState(1) != 0) silent_before = false;
+        if (switched_on < 0.0 && r->GetLauncher()->TransmitterState(1) != 0) switched_on = r->Time();
+        if (r->Em()->CommandLinkRadiating(1) && first_on < 0.0) first_on = r->Time();
         if (r->Log().Summary().launches > 0 && launch_at < 0.0) launch_at = r->Time();
         if (r->Em()->MissilesInWorld() > 0) missile_seen = true;
     }
-    std::printf("    channel I on the air at %.1f s, launch at %.1f s\n", first_on, launch_at);
-    SC_EXPECT(silent_before);                          // nothing on the air before a missile was selected
-    SC_EXPECT(first_on > 0.0 && launch_at > first_on);  // on from ВНИМАНИЕ, before the launch (mon_2112_80 p67)
-    SC_EXPECT(missile_seen);
-    SC_EXPECT_NEAR(r->Em()->CommandLinkFreqHz(1), 8.6e9, 1.0);  // the 1st vehicle's frequency 3 (library estimate)
-}
-
-SC_TEST("em guidance: in a peacetime check the command transmitters wait in their load until the launch") {
-    auto r = Runner(PracticeWithRwr("launch", true));
-    SC_EXPECT(r != nullptr && r->Em() != nullptr);
-    if (r == nullptr || r->Em() == nullptr) return;
-    double first_on = -1.0, launch_at = -1.0;
-    while (!r->Finished() && r->Time() < 700.0) {
-        r->Step(0.1);
-        if (r->Em()->CommandLinkRadiating(1) && first_on < 0.0) first_on = r->Time();
-        if (r->Log().Summary().launches > 0 && launch_at < 0.0) launch_at = r->Time();
-    }
+    std::printf("    channel I on (into its load) at %.1f s, on the air at %.1f s, launch at %.1f s\n", switched_on, first_on, launch_at);
+    SC_EXPECT(switched_on > 0.0 && launch_at > switched_on);  // on from ВНИМАНИЕ, before the launch
+    // Silent until the launch switches it from the load to the antenna (voenizdat_osa_1991 p21, p140, p155).
     SC_EXPECT(launch_at > 0.0 && first_on >= launch_at - 0.15);
+    SC_EXPECT(missile_seen);
+    SC_EXPECT_NEAR(r->Em()->CommandLinkFreqHz(1), 8.6e9, 1.0);  // the 1st vehicle's letter 3 (library estimate)
 }
 
 SC_TEST("em guidance: СМЕНА ЛИТ. moves the command transmitters to the vehicle's other frequency, the АПЧ lamps out a moment") {
-    auto r = Runner(PracticeWithRwr("launch", false, false));
+    auto r = Runner(PracticeWithRwr("launch", false));
     if (r == nullptr || r->Em() == nullptr) return;
-    // On to ВНИМАНИЕ (the command link on), then the letter key.
-    while (!r->Finished() && r->Time() < 700.0 && !r->Em()->CommandLinkRadiating(1)) r->Step(0.1);
-    SC_EXPECT(r->Em()->CommandLinkRadiating(1));
+    // On to ВНИМАНИЕ (the command transmitters on, into their loads), then the letter key.
+    while (!r->Finished() && r->Time() < 700.0 && r->GetLauncher()->TransmitterState(1) == 0) r->Step(0.1);
+    SC_EXPECT(r->GetLauncher()->TransmitterState(1) != 0);
     const double f0 = r->Em()->CommandLinkFreqHz(1), g0 = r->Em()->CommandLinkFreqHz(2);
     ConsoleData& c = r->Console();
     c.panel.Set("spk.letter", 1);  // the latch open (НОРМА), then the key to СМЕНА ЛИТ.
@@ -198,42 +184,34 @@ SC_TEST("em guidance: СМЕНА ЛИТ. moves the command transmitters to the v
 
 SC_TEST("em guidance: the target's warning receiver hears the lock and the command link, named through NATO's library; it breaks on the warning") {
     // On the lock: the tracking radar's steady beam, NATO's SA-8 tracking entry.
-    auto lock = Runner(PracticeWithRwr("lock", false));
+    auto lock = Runner(PracticeWithRwr("lock"));
     if (lock == nullptr) return;
     lock->RunToEnd(0.1, 700.0);
     const std::string dl = lock->Debrief();
     SC_EXPECT(Has(dl, "warning receiver: locked by SA-8 track (Land Roll"));
     SC_EXPECT(Has(dl, "t1  breaks"));
     SC_EXPECT(TimeOf(dl, "t1  breaks") >= TimeOf(dl, "warning receiver: locked by"));
-    // On the launch: the command link heard. In combat it radiates from ВНИМАНИЕ, so the warning comes before the
-    // missile does; in a peacetime check, with the launch.
-    auto combat = Runner(PracticeWithRwr("launch", false));
+    // On the launch: the command link heard. It waits in its load until the launch, so the warning comes with the
+    // missile, not before it.
+    auto combat = Runner(PracticeWithRwr("launch"));
     if (combat == nullptr) return;
     combat->RunToEnd(0.1, 700.0);
     const std::string dc = combat->Debrief();
     SC_EXPECT(Has(dc, "warning receiver: missile guidance, SA-8 command-guidance radars"));
     const double warned = TimeOf(dc, "warning receiver: missile guidance");
     const double launched = TimeOf(dc, "LAUNCH");
-    std::printf("    combat: warned at %.1f s, launch at %.1f s\n", warned, launched);
-    SC_EXPECT(warned > 0.0 && (launched < 0.0 || warned < launched));
-    auto check = Runner(PracticeWithRwr("launch", true));
-    if (check == nullptr) return;
-    check->RunToEnd(0.1, 700.0);
-    const std::string dk = check->Debrief();
-    const double warned_k = TimeOf(dk, "warning receiver: missile guidance");
-    const double launched_k = TimeOf(dk, "LAUNCH");
-    std::printf("    peacetime check: warned at %.1f s, launch at %.1f s\n", warned_k, launched_k);
-    SC_EXPECT(launched_k > 0.0 && warned_k >= launched_k - 0.15);
+    std::printf("    warned at %.1f s, launch at %.1f s\n", warned, launched);
+    SC_EXPECT(launched > 0.0 && warned >= launched - 0.15);
 }
 
 SC_TEST("em guidance: a target's warning receiver must be an RWR of the EM libraries, with the EM layer on") {
-    std::string s = PracticeWithRwr("launch", false);
+    std::string s = PracticeWithRwr("launch");
     s = ReplaceOnce(s, "\"rwr\": \"nato_alr46_class_rwr\"", "\"rwr\": \"red_ground_esm_class\"");
     ScenarioDef def;
     ConsoleData console;
     std::string error;
     SC_EXPECT(!LoadScenario(s, kData, def, console, &error) && error.find("not a radar warning receiver") != std::string::npos);
-    s = PracticeWithRwr("launch", false);
+    s = PracticeWithRwr("launch");
     s = ReplaceOnce(s, "\"rwr\": \"nato_alr46_class_rwr\"", "\"rwr\": \"nothing_like_it\"");
     SC_EXPECT(!LoadScenario(s, kData, def, console, &error) && error.find("not an ESM receiver") != std::string::npos);
 }

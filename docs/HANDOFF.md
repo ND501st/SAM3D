@@ -109,12 +109,30 @@ a `ProcedureTracker` so the debrief records early and out-of-order actions.
 | Research review | Done (PR #8): research file, briefing, re-plan; the user's video transcript analysed (Korovin's «Техника и вооружение» series added as a tier-1 source) |
 | **6 Accuracy pass** | **6.1 done** (branch `feature/five-man-crew`): five seats, one seat per procedure, aiming split per wheel, red start-position dots. Next: 6.2 |
 
+### The enemy air command (18 October 2026)
+
+Roadmap phase 11 (`docs/air_war/`): the other side's air war in simcore. Four adversaries as data (rebels, a neutral
+neighbour, the Warsaw Pact, NATO), staffs of officers with traits, skills, quirks, memory and careers, an intelligence
+picture with latency, ageing and deception, a planner that explains itself, abstract resolution, and raids through the
+battery's sector generated as scenarios the runner plays (`air_war_demo`; seven samples in the missions menu). Next: the
+Unreal campaign screen (A10), the ARM drill with the EM track (A11), a balance pass (A12). Shared-tree note: built
+alongside the EM session's E1-E6 work; nothing in the runner or the EM layer was changed for it.
+
+### The test range (18 October 2026)
+
+Roadmap 10.4 (`docs/TEST_RANGE.md`): `data/maps/kesmark_range.json` built by `simcore/terrain_map.hpp` (40 by 40 km of
+the Kesmark district, ground out to 150 km; boxes only), `data/weather/presets.json` and `simcore/weather.hpp` (winds
+that carry the aircraft, cloud that blinds the TV), `simcore/solar.hpp`. Scenarios opt in with `"terrain": {"type":
+"map"}` and `"weather"`; `kesmark_range_test.json` plays on it. Unreal: `ASimMapActor`, `ASimSkyWeatherActor`, the level
+`/Game/Maps/KesmarkRange` (`tools/ue_build_kesmark_range.py`), `-SimMapShots` for a scripted look. Built alongside the
+air war session's basic models (`simcore/scenery/`), which draw the aircraft and vehicles on it.
+
 ### The trainer's instructor (18 October 2026)
 
 Roadmap 10.3: the 9Ф632 trainer's instructor seat (`flak11`, ePap). `simcore/instructor.hpp` and
 `ScenarioRunner::Instruct` / `InstructorEnter` / `InstructorPicture`: he takes up to two targets and turns them, sends
 them up or down, sets their speed, makes them jink, switches their pods, lets them go back to their routes, and enters
-new targets. Scripted with the trigger action `"instructor"` (`osa_trainer.json`); in Unreal the instructor panel (F7).
+new targets. Scripted with the trigger action `"instructor"` (`osa_trainer.json`); in Unreal the instructor panel (F9).
 Tests `test_instructor.cpp` (6) and `SAM3D.Instructor.Panel`. Built in a separate worktree (`C:/dev/SAM3D-p10`) while the
 enemy-air-command session builds in the main one.
 

@@ -123,6 +123,9 @@ struct ViewRadio {
     std::string net;
     std::string from;
     std::string text;
+    bool callout = false;  // a crew callout, voiced from the callout bus
+    bool routed = false;   // the seats that heard it are known (the voice paths, docs/crew/12_COMMUNICATIONS.md)
+    std::vector<std::string> heard_by;
 };
 
 struct ViewVehicle {
@@ -154,6 +157,8 @@ struct ViewPostTrack {
     bool friendly = false;
     bool group = false;
     bool primary = false;  // from a radar cabled to the post: its echo paints under the symbol
+    bool designated = false;  // the regiment's designation to the battery
+    bool imitated = false;    // the ФР block's imitated echo
 };
 
 struct ViewLauncher {
@@ -183,6 +188,9 @@ struct ViewExtras {
     std::string post_keypad;
     bool post_keypad_designating = false;
     std::string post_keypad_last;
+    std::vector<int> post_heard;  // air-picture reports waiting for the plotter (board numbers)
+    int post_command = -1;        // the regiment's last two-digit command on the tube
+    std::string post_command_text;
 };
 
 struct KnowledgeView {
@@ -529,6 +537,9 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Str(r.net);
         w.Str(r.from);
         w.Str(r.text);
+        w.U8(static_cast<std::uint8_t>((r.callout ? 1 : 0) | (r.routed ? 2 : 0)));
+        w.U32(static_cast<std::uint32_t>(r.heard_by.size()));
+        for (const std::string& h : r.heard_by) w.Str(h);
     }
     w.U32(static_cast<std::uint32_t>(x.battery.size()));
     for (const ViewVehicle& v : x.battery) {
@@ -556,7 +567,8 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Q(t.vx, kFracStep);
         w.Q(t.vy, kFracStep);
         w.U8(static_cast<std::uint8_t>(t.zone));
-        w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0) | (t.primary ? 4 : 0)));
+        w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0) | (t.primary ? 4 : 0) | (t.designated ? 8 : 0) |
+                                       (t.imitated ? 16 : 0)));
     }
     w.U32(static_cast<std::uint32_t>(x.launchers.size()));
     for (const ViewLauncher& l : x.launchers) {
@@ -572,6 +584,10 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
     w.Str(x.post_keypad);
     w.U8(x.post_keypad_designating ? 1 : 0);
     w.Str(x.post_keypad_last);
+    w.U32(static_cast<std::uint32_t>(x.post_heard.size()));
+    for (int n : x.post_heard) w.I32(n);
+    w.I32(x.post_command);
+    w.Str(x.post_command_text);
     return w.bytes;
 }
 inline bool GetExtras(Reader& r, ViewExtras& x) {
@@ -597,6 +613,12 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         m.net = r.Str();
         m.from = r.Str();
         m.text = r.Str();
+        const std::uint8_t flags = r.U8();
+        m.callout = (flags & 1) != 0;
+        m.routed = (flags & 2) != 0;
+        const std::uint32_t heard = r.U32();
+        if (!r.ok || heard > 64u) return false;
+        for (std::uint32_t k = 0; k < heard && r.ok; ++k) m.heard_by.push_back(r.Str());
         x.radio.push_back(m);
     }
     n = r.U32();
@@ -639,6 +661,8 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         t.friendly = (flags & 1u) != 0;
         t.group = (flags & 2u) != 0;
         t.primary = (flags & 4u) != 0;
+        t.designated = (flags & 8u) != 0;
+        t.imitated = (flags & 16u) != 0;
         x.post_scope.push_back(t);
     }
     n = r.U32();
@@ -658,6 +682,11 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
     x.post_keypad = r.Str();
     x.post_keypad_designating = r.U8() != 0;
     x.post_keypad_last = r.Str();
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) x.post_heard.push_back(r.I32());
+    x.post_command = r.I32();
+    x.post_command_text = r.Str();
     return r.ok;
 }
 

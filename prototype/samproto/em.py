@@ -25,7 +25,7 @@ M64 = (1 << 64) - 1
 
 STREAMS = {"detection": 1, "range_noise": 2, "azimuth_noise": 3, "elevation_noise": 4, "esm_bearing": 5,
            "esm_frequency": 6, "esm_pri": 7, "esm_pulse_width": 8, "comms_delivery": 9, "iff": 10,
-           "false_alarm": 11, "tdoa_noise": 12, "doctrine": 13}
+           "false_alarm": 11, "tdoa_noise": 12, "doctrine": 13, "arm_seeker": 14}
 
 
 def mix64(x: int) -> int:
@@ -605,3 +605,67 @@ def lines_across(size_m: float, range_m: float, fov_height_rad: float, tv_lines:
     if range_m <= 0.0 or fov_height_rad <= 0.0:
         return 1e9
     return (size_m / range_m) / (fov_height_rad / tv_lines)
+
+
+# ------------------------------------------------------------------------- anti-radiation missiles (em/arm.hpp)
+
+def one_way_received_power_w(eirp_w: float, rx_gain_db: float, freq_hz: float, range_m: float, extra_loss_db: float = 0.0) -> float:
+    """The one-way radar equation a passive receiver (an ESM set, an ARM's seeker) hears an emitter by."""
+    if range_m <= 0.0 or freq_hz <= 0.0:
+        return 0.0
+    lam = wavelength(freq_hz)
+    return eirp_w * undb(rx_gain_db - extra_loss_db) * lam * lam / (16.0 * math.pi * math.pi * range_m * range_m)
+
+
+def direction_from_az_el(az: float, el: float) -> Tuple[float, float, float]:
+    ce = math.cos(el)
+    return (ce * math.sin(az), ce * math.cos(az), math.sin(el))
+
+
+def arm_launch_direction(frm: Tuple[float, float, float], believed: Tuple[float, float, float], loft_rad: float) -> Tuple[float, float, float]:
+    """The carrier fires at where it believes the radar is, lofted above that line."""
+    dx, dy, dz = believed[0] - frm[0], believed[1] - frm[1], believed[2] - frm[2]
+    az = math.atan2(dx, dy) % TWO_PI
+    el = math.atan2(dz, math.hypot(dx, dy))
+    return direction_from_az_el(az, el + loft_rad)
+
+
+def arm_tuned_to(freq_hz: float, prf_hz: float, band: Tuple[float, float], tuned_freq_hz: float, tuned_prf_hz: float,
+                 tune_fraction: float, prf_fraction: float) -> bool:
+    """Is an emitter on the signal the ARM was set to, inside its head's band? (0 fractions: the whole band, any rate.)"""
+    if freq_hz < band[0] or freq_hz > band[1]:
+        return False
+    if tune_fraction > 0.0 and tuned_freq_hz > 0.0 and abs(freq_hz - tuned_freq_hz) > tune_fraction * tuned_freq_hz:
+        return False
+    if prf_fraction > 0.0 and tuned_prf_hz > 0.0 and abs(prf_hz - tuned_prf_hz) > prf_fraction * tuned_prf_hz:
+        return False
+    return True
+
+
+def arm_ground_point(frm: Tuple[float, float, float], d: Tuple[float, float, float], ground_alt: Callable[[float, float], float],
+                     max_m: float = 100000.0, earth_radius_m: float = MEAN_RADIUS) -> Optional[Tuple[float, float, float]]:
+    """Where a ray from `frm` (local ENU, z up from the origin's height) along unit `d` meets the ground: the point a
+    HARM-class missile remembers when the radar goes silent. A local point's height above the ground is its z plus the
+    Earth's drop over its distance from the origin, less the ground's height (the C++ uses the WGS84 frame): 50 m steps,
+    then bisection, as em/arm.hpp ArmGroundPoint."""
+    def above(t: float) -> float:
+        x, y, z = frm[0] + d[0] * t, frm[1] + d[1] * t, frm[2] + d[2] * t
+        return z + (x * x + y * y) / (2.0 * earth_radius_m) - ground_alt(x, y)
+
+    if above(0.0) <= 0.0:
+        return frm
+    lo, t = 0.0, 50.0
+    while t <= max_m:
+        if above(t) > 0.0:
+            lo = t
+            t += 50.0
+            continue
+        hi = t
+        for _ in range(20):
+            mid = 0.5 * (lo + hi)
+            if above(mid) > 0.0:
+                lo = mid
+            else:
+                hi = mid
+        return (frm[0] + d[0] * hi, frm[1] + d[1] * hi, frm[2] + d[2] * hi)
+    return None

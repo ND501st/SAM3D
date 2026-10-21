@@ -64,6 +64,8 @@
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/group_designation.hpp"
+#include "simcore/kill_assessment.hpp"
 #include "simcore/orientation.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
@@ -92,6 +94,17 @@ struct EngagementTuning {
     std::vector<SpeedBand> head_on;  // ascending speed
     SpeedBand pursuit;               // a receding target
     double pursuit_max_range_m = 0.0;
+    double pursuit_range_loss_s = 0.0;  // the receding edge comes in by this many metres per m/s of target speed
+    // Head-on: the slant parameter (the distance from the unit to the target's course, through its height) at most
+    // max_slant_parameter_m less slant_parameter_loss_s metres per m/s of target speed (0: not checked).
+    double max_slant_parameter_m = 0.0;
+    double slant_parameter_loss_s = 0.0;
+    // The crews' far edge of the launch zone head-on: the target's range at launch, by its height (points of height AGL
+    // m, range m; linear between them, flat beyond), for targets up to launch_split_speed_mps and for faster ones.
+    bool has_launch_ranges = false;
+    double launch_split_speed_mps = 0.0;
+    std::vector<std::pair<double, double>> launch_range_slow;
+    std::vector<std::pair<double, double>> launch_range_fast;
     SpeedBand optical;               // slow or hovering targets close to the ground ("F"); needs its own range
     double optical_min_range_m = 0.0;
     double optical_max_range_m = 0.0;
@@ -99,6 +112,15 @@ struct EngagementTuning {
     bool has_methods = false;
     double low_target_elevation_deg = 0.0;  // below it a low target needs a low-target method
     double gorka_max_agl_m = 0.0;           // the zoom-climb method is used at or below this height
+    // Under the threat of anti-radiation missiles (optional "arm"): the range at which the tracking transmitter's high
+    // voltage goes on, for the missile to meet the target at the near or the far edge of the zone, by the target's
+    // speed (voenizdat_osa_1991 Table 7.3).
+    bool has_arm_table = false;
+    double arm_split_speed_mps = 300.0;
+    double arm_track_on_slow_near_m = 0.0;
+    double arm_track_on_slow_far_m = 0.0;
+    double arm_track_on_fast_near_m = 0.0;
+    double arm_track_on_fast_far_m = 0.0;
     // Manual TV tracking (optional): the TV channel follows the wheels. Without it the servo drives the wheels onto the
     // target by itself once the TV has locked.
     bool has_tv_manual = false;
@@ -139,7 +161,7 @@ struct EngagementTuning {
     // (one field height apart) swept in turn. 0 = none: the wheels sit on the designation.
     double tv_search_half_deg = 0.0;
     int tv_search_bars = 1;
-    // Missile pacing (not a flight model).
+    // Missile pacing (not a flight model): the missile flies along the line of sight at its average speed.
     double missile_average_speed_mps = 0.0;
     double missile_max_flight_time_s = 0.0;
     // Outcome.
@@ -157,6 +179,11 @@ struct EngagementTuning {
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
+    // The crew judging a shot's result from its instruments' signs (kill_assessment.hpp; "kill_assessment"), and picking
+    // an aircraft in a group the post designated by its centre and a rule (group_designation.hpp; "group"). Without the
+    // blocks, these defaults.
+    KillAssessmentTuning kill;
+    GroupTuning group;
 
     double MethodFactor(const char* method) const {
         const auto it = method_factor.find(method);
@@ -212,14 +239,106 @@ struct EngagementTuning {
             for (const SpeedBand& b : head_on) {
                 if (speed_mps <= b.max_speed_mps) {
                     if (b.max_parameter_m > 0.0 && parameter_m > b.max_parameter_m) return ZoneKind::None;
+                    if (max_slant_parameter_m > 0.0 && parameter_m >= 0.0 &&
+                        std::hypot(parameter_m, agl_m) > max_slant_parameter_m - slant_parameter_loss_s * speed_mps) {
+                        return ZoneKind::None;
+                    }
                     return agl_m >= b.min_alt_m && agl_m <= b.max_alt_m ? ZoneKind::HeadOn : ZoneKind::None;
                 }
             }
             return ZoneKind::None;
         }
-        const bool in = speed_mps <= pursuit.max_speed_mps && range_m >= zone_min_range_m && range_m <= pursuit_max_range_m &&
+        const double pursuit_edge_m = pursuit_max_range_m - pursuit_range_loss_s * speed_mps;
+        const bool in = speed_mps <= pursuit.max_speed_mps && range_m >= zone_min_range_m && range_m <= pursuit_edge_m &&
                         agl_m >= pursuit.min_alt_m && agl_m <= pursuit.max_alt_m;
         return in ? ZoneKind::Pursuit : ZoneKind::None;
+    }
+
+    // Where the missile meets the target (voenizdat_osa_1991 p122-123: the fire-control computer takes the target as
+    // flying on straight at its speed; p129: the missile's flight time to the zone's far edge): the missile flies along
+    // the line of sight at its average speed. `rel` is the target from the unit (ENU m). ok false: it can't catch it.
+    struct Meeting {
+        bool ok = false;
+        double time_s = 0.0;       // from the launch
+        double range_m = 0.0;      // slant range to the meeting point
+        double height_m = 0.0;     // the target's height above the ground there (the ground taken as level)
+        double closing_mps = 0.0;  // > 0: the target still approaching there (before its course's nearest point)
+    };
+    Meeting MeetingFor(const Vec3& rel, const Vec3& velocity, double agl_m) const {
+        Meeting m;
+        const double vm = missile_average_speed_mps;
+        if (!(vm > 0.0)) return m;
+        // |rel + velocity t| = vm t:  (v.v - vm^2) t^2 + 2 (rel.v) t + rel.rel = 0, the smallest positive root.
+        const double a = Dot(velocity, velocity) - vm * vm;
+        const double b = 2.0 * Dot(rel, velocity);
+        const double c = Dot(rel, rel);
+        double t = -1.0;
+        if (std::fabs(a) < 1e-9) {
+            if (b < 0.0) t = -c / b;
+        } else {
+            const double disc = b * b - 4.0 * a * c;
+            if (disc >= 0.0) {
+                const double sq = std::sqrt(disc);
+                const double r1 = (-b - sq) / (2.0 * a);
+                const double r2 = (-b + sq) / (2.0 * a);
+                const double lo = std::fmin(r1, r2);
+                const double hi = std::fmax(r1, r2);
+                t = lo > 0.0 ? lo : hi;
+            }
+        }
+        if (!(t > 0.0)) return m;
+        const Vec3 at = rel + velocity * t;
+        m.ok = true;
+        m.time_s = t;
+        m.range_m = at.Length();
+        m.height_m = agl_m + velocity.z * t;
+        m.closing_mps = m.range_m > 1.0 ? -Dot(velocity, at / m.range_m) : 0.0;
+        return m;
+    }
+
+    // The crews' far edge of the launch zone head-on for a target at this height and speed (0: no table).
+    double LaunchRangeFor(double agl_m, double speed_mps) const {
+        if (!has_launch_ranges) return 0.0;
+        return Interpolate(speed_mps <= launch_split_speed_mps ? launch_range_slow : launch_range_fast, agl_m);
+    }
+
+    // The launch zone (voenizdat_osa_1991 p14: the targets that, when a missile goes, meet it inside the zone; the
+    // computer's ЦЕЛЬ В ЗОНЕ, p121-129): the zone the meeting point is in, within the missile's flight time; head-on also
+    // the target's range at most the crews' far edge for its height and speed (p257, Table 7.1), which carries the
+    // computer's own speed functions that the book doesn't print.
+    ZoneKind LaunchZoneFor(const Vec3& rel, const Vec3& velocity, double agl_m) const {
+        const Meeting m = MeetingFor(rel, velocity, agl_m);
+        if (!m.ok || (missile_max_flight_time_s > 0.0 && m.time_s > missile_max_flight_time_s)) return ZoneKind::None;
+        const double speed = velocity.Length();
+        const double vh = std::hypot(velocity.x, velocity.y);
+        const double parameter = vh > 1.0 ? std::fabs(rel.x * velocity.y - rel.y * velocity.x) / vh : std::hypot(rel.x, rel.y);
+        const ZoneKind k = ZoneFor(m.range_m, m.height_m, speed, m.closing_mps, parameter);
+        if (k == ZoneKind::HeadOn && has_launch_ranges && rel.Length() > LaunchRangeFor(agl_m, speed)) return ZoneKind::None;
+        return k;
+    }
+
+    // ВНИМАНИЕ (voenizdat_osa_1991 p121, p129, eq. 2.24): the launch zone, or an approaching target within the zone's far
+    // edge plus the missile's flight time to it and the warning time at its speed over the ground:
+    // range <= Rmax + (Rmax / vm + warning) x Vground (10.3 km + 36 s x Vground on the Osa).
+    bool AttentionFor(const Vec3& rel, const Vec3& velocity, double agl_m) const {
+        if (LaunchZoneFor(rel, velocity, agl_m) != ZoneKind::None) return true;
+        const double range = rel.Length();
+        if (range < 1.0 || !(missile_average_speed_mps > 0.0) || -Dot(velocity, rel / range) <= 0.0) return false;
+        const double vh = std::hypot(velocity.x, velocity.y);
+        return range <= zone_max_range_m + (zone_max_range_m / missile_average_speed_mps + zone_warning_s) * vh;
+    }
+
+    // Piecewise linear through (x, y) points in ascending x, flat beyond the ends.
+    static double Interpolate(const std::vector<std::pair<double, double>>& pts, double x) {
+        if (pts.empty()) return 0.0;
+        if (x <= pts.front().first) return pts.front().second;
+        for (std::size_t i = 1; i < pts.size(); ++i) {
+            if (x <= pts[i].first) {
+                const double f = (x - pts[i - 1].first) / (pts[i].first - pts[i - 1].first);
+                return pts[i - 1].second + f * (pts[i].second - pts[i - 1].second);
+            }
+        }
+        return pts.back().second;
     }
 
     enum class GuidanceMethod { ThreePoint, ZoomClimb, Optical, Jammer };
@@ -250,7 +369,8 @@ namespace detail {
 class TuningLoader : public ConsoleLoader {
 public:
     bool LoadTuning(const json::Value& root, EngagementTuning& t) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome"}) ||
+        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "arm", "search", "track", "aim", "missile", "outcome",
+                             "kill_assessment", "group"}) ||
             !RequireString(root, "", "system_id", t.system_id)) {
             return false;
         }
@@ -298,6 +418,18 @@ public:
                 return false;
             }
             t.has_methods = true;
+        }
+        if (root.Find("arm") != nullptr) {
+            if (!Group(root, "arm", {"split_speed_mps", "slow_near_km", "slow_far_km", "fast_near_km", "fast_far_km"}, g) ||
+                !Num(*g, "arm", "split_speed_mps", t.arm_split_speed_mps, 1.0) ||
+                !Num(*g, "arm", "slow_near_km", t.arm_track_on_slow_near_m, 0.1) || !Num(*g, "arm", "slow_far_km", t.arm_track_on_slow_far_m, 0.1) ||
+                !Num(*g, "arm", "fast_near_km", t.arm_track_on_fast_near_m, 0.1) || !Num(*g, "arm", "fast_far_km", t.arm_track_on_fast_far_m, 0.1)) {
+                return false;
+            }
+            for (double* m : {&t.arm_track_on_slow_near_m, &t.arm_track_on_slow_far_m, &t.arm_track_on_fast_near_m, &t.arm_track_on_fast_far_m}) {
+                *m *= 1000.0;
+            }
+            t.has_arm_table = true;
         }
         if (!Group(root, "search", {"clutter_altitude_m"}, g) ||
             !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0)) {
@@ -383,10 +515,65 @@ public:
             }
         }
         if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
-        return LoadLowAltitude(*g, t);
+        if (!LoadLowAltitude(*g, t)) return false;
+        if (root.Find("kill_assessment") != nullptr && !LoadKillAssessment(root, t.kill)) return false;
+        if (root.Find("group") != nullptr && !LoadGroup(root, t.group)) return false;
+        return true;
     }
 
 private:
+    bool Chance(const json::Value& g, const char* group, const char* key, double& out) {
+        if (!Num(g, group, key, out, 0.0)) return false;
+        if (out > 1.0) return Fail(Join(group, key), "must be from 0 to 1");
+        return true;
+    }
+    bool LoadKillAssessment(const json::Value& root, KillAssessmentTuning& k) {
+        const char* G = "kill_assessment";
+        const json::Value* g = nullptr;
+        if (!Group(root, G,
+                   {"judge_role", "judge_min_s", "judge_max_s", "watch_s", "mark_gone_s", "scope_gone_s", "near_burst_chance",
+                    "early_burst_chance", "elevation_drop_chance", "tv_fire_chance", "elevation_drop_deg_s", "strobe_match_deg",
+                    "beside_m", "ambiguous_wrong_chance", "recheck_s", "decisive", "weight", "delay_s"},
+                   g) ||
+            !RequireString(*g, G, "judge_role", k.judge_role) || !Num(*g, G, "judge_min_s", k.judge_min_s, 0.0) ||
+            !Num(*g, G, "judge_max_s", k.judge_max_s, k.judge_min_s) || !Num(*g, G, "watch_s", k.watch_s, 0.0) ||
+            !Num(*g, G, "mark_gone_s", k.mark_gone_s, 0.0) || !Num(*g, G, "scope_gone_s", k.scope_gone_s, 0.0) ||
+            !Chance(*g, G, "near_burst_chance", k.near_burst_chance) || !Chance(*g, G, "early_burst_chance", k.early_burst_chance) ||
+            !Chance(*g, G, "elevation_drop_chance", k.elevation_drop_chance) || !Chance(*g, G, "tv_fire_chance", k.tv_fire_chance) ||
+            !Num(*g, G, "elevation_drop_deg_s", k.elevation_drop_deg_s, 0.0) || !Num(*g, G, "strobe_match_deg", k.strobe_match_deg, 0.0) ||
+            !Num(*g, G, "beside_m", k.beside_m, 0.0) || !Chance(*g, G, "ambiguous_wrong_chance", k.ambiguous_wrong_chance) ||
+            !Num(*g, G, "recheck_s", k.recheck_s, 0.0) || !Num(*g, G, "decisive", k.decisive, 0.01)) {
+            return false;
+        }
+        if (k.near_burst_chance + k.early_burst_chance > 1.0) return Fail(Join(G, "near_burst_chance"), "with early_burst_chance at most 1");
+        for (const char* name : {"weight", "delay_s"}) {
+            const std::string table = name;
+            const json::Value* w = g->Find(table);
+            const std::string p = Join(G, table);
+            if (w == nullptr) return Fail(p, "required: a number for each sign");
+            if (!w->Is(json::Type::Object)) return Fail(p, "expected an object of sign: number");
+            for (std::size_t i = 0; i < w->keys.size(); ++i) {
+                KillSign s = KillSign::Burst;
+                if (!KillSignFromId(w->keys[i], s)) return Fail(Join(p, w->keys[i]), "unknown sign");
+                if (!w->items[i].Is(json::Type::Number)) return Fail(Join(p, w->keys[i]), "expected a number");
+                const double v = w->items[i].number;
+                const bool for_hit = s <= KillSign::TvFire;
+                if (table == "delay_s" && v < 0.0) return Fail(Join(p, w->keys[i]), "must be >= 0");
+                if (table == "weight" && (for_hit ? v <= 0.0 : v >= 0.0)) {  // a hit's sign weighs for it, a miss's against
+                    return Fail(Join(p, w->keys[i]), for_hit ? "a hit's sign: must be > 0" : "a miss's sign: must be < 0");
+                }
+                (table == "weight" ? k.weight : k.delay_s)[static_cast<std::size_t>(s)] = v;
+            }
+            if (w->keys.size() != kKillSignCount) return Fail(p, "needs every sign (" + std::to_string(kKillSignCount) + ")");
+        }
+        return true;
+    }
+    bool LoadGroup(const json::Value& root, GroupTuning& gt) {
+        const json::Value* g = nullptr;
+        return Group(root, "group", {"post_unresolved_m", "search_m", "link_m", "same_azimuth_deg"}, g) &&
+               Num(*g, "group", "post_unresolved_m", gt.post_unresolved_m, 0.0) && Num(*g, "group", "search_m", gt.search_m, 1.0) &&
+               Num(*g, "group", "link_m", gt.link_m, 0.0) && Num(*g, "group", "same_azimuth_deg", gt.same_azimuth_deg, 0.0);
+    }
     bool LoadSpeedBand(const json::Value& v, const std::string& path, EngagementTuning::SpeedBand& b) {
         return Num(v, path.c_str(), "max_speed_mps", b.max_speed_mps, 0.0) &&
                Num(v, path.c_str(), "min_altitude_m", b.min_alt_m, 0.0) &&
@@ -395,7 +582,14 @@ private:
 
     bool LoadZones(const json::Value& root, EngagementTuning& t) {
         const json::Value* z = nullptr;
-        if (!Group(root, "zones", {"head_on", "pursuit", "optical"}, z)) return false;
+        if (!Group(root, "zones", {"head_on", "pursuit", "optical", "max_slant_parameter_m", "slant_parameter_loss_s", "launch_range_m"}, z) ||
+            !OptionalNumber(*z, "zones", "max_slant_parameter_m", t.max_slant_parameter_m) ||
+            !OptionalNumber(*z, "zones", "slant_parameter_loss_s", t.slant_parameter_loss_s)) {
+            return false;
+        }
+        if (t.max_slant_parameter_m < 0.0) return Fail("zones.max_slant_parameter_m", "must be >= 0");
+        if (t.slant_parameter_loss_s < 0.0) return Fail("zones.slant_parameter_loss_s", "must be >= 0");
+        if (z->Find("launch_range_m") != nullptr && !LoadLaunchRanges(*z->Find("launch_range_m"), t)) return false;
         const json::Value* ho = z->Find("head_on");
         if (ho == nullptr || !ho->Is(json::Type::Array) || ho->items.empty()) {
             return Fail("zones.head_on", "expected a non-empty list of speed bands");
@@ -416,16 +610,44 @@ private:
         const json::Value* pu = z->Find("pursuit");
         const json::Value* op = z->Find("optical");
         if (pu == nullptr || op == nullptr) return Fail("zones", "needs head_on, pursuit and optical");
-        if (!Keys(*pu, "zones.pursuit", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "max_range_m"}) ||
+        if (!Keys(*pu, "zones.pursuit", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "max_range_m", "range_loss_s"}) ||
             !LoadSpeedBand(*pu, "zones.pursuit", t.pursuit) ||
             !Num(*pu, "zones.pursuit", "max_range_m", t.pursuit_max_range_m, t.zone_min_range_m + 1.0) ||
+            !OptionalNumber(*pu, "zones.pursuit", "range_loss_s", t.pursuit_range_loss_s) ||
             !Keys(*op, "zones.optical", {"max_speed_mps", "min_altitude_m", "max_altitude_m", "min_range_m", "max_range_m"}) ||
             !LoadSpeedBand(*op, "zones.optical", t.optical) ||
             !Num(*op, "zones.optical", "min_range_m", t.optical_min_range_m, 0.0) ||
             !Num(*op, "zones.optical", "max_range_m", t.optical_max_range_m, t.optical_min_range_m + 1.0)) {
             return false;
         }
+        if (t.pursuit_range_loss_s < 0.0) return Fail("zones.pursuit.range_loss_s", "must be >= 0");
         t.has_zones = true;
+        return true;
+    }
+
+    // zones.launch_range_m: { "split_speed_mps": v, "slow": [[height_m, range_m], ...], "fast": [...] }.
+    bool LoadLaunchRanges(const json::Value& v, EngagementTuning& t) {
+        const char* p = "zones.launch_range_m";
+        if (!Keys(v, p, {"split_speed_mps", "slow", "fast"}) || !Num(v, p, "split_speed_mps", t.launch_split_speed_mps, 1.0) ||
+            !LoadPoints(v, Join(p, "slow"), "slow", t.launch_range_slow) || !LoadPoints(v, Join(p, "fast"), "fast", t.launch_range_fast)) {
+            return false;
+        }
+        t.has_launch_ranges = true;
+        return true;
+    }
+
+    // A required non-empty list of [x, y] points, x ascending, y > 0.
+    bool LoadPoints(const json::Value& obj, const std::string& path, const char* key, std::vector<std::pair<double, double>>& out) {
+        const json::Value* list = obj.Find(key);
+        if (list == nullptr || !list->Is(json::Type::Array) || list->items.empty()) return Fail(path, "expected a non-empty list of [x, y]");
+        for (const json::Value& pt : list->items) {
+            if (!pt.Is(json::Type::Array) || pt.items.size() != 2 || !pt.items[0].Is(json::Type::Number) ||
+                !pt.items[1].Is(json::Type::Number) || !(pt.items[1].number > 0.0) ||
+                (!out.empty() && !(pt.items[0].number > out.back().first))) {
+                return Fail(path, "expected [x, y] pairs in ascending x with y > 0");
+            }
+            out.emplace_back(pt.items[0].number, pt.items[1].number);
+        }
         return true;
     }
 
@@ -595,6 +817,10 @@ struct EngagementEvent {
     double range_m = 0.0;
     TrackMethod method = TrackMethod::None;
     std::string detail;
+    // Hit and Miss: the missile's number and what the instruments showed of its target at that moment (the kill
+    // assessment's start, kill_assessment.hpp). The crew learns the result from those signs, not from this event.
+    int shot = 0;
+    MeetingView view;
 };
 
 // Which aiming seats have an NPC in them. A seat the player sits in (or nobody) is left alone.
@@ -620,6 +846,9 @@ struct AimCrew {
     const CrewPicture* range_knows = nullptr;
     // Contacts the commander has called false (decoys made out on the TV, roadmap E6): the wheels leave them alone.
     std::set<std::string> ignore;
+    // The helper (docs/crew/14_HELPER.md): work out where each wheel's NPC would bring it even where a player sits, for
+    // EngagementModel::WheelWanted. Only the NPCs' wheels move.
+    bool advise = false;
 };
 
 class EngagementModel {
@@ -632,10 +861,10 @@ public:
               SessionLog& log, std::mt19937& rng, const AimCrew& aim_crew) {
         if (!console.has_sensors) return;
         time_ = t;
-        UpdateOrientation(t, dt, console, log, aim_crew.elevation);
+        UpdateOrientation(t, dt, console, log, aim_crew.elevation, aim_crew.advise);
         UpdateBeams(dt, console);
         Measure(dt, world, targets);
-        ResolveShots(t, world, targets, log, rng);
+        ResolveShots(t, world, console, targets, log, rng);
         if (em_ != nullptr) StepEm(dt, world, console, targets);
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
@@ -670,10 +899,13 @@ public:
         s.in_zone = s.zone != EngagementTuning::ZoneKind::None;
         s.guidance = tuning_.MethodFor(g.agl_m, g.el_deg, g.speed_mps, jam_switch);
         s.range_known = range_known_now_;
-        s.flight_time_s = g.range_m / tuning_.missile_average_speed_mps;
-        s.out_of_reach = s.flight_time_s > tuning_.missile_max_flight_time_s;
+        // The missile flies to where it meets the target (the target flying on straight); beyond its flight time it
+        // destroys itself (voenizdat_osa_1991 p22: at 25-28 s).
+        const EngagementTuning::Meeting meet = tuning_.MeetingFor(g.rel, g.velocity, g.agl_m);
+        s.flight_time_s = meet.ok ? meet.time_s : tuning_.missile_max_flight_time_s;
+        s.out_of_reach = !meet.ok || s.flight_time_s > tuning_.missile_max_flight_time_s;
         if (s.out_of_reach) s.flight_time_s = tuning_.missile_max_flight_time_s;
-        char detail[300];
+        char detail[340];
         std::snprintf(detail, sizeof(detail), "guided at %s, %.1f km, %s track%s", tracked_.c_str(), g.range_m / 1000.0,
                       ToString(method_), s.in_zone ? ", in the zone" : ", OUTSIDE the zone");
         if (tuning_.has_zones || tuning_.has_methods) {
@@ -684,6 +916,10 @@ public:
         if (!s.range_known) {
             const std::size_t n = std::strlen(detail);
             std::snprintf(detail + n, sizeof(detail) - n, "; NO RANGE%s", jam_switch ? " (method N)" : ", ПОМЕХА off");
+        }
+        if (meet.ok) {
+            const std::size_t n = std::strlen(detail);
+            std::snprintf(detail + n, sizeof(detail) - n, "; meeting at %.1f km in %.0f s", meet.range_m / 1000.0, meet.time_s);
         }
         log.Record({t, DebriefEntry::Kind::Scenario, who, tracked_, detail});
         shots_.push_back(s);
@@ -884,9 +1120,12 @@ private:
         double closing_mps = 0.0;
         double speed_mps = 0.0;
         double parameter_m = 0.0;  // crossing parameter: distance from the unit to the target's course, over the ground
+        Vec3 rel;                  // the target from the unit (ENU m)
+        Vec3 velocity;
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
         bool los = false;
+        double cloud_transmission = 1.0;  // the light the cloud lets through between the unit and the target (weather.hpp)
         std::vector<std::array<double, 3>> history;  // (time, az, el) of the last few seconds, for a lagging operator
         Vec3 prev_velocity;
         Vec3 prev_los_dir;
@@ -964,7 +1203,10 @@ private:
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
             g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
+            g.cloud_transmission = world.GetWeather().HasClouds() ? world.GetWeather().CloudTransmission(unit_, unit_alt, a->position, alt) : 1.0;
             const Vec3 dir = los.Normalized();
+            g.rel = los;
+            g.velocity = a->velocity;
             g.closing_mps = -Dot(a->velocity, dir);
             g.speed_mps = a->velocity.Length();
             const double vh = std::hypot(a->velocity.x, a->velocity.y);
@@ -1031,8 +1273,13 @@ private:
         em_->Advance(dt);
     }
 
+    // The launch zone at the range the system has: `g.range_m` may be the range set by hand (along the true line of sight).
     EngagementTuning::ZoneKind ZoneOf(const Geometry& g) const {
-        return tuning_.ZoneFor(g.range_m, g.agl_m, g.speed_mps, g.closing_mps, g.parameter_m);
+        return tuning_.LaunchZoneFor(RelAtRange(g), g.velocity, g.agl_m);
+    }
+    static Vec3 RelAtRange(const Geometry& g) {
+        const double r = g.rel.Length();
+        return r > 1.0 ? g.rel * (g.range_m / r) : g.rel;
     }
     bool InZone(const Geometry& g) const { return ZoneOf(g) != EngagementTuning::ZoneKind::None; }
 
@@ -1041,8 +1288,43 @@ private:
         return s.early_actions + s.out_of_order_actions;
     }
 
-    void ResolveShots(double t, World& world, const std::vector<EngagementTarget>& targets, SessionLog& log,
-                      std::mt19937& rng) {
+    // What the instruments show of a shot's target now (its geometry before a hit takes it out of the sky): the tracking
+    // radar's range channel and antenna, the TV, the search scope and what is beside it there.
+    MeetingView MeetingOf(const ConsoleData& console, const std::string& id, const Geometry& g) const {
+        MeetingView v;
+        const bool tracked = method_ != TrackMethod::None && tracked_ == id;
+        v.radar_range = tracked && method_ == TrackMethod::Radar;
+        v.antenna_on = tracked;
+        v.noise_tracked = tracked && method_ == TrackMethod::RadarOnJam;
+        const TrackSensorDef& d = console.track;
+        v.on_tv = tracked && !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera) && TvLookAt(console, g).seen;
+        v.elevation_deg = g.el_deg;
+        const KillAssessmentTuning& k = tuning_.kill;
+        const Contact* own = nullptr;
+        for (const Contact& c : picture_) {
+            if (c.target_id == id) own = &c;
+        }
+        v.on_scope = own != nullptr;
+        for (const ScopeStrobe& st : strobes_) v.strobe = v.strobe || std::fabs(Wrap180(st.azimuth_deg - g.az_deg)) <= k.strobe_match_deg;
+        if (own == nullptr) return v;
+        for (const Contact& c : picture_) {
+            if (&c == own) continue;
+            const double a = DegToRad(c.azimuth_deg), b = DegToRad(own->azimuth_deg);
+            const double dx = c.range_m * std::sin(a) - own->range_m * std::sin(b);
+            const double dy = c.range_m * std::cos(a) - own->range_m * std::cos(b);
+            if (dx * dx + dy * dy > k.beside_m * k.beside_m) continue;
+            // An aircraft's echo beside it is its group; an echo of no aircraft (a chaff cloud, em_link.hpp's ghosts), its chaff.
+            if (geo_.count(c.target_id) != 0) {
+                v.group = true;
+            } else {
+                v.chaff = true;
+            }
+        }
+        return v;
+    }
+
+    void ResolveShots(double t, World& world, const ConsoleData& console, const std::vector<EngagementTarget>& targets,
+                      SessionLog& log, std::mt19937& rng) {
         for (Shot& s : shots_) {
             if (s.done) continue;
             const std::string who = "Missile " + std::to_string(s.number);
@@ -1050,14 +1332,15 @@ private:
             if (it == geo_.end() || !it->second.alive) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "target already down"});
-                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "target already down"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "target already down", s.number});
                 continue;
             }
             const Geometry& g = it->second;
             if (method_ == TrackMethod::None || tracked_ != s.target_id) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "track lost: no guidance commands"});
-                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "track lost"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, "track lost", s.number,
+                                   MeetingOf(console, s.target_id, g)});
                 continue;
             }
             if (g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
@@ -1065,7 +1348,8 @@ private:
             if (s.out_of_reach) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "out of reach: flight time ran out"});
-                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "out of reach"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, "out of reach", s.number,
+                                   MeetingOf(console, s.target_id, g)});
                 continue;
             }
             const double base = tuning_.HitChanceFor(g.target_class);
@@ -1110,7 +1394,8 @@ private:
                           manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim_text, draw);
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
-            events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, std::string()});
+            events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method,
+                               std::string(), s.number, MeetingOf(console, s.target_id, g)});
             if (hit) {
                 Aircraft* a = TargetAircraft(world, targets, s.target_id);
                 if (a != nullptr) a->alive = false;
@@ -1178,7 +1463,7 @@ private:
 
     // The aiming crew turn their wheels toward the nearest contact, as the scope shows it. A locked wheel doesn't turn.
     void Aim(double dt, ConsoleData& console, const AimCrew& crew) {
-        if (!crew.azimuth && !crew.elevation && !crew.range) return;
+        if (!crew.azimuth && !crew.elevation && !crew.range && !crew.advise) return;
         const TrackSensorDef& d = console.track;
         struct Aimpoint {
             double range_m = 0.0;
@@ -1282,13 +1567,14 @@ private:
             tv_search_s_ = 0.0;
         }
         const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
-        if (crew.azimuth && !az_locked) {
+        if ((crew.azimuth || crew.advise) && !az_locked) {
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             // The board gives true azimuth, set on the wheel as it is: right only if the vehicle is oriented.
             const double want_az = WheelAzimuth(from_board ? board_true_az : best.az_deg, wheel_az, d.az_limit_deg);
-            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
+            Want(d.az_wheel, want_az, best_id, crew.assigned);
+            if (crew.azimuth) console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
         }
-        if (crew.range) {
+        if (crew.range || crew.advise) {
             double want_r = -1.0;
             if (crew.range_knows == nullptr) {
                 if (range_known) want_r = best.range_m;
@@ -1304,8 +1590,9 @@ private:
                 }
             }
             if (want_r >= 0.0) {
+                Want(d.range_wheel, want_r, best_id, crew.assigned);
                 const double wheel_r = console.panel.GetValue(d.range_wheel);
-                console.panel.SetValue(d.range_wheel, Toward(wheel_r, want_r, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
+                if (crew.range) console.panel.SetValue(d.range_wheel, Toward(wheel_r, want_r, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
             }
         }
         // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
@@ -1314,13 +1601,45 @@ private:
         if (d.beam_width_deg > 0.0) {
             for (const Contact& c : track_returns_) on_indicator = on_indicator || c.target_id == best_id;
         }
-        if (crew.elevation && (tv_search || on_indicator)) {
+        if ((crew.elevation || crew.advise) && (tv_search || on_indicator)) {
+            Want(d.el_wheel, best.el_deg, best_id, crew.assigned);
             const double wheel_el = console.panel.GetValue(d.el_wheel);
-            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
+            if (crew.elevation) console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
         }
     }
 
     static double TvHalfFov(const ConsoleData& console) { return 0.5 * TvFieldOfViewDeg(console); }
+    // Where the wheels' NPCs would bring them (AimCrew::advise), by wheel id: the value, the target it is on, when.
+    struct WheelWant {
+        double value = 0.0;
+        std::string target;
+        double t = 0.0;
+    };
+    std::map<std::string, WheelWant> wanted_;
+    // A want not renewed this long is gone (the NPC would leave the wheel). One on the target the commander ordered taken
+    // isn't replaced by another target's for kOrderedHoldS: the ordered target out of the picture for a few scans (a low
+    // flier in the clutter) leaves the wheel where it was last seen, it doesn't send it to the next echo (sam3d: an NPC's
+    // wheel barely moves in such a moment; a mark that flips between targets would turn a player's onto the wrong one).
+    static constexpr double kWantFreshS = 1.0;
+    static constexpr double kOrderedHoldS = 8.0;
+    void Want(const std::string& wheel, double value, const std::string& target = std::string(), const std::string& assigned = std::string()) {
+        const auto it = wanted_.find(wheel);
+        if (it != wanted_.end() && !assigned.empty() && target != assigned && it->second.target == assigned && time_ - it->second.t < kOrderedHoldS) {
+            return;
+        }
+        wanted_[wheel] = {value, target, time_};
+    }
+
+public:
+    // Where the NPC at a wheel would bring it now (with AimCrew::advise on): false when he would leave it.
+    bool WheelWanted(const std::string& wheel, double& value) const {
+        const auto it = wanted_.find(wheel);
+        if (it == wanted_.end() || time_ - it->second.t > kWantFreshS) return false;
+        value = it->second.value;
+        return true;
+    }
+
+private:
 
     void UpdateTrackReturns(const ConsoleData& console) {
         track_returns_.clear();
@@ -1387,7 +1706,7 @@ private:
                                      ? optical_.contrast_threshold
                                      : em::AnchorThreshold(optical_.inherent_contrast, tuning_.tv_max_range_m, em::kReferenceVisibilityM);
         const double fov_h = DegToRad(TvFieldOfViewDeg(console) * console.track.fov_height_ratio);
-        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los);
+        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los, g.cloud_transmission);
     }
 
     // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by
@@ -1468,7 +1787,14 @@ private:
     // to the range the commander gave.
     void FollowRangeByHand(double dt, ConsoleData& console, const AimCrew& crew) {
         const RangeSource source = RangeFrom(console);
-        if (!crew.range || !ByHand(source)) return;
+        if (!ByHand(source)) return;
+        if (!crew.range) {  // a player's wheel: where the NPC would put it (the helper)
+            const Contact* blip = source == RangeSource::Search ? SearchContact(tracked_) : nullptr;
+            if (crew.advise && (blip != nullptr || source != RangeSource::Search)) {
+                Want(console.track.range_wheel, blip != nullptr ? blip->range_m : BoardRange(tracked_));
+            }
+            return;
+        }
         if (range_bias_for_ != tracked_) {  // a crewmate's error setting a range by hand, one draw per target
             range_bias_for_ = tracked_;
             range_bias_m_ = crew.range_error_m > 0.0 ? crew.range_error_m * AimNormal() : 0.0;
@@ -1531,6 +1857,10 @@ private:
             tracked_.clear();
             tv_masked_s_ = 0.0;
             return false;
+        }
+        if (g.los && crew.advise) {  // where the target is now, for a player's wheels (the helper)
+            if (d.lock_control.empty() || console.panel.Get(d.lock_control) >= 1) Want(d.az_wheel, WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg));
+            Want(d.el_wheel, g.el_deg);
         }
         if (g.los) {
             // The NPC seats follow the target as it was a moment ago (each seat's own lag), with their own aim error.
@@ -1744,7 +2074,7 @@ private:
     // latitude less what the latitude correction cancels (with РЕЛЕ — Qc back at РЕЛЕ), plus its own drift. The crew
     // chief's Qc comes from his compass work (SetCommandedQc); when the setter is connected an NPC in the elevation
     // seat (the deputy commander) turns the setter to it, and the latitude scale to the site's latitude (from the map).
-    void UpdateOrientation(double t, double dt, ConsoleData& console, SessionLog& log, bool npc_sets_heading) {
+    void UpdateOrientation(double t, double dt, ConsoleData& console, SessionLog& log, bool npc_sets_heading, bool advise = false) {
         const double turned = Wrap180(unit_heading_deg_ - last_unit_heading_deg_);
         last_unit_heading_deg_ = unit_heading_deg_;
         if (!console.has_orientation) {
@@ -1770,6 +2100,10 @@ private:
             log.Record({t, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
         }
         was_setting_ = setting;
+        if (setting && advise) {  // where the NPC turns the setter and the latitude scale (the helper)
+            if (qc_known_) Want(o.setter, qc_commanded_deg_);
+            if (!o.latitude_control.empty()) Want(o.latitude_control, site_latitude_deg_);
+        }
         if (setting && npc_sets_heading) {
             auto turn_to = [&](const std::string& wheel, double want, bool wraps) {
                 const double now = console.panel.GetValue(wheel);
@@ -1982,11 +2316,7 @@ private:
             eq.SetInput(d.crosshair_input, method_ == TrackMethod::Tv && !tracked_.empty() && InZone(geo_.at(tracked_)));
         }
         if (!d.near_zone_input.empty()) {
-            bool near_zone = in_zone;
-            if (range_known && !in_zone && g->closing_mps > 0.0 && g->range_m > tuning_.zone_max_range_m) {
-                near_zone = (g->range_m - tuning_.zone_max_range_m) / g->closing_mps <= tuning_.zone_warning_s;
-            }
-            eq.SetInput(d.near_zone_input, near_zone);
+            eq.SetInput(d.near_zone_input, range_known && tuning_.AttentionFor(RelAtRange(*g), g->velocity, g->agl_m));
         }
         if (!d.too_low_input.empty()) {
             // НЛЦ: the target under the azimuth line (or being tracked) is too low for the radar. One hidden behind the

@@ -177,7 +177,7 @@ SC_TEST("history: over the Bekaa the mountains hide the F-4Es until they top the
     std::printf("    first seen at %.1f km behind the mountains, %.1f km over flat ground\n", seen_km, flat_km);
     SC_EXPECT(seen_km > 0.0 && flat_km > seen_km + 5.0);
     SC_EXPECT(Has(d, "guided at f1") || Has(d, "guided at f2"));
-    SC_EXPECT(Has(d, "warning receiver: missile guidance"));  // the command link on the air from ВНИМАНИЕ
+    SC_EXPECT(Has(d, "warning receiver: missile guidance"));  // the command link on the air from the launch
 }
 
 SC_TEST("history: dug in at night in Angola the crew fights by the radars; the Puma shows only when it climbs out of the canyon") {

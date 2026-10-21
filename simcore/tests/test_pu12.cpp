@@ -56,7 +56,7 @@ std::string ReadScenarioText() {
       "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },
                 { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
                 { "name": "Driver", "role": "driver" } ],
-      "targets": [ { "id": "t1", "name": "T", "class": "drone", "board_type": 7,
+      "targets": [ { "id": "t1", "name": "T", "class": "drone", "board_type": 2,
                      "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },
                      "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ], "speed_mps": 150 } ],
       "triggers": [ { "id": "tv", "when": {}, "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
@@ -137,9 +137,9 @@ SC_TEST("pu12: a scenario's command post plots the targets and the crew aims by 
     for (int i = 0; i < 1210; ++i) runner.Step(0.1);  // 121 s: the board is written at 0.1, 60.1 and 120.1 s
     const PlottingBoard& b = *runner.Board();
     SC_EXPECT(b.Stamp() == 3);  // at 0, 60 and 120 s
-    SC_EXPECT(b.Current().size() == 1 && b.Current()[0].Code() == 71);  // practice target, one aircraft
+    SC_EXPECT(b.Current().size() == 1 && b.Current()[0].Code() == 21);  // training target (bguir_tsp), one aircraft
     // 1000 m in the flat frame at 45 km is about 1160 m above sea level (the Earth's curvature): 12 hectometres.
-    SC_EXPECT(runner.Debrief().find("PU-12            event      t1  on the board: 6201 12/71") != std::string::npos);
+    SC_EXPECT(runner.Debrief().find("PU-12            event      t1  on the board: 6201 12/21") != std::string::npos);
     // The senior operator's azimuth wheel is on the last designation the crew was told (true azimuth), not on the
     // target: the 120 s plot is still on the air (4 s + 8 s + 2 s), so it is the 60 s one.
     SC_EXPECT(b.Known(runner.Time()).size() == 1 && b.Known(runner.Time())[0].stamp == 2);

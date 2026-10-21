@@ -1,0 +1,189 @@
+{
+  "tutorial_id": "school_driver",
+  "title": "Seat lesson 1: the driver",
+  "scenario": "scenarios/school_driver.json",
+  "seat": "driver",
+  "strict": true,
+  "status": "A seat lesson (docs/TUTORIALS.md): step by step, each control highlighted, the next step only once it is done.",
+  "source": "sam3d; the moves, their order and their waits are the console's procedures (data/procedures/osa_ak.json: power_up, pto_on_line) and the crew data's reports (data/crew/osa_ak_crew.json), with their sources",
+  "notes": "The lesson's scenario starts with the headset off. The commander's orders are given by the lesson (on_start) at the learner's pace.",
+  "steps": [
+    {
+      "id": "hello", "chapter": "Your seat", "title": "The driver's seat",
+      "lines": [
+        "You are the driver-mechanic (механик-водитель): seat 4 of the Osa 21, front left, at the steering wheel.",
+        "You drive the vehicle. And you are the crew's power station: the gas-turbine unit that powers every radar, computer and drive, and the engine's generator at the halt. Nothing in the Osa works until you have done your part.",
+        "Each step lights up what to use; only that works. Read, then press Enter."
+      ],
+      "hint": "Enter: next.   Mouse: look round.   L: turn your head to what is highlighted.",
+      "continue": true
+    },
+    {
+      "id": "headset", "title": "Your headset (шлемофон)", "control": "headset.driver", "position": 1,
+      "lines": [
+        "First your шлемофон: put it on and plug its cord into your Р-124 box.",
+        "Without it you hear only the cabin, and over the engine little of it. Your ПВ box can also put you on the left R-123M."
+      ],
+      "why": "The Osa's crew work in their headsets: the turbine and the fans drown a voice in the cabin (r124_refs; voenizdat_osa_1991).",
+      "hint": "J: put it on (or point the cross at it, left click)."
+    },
+    {
+      "id": "tour_pu303", "title": "The power-supply panel ПУ-303", "look": "pu303_panel",
+      "lines": [
+        "To your left, by the dashboard: the power-supply panel. Its ГТА switch starts the gas-turbine power unit (9И120); the generator switch puts the engine's power take-off generator on line. A lamp beside each lights when it runs."
+      ],
+      "hint": "L: look at it.   Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_dash", "title": "Your dashboard", "look": "driver_panel",
+      "lines": [
+        "In front of you: the АРРЕТИР. button, which erects the gyro vertical at start-up, and your intercom box (Р-124), on which you hear the crew and they hear you."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_radio", "title": "The left radio, R-123M", "look": "radio_left_panel",
+      "lines": [
+        "Beside you, on the left: the left R-123M radio set. It is already on. The commander listens to the battery's command post on it, so you keep it working."
+      ],
+      "hint": "Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "drive", "chapter": "Driving", "title": "Drive forward 40 m", "done_when": ["moved:40"],
+      "lines": [
+        "W drives forward, S backwards, A and D steer, Space brakes. The Osa only turns while it moves, like any wheeled vehicle.",
+        "Drive about 40 m forward, out of the hide."
+      ],
+      "look": "driver_panel",
+      "hint": "L: look ahead.   W: forward (hold it).   A / D: steer.   Space: brake.   F2 watches from outside, F1 brings you back.",
+      "wait_text": "40 m driven"
+    },
+    {
+      "id": "halt", "title": "Stop", "done_when": ["input:vehicle_stopped"],
+      "lines": ["Brake to a halt: Space, until the vehicle stands still."],
+      "why": "Much of the Osa works only at a halt: the engine's generator, the turret's drives, the orientation. Driving off with the turret unlocked faults it.",
+      "look": "driver_panel",
+      "hint": "Space: brake (hold it).",
+      "wait_text": "the vehicle standing still"
+    },
+    {
+      "id": "report_halt", "title": "Report it: «Стою!»", "report": "halted",
+      "lines": ["Tell the crew you have stopped: open your reports with O and pick «Стою!» (Halted!)."],
+      "why": "Nobody in the back can see out: the crew only knows the vehicle has halted because you say so.",
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "order_k_boyu", "chapter": "Action stations (К бою)", "title": "The commander: «К бою!»",
+      "lines": [
+        "«К бою!» (Action stations!) brings the whole crew to readiness. Your part comes first: the power.",
+        "Listen: the crew acknowledges on the intercom, «Есть!»."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_k_boyu"],
+      "continue": true
+    },
+    {
+      "id": "gta", "title": "Start the turbine: ГТА on", "control": "pwr.gta", "position": 1, "procedure": "power_up",
+      "lines": ["On the ПУ-303 panel: flip ГТА up, on."],
+      "why": "The gas-turbine unit makes the 220 V 400 Hz power every radar, computer and drive in the Osa runs on. The operator is waiting for it to switch the equipment on.",
+      "hint": "Left click flips a switch."
+    },
+    {
+      "id": "power", "title": "The turbine spins up", "done_when": ["subsystem:power=ready"], "fast_forward": true,
+      "lines": ["It takes about a minute for the turbine to come up to speed and give power. The lesson runs time faster while you wait."],
+      "wait_text": "the turbine to give power (about a minute)"
+    },
+    {
+      "id": "report_power", "title": "Report it: «Питание подано!»", "report": "power_on",
+      "lines": ["Tell the crew the power is on: O, then «Питание подано!» (Power on!). The operator switches the equipment on when he hears it."],
+      "hint": "O: your reports, then the highlighted line's number."
+    },
+    {
+      "id": "arrest", "title": "Erect the gyro: АРРЕТИР.", "control": "gyro.arrest", "position": 1, "procedure": "power_up",
+      "lines": ["Press АРРЕТИР. on your dashboard."],
+      "why": "It frees the gyro vertical to erect itself: the level the antennas are stabilised on and the reference the vehicle is oriented by. It takes 40 s, and the deputy commander can't orient the vehicle until it has.",
+      "hint": "Left click presses a button."
+    },
+    {
+      "id": "order_generator", "chapter": "At the halt: the generator", "title": "The commander: «Генератор на линию!»",
+      "lines": [
+        "«Генератор на линию!» (Generator on line!): at the halt the engine's power take-off generator goes on line as a second source of power beside the turbine."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["order:order_generator"],
+      "continue": true
+    },
+    {
+      "id": "pto", "title": "Generator on line", "control": "pwr.pto", "position": 1, "procedure": "pto_on_line",
+      "lines": ["On the ПУ-303 panel: flip the generator switch up, on."],
+      "why": "The engine-driven generator works only while the vehicle stands still; take it off line before you drive.",
+      "hint": "Left click."
+    },
+    {
+      "id": "gyro", "title": "The gyro erects", "done_when": ["subsystem:gyro_erected=ready"], "fast_forward": true,
+      "lines": ["The gyro takes 40 s to erect. Then the deputy commander orients the vehicle on it: his work waits on yours. This is how the crew depends on each other."],
+      "wait_text": "the gyro to erect (40 s)"
+    },
+    {
+      "id": "readiness", "chapter": "Your crew at work", "title": "The crew comes to readiness", "done_when": ["task:searching"], "fast_forward": true,
+      "lines": [
+        "Your part of К бою is done. Now the others: the operator switches the equipment on and unlocks the turret, the senior operator brings up the search radar, the deputy commander orients the vehicle. Listen to them on the intercom.",
+        "F1 or Tab: visit their seats and watch them work. Come back to yours with F1."
+      ],
+      "wait_text": "the search radar to come up («Готов СОЦ!»)"
+    },
+    {
+      "id": "target", "title": "A target",
+      "lines": [
+        "A practice drone is flying at you from the north-west. In the fight you stay at your seat, ready to move off the moment the commander orders it. Watch your crew take it on."
+      ],
+      "hint": "Enter: next.",
+      "on_start": ["release:d1"],
+      "continue": true
+    },
+    {
+      "id": "contact", "title": "Search", "done_when": ["contact:commander"], "fast_forward": true,
+      "lines": ["The senior operator searches with the radar and calls the contact: «Цель, азимут …, дальность …!»"],
+      "wait_text": "the senior operator to find the target"
+    },
+    {
+      "id": "capture", "title": "«Цель — взять!»", "done_when": ["task:captured"], "fast_forward": true,
+      "lines": ["The commander orders it taken; the senior operator, the deputy commander and the operator put the tracking radar on it and capture it: «Захват!»"],
+      "on_start": ["order:order_take_target"],
+      "wait_text": "the capture"
+    },
+    {
+      "id": "prepare", "title": "«Приготовиться к пуску!»", "done_when": ["control:fo.key=1"], "fast_forward": true,
+      "lines": ["The deputy commander prepares the missiles and puts the launch key in."],
+      "on_start": ["order:order_prepare"],
+      "wait_text": "the launch key"
+    },
+    {
+      "id": "zone", "title": "Into the zone", "done_when": ["input:target_in_zone"], "fast_forward": true,
+      "lines": ["Wait for «Цель в зоне!»: the drone inside the missiles' reach."],
+      "wait_text": "the target to come into the firing zone"
+    },
+    {
+      "id": "launch", "title": "«Пуск разрешаю!»", "done_when": ["debrief:LAUNCH"],
+      "lines": ["Launch permitted. Press F6 to follow the missile, F1 to come back."],
+      "on_start": ["order:fire_permitted"],
+      "wait_text": "the launch"
+    },
+    {
+      "id": "result", "title": "Missile away", "done_when": ["debrief:HIT", "debrief:MISS"],
+      "lines": ["The missile flies on the tracking radar's commands."],
+      "wait_text": "the missile to reach the drone"
+    },
+    {
+      "id": "end", "chapter": "Done", "title": "The driver's part: done",
+      "lines": [
+        "That is the driver's part of the drill: drive and halt, report it, start the turbine and report the power, erect the gyro, and put the generator on line at the halt.",
+        "Practise it without the highlights: the Missions group's «Osa: crew practice, one target», starting in the driver's seat, with H set to hint. Or the next lesson: the operator.",
+        "Esc: the menu."
+      ]
+    }
+  ]
+}

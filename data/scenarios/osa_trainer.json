@@ -45,7 +45,7 @@
       "do": [ { "instructor": "turn", "target": "t1", "to": 270 } ] },
     { "id": "back_low", "when": { "after_s": 260 },
       "do": [ { "instructor": "height", "target": "t1", "to": 100 }, { "instructor": "turn", "target": "t1", "to": 132 } ] },
-    { "id": "pod_on", "when": { "target": "t2", "target_within_m": 30000 },
+    { "id": "pod_on", "when": { "target": "t2", "target_within_m": 20000 },
       "do": [ { "instructor": "jam", "target": "t2", "to": 1 } ] }
   ],
   "end": { "time_limit_s": 900, "when_targets_gone": true }

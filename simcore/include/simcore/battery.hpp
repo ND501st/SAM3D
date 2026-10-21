@@ -1,14 +1,15 @@
 // simcore/battery.hpp — the battery around the player's vehicle (roadmap 7.5): its other vehicles and how they move.
 //
 // An Osa-AK battery was the battery commander's PU-12M, two platoons of two 9A33 and a TZM, and a maintenance vehicle
-// (flak11). The battery tactics below come from an unnamed manual retold in `video_osa` (tier 4, unverified, consistent
-// with Soviet practice), with numbers in data/command/battery_tactics.json:
-//   * March: one column, 25-50 m between vehicles, 200-800 m when an air attack is expected; ready at any moment to pull
-//     off the road for a short-halt engagement.
-//   * Short halt: each vehicle pulls a few tens of metres off the road, alternating sides, stops and deploys.
-//   * Combat formation (advance, pursuit): launchers in pairs about 3 km apart, 200 m within a pair, 1.5-3 km behind the
-//     covered unit; the reload vehicles about 500 m behind the pairs.
-//   * Halts every 3-4 h for checks, fuel and rest (up to 2 h); at night about 1 h without breaking formation.
+// (flak11). The battery tactics below are the Soviet 1991 textbook's (voenizdat_osa_1991 ch. 6, pp. 231-239; they
+// confirm the unnamed manual retold in `video_osa`), with numbers in data/command/battery_tactics.json:
+//   * March: one column, 25-50 m between vehicles, at least 200 m between launchers when an air attack is expected;
+//     ready at any moment to stop for a short-halt engagement.
+//   * Short halt: a target beyond 20 km, each vehicle pulls 30-50 m off the road to the side away from it; within 20 km
+//     it stops in the column (p254; mon_2112_80 p66). Without the target's position the vehicles alternate sides.
+//   * Combat formation (advance, pursuit): launchers in pairs up to 3 km apart, at least 200 m within a pair, 1.5-3 km
+//     behind the covered unit; the reload vehicles within 500 m of the pairs.
+//   * Halts of up to 1 h every 3-4 h for checks, fuel and rest, the column kept in order.
 // The model moves the NPC vehicles; the player's own vehicle is a member too, and the battery gives it the same goal
 // (its slot in the column or the formation) whether the player or the battery drives it.
 //
@@ -37,6 +38,7 @@ struct BatteryTactics {
     double march_speed_mps = 8.3;
     double cross_country_speed_mps = 5.5;
     double short_halt_offset_m = 40.0;
+    double short_halt_in_column_m = 0.0;  // a target nearer than this: stop in the column, not off the road (0: off)
     double deploy_s = 240.0;
     double pair_separation_m = 3000.0;
     double pair_internal_m = 200.0;
@@ -47,6 +49,8 @@ struct BatteryTactics {
     double halt_duration_s = 1.5 * 3600.0;
     double night_halt_s = 3600.0;
     double threat_range_m = 50000.0;
+    double warning_s = 0.0;       // the launchers' warm-up: a track that reaches the zone within it raises readiness (0: off)
+    double zone_edge_m = 10000.0; // the far edge of the launchers' zone, where that time is counted to
     double water_speed_mps = 2.2;
     double river_standoff_m = 2000.0;
     double ambush_dwell_s = 1200.0;
@@ -94,17 +98,23 @@ struct BatteryVehicleDef {
 };
 
 struct BatteryOrder {
-    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon };
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon, Relocate };
     Kind kind = Kind::March;
     double at_s = 0.0;
     std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
     Vec3 covered;             // CombatFormation: the covered unit's position. RiverCrossing: the crossing point (near bank)
+                              // Relocate: where the own vehicle goes (the others keep their places around it)
     double axis_deg = 0.0;    // direction of advance, or across the river (true, clockwise from north)
     bool bounding = false;    // CombatFormation: the pairs move one at a time, the others staying deployed
     bool roving = false;      // Ambush: the pairs move on to the next point every ambush_dwell_s
     double width_m = 100.0;   // RiverCrossing: the river's width
     std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
     bool radiate = false;     // Emcon: the radars may radiate again (false: radiation off, the battery fights silent)
+    // ShortHalt: the target the halt is for, as the battery commander knows it: its range (< 0: not known) and, if
+    // known, its true azimuth from the battery.
+    double threat_range_m = -1.0;
+    bool threat_has_azimuth = false;
+    double threat_az_deg = 0.0;
 };
 
 inline const char* BatteryOrderName(BatteryOrder::Kind k) {
@@ -120,6 +130,7 @@ inline const char* BatteryOrderName(BatteryOrder::Kind k) {
         case BatteryOrder::Kind::Reload: return "reload";
         case BatteryOrder::Kind::Refuel: return "refuel";
         case BatteryOrder::Kind::Emcon: return "emcon";
+        case BatteryOrder::Kind::Relocate: return "relocate";
     }
     return "?";
 }
@@ -128,7 +139,7 @@ inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
     for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
                                  BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume, BatteryOrder::Kind::Ambush,
                                  BatteryOrder::Kind::RiverCrossing, BatteryOrder::Kind::FarBankHeld, BatteryOrder::Kind::Reload,
-                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon}) {
+                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon, BatteryOrder::Kind::Relocate}) {
         if (s == BatteryOrderName(k)) {
             out = k;
             return true;
@@ -157,6 +168,20 @@ public:
             {"river_standoff_m", &t.river_standoff_m},     {"ambush_dwell_s", &t.ambush_dwell_s},
             {"alongside_offset_m", &t.alongside_offset_m}, {"tzm_capacity", &t.tzm_capacity},
             {"fuel_truck_capacity_l", &t.fuel_truck_capacity_l}};
+        // Optional: the board's warning time (board_reading.hpp).
+        const std::pair<const char*, double*> optional[] = {
+            {"warning_s", &t.warning_s}, {"zone_edge_m", &t.zone_edge_m}, {"short_halt_in_column_m", &t.short_halt_in_column_m}};
+        for (const auto& f : optional) {
+            const std::string p = Join("tactics", f.first);
+            const json::Value* v = b->Find(f.first);
+            if (v == nullptr) continue;
+            if (!v->Is(json::Type::Object) || !Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) {
+                return message_.empty() ? Fail(p, "expected {value, source, confidence}") : false;
+            }
+            const json::Value* n = v->Find("value");
+            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number > 0.0)) return Fail(Join(p, "value"), "a number > 0");
+            *f.second = n->number;
+        }
         for (const auto& f : fields) {
             const std::string p = Join("tactics", f.first);
             const json::Value* v = b->Find(f.first);
@@ -286,7 +311,8 @@ public:
     }
 
     void Order(const BatteryOrder& o, double t) {
-        const bool moves = o.kind == BatteryOrder::Kind::March || o.kind == BatteryOrder::Kind::CombatFormation;
+        const bool moves = o.kind == BatteryOrder::Kind::March || o.kind == BatteryOrder::Kind::CombatFormation ||
+                           o.kind == BatteryOrder::Kind::Relocate;
         if (moves && leave_s_ > 0.0) {
             hold_until_s_ = t + leave_s_;
             events_.push_back({t, "Battery commander", "out of the position: clear the nets and climb out (" + Fmt(leave_s_) + " s)"});
@@ -307,21 +333,31 @@ public:
                 for (Vehicle& v : vehicles_) v.deployed = false;
                 events_.push_back({t, "Battery commander", "march: form the column (" + std::to_string(vehicles_.size()) + " vehicles)"});
                 break;
-            case BatteryOrder::Kind::ShortHalt:
+            case BatteryOrder::Kind::ShortHalt: {
                 if (route_.size() < 2) return;
                 mode_ = Mode::ShortHalt;
+                // A target within 20 km: stop in the column; beyond, off the road away from it (voenizdat_osa_1991 p254).
+                const bool in_column = o.threat_range_m >= 0.0 && tactics_.short_halt_in_column_m > 0.0 &&
+                                       o.threat_range_m < tactics_.short_halt_in_column_m;
+                const Vec3 toward{std::sin(DegToRad(o.threat_az_deg)), std::cos(DegToRad(o.threat_az_deg)), 0.0};
                 for (std::size_t k = 0; k < vehicles_.size(); ++k) {
                     Vehicle& v = vehicles_[k];
                     const double s = SlotArc(k);
                     const Vec3 dir = DirectionAt(s);
                     const Vec3 left{-dir.y, dir.x, 0.0};
-                    const double side = k % 2 == 0 ? 1.0 : -1.0;
-                    v.goal = PointAt(s) + left * (side * tactics_.short_halt_offset_m);
+                    double side = k % 2 == 0 ? 1.0 : -1.0;
+                    if (o.threat_has_azimuth) side = Dot(left, toward) > 0.0 ? -1.0 : 1.0;
+                    v.goal = PointAt(s) + left * (in_column ? 0.0 : side * tactics_.short_halt_offset_m);
                     v.deployed = false;
                     v.deploy_done_s = -1.0;
                 }
-                events_.push_back({t, "Battery commander", "short halt: off the road, deploy"});
+                events_.push_back({t, "Battery commander", in_column ? "short halt: the target within " +
+                                                                          Fmt(tactics_.short_halt_in_column_m / 1000.0) +
+                                                                          " km, stop in the column, deploy"
+                                                     : o.threat_has_azimuth ? "short halt: off the road away from the target, deploy"
+                                                                            : "short halt: off the road, deploy"});
                 break;
+            }
             case BatteryOrder::Kind::CombatFormation:
                 mode_ = Mode::Formation;
                 FormationSlots(o.covered, o.axis_deg);
@@ -331,6 +367,25 @@ public:
                                                                Fmt(tactics_.pair_separation_m) + " m apart, " +
                                                                Fmt(tactics_.behind_covered_m) + " m behind the covered unit"});
                 break;
+            case BatteryOrder::Kind::Relocate: {
+                // A change of position (after an ARM attack, on the regiment's order: voenizdat_osa_1991 p238): the
+                // whole battery moves across country by the own vehicle's offset to the new position, keeping its order,
+                // and deploys there.
+                const Vehicle* own = Own();
+                if (own == nullptr) return;
+                const Vec3 shift{o.covered.x - own->position.x, o.covered.y - own->position.y, 0.0};
+                mode_ = Mode::Formation;
+                bounding_ = false;
+                for (Vehicle& v : vehicles_) {
+                    v.waiting = false;
+                    v.goal = v.position + shift;
+                    v.deployed = false;
+                    v.deploy_done_s = -1.0;
+                }
+                events_.push_back({t, "Battery commander", "change of position: to the reserve position, " + Fmt(shift.HorizontalLength()) +
+                                                               " m, in the same order"});
+                break;
+            }
             case BatteryOrder::Kind::Ambush:
                 if (o.route.empty()) return;
                 mode_ = Mode::Ambush;

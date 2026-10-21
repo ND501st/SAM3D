@@ -191,22 +191,23 @@ DecisionTrack Inbound(const std::string& id, double north_m, double speed_mps) {
 
 SC_TEST("decisions: the best launch is at the zone's far edge; the window allows a second missile") {
     const EngagementTuning t = BoxTuning();
-    // 20 km out, 1 km up, at 300 m/s: in the zone at 10 km slant range (9950 m along the ground: 33.5 s), out of it at
-    // 1.5 km (1118 m: 62.9 s). A missile launched at 10 km meets it after about 10000 / (500 + 300) = 12.5 s, about
-    // 6.25 km out; the next can go 12.5 + 11.2 s later (57 s, still in the zone): two shots.
+    // 20 km out, 1 km up, at 300 m/s. The launch zone is where a missile launched now meets it inside the zone: the
+    // meeting at the far edge, 10 km slant (9950 m along the ground), takes 10000 / 500 = 20 s, so the launch is from
+    // 9950 + 300 x 20 = 15950 m (13.5 s from now); the last meeting at 1.5 km slant (1118 m) takes 3 s, from 2018 m
+    // (59.9 s). The next missile can go 20 + 11.2 s after the first (44.7 s, still in the zone): two shots.
     const DecisionTrack d = Inbound("t1", 20000.0, 300.0);
     const LaunchTiming lt = BestLaunch(t, d, 11.2);
     SC_EXPECT(lt.reachable);
-    SC_EXPECT_NEAR(lt.window.enter_s, 33.5, 0.3);
-    SC_EXPECT_NEAR(lt.window.leave_s, 62.94, 0.3);
-    SC_EXPECT_NEAR(lt.best.flight_s, 12.5, 0.2);
-    SC_EXPECT_NEAR(lt.best.intercept_range_m, 6250.0, 150.0);
+    SC_EXPECT_NEAR(lt.window.enter_s, 13.5, 0.3);
+    SC_EXPECT_NEAR(lt.window.leave_s, 59.94, 0.3);
+    SC_EXPECT_NEAR(lt.best.flight_s, 20.0, 0.2);
+    SC_EXPECT_NEAR(lt.best.intercept_range_m, 10000.0, 100.0);
     SC_EXPECT(lt.best.in_zone && lt.best.shots == 2);
     SC_EXPECT_NEAR(lt.best.kill, 1.0 - 0.4 * 0.4, 1e-9);
-    // Waiting costs the second missile; launching early is outside the zone.
+    // Waiting costs the second missile; launching early is outside the zone (it would meet the target 11.6 km out).
     const LaunchOption late = EvaluateLaunch(t, d, 50.0, 11.2, lt.window);
     SC_EXPECT(late.shots == 1 && late.kill < lt.best.kill);
-    const LaunchOption early = EvaluateLaunch(t, d, 20.0, 11.2, lt.window);
+    const LaunchOption early = EvaluateLaunch(t, d, 5.0, 11.2, lt.window);
     SC_EXPECT(!early.in_zone && early.chance < lt.best.chance);
 }
 

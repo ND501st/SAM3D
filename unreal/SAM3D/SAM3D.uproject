@@ -1,41 +1,45 @@
 {
-  "FileVersion": 3,
-  "EngineAssociation": "5.8",
-  "Category": "",
-  "Description": "SAM3D - first-person 3D air-defence simulator built on the simcore library.",
-  "Modules": [
-    {
-      "Name": "SAM3D",
-      "Type": "Runtime",
-      "LoadingPhase": "Default",
-      "AdditionalDependencies": [
-        "Engine"
-      ]
-    }
-  ],
-  "Plugins": [
-    {
-      "Name": "CesiumForUnreal",
-      "Enabled": true
-    },
-    {
-      "Name": "ProceduralMeshComponent",
-      "Enabled": true
-    },
-    {
-      "Name": "ModelContextProtocol",
-      "Enabled": true
-    },
-    {
-      "Name": "AllToolsets",
-      "Enabled": true
-    },
-    {
-      "Name": "ModelingToolsEditorMode",
-      "Enabled": true,
-      "TargetAllowList": [
-        "Editor"
-      ]
-    }
-  ]
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "SAM3D - first-person 3D air-defence simulator built on the simcore library.",
+	"Modules": [
+		{
+			"Name": "SAM3D",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "CesiumForUnreal",
+			"Enabled": true
+		},
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelContextProtocol",
+			"Enabled": true
+		},
+		{
+			"Name": "AllToolsets",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "Terminal",
+			"Enabled": true
+		}
+	]
 }

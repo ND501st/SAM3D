@@ -152,11 +152,23 @@ published ranges; data in `data/em/`. It runs at 10 Hz (`EmWorld::Step`), determ
 overlay primitives drawn by Unreal (`FSimEmLayer`, `sam3d.em.Debug`) and by `tools/em_view.py`. It is not yet linked
 to the Osa scenario's engagement model (roadmap E2). Full design: `docs/EM_ARCHITECTURE.md`.
 
+## The enemy air command
+
+`simcore/include/simcore/air_war/` (namespace `simcore::airwar`, umbrella `air_war.hpp`; design `docs/air_war/`) is a
+campaign layer above the scenarios: an enemy staff of officers with characters plans air tasking orders on an
+intelligence picture that never reads the truth; raids are resolved abstractly by the same rules the planner estimates
+with, or, when they come through the player's battery's sector, become scenario JSON for the existing loader and runner
+(NPC crew and battery, PU-12, C2, EM layer, prepared position) with a mission bridge that adds weapon release, ARMs and
+the enemy's ELINT and brings the outcome back. The campaign then applies damage, losses, pilots' claims, sightings and
+fixes, the officers' lessons, grudges and careers, politics, logistics and repair, and writes what our side learns.
+Deterministic for a seed. `examples/air_war_demo.cpp` runs it end to end.
+
 ## Known limitations (deliberate, for now)
 
 Generic simcore models (used by the demo, not by the Osa's outcomes):
 
-- Aircraft: constant speed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances.
+- Aircraft: constant airspeed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
+- Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's obstacle grid (woods, buildings) is not yet used by line of sight (E9).
 - Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
   deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
 - Radar physics: single-look SNR threshold, no clutter or multipath.
@@ -179,6 +191,12 @@ roadmap phase 6:
   (`orientation.hpp`; the crew's azimuths are in the gyro's frame). The compass work is one timed activity with an
   estimated error, not the sighting itself; the GA-3's own drift and the survey's time and error are estimates. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
+- Out of the vehicle (`simcore/crew_mobility.hpp`, `docs/crew/13_OUT_OF_THE_VEHICLE.md`, 8.14): the climbing times, the
+  Osa's axles and which hatch each seat uses are estimates; the hatches don't touch the console's ЛЮКИ ЗАКР. (an open
+  crew hatch doesn't hold off ПУСК ГОТОВ); the walk on the hull is in straight lines round rectangles, on the ground
+  round the hull only (not round woods, buildings or water); a road's traffic side isn't kept; the drill master and the
+  lessons don't know a job's walk; on a networked client the NPCs' bodies out of their seats aren't mirrored (they stay
+  seated there), only the player's own goes to the server. The RF hazard near the radars (p. 207) isn't modelled.
 - TV channel: tracked by hand (the wheels), with the 3-thousandth reticle drawn in the Unreal view and the range judged
   from the target's size against it (class spans are placeholders). (6.6)
 - Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer
@@ -195,6 +213,19 @@ roadmap phase 6:
   shows on the driver's fuel gauge (7.4); the drive's own consumption is not modelled. No smoke generators.
 - PU-12 board and voice designations are built (7.1, 7.2); the board's picture is the regiment radars' (P-19, P-40: range and horizon only; no clutter, terrain or blind cone) when the scenario lists them.
 
+The PU-12M's R-111 and R-407 (`simcore/radio_sets.hpp`): their reach is the documents' range by antenna and the fourth
+root of the power, not the EM layer's link budget over the terrain; interference on the telecode is a scenario outage
+(`"kind": "interference"`), not a jammer; the R-111's other modes (telegraphy, relay, remote control) are positions only.
+
 Radios and intercom: `simcore/crew_comms.hpp` reads the console's R-123M and R-124 controls and tells the command network which set hears and whether the commander is on the radio, and the EM link what the squelch and the antenna cost; orders to crew go through the R-124 (`ScenarioRunner::GiveOrder`). The commander's reports go out only on a set that can transmit (`CrewComms::CanTransmit`, `ScenarioRunner::SayOnRadio`), and the presets are set up by hand (`simcore/radio_setup.hpp`).
+
+Voice paths (`simcore/voice_comms.hpp`, `simcore/radio_nets.hpp`, `docs/crew/12_COMMUNICATIONS.md`): who hears a callout is
+decided by headsets, boxes and selectors, and a net's reach by its set being on, warm, on the net's numbered frequency
+and not jammed out; the reach of a voice net is not the EM layer's link budget over the terrain (the R-123M nets are
+assumed to reach within the battery). A set on smooth tuning (ПЛАВН. I-II, `simcore/radio_setup.hpp`) counts as on no numbered net's
+frequency, whatever its knobs are turned to. Jamming is a scenario's or a lesson's (barrage or spot, weak or strong, a
+direction-finding fix bringing a follow-on jammer), not an EM jammer's J/S. The talk tables' groups are SAM3D's
+placeholders (the real tables are not public); a regiment's group heard on the R-111 is decoded by an NPC, never by the
+player's hand. Which PVS/RTK-1 position reaches which set is SAM3D's reading of museum photographs (medium confidence).
 
 Command sources: `simcore/c2_sources.hpp` (`C2Network`) gives the engagement model the crew's air picture from the active of several sources; the PU-12 board is one of them (`docs/research/EM_C2_SOURCES_2026-10.md`).

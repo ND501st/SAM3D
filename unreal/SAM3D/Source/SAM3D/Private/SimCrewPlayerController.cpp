@@ -64,10 +64,11 @@ void ASimCrewPlayerController::BeginPlay()
 void ASimCrewPlayerController::PlotFirstTrack()
 {
 	USimWorldSubsystem* Sim = GetWorld()->GetSubsystem<USimWorldSubsystem>();
-	const TArray<int32> Tube = Sim != nullptr ? Sim->GetPostTrackNumbers() : TArray<int32>();
-	const bool bSent = Tube.Num() > 0 && Sim->PlotPostTrack(Tube[0]);
-	UE_LOG(LogSAM3D, Display, TEXT("SIMCREW PLOT: IT-45 shows %d targets; %s"), Tube.Num(),
-		bSent ? *FString::Printf(TEXT("plotting %02d"), Tube[0]) : TEXT("nothing sent"));
+	// The plotter writes what he heard on the air-picture net (the tube is the commander's).
+	const TArray<int32> Heard = Sim != nullptr ? Sim->GetPostHeardNumbers() : TArray<int32>();
+	const bool bSent = Heard.Num() > 0 && Sim->PlotPostTrack(Heard[0]);
+	UE_LOG(LogSAM3D, Display, TEXT("SIMCREW PLOT: %d reports heard; %s"), Heard.Num(),
+		bSent ? *FString::Printf(TEXT("plotting %04d"), Heard[0]) : TEXT("nothing sent"));
 }
 
 void ASimCrewPlayerController::DesignateFirstTarget()

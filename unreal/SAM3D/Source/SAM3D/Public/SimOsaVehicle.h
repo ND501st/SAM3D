@@ -11,6 +11,7 @@ class USimCabinComponent;
 class USimCrewBodiesComponent;
 class USimCrewVoiceComponent;
 class USimPu12MastComponent;
+class USimViewComponent;
 class USimCrewAudioComponent;
 class USceneComponent;
 class USpringArmComponent;
@@ -62,6 +63,8 @@ struct FSimCabinTourView
  * right mouse drag orbits the camera. C enters the 3D cabin (USimCabinComponent): mouse looks around, Tab
  * changes seat, left/right click works switches, selectors, keys, covers and buttons, drag or scroll turns hand
  * wheels. Kinematic for now: swap in Chaos Vehicles once there is a real vehicle mesh with wheel bones.
+ *
+ * The camera views (F1-F11, as in DCS) and the time keys (Ctrl/Alt/Shift+Z) are its USimViewComponent's.
  */
 UCLASS(Blueprintable)
 class SAM3D_API ASimOsaVehicle : public APawn
@@ -124,6 +127,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey NextStationKey = EKeys::Tab;
 
+	/** Up from the seat and walking in the cabin, or down into the seat beside you. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey StandKey = EKeys::X;
+
+	/** Walking pace in the cabin (cm/s): a crewman stooping under a low roof. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	double WalkSpeedCmPerS = 90.0;
+
+	/**
+	 * Out of the vehicle and back by its real ways (docs/crew/13_OUT_OF_THE_VEHICLE.md, simcore/crew_mobility.hpp): under a
+	 * hatch (or in the seat beside it) the hatch opens and he climbs out onto the roof; at the roof's edge by a way down
+	 * he climbs down; on the ground by it he climbs up; on the roof by a hatch he climbs in. Each climb is walked along
+	 * simcore's legs in first person. Needs a seat held (T) and the vehicle's file (data/vehicles/<system>.json).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey ClimbKey = EKeys::F;
+
+	/** On the ground: running (the drill's 165-180 steps a minute) while held. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey RunKey = EKeys::LeftShift;
+
 	/** In a battery link: to the other vehicle (the Osa <-> the PU-12M). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey SwitchVehicleKey = EKeys::V;
@@ -144,12 +168,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	double CabinReachCm = 150.0;
 
+	/** How far for the seat's own controls (cm): the crewman stands and steps to a far panel of his seat (simcore's
+	 *  crew_body.hpp: it costs drill time, it isn't out of reach), e.g. the deputy commander's gyro panel, 1.5-1.75 m. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	double StandingReachCm = 220.0;
+
 	/** HUD drawn for the possessing player (crosshair and control names in the cabin). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	TSubclassOf<class AHUD> CabinHUDClass;
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsInCabin() const { return bInCabin; }
+
+	/** Up from the seat, walking in the cabin. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsWalking() const { return bInCabin && bWalking; }
+
+	/** Out of the vehicle (on its roof or on the ground), or on his way through a hatch or down its side. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsOutside() const { return bInCabin && Body != EBodyMode::Seat && Body != EBodyMode::Cabin; }
+
+	/** Where the player's body is, for the HUD ("on the roof", "on the ground", "climbing out"...). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetBodyText() const;
+
+	/** X: up from the seat onto the cabin's floor, or down into the seat he stands by (FeedbackText says why not). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void ToggleWalking();
 
 	/** Enter or leave the cabin. Entering needs a loaded cabin layout. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -164,23 +209,49 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetCabinStationLabel() const { return StationLabel; }
 
-	// ---- The crew (phase 8, docs/crew/): H the training overlay, O the crew menu (orders at the commander's seat,
-	// reports elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back.
+	/** The next seat of the cabin (Tab, or F1 again). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void NextStation();
+	/** The head's turn (yaw and pitch from the seat's view) that looks at a point in the world from where the eye is now
+	 *  (the seat, or standing at a far panel). False if the seat has no view. */
+	bool LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const;
+	/** The wheel just grabbed: start turning the head onto its display, if it has one. */
+	void StartWheelWatch(int32 Item);
 
-	/** The training overlay is on: the drill master's next move for this seat is highlighted (refreshed each second). */
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	/** The camera views (F1-F11) and the time keys. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Views")
+	USimViewComponent* GetViews() const { return Views; }
+
+	/** The 3D cabin (the HUD finds a lesson's highlight in it). */
+	USimCabinComponent* GetCabin() const { return Cabin; }
+
+	/** A lesson (simcore/tutorial.hpp): turn the head onto what the step highlights, from the lesson's seat (L). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
+	void LookAtLessonTarget();
+
+	// ---- The crew (phase 8, docs/crew/): H the helper, O the crew menu (orders at the commander's seat, reports
+	// elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back, N let the helper make its move.
+
+	/** The helper is on (docs/crew/14_HELPER.md): the move this seat's NPC would make now is highlighted, as a lesson's
+	 *  step is, without the lesson's card (refreshed twice a second). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
 	bool IsAssistOn() const { return bAssist; }
 
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
-	FSimDrillAdvice GetAdvice() const { return Advice; }
+	/** The helper for the seat the camera is at. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
+	FSimSeatHelp GetHelp() const { return Help; }
 
-	/** The task the overlay aims at: К бою until ready, then the capture, then the launch. */
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
-	FString GetAssistTask() const { return AssistTask; }
-
-	/** The overlay's level (guided, hint, demonstrate; H cycles them and off). */
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	/** The helper's level (unassisted, hint, guided, demonstrate). H cycles off, hints, on, watch the crewman. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
 	FString GetAssistLevel() const { return AssistLevel; }
+
+	/** The next level round (H in the cabin, H in the mission's menu), kept for the next missions too. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Helper")
+	void CycleHelper(bool bWithWatch);
+
+	/** The helper's target at the post (a target to give a launcher, or to plot): its number, and the launcher. -1 none. */
+	int32 GetHelpTargetNumber() const;
+	FString GetHelpCallsign() const;
 
 	/** The player's last move at this seat, judged (the overlay's "that cost" line). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
@@ -218,7 +289,7 @@ public:
 	bool IsMissionMenuOpen() const { return bMissionMenuOpen; }
 
 	/**
-	 * The trainer's instructor panel (roadmap 10.3): F7 opens and closes it where the simulation runs. While it is open
+	 * The trainer's instructor panel (roadmap 10.3): F9 opens and closes it (F7 is a camera view) where the simulation runs. While it is open
 	 * it has the keys: Tab the next target, Left/Right turn it 30 degrees, Up/Down send it up or down, -/= its speed,
 	 * E a manoeuvre, J its jammer, R let it go, N enter a training drone ahead of the vehicle.
 	 */
@@ -282,6 +353,9 @@ public:
 	/** The target number picked at this seat (board or IT-45; -1: none; the IT-45's numbers start at 00). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	int32 GetPickedTarget() const { return PickedTarget; }
+	bool IsCrossOnBoard() const { return bOnBoard; }
+	float GetLastPlotMissCm() const { return LastPlotMissCm; }
+	float GetLastPlotTime() const { return LastPlotTime; }
 
 	/** Pick the next (+1) or previous (-1) target on this seat's picture: the board at the commander's, the IT-45 at the
 	 *  plotter's. */
@@ -295,6 +369,8 @@ public:
 	/** At the plotter's seat: write the picked IT-45 target on the board. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
 	bool PlotPicked();
+	/** The plotting board under the cross (the plotter's): the mouse wheel picks the number, a click writes it there. */
+	void HandleBoard(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
@@ -338,6 +414,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USimCrewAudioComponent> CrewAudio;
 
+	/** The camera views on the F keys (docs/PLAYING.md). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimViewComponent> Views;
+
 	/** First-person camera at the current station's eye point. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<UCameraComponent> CabinCamera;
@@ -350,6 +430,47 @@ protected:
 	TObjectPtr<USimPu12MastComponent> PostMast;
 
 private:
+	/** Where the player's body is: in a seat, on his feet inside (bWalking), led along simcore's legs (a climb, a walk to
+	 *  a job), on the roof, on the ground. */
+	enum class EBodyMode : uint8 { Seat, Cabin, Guided, Hull, Ground };
+	EBodyMode Body = EBodyMode::Seat;
+	/** On the roof or the ground: his feet in the vehicle's frame (cm, X forward, Y right, Z up) and his look (yaw and
+	 *  pitch in the vehicle's frame). Led: the extra turn of his head off the way he goes. */
+	FVector OutFeet = FVector::ZeroVector;
+	double BodyYawDeg = 0.0;
+	double BodyPitchDeg = 0.0;
+	/** A job's switch clicked inside (the AB-1's, the PAB-2's case): he is walked out to it and works it there. */
+	FString PendingJob;
+	int32 PendingJobDirection = 1;
+	/** The body seen from outside: the hull shown, the closed compartment hidden, the daylight in. */
+	bool bOutsideLook = false;
+	/** The job objects on the ground (the AB-1 set, the aiming circle), by place id. */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UStaticMeshComponent>> JobMarkers;
+	FString HoveredJob;
+	/** Several jobs at one place (the AB-1: set out, start): the mouse wheel picks among them. */
+	int32 JobPick = -1;
+	float BodyReportClock = 0.0f;
+
+	void HandleOutside(float DeltaSeconds, class APlayerController* Pc, USimWorldSubsystem* Sim);
+	/** F: the next climb where he stands. */
+	void Climb(USimWorldSubsystem* Sim);
+	/** Walked along simcore's legs to a goal; false (FeedbackText says why) if there is no way. */
+	bool GoBody(USimWorldSubsystem* Sim, const simcore::MoveGoal& Goal);
+	/** The led walk's camera, and what he becomes when it ends. */
+	void FollowGuide(USimWorldSubsystem* Sim, float DeltaSeconds);
+	/** The body's place and feet to simcore (and the server). */
+	void ReportBody(USimWorldSubsystem* Sim);
+	void SetOutsideLook(bool bOutside);
+	/** A cabin control clicked: a job outside walks him out to it first; anything else is clicked. */
+	ESimPlayerActionResult ClickOrGoOut(int32 Item, int32 Direction);
+	void UpdateJobMarkers(USimWorldSubsystem* Sim);
+	/** The vehicle's frame (cm) <-> simcore's body frame (m: x right, y forward, z up). */
+	static simcore::Vec3 ToBodyM(const FVector& VehicleCm) { return simcore::Vec3{VehicleCm.Y / 100.0, VehicleCm.X / 100.0, VehicleCm.Z / 100.0}; }
+	static FVector FromBodyM(const simcore::Vec3& B) { return FVector(B.y, B.x, B.z) * 100.0; }
+	/** The ground's height under a point of the vehicle's frame (cm, the vehicle's frame), from what the world has. */
+	double GroundZ(const FVector& VehicleCm) const;
+
 	void Drive(float DeltaSeconds, class APlayerController* Pc);
 	void FollowGround();
 	void UpdateSim(USimWorldSubsystem* Sim);
@@ -361,6 +482,15 @@ private:
 	void UpdateTour(float DeltaSeconds);
 	void ShowTourView();
 	void HandleCrew(class APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds);
+	/** A lesson: Enter, L, its highlight in the cabin; returns the control the ghost hand should reach for. */
+	FString HandleLesson(class APlayerController* Pc, USimWorldSubsystem* Sim, float DeltaSeconds);
+	/** -SimTutorialAutoplay=<folder>: the lesson played as a learner would, through the same clicks, wheel turns and
+	 *  menu lines, each step photographed as he sees it before it is done; the game quits at the end. */
+	void RunLessonAutoplay(USimWorldSubsystem* Sim, const struct FSimTutorialStep& Step, float DeltaSeconds);
+	/** The crew menu opens (O): this seat's orders or reports, on the page with the lesson's line if one is asked for. */
+	void OpenCrewMenu(USimWorldSubsystem* Sim);
+	/** The cabin seat with this station id (INDEX_NONE if none). */
+	int32 FindStation(const FString& StationId) const;
 	void ConfigureForScenario(USimWorldSubsystem* Sim);
 	void HandlePost(class APlayerController* Pc);
 	TArray<int32> PickList() const;
@@ -382,11 +512,30 @@ private:
 	void HandleInstructor(APlayerController* Pc, USimWorldSubsystem* Sim);
 	int32 Station = 0;
 	FString StationLabel;
+	/** Standing at a far panel of the seat (L onto one of its controls beyond arm's reach): the eye's step from the seat
+	 *  (cm, the vehicle's frame), for the seat StandStation only; another seat, or the cabin left, sits down again. */
+	FVector StandOffset = FVector::ZeroVector;
+	int32 StandStation = INDEX_NONE;
+	/** Walking (X): the eye (cm, the vehicle's frame) and where he looks (yaw, pitch in the vehicle's frame). The seat he
+	 *  got up from stays his (Station): his orders and reports, and the seat he holds. */
+	bool bWalking = false;
+	FVector WalkEye = FVector::ZeroVector;
+	double WalkYawDeg = 0.0;
+	double WalkPitchDeg = 0.0;
+
 	/** Head turn from the station's view direction (degrees). */
 	double LookYawDeg = 0.0;
 	double LookPitchDeg = 0.0;
 	int32 HoveredItem = INDEX_NONE;
 	int32 DraggedWheel = INDEX_NONE;
+	/** Holding a hand wheel turns the head onto the display it is worked against (the layout's "watch"), and back to
+	 *  where it was when the wheel is let go: the look to turn to, and the look to come back to. */
+	bool bWheelWatch = false;
+	bool bWatchReturn = false;
+	double WatchYawDeg = 0.0;
+	double WatchPitchDeg = 0.0;
+	double ReturnYawDeg = 0.0;
+	double ReturnPitchDeg = 0.0;
 	FString HoverText;
 	FString FeedbackText;
 	float FeedbackSecondsLeft = 0.0f;
@@ -397,10 +546,11 @@ private:
 
 	bool bAssist = false;
 	float AssistClock = 0.0f;
-	FString AssistTask;
 	FString AssistLevel;
 	FSimMoveVerdict LastVerdict;
-	FSimDrillAdvice Advice;
+	FSimSeatHelp Help;
+	/** The first move the helper shows now (null: none shown). */
+	const FSimHelpStep* HelpTop() const;
 	bool bMenuOpen = false;
 	int32 MenuPage = 0;
 	TArray<FSimCrewMenuEntry> MenuEntries;
@@ -413,6 +563,26 @@ private:
 	/** The sky lights dimmed by SetDaylightShut, with their own intensities. */
 	TMap<TWeakObjectPtr<class USkyLightComponent>, float> ShutSkyLights;
 	int32 PickedTarget = INDEX_NONE;
+	/** The cross is on the plotting board (HandleBoard): the HUD draws the picked number beside it. */
+	bool bOnBoard = false;
+	/** The last mark written by hand: how far the click was (cm), and when (world seconds), for a moment's feedback. */
+	float LastPlotMissCm = -1.0f;
+	float LastPlotTime = -100.0f;
+
+	FString AutoplayFolder;
+	bool bAutoplayAsked = false;
+	int32 AutoStep = INDEX_NONE;
+	float AutoClock = 0.0f;
+	bool bAutoLooked = false;
+	bool bAutoShot = false;
+	bool bAutoUi = false;
+	bool bAutoReachChecked = false;
+	bool bAutoWatched = false;
+	int32 AutoClicks = 0;
+	float AutoEndClock = -1.0f;
+	/** The autoplay's hands on the controls: throttle forward, and the brake. */
+	double AutoThrottle = 0.0;
+	bool bAutoBrake = false;
 
 	bool bTouring = false;
 	FString ShotFolder;

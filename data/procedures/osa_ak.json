@@ -171,9 +171,35 @@
     "sources": [ { "subsystem": "gta", "stationary_lph": 75, "moving_lph": 100 },
                  { "subsystem": "pto_generator", "stationary_lph": 25, "moving_lph": 25 } ],
     "stopped_input": "vehicle_stopped", "refuel_input": "tzm_alongside", "refuel_input_alt": "fuel_truck_alongside", "refuel_lpm": 60, "power_cut_input": "fuel_power_cut",
-    "source": "samsim_thread (ePap: about 300 l tank; turbine about 75 l/h stationary and 100 l/h moving; take-off generator about 25 l/h; half the tank is kept for driving, and the crew asks for fuel at half)",
+    "source": "samsim_thread (ePap: about 300 l tank; turbine about 75 l/h stationary and 100 l/h moving; take-off generator about 25 l/h; half the tank is kept for driving, and the crew asks for fuel at half); voenizdat_osa_1991 p163-164 agrees (the turbine 67 kg/h, about 80 l/h, at its 50 kW; the take-off generator 20 kg/h, about 24 l/h)",
     "confidence": "medium",
     "notes": "Burning = the power source's subsystem is not off (it burns while starting). The take-off generator is taken as 25 l/h whether or not the vehicle moves (it only runs at a halt). At the reserve the crew asks for fuel (debrief) and both power sources are cut so the rest stays for driving; this reads 'half the tank is kept for driving' as a hard limit on the power sources. refuel_lpm 60 is a sam3d estimate (no source gives a refuelling rate): a full tank from the reserve in 2.5 min."
+  },
+
+  "voice": {
+    "system": "R-124",
+    "power": "r124_intercom",
+    "intercom_on_radio": false,
+    "sets": [
+      { "id": "left", "name": "R-123M left", "kind": "r123m", "power": "radio.left.power", "mode": "radio.left.mode", "preset": "radio.left.preset", "volume": "radio.left.volume", "squelch": "radio.left.squelch", "warm": "r123m_left", "transmit": "r123m_left_tx" },
+      { "id": "right", "name": "R-123M right", "kind": "r123m", "power": "radio.right.power", "mode": "radio.right.mode", "preset": "radio.right.preset", "volume": "radio.right.volume", "squelch": "radio.right.squelch", "warm": "r123m_right", "transmit": "r123m_right_tx" }
+    ],
+    "boxes": [
+      { "id": "a1", "name": "А-1", "station": "commander", "headset": "headset.commander", "selector": "intercom.a1", "positions": ["off", "intercom", "radio"], "radio_select": "radio.headset", "radio_select_sets": ["left", "right"], "keeps_intercom": true },
+      { "id": "a2", "name": "А-2", "station": "deputy_commander", "headset": "headset.deputy_commander", "selector": "intercom.a2", "positions": ["intercom", "radio"], "radio": "left" },
+      { "id": "a3", "name": "А-3", "station": "senior_operator", "headset": "headset.senior_operator" },
+      { "id": "a4", "name": "А-4", "station": "operator", "headset": "headset.operator" },
+      { "id": "pv", "name": "ПВ", "station": "driver", "headset": "headset.driver", "selector": "intercom.pv", "positions": ["intercom", "radio"], "radio": "left" }
+    ],
+    "phones": [
+      { "id": "ta57", "handset": "ta57.handset", "station": "commander" }
+    ],
+    "shout_quiet_s": 1.5,
+    "shout_noisy_s": 4.0,
+    "noisy": ["gta", "pto_generator"],
+    "source": "r124_refs; r124_bmp2 (A-1 ВЫКЛ / ВС / Р-123 / Р-112, A-2 Р-112 / ВС / Р-123: two radios; the chest switch's ВЫЗ pulls those on the radio back); r123m_training (the one on the radio leaves the intercom); mon_2112_80 (two R-123M, the R-124, a TA-57)",
+    "confidence": "medium",
+    "notes": "A-1 on Р-123 keeps the intercom (the chest switch's ПРМ: receive and the intercom, r124_bmp2; SAM3D as before); A-2 and the driver's ПВ on the radio leave it, and the call (ВЫЗ) brings them back. Which seat holds A-2 to A-5 on the Osa is not documented: A-2 the deputy commander (the ZSU-23-4 analogue, tpu_zsu; the NVA's deputy with the lock-on button), the rest by seat. A-2 and the driver's ПВ reach the left set (SAM3D's choice)."
   },
 
   "readiness": {
@@ -301,7 +327,8 @@
     { "id": "target_too_low", "description": "Target too low for the SSC radar to track in angle (НЛЦ lamp)", "source": "samsim_osa p25", "confidence": "high" },
     { "id": "target_captured", "description": "SSC is on the target azimuth and the target is inside the range gate, so it captures automatically", "source": "samsim_osa p24", "confidence": "high" },
     { "id": "target_tv_tracked", "description": "The target is in the TOV crosshair and the operators are tracking it by hand (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p25, p34 (ПА: angle tracking with the TOV camera)", "confidence": "medium" },
-    { "id": "target_fills_crosshair", "description": "The TV-tracked target fills the narrow-lens crosshair: by its size it is about within range (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p33-35 (range judged from the target's size in the narrow-lens crosshair); taken as the target within the firing zone at its true range: sam3d estimate", "confidence": "estimate" }
+    { "id": "target_fills_crosshair", "description": "The TV-tracked target fills the narrow-lens crosshair: by its size it is about within range (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p33-35 (range judged from the target's size in the narrow-lens crosshair); taken as the target within the firing zone at its true range: sam3d estimate", "confidence": "estimate" },
+    { "id": "ta57_call", "description": "The TA-57 rings: a call on the line laid to the vehicle", "source": "the sim sets it (docs/crew/12_COMMUNICATIONS.md §2.8)", "confidence": "medium" }
   ],
 
   "controls": [
@@ -396,6 +423,9 @@
     { "id": "veh.hatches", "label": "люки (hatches)", "station": "commander", "kind": "switch", "position_labels": ["open", "closed"], "initial": 1,
       "source": "voenizdat_osa_1991 p99 (РУ lights only with ЛЮКИ ЗАКР. lit on the commander's console), p154 (ПУСК ГОТОВ needs the hatches closed); mon_2112_80 p64 (hatches must not be opened in combat work)", "confidence": "medium",
       "notes": "The hatches have a powered opening and closing system (voenizdat_osa_1991 p163). One control stands for all of them; starts closed." },
+    { "id": "nav.aiming_circle", "label": "буссоль (aiming circle): stowed / set up ahead", "station": "commander", "kind": "switch", "position_labels": ["stowed", "set up"], "initial": 0,
+      "source": "voenizdat_osa_1991 p249-250 (Qc found by mutual sighting with a field artillery aiming circle set up 20-50 m ahead of the vehicle: its monocular laid on the TV sight's lens, the launcher laid on it), p249 (the crew chief finds Qc)", "confidence": "medium",
+      "notes": "A job outside (data/vehicles/osa_ak.json): the crew chief carries the aiming circle out ahead of the vehicle, sets it up and reads the azimuth to the vehicle. The switch is its case beside his seat; its time is the subsystem qc_measured." },
     { "id": "gyro.arrest", "label": "АРРЕТИР.", "station": "driver", "kind": "button",
       "source": "voenizdat_osa_1991 p247 (the driver erects the gyro by holding АРРЕТИР. on block 0005-8M for 40 s), p51–52", "confidence": "medium",
       "notes": "Block 0005-8M is on rack SŁ-1M at the front of the operators' compartment (mon_2112_80 Fig. 3). SAM3D: one press starts the 40 s erection." },
@@ -403,9 +433,9 @@
       "source": "voenizdat_osa_1991 p48, p246 (ЗК connects the course setter ЗК-4 to the gyro for orientation; back to АК afterwards)", "confidence": "high" },
     { "id": "orient.relay", "label": "РЕЛЕ — Qc", "station": "deputy_commander", "kind": "switch", "position_labels": ["РЕЛЕ", "Qc"], "initial": 0,
       "source": "voenizdat_osa_1991 p51 (switches on azimuth correction for orienting with ЗК-4; start position РЕЛЕ), p246", "confidence": "high" },
-    { "id": "orient.qc", "label": "ЗАДАТЧИК КУРСА ЗК-4 (Qc)", "station": "deputy_commander", "kind": "wheel", "min": 0, "max": 360, "initial_value": 0, "unit": "deg",
+    { "id": "orient.qc", "label": "ЗАДАТЧИК КУРСА ЗК-4 (Qc)", "station": "deputy_commander", "kind": "wheel", "min": 0, "max": 360, "wraps": true, "initial_value": 0, "unit": "deg",
       "source": "voenizdat_osa_1991 p48 (course setter ЗК-4 on block 0005-8M: the vehicle's heading Qc is set on its scale), p249 (Qc from north, clockwise, to the vehicle's axis)", "confidence": "high",
-      "notes": "Degrees here; the real scale is probably in Russian mils (not seen)." },
+      "notes": "Degrees here; the real scale is probably in Russian mils (not seen). It turns round past 0 like any heading scale (wraps: sam3d)." },
     { "id": "orient.sync", "label": "СОГЛАСОВАНИЕ", "station": "deputy_commander", "kind": "button",
       "source": "voenizdat_osa_1991 p48 (on panel ПУ-11 in block 0005-8M: speeds up orienting the GA-3; held until the Qc scale stops), p246", "confidence": "high" },
     { "id": "orient.latitude", "label": "ШИРОТА (φ)", "station": "deputy_commander", "kind": "wheel", "min": 0, "max": 90, "initial_value": 0, "unit": "deg",
@@ -535,7 +565,13 @@
       "source": "samsim_sprites osa042–043; samsim_osa p29 photo; start: samsim_game", "confidence": "medium" },
     { "id": "msl.emergency", "label": "АВАРИЙНЫЙ ПУСК", "station": "deputy_commander", "kind": "button", "guard": "msl.emergency_cover",
       "source": "samsim_osa p29 photo; samsim_thread (ePap, 29–30 Jun 2013)", "confidence": "medium",
-      "notes": "Throws the missile ИЗДЕЛИЯ is set to off unguided, when the launcher has lost power or to get rid of missiles fast. It climbs 24-27 s and self-destructs (launcher.emergency)." }
+      "notes": "Throws the missile ИЗДЕЛИЯ is set to off unguided, when the launcher has lost power or to get rid of missiles fast. It climbs 24-27 s and self-destructs (launcher.emergency)." },
+    { "id": "headset.commander", "label": "Headset (шлемофон): commander (A-1)", "station": "commander", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.deputy_commander", "label": "Headset (шлемофон): deputy commander (A-2)", "station": "deputy_commander", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.senior_operator", "label": "Headset (шлемофон): senior operator (A-3)", "station": "senior_operator", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.operator", "label": "Headset (шлемофон): operator (A-4)", "station": "operator", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "headset.driver", "label": "Headset (шлемофон): driver (ПВ)", "station": "driver", "kind": "switch", "position_labels": ["СНЯТ", "НАДЕТ"], "initial": 1, "source": "r124_refs (the R-124: five subscribers with helmets and laryngophones, each on his own box); the control itself is sam3d", "confidence": "medium", "notes": "On the head and its cord plugged into the seat's box. Without it the seat hears only voices in the cabin: no intercom, no radio, no line (docs/crew/12_COMMUNICATIONS.md)." },
+    { "id": "ta57.handset", "label": "ТА-57: трубка", "station": "commander", "kind": "switch", "position_labels": ["НА РЫЧАГЕ", "СНЯТА"], "initial": 0, "source": "mon_2112_80 (p. 26: a TA-57 for a subscriber outside the vehicle at a halt); airbase_ek32_2012 (crews held the handset under the headset for the command post's night checks)", "confidence": "medium", "notes": "Taken: the commander hears the line (the battery command post's, where one is laid)." }
   ],
 
   "subsystems": [
@@ -584,6 +620,11 @@
       "start_time_s": { "value": 40, "source": "voenizdat_osa_1991 p247 (АРРЕТИР. held for 40 s)", "confidence": "high" },
       "source": "voenizdat_osa_1991 p51–52, p247", "confidence": "medium",
       "notes": "Lamp ОТКАЗ Ψ, Θ is lit while erecting (p52). Nothing else waits for it in SAM3D." },
+    { "id": "qc_measured", "name": "Qc measured with the aiming circle (mutual sighting)",
+      "enable": [ { "control": "nav.aiming_circle", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
+      "start_time_s": { "value": 150, "source": "estimate (level the aiming circle, lay it on the TV sight's lens, read it and work out Qc)", "confidence": "estimate" },
+      "source": "voenizdat_osa_1991 p250", "confidence": "medium",
+      "notes": "Nothing waits for it yet: the deputy's orient_vehicle takes the crew chief's Qc as given." },
     { "id": "equipment_warm", "name": "Equipment warmed up (anode supplies on, scopes sweeping)",
       "enable": [ { "control": "pwr.equipment", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
       "start_time_s": { "value": 60, "source": "voenizdat_osa_1991 p165 (anode supplies of all systems after 1 min), p52, p99 (sweeps appear after 1 min)", "confidence": "high" },
@@ -1214,9 +1255,9 @@
     {
       "id": "acquire_with_soc", "name": "Autonomous target acquisition with the SOC radar",
       "source": "samsim_osa p21–24; seats: flak11 (9A33-3)", "confidence": "high",
-      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator). The manual then selects the beam the echo appeared in; SAM3D's crew leaves АВТ. I–III on, where target designation searches the beam the echo is seen in.",
+      "notes": "Senior operator: find the target and put the SSC azimuth line on it. Several steps wait for target geometry (50, 35 km) that the sim provides later; those waits are in the descriptions. The same order goes with ready_capture (deputy commander) and capture_with_ssc (operator). The manual then selects the beam the echo appeared in; SAM3D's crew leaves АВТ. I–III on, where target designation searches the beam the echo is seen in. SAM Simulator has the crew watch the PU-12's plotting board; the board is in the battery's post, and the vehicle gets the target by voice from the battery commander, azimuth and range (flak11), so the cue here is his designation.",
       "steps": [
-        { "control": "soc.search", "position": 1, "description": "When the target nears 50 km on the plotting board: ПОИСК ВКЛ, SOC antenna rotation on" },
+        { "control": "soc.search", "position": 1, "description": "When the battery commander's designation puts the target near 50 km: ПОИСК ВКЛ, SOC antenna rotation on" },
         { "control": "soc.hv_cover", "position": 1, "description": "Remove the guard over ВЫСОКОЕ" },
         { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, SOC transmitter on" },
         { "control": "soc.beam", "position": 3, "description": "АВТ. I–III ЛУЧ, scan all three height beams" },
@@ -1250,6 +1291,15 @@
       ]
     },
     {
+      "id": "measure_qc", "name": "Find Qc with the aiming circle ahead of the vehicle", "situational": true,
+      "source": "voenizdat_osa_1991 p249-250", "confidence": "medium",
+      "notes": "Commander (crew chief), at a halt: out with the aiming circle 20-50 m ahead, set it up and read the azimuth to the vehicle while the launcher is laid on it from inside, then stow it and bring the reading back. Out and back by his hatch (data/vehicles/osa_ak.json), which stays shut in БР with the equipment on.",
+      "steps": [
+        { "control": "nav.aiming_circle", "position": 1, "description": "Out ahead: set the aiming circle up, level it and lay it on the vehicle", "wait_for": [ { "input": "vehicle_stopped", "is": true } ] },
+        { "control": "nav.aiming_circle", "position": 0, "description": "Azimuth read: stow the aiming circle and bring Qc in", "wait_for": [ { "subsystem": "qc_measured", "is": "ready" } ] }
+      ]
+    },
+    {
       "id": "hv_off", "name": "Search transmitter off, the antenna turning (a burst ends)", "situational": true,
       "source": "sam3d", "confidence": "estimate",
       "notes": "Senior operator. Emission discipline against direction-finding (scenario doctrine search_bursts): ВЫСОКОЕ off between bursts, the antenna turning on and the guard open, so the next burst is one switch (roadmap E6).",
@@ -1260,6 +1310,18 @@
       "source": "sam3d", "confidence": "estimate",
       "notes": "Senior operator: the next burst of the search radar (doctrine search_bursts; video_osa: the search radar on for only two turns).",
       "steps": [ { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, the SOC transmitter on", "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] } ]
+    },
+    {
+      "id": "arm_beams", "name": "Both low beams in each burst (against ARMs)", "situational": true,
+      "source": "sam3d; the bursts: voenizdat_osa_1991 p262 (the search transmitter's high voltage on for 2 turns after every 3-4); the programmes: samsim_osa (ЛУЧ АВТ. I–II)", "confidence": "estimate",
+      "notes": "Senior operator, under the least emission against ARMs (scenario doctrine arm_threat): ЛУЧ to АВТ. I–II, a two-turn programme, so each two-turn burst lights beams I and II. Under АВТ. I–III a burst lights only two of the three beams, and the low beam is dark in every third burst (roadmap E6).",
+      "steps": [ { "control": "soc.beam", "position": 4, "description": "ЛУЧ АВТ. I–II, the two low beams in turn" } ]
+    },
+    {
+      "id": "ssc_tx_off", "name": "Tracking transmitter off (against ARMs)", "situational": true,
+      "source": "voenizdat_osa_1991 p262 (firing under the threat of ARMs: the tracking transmitter's high voltage off after the missile's burst); the switch: samsim_osa p22-24 (ПЕРЕДАТЧИК)", "confidence": "medium",
+      "notes": "Operator, at the commander's order (order_ssc_off): ПЕРЕДАТЧИК ОТКЛ, the guard left open so the next target is one switch (roadmap E6, the ARM drill).",
+      "steps": [ { "control": "ssc.tx", "position": 0, "description": "ПЕРЕДАТЧИК ОТКЛ, the SSC transmitter off" } ]
     },
     {
       "id": "tv_watch", "name": "Look at the tracked target on the TV", "situational": true,
@@ -1331,12 +1393,12 @@
       ]
     },
     {
-      "id": "emcon_tv_azimuth", "name": "Emissions control: azimuth onto the plotting-board track",
-      "source": "samsim_osa p33–35; seat: flak11 (9A33-3)", "confidence": "high",
-      "notes": "Senior operator, with emcon_tv_engagement (deputy commander).",
+      "id": "emcon_tv_azimuth", "name": "Emissions control: azimuth onto the designated target",
+      "source": "samsim_osa p33–35; seat: flak11 (9A33-3); the designation by voice: flak11 (PU12-0)", "confidence": "high",
+      "notes": "Senior operator, with emcon_tv_engagement (deputy commander). SAM Simulator takes the azimuth from the PU-12's plotting board; the crew has it from the battery commander's designation by voice (flak11), a minute old at worst.",
       "steps": [
         { "control": "ssc.az_light", "position": 1, "description": "ПОДСВЕТКА, light the azimuth indicator" },
-        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel, then turn towards the target's azimuth from the plotting board" }
+        { "control": "ssc.az_lock", "position": 1, "description": "Unlock the azimuth wheel, then turn towards the azimuth in the battery commander's designation" }
       ]
     },
     {
@@ -1344,7 +1406,7 @@
       "source": "samsim_osa p33–35", "confidence": "high",
       "notes": "Deputy commander; the senior operator turns the azimuth (emcon_tv_azimuth). Range is judged from the target's size in the narrow-lens crosshair, so ЦЕЛЬ В ЗОНЕ is not awaited. The TV can't look within 16° of the sun (voenizdat_osa_1991 p251).",
       "steps": [
-        { "control": "tov.power", "position": 1, "description": "When the target nears 50 km on the plotting board: РАБ.РЕЖ. ВКЛ, TOV camera on" },
+        { "control": "tov.power", "position": 1, "description": "When the battery commander's designation puts the target near 50 km: РАБ.РЕЖ. ВКЛ, TOV camera on" },
         { "control": "ssc.el_light", "position": 1, "description": "ПОДСВЕТКА, light the elevation indicator" },
         { "control": "ssc.el_lock", "position": 1, "description": "Unlock the elevation wheel (p23), then scan slowly upwards until the target shows on the TV and bring it into the crosshair" },
         { "control": "fo.pa", "position": 1, "description": "ПА, angle tracking with the TOV camera",

@@ -18,8 +18,9 @@ Or double-click `SAM3D.uproject` and let Unreal compile it.
 
 The project enables Epic's **Unreal MCP** (`ModelContextProtocol`, experimental, UE 5.8+) and **All Toolsets**
 plugins. With the editor open, the MCP server listens on `http://127.0.0.1:8000/mcp` (this PC only, no
-authentication) and Claude Code connects to it through `.mcp.json` at the repo root. Python remote execution
-(`tools/ue_remote.py`) stays on alongside it.
+authentication). Claude Code reaches it through `.mcp.json` at the repo root, which starts
+`tools/unreal_mcp_proxy.py` as the `unreal-mcp` server: a small stdio proxy that is always connected and passes
+requests on to the editor while it is open. Python remote execution (`tools/ue_remote.py`) stays on alongside it.
 
 The server starts with the editor: `Config/DefaultEditorPerProjectUserSettings.ini` (in git) sets
 `bAutoStartServer=True`, so every checkout and worktree has it. (The same switch is **Edit → Editor Preferences →
@@ -27,11 +28,13 @@ General → Model Context Protocol → Auto Start Server**; a user's own choice 
 read once at editor start-up, so change it, then restart the editor.) If the server is ever off, run
 `ModelContextProtocol.StartServer` in the editor console.
 
-Order matters for Claude Code: it reads `.mcp.json` and connects when the session starts, and does not retry. Open
-the editor first, then start Claude Code from the repo root. If the session came first, or the editor was restarted,
-type `/mcp` in the session and reconnect `unreal-mcp`. Only one editor can hold port 8000, and a session talks to
-whichever project's editor owns it: check the editor is the checkout you mean (a worktree has its own `Binaries/`
-and `Saved/`; the Cesium ion token is also per checkout and not in git).
+Order doesn't matter: Claude Code connects to its MCP servers once, when a session starts, and does not retry, so
+the proxy stands in for the editor. It checks for the editor every 5 s and, when it comes up, restarts or closes,
+tells Claude Code to fetch the tool list again; the editor's tools appear and vanish by themselves (no `/mcp`
+reconnect, which the desktop app doesn't offer anyway). Its own tool `proxy_status` says whether the editor is
+reachable. Only one editor can hold port 8000, and a session talks to whichever project's editor owns it: check the
+editor is the checkout you mean (a worktree has its own `Binaries/` and `Saved/`; the Cesium ion token is also per
+checkout and not in git).
 
 ## Time compression
 
@@ -80,14 +83,38 @@ director's ScenarioFile (set the director's **Mission Menu** to Always to see th
   the crew's grades. A networked game only resumes or quits, and runs on meanwhile.
 - Scripted check: `-SimMenuTest=<folder> -SimMenuPick=<mission>:<vehicle>:<seat>` photographs the menu (`menu.png`,
   `menu_pick.png`), starts the pick, photographs the player's first view (`started.png`) and the mission's menu
-  (`mission_menu.png`), then quits. Test `SAM3D.Missions.Menu`.
+  (`mission_menu.png`), then quits, logging each view's frame rate and game, render and GPU times and checking the view mode stayed lit
+(`-SimViewShotLast=N`: only the last N views, the cabin's).
+
+Performance (19 Oct 2026, the tutorial at 1600x900: about 100 fps in every view, from 9): the cabin's instruments are
+drawn only while the camera is in the cabin, at most `sam3d.CabinDisplayHz` times a second (default 30), and only when
+their picture changes (a dial, a meter, a tube switched off); all their lines, rings and discs go to the canvas as one
+triangle list per picture (each canvas item costs the render thread a draw of its own); the search scope's scale is
+drawn once. The TOV monitor films the world at `sam3d.TvHz` (default 15) while it is on and the camera is in the cabin.
+`sam3d.CabinDisplaySkipKinds` (a bit mask of display kinds) is there to find the next expensive one. Test `SAM3D.Missions.Menu`.
+
+**The first playable test** (`docs/PLAYING.md`): `.\tools\play.ps1 -Tutorial` opens the first lesson straight away,
+`-Lesson <seat>` a seat's lesson (the missions menu's Tutorial group: `data/tutorials/`, `docs/TUTORIALS.md`). The
+lesson's card is `ASimCabinHUD::DrawGuide` (with the bracket or edge arrow on the step's control from
+`USimCabinComponent::GetHighlightTarget`, the wheel gauge, the done tick, the menu line); `ASimOsaVehicle::HandleLesson`
+takes Enter and L and refuses what a strict lesson doesn't allow (`USimWorldSubsystem::GetTutorialRefusal`); the
+instructor's voice is `USimCrewVoiceComponent`. Tests `SAM3D.Missions.Tutorial`, `SAM3D.Missions.SeatLesson`; scripted
+check `-SimTutorialAutoplay=<folder>` plays the lesson and photographs each step (`docs/TUTORIALS.md`). The camera views are on the F keys as in DCS (`USimViewComponent`): F1 the cabin and its
+seats, F2 your vehicle, F3 fly-by, F4 chase, F5 the nearest aircraft from your vehicle, F6 your missile, F7 the ground
+units, F8 the aircraft, F10 the map, F11 a free camera; the same key again for the next of its kind. Ctrl+Z / Alt+Z /
+Shift+Z speed time up, slow it, set it back. G shows every key. `Config/DefaultInput.ini` takes the engine's debug view
+modes off F1-F5, F9 and F11. Test `SAM3D.Missions.Tutorial`. Scripted check: `-SimViewShots=<folder>` (with
+`-SimShotDelay=<s>`, default 15) steps through the views in the running game and photographs each with the HUD, then
+quits.
 
 In play:
 
 | Keys | Action |
 |---|---|
 | W / S, A / D, Space | Drive, steer, brake. Stopping tells the sim the vehicle is at a halt. |
-| Right mouse + drag | Orbit the camera |
+| F1-F8, F10, F11 | Camera views (`docs/PLAYING.md`); right mouse + drag turns the camera, the wheel zooms |
+| Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |
+| G | Every key |
 | 1 | Power up: driver starts the GTA (`power_up`), operator switches on the equipment (`equipment_on`) |
 | 2 | Senior operator: search on the march (waits for power) |
 | 3 | Come into action at a halt: operator unlocks the АПУ and switches on the drives, driver puts the generator on line, deputy commander orients the vehicle (gyro to the crew chief's Qc, `orient_vehicle`) |
@@ -123,6 +150,23 @@ faults red) and go to the Output Log (`LogSAM3D`). Driving off with the АПУ u
 
 **Your Cesium ion token** is saved by the plugin under `Content/CesiumSettings/`, which is git-ignored so it
 never reaches the repository.
+
+## The Kesmark test range (no Cesium)
+
+`Content/Maps/KesmarkRange` (made by `tools/ue_build_kesmark_range.py` through the editor commandlet, with the map's
+vertex-colour material `/Game/SAM3D/Map/M_SimMapVertexColor`) draws the generated 40 km map
+(`data/maps/kesmark_range.json`) and the weather at play time: `ASimMapActor` (ground, ribbons, instanced boxes, in the
+scenario's frame, curved with the Earth), `ASimSkyWeatherActor` (sun from `simcore/solar.hpp`, physically based sky with
+the day's haze, volumetric cloud on the weather's main layer; `-SimCloudCells` adds the sim's own cloud as boxes), and a
+director with Cesium off playing `scenarios/kesmark_range_test.json`. The missions menu's "Test range" opens it.
+`docs/TEST_RANGE.md` has the details.
+
+```
+UnrealEditor.exe SAM3D.uproject /Game/Maps/KesmarkRange -game -SimScenario=scenarios/kesmark_range_test.json
+UnrealEditor.exe SAM3D.uproject /Game/Maps/KesmarkRange -game -RenderOffscreen -SimScenario=scenarios/kesmark_range_test.json -SimMapShots=C:/dev/SAM3D/out/map_shots
+```
+
+From Git Bash, pass the level from PowerShell or cmd: Git Bash rewrites `/Game/...` into a Windows path.
 
 ## Hands-free test run
 
@@ -189,7 +233,11 @@ must run with the tour on), records sim time, equipment, lamps, the track and a 
 | `SimCabinComponent` | Builds the cabin's panels, controls and lamps from the loaded cabin layout and shows the console state on them every frame; tracing, hover text, clicks and wheel turns for the vehicle. |
 | `SimCabinDisplayComponent` | One instrument: draws the scope, range indicator, dial or meter into a render target every frame (or films the TV picture with a scene capture) and shows it on a quad on the panel. Uses the ProceduralMeshComponent plugin and the engine's `Widget3DPassThrough_Opaque` material. |
 | `SimCabinHUD` | Crosshair, hover text, feedback and key help while in the cabin. |
+| `SimMapActor` | Draws a generated map (`simcore/terrain_map.hpp`) in the running scenario's frame: ground tiles with collision, roads/rail/river ribbons, every building, wood block and site part as instanced boxes. `-SimMapShots=<folder>` photographs it. |
+| `SimSkyWeatherActor` | The sun, sky atmosphere, sky light and volumetric cloud from the sim's weather and the sun's place. |
 | `SimEntityActor` | Visual proxy for one target or missile. Subclass in Blueprint for real meshes and effects. |
+| `SimAirCampaignSubsystem` | The air war's campaign (`simcore::airwar::AirCampaign`), kept by the game instance across level loads: starts and saves campaigns, advances to the next raid, writes the raid's scenario to `Saved/AirWar/`, steps the mission bridge while it plays, brings the outcome back. |
+| `SimCampaignHUD` | The campaign screen between raids: the map of what our side knows, the intelligence summary, the enemy staff's dossiers, the raids seen, the battery's posture, the raid warning and the choice to fight it or let it pass, the reveal at the end. |
 
 ## Electromagnetic layer (radar, ESM, jamming, C2)
 
@@ -267,6 +315,41 @@ ScenarioFile to `scenarios/osa_crew_practice.json`, NPC commander, or `scenarios
   UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.Crew;Quit" -unattended -nullrhi
   ```
 
+## Air war campaign (docs/air_war/)
+
+The missions menu has an **AIR WAR CAMPAIGN** box: **1-4** start a campaign against the rebels, the neutral neighbour,
+the Warsaw Pact or NATO (a fresh seed each time); **C** continues the campaign under way, or the one saved in
+`Saved/AirWar/campaign.json` (written after every step: a campaign survives quitting the game). The level reopens with
+`?SimCampaign` and `ASimScenarioDirector` shows the campaign screen (`ASimCampaignHUD`):
+
+- the game is first person (`docs/command/`): the screen shows only what has reached the player's character through
+  the chain of command (`simcore/command/`, owned by the subsystem and fed after every step of the campaign);
+- the map (left): the enemy's front and entry points, our objects (where they are, not how they stand: damage only as
+  it was reported to the player), towns and the district's villages and posts, battery 21 with its 10 km reach and its
+  dummies, the raids reported to the player in the last day (brighter through the battery's sector); a click marks a
+  position, **M** moves the battery there (30 km at most, not within 8 km of the front);
+- the panels (right, **Tab** or **1-4**): **What you know** (each delivery: when, who, by what means, where; the paper
+  or only the summary), **Your chain** (the player's post, superior, contacts and people, where each is now, the coming
+  briefings, visits, courier runs and news), the battery's posture (Up/Down a row, Left/Right change it: emission, EMCON
+  discipline, radio discipline, dummy traffic, decoy emitters, nets, fight silent, move every N hours), the raids
+  reported to the player;
+- **Space** runs the war until a raid comes through the battery's sector (or a day passes); then the warning shows as
+  it reached the player ("'Vozdukh!' 05:14, the regiment's duty officer on the radio ..."), or that none came in time;
+  **[ ]** choose the seat, **Enter** fights it, **L** lets it pass (fought without you, abstractly);
+- **E** ends the campaign and reveals the enemy's staff as it really was; **Q**/**Esc** back to the missions menu.
+
+Fighting a raid writes `Saved/AirWar/raid_<id>.json` (on the Kesmark range map's ground and with the day's weather when
+the map exists: `data/maps/kesmark_range.json`) and opens `/Game/Maps/KesmarkRange` (else the current level) with
+`?SimAirWarRaid=<id>&SimSeat=<seat>`; the director plays it like any mission. While it plays the subsystem steps the
+mission bridge (`simcore/air_war/mission_bridge.hpp`: weapon release, ARMs at a radiating radar, the enemy's ELINT);
+when the scenario ends (or our vehicle is hit) the outcome goes into the campaign and the campaign screen comes back
+after 20 s. A raid left early (Esc → the missions, restart, quit) counts as far as it went. Standalone games only for
+now (a networked campaign would live on the server).
+
+Checks: `UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.AirWar;Quit" -unattended -nullrhi`
+(a campaign's raid written, loaded by the world subsystem, read by the bridge, completed); `-game -SimCampaignTest=<folder>`
+photographs the campaign screen (`campaign.png`), advances to a raid and photographs it (`campaign_raid.png`), then quits.
+
 ## Not done yet
 
 - Chaos Vehicles physics for driving (needs a vehicle mesh with wheel bones); driving is kinematic.
@@ -288,11 +371,11 @@ Battery, board and radio (roadmap 7.7): the practice map plays `scenarios/osa_ba
 
 Multiplayer crew: `ASimCrewGameMode` gives every player a crew seat and a knowledge stream; a network client mirrors the server's simulation and never steps its own. Details and checks in `docs/MULTIPLAYER.md`; networked smoke test `tools/ue_crew_smoke.ps1` (dedicated server and two headless clients; `-Pu12m` for the command post).
 
-The PU-12M (`docs/PU12_DEVELOPMENT.md`): when the scenario's own vehicle is the command post (`scenarios/pu12m_deploy.json`, `pu12m_battery.json`), `ASimOsaVehicle` wears `SM_PU12M` and its mast (`USimPu12MastComponent`) instead of the Osa's boxes, and the director loads `cabins/pu12m.json` (an empty `CabinFile` loads the scenario's own vehicle's cabin; "none" loads none). In the cabin: at the battery commander's seat `[` `]` pick a target on the post's board and 1-5 give it to that launcher on the battery net; at the operator-plotter's seat `[` `]` pick a target on the IT-45 and P writes it on the board (take the seat with T first). Art: `tools/blender/pu12m_model.py` (exterior), `tools/blender/build_pu12m_interior.py` (interior), imported headless with the editor closed by `UnrealEditor-Cmd.exe SAM3D.uproject -run=pythonscript -script=C:/dev/SAM3D/tools/ue_import_pu12m.py -unattended -nullrhi` (`SAM3D_PU12M_STEPS=interior` for the interior alone). A battery link (`-SimScenario=scenarios/battery_link_practice.json`, docs/PU12_DEVELOPMENT.md P8) puts the Osa and the PU-12M in one battery: the player starts in the Osa (`-SimVehicle=post` for the post) and **V** moves him to the other vehicle, whose crew he leaves behind fighting on as NPCs. Networked, each player joins in his vehicle (`-SimVehicle=post` or `osa`; docs/MULTIPLAYER.md). The interior is imported without Nanite (its fallback mesh made the round parts polygons) and with finer distance fields, set through `USimEditorScripting` (a commandlet has no static mesh editor subsystem, and the import pipeline's build settings don't reach the mesh). The compartment is closed: while the camera is in it the level's sky lights are put out (`ASimOsaVehicle::SetDaylightShut`; Lumen otherwise tints the cream lining mauve), and from outside the cabin is hidden (`USimCabinComponent::SetCabinHidden`). At the battery commander's seat the instruments work too: the DT-2's two wheels put the IT-45's marker on a target, the ДХ's digits pick a number, ЦУ and a digit give it to that launcher, СБР clears.
+The PU-12M (`docs/PU12_DEVELOPMENT.md`): when the scenario's own vehicle is the command post (`scenarios/pu12m_deploy.json`, `pu12m_battery.json`), `ASimOsaVehicle` wears `SM_PU12M` and its mast (`USimPu12MastComponent`) instead of the Osa's boxes, and the director loads `cabins/pu12m.json` (an empty `CabinFile` loads the scenario's own vehicle's cabin; "none" loads none). In the cabin: at the battery commander's seat `[` `]` pick a target on the post's board and 1-5 give it to that launcher on the battery net; at the operator-plotter's seat `[` `]` pick a target on the IT-45 and P writes it on the board (take the seat with T first). Art: `tools/blender/pu12m_model.py` (exterior), `tools/blender/build_pu12m_interior.py` (interior), imported headless with the editor closed by `UnrealEditor-Cmd.exe SAM3D.uproject -run=pythonscript -script=C:/dev/SAM3D/tools/ue_import_pu12m.py -unattended -nullrhi` (`SAM3D_PU12M_STEPS=interior` for the interior alone; it takes every `art/pu12m_interior/SM_*.fbx`, the R-111's and the R-407's `SM_RadioR111`, `SM_RadioR407` among them, whose materials, `Lens_Amber` the newest, `python tools/ue_import_cabin_interior.py materials` makes first). The sets' meters read the sets (`simcore::MeterValue`). A battery link (`-SimScenario=scenarios/battery_link_practice.json`, docs/PU12_DEVELOPMENT.md P8) puts the Osa and the PU-12M in one battery: the player starts in the Osa (`-SimVehicle=post` for the post) and **V** moves him to the other vehicle, whose crew he leaves behind fighting on as NPCs. Networked, each player joins in his vehicle (`-SimVehicle=post` or `osa`; docs/MULTIPLAYER.md). The interior is imported without Nanite (its fallback mesh made the round parts polygons) and with finer distance fields, set through `USimEditorScripting` (a commandlet has no static mesh editor subsystem, and the import pipeline's build settings don't reach the mesh). The compartment is closed: while the camera is in it the level's sky lights are put out (`ASimOsaVehicle::SetDaylightShut`; Lumen otherwise tints the cream lining mauve), and from outside the cabin is hidden (`USimCabinComponent::SetCabinHidden`). At the battery commander's seat the instruments work too: the DT-2's two wheels put the IT-45's marker on a target, the ДХ's digits pick a number, ЦУ and a digit give it to that launcher, СБР clears.
 
 Command-line options for scripted runs: `-SimScenario=scenarios/<file>.json` plays that scenario whatever the map's director says (server and clients alike). `-SimCabinShots=<folder> [-SimShotDelay=<s>]` photographs every seat and instrument of the cabin after the delay (default 20 s), one PNG each, then quits: with `UnrealEditor.exe SAM3D.uproject -game -RenderOffscreen -ResX=1280 -ResY=720` a run is checked from its pictures alone, no window and no editor (the PU-12M's: `-SimScenario=scenarios/pu12m_battery.json -SimCabinShots=C:/dev/SAM3D/out/pu12m_cabin_shots -SimShotDelay=40`). `-SimShotsAround` adds five more views from every seat (left, right, behind, down, up) to check the cabin all round; `-SimVehicle=post` photographs the post in a battery link. `-SimShotsUI` keeps the HUD in the pictures; `-SimInstructor` starts with the instructor panel open.
 
-**The instructor panel** (roadmap 10.3, the 9Ф632 trainer): F7 opens it where the simulation runs (single player, or the
+**The instructor panel** (roadmap 10.3, the 9Ф632 trainer): F9 opens it where the simulation runs (single player, or the
 server). It lists every target in the sky as it is (range, bearing, heading, height, speed, held, jammer) and has the keys
 while open: Tab the next target, Left/Right turn it 30 degrees, Up/Down its height, -/= its speed, E a manoeuvre (a jink),
 J its jammer, R let it go back to its route, N a training drone 30 km out ahead of the vehicle; the trainer holds two

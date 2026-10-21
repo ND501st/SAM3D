@@ -25,6 +25,8 @@ How it was traced:
   the tube, "Platz des Planzeichners" beside it, the radio operator's; the IT-2M over the commander's workplace; the GAK
   on a stand over its PT-200 converter; the lining cream, the blocks blue-grey, the IT-45, the ДХ and the IT-2M light
   grey). docs/research/PU12_VISUALS_2026-10.md.
+* The radio operator's rack (the R-123M on a shelf over the R-111, an open tubular frame; its heights SAM3D's, RACK) and
+  the ŠČR with the VS-27 under it: wwp_btr60 (photographs of a preserved ČSLA PU-12, p. 087).
 
 Frame: the exterior trace's, X forward from the middle of the wheelbase, Y to the left, Z up from the ground; metres. The
 cabin layout's body frame is x right = -Y, y forward = X, z up (to_body).
@@ -235,29 +237,39 @@ rect('it2', 18, 'IT-2M status board', 1190, 1245, 203, 228, 1.66, 1.88, dy=0.10,
 circle('di', 20, 'DI information marker', 1243, 276, 22, 1.37, 1.43, note="in the desk top (the plan's circle is 31 px)")
 rect('fan_right', 50, 'Fan', 1265, 1290, 196, 218, 1.86, 1.96, dy=0.15, note='high on the sloping wall, above the ŠČK')
 rect('skc', 36, 'ŠČK commander’s panel', 1258, 1318, 225, 250, 1.64, 1.84)
-rect('r123_fug4', 22, 'R-123M (FuG-4, battery command net)', 1290, 1360, 202, 250, 1.375, 1.619, shape='r123m', dx=-0.04,
+rect('r123_fug2', 22, 'R-123M (FuG-2, covered unit net)', 1290, 1360, 202, 250, 1.375, 1.619, shape='r123m', dx=-0.04,
      note='on the desk, facing inboard')
-rect('bp_fug4', 23, 'R-123M power unit', 1300, 1355, 268, 318, FLOOR_Z, FLOOR_Z + 0.26, dy=0.012, note='under the desk')
+rect('bp_fug2', 23, 'R-123M power unit', 1300, 1355, 268, 318, FLOOR_Z, FLOOR_Z + 0.26, dy=0.012, note='under the desk')
 # The air-situation map (the plan's item 24, "planšet vzdušné situace"): a square plexiglass board on a hinge (rwd_mb3's
-# photograph of the Luftlagekarte), drawn in the plan folded edge-on, 0.40 m long, on the centreline before the middle
-# place (1218-1311 x 468-482 px). SAM3D shows it swung open to face the plotter, hanging from a bracket at the roof.
-MAP_BOARD = {'x': px_x(1218) - 0.003, 'y0': -0.18, 'y1': 0.16, 'z0': 1.32, 'z1': 1.70}
+# photograph of the Luftlagekarte, pu12_llk1: the board face-on from the plotter's place, the hinge bar down its left edge,
+# the commander's ДХ and DT-2 behind it). The plan draws it folded edge-on, 0.40 m long, on the centreline before the
+# middle place (1218-1311 x 468-482 px): stowed for the march. Deployed it swings on its hinge at the strip's front end
+# (1218 px, on the strip's line) through a quarter turn, to stand across the compartment facing the plotter, 0.40 m wide
+# from the hinge to the right, hanging from a bracket at the roof over the hinge. Its height is SAM3D's: the plotter's
+# chest height seated, its top below the commander's line of sight over it to the ДХ keypad.
+MAP_HINGE_Y = py_y(475)
+MAP_BOARD = {'x': px_x(1218) - 0.003, 'y0': MAP_HINGE_Y - 0.40, 'y1': MAP_HINGE_Y, 'z0': 1.26, 'z1': 1.64}
 _add('map_board', 24, 'Air-situation map board', MAP_BOARD['x'] - 0.018, MAP_BOARD['x'], MAP_BOARD['y0'], MAP_BOARD['y1'],
-     MAP_BOARD['z0'], MAP_BOARD['z1'], mat='Metal_Steel', note="open, facing the plotter; the plan draws it folded")
+     MAP_BOARD['z0'], MAP_BOARD['z1'], mat='Metal_Steel',
+     note="deployed: swung open on its hinge (the left edge, at the front end of the plan's folded strip), facing the plotter")
 rect('bp3', 21, 'BP-3 power unit', 1382, 1430, 262, 285, 1.05, 1.30, note='on a bracket on the side, beside the R-407')
-rect('r407', 25, 'R-407 radio (FuG-5, telecode)', 1375, 1440, 285, 327, FLOOR_Z, FLOOR_Z + 0.52,
-     note='behind the operator, its face inboard (the drawing: lower right)')
+rect('r407', 25, 'R-407 radio (FuG-5, telecode)', 1375, 1440, 285, 327, 1.31, 1.83,
+     note="on a bracket at the side over the BP-3, its face inboard: the battery commander's drawing stands it upright "
+          "behind his seat back, its upper half above the back (item 25's leader; the box on the floor at the drawing's "
+          "lower right has no number)")
 rect('sau', 26, 'SAU antenna tuner', 1386, 1460, 355, 430, FLOOR_Z, FLOOR_Z + 0.28,
      note="under the bench's back")
 
 # The radio operator's place (left side, rear).
 rect('r111', 41, 'R-111 radio (FuG-3, regiment net)', 1085, 1188, 505, 640, 0.86, 1.21,
-     note='on a stand, facing the bench (the drawing: right foreground, the R-123M on top)')
-rect('r111_stand', None, 'R-111 stand', 1085, 1188, 505, 640, FLOOR_Z, 0.86, mat='Paint_Rack')
+     note='in its rack, facing the bench, the R-123M over it (the drawing: right foreground); its height SAM3D\'s (RACK)')
+rect('r111_stand', None, 'R-111 stand', 1085, 1188, 505, 640, FLOOR_Z, 0.86, mat='Paint_Rack',
+     note="the rack's lower tier, empty: an open tubular frame (wwp_btr60 p. 087) on up to the R-111's and the "
+          "R-123M's shelves")
 rect('r111_power', 37, 'R-111 power unit', 1072, 1085, 505, 605, FLOOR_Z, 0.95)
-rect('r123_fug2', 40, 'R-123M (FuG-2, covered unit net)', 1150, 1188, 515, 620, 1.22, 1.464, shape='r123m',
+rect('r123_fug4', 40, 'R-123M (FuG-4, battery command net)', 1150, 1188, 515, 620, 1.22, 1.464, shape='r123m',
      note='on top of the R-111, facing the bench')
-rect('bp_fug2', 39, 'R-123M power unit', 1095, 1165, 665, 720, 1.46, 1.62)
+rect('bp_fug4', 39, 'R-123M power unit', 1095, 1165, 665, 720, 1.46, 1.62)
 rect('rk1', 38, 'RK-1 junction box', 1078, 1135, 650, 688, 1.30, 1.44, dy=-0.03)
 rect('pvs1', 42, 'PVS-1 intercom box', 1190, 1240, 660, 708, 1.50, 1.66)
 rect('vs27', 43, 'VS-27 rectifier', 1255, 1320, 680, 722, 1.36, 1.52)
@@ -304,7 +316,7 @@ WINDSCREENS = [(2.62, py_y(557)), (2.62, py_y(400))]
 
 # Paint (rwd_mb3's colour photographs): the ASPD-U's cabinets and blocks, the power boards and the junction boxes
 # blue-grey; the IT-45, the ДХ, the IT-2M and the GAK light grey; the radios hammer grey; the lining cream.
-BLUE_GREY = {'fr_block', 'telecode_tx', 'telecode_rx', 'ssp', 'kv', 'rk1', 'rk2', 'rk3', 'bp_fug1', 'bp_fug2', 'bp_fug4',
+BLUE_GREY = {'fr_block', 'telecode_tx', 'telecode_rx', 'ssp', 'kv', 'rk1', 'rk2', 'rk3', 'bp_fug1', 'bp_fug4', 'bp_fug2',
              'bp3', 'bp48', 'vs27', 'scr', 'pvs1', 'pvs2', 'pvs3', 'baf', 'rr361', 'gak_panel', 'it1', 'skc', 'dtp', 'kp4', 'pt200',
              'fp', 'r111_power', 'sau', 'scv', 'rtk1'}
 for _it in ITEMS:
@@ -318,8 +330,8 @@ FACES = {
     'kp4': 'rear', 'it1': 'left', 'dtp': 'left', 'pvs2': 'left', 'gak_panel': 'left', 'r123_fug1': 'left',
     'telecode_tx': 'left', 'kv': 'left', 'pvs3': 'right', 'gak': 'right', 'scv': 'right', 'rk2': 'right',
     'telecode_rx': 'right', 'baf': 'right', 'rtk1': 'left', 'it45': 'rear', 'dch': 'rear', 'fr_block': 'rear',
-    'rk3': 'left', 'it2': 'left', 'skc': 'left', 'r123_fug4': 'left', 'r407': 'left', 'r111': 'rear', 'r123_fug2': 'rear',
-    'bp_fug2': 'right', 'rk1': 'right', 'pvs1': 'right', 'vs27': 'right', 'scr': 'right', 'fp': 'rear', 'rr361': 'right',
+    'rk3': 'left', 'it2': 'left', 'skc': 'left', 'r123_fug2': 'left', 'r407': 'left', 'r111': 'rear', 'r123_fug4': 'rear',
+    'bp_fug4': 'right', 'rk1': 'right', 'pvs1': 'right', 'vs27': 'right', 'scr': 'right', 'fp': 'rear', 'rr361': 'right',
     'bp48': 'front', 'winch': 'left', 'dash': 'rear', 'pab2_case': 'left', 'map_board': 'rear', 's23': 'right', 'di': 'top',
 }
 
@@ -346,6 +358,57 @@ def _fit_r123m():
 
 _fit_r123m()
 
+# The R-111's and the R-407's meshes (art/pu12m_interior SM_RadioR111, SM_RadioR407, traced from photographs and the R-111's
+# ТО: tools/blender/build_pu12m_radios.py writes these into the manifest; tools/tests/test_pu12m_interior_trace.py keeps
+# them equal): the box (width, depth, height, the front's knobs and hood included) and where the front plate stands from
+# its centre (ahead, up).
+R111_SIZE = (0.585, 0.446, 0.3223)
+R111_PLATE = (0.177, -0.0)
+R407_SIZE = (0.42, 0.284, 0.5298)
+R407_PLATE = (0.108, -0.0098)
+
+
+def _fit_radios():
+    """Stand the R-111 and the R-407 at their plan places at their real size: the R-111 on its stand, its front where the
+    plan has it, centred across it; the R-407 on its bracket over the BP-3, its front and its forward edge where the plan
+    has them (the plan draws it 0.28 x 0.19 m; the set is 0.42 m across its latches and 0.25 m deep, r407_to: it grows
+    rearward and outboard, the seat back being ahead of it)."""
+    r111 = item('r111')
+    w, d, h = R111_SIZE
+    cy = 0.5 * (r111['y0'] + r111['y1'])
+    r111['x1'] = min(r111['x0'] + d, item('r111_power')['x0'] - 0.002)    # its back against its power unit
+    r111['x0'] = r111['x1'] - d
+    r111['y0'], r111['y1'] = cy - w / 2, cy + w / 2
+    r111['z1'] = r111['z0'] + h
+    r407 = item('r407')
+    w, d, h = R407_SIZE
+    r407['x0'] = r407['x1'] - w                             # the plan's forward edge kept
+    r407['y0'] = r407['y1'] - d                             # the plan's front kept: its back over the BP-3
+    r407['z0'] = item('bp3')['z1'] + 0.01                   # on its bracket, clear of the BP-3 under it
+    r407['z1'] = r407['z0'] + h
+
+
+_fit_radios()
+
+# The radio operator's rack in three tiers (SAM3D, the project owner's decision, 20 Oct 2026): the R-123M on the top
+# shelf under the roof, the R-111 on the middle one, its front just below his seated eye, the lower tier empty. The
+# preserved ČSLA PU-12 (wwp_btr60 p. 087) and the ČSLA drawing have the same stack lower, the R-111 at his knees and a
+# unit under it; here the set he works most is in view and the vertical room, which is not short, is spent on it.
+RACK = {'roof_gap': 0.02, 'shelf_gap': 0.035, 'low_shelf_z': FLOOR_Z + 0.24}
+
+
+def _stack_rack():
+    r123, r111, stand = item('r123_fug4'), item('r111'), item('r111_stand')  # the R-123M over the R-111 (plan item 40)
+    top = min(ceiling_z(r111['x0']), ceiling_z(r111['x1'])) - RACK['roof_gap']
+    r123['z0'], r123['z1'] = top - (r123['z1'] - r123['z0']), top
+    h = r111['z1'] - r111['z0']
+    r111['z1'] = r123['z0'] - RACK['shelf_gap']
+    r111['z0'] = r111['z1'] - h
+    stand['z1'] = r111['z0']
+
+
+_stack_rack()
+
 # ---------------------------------------------------------------------------------------------- the stations
 
 # Eye points: the body model's sitting eye above a cushion (data/crew/body.json: 0.79 m, so 1.22 m above the floor), over
@@ -358,8 +421,9 @@ STATIONS = {
     # tube's desk the battery commander's workplace).
     'battery_commander': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][0]), SEAT_Z + EYE_ABOVE_SEAT),
                           'yaw': 9.0, 'pitch': -16.0},
-    'operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][1]), SEAT_Z + EYE_ABOVE_SEAT), 'yaw': 6.0,
-                 'pitch': -16.0},
+    # the plotter looks down at the map board swung open before him (its centre 0.45 m ahead, a little to his right)
+    'operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][1]), SEAT_Z + EYE_ABOVE_SEAT), 'yaw': 20.0,
+                 'pitch': -38.0},
     'radio_operator': {'eye': (BENCH['x_back'] + 0.10, 0.5 * sum(BENCH['places'][2]), SEAT_Z + EYE_ABOVE_SEAT),
                        'yaw': -8.0, 'pitch': -16.0},
 }

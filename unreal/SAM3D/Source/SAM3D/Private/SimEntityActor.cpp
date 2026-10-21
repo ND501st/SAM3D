@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "SimBasicModels.h"
 #include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
@@ -40,6 +41,34 @@ void ASimEntityActor::UseGroundStandIn()
 		Mesh->SetRelativeRotation(FRotator::ZeroRotator);
 		Mesh->SetRelativeLocation(FVector(0.0, 0.0, 50.0));  // the box stands on the ground
 	}
+}
+
+bool ASimEntityActor::UseBasicModel(const FString& ModelId)
+{
+	if (ModelId.IsEmpty() || ModelId == BasicModel)
+	{
+		return !ModelId.IsEmpty();
+	}
+	TArray<UStaticMeshComponent*> Parts;
+	if (FSimBasicModels::Build(ModelId, Root, &Parts) == 0)
+	{
+		return false;
+	}
+	for (TObjectPtr<UStaticMeshComponent>& Old : ModelParts)
+	{
+		if (Old != nullptr)
+		{
+			Old->DestroyComponent();
+		}
+	}
+	ModelParts.Reset();
+	for (UStaticMeshComponent* P : Parts)
+	{
+		ModelParts.Add(P);
+	}
+	Mesh->SetVisibility(false);
+	BasicModel = ModelId;
+	return true;
 }
 
 void ASimEntityActor::UseOsaStandIn()
@@ -115,7 +144,18 @@ void ASimEntityActor::Tick(float DeltaSeconds)
 
 	if (State.bAlive)
 	{
-		SetActorLocationAndRotation(State.Location, State.Rotation);
+		FVector At = State.Location;
+		if (State.bIsGround)
+		{
+			// A ground vehicle's sim position is where its antennas are, a few metres up: draw it on the ground below.
+			FHitResult Hit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(SimEntityGround), false, this);
+			if (MyWorld->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 2000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+			{
+				At = Hit.ImpactPoint;
+			}
+		}
+		SetActorLocationAndRotation(At, State.Rotation);
 		if (Mast != nullptr)
 		{
 			// a battery's post raises its mast and sets the AB-1 out when it deploys, at the mast's own pace

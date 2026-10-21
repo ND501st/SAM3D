@@ -45,6 +45,8 @@ enum class StepResult {
     AcceptedEarly,     // correct next step done before its wait_for held; moved, advanced, counted as a deviation
     NotNextStep,       // control moved, but it wasn't the expected step (counted as a deviation)
     WaitRequired,      // correct step but before min_wait_s; control NOT moved
+    Toward,            // the step's selector moved one position on toward the step's position: moved, not yet the step,
+                       // not judged (a rotary clicked through its positions)
     UnknownControl,
     InvalidPosition,
     Blocked,           // physically blocked (cover closed, or a stepwise jump); control NOT moved, not judged
@@ -86,11 +88,22 @@ public:
         if (!panel.Has(control_id)) return StepResult::UnknownControl;
         if (!panel.IsValidPosition(control_id, value)) return StepResult::InvalidPosition;
         if (!panel.CanMove(control_id, value)) return StepResult::Blocked;
+        PassChecks(panel, equipment, control_id, value);
         if (IsComplete()) {
             panel.Set(control_id, value);
             return StepResult::ProcedureComplete;
         }
         const ProcedureStep& step = procedure_.steps[next_];
+        // A selector on its way to the step's position (clicked through the positions between): not a deviation.
+        if (step.control_id == control_id && step.value != value) {
+            const ControlDef* def = panel.Find(control_id);
+            const int now = panel.Get(control_id);
+            if (def != nullptr && def->kind == ControlKind::Discrete && def->positions > 2 &&
+                ((now < value && value < step.value) || (step.value < value && value < now))) {
+                panel.Set(control_id, value);
+                return StepResult::Toward;
+            }
+        }
         if (step.control_id == control_id && step.value == value) {
             if (elapsed_since_step_s_ < step.min_wait_s) return StepResult::WaitRequired;
             const bool ready = ConditionsHold(step.wait_for, panel, equipment);
@@ -103,6 +116,18 @@ public:
         panel.Set(control_id, value);
         Log(DeviationKind::OutOfOrder, control_id, value);
         return StepResult::NotNextStep;
+    }
+
+    // A step whose control already sits where the step puts it (a radio's switch left on СИМПЛЕКС, the RK-1U already
+    // on the R-407) is a check, not a move: passed once its wait is over, unless it is the very move being made.
+    void PassChecks(const ControlPanel& panel, const Equipment* equipment, const std::string& moving = std::string(), int value = -1) {
+        while (!IsComplete()) {
+            const ProcedureStep& due = procedure_.steps[next_];
+            if (due.control_id == moving && due.value == value) break;
+            if (!panel.Has(due.control_id) || panel.Get(due.control_id) != due.value) break;
+            if (elapsed_since_step_s_ < due.min_wait_s || !ConditionsHold(due.wait_for, panel, equipment)) break;
+            ++next_;
+        }
     }
 
     bool IsComplete() const { return next_ >= procedure_.steps.size(); }
@@ -126,6 +151,14 @@ private:
 };
 
 enum class CrewStatus { Idle, Working, Waiting };
+
+// A control worked outside the vehicle, at a place (crew_mobility.hpp's VehicleJob): its man stays there after working it
+// until `stay_until` holds (the work goes on: the aiming circle measuring), then is free to go.
+struct OutsideJob {
+    std::string control;
+    std::string place;
+    std::vector<Condition> stay_until;
+};
 
 // What a crew member's drill work takes from its skill tier (docs/crew/05_SKILL.md, data/crew/skill_levels.json).
 // Without one (the default) a crew member reacts after its fixed reaction time and never slips.
@@ -214,6 +247,31 @@ public:
     }
     bool Standing() const { return standing_; }
 
+    // Controls worked outside the vehicle, at a place (data/vehicles/<system>.json "jobs", crew_mobility.hpp): a step on one
+    // needs him there, a step on any other control at his seat. He goes out once the step's conditions hold and acts once
+    // he has arrived. After a job he stays at its place while its work goes on (its stay_until: out at the aiming circle
+    // until the measurement is done); then a step inside that waits takes him back to wait at his seat.
+    void SetOutsideJobs(std::vector<OutsideJob> jobs) { jobs_ = std::move(jobs); }
+    bool HasOutsideJobs() const { return !jobs_.empty(); }
+    // Where his body is (the runner's CrewMover): "" at his seat inside, a place's id, "lineup" or "point" outside;
+    // `moving`: on his way.
+    void SetWhere(std::string at, bool moving) {
+        at_ = std::move(at);
+        moving_ = moving;
+    }
+    // Where to be with nothing to do ("" his seat; "lineup": "К машинам").
+    void StayAt(std::string place) { stay_ = std::move(place); }
+    const std::string& StaysAt() const { return stay_; }
+    // Where he wants his body now ("" his seat).
+    const std::string& WantedPlace() const { return want_; }
+    // The place a control is worked at ("" at his seat).
+    std::string PlaceOf(const std::string& control) const {
+        for (const OutsideJob& j : jobs_) {
+            if (j.control == control) return j.place;
+        }
+        return std::string();
+    }
+
     // What he is about to do, for his body (crew_body.hpp, roadmap 8.10): the next action's control and position, the
     // seconds until he moves it (in_s < 0 while he waits for a condition), the control he moved last and when, and
     // whether he is up at a panel. An empty control: nothing to do.
@@ -226,6 +284,8 @@ public:
         double since_last_s = 1e9;
         bool standing = false;
         std::string stand_control;
+        bool away = false;      // not at his seat (out of the vehicle, or on his way)
+        std::string place;      // where he is going or is ("" his seat)
     };
     Intent CurrentIntent() const {
         Intent i;
@@ -233,6 +293,8 @@ public:
         i.since_last_s = last_control_.empty() ? 1e9 : time_s_ - last_time_s_;
         i.standing = standing_;
         i.stand_control = stand_control_;
+        i.away = !at_.empty() || moving_;
+        i.place = want_;
         if (!has_order_) return i;
         const ProcedureStep* step = tracker_.NextStep();
         if (step == nullptr) return i;
@@ -245,6 +307,7 @@ public:
             i.waiting = true;
             return i;
         }
+        if (moving_ || want_ != at_) return i;  // on his way: not due yet
         const double needed = (has_skill_ ? step_delay_s_ : reaction_time_s_) + extra_s_;
         double left = needed - action_timer_s_;
         const double min_left = step->min_wait_s - tracker_.ElapsedSinceStep();
@@ -259,6 +322,7 @@ public:
         time_s_ += dt;
         tracker_.Update(dt);
         if (!has_order_) {
+            want_ = stay_;
             idle_s_ += dt;
             if (standing_ && idle_s_ > 1.0) {  // nothing more to do up there: back to his seat
                 standing_ = false;
@@ -280,6 +344,10 @@ public:
             return;
         }
         if (!ConditionsHold(step->wait_for, panel, equipment)) {
+            // Out at a job whose work is done, the next step inside: he goes back to wait for it at his seat.
+            if (!at_.empty() && !moving_ && PlaceOf(step->control_id).empty() && ConditionsHold(hold_, panel, equipment)) {
+                want_.clear();
+            }
             if (status_ != CrewStatus::Waiting) {
                 status_ = CrewStatus::Waiting;
                 Report(CrewReport::Kind::Waiting, FirstUnmet(step->wait_for, panel, equipment));
@@ -288,6 +356,12 @@ public:
             return;
         }
         status_ = CrewStatus::Working;
+        // A step at a place he isn't at: he goes there first (the runner walks him); his reaction counts from arriving.
+        want_ = PlaceOf(step->control_id);
+        if (want_ != at_ || moving_) {
+            action_timer_s_ = 0.0;
+            return;
+        }
         action_timer_s_ += dt;
         const double needed_s = (has_skill_ ? step_delay_s_ : reaction_time_s_) + extra_s_;
         if (action_timer_s_ < needed_s || tracker_.ElapsedSinceStep() < step->min_wait_s) return;
@@ -305,6 +379,10 @@ public:
         }
         const std::string control_id = step->control_id;
         const StepResult r = tracker_.Attempt(panel, control_id, step->value, equipment);
+        hold_.clear();  // a job's work holds him at its place until it is done
+        for (const OutsideJob& j : jobs_) {
+            if (j.control == control_id) hold_ = j.stay_until;
+        }
         last_control_ = control_id;
         last_time_s_ = time_s_;
         action_timer_s_ = 0.0;
@@ -450,6 +528,12 @@ private:
     double step_delay_s_ = -1.0;
     double extra_s_ = 0.0;       // this step's getting up or sitting down
     std::vector<std::string> stand_for_;
+    std::vector<OutsideJob> jobs_;
+    std::vector<Condition> hold_;
+    std::string at_;
+    bool moving_ = false;
+    std::string stay_;
+    std::string want_;
     double stand_s_ = 0.0;
     double sit_s_ = 0.0;
     bool standing_ = false;

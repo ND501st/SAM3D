@@ -11,22 +11,37 @@ with its top-level `"command_post"` (e.g. `"command/pu12.json"`).
 
 | `battery_tactics.json` | The battery's march spacing, threat spacing, short-halt offset, combat formation (pairs), halts and speeds; the drills' numbers (river standoff, speed afloat, ambush dwell), the TZM's 12 missiles and the fuel truck's 3.8 m³ (roadmap 7.3, 7.5; `video_osa`, unverified, and estimates) |
 | `prepared_positions.json` | A prepared position's echo factors (emplacement, nets), the dummies' echo and the time to leave the emplacement (roadmap 7.6; estimates) |
+| `chain_pannonia.json` | Our side's chain of command around battery 21 (`docs/command/02_CHAIN_OF_COMMAND.md`): 38 posts from the national air defence sector and the army's chief of air defence to vehicle 21-1's driver, the Kesmark garrison commandant, civil defence, the police, the militia and the village council, each with a holder, a home place, a superior, links and the means of signal it has; the routines (briefings, visits, courier runs, the news). Loaded by `simcore/command/data.hpp` |
+| `places_pannonia.json` | Where they sit (`docs/command/05_PLACES.md`): the small city of Novo Varosd, the town of Kesmark, five villages, the works, the regiment's and the division's posts, the radar posts, the air base; on the air war's theatre, the battery's places moving with it |
+| `signal_means.json` | The means of signal between people (`docs/command/03_MEANS.md`): in person, runners, despatch riders, courier runs, field and town telephones, radio, the early-warning net, the teleprinter, sirens, the field post, the state radio; and how an NPC relays (`utin_2018`; speeds and times estimates) |
 | `c2_sources.json` | Library of other early-warning and command sources (EWR voice net, division early-warning net, neighbouring battery, observation post, data link) the crew can switch to; the PU-12 stays the main source |
 
 A scenario's `"c2"` block makes instances (`id`, library `type`, `position`, `net`, `link_range_m`, `outages`) and sets the commander's policy (`primary`, `active`, `auto_fallback`, `fallback_order`, `presets`, `select_s`, `retune_s`, `primary_stable_s`, `heard_life_s`). Triggers: `c2_source` (change source, or `"none"`), `c2_fail`, `c2_restore`. A player changes source with `ScenarioRunner::RequestC2Source`. See `docs/research/EM_C2_SOURCES_2026-10.md`.
 
 When the player's vehicle is the PU-12M itself, the scenario has a `"post"` block instead of `"command_post"`:
 `{ "board": "command/pu12.json", "aspd": "command/aspd_u.json", "library": "command/regiment_radars.json", "regiment":
-{ "position", "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ] }, "radar": { "type",
-"position" } }`. The regiment's command post sends its radars' picture by telecode while the post is within the R-407's
-reach of it and its net is on the air; `radar` is one cabled to the post (the primary picture). The post's board is then
-written by its own plotter from the IT-45, one mark at a time (`ScenarioRunner::Post`, `PostScope`, `PlayerPlot`).
+{ "position", "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason", "kind" } ],
+"command_net_mhz", "telecode_mhz", "telecode_return_mhz", "mast", "messages": [ { "at_s", "text" } ] }, "radar": { "type",
+"position" }, "radios": { "r111_presets_mhz": [4], "own_nets_mhz": { "fug1": ... }, "prepared", "repeat_s", "repeats",
+"notes" } }`. The regiment's command post sends its radars' picture by telecode while the post is within the R-407's
+reach of it and its net is on the air; with the frequency plan (`telecode_mhz`, `post.radios`) and a console that binds
+its sets (`"radios"`, `data/procedures/README.md`) the R-407 itself must be on that channel (`simcore/radio_sets.hpp`,
+`data/systems/pu12m_radios.json`), and an outage of `"kind": "interference"` jams the channel instead of taking it off
+the air. The regiment's `messages` are said on its command net (`command_net_mhz`) and heard on the post's R-111, repeated
+`repeats` times `repeat_s` apart until it receipts them. `r111_presets_mhz` are the R-111's four presets (0 for none,
+the first the net), `own_nets_mhz` the post's R-123Ms (their transmissions can trip the R-111's input protection), and
+`prepared` false leaves the sets' scales and drums for the crew to set; `radar` is one cabled to the post (the primary picture). The regiment's radar
+battery also reads its picture out on the air-picture voice net (FuG-1, `aspd_u.json` `air_net_*`), out to the board's
+200 km. The post's board is written by its own plotter, what he hears on that net first, then the IT-45, one mark at a
+time (`ScenarioRunner::Post`, `PostScope`, `PlayerPlot`; `docs/research/PLOTTING_BOARD_2026-10.md`).
 
 Every value is `{"value": ..., "source": "...", "confidence": "..."}`, cited like `data/systems/` (`docs/SOURCES.md`).
 
 The board (`samsim_osa` p20) writes each target once a minute as a four-digit number (the radar battery's tactical
 number, then a sequence number) and its height in hectometres over a two-digit code: the tens digit is the type
-(0 jamming, 1 friend, 2 identified, 3 border violator, 4 supervisor, 5 own target, 6 rule violator, 7 practice,
-8 enemy, 9 no IFF), the ones digit the formation size. A scenario target gives its type with `"board_type"` (default:
+(0 jamming, 1 friend, 2 training target, 3 border violator, 4 supervisor, 5 own target, 6 rule violator, 8 enemy,
+9 no IFF), the ones digit the formation size. The training target's 2 is the Soviet report's index ("учебная воздушная
+цель", `bguir_tsp`); SAM Simulator has 7 for a practice target and 2 for "identified" (owner's decision, 19 Oct 2026:
+the written source's 2). 7 is left unassigned. A scenario target gives its type with `"board_type"` (default:
 1 for a friend, else 9) and its formation with `"formation"` (default 1). With the radars silent, the vehicle crews
 aim by the designations the battery commander has given them (roadmap 7.2) instead of the truth: each target inside `designation_range_m` is read out by voice on every plot, one message at a time (`operator_delay_s`, `message_s`), and the vehicle commander passes it on (`pass_on_s`). A designation is a minute old at worst, off by the post's navigation error, and the crew only has it once it is passed on. The debrief logs each one ("Commander ... designation 6201: azimuth 00-71, range 45 km, height 12 hm").

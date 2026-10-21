@@ -12,8 +12,9 @@
  * "in the crew". Starting reopens the level with ?SimMission=<id>[?SimVehicle=post][?SimSeat=<station>], which
  * ASimScenarioDirector plays.
  *
- * Keys: Up/Down (W/S) a mission, Left/Right (A/D) where to start, Enter to start, Q to quit; a click picks a mission or
- * presses Start.
+ * Keys: Up/Down (W/S) a mission, Left/Right (A/D) where to start, H the helper (off, hints, on: docs/crew/14_HELPER.md,
+ * kept in GameUserSettings.ini for every mission), Enter to start, Q to quit; a click picks a mission, turns the helper
+ * or presses Start.
  *
  * Scripted check: -SimMenuTest=<folder> photographs the menu (menu.png), then -SimMenuPick=<mission>:<vehicle>:<seat>
  * picks and photographs (menu_pick.png) and starts it; without a pick it quits.
@@ -36,8 +37,9 @@ public:
 	/** Reopen the level with the selected mission. */
 	void StartSelected();
 
-	/** The level options that start a mission in that vehicle and seat (seat "" = outside the vehicle). */
-	static FString OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId);
+	/** The level options that start a mission in that vehicle and seat (seat "" = outside the vehicle), with its tutorial
+	 *  guide if it has one (?SimTutorial). */
+	static FString OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial = FString());
 
 	const TArray<FSimMission>& GetMissions() const { return Missions; }
 
@@ -53,6 +55,11 @@ private:
 	void MoveSelection(int32 Step);
 	float DrawWrapped(const FString& Text, float X, float Y, float Width, UFont* Font, const FLinearColor& Colour, float LineGap = 2.0f);
 	void HandleInput();
+	/** The air war: start a campaign against adversary 0-3 (rebels, neutral, Warsaw Pact, NATO) and open its screen. */
+	void StartCampaign(int32 Index);
+	/** Continue the campaign under way, or the saved one. */
+	void ContinueCampaign();
+	void DrawCampaignBox(float X, float Y, float Width);
 	void RunScriptedCheck(float DeltaSeconds);
 
 	TArray<FSimMission> Missions;
@@ -62,6 +69,11 @@ private:
 	/** Where each mission's row and the Start button were drawn, for the mouse. */
 	TArray<FBox2D> RowBoxes;
 	FBox2D StartBox = FBox2D(ForceInit);
+	/** The helper's line (a click turns it). */
+	FBox2D HelperBox = FBox2D(ForceInit);
+	void CycleHelper();
+	/** The air war box: the four adversaries and "continue". */
+	TArray<FBox2D> CampaignBoxes;
 
 	FString TestFolder;
 	FString TestPick;

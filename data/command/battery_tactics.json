@@ -1,78 +1,98 @@
 {
   "tactics_id": "osa_battery_1980s",
   "display_name": "Osa-AK battery: march, short halt, combat formation and halts",
-  "status": "Numbers for simcore/battery.hpp (roadmap 7.5). The tactics are from an unnamed manual retold in video_osa (tier 4, unverified, consistent with Soviet practice; docs/research/OSA_RESEARCH_2026-10.md §7). Where a range is given, the middle is used; speeds are estimates.",
-  "notes": "Composition (flak11): battery commander's PU-12M, two platoons of two 9A33 and one TZM, a maintenance vehicle. Ambush (several prepared points, or pairs roving between them; bounding in pairs as the covered force advances) and river crossing (about 2 km from the river, then across in pairs once the far bank is held) are from video_osa too.",
+  "status": "Numbers for simcore/battery.hpp (roadmap 7.5). The tactics are the Soviet 1991 textbook's (voenizdat_osa_1991 chapter 6, pp. 231-239, tier 1, for the Osa-AKM battery), which confirms the unnamed manual retold in video_osa (tier 4) on nearly every point; docs/research/OSA_MANUALS_2026-10.md. Where a range is given, the middle is used unless noted; speeds are from the manuals.",
+  "notes": "Composition: flak11 (Osa-AK: the battery commander's PU-12M, two platoons of two 9A33 and one TZM, a maintenance vehicle); voenizdat_osa_1991 p226 (Osa-AKM: command, control section, four launcher crews, a MANPADS section, a supply section, a maintenance crew; PU-12M, four 9A33BM3, three MANPADS launchers, two TZM, the 9V210M3 maintenance vehicle and the ZIP-2 vehicle). Ambush and roving tasks (p238: a position, a sector, a route, rules for search and fire, a time to leave) and the river crossing (p237: positions 2-3 km from the river; across swimming in pairs behind the first-echelon battalions once their bridgeheads are 1.6-2 km deep) are the textbook's.",
   "tactics": {
     "march_spacing_m": {
       "value": 40,
-      "source": "video_osa (25-50 m between vehicles on the march)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p232 (25-50 m between vehicles in the column); video_osa agrees",
+      "confidence": "high"
     },
     "threat_spacing_m": {
       "value": 400,
-      "source": "video_osa (200-800 m when an air attack is expected)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p232 (at least 200 m between the launchers when an air attack is to be met from short halts; the column then 700-800 m deep); video_osa (200-800 m)",
+      "confidence": "medium"
     },
     "march_speed_mps": {
       "value": 8.3,
-      "source": "mon_2112_80 p11 (dirt roads 30 km/h; road up to 60); korovin_tiv_2010 (dirt roads 36 km/h by day, 25 at night): 30 km/h for a column",
+      "source": "mon_2112_80 p11, voenizdat_osa_1991 p16 (dirt roads 30 km/h; road up to 60); korovin_tiv_2010 (dirt roads 36 km/h by day, 25 at night): 30 km/h for a column",
       "confidence": "medium"
     },
     "cross_country_speed_mps": {
       "value": 2.8,
-      "source": "mon_2112_80 p11 (cross-country 10 km/h)",
+      "source": "mon_2112_80 p11, voenizdat_osa_1991 p16 (cross-country 10 km/h)",
       "confidence": "medium"
     },
     "short_halt_offset_m": {
       "value": 40,
-      "source": "estimate (off the road far enough to deploy, alternating sides); video_osa (ready to pull off the road for a short-halt engagement at any time)",
-      "confidence": "estimate"
+      "source": "mon_2112_80 p66 (a target found beyond 20 km: pull 30-50 m off the road); voenizdat_osa_1991 p233, p254 (the launcher leaves the roadway; beyond 20 km to the side away from the target, within 20 km it stops in the column)",
+      "confidence": "high"
+    },
+    "short_halt_in_column_m": {
+      "value": 20000,
+      "source": "voenizdat_osa_1991 p254 (a target within 20 km: stop without leaving the column; beyond it, leave the column to the side away from the target); mon_2112_80 p66 (the same 20 km)",
+      "confidence": "high",
+      "notes": "A short halt ordered with the target's position: inside this range every vehicle stops in its place on the road; beyond it each pulls off to the side away from the target. Without a target the vehicles alternate sides."
     },
     "deploy_s": {
       "value": 240,
-      "source": "mon_2112_80 p11-12 (readiness within 4 min); video_osa (a powered battery deploys in 35-50 s, unverified): the documented 4 min is used for an NPC vehicle",
-      "confidence": "low"
+      "source": "mon_2112_80 p11-12, voenizdat_osa_1991 p16 (march to combat within 4 min, the gas-turbine start included): used for an NPC vehicle",
+      "confidence": "high",
+      "notes": "voenizdat_osa_1991 p231 gives the battery 35-50 s into combat order and 15-30 s back into march order: a battery marching with its equipment on (video_osa says the same)."
     },
     "pair_separation_m": {
       "value": 3000,
-      "source": "video_osa (vehicles in pairs about 3 km apart in the combat formation)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p234-237 (pairs up to 3 km apart, so their zones overlap, dead cones included); video_osa agrees",
+      "confidence": "high"
     },
     "pair_internal_m": {
       "value": 200,
-      "source": "video_osa (200 m within a pair)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p234, p237 (at least 200 m within a pair, up to 500 m; no mutual interference); video_osa agrees",
+      "confidence": "high"
     },
     "behind_covered_m": {
       "value": 2000,
-      "source": "video_osa (1.5-3 km behind the covered unit)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p234, p237 (1.5-3 km behind the covered companies' leading line); video_osa agrees",
+      "confidence": "high"
     },
     "reload_behind_m": {
       "value": 500,
-      "source": "video_osa (reload vehicles about 500 m from the pairs)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p234 (the TZM crews within 500 m of the launchers); video_osa agrees",
+      "confidence": "high"
     },
     "command_post_behind_m": {
       "value": 1000,
-      "source": "estimate (the battery command post behind the pairs; video_osa places the PU-12 at the head or tail of a march column)",
+      "source": "estimate; voenizdat_osa_1991 p234, p237 (the battery command post at the centre of the battle order or near a pair; its PU-12M follows the launchers at a distance that keeps control steady; on the march at the head of the column, p239)",
       "confidence": "estimate"
     },
     "halt_interval_s": {
       "value": 12600,
-      "source": "video_osa (halts every 3-4 h: equipment check, fuel, food)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p238 (a halt every 3-4 h of movement: checks, faults, maintenance, fuel, rest); video_osa agrees",
+      "confidence": "high"
     },
     "halt_duration_s": {
-      "value": 5400,
-      "source": "video_osa (rest up to 2 h); 1.5 h used",
-      "confidence": "low"
+      "value": 3600,
+      "source": "voenizdat_osa_1991 p238 (halts of up to 1 h; one of up to 2 h for a meal in the second half of the day's march, not modelled)",
+      "confidence": "high",
+      "notes": "Was 1.5 h from video_osa's 'up to 2 h'."
     },
     "night_halt_s": {
       "value": 3600,
-      "source": "video_osa (at night shorter halts of about 1 h without breaking formation)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p238-239 (halts of up to 1 h without breaking the column's order; marches best by night); video_osa (at night about 1 h)",
+      "confidence": "medium"
+    },
+    "warning_s": {
+      "value": 408,
+      "source": "flak11 (preliminary preparation from cold: 3.8 min switch-on and 3.0 min function check, 6.8 min)",
+      "confidence": "medium",
+      "notes": "The warning the launchers need: the NPC battery commander raises readiness when the board shows a track that will reach the edge of the zone in this time or less (simcore/board_reading.hpp). Without a speed (one mark) the threat range below decides. voenizdat_osa_1991 p251: the function check must not delay opening fire."
+    },
+    "zone_edge_m": {
+      "value": 10000,
+      "source": "flak11 (Osa-AK engagement zone head-on to 10 km); voenizdat_osa_1991 p15 (10-10.3 km)",
+      "confidence": "medium",
+      "notes": "Where the warning time is counted to: the far edge of the launchers' zone, from the battery."
     },
     "threat_range_m": {
       "value": 50000,
@@ -81,17 +101,17 @@
     },
     "water_speed_mps": {
       "value": 2.2,
-      "source": "mon_2112_80 p11, flak11 (9K33-0), nuou (8 km/h in water)",
+      "source": "mon_2112_80 p11, voenizdat_osa_1991 p16, flak11 (9K33-0), nuou (8 km/h in water)",
       "confidence": "high"
     },
     "river_standoff_m": {
       "value": 2000,
-      "source": "video_osa (river crossing: positions about 2 km from the river; cross in pairs once the far bank is held)",
-      "confidence": "low"
+      "source": "voenizdat_osa_1991 p237 (the battery's positions 2-3 km from the river); video_osa (about 2 km)",
+      "confidence": "high"
     },
     "ambush_dwell_s": {
       "value": 1200,
-      "source": "estimate (pairs roving between prepared ambush points: video_osa gives the drill, not the time at each point)",
+      "source": "estimate (voenizdat_osa_1991 p238 gives an ambush or roving launcher a time to leave each position, not its length)",
       "confidence": "estimate"
     },
     "alongside_offset_m": {
@@ -101,8 +121,8 @@
     },
     "tzm_capacity": {
       "value": 12,
-      "source": "estimate (a TZM is usually credited with two loads of six missiles; flak11 gives six in 6 min per load; not checked against a document)",
-      "confidence": "estimate"
+      "source": "voenizdat_osa_1991 p188 (the 9T217BM2 carries 1 to 12 missiles, six a side; loads a launcher in 5-8 min)",
+      "confidence": "high"
     },
     "fuel_truck_capacity_l": {
       "value": 3800,

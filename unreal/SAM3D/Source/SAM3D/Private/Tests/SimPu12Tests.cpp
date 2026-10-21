@@ -129,7 +129,8 @@ bool FSimPu12CabinTest::RunTest(const FString& Parameters)
 		{
 			TestTrue(TEXT("into the cabin"), Car->SetInCabin(true));
 			TestEqual(TEXT("five seats"), Cabin->GetNumStations(), 5);
-			TestEqual(TEXT("the IT-45, the IT-1M, the IT-2M, the plotter's map and the ДХ's window"), Cabin->GetNumDisplays(), 5);
+			TestEqual(TEXT("the IT-45, the IT-1M, the IT-2M, the plotter's map, the ДХ's window, the radio data and the talk tables, the "
+							"R-407's two drums and meter, the R-111's meter and scale"), Cabin->GetNumDisplays(), 12);
 			TestFalse(TEXT("the hull hidden from inside"), Exterior != nullptr && Exterior->IsVisible());
 			TestFalse(TEXT("the compartment shown inside"), Cabin->IsCabinHidden());
 			Car->SetInCabin(false);
@@ -149,8 +150,8 @@ bool FSimPu12CabinTest::RunTest(const FString& Parameters)
 	}
 	TestEqual(TEXT("four launchers on the IT boards"), Sim->GetLauncherStatus().Num(), 4);
 	// The post deployed: the ASPD-U warms up and the regiment's telecode brings the raid onto the IT-45; the NPC
-	// plotter writes it on the board.
-	for (int32 I = 0; I < 20 * 300 && Sim->GetPostBoardNumbers().Num() == 0; ++I)
+	// plotter writes on the board what the regiment reads out on the air-picture net.
+	for (int32 I = 0; I < 20 * 600 && Sim->GetPostBoardNumbers().Num() == 0; ++I)
 	{
 		Sim->Tick(0.05f);
 	}

@@ -1,5 +1,7 @@
 #include "SimWorldSubsystem.h"
 
+#include "SimBasicModels.h"
+
 #include "Misc/FileHelper.h"
 
 #include <algorithm>
@@ -8,6 +10,7 @@
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 #include "SimCrewSeatComponent.h"
@@ -17,6 +20,7 @@ namespace
 {
 	constexpr double MetersToCm = 100.0;
 	constexpr int32 MissileIdBase = 100000;  // display ids for engagement-model missiles
+	constexpr int32 ArmIdBase = 150000;      // display ids for anti-radiation missiles (EM layer, roadmap E6)
 	constexpr int32 GroundIdBase = 200000;   // display ids for the battery's vehicles and dummy positions
 
 	ESimEventType ToUnrealEventType(simcore::EventType Type)
@@ -48,6 +52,12 @@ namespace
 
 	std::string ToStd(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
 	FString ToF(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
+	// The control moved (or the move went to the server).
+	bool ActionMoved(ESimPlayerActionResult R)
+	{
+		return R == ESimPlayerActionResult::Moved || R == ESimPlayerActionResult::Accepted || R == ESimPlayerActionResult::AcceptedEarly ||
+			   R == ESimPlayerActionResult::OutOfOrder || R == ESimPlayerActionResult::Sent;
+	}
 }
 
 // ---------------------------------------------------------------------------------------------- coordinates
@@ -222,6 +232,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 			++Steps;
 		}
 		BroadcastNewDebriefEntries();
+		UpdateTutorial(DeltaTime);
 		return;
 	}
 
@@ -357,6 +368,9 @@ FString USimWorldSubsystem::ResolveDataDirectory() const
 
 void USimWorldSubsystem::ClearScenario()
 {
+	HelpMemoState = simcore::HelpMemo();
+	Tutorial.Reset();
+	TutorialUiState = simcore::TutorialUi();
 	Runner = nullptr;
 	Link.Reset();
 	OwnedRunner.Reset();
@@ -416,6 +430,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	DebriefEntriesSent = 0;
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
 		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
+	ApplyHelperLevel();
 	LoadCrewPresentation(DataDir);
 	BroadcastNewDebriefEntries();
 	return true;
@@ -582,6 +597,8 @@ static ESimPlayerActionResult ToActionResult(simcore::StepResult Result)
 	case simcore::StepResult::WaitRequired: return ESimPlayerActionResult::NotYet;
 	case simcore::StepResult::Blocked: return ESimPlayerActionResult::Blocked;
 	case simcore::StepResult::ProcedureComplete: return ESimPlayerActionResult::Moved;
+	// A multi-position switch turned one click toward the position its step wants: a move on the way, not a mistake.
+	case simcore::StepResult::Toward: return ESimPlayerActionResult::Moved;
 	case simcore::StepResult::UnknownControl:
 	case simcore::StepResult::InvalidPosition: break;
 	}
@@ -628,18 +645,7 @@ ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& Contr
 	}
 	const simcore::StepResult Result = Runner->PlayerSet(ToStd(ControlId), Position);
 	BroadcastNewDebriefEntries();
-	switch (Result)
-	{
-	case simcore::StepResult::Accepted: return ESimPlayerActionResult::Accepted;
-	case simcore::StepResult::AcceptedEarly: return ESimPlayerActionResult::AcceptedEarly;
-	case simcore::StepResult::NotNextStep: return ESimPlayerActionResult::OutOfOrder;
-	case simcore::StepResult::WaitRequired: return ESimPlayerActionResult::NotYet;
-	case simcore::StepResult::Blocked: return ESimPlayerActionResult::Blocked;
-	case simcore::StepResult::ProcedureComplete: return ESimPlayerActionResult::Moved;
-	case simcore::StepResult::UnknownControl:
-	case simcore::StepResult::InvalidPosition: break;
-	}
-	return ESimPlayerActionResult::Invalid;
+	return ToActionResult(Result);
 }
 
 bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
@@ -696,6 +702,249 @@ bool USimWorldSubsystem::IsLampLit(const FString& LampId) const
 		}
 	}
 	return false;
+}
+
+// ---------------------------------------------------------------------------------------------- the tutorial guide
+
+bool USimWorldSubsystem::LoadTutorial(const FString& TutorialFile, FString& OutError)
+{
+	Tutorial.Reset();
+	TutorialUiState = simcore::TutorialUi();
+	if (!Runner)
+	{
+		OutError = TEXT("no scenario running");
+		return false;
+	}
+	simcore::TutorialDef Def;
+	std::string Error;
+	if (!simcore::LoadTutorialFile(ToStd(ResolveDataDirectory()), ToStd(TutorialFile), Def, &Error) ||
+		!simcore::CheckTutorialAgainst(Def, *Runner, &Error))
+	{
+		OutError = ToF(Error);
+		return false;
+	}
+	Tutorial = MakeUnique<simcore::TutorialGuide>(std::move(Def));
+	if (!Tutorial->Bind(*Runner, &Error))
+	{
+		OutError = ToF(Error);
+		Tutorial.Reset();
+		return false;
+	}
+	Tutorial->SetPlayerName(simcore::ScenarioRunner::kPlayerName);
+	TutorialStepShownAt = 0.0;
+	TutorialLastDone.Reset();
+	TutorialLastDoneAt = -1000.0;
+	bTutorialFastForward = false;
+	UE_LOG(LogSAM3D, Log, TEXT("Tutorial: %s, %d steps%s"), *TutorialFile, static_cast<int32>(Tutorial->Count()),
+		Tutorial->Def().strict ? TEXT(", strict") : TEXT(""));
+	OnTutorialStep();
+	return true;
+}
+
+FSimTutorialStep USimWorldSubsystem::GetTutorialStep() const
+{
+	FSimTutorialStep Out;
+	const simcore::TutorialStep* Step = Tutorial && Runner ? Tutorial->Current() : nullptr;
+	if (Step == nullptr)
+	{
+		return Out;
+	}
+	const simcore::TutorialStatus St = Tutorial->Status(*Runner, TutorialUiState);
+	Out.Guide = ToF(Tutorial->Def().title);
+	Out.Chapter = ToF(St.chapter);
+	Out.Number = static_cast<int32>(Tutorial->Index()) + 1;
+	Out.Count = static_cast<int32>(Tutorial->Count());
+	Out.Id = ToF(Step->id);
+	Out.Title = ToF(Step->title);
+	for (const std::string& L : Step->lines)
+	{
+		Out.Lines.Add(ToF(L));
+	}
+	Out.Why = ToF(Step->why);
+	Out.Hint = ToF(Step->hint);
+	switch (St.phase)
+	{
+	case simcore::TutorialStatus::Phase::Read: Out.Phase = ESimTutorialPhase::Read; break;
+	case simcore::TutorialStatus::Phase::Wait: Out.Phase = ESimTutorialPhase::Wait; break;
+	case simcore::TutorialStatus::Phase::Act: Out.Phase = ESimTutorialPhase::Act; break;
+	case simcore::TutorialStatus::Phase::Watch: Out.Phase = ESimTutorialPhase::Watch; break;
+	case simcore::TutorialStatus::Phase::End: Out.Phase = ESimTutorialPhase::End; break;
+	default: Out.Phase = ESimTutorialPhase::None; break;
+	}
+	Out.WaitText = ToF(St.wait_text);
+	Out.Control = ToF(St.control);
+	Out.ControlLabel = ToF(St.control_label);
+	Out.Station = ToF(St.station);
+	Out.Position = St.position;
+	Out.PositionLabel = ToF(St.position_label);
+	Out.CurrentPosition = St.current_position;
+	Out.bWheel = St.wheel;
+	Out.bTargetKnown = St.target_known;
+	Out.Target = St.target;
+	Out.Tolerance = St.tolerance;
+	Out.Value = St.value;
+	Out.bWraps = St.wraps;
+	Out.bOnMark = St.on_mark;
+	Out.Order = ToF(St.order);
+	Out.OrderRu = ToF(St.order_ru);
+	Out.OrderEn = ToF(St.order_en);
+	Out.bReport = St.report;
+	Out.Look = Step->look.empty() ? Out.Control : ToF(Step->look);
+	Out.Feedback = ToF(St.feedback);
+	Out.bFastForward = St.fast_forward;
+	Out.Seat = ToF(Tutorial->Def().seat);
+	Out.bStrict = Tutorial->Def().strict;
+	for (const simcore::TutorialCondition& C : Step->done_when)
+	{
+		Out.DoneWhen.Add(ToF(C.text));
+	}
+	Out.bLast = Tutorial->AtEnd();
+	Out.bReview = St.review;
+	Out.bInstructor = St.instructor;
+	Out.bCanGoBack = Tutorial->Index() > 0;
+	Out.ShownSeconds = static_cast<float>(TutorialUiState.real_time_s - TutorialStepShownAt);
+	Out.LastDone = TutorialLastDone;
+	Out.LastDoneSeconds = static_cast<float>(TutorialUiState.real_time_s - TutorialLastDoneAt);
+	return Out;
+}
+
+void USimWorldSubsystem::SkipTutorialStep()
+{
+	if (Tutorial && Runner && CanSkipTutorialStep())
+	{
+		// Passed at once, or the instructor does it and the step finishes as if the learner had (the next comes up then).
+		const size_t Was = Tutorial->Index();
+		Tutorial->Skip(*Runner, TutorialUiState);
+		if (Tutorial->Index() != Was)
+		{
+			TutorialStepShownAt = TutorialUiState.real_time_s;
+			OnTutorialStep();
+		}
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: step %d skipped%s"), static_cast<int32>(Was) + 1,
+			Tutorial->Index() != Was ? TEXT("") : TEXT(": the instructor does it"));
+	}
+}
+
+bool USimWorldSubsystem::CanSkipTutorialStep() const
+{
+	return Tutorial && !Tutorial->AtEnd();
+}
+
+void USimWorldSubsystem::BackTutorialStep()
+{
+	if (Tutorial && Runner && Tutorial->Back(*Runner, TutorialUiState))
+	{
+		TutorialStepShownAt = TutorialUiState.real_time_s;
+		OnTutorialStep();
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: back to step %d"), static_cast<int32>(Tutorial->Index()) + 1);
+	}
+}
+
+void USimWorldSubsystem::NoteTutorialContinue()
+{
+	if (Tutorial)
+	{
+		++TutorialUiState.continues;
+	}
+}
+
+FString USimWorldSubsystem::GetTutorialRefusal(const FString& ControlId) const
+{
+	return Tutorial && Runner ? ToF(Tutorial->Refusal(*Runner, ToStd(ControlId), TutorialUiState)) : FString();
+}
+
+FString USimWorldSubsystem::GetTutorialMenuRefusal(const FString& CalloutId) const
+{
+	return Tutorial && Runner ? ToF(Tutorial->MenuRefusal(*Runner, ToStd(CalloutId), TutorialUiState)) : FString();
+}
+
+bool USimWorldSubsystem::IsTutorialStrict() const
+{
+	return Tutorial && Tutorial->Def().strict;
+}
+
+bool USimWorldSubsystem::TakeTutorialSpeech(FString& OutLine)
+{
+	if (TutorialSpeech.IsEmpty())
+	{
+		return false;
+	}
+	OutLine = MoveTemp(TutorialSpeech);
+	TutorialSpeech.Reset();
+	return true;
+}
+
+void USimWorldSubsystem::OnTutorialStep()
+{
+	// The instructor says the new step: its title, and its first line when it is an action (a reading step's lines are
+	// read on the card).
+	const simcore::TutorialStep* Step = Tutorial ? Tutorial->Current() : nullptr;
+	if (Step == nullptr)
+	{
+		return;
+	}
+	std::string Words = simcore::InstructorSpeech(Step->title);
+	if (!Step->continue_key && !Step->lines.empty())
+	{
+		const char Last = Words.empty() ? '.' : Words.back();
+		Words += Last == '!' || Last == '?' || Last == '.' || Last == ':' ? " " : ". ";
+		Words += simcore::InstructorSpeech(Step->lines[0]);
+	}
+	TutorialSpeech = ToF(Words);
+}
+
+void USimWorldSubsystem::SetTutorialView(const FString& ViewKey, bool bInCabin, const FString& Seat, const FString& Holding)
+{
+	TutorialUiState.view = ToStd(ViewKey);
+	TutorialUiState.views_used.insert(TutorialUiState.view);
+	TutorialUiState.in_cabin = bInCabin;
+	TutorialUiState.seat = ToStd(Seat);
+	TutorialUiState.holding = ToStd(Holding);
+}
+
+void USimWorldSubsystem::NoteTutorialEvent(const FString& Event)
+{
+	if (Tutorial)
+	{
+		TutorialUiState.events.insert(ToStd(Event));
+	}
+}
+
+void USimWorldSubsystem::UpdateTutorial(float DeltaTime)
+{
+	if (!Tutorial || !Runner)
+	{
+		return;
+	}
+	TutorialUiState.real_time_s += DeltaTime;  // not while paused: the tick returns before this
+	const std::size_t Was = Tutorial->Index();
+	if (Tutorial->Update(*Runner, TutorialUiState))
+	{
+		TutorialStepShownAt = TutorialUiState.real_time_s;
+		TutorialLastDone = ToF(Tutorial->Def().steps[Was].title);
+		TutorialLastDoneAt = TutorialUiState.real_time_s;
+		OnTutorialStep();
+		UE_LOG(LogSAM3D, Log, TEXT("Tutorial: step %d done at t=%.0f s, now '%s'"), static_cast<int32>(Was) + 1, Runner->Time(),
+			Tutorial->Current() != nullptr ? *ToF(Tutorial->Current()->title) : TEXT("-"));
+	}
+	// A step that only waits (for the turbine, a warm-up, the target to come in) runs time faster, as the lesson says; the
+	// learner's own choice of time (Ctrl+Z) wins, and time goes back to normal when there is something to do.
+	const simcore::TutorialStatus St = Tutorial->Status(*Runner, TutorialUiState);
+	const bool bWaiting = St.fast_forward &&
+		(St.phase == simcore::TutorialStatus::Phase::Wait || St.phase == simcore::TutorialStatus::Phase::Watch);
+	if (bWaiting && !bTutorialFastForward && GetTimeScale() <= 1.0f)
+	{
+		SetTimeScale(8.0f);
+		bTutorialFastForward = true;
+	}
+	else if (!bWaiting && bTutorialFastForward)
+	{
+		if (GetTimeScale() == 8.0f)
+		{
+			SetTimeScale(1.0f);
+		}
+		bTutorialFastForward = false;
+	}
 }
 
 bool USimWorldSubsystem::IsScenarioFinished() const
@@ -758,6 +1007,9 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 			Out.Name = ToF(M.name);
 			Out.Description = ToF(M.description);
 			Out.bLink = M.link;
+			Out.Level = ToF(M.level);
+			Out.Tutorial = ToF(M.tutorial);
+			Out.Start = ToF(M.start);
 			for (const simcore::MissionVehicle& V : M.vehicles)
 			{
 				FSimMissionVehicle& OutV = Out.Vehicles.AddDefaulted_GetRef();
@@ -980,8 +1232,175 @@ bool USimWorldSubsystem::SetAssistLevel(const FString& Level)
 	{
 		return false;
 	}
-	Runner->SetAssistLevel(L);
+	if (Link)  // both vehicles: the player may move to the other
+	{
+		SetRunnerHelper(Link->Osa(), L);
+		SetRunnerHelper(Link->Post(), L);
+	}
+	else
+	{
+		SetRunnerHelper(*Runner, L);
+	}
 	return true;
+}
+
+void USimWorldSubsystem::SetRunnerHelper(simcore::ScenarioRunner& R, simcore::AssistLevel Level)
+{
+	R.SetAssistLevel(Level);
+	R.SetHelper(Level == simcore::AssistLevel::Guided || Level == simcore::AssistLevel::Hint);
+}
+
+void USimWorldSubsystem::ApplyHelperLevel()
+{
+	const FString Wanted = HasUrlOption(TEXT("SimHelper")) ? GetLaunchOption(TEXT("SimHelper")) : GetHelperPreference();
+	simcore::AssistLevel L = simcore::AssistLevel::Unassisted;
+	if (!simcore::ParseAssistLevel(ToStd(Wanted), L) || L == simcore::AssistLevel::Exam)
+	{
+		L = simcore::AssistLevel::Unassisted;
+	}
+	auto Apply = [L](simcore::ScenarioRunner& R)
+	{
+		if (R.GetAssistLevel() != simcore::AssistLevel::Exam)  // an exam is unassisted, whatever the menu says
+		{
+			SetRunnerHelper(R, L);
+		}
+	};
+	if (Link)
+	{
+		Apply(Link->Osa());
+		Apply(Link->Post());
+	}
+	else if (Runner)
+	{
+		Apply(*Runner);
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Helper: %s"), *HelperLevelLabel(GetAssistLevel()));
+}
+
+namespace
+{
+	const TCHAR* const HelperSection = TEXT("SAM3D.Helper");
+}
+
+FString USimWorldSubsystem::GetHelperPreference()
+{
+	FString Level;
+	if (GConfig == nullptr || !GConfig->GetString(HelperSection, TEXT("Level"), Level, GGameUserSettingsIni))
+	{
+		return TEXT("unassisted");
+	}
+	simcore::AssistLevel L;
+	return simcore::ParseAssistLevel(ToStd(Level), L) && L != simcore::AssistLevel::Exam ? Level : FString(TEXT("unassisted"));
+}
+
+void USimWorldSubsystem::SetHelperPreference(const FString& Level)
+{
+	simcore::AssistLevel L;
+	if (GConfig == nullptr || !simcore::ParseAssistLevel(ToStd(Level), L) || L == simcore::AssistLevel::Exam)
+	{
+		return;
+	}
+	GConfig->SetString(HelperSection, TEXT("Level"), *Level, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+FString USimWorldSubsystem::NextHelperLevel(const FString& Level)
+{
+	if (Level == TEXT("unassisted"))
+	{
+		return TEXT("hint");
+	}
+	if (Level == TEXT("hint"))
+	{
+		return TEXT("guided");
+	}
+	return TEXT("unassisted");
+}
+
+FString USimWorldSubsystem::HelperLevelLabel(const FString& Level)
+{
+	if (Level == TEXT("guided"))
+	{
+		return TEXT("On (the next move shown at once)");
+	}
+	if (Level == TEXT("hint"))
+	{
+		return TEXT("Hints (shown when you hesitate)");
+	}
+	if (Level == TEXT("demonstrate"))
+	{
+		return TEXT("Watch the crewman");
+	}
+	if (Level == TEXT("exam"))
+	{
+		return TEXT("Off (an exam)");
+	}
+	return TEXT("Off");
+}
+
+FString USimWorldSubsystem::HelperLevelShort(const FString& Level)
+{
+	return Level == TEXT("guided") ? FString(TEXT("On")) : Level == TEXT("hint") ? FString(TEXT("Hints")) : Level == TEXT("demonstrate") ? FString(TEXT("Watch")) : FString(TEXT("Off"));
+}
+
+FSimSeatHelp USimWorldSubsystem::GetHelp(const FString& Station) const
+{
+	FSimSeatHelp Out;
+	if (!Runner)
+	{
+		return Out;
+	}
+	const simcore::SeatHelp H = simcore::HelpFor(*Runner, ToStd(Station), &HelpMemoState);
+	Out.Level = ToF(simcore::ToString(H.level));
+	Out.bShown = H.shown;
+	Out.bHesitating = H.hesitating;
+	for (const simcore::HelpStep& S : H.steps)
+	{
+		FSimHelpStep& O = Out.Steps.AddDefaulted_GetRef();
+		O.Kind = ToF(simcore::ToString(S.kind));
+		O.Source = ToF(S.source);
+		O.Rule = ToF(S.rule);
+		O.Text = ToF(S.text);
+		O.Control = ToF(S.control);
+		O.ControlLabel = ToF(S.control_label);
+		O.Position = S.position;
+		O.PositionLabel = ToF(S.position_label);
+		O.Target = S.target;
+		O.Value = S.value;
+		O.bOnMark = S.on_mark;
+		O.Callout = ToF(S.callout);
+		O.WordsRu = ToF(S.words_ru);
+		O.WordsEn = ToF(S.words_en);
+		O.Number = S.number;
+		O.Callsign = ToF(S.callsign);
+		O.WaitingFor = ToF(S.waiting_for);
+		O.Blocked = ToF(S.blocked);
+		O.DueInSeconds = S.due_in_s;
+	}
+	return Out;
+}
+
+bool USimWorldSubsystem::DoHelpMove(const FString& Station, FString& OutWhy)
+{
+	if (!Runner || IsMirrorOnly())
+	{
+		OutWhy = TEXT("no scenario");
+		return false;
+	}
+	for (const simcore::HelpStep& S : simcore::HelpMoves(*Runner, ToStd(Station)))
+	{
+		if (S.kind == simcore::HelpStep::Kind::Wait || S.kind == simcore::HelpStep::Kind::Halt || !S.blocked.empty())
+		{
+			continue;  // a wait has nothing to do; the halt is the driver's brake (his keys)
+		}
+		std::string Why;
+		const bool bDone = simcore::HelpDo(*Runner, S, &Why);
+		OutWhy = bDone ? ToF(S.text) : ToF(S.text + ": " + Why);
+		BroadcastNewDebriefEntries();
+		return bDone;
+	}
+	OutWhy = TEXT("nothing to do now");
+	return false;
 }
 
 FString USimWorldSubsystem::GetAssistLevel() const
@@ -1176,13 +1595,21 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 				Out.Add(E);
 			}
 		}
+		// After the orders, what he says on the air himself (the Osa commander's read-back of a designation).
+		for (const std::string& Id : Runner->PlayerRadioReports(Seat))
+		{
+			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, Id);
+			Out.Add({ToF(Id), ToF(Words.first), ToF(Words.second), false});
+		}
 		return Out;
 	}
 	for (const simcore::CalloutDef& C : Crew.callouts)
 	{
 		if (C.kind == simcore::CalloutKind::Report && (C.from == Seat || C.from == "any"))
 		{
-			Out.Add({ToF(C.id), ToF(C.ru), ToF(C.en), false});
+			// The words as he would say them: the report he would read out, his seat's number; other blanks «…».
+			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, C.id);
+			Out.Add({ToF(C.id), ToF(Words.first), ToF(Words.second), false});
 		}
 	}
 	return Out;
@@ -1385,13 +1812,32 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 	{
 		return Out;
 	}
+	// Each aircraft's basic model: its scenario target's own, else its class's (docs/scenery/).
+	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
 	for (const simcore::Aircraft& A : W->AircraftList())
 	{
-		Out.Add(MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity));
+		FSimEntityState S = MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity);
+		if (Models != nullptr && Runner)
+		{
+			for (const simcore::ScenarioTarget& T : Runner->Def().targets)
+			{
+				if (T.name == A.name || T.id == A.name)
+				{
+					S.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
+					break;
+				}
+			}
+		}
+		Out.Add(S);
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
-		Out.Add(MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity));
+		FSimEntityState S = MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity);
+		if (Models != nullptr)
+		{
+			S.Model = ToF(Models->ForTarget(std::string(), "missile", std::string()));
+		}
+		Out.Add(S);
 	}
 	// The battery's other vehicles and the dummy positions (roadmap 7.7).
 	{
@@ -1406,6 +1852,10 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 				S.bIsGround = true;
 				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
 				S.bDeployed = V.deployed;
+				if (Models != nullptr)
+				{
+					S.Model = ToF(Models->ForGround(V.kind));
+				}
 				Out.Add(S);
 			}
 		}
@@ -1416,6 +1866,11 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 		{
 			Out.Add(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number), true, true,
 				M.position, M.velocity));
+		}
+		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed).
+		for (const simcore::EmSensorLink::ArmView& A : Runner->ArmsInFlight())
+		{
+			Out.Add(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
 		}
 	}
 	return Out;
@@ -1670,6 +2125,56 @@ bool USimWorldSubsystem::SeatSetControl(const FString& Role, const FString& Cont
 	return bMoved;
 }
 
+void USimWorldSubsystem::ReportPlayerBody(const FString& Station, simcore::BodyPlace Place, const simcore::Vec3& FeetM, double YawRad)
+{
+	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
+	{
+		if (!Seat->SeatRole.IsEmpty() && IsMirrorOnly())
+		{
+			Seat->SetBody(static_cast<int32>(Place), FVector(FeetM.x, FeetM.y, FeetM.z), YawRad);
+			if (Runner)
+			{
+				Runner->SetPlayerBody(ToStd(Station), Place, FeetM, YawRad);  // this machine plans his next way from it
+			}
+			return;
+		}
+	}
+	if (Runner)
+	{
+		Runner->SetPlayerBody(ToStd(Station), Place, FeetM, YawRad);
+	}
+}
+
+void USimWorldSubsystem::SeatSetBody(const FString& Role, int32 Place, const FVector& FeetM, double YawRad, const FString& Vehicle)
+{
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	if (In != nullptr && Place >= 0 && Place <= static_cast<int32>(simcore::BodyPlace::Ground))
+	{
+		In->SetPlayerBody(ToStd(Role), static_cast<simcore::BodyPlace>(Place), simcore::Vec3{FeetM.X, FeetM.Y, FeetM.Z}, YawRad);
+	}
+}
+
+bool USimWorldSubsystem::PlayerBodyGoTo(const FString& Station, const simcore::MoveGoal& Goal, FString& Why)
+{
+	if (!Runner)
+	{
+		Why = TEXT("no scenario");
+		return false;
+	}
+	std::string W;
+	const bool bOk = Runner->PlayerGoTo(ToStd(Station), Goal, &W);
+	Why = UTF8_TO_TCHAR(W.c_str());
+	return bOk;
+}
+
+void USimWorldSubsystem::StepPlayerBody(const FString& Station, float DeltaSeconds)
+{
+	if (Runner && IsMirrorOnly() && !IsSimPaused())
+	{
+		Runner->StepMover(ToStd(Station), static_cast<double>(DeltaSeconds) * GetTimeScale());
+	}
+}
+
 bool USimWorldSubsystem::SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why, const FString& Vehicle)
 {
 	std::string W;
@@ -1876,6 +2381,57 @@ TArray<int32> USimWorldSubsystem::GetPostBoardNumbers() const
 	return Out;
 }
 
+TArray<FVector4f> USimWorldSubsystem::GetPostBoardReadings() const
+{
+	// By eye, from the crosses' minute labels (simcore/board_reading.hpp), as the glass shows them.
+	const simcore::PostFeed Feed = GetPostFeed();
+	std::vector<simcore::BoardFix> Fixes;
+	for (const simcore::em::ViewBoardMark& M : Feed.glass)
+	{
+		Fixes.push_back({std::to_string(M.number), M.number, M.position, 60.0 * M.stamp});
+	}
+	std::vector<simcore::BoardReading> Read = simcore::ReadBoard(Fixes, Feed.position);
+	std::sort(Read.begin(), Read.end(), [](const simcore::BoardReading& A, const simcore::BoardReading& B) { return A.range_m < B.range_m; });
+	TArray<FVector4f> Out;
+	for (const simcore::BoardReading& R : Read)
+	{
+		Out.Add(FVector4f(static_cast<float>(R.number), static_cast<float>(R.range_m / 1000.0),
+			R.has_speed ? static_cast<float>(R.velocity_mps.HorizontalLength()) : -1.0f,
+			R.arrival_s >= 0.0 ? static_cast<float>(R.arrival_s / 60.0) : -1.0f));
+	}
+	return Out;
+}
+
+FString USimWorldSubsystem::GetPostCommandText() const
+{
+	return FString(UTF8_TO_TCHAR(GetPostFeed().command_text.c_str()));
+}
+
+float USimWorldSubsystem::PlotPostAt(int32 Number, double EastM, double NorthM, double MetresPerBoardM)
+{
+	if (!Runner || IsMirrorOnly())
+	{
+		return -1.0f;
+	}
+	const simcore::CommandPost::PlotResult R = Runner->PlayerPlotAt(Number, EastM, NorthM, MetresPerBoardM);
+	return R.ok ? static_cast<float>(100.0 * R.miss_board_m) : -1.0f;
+}
+
+bool USimWorldSubsystem::IsPostBoardOpen() const
+{
+	return !Runner || Runner->Post() == nullptr || Runner->Post()->BoardOpen();
+}
+
+TArray<int32> USimWorldSubsystem::GetPostHeardNumbers() const
+{
+	TArray<int32> Out;
+	for (int N : GetPostFeed().heard)
+	{
+		Out.Add(N);
+	}
+	return Out;
+}
+
 TArray<FSimLauncherStatus> USimWorldSubsystem::GetLauncherStatus() const
 {
 	TArray<FSimLauncherStatus> Out;
@@ -1985,7 +2541,158 @@ TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) co
 		M.Net = UTF8_TO_TCHAR(R.net.c_str());
 		M.From = UTF8_TO_TCHAR(R.from.c_str());
 		M.Text = UTF8_TO_TCHAR(R.text.c_str());
+		M.bCallout = R.callout;
+		M.bRouted = R.routed;
+		for (const std::string& H : R.heard_by)
+		{
+			M.HeardBy.Add(ToF(H));
+		}
 		Out.Add(M);
+	}
+	return Out;
+}
+
+FSimSeatComms USimWorldSubsystem::GetSeatComms(const FString& Station) const
+{
+	FSimSeatComms C;
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	if (V == nullptr || Station.IsEmpty())
+	{
+		return C;
+	}
+	const std::string St = ToStd(Station);
+	const simcore::ConsoleData& Con = Runner->Console();
+	C.bVoice = true;
+	C.bUnboxed = V->Unboxed(St);
+	const simcore::VoiceBoxDef* Box = V->BoxOf(St);
+	if (Box == nullptr)
+	{
+		return C;
+	}
+	C.bHeadset = V->HeadsetOn(St);
+	C.bPowered = V->Powered();
+	C.BoxName = ToF(Box->name);
+	const std::string Sel = V->Selected(St);
+	C.Channel = Sel == "intercom" ? FString(TEXT("ВС")) : ToF(V->Name(Sel));
+	if (!V->Monitored(St).empty())
+	{
+		C.Monitor = ToF(V->Name(V->Monitored(St)));
+	}
+	auto Reaches = [Box](const std::string& Set) {
+		for (const std::string& P : Box->positions)
+		{
+			if (P == Set) return true;
+		}
+		for (const std::string& P : Box->radio_select_sets)
+		{
+			if (P == Set) return true;
+		}
+		return Box->radio == Set;
+	};
+	for (const simcore::VoiceSetDef& S : Con.voice.sets)
+	{
+		if (!Reaches(S.id))
+		{
+			continue;
+		}
+		C.SetNames.Add(ToF(S.name));
+		C.SetLive.Add(Runner->SetHearsItsNet(S.id));
+	}
+	const std::string Called = Box->id + "_call";
+	C.bCalled = Con.equipment.HasInput(Called) && Con.equipment.GetInput(Called);
+	for (int32 N = 1; N <= static_cast<int32>(Box->lines.size()); ++N)
+	{
+		const std::string Id = "line" + std::to_string(N) + "_call";
+		if (Con.equipment.HasInput(Id) && Con.equipment.GetInput(Id))
+		{
+			C.RingingLines.Add(N);
+		}
+	}
+	for (int L : V->LinesUp(St))
+	{
+		C.LinesUp.Add(L);
+	}
+	for (const simcore::VoicePhoneDef& P : Con.voice.phones)
+	{
+		if (P.station != St)
+		{
+			continue;
+		}
+		C.bPhoneTaken = V->PhoneTaken(P.id);
+		C.bPhoneRinging = Con.equipment.HasInput(P.id + "_call") && Con.equipment.GetInput(P.id + "_call");
+	}
+	return C;
+}
+
+bool USimWorldSubsystem::ToggleHeadset(const FString& Station)
+{
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	const simcore::VoiceBoxDef* Box = V != nullptr ? V->BoxOf(ToStd(Station)) : nullptr;
+	if (Box == nullptr)
+	{
+		return false;
+	}
+	const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->headset), V->HeadsetOn(ToStd(Station)) ? 0 : 1);
+	return ActionMoved(R);
+}
+
+bool USimWorldSubsystem::TurnBox(const FString& Station, int32 Direction)
+{
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	const simcore::VoiceBoxDef* Box = V != nullptr ? V->BoxOf(ToStd(Station)) : nullptr;
+	if (Box == nullptr || Box->selector.empty() || Box->positions.empty())
+	{
+		return false;
+	}
+	const int32 N = static_cast<int32>(Box->positions.size());
+	const int32 Now = Runner->Console().panel.Get(Box->selector);
+	const int32 Next = ((Now + (Direction >= 0 ? 1 : -1)) % N + N) % N;
+	const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->selector), Next);
+	return ActionMoved(R);
+}
+
+bool USimWorldSubsystem::AnswerCall(const FString& Station)
+{
+	const simcore::VoiceComms* V = Runner ? Runner->Voice() : nullptr;
+	if (V == nullptr)
+	{
+		return false;
+	}
+	const FSimSeatComms C = GetSeatComms(Station);
+	const simcore::VoiceBoxDef* Box = V->BoxOf(ToStd(Station));
+	if (Box != nullptr && C.RingingLines.Num() > 0)
+	{
+		const int32 L = C.RingingLines[0];
+		const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->lines[static_cast<size_t>(L - 1)]), 1);
+		return ActionMoved(R);
+	}
+	for (const simcore::VoicePhoneDef& P : Runner->Console().voice.phones)
+	{
+		if (P.station != ToStd(Station))
+		{
+			continue;
+		}
+		const ESimPlayerActionResult R = PlayerSetControl(ToF(P.handset), V->PhoneTaken(P.id) ? 0 : 1);
+		return ActionMoved(R);
+	}
+	if (Box != nullptr && C.LinesUp.Num() > 0)  // nothing ringing: put the raised line down
+	{
+		const ESimPlayerActionResult R = PlayerSetControl(ToF(Box->lines[static_cast<size_t>(C.LinesUp[0] - 1)]), 0);
+		return ActionMoved(R);
+	}
+	return false;
+}
+
+TArray<FString> USimWorldSubsystem::GetDocumentLines(const FString& Document) const
+{
+	// The paper as typed: simcore's (the radio data's form, the talk tables), in Russian as issued.
+	TArray<FString> Out;
+	if (Runner)
+	{
+		for (const std::string& L : Runner->DocumentText(ToStd(Document)))
+		{
+			Out.Add(ToF(L));
+		}
 	}
 	return Out;
 }

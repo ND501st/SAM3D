@@ -46,6 +46,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D")
 	bool UseVehicleModel(const FString& Kind);
 
+	/** Draw it with a basic model (data/scenery/basic_models.json: docs/scenery/), built to size, in place of the
+	 *  placeholder. False if the model isn't in the library: keep what it has. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D")
+	bool UseBasicModel(const FString& ModelId);
+
+	/** The basic model it is drawn with ("" none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D")
+	FString GetBasicModel() const { return BasicModel; }
+
 	/** The PU-12M's mast, guys and AB-1 (a command_post's model only; null otherwise). It follows the vehicle's deployment. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D")
 	USimPu12MastComponent* GetMast() const { return Mast; }
@@ -70,4 +79,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<USimPu12MastComponent> Mast;
+
+	/** The basic model's parts (UseBasicModel). */
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> ModelParts;
+
+	FString BasicModel;
 };

@@ -1,0 +1,39 @@
+{
+  "tables_id": "talk_tables",
+  "display_name": "Talk tables ПТ-1 and ПТ-2 (переговорные таблицы)",
+  "status": "Placeholder tables for simcore/talk_tables.hpp: the regiment's voice orders on its command net (FuG-3, R-111) go out as three-digit groups of ПТ-1; the battery's signals (warnings) as groups of ПТ-2. Read by the crew (an NPC decodes, a player reads the document on his desk). docs/crew/12_COMMUNICATIONS.md §2.9.",
+  "notes": "That troop air defence kept talk tables (переговорные таблицы, таблицы сигналов), coded maps and call-sign tables is documented (pvo_bu_x_1984); that «ПТ-<n>» names a talk table is attested (fsrbit_pt). The 1980s tables themselves were controlled documents and were not sought. The form is that of post-Soviet samples: tactical terms as three-digit groups (bstudy_tactics, an AA missile regiment's table of 1999, readiness no. 1 = 143), a signal table with a radio code and a spoken word per signal (bstudy_tactics: 333 «Воздух», 777 «Отбой»; sfu_tactics_2011 has 555 for the air alarm: the samples disagree, and every group here is SAM3D's). Air data, target designations and warnings may be said in clear (pvo_bu_x_1984 art. 30): the tables cover orders and signals, not targets. `aspd` ties an entry to the ASPD-U's two-digit command of the same meaning (data/command/aspd_codes.json), so a regiment's order sent both ways means one thing.",
+  "source": "bstudy_tactics (the form: three-digit groups, readiness no. 1 = 143, signals 333 «Воздух» and 777 «Отбой»); fsrbit_pt (ПТ-<n> = переговорная таблица); pvo_bu_x_1984 (art. 30: what may be said in clear); the groups are a sam3d placeholder",
+  "confidence": "low",
+  "tables": [
+    {
+      "id": "pt1",
+      "name_ru": "ПТ-1",
+      "name_en": "Talk table no. 1: the regiment's command net",
+      "entries": [
+        { "code": "143", "ru": "Готовность номер один", "en": "readiness no. 1", "effect": "readiness", "aspd": 10 },
+        { "code": "146", "ru": "Готовность номер два", "en": "readiness no. 2", "aspd": 11 },
+        { "code": "214", "ru": "Огонь запрещаю", "en": "fire ban", "effect": "fire_ban", "aspd": 20 },
+        { "code": "217", "ru": "Огонь разрешаю", "en": "fire permitted", "effect": "fire_free", "aspd": 21 },
+        { "code": "230", "ru": "Прекратить огонь", "en": "cease fire", "effect": "cease_fire", "aspd": 30 },
+        { "code": "402", "ru": "В зоне свои самолёты", "en": "own aircraft in the zone", "aspd": 40 },
+        { "code": "505", "ru": "Ожидается налёт", "en": "air raid expected", "effect": "readiness", "aspd": 50 },
+        { "code": "611", "ru": "Режим радиомолчания", "en": "radio silence", "effect": "silence_on" },
+        { "code": "612", "ru": "Радиомолчание отменить", "en": "radio silence lifted", "effect": "silence_off" },
+        { "code": "620", "ru": "Переходите на запасную частоту", "en": "go to the spare frequency", "effect": "spare_frequency" },
+        { "code": "707", "ru": "Доложить о готовности", "en": "report readiness", "effect": "report_readiness" }
+      ]
+    },
+    {
+      "id": "pt2",
+      "name_ru": "ПТ-2",
+      "name_en": "Talk table no. 2: the battery's signals",
+      "entries": [
+        { "code": "333", "ru": "Воздух", "en": "air raid warning", "effect": "air_warning", "visual": "зелёная ракета", "notes": "bstudy_tactics: «Воздух» by voice, a green flare" },
+        { "code": "777", "ru": "Отбой", "en": "all clear", "effect": "all_clear", "visual": "белая ракета", "notes": "bstudy_tactics: «Отбой» by voice, a white flare" },
+        { "code": "444", "ru": "Химическая тревога", "en": "chemical alarm" },
+        { "code": "555", "ru": "Сбор", "en": "assemble" }
+      ]
+    }
+  ]
+}

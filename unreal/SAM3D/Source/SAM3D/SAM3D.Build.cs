@@ -13,6 +13,8 @@ public class SAM3D : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
+			"RenderCore",  // frame timings for the scripted view check
+			"RHI",
 			"ProceduralMeshComponent",  // cabin screens: quads with exact texture coordinates
 			"CesiumRuntime"  // Cesium for Unreal: georeference, terrain height sampling
 		});

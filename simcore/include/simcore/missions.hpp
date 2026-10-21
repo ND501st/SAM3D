@@ -18,6 +18,7 @@
 #include "simcore/crew_data.hpp"
 #include "simcore/json.hpp"
 #include "simcore/scenario.hpp"
+#include "simcore/tutorial.hpp"
 
 namespace simcore {
 
@@ -51,6 +52,9 @@ struct MissionDef {
     std::string name;         // the scenario's (the link's) name
     std::string description;  // and description
     bool link = false;        // a battery link: the player chooses the vehicle
+    std::string level;        // the game level it plays in ("" the menu's own; "/Game/Maps/KesmarkRange" for the map)
+    std::string tutorial;     // the guide shown over it (data/tutorials/, simcore/tutorial.hpp), relative to the data folder
+    std::string start;        // where the menu starts the player by default: a seat id, "outside", or "" the commander's seat
     std::vector<MissionVehicle> vehicles;
 
     const MissionVehicle* Vehicle(const std::string& vehicle_id) const {
@@ -135,11 +139,24 @@ public:
 
 private:
     bool LoadMission(const json::Value& e, const std::string& p, MissionDef& m) {
-        if (!Keys(e, p, {"file", "title", "vehicles"}) || !RequireString(e, p, "file", m.file) ||
-            !RequireString(e, p, "title", m.title)) {
+        if (!Keys(e, p, {"file", "title", "vehicles", "level", "tutorial", "start"}) || !RequireString(e, p, "file", m.file) ||
+            !RequireString(e, p, "title", m.title) || !OptionalString(e, p, "level", m.level) ||
+            !OptionalString(e, p, "tutorial", m.tutorial) || !OptionalString(e, p, "start", m.start)) {
             return false;
         }
+        if (!m.tutorial.empty()) {
+            // The lesson loads, is written for this scenario, and everything it names is in it.
+            TutorialDef guide;
+            std::string error;
+            if (!LoadTutorialFile(data_dir_, m.tutorial, guide, &error)) return Fail(Join(p, "tutorial"), error);
+            if (guide.scenario != m.file) return Fail(Join(p, "tutorial"), m.tutorial + " is written for " + guide.scenario);
+            ScenarioDef scenario;
+            ConsoleData console;
+            if (!LoadScenarioFile(data_dir_ + "/" + m.file, data_dir_, scenario, console, &error)) return Fail(Join(p, "file"), error);
+            if (!BindTutorial(guide, scenario, console, &error)) return Fail(Join(p, "tutorial"), m.tutorial + ": " + error);
+        }
         m.id = MissionIdOf(m.file);
+        if (!m.level.empty() && m.level.rfind("/Game/", 0) != 0) return Fail(Join(p, "level"), "a level path starting /Game/");
         const std::string path = data_dir_ + "/" + m.file;
         std::string text;
         if (!ReadTextFile(path, text)) return Fail(Join(p, "file"), "cannot open " + m.file);
@@ -153,7 +170,7 @@ private:
             MissionVehicle v;
             if (!LoadVehicle(m.file, Join(p, "file"), v, &m)) return false;
             m.vehicles.push_back(std::move(v));
-            return true;
+            return StartKnown(m, p);
         }
         // A battery link: both halves load together (LoadBatteryLinkFile checks they fit), then each vehicle's seats.
         std::string error;
@@ -177,7 +194,16 @@ private:
             v.label = label;
             m.vehicles.push_back(std::move(v));
         }
-        return true;
+        return StartKnown(m, p);
+    }
+
+    // The default start is "outside" or a seat of the mission's first vehicle.
+    bool StartKnown(const MissionDef& m, const std::string& p) {
+        if (m.start.empty() || m.start == "outside") return true;
+        for (const MissionSeat& s : m.vehicles.front().seats) {
+            if (s.id == m.start) return true;
+        }
+        return Fail(Join(p, "start"), "'" + m.start + "' is not \"outside\" or a seat of " + m.vehicles.front().label);
     }
 
     // One scenario as the game loads it: its seats and the one that commands; its name and description into `m`.

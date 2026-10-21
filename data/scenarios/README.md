@@ -161,8 +161,8 @@ scope at 25 to 34 km (the search radar's 50 % range is 28 km), and the tracking 
 `own_unit.em` also takes the electromagnetic environment's scripted effects (`docs/EM_ARCHITECTURE.md` §25):
 `"extra_libraries": ["em/nato_1985.json"]` merges more library files (jammers, threat libraries);
 `"decoys": [ { "position": {...}, "mode": "with_radar" | "when_radar_off" | "always" } ]` puts decoy emitters copying the search radar at dummy positions (roadmap E7);
-`"command_link_in_load": true` keeps the command transmitters in their equivalent load until a missile flies (a
-peacetime check, `mon_2112_80` p67; in combat they radiate from ВНИМАНИЕ, so a target's RWR warns before the launch);
+(the command transmitters are on from ВНИМАНИЕ but work into their equivalent loads until the launch, `voenizdat_osa_1991`
+p21, p140, p155: a target's RWR hears the command link with the missile, not before it);
 `"rain_mmh": 25` puts rain over the scene (ITU-R P.838: it costs Ku-band and C-band paths, not VHF; never part of a radar's calibration);
 `"jammers": [ { "jammer": "<library id>", "target": "<target id>" | "position": {...}, "on_at_s": 270, "off_at_s": 400 } ]`
 puts a jammer on a target (self-screening) or at a stand-off point, aimed at the unit; `"chaff": [ { "target": "<id>",
@@ -195,6 +195,31 @@ equipment without the turbine or the take-off generator and burns no fuel; it dr
 
 `own_unit.prepared_position` (optional, roadmap 7.6): `{ "emplacement": true, "nets": true, "wire": true, "dummies": [ { "position": {...}, "decoy": "when_radar_off" } ] }`; values from `command/prepared_positions.json`.
 
+**Anti-radiation missiles (roadmap E6, `simcore/em/arm.hpp`, `docs/EM_ARCHITECTURE.md` §35).** A target with a warning
+receiver (`"rwr"`, so `own_unit.em` with the library that has it) can carry ARMs: `"arms": { "weapon": "agm88a_class_harm",
+"count": 1, "launch_range_km": 22, "min_range_km": 3, "interval_s": 4, "aim": {...}, "turn_away": true }`. `weapon` is an
+`arms` entry of the EM libraries (`em/nato_1985.json`: `agm45_class_shrike`, `agm88a_class_harm`, `kh58_class`);
+`launch_range_km` and `min_range_km` default to the weapon's; `aim` is where its intelligence has the radar (default the
+unit's position, a pre-briefed launch). It fires when its warning receiver hears a radar in the weapon's band on the aim's
+bearing (one its library calls hostile search, tracking or fire control, or one it doesn't know) and the aim is within
+range; each ARM is set to the signal heard; after its last it turns away hard. The ARM flies in the EM layer: on our scope
+it is a ghost mark `T<n>`, in Tacview a `Weapon+Missile`; one that bursts on the vehicle ends the scenario ("the vehicle
+was hit by an anti-radiation missile"), one on a dummy or decoy is logged (`ScenarioRunner::ArmResults`).
+
+`"doctrine": { "arm_threat": true, "arm_silence_s": 60, "arm_search_off_turns": 3, "relocate_after_arm": { "to": {...} } }`:
+the crew warned of ARMs fights with the least emission (`voenizdat_osa_1991` pp262-264): the senior operator puts the
+search transmitter's high voltage on for 2 antenna turns after every `arm_search_off_turns` (3-4 in the textbook), with
+ЛУЧ АВТ. I–II so that both low beams are in each burst, and off while the tracking radar holds a target alone; the
+commander puts the tracking transmitter on only from Table 7.3's range for the target's speed
+(`data/gameplay/osa_ak.json` `arm`) and has it off after the burst. Every crew reacts to the signs of a launch (the
+senior operator's "Пуск ПРР!": a small mark coming at the vehicle faster than 450 m/s at zero parameter; warned of ARMs,
+also a target that came at the battery turning away), if his tier knows the drill (class2 and up): the missile in the
+air is guided to its burst, then «Излучение выключить!» for `arm_silence_s`, and the attack is reported up the battery
+net. `relocate_after_arm` (needs a battery with `drive_own`) is the regiment's standing order: when the fight is over
+the crew stows and the battery moves to `to` in its order (battery order `relocate`, with `covered`, the own vehicle's
+new place), and deploys there. `osa_arm_drill.json` (HARM class) and `osa_arm_drill_shrike.json` (Shrike class) are the
+drill's missions.
+
 `osa_battery_practice.json` is the EM practice shoot with the whole battery in a prepared position (the practice map's scenario).
 
 `own_unit.position_power` (optional, roadmap 7.6) is a prepared position's supply, and sets `external_power` itself every
@@ -207,7 +232,7 @@ each change. The 24 h is the only figure a source gives (`video_osa`, unverified
 (`simcore/pu12.hpp`, `data/command/README.md`): it plots every target once a minute with the manual's notation, off by the
 post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are
 silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
-`"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/71 at 45 km, 00-71").
+`"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/21 at 45 km, 00-71").
 
 A trigger can give the trainer's instructor's orders (roadmap 10.3, `simcore/instructor.hpp`): `{ "instructor": "turn",
 "target": "t1", "to": 270 }`. Orders: `take`, `release`, `turn` (`to`: the true heading, degrees), `height` (`to`: metres
@@ -231,3 +256,10 @@ describe.
 | `osa_angola_night.json` | Angola, the Pavlov memoir (`korovin_tiv_2010`): dug in under nets, a night raid, a Puma in a canyon | by the radars at night (no TV); the Puma first seen out of the canyon's mouth |
 | `osa_cuito_1988.json` | Cuito Cuanavale, 20 February 1988 (`samsim_osa` p31): Mirage F1AZs toss their bombs | missiles away between the pull-up and the turn away |
 
+## Generated raids (the enemy air command)
+
+`air_war_*.json` are raids generated by the enemy air command (`simcore/air_war/raid_scenario.hpp`, `docs/air_war/05_EXECUTION.md`)
+and kept as samples for the missions menu's "Air war" group. They use only the keys above: targets with waypoint heights,
+`behaviour`, `evade`, `rwr` and `decoy`; `own_unit.em.jammers`; the `battery`, `prepared_position`, `c2` (with
+`regiment` radars and outages) and `command_post` blocks; an `air_threat` trigger; `doctrine`; `environment`; NPC
+commanders. Regenerate with `simcore/examples/air_war_demo` (it writes every raid it plays to its output folder).

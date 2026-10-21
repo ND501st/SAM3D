@@ -1,0 +1,23 @@
+{
+  "comms_id": "comms",
+  "display_name": "Communications: game values",
+  "status": "Game values for simcore/voice_comms.hpp and simcore/radio_nets.hpp (docs/crew/12_COMMUNICATIONS.md): how long hands take on a box and a headset, what weak jamming costs, when the enemy is taken to have fixed a net. Not system data: where a value has a source it says so, the rest are SAM3D's.",
+  "notes": "Strong jamming loses every message at a receiver it reaches; weak jamming loses each with `weak_jam_loss` and the speaker says a command twice (rrs_1986: under strong interference commands may be repeated twice), so the chance that both are lost is its square. A spot jammer finds a net's new frequency after its own `follow_s` (the scenario's). Direction finding: palii_1989 credits the US with 6-12 VHF bearings a minute; one tier-4 lesson says 30 s on air is enough. SAM3D counts each net's time on air in a sliding window; past `df_fix_s` in `df_window_s` the net is fixed and, after `df_reaction_s`, a spot jammer comes on it (when the scenario allows it: `jamming_follows_df`).",
+  "headset_s": { "value": 3.0, "source": "sam3d estimate (the helmet on, the cord plugged in)", "confidence": "estimate" },
+  "box_select_s": { "value": 1.0, "source": "sam3d estimate (one turn of a box's selector)", "confidence": "estimate" },
+  "answer_line_s": { "value": 2.0, "source": "sam3d estimate (the lever up, or the handset taken)", "confidence": "estimate" },
+  "recognise_jamming_s": { "value": 6.0, "source": "sam3d estimate (a trained listener; the skill tier scales it)", "confidence": "estimate" },
+  "order_spare_s": { "value": 20.0, "source": "sam3d estimate (the main station's commander decides to leave a jammed frequency)", "confidence": "estimate" },
+  "weak_jam_loss": { "value": 0.4, "source": "sam3d (palii_1989: an operator stops understanding at about 50 % loss of information; weak jamming taken below that)", "confidence": "estimate" },
+  "call_wait_s": { "value": 90.0, "source": "rrs_1986 (after a change, no call from the main station in 1-2 min: call it)", "confidence": "high" },
+  "both_frequencies_s": { "value": 300.0, "source": "rrs_1986 (no contact in 5 min: work the old and the new frequency)", "confidence": "high" },
+  "loss_report_s": { "value": 600.0, "source": "rrs_1986 (no contact in 10 min: report the loss of communication)", "confidence": "high" },
+  "df_window_s": { "value": 300.0, "source": "sam3d", "confidence": "estimate" },
+  "df_fix_s": { "value": 30.0, "source": "sam3d (a tier-4 lesson: 30 s on air is detected; palii_1989: 6-12 bearings a minute)", "confidence": "estimate" },
+  "df_reaction_s": { "value": 120.0, "source": "sam3d estimate (the jammer is tasked and tuned)", "confidence": "estimate" },
+  "warn_covered_m": { "value": 60000.0, "source": "sam3d (pvo_bu_x_1984: the air-defence units warn the covered troops of the air enemy; how far out is the battery commander's call)", "confidence": "estimate" },
+  "notice_board_s": { "value": 30.0, "source": "sam3d estimate (pvo_bu_x_1984 art. 17 and 23: the commander reads the board and the tube, the plotter calls each new target to him; uncalled, he finds it on his next look over the board)", "confidence": "estimate" },
+  "plot_lost_s": { "value": 180.0, "source": "sam3d (pvo_bu_x_1984 art. 23: the plotter reports targets lost; three of the board's one-minute reporting periods without a new mark)", "confidence": "estimate" },
+  "plot_turn_deg": { "value": 60.0, "source": "sam3d (pvo_bu_x_1984 art. 23: the plotter reports the targets' actions; a turn this large stands clear of the plotting error)", "confidence": "estimate" },
+  "plot_stale_s": { "value": 120.0, "source": "sam3d (a report two of the board's reporting periods old tells the commander nothing he can act on)", "confidence": "estimate" }
+}

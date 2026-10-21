@@ -162,7 +162,7 @@ def windscreens(b):
 # ---------------------------------------------------------------------------------------------- equipment
 
 EQUIPMENT_SKIP = {'seat_squad_leader', 'seat_driver', 'bench', 'bench_back', 'mast', 'winch', 'dash', 'r123_fug1',
-                  'r123_fug2', 'r123_fug4'}
+                  'r123_fug2', 'r123_fug4', 'r111', 'r407', 'map_board'}   # the radios and the board are meshes of their own
 
 
 def face_inset(b, it):
@@ -249,7 +249,7 @@ def build_item(b, it):
             b.box(-it['y1'] + 0.005, -it['y1'] + 0.035, x - 0.015, x + 0.015, I.FLOOR_Z, it['z0'], 'Paint_Rack')
         return
     if iid == 'table51':
-        # the top on two struts to the R-111's front ahead of it: his knees go under it (no leg to the floor)
+        # the top on two struts to the rack's front, under the R-111: his knees go under it (no leg to the floor)
         b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
         x_set = I.item('r111')['x0'] - 0.006   # short of its front panel
         for y in (it['y0'] + 0.02, it['y1'] - 0.02):
@@ -282,6 +282,17 @@ def build_item(b, it):
         for x in (it['x0'] + 0.015, it['x1'] - 0.015):
             for y in (it['y0'] + 0.015, it['y1'] - 0.015):
                 b.box(-y - 0.012, -y + 0.012, x - 0.012, x + 0.012, it['z0'], it['z1'] - 0.025, it['mat'])
+        if iid == 'r111_stand':
+            # the rack's three tiers (pu12m_interior_trace.RACK): the lower one's shelf, then the posts go on up beside
+            # the R-111 to a shelf under the R-123M and the R-123M's top (wwp_btr60 p. 087: tubular posts at the sides)
+            zl = I.RACK['low_shelf_z']
+            b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], zl - 0.025, zl, it['mat'])
+            r111, r123 = I.item('r111'), I.item('r123_fug4')
+            shelf0, shelf1 = r111['z1'] + 0.008, r123['z0'] - 0.005
+            b.box(-it['y1'] - 0.024, -it['y0'] + 0.024, it['x0'], it['x1'], shelf0, shelf1, it['mat'])
+            for x in (it['x0'] + 0.012, it['x1'] - 0.012):
+                for y in (r111['y0'] - 0.013, r111['y1'] + 0.013):
+                    b.cylinder(b3(x, y, it['z1']), b3(x, y, r123['z1']), 0.011, it['mat'], seg=12)
         return
     if iid == 'it45':
         # the tube's housing: a box, its back (to the bench) dished round the screen, a hood over the top
@@ -300,7 +311,7 @@ def build_item(b, it):
                        'Bakelite_Black' if k % 3 else 'Metal_Steel', seg=12)
         return
     x0, x1, y0, y1 = face_inset(b, it)
-    if iid in ('telecode_tx', 'telecode_rx', 'r407', 'r111', 'scr', 'bp48', 'vs27'):
+    if iid in ('telecode_tx', 'telecode_rx', 'scr', 'bp48', 'vs27'):
         handles(b, dict(it, x0=x0, x1=x1, y0=y0, y1=y1), face)
     if iid in ('telecode_tx', 'telecode_rx'):
         # the cabinet's two doors (the drawings' diagonal hatching): seams on its face
@@ -320,6 +331,13 @@ def build_equipment():
         if it['id'] not in EQUIPMENT_SKIP:
             build_item(b, it)
     return C.finish(b, bevel=0.003)
+
+
+def build_map_board():
+    # The plotting board on its own (its hinge turns it: data/cabins/pu12m.json hinges), drawn open.
+    b = C.Builder('SM_PU12MMapBoard')
+    build_item(b, I.item('map_board'))
+    return C.finish(b, bevel=0.002)
 
 
 def build_bench():
@@ -441,8 +459,8 @@ def build_mast_foot():
 
 
 def build_all():
-    return [build_lining(), build_equipment(), build_bench(), build_front_seat(), build_steering(), build_pedals(),
-            build_driver(), build_mast_foot()]
+    return [build_lining(), build_equipment(), build_map_board(), build_bench(), build_front_seat(), build_steering(),
+            build_pedals(), build_driver(), build_mast_foot()]
 
 
 def export(obj):
@@ -531,7 +549,9 @@ def main():
         bpy.data.objects.remove(o, do_unlink=True)
     os.makedirs(OUT, exist_ok=True)
     objs = build_all()
-    manifest = {}
+    # keep the entries of the meshes other scripts build into the same folder (the radios: build_pu12m_radios.py)
+    path = os.path.join(OUT, 'manifest.json')
+    manifest = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
     for obj in objs:
         export(obj)
         # a reused mesh's centre is in its own frame (the layout adds where each copy stands)

@@ -3,14 +3,18 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "CanvasItem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
+#include "GlobalRenderResources.h"
 #include "SimCabinComponent.h"
+#include "SimOsaVehicle.h"
 #include "simcore/readouts.hpp"
 #include "SimWorldSubsystem.h"
 
@@ -29,11 +33,64 @@ namespace
 	// is the windows reflected in it, which the CRT material adds as a soft highlight).
 	const FLinearColor MonitorGlass(0.04f, 0.045f, 0.042f);
 
+	// The displays' shapes go to the canvas as one list of triangles. Each canvas item costs the render thread a draw of
+	// its own whatever its size, and the scopes were thousands of short lines and little discs a picture: some 100 ms a
+	// frame in the cabin. Lines, rings, discs and dots are gathered here and drawn as one item when something else (text,
+	// a texture, a box) comes, or the picture ends, so they keep their order.
+	struct FShapeBatch
+	{
+		UCanvas* Canvas = nullptr;
+		TArray<FCanvasUVTri> Tris;
+	};
+	FShapeBatch GShapes;
+
+	void FlushShapes()
+	{
+		if (GShapes.Canvas != nullptr && GShapes.Tris.Num() > 0)
+		{
+			FCanvasTriangleItem Item(FVector2D::ZeroVector, FVector2D::ZeroVector, FVector2D::ZeroVector, GWhiteTexture);
+			Item.TriangleList = MoveTemp(GShapes.Tris);
+			Item.BlendMode = SE_BLEND_Translucent;  // as the canvas lines were: the colours carry their own alpha
+			GShapes.Canvas->DrawItem(Item);
+		}
+		GShapes.Tris.Reset();
+		GShapes.Canvas = nullptr;
+	}
+
+	void Tri(UCanvas* Canvas, const FVector2D& A, const FVector2D& B, const FVector2D& C, const FLinearColor& Color)
+	{
+		if (GShapes.Canvas != Canvas)
+		{
+			FlushShapes();
+			GShapes.Canvas = Canvas;
+		}
+		FCanvasUVTri T;
+		T.V0_Pos = A;
+		T.V1_Pos = B;
+		T.V2_Pos = C;
+		T.V0_Color = T.V1_Color = T.V2_Color = Color;
+		GShapes.Tris.Add(T);
+	}
+
+	// A line on a display, as a thin quad (a hairline one pixel wide).
+	void Line(UCanvas* Canvas, const FVector2D& A, const FVector2D& B, float Thickness, const FLinearColor& Color)
+	{
+		const FVector2D Along = B - A;
+		const double Length = Along.Size();
+		if (Length < 1e-6)
+		{
+			return;
+		}
+		const FVector2D Side = FVector2D(-Along.Y, Along.X) / Length * (0.5 * FMath::Max(1.0f, Thickness));
+		Tri(Canvas, A - Side, A + Side, B + Side, Color);
+		Tri(Canvas, A - Side, B + Side, B - Side, Color);
+	}
+
 	// A beam on a phosphor: the bright core and a faint wide halo round it.
 	void Beam(UCanvas* Canvas, const FVector2D& A, const FVector2D& B, float Thickness, const FLinearColor& Color)
 	{
-		Canvas->K2_DrawLine(A, B, Thickness * 3.0f, Color * 0.16f);
-		Canvas->K2_DrawLine(A, B, Thickness, Color);
+		Line(Canvas, A, B, Thickness * 3.0f, Color * 0.16f);
+		Line(Canvas, A, B, Thickness, Color);
 	}
 
 	// Screen point at Angle (clockwise from up) and Radius from Centre; screen Y grows downward.
@@ -42,24 +99,66 @@ namespace
 		return Centre + FVector2D(FMath::Sin(AngleRad), -FMath::Cos(AngleRad)) * Radius;
 	}
 
+	// A ring.
 	void Circle(UCanvas* Canvas, const FVector2D& Centre, double Radius, const FLinearColor& Color, float Thickness = 1.0f)
 	{
-		constexpr int32 Segments = 180;
+		constexpr int32 Segments = 96;
+		const double In = FMath::Max(0.0, Radius - 0.5 * Thickness);
+		const double Out = Radius + 0.5 * Thickness;
 		for (int32 I = 0; I < Segments; ++I)
 		{
 			const double A0 = UE_DOUBLE_TWO_PI * I / Segments;
 			const double A1 = UE_DOUBLE_TWO_PI * (I + 1) / Segments;
-			Canvas->K2_DrawLine(Polar(Centre, A0, Radius), Polar(Centre, A1, Radius), Thickness, Color);
+			const FVector2D I0 = Polar(Centre, A0, In), I1 = Polar(Centre, A1, In), O0 = Polar(Centre, A0, Out), O1 = Polar(Centre, A1, Out);
+			Tri(Canvas, I0, O0, O1, Color);
+			Tri(Canvas, I0, O1, I1, Color);
+		}
+	}
+
+	// A filled polygon (48 sides: a disc; 4: a dot).
+	void Polygon(UCanvas* Canvas, const FVector2D& Centre, double Radius, int32 Sides, const FLinearColor& Color)
+	{
+		for (int32 I = 0; I < Sides; ++I)
+		{
+			Tri(Canvas, Centre, Polar(Centre, UE_DOUBLE_TWO_PI * I / Sides, Radius), Polar(Centre, UE_DOUBLE_TWO_PI * (I + 1) / Sides, Radius),
+				Color);
 		}
 	}
 
 	void Disc(UCanvas* Canvas, const FVector2D& Centre, double Radius, const FLinearColor& Color)
 	{
-		Canvas->K2_DrawPolygon(nullptr, Centre, FVector2D(Radius, Radius), 48, Color);
+		Polygon(Canvas, Centre, Radius, 48, Color);
+	}
+
+	// A sector of the tube from angle A0 to A1 (clockwise from up), Inner to Outer radius.
+	void Wedge(UCanvas* Canvas, const FVector2D& Centre, double A0, double A1, double Inner, double Outer, const FLinearColor& Color)
+	{
+		const FVector2D I0 = Polar(Centre, A0, Inner), I1 = Polar(Centre, A1, Inner), O0 = Polar(Centre, A0, Outer), O1 = Polar(Centre, A1, Outer);
+		Tri(Canvas, I0, O0, O1, Color);
+		Tri(Canvas, I0, O1, I1, Color);
+	}
+
+	// A trace on a phosphor as the eye sees it: a wide faint bloom, a softer shoulder and the bright core (a long
+	// afterglow screen's line is never a hard edge).
+	void Glow(UCanvas* Canvas, const FVector2D& A, const FVector2D& B, float Thickness, const FLinearColor& Color)
+	{
+		Line(Canvas, A, B, Thickness * 5.0f, Color * 0.06f);
+		Line(Canvas, A, B, Thickness * 2.2f, Color * 0.22f);
+		Line(Canvas, A, B, Thickness, Color);
+	}
+
+	// The colour of a В screen's light as it decays (radiolamp_elt: a white flash, a long yellow afterglow), seen through
+	// the amber filter: pale yellow fresh, sinking to amber, at brightness Fresh (1 just struck, 0 gone).
+	FLinearColor SearchGlow(double Fresh)
+	{
+		const float F = static_cast<float>(FMath::Clamp(Fresh, 0.0, 1.0));
+		const FLinearColor Flash(1.0f, 0.95f, 0.72f);
+		return FLinearColor::LerpUsingHSV(Phosphor * 0.8f, Flash, F * F) * F;
 	}
 
 	void Text(UCanvas* Canvas, const FString& S, const FVector2D& At, const FLinearColor& Color, float Scale, bool bCentre = true)
 	{
+		FlushShapes();
 		UFont* Font = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
 		Canvas->K2_DrawText(Font, S, At, FVector2D(Scale, Scale), Color, 0.0f, FLinearColor::Transparent, FVector2D::ZeroVector,
 			bCentre, bCentre);
@@ -79,7 +178,7 @@ namespace
 		{
 			const double X = C.X + I * 0.085 * R;
 			const double Half = FMath::Sqrt(FMath::Max(0.0, R * R - (X - C.X) * (X - C.X))) * 0.96;
-			Canvas->K2_DrawLine(FVector2D(X, C.Y - Half), FVector2D(X, C.Y + Half), 1.0f, AmberGlass * 0.6f);
+			Line(Canvas, FVector2D(X, C.Y - Half), FVector2D(X, C.Y + Half), 1.0f, AmberGlass * 0.6f);
 		}
 	}
 
@@ -168,6 +267,12 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	const FVector C = Centre + Normal * 1.3;
 	const FVector Hr = Right * (0.5 * WidthCm);
 	const FVector Hu = Up * (0.5 * HeightCm);
+	FaceCentre = C;
+	FaceNormal = Normal;
+	FaceRight = Right;
+	FaceUp = Up;
+	FaceWidthCm = WidthCm;
+	FaceHeightCm = HeightCm;
 	TArray<FVector> Vertices = {C - Hr + Hu, C + Hr + Hu, C - Hr - Hu, C + Hr - Hu};
 	TArray<FVector2D> Uv = {FVector2D(0, 0), FVector2D(1, 0), FVector2D(0, 1), FVector2D(1, 1)};
 	TArray<int32> Triangles = {0, 1, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1};
@@ -201,6 +306,26 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 	const int32 W = FMath::Max(16, FMath::RoundToInt32(Pixels * WidthCm / Long));
 	const int32 H = FMath::Max(16, FMath::RoundToInt32(Pixels * HeightCm / Long));
 	Target = UKismetRenderingLibrary::CreateRenderTarget2D(this, W, H, RTF_RGBA8, FLinearColor::Black);
+	// The plotting board is glass, not a tube: its own translucent material (tools/ue_make_glass_material.py), where the
+	// etched lines and the grease pencil lift the opacity of a sheet that is otherwise all but clear.
+	if (Kind == simcore::CabinDisplayKind::PlotBoard)
+	{
+		if (UMaterialInterface* Glass = LoadObject<UMaterialInterface>(nullptr,
+				TEXT("/Game/SAM3D/Cabin/Materials/M_CabinGlassBoard.M_CabinGlassBoard"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			ScreenMaterialBase = Glass;
+		}
+	}
+	// A paper (the radio data, the talk tables) is lit by the cabin like everything round it, not by itself: its own lit,
+	// matt material (tools/ue_make_paper_material.py).
+	if (Kind == simcore::CabinDisplayKind::Document)
+	{
+		if (UMaterialInterface* Paper = LoadObject<UMaterialInterface>(nullptr,
+				TEXT("/Game/SAM3D/Cabin/Materials/M_CabinPaper.M_CabinPaper"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			ScreenMaterialBase = Paper;
+		}
+	}
 	if (ScreenMaterialBase != nullptr && Target != nullptr)
 	{
 		ScreenMaterial = UMaterialInstanceDynamic::Create(ScreenMaterialBase, this);
@@ -211,8 +336,9 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 		const bool bTv = Kind == simcore::CabinDisplayKind::Tv;
 		const float Gain = bTv ? 4.0f
 			: Kind == simcore::CabinDisplayKind::Counters ? 10.0f
-			: Kind == simcore::CabinDisplayKind::PlotBoard ? 3.5f
-			: Kind == simcore::CabinDisplayKind::StatusBoard ? 4.0f : 6.0f;
+			: Kind == simcore::CabinDisplayKind::PlotBoard ? 2.5f
+			: Kind == simcore::CabinDisplayKind::StatusBoard ? 4.0f
+			: Kind == simcore::CabinDisplayKind::Document ? 1.0f : 6.0f;  // paper: its own colour, lit by the cabin
 		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
 			bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f));
 		// The tube's character (M_CabinCRT): curvature, halo (amount, radius), raster lines (strength, count), noise
@@ -342,9 +468,33 @@ void USimCabinDisplayComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 	Super::OnComponentDestroyed(bDestroyingHierarchy);
 }
 
+namespace
+{
+TAutoConsoleVariable<float> CVarCabinDisplayHz(TEXT("sam3d.CabinDisplayHz"), 30.0f,
+	TEXT("How many times a second the cabin's scopes, dials and meters are redrawn while the camera is in the cabin (each is ")
+	TEXT("hundreds of canvas lines on the render thread). Outside the cabin they aren't drawn at all."),
+	ECVF_Default);
+TAutoConsoleVariable<int32> CVarSkipKinds(TEXT("sam3d.CabinDisplaySkipKinds"), 0,
+	TEXT("Debugging: a bit mask of cabin display kinds not to redraw (1 search scope, 2 range scope, 4 elevation scope, 8 TV, ")
+	TEXT("16 dial, 32 meter, 64 counters, 128 IT-45, 256 status board, 512 plot board, 1024 keypad window)."),
+	ECVF_Default);
+TAutoConsoleVariable<float> CVarTvHz(TEXT("sam3d.TvHz"), 15.0f,
+	TEXT("How many times a second the TOV monitor films the world while it is on and the camera is in the cabin (each is a ")
+	TEXT("second rendering of the scene)."),
+	ECVF_Default);
+}
+
+bool USimCabinDisplayComponent::IsSeen() const
+{
+	const ASimOsaVehicle* Vehicle = Cast<ASimOsaVehicle>(GetOwner());
+	return Vehicle == nullptr || Vehicle->IsInCabin();
+}
+
 void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	RedrawSecondsLeft -= DeltaTime;
+	DeltaSinceDraw += DeltaTime;
 	const USimWorldSubsystem* Sim = GetSim();
 	simcore::ScenarioRunner* Runner = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
 	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
@@ -416,6 +566,34 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			Feed.track_returns);
 	}
 
+	// The state above runs every frame (the sweeps and afterglow keep time); the picture only when it is seen, at the set
+	// rate.
+	if (!IsSeen() || RedrawSecondsLeft > 0.0f || (CVarSkipKinds.GetValueOnGameThread() & (1 << static_cast<int32>(Kind))) != 0)
+	{
+		return;
+	}
+	RedrawSecondsLeft = 1.0f / FMath::Max(1.0f, CVarCabinDisplayHz.GetValueOnGameThread());
+	// A picture that hasn't changed since it was drawn stays as it is.
+	uint32 Key = 0;
+	if (ContentKey(Display, Console, bOn, Key))
+	{
+		if (bDrawnKeyValid && Key == DrawnKey)
+		{
+			return;
+		}
+		DrawnKey = Key;
+		bDrawnKeyValid = true;
+	}
+	else
+	{
+		bDrawnKeyValid = false;
+	}
+	if (Kind == simcore::CabinDisplayKind::Ppi && FaceTarget == nullptr)
+	{
+		DrawPpiFace(FVector2D(Target->SizeX, Target->SizeY));
+	}
+	const float DrawDelta = DeltaSinceDraw;
+	DeltaSinceDraw = 0.0f;
 	// The range indicator's dead glass is pale like the TV's (opisybroni 54539); the tubes and dials paint their own.
 	UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, Kind == simcore::CabinDisplayKind::RangeScope && !bOn ? MonitorGlass : FLinearColor::Black);
 	UCanvas* Canvas = nullptr;
@@ -448,7 +626,7 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			DrawAspdScope(Canvas, Size, Display, Sim->GetPostFeed(), bOn);
 			break;
 		case simcore::CabinDisplayKind::StatusBoard:
-			DrawStatusBoard(Canvas, Size, Sim->GetPostFeed(), bOn, DeltaTime);
+			DrawStatusBoard(Canvas, Size, Sim->GetPostFeed(), bOn, DrawDelta);
 			break;
 		case simcore::CabinDisplayKind::PlotBoard:
 			DrawPlotBoard(Canvas, Size, Sim->GetPostFeed(), bOn);
@@ -456,14 +634,77 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		case simcore::CabinDisplayKind::KeypadWindow:
 			DrawKeypadWindow(Canvas, Size, Sim->GetPostFeed(), bOn);
 			break;
+		case simcore::CabinDisplayKind::Document:
+			DrawDocument(Canvas, Size, Sim->GetDocumentLines(UTF8_TO_TCHAR(Display.document.c_str())));
+			break;
 		case simcore::CabinDisplayKind::Tv:
 			break;
 		}
 	}
+	FlushShapes();
 	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
 }
 
+bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display, const simcore::ConsoleData& Console, bool bOn, uint32& Key) const
+{
+	Key = GetTypeHash(bOn);
+	switch (Kind)
+	{
+	case simcore::CabinDisplayKind::Dial:
+		Key = HashCombine(Key, GetTypeHash(simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment)));
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Console.panel.GetValue(Display.control) * 100.0)));
+		return true;
+	case simcore::CabinDisplayKind::Meter:
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console) * 1000.0)));
+		return true;
+	case simcore::CabinDisplayKind::Ppi:
+		// Off: the dead tube behind its filter, with the scale round it.
+		return !bOn;
+	case simcore::CabinDisplayKind::RangeScope:
+	case simcore::CabinDisplayKind::ElevationScope:
+		return !bOn;
+	case simcore::CabinDisplayKind::Document:
+		return true;  // the paper doesn't change
+	default:
+		return false;
+	}
+}
+
 // ---------------------------------------------------------------------------------------------- search scope
+
+void USimCabinDisplayComponent::DrawPpiFace(const FVector2D& Size)
+{
+	FaceTarget = UKismetRenderingLibrary::CreateRenderTarget2D(this, FMath::RoundToInt32(Size.X), FMath::RoundToInt32(Size.Y), RTF_RGBA8,
+		FLinearColor::Black);
+	if (FaceTarget == nullptr)
+	{
+		return;
+	}
+	UCanvas* Canvas = nullptr;
+	FVector2D FaceSize;
+	FDrawToRenderTargetContext Context;
+	UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(this, FaceTarget, Canvas, FaceSize, Context);
+	if (Canvas != nullptr)
+	{
+		const FVector2D C = FaceSize * 0.5;
+		const double S = FMath::Min(FaceSize.X, FaceSize.Y);
+		// The azimuth scale around the tube, as on OP81-16M (samsim_panels): 0 to 59 clockwise from the top (hundreds of
+		// thousandths, 6000 to the circle), light marks on a dark ring, with a tick every half division.
+		const FLinearColor ScaleInk(0.32f, 0.32f, 0.3f);
+		Disc(Canvas, C, 0.5 * S, FLinearColor(0.012f, 0.012f, 0.012f));
+		for (int32 I = 0; I < 120; ++I)
+		{
+			const double A = UE_DOUBLE_TWO_PI * I / 120.0;
+			Line(Canvas, Polar(C, A, 0.437 * S), Polar(C, A, (I % 2 == 0 ? 0.452 : 0.446) * S), 1.0f, ScaleInk);
+		}
+		for (int32 I = 0; I < 60; ++I)
+		{
+			Text(Canvas, FString::FromInt(I), Polar(C, UE_DOUBLE_TWO_PI * I / 60.0, 0.474 * S), ScaleInk, 0.8f);
+		}
+	}
+	FlushShapes();
+	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
+}
 
 void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
 	simcore::ScenarioRunner& Runner, bool bOn)
@@ -471,18 +712,12 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	const FVector2D C = Size * 0.5;
 	const double S = FMath::Min(Size.X, Size.Y);
 	const double R = 0.43 * S;
-	// The azimuth scale around the tube, as on OP81-16M (samsim_panels): 0 to 59 clockwise from the top (hundreds of
-	// thousandths, 6000 to the circle), light marks on a dark ring, with a tick every half division.
-	const FLinearColor ScaleInk(0.32f, 0.32f, 0.3f);
-	Disc(Canvas, C, 0.5 * S, FLinearColor(0.012f, 0.012f, 0.012f));
-	for (int32 I = 0; I < 120; ++I)
+	// The fixed face (the azimuth scale), drawn once (DrawPpiFace).
+	if (FaceTarget != nullptr)
 	{
-		const double A = UE_DOUBLE_TWO_PI * I / 120.0;
-		Canvas->K2_DrawLine(Polar(C, A, 0.437 * S), Polar(C, A, (I % 2 == 0 ? 0.452 : 0.446) * S), 1.0f, ScaleInk);
-	}
-	for (int32 I = 0; I < 60; ++I)
-	{
-		Text(Canvas, FString::FromInt(I), Polar(C, UE_DOUBLE_TWO_PI * I / 60.0, 0.474 * S), ScaleInk, 0.8f);
+		FlushShapes();
+		Canvas->K2_DrawTexture(FaceTarget, FVector2D::ZeroVector, Size, FVector2D::ZeroVector, FVector2D::UnitVector, FLinearColor::White,
+			BLEND_Opaque);
 	}
 	if (!bOn)
 	{
@@ -505,31 +740,105 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	const double Span = FMath::Max(1.0, MaxM - MinM);
 	auto RadiusOf = [&](double RangeM) { return (RangeM - MinM) / Span * R; };
 
-	// Range rings for the scale (the console's list, as the operators describe the scope), bearing ticks every 30 degrees.
+	// The sweep, counted round: everything it paints fades from when it passed.
+	const bool bTurning = Console.equipment.IsReady(Search.antenna);
+	const double Sweep = Scope->SweepAzimuthRad();
+	if (bPpiSweepKnown)
+	{
+		double Step = FMath::Fmod(Sweep - PpiLastSweepRad, UE_DOUBLE_TWO_PI);
+		if (Step < 0.0)
+		{
+			Step += UE_DOUBLE_TWO_PI;
+		}
+		PpiTurns += Step / UE_DOUBLE_TWO_PI;
+	}
+	PpiLastSweepRad = Sweep;
+	bPpiSweepKnown = true;
+	const double Period = FMath::Max(0.5, Display.sweep_period_s);
+	const double Persist = FMath::Max(0.3, Display.afterglow_s);
+	// How long ago the sweep passed an azimuth (s), and how bright what it painted there still is (0..1).
+	auto AgeAt = [&](double A)
+	{
+		double Behind = FMath::Fmod(Sweep - A, UE_DOUBLE_TWO_PI);
+		if (Behind < 0.0)
+		{
+			Behind += UE_DOUBLE_TWO_PI;
+		}
+		return Behind / UE_DOUBLE_TWO_PI * Period;
+	};
+	auto Left = [&](double A) { return bTurning ? FMath::Exp(-AgeAt(A) / Persist) : 0.35; };
+
+	const bool bRadiating = Console.equipment.IsReady(Search.transmitter) && Console.equipment.IsReady(Search.antenna);
+	// The swept face still faintly lit behind the sweep, darkest just ahead of it (the screen's own glow: noise and the
+	// defocused trace spread over the phosphor).
+	constexpr int32 Sectors = 90;
+	if (bTurning)
+	{
+		for (int32 K = 0; K < Sectors; ++K)
+		{
+			const double A0 = Sweep - UE_DOUBLE_TWO_PI * (K + 1) / Sectors;
+			const double A1 = Sweep - UE_DOUBLE_TWO_PI * K / Sectors;
+			const double Fresh = FMath::Exp(-(Period * (K + 0.5) / Sectors) / Persist);
+			Wedge(Canvas, C, A0, A1, 0.0, R, Phosphor * static_cast<float>((bRadiating ? 0.07 : 0.03) * Fresh));
+		}
+	}
+
+	// The range marks for the scale (the console's list, as the operators describe the scope; roadmap 6.4): painted by
+	// the sweep as it passes, fading behind it.
 	for (const double K : simcore::ScopeRingsM(Search, ScaleIndex))
 	{
-		if (K > MinM && K <= MaxM + 1.0)
+		if (K <= MinM || K > MaxM + 1.0)
 		{
-			Circle(Canvas, C, RadiusOf(K), Phosphor * 0.3f, 1.6f);
+			continue;
+		}
+		const double Rr = RadiusOf(K);
+		for (int32 I = 0; I < Sectors; ++I)
+		{
+			const double A0 = UE_DOUBLE_TWO_PI * I / Sectors;
+			const double A1 = UE_DOUBLE_TWO_PI * (I + 1) / Sectors;
+			const double Fresh = Left(0.5 * (A0 + A1));
+			Wedge(Canvas, C, A0, A1, Rr - 2.2, Rr + 2.2, Phosphor * static_cast<float>(0.05 * Fresh));
+			Wedge(Canvas, C, A0, A1, Rr - 0.8, Rr + 0.8, SearchGlow(0.12 + 0.55 * Fresh) * 0.8f);
+		}
+	}
+
+	// Receiver noise: a speckle the sweep lays down while it radiates, each grain where it fell until the sweep comes round
+	// again (seeded by the sweep's pass over its sector), fading with the afterglow. Ground clutter round the centre
+	// without MTI (picture only; the model hides low targets in it).
+	const bool bMti = !Search.mti_control.empty() && Console.panel.Get(Search.mti_control) == 1;
+	if (bRadiating)
+	{
+		const double ClutterR = MinM <= 0.0 && !bMti ? RadiusOf(4000.0) : 0.0;
+		for (int32 K = 0; K < Sectors; ++K)
+		{
+			const double A0 = UE_DOUBLE_TWO_PI * K / Sectors;
+			const double Fresh = Left(A0 + 0.5 * UE_DOUBLE_TWO_PI / Sectors);
+			if (Fresh < 0.04)
+			{
+				continue;
+			}
+			// The pass that painted this sector: the sweep's turns, less how far behind it the sector lies.
+			const int32 Pass = FMath::FloorToInt32(PpiTurns - AgeAt(A0) / Period + 1e-6);
+			FRandomStream Grain(K * 7919 + Pass * 104729);
+			for (int32 I = 0; I < 14; ++I)
+			{
+				const double A = A0 + Grain.FRand() * UE_DOUBLE_TWO_PI / Sectors;
+				const double Rr = R * FMath::Sqrt(Grain.FRand());
+				const float Spark = Grain.FRandRange(0.15f, 0.55f);
+				Polygon(Canvas, Polar(C, A, Rr), 1.1, 4, SearchGlow(Fresh * Spark));
+			}
+			for (int32 I = 0; ClutterR > 0.0 && I < 4; ++I)
+			{
+				const double A = A0 + Grain.FRand() * UE_DOUBLE_TWO_PI / Sectors;
+				const FVector2D P = Polar(C, A, ClutterR * FMath::Sqrt(Grain.FRand()));
+				Polygon(Canvas, P, 1.5, 4, SearchGlow(Fresh * Grain.FRandRange(0.25f, 0.6f)) * 0.8f);  // speckle, never a solid patch
+			}
 		}
 	}
 	for (int32 I = 0; I < 12; ++I)
 	{
 		const double A = UE_DOUBLE_TWO_PI * I / 12.0;
-		Canvas->K2_DrawLine(Polar(C, A, R * 0.95), Polar(C, A, R), 1.5f, Phosphor * 0.5f);
-	}
-
-	const bool bRadiating = Console.equipment.IsReady(Search.transmitter) && Console.equipment.IsReady(Search.antenna);
-	const bool bMti = !Search.mti_control.empty() && Console.panel.Get(Search.mti_control) == 1;
-	if (bRadiating && !bMti && MinM <= 0.0)
-	{
-		// Ground clutter around the centre without MTI (picture only; the model hides low targets in it).
-		const double ClutterR = RadiusOf(4000.0);
-		for (int32 I = 0; I < 90; ++I)
-		{
-			const FVector2D P = Polar(C, Noise.FRandRange(0.0, UE_DOUBLE_TWO_PI), ClutterR * FMath::Sqrt(Noise.FRand()));
-			Canvas->K2_DrawPolygon(nullptr, P, FVector2D(1.5, 1.5), 4, Phosphor * Noise.FRandRange(0.2f, 0.7f));
-		}
+		Line(Canvas, Polar(C, A, R * 0.95), Polar(C, A, R), 1.5f, Phosphor * 0.35f);
 	}
 
 	// Fading echoes, and IFF replies as arcs just beyond the echo: 20 degrees wide in open reception, narrow when
@@ -541,16 +850,12 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		{
 			// A noise jammer's strobe (roadmap E3): a grainy bright spoke along its azimuth across the whole scale, as
 			// bright as the jamming is strong; it has no range.
-			const float Glow = static_cast<float>(B.brightness);
-			for (int32 K = -2; K <= 2; ++K)
+			const float Strength = static_cast<float>(B.brightness);
+			Glow(Canvas, C, Polar(C, B.azimuth_rad, R), 2.5f, SearchGlow(0.9) * Strength);
+			for (int32 I = 0; I < 40; ++I)
 			{
-				const double A = B.azimuth_rad + FMath::DegreesToRadians(0.6 * K);
-				Canvas->K2_DrawLine(C, Polar(C, A, R), K == 0 ? 3.0f : 1.5f, Phosphor * (Glow * (K == 0 ? 0.9f : 0.4f)));
-			}
-			for (int32 I = 0; I < 28; ++I)
-			{
-				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-0.015, 0.015), R * Noise.FRand());
-				Canvas->K2_DrawPolygon(nullptr, P, FVector2D(1.5, 1.5), 4, Phosphor * (Glow * Noise.FRandRange(0.3f, 1.0f)));
+				const FVector2D P = Polar(C, B.azimuth_rad + Noise.FRandRange(-0.02, 0.02), R * Noise.FRand());
+				Polygon(Canvas, P, 1.3, 4, SearchGlow(Noise.FRandRange(0.4f, 1.0f)) * Strength);
 			}
 			continue;
 		}
@@ -558,38 +863,36 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		{
 			continue;
 		}
+		const float Strength = static_cast<float>(B.brightness);
 		if (B.iff_reply)
 		{
 			const double Half = FMath::DegreesToRadians(bGated ? 2.0 : 10.0);
-			const float Glow = static_cast<float>(B.brightness);
 			for (int32 Arc = 0; Arc < (B.control_reply ? 2 : 1); ++Arc)
 			{
 				const double Rr = RadiusOf(B.range_m) + 9.0 + 5.0 * Arc;
-				for (int32 I = 0; I < 8; ++I)
-				{
-					const double A0 = B.azimuth_rad - Half + 2.0 * Half * I / 8.0;
-					const double A1 = B.azimuth_rad - Half + 2.0 * Half * (I + 1) / 8.0;
-					Canvas->K2_DrawLine(Polar(C, A0, Rr), Polar(C, A1, Rr), 2.0f, Phosphor * Glow);
-				}
+				Wedge(Canvas, C, B.azimuth_rad - Half, B.azimuth_rad + Half, Rr - 3.0, Rr + 3.0, Phosphor * (0.12f * Strength));
+				Wedge(Canvas, C, B.azimuth_rad - Half, B.azimuth_rad + Half, Rr - 1.0, Rr + 1.0, SearchGlow(Strength));
 			}
 			continue;
 		}
-		// A bright arc-shaped smear when fresh, fading with the afterglow.
-		const float Glow = static_cast<float>(B.brightness);
-		const FVector2D P = Polar(C, B.azimuth_rad, RadiusOf(B.range_m));
-		Disc(Canvas, P, 7.0, Phosphor * (0.35f * Glow));
-		Disc(Canvas, P, 4.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+		// The echo: a short arc as wide as the beam and as deep as the pulse, a white flash when struck sinking through
+		// yellow to amber, with the bloom of an overdriven spot round it.
+		const double Rr = RadiusOf(B.range_m);
+		const double HalfBeam = FMath::DegreesToRadians(1.2);
+		Wedge(Canvas, C, B.azimuth_rad - 2.5 * HalfBeam, B.azimuth_rad + 2.5 * HalfBeam, Rr - 7.0, Rr + 7.0, Phosphor * (0.07f * Strength));
+		Wedge(Canvas, C, B.azimuth_rad - 1.6 * HalfBeam, B.azimuth_rad + 1.6 * HalfBeam, Rr - 3.5, Rr + 3.5, SearchGlow(Strength) * 0.45f);
+		Wedge(Canvas, C, B.azimuth_rad - HalfBeam, B.azimuth_rad + HalfBeam, Rr - 1.6, Rr + 1.6, SearchGlow(Strength));
 	}
 
-	// The sweep, with a short fading trail.
-	if (Console.equipment.IsReady(Search.antenna))
+	// The sweep: the bright trace itself, with the freshly struck phosphor glowing just behind it.
+	if (bTurning)
 	{
-		const double Sweep = Scope->SweepAzimuthRad();
-		for (int32 I = 6; I >= 0; --I)
+		for (int32 I = 4; I >= 1; --I)
 		{
-			const double A = Sweep - FMath::DegreesToRadians(2.5 * I);
-			Beam(Canvas, C, Polar(C, A, R), 2.0f, Phosphor * (I == 0 ? 0.9f : 0.25f / I));
+			const double A = Sweep - FMath::DegreesToRadians(0.8 * I);
+			Line(Canvas, C, Polar(C, A, R), 2.0f, SearchGlow(0.55 / I) * 0.5f);
 		}
+		Glow(Canvas, C, Polar(C, Sweep, R), 1.8f, SearchGlow(1.0) * (bRadiating ? 0.95f : 0.6f));
 	}
 
 	// The SSC azimuth line and its range gate, which the range officer puts on the target mark.
@@ -597,12 +900,12 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 	{
 		const simcore::TrackSensorDef& Track = Console.track;
 		const double Az = FMath::DegreesToRadians(Console.panel.GetValue(Track.az_wheel));
-		Canvas->K2_DrawLine(C, Polar(C, Az, R), 1.5f, Amber * 0.7f);
+		Line(Canvas, C, Polar(C, Az, R), 1.5f, Amber * 0.7f);
 		const double Gate = Console.panel.GetValue(Track.range_wheel);
 		if (Gate >= MinM && Gate <= MaxM)
 		{
 			const double Rg = RadiusOf(Gate);
-			Canvas->K2_DrawLine(Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber);
+			Line(Canvas, Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber);
 		}
 	}
 }
@@ -647,17 +950,32 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			for (double M = FMath::CeilToDouble(FromM / TickM) * TickM; M <= ToM; M += TickM)
 			{
 				const bool bMajor = FMath::Fmod(FMath::RoundToDouble(M / TickM), 5.0) < 0.5;
-				Canvas->K2_DrawLine(FVector2D(XOf(M), Y + 3.0), FVector2D(XOf(M), Y + (bMajor ? 11.0 : 7.0)), 1.0f, TraceGreen * 0.4f);
+				Line(Canvas, FVector2D(XOf(M), Y + 3.0), FVector2D(XOf(M), Y + (bMajor ? 11.0 : 7.0)), 1.0f, TraceGreen * 0.4f);
 			}
 		}
-		double PrevX = X0;
-		double PrevY = Y;
-		for (double X = X0; X <= X1; X += 3.0)
+		// The baseline and its grass: the noise differs every sweep, the phosphor keeps the last few, so the eye sees a
+		// fuzzy band with the newest sweep brightest on it (ap3302: "the centreline is not sharp due to the presence of
+		// noise"); an echo stands in the same place sweep after sweep.
+		for (int32 Back = 3; Back >= 0; --Back)
 		{
-			const double Ny = bRadiating ? Noise.FRandRange(0.0, 3.0) : 0.0;
-			Beam(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.2f, TraceGreen * 0.8f);
-			PrevX = X;
-			PrevY = Y - Ny;
+			FRandomStream Grass((RangeSweeps - Back) * 7919 + static_cast<int32>(Y));
+			const float Fade = Back == 0 ? 1.0f : 0.35f / Back;
+			double PrevX = X0;
+			double PrevY = Y;
+			for (double X = X0; X <= X1; X += 2.5)
+			{
+				const double Ny = bRadiating ? Grass.FRandRange(0.0, 1.0) * Grass.FRandRange(0.0, 9.0) : 0.0;
+				if (Back == 0)
+				{
+					Glow(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.6f, TraceGreen);
+				}
+				else
+				{
+					Line(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.0f, TraceGreen * (0.5f * Fade));
+				}
+				PrevX = X;
+				PrevY = Y - Ny;
+			}
 		}
 		auto Spike = [&](double RangeM)
 		{
@@ -665,9 +983,13 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			{
 				return;
 			}
+			// A pulse: its rise and fall a few pixels apart, the top a little rounded, slightly different each
+			// sweep (the receiver's noise rides on it).
 			const double X = XOf(RangeM);
-			Beam(Canvas, FVector2D(X - 3.0, Y), FVector2D(X, Y - SpikeH), 1.6f, TraceGreen);
-			Beam(Canvas, FVector2D(X, Y - SpikeH), FVector2D(X + 3.0, Y), 1.6f, TraceGreen);
+			const double H = SpikeH * Noise.FRandRange(0.93, 1.0);
+			Glow(Canvas, FVector2D(X - 4.0, Y), FVector2D(X - 1.5, Y - H), 1.4f, TraceGreen);
+			Glow(Canvas, FVector2D(X - 1.5, Y - H), FVector2D(X + 1.5, Y - H * 0.97), 1.4f, TraceGreen);
+			Glow(Canvas, FVector2D(X + 1.5, Y - H * 0.97), FVector2D(X + 4.0, Y), 1.4f, TraceGreen);
 		};
 		if (bMissileSweep)
 		{
@@ -688,14 +1010,15 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 		{
 			if (!bMissileSweep && M >= FromM && M <= ToM)
 			{
-				Canvas->K2_DrawLine(FVector2D(XOf(M), Y + 2.0), FVector2D(XOf(M), Y + 12.0), 2.0f, Amber);
+				Line(Canvas, FVector2D(XOf(M), Y + 2.0), FVector2D(XOf(M), Y + 12.0), 2.0f, Amber);
 			}
 		}
 	};
+	++RangeSweeps;  // a new pair of sweeps each picture (the tube's own sweeps are far faster than the redraw)
 	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false);
 	const double Half = 0.5 * Display.magnified_window_m;
 	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0);
-	Canvas->K2_DrawLine(FVector2D(0.5 * Size.X, 0.6 * Size.Y), FVector2D(0.5 * Size.X, 0.88 * Size.Y), 1.0f, Amber * 0.5f);
+	Line(Canvas, FVector2D(0.5 * Size.X, 0.6 * Size.Y), FVector2D(0.5 * Size.X, 0.88 * Size.Y), 1.0f, Amber * 0.5f);
 
 	// The range counter: where the gate is (it follows the target while tracking in range), as five lit drum digits
 	// like the readout strip's, not a text line painted on the picture.
@@ -706,7 +1029,7 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	{
 		// each digit in its own lit cell: a vertical bar CellW wide, with a gap to the next
 		const FVector2D At(0.5 * Size.X + (I - 2) * CellW * 1.4, 0.1 * Size.Y);
-		Canvas->K2_DrawLine(At - FVector2D(0.0, 0.5 * (CellH - CellW)), At + FVector2D(0.0, 0.5 * (CellH - CellW)),
+		Line(Canvas, At - FVector2D(0.0, 0.5 * (CellH - CellW)), At + FVector2D(0.0, 0.5 * (CellH - CellW)),
 			static_cast<float>(CellW), Amber * 0.85f);
 		Text(Canvas, Digits.Mid(I, 1), At, FLinearColor(0.12f, 0.05f, 0.01f), 2.0f);
 	}
@@ -743,30 +1066,72 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	};
 	auto XOfOffset = [&](double OffsetM) { return C.X + OffsetM / (0.5 * Display.range_window_m) * Half; };
 
-	// The raster: faint horizontal lines over the beam's band, with its outline.
-	for (double Y = Top; Y <= Bottom; Y += 4.0)
+	// The tube's face lit faintly from behind the amber filter, darker to the rim (the dead tube's filter, lit).
+	for (int32 I = 0; I < 6; ++I)
 	{
-		Canvas->K2_DrawLine(FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * 0.1f);
+		Disc(Canvas, C, R * (0.98 - 0.12 * I), Phosphor * (0.012f + 0.008f * I));
 	}
-	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
-	Canvas->K2_DrawLine(FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
-	Canvas->K2_DrawLine(FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
-	Canvas->K2_DrawLine(FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
-	// The range gate sits in the middle of the range window.
-	Canvas->K2_DrawLine(FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
-
-	// Where the antenna points now: a brighter line while the tracking radar radiates.
 	const bool bRadiating = Console.has_sensors && Console.equipment.IsReady(Console.track.transmitter);
-	const double AntennaY = YOfEl(Feed.antenna_el_deg);
-	Canvas->K2_DrawLine(FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 3.0f, Phosphor * (bRadiating ? 1.0f : 0.45f));
+	++ElevFrames;
+	// The raster: the scan lines across the beam's band, each a little brighter or dimmer than its neighbour (a raster
+	// on a long-persistence В screen is never even), and while the radar radiates, the receiver's noise on them as short
+	// flecks that change every picture (the same "grass" as the range sweep's, drawn as the raster writes it).
+	FRandomStream Grass((ElevFrames / 2) * 4099 + LayoutIndex);
+	int32 Row = 0;
+	for (double Y = Top; Y <= Bottom; Y += 4.0, ++Row)
+	{
+		const float Even = 0.07f + 0.04f * static_cast<float>((Row * 37) % 5) / 4.0f;
+		Line(Canvas, FVector2D(Left, Y), FVector2D(Right, Y), 1.0f, Phosphor * Even);
+		if (!bRadiating)
+		{
+			continue;
+		}
+		const int32 Flecks = Grass.RandRange(1, 4);
+		for (int32 K = 0; K < Flecks; ++K)
+		{
+			const double X = Grass.FRandRange(Left, Right - 6.0);
+			const double W = Grass.FRandRange(2.0, 7.0);
+			Line(Canvas, FVector2D(X, Y), FVector2D(X + W, Y), 1.2f, SearchGlow(Grass.FRandRange(0.15, 0.4)));
+		}
+	}
+	// The band's edges and the range marks: engraved on the filter, so seen in the tube's own light only faintly.
+	Line(Canvas, FVector2D(Left, Top), FVector2D(Right, Top), 1.5f, Phosphor * 0.28f);
+	Line(Canvas, FVector2D(Left, Bottom), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	Line(Canvas, FVector2D(Left, Top), FVector2D(Left, Bottom), 1.5f, Phosphor * 0.28f);
+	Line(Canvas, FVector2D(Right, Top), FVector2D(Right, Bottom), 1.5f, Phosphor * 0.28f);
+	for (int32 I = -2; I <= 2; ++I)
+	{
+		const double X = C.X + I * 0.5 * Half;
+		Line(Canvas, FVector2D(X, Bottom + 2.0), FVector2D(X, Bottom + (I == 0 ? 9.0 : 5.0)), 1.0f, Phosphor * 0.3f);
+	}
+	// The range gate sits in the middle of the range window.
+	Line(Canvas, FVector2D(C.X, Bottom), FVector2D(C.X, Bottom + 6.0), 1.5f, Amber * 0.6f);
 
-	// Target marks: bright spots fading with the afterglow.
+	// Where the antenna points now: the raster's brightest line, with the phosphor's bloom round it, while the tracking
+	// radar radiates; a dim line otherwise.
+	const double AntennaY = YOfEl(Feed.antenna_el_deg);
+	if (bRadiating)
+	{
+		Glow(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.4f, SearchGlow(0.85));
+	}
+	else
+	{
+		Line(Canvas, FVector2D(Left, AntennaY), FVector2D(Right, AntennaY), 2.0f, Phosphor * 0.35f);
+	}
+
+	// Target marks: a blip drawn along the raster's lines (the echo is as long as the pulse, a few lines high), struck
+	// pale yellow and sinking to amber with the afterglow.
 	for (const simcore::ElevationScope::Mark& M : ElevScope->Marks())
 	{
-		const float Glow = static_cast<float>(M.brightness);
+		const double Fresh = M.brightness;
 		const FVector2D P(XOfOffset(M.range_offset_m), YOfEl(M.elevation_deg));
-		Disc(Canvas, P, 9.0, Phosphor * (0.5f * Glow));
-		Disc(Canvas, P, 5.0, FLinearColor::LerpUsingHSV(Phosphor, FLinearColor::White, 0.5f) * Glow);
+		const FLinearColor Ink = SearchGlow(Fresh);
+		Disc(Canvas, P, 11.0, Ink * 0.12f);
+		for (int32 L = -2; L <= 2; ++L)
+		{
+			const double W = (L == 0 ? 9.0 : L == 1 || L == -1 ? 7.0 : 4.0);
+			Glow(Canvas, P + FVector2D(-W, 2.0 * L), P + FVector2D(W, 2.0 * L), 1.4f, Ink * (L == 0 ? 1.0f : 0.7f));
+		}
 	}
 }
 
@@ -785,7 +1150,7 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 	for (int32 I = 0; I < Display.marks; ++I)
 	{
 		const double A = UE_DOUBLE_TWO_PI * I / Display.marks;
-		Canvas->K2_DrawLine(Polar(C, A, 0.85 * R), Polar(C, A, R), 2.0f, Ink);
+		Line(Canvas, Polar(C, A, 0.85 * R), Polar(C, A, R), 2.0f, Ink);
 		Text(Canvas, Label(Display.labels_per_turn * I / Display.marks), Polar(C, A, 0.68 * R), Ink, 1.3f);
 	}
 	if (!bOn)
@@ -794,7 +1159,7 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 	}
 	// A control's value, or for a readout dial (the OR-31M Qc scale) the simulation's, from the feed (the server's on a client).
 	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) / Display.value_per_turn;
-	Canvas->K2_DrawLine(C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
+	Line(Canvas, C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
 	Disc(Canvas, C, 0.06 * R, Ink);
 }
 
@@ -804,22 +1169,22 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 	const FLinearColor Face(0.8f, 0.78f, 0.7f);
 	const FLinearColor Ink(0.05f, 0.05f, 0.05f);
 	// Fill the face: one line as thick as the face is tall.
-	Canvas->K2_DrawLine(FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y), Face);
+	Line(Canvas, FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y), Face);
 	const FVector2D Pivot(0.5 * Size.X, 0.92 * Size.Y);
 	const double R = 0.75 * Size.Y;
 	constexpr double SwingDeg = 50.0;
 	for (int32 I = 0; I <= Display.marks; ++I)
 	{
 		const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * I / Display.marks);
-		Canvas->K2_DrawLine(Polar(Pivot, A, 0.88 * R), Polar(Pivot, A, R), 2.0f, Ink);
+		Line(Canvas, Polar(Pivot, A, 0.88 * R), Polar(Pivot, A, R), 2.0f, Ink);
 		Text(Canvas, Label(Display.full_scale * I / Display.marks), Polar(Pivot, A, 0.75 * R), Ink, 1.2f);
 	}
 	Text(Canvas, FString::Printf(TEXT("%s  %s"), *FString(UTF8_TO_TCHAR(Display.label.c_str())), *FString(UTF8_TO_TCHAR(Display.unit.c_str()))),
 		FVector2D(0.5 * Size.X, 0.55 * Size.Y), Ink, 1.3f);
-	const double Reading = bOn ? Console.panel.GetValue(Display.control) * Display.scale : 0.0;
+	const double Reading = bOn ? simcore::MeterValue(Display, Console) : 0.0;
 	const double Fraction = FMath::Clamp(Reading / Display.full_scale, 0.0, 1.0);
 	const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * Fraction);
-	Canvas->K2_DrawLine(Pivot, Polar(Pivot, A, 0.95 * R), 2.5f, FLinearColor(0.7f, 0.05f, 0.02f));
+	Line(Canvas, Pivot, Polar(Pivot, A, 0.95 * R), 2.5f, FLinearColor(0.7f, 0.05f, 0.02f));
 }
 
 // ---------------------------------------------------------------------------------------------- readout strip
@@ -831,7 +1196,7 @@ void USimCabinDisplayComponent::DrawCounters(UCanvas* Canvas, const FVector2D& S
 	// tools/cabin_textures.py), each reading its place's value (simcore/readouts.hpp). Unpowered, the lamps are dark and
 	// the digits unreadable.
 	const simcore::ConsoleData& Console = Runner.Console();
-	Canvas->K2_DrawLine(FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y),
+	Line(Canvas, FVector2D(0.0, 0.5 * Size.Y), FVector2D(Size.X, 0.5 * Size.Y), static_cast<float>(Size.Y),
 		FLinearColor(0.74f, 0.72f, 0.66f));
 	const double Pitch = 0.88 * Size.X / 8.0;
 	const double Dia = FMath::Min(0.84 * Size.Y, 0.8 * Pitch);
@@ -902,7 +1267,7 @@ namespace
 				}
 				else
 				{
-					Canvas->K2_DrawLine(Ends[S][0], Ends[S][1], Thickness, Color);
+					Line(Canvas, Ends[S][0], Ends[S][1], Thickness, Color);
 				}
 			}
 		}
@@ -919,6 +1284,7 @@ namespace
 
 	void Fill(UCanvas* Canvas, const FVector2D& At, const FVector2D& Size, const FLinearColor& Color)
 	{
+		FlushShapes();
 		Canvas->K2_DrawTexture(nullptr, At, Size, FVector2D::ZeroVector, FVector2D::UnitVector, Color, BLEND_Opaque);
 	}
 
@@ -974,7 +1340,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			{
 				const double A0 = UE_DOUBLE_TWO_PI * I / RingSegments;
 				const double A1 = UE_DOUBLE_TWO_PI * (I + 1) / RingSegments;
-				Canvas->K2_DrawLine(Polar(C, A0, Rr), Polar(C, A1, Rr), 1.5f, OnFace(Afterglow(BrightAt(0.5 * (A0 + A1))) * 0.16f));
+				Line(Canvas, Polar(C, A0, Rr), Polar(C, A1, Rr), 1.5f, OnFace(Afterglow(BrightAt(0.5 * (A0 + A1))) * 0.16f));
 			}
 		}
 
@@ -1002,7 +1368,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 				{
 					const double Aa = A + Speckle.FRandRange(-0.5, 0.5) * UE_DOUBLE_TWO_PI / Bins;
 					const FVector2D P = Polar(C, Aa, R * FMath::Sqrt(Speckle.FRand()));
-					Canvas->K2_DrawPolygon(nullptr, P, FVector2D(1.2, 1.2), 4, OnFace(Afterglow(B) * Speckle.FRandRange(0.04f, 0.16f)));
+					Polygon(Canvas, P, 1.2, 4, OnFace(Afterglow(B) * Speckle.FRandRange(0.04f, 0.16f)));
 				}
 			}
 			for (const simcore::CommandPost::ScopeMark& M : Post.scope)
@@ -1027,21 +1393,25 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 		for (int32 I = 12; I >= 1; --I)
 		{
 			const double A = AspdSweepRad - FMath::DegreesToRadians(0.6 * I);
-			Canvas->K2_DrawLine(C, Polar(C, A, R), 2.0f, OnFace(Afterglow(BrightAt(A)) * (0.05f / I)));
+			Line(Canvas, C, Polar(C, A, R), 2.0f, OnFace(Afterglow(BrightAt(A)) * (0.05f / I)));
 		}
-		Canvas->K2_DrawLine(C, Polar(C, AspdSweepRad, R), 1.5f, OnFace(AspdFlash * 0.3f));
+		Line(Canvas, C, Polar(C, AspdSweepRad, R), 1.5f, OnFace(AspdFlash * 0.3f));
 
 		// The character generator's symbols.
 		const int32 KeypadTarget = Post.keypad.empty() ? -1 : FCString::Atoi(UTF8_TO_TCHAR(Post.keypad.c_str()));
 		for (const simcore::CommandPost::ScopeMark& M : Post.scope)
 		{
+			if (M.number < 0)
+			{
+				continue;  // the ФР block's imitated echo not yet taken off: only its echo
+			}
 			const bool bMarked = M.number == Post.marked;
 			const bool bKeyed = M.number == KeypadTarget;
 			const FVector2D At = ScreenOf(M.x, M.y);
 			const FVector2D Tip = At + FVector2D(M.vx, -M.vy) * R;
 			const FLinearColor Ink = OnFace(AspdSymbol * (bMarked || bKeyed ? 0.9f : (M.friendly ? 0.4f : 0.6f)));
 			const float T = bMarked ? 2.2f : 1.5f;
-			Canvas->K2_DrawLine(At, Tip, T, Ink);
+			Line(Canvas, At, Tip, T, Ink);
 			const double K = 0.011 * S;
 			if (M.zone <= 1)
 			{
@@ -1049,6 +1419,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			}
 			else if (M.zone == 2)
 			{
+				FlushShapes();
 				Canvas->K2_DrawBox(At - FVector2D(K, K), FVector2D(2.0 * K, 2.0 * K), T, Ink);
 			}
 			else
@@ -1056,9 +1427,9 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 				const FVector2D P0 = At + FVector2D(0.0, -1.25 * K);
 				const FVector2D P1 = At + FVector2D(1.1 * K, 0.8 * K);
 				const FVector2D P2 = At + FVector2D(-1.1 * K, 0.8 * K);
-				Canvas->K2_DrawLine(P0, P1, T, Ink);
-				Canvas->K2_DrawLine(P1, P2, T, Ink);
-				Canvas->K2_DrawLine(P2, P0, T, Ink);
+				Line(Canvas, P0, P1, T, Ink);
+				Line(Canvas, P1, P2, T, Ink);
+				Line(Canvas, P2, P0, T, Ink);
 			}
 			if (M.group)
 			{
@@ -1066,7 +1437,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			}
 			if (M.friendly)
 			{
-				Canvas->K2_DrawLine(At + FVector2D(-1.7 * K, -1.8 * K), At + FVector2D(1.7 * K, -1.8 * K), T, Ink);
+				Line(Canvas, At + FVector2D(-1.7 * K, -1.8 * K), At + FVector2D(1.7 * K, -1.8 * K), T, Ink);
 			}
 			const double Gw = 0.012 * S;
 			StrokeNumber(Canvas, FString::Printf(TEXT("%02d"), M.number), At + FVector2D(1.9 * K, -3.4 * K), Gw, 1.6 * Gw, T, Ink, 0.0, false);
@@ -1074,12 +1445,32 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			{
 				// the number the ДХ is on: bracketed
 				const FVector2D B0 = At - FVector2D(2.6 * K, 2.6 * K);
+				FlushShapes();
 				Canvas->K2_DrawBox(B0, FVector2D(5.2 * K, 5.2 * K), 1.0f, Ink);
 			}
 			if (bMarked && Post.marked_arrival_s >= 0.0)
 			{
 				Text(Canvas, ArrivalText(Post.marked_arrival_s), At + FVector2D(2.0 * K, 1.4 * K), OnFace(AspdSymbol * 0.9f), 1.0f, false);
 			}
+			if (M.designated)
+			{
+				// the regiment's designation to this battery (ЦУ with its address): a diamond round the symbol
+				const double D = 2.4 * K;
+				const FVector2D N = At + FVector2D(0.0, -D), E = At + FVector2D(D, 0.0), So = At + FVector2D(0.0, D), W = At + FVector2D(-D, 0.0);
+				Line(Canvas, N, E, 1.2f, Ink);
+				Line(Canvas, E, So, 1.2f, Ink);
+				Line(Canvas, So, W, 1.2f, Ink);
+				Line(Canvas, W, N, 1.2f, Ink);
+			}
+		}
+
+		// The regiment's last command by telecode: its two digits at the tube's top left (rwd_mb3: commands and reports
+		// shown on the indicator as decimal numbers).
+		if (Post.command >= 0)
+		{
+			const double Gw = 0.016 * S;
+			StrokeNumber(Canvas, FString::Printf(TEXT("%02d"), Post.command), C + FVector2D(-0.62 * R, -0.62 * R), Gw, 1.6 * Gw, 1.8f,
+				OnFace(AspdSymbol * 0.9f), 0.0, false);
 		}
 
 		// The DT-2's marker: a small ring open at the quarters.
@@ -1090,7 +1481,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			for (int32 I = 0; I < 8; ++I)
 			{
 				const double A0 = UE_DOUBLE_HALF_PI * Q + 0.25 + 0.135 * I;
-				Canvas->K2_DrawLine(Polar(Mk, A0, Mr), Polar(Mk, A0 + 0.135, Mr), 1.8f, OnFace(AspdFlash * 0.8f));
+				Line(Canvas, Polar(Mk, A0, Mr), Polar(Mk, A0 + 0.135, Mr), 1.8f, OnFace(AspdFlash * 0.8f));
 			}
 		}
 	}
@@ -1107,59 +1498,156 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 		const double V = C.Y - R + 2.0 * R * I / 12.0;
 		const double Hu = FMath::Sqrt(FMath::Max(0.0, R * R - FMath::Square(U - C.X)));
 		const double Hv = FMath::Sqrt(FMath::Max(0.0, R * R - FMath::Square(V - C.Y)));
-		Canvas->K2_DrawLine(FVector2D(U, C.Y - Hu), FVector2D(U, C.Y + Hu), 1.0f, Etch);
-		Canvas->K2_DrawLine(FVector2D(C.X - Hv, V), FVector2D(C.X + Hv, V), 1.0f, Etch);
+		Line(Canvas, FVector2D(U, C.Y - Hu), FVector2D(U, C.Y + Hu), 1.0f, Etch);
+		Line(Canvas, FVector2D(C.X - Hv, V), FVector2D(C.X + Hv, V), 1.0f, Etch);
 	}
 	for (int32 I = 0; I < 36; ++I)
 	{
 		const double A = UE_DOUBLE_TWO_PI * I / 36.0;
-		Canvas->K2_DrawLine(Polar(C, A, R * (I % 3 == 0 ? 0.955 : 0.975)), Polar(C, A, R), 1.0f, Etch * 1.6f);
+		Line(Canvas, Polar(C, A, R * (I % 3 == 0 ? 0.955 : 0.975)), Polar(C, A, R), 1.0f, Etch * 1.6f);
 	}
+}
+
+bool USimCabinDisplayComponent::RayHit(const FVector& WorldStart, const FVector& WorldEnd, FVector2D& OutUvM, double& OutDistanceCm) const
+{
+	if (Screen == nullptr || !(FaceWidthCm > 0.0))
+	{
+		return false;
+	}
+	const FTransform& T = Screen->GetComponentTransform();
+	const FVector A = T.InverseTransformPosition(WorldStart);
+	const FVector B = T.InverseTransformPosition(WorldEnd);
+	const double Da = FVector::DotProduct(A - FaceCentre, FaceNormal);
+	const double Db = FVector::DotProduct(B - FaceCentre, FaceNormal);
+	if (Da == Db || (Da > 0.0) == (Db > 0.0))
+	{
+		return false;  // parallel, or both on one side
+	}
+	const double F = Da / (Da - Db);
+	const FVector P = A + (B - A) * F;
+	const double U = FVector::DotProduct(P - FaceCentre, FaceRight);
+	const double V = FVector::DotProduct(P - FaceCentre, FaceUp);
+	if (FMath::Abs(U) > 0.5 * FaceWidthCm || FMath::Abs(V) > 0.5 * FaceHeightCm)
+	{
+		return false;
+	}
+	OutUvM = FVector2D(U / 100.0, V / 100.0);
+	OutDistanceCm = F * (WorldEnd - WorldStart).Size();
+	return true;
+}
+
+bool USimCabinDisplayComponent::BoardGround(const FVector2D& UvM, double& OutEastM, double& OutNorthM, double& OutMetresPerBoardM) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	if (Sim == nullptr || Kind != simcore::CabinDisplayKind::PlotBoard || !(FaceWidthCm > 0.0))
+	{
+		return false;
+	}
+	// As DrawPlotBoard draws it: the outer ring at 0.47 of the shorter side.
+	const double RingM = 0.47 * FMath::Min(FaceWidthCm, FaceHeightCm) / 100.0;
+	OutMetresPerBoardM = PlotBoardRadiusM / RingM;
+	const simcore::PostFeed Post = Sim->GetPostFeed();
+	OutEastM = Post.position.x + UvM.X * OutMetresPerBoardM;
+	OutNorthM = Post.position.y + UvM.Y * OutMetresPerBoardM;
+	return Post.post;
 }
 
 void USimCabinDisplayComponent::DrawPlotBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn)
 {
-	// The plotter's air-situation map (csla_pu12_manual item 24; rwd_mb3, Luftlagekarte: a plexiglass board on which the
-	// targets' tracks are drawn by hand in the designation squares, and their azimuth and range taken off; the photograph:
-	// etched with a grid and range circles). The post at the centre, north up, 100 km to the edge (the ASPD-U's longest
-	// scale, ru_pu12_text): circles every 25 km, squares of 25 km lettered along the top and numbered down the side. Each
-	// target's last marks joined into its track in grease pencil, its number and its height over its code (the board's
-	// notation, data/command/pu12.json). Spacing, lettering and the pencil's colours are SAM3D's.
-	constexpr double RadiusM = 100000.0;
+	// The plotter's air-situation board (csla_pu12_manual item 24; rwd_mb3, Luftlagekarte: a sheet of plexiglass on which
+	// the targets' tracks are drawn by hand in the designation squares, and their azimuth and range taken off; its
+	// photograph: the grid and range circles etched into the glass). Drawn on black, which the glass material
+	// (M_CabinGlassBoard) leaves clear: only the etching and the pencil show. The post at the centre, north up, 200 km to
+	// the outer ring (data/command/pu12.json): rings every 50 km, ticks every 10 degrees, the PVO grid's big squares
+	// (1 degree by 1 degree 30', their two digits) and their ninths (pvo_grid.hpp; bguir_tsp), so a report's square can be
+	// found. Each target's last crosses joined into its track in yellow grease pencil (blue for a friend), its number and
+	// its height over its code (the board's notation). Spacing, lettering and colours are SAM3D's.
+	const double RadiusM = PlotBoardRadiusM;
 	const FVector2D C = Size * 0.5;
 	const double R = 0.47 * FMath::Min(Size.X, Size.Y);
-	Fill(Canvas, FVector2D::ZeroVector, Size, FLinearColor(0.5f, 0.5f, 0.48f));  // the plexiglass over its white backing
-	const FLinearColor Etch(0.07f, 0.075f, 0.07f);
-	const FLinearColor Ink(0.02f, 0.02f, 0.02f);
-	const double Cell = R * 25000.0 / RadiusM;
-	static const TCHAR* Letters[] = {TEXT("А"), TEXT("Б"), TEXT("В"), TEXT("Г"), TEXT("Д"), TEXT("Е"), TEXT("Ж"), TEXT("И"),
-		TEXT("К"), TEXT("Л")};
-	for (int32 I = -4; I <= 4; ++I)
+	Fill(Canvas, FVector2D::ZeroVector, Size, FLinearColor::Black);  // clear glass
+	const FLinearColor Etch(0.16f, 0.17f, 0.17f);     // frosted lines in the plexiglass
+	const FLinearColor EtchFine(0.07f, 0.075f, 0.075f);
+	const FLinearColor EtchText(0.22f, 0.23f, 0.23f);
+	const FLinearColor Yellow(1.0f, 0.82f, 0.18f);
+	const FLinearColor Blue(0.25f, 0.55f, 1.0f);
+	auto ToScreen = [&](double EastRel, double NorthRel) { return C + FVector2D(EastRel, -NorthRel) / RadiusM * R; };
+	auto Inside = [&](const FVector2D& P) { return FVector2D::Distance(P, C) <= R; };
+
+	// The PVO grid, etched: big squares with their digits, their ninths faint (where the scenario's place is known).
+	if (const USimWorldSubsystem* Sim = GetSim())
 	{
-		const double X = C.X + I * Cell;
-		const double Y = C.Y + I * Cell;
-		Canvas->K2_DrawLine(FVector2D(X, C.Y - 4 * Cell), FVector2D(X, C.Y + 4 * Cell), 1.0f, Etch);
-		Canvas->K2_DrawLine(FVector2D(C.X - 4 * Cell, Y), FVector2D(C.X + 4 * Cell, Y), 1.0f, Etch);
-		if (I < 4)
+		const FVector LonLatH = Sim->GetOriginLongitudeLatitudeHeight();
+		const simcore::LocalFrame Frame(simcore::GeoPoint::FromDegrees(LonLatH.Y, LonLatH.X, LonLatH.Z));
+		const simcore::GeoPoint Centre = Frame.EnuToGeodetic(Post.position);
+		const double Lat0 = FMath::RadiansToDegrees(Centre.lat_rad);
+		const double Lon0 = FMath::RadiansToDegrees(Centre.lon_rad);
+		const double DLat = RadiusM / 111320.0;
+		const double DLon = RadiusM / (111320.0 * FMath::Max(0.2, FMath::Cos(Centre.lat_rad)));
+		auto GridScreen = [&](double Lat, double Lon)
 		{
-			Text(Canvas, Letters[I + 4], FVector2D(X + 0.5 * Cell, C.Y - 4 * Cell - 0.022 * Size.Y), Ink, 0.75f);
-			Text(Canvas, FString::FromInt(I + 5), FVector2D(C.X - 4 * Cell - 0.03 * Size.X, Y + 0.5 * Cell), Ink, 0.75f);
+			const simcore::Vec3 E = Frame.GeodeticToEnu(simcore::GeoPoint::FromDegrees(Lat, Lon, 0.0));
+			return ToScreen(E.x - Post.position.x, E.y - Post.position.y);
+		};
+		const double LatA = FMath::FloorToDouble(Lat0 - DLat) - 1.0, LatB = FMath::CeilToDouble(Lat0 + DLat) + 1.0;
+		const double LonA = FMath::FloorToDouble((Lon0 - DLon) / 1.5) * 1.5 - 1.5, LonB = FMath::CeilToDouble((Lon0 + DLon) / 1.5) * 1.5 + 1.5;
+		constexpr int32 Steps = 24;
+		// The ninths and the ninths' ninths: the medium squares' lines faint, the big squares' bold.
+		for (int32 Level = 2; Level >= 0; --Level)
+		{
+			const double Div = Level == 0 ? 1.0 : (Level == 1 ? 3.0 : 9.0);
+			const FLinearColor Ink = Level == 0 ? Etch : (Level == 1 ? EtchFine : EtchFine * 0.45f);
+			const float Thick = Level == 0 ? 1.6f : 1.0f;
+			for (double Lat = LatA; Lat <= LatB + 1e-9; Lat += 1.0 / Div)
+			{
+				for (int32 I = 0; I < Steps; ++I)
+				{
+					const FVector2D P0 = GridScreen(Lat, LonA + (LonB - LonA) * I / Steps);
+					const FVector2D P1 = GridScreen(Lat, LonA + (LonB - LonA) * (I + 1) / Steps);
+					if (Inside(P0) && Inside(P1)) Line(Canvas, P0, P1, Thick, Ink);
+				}
+			}
+			for (double Lon = LonA; Lon <= LonB + 1e-9; Lon += 1.5 / Div)
+			{
+				for (int32 I = 0; I < Steps; ++I)
+				{
+					const FVector2D P0 = GridScreen(LatA + (LatB - LatA) * I / Steps, Lon);
+					const FVector2D P1 = GridScreen(LatA + (LatB - LatA) * (I + 1) / Steps, Lon);
+					if (Inside(P0) && Inside(P1)) Line(Canvas, P0, P1, Thick, Ink);
+				}
+			}
+		}
+		// Each big square's two digits (its row and column, pvo_grid::Encode) in its top-left corner.
+		for (double Lat = LatA; Lat < LatB; Lat += 1.0)
+		{
+			for (double Lon = LonA; Lon < LonB; Lon += 1.5)
+			{
+				const FVector2D P = GridScreen(Lat + 0.93, Lon + 0.06);
+				if (!Inside(P)) continue;
+				const std::string Digits = simcore::pvo_grid::Encode(Lat + 0.5, Lon + 0.75, 0);
+				Text(Canvas, FString(UTF8_TO_TCHAR(Digits.c_str())), P, EtchText, 0.85f, false);
+			}
 		}
 	}
+
+	// The range rings (every 50 km, numbered) and the azimuth ticks (every 10 degrees, the cardinal ones longer).
 	for (int32 K = 1; K <= 4; ++K)
 	{
-		Circle(Canvas, C, R * K / 4.0, Etch * 0.8f, 1.3f);
-		Text(Canvas, FString::FromInt(25 * K), Polar(C, FMath::DegreesToRadians(45.0), R * K / 4.0) + FVector2D(4.0, -6.0), Ink, 0.6f, false);
+		Circle(Canvas, C, R * K / 4.0, Etch, K == 4 ? 2.0f : 1.4f);
+		Text(Canvas, FString::FromInt(50 * K), Polar(C, FMath::DegreesToRadians(45.0), R * K / 4.0) + FVector2D(3.0, -6.0), EtchText, 0.6f, false);
 	}
-	for (int32 I = 0; I < 12; ++I)
+	for (int32 I = 0; I < 36; ++I)
 	{
-		const double A = UE_DOUBLE_TWO_PI * I / 12.0;
-		Canvas->K2_DrawLine(Polar(C, A, 0.0), Polar(C, A, R), 1.0f, Etch * 0.6f);
+		const double A = UE_DOUBLE_TWO_PI * I / 36.0;
+		Line(Canvas, Polar(C, A, R), Polar(C, A, R * (I % 9 == 0 ? 0.92 : 0.96)), 1.2f, Etch);
 	}
-	Disc(Canvas, C, 0.012 * Size.X, Ink);  // the post
+	Text(Canvas, TEXT("С"), C + FVector2D(-4.0, -R - 0.025 * Size.Y), EtchText, 0.8f, false);  // север
+	Disc(Canvas, C, 0.008 * Size.X, Etch * 1.5f);  // the post
+
+	// The grease pencil: each target's crosses of the last minutes joined into its track, its number, height over code.
 	for (const simcore::em::ViewBoardMark& Latest : simcore::LatestMarks(Post))
 	{
-		const FLinearColor Pencil = Latest.code / 10 == 1 ? PencilBlue : PencilRed;
+		const FLinearColor Pencil = Latest.code / 10 == 1 ? Blue : Yellow;
 		FVector2D Prev = FVector2D::ZeroVector;
 		bool bHasPrev = false;
 		for (const simcore::em::ViewBoardMark& M : Post.glass)
@@ -1169,24 +1657,26 @@ void USimCabinDisplayComponent::DrawPlotBoard(UCanvas* Canvas, const FVector2D& 
 				continue;
 			}
 			const simcore::Vec3 Rel = M.position - Post.position;
-			const FVector2D P = C + FVector2D(Rel.x, -Rel.y) / RadiusM * R;
-			// a short cross for each plot, joined by the track (the grease pencil's soft, waxy line)
-			const double K = 0.007 * Size.X;
-			Canvas->K2_DrawLine(P - FVector2D(K, 0.0), P + FVector2D(K, 0.0), 2.0f, Pencil);
-			Canvas->K2_DrawLine(P - FVector2D(0.0, K), P + FVector2D(0.0, K), 2.0f, Pencil);
+			const FVector2D P = ToScreen(Rel.x, Rel.y);
+			const double K = 0.008 * Size.X;
+			// a cross for each plot, the waxy line of the pencil a little uneven
+			Line(Canvas, P - FVector2D(K, K), P + FVector2D(K, K), 2.4f, Pencil);
+			Line(Canvas, P - FVector2D(K, -K), P + FVector2D(K, -K), 2.4f, Pencil);
+			Text(Canvas, FString::Printf(TEXT("%02d"), M.stamp % 100), P + FVector2D(K + 1.0, 1.0), Pencil * 0.75f, 0.55f, false);
 			if (bHasPrev)
 			{
-				Canvas->K2_DrawLine(Prev, P, 2.5f, Pencil * 0.9f);
+				Line(Canvas, Prev, P, 2.0f, Pencil * 0.85f);
 			}
 			Prev = P;
 			bHasPrev = true;
 		}
 		if (bHasPrev)
 		{
-			Text(Canvas, FString::Printf(TEXT("%d"), Latest.number), Prev + FVector2D(0.02 * Size.X, -0.025 * Size.Y), Pencil, 1.0f, false);
-			Text(Canvas, FString::Printf(TEXT("%d"), Latest.height_hm), Prev + FVector2D(0.02 * Size.X, 0.002 * Size.Y), Pencil, 0.8f, false);
-			Canvas->K2_DrawLine(Prev + FVector2D(0.02 * Size.X, 0.03 * Size.Y), Prev + FVector2D(0.06 * Size.X, 0.03 * Size.Y), 1.5f, Pencil);
-			Text(Canvas, FString::Printf(TEXT("%02d"), Latest.code), Prev + FVector2D(0.02 * Size.X, 0.034 * Size.Y), Pencil, 0.8f, false);
+			const FVector2D At = Prev + FVector2D(0.018 * Size.X, -0.05 * Size.Y);
+			Text(Canvas, FString::Printf(TEXT("%d"), Latest.number), At, Pencil, 0.95f, false);
+			Text(Canvas, FString::Printf(TEXT("%d"), Latest.height_hm), At + FVector2D(0.0, 0.026 * Size.Y), Pencil, 0.75f, false);
+			Line(Canvas, At + FVector2D(0.0, 0.052 * Size.Y), At + FVector2D(0.045 * Size.X, 0.052 * Size.Y), 1.5f, Pencil);
+			Text(Canvas, FString::Printf(TEXT("%02d"), Latest.code), At + FVector2D(0.0, 0.056 * Size.Y), Pencil, 0.75f, false);
 		}
 	}
 	(void)bOn;  // a board is read by the cabin's light, powered or not
@@ -1222,6 +1712,21 @@ void USimCabinDisplayComponent::DrawKeypadWindow(UCanvas* Canvas, const FVector2
 	}
 }
 
+void USimCabinDisplayComponent::DrawDocument(UCanvas* Canvas, const FVector2D& Size, const TArray<FString>& Lines)
+{
+	// Typed on a form of off-white paper, a line a row, small enough for the table to fit. The paper's own colour (the
+	// lit material multiplies it by the cabin's light): an aged off-white, the typewriter's ribbon nearly black.
+	Fill(Canvas, FVector2D::ZeroVector, Size, FLinearColor(0.62f, 0.58f, 0.47f));
+	const FLinearColor Ink(0.02f, 0.02f, 0.025f);
+	const int32 Rows = FMath::Max(14, Lines.Num());
+	const double Row = (Size.Y * 0.94) / Rows;
+	const float Scale = static_cast<float>(FMath::Clamp(Row / 18.0, 0.35, 0.8));
+	for (int32 I = 0; I < Lines.Num(); ++I)
+	{
+		Text(Canvas, Lines[I], FVector2D(0.04 * Size.X, 0.03 * Size.Y + Row * I), Ink, Scale, false);
+	}
+}
+
 void USimCabinDisplayComponent::DrawStatusBoard(UCanvas* Canvas, const FVector2D& Size, const simcore::PostFeed& Post, bool bOn,
 	float DeltaTime)
 {
@@ -1248,10 +1753,10 @@ void USimCabinDisplayComponent::DrawStatusBoard(UCanvas* Canvas, const FVector2D
 	{
 		const double Gx = X0 + Cw * 3 * G;
 		Text(Canvas, Groups[G], FVector2D(Gx + 1.5 * Cw, 0.06 * Size.Y), Ink, 0.75f);
-		Canvas->K2_DrawLine(FVector2D(Gx + 0.1 * Cw, 0.11 * Size.Y), FVector2D(Gx + 2.9 * Cw, 0.11 * Size.Y), 1.0f, Ink);
+		Line(Canvas, FVector2D(Gx + 0.1 * Cw, 0.11 * Size.Y), FVector2D(Gx + 2.9 * Cw, 0.11 * Size.Y), 1.0f, Ink);
 		if (G > 0)
 		{
-			Canvas->K2_DrawLine(FVector2D(Gx, 0.03 * Size.Y), FVector2D(Gx, Size.Y - 0.02 * Size.Y), 1.0f, Ink);
+			Line(Canvas, FVector2D(Gx, 0.03 * Size.Y), FVector2D(Gx, Size.Y - 0.02 * Size.Y), 1.0f, Ink);
 		}
 	}
 	for (int32 L = 0; L < Lamps; ++L)
@@ -1308,6 +1813,7 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	{
 		return;
 	}
+	Capture->bCaptureEveryFrame = false;  // filmed by hand below, at sam3d.TvHz
 	// The reticle's marks: every reticle (3 thousandths) along each arm, for the lens in use; a short bar across the arm.
 	{
 		const simcore::ConsoleData& C = Runner.Console();
@@ -1341,11 +1847,14 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	}
 	if (!bOn)
 	{
-		// A dark screen. Cleared every frame, not just when switched off: a capture can land in the target
-		// before the first update (found by tools/ue_cabin_check.py: a picture on a TV that was never on).
-		UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, MonitorGlass);
+		// A dark screen. Cleared on each redraw, not just when switched off: a capture can land in the target before the
+		// first update (found by tools/ue_cabin_check.py: a picture on a TV that was never on).
+		if (IsSeen() && (bTvWasOn || RedrawSecondsLeft <= 0.0f))
+		{
+			UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, MonitorGlass);
+			RedrawSecondsLeft = 0.5f;
+		}
 		bTvWasOn = false;
-		Capture->bCaptureEveryFrame = false;
 		return;
 	}
 	bTvWasOn = true;
@@ -1360,5 +1869,11 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	const FVector To = Sim->ToUnreal(Unit + Dir * 1000.0);
 	Capture->SetWorldLocationAndRotation(From, (To - From).Rotation());
 	Capture->FOVAngle = static_cast<float>(FMath::Max(0.1, simcore::TvFieldOfViewDeg(Console)));
-	Capture->bCaptureEveryFrame = true;
+	// Each picture renders the scene a second time: only while someone in the cabin can see the monitor, at a TV's
+	// rate rather than the game's.
+	if (IsSeen() && RedrawSecondsLeft <= 0.0f)
+	{
+		RedrawSecondsLeft = 1.0f / FMath::Max(1.0f, CVarTvHz.GetValueOnGameThread());
+		Capture->CaptureScene();
+	}
 }

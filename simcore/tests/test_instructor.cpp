@@ -222,7 +222,13 @@ SC_TEST("instructor: the trainer's scripted drill plays: turned away, back low, 
     SC_EXPECT(d.find("sends it to 100 m above the ground") != std::string::npos);
     SC_EXPECT(d.find("switches its jammer on") != std::string::npos);
     SC_EXPECT(d.find("radar on the jammer track") != std::string::npos);  // the jamming drill: fought on the strobe
-    SC_EXPECT(d.find("guided at t1") != std::string::npos && d.find("guided at t2") != std::string::npos);
+    // The crew fights both: the drone back low (under the search radar's clutter) is taken again when it shows, at about
+    // 3 km and passing, which with the launch zone's meeting point (roadmap 6.9) is too late for a shot; then the jammer,
+    // on its strobe, to a shot.
+    std::size_t t1_tracks = 0;
+    for (std::size_t at = d.find("t1  radar track"); at != std::string::npos; at = d.find("t1  radar track", at + 1)) ++t1_tracks;
+    SC_EXPECT(t1_tracks >= 2);
+    SC_EXPECT(d.find("guided at t2") != std::string::npos);
     // Bad scripts are refused with their paths.
     std::string error;
     SC_EXPECT(Runner(ReplaceOnce(text, "\"instructor\": \"turn\", \"target\": \"t1\", \"to\": 270", "\"instructor\": \"loop\", \"target\": \"t1\", \"to\": 270"), &error) == nullptr);

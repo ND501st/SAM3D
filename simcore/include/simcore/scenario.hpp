@@ -24,6 +24,7 @@
 #include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/crew_mobility.hpp"
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
@@ -31,7 +32,12 @@
 #include "simcore/instructor.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_nets.hpp"
+#include "simcore/radio_sets.hpp"
+#include "simcore/talk_tables.hpp"
 #include "simcore/target_behaviour.hpp"
+#include "simcore/terrain_map.hpp"
+#include "simcore/weather_data.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -46,6 +52,22 @@ struct ScenarioCrew {
     std::string skill;               // a tier of data/crew/skill_levels.json (docs/crew/05_SKILL.md); empty: none
 };
 
+// A target's anti-radiation missiles (roadmap E6): "arms": {"weapon", "count", "launch_range_km", "min_range_km",
+// "interval_s", "aim", "turn_away"}. It fires only on what its own warning receiver hears: a hostile radar in the
+// weapon's band (search, track or fire control) heard in the last second, with the place it believes the radar is
+// (its intelligence: "aim", by default the unit's position, a pre-briefed launch) within the launch range. Each ARM is
+// set to the signal heard. After its last one it turns away from the radar (the ARM sign: voenizdat_osa_1991 p262).
+struct ArmCarrierDef {
+    std::string weapon;           // the EM library's ARM id
+    int count = 0;
+    double launch_range_m = 0.0;  // 0: the weapon's max_range_m
+    double min_range_m = -1.0;    // < 0: the weapon's
+    double interval_s = 4.0;      // between two of its ARMs
+    bool has_aim = false;
+    Vec3 aim;                     // ENU; without one, the unit's position
+    bool turn_away = true;
+};
+
 struct ScenarioTarget {
     std::string id;
     std::string name;
@@ -56,6 +78,7 @@ struct ScenarioTarget {
     double max_turn_rate_rad_s = DegToRad(6.0);
     double rcs_m2 = 5.0;
     double appear_at_s = 0.0;
+    bool on_cue = false;                   // held until something releases it (a lesson: ScenarioRunner::ReleaseTarget)
     std::string target_class = "default";  // picks the hit chance in the gameplay tuning
     bool evade_on_launch = false;          // breaks away onto a beam heading when a missile is launched at it
     double evade_turn_rate_rad_s = DegToRad(12.0);
@@ -69,9 +92,13 @@ struct ScenarioTarget {
     // Its radar warning receiver: an ESM receiver of the EM library (kind rwr). With one, the pilot evades when it warns
     // of the lock or the launch (the command link heard: roadmap E5), not on the truth.
     std::string rwr;
+    // The model it is drawn with (data/scenery/basic_models.json; "" its class's): presentation only.
+    std::string model;
     // A decoy (roadmap E6): a drone whose echo is made to look like an aircraft's (radar reflectors). The radar can't
     // tell; the TV can, close enough to make out its type (em/optical.hpp), when the crew looks.
     bool decoy = false;
+    // Anti-radiation missiles it carries (roadmap E6, em/arm.hpp): "arms". Count 0: none.
+    ArmCarrierDef arms;
 };
 
 // How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
@@ -87,6 +114,21 @@ struct CrewDoctrineDef {
     // (3-5 s), before the first's result (korovin_tiv_2010; flak11: two missiles selected at ВНИМАНИЕ). 1: one, and
     // the second only after a miss.
     int salvo = 1;
+    // Under the threat of anti-radiation missiles ("arm_threat", voenizdat_osa_1991 pp262-264): the least emission. The
+    // search transmitter's high voltage on for 2 antenna turns after every 3-4 («через 3—4 оборота антенны на 2
+    // оборота»); the tracking transmitter's only from the range of Table 7.3 for the target's speed; the search
+    // transmitter off while the tracking radar holds a stable track and nothing else is about; the tracking
+    // transmitter off after the missile's burst. The commander's reaction to the signs of an ARM launch is part of
+    // every crew's drill, threat or not: «Излучение выключить!» once the missile in the air has burst, for
+    // arm_silence_s after the last sign (a SAM3D estimate).
+    bool arm_threat = false;
+    double arm_silence_s = 60.0;
+    double arm_search_off_turns = 3.0;  // the low end of the textbook's 3-4
+    // A standing order from the regiment ("relocate_after_arm": {"to": position}): attacked by ARMs, the battery moves to
+    // its reserve position when the fight is over (only where the battery drives this vehicle, battery_drive_own). The
+    // battery commander changes position only on the regiment commander's order (voenizdat_osa_1991 p238).
+    bool relocate_after_arm = false;
+    Vec3 relocate_to;
 };
 
 struct TriggerAction {
@@ -132,10 +174,23 @@ struct ScenarioDef {
     GeoPoint origin;
     double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
     std::vector<TerrainRidge> ridges;     // straight ridges on it, for cover (terrain.ridges)
+    // "terrain": {"type": "map", "map": "maps/kesmark_range.json"}: the ground of a generated map (terrain_map.hpp)
+    // under the scenario, whatever its origin. ground_height_m is then the map's ground under the origin.
+    std::string map_file;
+    std::shared_ptr<const MapData> map;
+    // "weather": a preset of data/weather/presets.json (by id, or the air war's clear/cloudy/poor): the winds, the
+    // cloud and the air (weather.hpp). Without one, still standard air and no cloud.
+    bool has_weather = false;
+    WeatherPreset weather;
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
     std::string crew_file;         // the crew data (own_unit.crew_data, or data/crew/<system>_crew.json when it exists)
     bool has_crew_data = false;
     CrewData crew_data;
+    // The vehicle as a body to climb (data/vehicles/<system>.json, crew_mobility.hpp) and the crew's pace and voice
+    // (data/crew/walking.json), loaded when the system has a vehicle file: its crew then gets in and out by its hatches.
+    bool has_vehicle = false;
+    VehicleDef vehicle;
+    WalkingDef walking;
     bool has_skills = false;       // a crew member has a "skill": the tiers are loaded
     SkillTable skills;
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
@@ -155,6 +210,7 @@ struct ScenarioDef {
     // starts part-spent, so that the TZM comes within it (roadmap 8.11).
     std::vector<std::string> empty_containers;
     std::vector<std::pair<std::string, bool>> initial_inputs;
+    std::vector<std::pair<std::string, int>> initial_controls;  // set after the readiness (own_unit.controls)
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
     std::vector<ScenarioTrigger> triggers;
@@ -166,8 +222,19 @@ struct ScenarioDef {
     PlottingBoardDef post_board;
     AspdDef post_aspd;
     PostRegiment post_regiment;
+    AspdCodeTable post_codes;        // the regiment's two-digit commands' meanings ("post.codes"; empty: none)
+    PlottingTuning post_plotting;    // the player's hand on the board ("post.plotting"; the defaults without it)
     bool has_post_radar = false;
     RegimentRadar post_radar;
+    // The post's R-111 and R-407 (the console's "radios"): their numbers, and the scenario's frequency plan for them.
+    bool has_radio_sets = false;
+    RadioSetsDef radio_sets;
+    RadioPlan radio_plan;
+    // The battery's radio data: its nets, frequencies by number, call signs, scheduled changes, jamming, lines; the talk
+    // tables and the communications' game values ("radio_data", docs/crew/12_COMMUNICATIONS.md).
+    RadioDataDef radio_data;
+    TalkTables talk_tables;
+    CommsTuning comms_tuning;
     // The battery's early-warning and command sources (roadmap E4): the PU-12 from "command_post" first, then the
     // scenario's "c2" block. Empty: no command network.
     C2Policy c2_policy;
@@ -225,7 +292,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "triggers", "end", "assistance", "environment", "doctrine"})) {
+                             "targets", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -236,7 +303,7 @@ public:
         if (!OptionalInt(root, "", "seed", seed)) return false;
         if (seed < 0) return Fail("seed", "must be >= 0");
         out.seed = static_cast<unsigned>(seed);
-        if (!LoadOrigin(root, out) || !LoadTerrain(root, out)) return false;
+        if (!LoadOrigin(root, out) || !LoadTerrain(root, data_dir, out)) return false;
         if (!LoadOwnUnit(root, data_dir, out, console)) return false;
         if (!OptionalString(root, "", "command_post", out.command_post_file)) return false;
         if (!out.command_post_file.empty()) {
@@ -247,6 +314,8 @@ public:
         }
         if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadPost(root, data_dir, out, console)) return false;
+        if (!LoadRadioData(root, data_dir, out, console)) return false;
+        if (!CheckRegimentGroups(out)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
         if (const json::Value* cc = root.Find("crew_commander")) {
@@ -267,13 +336,194 @@ public:
                 return Fail("assistance", "must be \"demonstrate\", \"guided\", \"hint\", \"unassisted\" or \"exam\"");
             }
         }
-        if (!LoadEnvironment(root, out) || !LoadDoctrine(root, out)) return false;
+        if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
     }
 
 private:
+    // The regiment's commands said as talk-table groups go on its command net: the scenario's radio data must have that net
+    // and the group must be in its talk tables. Radio silence and the spare frequency are ordered by the radio data
+    // (silence_orders, the net's changes), and the warnings are the battery's own signals, so those groups are refused here.
+    bool CheckRegimentGroups(const ScenarioDef& out) {
+        for (std::size_t j = 0; j < out.post_regiment.commands.size(); ++j) {
+            const RegimentCommand& c = out.post_regiment.commands[j];
+            if (c.group.empty()) continue;
+            const std::string cp = Index("post.regiment.commands", j);
+            if (out.radio_data.Find("regiment") == nullptr) return Fail(cp, "a group goes on the regiment's net: radio_data has no net \"regiment\"");
+            const TalkEntry* e = out.talk_tables.Decode(c.group);
+            if (e == nullptr) return Fail(Join(cp, "group"), "group " + c.group + " is not in the radio data's talk tables");
+            for (const char* other : {"silence_on", "silence_off", "spare_frequency", "air_warning", "all_clear"}) {
+                if (e->effect == other) return Fail(Join(cp, "group"), "group " + c.group + " (" + e->effect + ") is ordered by the radio data, not as a command");
+            }
+        }
+        return true;
+    }
+
+    // "radio_data": the battery's nets and lines (radio_nets.hpp). A net's set must be one of the console's voice sets,
+    // its frequencies inside that set's band.
+    bool LoadRadioData(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* r = root.Find("radio_data");
+        if (r == nullptr) return true;
+        const std::string p = "radio_data";
+        if (!Keys(*r, p, {"talk_tables", "comms", "silence", "silence_orders", "jamming_follows_df", "df_jam_s", "nets", "jamming", "lines",
+                          "source", "confidence", "notes"}) ||
+            !Provenance(*r, p)) {
+            return false;
+        }
+        RadioDataDef& d = out.radio_data;
+        std::string tables_file, comms_file;
+        if (!OptionalString(*r, p, "talk_tables", tables_file) || !OptionalString(*r, p, "comms", comms_file) ||
+            !OptionalBool(*r, p, "silence", d.silence) || !OptionalBool(*r, p, "jamming_follows_df", d.jamming_follows_df) ||
+            !OptionalNumber(*r, p, "df_jam_s", d.df_jam_s)) {
+            return false;
+        }
+        std::string error;
+        if (!tables_file.empty() && !LoadTalkTablesFile(data_dir + "/" + tables_file, out.talk_tables, &error)) return Fail(Join(p, "talk_tables"), error);
+        if (!comms_file.empty() && !LoadCommsTuningFile(data_dir + "/" + comms_file, out.comms_tuning, &error)) return Fail(Join(p, "comms"), error);
+        const json::Value* nets = OptionalArray(*r, p, "nets");
+        if (nets == nullptr) return message_.empty() ? Fail(Join(p, "nets"), "required, a list") : false;
+        for (std::size_t i = 0; i < nets->items.size(); ++i) {
+            const std::string np = Index(Join(p, "nets"), i);
+            const json::Value& e = nets->items[i];
+            RadioNetDef n;
+            if (!Keys(e, np, {"id", "name_ru", "name_en", "set", "main", "own_call_sign", "main_call_sign", "frequencies_mhz", "changes",
+                              "orders", "exempt", "notes"}) ||
+                !RequireString(e, np, "id", n.id) || !RequireString(e, np, "name_ru", n.name_ru) || !RequireString(e, np, "name_en", n.name_en) ||
+                !OptionalString(e, np, "set", n.set) || !OptionalString(e, np, "main", n.main) ||
+                !OptionalString(e, np, "own_call_sign", n.own_call_sign) || !OptionalString(e, np, "main_call_sign", n.main_call_sign) ||
+                !OptionalBool(e, np, "exempt", n.exempt)) {
+                return false;
+            }
+            if (d.Find(n.id) != nullptr) return Fail(Join(np, "id"), "duplicate net '" + n.id + "'");
+            const json::Value* f = OptionalArray(e, np, "frequencies_mhz");
+            if (f == nullptr || f->items.empty()) return message_.empty() ? Fail(Join(np, "frequencies_mhz"), "required: working, spare, ...") : false;
+            const VoiceSetDef* set = nullptr;
+            if (!n.set.empty()) {
+                for (const VoiceSetDef& vs : console.voice.sets) {
+                    if (vs.id == n.set) set = &vs;
+                }
+                if (console.has_voice && set == nullptr) return Fail(Join(np, "set"), "not one of the console's voice sets");
+            }
+            for (std::size_t k = 0; k < f->items.size(); ++k) {
+                const json::Value& x = f->items[k];
+                if (!x.Is(json::Type::Number) || x.number <= 0.0) return Fail(Index(Join(np, "frequencies_mhz"), k), "a frequency, MHz");
+                if (set != nullptr && set->band_hi_mhz > 0.0 && (x.number < set->band_lo_mhz || x.number > set->band_hi_mhz)) {
+                    return Fail(Index(Join(np, "frequencies_mhz"), k), "outside " + set->name + "'s band");
+                }
+                n.frequencies_mhz.push_back(x.number);
+            }
+            for (const char* key : {"changes", "orders"}) {
+                const json::Value* list = OptionalArray(e, np, key);
+                if (list == nullptr) {
+                    if (!message_.empty()) return false;
+                    continue;
+                }
+                for (std::size_t k = 0; k < list->items.size(); ++k) {
+                    const std::string cp = Index(Join(np, key), k);
+                    RadioNetDef::Change c;
+                    double to = 1.0;
+                    if (!Keys(list->items[k], cp, {"at_s", "to", "notes"}) || !RequireNumber(list->items[k], cp, "at_s", c.at_s) ||
+                        !RequireNumber(list->items[k], cp, "to", to)) {
+                        return false;
+                    }
+                    c.to = static_cast<int>(to);
+                    if (c.to < 1 || static_cast<std::size_t>(c.to) > n.frequencies_mhz.size()) return Fail(Join(cp, "to"), "a frequency number of the net");
+                    (std::string(key) == "changes" ? n.changes : n.orders).push_back(c);
+                }
+            }
+            if (!n.orders.empty() && n.main == "self") return Fail(Join(np, "orders"), "a net this vehicle runs takes its own orders");
+            d.nets.push_back(std::move(n));
+        }
+        const json::Value* jam = OptionalArray(*r, p, "jamming");
+        if (jam == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; jam != nullptr && i < jam->items.size(); ++i) {
+            const std::string jp = Index(Join(p, "jamming"), i);
+            const json::Value& e = jam->items[i];
+            JammingDef j;
+            std::string strength = "strong", kind = "barrage";
+            if (!Keys(e, jp, {"nets", "band_mhz", "from_s", "to_s", "strength", "kind", "follow_s", "notes"}) ||
+                !OptionalNumber(e, jp, "from_s", j.from_s) || !OptionalNumber(e, jp, "to_s", j.to_s) ||
+                !OptionalString(e, jp, "strength", strength) || !OptionalString(e, jp, "kind", kind) ||
+                !OptionalNumber(e, jp, "follow_s", j.follow_s)) {
+                return false;
+            }
+            if (strength != "strong" && strength != "weak") return Fail(Join(jp, "strength"), "strong or weak");
+            if (kind != "barrage" && kind != "spot") return Fail(Join(jp, "kind"), "barrage or spot");
+            j.strong = strength == "strong";
+            j.spot = kind == "spot";
+            if (const json::Value* list = OptionalArray(e, jp, "nets")) {
+                for (std::size_t k = 0; k < list->items.size(); ++k) {
+                    if (!list->items[k].Is(json::Type::String) || d.Find(list->items[k].string) == nullptr) {
+                        return Fail(Index(Join(jp, "nets"), k), "unknown net");
+                    }
+                    j.nets.push_back(list->items[k].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (const json::Value* band = OptionalArray(e, jp, "band_mhz")) {
+                if (band->items.size() != 2 || !band->items[0].Is(json::Type::Number) || !band->items[1].Is(json::Type::Number)) {
+                    return Fail(Join(jp, "band_mhz"), "[lowest, highest] MHz");
+                }
+                j.band_lo_mhz = band->items[0].number;
+                j.band_hi_mhz = band->items[1].number;
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (j.nets.empty() && !(j.band_hi_mhz > j.band_lo_mhz)) return Fail(jp, "nets or a band");
+            if (j.spot && j.nets.size() != 1) return Fail(Join(jp, "nets"), "a spot jammer works one net");
+            if (j.to_s <= j.from_s) return Fail(Join(jp, "to_s"), "after from_s");
+            d.jamming.push_back(std::move(j));
+        }
+        if (const json::Value* so = OptionalArray(*r, p, "silence_orders")) {
+            for (std::size_t i = 0; i < so->items.size(); ++i) {
+                const std::string sp = Index(Join(p, "silence_orders"), i);
+                RadioDataDef::SilenceOrder o;
+                if (!Keys(so->items[i], sp, {"at_s", "on", "notes"}) || !RequireNumber(so->items[i], sp, "at_s", o.at_s) ||
+                    !OptionalBool(so->items[i], sp, "on", o.on)) {
+                    return false;
+                }
+                d.silence_orders.push_back(o);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        const json::Value* lines = OptionalArray(*r, p, "lines");
+        if (lines == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; lines != nullptr && i < lines->items.size(); ++i) {
+            const std::string lp = Index(Join(p, "lines"), i);
+            const json::Value& e = lines->items[i];
+            LineDef l;
+            double n = 0.0;
+            if (!Keys(e, lp, {"line", "to", "to_name", "laid", "calls", "notes"}) || !RequireNumber(e, lp, "line", n) ||
+                !RequireString(e, lp, "to", l.to) || !OptionalString(e, lp, "to_name", l.to_name) || !OptionalBool(e, lp, "laid", l.laid)) {
+                return false;
+            }
+            if (const json::Value* calls = OptionalArray(e, lp, "calls")) {
+                for (std::size_t k = 0; k < calls->items.size(); ++k) {
+                    const std::string cp = Index(Join(lp, "calls"), k);
+                    LineDef::Call c;
+                    if (!Keys(calls->items[k], cp, {"at_s", "text", "notes"}) || !RequireNumber(calls->items[k], cp, "at_s", c.at_s) ||
+                        !RequireString(calls->items[k], cp, "text", c.text)) {
+                        return false;
+                    }
+                    l.calls.push_back(std::move(c));
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            l.line = static_cast<int>(n);
+            if (l.line < 1 || l.line > 5) return Fail(Join(lp, "line"), "1-5 (the RTK-1's levers)");
+            if (d.Line(l.line) != nullptr) return Fail(Join(lp, "line"), "two subscribers on one line");
+            if (l.to_name.empty()) l.to_name = l.to;
+            d.lines.push_back(std::move(l));
+        }
+        d.present = true;
+        return true;
+    }
+
     bool RequireObject(const json::Value& obj, const std::string& path, const char* key, const json::Value*& out) {
         out = obj.Find(key);
         if (out == nullptr) return Fail(Join(path, key), "required");
@@ -323,12 +573,21 @@ private:
         return true;
     }
 
-    bool LoadTerrain(const json::Value& root, ScenarioDef& out) {
+    bool LoadTerrain(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
         const json::Value* t = nullptr;
-        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m", "ridges", "notes"})) return false;
+        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m", "map", "ridges", "notes"})) return false;
         std::string type;
         if (!RequireString(*t, "terrain", "type", type)) return false;
-        if (type != "flat") return Fail("terrain.type", "only \"flat\" is supported so far");
+        if (type == "map") {  // a generated map's ground (terrain_map.hpp); no ridges: the map has its own hills
+            if (!RequireString(*t, "terrain", "map", out.map_file)) return false;
+            if (t->Find("ridges") != nullptr || t->Find("height_m") != nullptr) return Fail("terrain", "a map has its own ground: no height_m or ridges");
+            std::string error;
+            out.map = LoadMapCached(data_dir, out.map_file, &error);
+            if (!out.map) return Fail("terrain.map", error);
+            out.ground_height_m = MapTerrain(out.map, out.origin).HeightAt(0.0, 0.0);
+            return true;
+        }
+        if (type != "flat") return Fail("terrain.type", "must be \"flat\" or \"map\"");
         if (!RequireNumber(*t, "terrain", "height_m", out.ground_height_m)) return false;
         // "ridges": [ { "from": { "east_m", "north_m" }, "to": {...}, "height_m": 120, "width_m": 1000 } ]
         const json::Value* rs = OptionalArray(*t, "terrain", "ridges");
@@ -367,7 +626,7 @@ private:
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
             !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "radio_presets", "position_power",
-                                   "prepared_position", "position", "heading_deg", "inputs", "empty_containers"})) {
+                                   "prepared_position", "position", "heading_deg", "inputs", "controls", "empty_containers"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -384,6 +643,13 @@ private:
             out.has_crew_data = true;
         } else {
             out.crew_file.clear();
+        }
+        // The vehicle's hatches, hull and the places round it (docs/crew/13_OUT_OF_THE_VEHICLE.md), when it has a file.
+        const std::string vehicle_file = data_dir + "/vehicles/" + console.system_id + ".json";
+        if (std::ifstream(vehicle_file).good()) {
+            if (!LoadVehicleFile(vehicle_file, console, out.vehicle, &error)) return Fail("own_unit", error);
+            if (!LoadWalkingFile(data_dir + "/crew/walking.json", out.walking, &error)) return Fail("own_unit", error);
+            out.has_vehicle = true;
         }
         if (!OptionalString(*u, "own_unit", "tuning", out.tuning_file)) return false;
         if (!out.tuning_file.empty()) {
@@ -421,7 +687,7 @@ private:
             std::string library, search, track;
             if (!em->Is(json::Type::Object) ||
                 !Keys(*em, "own_unit.em", {"library", "search_radar", "track_radar", "extra_libraries", "wind_mps", "rain_mmh",
-                                           "jammers", "chaff", "decoys", "command_link_in_load", "notes"}) ||
+                                           "jammers", "chaff", "decoys", "notes"}) ||
                 !RequireString(*em, "own_unit.em", "library", library) ||
                 !RequireString(*em, "own_unit.em", "search_radar", search) ||
                 !RequireString(*em, "own_unit.em", "track_radar", track)) {
@@ -437,10 +703,7 @@ private:
                 return false;
             }
             if (!LoadEmLinkDef(data_dir, library, search, track, out.em, &error, extras)) return Fail("own_unit.em", error);
-            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh) ||
-                !OptionalBool(*em, "own_unit.em", "command_link_in_load", out.em.command_link_in_load)) {
-                return false;
-            }
+            if (!OptionalNumber(*em, "own_unit.em", "rain_mmh", out.em.rain_mmh)) return false;
             if (out.em.rain_mmh < 0.0) return Fail("own_unit.em.rain_mmh", "must be >= 0");
             if (const json::Value* w = em->Find("wind_mps")) {
                 if (!Keys(*w, "own_unit.em.wind_mps", {"east", "north", "notes"}) ||
@@ -532,6 +795,19 @@ private:
                 if (!console.equipment.HasInput(in->keys[i])) return Fail(p, "unknown input");
                 if (!in->items[i].Is(json::Type::Bool)) return Fail(p, "expected true or false");
                 out.initial_inputs.emplace_back(in->keys[i], in->items[i].boolean);
+            }
+        }
+        // Controls set at the start after the readiness (a lesson starting with the headset off).
+        if (const json::Value* cs = u->Find("controls")) {
+            if (!cs->Is(json::Type::Object)) return Fail("own_unit.controls", "expected an object of control: position");
+            for (std::size_t i = 0; i < cs->keys.size(); ++i) {
+                const std::string p = Join("own_unit.controls", cs->keys[i]);
+                const ControlDef* c = console.panel.Find(cs->keys[i]);
+                if (c == nullptr) return Fail(p, "unknown control");
+                if (!cs->items[i].Is(json::Type::Number)) return Fail(p, "expected a position");
+                const int at = static_cast<int>(cs->items[i].number);
+                if (at < 0 || at >= c->positions) return Fail(p, "not a position of the control");
+                out.initial_controls.emplace_back(cs->keys[i], at);
             }
         }
         return true;
@@ -661,14 +937,45 @@ private:
         return true;
     }
 
+    // "weather": "cloudy" (a preset id, or the air war's clear/cloudy/poor). Without an "environment" the preset's
+    // surface visibility is the TV's; without own_unit.em.rain_mmh its rain falls on the radars.
+    bool LoadWeather(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* w = root.Find("weather");
+        if (w == nullptr) return true;
+        if (!w->Is(json::Type::String) || w->string.empty()) return Fail("weather", "expected a preset id (data/weather/presets.json)");
+        std::string error;
+        if (!FindWeatherPreset(data_dir, w->string, out.weather, &error)) return Fail("weather", error);
+        out.has_weather = true;
+        const json::Value* env = root.Find("environment");
+        if (env == nullptr || env->Find("visibility_km") == nullptr) out.optics.visibility_m = out.weather.visibility_km * 1000.0;
+        if (out.has_em && out.em.rain_mmh <= 0.0) out.em.rain_mmh = out.weather.rain_mmh;
+        return true;
+    }
+
     // "doctrine": {"tv_check": true, "search_bursts": {"on_s": 4, "off_s": 20}, "salvo": 2}.
     bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
         const json::Value* d = root.Find("doctrine");
         if (d == nullptr) return true;
-        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "notes"}) ||
+        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "arm_threat", "arm_silence_s", "arm_search_off_turns",
+                                   "relocate_after_arm", "notes"}) ||
             !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check) ||
-            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo)) {
+            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo) || !OptionalBool(*d, "doctrine", "arm_threat", out.doctrine.arm_threat) ||
+            !OptionalNumber(*d, "doctrine", "arm_silence_s", out.doctrine.arm_silence_s) ||
+            !OptionalNumber(*d, "doctrine", "arm_search_off_turns", out.doctrine.arm_search_off_turns)) {
             return false;
+        }
+        if (out.doctrine.arm_silence_s < 0.0) return Fail("doctrine.arm_silence_s", "must be >= 0");
+        if (out.doctrine.arm_search_off_turns < 0.0) return Fail("doctrine.arm_search_off_turns", "must be >= 0");
+        if (const json::Value* r = d->Find("relocate_after_arm")) {
+            const json::Value* to = nullptr;
+            if (!Keys(*r, "doctrine.relocate_after_arm", {"to", "notes"}) || !RequireObject(*r, "doctrine.relocate_after_arm", "to", to) ||
+                !LoadPosition(*to, "doctrine.relocate_after_arm.to", frame_, out.doctrine.relocate_to)) {
+                return false;
+            }
+            if (!out.has_battery || !out.battery_drive_own) {
+                return Fail("doctrine.relocate_after_arm", "needs a battery that drives this vehicle (battery.drive_own)");
+            }
+            out.doctrine.relocate_after_arm = true;
         }
         if (out.doctrine.salvo < 1 || out.doctrine.salvo > 2) return Fail("doctrine.salvo", "must be 1 or 2");
         if (const json::Value* b = d->Find("search_bursts")) {
@@ -684,6 +991,37 @@ private:
         return true;
     }
 
+    // A target's "arms" (ArmCarrierDef): its warning receiver tells it what to fire at, so it needs one.
+    bool LoadArmCarrier(const json::Value& t, const std::string& tp, const ScenarioDef& out, ScenarioTarget& tg) {
+        const json::Value* a = t.Find("arms");
+        if (a == nullptr) return true;
+        const std::string p = Join(tp, "arms");
+        ArmCarrierDef& d = tg.arms;
+        double launch_km = 0.0, min_km = -1.0;
+        d.count = 1;
+        if (!Keys(*a, p, {"weapon", "count", "launch_range_km", "min_range_km", "interval_s", "aim", "turn_away", "notes"}) ||
+            !RequireString(*a, p, "weapon", d.weapon) || !OptionalInt(*a, p, "count", d.count) ||
+            !OptionalNumber(*a, p, "launch_range_km", launch_km) || !OptionalNumber(*a, p, "min_range_km", min_km) ||
+            !OptionalNumber(*a, p, "interval_s", d.interval_s) || !OptionalBool(*a, p, "turn_away", d.turn_away)) {
+            return false;
+        }
+        if (d.count < 1) return Fail(Join(p, "count"), "must be >= 1");
+        if (d.interval_s < 0.0) return Fail(Join(p, "interval_s"), "must be >= 0");
+        if (!out.has_em) return Fail(p, "needs own_unit.em: an anti-radiation missile is an EM platform");
+        if (tg.rwr.empty()) return Fail(p, "needs the target's rwr: it fires at what its warning receiver hears");
+        const int w = out.em.library.Arm(d.weapon);
+        if (w < 0) return Fail(Join(p, "weapon"), "'" + d.weapon + "' is not an anti-radiation missile of the EM libraries");
+        const em::ArmDef& def = out.em.library.arms[static_cast<std::size_t>(w)];
+        d.launch_range_m = launch_km > 0.0 ? launch_km * 1000.0 : def.max_range_m;
+        d.min_range_m = min_km >= 0.0 ? min_km * 1000.0 : def.min_range_m;
+        if (d.min_range_m >= d.launch_range_m) return Fail(Join(p, "min_range_km"), "must be below the launch range");
+        if (const json::Value* aim = a->Find("aim")) {
+            if (!LoadPosition(*aim, Join(p, "aim"), frame_, d.aim)) return false;
+            d.has_aim = true;
+        }
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         const json::Value* arr = OptionalArray(root, "", "targets");
         if (arr == nullptr) return message_.empty();
@@ -692,13 +1030,13 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "span_m", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
             double turn_deg_s = RadToDeg(tg.max_turn_rate_rad_s);
             double evade_deg_s = RadToDeg(tg.evade_turn_rate_rad_s);
-            if (!OptionalString(t, p, "class", tg.target_class) ||
+            if (!OptionalBool(t, p, "on_cue", tg.on_cue) || !OptionalString(t, p, "class", tg.target_class) ||
                 !OptionalBool(t, p, "evade_on_launch", tg.evade_on_launch) || !LoadIff(t, p, tg.friendly) ||
                 !OptionalNumber(t, p, "evade_turn_rate_deg_s", evade_deg_s)) {
                 return false;
@@ -710,11 +1048,11 @@ private:
             }
             if (tg.span_m < 0.0) return Fail(Join(p, "span_m"), "must be >= 0");
             if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
-                return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
+                return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 2 training target, 8 enemy, 9 no IFF...)");
             }
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
             if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr) ||
-                !OptionalBool(t, p, "decoy", tg.decoy)) {
+                !OptionalBool(t, p, "decoy", tg.decoy) || !OptionalString(t, p, "model", tg.model)) {
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
@@ -726,6 +1064,7 @@ private:
                     return Fail(Join(p, "rwr"), "'" + tg.rwr + "' is not a radar warning receiver");
                 }
             }
+            if (!LoadArmCarrier(t, p, out, tg)) return false;
             tg.evade_turn_rate_rad_s = DegToRad(evade_deg_s);
             const json::Value* start = nullptr;
             if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||
@@ -1028,7 +1367,10 @@ private:
 
     // The player's vehicle is the command post: "post": { "board": "command/pu12.json", "aspd": "command/aspd_u.json",
     //   "library": "command/regiment_radars.json",
-    //   "regiment": { "position": {...}, "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ] },
+    //   "codes": "command/aspd_codes.json",
+    //   "regiment": { "position": {...}, "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ],
+    //                 "telecode": true, "designate_within_m": 40000,
+    //                 "commands": [ { "at_s", "code" } | { "at_s", "group" } | { "code" or "group", "on_cue": true } ] },
     //   "radar": { "type": "p19", "position": {...} } }  (a radar cabled to the post; optional)
     // Required when the console has "post", refused otherwise.
     bool LoadPost(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
@@ -1038,16 +1380,22 @@ private:
             return true;
         }
         if (!console.has_post) return Fail("post", "the console is not a command post (no \"post\" block)");
-        if (!p->Is(json::Type::Object) || !Keys(*p, "post", {"board", "aspd", "library", "regiment", "radar", "notes"})) {
+        if (!p->Is(json::Type::Object) ||
+            !Keys(*p, "post", {"board", "aspd", "codes", "plotting", "library", "regiment", "radar", "radios", "notes"})) {
             return message_.empty() ? Fail("post", "expected an object") : false;
         }
-        std::string board_file, aspd_file, library_file, error;
+        std::string board_file, aspd_file, codes_file, plotting_file, library_file, error;
         if (!RequireString(*p, "post", "board", board_file) || !RequireString(*p, "post", "aspd", aspd_file) ||
+            !OptionalString(*p, "post", "codes", codes_file) || !OptionalString(*p, "post", "plotting", plotting_file) ||
             !OptionalString(*p, "post", "library", library_file)) {
             return false;
         }
+        if (!plotting_file.empty() && !LoadPlottingTuningFile(data_dir + "/" + plotting_file, out.post_plotting, &error)) {
+            return Fail("post.plotting", error);
+        }
         if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
         if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);
+        if (!codes_file.empty() && !LoadAspdCodesFile(data_dir + "/" + codes_file, out.post_codes, &error)) return Fail("post.codes", error);
         RegimentRadarLibrary lib;
         if (!library_file.empty() && !LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail("post.library", error);
         auto radar_of = [&](const json::Value& e, const std::string& rp, bool with_id, RegimentRadar& radar) {
@@ -1070,8 +1418,62 @@ private:
         };
         if (const json::Value* r = p->Find("regiment")) {
             const std::string rp = "post.regiment";
-            if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"position", "radars", "outages", "notes"})) {
+            if (!r->Is(json::Type::Object) ||
+                !Keys(*r, rp, {"position", "radars", "outages", "telecode", "designate_within_m", "commands", "command_net_mhz",
+                               "telecode_mhz", "telecode_return_mhz", "mast", "messages", "notes"}) ||
+                !OptionalBool(*r, rp, "telecode", out.post_regiment.telecode) ||
+                !OptionalNumber(*r, rp, "designate_within_m", out.post_regiment.designate_within_m)) {
                 return message_.empty() ? Fail(rp, "expected an object") : false;
+            }
+            if (const json::Value* cmds = OptionalArray(*r, rp, "commands")) {
+                double last_s = -1e18;
+                for (std::size_t j = 0; j < cmds->items.size(); ++j) {
+                    const std::string cp = Index(Join(rp, "commands"), j);
+                    const json::Value& x = cmds->items[j];
+                    RegimentCommand c;
+                    double code = -1.0;
+                    if (!Keys(x, cp, {"at_s", "code", "group", "on_cue", "notes"}) || !OptionalNumber(x, cp, "code", code) ||
+                        !OptionalString(x, cp, "group", c.group) || !OptionalBool(x, cp, "on_cue", c.on_cue)) {
+                        return false;
+                    }
+                    if ((x.Find("code") != nullptr) == !c.group.empty()) return Fail(cp, "a telecode \"code\" or a talk-table \"group\", one of them");
+                    if (x.Find("code") != nullptr) {
+                        if (code < 0.0 || code > 99.0 || code != std::floor(code)) return Fail(Join(cp, "code"), "a two-digit number, 00-99");
+                        c.code = static_cast<int>(code);
+                    }
+                    if (c.on_cue) {
+                        if (x.Find("at_s") != nullptr) return Fail(Join(cp, "at_s"), "a command held on cue has no time: the lesson sends it");
+                    } else {
+                        if (!RequireNumber(x, cp, "at_s", c.at_s)) return false;
+                        if (c.at_s < last_s) return Fail(Join(cp, "at_s"), "the commands in time order");
+                        last_s = c.at_s;
+                    }
+                    out.post_regiment.commands.push_back(c);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            RadioPlan& plan = out.radio_plan;
+            double net = 0.0, tc = 0.0, tc_back = 0.0;
+            if (!OptionalNumber(*r, rp, "command_net_mhz", net) || !OptionalNumber(*r, rp, "telecode_mhz", tc) ||
+                !OptionalNumber(*r, rp, "telecode_return_mhz", tc_back) || !OptionalBool(*r, rp, "mast", plan.regiment_mast)) {
+                return false;
+            }
+            plan.command_net_hz = net * 1.0e6;
+            plan.telecode_hz = tc * 1.0e6;
+            plan.telecode_return_hz = tc_back * 1.0e6;
+            if (const json::Value* msgs = OptionalArray(*r, rp, "messages")) {
+                for (std::size_t j = 0; j < msgs->items.size(); ++j) {
+                    const std::string mp = Index(Join(rp, "messages"), j);
+                    RegimentMessage m;
+                    if (!Keys(msgs->items[j], mp, {"at_s", "text"}) || !RequireNumber(msgs->items[j], mp, "at_s", m.at_s) ||
+                        !RequireString(msgs->items[j], mp, "text", m.text)) {
+                        return false;
+                    }
+                    plan.messages.push_back(std::move(m));
+                }
+            } else if (!message_.empty()) {
+                return false;
             }
             if (const json::Value* pos = r->Find("position")) {
                 if (!pos->Is(json::Type::Object) || !LoadPosition(*pos, Join(rp, "position"), frame_, out.post_regiment.position)) {
@@ -1092,10 +1494,16 @@ private:
                 for (std::size_t j = 0; j < outs->items.size(); ++j) {
                     const std::string op = Index(Join(rp, "outages"), j);
                     C2Outage o;
-                    if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
-                        !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason)) {
+                    std::string kind;
+                    if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason", "kind"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
+                        !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason) ||
+                        !OptionalString(outs->items[j], op, "kind", kind)) {
                         return false;
                     }
+                    if (!kind.empty() && kind != "off_air" && kind != "interference") {
+                        return Fail(Join(op, "kind"), "must be off_air or interference");
+                    }
+                    o.interference = kind == "interference";
                     if (o.to_s <= o.from_s) return Fail(Join(op, "to_s"), "must be after from_s");
                     out.post_regiment.outages.push_back(o);
                 }
@@ -1108,7 +1516,58 @@ private:
             if (!radar_of(*r, "post.radar", false, out.post_radar)) return false;
             out.has_post_radar = true;
         }
+        if (!LoadPostRadios(*p, data_dir, out, console)) return false;
         out.has_post = true;
+        return true;
+    }
+
+    // The post's radio sets (the console's "radios"): their data file, every role bound, and the plan the scenario gives
+    // them: "radios": { "r111_presets_mhz": [4 frequencies], "own_nets_mhz": { "fug1": 24.4, ... }, "prepared": true }.
+    bool LoadPostRadios(const json::Value& p, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* r = p.Find("radios");
+        if (!console.r111.present && !console.r407.present) {
+            return r == nullptr ? true : Fail("post.radios", "the console has no radio sets (" + std::string("radios") + ")");
+        }
+        std::string error;
+        if (!LoadRadioSetsFile(data_dir + "/" + console.radios_file, out.radio_sets, &error)) return Fail("post", "the console's radios: " + error);
+        for (const auto& set : {std::make_pair(true, &console.r111), std::make_pair(false, &console.r407)}) {
+            if (!set.second->present) continue;
+            const std::string missing = MissingRadioRole(*set.second, set.first);
+            if (!missing.empty()) return Fail("post", std::string("the console's radios.") + (set.first ? "r111." : "r407.") + missing + " is not bound");
+        }
+        out.has_radio_sets = true;
+        RadioPlan& plan = out.radio_plan;
+        if (r == nullptr) return true;
+        const std::string rp = "post.radios";
+        if (!r->Is(json::Type::Object) || !Keys(*r, rp, {"r111_presets_mhz", "own_nets_mhz", "prepared", "repeat_s", "repeats", "notes"}) ||
+            !OptionalBool(*r, rp, "prepared", plan.prepared) || !OptionalNumber(*r, rp, "repeat_s", plan.repeat_s) ||
+            !OptionalInt(*r, rp, "repeats", plan.repeats)) {
+            return message_.empty() ? Fail(rp, "expected an object") : false;
+        }
+        if (const json::Value* list = OptionalArray(*r, rp, "r111_presets_mhz")) {
+            if (list->items.size() > 4) return Fail(Join(rp, "r111_presets_mhz"), "the R-111 has four presets");
+            for (std::size_t i = 0; i < list->items.size(); ++i) {
+                const json::Value& v = list->items[i];
+                const double mhz = v.Is(json::Type::Number) ? v.number : -1.0;
+                if (mhz != 0.0 && (mhz * 1.0e6 < out.radio_sets.r111.freq_min_hz || mhz * 1.0e6 > out.radio_sets.r111.freq_max_hz)) {
+                    return Fail(Index(Join(rp, "r111_presets_mhz"), i), "outside the R-111's band (0: not prepared)");
+                }
+                plan.presets_hz[i] = mhz * 1.0e6;
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* nets = r->Find("own_nets_mhz")) {
+            if (!nets->Is(json::Type::Object)) return Fail(Join(rp, "own_nets_mhz"), "expected an object of set: MHz");
+            for (std::size_t i = 0; i < nets->keys.size(); ++i) {
+                if (!nets->items[i].Is(json::Type::Number) || !(nets->items[i].number > 0.0)) {
+                    return Fail(Join(Join(rp, "own_nets_mhz"), nets->keys[i]), "expected a frequency in MHz");
+                }
+                plan.own_nets_hz.emplace_back(nets->keys[i], nets->items[i].number * 1.0e6);
+            }
+        }
+        if (!(plan.repeat_s > 0.0) || plan.repeats < 0) return Fail(rp, "repeat_s must be > 0, repeats >= 0");
+        plan.present = true;
         return true;
     }
 
@@ -1169,7 +1628,7 @@ private:
     bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
             return Fail(p, "unknown battery order '" + kind_text +
-                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon)");
+                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon, relocate)");
         }
         if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
             !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle) ||
@@ -1199,6 +1658,11 @@ private:
                 if (!LoadPosition(route->items[i], Index(Join(p, "route"), i), frame_, v)) return false;
                 out.route.push_back(v);
             }
+        }
+        if (out.kind == BatteryOrder::Kind::Relocate) {
+            const json::Value* c = o.Find("covered");
+            if (c == nullptr) return Fail(Join(p, "covered"), "a change of position needs the new position (of the own vehicle)");
+            if (!LoadPosition(*c, Join(p, "covered"), frame_, out.covered)) return false;
         }
         if (out.kind == BatteryOrder::Kind::CombatFormation) {
             const json::Value* c = o.Find("covered");

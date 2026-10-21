@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/radio_sets.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
 
@@ -221,6 +222,8 @@ struct CabinControl {
     bool auto_placed = false;       // a guard placed over the control it guards
     int red_dot = -1;               // toggles and rotaries: the position a red dot marks on the panel, or -1
     CabinLook look;                 // optional appearance (kind Default = by style)
+    std::string watch;              // wheels: the display its crewman watches while he turns it ("" none): the front
+                                    // end turns his head onto it while the wheel is held
 };
 
 struct CabinLamp {
@@ -250,7 +253,7 @@ inline bool KnownReadout(const std::string& name) {
 // plot_board: the plotter's air-situation map (the board's marks in grease pencil); keypad_window: the ДХ keypad's window
 // (the number it is on, ЦУ). All need the console's post block (keypad_window its keypad).
 enum class CabinDisplayKind { Ppi, RangeScope, ElevationScope, Tv, Dial, Meter, Counters, AspdScope, StatusBoard, PlotBoard,
-                              KeypadWindow };
+                              KeypadWindow, Document };
 
 inline const char* ToString(CabinDisplayKind k) {
     switch (k) {
@@ -265,6 +268,7 @@ inline const char* ToString(CabinDisplayKind k) {
         case CabinDisplayKind::StatusBoard: return "status_board";
         case CabinDisplayKind::PlotBoard: return "plot_board";
         case CabinDisplayKind::KeypadWindow: return "keypad_window";
+        case CabinDisplayKind::Document: return "document";
     }
     return "?";
 }
@@ -290,6 +294,7 @@ struct CabinDisplay {
     std::vector<Condition> lit_when;     // dial backlight: all must hold (empty = lit whenever powered)
     // dial and meter
     std::string control;                 // the control whose value the needle shows
+    std::string reading;                 // meter: or a reading worked out from the console (radio_sets.hpp), 0..1 of the swing
     std::string readout;                 // dial: or a value the simulation gives (simcore/readouts.hpp, DialReading)
     int marks = 12;                      // labelled divisions on the scale
     // dial: one needle revolution = value_per_turn; the scale reads 0..labels_per_turn around it
@@ -312,11 +317,43 @@ struct CabinDisplay {
     std::vector<std::string> readouts;
     // aspd_scope: the grid glass over the tube, with the plotting board's marks on it
     bool glass = false;
+    // document: a paper kept at the seat (the talk tables, the radio data: docs/crew/12_COMMUNICATIONS.md), drawn from
+    // the scenario's own (`talk_tables`, `radio_data`)
+    std::string document;
+};
+
+// What a meter's needle reads now, in its display units: its control's value times `scale`, or its reading (0..1 of the
+// swing, radio_sets.hpp) times `full_scale`. Worked out from the console alone, so a mirrored console reads the same.
+inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
+    if (!d.reading.empty()) return RadioMeterReading(d.reading, console) * d.full_scale;
+    return console.panel.GetValue(d.control) * d.scale;
+}
+
+// A rectangle of floor a crewman can walk on, in plan (body frame x and y, metres).
+// A part that swings on a hinge (the PU-12M's plotting board): its panels (with everything on them) and shell meshes
+// turn about a vertical axis through `pivot_m`, by `folded_rad` (clockwise seen from above) when folded and not at all
+// when open, as the console's `subsystem` goes from off to ready (its progress in between).
+struct CabinHinge {
+    std::string id;
+    std::string label;
+    std::vector<std::string> panels;
+    std::vector<std::string> shell;
+    Vec3 pivot_m;
+    double folded_rad = 0.0;
+    std::string subsystem;
+};
+
+struct CabinWalkArea {
+    double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
+    bool Contains(double x, double y) const { return x >= x0 && x <= x1 && y >= y0 && y <= y1; }
 };
 
 struct CabinLayout {
     std::string system_id;
     double ceiling_m = 0.0;  // the roof's inside in the body frame, where a crewman getting up must keep his head under (0: none)
+    std::vector<CabinWalkArea> walk;  // the floor he can walk on, up from his seat ("walk"); none: he stays seated
+    std::vector<CabinHinge> hinges;   // parts that swing (CabinHinge)
+    double stand_eye_m = 0.0;         // his eye's height on his feet (stooping under a low roof; "stand_eye_m")
     std::vector<CabinStation> stations;
     std::vector<CabinPanel> panels;
     std::vector<CabinControl> controls;
@@ -408,6 +445,64 @@ struct CabinLayout {
         return DisplayOn(d, panel, equipment) && equipment.AllHold(d.lit_when, panel);
     }
 
+    // Walking (a player up from his seat, roadmap 8 mobility): the plan point is on the floor he can walk on.
+    bool Walkable(double x, double y) const {
+        for (const CabinWalkArea& a : walk) {
+            if (a.Contains(x, y)) return true;
+        }
+        return false;
+    }
+
+    // The nearest walkable plan point to (x, y) (the point itself if walkable); false without walking floor.
+    bool NearestWalkable(double x, double y, double& out_x, double& out_y) const {
+        double best = 1e18;
+        for (const CabinWalkArea& a : walk) {
+            const double cx = x < a.x0 ? a.x0 : (x > a.x1 ? a.x1 : x);
+            const double cy = y < a.y0 ? a.y0 : (y > a.y1 ? a.y1 : y);
+            const double d2 = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+            if (d2 < best) {
+                best = d2;
+                out_x = cx;
+                out_y = cy;
+            }
+        }
+        return !walk.empty();
+    }
+
+    // One step of walking from `from` towards `to` (the eye; z kept): all of it if the floor allows, else along x or y
+    // alone (sliding along an edge), else none.
+    Vec3 WalkStep(const Vec3& from, const Vec3& to) const {
+        if (Walkable(to.x, to.y)) return Vec3{to.x, to.y, from.z};
+        if (Walkable(to.x, from.y)) return Vec3{to.x, from.y, from.z};
+        if (Walkable(from.x, to.y)) return Vec3{from.x, to.y, from.z};
+        return from;
+    }
+
+    // Where a crewman stands when he gets up from a seat: the walkable point nearest his eye, at standing eye height.
+    bool StandUpFrom(const CabinStation& seat, Vec3& out) const {
+        double x = 0.0, y = 0.0;
+        if (!NearestWalkable(seat.eye_m.x, seat.eye_m.y, x, y)) return false;
+        out = Vec3{x, y, stand_eye_m};
+        return true;
+    }
+
+    // The seat a standing crewman can sit down in from where he is: the nearest whose standing-up point is within
+    // `radius_m` (plan distance); null if none.
+    const CabinStation* SeatNear(const Vec3& eye, double radius_m) const {
+        const CabinStation* best = nullptr;
+        double best_d = radius_m;
+        for (const CabinStation& st : stations) {
+            Vec3 up;
+            if (!StandUpFrom(st, up)) continue;
+            const double d = std::sqrt((up.x - eye.x) * (up.x - eye.x) + (up.y - eye.y) * (up.y - eye.y));
+            if (d <= best_d) {
+                best_d = d;
+                best = &st;
+            }
+        }
+        return best;
+    }
+
     // Console controls the layout doesn't place (a cabin should usually place them all).
     std::vector<std::string> UnplacedControls(const ControlPanel& panel) const {
         std::vector<std::string> out;
@@ -423,21 +518,68 @@ namespace detail {
 class CabinLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "ceiling_m", "stations", "panels", "controls", "lamps",
-                             "displays", "blocks", "fixtures", "shell"})) {
+        if (!Keys(root, "", {"system_id", "status", "notes", "ceiling_m", "walk", "stand_eye_m", "stations", "panels",
+                             "controls", "lamps", "displays", "blocks", "fixtures", "shell", "hinges"})) {
             return false;
         }
         if (!RequireString(root, "", "system_id", out.system_id)) return false;
         if (!OptionalNumber(root, "", "ceiling_m", out.ceiling_m)) return false;
+        if (!LoadWalk(root, out)) return false;
         if (out.system_id != console.system_id) {
             return Fail("system_id", "'" + out.system_id + "' doesn't match the console's '" + console.system_id + "'");
         }
         return LoadSeats(root, console, out) && LoadPanels(root, out) && LoadControlItems(root, console.panel, out) &&
                PlaceGuards(console.panel, out) && LoadLamps(root, console, out) && LoadDisplays(root, console, out) &&
-               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out);
+               LoadBlocks(root, out) && LoadFixtures(root, out) && LoadShell(root, out) && LoadHinges(root, console, out) && CheckWatches(out);
     }
 
 private:
+    // The walking floor: rectangles from_m -> to_m in plan, and the standing eye's height (under the roof).
+    bool LoadWalk(const json::Value& root, CabinLayout& out) {
+        if (!OptionalNumber(root, "", "stand_eye_m", out.stand_eye_m)) return false;
+        const json::Value* arr = OptionalArray(root, "", "walk");
+        if (arr == nullptr) return message_.empty();
+        if (!(out.stand_eye_m > 0.0)) return Fail("stand_eye_m", "required with walk");
+        if (out.ceiling_m > 0.0 && out.stand_eye_m > out.ceiling_m - 0.08) {
+            return Fail("stand_eye_m", "must leave the head under the ceiling (8 cm from the eye to the roof at least)");
+        }
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("walk", i);
+            const json::Value& w = arr->items[i];
+            if (!Keys(w, path, {"from_m", "to_m", "notes"})) return false;
+            double ax = 0.0, ay = 0.0, bx = 0.0, by = 0.0;
+            if (!Number2(w, path, "from_m", ax, ay) || !Number2(w, path, "to_m", bx, by)) return false;
+            CabinWalkArea area;
+            area.x0 = ax < bx ? ax : bx;
+            area.x1 = ax < bx ? bx : ax;
+            area.y0 = ay < by ? ay : by;
+            area.y1 = ay < by ? by : ay;
+            if (area.x1 - area.x0 < 0.05 || area.y1 - area.y0 < 0.05) return Fail(path, "too narrow to walk in");
+            out.walk.push_back(area);
+        }
+        return true;
+    }
+
+    // A wheel's "watch" names a display of the same seat.
+    bool CheckWatches(const CabinLayout& out) {
+        for (std::size_t i = 0; i < out.controls.size(); ++i) {
+            const CabinControl& c = out.controls[i];
+            if (c.watch.empty()) continue;
+            const CabinDisplay* d = nullptr;
+            for (const CabinDisplay& x : out.displays) {
+                if (x.id == c.watch) d = &x;
+            }
+            const std::string path = Index("controls", i) + ".watch";
+            if (d == nullptr) return Fail(path, "no display '" + c.watch + "'");
+            const CabinPanel* mine = out.FindPanel(c.panel_id);
+            const CabinPanel* theirs = out.FindPanel(d->panel_id);
+            if (mine != nullptr && theirs != nullptr && mine->station != theirs->station) {
+                return Fail(path, "'" + c.watch + "' is another seat's display");
+            }
+        }
+        return true;
+    }
+
     bool Number3(const json::Value& obj, const std::string& path, const char* key, Vec3& out) {
         const json::Value* v = obj.Find(key);
         if (v == nullptr) return Fail(Join(path, key), "required");
@@ -563,7 +705,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
-            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "look", "notes"})) {
+            if (!Keys(c, path, {"control", "panel", "at_m", "style", "units_per_turn", "red_dot", "look", "watch", "notes"})) {
                 return false;
             }
             CabinControl item;
@@ -606,6 +748,8 @@ private:
             if (const json::Value* look = c.Find("look")) {
                 if (!LoadLook(*look, Join(path, "look"), false, item.look)) return false;
             }
+            if (!OptionalString(c, path, "watch", item.watch)) return false;
+            if (!item.watch.empty() && item.style != CabinStyle::Wheel) return Fail(Join(path, "watch"), "for wheels only");
             out.controls.push_back(std::move(item));
         }
         return true;
@@ -756,6 +900,47 @@ private:
         return true;
     }
 
+    bool LoadHinges(const json::Value& root, const ConsoleData& console, CabinLayout& out) {
+        const json::Value* arr = OptionalArray(root, "", "hinges");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string path = Index("hinges", i);
+            const json::Value& v = arr->items[i];
+            if (!Keys(v, path, {"id", "label", "panels", "shell", "pivot_m", "folded_deg", "subsystem", "source", "confidence", "notes"})) {
+                return false;
+            }
+            CabinHinge h;
+            if (!RequireString(v, path, "id", h.id) || !OptionalString(v, path, "label", h.label) || !Number3(v, path, "pivot_m", h.pivot_m) ||
+                !Degrees(v, path, "folded_deg", h.folded_rad) || !RequireString(v, path, "subsystem", h.subsystem) || !Provenance(v, path)) {
+                return false;
+            }
+            for (const char* key : {"panels", "shell"}) {
+                const json::Value* list = OptionalArray(v, path, key);
+                if (list == nullptr) {
+                    if (!message_.empty()) return false;
+                    continue;
+                }
+                for (std::size_t k = 0; k < list->items.size(); ++k) {
+                    if (!list->items[k].Is(json::Type::String)) return Fail(Index(Join(path, key), k), "expected an id");
+                    const std::string id = list->items[k].string;
+                    if (std::string(key) == "panels") {
+                        if (out.FindPanel(id) == nullptr) return Fail(Index(Join(path, key), k), "unknown panel '" + id + "'");
+                        h.panels.push_back(id);
+                    } else {
+                        bool found = false;
+                        for (const CabinShellPart& part : out.shell) found = found || part.id == id;
+                        if (!found) return Fail(Index(Join(path, key), k), "unknown shell part '" + id + "'");
+                        h.shell.push_back(id);
+                    }
+                }
+            }
+            if (h.panels.empty() && h.shell.empty()) return Fail(path, "swings nothing: give panels or shell parts");
+            if (console.equipment.Def(h.subsystem) == nullptr) return Fail(Join(path, "subsystem"), "unknown subsystem '" + h.subsystem + "'");
+            out.hinges.push_back(std::move(h));
+        }
+        return true;
+    }
+
     bool LoadShell(const json::Value& root, CabinLayout& out) {
         const json::Value* arr = OptionalArray(root, "", "shell");
         if (arr == nullptr) return message_.empty();
@@ -838,7 +1023,7 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale",
                                 "unit", "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "readouts", "glass", "source", "confidence", "notes"})) {
+                                "readouts", "glass", "reading", "document", "source", "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -898,7 +1083,7 @@ private:
             allowed = {"control", "readout", "marks", "value_per_turn", "labels_per_turn"};
         } else if (kind == "meter") {
             disp.kind = CabinDisplayKind::Meter;
-            allowed = {"control", "marks", "scale", "full_scale", "unit"};
+            allowed = {"control", "reading", "marks", "scale", "full_scale", "unit"};
         } else if (kind == "counters") {
             disp.kind = CabinDisplayKind::Counters;
             allowed = {"readouts"};
@@ -916,18 +1101,31 @@ private:
         } else if (kind == "keypad_window") {
             disp.kind = CabinDisplayKind::KeypadWindow;
             if (console.post_keypad_digits.empty()) return Fail(Join(path, "kind"), "a keypad_window needs the console's post keypad");
+        } else if (kind == "document") {
+            disp.kind = CabinDisplayKind::Document;
+            allowed = {"document"};
+            if (!OptionalString(d, path, "document", disp.document)) return false;
+            if (disp.document != "talk_tables" && disp.document != "radio_data") return Fail(Join(path, "document"), "talk_tables or radio_data");
         } else {
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope, "
-                                            "status_board, plot_board or keypad_window");
+                                            "status_board, plot_board, keypad_window or document");
         }
-        for (const char* key : {"control", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
+        for (const char* key : {"control", "reading", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
-                                "range_window_m", "readouts", "glass"}) {
+                                "range_window_m", "readouts", "glass", "document"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
         }
-        if (disp.kind == CabinDisplayKind::Dial && d.Find("readout") != nullptr) {
+        if (disp.kind == CabinDisplayKind::Meter && d.Find("reading") != nullptr) {
+            // A meter that reads the set rather than a control: one of the radio sets' readings, and that set on the console.
+            if (d.Find("control") != nullptr) return Fail(path, "a meter shows a control or a reading, not both");
+            if (!RequireString(d, path, "reading", disp.reading)) return false;
+            if (!KnownRadioReading(disp.reading)) return Fail(Join(path, "reading"), "unknown reading '" + disp.reading + "'");
+            if ((disp.reading == "r111_indicator" && !console.r111.present) || (disp.reading == "r407_meter" && !console.r407.present)) {
+                return Fail(Join(path, "reading"), "the console has no such radio set");
+            }
+        } else if (disp.kind == CabinDisplayKind::Dial && d.Find("readout") != nullptr) {
             if (d.Find("control") != nullptr) return Fail(Join(path, "readout"), "a dial reads a control or a readout, not both");
             if (!RequireString(d, path, "readout", disp.readout)) return false;
             if (disp.readout != "gyro_heading" && disp.readout != "fuel") return Fail(Join(path, "readout"), "must be gyro_heading or fuel");

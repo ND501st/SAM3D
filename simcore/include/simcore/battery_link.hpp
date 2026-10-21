@@ -85,6 +85,8 @@ private:
             pending_until_s_ = d.end_s + kPendingS;
         }
         osa_->SetPostNetUp(post_->PostBatteryNetUp());
+        for (int to : post_->TakeBatteryNetOrders()) osa_->HearBatteryNetOrder(to);  // the spare frequency (or back)
+        for (int number : osa_->TakeReadbacks()) post_->HearReadback(callsign_, number);
         for (const ScenarioRunner::LinkReport& r : osa_->TakeOwnReports()) post_->HearBatteryReport(r);
         for (const ScenarioRunner::LinkReport& r : post_->TakeNetReports()) {
             if (r.kind == BatteryFire::Event::Kind::Hit) osa_->DestroyTarget(r.target, r.callsign);

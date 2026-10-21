@@ -32,7 +32,7 @@ SC_TEST("missions: the catalogue loads and every mission in it starts, with its 
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("    %zu missions in %zu groups, loaded in %.0f ms\n", c.Count(), c.groups.size(), ms);
-    SC_EXPECT(c.Count() == 20 + 6 && c.groups.size() == 3);  // + ranges and history
+    SC_EXPECT(c.Count() == 13 + 16 + 4 + 7 + 7 + 1 && c.groups.size() == 6);  // the missions (with the two ARM drills) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
     for (const MissionGroup& g : c.groups) {
         SC_EXPECT(!g.label.empty() && !g.notes.empty());
         for (const MissionDef& m : g.missions) {
@@ -90,7 +90,7 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
         if (!listed) std::printf("    not in the menu: scenarios/%s\n", name.c_str());
         SC_EXPECT(listed);
     }
-    SC_EXPECT(files == 22 + 6);  // + ranges and history
+    SC_EXPECT(files == 13 + 18 + 4 + 7 + 7 + 1);  // the missions (with the two ARM drills) and drills, the tutorial and the seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + data/scenarios/air_war_*.json, + the test range
 }
 
 SC_TEST("missions: a mission that would not start is refused, naming its place in the list") {
@@ -105,4 +105,33 @@ SC_TEST("missions: a mission that would not start is refused, naming its place i
     SC_EXPECT(Refused(head + R"({"file": "scenarios/osa_practice.json", "title": "x"}, {"file": "scenarios/osa_practice.json", "title": "y"})" + tail,
                       "listed twice"));
     SC_EXPECT(Refused(R"({"catalog_id": "t", "groups": []})", "groups: required"));
+}
+
+SC_TEST("missions: the tutorial comes first: the basics outside, then each seat's lesson, the Osa's and the PU-12M's, starting in that seat") {
+    MissionCatalog c;
+    SC_EXPECT(LoadMissionCatalog(kData, c));
+    SC_EXPECT(!c.groups.empty() && c.groups.front().id == "tutorial");
+    if (c.groups.empty()) return;
+    const std::vector<MissionDef>& t = c.groups.front().missions;
+    SC_EXPECT(t.size() == 11);
+    if (t.size() != 11) return;
+    SC_EXPECT(t[0].id == "tutorial_basics" && t[0].tutorial == "tutorials/basics.json" && t[0].start == "outside");
+    const char* seats[] = {"driver", "operator", "senior_operator", "deputy_commander", "commander"};
+    for (int i = 0; i < 5; ++i) {
+        const MissionDef& m = t[static_cast<std::size_t>(i + 1)];
+        SC_EXPECT(m.id == std::string("school_") + seats[i] && m.start == seats[i]);
+        SC_EXPECT(m.tutorial == std::string("tutorials/school_") + seats[i] + ".json");
+        SC_EXPECT(m.level == "/Game/Maps/KesmarkRange");
+    }
+    const char* post_seats[] = {"driver", "radio_operator", "squad_leader", "operator", "battery_commander"};
+    for (int i = 0; i < 5; ++i) {
+        const MissionDef& m = t[static_cast<std::size_t>(i + 6)];
+        SC_EXPECT(m.id == std::string("school_pu12m_") + post_seats[i] && m.start == post_seats[i]);
+        SC_EXPECT(m.tutorial == std::string("tutorials/school_pu12m_") + post_seats[i] + ".json");
+    }
+    // A lesson written for another scenario, and a start that is no seat, are refused.
+    const std::string entry = "{\"catalog_id\": \"x\", \"groups\": [{\"id\": \"g\", \"label\": \"G\", \"missions\": [";
+    SC_EXPECT(Refused(entry + "{\"file\": \"scenarios/osa_practice.json\", \"title\": \"T\", \"tutorial\": \"tutorials/basics.json\"}]}]}",
+                      "is written for scenarios/tutorial_basics.json"));
+    SC_EXPECT(Refused(entry + "{\"file\": \"scenarios/osa_practice.json\", \"title\": \"T\", \"start\": \"gunner\"}]}]}", "'gunner' is not"));
 }

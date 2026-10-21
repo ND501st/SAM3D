@@ -187,7 +187,7 @@ SC_TEST("comms: the commander's box on the intercom only (ВС) hears no radio; 
     SC_EXPECT(Has(d, "cannot hear the net: his intercom box is not on the radio (A-1)") && Has(d, "hears the net again"));
 }
 
-SC_TEST("comms: an order goes by the intercom at once, and is shouted when the commander's box is off or the member's is on the radio") {
+SC_TEST("comms: an order goes by the intercom at once, made with the call to a box on the radio, shouted without the box or a headset") {
     auto r = Load(Text());
     SC_EXPECT(r != nullptr);
     if (!r) return;
@@ -222,16 +222,22 @@ SC_TEST("comms: an order goes by the intercom at once, and is shouted when the c
     op->CancelOrder();
     c.panel.Set("intercom.a1", 2);
     Steps(*r, 1.0);
-    c.panel.Set("intercom.pv", 1);  // the driver is on the radio: he does not hear the intercom
+    c.panel.Set("intercom.pv", 1);  // the driver is on the radio: the order goes with the call (ВЫЗ), which reaches him
+    Steps(*r, 0.2);
     r->GiveOrder(*driver, *p_driver, false);
-    SC_EXPECT(r->PendingOrders() == 1);
-    Steps(*r, 5.0);
     SC_EXPECT(r->PendingOrders() == 0 && driver->IsBusy());
     driver->CancelOrder();
     c.panel.Set("intercom.pv", 0);
-    c.panel.Set("intercom.a2", 1);  // the deputy on the radio
+    c.panel.Set("intercom.a2", 1);  // the deputy on the radio: likewise
+    Steps(*r, 0.2);
     r->GiveOrder(*r->Crew("Deputy"), *p_deputy, true);
-    SC_EXPECT(r->PendingOrders() == 1);
+    SC_EXPECT(r->PendingOrders() == 0);
+    r->Crew("Deputy")->CancelOrder();
+    c.panel.Set("intercom.a2", 0);
+    c.panel.Set("headset.operator", 0);  // no headset: he hears only the cabin, the order is shouted
+    Steps(*r, 0.2);
+    r->GiveOrder(*op, *p_op, false);
+    SC_EXPECT(r->PendingOrders() == 1 && !op->IsBusy());
 }
 
 SC_TEST("comms: without the turbine and the take-off generator a shouted order takes only the quiet time") {

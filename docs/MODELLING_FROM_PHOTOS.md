@@ -40,6 +40,9 @@ python tools/photo_trace.py rectify tools/traces/<name>.json PHOTO --check
   into `plate_edges` (keep `"offset": [500, 100]`), set `width_mm` from the flattened right edge, run again: `front_mm.png`
   is the front at 5 px/mm with a 40 mm margin, and `front_mm_grid.jpg` the same with a mm grid.
 * Check: a round part's circle fit (next step) should come out round. The R-123M's band selector was round to 0.6 %.
+* **A manual's drawing** of the front (the R-111's ТО fig. 4) is flattened the same way (`tools/traces/r111_drawing.json`)
+  and names every control by its number, but take positions from the photograph: the circle fits showed the drawing
+  about 4 % wide. Keep both and say which was used.
 
 ## 2. Read the front off it
 
@@ -102,6 +105,7 @@ C.render_views(target, r'out/traces/<name>/close', {'left': (0.22, -0.1, 0.12), 
 
 ```bash
 python tools/photo_trace.py camera  tools/traces/<name>.json PHOTO              # solve the photo's camera first
+python tools/photo_trace.py camera  tools/traces/<name>.json PHOTO --focal-35mm 34   # a near square-on photo: hold the focal
 python tools/photo_trace.py overlay tools/traces/<name>.json out/traces/<name>/render_front.png
 python tools/photo_trace.py overlay tools/traces/<name>.json out/traces/<name>/render_photo.png --photo PHOTO
 ```
@@ -112,6 +116,16 @@ python tools/photo_trace.py overlay tools/traces/<name>.json out/traces/<name>/r
   acceptance test.
 * **Close-ups** from three-quarter angles: parts running into each other, letters standing on the right surface, screws
   seated.
+
+* A photo taken nearly square-on leaves the focal length free (the solve returns f = 0 or runs off): hold it with
+  `--focal-35mm`, from the EXIF (the R-111's 34 mm) or a phone's usual 26 mm when there is none (the R-407's).
+* A part well proud of the front (the R-407's meter housing, 32 mm) lies off the flattened plane: read its face off the
+  photo, then **back-project** it through the solved camera onto its own plane before tracing it, or it lands shifted by
+  the parallax.
+* **Sets that share a builder**: the PU-12M's radios have one trace schema (`r111_trace.py`, `r407_trace.py`: plate,
+  regions, round parts with their `sim` control, lamps, tubes, letters, screws, `CONTROL_MM`) and one builder
+  (`tools/blender/radio_front_model.py`); a new set of the kind is a trace module, a colour scheme and a line in
+  `build_pu12m_radios.py`.
 
 ## 7. Into the cabin
 

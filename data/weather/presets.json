@@ -1,0 +1,111 @@
+{
+  "weather_id": "central_europe_autumn",
+  "display_name": "Weather presets: the middle Danube plain in autumn",
+  "status": "First pass, 18 October 2026 (docs/TEST_RANGE.md).",
+  "source": "sam3d estimate: cloud heights, kinds and shares after wmo_cloud_atlas and wmo_306; the wind profile after stull_1988; cloud extinction from liquid water after kunkel_1984 and wallace_hobbs_2006",
+  "confidence": "estimate",
+  "notes": "Typical days, not climatology: values are chosen inside the ranges the cloud atlas gives for the temperate latitudes (low cloud up to 2 km, middle 2-7 km, high 5-13 km) and the boundary-layer textbook gives for a plain. Altitudes are above mean sea level; cover in oktas (eighths of the sky, as a METAR reports it: FEW 1-2, SCT 3-4, BKN 5-7, OVC 8). Winds from the given true bearing. 'air_war' names the air war's weather (Clear, Cloudy, Poor: simcore/air_war/types.hpp) the preset plays. A scenario names a preset in its \"weather\".",
+  "presets": [
+    {
+      "id": "clear", "name": "Clear, a high-pressure day", "air_war": "clear",
+      "source": "sam3d estimate after wmo_cloud_atlas (cirrus heights), stull_1988 (fair-weather boundary layer)", "confidence": "estimate",
+      "surface": { "temperature_c": 12, "dewpoint_c": 3, "qnh_hpa": 1022, "visibility_km": 40, "rain_mmh": 0,
+                   "wind_10m": { "speed_mps": 3, "from_deg": 330 } },
+      "boundary_layer": { "surface_layer_m": 80, "top_m": 900, "veer_deg": 25 },
+      "winds_aloft": [
+        { "alt_m": 1000, "speed_mps": 7, "from_deg": 345 },
+        { "alt_m": 3000, "speed_mps": 12, "from_deg": 315 },
+        { "alt_m": 5500, "speed_mps": 18, "from_deg": 295 },
+        { "alt_m": 9000, "speed_mps": 30, "from_deg": 285 },
+        { "alt_m": 11000, "speed_mps": 35, "from_deg": 280 },
+        { "alt_m": 14000, "speed_mps": 22, "from_deg": 275 },
+        { "alt_m": 20000, "speed_mps": 10, "from_deg": 270 }
+      ],
+      "layers": [
+        { "id": "cirrus", "kind": "cirrus", "base_m": 8800, "thickness_m": 900, "cover_oktas": 2, "cell_m": 8000, "extinction_per_km": 0.4,
+          "notes": "Ice cloud: an optical depth well under 1 through its depth, so the sun shines through it." }
+      ]
+    },
+    {
+      "id": "fair_cumulus", "name": "Fair-weather cumulus, an afternoon", "air_war": "",
+      "source": "sam3d estimate after wmo_cloud_atlas (cumulus humilis and mediocris), stull_1988 (convective boundary layer), kunkel_1984 (extinction)", "confidence": "estimate",
+      "surface": { "temperature_c": 17, "dewpoint_c": 7, "qnh_hpa": 1017, "visibility_km": 30, "rain_mmh": 0,
+                   "wind_10m": { "speed_mps": 4, "from_deg": 300 } },
+      "boundary_layer": { "surface_layer_m": 100, "top_m": 1400, "veer_deg": 15 },
+      "winds_aloft": [
+        { "alt_m": 1500, "speed_mps": 8, "from_deg": 310 },
+        { "alt_m": 3000, "speed_mps": 11, "from_deg": 300 },
+        { "alt_m": 5500, "speed_mps": 17, "from_deg": 285 },
+        { "alt_m": 9000, "speed_mps": 28, "from_deg": 275 },
+        { "alt_m": 11000, "speed_mps": 32, "from_deg": 275 },
+        { "alt_m": 14000, "speed_mps": 20, "from_deg": 270 },
+        { "alt_m": 20000, "speed_mps": 9, "from_deg": 270 }
+      ],
+      "layers": [
+        { "id": "cumulus", "kind": "cumulus", "base": "lcl", "thickness_m": 1200, "cover_oktas": 3, "cell_m": 1200, "lwc_g_m3": 0.5,
+          "notes": "The base is where the surface air condenses: 125 m per degree of dewpoint spread, here about 1.25 km above the ground. Cells 1-2 km across." }
+      ]
+    },
+    {
+      "id": "cloudy", "name": "Broken stratocumulus under altostratus", "air_war": "cloudy",
+      "source": "sam3d estimate after wmo_cloud_atlas (stratocumulus, altostratus), stull_1988, kunkel_1984", "confidence": "estimate",
+      "surface": { "temperature_c": 10, "dewpoint_c": 6, "qnh_hpa": 1011, "visibility_km": 20, "rain_mmh": 0,
+                   "wind_10m": { "speed_mps": 5, "from_deg": 280 } },
+      "boundary_layer": { "surface_layer_m": 100, "top_m": 1000, "veer_deg": 20 },
+      "winds_aloft": [
+        { "alt_m": 1000, "speed_mps": 10, "from_deg": 295 },
+        { "alt_m": 3000, "speed_mps": 16, "from_deg": 275 },
+        { "alt_m": 5500, "speed_mps": 24, "from_deg": 265 },
+        { "alt_m": 9000, "speed_mps": 38, "from_deg": 260 },
+        { "alt_m": 11000, "speed_mps": 42, "from_deg": 265 },
+        { "alt_m": 14000, "speed_mps": 25, "from_deg": 270 },
+        { "alt_m": 20000, "speed_mps": 12, "from_deg": 270 }
+      ],
+      "layers": [
+        { "id": "stratocumulus", "kind": "stratocumulus", "base_m": 1100, "thickness_m": 500, "cover_oktas": 5, "cell_m": 2500, "lwc_g_m3": 0.3 },
+        { "id": "altostratus", "kind": "altostratus", "base_m": 3600, "thickness_m": 900, "cover_oktas": 4, "cell_m": 6000, "lwc_g_m3": 0.15 }
+      ]
+    },
+    {
+      "id": "poor", "name": "Rain under a low overcast, a front coming through", "air_war": "poor",
+      "source": "sam3d estimate after wmo_cloud_atlas (nimbostratus, stratus fractus), stull_1988, kunkel_1984; the rain rate as the air war's raid scenarios use (simcore/air_war/raid_scenario.hpp)", "confidence": "estimate",
+      "surface": { "temperature_c": 8, "dewpoint_c": 7, "qnh_hpa": 1002, "visibility_km": 6, "rain_mmh": 4,
+                   "wind_10m": { "speed_mps": 8, "from_deg": 220 } },
+      "boundary_layer": { "surface_layer_m": 100, "top_m": 1000, "veer_deg": 20 },
+      "winds_aloft": [
+        { "alt_m": 1000, "speed_mps": 15, "from_deg": 235 },
+        { "alt_m": 3000, "speed_mps": 22, "from_deg": 240 },
+        { "alt_m": 5500, "speed_mps": 30, "from_deg": 245 },
+        { "alt_m": 9000, "speed_mps": 45, "from_deg": 250 },
+        { "alt_m": 11000, "speed_mps": 48, "from_deg": 255 },
+        { "alt_m": 14000, "speed_mps": 28, "from_deg": 260 },
+        { "alt_m": 20000, "speed_mps": 12, "from_deg": 265 }
+      ],
+      "layers": [
+        { "id": "stratus_fractus", "kind": "stratus", "base_m": 280, "thickness_m": 150, "cover_oktas": 3, "cell_m": 800, "lwc_g_m3": 0.25,
+          "notes": "Ragged scud under the main deck." },
+        { "id": "nimbostratus", "kind": "nimbostratus", "base_m": 500, "thickness_m": 2600, "cover_oktas": 8, "cell_m": 3000, "lwc_g_m3": 0.4 }
+      ]
+    },
+    {
+      "id": "low_stratus", "name": "Low stratus, dry beneath", "air_war": "",
+      "source": "sam3d estimate after wmo_cloud_atlas (stratus), kunkel_1984", "confidence": "estimate",
+      "surface": { "temperature_c": 6, "dewpoint_c": 4, "qnh_hpa": 1026, "visibility_km": 12, "rain_mmh": 0,
+                   "wind_10m": { "speed_mps": 2, "from_deg": 90 } },
+      "boundary_layer": { "surface_layer_m": 60, "top_m": 700, "veer_deg": 30 },
+      "winds_aloft": [
+        { "alt_m": 1000, "speed_mps": 5, "from_deg": 120 },
+        { "alt_m": 3000, "speed_mps": 9, "from_deg": 200 },
+        { "alt_m": 5500, "speed_mps": 15, "from_deg": 250 },
+        { "alt_m": 9000, "speed_mps": 25, "from_deg": 260 },
+        { "alt_m": 11000, "speed_mps": 28, "from_deg": 265 },
+        { "alt_m": 14000, "speed_mps": 18, "from_deg": 270 },
+        { "alt_m": 20000, "speed_mps": 9, "from_deg": 270 }
+      ],
+      "layers": [
+        { "id": "stratus", "kind": "stratus", "base_m": 600, "thickness_m": 400, "cover_oktas": 8, "cell_m": 2000, "lwc_g_m3": 0.25,
+          "notes": "An autumn inversion's deck: the TV sight sees nothing above 600 m, the radars see through it." }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 //
 // docs/crew/04_COMMANDS_AND_CALLOUTS.md is the specification; the words are the crew data's catalogue
 // (data/crew/<system>_crew.json, `callouts`). A CalloutBus carries them:
-//   * one voice at a time per channel: the intercom (R-124) inside the vehicle, the battery net (R-123M) outside;
+//   * one voice at a time per channel: the intercom inside the vehicle, the battery net outside, and the cabin (a word
+//     said aloud, without the intercom: a seat with no headset or no box); the runner routes each line (its `Router`:
+//     docs/crew/12_COMMUNICATIONS.md) and marks a circular call (ВЫЗ, ЦИРКУЛЯР) that reaches boxes on the radio too;
 //   * urgent callouts (priority 0) are spoken before everything queued; otherwise first come, first spoken;
 //   * speaking takes time: 0.4 s plus 0.35 s a word (about 2.8 words a second; sam3d estimate);
 //   * a callout can be delayed before it is queued (the speaker noticing and thinking: his skill).
@@ -12,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <string>
 #include <utility>
@@ -26,7 +29,7 @@ struct SpokenCallout {
     std::string id;       // the catalogue's id
     std::string from;     // a station, or "battery"
     std::string to;
-    std::string channel;  // "intercom" or "battery net"
+    std::string channel;  // "intercom", "cabin" or "battery net"
     std::string ru;       // the words, filled in
     std::string en;
     int priority = 1;
@@ -38,6 +41,7 @@ struct SpokenCallout {
     bool has_about = false;
     KnownTarget about;
     int repeats = 0;  // said again after "Повторите"
+    bool call = false;    // made with the call (ВЫЗ / ЦИРКУЛЯР): heard by boxes on the radio too
     std::size_t seq = 0;  // the order it started in (1, 2, ...): the voice plays each line once (roadmap 8.10)
 };
 
@@ -81,6 +85,16 @@ class CalloutBus {
 public:
     explicit CalloutBus(const CrewData* crew) : crew_(crew) {}
 
+    // How a line goes: its channel, whether it is made with the call, and any extra time before it can be said (turning
+    // a box, shouting). Without a router: the intercom, or the battery net for a radio callout.
+    struct Route {
+        std::string channel;
+        bool call = false;
+        double extra_s = 0.0;
+    };
+    using Router = std::function<Route(const CalloutDef&, const std::string& from)>;
+    void SetRouter(Router r) { router_ = std::move(r); }
+
     // Queue the catalogue's callout `id` from `from` (a station), after `delay_s`. Returns false for an unknown id.
     bool Say(double now_s, const std::string& id, const std::string& from, const std::map<std::string, std::string>& fields = {},
              double delay_s = 0.0, const KnownTarget* about = nullptr) {
@@ -91,6 +105,13 @@ public:
         s.from = from;
         s.to = def->to;
         s.channel = def->kind == CalloutKind::Radio ? "battery net" : "intercom";
+        double extra = 0.0;
+        if (router_) {
+            const Route r = router_(*def, from);
+            s.channel = r.channel;
+            s.call = r.call;
+            extra = r.extra_s;
+        }
         s.ru = FillCallout(def->ru, fields);
         std::map<std::string, std::string> en = fields;  // "<key>_en" gives the English for a field
         for (const auto& f : fields) {
@@ -99,7 +120,7 @@ public:
         }
         s.en = FillCallout(def->en, en);
         s.priority = def->priority;
-        s.queued_s = now_s + (delay_s > 0.0 ? delay_s : 0.0);
+        s.queued_s = now_s + (delay_s > 0.0 ? delay_s : 0.0) + extra;
         if (about != nullptr) {
             s.has_about = true;
             s.about = *about;
@@ -181,6 +202,7 @@ private:
     }
 
     const CrewData* crew_;
+    Router router_;
     std::vector<SpokenCallout> pending_;
     std::vector<SpokenCallout> speaking_;
     std::vector<SpokenCallout> heard_;

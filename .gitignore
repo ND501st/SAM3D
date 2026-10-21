@@ -67,3 +67,7 @@ unreal/**/Content/Developers/
 
 # Blender backups
 *.blend1
+
+# Deep-research working folders (the report is copied into docs/research)
+research_notes/
+reports/

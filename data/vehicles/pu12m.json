@@ -1,0 +1,88 @@
+{
+  "system_id": "pu12m",
+  "status": "first pass (docs/crew/13_OUT_OF_THE_VEHICLE.md, docs/research/MOUNTING_2026-10.md)",
+  "notes": "The PU-12M on its BTR-60PB hull as a body to climb: where each seat's crewman stands up, the roof hatches over the front seats, the roof, the ways down over the wheels, the places round it (the AB-1 set behind, the PAB-2 aiming circle ahead) and the jobs done there. Body frame as data/cabins/pu12m.json: x right, y forward, z up, metres, origin on the ground at the middle of the wheelbase (the exterior trace's X forward, Y left: x = -Y).",
+  "source": "tools/blender/pu12m_trace.py (the hull, the roof hatches, the mast, the roof box); tools/blender/pu12m_interior_trace.py (the equipment under the hatches); fair_btr_compare and vk_btr60 (the BTR-60PB's troops get out by the roof hatches; two side hatches high in the sides)",
+  "confidence": "medium",
+  "inside_noise_db": 62.0,
+  "hull": {
+    "top_m": 2.055,
+    "areas": [
+      { "from_m": [-1.0, -1.45], "to_m": [1.0, 2.25], "notes": "The flat roof (half-width 1.06 m) from the engine deck's grilles (X -1.45) to the roof's front corner (2.30)." }
+    ],
+    "footprint": { "from_m": [-1.42, -3.49], "to_m": [1.42, 3.73], "notes": "7.22 m long, 2.825 wide (valka_pu12)." },
+    "source": "valka_pu12 (7220 mm long, 2825 wide, 2055 to the top of the armour); tools/blender/pu12m_trace.py (ROOF_HALF_W, the roof's corners, the engine grilles)",
+    "confidence": "medium"
+  },
+  "keep_out": [
+    { "id": "mast", "why": "The mast's foot and winch come up through the roof; raised, it stands guyed (csla_pu12_manual item 10)",
+      "from_m": [0.48, 1.28], "to_m": [0.78, 1.58],
+      "source": "csla_pu12_manual (item 10, the mast through the roof); tools/blender/pu12m_trace.py (MAST_X, MAST_Y: 2.30 m behind the bow, 0.63 m to the right; the base section 7.5 cm in radius)", "confidence": "medium" },
+    { "id": "roof_box", "why": "The roof box in place of the turret stands 0.65 m above the roof",
+      "from_m": [-0.85, -1.25], "to_m": [-0.15, -0.35],
+      "source": "tools/blender/pu12m_trace.py (ROOF_BOX, after flak11 PU12-0)", "confidence": "medium" }
+  ],
+  "seats": [
+    { "station": "driver", "stand_m": [-0.15, 2.16, 0.62], "notes": "Between the front seats (data/cabins/pu12m.json walk)." },
+    { "station": "squad_leader", "stand_m": [0.05, 2.16, 0.62] },
+    { "station": "battery_commander", "stand_m": [0.4, -0.86, 0.62], "via_m": [[-0.05, -0.75], [-0.05, 0.15], [0.0, 1.45]],
+      "notes": "Along the bench's knee room to the gap between the R-111 and the ДХ keypad (x -0.17 to 0.08), under the folded map board, up the aisle between the telecode units to the front seats (tools/blender/pu12m_interior_trace.py)." },
+    { "station": "operator", "stand_m": [0.0, -0.86, 0.62], "via_m": [[-0.05, -0.75], [-0.05, 0.15], [0.0, 1.45]] },
+    { "station": "radio_operator", "stand_m": [-0.4, -0.86, 0.62], "via_m": [[-0.05, -0.75], [-0.05, 0.15], [0.0, 1.45]] }
+  ],
+  "exits": [
+    { "id": "hatch_squad_leader", "label": "The squad leader's roof hatch", "kind": "roof_hatch",
+      "opening_m": [0.45, 2.02, 2.055], "size_m": [0.5, 0.5], "under_m": [0.05, 2.05, 0.62], "out_m": [0.0, 1.8, 2.055],
+      "open_s": 2.0, "climb_out_s": 4.0, "climb_in_s": 5.0,
+      "stations": ["squad_leader", "battery_commander", "operator", "radio_operator"],
+      "source": "tools/blender/pu12m_trace.py ROOF_HATCHES (over the front seats, 0.5 x 0.5 m, scaled from the photographs and csla_pu12_manual's plan); the times: sam3d estimate",
+      "confidence": "medium",
+      "notes": "The BTR-60PB's middle roof hatch on the right stands over the IT-45 (its top 1.92 m under a 2.025 m ceiling) and the side hatches over the RK-3 and the ФР block (tools/blender/pu12m_interior_trace.py): the bench crew can't climb out there, so SAM3D sends them forward to the front hatches (a SAM3D inference from the trace)." },
+    { "id": "hatch_driver", "label": "The driver's roof hatch", "kind": "roof_hatch",
+      "opening_m": [-0.45, 2.02, 2.055], "size_m": [0.5, 0.5], "under_m": [-0.15, 2.05, 0.62], "out_m": [-0.75, 1.6, 2.055],
+      "open_s": 2.0, "climb_out_s": 4.0, "climb_in_s": 5.0,
+      "stations": ["driver"],
+      "source": "tools/blender/pu12m_trace.py ROOF_HATCHES; the times: sam3d estimate", "confidence": "medium" }
+  ],
+  "ways_down": [
+    { "id": "front_left", "label": "Down the left side over the front wheel", "top_m": [-1.0, 2.2, 2.055], "bottom_m": [-1.85, 2.2, 0.0],
+      "holds_m": [[-1.32, 2.2, 1.39], [-1.25, 2.2, 1.1]], "down_s": 3.0, "up_s": 4.0,
+      "source": "stroevoy_ustav_1993 art. 149 (men climb by the wheels and steps); tools/blender/pu12m_trace.py (the front axle at X 2.2, the chine at 1.39 m, track 2.38 m); the times: sam3d estimate",
+      "confidence": "estimate" },
+    { "id": "front_right", "label": "Down the right side over the front wheel", "top_m": [1.0, 2.2, 2.055], "bottom_m": [1.85, 2.2, 0.0],
+      "holds_m": [[1.32, 2.2, 1.39], [1.25, 2.2, 1.1]], "down_s": 3.0, "up_s": 4.0,
+      "source": "stroevoy_ustav_1993 art. 149; tools/blender/pu12m_trace.py; the times: sam3d estimate", "confidence": "estimate" },
+    { "id": "middle_left", "label": "Down the left side over the second wheel", "top_m": [-1.0, 0.807, 2.055], "bottom_m": [-1.85, 0.807, 0.0],
+      "holds_m": [[-1.32, 0.807, 1.39], [-1.25, 0.807, 1.1]], "down_s": 3.0, "up_s": 4.0,
+      "source": "stroevoy_ustav_1993 art. 149; tools/blender/pu12m_trace.py (the second axle at X 0.807); the times: sam3d estimate", "confidence": "estimate" },
+    { "id": "middle_right", "label": "Down the right side over the second wheel", "top_m": [1.0, 0.807, 2.055], "bottom_m": [1.85, 0.807, 0.0],
+      "holds_m": [[1.32, 0.807, 1.39], [1.25, 0.807, 1.1]], "down_s": 3.0, "up_s": 4.0,
+      "source": "stroevoy_ustav_1993 art. 149; tools/blender/pu12m_trace.py; the times: sam3d estimate", "confidence": "estimate" }
+  ],
+  "places": [
+    { "id": "ab1", "label": "The AB-1 set on the ground behind the vehicle", "at_m": [-1.0, -9.0], "face_m": [-1.0, -10.0],
+      "source": "csla_pu12_manual (the combat position drawing: the generator set on the ground behind the vehicle); the distance: sam3d estimate (clear of the exhaust on the right rear)", "confidence": "estimate",
+      "notes": "He stands at the set's front (face_m, where the set is): lifting it down, earthing it, cabling it to the input board, starting it." },
+    { "id": "pab2", "label": "The PAB-2 aiming circle, 35 m ahead", "at_m": [0.0, 38.7], "face_m": [0.0, 38.1],
+      "source": "voenizdat_osa_1991 p249 (the aiming circle set up 30-40 m from the PU-12M in its direction of travel, its monocular laid on the PU-12M's sight); flak11 (PU12-0: the PAB-2A)", "confidence": "high",
+      "notes": "Behind the tripod, looking back at the post." }
+  ],
+  "jobs": [
+    { "control": "pwr.ab1_set", "place": "ab1", "stay_until": [ { "subsystem": "ab1_placed", "is": "ready" } ], "source": "csla_pu12_manual (the set on the ground behind the vehicle)", "confidence": "medium",
+      "notes": "Setting it out and taking it back in are done at the set; he stays while it is lifted down, earthed and cabled (ab1_placed)." },
+    { "control": "pwr.ab1_start", "place": "ab1", "source": "sam3d (the set is started at the set)", "confidence": "estimate" },
+    { "control": "nav.pab2", "place": "pab2", "stay_until": [ { "subsystem": "pab2_measured", "is": "ready" } ], "source": "voenizdat_osa_1991 p249; flak11 (PU12-0)", "confidence": "high",
+      "notes": "He stays at the aiming circle while he measures (pab2_measured)." }
+  ],
+  "noise": [
+    { "subsystem": "ab1", "db_at_1m": 92.0, "at_m": [-1.0, -10.0, 0.5],
+      "source": "sam3d estimate (a 1 kW petrol set)", "confidence": "estimate" },
+    { "subsystem": "g290", "db_at_1m": 95.0, "at_m": [0.0, -2.5, 1.6],
+      "source": "sam3d estimate (the engines running the G-290 generator)", "confidence": "estimate" }
+  ],
+  "lineup": {
+    "first_m": [1.2, 5.25], "step_m": [-0.6, 0.0], "face_m": [0.0, 100.0],
+    "order": ["battery_commander", "squad_leader", "operator", "radio_operator", "driver"],
+    "source": "stroevoy_ustav_1993 art. 146, 150; the order: sam3d (the commander, then the crew by its numbers, ru_pu12_text)",
+    "confidence": "medium" }
+}

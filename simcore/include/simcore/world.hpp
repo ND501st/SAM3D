@@ -13,6 +13,7 @@
 #include "simcore/missile.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/vec3.hpp"
+#include "simcore/weather.hpp"
 
 namespace simcore {
 
@@ -45,6 +46,11 @@ public:
     // Swap the terrain (e.g. once Cesium heights have been sampled). Null = flat ground at 0 m.
     // It must outlive the World or be replaced before it goes away.
     void SetTerrain(const Terrain* terrain) { terrain_ = terrain; }
+
+    // The weather the aircraft fly in (their wind) and the sensors look through (its cloud). Null: still, clear air.
+    // It must outlive the World or be replaced before it goes away.
+    void SetWeather(const Weather* weather) { weather_ = weather; }
+    const Weather& GetWeather() const { return weather_ != nullptr ? *weather_ : still_; }
     double Time() const { return time_s_; }
 
     int AddAircraft(Aircraft a) {
@@ -75,7 +81,14 @@ public:
         start_positions_.clear();
         for (const Aircraft& a : aircraft_) start_positions_.push_back(a.position);
 
-        for (Aircraft& a : aircraft_) StepAircraft(a, dt);
+        for (Aircraft& a : aircraft_) {
+            if (weather_ == nullptr || !a.alive) {
+                StepAircraft(a, dt);
+                continue;
+            }
+            const double alt = frame_.AltitudeOf(a.position);
+            StepAircraft(a, dt, weather_->WindAt(alt, alt - GetTerrain().HeightAt(a.position.x, a.position.y)));
+        }
 
         for (Missile& m : missiles_) {
             if (!m.Active()) continue;
@@ -155,6 +168,8 @@ private:
     LocalFrame frame_;
     const Terrain* terrain_;
     FlatTerrain flat_{0.0};
+    const Weather* weather_ = nullptr;
+    Weather still_;
     double time_s_ = 0.0;
     int next_id_ = 1;
     std::vector<Aircraft> aircraft_;

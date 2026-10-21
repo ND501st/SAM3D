@@ -1,0 +1,298 @@
+{
+  "scenario_id": "pu12m_range_day",
+  "name": "PU-12M range day: the picture by voice (the ASPD-U off)",
+  "description": "A peacetime range day seen from the battery's PU-12M. As in the troops, the ASPD-U is not switched on (shilka_narod: rarely used, not at platoon firings): no telecode comes, the IT-45 stays dark. The regiment's radar battery reads the air picture out on the air-picture net, square by square; the operator-plotter writes it on the board; the battery commander reads the board, brings the launchers to readiness from the warning it gives and gives each target out by voice. Two practice targets come in from far beyond the tube's 100 km, three nearer.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional; placeholder targets. docs/research/PLOTTING_BOARD_2026-10.md (proposal 10).",
+  "seed": 1,
+  "origin": {
+    "lat_deg": 46.9,
+    "lon_deg": 19.7,
+    "alt_m": 110
+  },
+  "terrain": {
+    "type": "flat",
+    "height_m": 110
+  },
+  "crew_commander": "npc",
+  "battery_commander": "npc",
+  "post": {
+    "board": "command/pu12.json",
+    "aspd": "command/aspd_u.json",
+    "plotting": "gameplay/plotting.json",
+    "library": "command/regiment_radars.json",
+    "regiment": {
+      "position": {
+        "east_m": -4000,
+        "north_m": -7000,
+        "up_m": 2
+      },
+      "radars": [
+        {
+          "id": "p19_regiment",
+          "type": "p19",
+          "position": {
+            "east_m": -4200,
+            "north_m": -7000,
+            "up_m": 2
+          }
+        }
+      ],
+      "notes": "The regiment's command post and its control battery's P-19, 8 km behind the battery, inside the air-picture net's 20 km. Its telecode is off: the picture comes by voice only.",
+      "telecode": false,
+      "command_net_mhz": 31.5,
+      "telecode_mhz": 56.0,
+      "telecode_return_mhz": 52.0,
+      "mast": true
+    },
+    "radios": {
+      "r111_presets_mhz": [
+        31.5,
+        34.2,
+        41.0,
+        46.5
+      ],
+      "own_nets_mhz": {
+        "fug1": 24.4,
+        "fug2": 22.275,
+        "fug4": 44.0
+      },
+      "notes": "The frequencies are SAM3D placeholders (a 1980s regiment's are not public): the command net on the R-111's preset 1, the post's own R-123M nets at least 10 % from it and not 8 or 16 MHz off (r111_to p. 3), the R-407's duplex pair 4 MHz apart and off its spurious channels (r407_plate)."
+    }
+  },
+  "battery": {
+    "deployed": true,
+    "own": {
+      "id": "20",
+      "callsign": "20"
+    },
+    "launchers": {
+      "console": "procedures/osa_ak.json",
+      "tuning": "gameplay/osa_ak.json"
+    },
+    "vehicles": [
+      {
+        "id": "21",
+        "kind": "launcher",
+        "position": {
+          "east_m": -2500,
+          "north_m": 1500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 2500,
+          "north_m": 1500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": -2500,
+          "north_m": -1500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 2500,
+          "north_m": -1500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": 0,
+          "north_m": -2500,
+          "up_m": 3
+        }
+      }
+    ]
+  },
+  "radio_data": {
+    "talk_tables": "command/talk_tables.json",
+    "comms": "gameplay/comms.json",
+    "nets": [
+      { "id": "air_picture", "name_ru": "радиосеть оповещения (ЦУ № 2)", "name_en": "air-picture net", "set": "fug1", "main": "radar", "own_call_sign": "Рябина", "main_call_sign": "Ромашка", "frequencies_mhz": [24.4, 25.85], "exempt": true },
+      { "id": "covered", "name_ru": "радиосеть прикрываемой части", "name_en": "covered unit's net", "set": "fug2", "main": "covered", "own_call_sign": "Рябина", "main_call_sign": "Клён", "frequencies_mhz": [22.275, 21.8] },
+      { "id": "regiment", "name_ru": "командная радиосеть полка", "name_en": "regiment's command net", "set": "fug3", "main": "regiment", "own_call_sign": "Рябина", "main_call_sign": "Тополь", "frequencies_mhz": [31.5, 34.2] },
+      { "id": "battery", "name_ru": "радиосеть управления батареей", "name_en": "battery net", "set": "fug4", "main": "self", "own_call_sign": "10", "main_call_sign": "10", "frequencies_mhz": [44.0, 42.2], "exempt": true }
+    ],
+    "source": "rrs_1986 (radio data: frequencies by conditional number, call signs; the main station of each net); flak11 (PU12-1: the five sets' nets; FuG-2 20-27 MHz and FuG-4 37-51.5 MHz on one diplexer); bstudy_tactics (the form of call signs: a word for a station, a number for an official); every value here is a sam3d placeholder",
+    "confidence": "low",
+    "notes": "Placeholders: a 1980s regiment's radio data are not public. Each net's working frequency is its set's preset 1, its spare preset 2. They keep the R-111's rules (r111_to p. 3): the post's own sets at least 10 % from its frequency and not 8 or 16 MHz off. The battery net and the air picture are exempt from radio silence (vst_1988: air defence and the warning system)."
+  },
+
+  "own_unit": {
+    "console": "procedures/pu12m.json",
+    "readiness": "deployed",
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 2
+    },
+    "heading_deg": 0,
+    "inputs": {
+      "vehicle_stopped": true
+    }
+  },
+  "crew": [
+    {
+      "name": "Battery commander",
+      "role": "battery_commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Squad leader",
+      "role": "squad_leader",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Radio operator",
+      "role": "radio_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [
+    {
+      "id": "t1",
+      "name": "Strike aircraft 1 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": 10000,
+        "north_m": 160000,
+        "up_m": 6000
+      },
+      "waypoints": [
+        {
+          "east_m": 3000,
+          "north_m": -30000,
+          "up_m": 1000
+        }
+      ],
+      "speed_mps": 250,
+      "rcs_m2": 3.0,
+      "appear_at_s": 60,
+      "notes": "Placeholder. A fast practice target from 160 km: on the board long before the tube could show it.",
+      "board_type": 2
+    },
+    {
+      "id": "t2",
+      "name": "Strike aircraft 2 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": 35000,
+        "north_m": 35000,
+        "up_m": 1500
+      },
+      "waypoints": [
+        {
+          "east_m": -20000,
+          "north_m": -20000,
+          "up_m": 1500
+        }
+      ],
+      "speed_mps": 200,
+      "rcs_m2": 3.0,
+      "appear_at_s": 90,
+      "notes": "Placeholder numbers.",
+      "board_type": 2
+    },
+    {
+      "id": "t3",
+      "name": "Strike aircraft 3 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": -40000,
+        "north_m": 25000,
+        "up_m": 2500
+      },
+      "waypoints": [
+        {
+          "east_m": 20000,
+          "north_m": -10000,
+          "up_m": 2500
+        }
+      ],
+      "speed_mps": 220,
+      "rcs_m2": 3.0,
+      "appear_at_s": 120,
+      "notes": "Placeholder numbers.",
+      "board_type": 2
+    },
+    {
+      "id": "t4",
+      "name": "Strike aircraft 4 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": -30000,
+        "north_m": 140000,
+        "up_m": 4000
+      },
+      "waypoints": [
+        {
+          "east_m": -5000,
+          "north_m": -30000,
+          "up_m": 800
+        }
+      ],
+      "speed_mps": 200,
+      "rcs_m2": 3.0,
+      "appear_at_s": 150,
+      "notes": "Placeholder. A second one from 140 km.",
+      "board_type": 2
+    },
+    {
+      "id": "t5",
+      "name": "Own transport (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "transport",
+      "iff": "friend",
+      "start": {
+        "east_m": 20000,
+        "north_m": -40000,
+        "up_m": 3000
+      },
+      "waypoints": [
+        {
+          "east_m": 20000,
+          "north_m": 40000,
+          "up_m": 3000
+        }
+      ],
+      "speed_mps": 140,
+      "rcs_m2": 20.0,
+      "appear_at_s": 30,
+      "notes": "A friend: never designated. Placeholder numbers."
+    }
+  ],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 1500,
+    "when_targets_gone": true
+  }
+}

@@ -376,7 +376,8 @@ Co-operative crews share one node.
 * VGPO, angle deception against non-monopulse radars, repeater false targets and sweep jamming not
   yet; frequency-channel changes are data-only (no crew action).
 * Comms: no message priorities, encryption or interception value; relays forward everything.
-* Doctrine is minimal (one SAM rule set); no ARM detection or relocation yet.
+* Doctrine is minimal (one SAM rule set). ARMs and the crew's drill against them are in the scenario runner (§35), not
+  in `doctrine.hpp`'s rules for the EM world's own SAM sites.
 * The Osa's two radars are connected (§23); its IFF replies, TV channel, missiles and the crew's jamming
   response are not.
 * The tracking radar locks on the first echo in its gate, and Swerling I detection falls off slowly (Pd 0.24 at
@@ -587,12 +588,13 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
   are estimates. At night it sees nothing. Scenario `environment` {`visibility_km`, `daylight`}, target `size_m`.
   Mirrored in the Python prototype.
 * **The command link** (`data/em/osa_ak.json` `osa_ak_command_link_1`, `_2`). The two channels' command transmitters
-  (СПК) are emitters on the vehicle, on the vehicle's two grid frequencies (`mon_2112_80` p67: fixed frequencies,
-  neighbouring vehicles interleaved, the 1st vehicle on 3 and 1); СМЕНА ЛИТ. moves each to the other (SAM3D's reading of
-  the letter change). They radiate from ВНИМАНИЕ (switched on then, `mon_2112_80` p67) along the tracking antenna's
-  line of sight; into the equivalent load until the launch only in a peacetime check
-  (`own_unit.em.command_link_in_load`). The band is the I band NATO's view gives (FM 100-2-3); power, pulse and antenna
-  are estimates.
+  (СПК) are emitters on the vehicle, on the vehicle's two letter frequencies (`mon_2112_80` p67, `voenizdat_osa_1991`
+  Table 5.1: neighbouring vehicles interleaved, the 1st vehicle on 3 and 1); СМЕНА ЛИТ. swaps the two channels'
+  frequencies and codes (`voenizdat_osa_1991` p148). They are switched on at ВНИМАНИЕ but work into their equivalent
+  loads, for concealment, until the launch switches them to the antenna (`voenizdat_osa_1991` p21, p140, p155); then
+  they radiate along the tracking antenna's line of sight, so a target's RWR hears the launch, not the preparation. 100
+  kW, 0.75 µs pulses at a quarter of the radars' 2800 Hz, the medium beam 1.8-2.4° (`voenizdat_osa_1991` p92, p138);
+  the band is the I band NATO's view gives (FM 100-2-3).
 * **The missile's responder** (`9m33_responder`, kind `missile_responder`): each missile in flight is an EM platform
   carrying it (`EmSensorLink::SyncMissiles`); every value an estimate. Missiles give no echo to their own search radar
   (a simplification).
@@ -618,5 +620,77 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
   reach, the commander keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
   the antenna turning); it stays on once one is near. Drills marked `situational` are never pulled into a plan by the
   drill master.
-* **Not modelled here:** anti-radiation missiles and the drills against them.
+* Anti-radiation missiles and the drill against them: §35.
 * Tests: `test_em_threats.cpp`.
+
+## 35. Anti-radiation missiles and the ARM drill (roadmap E6, 20 October 2026)
+
+**The missile (`em/arm.hpp`, library `arms` in `data/em/nato_1985.json`).** An ARM is a missile platform of the EM world
+with a passive seeker. Its carrier sets it at launch to the signal its own warning receiver measured (frequency, PRF)
+and fires it, lofted, toward where it believes the radar is (`LaunchArm`, `ArmLaunchDirection`). Each tick the seeker
+listens like any passive receiver (§8: the one-way radar equation, the emitter's antenna pattern toward it, so sidelobes
+are heard, terrain and ground reflection on the path through its own path cache) to the emitters in its head's band,
+on the signal it was set to (`tune_fraction`, `prf_fraction`; 0: the whole band), inside its field of view. Emitters
+closer together than its `resolution` are one direction to it, their power-weighted middle: a decoy on the radar's own
+parameters beside it draws it off (§29). The line of sight is a smoothed, noisy measurement (`Stream::ArmSeeker`).
+Guidance is pursuit within its steering limit; a lofted launch holds the flight path above the line of sight by the loft
+angle, falling away over the first half of the expected flight, so the missile climbs and comes down on the radar.
+When the emission stops:
+
+* with a **memory** (HARM class) it flies on to where its last line of sight met the ground (`ArmGroundPoint`). That
+  point's error is the line of sight's angle error over the sine of its depression: silent at 1.5 km the radar is still
+  hit, silent at 11 km the burst is 0.6-1.4 km away (`test_em_arm.cpp`, four seeds);
+* **without** (Shrike class: "if the SAM radar switched off, missiles already fired lost lock and went ballistic",
+  `arm_refs`) it keeps its last heading and falls; it homes again on whatever comes back on the air.
+
+The fuze bursts it at the closest point of the tick's path within its lethal radius of a ground platform, or at the
+ground; that platform is put out of action (`DestroyPlatformIn`: its radars and nodes off). A shallow glide passes close
+over the radar on its way to a remembered point beyond it, so the loft matters: at 10 deg a 400 m long point still
+killed the radar, which is why the HARM class's estimate is 20 deg. The ARM is an echo too (`rcs_m2`): the defenders'
+search radar holds it as a small, fast mark; on the scope a mark faster than 450 m/s coming at the vehicle is shown once
+confirmed, without the four updates other ghost marks wait for (`EmSensorLink::FastClosing`).
+
+The classes: `agm45_class_shrike` (2-10 GHz broad head, no memory, 600 m/s, 40 km), `agm88a_class_harm` (2-20 GHz,
+tuned within 10 %, memory, 700 m/s, 25 km at low level), `kh58_class` (an H-band head, no memory assumed, 900 m/s,
+60 km). Every value is cited or marked an estimate in the file.
+
+**Carriers (`ScenarioTarget::arms`, `ScenarioRunner::UpdateArms`).** A target with a warning receiver fires when it hears
+a radar in its weapon's band on the bearing of where its briefing has the radar (within about 20 deg), one its library
+calls a hostile search, tracking or fire-control radar or one it doesn't know, and that place is within its launch
+range. After its last ARM it turns away hard. The runner logs each ARM's end; one on the vehicle ends the scenario;
+`ArmsInFlight()` draws them (Tacview, Unreal), `ArmResults()` hands them to the air war's bridge (A11).
+
+**The drill (`ScenarioRunner` WatchScope, ArmSignSeen, ArmSignHeard, ArmSilent, ArmEmission; voenizdat_osa_1991
+pp262-264).**
+
+* *The signs, seen by the senior operator on his scope* (the marks' motion over their last looks, never the truth): a
+  smaller mark separating and coming at the vehicle much faster than any aircraft at zero parameter ("Пуск ПРР!
+  Азимут ..."); and, warned of ARMs (`doctrine.arm_threat`), a target that came at the battery at zero parameter turning
+  away out at stand-off range. A mark lost between bursts and a new one where it was heading are one blip to him.
+  A "basic" tier (recruit, class3) doesn't know the signs; the others may miss one (`miss_chance`, more under stress).
+  Not built: the tracking radar's indicators (the tracked pulse briefly growing, a smaller one separating) and the
+  launch seen on the TV.
+* *The commander, on hearing a sign*: the missile in the air is guided to its burst, then every transmitter off at
+  once (`order_drop_target`, `order_emcon_off`, `order_ssc_off`; a capture under way is stopped) for `arm_silence_s`
+  (60 s, an estimate), held so until it is over; radiation then comes back through the EMCON path. He reports the
+  attack up the battery net ("21: пуск ПРР, азимут ..."). Having seen the sign himself the senior operator gives no more
+  bursts.
+* *The least emission under the threat* (`doctrine.arm_threat`): the senior operator keeps the search transmitter's high
+  voltage on for 2 turns after every `arm_search_off_turns` (3; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
+  two-turn burst lights both low beams (under АВТ. I–III the low beam is dark in every third burst), and off while the
+  tracking radar holds a target alone (5 s); the commander has the tracking transmitter put on a target only from Table
+  7.3's far-edge range for its speed as the scope shows it (24 km over 300 m/s, 20 km under) and off after the burst.
+  Not built: the TV for tracking under the threat (the angles on the TV without НЛЦ, range by short bursts of the
+  tracking radar, p264).
+* *Relocation* (`doctrine.relocate_after_arm`): a position is changed only on the regiment commander's order (p238)
+  and the battery commander's map carries the ARM launch lines (p244), so the attack is reported up and the regiment's
+  standing order moves the battery when the fight is over: the crew stows (`order_march`), the battery moves to the
+  reserve position in its order (battery order `relocate`) and deploys, and the crew makes ready again. Only where the
+  battery drives the vehicle (`battery.drive_own`).
+
+**What the tests show** (`test_arm_drill.cpp`, the HARM drill's SEAD pair firing at 22 km): a class1 crew sees a sign
+and goes silent in 6 seeds of 6 and the vehicle survives all 6, the first HARM bursting 35-499 m away; with a class3
+senior operator it is hit in 4 of 4. Against the Shrike class the drill makes every missile fall 2.6 km away on average
+(HARM class: 271 m). A dummy position's decoy that radiates while the radar is silent takes the first HARM in 4 of 4.
+The burst rhythm alone (no drill) does not save the vehicle: the last burst before the impact gives the HARM its lock
+back.

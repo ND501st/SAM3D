@@ -28,7 +28,7 @@
     { "role": "operator", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
       "notes": "Range display and range tracking; captures with ТСЦ. SAM Simulator: Range Officer. wrk: range operator." },
     { "role": "driver_mechanic", "count": 1, "source": "flak11 (9A33-3), wrk", "confidence": "high",
-      "notes": "Crew of five in the NVA (flak11), Soviet (wrk), Polish and ru_wiki sources for the Osa-AK. Four in Russian service after the Osa-AKM1 upgrade ('crew reduced by one', nvo_2015; ilya_prosto)." }
+      "notes": "Crew of five in the NVA (flak11), Soviet (wrk), Polish and ru_wiki sources for the Osa-AK, and in voenizdat_osa_1991 p17 for the Osa-AKM (crew chief; guidance, search and range operators; driver-mechanic-electrician). Four in Russian service after the Osa-AKM1 upgrade ('crew reduced by one', nvo_2015; ilya_prosto)." }
   ],
   "vehicle": {
     "mobility": "wheeled",
@@ -36,16 +36,16 @@
     "max_road_speed_mps": { "value": 16.7, "source": "mon_2112_80 p11 (Polish Osa-AK manual: road 60 km/h, dirt roads 30, cross-country 10, water 8 km/h), wrk (60 km/h)", "confidence": "high",
                             "notes": "Sources disagree: 60 km/h (the Polish operator's manual for exactly the Osa-AK, and wrk), 70 km/h (flak11 for the 9A33BM2, ru_wiki; flak11 adds 'in practice much faster'), 80 km/h (korovin_tiv_2010 for the original 9A33B; nuou; wrk for the chassis). The official 60 km/h is used. Dirt-road averages 36 km/h by day, 25 km/h at night (korovin_tiv_2010)." },
     "max_water_speed_mps": { "value": 2.2, "source": "flak11 (9K33-0: 8 km/h), wrk, nuou", "confidence": "high" },
-    "deploy_time_s": { "value": 240, "source": "mon_2112_80 p11–12 (march to combat at most 4 min, including starting the gas-turbine generator), nvo_2015, wrk", "confidence": "high",
-                       "notes": "Russian norms quoted as 3 min for the Osa-AKM. video_osa (unverified) gives 35–50 s for a battery deploying from a powered march and 15–30 s back to march order, by crew skill. Different measure: a cold start (switch-on cycle 3.8 min + function check 3.0 min = 6.8 min, flak11 9K33-0), which SAM3D does not model yet (roadmap 6.2). The Polish manual allows at most 10 min for the function check (mon_2112_80 p19). SAM3D's crew reaches search after about 4 min: GTA start (60 s, estimate) and the equipment's 3 min (voenizdat_osa_1991 p53, p165)." },
+    "deploy_time_s": { "value": 240, "source": "mon_2112_80 p11–12 (march to combat at most 4 min, including starting the gas-turbine generator), voenizdat_osa_1991 p16 (the same 4 min for the Osa-AKM), nvo_2015, wrk", "confidence": "high",
+                       "notes": "Russian norms quoted as 3 min for the Osa-AKM. voenizdat_osa_1991 p231 gives 35–50 s for the battery into combat order and 15–30 s back to march order (from a powered march; video_osa said the same). Different measure: a cold start (switch-on cycle 3.8 min + function check 3.0 min = 6.8 min, flak11 9K33-0), which SAM3D does not model yet (roadmap 6.2). The Polish manual allows at most 10 min for the function check (mon_2112_80 p19). SAM3D's crew reaches search after about 4 min: GTA start (60 s, estimate) and the equipment's 3 min (voenizdat_osa_1991 p53, p165)." },
     "stow_time_s": { "value": 300, "source": "ru_wiki (deployment and stowing not more than 5 min)", "confidence": "medium",
-                     "notes": "No tier-1 source found yet for stowing alone." },
+                     "notes": "No tier-1 source for stowing a single vehicle from cold; voenizdat_osa_1991 p231 gives a battery 15–30 s back into march order from a powered halt." },
     "search_on_the_move_max_speed_mps": { "value": 22.2, "source": "wrk (search possible at up to 80 km/h)", "confidence": "medium" },
     "engages_from": { "value": "short halt or stationary only", "source": "nvo_2015 ('с места или короткой остановки'), wrk, flak11", "confidence": "high" },
     "power": {
       "value": "9И120 gas-turbine unit (on the move and at a halt); engine power take-off generator (at a halt only)",
-      "source": "vpvo, wrk, samsim_thread (ePap); mon_2112_80 p20, p27 (also an external supply at a halt); voenizdat_osa_1991 p163–164 (50 kW and 35 kW)", "confidence": "high",
-      "notes": "9И120 = 9И56-3 gas-turbine engine + С-75 generator, about 50 kW; the take-off generator about 35 kW. Fuel (ePap): ~300 l tank, turbine ~75 l/h stationary and ~100 l/h moving, take-off generator ~25 l/h; half the tank is kept for driving. '9I210' in apa and flak11 is probably a confusion with the 9В210 maintenance vehicle."
+      "source": "vpvo, wrk, samsim_thread (ePap); mon_2112_80 p20, p27 (also an external supply at a halt); voenizdat_osa_1991 p163–164 (50 kW at 67 kg/h of fuel; 35 kW at 20 kg/h)", "confidence": "high",
+      "notes": "9И120 = 9И56-3 gas-turbine engine + С-75 generator, 50 kW; the take-off generator 35 kW, at a halt only. Fuel (ePap): ~300 l tank, turbine ~75 l/h stationary and ~100 l/h moving, take-off generator ~25 l/h; half the tank is kept for driving. voenizdat_osa_1991 p163-164 gives 67 kg/h (about 80 l/h) and 20 kg/h (about 24 l/h); p17, p231: 250 km on the fuel with 2 h of the turbine, 500 km with the fuel the TZM carries, at most 70 l per 100 km on roads; 48 h of continuous work with refuelling. '9I210' in apa and flak11 is probably a confusion with the 9В210 maintenance vehicle."
     }
   },
   "radars": [],

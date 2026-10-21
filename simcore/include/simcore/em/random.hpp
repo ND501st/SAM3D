@@ -33,7 +33,8 @@ enum class Stream : std::uint64_t {
     Iff = 10,
     FalseAlarm = 11,
     TdoaNoise = 12,
-    Doctrine = 13
+    Doctrine = 13,
+    ArmSeeker = 14
 };
 
 inline std::uint64_t Mix64(std::uint64_t x) {

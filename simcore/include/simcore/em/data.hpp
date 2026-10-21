@@ -46,7 +46,7 @@ class EmLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, EmLibrary& lib, EmLoadResult& res) {
         if (!Keys(root, "", {"library_id", "display_name", "status", "provenance", "notes", "sources", "radars", "esm",
-                             "jammers", "radios", "emitters", "threat_libraries"})) {
+                             "jammers", "radios", "emitters", "threat_libraries", "arms"})) {
             return false;
         }
         if (!RequireString(root, "", "library_id", res.library_id)) return false;
@@ -81,6 +81,8 @@ public:
             return false;
         if (!LoadArray(root, "threat_libraries",
                        [&](const json::Value& v, const std::string& p) { return LoadThreatLibrary(v, p, lib); }))
+            return false;
+        if (!LoadArray(root, "arms", [&](const json::Value& v, const std::string& p) { return LoadArm(v, p, lib); }))
             return false;
         return true;
     }
@@ -364,6 +366,35 @@ private:
             return false;
         }
         lib.esm.push_back(d);
+        return true;
+    }
+
+    // An anti-radiation missile (em/arm.hpp).
+    bool LoadArm(const json::Value& v, const std::string& path, EmLibrary& lib) {
+        if (!Keys(v, path, {"id", "name", "freq_min_hz", "freq_max_hz", "tune_fraction", "prf_fraction", "sensitivity_dbw",
+                            "antenna_gain_db", "fov_deg", "angle_sigma_deg", "resolution_deg", "smoothing", "memory",
+                            "speed_mps", "max_flight_s", "max_accel_mps2", "loft_deg", "lethal_radius_m", "rcs_m2",
+                            "min_range_m", "max_range_m", "source", "confidence", "notes"})) {
+            return false;
+        }
+        ArmDef d;
+        if (!Item(v, path, d.id, d.name, d.source, d.confidence)) return false;
+        if (!Val(v, path, "freq_min_hz", d.freq_min_hz, true) || !Val(v, path, "freq_max_hz", d.freq_max_hz, true) ||
+            !Val(v, path, "tune_fraction", d.tune_fraction, false) || !Val(v, path, "prf_fraction", d.prf_fraction, false) ||
+            !Val(v, path, "sensitivity_dbw", d.sensitivity_dbw, true) || !Val(v, path, "antenna_gain_db", d.antenna_gain_db, false) ||
+            !Val(v, path, "fov_deg", d.fov_rad, true, kDeg) || !Val(v, path, "angle_sigma_deg", d.angle_sigma_rad, true, kDeg) ||
+            !Val(v, path, "resolution_deg", d.resolution_rad, true, kDeg) || !Val(v, path, "smoothing", d.smoothing, false) ||
+            !OptionalBool(v, path, "memory", d.memory) || !Val(v, path, "speed_mps", d.speed_mps, true) ||
+            !Val(v, path, "max_flight_s", d.max_flight_s, true) || !Val(v, path, "max_accel_mps2", d.max_accel_mps2, true) ||
+            !Val(v, path, "loft_deg", d.loft_rad, false, kDeg) || !Val(v, path, "lethal_radius_m", d.lethal_radius_m, true) ||
+            !Val(v, path, "rcs_m2", d.rcs_m2, true) || !Val(v, path, "min_range_m", d.min_range_m, false) ||
+            !Val(v, path, "max_range_m", d.max_range_m, true)) {
+            return false;
+        }
+        if (d.freq_max_hz <= d.freq_min_hz) return Fail(Join(path, "freq_max_hz"), "must be above freq_min_hz");
+        if (d.speed_mps <= 0.0 || d.max_accel_mps2 <= 0.0) return Fail(Join(path, "speed_mps"), "speed and steering must be > 0");
+        if (d.smoothing <= 0.0 || d.smoothing > 1.0) return Fail(Join(path, "smoothing"), "must be in (0, 1]");
+        lib.arms.push_back(d);
         return true;
     }
 

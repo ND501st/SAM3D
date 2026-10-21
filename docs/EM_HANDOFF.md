@@ -217,10 +217,26 @@ Anti-radiation missiles are not modelled in this track.
 * **E4**: done; the saturated voice net measured in `test_c2_sources.cpp`.
 * **E5**: the TV sight as a passive optical sensor, the command link and the missile's responders as emitters, a
   target's RWR (§33).
-* **E6**: decoy drones the TV unmasks, a stand-off jammer escort, emission discipline (§34). No anti-radiation
-  missiles.
+* **E6**: decoy drones the TV unmasks, a stand-off jammer escort, emission discipline (§34). Anti-radiation missiles
+  and the ARM drill followed on 20 October (§35, next section).
 * **E1**: the command link and the responder entered (estimates as marked); the other open data items still lack a
   registered source.
+
+## 12c. E6 finished: anti-radiation missiles and the ARM drill (20 October 2026)
+
+* `em/arm.hpp`: the ARM as an EM missile platform with a passive seeker (§35); the library's three classes in
+  `data/em/nato_1985.json` `arms` (sources `arm_refs`, `usaf_harm_factsheet`, `kh58_refs`; most values estimates).
+  Tuned while testing: the HARM class's loft 10 -> 20 deg (a shallow glide passed within the lethal radius of the radar on
+  its way to a remembered point beyond it); the reason is in the file.
+* Carriers (`ScenarioTarget::arms`), the crew's drill and the least emission in `scenario_runner.hpp`; the search
+  scope shows a fast mark closing on the vehicle once confirmed (`EmSensorLink::FastClosing`); the ARMs in flight for
+  display (`ScenarioRunner::ArmsInFlight`, Tacview objects). Unreal does not draw them yet: `USimWorldSubsystem` can take
+  them like the missiles (`MissilesInFlight`), the user builds Unreal.
+* Missions `osa_arm_drill.json`, `osa_arm_drill_shrike.json`; tests `test_em_arm.cpp`, `test_arm_drill.cpp`, the A11
+  test in `test_air_war.cpp`; the prototype mirrors the seeker's power, tuning and memory point (`samproto/em.py`).
+* Open: the signs on the tracking radar's indicators and the TV; the TV for tracking under the threat; the Kh-58's
+  memory (none assumed); a Pact warning receiver library that knows the battery's radars (the MiG-25BM fires on unknown
+  emitters on its briefed bearing).
 
 ## 13. Open questions for the owner
 

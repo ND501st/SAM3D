@@ -6,14 +6,19 @@
 #include "CesiumGeoreference.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "GameFramework/DefaultPawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "SAM3D.h"
 #include "Misc/Paths.h"
+#include "Engine/GameInstance.h"
+#include "SimAirCampaignSubsystem.h"
+#include "SimCampaignHUD.h"
 #include "SimEntityActor.h"
 #include "SimMissionMenuHUD.h"
+#include "SimModelGallery.h"
 #include "SimOsaVehicle.h"
 #include "UnrealClient.h"
 
@@ -37,6 +42,8 @@ void ASimScenarioDirector::BeginPlay()
 	}
 	Sim->OnSimEvent.AddDynamic(this, &ASimScenarioDirector::HandleSimEvent);
 	Sim->OnDebriefEntry.AddDynamic(this, &ASimScenarioDirector::HandleDebriefEntry);
+	// The basic models' checks: -SimModelGallery=<folder>, -SimShots=<folder> (docs/scenery/README.md).
+	ASimModelGallery::StartIfAsked(GetWorld());
 
 	// ?SimMenu (the mission's menu: "the missions") opens the missions menu whatever else is asked.
 	if (Sim->HasUrlOption(TEXT("SimMenu")))
@@ -44,13 +51,36 @@ void ASimScenarioDirector::BeginPlay()
 		ShowMissionMenu();
 		return;
 	}
+	// The air war (docs/air_war/): ?SimCampaign shows the campaign screen; ?SimAirWarRaid=<id> plays the raid the campaign
+	// wrote for it (Saved/AirWar/), from ?SimSeat. A raid the campaign no longer waits for goes back to the screen.
+	USimAirCampaignSubsystem* AirWar = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<USimAirCampaignSubsystem>() : nullptr;
+	if (Sim->HasUrlOption(TEXT("SimCampaign")) || (Sim->HasUrlOption(TEXT("SimAirWarRaid")) && (AirWar == nullptr || !AirWar->IsRaidActive())))
+	{
+		ShowCampaignScreen();
+		return;
+	}
+	const bool bAirWarRaid = Sim->HasUrlOption(TEXT("SimAirWarRaid")) && AirWar != nullptr && AirWar->IsRaidActive();
 	// ?SimMission=<id> (a mission chosen in the menu) plays scenarios/<id>.json, in ?SimVehicle (a battery link) and
 	// ?SimSeat. -SimScenario=scenarios/<file>.json plays that scenario instead of the level's (a server or a scripted
 	// run). Either way with its own vehicle's cabin.
 	const FString Mission = Sim->HasUrlOption(TEXT("SimMission")) ? Sim->GetLaunchOption(TEXT("SimMission")) : FString();
 	FString CommandLineScenario;
 	const bool bValidMission = !Mission.IsEmpty() && !Mission.Contains(TEXT("/")) && !Mission.Contains(TEXT("\\")) && !Mission.Contains(TEXT(".."));
-	if (bValidMission)
+	if (bAirWarRaid)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Air war raid: %s"), *AirWar->GetRaidScenarioFile());
+		ScenarioFile = AirWar->GetRaidScenarioFile();
+		CabinFile.Reset();
+		bShowEventsOnScreen = false;
+		for (const FString& Op : GetWorld()->URL.Op)
+		{
+			if (Op.StartsWith(TEXT("SimSeat="), ESearchCase::IgnoreCase))
+			{
+				StartSeat = Op.Mid(8);
+			}
+		}
+	}
+	else if (bValidMission)
 	{
 		UE_LOG(LogSAM3D, Log, TEXT("Mission from the menu: %s"), *Mission);
 		ScenarioFile = FString::Printf(TEXT("scenarios/%s.json"), *Mission);
@@ -117,6 +147,24 @@ void ASimScenarioDirector::ShowMissionMenu()
 	UE_LOG(LogSAM3D, Log, TEXT("Missions menu shown"));
 }
 
+void ASimScenarioDirector::ShowCampaignScreen()
+{
+	bMissionMenuShown = true;
+	APlayerController* Pc = UGameplayStatics::GetPlayerController(this, 0);
+	if (Pc == nullptr)
+	{
+		return;
+	}
+	Pc->ClientSetHUD(ASimCampaignHUD::StaticClass());
+	Pc->SetShowMouseCursor(true);
+	Pc->SetIgnoreMoveInput(true);
+	Pc->SetIgnoreLookInput(true);
+	FInputModeGameAndUI Mode;
+	Mode.SetHideCursorDuringCapture(false);
+	Pc->SetInputMode(Mode);
+	UE_LOG(LogSAM3D, Log, TEXT("Air war: campaign screen shown"));
+}
+
 void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 {
 	FString Error;
@@ -142,6 +190,19 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 			Sim->SetGeoreference(Geo);
 		}
 	}
+	// ?SimTutorial=tutorials/<file>.json (the missions menu's tutorial) or -SimTutorial=: the guide over the scenario.
+	const FString Guide = Sim->GetLaunchOption(TEXT("SimTutorial"));
+	if (!Guide.IsEmpty())
+	{
+		if (!Guide.StartsWith(TEXT("tutorials/")) || Guide.Contains(TEXT("..")) || Guide.Contains(TEXT("\\")))
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Tutorial '%s' refused: a guide is tutorials/<file>.json"), *Guide);
+		}
+		else if (!Sim->LoadTutorial(Guide, Error) && GEngine != nullptr)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Red, FString::Printf(TEXT("Tutorial failed to load: %s"), *Error));
+		}
+	}
 	if (bSpawnPlayerVehicle)
 	{
 		SpawnPlayerVehicle(Sim);
@@ -159,14 +220,20 @@ void ASimScenarioDirector::SpawnPlayerVehicle(USimWorldSubsystem* Sim)
 	APlayerController* Pc = UGameplayStatics::GetPlayerController(this, 0);
 	if (Vehicle != nullptr && Pc != nullptr)
 	{
+		// The game mode's stand-in (a floating sphere) is left behind when the player takes the vehicle: remove it.
+		APawn* StandIn = Pc->GetPawn();
 		Pc->Possess(Vehicle);
+		if (StandIn != nullptr && StandIn != Vehicle && StandIn->IsA<ADefaultPawn>())
+		{
+			StandIn->Destroy();
+		}
 	}
 	PlayerVehicle = Vehicle;
 	if (Vehicle != nullptr && !StartSeat.IsEmpty())
 	{
 		Vehicle->StartInSeat(StartSeat);
 	}
-	// -SimInstructor: start with the trainer's instructor panel open (roadmap 10.3; F7 in the game).
+	// -SimInstructor: start with the trainer's instructor panel open (roadmap 10.3; F9 in the game).
 	if (Vehicle != nullptr && FParse::Param(FCommandLine::Get(), TEXT("SimInstructor")))
 	{
 		Vehicle->SetInstructorOpen(true);
@@ -286,9 +353,10 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 			Actor->SetActorScale3D(State.bIsGround ? GroundScale : (State.bIsMissile ? MissileScale : AircraftScale));
 			if (State.bIsGround && (!GroundActorClass || GroundActorClass == ASimEntityActor::StaticClass()))
 			{
-				if (Actor->UseVehicleModel(State.Kind))
+				// A real model if there is one (the TZM, the fuel truck, the PU-12M), else the basic model, else a box.
+				if (Actor->UseVehicleModel(State.Kind) || Actor->UseBasicModel(State.Model))
 				{
-					Actor->SetActorScale3D(FVector(1.0));  // the model is built to size
+					Actor->SetActorScale3D(FVector(1.0));  // the models are built to size
 				}
 				else if (State.Kind == TEXT("launcher") || State.Kind == TEXT("dummy"))
 				{
@@ -300,6 +368,12 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 					Actor->UseGroundStandIn();
 				}
 			}
+			else if (!State.bIsGround && Actor->GetClass() == ASimEntityActor::StaticClass() && Actor->UseBasicModel(State.Model))
+			{
+				Actor->SetActorScale3D(FVector(1.0));  // aircraft and missiles at their real size (docs/scenery/)
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Entity %d '%s' drawn as %s"), State.Id, *State.Name,
+				Actor->GetBasicModel().IsEmpty() ? TEXT("a placeholder") : *Actor->GetBasicModel());
 #if WITH_EDITOR
 			Actor->SetActorLabel(FString::Printf(TEXT("%s_%d"), *State.Name, State.Id));
 #endif

@@ -79,7 +79,8 @@ int main(int argc, char** argv) {
         {"commander_fr", "battery_commander", "fr.scale", false, false},
         {"operator_rest", "operator", "", false, false},
         {"radio_rest", "radio_operator", "", false, false},
-        {"radio_fug3", "radio_operator", "radio.fug3.power", false, false},
+        {"radio_fug3", "radio_operator", "radio.fug3.mode", false, false},
+        {"commander_r407", "battery_commander", "radio.fug5.power", false, true},
         {"radio_mast", "radio_operator", "mast.raise", false, true},
     };
     const std::vector<Shot>& shots = system == "pu12m" ? pu12m : osa;

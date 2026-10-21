@@ -9,14 +9,16 @@
       "display_name": "P-19 (Flat Face) early-warning radar",
       "notes": "The control battery's radar in the Soviet regiment (korovin_tiv_2010) and two of the NVA regiment's (flak11).",
       "max_range_m": { "value": 250000, "source": "fm100_2_3 p. 5-138 (Flat Face, UHF, 250 km: the US Army's view in 1991); nato_radar_refs (P-19 instrumented range 260 km)", "confidence": "low" },
-      "antenna_height_m": { "value": 8, "source": "estimate (a truck- or trailer-mounted UHF early-warning antenna stands a few metres up)", "confidence": "estimate" }
+      "antenna_height_m": { "value": 8, "source": "estimate (a truck- or trailer-mounted UHF early-warning antenna stands a few metres up)", "confidence": "estimate" },
+      "switch_position": { "value": 3, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its third position 1RL13 / 1RL134); the P-19 is the 1RL134 (p19_to: РЛС П-19)", "confidence": "medium" }
     },
     {
       "id": "p40",
       "display_name": "P-40 (Long Track) early-warning radar",
       "notes": "In the NVA regiment's headquarters battery (flak11).",
       "max_range_m": { "value": 150000, "source": "fm100_2_3 p. 5-138 (Long Track, over 150 km: a lower bound)", "confidence": "low" },
-      "antenna_height_m": { "value": 10, "source": "estimate (a tracked-vehicle mast antenna)", "confidence": "estimate" }
+      "antenna_height_m": { "value": 10, "source": "estimate (a tracked-vehicle mast antenna)", "confidence": "estimate" },
+      "switch_position": { "value": 2, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its second position 1RL111 / 1RL128); the P-40 is the 1RL128 (sam3d: its index)", "confidence": "low" }
     }
   ]
 }

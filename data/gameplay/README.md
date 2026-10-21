@@ -30,7 +30,8 @@ chance = hit_chance[target class]
 **Zones and methods (roadmap 6.7).** `zones` gives the NVA's firing zones (`flak11`): head-on for an approaching target
 (the `zone` box's range limits, with an altitude band that depends on the target's speed: 25-5000 m up to 300 m/s,
 100-5000 m up to 500 m/s), pursuit for a receding one (to 6.5 km, 100-5000 m, up to 300 m/s), and the optical "F"
-zone for slow or hovering targets near the ground (up to 100 m/s, 2-6.5 km, 10-25 m). The ЦЕЛЬ В ЗОНЕ lamp and the
+zone for slow or hovering targets near the ground (up to 100 m/s, 2-6.5 km, 10-25 m); `voenizdat_osa_1991` p15 gives the same
+bands for the Osa-AKM, and its pursuit edge falls with speed (below). The ЦЕЛЬ В ЗОНЕ lamp and the
 zone factor use them; without a `zones` block the one `zone` box applies to every target. `methods` picks the guidance
 method the way the creator describes it: "F" for slow or hovering targets in the optical zone, "Gorka" (zoom climb) for
 a low target (at or below `gorka_max_agl_m`) under `low_target_elevation_deg` (00-30 thousandths = 1.8 degrees),
@@ -42,6 +43,18 @@ with the medium beam; 0.75 is a game value). A missile launched with no range at
 (`no_range_fuse_factor` 0): the fuse is armed by range and there is none. Each head-on speed band may carry
 `max_parameter_m`, the crossing parameter (how far the target's course passes from the unit over the ground): 6 km
 at 300 m/s and 4 km at 500 m/s (`mon_2112_80` p10-12, `flak11`); beyond it the target is outside the zone (roadmap 9.1).
+
+**The launch zone (20 Oct 2026, `voenizdat_osa_1991` p14, p121-129, p257).** The zones are kill zones, and ЦЕЛЬ В ЗОНЕ
+is the fire-control computer's launch zone: the target's meeting point with a missile launched now lies inside them.
+`EngagementTuning::MeetingFor` takes the target as flying straight on and the missile along the line of sight at
+`missile.average_speed_mps` (490 m/s: 10.3 km in 21 s, p129); the zone bands are checked there, within
+`max_flight_time_s`. Optional zone limits from the computer's equations: `max_slant_parameter_m` less
+`slant_parameter_loss_s` x speed for a head-on meeting point (the slant parameter, through the height: 8700 - 8 V,
+eq. 2.18), and the pursuit band's `range_loss_s` (8700 - 8 V, eq. 2.19). `launch_range_m` is the crews' far edge of the
+launch zone head-on (Table 7.1: the target's range at launch by its height, up to `split_speed_mps` and faster); it
+carries the computer's speed functions, which the book does not print (8 km at 25-50 m, 16 km at 200-5000 m). ВНИМАНИЕ
+(`zone.warning_s`) lights for an approaching target within `max_range_m` + (`max_range_m` / average speed +
+`warning_s`) x its ground speed: 10.3 km + 36 s x V (eq. 2.24). A shot's result comes at the meeting time.
 
 **Manual TV tracking (roadmap 6.6).** With a `tv` group the TV channel follows the wheels instead of driving them
 (`ePap`: "only manual tracking"). A TV track holds while the target stays inside the lens field around where the
@@ -65,3 +78,13 @@ behaviour stays: the servo drives the wheels onto the target.
 Losing the track during the flight loses the missile (command guidance), and a shot whose flight time would exceed
 `missile.max_flight_time_s` runs out. The debrief prints every factor and the random draw for each shot, and the
 draw comes from the scenario seed, so a run can be repeated exactly.
+
+## air_war.json (the enemy air command)
+
+Game-balance numbers of the enemy air command (`simcore/air_war/`, `docs/air_war/`): the planner's utility weights, the
+abstract attrition and strike model (with the guns around targets), the intelligence's ageing and deception, adaptation,
+politics, the repair of what is wrecked, the day's weather, the pacing of the player's missions, the raid scenarios and
+the mission bridge's weapon effects, and what our side learns. Tuned against the period's shapes in the balance pass
+(`docs/air_war/09_BALANCE.md`, `simcore/examples/air_war_balance.cpp`).
+Every key is listed with its default in `TuningTable::Defaults` (`simcore/air_war/data.hpp`); an unknown key fails the
+load and `test_air_war` checks the file names them all.

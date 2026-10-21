@@ -28,6 +28,9 @@ struct PostFeed {
     std::string keypad;                             // the ДХ window: the target's number ("" none)
     bool keypad_designating = false;                // ЦУ pressed, waiting for the launcher's place
     std::string keypad_last;                        // the last designation ("05>22")
+    std::vector<int> heard;                         // air-picture reports heard, not yet written (board numbers, oldest first)
+    int command = -1;                               // the regiment's last two-digit command on the tube (-1 none)
+    std::string command_text;                       // "20 fire ban" (the code table's meaning)
 };
 
 // The board's targets as the commander reads them: each number's latest mark.
@@ -64,6 +67,8 @@ inline PostFeed FromViewExtras(const em::ViewExtras& x) {
         m.friendly = t.friendly;
         m.group = t.group;
         m.primary = t.primary;
+        m.designated = t.designated;
+        m.imitated = t.imitated;
         f.scope.push_back(m);
     }
     f.glass = x.board;
@@ -82,6 +87,9 @@ inline PostFeed FromViewExtras(const em::ViewExtras& x) {
     f.keypad = x.post_keypad;
     f.keypad_designating = x.post_keypad_designating;
     f.keypad_last = x.post_keypad_last;
+    f.heard = x.post_heard;
+    f.command = x.post_command;
+    f.command_text = x.post_command_text;
     return f;
 }
 
@@ -93,7 +101,7 @@ inline void ToViewExtras(const PostFeed& f, em::ViewExtras& x) {
     x.post_position = f.position;
     x.post_scope.clear();
     for (const CommandPost::ScopeMark& m : f.scope) {
-        x.post_scope.push_back({m.number, m.x, m.y, m.vx, m.vy, m.zone, m.friendly, m.group, m.primary});
+        x.post_scope.push_back({m.number, m.x, m.y, m.vx, m.vy, m.zone, m.friendly, m.group, m.primary, m.designated, m.imitated});
     }
     x.board = f.glass;
     x.launchers.clear();
@@ -107,6 +115,9 @@ inline void ToViewExtras(const PostFeed& f, em::ViewExtras& x) {
     x.post_keypad = f.keypad;
     x.post_keypad_designating = f.keypad_designating;
     x.post_keypad_last = f.keypad_last;
+    x.post_heard = f.heard;
+    x.post_command = f.command;
+    x.post_command_text = f.command_text;
 }
 
 }  // namespace simcore

@@ -83,19 +83,19 @@ SC_TEST("radio setup: the grid, the sub-bands and the antenna circuit follow han
 
 SC_TEST("radio setup: selecting a fixed frequency, the motors turn the knobs to it; an unset one is off the net") {
     auto r = Load(Text("set"));
-    SC_EXPECT(r != nullptr && r->Tuning() != nullptr);
-    if (!r || r->Tuning() == nullptr) return;
+    SC_EXPECT(r != nullptr && r->RadioPresets() != nullptr);
+    if (!r || r->RadioPresets() == nullptr) return;
     Steps(*r, 1.0);
     ConsoleData& c = r->Console();
-    SC_EXPECT_NEAR(r->Tuning()->FrequencyMhz(0), 30.0, 1e-9);
+    SC_EXPECT_NEAR(r->RadioPresets()->FrequencyMhz(0), 30.0, 1e-9);
     SC_EXPECT_NEAR(c.panel.GetValue("radio.left.freq"), 30.0, 1e-9);  // the knob where the fixator holds it
     SC_EXPECT(c.equipment.GetInput("r123m_left_on_frequency") && c.equipment.GetInput("r123m_right_on_frequency"));
     // The right set to fixed frequency 1 (the PU-12's net): the motors run 3 s, the set is off tune meanwhile.
     c.panel.Set("radio.right.preset", 0);
     Steps(*r, 1.0);
-    SC_EXPECT(r->Tuning()->MotorsRunning(1));
+    SC_EXPECT(r->RadioPresets()->MotorsRunning(1));
     Steps(*r, 3.0);
-    SC_EXPECT_NEAR(r->Tuning()->FrequencyMhz(1), 30.0, 1e-9);
+    SC_EXPECT_NEAR(r->RadioPresets()->FrequencyMhz(1), 30.0, 1e-9);
     // Unset: the fixators hold nothing, so neither set is on its net and the commander hears nothing.
     auto u = Load(Text("unset"));
     SC_EXPECT(u != nullptr);
@@ -115,7 +115,7 @@ SC_TEST("radio setup: the crew's set-up drill puts both sets on the plan's frequ
     Steps(*r, 1.0);
     SC_EXPECT(r->GiveCrewOrder("order_presets"));
     Steps(*r, 600.0);
-    const RadioTuning& t = *r->Tuning();
+    const RadioTuning& t = *r->RadioPresets();
     for (int s = 0; s < 2; ++s) {
         SC_EXPECT_NEAR(t.PresetOf(s, 0).freq_mhz, 30.0, 1e-9);
         SC_EXPECT_NEAR(t.PresetOf(s, 1).freq_mhz, 38.55, 1e-9);
@@ -142,7 +142,7 @@ SC_TEST("radio setup: smooth tuning goes by the knobs, and on the move it walks 
     c.panel.SetValue("radio.right.freq", 38.55);
     c.panel.Set("radio.right.preset", 5);
     Steps(*r, 1.0);
-    SC_EXPECT(r->Tuning()->Smooth(1));
+    SC_EXPECT(r->RadioPresets()->Smooth(1));
     SC_EXPECT(c.equipment.GetInput("r123m_right_on_frequency"));
     // Sub-band I with a 38 MHz knob: wrong sub-band.
     c.panel.Set("radio.right.preset", 4);

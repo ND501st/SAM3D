@@ -1,0 +1,11 @@
+{
+  "plotting_id": "plotting",
+  "status": "Game values for the player's hand on the PU-12M's plotting board (simcore/command_post.hpp PlottingTuning, CommandPost::PlotAt). Not system data.",
+  "notes": "The player clicks where he thinks the report (or the tube) put the target. On the board's surface: within exact_board_m of the right place the mark goes exactly there; up to scatter_board_m it goes off the right place by more than exact_board_m but no more than his own miss, in a random direction; beyond, further off still, far_min to far_max times his miss. The board is 0.36 m across for 200 km each side: 5 cm is some 55 km, so the leeway is generous; the point is to look, listen and remember, not to copy every figure. The project owner's numbers (19 Oct 2026).",
+  "source": "sam3d (game values: the project owner's request of 19 Oct 2026)",
+  "confidence": "estimate",
+  "exact_board_m": 0.05,
+  "scatter_board_m": 0.20,
+  "far_min": 1.0,
+  "far_max": 1.6
+}

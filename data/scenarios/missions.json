@@ -5,6 +5,29 @@
   "source": "sam3d",
   "groups": [
     {
+      "id": "tutorial", "label": "Tutorial",
+      "notes": "Start here, then learn the Osa one seat at a time. Each step lights up the switch, button or wheel to use and waits until you have used it; the rest of the crew are NPCs and the commander's orders come at your pace. G shows every key at any time.",
+      "missions": [
+        { "file": "scenarios/tutorial_basics.json", "title": "Start here: the camera, the cabin, the controls", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/basics.json", "start": "outside" },
+        { "file": "scenarios/school_driver.json", "title": "Seat lesson 1: the driver", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_driver.json", "start": "driver" },
+        { "file": "scenarios/school_operator.json", "title": "Seat lesson 2: the operator", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_operator.json", "start": "operator" },
+        { "file": "scenarios/school_senior_operator.json", "title": "Seat lesson 3: the senior operator", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_senior_operator.json", "start": "senior_operator" },
+        { "file": "scenarios/school_deputy_commander.json", "title": "Seat lesson 4: the deputy commander", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_deputy_commander.json", "start": "deputy_commander" },
+        { "file": "scenarios/school_commander.json", "title": "Seat lesson 5: the commander, in command", "level": "/Game/Maps/KesmarkRange",
+          "tutorial": "tutorials/school_commander.json", "start": "commander" },
+        {"file": "scenarios/school_pu12m_driver.json", "title": "PU-12M lesson 1: the driver-electrician", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_driver.json", "start": "driver"},
+        {"file": "scenarios/school_pu12m_radio_operator.json", "title": "PU-12M lesson 2: the radiotelephone operator", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_radio_operator.json", "start": "radio_operator"},
+        {"file": "scenarios/school_pu12m_squad_leader.json", "title": "PU-12M lesson 3: the squad leader", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_squad_leader.json", "start": "squad_leader"},
+        {"file": "scenarios/school_pu12m_operator.json", "title": "PU-12M lesson 4: the operator-plotter", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_operator.json", "start": "operator"},
+        {"file": "scenarios/school_pu12m_battery_commander.json", "title": "PU-12M lesson 5: the battery commander, in command", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_battery_commander.json", "start": "battery_commander"}
+      ]
+    },
+    {
       "id": "missions", "label": "Missions",
       "notes": "NPC commanders run the crew and the battery by the drill. Take a seat and do your part when you are told, or take the commander's seat and give the orders yourself.",
       "missions": [
@@ -16,7 +39,9 @@
           "vehicles": [ { "id": "osa", "label": "the Osa 21" }, { "id": "post", "label": "the PU-12M" } ] },
         { "file": "scenarios/osa_mission_march.json", "title": "Osa: march, raid, fight, march on" },
         { "file": "scenarios/osa_decoys.json", "title": "Osa: decoy drones, then the strike" },
-        { "file": "scenarios/osa_soj_strike.json", "title": "Osa: a strike under stand-off jamming" }
+        { "file": "scenarios/osa_soj_strike.json", "title": "Osa: a strike under stand-off jamming" },
+        { "file": "scenarios/osa_arm_drill.json", "title": "Osa: HARM drill, a SEAD pair ahead of the strike" },
+        { "file": "scenarios/osa_arm_drill_shrike.json", "title": "Osa: Shrike drill, beaten by going silent" }
       ]
     },
     {
@@ -44,9 +69,30 @@
         { "file": "scenarios/osa_range_ashuluk.json", "title": "Ashuluk: from cold to two La-17M drones" },
         { "file": "scenarios/osa_range_ustka.json", "title": "Ustka: P-15 targets from the sea, a salvo at each" },
         { "file": "scenarios/osa_range_kapustin_yar.json", "title": "Kapustin Yar: a target at the zone's far edge" },
+        { "file": "scenarios/pu12m_range_day.json", "title": "PU-12M range day: the picture by voice, the ASPD-U off" },
         { "file": "scenarios/osa_bekaa_1982.json", "title": "The Bekaa, 24 July 1982: F-4Es over the mountains" },
         { "file": "scenarios/osa_angola_night.json", "title": "Angola: dug in, a night raid, a Puma in the canyon" },
         { "file": "scenarios/osa_cuito_1988.json", "title": "Cuito Cuanavale, 20 February 1988: Mirage F1AZs" }
+      ]
+    },
+    {
+      "id": "air_war", "label": "Air war",
+      "notes": "Raids planned by the enemy air command against battery 21 (docs/air_war/): officers with characters choose the targets, the time, the way in and the package from what their intelligence believes. These are samples from campaigns against each adversary; the whole campaign runs in simcore (air_war_demo) and comes to the game next. NPC commanders run the crew and the battery: take a seat, or command the vehicle.",
+      "missions": [
+        { "file": "scenarios/air_war_rebels_strike.json", "title": "Rebels: light aircraft at dusk" },
+        { "file": "scenarios/air_war_neutral_recce.json", "title": "Neutral neighbour: a light jet looks for you" },
+        { "file": "scenarios/air_war_pact_massed_strike.json", "title": "Warsaw Pact: a massed blow" },
+        { "file": "scenarios/air_war_pact_dead.json", "title": "Warsaw Pact: MiG-25BMs hunt the battery" },
+        { "file": "scenarios/air_war_nato_decoys.json", "title": "NATO: decoys first" },
+        { "file": "scenarios/air_war_nato_strike.json", "title": "NATO: a strike package goes by" },
+        { "file": "scenarios/air_war_nato_dead.json", "title": "NATO: DEAD on the battery" }
+      ]
+    },
+    {
+      "id": "test_range", "label": "Test range",
+      "notes": "The Kesmark test map (data/maps/kesmark_range.json): 40 by 40 km of ground with its towns, woods, roads and military sites, the airspace and the weather beyond it. NPC commanders fight; take any seat to watch or join in.",
+      "missions": [
+        { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" }
       ]
     }
   ]
