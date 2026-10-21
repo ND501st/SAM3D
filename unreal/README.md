@@ -54,6 +54,26 @@ tileset set). Don't place a Sim Osa Vehicle in it: the director spawns the playe
    (46.9° N, 19.7° E), samples terrain heights for the simulation after a few seconds, spawns the Osa placeholder
    at the unit's position and gives you control of it, and spawns a cone for the target drone.
 
+**The missions menu** (roadmap M2: play without the editor). The game itself (`UnrealEditor.exe SAM3D.uproject -game`,
+or a packaged build) opens on the missions menu instead of the director's scenario; the editor's Play keeps playing the
+director's ScenarioFile (set the director's **Mission Menu** to Always to see the menu there too).
+
+- The list is `data/scenarios/missions.json` (`simcore/missions.hpp`): the missions, where NPC commanders run the crew
+  and the battery, and the drills, where the scenario gives the orders. The selected one shows its scenario's name and
+  description and where you start: the vehicle (the Osa or the PU-12M in the battery link) and the seat. The
+  commander's seat is the game's "in command" half and any other seat "in the crew"; "outside" starts you outside the
+  vehicle. Up/Down a mission, Left/Right where to start, Enter (or Start) to play, Q to quit.
+- Starting reopens the level with `?SimMission=<id>[?SimVehicle=post][?SimSeat=<station>]`
+  (`ASimMissionMenuHUD::OptionsFor`). The director plays `scenarios/<id>.json` and puts you in that seat
+  (`ASimOsaVehicle::StartInSeat`: into the cabin, the seat taken from its NPC). A mission from the menu shows no
+  engineering lines, only the HUD's radio lines.
+- **Esc** in a mission opens its menu: the sim pauses (single player); Enter back to the mission, R restart, M the
+  missions (`?SimMenu`), Q quit. When the scenario ends, a banner says so and the menu shows the debrief's totals and
+  the crew's grades. A networked game only resumes or quits, and runs on meanwhile.
+- Scripted check: `-SimMenuTest=<folder> -SimMenuPick=<mission>:<vehicle>:<seat>` photographs the menu (`menu.png`,
+  `menu_pick.png`), starts the pick, photographs the player's first view (`started.png`) and the mission's menu
+  (`mission_menu.png`), then quits. Test `SAM3D.Missions.Menu`.
+
 In play:
 
 | Keys | Action |
@@ -216,8 +236,8 @@ In the cabin:
 - **T** takes this seat from its NPC (his orders become yours, the crew waits for you and reminds you) or gives it back.
 
 With the board (B) open, the battery's other launchers are listed under it (missiles, target, phase). To play the crew
-half, set the director's ScenarioFile to `scenarios/osa_crew_practice.json` (NPC commander) or
-`scenarios/osa_mission_march.json`.
+half, choose a mission in the missions menu and a seat other than the commander's (in the editor: set the director's
+ScenarioFile to `scenarios/osa_crew_practice.json`, NPC commander, or `scenarios/osa_mission_march.json`).
 
 **Bodies and voices** (roadmap 8.10, `docs/crew/10_BODIES_AND_VOICES.md`):
 

@@ -28,8 +28,15 @@ public:
 	float RadioLineSeconds = 40.f;
 
 private:
-	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font);
+	/** The radio lines, the newest at the bottom, ending above Bottom (clear of the PU-12M's aids). */
+	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font, float Bottom);
+	/** Where the PU-12M's aids start at this seat (the radio lines stay above it); the screen's foot otherwise. */
+	float PostAidsTop(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle) const;
+	/** A faint dark backing for a block of text over the bright instruments. */
+	void DrawBacking(float X, float Y, float W, float H);
 	void DrawCrew(const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	void DrawBoard(class USimWorldSubsystem* Sim, class UFont* Font);
 	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
+	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
+	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 };

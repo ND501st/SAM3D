@@ -9,6 +9,18 @@ class ACesium3DTileset;
 class ASimEntityActor;
 class ASimOsaVehicle;
 
+/** When the missions menu (ASimMissionMenuHUD) shows instead of the director's ScenarioFile. */
+UENUM(BlueprintType)
+enum class ESimMissionMenu : uint8
+{
+	/** Never: play ScenarioFile (or the command line's). */
+	Never,
+	/** In a standalone game (the packaged game, -game), not in the editor's Play. */
+	StandaloneGame,
+	/** Always, the editor's Play too. */
+	Always
+};
+
 /**
  * Drop one of these into a level and press Play.
  *
@@ -29,6 +41,11 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** When the missions menu shows first. A mission chosen there reopens the level with ?SimMission=<id> (and
+	 *  ?SimVehicle, ?SimSeat), which the director plays whatever this says; ?SimMenu opens the menu again. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
+	ESimMissionMenu MissionMenu = ESimMissionMenu::StandaloneGame;
 
 	/** Scenario to play, relative to the data folder. Empty = the generic demo engagement. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Scenario")
@@ -122,6 +139,9 @@ private:
 	void HandleDebriefEntry(const FSimDebriefEntry& Entry);
 
 	void StartScenario(USimWorldSubsystem* Sim);
+	void ShowMissionMenu();
+	bool ShouldShowMissionMenu() const;
+	void RunMenuCheck(float DeltaSeconds);
 	void SpawnPlayerVehicle(USimWorldSubsystem* Sim);
 	void SpawnMissingEntityActors();
 	void ShowStatus(const USimWorldSubsystem* Sim) const;
@@ -131,4 +151,11 @@ private:
 
 	bool bTerrainRequested = false;
 	float TimeSinceBeginPlay = 0.0f;
+	/** The menu's seat for the player's vehicle (?SimSeat). */
+	FString StartSeat;
+	bool bMissionMenuShown = false;
+	TWeakObjectPtr<ASimOsaVehicle> PlayerVehicle;
+	/** -SimMenuTest=<folder>, in a mission started from the menu: its first view and its menu photographed, then quit. */
+	FString MenuTestFolder;
+	int32 MenuTestStep = 0;
 };

@@ -39,3 +39,4 @@
 #include "simcore/console_sync.hpp"
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_voice.hpp"
+#include "simcore/missions.hpp"

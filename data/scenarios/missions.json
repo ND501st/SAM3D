@@ -1,0 +1,35 @@
+{
+  "catalog_id": "sam3d_missions",
+  "status": "The game's missions menu (roadmap M2: a person plays the whole mission without touching the editor).",
+  "notes": "Loaded by simcore/missions.hpp. Orders and groups the scenarios and gives each a short title; the name, the description, the seats and the seat that commands come from the scenario itself (its console's stations, its crew data's commander_seat). A battery link lists the vehicles the player may start in. Every scenario file of this folder is listed here or is a half of a listed link (test_missions.cpp).",
+  "source": "sam3d",
+  "groups": [
+    {
+      "id": "missions", "label": "Missions",
+      "notes": "NPC commanders run the crew and the battery by the drill. Take a seat and do your part when you are told, or take the commander's seat and give the orders yourself.",
+      "missions": [
+        { "file": "scenarios/osa_crew_practice.json", "title": "Osa: crew practice, one target" },
+        { "file": "scenarios/pu12m_deploy.json", "title": "PU-12M: deploy the command post" },
+        { "file": "scenarios/osa_battery_fight.json", "title": "Osa: the battery fight" },
+        { "file": "scenarios/pu12m_battery.json", "title": "PU-12M: run the battery in a raid" },
+        { "file": "scenarios/battery_link_practice.json", "title": "The battery: the Osa 21 and the PU-12M",
+          "vehicles": [ { "id": "osa", "label": "the Osa 21" }, { "id": "post", "label": "the PU-12M" } ] },
+        { "file": "scenarios/osa_mission_march.json", "title": "Osa: march, raid, fight, march on" }
+      ]
+    },
+    {
+      "id": "drills", "label": "Drills",
+      "notes": "Scripted shoots: the scenario gives the crew its orders as the target comes. Watch the crew work, or take a seat and keep up with the drill.",
+      "missions": [
+        { "file": "scenarios/osa_practice.json", "title": "Osa: one drone" },
+        { "file": "scenarios/osa_practice_em.json", "title": "Osa: one drone, the radars in full" },
+        { "file": "scenarios/osa_emcon_tv.json", "title": "Osa: radars silent, the TV only" },
+        { "file": "scenarios/osa_low_level_em.json", "title": "Osa: a low strike and a pop-up helicopter" },
+        { "file": "scenarios/osa_jamming_em.json", "title": "Osa: a jamming strike aircraft" },
+        { "file": "scenarios/osa_practice_em_ew.json", "title": "Osa: a drone with a noise pod and chaff" },
+        { "file": "scenarios/osa_practice_c2.json", "title": "Osa: the PU-12 lost, warning from the EWR net" },
+        { "file": "scenarios/osa_battery_practice.json", "title": "Osa: the battery in a prepared position" }
+      ]
+    }
+  ]
+}

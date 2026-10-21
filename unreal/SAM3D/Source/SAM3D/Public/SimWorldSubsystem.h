@@ -334,6 +334,79 @@ enum class ESimPlayerActionResult : uint8
 	Sent
 };
 
+/** A seat the player can start a mission in (the missions menu; simcore/missions.hpp). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimMissionSeat
+{
+	GENERATED_BODY()
+
+	/** The console's station id (the SimSeat option). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Label;
+
+	/** Whoever sits here gives the orders (the crew data's commander_seat): the game's "in command" half. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	bool bCommands = false;
+};
+
+/** A vehicle a mission can start in: one for a scenario, the Osa and the PU-12M in a battery link. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimMissionVehicle
+{
+	GENERATED_BODY()
+
+	/** "" for a plain scenario; "osa" or "post" in a battery link (the SimVehicle option). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Label;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString SystemId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FSimMissionSeat> Seats;
+};
+
+/** A mission of the menu (data/scenarios/missions.json): its scenario's name and description, where it can start. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimMission
+{
+	GENERATED_BODY()
+
+	/** The scenario file's base name (the SimMission option): scenarios/<Id>.json. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Title;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString GroupId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString GroupLabel;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString GroupNotes;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Description;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	bool bLink = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FSimMissionVehicle> Vehicles;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimDebriefEntry, const FSimDebriefEntry&, Entry);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimTerrainReady, bool, bSucceeded);
@@ -394,6 +467,24 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
 	FString GetDebriefText() const;
+
+	/** The running scenario's name (its file's "name"). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Scenario")
+	FString GetScenarioName() const;
+
+	/** The missions menu's list (data/scenarios/missions.json, simcore/missions.hpp): each mission with its scenario's
+	 *  name and description and the vehicles and seats it starts in. False with OutError if the catalogue doesn't load. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Missions")
+	bool GetMissions(TArray<FSimMission>& OutMissions, FString& OutError) const;
+
+	/** A launch option: the level URL's ?Key=Value (a mission started from the menu), else the command line's
+	 *  -Key=Value. Empty if neither has it. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
+	FString GetLaunchOption(const FString& Key) const;
+
+	/** The level URL carries ?Key (with or without a value). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
+	bool HasUrlOption(const FString& Key) const;
 
 	/** Fired for every new debrief line while a scenario runs. */
 	UPROPERTY(BlueprintAssignable, Category = "SAM3D|Scenario")

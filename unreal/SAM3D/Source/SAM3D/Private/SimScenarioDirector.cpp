@@ -9,8 +9,11 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "SAM3D.h"
+#include "Misc/Paths.h"
 #include "SimEntityActor.h"
+#include "SimMissionMenuHUD.h"
 #include "SimOsaVehicle.h"
+#include "UnrealClient.h"
 
 ASimScenarioDirector::ASimScenarioDirector()
 {
@@ -33,14 +36,43 @@ void ASimScenarioDirector::BeginPlay()
 	Sim->OnSimEvent.AddDynamic(this, &ASimScenarioDirector::HandleSimEvent);
 	Sim->OnDebriefEntry.AddDynamic(this, &ASimScenarioDirector::HandleDebriefEntry);
 
-	// -SimScenario=scenarios/<file>.json plays that scenario instead of the level's (a server or a scripted run), with
-	// its own vehicle's cabin.
+	// ?SimMenu (the mission's menu: "the missions") opens the missions menu whatever else is asked.
+	if (Sim->HasUrlOption(TEXT("SimMenu")))
+	{
+		ShowMissionMenu();
+		return;
+	}
+	// ?SimMission=<id> (a mission chosen in the menu) plays scenarios/<id>.json, in ?SimVehicle (a battery link) and
+	// ?SimSeat. -SimScenario=scenarios/<file>.json plays that scenario instead of the level's (a server or a scripted
+	// run). Either way with its own vehicle's cabin.
+	const FString Mission = Sim->HasUrlOption(TEXT("SimMission")) ? Sim->GetLaunchOption(TEXT("SimMission")) : FString();
 	FString CommandLineScenario;
-	if (FParse::Value(FCommandLine::Get(), TEXT("SimScenario="), CommandLineScenario) && !CommandLineScenario.IsEmpty())
+	const bool bValidMission = !Mission.IsEmpty() && !Mission.Contains(TEXT("/")) && !Mission.Contains(TEXT("\\")) && !Mission.Contains(TEXT(".."));
+	if (bValidMission)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Mission from the menu: %s"), *Mission);
+		ScenarioFile = FString::Printf(TEXT("scenarios/%s.json"), *Mission);
+		CabinFile.Reset();
+		bShowEventsOnScreen = false;  // played, not debugged: the HUD's radio lines and the debrief at the end, no engineering lines
+		for (const FString& Op : GetWorld()->URL.Op)
+		{
+			if (Op.StartsWith(TEXT("SimSeat="), ESearchCase::IgnoreCase))
+			{
+				StartSeat = Op.Mid(8);
+			}
+		}
+		FParse::Value(FCommandLine::Get(), TEXT("SimMenuTest="), MenuTestFolder);
+	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("SimScenario="), CommandLineScenario) && !CommandLineScenario.IsEmpty())
 	{
 		UE_LOG(LogSAM3D, Log, TEXT("Scenario from the command line: %s"), *CommandLineScenario);
 		ScenarioFile = CommandLineScenario;
 		CabinFile.Reset();
+	}
+	else if (ShouldShowMissionMenu())
+	{
+		ShowMissionMenu();
+		return;
 	}
 
 	if (!ScenarioFile.IsEmpty())
@@ -53,6 +85,34 @@ void ASimScenarioDirector::BeginPlay()
 	{
 		Sim->StartDemoScenario();
 	}
+}
+
+bool ASimScenarioDirector::ShouldShowMissionMenu() const
+{
+	const UWorld* World = GetWorld();
+	if (World == nullptr || World->GetNetMode() != NM_Standalone)
+	{
+		return false;  // a server plays its scenario; a client its server's
+	}
+	return MissionMenu == ESimMissionMenu::Always || (MissionMenu == ESimMissionMenu::StandaloneGame && World->WorldType == EWorldType::Game);
+}
+
+void ASimScenarioDirector::ShowMissionMenu()
+{
+	bMissionMenuShown = true;
+	APlayerController* Pc = UGameplayStatics::GetPlayerController(this, 0);
+	if (Pc == nullptr)
+	{
+		return;
+	}
+	Pc->ClientSetHUD(ASimMissionMenuHUD::StaticClass());
+	Pc->SetShowMouseCursor(true);
+	Pc->SetIgnoreMoveInput(true);
+	Pc->SetIgnoreLookInput(true);
+	FInputModeGameAndUI Mode;
+	Mode.SetHideCursorDuringCapture(false);
+	Pc->SetInputMode(Mode);
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu shown"));
 }
 
 void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
@@ -98,6 +158,11 @@ void ASimScenarioDirector::SpawnPlayerVehicle(USimWorldSubsystem* Sim)
 	if (Vehicle != nullptr && Pc != nullptr)
 	{
 		Pc->Possess(Vehicle);
+	}
+	PlayerVehicle = Vehicle;
+	if (Vehicle != nullptr && !StartSeat.IsEmpty())
+	{
+		Vehicle->StartInSeat(StartSeat);
 	}
 	// -SimCabinShots=<folder>: photograph every seat and instrument of the cabin (after -SimShotDelay= seconds, default
 	// 20), then quit. With -game -RenderOffscreen, a run checked from its pictures alone.
@@ -146,6 +211,41 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 	}
 	SpawnMissingEntityActors();
 	ShowStatus(Sim);
+	if (!MenuTestFolder.IsEmpty())
+	{
+		RunMenuCheck(DeltaSeconds);
+	}
+}
+
+void ASimScenarioDirector::RunMenuCheck(float DeltaSeconds)
+{
+	// The mission the menu check started: the player's first view in his seat, then the mission's menu, then quit.
+	ASimOsaVehicle* Vehicle = PlayerVehicle.Get();
+	if (MenuTestStep == 0 && TimeSinceBeginPlay >= 25.0f)
+	{
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(MenuTestFolder, TEXT("started.png")), false, false);
+		UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: started.png, the player %s"),
+			Vehicle != nullptr && Vehicle->IsHoldingSeat() ? *FString::Printf(TEXT("in the %s's seat"), *Vehicle->GetStationId()) : TEXT("in no seat"));
+		MenuTestStep = 1;
+	}
+	else if (MenuTestStep == 1 && TimeSinceBeginPlay >= 27.0f)
+	{
+		if (Vehicle != nullptr)
+		{
+			Vehicle->SetMissionMenuOpen(true);
+		}
+		MenuTestStep = 2;
+	}
+	else if (MenuTestStep == 2 && TimeSinceBeginPlay >= 29.0f)
+	{
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(MenuTestFolder, TEXT("mission_menu.png")), false, false);
+		MenuTestStep = 3;
+	}
+	else if (MenuTestStep == 3 && TimeSinceBeginPlay >= 31.0f)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: done"));
+		FGenericPlatformMisc::RequestExit(false);
+	}
 }
 
 void ASimScenarioDirector::SpawnMissingEntityActors()
