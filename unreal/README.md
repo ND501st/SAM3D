@@ -18,8 +18,9 @@ Or double-click `SAM3D.uproject` and let Unreal compile it.
 
 The project enables Epic's **Unreal MCP** (`ModelContextProtocol`, experimental, UE 5.8+) and **All Toolsets**
 plugins. With the editor open, the MCP server listens on `http://127.0.0.1:8000/mcp` (this PC only, no
-authentication) and Claude Code connects to it through `.mcp.json` at the repo root. Python remote execution
-(`tools/ue_remote.py`) stays on alongside it.
+authentication). Claude Code reaches it through `.mcp.json` at the repo root, which starts
+`tools/unreal_mcp_proxy.py` as the `unreal-mcp` server: a small stdio proxy that is always connected and passes
+requests on to the editor while it is open. Python remote execution (`tools/ue_remote.py`) stays on alongside it.
 
 The server starts with the editor: `Config/DefaultEditorPerProjectUserSettings.ini` (in git) sets
 `bAutoStartServer=True`, so every checkout and worktree has it. (The same switch is **Edit → Editor Preferences →
@@ -27,11 +28,13 @@ General → Model Context Protocol → Auto Start Server**; a user's own choice 
 read once at editor start-up, so change it, then restart the editor.) If the server is ever off, run
 `ModelContextProtocol.StartServer` in the editor console.
 
-Order matters for Claude Code: it reads `.mcp.json` and connects when the session starts, and does not retry. Open
-the editor first, then start Claude Code from the repo root. If the session came first, or the editor was restarted,
-type `/mcp` in the session and reconnect `unreal-mcp`. Only one editor can hold port 8000, and a session talks to
-whichever project's editor owns it: check the editor is the checkout you mean (a worktree has its own `Binaries/`
-and `Saved/`; the Cesium ion token is also per checkout and not in git).
+Order doesn't matter: Claude Code connects to its MCP servers once, when a session starts, and does not retry, so
+the proxy stands in for the editor. It checks for the editor every 5 s and, when it comes up, restarts or closes,
+tells Claude Code to fetch the tool list again; the editor's tools appear and vanish by themselves (no `/mcp`
+reconnect, which the desktop app doesn't offer anyway). Its own tool `proxy_status` says whether the editor is
+reachable. Only one editor can hold port 8000, and a session talks to whichever project's editor owns it: check the
+editor is the checkout you mean (a worktree has its own `Binaries/` and `Saved/`; the Cesium ion token is also per
+checkout and not in git).
 
 ## Time compression
 
