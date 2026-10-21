@@ -227,3 +227,37 @@ SC_TEST("em replication: a player moved to another node gets the new node's view
     SC_EXPECT(EncodeView(m.View()) == EncodeView(*server.Sent(c, ack)));
     SC_EXPECT(server.Keyframes(c) == 1);  // the switch went as a delta
 }
+
+SC_TEST("em replication: the scope block rides the stream, is skipped when unchanged, and carries no target ids") {
+    Scene sc;
+    sc.Run(100);
+    KnowledgeReplicator server;
+    const int c = server.AddClient(sc.red_node);
+    auto deco = [](KnowledgeView& v) {
+        v.scope.valid = true;
+        v.scope.search.push_back({7, 25000.0, 12.5, 3.25, 0, false});
+        v.scope.track_returns.push_back({7, 25010.0, 12.5, 3.3, -1, false});
+        v.scope.antenna_el_deg = 3.0;
+        v.scope.indicated_to_true_deg = -1.5;
+        v.scope.missile_range_m[0] = 8000.0;
+        v.scope.unit_position = {10.0, 20.0, 3.0};
+    };
+    KnowledgeMirror m;
+    std::uint32_t ack = 0;
+    const std::vector<std::uint8_t> first = server.Produce(c, &sc.w.Scene(), deco);
+    SC_EXPECT(m.Receive(first, &ack));
+    server.Ack(c, ack);
+    SC_EXPECT(m.View().scope.valid && m.View().scope.search.size() == 1);
+    SC_EXPECT(std::fabs(m.View().scope.search[0].azimuth_deg - 12.5) < 1e-3 && m.View().scope.search[0].key == 7);
+    SC_EXPECT(std::fabs(m.View().scope.missile_range_m[0] - 8000.0) < 1.0 && m.View().scope.missile_range_m[1] < 0.0);
+    // the next one with the same scope: the block is one byte
+    const std::vector<std::uint8_t> same = server.Produce(c, &sc.w.Scene(), deco);
+    SC_EXPECT(m.Receive(same, &ack));
+    SC_EXPECT(m.View().scope.search.size() == 1);  // kept from the base
+    // no EM scene at all: the scope alone still goes
+    KnowledgeReplicator bare;
+    const int b = bare.AddClient(0);
+    KnowledgeMirror mb;
+    SC_EXPECT(mb.Receive(bare.Produce(b, nullptr, deco), &ack));
+    SC_EXPECT(mb.View().scope.valid && mb.View().tracks.empty());
+}

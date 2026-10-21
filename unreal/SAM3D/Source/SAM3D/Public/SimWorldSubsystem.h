@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "SimCoreIncludes.h"
+
+#include <map>
 #include "SimEmLayer.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "SimWorldSubsystem.generated.h"
@@ -374,6 +376,12 @@ public:
 	/** Server: send each registered player its view when its period is up (called after the sim steps). */
 	void PumpKnowledge();
 
+	/** The local player's knowledge stream (its scope block feeds the cabin's scopes on a network client). */
+	void SetLocalKnowledge(USimKnowledgeComponent* Knowledge);
+	void ClearLocalKnowledge(USimKnowledgeComponent* Knowledge);
+	/** Network client: the scopes as the server's last view gave them (null: none yet). */
+	const simcore::em::ViewScope* GetMirroredScope() const;
+
 	/** The EM scene players' knowledge comes from: the scenario's EM layer, else the EM demo (null: none). */
 	const simcore::em::EmScene* GetActiveEmScene() const;
 
@@ -495,6 +503,8 @@ private:
 	TUniquePtr<simcore::em::KnowledgeReplicator> Replicator;
 	TArray<TWeakObjectPtr<USimKnowledgeComponent>> KnowledgeClients;
 	double LastKnowledgeSimTime = -1.0;
+	std::map<int32, simcore::EchoKeys> EchoKeysByClient;  // opaque echo keys per player
+	TWeakObjectPtr<USimKnowledgeComponent> LocalKnowledge;
 
 	// Multiplayer crew.
 	TArray<TWeakObjectPtr<USimCrewSeatComponent>> CrewSeats;

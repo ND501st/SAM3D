@@ -1,6 +1,7 @@
 #include "SimKnowledgeComponent.h"
 
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "SimWorldSubsystem.h"
 
 USimKnowledgeComponent::USimKnowledgeComponent()
@@ -13,6 +14,14 @@ USimKnowledgeComponent::USimKnowledgeComponent()
 void USimKnowledgeComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	const APlayerController* PC = Cast<APlayerController>(GetOwner());
+	if (PC != nullptr && PC->IsLocalController() && GetWorld() != nullptr)
+	{
+		if (USimWorldSubsystem* Sim = GetWorld()->GetSubsystem<USimWorldSubsystem>())
+		{
+			Sim->SetLocalKnowledge(this);
+		}
+	}
 	if (GetOwner() != nullptr && GetOwner()->HasAuthority())
 	{
 		if (USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
@@ -24,6 +33,10 @@ void USimKnowledgeComponent::BeginPlay()
 
 void USimKnowledgeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (USimWorldSubsystem* Local = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+	{
+		Local->ClearLocalKnowledge(this);
+	}
 	if (GetOwner() != nullptr && GetOwner()->HasAuthority())
 	{
 		if (USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
