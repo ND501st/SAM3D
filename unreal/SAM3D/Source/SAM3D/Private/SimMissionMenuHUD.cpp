@@ -52,9 +52,19 @@ TArray<ASimMissionMenuHUD::FStartChoice> ASimMissionMenuHUD::StartChoices(const 
 		const FString In = Mission.bLink ? V.Label + TEXT(": ") : FString();
 		for (const FSimMissionSeat& S : V.Seats)
 		{
-			Out.Add({V.Id, S.Id, FString::Printf(TEXT("%s%s, %s"), *In, *S.Label, S.bCommands ? TEXT("in command") : TEXT("in the crew"))});
+			FStartChoice C;
+			C.Vehicle = V.Id;
+			C.Seat = S.Id;
+			C.Label = FString::Printf(TEXT("%s%s, %s"), *In, *S.Label, S.bCommands ? TEXT("in command") : TEXT("in the crew"));
+			C.Title = S.Title.IsEmpty() ? S.Label : S.Title;
+			C.Duties = S.Duties;
+			C.bCommands = S.bCommands;
+			Out.Add(C);
 		}
-		Out.Add({V.Id, FString(), FString::Printf(TEXT("%soutside, no seat (C, Tab and T take one)"), *In)});
+		FStartChoice Outside;
+		Outside.Vehicle = V.Id;
+		Outside.Label = FString::Printf(TEXT("%soutside, no seat (C, Tab and T take one)"), *In);
+		Out.Add(Outside);
 	}
 	return Out;
 }
@@ -189,6 +199,11 @@ void ASimMissionMenuHUD::HandleInput()
 		}
 		return;
 	}
+	if (bChoosingCrew)
+	{
+		HandleCrewChoiceInput(Pc);
+		return;
+	}
 	if (Pc->WasInputKeyJustPressed(EKeys::Down) || Pc->WasInputKeyJustPressed(EKeys::S))
 	{
 		MoveSelection(1);
@@ -208,7 +223,7 @@ void ASimMissionMenuHUD::HandleInput()
 	}
 	if (Pc->WasInputKeyJustPressed(EKeys::Enter) || Pc->WasInputKeyJustPressed(EKeys::SpaceBar))
 	{
-		StartSelected();
+		OpenCrewChoice();
 		return;
 	}
 	if (Pc->WasInputKeyJustPressed(EKeys::H))
@@ -244,7 +259,7 @@ void ASimMissionMenuHUD::HandleInput()
 			const FVector2D At(Mx, My);
 			if (StartBox.bIsValid && StartBox.IsInside(At))
 			{
-				StartSelected();
+				OpenCrewChoice();
 				return;
 			}
 			if (HelperBox.bIsValid && HelperBox.IsInside(At))
@@ -277,6 +292,163 @@ void ASimMissionMenuHUD::HandleInput()
 			}
 		}
 	}
+}
+
+void ASimMissionMenuHUD::OpenCrewChoice()
+{
+	if (!Missions.IsValidIndex(Selected))
+	{
+		return;
+	}
+	const TArray<FStartChoice> Choices = StartChoices(Missions[Selected]);
+	if (Choices.Num() <= 1)
+	{
+		StartSelected();  // nobody to choose between
+		return;
+	}
+	if (!Choices.IsValidIndex(StartIndex))
+	{
+		StartIndex = DefaultStart(Missions[Selected]);
+	}
+	bChoosingCrew = true;
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: choosing who to play in %s"), *Missions[Selected].Id);
+}
+
+void ASimMissionMenuHUD::HandleCrewChoiceInput(APlayerController* Pc)
+{
+	const int32 Count = StartChoices(Missions[Selected]).Num();
+	if (Pc->WasInputKeyJustPressed(EKeys::Escape) || Pc->WasInputKeyJustPressed(EKeys::BackSpace))
+	{
+		bChoosingCrew = false;
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Down) || Pc->WasInputKeyJustPressed(EKeys::S))
+	{
+		StartIndex = (StartIndex + 1) % FMath::Max(1, Count);
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Up) || Pc->WasInputKeyJustPressed(EKeys::W))
+	{
+		StartIndex = (StartIndex + Count - 1) % FMath::Max(1, Count);
+	}
+	const FKey Numbers[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine};
+	for (int32 I = 0; I < 9 && I < Count; ++I)
+	{
+		if (Pc->WasInputKeyJustPressed(Numbers[I]))
+		{
+			StartIndex = I;
+		}
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Enter) || Pc->WasInputKeyJustPressed(EKeys::SpaceBar))
+	{
+		bChoosingCrew = false;
+		StartSelected();
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		float Mx = 0.0f;
+		float My = 0.0f;
+		if (!Pc->GetMousePosition(Mx, My))
+		{
+			return;
+		}
+		const FVector2D At(Mx, My);
+		if (CrewPlayBox.bIsValid && CrewPlayBox.IsInside(At))
+		{
+			bChoosingCrew = false;
+			StartSelected();
+			return;
+		}
+		if (CrewBackBox.bIsValid && CrewBackBox.IsInside(At))
+		{
+			bChoosingCrew = false;
+			return;
+		}
+		for (int32 I = 0; I < CrewBoxes.Num(); ++I)
+		{
+			if (!CrewBoxes[I].bIsValid || !CrewBoxes[I].IsInside(At))
+			{
+				continue;
+			}
+			if (I == StartIndex)  // a second click on the chosen crewman plays him
+			{
+				bChoosingCrew = false;
+				StartSelected();
+				return;
+			}
+			StartIndex = I;
+		}
+	}
+}
+
+void ASimMissionMenuHUD::DrawCrewChoice(float W, float H)
+{
+	UFont* Medium = GEngine->GetMediumFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const TArray<FStartChoice> Choices = StartChoices(Missions[Selected]);
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), 0.0f, 0.0f, W, H);
+	const float PanelW = FMath::Min(760.0f, W * 0.7f);
+	const float RowH = 28.0f;
+	int32 MostDuties = 2;  // room for the longest list shown (at most five lines), so the panel doesn't jump
+	for (const FStartChoice& C : Choices)
+	{
+		MostDuties = FMath::Max(MostDuties, FMath::Min(5, C.Duties.Num()));
+	}
+	const float DutiesH = 20.0f * MostDuties;
+	const float PanelH = FMath::Min(H * 0.9f, 110.0f + RowH * Choices.Num() + DutiesH + 100.0f);
+	const float X = (W - PanelW) * 0.5f;
+	float Y = (H - PanelH) * 0.5f;
+	DrawRect(FLinearColor(0.03f, 0.04f, 0.03f, 0.97f), X, Y, PanelW, PanelH);
+	DrawLine(X, Y, X + PanelW, Y, Amber, 2.0f);
+	const float In = X + 22.0f;
+	const float TextW = PanelW - 44.0f;
+	Y += 16.0f;
+	DrawText(TEXT("Who do you play?"), Amber, In, Y, Medium);
+	Y += 28.0f;
+	Y = DrawWrapped(Missions[Selected].Title, In, Y, TextW, Small, Dim, 2.0f) + 10.0f;
+
+	CrewBoxes.SetNum(Choices.Num());
+	for (int32 I = 0; I < Choices.Num(); ++I)
+	{
+		const FStartChoice& C = Choices[I];
+		CrewBoxes[I] = FBox2D(FVector2D(In - 8.0f, Y - 3.0f), FVector2D(In - 8.0f + TextW + 16.0f, Y + RowH - 5.0f));
+		const bool bOn = I == StartIndex;
+		if (bOn)
+		{
+			DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.18f), In - 8.0f, Y - 3.0f, TextW + 16.0f, RowH - 2.0f);
+		}
+		const FString Who = C.Seat.IsEmpty() ? C.Label : FString::Printf(TEXT("%s  (%s)"), *C.Title, C.bCommands ? TEXT("in command") : TEXT("in the crew"));
+		const FString Line = FString::Printf(TEXT("%s  %s"), I < 9 ? *FString::FromInt(I + 1) : TEXT(" "), *Who);
+		DrawText(Line, bOn ? Paper : Dim, In, Y, Medium);
+		Y += RowH;
+	}
+
+	// The chosen crewman's duties: what playing him means.
+	Y += 8.0f;
+	const FStartChoice& Chosen = Choices.IsValidIndex(StartIndex) ? Choices[StartIndex] : Choices[0];
+	if (Chosen.Seat.IsEmpty())
+	{
+		Y = DrawWrapped(TEXT("You start outside the vehicle, with no seat: look round, then C, Tab and T take one."), In, Y, TextW, Small, Paper, 2.0f);
+	}
+	else
+	{
+		for (int32 D = 0; D < Chosen.Duties.Num() && D < 5; ++D)
+		{
+			Y = DrawWrapped(TEXT("- ") + Chosen.Duties[D], In, Y, TextW, Small, Paper, 1.0f);
+		}
+	}
+
+	// Play and Back.
+	const float Bw = 150.0f;
+	const float Bh = 32.0f;
+	const float By = (H + PanelH) * 0.5f - Bh - 14.0f;
+	CrewPlayBox = FBox2D(FVector2D(In, By), FVector2D(In + Bw, By + Bh));
+	DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.85f), In, By, Bw, Bh);
+	DrawText(TEXT("Play"), FLinearColor(0.05f, 0.05f, 0.04f, 1.0f), In + 54.0f, By + 6.0f, Medium);
+	CrewBackBox = FBox2D(FVector2D(In + Bw + 16.0f, By), FVector2D(In + 2.0f * Bw + 16.0f, By + Bh));
+	DrawRect(FLinearColor(0.3f, 0.3f, 0.28f, 0.85f), In + Bw + 16.0f, By, Bw, Bh);
+	DrawText(TEXT("Back"), Paper, In + Bw + 16.0f + 52.0f, By + 6.0f, Medium);
+	DrawText(TEXT("Up / Down or 1-9 a crewman    Enter or a second click plays him    Esc back"), Dim, In, By - 24.0f, Small);
 }
 
 float ASimMissionMenuHUD::DrawWrapped(const FString& Text, float X, float Y, float Width, UFont* Font, const FLinearColor& Colour, float LineGap)
@@ -388,7 +560,7 @@ void ASimMissionMenuHUD::DrawHUD()
 		Y += 26.0f;
 		DrawText(FString::Printf(TEXT("<  %s  >"), *Choices[StartIndex].Label), Paper, X, Y, Medium);
 		Y += 26.0f;
-		DrawText(FString::Printf(TEXT("%d of %d: Left and Right choose"), StartIndex + 1, Choices.Num()), Dim, X, Y, Small);
+		DrawText(FString::Printf(TEXT("%d of %d: Start shows the whole crew to choose from (Left and Right here)"), StartIndex + 1, Choices.Num()), Dim, X, Y, Small);
 		Y += 30.0f;
 	}
 	// The helper: what the seat's NPC would do, highlighted like a lesson's step (docs/crew/14_HELPER.md).
@@ -412,8 +584,13 @@ void ASimMissionMenuHUD::DrawHUD()
 	const float BoxW = FMath::Min(420.0f, W * 0.3f);
 	DrawCampaignBox(W - Margin - BoxW, H - Margin - 200.0f, BoxW);
 
-	DrawText(TEXT("Up / Down a mission    Left / Right where you start    H the helper    Enter start    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
+	DrawText(TEXT("Up / Down a mission    H the helper    Enter choose who to play    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
 		Dim, Margin, H - Margin, Small);
+
+	if (bChoosingCrew)
+	{
+		DrawCrewChoice(W, H);
+	}
 }
 
 namespace
@@ -518,6 +695,7 @@ void ASimMissionMenuHUD::RunScriptedCheck(float DeltaSeconds)
 			FGenericPlatformMisc::RequestExit(false);
 			return;
 		}
+		OpenCrewChoice();  // the crew, as a player sees it after Start (photographed with the pick)
 		TestStep = 2;
 	}
 	else if (TestStep == 2 && TestClock >= 8.0f)
@@ -528,6 +706,7 @@ void ASimMissionMenuHUD::RunScriptedCheck(float DeltaSeconds)
 	else if (TestStep == 3 && TestClock >= 10.0f)
 	{
 		TestStep = 4;
+		bChoosingCrew = false;
 		StartSelected();
 	}
 }

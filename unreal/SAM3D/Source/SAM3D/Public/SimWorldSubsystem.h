@@ -542,6 +542,13 @@ struct SAM3D_API FSimMissionSeat
 	/** Whoever sits here gives the orders (the crew data's commander_seat): the game's "in command" half. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	bool bCommands = false;
+
+	/** The crewman in it and what he does (data/crew/<system>_crew.json), for the menu's choice of who to play. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Title;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FString> Duties;
 };
 
 /** A vehicle a mission can start in: one for a scenario, the Osa and the PU-12M in a battery link. */

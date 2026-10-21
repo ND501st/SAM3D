@@ -26,6 +26,8 @@ struct MissionSeat {
     std::string id;     // a station of the vehicle's console
     std::string label;
     bool commands = false;  // the crew data's commander_seat: whoever sits here gives the orders
+    std::string title;                // the crew data's title of the man in it ("Senior operator (search)"); may be empty
+    std::vector<std::string> duties;  // and what he does (data/crew/<system>_crew.json)
 };
 
 // A vehicle the player can start in. A plain scenario has one (id ""); a battery link has "osa" and "post".
@@ -217,7 +219,11 @@ private:
         if (v.label.empty()) v.label = console.display_name.empty() ? console.system_id : console.display_name;
         bool commander = false;
         for (const ConsoleStation& st : console.stations) {
-            MissionSeat seat{st.id, st.label, st.id == def.crew_data.commander};
+            MissionSeat seat{st.id, st.label, st.id == def.crew_data.commander, std::string(), {}};
+            if (const CrewSeatDef* crew = def.has_crew_data ? def.crew_data.FindSeat(st.id) : nullptr) {
+                seat.title = crew->title_en;
+                seat.duties = crew->duties;
+            }
             commander = commander || seat.commands;
             v.seats.push_back(std::move(seat));
         }

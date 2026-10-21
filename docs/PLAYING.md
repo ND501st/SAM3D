@@ -21,8 +21,10 @@ F11 the immersive view): use the standalone game for the full set of views.
 
 ## The missions menu
 
-Up/Down a mission, Left/Right where to start (a seat of the crew, the commander's seat, or outside), H the helper (Off,
-Hints, On: below), Enter to play, Q to quit. The groups:
+Up/Down a mission, H the helper (Off, Hints, On: below), Enter (or Start) to choose who to play, Q to quit. Choosing
+shows the mission's crew: every crewman of its vehicles, in command or in the crew, with his duties under the one chosen,
+and outside with no seat. Up/Down or 1-9 a crewman, Enter, Play or a second click on him to play, Esc or Back to the
+missions. (Left/Right on the mission's page still pick where to start.) The groups:
 
 | Group | What it is |
 |---|---|

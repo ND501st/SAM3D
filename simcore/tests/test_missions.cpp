@@ -71,6 +71,32 @@ SC_TEST("missions: the commander's seat commands (the Osa's commander, the PU-12
     SC_EXPECT(c.Find("link_osa_21") == nullptr);  // a half of the link, not a mission of its own
 }
 
+SC_TEST("missions: every seat offered names its crewman and his duties, for the menu's choice of who to play") {
+    MissionCatalog c;
+    SC_EXPECT(LoadMissionCatalog(kData, c));
+    int seats = 0, missions = 0;
+    for (const MissionGroup& g : c.groups) {
+        for (const MissionDef& m : g.missions) {
+            ++missions;
+            for (const MissionVehicle& v : m.vehicles) {
+                for (const MissionSeat& s : v.seats) {
+                    ++seats;
+                    if (s.title.empty() || s.duties.empty()) std::printf("    %s %s: %s has no title or duties\n", m.id.c_str(), v.id.c_str(), s.id.c_str());
+                    SC_EXPECT(!s.title.empty() && !s.duties.empty());
+                }
+            }
+        }
+    }
+    const MissionDef* crew = c.Find("osa_crew_practice");
+    SC_EXPECT(crew != nullptr);
+    if (crew != nullptr) {
+        for (const MissionSeat& s : crew->vehicles[0].seats) {
+            if (s.id == "senior_operator") SC_EXPECT(s.title == "Senior operator (search)");
+        }
+    }
+    std::printf("    %d seats over %d missions\n", seats, missions);
+}
+
 SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half of a link in it") {
     MissionCatalog c;
     SC_EXPECT(LoadMissionCatalog(kData, c));

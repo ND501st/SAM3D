@@ -1049,6 +1049,11 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 					OutS.Id = ToF(S.id);
 					OutS.Label = ToF(S.label);
 					OutS.bCommands = S.commands;
+					OutS.Title = ToF(S.title);
+					for (const std::string& Duty : S.duties)
+					{
+						OutS.Duties.Add(ToF(Duty));
+					}
 				}
 			}
 		}
