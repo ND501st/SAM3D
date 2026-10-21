@@ -154,7 +154,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | F9 | The trainer's instructor panel (roadmap 10.3; where the simulation runs: single player or the server) |
 | Right mouse, wheel | Turn the camera, closer / further |
 | Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |
-| W / S, A / D, Space | Drive, steer, brake (a halt for the crew) |
+| W / S, A / D, Space | Drive, steer, brake (a halt for the crew): from the driver's seat only in a mission (from the others the commander orders it) |
 | C | In and out of the cabin |
 | Tab | The next seat |
 | Mouse (cabin) | Look round; the cross names the control |

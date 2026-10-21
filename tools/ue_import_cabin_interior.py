@@ -144,6 +144,7 @@ def master():
     m = new_material('M_CabinPBR')
     m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_OPAQUE)
     m.set_editor_property('two_sided', False)
+    m.set_editor_property('used_with_nanite', True)  # the cabin's meshes are Nanite: without it the game draws the default
     uv = expr(m, unreal.MaterialExpressionTextureCoordinate, -1600, 0)
     s = unreal.MaterialExpressionScalarParameter
     v = unreal.MaterialExpressionVectorParameter

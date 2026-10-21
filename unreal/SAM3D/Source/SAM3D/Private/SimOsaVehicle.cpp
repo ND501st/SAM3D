@@ -174,8 +174,11 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		Views->UpdateViews(Pc, DeltaSeconds);
 	}
-	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's.
-	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() ? nullptr : Pc);
+	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's. In a mission only
+	// the driver's seat drives the hull (the commander orders it); with no scenario running the hull is the player's.
+	const bool bDriverSeat = bInCabin && Body == EBodyMode::Seat && StationId == TEXT("driver");
+	const bool bMayDrive = bDriverSeat || (Sim == nullptr || !Sim->IsScenarioRunning());
+	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() || !bMayDrive ? nullptr : Pc);
 	if (bAutoBrake && SpeedMps == 0.0)
 	{
 		bAutoBrake = false;  // the lesson autoplay's halt is made
