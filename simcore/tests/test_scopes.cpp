@@ -111,7 +111,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 9);
+    SC_EXPECT(layout.displays.size() == 12);  // with the driver's fuel gauge
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {
@@ -361,4 +361,17 @@ SC_TEST("readouts: the loader checks a counters display's readouts") {
     SC_EXPECT(Has(Error(R"({ "id": "c", "label": "C", "kind": "counters", "panel": "p", "at_m": [0, 0], "size_m": [0.5, 0.05],
                              "source": "s", "confidence": "low" })"),
                   "displays[0].readouts: required"));
+}
+
+SC_TEST("scopes: the search scope's range rings are the console's for each scale, else every 5 or 10 km") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", c));
+    const std::vector<double> near_scale = ScopeRingsM(c.search, 0);
+    SC_EXPECT(near_scale.size() == 3 && near_scale[0] == 2000.0 && near_scale[2] == 12000.0);
+    SC_EXPECT(ScopeRingsM(c.search, 2).front() == 15000.0 && ScopeRingsM(c.search, 2).back() == 40000.0);
+    // Without the list: every 10 km in a 0-45 km window.
+    SearchSensorDef plain;
+    plain.range_scales_m = {{0.0, 45000.0}};
+    const std::vector<double> fallback = ScopeRingsM(plain, 0);
+    SC_EXPECT(fallback.size() == 4 && fallback[0] == 10000.0 && fallback[3] == 40000.0);
 }

@@ -1188,6 +1188,27 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 	return Out;
 }
 
+TArray<FSimPositionWorkState> USimWorldSubsystem::GetPositionWorks() const
+{
+	TArray<FSimPositionWorkState> Out;
+	simcore::em::ViewExtras Scratch;
+	const simcore::em::ViewExtras* X = GetViewExtras(Scratch);
+	if (X == nullptr)
+	{
+		return Out;
+	}
+	for (const simcore::em::ViewWork& K : X->works)
+	{
+		FSimPositionWorkState W;
+		W.Location = ToUnreal(K.position);
+		W.YawDeg = HeadingToYawDeg(W.Location, K.heading_deg);
+		W.bEmplacement = K.emplacement;
+		W.bNets = K.nets;
+		Out.Add(W);
+	}
+	return Out;
+}
+
 bool USimWorldSubsystem::AssignBatteryTarget(const FString& Callsign, const FString& Target)
 {
 	return Runner && Runner->AssignBatteryTarget(ToStd(Callsign), ToStd(Target));
@@ -1546,7 +1567,7 @@ void USimWorldSubsystem::PumpKnowledge()
 			V.time_s = Now;
 			if (R != nullptr && R->EngagementOn())
 			{
-				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time()), Keys);
+				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time(), R->Fuel()), Keys);
 			}
 			if (R != nullptr)
 			{

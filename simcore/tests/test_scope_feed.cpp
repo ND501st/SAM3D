@@ -128,8 +128,11 @@ SC_TEST("scope feed: a stand-off jammer's strobe and the echoes' strength reach 
                 feed.search_antenna_az_deg);
     SC_EXPECT(!feed.strobes.empty());
     SC_EXPECT(feed.search_antenna_az_deg > -180.1 && feed.search_antenna_az_deg < 180.1);
-    // In the crew's frame (the gyro oriented to true north: the scenario orients the vehicle).
-    if (!feed.strobes.empty()) SC_EXPECT(std::fabs(feed.strobes[0].azimuth_deg - RadToDeg(std::atan2(30000.0, 50000.0))) < 6.0);
+    // In the crew's frame; turned to true north it points at the jammer (the vehicle may not be oriented by then: the
+    // crew chief breaks his compass work off for the target, roadmap 6.5).
+    if (!feed.strobes.empty()) {
+        SC_EXPECT(std::fabs(feed.IndicatedToTrueDeg(feed.strobes[0].azimuth_deg) - RadToDeg(std::atan2(30000.0, 50000.0))) < 6.0);
+    }
     EchoKeys keys;
     em::KnowledgeView v;
     v.scope = ToViewScope(feed, keys);

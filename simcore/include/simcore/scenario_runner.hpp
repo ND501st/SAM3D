@@ -54,6 +54,7 @@
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_setup.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/world.hpp"
@@ -112,12 +113,20 @@ public:
             e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
             e.friendly = t.friendly;
             e.size_m = t.size_m;
+            e.span_m = t.span_m;
             eng_targets_.push_back(e);
         }
         engagement_.SetOpticalConditions(def_.optics);
         rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
+        if (console_.has_orientation) {  // roadmap 6.5: the gyro's drift at this site, the crew chief's compass work
+            const OrientationDef& o = console_.orientation;
+            engagement_.SetSiteLatitude(RadToDeg(def_.origin.lat_rad));
+            const bool east = ((def_.seed * 2654435761u) >> 11) & 1u;  // the sign of this gyro's own drift, per seed
+            engagement_.SetGyroOwnDrift(east ? o.own_drift_deg_h : -o.own_drift_deg_h);
+            compass_ = CompassSurvey(o.survey_s, o.survey_sigma_deg, def_.seed * 40503u + 977u);
+        }
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         if (console_.has_launcher) {
             launcher_ = std::make_unique<Launcher>(console_.launcher);
@@ -161,6 +170,8 @@ public:
             }
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
+        StartRadioTuning();
+        RecordWorkPlaces();
         StartCallouts();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
@@ -176,6 +187,9 @@ public:
         UpdateBattery(dt);
         UpdateC2();
         UpdatePost();
+        UpdateRadioTuning(dt);
+        NpcSurvey();
+        UpdateCompass();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
             aim_crew_.ignore = decoys_known_;
@@ -196,6 +210,7 @@ public:
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
         CheckEmergencyLaunch();
+        UpdateTransmit();
         console_.panel.ReleaseMomentaries();
         for (CrewMember& c : crew_) {
             if (!SeatHolder(c.Role()).empty()) continue;  // a player sits there
@@ -216,6 +231,8 @@ public:
         SeeInstruments();
         UpdateGrades();
         UpdateCallouts();
+        UpdateTvRangeCallout();
+        UpdateCounterJamming();
         UpdateStress();
         UpdateNpcCommander();
         UpdateOwnReports();
@@ -270,6 +287,31 @@ public:
         def_.unit_heading_deg = heading_deg;
         engagement_.SetUnitHeading(heading_deg);
     }
+
+    // The crew chief's compass work (roadmap 6.5, orientation.hpp): the commander finds the vehicle's heading Qc with
+    // the artillery compass at a halt, then commands it to the deputy, who orients the gyro with it. False if the console
+    // has no orientation, the vehicle is moving or a survey is already running.
+    bool StartCompassSurvey(const std::string& by = "Commander") {
+        if (!console_.has_orientation || !console_.equipment.GetInput("vehicle_stopped") || compass_.Running()) return false;
+        compass_.Start(time_);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "orientation", "sets up the artillery compass (ПАБ) in front of the vehicle"});
+        return true;
+    }
+    const CompassSurvey& Compass() const { return compass_; }
+    // Every designation the commander has heard on the radio so far (the latest last).
+    const std::vector<C2Network::Event>& DesignationsHeard() const { return designations_heard_; }
+    // When the last call tone went out (ТОН. ВЫЗОВ), or a large negative number.
+    double LastToneCallS() const { return last_tone_s_; }
+    // The R-123M sets' tuning (null when the console has no preset set-up).
+    const RadioTuning* Tuning() const { return tuning_.get(); }
+    // When the vehicle last went on the air (a report, a carrier second, a call tone).
+    double LastTransmissionS() const { return last_tx_s_; }
+    // Transmissions the vehicle has made (roadmap 7.8): every report, carrier second and call tone that went out.
+    int Transmissions() const { return transmissions_; }
+    // Can the commander go on the air on his set now? `why` says what stops him.
+    bool CommanderCanTransmit(std::string* why = nullptr) const { return CanTransmitNow(why); }
+    // The vehicle has been oriented at this halt (the gyro slaved to the crew chief's Qc since it last stopped).
+    bool OrientedAtHalt() const { return halt_oriented_; }
 
     // Replace the scenario's flat ground, e.g. with heights sampled from Cesium. Null restores the flat ground.
     // The terrain must outlive the runner or be replaced first.
@@ -422,7 +464,33 @@ public:
         for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
             x.battery.push_back({"dummy " + std::to_string(i + 1), "dummy", def_.prepared.dummies[i].position, 0.0, true});
         }
+        x.works = Works();
         return x;
+    }
+
+    // A prepared position's works (roadmap 7.6): an emplacement and a net at each place a vehicle of the battery started
+    // in (ours, the battery's, the dummy positions). The emplacements stay; a vehicle's net is taken down once it has
+    // left its place (more than 15 m off it). Empty without a prepared position.
+    std::vector<em::ViewWork> Works() const {
+        std::vector<em::ViewWork> out;
+        if (!def_.prepared.present) return out;
+        for (const WorkPlace& w : work_places_) {
+            em::ViewWork k;
+            k.position = w.position;
+            k.heading_deg = w.heading_deg;
+            k.emplacement = def_.prepared.emplacement;
+            bool here = true;
+            if (w.vehicle == "own") {
+                here = (def_.unit_position - w.position).HorizontalLength() <= 15.0;
+            } else if (!w.vehicle.empty() && battery_) {
+                for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                    if (v.def.callsign == w.vehicle) here = (v.position - w.position).HorizontalLength() <= 15.0;
+                }
+            }
+            k.nets = def_.prepared.nets && here;
+            out.push_back(k);
+        }
+        return out;
     }
 
     // The prepared position the unit stands in (present = false: none).
@@ -499,6 +567,9 @@ public:
             if (m != nullptr && p != nullptr) GiveOrder(*m, *p, s.queue);
         }
         quiet_orders_ = false;
+        for (const std::string& a : o->actions) {
+            if (a == "compass_survey" && !engagement_.QcKnown() && !compass_.Running()) StartCompassSurvey();
+        }
         return true;
     }
     // The seat that commands the crew (the crew data's commander_seat: the Osa's commander, the PU-12M's squad leader).
@@ -905,7 +976,14 @@ private:
             }
             console_.equipment.Update(0.0, console_.panel);
         }
-        if (st.oriented) engagement_.SetOriented();
+        if (st.oriented) {
+            engagement_.SetOriented();
+            halt_oriented_ = true;
+            // The crew set the site's latitude on the gyro's correction when they oriented (from the map).
+            if (console_.has_orientation && !console_.orientation.latitude_control.empty()) {
+                console_.panel.SetValue(console_.orientation.latitude_control, RadToDeg(def_.origin.lat_rad));
+            }
+        }
         Event(def_.id, "starts " + st.id + (st.description.empty() ? std::string() : ": " + st.description));
     }
 
@@ -1156,14 +1234,16 @@ private:
             const int loaded = launcher_->LoadedCount();
             if (last_loaded_ >= 0 && loaded > last_loaded_) battery_->Consume("", Battery::Service::Reload, loaded - last_loaded_, time_);
             last_loaded_ = loaded;
-            if (loaded == 0 && launcher_->ShotsFlying().empty()) battery_->RequestService("", Battery::Service::Reload, time_);
+            if (loaded == 0 && launcher_->ShotsFlying().empty() && RequestOnAir("the TZM")) {
+                battery_->RequestService("", Battery::Service::Reload, time_);
+            }
             if (loaded == launcher_->Capacity()) battery_->Done("", Battery::Service::Reload, time_);
         }
         if (fuel_) {
             const double level = fuel_->LevelL();
             if (last_fuel_l_ >= 0.0 && level > last_fuel_l_) battery_->Consume("", Battery::Service::Refuel, level - last_fuel_l_, time_);
             last_fuel_l_ = level;
-            if (fuel_->Requested()) battery_->RequestService("", Battery::Service::Refuel, time_);
+            if (fuel_->Requested() && RequestOnAir("the fuel truck")) battery_->RequestService("", Battery::Service::Refuel, time_);
             if (level >= fuel_->TankL() - 1e-6) battery_->Done("", Battery::Service::Refuel, time_);
         }
     }
@@ -1399,6 +1479,11 @@ private:
         for (int i = 0; i < 3; ++i) {
             if (pan.Find(ids[i]) == nullptr) continue;
             const int p = pan.Get(ids[i]);
+            if (i < 2 && p >= C2Network::kPresets) {  // ПЛАВНЫЙ ПОДДИАПАЗОН: the set tunes off its knobs (radio_setup.hpp)
+                radio_panel_[i] = p;
+                radio_now_[i] = now[i];
+                continue;
+            }
             if (!radio_synced_) {
                 pan.Set(ids[i], now[i]);
             } else if (p != radio_panel_[i]) {
@@ -1424,6 +1509,321 @@ private:
     // Fuel: burned by the running power sources, pumped by the TZM; at the reserve the crew asks for fuel and the power
     // sources are cut so the rest stays for driving (roadmap 7.4).
     // A prepared position's supply (roadmap 7.6): the grid, then after a cut the diesel set once it has started.
+    // Range from the TV picture (roadmap 6.6): the deputy, watching the TV, tells the operator the range he makes of the
+    // target's size against the reticle; again whenever it has changed by a kilometre.
+    int tv_range_said_km_ = -1;
+    void UpdateTvRangeCallout() {
+        if (!engagement_on_ || !callouts_) return;
+        if (!engagement_.RangeFromTvSize(console_)) {
+            tv_range_said_km_ = -1;
+            return;
+        }
+        const int km = static_cast<int>(std::floor(engagement_.TvRangeEstimateM() / 1000.0 + 0.5));
+        if (km == tv_range_said_km_ || !NpcAt("deputy_commander")) return;
+        tv_range_said_km_ = km;
+        Say("tv_range", "deputy_commander", {{"range_km", std::to_string(km)}});
+    }
+
+    // Counter-jamming (roadmap 9.4) is switched on only when automatic tracking is impossible and off when the jamming
+    // stops (voenizdat_osa_1991 p259): switching it on with no range pull-off seen in the last minute is a crew mistake.
+    double last_pulled_s_ = -1e9;
+    bool rgpo_was_on_ = false;
+    void UpdateCounterJamming() {
+        const TrackSensorDef& tr = console_.track;
+        if (!console_.has_sensors || tr.rgpo_control.empty()) return;
+        if (!tr.range_pulled_input.empty() && console_.equipment.GetInput(tr.range_pulled_input)) last_pulled_s_ = time_;
+        const bool on = console_.panel.Get(tr.rgpo_control) == 1;
+        if (on && !rgpo_was_on_ && time_ - last_pulled_s_ > 60.0) {
+            log_.Record({time_, DebriefEntry::Kind::Deviation, SpeakerName("operator"), tr.rgpo_control,
+                         "counter-jamming switched on with no range pull-off seen (only when automatic tracking is impossible)"});
+        }
+        rgpo_was_on_ = on;
+    }
+
+    // Where a prepared position's works are: each vehicle's place at the start, and the dummy positions ("" vehicle).
+    struct WorkPlace {
+        Vec3 position;
+        double heading_deg = 0.0;
+        std::string vehicle;  // "own", a battery vehicle's callsign, or "" for a dummy position
+    };
+    std::vector<WorkPlace> work_places_;
+    void RecordWorkPlaces() {
+        if (!def_.prepared.present) return;
+        work_places_.push_back({def_.unit_position, def_.unit_heading_deg, "own"});
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (!v.def.own) work_places_.push_back({v.position, v.heading_deg, v.def.callsign});
+            }
+        }
+        for (const DummyPositionDef& d : def_.prepared.dummies) work_places_.push_back({d.position, 0.0, std::string()});
+    }
+
+    // The compass survey runs while the vehicle stands; its Qc is commanded to the deputy (engagement: SetCommandedQc).
+    // Moving off spoils the measurement and the halt's orientation (the gyro keeps its own, drifting, heading).
+    CompassSurvey compass_;
+    bool was_stopped_ = false;
+    bool halt_oriented_ = false;
+    void UpdateCompass() {
+        if (!console_.has_orientation) return;
+        const bool stopped = console_.equipment.GetInput("vehicle_stopped");
+        if (!stopped && was_stopped_) {
+            engagement_.ClearCommandedQc();
+            halt_oriented_ = false;
+        }
+        was_stopped_ = stopped;
+        if (stopped && engagement_.QcKnown() && console_.equipment.GetInput(console_.orientation.synced_input)) halt_oriented_ = true;
+        const bool was_running = compass_.Running();
+        if (compass_.Step(time_, stopped, def_.unit_heading_deg)) {
+            engagement_.SetCommandedQc(compass_.ResultDeg());
+            char detail[96];
+            std::snprintf(detail, sizeof(detail), "Qc by compass %s (%.1f deg)", MilsText(compass_.ResultDeg()).c_str(),
+                          compass_.ResultDeg());
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
+            Say("qc_report", Cmdr(), {{"qc", MilsText(compass_.ResultDeg())}});
+        } else if (was_running && !compass_.Running()) {
+            Event("orientation", "the compass survey was broken off: the vehicle moved");
+        }
+    }
+
+    // ---- Transmitting from the vehicle (roadmap 7.8). The commander talks on the set his headset is on, keyed by his chest
+    // switch (r123m_training: its tangent to ПРД transmits; ТОН. ВЫЗОВ sends a call tone while transmitting). Nothing goes
+    // out unless the set is on, warm and in СИМПЛЕКС and his A-1 is on Р-123. What does go out radiates on the net of the
+    // source on that set (the EM layer: the other side's ESM can hear it and find the vehicle).
+    int transmissions_ = 0;
+    double last_tx_s_ = -1e9;
+    double last_tone_s_ = -1e9;
+    bool chest_was_keyed_ = false;
+    double next_carrier_s_ = 0.0;
+    std::string tx_blocked_why_;
+    double tx_blocked_s_ = -1e9;
+    bool reported_ready_ = false;
+    std::map<std::string, std::string> request_blocked_;
+
+    int CommanderSet() const { return c2_ ? c2_->ListeningSet() : 1; }
+    bool CanTransmitNow(std::string* why = nullptr) const {
+        if (!comms_) return true;
+        return comms_->CanTransmit(CommanderSet(), console_, why);
+    }
+    void TransmitBlocked(const std::string& why) {
+        if (why == tx_blocked_why_ && time_ - tx_blocked_s_ < 30.0) return;
+        tx_blocked_why_ = why;
+        tx_blocked_s_ = time_;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "radio", "cannot transmit: " + why});
+    }
+    // The vehicle on the air for `seconds` on the net of the source on the commander's set.
+    void OnAir(double seconds) {
+        ++transmissions_;
+        last_tx_s_ = time_;
+        if (!em_link_ || !c2_) return;
+        const std::vector<C2Network::RadioView> sets = c2_->Radios();
+        const int set = CommanderSet();
+        if (set < 0 || set >= static_cast<int>(sets.size()) || sets[static_cast<std::size_t>(set)].source.empty()) return;
+        em_link_->SendVoiceFromUnit(sets[static_cast<std::size_t>(set)].source, time_, time_ + seconds);
+    }
+    // The commander says a radio callout: it goes out only if his set can transmit (a player has to hold the chest switch
+    // at ПРД). False, with the reason in the log, if nothing went out.
+    bool SayOnRadio(const std::string& id, const std::map<std::string, std::string>& fields, bool by_player) {
+        if (!callouts_) return false;
+        const CalloutDef* def = def_.crew_data.FindCallout(id);
+        if (def == nullptr) return false;
+        std::string why;
+        if (by_player && comms_ && comms_->HasChest() && !comms_->ChestKeyed(console_)) {
+            why = "the chest switch is at receive (hold it at ПРД to talk)";
+        } else {
+            CanTransmitNow(&why);
+        }
+        if (!why.empty()) {
+            TransmitBlocked(why);
+            return false;
+        }
+        const double delay = by_player ? 0.0 : SpeakDelayS(Cmdr());
+        if (!callouts_->Say(time_, id, Cmdr(), fields, delay)) return false;
+        OnAir(delay + SpeakingTimeS(FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
+        return true;
+    }
+    // The fields of the vehicle's radio reports: its callsign, the channels the КАНАЛЫ selector allows, missiles loaded.
+    std::map<std::string, std::string> RadioFields() const {
+        std::map<std::string, std::string> f;
+        f["callsign"] = OwnCallsign();
+        std::string ch;
+        if (console_.has_launcher) {
+            const int pos = console_.panel.Get(console_.launcher.channel_control);
+            if (pos >= 0 && pos < static_cast<int>(console_.launcher.channel_positions.size())) {
+                for (int c : console_.launcher.channel_positions[static_cast<std::size_t>(pos)]) ch += (ch.empty() ? "" : ", ") + std::string(c == 1 ? "I" : "II");
+            }
+        }
+        f["channels"] = ch.empty() ? "-" : ch;
+        f["missiles"] = std::to_string(launcher_ ? launcher_->LoadedCount() : 0);
+        return f;
+    }
+    // A request the crew makes by radio (the TZM, the fuel truck) reaches the battery only if the set can transmit.
+    bool RequestOnAir(const std::string& what) {
+        std::string why;
+        if (CanTransmitNow(&why)) {
+            request_blocked_.erase(what);
+            return true;
+        }
+        if (request_blocked_[what] != why) {
+            request_blocked_[what] = why;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "radio",
+                         "the request for " + what + " can't go out: " + why});
+        }
+        return false;
+    }
+    // The NPC commander reports the vehicle ready on the battery net once at each halt (voenizdat_osa_1991 p246: "к бою
+    // готов", with its channels and missiles).
+    void NpcReportReady(bool halted) {
+        if (LinkedToPost()) return;  // OwnReport does it for a linked post
+        if (!halted) {
+            reported_ready_ = false;
+            return;
+        }
+        if (reported_ready_ || !(battery_ || c2_) || !def_.has_crew_data) return;
+        const CrewTask* ready = def_.crew_data.FindTask("ready_halted");
+        if (ready == nullptr || !console_.equipment.AllHold(ready->conditions, console_.panel)) return;
+        reported_ready_ = SayOnRadio("report_ready", RadioFields(), false);
+    }
+    // The chest switch and ТОН. ВЫЗОВ, as the crew works them.
+    void UpdateTransmit() {
+        if (!comms_) return;
+        const bool keyed = comms_->ChestKeyed(console_);
+        std::string why;
+        const bool can = CanTransmitNow(&why);
+        if (keyed && !chest_was_keyed_) {
+            if (can) {
+                Event("radio", "the commander keys R-123M " + comms_->SetName(CommanderSet()));
+            } else {
+                TransmitBlocked(why);
+            }
+        }
+        if (keyed && can && time_ + 1e-9 >= next_carrier_s_) {  // held: on the air, second by second
+            OnAir(1.0);
+            next_carrier_s_ = time_ + 1.0;
+        }
+        chest_was_keyed_ = keyed;
+        const int tone = comms_->TonePressed(console_);
+        if (tone < 0) return;
+        const std::string set = "R-123M " + comms_->SetName(tone);
+        if (tone != CommanderSet()) {
+            why = set + " is not the set the commander's headset is on";
+        } else if (!can) {
+            // why says it
+        } else if (comms_->HasChest() && !keyed) {
+            why = "not transmitting (the chest switch is at receive)";
+        }
+        if (!why.empty()) {
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "radio", "ТОН. ВЫЗОВ on " + set + ": nothing goes out: " + why});
+            return;
+        }
+        Radio("battery net", OwnCallsign(), "ТОН. ВЫЗОВ (call tone)");
+        last_tone_s_ = time_;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "radio", "ТОН. ВЫЗОВ: a call tone on " + set});
+        OnAir(1.0);
+    }
+
+    // ---- Tuning the R-123M sets (roadmap 7.8, radio_setup.hpp). The frequency plan: the net of the source on each fixed
+    // frequency (c2.presets) on its frequency, or a placeholder plan where a source has none. A set off its net's
+    // frequency hears nothing and can't be heard; the antenna mismatch costs on the link.
+    std::unique_ptr<RadioTuning> tuning_;
+    static double DefaultPlanMhz(int preset) {
+        static const double plan[4] = {30.0, 32.5, 41.0, 45.5};  // PLACEHOLDER frequencies where the scenario has none
+        return plan[preset >= 0 && preset < 4 ? preset : 0];
+    }
+    double PlanMhz(int preset) const {
+        if (c2_) {
+            const std::string& id = c2_->PresetSource(preset + 1);
+            for (const C2SourceDef& s : def_.c2_sources) {
+                if (s.id == id && s.frequency_hz > 0.0) return s.frequency_hz / 1e6;
+            }
+        }
+        return DefaultPlanMhz(preset);
+    }
+    // The fixed frequency set `set` is on as the network knows it (0-3), or its panel position without a network.
+    int SetPreset(int set) const {
+        if (c2_) return c2_->Radios()[static_cast<std::size_t>(set)].preset - 1;
+        const CommsRadioDef& r = console_.comms.radios[static_cast<std::size_t>(set)];
+        return r.preset.empty() ? 0 : std::min(console_.panel.Get(r.preset), 3);
+    }
+    bool presets_planned_ = false;
+    std::array<std::string, 4> plan_ids_{};
+    void StartRadioTuning() {
+        if (!comms_) return;
+        bool any = false;
+        for (const CommsRadioDef& r : console_.comms.radios) any = any || r.HasSetup();
+        if (any) tuning_ = std::make_unique<RadioTuning>(console_.comms);
+    }
+    // The fixators' frequency plan, once the command network has put its sources on the presets (its first update);
+    // later, a preset the network re-tunes onto another source (the crew's retune) holds that net's frequency.
+    void PlanPresets() {
+        if (!presets_planned_) {
+            for (int s = 0; s < 2; ++s) {
+                std::array<double, 4> mhz{};
+                for (int p = 0; p < 4; ++p) mhz[static_cast<std::size_t>(p)] = def_.radio_presets_set ? PlanMhz(p) : 0.0;
+                tuning_->SetPresets(s, mhz);
+            }
+            tuning_->Settle(console_);
+            presets_planned_ = true;
+        } else if (c2_) {
+            for (int p = 0; p < 4; ++p) {
+                const std::string& id = c2_->PresetSource(p + 1);
+                if (id == plan_ids_[static_cast<std::size_t>(p)] || plan_ids_[static_cast<std::size_t>(p)].empty()) continue;
+                for (int s = 0; s < 2; ++s) tuning_->SetPresetFrequency(s, p, PlanMhz(p));
+            }
+        }
+        if (c2_) {
+            for (int p = 0; p < 4; ++p) plan_ids_[static_cast<std::size_t>(p)] = c2_->PresetSource(p + 1);
+        }
+    }
+    void UpdateRadioTuning(double dt) {
+        if (!tuning_) return;
+        PlanPresets();
+        NpcTuneRadios(dt);
+        const bool moving = !console_.equipment.GetInput("vehicle_stopped");
+        const bool keyed[2] = {comms_->Keyed(0, CommanderSet(), console_), comms_->Keyed(1, CommanderSet(), console_)};
+        for (const RadioTuning::Event& e : tuning_->Step(time_, dt, console_, moving, keyed)) {
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(console_.comms.radios[static_cast<std::size_t>(e.set)].preset.empty()
+                                                                               ? std::string("driver")
+                                                                               : console_.panel.Find(console_.comms.radios[static_cast<std::size_t>(e.set)].preset)->station),
+                         "R-123M " + comms_->SetName(e.set), e.text});
+        }
+        for (int s = 0; s < 2; ++s) {
+            const double plan = PlanMhz(SetPreset(s));
+            const bool on = tuning_->OnFrequency(s, plan);
+            comms_->SetTuning(s, on, tuning_->OffFrequencyWhy(s, plan), tuning_->LossDb(s));
+            const CommsRadioDef& r = console_.comms.radios[static_cast<std::size_t>(s)];
+            if (!r.on_frequency_input.empty()) console_.equipment.SetInput(r.on_frequency_input, on);
+        }
+    }
+    // An NPC doing a set's preset drill turns its knobs (the drill's steps are the switches): with a fixator open, the
+    // frequency knob to the plan's frequency for that fixed frequency and the sub-band to its band; with the antenna's
+    // lock off and the set keyed, the antenna knob to the meter's peak. Rates: SAM3D estimates.
+    void NpcTuneRadios(double dt) {
+        for (std::size_t s = 0; s < console_.comms.radios.size() && s < 2; ++s) {
+            const CommsRadioDef& r = console_.comms.radios[s];
+            if (!r.HasSetup()) continue;
+            const std::string& seat = console_.panel.Find(r.preset)->station;
+            const CrewMember* m = MemberAt(seat);
+            if (m == nullptr || !SeatHolder(seat).empty() || !m->IsBusy()) continue;
+            const std::string& drill = m->Tracker().GetProcedure().id;
+            if (drill.find("preset_setup") == std::string::npos) continue;
+            const int pos = console_.panel.Get(r.preset);
+            if (pos < 0 || pos >= 4) continue;
+            if (console_.panel.Get(r.fixators[static_cast<std::size_t>(pos)]) == 1) {
+                const double want = PlanMhz(pos);
+                const double now = console_.panel.GetValue(r.frequency);
+                const double step = 2.0 * dt;  // MHz a second
+                console_.panel.SetValue(r.frequency, std::fabs(want - now) <= step ? want : now + (want > now ? step : -step));
+                console_.panel.Set(r.subband, RadioTuning::BandOf(want));
+            }
+            if (console_.panel.Get(r.antenna_lock) == 1 && comms_->Keyed(static_cast<int>(s), CommanderSet(), console_)) {
+                const double want = RadioTuning::AntennaOptimum(tuning_->FrequencyMhz(static_cast<int>(s)));
+                const double now = console_.panel.GetValue(r.antenna_tune);
+                const double step = 10.0 * dt;  // divisions a second
+                console_.panel.SetValue(r.antenna_tune, std::fabs(want - now) <= step ? want : now + (want > now ? step : -step));
+            }
+        }
+    }
+
     void UpdatePositionPower() {
         const PositionPowerDef& p = def_.position_power;
         if (!p.present) return;
@@ -2110,6 +2510,7 @@ private:
                 }
             }
         }
+        NpcReportReady(halted);
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once (mon_2112_80 p63-68)
             for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
@@ -2132,6 +2533,8 @@ private:
             return;
         }
         npc_halt_ordered_ = false;
+        NpcOrient();
+        NpcCounterJamming();
         if (NpcBetweenFights()) return;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
@@ -2181,6 +2584,12 @@ private:
                     break;
                 }
             }
+            // The search radar has lost a low target he gave, but НЛЦ is lit under the azimuth line (the deputy's
+            // "НЛЦ!"): the TV looks along the line.
+            if (known.empty() && !assigned_target_.empty() && console_.equipment.GetInput("target_too_low")) {
+                NpcGive("order_low_target", 30.0);
+                return;
+            }
             if (known.empty()) return;
             std::size_t pick = 0;
             if (known.size() > 1 && npc_choice_for_ != known.front().target) {
@@ -2211,6 +2620,9 @@ private:
                 }
             }
             assigned_target_ = k.target;
+            // НЛЦ with the azimuth line on it (the deputy's "НЛЦ!"): the radar can't take it, so the angles by the TV
+            // (track_low_target: samsim_osa p25-26), the range then by ПОЛУАВТОМАТ (below).
+            if (console_.equipment.GetInput("target_too_low") && NpcGive("order_low_target", 30.0)) return;
             if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_) {  // no number from the PU-12: by its azimuth
                 callouts_->Say(time_, "order_take_contact", Cmdr(), {{"azimuth", MilsText(k.azimuth_deg)}});
             }
@@ -2256,6 +2668,13 @@ private:
         if (m == TrackMethod::RadarOnJam) {
             NpcGive("order_jammer", 40.0);
             return;
+        }
+        // The TV holds it with the tracking radar up: the operator ranges on it with the radar alone (ПОЛУАВТОМАТ,
+        // samsim_osa p26: while the deputy tracks the angles with the TV).
+        const TrackSensorDef& tr = console_.track;
+        if (m == TrackMethod::Tv && !tr.range_only_mode.empty() && !console_.equipment.IsReady(tr.range_only_mode) &&
+            console_.equipment.IsReady(tr.transmitter)) {
+            NpcGive("order_semi_auto", 30.0);
         }
         if (!npc_prepared_) {
             npc_prepared_ = NpcGive("order_prepare", 20.0);
@@ -2462,6 +2881,55 @@ private:
         return false;
     }
     double npc_halt_at_ = -1.0;
+
+    // Counter-jamming by doctrine (voenizdat_osa_1991 p259, p266): when the operator reports the range gate pulled off,
+    // the protection on; once the fight is over and nothing has pulled the gate for a minute, off again.
+    void NpcCounterJamming() {
+        const TrackSensorDef& tr = console_.track;
+        if (tr.rgpo_control.empty() || tr.range_pulled_input.empty()) return;
+        const bool on = console_.panel.Get(tr.rgpo_control) == 1;
+        if (console_.equipment.GetInput(tr.range_pulled_input)) {
+            if (!on) NpcGive("order_counter_pulloff", 20.0);
+            return;
+        }
+        if (!on || engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight() || time_ - last_pulled_s_ < 60.0) return;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            if (!k.friendly && k.has_range) return;
+        }
+        NpcGive("order_protection_off", 120.0);
+    }
+
+    // Orientation at a halt (voenizdat_osa_1991 p246, p249-250): with nothing hostile heard of, the commander finds Qc
+    // with the artillery compass and, once he has it, orders the deputy to orient the gyro with it. Once per halt; in a
+    // fight he stays at his post and the crew works in the gyro's frame as it is.
+    void NpcOrient() {
+        if (!console_.has_orientation || halt_oriented_ || !engagement_.QcKnown()) return;
+        if (!console_.equipment.IsReady(console_.orientation.gyro)) return;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) {
+            if (!k.friendly && k.has_range) return;
+        }
+        NpcGive("order_orient", 120.0);
+    }
+    // The commander's own compass work: an NPC in his seat sets up the compass as soon as the vehicle halts (it needs no
+    // power, so it runs while the equipment warms up), unless he already has this halt's Qc or something hostile is
+    // heard of (then he stays at his post).
+    void NpcSurvey() {
+        if (!console_.has_orientation || !NpcAt(Cmdr()) || halt_oriented_ || engagement_.QcKnown()) return;
+        bool hostile = false;
+        for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
+        if (compass_.Running()) {
+            if (hostile) {  // a target: back to his post; the crew fights in the gyro's frame as it is
+                compass_.Abort();
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", "breaks off the compass work: a target"});
+            }
+            return;
+        }
+        if (hostile || !console_.equipment.GetInput("vehicle_stopped")) return;
+        const bool column = battery_ && def_.battery_drive_own &&
+                            (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
+        if (column) return;  // a stop in the column is not a halt
+        StartCompassSurvey();
+    }
     bool npc_empty_reported_ = false;
     bool npc_fuel_reported_ = false;
     bool npc_fuel_requested_ = false;
@@ -2476,7 +2944,7 @@ private:
                 npc_empty_reported_ = true;
                 if (NpcAt("deputy_commander")) Say("launcher_empty", "deputy_commander");
                 const std::string callsign = battery_ ? OwnCallsign() : std::string("21");
-                if (callouts_) callouts_->Say(time_, "request_tzm", Cmdr(), {{"callsign", callsign}}, 3.0);
+                SayOnRadio("request_tzm", {{"callsign", callsign}}, false);
             }
             if (!empty) npc_empty_reported_ = false;
         }
@@ -2613,6 +3081,16 @@ private:
                     case EngagementEvent::Kind::TrackLost:
                         // not a target just shot down, nor one the crew let go
                         if (NpcAt("operator") && TargetRange(e.target) >= 0.0 && e.detail != "dropped") Say("lock_lost", "operator");
+                        // With nothing in the air the deputy's launch drill has no target to wait for: under the NPC
+                        // commander (who orders it again with the next lock) he leaves it, so the seat is free to take the
+                        // target again (by the radar or the TV), and the permission lapses.
+                        if (NpcCommanderActive() && !engagement_.ShotsInFlight() && SeatHolder("deputy_commander").empty()) {
+                            if (CrewMember* dep = MemberAt("deputy_commander")) {
+                                const std::string id = dep->IsBusy() ? dep->Tracker().GetProcedure().id : std::string();
+                                if (id == "launch" || id == "prepare_firing") dep->CancelOrder();
+                            }
+                            npc_permit_s_ = -1e9;
+                        }
                         break;
                     case EngagementEvent::Kind::IffNoReply: {
                         KnownTarget k;  // the senior operator saw no reply mark beside the echo
@@ -2638,6 +3116,18 @@ private:
                         if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
                         HeardDestroyed(e.target);
                         OwnReport(BatteryFire::Event::Kind::Hit, e.target);
+                        // Without a linked post the commander reports the result on the battery net himself (7.8).
+                        if (!LinkedToPost() && NpcAt(Cmdr()) && (battery_ || c2_)) {
+                            std::map<std::string, std::string> f = RadioFields();
+                            f["number"] = e.target;
+                            for (const C2Network::Event& d : designations_heard_) {
+                                char n[16];
+                                std::snprintf(n, sizeof(n), "%04d", d.number);
+                                if (d.subject == e.target && d.number > 0) f["number"] = n;
+                            }
+                            f["spent"] = std::to_string(launches_);
+                            SayOnRadio("report_result", f, false);
+                        }
                         break;
                     case EngagementEvent::Kind::Miss:
                         if (NpcAt("deputy_commander")) Say("miss", "deputy_commander");
@@ -3252,6 +3742,11 @@ private:
     // the abstract launchers do (flak11: readiness, launch, result), and the link carries it to the post's IT boards.
     void OwnReport(BatteryFire::Event::Kind kind, const std::string& target) {
         if (!LinkedToPost()) return;
+        std::string why;
+        if (!CanTransmitNow(&why)) {  // the report goes by radio: with the set unable to transmit the post never hears it
+            TransmitBlocked(why);
+            return;
+        }
         LinkReport r;
         r.kind = kind;
         r.callsign = OwnCallsign();
@@ -3261,19 +3756,25 @@ private:
         }
         r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
         own_reports_.push_back(r);
-        if (!callouts_ || !NpcAt(Cmdr())) return;
+        if (!callouts_ || !NpcAt(Cmdr())) {
+            OnAir(1.0);  // a player's words go out as he speaks them; the data reaches the post
+            return;
+        }
         char n[16];
         std::snprintf(n, sizeof(n), "%04d", r.number);
         const std::string number = r.number > 0 ? std::string(n) : target;
         if (kind == BatteryFire::Event::Kind::Ready) {
-            callouts_->Say(time_, "report_ready", Cmdr(), {{"callsign", r.callsign}, {"channels", "2"}, {"missiles", std::to_string(r.missiles)}}, 3.0);
+            std::map<std::string, std::string> f = RadioFields();
+            f["missiles"] = std::to_string(r.missiles);
+            SayOnRadio("report_ready", f, false);
         } else if (kind == BatteryFire::Event::Kind::Launch) {
-            callouts_->Say(time_, "report_launch", Cmdr(), {{"callsign", r.callsign}, {"number", number}}, 3.0);
+            SayOnRadio("report_launch", {{"callsign", r.callsign}, {"number", number}}, false);
         } else if (kind == BatteryFire::Event::Kind::Hit) {
             const auto spent = npc_launched_at_.find(target);
-            callouts_->Say(time_, "report_result", Cmdr(),
-                           {{"callsign", r.callsign}, {"number", number},
-                            {"spent", std::to_string(spent != npc_launched_at_.end() ? spent->second : 1)}}, 3.0);
+            SayOnRadio("report_result", {{"callsign", r.callsign}, {"number", number},
+                                         {"spent", std::to_string(spent != npc_launched_at_.end() ? spent->second : 1)}}, false);
+        } else {
+            OnAir(1.0);
         }
     }
     // К бою готов once the vehicle is ready (the crew data's ready_halted) with missiles aboard, and again after a reload;
@@ -3685,6 +4186,9 @@ public:
     // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.
     bool PlayerSay(const std::string& station, const std::string& callout_id) {
         if (!callouts_ || def_.crew_data.FindCallout(callout_id) == nullptr) return false;
+        if (station == "commander" && def_.crew_data.FindCallout(callout_id)->kind == CalloutKind::Radio) {
+            return SayOnRadio(callout_id, RadioFields(), true);  // on the air only with his chest switch at ПРД
+        }
         if (callout_id == "contact" && engagement_on_) {
             const Contact* nearest = nullptr;
             for (const Contact& c : engagement_.SearchPicture()) {

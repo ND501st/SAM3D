@@ -36,6 +36,8 @@ the readiness state they start in (march, deployed, powered).
     "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },  // optional, see below
     "readiness": "deployed",                          // optional: "cold" (default) or a console readiness state
     "fuel_fraction": 1.0,                             // optional: the tank's starting level, 0 to 1 (roadmap 7.4)
+    "radio_presets": "set",                           // optional: "set" (the c2 frequency plan on the R-123Ms' fixators) or
+                                                      // "unset" (the crew must set them up: preset_setup_left/right, 7.8)
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
     "inputs": { "vehicle_stopped": false },           // starting values of console inputs

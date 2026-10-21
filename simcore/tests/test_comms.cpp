@@ -1,5 +1,6 @@
 // The R-123M radio sets and the R-124 intercom (roadmap 7.8): the console's comms block, a set that is off or warming up,
 // the squelch and antenna as losses on the link, the commander's box on the radio or off, and shouted orders.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "simcore/c2_sources.hpp"
+#include "simcore/crew_audio.hpp"
 #include "simcore/crew_comms.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
@@ -354,4 +356,201 @@ SC_TEST("comms: the radio-on procedures bring the sets and the commander's box t
     SC_EXPECT(!r->Comms()->Receiving(1, c));  // still warming (10 min)
     Steps(*r, 700.0);
     SC_EXPECT(r->Comms()->Receiving(1, c) && r->C2()->CommanderOnRadio());
+}
+
+// ---- Transmitting from the vehicle (roadmap 7.8)
+
+SC_TEST("comms 7.8: the commander can transmit only on a set that is on, warm, in СИМПЛЕКС, with A-1 on Р-123") {
+    auto r = Load(Text());
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    r->Step(0.5);
+    std::string why;
+    SC_EXPECT(r->CommanderCanTransmit(&why));
+    const int set = r->C2()->ListeningSet();
+    const std::string side = set == 0 ? "left" : "right";
+    c.panel.Set("intercom.a1", 1);  // ВС: on the intercom only
+    r->Step(0.5);
+    SC_EXPECT(!r->CommanderCanTransmit(&why) && Has(why, "A-1 is not on Р-123"));
+    c.panel.Set("intercom.a1", 2);
+    c.panel.Set("radio." + side + ".mode", 0);  // duty reception: the transmitter valves are cold
+    r->Step(0.5);
+    SC_EXPECT(!r->CommanderCanTransmit(&why) && Has(why, "not ready to transmit"));
+    c.panel.Set("radio." + side + ".mode", 1);
+    Steps(*r, 60.0);
+    SC_EXPECT(!r->CommanderCanTransmit());  // 3 min after duty reception
+    Steps(*r, 125.0);
+    SC_EXPECT(r->CommanderCanTransmit());
+    c.panel.Set("radio." + side + ".power", 0);
+    r->Step(0.5);
+    SC_EXPECT(!r->CommanderCanTransmit(&why) && Has(why, "switched off"));
+}
+
+SC_TEST("comms 7.8: a player commander's radio report goes out only with his chest switch at ПРД, and is on the air") {
+    auto r = Load(Text());
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("commander", "player"));
+    r->Step(0.5);
+    SC_EXPECT(!r->PlayerSay("commander", "report_ready"));
+    SC_EXPECT(Has(r->Debrief(), "cannot transmit: the chest switch is at receive"));
+    const int before = r->Transmissions();
+    r->Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(r->PlayerSay("commander", "report_ready"));
+    Steps(*r, 10.0);
+    SC_EXPECT(r->Transmissions() > before);
+    SC_EXPECT(Has(r->Debrief(), "к бою готов"));
+    SC_EXPECT(Has(r->Debrief(), "the commander keys R-123M"));
+}
+
+SC_TEST("comms 7.8: ТОН. ВЫЗОВ sends a call tone only while the commander transmits on that set") {
+    auto r = Load(Text());
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("commander", "player"));
+    r->Step(0.5);
+    const std::string side = r->C2()->ListeningSet() == 0 ? "left" : "right";
+    const std::string other = side == "left" ? "right" : "left";
+    r->Console().panel.Set("radio." + side + ".tone", 1);
+    r->Step(0.5);
+    SC_EXPECT(Has(r->Debrief(), "nothing goes out: not transmitting"));
+    r->Console().panel.Set("radio.chest", 1);
+    r->Console().panel.Set("radio." + other + ".tone", 1);
+    r->Step(0.5);
+    SC_EXPECT(Has(r->Debrief(), "is not the set the commander's headset is on"));
+    r->Console().panel.Set("radio." + side + ".tone", 1);
+    r->Step(0.5);
+    SC_EXPECT(Has(r->Debrief(), "ТОН. ВЫЗОВ: a call tone on R-123M " + side));
+    bool heard = false;
+    for (const ScenarioRunner::RadioMessage& m : r->RadioLog()) heard = heard || Has(m.text, "ТОН. ВЫЗОВ");
+    SC_EXPECT(heard);
+}
+
+SC_TEST("comms 7.8: the request for the TZM reaches the battery only when the commander's set can transmit") {
+    const std::string text = R"({
+      "scenario_id": "svc", "name": "Service", "source": "sam3d", "confidence": "estimate", "seed": 2,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "battery": { "own": { "id": "21", "callsign": "21" },
+        "vehicles": [ { "id": "TZM", "kind": "reload", "position": { "east_m": 300, "north_m": -400, "up_m": 3 } } ] },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" } ],
+      "targets": [], "triggers": [], "end": { "time_limit_s": 1200, "when_targets_gone": false } })";
+    auto r = Load(text);
+    SC_EXPECT(r != nullptr);
+    if (!r || r->GetLauncher() == nullptr) return;
+    r->Console().panel.Set("radio.right.power", 0);  // the commander's set (no C2 network: the right one) is off
+    for (const char* c : {"1-I", "2-I", "3-I", "1-II", "2-II", "3-II"}) r->GetLauncher()->Unload(c);
+    Steps(*r, 120.0, 0.1);
+    SC_EXPECT(Has(r->Debrief(), "the request for the TZM can't go out: R-123M right is switched off"));
+    SC_EXPECT(!Has(r->Debrief(), "to reload 21"));
+    r->Console().panel.Set("radio.right.power", 1);  // on again: 10 min to warm up, then 3 min for the transmitter
+    Steps(*r, 820.0, 0.1);
+    SC_EXPECT(Has(r->Debrief(), "to reload 21"));
+}
+
+SC_TEST("comms 7.8: with the EM layer what the commander says goes on the air on the net of the source on his set") {
+    std::string text = Text();
+    const std::string from = "\"readiness\": \"deployed\",";
+    text.replace(text.find(from), from.size(),
+                 from + " \"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\" },");
+    auto r = Load(text);
+    SC_EXPECT(r != nullptr && r->Em() != nullptr);
+    if (!r || r->Em() == nullptr) return;
+    SC_EXPECT(r->TakeSeat("commander", "player"));
+    SC_EXPECT(r->RequestC2Source("ewr_north"));  // a source with a place: an EM radio link
+    Steps(*r, 35.0);  // the network re-tunes the standby set (30 s), its motors turn the knobs (3 s)
+    SC_EXPECT(r->C2()->ActiveId() == "ewr_north");
+    const std::size_t before = r->Em()->UnitTransmissions();
+    r->Console().panel.Set("radio.chest", 1);
+    std::string why;
+    if (!r->CommanderCanTransmit(&why)) std::printf("    cannot transmit: %s\n", why.c_str());
+    SC_EXPECT(r->PlayerSay("commander", "report_ready"));
+    Steps(*r, 3.0);
+    SC_EXPECT(r->Em()->UnitTransmissions() > before);
+}
+
+SC_TEST("comms 7.8: every seat has its R-124 box; a seat without one is not on the intercom and orders to it are shouted") {
+    ConsoleData c = Osa();
+    SC_EXPECT(c.comms.subscribers.size() == 5);
+    CrewComms comms(c.comms);
+    for (const char* seat : {"commander", "deputy_commander", "senior_operator", "operator", "driver"}) SC_EXPECT(comms.HasBox(seat));
+    SC_EXPECT(comms.BoxOf("commander") == "A-1" && comms.BoxOf("driver") == "A-4");
+    c.equipment.SetInput("vehicle_stopped", true);
+    SC_EXPECT_NEAR(comms.OrderDelayS("operator", c), 0.0, 1e-12);
+    // Take the operator's box away: he is off the intercom.
+    CommsDef d = c.comms;
+    d.subscribers.erase(std::remove_if(d.subscribers.begin(), d.subscribers.end(),
+                                       [](const CommsDef::Subscriber& s) { return s.station == "operator"; }),
+                        d.subscribers.end());
+    CrewComms without(d);
+    SC_EXPECT(!without.HasBox("operator"));
+    SC_EXPECT(without.OrderDelayS("operator", c) > 0.0);
+    SC_EXPECT_NEAR(without.OrderDelayS("senior_operator", c), 0.0, 1e-12);
+}
+
+// ---- What the headset carries (roadmap 7.7)
+
+SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it on, and the carrier quietens it") {
+    auto r = Load(Text());
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("commander", "player"));
+    Steps(*r, 1.0);
+    ConsoleData& c = r->Console();
+    const std::string side = r->C2()->ListeningSet() == 0 ? "left" : "right";
+    HeadsetSound h = HeadsetSoundNow(*r);
+    SC_EXPECT(h.on_radio && !h.squelched && !h.carrier);
+    SC_EXPECT_NEAR(h.hiss, 0.35, 1e-12);
+    c.panel.Set("radio." + side + ".squelch", 1);  // the suppressor: silence between transmissions
+    Steps(*r, 0.5);
+    h = HeadsetSoundNow(*r);
+    SC_EXPECT(h.squelched && h.hiss == 0.0);
+    // Our own transmission is a carrier on the net (and the sidetone): the hiss drops under it.
+    c.panel.Set("radio." + side + ".squelch", 0);
+    c.panel.Set("radio.chest", 1);
+    Steps(*r, 1.0);
+    h = HeadsetSoundNow(*r);
+    SC_EXPECT(h.carrier);
+    SC_EXPECT_NEAR(h.hiss, 0.05, 1e-12);
+    // The call tone while ТОН. ВЫЗОВ is pressed.
+    c.panel.Set("radio." + side + ".tone", 1);
+    r->Step(0.5);
+    SC_EXPECT(HeadsetSoundNow(*r).tone);
+    Steps(*r, 2.0);
+    SC_EXPECT(!HeadsetSoundNow(*r).tone);
+    // A1 on the intercom only: no set in his ears.
+    c.panel.Set("radio.chest", 0);
+    c.panel.Set("intercom.a1", 1);
+    Steps(*r, 0.5);
+    h = HeadsetSoundNow(*r);
+    SC_EXPECT(!h.on_radio && h.hiss == 0.0);
+}
+// Roadmap 7.8 / E4: a barrage jammer on the VHF band takes the PU-12's net (38.550 MHz, inside its 30-70 MHz) off the
+// air; the commander waits out the silence and changes to the early-warning site's net (25.375 MHz, below the band).
+SC_TEST("comms 7.8: the command net jammed, the commander changes to the EWR's net below the band and the crew fights") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_vhf_jamming_em.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.Em() != nullptr && r.C2() != nullptr);
+    if (r.Em() == nullptr || r.C2() == nullptr) return;
+    Steps(r, 50.0, 0.1);
+    SC_EXPECT(r.Em()->RadioDeliveryProbability("pu12") > 0.9);
+    Steps(r, 30.0, 0.1);  // the jammer is up
+    SC_EXPECT(r.Em()->RadioDeliveryProbability("pu12") < 0.05);
+    SC_EXPECT(r.Em()->RadioDeliveryProbability("ewr_south") > 0.9);  // below the jammer's band
+    double changed_at = -1.0;
+    while (!r.Finished() && r.Time() < 1000.0) {
+        r.Step(0.1);
+        if (changed_at < 0.0 && r.C2()->ActiveId() == "ewr_south") changed_at = r.Time();
+    }
+    std::printf("    changed to the EWR's net at %.0f s; %zu designations heard\n", changed_at, r.DesignationsHeard().size());
+    SC_EXPECT(changed_at > 60.0 && changed_at < 450.0);
+    SC_EXPECT(!r.DesignationsHeard().empty());
+    SC_EXPECT(r.Launches() >= 1);
+    SC_EXPECT(Has(r.Debrief(), "HIT") || Has(r.Debrief(), "MISS"));
 }

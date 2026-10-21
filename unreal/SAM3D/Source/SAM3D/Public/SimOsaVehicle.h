@@ -11,6 +11,7 @@ class USimCabinComponent;
 class USimCrewBodiesComponent;
 class USimCrewVoiceComponent;
 class USimPu12MastComponent;
+class USimCrewAudioComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
@@ -333,6 +334,9 @@ protected:
 	/** The crew's voices: their callouts on the intercom and the battery net (roadmap 8.10). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USimCrewVoiceComponent> CrewVoice;
+	/** What the crew hears: the radio's hiss and call tone in the commander's headset, the crew's words (roadmap 7.7). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimCrewAudioComponent> CrewAudio;
 
 	/** First-person camera at the current station's eye point. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")

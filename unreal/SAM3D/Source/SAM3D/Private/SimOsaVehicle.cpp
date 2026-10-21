@@ -1,5 +1,7 @@
 #include "SimOsaVehicle.h"
 
+#include "SimCrewAudioComponent.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -89,6 +91,7 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CrewBodies = CreateDefaultSubobject<USimCrewBodiesComponent>(TEXT("CrewBodies"));
 	CrewBodies->SetupAttachment(Cabin);
 	CrewVoice = CreateDefaultSubobject<USimCrewVoiceComponent>(TEXT("CrewVoice"));
+	CrewAudio = CreateDefaultSubobject<USimCrewAudioComponent>(TEXT("CrewAudio"));
 	CabinCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CabinCamera"));
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);

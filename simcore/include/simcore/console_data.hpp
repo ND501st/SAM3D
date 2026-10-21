@@ -67,6 +67,21 @@ struct OrientationDef {
     double slew_rate_deg_s = 1.0;
     double sync_rate_deg_s = 10.0;
     std::string synced_input;  // set while slaved and agreeing with the setter
+    // Drift (roadmap 6.5): a gyro half-compass keeps its direction in space, so the Earth turning under it makes its
+    // heading run off at earth_rate * sin(latitude). The latitude correction (with `relay_control` back at its other
+    // position) cancels the part set on `latitude_control` (a wheel, degrees); what is left, plus the gyro's own drift
+    // (degrees an hour, its sign drawn per run), moves the crew's frame away from north until they orient again.
+    std::string latitude_control;
+    double earth_rate_deg_h = 15.041;
+    double own_drift_deg_h = 0.0;
+    // The crew chief's compass work (orientation.hpp): seconds at a halt to find Qc with the artillery compass, and the
+    // error of the result (standard deviation, degrees). `qc_known_input` is set while he has a Qc for this halt.
+    double survey_s = 0.0;
+    double survey_sigma_deg = 0.0;
+    std::string qc_known_input;
+    // Set while the gyro holds a heading that was set from the crew chief's Qc at this halt (cleared when the gyro
+    // stops or the vehicle moves off).
+    std::string oriented_input;
 };
 
 struct TrackSensorDef {
@@ -82,6 +97,11 @@ struct TrackSensorDef {
     std::string lock_control;    // lock that must be open before the aiming crew can turn the azimuth wheel
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
     std::string mti_control;     // tracking radar СДЦ / ШТ.: 1 = moving-target indication (may be empty)
+    // Counter-jamming (roadmap 9.4): the switch of the circuit against a range-gate pull-off that walks the gate out
+    // (УВ. ПОМЕХА, 1 = on; with the radar's EM model); the input set while a repeater holds the range gate (the
+    // operator sees the target's mark split from the jamming pulse on the range indicator). Both may be empty.
+    std::string rgpo_control;
+    std::string range_pulled_input;
     double fov_wide_deg = 0.0;
     double fov_narrow_deg = 0.0;
     double fov_height_ratio = 1.0;  // the lens field's height over its width (a 4:3 raster: 0.75)
@@ -121,6 +141,16 @@ struct CommsRadioDef {
     std::string name;
     std::string power, mode, squelch, volume, antenna;  // controls
     std::string warm, transmit;                         // subsystems
+    std::string tone;                                   // ТОН. ВЫЗОВ button (optional): a call tone while transmitting
+    // The preset set-up (roadmap 7.8, radio_setup.hpp; optional, all or none): the preset selector (positions 0-3 the
+    // fixed frequencies, then ПЛАВНЫЙ ПОДДИАПАЗОН I and II), the fixators' cover and the four fixators (0 locked,
+    // 1 unlocked), УСТАНОВКА ЧАСТОТЫ (a wheel, MHz), ПОДДИАПАЗОН (0 I, 1 II), the antenna-tuning knob's lock (0 locked)
+    // and the knob (a wheel, divisions); the inputs set while the set is on its net's frequency and while it is keyed
+    // with its antenna tuned (the tuning lamp at its brightest).
+    std::string preset, fixator_cover, frequency, subband, antenna_lock, antenna_tune;
+    std::vector<std::string> fixators;
+    std::string on_frequency_input, tuned_input;
+    bool HasSetup() const { return !frequency.empty(); }
 };
 
 struct CommsDef {
@@ -135,6 +165,22 @@ struct CommsDef {
     int deputy_radio_position = 0;
     int driver_radio_position = 0;
     std::string intercom_subsystem;
+    std::string chest;                       // the commander's chest switch (optional): position 1 = ПРД, transmitting
+    std::string driver_chest;                // the driver's (optional): with his ПВ on РС it keys the left set
+    // The R-124's subscriber boxes and the seat each is at (optional): a seat without a box is not on the intercom, so an
+    // order to it is shouted. Empty: every seat is on it.
+    struct Subscriber {
+        std::string box;
+        std::string station;
+    };
+    std::vector<Subscriber> subscribers;
+    // Tuning the sets (radio_setup.hpp): the motors' time to drive the knobs to a fixed frequency, the antenna circuit's
+    // half-width in knob divisions, how fast the vibration walks a smooth-tuned frequency off on the move, the reading
+    // at which the tuning lamp is at its brightest.
+    double motor_s = 3.0;
+    double antenna_width = 5.0;
+    double smooth_drift_khz_s = 0.0;
+    double tuned_reading = 0.9;
     double shout_quiet_s = 0.0;
     double shout_noisy_s = 0.0;
     std::vector<std::string> noisy;          // subsystems whose running makes the cabin too loud to talk
@@ -799,12 +845,32 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         return true;
     }
 
+    bool LoadSubscribers(const json::Value& ic, const std::string& ip, const ConsoleData& out, CommsDef& d) {
+        const json::Value* arr = OptionalArray(ic, ip, "subscribers");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& e = arr->items[i];
+            const std::string sp = Index(Join(ip, "subscribers"), i);
+            CommsDef::Subscriber sub;
+            if (!Keys(e, sp, {"box", "station", "source", "confidence", "notes"}) || !RequireString(e, sp, "box", sub.box) ||
+                !RequireString(e, sp, "station", sub.station) || !Provenance(e, sp)) {
+                return false;
+            }
+            if (out.FindStation(sub.station) == nullptr) return Fail(Join(sp, "station"), "unknown station '" + sub.station + "'");
+            for (const CommsDef::Subscriber& o : d.subscribers) {
+                if (o.box == sub.box || o.station == sub.station) return Fail(sp, "each box and each seat once");
+            }
+            d.subscribers.push_back(sub);
+        }
+        return true;
+    }
+
     bool LoadComms(const json::Value& root, ConsoleData& out) {
         const json::Value* v = root.Find("comms");
         if (v == nullptr) return true;
         const std::string p = "comms";
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
-        if (!Keys(*v, p, {"radios", "ranges_km", "intercom", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+        if (!Keys(*v, p, {"radios", "ranges_km", "intercom", "tuning", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
         CommsDef& d = out.comms;
         const Equipment& eq = out.equipment;
         const json::Value* radios = OptionalArray(*v, p, "radios");
@@ -815,15 +881,44 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string rp = Index(Join(p, "radios"), i);
             const json::Value& e = radios->items[i];
             CommsRadioDef r;
-            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit"}) ||
+            if (!Keys(e, rp, {"set", "name", "power", "mode", "squelch", "volume", "antenna", "warm", "transmit", "tone", "preset",
+                              "fixator_cover", "fixators", "frequency", "subband", "antenna_lock", "antenna_tune",
+                              "on_frequency_input", "tuned_input"}) ||
                 !OptionalInt(e, rp, "set", r.set) || !RequireString(e, rp, "name", r.name) ||
                 !RefControl(e, rp, "power", out.panel, ControlKind::Discrete, true, r.power) ||
                 !RefControl(e, rp, "mode", out.panel, ControlKind::Discrete, true, r.mode) ||
                 !RefControl(e, rp, "squelch", out.panel, ControlKind::Discrete, true, r.squelch) ||
                 !RefControl(e, rp, "volume", out.panel, ControlKind::Discrete, true, r.volume) ||
                 !RefControl(e, rp, "antenna", out.panel, ControlKind::Discrete, true, r.antenna) ||
-                !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit)) {
+                !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit) ||
+                !RefControl(e, rp, "tone", out.panel, ControlKind::Momentary, false, r.tone) ||
+                !RefControl(e, rp, "preset", out.panel, ControlKind::Discrete, false, r.preset) ||
+                !RefControl(e, rp, "fixator_cover", out.panel, ControlKind::Discrete, false, r.fixator_cover) ||
+                !RefControl(e, rp, "frequency", out.panel, ControlKind::Continuous, false, r.frequency) ||
+                !RefControl(e, rp, "subband", out.panel, ControlKind::Discrete, false, r.subband) ||
+                !RefControl(e, rp, "antenna_lock", out.panel, ControlKind::Discrete, false, r.antenna_lock) ||
+                !RefControl(e, rp, "antenna_tune", out.panel, ControlKind::Continuous, false, r.antenna_tune) ||
+                !RefInput(e, rp, "on_frequency_input", eq, r.on_frequency_input) || !RefInput(e, rp, "tuned_input", eq, r.tuned_input)) {
                 return false;
+            }
+            if (const json::Value* fx = e.Find("fixators")) {
+                if (!fx->Is(json::Type::Array) || fx->items.size() != 4) return Fail(Join(rp, "fixators"), "expected the four fixators' controls");
+                for (std::size_t k = 0; k < 4; ++k) {
+                    const json::Value& c = fx->items[k];
+                    const std::string fp = Index(Join(rp, "fixators"), k);
+                    if (!c.Is(json::Type::String) || out.panel.Find(c.string) == nullptr) return Fail(fp, "expected a control id");
+                    if (out.panel.Find(c.string)->kind != ControlKind::Discrete) return Fail(fp, "control '" + c.string + "' is the wrong kind");
+                    r.fixators.push_back(c.string);
+                }
+            }
+            const bool any = !r.preset.empty() || !r.fixator_cover.empty() || !r.frequency.empty() || !r.subband.empty() ||
+                             !r.antenna_lock.empty() || !r.antenna_tune.empty() || !r.fixators.empty();
+            if (any && (r.preset.empty() || r.fixator_cover.empty() || r.frequency.empty() || r.subband.empty() ||
+                        r.antenna_lock.empty() || r.antenna_tune.empty() || r.fixators.size() != 4)) {
+                return Fail(rp, "the preset set-up needs preset, fixator_cover, fixators, frequency, subband, antenna_lock and antenna_tune together");
+            }
+            if (!r.preset.empty() && out.panel.Find(r.preset)->positions != 6) {
+                return Fail(Join(rp, "preset"), "needs six positions (fixed frequencies 1-4, smooth sub-band I and II)");
             }
             if (r.set != static_cast<int>(i)) return Fail(Join(rp, "set"), "radios are in the order of the C2 network's sets: 0, 1");
             if (out.panel.Find(r.antenna)->positions != 3) return Fail(Join(rp, "antenna"), "needs three positions (4 m whip, 1 m whip, emergency wire)");
@@ -850,7 +945,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string ip = Join(p, "intercom");
         if (ic == nullptr || !ic->Is(json::Type::Object) ||
             !Keys(*ic, ip, {"commander", "commander_radio_position", "commander_off_position", "deputy", "deputy_radio_position", "driver",
-                            "driver_radio_position", "subsystem", "shout_quiet_s", "shout_noisy_s", "noisy"})) {
+                            "driver_radio_position", "subsystem", "chest", "driver_chest", "subscribers", "shout_quiet_s", "shout_noisy_s",
+                            "noisy"})) {
             return message_.empty() ? Fail(ip, "required, an object") : false;
         }
         if (!RefControl(*ic, ip, "commander", out.panel, ControlKind::Discrete, true, d.commander) ||
@@ -861,6 +957,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalInt(*ic, ip, "deputy_radio_position", d.deputy_radio_position) ||
             !OptionalInt(*ic, ip, "driver_radio_position", d.driver_radio_position) ||
             !RefSubsystem(*ic, ip, "subsystem", eq, true, d.intercom_subsystem) ||
+            !RefControl(*ic, ip, "chest", out.panel, ControlKind::Discrete, false, d.chest) ||
+            !RefControl(*ic, ip, "driver_chest", out.panel, ControlKind::Discrete, false, d.driver_chest) ||
+            !LoadSubscribers(*ic, ip, out, d) ||
             !OptionalNumber(*ic, ip, "shout_quiet_s", d.shout_quiet_s) || !OptionalNumber(*ic, ip, "shout_noisy_s", d.shout_noisy_s)) {
             return false;
         }
@@ -890,6 +989,20 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         out.has_comms = true;
+        if (const json::Value* tn = v->Find("tuning")) {
+            const std::string tp = Join(p, "tuning");
+            if (!tn->Is(json::Type::Object) ||
+                !Keys(*tn, tp, {"motor_s", "antenna_width", "smooth_drift_khz_s", "tuned_reading", "source", "confidence", "notes"}) ||
+                !Provenance(*tn, tp) || !OptionalNumber(*tn, tp, "motor_s", d.motor_s) ||
+                !OptionalNumber(*tn, tp, "antenna_width", d.antenna_width) ||
+                !OptionalNumber(*tn, tp, "smooth_drift_khz_s", d.smooth_drift_khz_s) ||
+                !OptionalNumber(*tn, tp, "tuned_reading", d.tuned_reading)) {
+                return message_.empty() ? Fail(tp, "expected an object") : false;
+            }
+            if (d.motor_s < 0.0 || !(d.antenna_width > 0.0) || d.smooth_drift_khz_s < 0.0 || !(d.tuned_reading > 0.0 && d.tuned_reading <= 1.0)) {
+                return Fail(tp, "motor_s and smooth_drift_khz_s >= 0, antenna_width > 0, tuned_reading in (0, 1]");
+            }
+        }
         return true;
     }
 
@@ -1239,9 +1352,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "fov_deg", "fov_height_ratio", "max_range_m",
-                            "az_limit_deg", "captured_input", "tv_track_input", "too_low_input", "near_zone_input", "in_zone_input",
-                            "crosshair_input", "elevation_search", "notes"}) ||
+                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
+                            "max_range_m", "az_limit_deg", "captured_input", "range_pulled_input", "tv_track_input", "too_low_input", "near_zone_input",
+                            "in_zone_input", "crosshair_input", "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -1254,6 +1367,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
             !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
             !RefControl(*tr, tp, "mti_control", panel, ControlKind::Discrete, false, track.mti_control) ||
+            !RefControl(*tr, tp, "rgpo_control", panel, ControlKind::Discrete, false, track.rgpo_control) ||
+            !RefInput(*tr, tp, "range_pulled_input", eq, track.range_pulled_input) ||
             !OptionalNumber(*tr, tp, "max_range_m", track.max_range_m) ||
             !OptionalNumber(*tr, tp, "az_limit_deg", track.az_limit_deg) ||
             !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||
@@ -1294,8 +1409,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     bool LoadOrientation(const json::Value& o, const std::string& op, const ControlPanel& panel, const Equipment& eq,
                          OrientationDef& def) {
         if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
-                          "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "source", "confidence",
-                          "notes"}) ||
+                          "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
+                          "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
+                          "oriented_input", "source", "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1305,8 +1421,18 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalInt(o, op, "relay_position", def.relay_position) ||
             !OptionalNumber(o, op, "slew_rate_deg_s", def.slew_rate_deg_s) ||
             !OptionalNumber(o, op, "sync_rate_deg_s", def.sync_rate_deg_s) ||
-            !RefInput(o, op, "synced_input", eq, def.synced_input)) {
+            !RefInput(o, op, "synced_input", eq, def.synced_input) ||
+            !RefControl(o, op, "latitude_control", panel, ControlKind::Continuous, false, def.latitude_control) ||
+            !OptionalNumber(o, op, "earth_rate_deg_h", def.earth_rate_deg_h) ||
+            !OptionalNumber(o, op, "own_drift_deg_h", def.own_drift_deg_h) ||
+            !OptionalNumber(o, op, "survey_s", def.survey_s) ||
+            !OptionalNumber(o, op, "survey_sigma_deg", def.survey_sigma_deg) ||
+            !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
+            !RefInput(o, op, "oriented_input", eq, def.oriented_input)) {
             return false;
+        }
+        if (def.earth_rate_deg_h < 0.0 || def.own_drift_deg_h < 0.0 || def.survey_s < 0.0 || def.survey_sigma_deg < 0.0) {
+            return Fail(op, "earth_rate_deg_h, own_drift_deg_h, survey_s and survey_sigma_deg must be >= 0");
         }
         if (def.set_position < 0 || def.set_position >= panel.Find(def.mode_control)->positions) {
             return Fail(Join(op, "set_position"), "not a position of " + def.mode_control);

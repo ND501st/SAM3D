@@ -20,7 +20,7 @@ SC_TEST("em data: the placeholder library loads and every radar calibrates") {
     if (!r.ok) std::printf("    %s\n", r.error.c_str());
     SC_EXPECT(r.ok);
     SC_EXPECT(r.provenance_mode == "placeholder");
-    SC_EXPECT(lib.radars.size() == 2 && lib.esm.size() == 5 && lib.jammers.size() == 7 && lib.radios.size() == 2);
+    SC_EXPECT(lib.radars.size() == 2 && lib.esm.size() == 5 && lib.jammers.size() == 8 && lib.radios.size() == 2);
     SC_EXPECT(lib.emitters.size() == 2 && lib.threat_libraries.size() == 3);
     EmWorld w(GeoPoint::FromDegrees(49.5, 17.0, 300.0));
     std::string err;

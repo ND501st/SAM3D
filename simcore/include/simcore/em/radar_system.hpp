@@ -194,7 +194,10 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
     const double ground_horizon = 4120.0 * std::sqrt(p.height_agl_m > 0.5 ? p.height_agl_m : 0.5);
     const bool in_clutter = el < d.clutter_max_elevation_rad && range < 1.3 * ground_horizon;
     if (in_clutter) cn = DbToLinear(d.clutter_cnr_db_at_10km - 30.0 * std::log10(range / 10000.0));
-    if (d.has_mti && r.mti != MtiMode::Off) {
+    // Beyond the MTI's working range the receiver gates the normal channel in: nothing is cancelled there (the Osa's
+    // search radar: 35 km, voenizdat_osa_1991 p30).
+    const bool mti_on = d.has_mti && r.mti != MtiMode::Off && (d.mti_max_range_m <= 0.0 || range <= d.mti_max_range_m);
+    if (mti_on) {
         cn *= DbToLinear(-d.mti_improvement_db);
         if (std::fabs(radial_mps) < d.mti_notch_mps) snr *= DbToLinear(-d.mti_notch_attenuation_db);
         // External coherence references the chaff's own phase: drifting chaff cancels like clutter.
@@ -212,7 +215,7 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
         RadarLookPhysics cp = phys;
         cp.rcs_m2 = sc;
         double chaff_snr = RadarSnr(d, cp);
-        if (d.has_mti && r.mti != MtiMode::Off) {
+        if (mti_on) {
             const double vr_chaff = Dot(c.velocity, cl) / (cr > 1.0 ? cr : 1.0);
             // Internal coherence cancels only echoes that barely move; external coherence takes its
             // phase reference from the chaff itself, so wind-blown chaff cancels too, and the
@@ -574,7 +577,16 @@ inline void RunTrackRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterS
             const double jn = JammingToNoise(pj, d.noise_figure_db, d.RxBandwidthHz());
             const double sn = DbToLinear(best.record.snr_db);
             const double js_db = LinearToDb((jn > 1e-30 ? jn : 1e-30) / (sn > 1e-12 ? sn : 1e-12));
-            if (!r.rgpo_captured && js_db >= jd.rgpo_js_needed_db &&
+            // The radar's protection against this kind of pull-off: the trailing blank against one that walks out, the
+            // staggered repetition periods against one that walks in (voenizdat_osa_1991 p80-81).
+            const bool walks_out = jd.rgpo_walk_mps >= 0.0;
+            const bool guarded = walks_out ? r.rgpo_trailing_blank : r.prf_staggered;
+            if (r.rgpo_captured && guarded && std::fabs(r.rgpo_offset_m) <= gate) {
+                r.rgpo_captured = false;  // switched on in time: the gate stays on the skin echo
+                r.rgpo_offset_m = 0.0;
+                s.Log(EmEventKind::Info, r.id, rgpo->id, "the range gate is kept on the echo: pull-off protection");
+            }
+            if (!r.rgpo_captured && !guarded && js_db >= jd.rgpo_js_needed_db &&
                 s.rng.Uniform01Of(Stream::Detection, LookKey(r.id, -2000 - rgpo->id, r.looks)) < d.rgpo_susceptibility) {
                 r.rgpo_captured = true;
                 r.rgpo_offset_m = 0.0;
@@ -584,7 +596,7 @@ inline void RunTrackRadar(EmScene& s, RadarState& r, const RadarDef& d, EmitterS
                 r.rgpo_offset_m += jd.rgpo_walk_mps * dt;
                 best.plot.range_m += r.rgpo_offset_m;
                 best.plot.false_target = true;
-                if (r.rgpo_offset_m >= jd.rgpo_max_m) {
+                if (std::fabs(r.rgpo_offset_m) >= jd.rgpo_max_m) {
                     for (JammerState& j : s.jammers)
                         if (j.id == rgpo->id) j.silent_until_s = s.time_s + jd.rgpo_off_s;
                     s.Log(EmEventKind::Info, r.id, rgpo->id, "repeater falls silent, leaving the gate off target");

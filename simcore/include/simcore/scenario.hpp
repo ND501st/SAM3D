@@ -62,6 +62,7 @@ struct ScenarioTarget {
     bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
     int board_type = -1;                   // its type on the PU-12 board (0-9; -1: 1 if a friend, else 9, no IFF)
     int formation = 1;                     // aircraft in its formation, as the board notes it
+    double span_m = 0.0;                   // its span as the TV sight sees it (0: the gameplay tuning's for its class)
     TargetBehaviourDef behaviour;          // terrain following, pop-up (target_behaviour.hpp)
     EvadeDef evade;                        // evasion on launch or lock (takes the place of evade_on_launch)
     double size_m = 4.5;                   // critical dimension for the TV sight (em/optical.hpp; estimate for a fighter)
@@ -140,6 +141,7 @@ struct ScenarioDef {
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
+    bool radio_presets_set = true;  // own_unit.radio_presets: "set" (the frequency plan is on the fixators) or "unset"
     PositionPowerDef position_power;
     PreparedPositionDef prepared;  // own_unit.prepared_position (roadmap 7.6)
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
@@ -364,8 +366,8 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
-                                   "position", "heading_deg", "inputs", "empty_containers"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "radio_presets", "position_power",
+                                   "prepared_position", "position", "heading_deg", "inputs", "empty_containers"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -399,6 +401,12 @@ private:
             }
         }
         if (!OptionalNumber(*u, "own_unit", "fuel_fraction", out.fuel_fraction)) return false;
+        if (const json::Value* rp = u->Find("radio_presets")) {
+            if (!rp->Is(json::Type::String) || (rp->string != "set" && rp->string != "unset")) {
+                return Fail("own_unit.radio_presets", "\"set\" (the frequency plan on the fixators) or \"unset\"");
+            }
+            out.radio_presets_set = rp->string == "set";
+        }
         if (out.fuel_fraction < 0.0 || out.fuel_fraction > 1.0) return Fail("own_unit.fuel_fraction", "from 0 to 1");
         if (!LoadPositionPower(*u, console, out.position_power)) return false;
         if (!OptionalString(*u, "own_unit", "readiness", out.readiness)) return false;
@@ -684,7 +692,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "span_m", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -696,7 +704,11 @@ private:
                 return false;
             }
             if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
-            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation)) return false;
+            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation) ||
+                !OptionalNumber(t, p, "span_m", tg.span_m)) {
+                return false;
+            }
+            if (tg.span_m < 0.0) return Fail(Join(p, "span_m"), "must be >= 0");
             if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
                 return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 7 practice, 8 enemy, 9 no IFF...)");
             }

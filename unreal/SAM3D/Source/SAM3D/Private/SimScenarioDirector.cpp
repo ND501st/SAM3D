@@ -1,5 +1,7 @@
 #include "SimScenarioDirector.h"
 
+#include "SimPositionWork.h"
+
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
 #include "Engine/Engine.h"
@@ -215,6 +217,7 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 		bTerrainRequested = Sim->RequestCesiumTerrain(TerrainTileset, TerrainHalfSizeMeters, TerrainSpacingMeters);
 	}
 	SpawnMissingEntityActors();
+	UpdatePositionWorks();
 	ShowStatus(Sim);
 	if (!MenuTestFolder.IsEmpty())
 	{
@@ -287,6 +290,11 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 				{
 					Actor->SetActorScale3D(FVector(1.0));  // the model is built to size
 				}
+				else if (State.Kind == TEXT("launcher") || State.Kind == TEXT("dummy"))
+				{
+					Actor->UseOsaStandIn();  // a launcher, or a dummy position's mock-up of one
+					Actor->SetActorScale3D(FVector(1.0));
+				}
 				else
 				{
 					Actor->UseGroundStandIn();
@@ -296,6 +304,45 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 			Actor->SetActorLabel(FString::Printf(TEXT("%s_%d"), *State.Name, State.Id));
 #endif
 			SpawnedActors.Add(State.Id, Actor);
+		}
+	}
+}
+
+void ASimScenarioDirector::UpdatePositionWorks()
+{
+	UWorld* MyWorld = GetWorld();
+	const USimWorldSubsystem* Sim = MyWorld ? MyWorld->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr)
+	{
+		return;
+	}
+	const TArray<FSimPositionWorkState> Works = Sim->GetPositionWorks();
+	for (int32 I = 0; I < Works.Num(); ++I)
+	{
+		const FSimPositionWorkState& W = Works[I];
+		if (I >= PositionWorks.Num())
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			ASimPositionWork* Work = MyWorld->SpawnActor<ASimPositionWork>(ASimPositionWork::StaticClass(), W.Location,
+				FRotator(0.0, W.YawDeg, 0.0), Params);
+			if (Work == nullptr)
+			{
+				return;
+			}
+			Work->WorkIndex = I;
+			Work->Build(W.bEmplacement, W.bNets);
+#if WITH_EDITOR
+			Work->SetActorLabel(FString::Printf(TEXT("PositionWork_%d"), I));
+#endif
+			PositionWorks.Add(Work);
+		}
+		if (ASimPositionWork* Work = PositionWorks[I])
+		{
+			if (Work->HasNets() != W.bNets)
+			{
+				Work->SetNets(W.bNets);
+			}
 		}
 	}
 }
