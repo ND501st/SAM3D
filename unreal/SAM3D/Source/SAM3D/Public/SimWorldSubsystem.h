@@ -39,6 +39,58 @@ struct SAM3D_API FSimEntityState
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	FRotator Rotation = FRotator::ZeroRotator;
+
+	/** A ground vehicle of the player's battery, or a dummy position (roadmap 7.7). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	bool bIsGround = false;
+
+	/** launcher, reload, command_post, maintenance, dummy (ground entities only). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	FString Kind;
+};
+
+/** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimBoardMark
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
+	int32 Number = 0;
+
+	/** The plot (minute) it was written at: 1, 2, ... */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
+	int32 Stamp = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
+	int32 HeightHm = 0;
+
+	/** Type and formation digits (e.g. 71: practice target, one aircraft). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
+	int32 Code = 0;
+
+	/** Metres east and north of the battery. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Board")
+	FVector2D EastNorthMeters = FVector2D::ZeroVector;
+};
+
+/** A radio or intercom message the crew heard. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimRadioMessage
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	double TimeSeconds = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	FString Net;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	FString From;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Radio")
+	FString Text;
 };
 
 UENUM(BlueprintType)
@@ -404,6 +456,20 @@ public:
 	/** Server: console snapshots and seat procedures to seated players (called after the sim steps). */
 	void PumpConsole();
 
+	// ------------------------------------------------------------------ battery, board and radio (roadmap 7.7)
+
+	/** The PU-12 plotting board's marks of the last five plots (on a network client: from the knowledge stream). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Board")
+	TArray<FSimBoardMark> GetBoardMarks() const;
+
+	/** The board's range rings (m) and its current plot number. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Board")
+	TArray<float> GetBoardRangeRings() const;
+
+	/** The last radio and intercom messages, oldest first. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Radio")
+	TArray<FSimRadioMessage> GetRadioMessages(int32 MaxCount = 8) const;
+
 	/** Who holds a crew seat ("" the NPC). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	FString GetSeatHolder(const FString& Role) const;
@@ -470,6 +536,10 @@ private:
 		const simcore::Vec3& Vel) const;
 
 	const simcore::World* ActiveWorld() const;
+	/** The board, radio and battery extras: built from the runner here, or the mirrored view on a client. */
+	const simcore::em::ViewExtras* GetViewExtras(simcore::em::ViewExtras& Scratch) const;
+	/** Where the battery (the player's vehicle) is, in ENU. */
+	simcore::Vec3 BatteryCentreEnu() const;
 	const simcore::LocalFrame* ActiveFrame() const;
 
 	// Demo mode.

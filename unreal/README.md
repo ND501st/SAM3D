@@ -198,5 +198,7 @@ Early-warning source (roadmap 7.8): `USimWorldSubsystem::RequestC2Source`, `GetA
 
 Multiplayer knowledge (roadmap E10): add a `SimKnowledge` component (`USimKnowledgeComponent`) to the PlayerController. The server sends that player its node's view (NodeId 0 = the scenario unit's own node) twice a second; read it with `GetPictureTracks`, `GetEsmContacts`, `GetSensorTracks` or bind `OnKnowledgeUpdated`. Headless test: `UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.Knowledge;Quit" -unattended -nullrhi`.
 
+Battery, board and radio (roadmap 7.7): the practice map plays `scenarios/osa_battery_practice.json` (the whole battery in a prepared position). The battery's other vehicles and the dummy positions appear as box stand-ins (`ASimScenarioDirector::GroundActorClass` / `GroundScale`); B shows the PU-12 plotting board; radio traffic runs as lines at the bottom left (`ASimCabinHUD`).
+
 Multiplayer crew: `ASimCrewGameMode` gives every player a crew seat and a knowledge stream; a network client mirrors the server's simulation and never steps its own. Details and checks in `docs/MULTIPLAYER.md`; networked smoke test `tools/ue_crew_smoke.ps1` (dedicated server and two headless clients).
 

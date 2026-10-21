@@ -37,8 +37,10 @@
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
 #include "simcore/launcher.hpp"
+#include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/console_sync.hpp"
+#include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/terrain.hpp"
@@ -101,6 +103,13 @@ public:
             }
             c2_->SetLinkModel(c2_link_.get());
         }
+        if (def_.has_battery) {
+            battery_ = std::make_unique<Battery>(def_.battery_tactics, def_.battery_vehicles);
+            battery_->SetDriveOwn(def_.battery_drive_own);
+            battery_->SetNight(def_.battery_night);
+            if (def_.prepared.present && def_.prepared.emplacement) battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
+            battery_orders_done_.assign(def_.battery_orders.size(), 0);
+        }
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -112,6 +121,7 @@ public:
         time_ += dt;
         UpdateTargets(dt);
         DeliverOrders();
+        UpdateBattery(dt);
         UpdateC2();
         if (engagement_on_) {
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
@@ -196,6 +206,7 @@ public:
             return;
         }
         pending_orders_.push_back({time_ + delay, crew.Name(), &procedure, queue});
+        Radio("cabin (shouted)", "Commander", crew.Name() + ": " + procedure.id);
         char detail[160];
         std::snprintf(detail, sizeof(detail), "'%s' to %s is shouted, it arrives in %.1f s", procedure.id.c_str(), crew.Name().c_str(), delay);
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "R-124", detail});
@@ -263,6 +274,53 @@ public:
     bool PlayerTurn(const std::string& wheel_id, double value) { return console_.panel.SetValue(wheel_id, value); }
 
     const ProcedureTracker& PlayerTracker() const { return player_; }
+    // Radio and intercom traffic the crew heard, oldest first (the last kRadioKept): the command net (designations, source
+    // changes), the battery net (the battery commander's orders) and orders shouted in the cabin.
+    struct RadioMessage {
+        double time_s = 0.0;
+        std::string net;
+        std::string from;
+        std::string text;
+    };
+    static constexpr std::size_t kRadioKept = 64;
+    const std::vector<RadioMessage>& RadioLog() const { return radio_; }
+
+    // What the player's crew has in front of it besides its knowledge (roadmap 7.7): the PU-12 board's marks of the last
+    // five plots, the last `radio_count` radio messages, and the battery's other vehicles and dummy positions.
+    em::ViewExtras ViewExtrasNow(std::size_t radio_count = 8) const {
+        em::ViewExtras x;
+        x.valid = true;
+        if (const PlottingBoard* b = Board()) {
+            for (const BoardMark& m : b->Marks()) {
+                if (m.stamp + 4 < b->Stamp()) continue;
+                x.board.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
+            }
+        }
+        const std::size_t from = radio_.size() > radio_count ? radio_.size() - radio_count : 0;
+        for (std::size_t i = from; i < radio_.size(); ++i) x.radio.push_back({radio_[i].time_s, radio_[i].net, radio_[i].from, radio_[i].text});
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (v.def.own) continue;
+                x.battery.push_back({v.def.callsign, BatteryVehicleKindName(v.def.kind), v.position, v.heading_deg, v.deployed});
+            }
+        }
+        for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
+            x.battery.push_back({"dummy " + std::to_string(i + 1), "dummy", def_.prepared.dummies[i].position, 0.0, true});
+        }
+        return x;
+    }
+
+    // The prepared position the unit stands in (present = false: none).
+    const PreparedPositionDef& Prepared() const { return def_.prepared; }
+
+    // The battery around the player's vehicle (null: the scenario has none).
+    const Battery* GetBattery() const { return battery_.get(); }
+    bool OrderBattery(const BatteryOrder& o) {
+        if (!battery_) return false;
+        battery_->Order(o, time_);
+        return true;
+    }
+
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
 
@@ -492,6 +550,51 @@ private:
             case TriggerAction::Kind::C2Restore:
                 if (c2_) c2_->SetFailed(a.c2_id, false, time_);
                 return;
+            case TriggerAction::Kind::BatteryOrder:
+                if (battery_) battery_->Order(a.battery_order, time_);
+                return;
+            case TriggerAction::Kind::AirThreat:
+                if (battery_) {
+                    battery_->SetAirThreat(a.air_threat, time_);
+                    air_threat_forced_ = a.air_threat;
+                }
+                return;
+        }
+    }
+
+    // The battery around the player's vehicle (roadmap 7.5): scheduled orders, the air-threat spacing from what the crew
+    // has been told, the vehicles' moves; the other launchers' positions feed their neighbour sources.
+    void UpdateBattery(double dt) {
+        if (!battery_) return;
+        for (std::size_t i = 0; i < def_.battery_orders.size(); ++i) {
+            if (battery_orders_done_[i] || def_.battery_orders[i].at_s > time_ + 1e-9) continue;
+            battery_orders_done_[i] = 1;
+            battery_->Order(def_.battery_orders[i], time_);
+        }
+        if (c2_ && !air_threat_forced_) {
+            bool close = false;
+            for (const BoardMark& m : c2_->Known(time_)) {
+                close = close || (m.position - def_.unit_position).HorizontalLength() <= def_.battery_tactics.threat_range_m;
+            }
+            battery_->SetAirThreat(close, time_);
+        }
+        if (!def_.battery_drive_own) battery_->SetOwnPosition(def_.unit_position);
+        battery_->Step(time_, dt);
+        if (def_.battery_drive_own) {
+            if (const Battery::Vehicle* own = battery_->Own()) {
+                SetUnitPosition(Vec3{own->position.x, own->position.y, def_.unit_position.z});
+                if (own->speed_mps > 0.1) SetUnitHeading(own->heading_deg);
+                console_.equipment.SetInput("vehicle_stopped", own->speed_mps <= 0.1);
+            }
+        }
+        if (c2_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (!v.def.own) c2_->SetSourcePosition(v.def.id, v.position);
+            }
+        }
+        for (const Battery::Event& e : battery_->TakeEvents()) {
+            log_.Record({e.t, DebriefEntry::Kind::Scenario, e.who, "battery", e.text});
+            Radio("battery net", e.who, e.text);
         }
     }
 
@@ -532,6 +635,7 @@ private:
             }
         }
         c2_->Update(time_, contacts, def_.unit_position);
+        for (const C2Network::Event& e : c2_->PeekEvents()) Radio("command net", e.actor, e.subject + ": " + e.text);
         SyncRadios();
         for (const C2Network::Event& e : c2_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.actor, e.subject, e.text});
@@ -676,6 +780,20 @@ private:
         acmi_.WriteObject(kUnitAcmiId, def_.unit_position, Vec3{},
                           "Type=Ground+AntiAircraft,Name=" + console_.display_name + ",Color=Red");
         if (engagement_on_) engagement_.WriteAcmi(acmi_, time_, world_, eng_targets_);
+        for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
+            acmi_.WriteObject(kUnitAcmiId + 100 + static_cast<int>(i), def_.prepared.dummies[i].position, Vec3{},
+                              "Type=Ground+Static,Name=Dummy position,Color=Red");
+        }
+        if (battery_) {
+            int k = 0;
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                ++k;
+                if (v.def.own) continue;
+                acmi_.WriteObject(kUnitAcmiId + k, Vec3{v.position.x, v.position.y, def_.unit_position.z}, Vec3{},
+                                  std::string("Type=Ground+") + (v.def.kind == BatteryVehicleKind::Launcher ? "AntiAircraft" : "Vehicle") +
+                                      ",Name=" + v.def.callsign + ",Color=Red");
+            }
+        }
     }
 
     void CheckEnd() {
@@ -735,6 +853,14 @@ private:
         std::vector<std::string> queued;  // procedures ordered while one was under way
     };
     std::vector<Seat> seats_;
+    std::unique_ptr<Battery> battery_;
+    std::vector<RadioMessage> radio_;
+    void Radio(const std::string& net, const std::string& from, const std::string& text) {
+        radio_.push_back({time_, net, from, text});
+        if (radio_.size() > kRadioKept) radio_.erase(radio_.begin());
+    }
+    std::vector<char> battery_orders_done_;
+    bool air_threat_forced_ = false;
 
     Seat* FindSeat(const std::string& role) {
         for (Seat& st : seats_)

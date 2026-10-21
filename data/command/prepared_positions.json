@@ -1,0 +1,13 @@
+{
+  "position_id": "osa_prepared_position",
+  "display_name": "Prepared (peacetime) position: emplacement, camouflage nets, wire, dummy positions",
+  "status": "Numbers for simcore/position_prep.hpp (roadmap 7.6). That prepared positions had concrete emplacements, two rows of wire, camouflage nets, dummy positions, smoke generators and decoys is from video_osa (tier 4, unverified); the Angola memoir in korovin_tiv_2010 has the vehicles in 2 m deep emplacements under nets. No source gives how much they hide a vehicle from a radar: those factors are estimates, labelled so.",
+  "notes": "An RCS factor multiplies the vehicle's echo seen by the other side's radars (the EM layer's ground platform). A dummy position is a ground echo of its own (corner reflectors) and, if the scenario asks, a decoy emitter copying the search radar (roadmap E7).",
+  "values": {
+    "vehicle_rcs_m2": { "value": 20, "source": "estimate (a tracked or wheeled armoured vehicle's radar echo is of the order of 10-30 m2 from the side)", "confidence": "estimate" },
+    "emplacement_rcs_factor": { "value": 0.2, "source": "estimate (the hull below ground level in the emplacement: korovin_tiv_2010, 2 m deep; only the turret and antennas show)", "confidence": "estimate" },
+    "nets_rcs_factor": { "value": 0.5, "source": "estimate (camouflage nets over the vehicle: video_osa; the radar-scattering effect is not documented)", "confidence": "estimate" },
+    "dummy_rcs_m2": { "value": 20, "source": "estimate (corner reflectors sized to look like the real vehicle; video_osa: dummy positions and decoys)", "confidence": "estimate" },
+    "leave_emplacement_s": { "value": 60, "source": "estimate (climbing out of the emplacement and clearing the nets before driving off)", "confidence": "estimate" }
+  }
+}
