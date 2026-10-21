@@ -40,6 +40,14 @@ The marks for the wheels are the engagement's own aim, recorded where the NPC wo
 in a player's hands). A mark on the target the commander ordered taken is held while that target is missing from a few
 sweeps of the search radar (a low flier in the clutter), so it doesn't flip to the next echo.
 
+The tracking wheels are advised in words, not as a figure to chase: the azimuth wheel brings the tracking radar's azimuth
+line onto the target's mark on the search scope, the elevation wheel the target into the TV's crosshair (or onto its mark
+on the elevation indicator), the range wheel the range gate onto the echo, each kept there. A wheel counts as on the mark
+within ±0.5° (the narrow TV's field) or 500 m; the course setter keeps its figure, the Qc the crew chief gave. A wheel the
+equipment turns itself is never advised and won't turn by hand (`ScenarioRunner::WheelDriven`, `SeatTurn` refuses with
+"Hands off: ..."): the angles and range while the tracking radar holds the target, the elevation while the elevation
+search scans, the range under ПОЛУАВТОМАТ. The helper's ghost hand shows switches only, never a wheel.
+
 At the **PU-12M** the battery commander's fire distribution runs for a player in his seat too: each target it would give
 a launcher is a designate duty. The plotter owes every report he has heard and not written; the radio operator owes the
 air reports he heard and hasn't read out, a retune when his net is ordered to its other frequency, and the jamming he

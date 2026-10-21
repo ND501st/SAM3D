@@ -922,7 +922,7 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 			}
 			else if (S.Kind == TEXT("wheel"))
 			{
-				Line += FString::Printf(TEXT("   (now %.1f)"), S.Value);
+				Line += S.bOnMark ? FString(TEXT("   (on it: keep it there)")) : FString(TEXT("   (hold the left button on the wheel and drag)"));
 			}
 			else if (S.Kind == TEXT("halt"))
 			{

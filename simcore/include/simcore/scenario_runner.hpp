@@ -1092,6 +1092,11 @@ public:
     // Where the seat's NPC would bring a hand wheel now (with the helper on): the engagement's aim at the target the crew
     // is on. False when it would leave it where it is.
     bool WheelWant(const std::string& wheel, double& value) const { return engagement_on_ && engagement_.WheelWanted(wheel, value); }
+    // Why the equipment turns a hand wheel itself now ("" if a hand turns it): a player's drag on it does nothing then.
+    std::string WheelDriven(const std::string& wheel) const {
+        const char* why = engagement_on_ ? engagement_.WheelDrivenBy(console_, wheel) : nullptr;
+        return why != nullptr ? std::string(why) : std::string();
+    }
     // The next step of a drill a seat owes (SeatDuty::Kind::Drill): the first whose switch isn't where the step puts it,
     // or whose button that seat hasn't pressed since `since_s`. Null: all done.
     const ProcedureStep* DrillNextStep(const std::string& procedure, const std::string& seat, double since_s) const {
@@ -1241,6 +1246,11 @@ public:
     bool SeatTurn(const std::string& role, const std::string& wheel_id, double value, std::string* why = nullptr) {
         Seat* st = FindSeat(role);
         if (st == nullptr || !AtStation(role, wheel_id, why)) return false;
+        const std::string driven = WheelDriven(wheel_id);
+        if (!driven.empty()) {  // the equipment turns it now: a hand on it changes nothing
+            if (why != nullptr) *why = "Hands off: " + driven;
+            return false;
+        }
         st->last_action_s = time_;
         const bool moved = console_.panel.SetValue(wheel_id, value);
         seat_actions_.push_back({time_, role, wheel_id, 0, value, true, moved, StepResult::ProcedureComplete});

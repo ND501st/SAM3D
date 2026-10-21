@@ -1136,9 +1136,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	ESimPlayerActionResult PlayerSetControl(const FString& ControlId, int32 Position);
 
-	/** The player turning a hand wheel. False if its lock is closed or it isn't a wheel. */
+	/** The player turning a hand wheel. False if its lock is closed, the equipment turns it now, or it isn't a wheel. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool PlayerTurnWheel(const FString& ControlId, double Value);
+
+	/** Why the equipment turns this hand wheel itself now (the tracking servo, the elevation search, ПОЛУАВТОМАТ), or ""
+	 *  if a hand turns it: a drag on it then does nothing. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetWheelDriven(const FString& ControlId) const;
 
 	/** Judge the player's actions against a procedure of the console; empty = free play. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")

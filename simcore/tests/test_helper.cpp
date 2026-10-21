@@ -141,6 +141,42 @@ SC_TEST("helper: in command, the shadow commander's orders are the player's, К 
     SC_EXPECT(p.launches >= 1 && p.hits >= 1);
 }
 
+SC_TEST("helper: a tracking wheel is advised in words, and once the radar holds the target its wheels are hands-off") {
+    std::unique_ptr<ScenarioRunner> r = Load("scenarios/osa_crew_practice.json");
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    const std::string seat = "senior_operator";
+    const std::string az = r->Console().track.az_wheel;
+    r->TakeSeat(seat, "Player");
+    r->SetHelper(true);
+    HelpFollower f(seat);
+    bool advised = false, locked = false, refused = false, offered_locked = false;
+    for (int i = 0; i < 9000 && !(advised && refused); ++i) {
+        r->Step(0.1);
+        f.Update(*r);
+        for (const HelpStep& s : HelpMoves(*r, seat)) {
+            if (s.kind != HelpStep::Kind::Wheel || s.control != az) continue;
+            advised = true;
+            SC_EXPECT(s.text.find("azimuth line onto the target's mark") != std::string::npos);
+            SC_EXPECT(s.text.find("\xC2\xB0") == std::string::npos);  // no degree figure to chase
+            SC_EXPECT_NEAR(s.tolerance, 0.5, 1e-9);
+            offered_locked = offered_locked || !r->WheelDriven(az).empty();
+        }
+        if (r->Engagement().Method() == TrackMethod::Radar) {
+            locked = true;
+            SC_EXPECT(!r->WheelDriven(az).empty() && !r->WheelDriven(r->Console().track.el_wheel).empty());
+            std::string why;
+            const double before = r->Console().panel.GetValue(az);
+            refused = !r->SeatTurn(seat, az, before + 5.0, &why);
+            SC_EXPECT(refused && why.find("Hands off") == 0);
+            SC_EXPECT_NEAR(r->Console().panel.GetValue(az), before, 1e-9);
+        }
+    }
+    std::printf("    the azimuth wheel advised %s; the radar locked %s; a turn under the servo refused %s\n", advised ? "yes" : "no",
+                locked ? "yes" : "no", refused ? "yes" : "no");
+    SC_EXPECT(advised && locked && refused && !offered_locked);
+}
+
 SC_TEST("helper: the shadow commander and the wheels' advice change nothing in the world") {
     for (const char* seat : {"commander", "operator"}) {
         std::unique_ptr<ScenarioRunner> off = Load("scenarios/osa_crew_practice.json");

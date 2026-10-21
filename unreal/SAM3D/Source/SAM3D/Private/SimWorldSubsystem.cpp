@@ -1182,6 +1182,11 @@ double USimWorldSubsystem::GetWheelValue(const FString& ControlId) const
 	return Runner ? Runner->Console().panel.GetValue(ToStd(ControlId)) : 0.0;
 }
 
+FString USimWorldSubsystem::GetWheelDriven(const FString& ControlId) const
+{
+	return Runner ? ToF(Runner->WheelDriven(ToStd(ControlId))) : FString();
+}
+
 bool USimWorldSubsystem::SetWheelValue(const FString& ControlId, double Value)
 {
 	return Runner && Runner->Console().panel.SetValue(ToStd(ControlId), Value);
