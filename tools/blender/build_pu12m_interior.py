@@ -249,7 +249,7 @@ def build_item(b, it):
             b.box(-it['y1'] + 0.005, -it['y1'] + 0.035, x - 0.015, x + 0.015, I.FLOOR_Z, it['z0'], 'Paint_Rack')
         return
     if iid == 'table51':
-        # the top on two struts to the R-111's front ahead of it: his knees go under it (no leg to the floor)
+        # the top on two struts to the rack's front, under the R-111: his knees go under it (no leg to the floor)
         b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], it['z0'], it['z1'], it['mat'])
         x_set = I.item('r111')['x0'] - 0.006   # short of its front panel
         for y in (it['y0'] + 0.02, it['y1'] - 0.02):
@@ -282,6 +282,17 @@ def build_item(b, it):
         for x in (it['x0'] + 0.015, it['x1'] - 0.015):
             for y in (it['y0'] + 0.015, it['y1'] - 0.015):
                 b.box(-y - 0.012, -y + 0.012, x - 0.012, x + 0.012, it['z0'], it['z1'] - 0.025, it['mat'])
+        if iid == 'r111_stand':
+            # the rack's three tiers (pu12m_interior_trace.RACK): the lower one's shelf, then the posts go on up beside
+            # the R-111 to a shelf under the R-123M and the R-123M's top (wwp_btr60 p. 087: tubular posts at the sides)
+            zl = I.RACK['low_shelf_z']
+            b.box(-it['y1'], -it['y0'], it['x0'], it['x1'], zl - 0.025, zl, it['mat'])
+            r111, r123 = I.item('r111'), I.item('r123_fug4')
+            shelf0, shelf1 = r111['z1'] + 0.008, r123['z0'] - 0.005
+            b.box(-it['y1'] - 0.024, -it['y0'] + 0.024, it['x0'], it['x1'], shelf0, shelf1, it['mat'])
+            for x in (it['x0'] + 0.012, it['x1'] - 0.012):
+                for y in (r111['y0'] - 0.013, r111['y1'] + 0.013):
+                    b.cylinder(b3(x, y, it['z1']), b3(x, y, r123['z1']), 0.011, it['mat'], seg=12)
         return
     if iid == 'it45':
         # the tube's housing: a box, its back (to the bench) dished round the screen, a hood over the top

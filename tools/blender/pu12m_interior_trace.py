@@ -25,6 +25,8 @@ How it was traced:
   the tube, "Platz des Planzeichners" beside it, the radio operator's; the IT-2M over the commander's workplace; the GAK
   on a stand over its PT-200 converter; the lining cream, the blocks blue-grey, the IT-45, the ДХ and the IT-2M light
   grey). docs/research/PU12_VISUALS_2026-10.md.
+* The radio operator's rack (the R-123M on a shelf over the R-111, an open tubular frame; its heights SAM3D's, RACK) and
+  the ŠČR with the VS-27 under it: wwp_btr60 (photographs of a preserved ČSLA PU-12, p. 087).
 
 Frame: the exterior trace's, X forward from the middle of the wheelbase, Y to the left, Z up from the ground; metres. The
 cabin layout's body frame is x right = -Y, y forward = X, z up (to_body).
@@ -260,8 +262,10 @@ rect('sau', 26, 'SAU antenna tuner', 1386, 1460, 355, 430, FLOOR_Z, FLOOR_Z + 0.
 
 # The radio operator's place (left side, rear).
 rect('r111', 41, 'R-111 radio (FuG-3, regiment net)', 1085, 1188, 505, 640, 0.86, 1.21,
-     note='on a stand, facing the bench (the drawing: right foreground, the R-123M on top)')
-rect('r111_stand', None, 'R-111 stand', 1085, 1188, 505, 640, FLOOR_Z, 0.86, mat='Paint_Rack')
+     note='in its rack, facing the bench, the R-123M over it (the drawing: right foreground); its height SAM3D\'s (RACK)')
+rect('r111_stand', None, 'R-111 stand', 1085, 1188, 505, 640, FLOOR_Z, 0.86, mat='Paint_Rack',
+     note="the rack's lower tier, empty: an open tubular frame (wwp_btr60 p. 087) on up to the R-111's and the "
+          "R-123M's shelves")
 rect('r111_power', 37, 'R-111 power unit', 1072, 1085, 505, 605, FLOOR_Z, 0.95)
 rect('r123_fug4', 40, 'R-123M (FuG-4, battery command net)', 1150, 1188, 515, 620, 1.22, 1.464, shape='r123m',
      note='on top of the R-111, facing the bench')
@@ -385,6 +389,25 @@ def _fit_radios():
 
 
 _fit_radios()
+
+# The radio operator's rack in three tiers (SAM3D, the project owner's decision, 20 Oct 2026): the R-123M on the top
+# shelf under the roof, the R-111 on the middle one, its front just below his seated eye, the lower tier empty. The
+# preserved ČSLA PU-12 (wwp_btr60 p. 087) and the ČSLA drawing have the same stack lower, the R-111 at his knees and a
+# unit under it; here the set he works most is in view and the vertical room, which is not short, is spent on it.
+RACK = {'roof_gap': 0.02, 'shelf_gap': 0.035, 'low_shelf_z': FLOOR_Z + 0.24}
+
+
+def _stack_rack():
+    r123, r111, stand = item('r123_fug4'), item('r111'), item('r111_stand')  # the R-123M over the R-111 (plan item 40)
+    top = min(ceiling_z(r111['x0']), ceiling_z(r111['x1'])) - RACK['roof_gap']
+    r123['z0'], r123['z1'] = top - (r123['z1'] - r123['z0']), top
+    h = r111['z1'] - r111['z0']
+    r111['z1'] = r123['z0'] - RACK['shelf_gap']
+    r111['z0'] = r111['z1'] - h
+    stand['z1'] = r111['z0']
+
+
+_stack_rack()
 
 # ---------------------------------------------------------------------------------------------- the stations
 
