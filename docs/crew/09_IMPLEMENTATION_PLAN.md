@@ -42,6 +42,40 @@ tests; the Unreal parts come after the simcore parts they show.
   a seat gets his orders and is reminded; a player in command gives orders through `GiveCrewOrder`. Scenario
   `osa_crew_practice.json`. Not yet: the march (he doesn't order the vehicle to move), target priorities among
   several, the second missile, reload and refuel, C2 source changes.
-- **8.7, 8.8 started**: the Unreal backends `USimWorldSubsystem::GiveCrewOrder` (order menu) and `GetDrillAdvice`
-  (overlay); the callouts already show as HUD radio lines. The menu and the highlight themselves are not built.
-- 8.5, 8.9–8.12: not started.
+- **8.7, 8.8 first pass** (17 October 2026): in the cabin, H turns on the training overlay (the drill master's next control
+  for the seat pulses green; the HUD says what, why and when; the task follows the fight: К бою, the capture, the
+  launch), O opens the crew menu (orders of the crew data at the commander's seat, the seat's reports elsewhere), T takes
+  the seat from its NPC (his orders become the player's, the crew waits for and reminds him) or gives it back. The
+  debrief grades К бою against the drill master's ideal (excellent / good / satisfactory, within 110 / 130 / 160 %),
+  detection to launch against the published 26–40 s when the target appeared in reach, and lists each seat's
+  reminders, slips and forgotten steps. Not yet: a ghost hand, the cost of a wrong move shown at once, a radial menu,
+  greying of orders that can't be carried out.
+
+Second session (17 October 2026):
+
+- **8.5 done**: `simcore/crew_knowledge.hpp`: each seat's picture from its own instruments (the senior operator's
+  scope, the operator's range indicator) and from what it heard (callouts carry what they say about a target). The
+  operator puts the range on what he sees or was told, never the truth; a crewmate may miss a report (his tier's miss
+  chance) and asks "Повторите!"; the senior operator keeps reporting the nearest contact every 15 s until it is tracked;
+  the NPC commander decides from his own picture; a player in a seat speaks reports through the menu (`PlayerSay`).
+- **8.2 completed**: judgement (the decision controls, ПУСК, carry the tier's launch timing; the commander's priority
+  slips and his hesitation at a branch), stress from the situation (own radars jammed; a hostile within 10 km and
+  nothing tracked), and the calibration test: detection to launch per tier, master 29 s, 1st class 31 s, 2nd 38 s, 3rd
+  41 s, recruit 81 s against the published 26–40 s.
+- **8.3 completed** (but for the network chart in the timeline and the scored decisions of `06` §3.6): fault recovery
+  (switch it off, its prerequisites, on again).
+- **8.6 completed for the vehicle**: on the march (search on the move on the turbine; a hostile inside 20 km halts the
+  vehicle at once, the battery's short halt when it drives us; a column stop is no halt); target priority (the nearest
+  hostile he heard of, with his tier's priority slips); one launch permission per missile; logistics reports; between
+  fights the function check (from a cold start only, broken off for a target) and, when it is quiet, К маршу and the
+  march on.
+- **8.9 first pass**: `simcore/battery_fire.hpp`: the battery's other launchers fight with an abstract crew (the network
+  chart's times, geometric sensors, the same zones and hit chances, six missiles, TZM reload); the battery commander
+  (NPC by default, the player with `"battery_commander": "player"`, or free fire) gives them targets from the PU-12 board
+  on the battery net, leaving to our vehicle the targets it is nearest; our commander leaves theirs alone. Scenario
+  `osa_battery_fight.json`; Unreal lists them under the plotting board. Not yet: the PU-12M as a seat with its own
+  console (`docs/PU12_DEVELOPMENT.md`), the other vehicles' crews as full NPC crews, sectors.
+- **8.11 first pass**: `osa_mission_march.json`: the battery on the march with our vehicle, a raid, halt, deploy, fight,
+  stow and march on, run by NPC commanders without a fault. Not yet: choosing the position, orientation as part of the
+  readiness, a reload inside the mission, the map's version in Unreal.
+- 8.10 (bodies, animations, voices) and 8.12 (playtest and balance): not started.

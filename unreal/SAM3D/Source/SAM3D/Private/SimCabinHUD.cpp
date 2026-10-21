@@ -48,9 +48,65 @@ void ASimCabinHUD::DrawHUD()
 	{
 		DrawText(Feedback, FLinearColor(1.0f, 0.4f, 0.3f), Cx + 16.0f, Cy + 32.0f, Font);
 	}
-	DrawText(FString::Printf(TEXT("%s   |   C leave cabin   Tab next seat   left/right click operate   drag or scroll wheels   B plotting board"),
-				 *Vehicle->GetCabinStationLabel()),
+	DrawText(FString::Printf(TEXT("%s%s   |   C leave cabin   Tab next seat   T %s   O %s   H help   B plotting board"),
+				 *Vehicle->GetCabinStationLabel(), Vehicle->IsHoldingSeat() ? TEXT(" (your seat)") : TEXT(""),
+				 Vehicle->IsHoldingSeat() ? TEXT("give the seat back") : TEXT("take this seat"),
+				 Vehicle->GetStationId() == TEXT("commander") ? TEXT("orders") : TEXT("reports")),
 		Ink, 20.0f, Canvas->ClipY - 40.0f, Font);
+	DrawCrew(Vehicle, Font);
+}
+
+void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
+{
+	// The training overlay: the drill master's next move for this seat, why, and when.
+	if (Vehicle->IsAssistOn())
+	{
+		const FSimDrillAdvice A = Vehicle->GetAdvice();
+		const FLinearColor Green(0.4f, 1.0f, 0.5f);
+		float Y = 40.0f;
+		DrawText(FString::Printf(TEXT("Help (%s):"), *Vehicle->GetAssistTask()), Green, 20.0f, Y, Font);
+		Y += 20.0f;
+		if (!A.bValid)
+		{
+			DrawText(TEXT("nothing for this seat now"), Green, 20.0f, Y, Font);
+		}
+		else
+		{
+			DrawText(FString::Printf(TEXT("Next: %s%s"), *A.Description,
+						 A.DueInSeconds > 2.0 ? *FString::Printf(TEXT("  (in about %.0f s)"), A.DueInSeconds) : TEXT("  (now)")),
+				Green, 20.0f, Y, Font);
+			Y += 20.0f;
+			for (int32 I = 0; I < A.Why.Num() && I < 3; ++I)
+			{
+				DrawText(FString::Printf(TEXT("   because: %s"), *A.Why[I]), FLinearColor(0.7f, 0.9f, 0.7f), 20.0f, Y, Font);
+				Y += 18.0f;
+			}
+		}
+	}
+	// The crew menu: orders at the commander's seat, this seat's reports elsewhere.
+	if (Vehicle->IsCrewMenuOpen())
+	{
+		const TArray<FSimCrewMenuEntry> Entries = Vehicle->GetCrewMenuEntries();
+		const int32 Page = Vehicle->GetCrewMenuPage();
+		const int32 Pages = FMath::Max(1, (Entries.Num() + 8) / 9);
+		const float X = Canvas->ClipX * 0.5f - 260.0f;
+		float Y = Canvas->ClipY * 0.25f;
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X - 10.0f, Y - 10.0f, 540.0f, 230.0f);
+		DrawText(FString::Printf(TEXT("%s (page %d/%d: 0 next, Esc close)"), Vehicle->GetStationId() == TEXT("commander") ? TEXT("Orders") : TEXT("Reports"),
+					 Page + 1, Pages),
+			FLinearColor::White, X, Y, Font);
+		Y += 24.0f;
+		for (int32 I = 0; I < 9; ++I)
+		{
+			const int32 Index = Page * 9 + I;
+			if (!Entries.IsValidIndex(Index))
+			{
+				break;
+			}
+			DrawText(FString::Printf(TEXT("%d  %s  (%s)"), I + 1, *Entries[Index].Ru, *Entries[Index].En), FLinearColor(1.0f, 0.95f, 0.8f), X, Y, Font);
+			Y += 20.0f;
+		}
+	}
 }
 
 void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font)
@@ -80,6 +136,18 @@ void ASimCabinHUD::DrawBoard(USimWorldSubsystem* Sim, UFont* Font)
 	const FVector2D Origin(Canvas->ClipX - Size - 30.0f, 40.0f);
 	const FVector2D Centre = Origin + FVector2D(Size, Size) * 0.5f;
 	DrawRect(FLinearColor(0.02f, 0.04f, 0.05f, 0.85f), Origin.X, Origin.Y, Size, Size);
+	// The battery's other launchers under the board: missiles, target, what they are doing (battery_fire.hpp).
+	{
+		float Y = Origin.Y + Size + 8.0f;
+		for (const FSimBatteryShooter& S : Sim->GetBatteryShooters())
+		{
+			DrawText(FString::Printf(TEXT("%s  %d missiles  %s%s"), *S.Callsign, S.Missiles,
+						 S.Target.IsEmpty() ? TEXT("no target") : *FString::Printf(TEXT("%s, %s"), *S.Target, *S.Phase),
+						 S.bDeployed ? TEXT("") : TEXT("  (not deployed)")),
+				FLinearColor(0.8f, 0.9f, 1.0f), Origin.X, Y, Font);
+			Y += 16.0f;
+		}
+	}
 	const TArray<float> Rings = Sim->GetBoardRangeRings();
 	float MaxRange = 1.f;
 	for (float R : Rings)

@@ -203,8 +203,15 @@ in command, the order menu (`docs/crew/07_*`) with honest greying, the crew's ca
 crew's picture as they reported it. Built so far: `USimWorldSubsystem::OrderCrew` (orders by procedure id), the
 order hotkeys of `ASimOsaVehicle`, `GiveCrewOrder` (a whole order of `data/crew/<system>_crew.json`, e.g.
 `order_k_boyu`: the order menu's backend) and `GetDrillAdvice` (a seat's best next move toward a task, with why and
-when: the overlay's backend). The crew's callouts reach the HUD as radio lines (net "intercom"). To come: 8.7 (the
-overlay itself), 8.8 (the menu itself), 8.10 (bodies and voices).
+when: the overlay's backend). The crew's callouts reach the HUD as radio lines (net "intercom").
+
+In the cabin: **H** turns the training overlay on (the drill master's next control for this seat pulses green; the
+HUD says what, why and when); **O** opens the crew menu (at the commander's seat the orders of the crew data, at any
+other seat that seat's reports; 1-9 choose, 0 next page, Esc close); **T** takes this seat from its NPC (his orders
+become yours, the crew waits for you and reminds you) or gives it back. With the board (B) open, the battery's other
+launchers are listed under it (missiles, target, phase). To play the crew half, set the director's ScenarioFile to
+`scenarios/osa_crew_practice.json` (NPC commander) or `scenarios/osa_mission_march.json`. To come: 8.10 (bodies and
+voices).
 
 ## Not done yet
 

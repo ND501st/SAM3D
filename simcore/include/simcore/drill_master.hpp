@@ -298,6 +298,8 @@ public:
         const IdealTimeline base = Ideal(goal, before, max_s);
         ConsoleData after = before;
         if (!after.panel.Set(control, position)) return 0.0;  // a blocked move changes nothing
+        after.equipment.Update(0.0, after.panel);  // its consequence at once (a fault)
+        after.equipment.TakeTransitions();
         const IdealTimeline tl = Ideal(goal, after, max_s);
         if (!tl.reached) return base.reached ? max_s : 0.0;
         const double c = tl.time_s - (base.time_s - reaction_s_);
@@ -454,6 +456,24 @@ private:
                 if (d == nullptr) return;
                 std::vector<std::string> up = why;
                 up.insert(up.begin(), Text(c));
+                if ((c.state == SubsystemState::Ready || c.state == SubsystemState::Starting) &&
+                    x.eq.State(c.id) == SubsystemState::Fault) {
+                    // Recover a fault: its enabling switch off, then on again once it is off and its prerequisites hold.
+                    for (const Condition& n : d->enable) {
+                        if (!IsControl(n)) continue;
+                        const int off = OffPosition(n);
+                        if (off < 0) continue;
+                        std::vector<std::string> rec = up;
+                        rec.insert(rec.begin(), "recover the fault: switch it off first");
+                        Need(x, n.id, off, rec, {});
+                        std::vector<Condition> wait_on = d->prerequisites;
+                        wait_on.push_back(Condition::Subsystem(c.id, SubsystemState::Off));
+                        Need(x, n.id, n.position, up, wait_on);
+                        break;
+                    }
+                    for (const Condition& n : d->prerequisites) Expand(x, n, up);
+                    return;
+                }
                 if (c.state == SubsystemState::Ready || c.state == SubsystemState::Starting) {
                     for (const Condition& n : d->prerequisites) Expand(x, n, up);
                     // Controls of this subsystem wait for its prerequisites (switching on before them faults it).

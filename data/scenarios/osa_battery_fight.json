@@ -1,0 +1,250 @@
+{
+  "scenario_id": "osa_battery_fight",
+  "name": "Osa-AK battery fight: four launchers, the PU-12 distributing targets (NPC commanders)",
+  "description": "A fictional raid on the battery in its prepared position (docs/crew/07_COMMANDER_MODE.md §3). Four aircraft come in from several directions. The PU-12 plots them; the NPC battery commander gives each to the nearest ready launcher on the battery net, leaving to our own vehicle the ones it is nearest to; our own crew is run by its NPC commander. Take a seat in our vehicle, or command it, or (battery_commander: player) distribute the targets yourself.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. Every target number is a PLACEHOLDER. The other launchers fight with the abstract crew model of simcore/battery_fire.hpp (the network chart's times, geometric sensors, the same zones and hit chances).",
+  "seed": 1,
+  "origin": {
+    "lat_deg": 46.9,
+    "lon_deg": 19.7,
+    "alt_m": 110
+  },
+  "terrain": {
+    "type": "flat",
+    "height_m": 110
+  },
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12"
+  },
+  "battery": {
+    "share_picture": true,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 200,
+          "north_m": 0,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": 3000,
+          "north_m": 0,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 3200,
+          "north_m": 0,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": 1600,
+          "north_m": -500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": 1700,
+          "north_m": -700,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 1600,
+          "north_m": -1000,
+          "up_m": 3
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 3
+    },
+    "heading_deg": 35,
+    "inputs": {
+      "vehicle_stopped": true
+    },
+    "prepared_position": {
+      "emplacement": true,
+      "nets": true,
+      "wire": true,
+      "dummies": [
+        {
+          "position": {
+            "east_m": -1500,
+            "north_m": 600,
+            "up_m": 0
+          },
+          "decoy": "when_radar_off"
+        },
+        {
+          "position": {
+            "east_m": 4700,
+            "north_m": 500,
+            "up_m": 0
+          }
+        }
+      ]
+    }
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class2"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [
+    {
+      "id": "t1",
+      "name": "Strike aircraft 1 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": 2000,
+        "north_m": 45000,
+        "up_m": 1000
+      },
+      "waypoints": [
+        {
+          "east_m": 2000,
+          "north_m": -30000,
+          "up_m": 1000
+        }
+      ],
+      "speed_mps": 180,
+      "rcs_m2": 3.0,
+      "appear_at_s": 300,
+      "notes": "Placeholder numbers."
+    },
+    {
+      "id": "t2",
+      "name": "Strike aircraft 2 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": 30000,
+        "north_m": 30000,
+        "up_m": 1500
+      },
+      "waypoints": [
+        {
+          "east_m": -15000,
+          "north_m": -15000,
+          "up_m": 1500
+        }
+      ],
+      "speed_mps": 200,
+      "rcs_m2": 3.0,
+      "appear_at_s": 320,
+      "notes": "Placeholder numbers."
+    },
+    {
+      "id": "t3",
+      "name": "Strike aircraft 3 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "bomber",
+      "start": {
+        "east_m": -25000,
+        "north_m": 35000,
+        "up_m": 800
+      },
+      "waypoints": [
+        {
+          "east_m": 10000,
+          "north_m": -30000,
+          "up_m": 800
+        }
+      ],
+      "speed_mps": 180,
+      "rcs_m2": 3.0,
+      "appear_at_s": 340,
+      "notes": "Placeholder numbers."
+    },
+    {
+      "id": "t4",
+      "name": "Strike aircraft 4 (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "start": {
+        "east_m": 40000,
+        "north_m": -5000,
+        "up_m": 1200
+      },
+      "waypoints": [
+        {
+          "east_m": -30000,
+          "north_m": 2000,
+          "up_m": 1200
+        }
+      ],
+      "speed_mps": 200,
+      "rcs_m2": 3.0,
+      "appear_at_s": 360,
+      "notes": "Placeholder numbers."
+    }
+  ],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 900,
+    "when_targets_gone": true
+  },
+  "crew_commander": "npc",
+  "battery_commander": "npc"
+}

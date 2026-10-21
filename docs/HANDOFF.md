@@ -242,3 +242,9 @@ Next, as the user set it: NPC crewmate behaviour and teamwork (phase 8), then th
 reference documents and the generated action map; crew data and skill tiers; skill in the crew's behaviour; the drill
 master (the ideal crew: best move per seat from any state); callouts; the NPC vehicle commander
 (`osa_crew_practice.json` is fought from cold with no triggers). 343 simcore tests.
+
+**17 October 2026:** 8.5 knowledge per seat, the rest of 8.2 (judgement, stress, the calibration against the published
+reaction time), fault recovery in the drill master, the commander on the march and between fights, the training
+overlay and crew menu in Unreal (H, O, T), the crew's grades in the debrief, the battery's fight with fire distribution
+(`osa_battery_fight.json`) and one mission end to end (`osa_mission_march.json`). 356 simcore tests. Next: 8.10 (bodies,
+animations, voices), playing it on the map, then the PU-12M (`docs/PU12_DEVELOPMENT.md`).
