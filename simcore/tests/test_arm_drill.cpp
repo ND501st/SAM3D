@@ -55,10 +55,15 @@ const char* kVehicleHit = "the vehicle was hit by an anti-radiation missile";
 
 std::string Harm() { return ReadFile(kData + "/scenarios/osa_arm_drill.json"); }
 std::string Shrike() { return ReadFile(kData + "/scenarios/osa_arm_drill_shrike.json"); }
-// A senior operator of a "basic" tier: he doesn't know the signs of an ARM launch, so nobody reacts to them.
+// The seats that watch for the signs of an ARM launch (the search scope, the tracking radar's indicators, the TV) of a
+// "basic" tier: they don't know the signs, so nobody reacts to them.
 std::string Untrained(const std::string& text) {
-    return Replace(text, "{ \"name\": \"Senior operator\", \"role\": \"senior_operator\", \"skill\": \"class1\" }",
-                   "{ \"name\": \"Senior operator\", \"role\": \"senior_operator\", \"skill\": \"class3\" }");
+    std::string s = Replace(text, "{ \"name\": \"Senior operator\", \"role\": \"senior_operator\", \"skill\": \"class1\" }",
+                            "{ \"name\": \"Senior operator\", \"role\": \"senior_operator\", \"skill\": \"class3\" }");
+    s = Replace(s, "{ \"name\": \"Deputy commander\", \"role\": \"deputy_commander\", \"skill\": \"class1\" }",
+                "{ \"name\": \"Deputy commander\", \"role\": \"deputy_commander\", \"skill\": \"class3\" }");
+    return Replace(s, "{ \"name\": \"Operator\", \"role\": \"operator\", \"skill\": \"class2\" }",
+                   "{ \"name\": \"Operator\", \"role\": \"operator\", \"skill\": \"class3\" }");
 }
 // The fight only: the scenario ends when the raid is gone.
 std::string FightOnly(const std::string& text) {
@@ -229,4 +234,48 @@ SC_TEST("arm drill: the least emission; the attack reported up; the battery chan
     SC_EXPECT(moved_at > 0.0);
     SC_EXPECT((r->UnitPosition() - Vec3{700.0, -600.0, r->UnitPosition().z}).HorizontalLength() < 50.0);
     SC_EXPECT(Has(d, "Излучение включить!"));  // radiation back on after the silence
+}
+
+
+// The practice shoot (data/scenarios/osa_practice_em.json) with its target given a warning receiver and a HARM-class
+// missile, its own missiles all missing, the deputy's TV on: the crew tracks the shooter when it fires. It fires from
+// 8 km: the EM layer's tracking radar sees the HARM's 0.08 m2 (an estimate) only that close, for the few tenths of a
+// second before the missile's loft takes it out of the 1 deg beam; from 12 km the indicators show nothing.
+SC_TEST("arm drill: the launch from the tracked target seen on the tracking radar's indicators and on the TV") {
+    std::string text = ReadFile(kData + "/scenarios/osa_practice_em.json");
+    text = Replace(text, "\"track_radar\": \"osa_ak_ssc\" }",
+                   "\"track_radar\": \"osa_ak_ssc\", \"extra_libraries\": [\"em/nato_1985.json\"] }");
+    text = Replace(text, "\"speed_mps\": 150, \"rcs_m2\": 0.5, \"appear_at_s\": 200,",
+                   "\"speed_mps\": 150, \"rcs_m2\": 0.5, \"appear_at_s\": 200, \"rwr\": \"nato_alr46_class_rwr\", "
+                   "\"arms\": { \"weapon\": \"agm88a_class_harm\", \"count\": 1, \"launch_range_km\": 8 },");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string err;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &err));
+    if (!err.empty()) std::printf("    load: %s\n", err.c_str());
+    for (auto& h : def.tuning.hit_chance) h.second = 0.0;  // the shooter lives to fire
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.Console().panel.Set("tov.power", 1);  // the deputy's TV on
+    bool track = false, tv = false;
+    while (!r.Finished() && r.Time() < 900.0 && !(track && tv)) {
+        r.Step(0.1);
+        for (const SpokenCallout& s : r.Callouts()->Log()) {
+            if (s.id == "arm_launch_track" && !track) {
+                track = true;
+                SC_EXPECT(s.from == "operator");
+            }
+            if (s.id == "arm_launch_tv" && !tv) {
+                tv = true;
+                SC_EXPECT(s.from == "deputy_commander");
+            }
+        }
+    }
+    for (int i = 0; i < 50; ++i) r.Step(0.1);  // the calls heard
+    const std::string d = r.Debrief();
+    const bool heard = Has(d, "hears the sign of an ARM launch");
+    std::printf("    ARMs fired %d; on the indicators %s, on the TV %s; the commander %s\n", r.ArmsFired(), track ? "yes" : "no",
+                tv ? "yes" : "no", heard ? "acts on it" : "heard nothing");
+    SC_EXPECT(r.ArmsFired() == 1);
+    SC_EXPECT(track && tv && heard);
+    SC_EXPECT(Has(d, "smaller pulse leave the tracked target's pulse") && Has(d, "fire a missile on the TV"));
 }
