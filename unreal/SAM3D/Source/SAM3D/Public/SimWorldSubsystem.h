@@ -1475,6 +1475,7 @@ public:
 
 private:
 	FString ResolveDataDirectory() const;
+	static void StopCesiumSplatSubsystem();
 	void RunDemoFireControl();
 	void BroadcastEvents();
 	void BroadcastNewDebriefEntries();
