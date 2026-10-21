@@ -22,7 +22,9 @@ the readiness state they start in (march, deployed, powered).
   "name": "...", "description": "...", "source": "sam3d", "confidence": "estimate", "notes": "...",
   "seed": 1,                                          // crew reaction times are drawn from this
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
-  "terrain": { "type": "flat", "height_m": 110 },     // only flat so far
+  "terrain": { "type": "flat", "height_m": 110,      // only flat so far
+               "ridges": [ { "from": { "east_m": 1000, "north_m": 5500 }, "to": { "east_m": 9000, "north_m": 5500 },
+                             "height_m": 60, "width_m": 900 } ] },   // optional: straight ridges for cover (9.3)
   "own_unit": {
     "console": "procedures/osa_ak.json",              // relative to data/
     "tuning": "gameplay/osa_ak.json",                 // optional: turns on the gameplay engagement model
@@ -38,6 +40,8 @@ the readiness state they start in (march, deployed, powered).
   "targets": [
     { "id": "t1", "name": "...", "type": "Air+FixedWing", "class": "drone", "appear_at_s": 0,
       "evade_on_launch": false, "evade_turn_rate_deg_s": 12,          // optional: break away when fired at
+      "evade": { "on": "launch", "kind": "break", "turn_rate_deg_s": 12 },   // optional instead (9.3), see below
+      "behaviour": { "kind": "terrain_following", "agl_m": 60 },      // optional (9.3), see below
       "iff": "none",                                                  // optional: "friend" replies to IFF
       "start": { "east_m": 2000, "north_m": 45000, "up_m": 1000 },   // or { "lat_deg", "lon_deg", "alt_m" }
       "waypoints": [ { "east_m": 2000, "north_m": -30000, "up_m": 1000 } ],
@@ -55,6 +59,32 @@ the readiness state they start in (march, deployed, powered).
   "end": { "time_limit_s": 600, "when_targets_gone": true }
 }
 ```
+
+**How targets fly (roadmap 9.3, `simcore/target_behaviour.hpp`).** Without a `behaviour` a target flies straight at
+constant speed from waypoint to waypoint. With one, the target's pilot holds the height:
+- `{ "kind": "terrain_following", "agl_m": 60, "max_climb_mps": 30, "lookahead_s": 6 }` holds `agl_m` above the
+  ground, climbing early for the highest ground `lookahead_s` ahead. Waypoints may then give `"agl_m"` instead of
+  `"up_m"` (`{ "east_m", "north_m", "agl_m" }`): the target holds the height of the waypoint it is flying to. A low
+  strike run is such a route: low ingress, a pull-up point at a few hundred metres, the attack, a low egress.
+- `{ "kind": "pop_up", "hide_agl_m": 5, "popup_agl_m": 25, "first_hold_s": 30, "expose_s": 30, "hidden_s": 60,
+  "cycles": 1 }`: a helicopter flies low to its first waypoint (the hide), hovers there, rises to `popup_agl_m` for
+  `expose_s`, sinks back for `hidden_s`, `cycles` times, then flies on along the rest of the route low (it needs at
+  least one waypoint after the hide).
+- `"evade": { "on": "launch" | "lock", "kind": "break" | "dive" | "jink", "turn_rate_deg_s": 12, "dive_agl_m": 30,
+  "jink_period_s": 4, "evade_s": 20 }`: when a missile is launched at it, or when the tracking radar locks it (a radar
+  warning receiver hears a radar lock; a TV track gives no warning), it breaks onto a beam heading, breaks and dives to
+  `dive_agl_m`, or jinks (hard turns 60 degrees either side of its course every `jink_period_s`) for `evade_s` and
+  then resumes its route. A hiding helicopter drops behind its cover instead. Use either `evade` or the older
+  `evade_on_launch`.
+Terrain masking needs no setting: a target low behind a ridge (`terrain.ridges`, or Cesium's ground on the map) is out
+of every sensor's line of sight. The scenarios `osa_low_level_em.json`, `osa_jamming_em.json` and `osa_emcon_tv.json`
+show them.
+
+**Jamming the tracking radar (roadmap 9.1).** A self-screening noise jammer in the tracking radar's band
+(`own_unit.em.jammers`, e.g. `generic_selfscreen_noise_ku`) drowns its echo: the radar follows the jammer in angle with
+no range. The range then comes by hand: the operator keeps the range wheel on the target's blip on the search scope, or
+on the range the PU-12 last gave; ЦЕЛЬ В ЗОНЕ lights from it. The deputy commander's `fire_at_jammer` drill fires with
+ПОМЕХА up (method Н).
 
 Each trigger fires once, when every part of `when` holds. Positions: `east_m`/`north_m`/`up_m` are the local frame
 at `origin` (ENU metres); `lat_deg`/`lon_deg`/`alt_m` are converted to it.

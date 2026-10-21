@@ -206,3 +206,22 @@ physics stays unscheduled.
 - Earlier state still holds: decisions in briefing §5 adopted; CI was green on PRs #1–#8 before merging.
 
 Early-warning/command sources (E4, roadmap 7.8): `simcore/c2_sources.hpp`, `data/command/c2_sources.json`, `docs/research/EM_C2_SOURCES_2026-10.md`. PU-12 is the main source; the crew can switch (`RequestC2Source`) and an NPC commander falls back on silence.
+
+## 16. State on 16 October 2026 (phase 9 done in simcore)
+
+Sections 8, 13 and 15 above describe early October. Since then (all as stacked PRs, newest last): the accuracy pass
+(phase 6), the EM track to E10 (multiplayer knowledge, client scopes from the knowledge stream), the battery and PU-12
+work of phase 7 (7.1-7.8 in simcore, 7.7 in Unreal; drills, TZM and fuel-truck runs; placeholder models of the TZM,
+the ATZ and the PU-12M; the PU-12M plan in `docs/PU12_DEVELOPMENT.md`), and now phase 9, threats:
+
+- **Jamming in the engagement (9.1):** the tracking radar follows a noise jammer in angle (`docs/EM_ARCHITECTURE.md`
+  §31), the range comes by hand from the search scope or the PU-12, ПОМЕХА fires by method Н, a missile with no range
+  and ПОМЕХА off is never fused, and the firing zone has its crossing parameter. Drill `fire_at_jammer`.
+- **EMCON TV engagement as a mission (9.2):** `data/scenarios/osa_emcon_tv.json`. The anti-radiation missile threat
+  itself is not modelled.
+- **Mixed tracking (9.4):** TV angles or the radar on a jammer, with the range by hand.
+- **Target behaviour (9.3):** `simcore/target_behaviour.hpp`: terrain following, low strike runs, pop-up helicopters,
+  evasion on launch or lock; `terrain.ridges` for cover in scenario files.
+- Scenarios: `osa_jamming_em.json`, `osa_low_level_em.json`, `osa_emcon_tv.json`. 323 simcore tests.
+
+Next, as the user set it: NPC crewmate behaviour and teamwork (phase 8), then the PU-12M (`docs/PU12_DEVELOPMENT.md`).

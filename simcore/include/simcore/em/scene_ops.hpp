@@ -148,31 +148,66 @@ inline double PairGrazing(const EmScene& s, const Platform& a, const Platform& b
 // Sum of J/N from active noise jammers in one look of a receiver on platform `rx` whose antenna
 // points at (look_az, look_el), at frequency/bandwidth (freq_hz, bw_hz). Repeater (deception)
 // jammers are not noise and are handled by the radar's range gate.
+// One noise jammer's J/N in that look (0 if it is off, a repeater, out of band or the receiver's own platform), and
+// the direction it comes from (true, from the receiver).
+inline double OneNoiseJammerToNoise(const EmScene& s, const JammerState& j, const Platform& rx, const AntennaDef& rx_ant,
+                                    double look_az, double look_el, double freq_hz, double bw_hz, double noise_figure_db,
+                                    double extra_noise_db, PathCache* cache, double* az_out = nullptr,
+                                    double* el_out = nullptr) {
+    if (!j.on || j.silent_until_s > s.time_s) return 0.0;
+    const JammerDef& jd = s.lib.jammers[static_cast<std::size_t>(j.def_index)];
+    if (jd.technique == JamTechnique::RangeGatePullOff || jd.technique == JamTechnique::FalseTargets) return 0.0;
+    const Platform* jp = s.FindPlatform(j.platform_id);
+    const EmitterState* je = s.FindEmitter(j.emitter_id);
+    if (jp == nullptr || je == nullptr || !jp->alive || jp->id == rx.id) return 0.0;
+    const double centre = je->freq_hz > 0.0 ? je->freq_hz : jd.emitter.waveform.freq_hz;  // a spot jammer may re-tune
+    const double overlap = JammerBandOverlap(centre, jd.emitter.waveform.bandwidth_hz, freq_hz, bw_hz);
+    if (overlap <= 0.0) return 0.0;
+    const double az_j = AzimuthFromTo(rx.position, jp->position);
+    const double el_j = s.ElevationAngle(rx, *jp);
+    if (az_out != nullptr) *az_out = az_j;
+    if (el_out != nullptr) *el_out = el_j;
+    const double g_rx = AntennaGainDb(rx_ant, WrapPi(az_j - look_az), el_j - look_el);
+    const double az_back = AzimuthFromTo(jp->position, rx.position);
+    const double el_back = s.ElevationAngle(*jp, rx);
+    const double eirp = EirpW(jd.emitter, WrapPi(az_back - je->pointing_az_rad), el_back - je->pointing_el_rad);
+    const LinkLossResult loss = LinkLossCached(s, cache != nullptr ? *cache : s.paths, *jp, rx, freq_hz);
+    const double pj = OneWayReceivedPowerW(eirp, g_rx, freq_hz, loss.range_m, loss.TotalOneWayDb()) * overlap;
+    return JammingToNoise(pj, noise_figure_db + extra_noise_db, bw_hz);
+}
+
 inline double NoiseJammingToNoise(const EmScene& s, const Platform& rx, const AntennaDef& rx_ant, double look_az,
                                   double look_el, double freq_hz, double bw_hz, double noise_figure_db,
                                   double extra_noise_db = 0.0, PathCache* cache = nullptr) {
     double sum = 0.0;
     for (const JammerState& j : s.jammers) {
-        if (!j.on || j.silent_until_s > s.time_s) continue;
-        const JammerDef& jd = s.lib.jammers[static_cast<std::size_t>(j.def_index)];
-        if (jd.technique == JamTechnique::RangeGatePullOff || jd.technique == JamTechnique::FalseTargets) continue;
-        const Platform* jp = s.FindPlatform(j.platform_id);
-        const EmitterState* je = s.FindEmitter(j.emitter_id);
-        if (jp == nullptr || je == nullptr || !jp->alive || jp->id == rx.id) continue;
-        const double centre = je->freq_hz > 0.0 ? je->freq_hz : jd.emitter.waveform.freq_hz;  // a spot jammer may re-tune
-        const double overlap = JammerBandOverlap(centre, jd.emitter.waveform.bandwidth_hz, freq_hz, bw_hz);
-        if (overlap <= 0.0) continue;
-        const double az_j = AzimuthFromTo(rx.position, jp->position);
-        const double el_j = s.ElevationAngle(rx, *jp);
-        const double g_rx = AntennaGainDb(rx_ant, WrapPi(az_j - look_az), el_j - look_el);
-        const double az_back = AzimuthFromTo(jp->position, rx.position);
-        const double el_back = s.ElevationAngle(*jp, rx);
-        const double eirp = EirpW(jd.emitter, WrapPi(az_back - je->pointing_az_rad), el_back - je->pointing_el_rad);
-        const LinkLossResult loss = LinkLossCached(s, cache != nullptr ? *cache : s.paths, *jp, rx, freq_hz);
-        const double pj = OneWayReceivedPowerW(eirp, g_rx, freq_hz, loss.range_m, loss.TotalOneWayDb()) * overlap;
-        sum += JammingToNoise(pj, noise_figure_db + extra_noise_db, bw_hz);
+        sum += OneNoiseJammerToNoise(s, j, rx, rx_ant, look_az, look_el, freq_hz, bw_hz, noise_figure_db, extra_noise_db, cache);
     }
     return sum;
+}
+
+// The strongest noise jammer inside the main beam (within `half_angle_rad` of where the antenna looks): what an angle
+// tracker on the jamming would follow. `jn` 0 and `jammer_id` 0 when there is none.
+struct BeamJammer {
+    int jammer_id = 0;
+    double jn = 0.0;
+    double az_rad = 0.0;  // its true direction from the receiver
+    double el_rad = 0.0;
+};
+
+inline BeamJammer StrongestNoiseJammerInBeam(const EmScene& s, const Platform& rx, const AntennaDef& rx_ant, double look_az,
+                                             double look_el, double half_angle_rad, double freq_hz, double bw_hz,
+                                             double noise_figure_db, PathCache* cache = nullptr) {
+    BeamJammer best;
+    const Vec3 boresight = DirectionFromAzEl(look_az, look_el);
+    for (const JammerState& j : s.jammers) {
+        double az = 0.0, el = 0.0;
+        const double jn = OneNoiseJammerToNoise(s, j, rx, rx_ant, look_az, look_el, freq_hz, bw_hz, noise_figure_db, 0.0, cache, &az, &el);
+        if (jn <= best.jn) continue;
+        if (AngleBetween(DirectionFromAzEl(az, el), boresight) > half_angle_rad) continue;
+        best = {j.id, jn, az, el};
+    }
+    return best;
 }
 
 }  // namespace em

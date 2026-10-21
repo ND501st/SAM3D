@@ -143,6 +143,7 @@ public:
         double true_az_deg = 0.0;  // -180..180
         double el_deg = 0.0;
         int beam = -1;  // the search radar's elevation beam its last echo came in (-1 unknown)
+        bool no_range = false;  // angles only (the tracking radar on a jammer): range_m and position mean nothing
     };
 
     EmSensorLink(const GeoPoint& origin, const Terrain* terrain, unsigned seed, const EmLinkDef& def, const Vec3& unit_position)
@@ -405,6 +406,31 @@ public:
         r->has_designation = false;
         r->rgpo_captured = false;
         r->rgpo_offset_m = 0.0;
+        r->on_jam = false;
+    }
+
+    // The tracking radar follows a noise jammer in angle because its echo is drowned in the jamming (the radar's
+    // angle_track_on_jam): which target that direction lines up with, and the measured direction. No range: the
+    // contact's range_m is 0 and no_range is set. The gate stays where the last designation (the range wheel) put it,
+    // so the lock comes back by itself when the echo burns through.
+    bool JamTracked(std::string* target_id, Contact* angles = nullptr) const {
+        const em::RadarState* r = Radar(track_);
+        if (r == nullptr || !r->on || !r->on_jam) return false;
+        const Vec3 dir = DirectionFromAzEl(r->jam_az_rad, r->jam_el_rad);
+        const std::string id = ResolveTarget(Antenna() + dir * 10000.0, false, std::vector<std::string>());
+        if (id.empty()) return false;
+        if (target_id != nullptr) *target_id = id;
+        if (angles != nullptr) {
+            *angles = MakeContact(id, Antenna() + dir * 10000.0);
+            angles->range_m = 0.0;
+            angles->no_range = true;
+        }
+        return true;
+    }
+    // J/N of the jamming the tracking radar follows (dB; -300 when it follows none).
+    double JamToNoiseDb() const {
+        const em::RadarState* r = Radar(track_);
+        return r != nullptr && r->on && r->on_jam ? r->jam_jn_db : -300.0;
     }
 
     void Advance(double dt) {

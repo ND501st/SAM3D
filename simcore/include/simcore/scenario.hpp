@@ -26,6 +26,7 @@
 #include "simcore/engagement.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/target_behaviour.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -55,6 +56,8 @@ struct ScenarioTarget {
     bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
     int board_type = -1;                   // its type on the PU-12 board (0-9; -1: 1 if a friend, else 9, no IFF)
     int formation = 1;                     // aircraft in its formation, as the board notes it
+    TargetBehaviourDef behaviour;          // terrain following, pop-up (target_behaviour.hpp)
+    EvadeDef evade;                        // evasion on launch or lock (takes the place of evade_on_launch)
 };
 
 struct TriggerAction {
@@ -98,6 +101,7 @@ struct ScenarioDef {
     unsigned seed = 1;
     GeoPoint origin;
     double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
+    std::vector<TerrainRidge> ridges;     // straight ridges on it, for cover (terrain.ridges)
     std::string console_file;      // relative to the data folder, e.g. "procedures/osa_ak.json"
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
@@ -233,11 +237,33 @@ private:
 
     bool LoadTerrain(const json::Value& root, ScenarioDef& out) {
         const json::Value* t = nullptr;
-        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m"})) return false;
+        if (!RequireObject(root, "", "terrain", t) || !Keys(*t, "terrain", {"type", "height_m", "ridges", "notes"})) return false;
         std::string type;
         if (!RequireString(*t, "terrain", "type", type)) return false;
         if (type != "flat") return Fail("terrain.type", "only \"flat\" is supported so far");
-        return RequireNumber(*t, "terrain", "height_m", out.ground_height_m);
+        if (!RequireNumber(*t, "terrain", "height_m", out.ground_height_m)) return false;
+        // "ridges": [ { "from": { "east_m", "north_m" }, "to": {...}, "height_m": 120, "width_m": 1000 } ]
+        const json::Value* rs = OptionalArray(*t, "terrain", "ridges");
+        if (rs == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < rs->items.size(); ++i) {
+            const json::Value& r = rs->items[i];
+            const std::string p = Index("terrain.ridges", i);
+            const json::Value* a = nullptr;
+            const json::Value* b = nullptr;
+            TerrainRidge ridge;
+            if (!Keys(r, p, {"from", "to", "height_m", "width_m", "notes"}) || !RequireObject(r, p, "from", a) ||
+                !RequireObject(r, p, "to", b) || !Keys(*a, Join(p, "from"), {"east_m", "north_m"}) ||
+                !Keys(*b, Join(p, "to"), {"east_m", "north_m"}) || !RequireNumber(*a, Join(p, "from"), "east_m", ridge.a_east_m) ||
+                !RequireNumber(*a, Join(p, "from"), "north_m", ridge.a_north_m) || !RequireNumber(*b, Join(p, "to"), "east_m", ridge.b_east_m) ||
+                !RequireNumber(*b, Join(p, "to"), "north_m", ridge.b_north_m) || !RequireNumber(r, p, "height_m", ridge.height_m) ||
+                !RequireNumber(r, p, "width_m", ridge.width_m)) {
+                return false;
+            }
+            if (ridge.height_m < 0.0) return Fail(Join(p, "height_m"), "must be >= 0");
+            if (ridge.width_m <= 0.0) return Fail(Join(p, "width_m"), "must be > 0");
+            out.ridges.push_back(ridge);
+        }
+        return true;
     }
 
     // A target's "iff": "friend" (replies to interrogation) or "none" (the default).
@@ -421,6 +447,78 @@ private:
         return true;
     }
 
+    // A target's "behaviour" (terrain_following, pop_up) and "evade" blocks (target_behaviour.hpp).
+    bool LoadTargetBehaviour(const json::Value& t, const std::string& p, ScenarioTarget& tg) {
+        if (const json::Value* b = t.Find("behaviour")) {
+            const std::string bp = Join(p, "behaviour");
+            if (!b->Is(json::Type::Object)) return Fail(bp, "expected an object");
+            std::string kind;
+            if (!RequireString(*b, bp, "kind", kind)) return false;
+            TargetBehaviourDef& d = tg.behaviour;
+            if (kind == "terrain_following") {
+                d.kind = TargetBehaviourDef::Kind::TerrainFollowing;
+                if (!Keys(*b, bp, {"kind", "agl_m", "max_climb_mps", "lookahead_s", "notes"}) ||
+                    !OptionalNumber(*b, bp, "agl_m", d.agl_m)) {
+                    return false;
+                }
+            } else if (kind == "pop_up") {
+                d.kind = TargetBehaviourDef::Kind::PopUp;
+                if (!Keys(*b, bp, {"kind", "hide_agl_m", "popup_agl_m", "first_hold_s", "expose_s", "hidden_s", "cycles",
+                                   "max_climb_mps", "lookahead_s", "notes"}) ||
+                    !OptionalNumber(*b, bp, "hide_agl_m", d.hide_agl_m) || !OptionalNumber(*b, bp, "popup_agl_m", d.popup_agl_m) ||
+                    !OptionalNumber(*b, bp, "first_hold_s", d.first_hold_s) || !OptionalNumber(*b, bp, "expose_s", d.expose_s) ||
+                    !OptionalNumber(*b, bp, "hidden_s", d.hidden_s) || !OptionalInt(*b, bp, "cycles", d.cycles)) {
+                    return false;
+                }
+                if (d.popup_agl_m <= d.hide_agl_m) return Fail(Join(bp, "popup_agl_m"), "must be above hide_agl_m");
+                if (d.cycles < 1) return Fail(Join(bp, "cycles"), "must be >= 1");
+                if (tg.waypoints.size() < 2) return Fail(Join(p, "waypoints"), "a pop-up needs the hide and at least one waypoint after it");
+            } else {
+                return Fail(Join(bp, "kind"), "unknown behaviour '" + kind + "' (terrain_following, pop_up)");
+            }
+            if (!OptionalNumber(*b, bp, "max_climb_mps", d.max_climb_mps) || !OptionalNumber(*b, bp, "lookahead_s", d.lookahead_s)) return false;
+            if (d.agl_m < 0.0 || d.hide_agl_m < 0.0) return Fail(bp, "heights above the ground must be >= 0");
+            if (d.max_climb_mps <= 0.0) return Fail(Join(bp, "max_climb_mps"), "must be > 0");
+            if (d.lookahead_s < 0.0) return Fail(Join(bp, "lookahead_s"), "must be >= 0");
+        }
+        if (const json::Value* e = t.Find("evade")) {
+            const std::string ep = Join(p, "evade");
+            if (t.Find("evade_on_launch") != nullptr) return Fail(ep, "use either evade or evade_on_launch, not both");
+            if (!e->Is(json::Type::Object)) return Fail(ep, "expected an object");
+            if (!Keys(*e, ep, {"on", "kind", "turn_rate_deg_s", "dive_agl_m", "jink_period_s", "evade_s", "notes"})) return false;
+            EvadeDef& d = tg.evade;
+            std::string on = "launch", kind = "break";
+            double turn_deg_s = RadToDeg(d.turn_rate_rad_s);
+            if (!OptionalString(*e, ep, "on", on) || !OptionalString(*e, ep, "kind", kind) ||
+                !OptionalNumber(*e, ep, "turn_rate_deg_s", turn_deg_s) || !OptionalNumber(*e, ep, "dive_agl_m", d.dive_agl_m) ||
+                !OptionalNumber(*e, ep, "jink_period_s", d.jink_period_s) || !OptionalNumber(*e, ep, "evade_s", d.evade_s)) {
+                return false;
+            }
+            if (on == "launch") {
+                d.on = EvadeDef::On::Launch;
+            } else if (on == "lock") {
+                d.on = EvadeDef::On::Lock;
+            } else {
+                return Fail(Join(ep, "on"), "unknown cue '" + on + "' (launch, lock)");
+            }
+            if (kind == "break") {
+                d.kind = EvadeDef::Kind::Break;
+            } else if (kind == "dive") {
+                d.kind = EvadeDef::Kind::Dive;
+            } else if (kind == "jink") {
+                d.kind = EvadeDef::Kind::Jink;
+            } else {
+                return Fail(Join(ep, "kind"), "unknown evasion '" + kind + "' (break, dive, jink)");
+            }
+            if (turn_deg_s <= 0.0) return Fail(Join(ep, "turn_rate_deg_s"), "must be > 0");
+            if (d.dive_agl_m < 0.0) return Fail(Join(ep, "dive_agl_m"), "must be >= 0");
+            if (d.jink_period_s <= 0.0 || d.evade_s <= 0.0) return Fail(ep, "jink_period_s and evade_s must be > 0");
+            d.turn_rate_rad_s = DegToRad(turn_deg_s);
+            d.present = true;
+        }
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         const json::Value* arr = OptionalArray(root, "", "targets");
         if (arr == nullptr) return message_.empty();
@@ -429,7 +527,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "notes"})) {
+                             "formation", "behaviour", "evade", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -465,10 +563,29 @@ private:
             if (wps == nullptr || wps->items.empty()) {
                 return message_.empty() ? Fail(Join(p, "waypoints"), "needs at least one waypoint") : false;
             }
+            bool any_agl = false;
             for (std::size_t j = 0; j < wps->items.size(); ++j) {
+                const json::Value& w = wps->items[j];
+                const std::string wp_path = Index(Join(p, "waypoints"), j);
                 Vec3 wp;
-                if (!LoadPosition(wps->items[j], Index(Join(p, "waypoints"), j), frame_, wp)) return false;
+                double agl = -1.0;
+                if (w.Find("agl_m") != nullptr) {  // a height above the ground, held by the target's behaviour
+                    if (!Keys(w, wp_path, {"east_m", "north_m", "agl_m"}) || !RequireNumber(w, wp_path, "east_m", wp.x) ||
+                        !RequireNumber(w, wp_path, "north_m", wp.y) || !RequireNumber(w, wp_path, "agl_m", agl)) {
+                        return false;
+                    }
+                    if (agl < 0.0) return Fail(Join(wp_path, "agl_m"), "must be >= 0");
+                    wp.z = tg.start.z;
+                    any_agl = true;
+                } else if (!LoadPosition(w, wp_path, frame_, wp)) {
+                    return false;
+                }
                 tg.waypoints.push_back(wp);
+                tg.behaviour.waypoint_agl_m.push_back(agl);
+            }
+            if (!LoadTargetBehaviour(t, p, tg)) return false;
+            if (any_agl && tg.behaviour.kind == TargetBehaviourDef::Kind::None) {
+                return Fail(Join(p, "waypoints"), "agl_m needs a behaviour that holds the height (terrain_following, pop_up)");
             }
             for (const ScenarioTarget& other : out.targets) {
                 if (other.id == tg.id) return Fail(Join(p, "id"), "duplicate target '" + tg.id + "'");

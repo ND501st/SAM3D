@@ -1,0 +1,43 @@
+{
+  "scenario_id": "osa_emcon_tv",
+  "name": "Osa-AK engagement with emissions control: TV only, radars silent, the PU-12's designations",
+  "description": "A fictional practice shoot with the radars silent from start to finish (the threat of anti-radiation weapons, or an order to keep emissions down). The PU-12 plots the target and the battery commander gives azimuth and range by radio; the senior operator turns the azimuth onto the board's track, the deputy commander finds the target on the TV, tracks it by hand, and fires with ПОМЕХА up when it is in range by the commander's range. Nothing radiates but the radios. A regression and demo scenario; a player can take any seat.",
+  "source": "samsim_osa p33–35 (the emissions-control engagement)",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. Target numbers are PLACEHOLDERS. The drills are emcon_tv_azimuth and emcon_tv_engagement (data/procedures/osa_ak.json); the range by hand is the board's (engagement.hpp RangeFrom).",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "command_post": "command/pu12.json",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Deputy commander", "role": "deputy_commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Senior operator", "role": "senior_operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Operator", "role": "operator", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
+    { "name": "Driver", "role": "driver", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Practice drone (placeholder)", "type": "Air+FixedWing+Drone", "class": "drone", "board_type": 7,
+      "start": { "east_m": 1500, "north_m": 40000, "up_m": 800 },
+      "waypoints": [ { "east_m": 1500, "north_m": -30000, "up_m": 800 } ],
+      "speed_mps": 150, "rcs_m2": 0.5, "appear_at_s": 200,
+      "notes": "Placeholder numbers."
+    }
+  ],
+  "triggers": [
+    { "id": "ready", "when": { "after_s": 0 },
+      "do": [ { "order": "power_up", "crew": "Driver" }, { "queue": "pto_on_line", "crew": "Driver" },
+              { "order": "equipment_on", "crew": "Operator" }, { "queue": "deploy_at_halt", "crew": "Operator" } ] },
+    { "id": "tv", "when": { "target": "t1", "target_within_m": 12500, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+      "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" }, { "order": "emcon_tv_engagement", "crew": "Deputy commander" } ] }
+  ],
+  "end": { "time_limit_s": 700, "when_targets_gone": true }
+}

@@ -210,7 +210,7 @@
       "az_wheel": "ssc.az_wheel", "el_wheel": "ssc.el_wheel", "range_wheel": "ssc.range_wheel",
       "lock_control": "ssc.az_lock", "fov_control": "tov.fov", "mti_control": "ssc.mti", "fov_deg": [4.8, 1.44], "fov_height_ratio": 0.75,
       "max_range_m": 28000, "az_limit_deg": 330,
-      "captured_input": "target_captured", "too_low_input": "target_too_low",
+      "captured_input": "target_captured", "tv_track_input": "target_tv_tracked", "too_low_input": "target_too_low",
       "near_zone_input": "target_near_zone", "in_zone_input": "target_in_zone",
       "elevation_search": {
         "mode": "auto_acquisition", "beam_control": "soc.beam",
@@ -272,7 +272,8 @@
     { "id": "target_near_zone", "description": "Target will reach the firing zone within 15 s (ВНИМАНИЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
     { "id": "target_in_zone", "description": "Target is within the firing zone (ЦЕЛЬ В ЗОНЕ lamp)", "source": "samsim_osa p29", "confidence": "high" },
     { "id": "target_too_low", "description": "Target too low for the SSC radar to track in angle (НЛЦ lamp)", "source": "samsim_osa p25", "confidence": "high" },
-    { "id": "target_captured", "description": "SSC is on the target azimuth and the target is inside the range gate, so it captures automatically", "source": "samsim_osa p24", "confidence": "high" }
+    { "id": "target_captured", "description": "SSC is on the target azimuth and the target is inside the range gate, so it captures automatically", "source": "samsim_osa p24", "confidence": "high" },
+    { "id": "target_tv_tracked", "description": "The target is in the TOV crosshair and the operators are tracking it by hand (what the deputy commander sees on the TV screen; not a lamp)", "source": "samsim_osa p25, p34 (ПА: angle tracking with the TOV camera)", "confidence": "medium" }
   ],
 
   "controls": [
@@ -815,7 +816,23 @@
         { "control": "fo.key", "position": 1, "description": "Insert the launch authorization key" },
         { "control": "tov.fov", "position": 1, "description": "УГОЛ ЗРЕНИЯ УЗКИЙ, narrow lens" },
         { "control": "fo.key", "position": 2, "description": "When the target fills the crosshair (roughly within range): turn the launch key",
-          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" } ] },
+          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" }, { "input": "target_tv_tracked", "is": true } ] },
+        { "control": "fo.launch", "position": 1, "description": "ПУСК",
+          "wait_for": [ { "subsystem": "launch_armed", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "fire_at_jammer", "name": "Firing at a jamming target (ПОМЕХА, method Н)",
+      "source": "samsim_osa p34 and samsim_thread (ПОМЕХА: method Н against a jammer, the fuse armed with the medium beam because there is no range); korovin_tiv_2010 PDF p24 (in heavy jamming the range is taken from the search radar); seat: flak11 (9A33-3)", "confidence": "low",
+      "notes": "Deputy commander, when the tracking radar's echo is lost in the jamming and it follows the jammer in angle. The operator keeps the range wheel on the target's blip on the search scope, or on the range the battery commander gave; ЦЕЛЬ В ЗОНЕ then lights from that range. Without any range the NPC waits: firing blind is the commander's decision. The order of the steps is SAM3D's, after emcon_tv_engagement.",
+      "steps": [
+        { "control": "fo.mode", "position": 0, "description": "РОД РАБОТЫ to БР, live firing" },
+        { "control": "fo.bort_spk_cover", "position": 1, "description": "Remove the guard over БОРТ СПК" },
+        { "control": "fo.bort_spk", "position": 1, "description": "БОРТ СПК ВКЛ, start missile, SPK and SVR preparation by hand" },
+        { "control": "fo.pomekha", "position": 1, "description": "ПОМЕХА up: method Н, and the fuse is armed with the medium beam" },
+        { "control": "fo.key", "position": 1, "description": "Insert the launch authorization key" },
+        { "control": "fo.key", "position": 2, "description": "ПУСК ГОТОВ and ЦЕЛЬ В ЗОНЕ (by the range by hand) lit: turn the launch key",
+          "wait_for": [ { "subsystem": "missile_prep", "is": "ready" }, { "input": "target_in_zone", "is": true } ] },
         { "control": "fo.launch", "position": 1, "description": "ПУСК",
           "wait_for": [ { "subsystem": "launch_armed", "is": "ready" } ] }
       ]

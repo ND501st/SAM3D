@@ -88,6 +88,7 @@ struct TrackSensorDef {
     double max_range_m = 0.0;
     double az_limit_deg = 360.0;  // wheel limits already enforce this; used to pick the reachable angle
     std::string captured_input;   // inputs the model sets (may be empty)
+    std::string tv_track_input;   // the TV channel holds the target (manual TV tracking)
     std::string too_low_input;
     std::string near_zone_input;
     std::string in_zone_input;
@@ -1162,7 +1163,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
                             "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "fov_deg", "fov_height_ratio", "max_range_m",
-                            "az_limit_deg", "captured_input", "too_low_input", "near_zone_input", "in_zone_input",
+                            "az_limit_deg", "captured_input", "tv_track_input", "too_low_input", "near_zone_input", "in_zone_input",
                             "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
@@ -1179,6 +1180,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalNumber(*tr, tp, "max_range_m", track.max_range_m) ||
             !OptionalNumber(*tr, tp, "az_limit_deg", track.az_limit_deg) ||
             !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||
+            !RefInput(*tr, tp, "tv_track_input", eq, track.tv_track_input) ||
             !RefInput(*tr, tp, "too_low_input", eq, track.too_low_input) ||
             !RefInput(*tr, tp, "near_zone_input", eq, track.near_zone_input) ||
             !RefInput(*tr, tp, "in_zone_input", eq, track.in_zone_input)) {

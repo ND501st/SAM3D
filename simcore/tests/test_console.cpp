@@ -338,6 +338,7 @@ SC_TEST("osa data: a crew of five; every control and procedure belongs to one se
         {"prepare_firing", "deputy_commander"},
         {"launch", "deputy_commander"},
         {"emcon_tv_engagement", "deputy_commander"},
+        {"fire_at_jammer", "deputy_commander"},
         {"stow_launch_console", "deputy_commander"}};
     for (const auto& o : owners) {
         const Procedure* p = c.FindProcedure(o.first);
@@ -548,6 +549,7 @@ SC_TEST("osa data: TV-only engagement with the radars silent") {
     seats.Order("emcon_tv_azimuth");
     seats.Order("emcon_tv_engagement");
     CrewMember& crew = seats.At("deputy_commander");
+    c.equipment.SetInput("target_tv_tracked", true);  // the target is in the crosshair (the engagement model sets this)
     bool launched = false;
     double t = 0.0;
     for (; t < 120.0 && !launched; t += 0.1) {
