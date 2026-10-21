@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "simcore/em/comms_system.hpp"
+#include "simcore/em/deception.hpp"
 #include "simcore/em/doctrine.hpp"
 #include "simcore/em/esm_system.hpp"
 #include "simcore/em/knowledge_system.hpp"
@@ -164,6 +165,40 @@ public:
         return j.id;
     }
 
+    // A decoy on `platform_id` with the same transmission as radar `radar_id` (frequency, PRF, pulse width, scan).
+    int AddDecoy(int platform_id, int radar_id, DecoyMode mode) {
+        const RadarState* r = s_.FindRadar(radar_id);
+        if (r == nullptr) return 0;
+        EmitterDef def = s_.lib.radars[static_cast<std::size_t>(r->def_index)].emitter;
+        def.kind = EmitterKind::Decoy;
+        def.name = "Decoy: " + def.name;
+        const int id = AddEmitter(platform_id, def);
+        s_.decoys.push_back({id, radar_id, mode});
+        UpdateDecoys(s_);
+        return id;
+    }
+
+    // Move an emitter to one of its preset channels (a radar's frequency change). False if it has no such channel.
+    bool SetEmitterChannel(int emitter_id, int channel) {
+        EmitterState* e = s_.FindEmitter(emitter_id);
+        if (e == nullptr || channel < 0 || static_cast<std::size_t>(channel) >= e->def.waveform.channels_hz.size()) return false;
+        e->freq_hz = e->def.waveform.channels_hz[static_cast<std::size_t>(channel)];
+        s_.Log(EmEventKind::Info, emitter_id, channel, "frequency change to channel " + std::to_string(channel + 1));
+        return true;
+    }
+
+    // Empty voice messages from `node_id` on `net_id` every `period_s`, from `from_s` until `until_s`.
+    void AddDummyTraffic(int node_id, int net_id, double period_s, double duration_s, double from_s = 0.0, double until_s = 1e18) {
+        DummyTraffic d;
+        d.node_id = node_id;
+        d.net_id = net_id;
+        d.period_s = period_s > 1.0 ? period_s : 1.0;
+        d.duration_s = duration_s > 0.5 ? duration_s : 0.5;
+        d.next_s = from_s;
+        d.until_s = until_s;
+        s_.dummy_traffic.push_back(d);
+    }
+
     int AddNode(const std::string& name, int platform_id, Side side, bool c2_center = false, int parent = 0) {
         NodeState n;
         n.id = s_.next_id++;
@@ -278,6 +313,8 @@ public:
         lap(s_.stats.ns_platforms);
         ApplyEmconSteps(s_, emcon_);
         for (SamDoctrine& d : doctrines_) RunSamDoctrine(s_, d);
+        UpdateDecoys(s_);
+        UpdateJammerTuning(s_);
         UpdateEmitters(s_, dt);
         for (ChaffCloud& c : s_.chaff) {
             c.position += c.velocity * dt;
@@ -308,6 +345,7 @@ public:
         lap(s_.stats.ns_knowledge);
         const bool links = s_.time_s + 1e-9 >= next_links_s_;
         if (links) next_links_s_ = s_.time_s + rates_.link_period_s;
+        RunDummyTraffic(s_);
         RunComms(s_, links);
         if (s_.time_s + 1e-9 >= next_age_s_) {
             next_age_s_ = s_.time_s + rates_.age_period_s;

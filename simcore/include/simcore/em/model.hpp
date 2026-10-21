@@ -211,7 +211,9 @@ struct ThreatLibrary {
     std::vector<ThreatEntry> entries;
 };
 
-enum class JamTechnique { Barrage, Spot, RangeGatePullOff };
+// FalseTargets: a repeater that answers the radar's pulses with copies delayed behind its own echo, so the radar sees
+// a string of echoes on the jammer's bearing (an abstraction: count, spacing, and the jam-to-noise it needs).
+enum class JamTechnique { Barrage, Spot, RangeGatePullOff, FalseTargets };
 
 struct JammerDef {
     std::string id;
@@ -222,6 +224,10 @@ struct JammerDef {
     double rgpo_max_m = 2500.0;
     double rgpo_off_s = 3.0;         // jammer silent after a walk-off, dragging the gate onto nothing
     double rgpo_js_needed_db = 3.0;  // repeater must beat the skin echo by this to capture the gate
+    double retune_s = 0.0;           // spot: time to follow its victim radar onto a new frequency (0: never follows)
+    int false_targets = 0;           // false-target repeater: echoes it adds behind itself
+    double false_spacing_m = 1000.0; // ... this far apart in range
+    double false_jn_needed_db = 6.0; // ... once its repeated power is this far above the radar's noise
     std::string source;
     std::string confidence;
 };
@@ -396,6 +402,29 @@ struct JammerState {
     int victim_radar = 0;  // RGPO: the radar whose range gate it works on
     double started_s = 0.0;
     double silent_until_s = -1.0;
+    double retune_since_s = -1.0;  // spot: when it noticed its victim left the band (-1: on frequency)
+};
+
+// A decoy emitter that copies a radar's transmission (Czechoslovak practice: decoys on the same parameters as the real
+// radar, to draw strikes away; Vojenské rozhledy 1985/6). It radiates always, with the radar, or while the radar is off
+// (blinking: the enemy hears the same signal from somewhere else when the real radar falls silent).
+enum class DecoyMode { Always, WithRadar, WhenRadarOff };
+
+struct DecoyLink {
+    int emitter_id = 0;
+    int radar_id = 0;
+    DecoyMode mode = DecoyMode::WithRadar;
+};
+
+// Dummy radio traffic: a node that transmits empty voice messages on a net on a schedule, so radio intercept and DF
+// hear a busy station where there is none to protect (or to keep the net's pattern the same when the real one is quiet).
+struct DummyTraffic {
+    int node_id = 0;
+    int net_id = 0;
+    double period_s = 30.0;
+    double duration_s = 8.0;
+    double next_s = 0.0;
+    double until_s = 1e18;
 };
 
 struct ChaffCloud {
@@ -641,7 +670,9 @@ struct EmScene {
     std::vector<NodeState> nodes;
     std::vector<NetState> nets;
     std::vector<Message> messages;  // queued or on the air
-    std::vector<VoiceResult> voice_results;  // outcomes of voice messages (the sender collects them)
+    std::vector<VoiceResult> voice_results;
+    std::vector<DecoyLink> decoys;
+    std::vector<DummyTraffic> dummy_traffic;  // outcomes of voice messages (the sender collects them)
     std::vector<LinkState> links;
     std::vector<EmEvent> events;
     EmStats stats;

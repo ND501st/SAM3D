@@ -366,7 +366,8 @@ private:
 
     bool LoadJammer(const json::Value& v, const std::string& path, EmLibrary& lib) {
         if (!Keys(v, path, {"id", "name", "technique", "emitter", "rgpo_walk_mps", "rgpo_max_m", "rgpo_off_s",
-                            "rgpo_js_needed_db", "source", "confidence", "notes"})) {
+                            "rgpo_js_needed_db", "retune_s", "false_targets", "false_spacing_m", "false_jn_needed_db",
+                            "source", "confidence", "notes"})) {
             return false;
         }
         JammerDef d;
@@ -376,7 +377,8 @@ private:
         if (tech == "barrage") d.technique = JamTechnique::Barrage;
         else if (tech == "spot") d.technique = JamTechnique::Spot;
         else if (tech == "rgpo") d.technique = JamTechnique::RangeGatePullOff;
-        else return Fail(Join(path, "technique"), "must be barrage, spot or rgpo");
+        else if (tech == "false_targets") d.technique = JamTechnique::FalseTargets;
+        else return Fail(Join(path, "technique"), "must be barrage, spot, rgpo or false_targets");
         const json::Value* em = v.Find("emitter");
         if (em == nullptr) return Fail(Join(path, "emitter"), "required");
         d.emitter.id = d.id;
@@ -387,6 +389,15 @@ private:
         if (!Val(v, path, "rgpo_walk_mps", d.rgpo_walk_mps, false) || !Val(v, path, "rgpo_max_m", d.rgpo_max_m, false) ||
             !Val(v, path, "rgpo_off_s", d.rgpo_off_s, false) || !Val(v, path, "rgpo_js_needed_db", d.rgpo_js_needed_db, false))
             return false;
+        double count = 0.0;
+        if (!Val(v, path, "retune_s", d.retune_s, false) || !Val(v, path, "false_targets", count, false) ||
+            !Val(v, path, "false_spacing_m", d.false_spacing_m, false) ||
+            !Val(v, path, "false_jn_needed_db", d.false_jn_needed_db, false))
+            return false;
+        if (count < 0.0 || count > 50.0) return Fail(Join(path, "false_targets"), "0 to 50");
+        d.false_targets = static_cast<int>(count);
+        if (d.technique == JamTechnique::FalseTargets && d.false_targets < 1)
+            return Fail(Join(path, "false_targets"), "a false-target repeater needs at least one");
         lib.jammers.push_back(d);
         return true;
     }
