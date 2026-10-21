@@ -652,6 +652,8 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 		{TEXT("The game"), {TEXT("Esc   pause: resume, restart, the missions, quit; the debrief"), TEXT("G     this card")}},
 		{TEXT("Lessons"), {TEXT("Enter   continue (a reading step)"), TEXT("L       look at what the step highlights"),
 			TEXT("N       skip a step: the instructor does it"), TEXT("Backspace   back a step, to read it again")}},
+		{TEXT("The helper (the missions menu turns it on)"), {TEXT("H   off, hints, on, watch the crewman (kept for the next missions)"),
+			TEXT("N   the helper makes its move for you (not in a lesson)")}},
 	};
 	const TArray<FGroup> Right = {
 		{TEXT("Driving (outside)"), {TEXT("W / S   throttle, reverse"), TEXT("A / D   steer"), TEXT("Space   brake: a halt for the crew")}},
@@ -662,7 +664,7 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("X   get up and walk (W A S D); X again by a seat sits down")}},
 		{TEXT("The crew"),
 			{TEXT("T   take this seat, or give it back"), TEXT("O   orders (commander's seat) or reports; 1-9 pick, 0 next page"),
-				TEXT("H   training overlay: guided, hint, demonstrate, off"), TEXT("1-9   quick crew drills (outside the crew menu)"),
+				TEXT("H   the helper: off, hints, on, watch the crewman"), TEXT("1-9   quick crew drills (outside the crew menu)"),
 				TEXT("B   the PU-12 board (in a launcher: the designations heard)"), TEXT("V   the other vehicle (battery link)")}},
 		{TEXT("Headset and radios"),
 			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
@@ -729,6 +731,9 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 		DrawText(Lines[I], Paper, X, Y, Medium);
 		Y += 26.0f;
 	}
+	// The helper (docs/crew/13_HELPER.md): H off, hints, on; kept for the next missions.
+	DrawText(TEXT("H      the helper: ") + USimWorldSubsystem::HelperLevelLabel(Sim->GetAssistLevel()), Paper, X, Y, Medium);
+	Y += 26.0f;
 	if (!bLeave)
 	{
 		DrawText(TEXT("(a networked game runs on while this menu is open)"), Dim, X, Y, Small);
@@ -775,7 +780,10 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 		for (int32 N : Numbers)
 		{
 			const FString Num = bTwoDigits ? FString::Printf(TEXT("%02d"), N) : FString::FromInt(N);
-			Line += N == Vehicle->GetPickedTarget() ? FString::Printf(TEXT("[%s] "), *Num) : Num + TEXT(" ");
+			// The picked one in brackets; the helper's in stars (the target it would give a launcher, or plot).
+			Line += N == Vehicle->GetPickedTarget()        ? FString::Printf(TEXT("[%s] "), *Num)
+					: N == Vehicle->GetHelpTargetNumber() ? FString::Printf(TEXT("*%s* "), *Num)
+														  : Num + TEXT(" ");
 		}
 		return Numbers.Num() == 0 ? Line + TEXT("(nothing)  ") : Line;
 	};
@@ -813,7 +821,7 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 		for (int32 I = 0; I < List.Num() && I < 5; ++I)
 		{
 			const FSimLauncherStatus& L = List[I];
-			Launchers += FString::Printf(TEXT("%d: %s %s%s   "), I + 1, *L.Callsign, *L.State,
+			Launchers += FString::Printf(TEXT("%d: %s%s %s%s   "), I + 1, *L.Callsign, L.Callsign == Vehicle->GetHelpCallsign() ? TEXT("*") : TEXT(""), *L.State,
 				L.Missiles >= 0 ? *FString::Printf(TEXT(" (%d)"), L.Missiles) : TEXT(""));
 		}
 		DrawText(Launchers + TEXT("|  [ ] pick a target, 1-5 give it to that launcher"), Ink, X, Y, Font);
@@ -825,29 +833,68 @@ void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehic
 
 void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 {
-	// The training overlay: the drill master's next move for this seat, why, and when.
+	// The helper (docs/crew/13_HELPER.md): the move this seat's NPC would make now, shown as a lesson's step is (its control
+	// pulses in the cabin, the crew menu's line is green) without the lesson's card: a line or two of what, and why.
 	if (Vehicle->IsAssistOn())
 	{
-		const FSimDrillAdvice A = Vehicle->GetAdvice();
+		const FSimSeatHelp Help = Vehicle->GetHelp();
 		const FLinearColor Green(0.4f, 1.0f, 0.5f);
+		const FLinearColor Soft(0.7f, 0.9f, 0.7f, 0.85f);
 		float Y = 40.0f;
-		DrawText(FString::Printf(TEXT("Help, %s (H: next level): %s"), *Vehicle->GetAssistLevel(), *Vehicle->GetAssistTask()), Green, 20.0f, Y,
-			Font);
+		DrawText(FString::Printf(TEXT("Helper: %s   (H the level, N let it do the move)"), *USimWorldSubsystem::HelperLevelLabel(Help.Level)), Soft,
+			20.0f, Y, Font);
 		Y += 20.0f;
-		if (!A.bValid)
+		if (!Help.bShown)
 		{
-			DrawText(Vehicle->GetAssistLevel() == TEXT("hint") ? TEXT("(a hint comes if you hesitate)") : TEXT("nothing for this seat now"), Green,
-				20.0f, Y, Font);
+			const TCHAR* Why = !Vehicle->IsHoldingSeat() && Help.Level != TEXT("demonstrate") ? TEXT("(take this seat, T, to be helped in it)")
+							   : Help.Level == TEXT("hint") && Help.Steps.Num() > 0  ? TEXT("(a hint comes if you hesitate)")
+																					: TEXT("(nothing for this seat to do now)");
+			DrawText(Why, Soft, 20.0f, Y, Font);
 		}
-		else
+		const USimWorldSubsystem* HelpSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		for (int32 I = 0; Help.bShown && I < Help.Steps.Num() && I < 3; ++I)
 		{
-			DrawText(FString::Printf(TEXT("%s: %s%s"), A.bDemonstrating ? TEXT("Watch the crewman") : TEXT("Next"), *A.Description,
-						 A.DueInSeconds > 2.0 ? *FString::Printf(TEXT("  (in about %.0f s)"), A.DueInSeconds) : TEXT("  (now)")),
-				Green, 20.0f, Y, Font);
-			Y += 20.0f;
-			for (int32 I = 0; I < A.Why.Num() && I < 3; ++I)
+			const FSimHelpStep& S = Help.Steps[I];
+			FString Line = S.Text;
+			if (S.Kind == TEXT("order") || S.Kind == TEXT("report"))
 			{
-				DrawText(FString::Printf(TEXT("   because: %s"), *A.Why[I]), FLinearColor(0.7f, 0.9f, 0.7f), 20.0f, Y, Font);
+				Line += TEXT("   (O: the green line)");
+			}
+			else if (S.Kind == TEXT("designate"))
+			{
+				int32 Key = 0;
+				const TArray<FSimLauncherStatus> List = HelpSim != nullptr ? HelpSim->GetLauncherStatus() : TArray<FSimLauncherStatus>();
+				for (int32 L = 0; L < List.Num(); ++L)
+				{
+					Key = List[L].Callsign == S.Callsign ? L + 1 : Key;
+				}
+				Line += Key > 0 ? FString::Printf(TEXT("   ([ ] pick %02d, then %d)"), S.Number, Key) : FString::Printf(TEXT("   ([ ] pick %02d)"), S.Number);
+			}
+			else if (S.Kind == TEXT("plot"))
+			{
+				Line += TEXT("   (pick it with the wheel, click it onto the board)");
+			}
+			else if (S.Kind == TEXT("wheel"))
+			{
+				Line += FString::Printf(TEXT("   (now %.1f)"), S.Value);
+			}
+			else if (S.Kind == TEXT("halt"))
+			{
+				Line += TEXT("   (brake)");
+			}
+			if (!S.Blocked.IsEmpty())
+			{
+				Line += TEXT("   - not yet: ") + S.Blocked;
+			}
+			else if (S.DueInSeconds > 2.0)
+			{
+				Line += FString::Printf(TEXT("   (in about %.0f s)"), S.DueInSeconds);
+			}
+			DrawText((I == 0 ? TEXT("> ") : TEXT("  ")) + Line, I == 0 ? Green : Soft, 20.0f, Y, Font);
+			Y += 20.0f;
+			if (I == 0 && !S.Rule.IsEmpty())
+			{
+				DrawText(TEXT("   because: ") + S.Rule, FLinearColor(0.6f, 0.8f, 0.6f, 0.75f), 20.0f, Y, Font);
 				Y += 18.0f;
 			}
 		}
@@ -872,7 +919,19 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 		float Y = FMath::Max(Canvas->ClipY * 0.25f, GuideBottom + 20.0f);  // below a lesson's card
 		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X - 10.0f, Y - 10.0f, 860.0f, 230.0f);
 		const USimWorldSubsystem* MenuSim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-		const FString LessonLine = MenuSim != nullptr && MenuSim->HasTutorial() ? MenuSim->GetTutorialStep().Order : FString();
+		FString LessonLine = MenuSim != nullptr && MenuSim->HasTutorial() ? MenuSim->GetTutorialStep().Order : FString();
+		if (LessonLine.IsEmpty() && Vehicle->IsAssistOn())  // the helper's order or report, outside a lesson
+		{
+			const FSimSeatHelp Help = Vehicle->GetHelp();
+			for (int32 I = 0; Help.bShown && I < Help.Steps.Num() && LessonLine.IsEmpty(); ++I)
+			{
+				const FSimHelpStep& S = Help.Steps[I];
+				if ((S.Kind == TEXT("order") || S.Kind == TEXT("report")) && S.Blocked.IsEmpty())
+				{
+					LessonLine = S.Callout;
+				}
+			}
+		}
 		const bool bOrders = MenuSim != nullptr && Vehicle->GetStationId() == MenuSim->GetCommanderStation();
 		DrawText(FString::Printf(TEXT("%s (page %d/%d: 0 next, Esc close)"), bOrders ? TEXT("Orders") : TEXT("Reports"),
 					 Page + 1, Pages),

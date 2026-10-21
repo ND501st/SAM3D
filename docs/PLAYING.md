@@ -21,8 +21,8 @@ F11 the immersive view): use the standalone game for the full set of views.
 
 ## The missions menu
 
-Up/Down a mission, Left/Right where to start (a seat of the crew, the commander's seat, or outside), Enter to play, Q to
-quit. The groups:
+Up/Down a mission, Left/Right where to start (a seat of the crew, the commander's seat, or outside), H the helper (Off,
+Hints, On: below), Enter to play, Q to quit. The groups:
 
 | Group | What it is |
 |---|---|
@@ -32,6 +32,15 @@ quit. The groups:
 | Ranges and history | Range days and the Osa's battles. |
 | Air war | Raids planned by the enemy air command (and the campaign screen). |
 | Test range | The Kesmark map with a raid at the bridges. |
+
+## The helper
+
+Turn it on in the missions menu (H; kept for every mission) or in a mission (H, also in the pause menu). It shows the move
+the crewman in your seat would make now, the way a lesson shows its step but without the lesson's card: the control
+pulses green, the crew menu's line is green for an order or report, at the post the target's number is starred, and a
+line at the top says what and why. *On* shows it at once, *Hints* once you hesitate longer than your seat's crewman
+would, *Watch the crewman* (H in the cabin) what the NPC at a seat you haven't taken does next. N lets it make the move
+for you. In command it is the NPC commander thinking in your place: his next order. `docs/crew/13_HELPER.md`.
 
 ## The lessons
 
@@ -139,7 +148,8 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | X | Get up and walk in the cabin (W A S D, the mouse looks round, any control in arm's reach works); X by a seat sits you down in it, T then takes it over |
 | T | Take this seat, or give it back |
 | O | Orders (at the commander's seat) or reports (any other); 1-9 pick, 0 next page, Esc close |
-| H | Training overlay: guided, hint, demonstrate, off |
+| H | The helper: off, hints, on, watch the crewman (kept for the next missions) |
+| N | The helper makes its move for you (outside a lesson) |
 | J | Your headset on or off |
 | K / Shift+K | Turn your intercom box (ВС, РСТ-1..4; the Osa's А-1: off, intercom, radio) |
 | Y | Answer a ringing line or telephone; again: put it down |

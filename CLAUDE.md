@@ -66,6 +66,8 @@ python tools/button_map.py                        # flow chart of every control 
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
 python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json from the PU-12M interior's trace (after build_pu12m_interior.py)
 ./simcore/build/crew_balance data 10              # every crew scenario at every skill tier over 10 seeds (docs/crew/11_*)
+./simcore/build/helper_coverage data docs/crew/generated/helper_coverage.md   # every mission from every seat following the helper vs the NPC crew
+./simcore/build/helper_coverage data - 900 osa_crew_practice:operator --trace --debrief   # one seat: every move, refusal and duty
 ./simcore/build/crew_pose_dump data out/crew_poses.json [pu12m]   # the crew's bodies posed; draw them: tools/blender/render_crew_poses.py
 blender --background --python tools/blender/pu12m_interior_check.py -- --poses out/crew_poses_pu12m.json   # PU-12M interior: what intersects
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
@@ -180,5 +182,12 @@ Voices (`docs/crew/12_COMMUNICATIONS.md`): inside a vehicle a seat hears the int
 through its headset and its box's selector (`simcore/voice_comms.hpp`); a net only while its set is on, warm, on the net's
 numbered frequency and not jammed out (`simcore/radio_nets.hpp`). Route new speech through the callout bus's router, never
 straight to every seat.
+
+The helper (`docs/crew/13_HELPER.md`, `simcore/helper.hpp`; the missions menu's Helper, H in the cabin): it shows the
+move the player's seat's NPC would make now, so it has no rules of its own. **Every NPC act at a seat goes through
+`ScenarioRunner::NpcDoes(seat, SeatDuty)`, never a bare `NpcAt(seat)` check before the act** (`NpcAt` only chooses who
+speaks and how fast); a direct act inside the NPC commander's think checks `!shadow_` (the shadow commander thinks in a
+player commander's place and must change nothing). After changing the crew's behaviour, the consoles or the missions,
+run `helper_coverage` and read its Gaps; `test_helper.cpp` counts the `NpcAt(` uses to make you look.
 
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

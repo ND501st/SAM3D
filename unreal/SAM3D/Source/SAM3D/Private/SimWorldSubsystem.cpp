@@ -10,6 +10,7 @@
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 #include "SimCrewSeatComponent.h"
@@ -366,6 +367,7 @@ FString USimWorldSubsystem::ResolveDataDirectory() const
 
 void USimWorldSubsystem::ClearScenario()
 {
+	HelpMemoState = simcore::HelpMemo();
 	Tutorial.Reset();
 	TutorialUiState = simcore::TutorialUi();
 	Runner = nullptr;
@@ -427,6 +429,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	DebriefEntriesSent = 0;
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
 		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
+	ApplyHelperLevel();
 	LoadCrewPresentation(DataDir);
 	BroadcastNewDebriefEntries();
 	return true;
@@ -1228,8 +1231,175 @@ bool USimWorldSubsystem::SetAssistLevel(const FString& Level)
 	{
 		return false;
 	}
-	Runner->SetAssistLevel(L);
+	if (Link)  // both vehicles: the player may move to the other
+	{
+		SetRunnerHelper(Link->Osa(), L);
+		SetRunnerHelper(Link->Post(), L);
+	}
+	else
+	{
+		SetRunnerHelper(*Runner, L);
+	}
 	return true;
+}
+
+void USimWorldSubsystem::SetRunnerHelper(simcore::ScenarioRunner& R, simcore::AssistLevel Level)
+{
+	R.SetAssistLevel(Level);
+	R.SetHelper(Level == simcore::AssistLevel::Guided || Level == simcore::AssistLevel::Hint);
+}
+
+void USimWorldSubsystem::ApplyHelperLevel()
+{
+	const FString Wanted = HasUrlOption(TEXT("SimHelper")) ? GetLaunchOption(TEXT("SimHelper")) : GetHelperPreference();
+	simcore::AssistLevel L = simcore::AssistLevel::Unassisted;
+	if (!simcore::ParseAssistLevel(ToStd(Wanted), L) || L == simcore::AssistLevel::Exam)
+	{
+		L = simcore::AssistLevel::Unassisted;
+	}
+	auto Apply = [L](simcore::ScenarioRunner& R)
+	{
+		if (R.GetAssistLevel() != simcore::AssistLevel::Exam)  // an exam is unassisted, whatever the menu says
+		{
+			SetRunnerHelper(R, L);
+		}
+	};
+	if (Link)
+	{
+		Apply(Link->Osa());
+		Apply(Link->Post());
+	}
+	else if (Runner)
+	{
+		Apply(*Runner);
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Helper: %s"), *HelperLevelLabel(GetAssistLevel()));
+}
+
+namespace
+{
+	const TCHAR* const HelperSection = TEXT("SAM3D.Helper");
+}
+
+FString USimWorldSubsystem::GetHelperPreference()
+{
+	FString Level;
+	if (GConfig == nullptr || !GConfig->GetString(HelperSection, TEXT("Level"), Level, GGameUserSettingsIni))
+	{
+		return TEXT("unassisted");
+	}
+	simcore::AssistLevel L;
+	return simcore::ParseAssistLevel(ToStd(Level), L) && L != simcore::AssistLevel::Exam ? Level : FString(TEXT("unassisted"));
+}
+
+void USimWorldSubsystem::SetHelperPreference(const FString& Level)
+{
+	simcore::AssistLevel L;
+	if (GConfig == nullptr || !simcore::ParseAssistLevel(ToStd(Level), L) || L == simcore::AssistLevel::Exam)
+	{
+		return;
+	}
+	GConfig->SetString(HelperSection, TEXT("Level"), *Level, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
+FString USimWorldSubsystem::NextHelperLevel(const FString& Level)
+{
+	if (Level == TEXT("unassisted"))
+	{
+		return TEXT("hint");
+	}
+	if (Level == TEXT("hint"))
+	{
+		return TEXT("guided");
+	}
+	return TEXT("unassisted");
+}
+
+FString USimWorldSubsystem::HelperLevelLabel(const FString& Level)
+{
+	if (Level == TEXT("guided"))
+	{
+		return TEXT("On (the next move shown at once)");
+	}
+	if (Level == TEXT("hint"))
+	{
+		return TEXT("Hints (shown when you hesitate)");
+	}
+	if (Level == TEXT("demonstrate"))
+	{
+		return TEXT("Watch the crewman");
+	}
+	if (Level == TEXT("exam"))
+	{
+		return TEXT("Off (an exam)");
+	}
+	return TEXT("Off");
+}
+
+FString USimWorldSubsystem::HelperLevelShort(const FString& Level)
+{
+	return Level == TEXT("guided") ? FString(TEXT("On")) : Level == TEXT("hint") ? FString(TEXT("Hints")) : Level == TEXT("demonstrate") ? FString(TEXT("Watch")) : FString(TEXT("Off"));
+}
+
+FSimSeatHelp USimWorldSubsystem::GetHelp(const FString& Station) const
+{
+	FSimSeatHelp Out;
+	if (!Runner)
+	{
+		return Out;
+	}
+	const simcore::SeatHelp H = simcore::HelpFor(*Runner, ToStd(Station), &HelpMemoState);
+	Out.Level = ToF(simcore::ToString(H.level));
+	Out.bShown = H.shown;
+	Out.bHesitating = H.hesitating;
+	for (const simcore::HelpStep& S : H.steps)
+	{
+		FSimHelpStep& O = Out.Steps.AddDefaulted_GetRef();
+		O.Kind = ToF(simcore::ToString(S.kind));
+		O.Source = ToF(S.source);
+		O.Rule = ToF(S.rule);
+		O.Text = ToF(S.text);
+		O.Control = ToF(S.control);
+		O.ControlLabel = ToF(S.control_label);
+		O.Position = S.position;
+		O.PositionLabel = ToF(S.position_label);
+		O.Target = S.target;
+		O.Value = S.value;
+		O.bOnMark = S.on_mark;
+		O.Callout = ToF(S.callout);
+		O.WordsRu = ToF(S.words_ru);
+		O.WordsEn = ToF(S.words_en);
+		O.Number = S.number;
+		O.Callsign = ToF(S.callsign);
+		O.WaitingFor = ToF(S.waiting_for);
+		O.Blocked = ToF(S.blocked);
+		O.DueInSeconds = S.due_in_s;
+	}
+	return Out;
+}
+
+bool USimWorldSubsystem::DoHelpMove(const FString& Station, FString& OutWhy)
+{
+	if (!Runner || IsMirrorOnly())
+	{
+		OutWhy = TEXT("no scenario");
+		return false;
+	}
+	for (const simcore::HelpStep& S : simcore::HelpMoves(*Runner, ToStd(Station)))
+	{
+		if (S.kind == simcore::HelpStep::Kind::Wait || S.kind == simcore::HelpStep::Kind::Halt || !S.blocked.empty())
+		{
+			continue;  // a wait has nothing to do; the halt is the driver's brake (his keys)
+		}
+		std::string Why;
+		const bool bDone = simcore::HelpDo(*Runner, S, &Why);
+		OutWhy = bDone ? ToF(S.text) : ToF(S.text + ": " + Why);
+		BroadcastNewDebriefEntries();
+		return bDone;
+	}
+	OutWhy = TEXT("nothing to do now");
+	return false;
 }
 
 FString USimWorldSubsystem::GetAssistLevel() const

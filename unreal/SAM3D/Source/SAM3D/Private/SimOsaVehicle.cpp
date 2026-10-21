@@ -220,7 +220,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			HandlePost(Pc);
 		}
 	}
-	// A lesson's highlight wins over the training overlay's (it is set after HandleCrew's).
+	// A lesson's highlight wins over the helper's (it is set after HandleCrew's).
 	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(Pc, Sim, DeltaSeconds) : FString();
 	// The body at the camera's seat isn't drawn (first person); the ghost hand shows the advised move.
 	// Walking, his own body is the one he walks in: the seat he holds is empty (another's seat keeps its crewman).
@@ -229,9 +229,55 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	// Nothing of a crewmate inside his head: a hand's breadth seated, more on his feet among them.
 	const bool bStanding = bInCabin && !bViewOverride && StandStation == Station;
 	CrewBodies->SetClearAround(CabinCamera->GetComponentLocation(), !bInCabin || bViewOverride ? 0.0f : (bStanding ? 60.0f : (bWalking ? 35.0f : 22.0f)));
-	// In a lesson only the lesson's hand (the drill master's advice could point elsewhere).
+	// In a lesson only the lesson's hand (the helper could point elsewhere). The helper's hand is the last of its hints:
+	// once the player has waited longer than his seat's NPC would, or when watching the crewman.
 	const bool bLesson = Sim != nullptr && Sim->HasTutorial();
-	CrewBodies->SetGhostHand(StationId, bLesson ? LessonHand : (bAssist && Advice.bValid ? Advice.Control : FString()));
+	const FSimHelpStep* Top = bLesson ? nullptr : HelpTop();
+	const bool bHand = Top != nullptr && (Top->Kind == TEXT("control") || Top->Kind == TEXT("wheel")) &&
+					   (Help.bHesitating || Help.Level == TEXT("demonstrate"));
+	CrewBodies->SetGhostHand(StationId, bLesson ? LessonHand : (bHand ? Top->Control : FString()));
+}
+
+const FSimHelpStep* ASimOsaVehicle::HelpTop() const
+{
+	return bAssist && Help.bShown && Help.Steps.Num() > 0 ? &Help.Steps[0] : nullptr;
+}
+
+void ASimOsaVehicle::CycleHelper(bool bWithWatch)
+{
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr || Sim->GetAssistLevel() == TEXT("exam"))
+	{
+		return;
+	}
+	const FString Now = Sim->GetAssistLevel();
+	FString Next = USimWorldSubsystem::NextHelperLevel(Now);
+	if (bWithWatch && Now == TEXT("guided"))
+	{
+		Next = TEXT("demonstrate");  // in the cabin the round goes on to watching the seat's NPC at work
+	}
+	Sim->SetAssistLevel(Next);
+	USimWorldSubsystem::SetHelperPreference(Next);
+	AssistLevel = Next;
+	bAssist = Next != TEXT("unassisted");
+	AssistClock = 0.0f;
+	if (!bAssist)
+	{
+		Cabin->SetAdvisedControl(FString());
+		Help = FSimSeatHelp();
+	}
+}
+
+int32 ASimOsaVehicle::GetHelpTargetNumber() const
+{
+	const FSimHelpStep* Top = HelpTop();
+	return Top != nullptr && (Top->Kind == TEXT("designate") || Top->Kind == TEXT("plot")) ? Top->Number : INDEX_NONE;
+}
+
+FString ASimOsaVehicle::GetHelpCallsign() const
+{
+	const FSimHelpStep* Top = HelpTop();
+	return Top != nullptr && Top->Kind == TEXT("designate") ? Top->Callsign : FString();
 }
 
 // ---------------------------------------------------------------------------------------------- lessons
@@ -567,41 +613,33 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		}
 		bHoldingSeat = !Sim->GetCrewSeatHolder(StationId).IsEmpty();
 	}
-	// H: the training overlay's level, round and round: guided, hint, demonstrate, off (docs/crew/08 section 2). An
-	// exam scenario keeps it off. The task: К бою until ready, then the capture, then the launch.
+	// H: the helper's level, round and round: off, hints, on, watch the crewman (docs/crew/13_HELPER.md). An exam
+	// scenario keeps it off. The choice is kept for the next missions (the missions menu shows it).
 	if (Pc->WasInputKeyJustPressed(EKeys::H) && Sim->GetAssistLevel() != TEXT("exam"))
 	{
-		static const TCHAR* Levels[] = {TEXT("guided"), TEXT("hint"), TEXT("demonstrate"), TEXT("unassisted")};
-		int32 Next = 0;
-		if (bAssist)
-		{
-			for (int32 I = 0; I < 4; ++I)
-			{
-				if (AssistLevel == Levels[I])
-				{
-					Next = (I + 1) % 4;
-				}
-			}
-		}
-		AssistLevel = Levels[Next];
-		Sim->SetAssistLevel(AssistLevel);
-		bAssist = AssistLevel != TEXT("unassisted");
+		CycleHelper(true);
+		FeedbackText = TEXT("Helper: ") + USimWorldSubsystem::HelperLevelLabel(AssistLevel);
+		FeedbackSecondsLeft = 2.5f;
+	}
+	// N (outside a lesson, where N is the lesson's): the helper makes its move for you, as the player's hand would.
+	if (bAssist && !Sim->HasTutorial() && bHoldingSeat && Pc->WasInputKeyJustPressed(EKeys::N))
+	{
+		FString Why;
+		Sim->DoHelpMove(StationId, Why);
+		FeedbackText = TEXT("Helper: ") + Why;
+		FeedbackSecondsLeft = 2.5f;
 		AssistClock = 0.0f;
-		if (!bAssist)
-		{
-			Cabin->SetAdvisedControl(FString());
-			Advice = FSimDrillAdvice();
-		}
 	}
 	if (bAssist)
 	{
 		AssistClock -= DeltaSeconds;
 		if (AssistClock <= 0.0f)
 		{
-			AssistClock = 1.0f;
-			Advice = Sim->GetAssistance(StationId);
-			AssistTask = Advice.Task;
-			Cabin->SetAdvisedControl(Advice.bValid ? Advice.Control : FString());
+			AssistClock = 0.5f;
+			Help = Sim->GetHelp(StationId);
+			// The move's control pulses in the cabin, a waiting one too (the player finds it ahead), as a lesson's does.
+			const FSimHelpStep* Top = HelpTop();
+			Cabin->SetAdvisedControl(Top != nullptr ? Top->Control : FString());
 		}
 	}
 	LastVerdict = Sim->GetLastMoveVerdict(StationId);
@@ -809,6 +847,11 @@ void ASimOsaVehicle::ConfigureForScenario(USimWorldSubsystem* Sim)
 		FeedbackSecondsLeft = 3.0f;
 	}
 	ConfiguredFor = Now;
+	// The helper's level the scenario started with (the missions menu's choice, kept between missions).
+	AssistLevel = Sim->GetAssistLevel();
+	bAssist = AssistLevel == TEXT("guided") || AssistLevel == TEXT("hint") || AssistLevel == TEXT("demonstrate");
+	AssistClock = 0.0f;
+	Help = FSimSeatHelp();
 	bIsPost = Sim->IsCommandPost();
 	if (!bIsPost)
 	{
@@ -1110,6 +1153,11 @@ void ASimOsaVehicle::HandleMissionMenu(APlayerController* Pc)
 	{
 		FGenericPlatformMisc::RequestExit(false);
 		return;
+	}
+	// H: the helper off, hints, on (kept for the next missions).
+	if (Pc->WasInputKeyJustPressed(EKeys::H))
+	{
+		CycleHelper(false);
 	}
 	if (!CanLeaveMission())
 	{

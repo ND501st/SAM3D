@@ -55,6 +55,7 @@
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/scenario.hpp"
+#include "simcore/seat_duty.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/voice_comms.hpp"
 #include "simcore/world.hpp"
@@ -220,7 +221,10 @@ public:
             c.Update(dt, console_.panel, &console_.equipment);
         }
         player_.Update(dt);
-        for (Seat& st : seats_) st.tracker.Update(dt);  // a seat's min_wait_s counts as the single player's does
+        for (Seat& st : seats_) {
+            st.tracker.Update(dt);  // a seat's min_wait_s counts as the single player's does
+            PassSeatChecks(st);
+        }
         for (WheelWatch& w : wheels_) {  // who is turning a hand wheel (the bodies, roadmap 8.10)
             const double v = console_.panel.GetValue(w.id);
             if (std::fabs(v - w.value) > 1e-9) w.moved_s = time_;
@@ -238,6 +242,7 @@ public:
         UpdateStress();
         UpdateNpcCommander();
         UpdateOwnReports();
+        UpdateOwedDuties();
         if (drop_at_s_ >= 0.0 && time_ >= drop_at_s_ && engagement_on_) {
             drop_at_s_ = -1.0;
             if (engagement_.DropTrack(time_, log_, "Цель сбросить")) assigned_target_.clear();
@@ -362,6 +367,15 @@ public:
     // box off, or the member's own box on the radio, it is shouted over the cabin noise and arrives after a delay
     // (roadmap 7.8). The same path serves the scenario's triggers and the player's order menu.
     void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
+        if (shadow_) {  // the shadow commander: a drill he would hand out, given by the player as an order (ShadowDrillOrders)
+            ShadowDrill d{crew.Role(), procedure.id, std::string(), -1};
+            if (procedure.steps.size() == 1) {  // one switch, no drill of its own (the readiness loop's loose orders)
+                d.control = procedure.steps.front().control_id;
+                d.position = procedure.steps.front().value;
+            }
+            shadow_drills_.push_back(d);
+            return;
+        }
         SayOrder(crew.Role(), procedure.id);
         const double delay = OrderDelayS(crew.Role());
         if (delay <= 0.0) {
@@ -566,6 +580,7 @@ public:
         if (!def_.has_crew_data) return false;
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
+        if (shadow_) return ShadowOrder(order_id);  // the shadow commander only thinks it: the player's to give
         // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
         if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
             order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment") {
@@ -755,6 +770,58 @@ public:
         }
         return nullptr;
     }
+
+    // ---- The helper (docs/crew/13_HELPER.md, simcore/helper.hpp): what the NPC at a seat a player holds would do now.
+    // Every NPC act at a seat goes through NpcDoes: an NPC there does it; a player there owes it (a SeatDuty, kept until
+    // he does it, it stops being due, or the moment passes). With the helper on, two more things are worked out for the
+    // players' seats: where each hand wheel's NPC would bring it (the engagement's aim), and, when a player holds the
+    // commanding seat, the NPC commander thinks in his place (the shadow commander: his orders become the player's
+    // duties, and nothing he thinks reaches the crew or the world).
+    void SetHelper(bool on) {
+        helper_ = on;
+        UpdateAimCrew();
+    }
+    bool HelperOn() const { return helper_; }
+    // The shadow commander is thinking for the player in the commanding seat: where an NPC would command but for him (in a
+    // scripted drill the scenario gives the orders, and he has none to give).
+    bool ShadowCommanding() const { return helper_ && def_.has_crew_data && def_.npc_commander && drill_ && !SeatHolder(Cmdr()).empty(); }
+    // The duties a seat owes now, oldest first.
+    std::vector<SeatDuty> OwedDuties(const std::string& seat) const {
+        std::vector<SeatDuty> out;
+        for (const SeatDuty& d : owed_) {
+            if (d.seat == seat) out.push_back(d);
+        }
+        return out;
+    }
+    const std::vector<SeatDuty>& AllOwedDuties() const { return owed_; }
+    // Drills the shadow commander would have handed a seat that no order of the crew data starts ("seat: drill" -> when
+    // last): the player in command has no way to give them (the coverage map lists them: a missing order in the data).
+    const std::map<std::string, double>& ShadowUnorderable() const { return shadow_unorderable_; }
+    // Where the seat's NPC would bring a hand wheel now (with the helper on): the engagement's aim at the target the crew
+    // is on. False when it would leave it where it is.
+    bool WheelWant(const std::string& wheel, double& value) const { return engagement_on_ && engagement_.WheelWanted(wheel, value); }
+    // The next step of a drill a seat owes (SeatDuty::Kind::Drill): the first whose switch isn't where the step puts it,
+    // or whose button that seat hasn't pressed since `since_s`. Null: all done.
+    const ProcedureStep* DrillNextStep(const std::string& procedure, const std::string& seat, double since_s) const {
+        const Procedure* p = console_.FindProcedure(procedure);
+        if (p == nullptr) return nullptr;
+        for (const ProcedureStep& st : p->steps) {
+            const ControlDef* c = console_.panel.Find(st.control_id);
+            if (c == nullptr || c->kind != ControlKind::Momentary) {
+                if (console_.panel.Get(st.control_id) != st.value) return &st;
+                continue;
+            }
+            bool pressed = false;
+            for (auto it = seat_actions_.rbegin(); it != seat_actions_.rend() && it->time_s + 1e-9 >= since_s; ++it) {
+                pressed = pressed || (it->station == seat && it->control == st.control_id && it->moved && it->position == st.value);
+            }
+            if (!pressed) return &st;
+        }
+        return nullptr;
+    }
+    // How long the player at a seat has done nothing, and the NPC's patience there (the hint level's wait).
+    double SeatHesitation(const std::string& station) const { return Hesitation(station); }
+    double SeatPatience(const std::string& station) const { return PatienceAt(station); }
 
     // The player's order from the menu: carried out if CheckOrder allows it; otherwise the seat it is for answers
     // "Не могу: <reason>" and nothing starts. False if refused.
@@ -1068,6 +1135,7 @@ private:
     }
 
     void Event(const std::string& what, const std::string& detail) {
+        if (shadow_) return;  // the shadow commander's thoughts are not events
         log_.Record({time_, DebriefEntry::Kind::Scenario, std::string(), what, detail});
     }
 
@@ -1829,6 +1897,11 @@ private:
         CrewMember* c = MemberAt(attendant);
         if (pr == nullptr || c == nullptr) return;
         if (!NpcAt(attendant)) {
+            if (voice_ && voice_->HearsSet(attendant, s->id)) {  // he heard it himself: his drill, unasked (the helper)
+                SeatDuty d = SeatDuty::Drill(attendant, pid, "his net ordered to its other frequency: retune the set");
+                d.keep_s = 120.0;
+                NpcDoes(attendant, d);
+            }
             if (attendant == Cmdr() || !NpcAt(Cmdr()) || !voice_ || voice_->HearsSet(attendant, s->id)) return;
             if (!voice_->HearsSet(Cmdr(), s->id)) return;
             GiveOrder(*c, *pr, true);  // «Р-111 на запасную!»: his words, the player's hand
@@ -1884,7 +1957,9 @@ private:
             if (pr == nullptr) continue;
             const std::string seat = std::string(pid).substr(8) == "commander" ? Cmdr() : std::string("radio_operator");
             CrewMember* c = MemberAt(seat);
-            if (c != nullptr && NpcAt(seat)) GiveOrder(*c, *pr, true);
+            if (c != nullptr && NpcDoes(seat, SeatDuty::Drill(seat, pr->id, on ? "radio silence ordered" : "radio silence lifted"))) {
+                GiveOrder(*c, *pr, true);
+            }
         }
     }
     // An NPC who heard a group of a talk table reads it against his table and tells the commander what it means.
@@ -1928,6 +2003,14 @@ private:
                 if (who.empty() && NpcAt(s)) who = s;
             }
             if (!who.empty() && who != Cmdr()) Say("net_jammed", who, {{"net", n.name_ru}, {"net_en", n.name_en}});
+            if (who.empty()) {  // no NPC heard it: a player who did reports it himself
+                for (const std::string& s : ears) {
+                    if (s == Cmdr()) continue;
+                    SeatDuty d = SeatDuty::Report(s, "net_jammed", "jamming recognised on a net", {{"net", n.name_ru}, {"net_en", n.name_en}});
+                    d.keep_s = 60.0;
+                    NpcDoes(s, d);
+                }
+            }
             log_.Record({time_, DebriefEntry::Kind::Scenario, who.empty() ? std::string("post") : SpeakerName(who), n.name_en,
                          j >= 2 ? "strong jamming recognised, logged and reported" : "jamming recognised, logged and reported"});
             if (n.main == "self") jam_order_due_s_[n.id] = time_ + Tuning().order_spare_s;
@@ -1939,7 +2022,7 @@ private:
             }
             const std::string net = it->first;
             it = jam_order_due_s_.erase(it);
-            if (net == "battery" && NpcAt(Cmdr()) && nets_->Jam(net, time_) > 0) OrderBatteryNetSpare("Battery commander");
+            if (net == "battery" && nets_->Jam(net, time_) > 0 && NpcDoes(Cmdr(), BatterySpareDuty())) OrderBatteryNetSpare("Battery commander");
         }
     }
 
@@ -2056,7 +2139,8 @@ private:
             }
             if (st.ringing) {
                 // Answered: the commander's lever up with his headset on (an NPC commander raises it himself).
-                if (voice_ && NpcAt(Cmdr()) && time_ - st.ring_from_s >= Tuning().answer_line_s && !voice_->LineUp(Cmdr(), l.line)) {
+                if (voice_ && (!NpcAt(Cmdr()) || time_ - st.ring_from_s >= Tuning().answer_line_s) && !voice_->LineUp(Cmdr(), l.line) &&
+                    NpcDoes(Cmdr(), SeatDuty::Answer(Cmdr(), l.line, "a line rings"))) {
                     const VoiceBoxDef* b = voice_->BoxOf(Cmdr());
                     if (b != nullptr && static_cast<std::size_t>(l.line) <= b->lines.size()) {
                         console_.panel.Set(b->lines[static_cast<std::size_t>(l.line - 1)], 1);
@@ -2108,8 +2192,14 @@ private:
             inside = inside || (m.position - def_.unit_position).HorizontalLength() <= Tuning().warn_covered_m;
         }
         if (inside && covered_due_s_ < 0.0) covered_due_s_ = time_;
-        if (inside && covered_warned_s_ < 0.0 && NpcAt(Cmdr()) && time_ - covered_due_s_ >= 5.0) WarnCovered(Cmdr(), true);
-        if (!inside && covered_warned_s_ >= 0.0 && covered_due_s_ >= 0.0 && NpcAt(Cmdr())) WarnCovered(Cmdr(), false);
+        if (inside && covered_warned_s_ < 0.0 && time_ - covered_due_s_ >= 5.0 &&
+            NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_warn_covered", "a raid within reach of the covered troops"))) {
+            WarnCovered(Cmdr(), true);
+        }
+        if (!inside && covered_warned_s_ >= 0.0 && covered_due_s_ >= 0.0 &&
+            NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_all_clear_covered", "the raid has gone: the all clear"))) {
+            WarnCovered(Cmdr(), false);
+        }
     }
     // The warning (or the all clear) goes out on FuG-2 from whoever can talk on it: the squad leader (his box on РСТ-2),
     // else the commander himself.
@@ -2173,12 +2263,12 @@ private:
     }
     // The NPC commander reports once the post's communications are ready and every launcher has reported ready.
     void UpdateRegimentReport() {
-        if (regiment_reported_ || !post_ || !NpcAt(Cmdr()) || def_.radio_data.Find("regiment") == nullptr) return;
+        if (regiment_reported_ || !post_ || def_.radio_data.Find("regiment") == nullptr) return;
         if (!console_.equipment.IsReady("comms_ready") || status_boards_.empty()) return;
         for (const LauncherStatus& l : status_boards_) {
             if (l.state != LauncherStatus::State::Ready) return;
         }
-        ReportToRegiment();
+        if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_report_regiment", "communications and every launcher ready"))) ReportToRegiment();
     }
 
 public:
@@ -2249,7 +2339,16 @@ private:
             for (const std::string& s : NetHearers("air_picture")) {
                 if (reader.empty() && NpcAt(s) && s != console_.post_plotter) reader = s;
             }
-            if (!reader.empty()) ReadOut(reader, r);
+            if (!reader.empty()) {
+                ReadOut(reader, r);
+                continue;
+            }
+            for (const std::string& s : NetHearers("air_picture")) {  // a player who hears the net reads it out himself
+                if (s == console_.post_plotter) continue;
+                SeatDuty d = SeatDuty::Report(s, "air_report", "an air report heard: read it out to the plotter");
+                d.number = r.number;
+                NpcDoes(s, d);
+            }
         }
     }
 
@@ -2270,7 +2369,7 @@ private:
     // The commander reads a designation back on the net (rrs_1986: a command acknowledged at once by its repetition):
     // only on a set that can transmit (not Д. ПРИЁМ). The post hears it through the link.
     void OsaReadBack(const C2Network::Event& e) {
-        if (!callouts_ || !NpcAt(Cmdr())) return;
+        if (!callouts_ || !NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "readback", "a target given on the battery net: read it back"))) return;
         if (comms_ && c2_) {
             const int set = c2_->ListeningSet();
             if (!comms_->Transmitting(set, console_)) {
@@ -2296,9 +2395,13 @@ private:
         static const char* const seats[3][2] = {{"deputy_commander", "Первый"}, {"senior_operator", "Второй"}, {"operator", "Третий"}};
         for (const auto& s : seats) {
             const std::string st = s[0];
-            if (intercom_checked_.count(st) != 0 || !NpcAt(st) || !voice_->HearsIntercom(st)) continue;
+            if (intercom_checked_.count(st) != 0 || !voice_->HearsIntercom(st)) continue;
             const CrewMember* c = MemberAtConst(st);
             if (c == nullptr || (c->Status() == CrewStatus::Idle && !power)) continue;
+            if (!NpcDoes(st, SeatDuty::Report(st, "seat_ready", "К бою: the intercom checked",
+                                              {{"seat_number", s[1]}, {"seat_number_en", std::to_string(&s - seats + 1)}}))) {
+                continue;
+            }
             intercom_checked_.insert(st);
             Say("seat_ready", st, {{"seat_number", s[1]}, {"seat_number_en", std::to_string(&s - seats + 1)}});
         }
@@ -2509,6 +2612,12 @@ private:
         in.tube_free = commander != nullptr && (!SeatHolder(Cmdr()).empty() || !commander->IsBusy());
         in.tube_speed = SeatSpeed(Cmdr());
         post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        if (!SeatHolder(console_.post_plotter).empty()) {  // the NPC plotter writes each report he hears; a player owes them
+            for (const CommandPost::AirReport& h : post_->Heard()) {
+                NpcDoes(console_.post_plotter, SeatDuty::Plot(console_.post_plotter, h.number, h.contact.target_id,
+                                                              "a report heard: write it on the board"));
+            }
+        }
         // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person).
         for (const CommandPost::Spoken& s : post_->TakeSpoken()) {
             if (s.heard) Radio("air picture", "Regiment", s.report.text);
@@ -2963,6 +3072,22 @@ private:
     };
     AssistLevel assist_level_ = AssistLevel::Guided;
     std::vector<MoveVerdict> verdicts_;
+    // The steps of a player's drill whose switches already sit where they put them are checks, passed once their wait
+    // is over, as an NPC's are (a light already on from the drill before); a drill so finished is done and the next one
+    // ordered is due. Without it the drill would wait for a move the player has nothing to make.
+    void PassSeatChecks(Seat& st) {
+        for (int guard = 0; guard < 8; ++guard) {
+            if (st.tracker.GetProcedure().id.empty() || st.tracker.IsComplete()) return;
+            st.tracker.PassChecks(console_.panel, &console_.equipment);
+            if (!st.tracker.IsComplete()) return;
+            log_.Record({time_, DebriefEntry::Kind::Completed, st.player, st.tracker.GetProcedure().id, std::string()});
+            if (st.queued.empty()) return;
+            const Procedure* next = console_.FindProcedure(st.queued.front());
+            st.queued.erase(st.queued.begin());
+            if (next == nullptr) return;
+            st.tracker.Reset(*next);
+        }
+    }
     // How long the player at a seat has done nothing (since he took it, or since his last move).
     double Hesitation(const std::string& station) const {
         for (const Seat& s : seats_) {
@@ -3007,6 +3132,188 @@ private:
                                " (" + cost + " s later)");
         }
         verdicts_.push_back(std::move(v));
+    }
+    // ---- The helper's duties (docs/crew/13_HELPER.md).
+    bool helper_ = false;
+    bool shadow_ = false;        // the NPC commander thinks in the player's place (ShadowCommanding): he acts on nothing
+    std::string shadow_target_;  // the target he would have the crew take
+    // A drill he would hand a seat in this think; a single switch (control, position) when it is no drill of the data.
+    struct ShadowDrill {
+        std::string seat;
+        std::string drill;
+        std::string control;
+        int position = -1;
+    };
+    std::vector<ShadowDrill> shadow_drills_;
+    std::map<std::string, double> shadow_unorderable_;  // "seat: drill" he would order that no order of the crew data starts
+    std::vector<SeatDuty> owed_;
+    // An order the player gave this lately counts, for the shadow commander, as the one he would give (he doesn't ask
+    // for it again).
+    static constexpr double kShadowRecallS = 60.0;
+
+    // The one way an NPC acts for a seat. True when the seat's NPC is there to do it. When a player holds the seat, or
+    // the commander thinks in the player's place, it is false and the act is the player's duty instead (the helper shows
+    // it). New NPC behaviour goes through here, not through NpcAt, so the helper knows of it without more code.
+    bool NpcDoes(const std::string& seat, SeatDuty d) {
+        if (!shadow_ && NpcAt(seat)) return true;
+        if (SeatHolder(seat).empty()) return false;
+        d.seat = seat;
+        Owe(std::move(d));
+        return false;
+    }
+    void Owe(SeatDuty d) {
+        const std::string key = d.Key();
+        for (SeatDuty& o : owed_) {
+            if (o.Key() != key) continue;
+            o.last_s = time_;
+            o.value = d.value;
+            o.fields = std::move(d.fields);
+            o.has_about = d.has_about;
+            o.about = d.about;
+            return;
+        }
+        d.since_s = time_;
+        d.last_s = time_;
+        owed_.push_back(std::move(d));
+    }
+    bool PlayerGave(const std::string& order, double within_s) const {
+        for (auto it = orders_given_.rbegin(); it != orders_given_.rend() && time_ - it->time_s <= within_s; ++it) {
+            if (it->order == order) return true;
+        }
+        return false;
+    }
+    // The shadow commander's order: one the player gave lately counts as given; else the player owes it.
+    bool ShadowOrder(const std::string& order_id) {
+        if (PlayerGave(order_id, kShadowRecallS)) return true;
+        if (def_.crew_data.FindOrder(order_id) != nullptr) {
+            SeatDuty d = SeatDuty::Order(Cmdr(), order_id, "the commander's next order", shadow_target_);
+            // The target's number from its designation, as his words would have it (SpeakOrder).
+            for (const C2Network::Event& e : designations_heard_) {
+                if (!shadow_target_.empty() && e.subject == shadow_target_ && e.number > 0) {
+                    char n[16];
+                    std::snprintf(n, sizeof(n), "%04d", e.number);
+                    d.fields["number"] = n;
+                }
+            }
+            NpcDoes(Cmdr(), d);
+        }
+        return false;
+    }
+    // Whether an order of the crew data starts this drill at its seat. A single switch the NPC commander orders on its
+    // own (the readiness loop's "order: <control>") is no drill of any order: it is left unorderable, not matched to an
+    // order whose drill happens to set it too (the TV camera's switch is in the EMCON engagement's drill: a different
+    // order altogether).
+    bool OrderStarts(const OrderDef& o, const ShadowDrill& d) const {
+        for (const OrderStart& st : o.procedures) {
+            if (st.station == d.seat && st.procedure == d.drill) return true;
+        }
+        return false;
+    }
+    // The drills the shadow commander would hand out in one think, as the orders of the crew data that start them: the
+    // order that starts the most of them first (К бою rather than each seat's drill), else the one with the fewest steps.
+    // A drill no order starts is left (ShadowUnorderable): a commander can't give it from his menu.
+    void ShadowDrillOrders() {
+        std::vector<ShadowDrill> left;
+        left.swap(shadow_drills_);
+        while (!left.empty()) {
+            const OrderDef* best = nullptr;
+            std::size_t best_n = 0;
+            std::size_t best_steps = 0;
+            for (const OrderDef& o : def_.crew_data.orders) {
+                std::size_t n = 0;
+                for (const ShadowDrill& sd : left) n += OrderStarts(o, sd) ? 1 : 0;
+                std::size_t steps = 0;
+                for (const OrderStart& st : o.procedures) {
+                    const Procedure* p = console_.FindProcedure(st.procedure);
+                    steps += p != nullptr ? p->steps.size() : 0;
+                }
+                if (n > best_n || (n > 0 && n == best_n && steps < best_steps)) {
+                    best = &o;
+                    best_n = n;
+                    best_steps = steps;
+                }
+            }
+            if (best == nullptr) {
+                for (const ShadowDrill& sd : left) {
+                    const ControlDef* c = sd.control.empty() ? nullptr : console_.panel.Find(sd.control);
+                    shadow_unorderable_[sd.seat + ": " + (c != nullptr ? ShortLabel(sd.control, sd.position) + " (" + sd.control + ")" : sd.drill)] = time_;
+                }
+                return;
+            }
+            if (!PlayerGave(best->callout, kShadowRecallS)) {
+                NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), best->callout, "the drills the crew needs next"));
+            }
+            for (std::size_t i = 0; i < left.size();) {
+                const bool covered = OrderStarts(*best, left[i]);
+                if (covered) {
+                    left.erase(left.begin() + static_cast<std::ptrdiff_t>(i));
+                } else {
+                    ++i;
+                }
+            }
+        }
+    }
+    // Each step: a duty is gone once the player has done it, it is no longer due (its lamp out, the order done already),
+    // the moment has passed (keep_s since the NPC last would have done it), or the player has left the seat.
+    void UpdateOwedDuties() {
+        for (std::size_t i = 0; i < owed_.size();) {
+            const SeatDuty& d = owed_[i];
+            const bool gone = SeatHolder(d.seat).empty() || time_ - d.last_s > d.keep_s ||
+                              (!d.holds_while.empty() && !console_.equipment.AllHold(d.holds_while, console_.panel)) || DutyDone(d);
+            if (gone) {
+                owed_.erase(owed_.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
+        }
+    }
+    // A report the player made settles the duty it answers: the one about the target it named, else the oldest.
+    void SettleOwedReport(const std::string& station, const std::string& callout, const std::string& target) {
+        auto match = [&](const SeatDuty& d, bool any) {
+            return d.kind == SeatDuty::Kind::Report && d.seat == station && d.id == callout && (any || d.target == target);
+        };
+        for (int pass = 0; pass < 2; ++pass) {
+            for (std::size_t i = 0; i < owed_.size(); ++i) {
+                if (!match(owed_[i], pass == 1)) continue;
+                owed_.erase(owed_.begin() + static_cast<std::ptrdiff_t>(i));
+                return;
+            }
+        }
+    }
+    bool DutyDone(const SeatDuty& d) const {
+        switch (d.kind) {
+            case SeatDuty::Kind::Report:
+                if (!d.target.empty()) return false;  // about one target: settled by the report that names it (SettleOwedReport)
+                for (auto it = reports_made_.rbegin(); it != reports_made_.rend() && it->time_s + 1e-9 >= d.since_s; ++it) {
+                    if (it->station == d.seat && it->callout == d.id) return true;
+                }
+                return false;
+            case SeatDuty::Kind::Order: {
+                for (auto it = orders_given_.rbegin(); it != orders_given_.rend() && it->time_s + 1e-9 >= d.since_s; ++it) {
+                    if (it->order == d.id) return true;
+                }
+                const OrderCheck c = CheckOrder(d.id);
+                return !c.can && c.reason_en == "done already";
+            }
+            case SeatDuty::Kind::Drill: return DrillNextStep(d.id, d.seat, d.since_s) == nullptr;
+            case SeatDuty::Kind::Control: return console_.panel.Get(d.id) == d.number;
+            case SeatDuty::Kind::Wheel: {
+                double diff = console_.panel.GetValue(d.id) - d.value;
+                if (d.wraps) diff = std::remainder(diff, 360.0);
+                return std::fabs(diff) <= d.tolerance;
+            }
+            case SeatDuty::Kind::Designate:
+                return DesignationPending(d.target) || (battery_fire_ && battery_fire_->Engaged(d.target)) || reported_kills_.count(d.target) != 0;
+            case SeatDuty::Kind::Plot:
+                if (!post_) return true;
+                for (const CommandPost::AirReport& h : post_->Heard()) {
+                    if (h.number == d.number) return false;
+                }
+                return true;
+            case SeatDuty::Kind::Answer: return !voice_ || voice_->LineUp(d.seat, d.number);
+            case SeatDuty::Kind::Halt: return console_.equipment.GetInput("vehicle_stopped");
+        }
+        return false;
     }
     std::vector<Seat> seats_;
     std::unique_ptr<Battery> battery_;
@@ -3120,6 +3427,13 @@ private:
                     aim_crew_.range_error_m = tier->range_error_m;
                 }
             }
+        }
+        // The helper: where the wheels' NPCs would bring them is worked out for players' wheels too; a player at the range
+        // wheel is advised from what his own seat knows, as its NPC would be.
+        aim_crew_.advise = helper_;
+        if (helper_ && !aim_crew_.range && def_.has_crew_data && !def_.tuning.aim_range_role.empty() &&
+            !SeatHolder(def_.tuning.aim_range_role).empty()) {
+            aim_crew_.range_knows = &pictures_[def_.tuning.aim_range_role];
         }
     }
     const SkillTier* SkillOf(const ScenarioCrew& c) const {
@@ -3303,6 +3617,7 @@ private:
 
     void Say(const std::string& id, const std::string& station, const std::map<std::string, std::string>& fields = {},
              const KnownTarget* about = nullptr) {
+        if (shadow_) return;  // nobody speaks in the shadow commander's head
         if (callouts_) callouts_->Say(time_, id, station, fields, NpcAt(station) ? SpeakDelayS(station) : 0.0, about);
     }
 
@@ -3346,6 +3661,10 @@ private:
     // An order's words, filled in from what the crew knows (the latest designation's number); not spoken twice within
     // 3 s (one order starts several drills) nor with a blank left in it.
     void SpeakOrder(const std::string& callout_id) {
+        if (shadow_) {  // words only: an order of the crew data is the player's to give, other words he keeps
+            ShadowOrder(callout_id);
+            return;
+        }
         if (!callouts_) return;
         if (callout_id == last_order_said_ && time_ - last_order_s_ < 3.0) return;
         const CalloutDef* def = def_.crew_data.FindCallout(callout_id);
@@ -3384,12 +3703,30 @@ private:
         return it != npc_ordered_.end() && it->second.first == drill && time_ - it->second.second < within_s;
     }
     bool NpcOrder(const std::string& seat, const std::string& drill, bool queue = false) {
+        if (shadow_) {
+            if (console_.FindProcedure(drill) != nullptr) shadow_drills_.push_back({seat, drill, std::string(), -1});
+            return false;
+        }
         CrewMember* m = MemberAt(seat);
         const Procedure* p = console_.FindProcedure(drill);
         if (m == nullptr || p == nullptr) return false;
         GiveOrder(*m, *p, queue);
         npc_ordered_[seat] = {drill, time_};
         return true;
+    }
+    static SeatDuty BatterySpareDuty() {
+        SeatDuty d = SeatDuty::Order(std::string(), "order_battery_spare", "the battery net jammed: to its spare frequency");
+        d.keep_s = 120.0;
+        return d;
+    }
+    // The target the commander has the crew take (the shadow commander only keeps it for his advice).
+    void NpcAssign(const std::string& target) { (shadow_ ? shadow_target_ : assigned_target_) = target; }
+    // An automatic report of the crew data as the player's duty: due while its lamp or input stays on.
+    static SeatDuty AutoReportDuty(const AutoReportDef& r) {
+        SeatDuty d = SeatDuty::Report(r.from, r.callout, "a report the crew makes when its lamp or input comes on");
+        d.holds_while = {r.when};
+        d.keep_s = 600.0;
+        return d;
     }
     // A seat is free for a new order when an NPC there has nothing to do, or the player there has finished his.
     bool SeatFree(const std::string& seat) {
@@ -3398,8 +3735,19 @@ private:
         return m != nullptr && !m->IsBusy();
     }
 
+    // With the helper on and a player in the commanding seat, the same think runs as the shadow commander: whatever he
+    // would order becomes the player's duty, and nothing else of it reaches the crew or the world (the root acts check
+    // shadow_: GiveCrewOrder, GiveOrder, NpcOrder, SpeakOrder, Say, Event; the few direct acts below do too).
     void UpdateNpcCommander() {
-        if (!NpcCommanderActive() || !drill_ || time_ + 1e-9 < npc_next_think_s_) return;
+        const bool shadow = !NpcCommanderActive() && ShadowCommanding();
+        if ((!NpcCommanderActive() && !shadow) || !drill_ || time_ + 1e-9 < npc_next_think_s_) return;
+        shadow_ = shadow;
+        shadow_target_.clear();
+        ThinkAsCommander();
+        if (shadow_) ShadowDrillOrders();
+        shadow_ = false;
+    }
+    void ThinkAsCommander() {
         npc_next_think_s_ = time_ + 1.0;
         // A stop while the battery forms its column or marches is not a halt: nobody deploys for it.
         const bool column = battery_ && def_.battery_drive_own &&
@@ -3435,6 +3783,11 @@ private:
                     if (NpcOrdered(s.station, drill, 60.0)) continue;
                     if (NpcOrder(s.station, drill)) given.emplace_back(s.station, drill);
                     break;
+                }
+                if (!shadow_ && !s.loose.empty() && SeatFree(s.station) && !SeatHolder(s.station).empty() &&
+                    console_.equipment.AllHold(s.loose_waits.front(), console_.panel)) {  // a player there: the switch is his
+                    NpcDoes(s.station, SeatDuty::Control(s.station, s.loose.front().control, s.loose.front().position,
+                                                         "the commander's order: " + s.loose.front().description));
                 }
                 if (!s.loose.empty() && SeatFree(s.station) && SeatHolder(s.station).empty()) {  // one switch, no drill: an order of its own
                     Procedure p;
@@ -3473,18 +3826,23 @@ private:
                         // (mon_2112_80 p66; voenizdat_osa_1991 p254)
             for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
                 if (!k.has_range || k.friendly || k.range_m > 20000.0 || npc_halt_ordered_) continue;
-                npc_halt_ordered_ = true;
+                if (!shadow_) npc_halt_ordered_ = true;  // the shadow asks for it until the player gives it
                 SpeakOrder("order_halt");
                 if (battery_ && def_.battery_drive_own) {  // the battery drives us: its short halt (inside 20 km: in the column)
                     BatteryOrder o;
                     o.kind = BatteryOrder::Kind::ShortHalt;
-                    battery_->Order(o, time_);
-                } else if (NpcAt("driver")) {  // our driver stops the vehicle
+                    o.threat_range_m = k.range_m;
+                    if (k.has_azimuth && k.true_azimuth) {
+                        o.threat_has_azimuth = true;
+                        o.threat_az_deg = k.azimuth_deg;
+                    }
+                    if (!shadow_) battery_->Order(o, time_);
+                } else if (NpcDoes("driver", SeatDuty::Halt("driver", "the commander's halt: a hostile inside 20 km"))) {  // our driver stops the vehicle
                     npc_halt_at_ = time_ + SpeakDelayS("driver") + 2.0;
                 }
                 break;
             }
-            if (npc_halt_at_ > 0.0 && time_ >= npc_halt_at_) {
+            if (!shadow_ && npc_halt_at_ > 0.0 && time_ >= npc_halt_at_) {
                 console_.equipment.SetInput("vehicle_stopped", true);
                 npc_halt_at_ = -1.0;
             }
@@ -3553,7 +3911,7 @@ private:
             // EMCON engagement: emcon_tv_azimuth, emcon_tv_engagement).
             if (NpcSilent()) {
                 if (k.number > 0 && k.range_m <= def_.tuning.tv_max_range_m) {
-                    assigned_target_ = k.target;
+                    NpcAssign(k.target);
                     NpcGive("order_emcon_tv", 90.0);
                 }
                 return;
@@ -3563,14 +3921,14 @@ private:
                 return;
             }
             // A target in reach interrupts the function check (the deputy's РОД РАБОТЫ goes back with the next drills).
-            if (CrewMember* dep = MemberAt("deputy_commander")) {
+            if (CrewMember* dep = shadow_ ? nullptr : MemberAt("deputy_commander")) {
                 if (dep->IsBusy() && dep->Tracker().GetProcedure().id == "function_check" && SeatHolder("deputy_commander").empty()) {
                     dep->CancelOrder();
                     console_.panel.Set("fo.mode", 1);
                 }
             }
-            assigned_target_ = k.target;
-            if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_) {  // no number from the PU-12: by its azimuth
+            NpcAssign(k.target);
+            if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_ && !shadow_) {  // no number from the PU-12: by its azimuth
                 callouts_->Say(time_, "order_take_contact", Cmdr(), {{"azimuth", MilsText(k.azimuth_deg)}});
             }
             return;
@@ -3606,11 +3964,6 @@ private:
             const SkillTier* t = CommanderTier();
             const bool slow = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->branch_error_chance;
             npc_branch_at_ = time_ + (slow ? 10.0 : 0.0);
-                    o.threat_range_m = k.range_m;
-                    if (k.has_azimuth && k.true_azimuth) {
-                        o.threat_has_azimuth = true;
-                        o.threat_az_deg = k.azimuth_deg;
-                    }
         }
         if (branch && time_ < npc_branch_at_) return;
         if (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) {
@@ -3684,11 +4037,15 @@ private:
                 Event(tracked, "the deputy commander takes the decoy on the TV for an aircraft");
                 return true;
             }
-            decoys_known_.insert(tracked);
-            if (assigned_target_ == tracked) assigned_target_.clear();
+            if (!shadow_) {
+                decoys_known_.insert(tracked);
+                if (assigned_target_ == tracked) assigned_target_.clear();
+            }
             npc_decoy_dropped_ = tracked;
             npc_decoy_dropped_s_ = time_;
-            if (NpcAt("deputy_commander")) Say("false_target", "deputy_commander", {});
+            if (NpcDoes("deputy_commander", SeatDuty::Report("deputy_commander", "false_target", "the TV shows a decoy"))) {
+                Say("false_target", "deputy_commander", {});
+            }
             Event(tracked, "made out on the TV: a decoy drone");
             SpeakOrder("hold_fire");
             GiveCrewOrder("order_drop_target");
@@ -3707,6 +4064,7 @@ private:
         return false;
     }
     const SkillTier* TierAt(const std::string& seat) const {
+        if (shadow_) return nullptr;  // the shadow commander's crew makes no slips (and draws no chances)
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() == seat) return SkillOf(def_.crew[i]);
         }
@@ -3813,8 +4171,8 @@ private:
             const CrewTask* stowed = def_.crew_data.FindTask("stowed");
             if (!npc_resumed_ && stowed != nullptr && console_.equipment.AllHold(stowed->conditions, console_.panel)) {
                 npc_resumed_ = true;
-                if (NpcAt("driver")) Say("ready_to_march", "driver");
-                if (battery_ && def_.battery_drive_own) {
+                if (NpcDoes("driver", SeatDuty::Report("driver", "ready_to_march", "the crew is stowed"))) Say("ready_to_march", "driver");
+                if (battery_ && def_.battery_drive_own && !shadow_) {
                     BatteryOrder o;
                     o.kind = BatteryOrder::Kind::Resume;
                     battery_->Order(o, time_);
@@ -3838,9 +4196,11 @@ private:
             const bool empty = launcher_->LoadedCount() == 0;
             if (empty && !npc_empty_reported_ && !engagement_.ShotsInFlight()) {
                 npc_empty_reported_ = true;
-                if (NpcAt("deputy_commander")) Say("launcher_empty", "deputy_commander");
+                if (NpcDoes("deputy_commander", SeatDuty::Report("deputy_commander", "launcher_empty", "no missile left on the launcher"))) {
+                    Say("launcher_empty", "deputy_commander");
+                }
                 const std::string callsign = battery_ ? OwnCallsign() : std::string("21");
-                if (callouts_) callouts_->Say(time_, "request_tzm", Cmdr(), {{"callsign", callsign}}, 3.0);
+                if (callouts_ && !shadow_) callouts_->Say(time_, "request_tzm", Cmdr(), {{"callsign", callsign}}, 3.0);
             }
             if (!empty) npc_empty_reported_ = false;
         }
@@ -3852,7 +4212,7 @@ private:
         }
         if (fuel_) {
             const bool half = fuel_->LevelL() <= 0.5 * fuel_->TankL();
-            if (half && !npc_fuel_reported_ && NpcAt("driver")) {
+            if (half && !npc_fuel_reported_ && NpcDoes("driver", SeatDuty::Report("driver", "fuel_half", "the tank at half"))) {
                 npc_fuel_reported_ = true;
                 Say("fuel_half", "driver");
             }
@@ -3868,6 +4228,7 @@ private:
         return "21";
     }
     const SkillTier* CommanderTier() const {
+        if (shadow_) return nullptr;
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() == Cmdr()) return SkillOf(def_.crew[i]);
         }
@@ -3903,7 +4264,8 @@ private:
         for (const OrderStart& st : o->procedures) {
             if (!SeatFree(st.station)) return false;
         }
-        GiveCrewOrder(order_id);
+        const bool given = GiveCrewOrder(order_id);
+        if (shadow_ && !given) return false;  // the shadow commander: the player hasn't given it yet
         npc_ordered_["order"] = {order_id, time_};
         return true;
     }
@@ -3942,7 +4304,7 @@ private:
             const AutoReportDef& r = def_.crew_data.reports[i];
             const bool now = console_.equipment.Holds(r.when, console_.panel);
             const bool flicker = time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS;
-            if (now && report_state_[i] == 0 && NpcAt(r.from) && !flicker) {
+            if (now && report_state_[i] == 0 && !flicker && NpcDoes(r.from, AutoReportDuty(r))) {
                 Say(r.callout, r.from);
                 report_said_s_[i] = time_;
             }
@@ -3955,13 +4317,14 @@ private:
                 char range[16];
                 std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
                 switch (e.kind) {
-                    case EngagementEvent::Kind::Contact:
-                        if (NpcAt("senior_operator")) {
-                            KnownTarget k;
-                            k.target = e.target;
-                            k.has_azimuth = k.has_range = true;
-                            k.azimuth_deg = e.az_deg;
-                            k.range_m = e.range_m;
+                    case EngagementEvent::Kind::Contact: {
+                        KnownTarget k;
+                        k.target = e.target;
+                        k.has_azimuth = k.has_range = true;
+                        k.azimuth_deg = e.az_deg;
+                        k.range_m = e.range_m;
+                        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "contact", "a new echo on his scope",
+                                                                        {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}}).About(k))) {
                             Say("contact", "senior_operator", {{"azimuth", MilsText(e.az_deg)}, {"range_km", range}}, &k);
                             next_contact_update_s_ = time_ + 15.0;
                             // His own duty with a new echo in the interrogator's reach: ЗАПРОС, unasked (the commander's
@@ -3972,11 +4335,20 @@ private:
                                 e.range_m <= console_.search.iff_max_range_m) {
                                 so->Queue(*iff);
                             }
+                        } else if (console_.FindProcedure("iff_interrogate") != nullptr && !console_.search.iff_query.empty() &&
+                                   e.range_m <= console_.search.iff_max_range_m) {
+                            SeatDuty d = SeatDuty::Drill("senior_operator", "iff_interrogate", "a new echo in the interrogator's reach: ЗАПРОС");
+                            d.target = e.target;
+                            NpcDoes("senior_operator", d);
                         }
                         break;
+                    }
                     case EngagementEvent::Kind::TrackLost:
                         // not a target just shot down, nor one the crew let go
-                        if (NpcAt("operator") && TargetRange(e.target) >= 0.0 && e.detail != "dropped") Say("lock_lost", "operator");
+                        if (TargetRange(e.target) >= 0.0 && e.detail != "dropped" &&
+                            NpcDoes("operator", SeatDuty::Report("operator", "lock_lost", "the track was lost"))) {
+                            Say("lock_lost", "operator");
+                        }
                         break;
                     case EngagementEvent::Kind::IffNoReply: {
                         KnownTarget k;  // the senior operator saw no reply mark beside the echo
@@ -3985,26 +4357,41 @@ private:
                         k.time_s = time_;
                         k.source = "IFF";
                         pictures_["senior_operator"].Learn(k);
-                        if (NpcAt("senior_operator")) Say("iff_no_reply", "senior_operator", {}, &k);
+                        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "iff_no_reply", "no reply mark beside the echo").About(k))) {
+                            Say("iff_no_reply", "senior_operator", {}, &k);
+                        }
                         break;
                     }
-                    case EngagementEvent::Kind::OnJammer: if (NpcAt("operator")) Say("on_jammer", "operator"); break;
-                    case EngagementEvent::Kind::BurnThrough: if (NpcAt("operator")) Say("captured", "operator"); break;
-                    case EngagementEvent::Kind::IffFriend:
-                        if (NpcAt("senior_operator")) {
-                            KnownTarget k;
-                            k.target = e.target;
-                            k.friendly = true;
+                    case EngagementEvent::Kind::OnJammer:
+                        if (NpcDoes("operator", SeatDuty::Report("operator", "on_jammer", "the radar holds only the jammer's angles"))) {
+                            Say("on_jammer", "operator");
+                        }
+                        break;
+                    case EngagementEvent::Kind::BurnThrough:
+                        if (NpcDoes("operator", SeatDuty::Report("operator", "captured", "the echo shows through the jamming"))) {
+                            Say("captured", "operator");
+                        }
+                        break;
+                    case EngagementEvent::Kind::IffFriend: {
+                        KnownTarget k;
+                        k.target = e.target;
+                        k.friendly = true;
+                        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "iff_friend", "a reply mark beside the echo").About(k))) {
                             Say("iff_friend", "senior_operator", {}, &k);
                         }
                         break;
+                    }
                     case EngagementEvent::Kind::Hit:
-                        if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
+                        if (NpcDoes("deputy_commander", SeatDuty::Report("deputy_commander", "hit", "the target destroyed"))) {
+                            Say("hit", "deputy_commander");
+                        }
                         HeardDestroyed(e.target);
                         OwnReport(BatteryFire::Event::Kind::Hit, e.target);
                         break;
                     case EngagementEvent::Kind::Miss:
-                        if (NpcAt("deputy_commander")) Say("miss", "deputy_commander");
+                        if (NpcDoes("deputy_commander", SeatDuty::Report("deputy_commander", "miss", "the missile missed"))) {
+                            Say("miss", "deputy_commander");
+                        }
                         OwnReport(BatteryFire::Event::Kind::Miss, e.target);
                         break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
@@ -4013,7 +4400,8 @@ private:
         }
         // Until something is tracked the senior operator keeps the crew up to date: the nearest echo on his scope,
         // every 15 s (the first report of each contact is spoken when it appears).
-        if (engagement_on_ && NpcAt("senior_operator") && engagement_.Method() == TrackMethod::None && time_ >= next_contact_update_s_) {
+        if (engagement_on_ && engagement_.Method() == TrackMethod::None && time_ >= next_contact_update_s_ &&
+            (NpcAt("senior_operator") || !SeatHolder("senior_operator").empty())) {
             const KnownTarget* nearest = nullptr;
             for (const KnownTarget& k : pictures_["senior_operator"].All()) {
                 if (time_ - k.time_s > 2.0 || !k.has_range || k.friendly) continue;
@@ -4023,8 +4411,11 @@ private:
                 KnownTarget k = *nearest;
                 char r[16];
                 std::snprintf(r, sizeof(r), "%.0f", k.range_m / 1000.0);
-                Say("contact", "senior_operator", {{"azimuth", MilsText(k.azimuth_deg)}, {"range_km", r}}, &k);
-                next_contact_update_s_ = time_ + 15.0;
+                if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "contact", "the nearest echo, every 15 s until a track",
+                                                                {{"azimuth", MilsText(k.azimuth_deg)}, {"range_km", r}}).About(k))) {
+                    Say("contact", "senior_operator", {{"azimuth", MilsText(k.azimuth_deg)}, {"range_km", r}}, &k);
+                    next_contact_update_s_ = time_ + 15.0;
+                }
             }
         }
         // Designations the commander heard on the radio, passed on to the crew: a new target, the one he has ordered
@@ -4183,8 +4574,10 @@ private:
         // The NPC battery commander: each hostile on the board or the tube that nobody has goes to the nearest ready launcher that
         // can reach it soon (our own vehicle's target is ours).
         // In the post, he does it from his board by voice on the battery net, and only while he is an NPC and the net is up.
-        const bool distribute = post_ ? NpcAt(Cmdr()) && BatteryNetUp() : c2_ != nullptr;
-        if (def_.battery_commander == "npc" && distribute && !fire_banned_ && time_ >= next_distribution_s_) {
+        // A player in the commander's seat: the same reckoning, as the targets he owes the launchers (the helper).
+        const bool player_commands = post_ && !SeatHolder(Cmdr()).empty();
+        const bool distribute = post_ ? (NpcAt(Cmdr()) || player_commands) && BatteryNetUp() : c2_ != nullptr;
+        if ((def_.battery_commander == "npc" || player_commands) && distribute && !fire_banned_ && time_ >= next_distribution_s_) {
             next_distribution_s_ = time_ + 5.0;
             // The regiment's designations to the battery first (they came with its address), then the rest.
             if (post_) {
@@ -4227,7 +4620,10 @@ private:
                                         (m.position - def_.unit_position).HorizontalLength() < best_r;
                 if (best != nullptr && !own_nearer) {
                     if (post_) {
-                        DesignateByVoice(best->callsign, m);
+                        if (NpcDoes(Cmdr(), SeatDuty::Designate(Cmdr(), best->callsign, m.number, m.target_id,
+                                                                "the nearest ready launcher whose sector covers it"))) {
+                            DesignateByVoice(best->callsign, m);
+                        }
                     } else {
                         AssignBatteryTarget(best->callsign, m.target_id);
                     }
@@ -4648,7 +5044,10 @@ private:
                 ++designations_lost_;
                 Event(d.callsign, "the designation did not get through (jammed, or off the battery net)");
                 // No read-back: the NPC commander says it again (twice more at most).
-                if (NpcAt(Cmdr()) && d.repeats < 2 && reported_kills_.count(d.mark.target_id) == 0) DesignateByVoice(d.callsign, d.mark, d.repeats + 1);
+                if (d.repeats < 2 && reported_kills_.count(d.mark.target_id) == 0 &&
+                    NpcDoes(Cmdr(), SeatDuty::Designate(Cmdr(), d.callsign, d.mark.number, d.mark.target_id, "no read-back: say it again"))) {
+                    DesignateByVoice(d.callsign, d.mark, d.repeats + 1);
+                }
                 continue;
             }
             const BatteryFireTarget* best = nullptr;
@@ -5012,12 +5411,16 @@ public:
             reports_made_.push_back({time_, station, callout_id});
             return true;
         }
+        const Contact* nearest = nullptr;
         if (callout_id == "contact" && engagement_on_) {
-            const Contact* nearest = nullptr;
             for (const Contact& c : engagement_.SearchPicture()) {
                 if (nearest == nullptr || c.range_m < nearest->range_m) nearest = &c;
             }
-            if (nearest == nullptr) return false;  // nothing on his scope to report
+            bool owes = false;  // the echo between two sweeps: what he would have said of it a moment ago stands
+            for (const SeatDuty& d : owed_) owes = owes || (d.kind == SeatDuty::Kind::Report && d.seat == station && d.id == callout_id);
+            if (nearest == nullptr && !owes) return false;  // nothing on his scope to report
+        }
+        if (nearest != nullptr) {
             KnownTarget k;
             k.target = nearest->target_id;
             k.has_azimuth = k.has_range = true;
@@ -5027,10 +5430,29 @@ public:
             std::snprintf(r, sizeof(r), "%.0f", nearest->range_m / 1000.0);
             callouts_->Say(time_, callout_id, station, {{"azimuth", MilsText(nearest->azimuth_deg)}, {"range_km", r}}, 0.0, &k);
             reports_made_.push_back({time_, station, callout_id});
+            if (station == "senior_operator") next_contact_update_s_ = time_ + 15.0;  // the crew's last update: just now
+            SettleOwedReport(station, callout_id, k.target);
             return true;
         }
-        if (!callouts_->Say(time_, callout_id, station)) return false;
+        // A report the seat owes says what its NPC would have said, and tells the crew what his would have (the helper's
+        // duty: the target, its IFF reply). The oldest owed first.
+        const SeatDuty* owed = nullptr;
+        for (const SeatDuty& d : owed_) {
+            if (owed == nullptr && d.kind == SeatDuty::Kind::Report && d.seat == station && d.id == callout_id) owed = &d;
+        }
+        std::string about_target;
+        if (owed != nullptr) {
+            const std::map<std::string, std::string> fields = owed->fields;
+            const KnownTarget about = owed->about;
+            const bool has_about = owed->has_about;
+            about_target = owed->target;
+            if (!callouts_->Say(time_, callout_id, station, fields, 0.0, has_about ? &about : nullptr)) return false;
+        } else if (!callouts_->Say(time_, callout_id, station)) {
+            return false;
+        }
         reports_made_.push_back({time_, station, callout_id});
+        if (callout_id == "contact" && station == "senior_operator") next_contact_update_s_ = time_ + 15.0;
+        SettleOwedReport(station, callout_id, about_target);
         return true;
     }
 

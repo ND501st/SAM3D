@@ -207,23 +207,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Tutorial")
 	void LookAtLessonTarget();
 
-	// ---- The crew (phase 8, docs/crew/): H the training overlay, O the crew menu (orders at the commander's seat,
-	// reports elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back.
+	// ---- The crew (phase 8, docs/crew/): H the helper, O the crew menu (orders at the commander's seat, reports
+	// elsewhere; 1-9 choose, 0 next page), T take this seat from its NPC or give it back, N let the helper make its move.
 
-	/** The training overlay is on: the drill master's next move for this seat is highlighted (refreshed each second). */
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	/** The helper is on (docs/crew/13_HELPER.md): the move this seat's NPC would make now is highlighted, as a lesson's
+	 *  step is, without the lesson's card (refreshed twice a second). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
 	bool IsAssistOn() const { return bAssist; }
 
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
-	FSimDrillAdvice GetAdvice() const { return Advice; }
+	/** The helper for the seat the camera is at. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
+	FSimSeatHelp GetHelp() const { return Help; }
 
-	/** The task the overlay aims at: К бою until ready, then the capture, then the launch. */
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
-	FString GetAssistTask() const { return AssistTask; }
-
-	/** The overlay's level (guided, hint, demonstrate; H cycles them and off). */
-	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	/** The helper's level (unassisted, hint, guided, demonstrate). H cycles off, hints, on, watch the crewman. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
 	FString GetAssistLevel() const { return AssistLevel; }
+
+	/** The next level round (H in the cabin, H in the mission's menu), kept for the next missions too. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Helper")
+	void CycleHelper(bool bWithWatch);
+
+	/** The helper's target at the post (a target to give a launcher, or to plot): its number, and the launcher. -1 none. */
+	int32 GetHelpTargetNumber() const;
+	FString GetHelpCallsign() const;
 
 	/** The player's last move at this seat, judged (the overlay's "that cost" line). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
@@ -451,10 +457,11 @@ private:
 
 	bool bAssist = false;
 	float AssistClock = 0.0f;
-	FString AssistTask;
 	FString AssistLevel;
 	FSimMoveVerdict LastVerdict;
-	FSimDrillAdvice Advice;
+	FSimSeatHelp Help;
+	/** The first move the helper shows now (null: none shown). */
+	const FSimHelpStep* HelpTop() const;
 	bool bMenuOpen = false;
 	int32 MenuPage = 0;
 	TArray<FSimCrewMenuEntry> MenuEntries;

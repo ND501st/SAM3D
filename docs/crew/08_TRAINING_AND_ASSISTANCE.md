@@ -54,6 +54,11 @@ an exam scenario keeps the overlay off.
   debrief.
 - **The ghost hand** pulses on the advised control (Unreal `USimCrewBodiesComponent::SetGhostHand`).
 
+As built, 21 October 2026: **the helper** (`13_HELPER.md`) takes over the overlay. Guided and hint show what the seat's
+NPC would do now (its duties, the ordered drill's next step, the wheels it would turn; in command, the shadow
+commander's orders), not only the drill master's next switch; the drill master stays its fallback where nobody orders
+the seat. The level is set in the missions menu (kept between missions) and H in the cabin.
+
 ## 3. Grading
 
 The debrief already lists crew reports, faults and deviations (`debrief.hpp`, no points: SAM Simulator's rule). The

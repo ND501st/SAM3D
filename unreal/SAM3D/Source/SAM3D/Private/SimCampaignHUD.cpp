@@ -12,6 +12,7 @@
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 #include "SimAirCampaignSubsystem.h"
+#include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
 
 namespace
@@ -218,6 +219,11 @@ void ASimCampaignHUD::HandleInput()
 		Fight();
 		return;
 	}
+	// H: the helper for the raid (off, hints, on: docs/crew/13_HELPER.md), kept for every mission.
+	if (Pressed(EKeys::H))
+	{
+		USimWorldSubsystem::SetHelperPreference(USimWorldSubsystem::NextHelperLevel(USimWorldSubsystem::GetHelperPreference()));
+	}
 	if (Pressed(EKeys::L) && C->HasPendingRaid())
 	{
 		C->LetPendingRaidPass();
@@ -281,6 +287,10 @@ void ASimCampaignHUD::HandleInput()
 			else if (Id == TEXT("seat+"))
 			{
 				SeatIndex = (SeatIndex + 1) % NumSeats;
+			}
+			else if (Id == TEXT("helper"))
+			{
+				USimWorldSubsystem::SetHelperPreference(USimWorldSubsystem::NextHelperLevel(USimWorldSubsystem::GetHelperPreference()));
 			}
 			else if (Id == TEXT("end"))
 			{
@@ -956,6 +966,8 @@ void ASimCampaignHUD::DrawHUD()
 		AddButton(TEXT("Let it pass (L)"), TEXT("pass"), 180.0f, false);
 		AddButton(TEXT("<  seat  ["), TEXT("seat-"), 120.0f, false);
 		AddButton(TEXT("]  seat  >"), TEXT("seat+"), 120.0f, false);
+		AddButton(TEXT("Helper: ") + USimWorldSubsystem::HelperLevelShort(USimWorldSubsystem::GetHelperPreference()) + TEXT(" (H)"), TEXT("helper"),
+			180.0f, false);
 	}
 	else
 	{
