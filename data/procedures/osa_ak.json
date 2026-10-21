@@ -368,6 +368,9 @@
     { "id": "veh.hatches", "label": "люки (hatches)", "station": "commander", "kind": "switch", "position_labels": ["open", "closed"], "initial": 1,
       "source": "voenizdat_osa_1991 p99 (РУ lights only with ЛЮКИ ЗАКР. lit on the commander's console), p154 (ПУСК ГОТОВ needs the hatches closed); mon_2112_80 p64 (hatches must not be opened in combat work)", "confidence": "medium",
       "notes": "The hatches have a powered opening and closing system (voenizdat_osa_1991 p163). One control stands for all of them; starts closed." },
+    { "id": "nav.aiming_circle", "label": "буссоль (aiming circle): stowed / set up ahead", "station": "commander", "kind": "switch", "position_labels": ["stowed", "set up"], "initial": 0,
+      "source": "voenizdat_osa_1991 p249-250 (Qc found by mutual sighting with a field artillery aiming circle set up 20-50 m ahead of the vehicle: its monocular laid on the TV sight's lens, the launcher laid on it), p249 (the crew chief finds Qc)", "confidence": "medium",
+      "notes": "A job outside (data/vehicles/osa_ak.json): the crew chief carries the aiming circle out ahead of the vehicle, sets it up and reads the azimuth to the vehicle. The switch is its case beside his seat; its time is the subsystem qc_measured." },
     { "id": "gyro.arrest", "label": "АРРЕТИР.", "station": "driver", "kind": "button",
       "source": "voenizdat_osa_1991 p247 (the driver erects the gyro by holding АРРЕТИР. on block 0005-8M for 40 s), p51–52", "confidence": "medium",
       "notes": "Block 0005-8M is on rack SŁ-1M at the front of the operators' compartment (mon_2112_80 Fig. 3). SAM3D: one press starts the 40 s erection." },
@@ -556,6 +559,11 @@
       "start_time_s": { "value": 40, "source": "voenizdat_osa_1991 p247 (АРРЕТИР. held for 40 s)", "confidence": "high" },
       "source": "voenizdat_osa_1991 p51–52, p247", "confidence": "medium",
       "notes": "Lamp ОТКАЗ Ψ, Θ is lit while erecting (p52). Nothing else waits for it in SAM3D." },
+    { "id": "qc_measured", "name": "Qc measured with the aiming circle (mutual sighting)",
+      "enable": [ { "control": "nav.aiming_circle", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
+      "start_time_s": { "value": 150, "source": "estimate (level the aiming circle, lay it on the TV sight's lens, read it and work out Qc)", "confidence": "estimate" },
+      "source": "voenizdat_osa_1991 p250", "confidence": "medium",
+      "notes": "Nothing waits for it yet: the deputy's orient_vehicle takes the crew chief's Qc as given." },
     { "id": "equipment_warm", "name": "Equipment warmed up (anode supplies on, scopes sweeping)",
       "enable": [ { "control": "pwr.equipment", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
       "start_time_s": { "value": 60, "source": "voenizdat_osa_1991 p165 (anode supplies of all systems after 1 min), p52, p99 (sweeps appear after 1 min)", "confidence": "high" },
@@ -770,6 +778,15 @@
         { "control": "ssc.tx_cover", "position": 1, "description": "Remove the guard over ПЕРЕДАТЧИК" },
         { "control": "ssc.tx", "position": 1, "description": "ЦУ selected, target at about 30 km: ПЕРЕДАТЧИК ВКЛ, SSC transmitter on. The SSC then captures the target by itself (ТСЦ and АВТОМАТ light)",
           "wait_for": [ { "subsystem": "auto_acquisition", "is": "ready" }, { "subsystem": "hv_ready", "is": "ready" } ] }
+      ]
+    },
+    {
+      "id": "measure_qc", "name": "Find Qc with the aiming circle ahead of the vehicle", "situational": true,
+      "source": "voenizdat_osa_1991 p249-250", "confidence": "medium",
+      "notes": "Commander (crew chief), at a halt: out with the aiming circle 20-50 m ahead, set it up and read the azimuth to the vehicle while the launcher is laid on it from inside, then stow it and bring the reading back. Out and back by his hatch (data/vehicles/osa_ak.json), which stays shut in БР with the equipment on.",
+      "steps": [
+        { "control": "nav.aiming_circle", "position": 1, "description": "Out ahead: set the aiming circle up, level it and lay it on the vehicle", "wait_for": [ { "input": "vehicle_stopped", "is": true } ] },
+        { "control": "nav.aiming_circle", "position": 0, "description": "Azimuth read: stow the aiming circle and bring Qc in", "wait_for": [ { "subsystem": "qc_measured", "is": "ready" } ] }
       ]
     },
     {

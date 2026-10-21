@@ -364,6 +364,79 @@ SC_TEST("post: the orders menu's orders on the nets are greyed with the reason w
     SC_EXPECT(r->GiveCrewOrder("order_battery_spare") && r->Nets()->Current("battery") == 2);
 }
 
+SC_TEST("post: the regiment's ПТ-1 group held on cue goes out on its net when called; the NPC commander answers 707 with the readiness") {
+    const std::string base = ReadFile(kData + "/scenarios/pu12m_battery.json");
+    const std::string from = "\"commands\": [ { \"at_s\": 5, \"code\": 10 } ]";
+    SC_EXPECT(base.find(from) != std::string::npos);
+    auto with = [&](const std::string& commands) { return ReplaceOnce(base, from, "\"commands\": [ " + commands + " ]"); };
+    // Refused as it loads: a group not in the talk tables, one the radio data orders, a time on a cued one, code and group.
+    auto refused = [&](const std::string& commands, const std::string& expect) {
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        const bool ok = LoadScenario(with(commands), kData, def, console, &e);
+        if (ok || e.find(expect) == std::string::npos) std::printf("    error: %s\n", e.c_str());
+        return !ok && e.find(expect) != std::string::npos;
+    };
+    SC_EXPECT(refused("{ \"at_s\": 5, \"group\": \"999\" }", "not in the radio data's talk tables"));
+    SC_EXPECT(refused("{ \"at_s\": 5, \"group\": \"611\" }", "ordered by the radio data"));
+    SC_EXPECT(refused("{ \"at_s\": 5, \"group\": \"707\", \"on_cue\": true }", "held on cue has no time"));
+    SC_EXPECT(refused("{ \"at_s\": 5, \"code\": 10, \"group\": \"143\" }", "one of them"));
+    SC_EXPECT(refused("{ \"at_s\": 5, \"code\": 10 }, { \"at_s\": 2, \"group\": \"143\" }", "in time order"));
+    // The NPC commander: reported ready once; asked again by 707, he reports again.
+    std::unique_ptr<ScenarioRunner> r = LoadText(with("{ \"at_s\": 5, \"code\": 10 }, { \"group\": \"707\", \"on_cue\": true }"));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Steps(*r, 300.0);
+    auto reports = [&]() {  // the debrief's log keeps every one (the radio log only its latest lines)
+        int n = 0;
+        for (const DebriefEntry& d : r->Log().Entries()) n += d.what == "regiment" && d.detail.find("к бою готова") != std::string::npos ? 1 : 0;
+        return n;
+    };
+    const int before = reports();
+    SC_EXPECT(before == 1 && !LogHas(*r, "regiment net", "707"));  // held: not said at any time
+    SC_EXPECT(r->ReleaseRegimentCommand("707"));
+    SC_EXPECT(!r->ReleaseRegimentCommand("707"));  // once
+    Steps(*r, 2.0);
+    SC_EXPECT(LogHas(*r, "regiment net", "Рябина, я Тополь: 707. Приём.", "battery_commander"));
+    bool heard = false;
+    for (const ScenarioRunner::GroupHeard& g : r->GroupsHeard()) {
+        for (const std::string& s : g.ears) heard = heard || (g.code == "707" && s == "battery_commander");
+    }
+    SC_EXPECT(heard);
+    SC_EXPECT(reports() == before + 1);
+}
+
+SC_TEST("osa: the commander hears the PU-12's designation only with his A-1 on Р-123; a player reports ready and reads it back from the crew menu") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/school_commander.json", kData, def, console, &e));  // A-1 on ВС, headset off
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.TakeSeat("commander", "Player"));
+    r.SeatSet("commander", "headset.commander", 1);
+    const std::vector<std::string> said = r.PlayerRadioReports("commander");
+    SC_EXPECT(said.size() == 2 && said[0] == "report_ready" && said[1] == "readback");
+    SC_EXPECT(r.PlayerRadioReports("senior_operator").empty());
+    SC_EXPECT(r.ReleaseTarget("d1"));
+    Steps(r, 150.0);
+    SC_EXPECT(r.DesignationsHeard() == 0);  // on ВС: the net is not in his ears
+    SC_EXPECT(!r.PlayerSay("commander", "readback") && r.LastRefusal().find("no target") != std::string::npos);
+    SC_EXPECT(!r.PlayerSay("commander", "report_ready"));  // nor his readiness
+    r.SeatSet("commander", "intercom.a1", 2);  // Р-123
+    Steps(r, 150.0);
+    SC_EXPECT(r.ReportWords("commander", "report_ready").first == "21 к бою готов, каналы 2, ракет 6!");
+    SC_EXPECT(r.PlayerSay("commander", "report_ready"));
+    SC_EXPECT(r.DesignationsHeard() >= 1);
+    const std::pair<std::string, std::string> w = r.ReportWords("commander", "readback");
+    SC_EXPECT(w.first.find("10, я 21: цель ") != std::string::npos && w.first.find("…") == std::string::npos);
+    SC_EXPECT(r.PlayerSay("commander", "readback"));
+    SC_EXPECT(!r.ReportsMade().empty() && r.ReportsMade().back().callout == "readback");
+    r.SeatSet("commander", "intercom.a1", 1);  // back to ВС: off the net
+    Steps(r, 1.0);
+    SC_EXPECT(!r.PlayerSay("commander", "readback") && r.LastRefusal().find("Р-123") != std::string::npos);
+}
+
 SC_TEST("link: the post's order to the spare reaches the Osa on its net; its NPC commander turns his set; read-backs reach the post") {
     std::string e;
     std::unique_ptr<BatteryLink> link = LoadBatteryLinkFile(kData + "/scenarios/battery_link_practice.json", kData, &e);
@@ -376,4 +449,104 @@ SC_TEST("link: the post's order to the spare reaches the Osa on its net; its NPC
     SC_EXPECT(link->Osa().Console().panel.Get("radio.left.preset") == 1 || link->Osa().Console().panel.Get("radio.right.preset") == 1);
     link->RunToEnd(0.1, 900.0);
     SC_EXPECT(link->Post().ReadbacksHeard() >= 1);
+}
+
+namespace {
+bool AnyLatin(const std::vector<std::string>& lines) {
+    for (const std::string& l : lines) {
+        for (char c : l) {
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) return true;
+        }
+    }
+    return false;
+}
+bool HasLine(const std::vector<std::string>& lines, const std::string& text) {
+    for (const std::string& l : lines) {
+        if (l.find(text) != std::string::npos) return true;
+    }
+    return false;
+}
+}  // namespace
+
+SC_TEST("documents: the radio data on their form and the talk tables, typed in Russian as issued") {
+    std::unique_ptr<ScenarioRunner> r = PostBattery();
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    const std::vector<std::string> rd = r->DocumentText("radio_data");
+    for (const std::string& l : rd) std::printf("    | %s\n", l.c_str());
+    SC_EXPECT(!rd.empty() && rd.front() == "РАДИОДАННЫЕ");
+    // each net: its frequencies by number with the decimal comma, the call signs, the mode (rrs_1986)
+    SC_EXPECT(HasLine(rd, "Радиосеть управления батареей") && HasLine(rd, "№ 1 — 44,000; № 2 — 42,200 МГц"));
+    SC_EXPECT(HasLine(rd, "позывные: свой — 10 (главная)") && HasLine(rd, "позывные: свой — Рябина; главная — Тополь"));
+    SC_EXPECT(HasLine(rd, "вид связи: телефония"));
+    SC_EXPECT(!AnyLatin(rd));
+    const std::vector<std::string> tt = r->DocumentText("talk_tables");
+    SC_EXPECT(HasLine(tt, "ПЕРЕГОВОРНАЯ ТАБЛИЦА ПТ-1") && HasLine(tt, "143 — Готовность номер один"));
+    SC_EXPECT(HasLine(tt, "ТАБЛИЦА СИГНАЛОВ ПТ-2") && HasLine(tt, "333 — «Воздух» — зелёная ракета"));
+    SC_EXPECT(!AnyLatin(tt));
+    SC_EXPECT(r->DocumentText("nothing").empty());
+}
+
+SC_TEST("plotter: he calls each new target to the commander aloud (art. 23); the NPC commander has it from his call") {
+    std::string t = ReadFile(kData + "/scenarios/pu12m_deploy.json");
+    t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }", "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\"");
+    // an NPC plotter: each new target called as he writes it
+    std::unique_ptr<ScenarioRunner> r = LoadText(t);
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Steps(*r, 90.0);
+    SC_EXPECT(!r->Board()->Marks().empty() && r->PlotReportsMade() >= 1);
+    bool called = false;
+    for (const SpokenCallout& s : r->Callouts()->Log()) called = called || (s.id == "plot_new" && s.ru.find("Новая цель ") == 0);
+    SC_EXPECT(called);
+    if (!r->Board()->Marks().empty()) SC_EXPECT(r->BoardTargetToldS(r->Board()->Marks().front().target_id) >= 0.0);
+    // a player plotter: his report waits for him, filled in; said, the commander has it
+    std::unique_ptr<ScenarioRunner> q = LoadText(t);
+    SC_EXPECT(q != nullptr);
+    if (!q) return;
+    SC_EXPECT(q->TakeSeat("operator", "Player"));
+    for (int i = 0; i < 1800 && q->Post()->Heard().empty(); ++i) q->Step(0.1);
+    SC_EXPECT(!q->Post()->Heard().empty());
+    if (q->Post()->Heard().empty()) return;
+    const CommandPost::AirReport h = q->Post()->Heard().front();
+    SC_EXPECT(q->PlayerPlotAt(h.number, h.contact.position.x, h.contact.position.y, 200000.0 / 0.17).ok);
+    Steps(*q, 1.0);
+    char n[8];
+    std::snprintf(n, sizeof(n), "%04d", h.number);
+    SC_EXPECT(q->Console().equipment.GetInput("plot_report_waiting"));
+    SC_EXPECT(q->ReportWords("operator", "plot_new").first.find(std::string("Новая цель ") + n) == 0);
+    SC_EXPECT(q->BoardTargetToldS(h.contact.target_id) < 0.0);
+    SC_EXPECT(q->PlayerSay("operator", "plot_new"));
+    SC_EXPECT(q->BoardTargetToldS(h.contact.target_id) >= 0.0);
+    SC_EXPECT(!q->PlayerSay("operator", "plot_lost"));  // nothing of that kind to report
+    // left unsaid past plot_stale_s, a report is missed and the debrief says so
+    std::unique_ptr<ScenarioRunner> u = LoadText(t);
+    SC_EXPECT(u != nullptr);
+    if (!u) return;
+    SC_EXPECT(u->TakeSeat("operator", "Player"));
+    for (int i = 0; i < 1800 && u->Post()->Heard().empty(); ++i) u->Step(0.1);
+    if (u->Post()->Heard().empty()) return;
+    const CommandPost::AirReport g = u->Post()->Heard().front();
+    u->PlayerPlotAt(g.number, g.contact.position.x, g.contact.position.y, 200000.0 / 0.17);
+    Steps(*u, 130.0);
+    SC_EXPECT(u->PlotReportsMissed() >= 1 && u->Debrief().find("not reported to the commander") != std::string::npos);
+}
+
+SC_TEST("march: the battery's orders go by flags on the march; radio again once it repels an attack (voenizdat_osa_1991)") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_mission_march.json", kData, def, console, &e));
+    ScenarioRunner r(std::move(def), std::move(console));
+    Steps(r, 60.0);
+    SC_EXPECT(LogHas(r, "flag signals", "form the column") && !LogHas(r, "battery net", "form the column"));
+    SC_EXPECT(LogHas(r, "flag signals", "form the column", "driver"));  // the column sees the signal
+    // the raid: the battery stops to fight; its order goes by radio (fire control while repelling an attack)
+    bool flags = false, radio = false;
+    for (int i = 0; i < 15000 && !r.Finished() && !(flags || radio); ++i) {
+        r.Step(0.1);
+        flags = LogHas(r, "flag signals", "short halt");
+        radio = LogHas(r, "battery net", "short halt");
+    }
+    SC_EXPECT(radio && !flags);
 }

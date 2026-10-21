@@ -411,10 +411,11 @@ void USimCrewVoiceComponent::VoiceRadioLog(USimWorldSubsystem& Sim, const simcor
 			RadioAtLast.Reset();
 		}
 		RadioAtLast.Add(Key);
-		if (!bVoice || M.bCallout || M.Net.StartsWith(TEXT("cabin")) || Runner.Time() - M.TimeSeconds > 4.0 ||
+		if (!bVoice || M.bCallout || M.Net.StartsWith(TEXT("cabin")) || M.Net.EndsWith(TEXT(" signals")) || Runner.Time() - M.TimeSeconds > 4.0 ||
 			(!Seat.IsEmpty() && !M.HeardAt(Seat)) || M.Text.StartsWith(TEXT("(")))
 		{
-			continue;  // a callout (voiced from the bus), shouted in the cabin, not heard at his seat, noise, or too late
+			continue;  // a callout (voiced from the bus), shouted in the cabin, a flag or lamp signal (seen), not heard at his
+					   // seat, noise, or too late
 		}
 		simcore::VoiceSettings Settings;
 		const bool bLine = M.Net.StartsWith(TEXT("line "));

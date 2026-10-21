@@ -40,13 +40,16 @@ camera, the views, the cabin, and one of each kind of control. Then the seats, i
 operator**, **the senior operator**, **the deputy commander**, and **the commander, in command**. Each seat lesson puts
 you in that seat of the Osa 21, cold at a halt by the Kesmark bridges, with the rest of the crew at their posts. It
 shows you your panels first, then takes you through your part of the drill one switch at a time, from «К бою!»
-(action stations) to the launch at a practice drone. The commander's orders come when you are ready for them.
+(action stations) to the launch at a practice drone. The commander's orders come when you are ready for them. In
+the commander's own lesson the battery's PU-12M is on the battery net: you turn your A-1 between the intercom (ВС) and
+the net (Р-123), report the vehicle ready, and read back the target the battery commander gives you.
 Then the **PU-12M**, the battery's command post, seat by seat: the driver-electrician (the AB-1 generator), the
 radiotelephone operator (the radios, the mast, the telecode's path, the air picture read out to the plotter, the sets
-kept on frequency when a net moves or is jammed), the squad leader (orienting the post, the check of communications),
-the operator-plotter (the radiotelephonist's reports onto the board) and the battery commander (deploying the post, his
-RTK-1, a target to a launcher with the DT-2 marker and the ДХ keys and its read-back, the battery net out of jamming, a
-telephone line answered).
+kept on frequency when a net moves or is jammed), the squad leader (orienting the post, the radio data, the check of
+communications),
+the operator-plotter (the radiotelephonist's reports onto the board, each new target called aloud to the commander) and the battery commander (deploying the post, his
+RTK-1, the regiment's ПТ-1 group read by hand against the talk table on his desk, a target to a launcher with the DT-2
+marker and the ДХ keys and its read-back, the battery net out of jamming, a telephone line answered).
 
 **Headsets, boxes and lines.** Every crewman wears a шлемофон plugged into his box (docs/crew/12_COMMUNICATIONS.md). With
 it off (J) you hear only voices in the cabin, and not every one over the turbine: no intercom, no radio, no telephone.
@@ -58,12 +61,23 @@ set and listens to a second, and has five telephone lines; the PVS-1 (radiotelep
 puts it down. The bottom left of the screen shows your headset, your box and the sets it reaches (● alive), a call and
 a ringing line; the radio log above it shows only what your seat heard.
 
+**The papers.** On the radiotelephonist's table lie his radio data (each net's frequencies by number, the call signs, the
+changes as Ч+minutes, the telecode channel, the lines); on the commander's desk the talk tables (ПТ-1, and the signal table
+ПТ-2 with its flares). They are paper, in Russian as issued, and as light or dark as the cabin round them.
+
+**On the march** the battery keeps radio silence but for fire control (the 1991 textbook): the battery commander's march
+orders reach the column as flag signals (lamps at night), and the post's orders on its nets are refused until the battery
+has to fight. A raid within reach opens the radio again.
+
 In the PU-12M the plotting board folds on its hinge; the operator-plotter swings it open by its latch. He writes on it
 what the regiment reads out on the air-picture net, square by square, out to 200 km (the IT-45 is the battery
 commander's: the plotter doesn't copy it): with the cross on the board the mouse wheel picks the number of a report
 heard (a small chip beside the cross), a click writes it there. Within
 5 cm of the right square the mark is exact; further off it lands off the target. The air-picture lines fade in a few
-seconds: remember the square. The battery commander
+seconds: remember the square. He calls each new target to the commander aloud as he writes it (O, then «Новая цель …»,
+filled in from the board), and a turn or a lost target the same way: the NPC commander has a new target from that call,
+or only half a minute later from his own look at the board, and a report left unsaid for two minutes is missed in the
+debrief. The battery commander
 reads it for warning: his aids line gives each track's range and when it will be here, and the regiment's last
 two-digit command. On the ДХ, СВ / Ч / ГР / Н1-Н3 set friend, foe, group and height zone on the target in the window; the
 ФР block's КОНТРОЛЬ position puts a training echo on the tube; the switch on the ФР block picks the cabled radar's type.
@@ -137,8 +151,11 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | Left / right click | Switch on, step forward, press / step back |
 | Drag or wheel on a hand wheel | Turn it; held, your eyes go to the display it is worked against (the scope, the range indicator, the IT-45) and come back when you let go |
 | X | Get up and walk in the cabin (W A S D, the mouse looks round, any control in arm's reach works); X by a seat sits you down in it, T then takes it over |
+| F | Out of the vehicle and back (your seat taken, T): under a hatch, or in the seat below it, the hatch opens and you climb out onto the roof; at the roof's edge by a wheel, down; on the ground by a wheel, up; on the roof by a hatch, in. Each climb takes its real time, seen from your eyes |
+| W A S D, Shift (outside) | Walk on the roof (not past its edges or onto the antenna unit or the mast) or over the ground at the drill pace; Shift runs. Never through the hull |
+| Click a job's case inside | A job done outside (the PU-12M's AB-1 set and PAB-2 aiming circle, the Osa's aiming circle): you are walked out to it and do it there. Out there, look at it within 3 m and click |
 | T | Take this seat, or give it back |
-| O | Orders (at the commander's seat) or reports (any other); 1-9 pick, 0 next page, Esc close |
+| O | Orders (at the commander's seat; the Osa commander's own words on the battery net follow them: his readiness, a read-back) or reports (any other); 1-9 pick, 0 next page, Esc close |
 | H | Training overlay: guided, hint, demonstrate, off |
 | J | Your headset on or off |
 | K / Shift+K | Turn your intercom box (ВС, РСТ-1..4; the Osa's А-1: off, intercom, radio) |

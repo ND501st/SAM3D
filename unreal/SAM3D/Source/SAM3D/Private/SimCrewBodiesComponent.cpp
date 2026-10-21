@@ -253,6 +253,21 @@ void USimCrewBodiesComponent::PoseBody(FBody& Body)
 	}
 }
 
+void USimCrewBodiesComponent::PoseAway(FBody& Body, const simcore::MoverView& View, const simcore::BodyDims& Dims)
+{
+	// A stride (two steps) every 1.5 m walked.
+	const simcore::Vec3 D = View.feet_m - Body.LastFeet;
+	const double Moved = std::sqrt(D.x * D.x + D.y * D.y);
+	Body.StridePhase += Moved < 1.0 ? Moved / 1.5 : 0.0;
+	Body.LastFeet = View.feet_m;
+	const simcore::BodyPose Pose = simcore::WalkingPose(View, Dims, Body.StridePhase);
+	const std::vector<simcore::BodyPart> Parts = simcore::PartsOf(Pose, Dims);
+	for (int32 I = 0; I < Body.Parts.Num() && I < static_cast<int32>(Parts.size()); ++I)
+	{
+		ShowPart(Body.Parts[I], Parts[static_cast<size_t>(I)]);
+	}
+}
+
 void USimCrewBodiesComponent::UpdateGhost(float DeltaTime)
 {
 	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
@@ -341,6 +356,11 @@ void USimCrewBodiesComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	// The bodies move in sim time (they keep up with the crew under time compression) and stop when it is paused.
 	const double Dt = Sim->IsSimPaused() ? 0.0 : static_cast<double>(DeltaTime) * Sim->GetTimeScale();
 	const std::vector<simcore::SeatActivity> Activity = Runner->CrewActivity();
+	const std::vector<simcore::MoverView> Away = Runner->CrewBodies();
+	// The closed compartment hidden (the PU-12M seen from outside): the seated bodies go with it, the men out of the
+	// vehicle stay seen.
+	const USimCabinComponent* CabinParent = Cast<USimCabinComponent>(GetAttachParent());
+	const bool bCabinHidden = CabinParent != nullptr && CabinParent->IsCabinHidden();
 	for (FBody& Body : Bodies)
 	{
 		simcore::SeatActivity A;
@@ -351,6 +371,20 @@ void USimCrewBodiesComponent::TickComponent(float DeltaTime, ELevelTick TickType
 			{
 				A = X;
 			}
+		}
+		const simcore::MoverView* View = nullptr;
+		for (const simcore::MoverView& V : Away)
+		{
+			if (V.station == A.station)
+			{
+				View = &V;
+			}
+		}
+		const bool bWasAway = Body.bAway;
+		Body.bAway = A.away && View != nullptr;
+		if (Body.bAway && !bWasAway)
+		{
+			Body.LastFeet = View->feet_m;
 		}
 		bool bShow = Body.Station != HiddenStation;
 		for (int32 I = 0; bShow && ClearRadiusCm > 0.0f && I < Body.Parts.Num(); ++I)
@@ -368,6 +402,21 @@ void USimCrewBodiesComponent::TickComponent(float DeltaTime, ELevelTick TickType
 				}
 			}
 			Body.bVisible = bShow;
+		}
+		for (FPart& P : Body.Parts)
+		{
+			if (P.Mesh != nullptr && P.Mesh->bHiddenInGame != (bCabinHidden && !Body.bAway))
+			{
+				P.Mesh->SetHiddenInGame(bCabinHidden && !Body.bAway);
+			}
+		}
+		if (Body.bAway)
+		{
+			if (bShow)
+			{
+				PoseAway(Body, *View, Sim->GetBodyData()->dims);
+			}
+			continue;
 		}
 		Body.Animator->Update(Dt, A, &Runner->Console().panel);
 		if (bShow)

@@ -23,9 +23,10 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/procedures/` | Per-system consoles: controls, subsystems, procedures (loaded by `console_data.hpp`). Same sourcing rules. |
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions, the floor a crewman walks on up from his seat (`walk`), the display each hand wheel is worked against (`watch`) (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
+| `data/vehicles/` | Each vehicle as a body to climb (`simcore/crew_mobility.hpp`): where each seat stands up, the hatches (and when the drill keeps them shut), the roof and its keep-outs, the ways down by the wheels, the places round it and the jobs done there, the line-up for К машине. Cited like `data/systems/`. See `docs/crew/13_OUT_OF_THE_VEHICLE.md`. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. Also our side's chain of command, its places and the means of signal (`chain_pannonia.json`, `places_pannonia.json`, `signal_means.json`; `simcore/command/`), and the talk tables ПТ-1/ПТ-2 (`talk_tables.json`, `simcore/talk_tables.hpp`). |
-| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
+| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`), his pace and his voice's carry out of doors (`walking.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
 | `data/air_war/` | The enemy air command: the fictional theatre, the four adversaries (rebels, neutral neighbour, Warsaw Pact, NATO) with doctrine, intelligence, politics, aircraft, squadrons and officers, and the quirk catalogue. Balance numbers in `data/gameplay/air_war.json`. |
 | `data/tutorials/` | The lessons (`simcore/tutorial.hpp`): a first lesson and one per seat of the Osa and of the PU-12M, each step one action on a lit control, shown over a mission named in `missions.json` (`"tutorial"`). See `docs/TUTORIALS.md`. |
 | `data/scenery/` | Presentation data: the ultra-basic models of every asset (`basic_models.json`: archetype, size, colour per type; the air war's aircraft ids). Placeholders until real models exist. |
@@ -175,6 +176,12 @@ offices, placed on a map of a small city, a town, villages, works and countrysid
 despatch riders, couriers, telephone, radio, the warning net, sirens, the post and the news (`simcore/command/`). Never
 add an omniscient HUD panel: route new information through the pipeline. Next: deliveries as scenes in the world, the
 player telling people.
+
+Out of the vehicle (roadmap 8.14, `docs/crew/13_OUT_OF_THE_VEHICLE.md`): a crewman's body is always somewhere (seated,
+inside, in a hatch, on the hull, on the ground) and moves only by the vehicle's real ways, leg by leg with their times
+(`simcore/crew_mobility.hpp`, `data/vehicles/`): no teleport, for NPCs or the player. A control worked outside is a job
+at a place; the man goes there to work it. Out of the vehicle he is off the intercom and heard only in earshot. Next:
+the drill master knowing the walk, wire laying.
 
 Voices (`docs/crew/12_COMMUNICATIONS.md`): inside a vehicle a seat hears the intercom, a radio or a telephone line only
 through its headset and its box's selector (`simcore/voice_comms.hpp`); a net only while its set is on, warm, on the net's

@@ -171,8 +171,8 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		Views->UpdateViews(Pc, DeltaSeconds);
 	}
-	// W A S D are the walker's feet while he is up in the cabin, not the driver's.
-	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() ? nullptr : Pc);
+	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's.
+	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() ? nullptr : Pc);
 	if (bAutoBrake && SpeedMps == 0.0)
 	{
 		bAutoBrake = false;  // the lesson autoplay's halt is made
@@ -214,6 +214,14 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	HandleCabin(DeltaSeconds, Pc);
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
+		// The player's body out of his seat to simcore (docs/crew/13_OUT_OF_THE_VEHICLE.md): ten times a second.
+		BodyReportClock += DeltaSeconds;
+		if (bInCabin && BodyReportClock >= 0.1f)
+		{
+			BodyReportClock = 0.0f;
+			ReportBody(Sim);
+		}
+		UpdateJobMarkers(Sim);
 		HandleCrew(Pc, Sim, DeltaSeconds);
 		if (bIsPost && !bMenuOpen)
 		{
@@ -224,11 +232,11 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(Pc, Sim, DeltaSeconds) : FString();
 	// The body at the camera's seat isn't drawn (first person); the ghost hand shows the advised move.
 	// Walking, his own body is the one he walks in: the seat he holds is empty (another's seat keeps its crewman).
-	const FString Own = bWalking ? (bHoldingSeat ? StationId : FString()) : Cabin->GetStationId(Station);
+	const FString Own = bWalking || IsOutside() ? (bHoldingSeat ? StationId : FString()) : Cabin->GetStationId(Station);
 	CrewBodies->SetHiddenStation(bInCabin && !bViewOverride ? Own : FString());
 	// Nothing of a crewmate inside his head: a hand's breadth seated, more on his feet among them.
 	const bool bStanding = bInCabin && !bViewOverride && StandStation == Station;
-	CrewBodies->SetClearAround(CabinCamera->GetComponentLocation(), !bInCabin || bViewOverride ? 0.0f : (bStanding ? 60.0f : (bWalking ? 35.0f : 22.0f)));
+	CrewBodies->SetClearAround(CabinCamera->GetComponentLocation(), !bInCabin || bViewOverride ? 0.0f : (bStanding ? 60.0f : (bWalking || IsOutside() ? 35.0f : 22.0f)));
 	// In a lesson only the lesson's hand (the drill master's advice could point elsewhere).
 	const bool bLesson = Sim != nullptr && Sim->HasTutorial();
 	CrewBodies->SetGhostHand(StationId, bLesson ? LessonHand : (bAssist && Advice.bValid ? Advice.Control : FString()));
@@ -290,6 +298,13 @@ void ASimOsaVehicle::LookAtLessonTarget()
 	{
 		FeedbackText = TEXT("Nothing to look at in this step");
 		FeedbackSecondsLeft = 2.0f;
+		return;
+	}
+	// Out of the vehicle he walks back in himself first: nothing carries him to his seat.
+	if (IsOutside())
+	{
+		FeedbackText = TEXT("You are outside: climb back in to your seat first (F at the hatch)");
+		FeedbackSecondsLeft = 3.0f;
 		return;
 	}
 	// From the lesson's seat: into the cabin, or back to it (sitting down if he was up and walking).
@@ -446,7 +461,7 @@ void ASimOsaVehicle::RunLessonAutoplay(USimWorldSubsystem* Sim, const FSimTutori
 			const int32 Item = Cabin->FindItem(Step.Control);
 			if (Item != INDEX_NONE && Sim->GetTutorialRefusal(Step.Control).IsEmpty())
 			{
-				ShowFeedback(Cabin->ClickItem(Item, Step.Position >= Step.CurrentPosition ? 1 : -1));
+				ShowFeedback(ClickOrGoOut(Item, Step.Position >= Step.CurrentPosition ? 1 : -1));
 			}
 			++AutoClicks;
 			return;
@@ -1143,6 +1158,8 @@ bool ASimOsaVehicle::SetInCabin(bool bEnter)
 	bInCabin = bEnter;
 	StandStation = INDEX_NONE;  // in or out, he sits down
 	bWalking = false;
+	Body = EBodyMode::Seat;
+	bOutsideLook = false;
 	Camera->SetActive(!bEnter);
 	CabinCamera->SetActive(bEnter);
 	// The placeholder hull's boxes enclose the cabin: from inside they would close the windows to Lumen's sky light
@@ -1232,6 +1249,18 @@ void ASimOsaVehicle::ApplyStationView()
 		CabinCamera->SetRelativeLocationAndRotation(OverrideLocation, OverrideRotation);
 		return;
 	}
+	if (Body == EBodyMode::Guided)
+	{
+		return;  // FollowGuide places the eye along the way
+	}
+	if (Body == EBodyMode::Hull || Body == EBodyMode::Ground)
+	{
+		const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		const simcore::BodyData* B = Sim != nullptr ? Sim->GetBodyData() : nullptr;
+		const double Eye = B != nullptr ? 100.0 * B->dims.eye_frac * B->dims.stature_m : 161.0;
+		CabinCamera->SetRelativeLocationAndRotation(OutFeet + FVector(0.0, 0.0, Eye), FRotator(BodyPitchDeg, BodyYawDeg, 0.0));
+		return;
+	}
 	if (bWalking)
 	{
 		CabinCamera->SetRelativeLocationAndRotation(WalkEye, FRotator(WalkPitchDeg, WalkYawDeg, 0.0));
@@ -1288,6 +1317,11 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		{
 			StopCabinTour();
 		}
+		else if (IsOutside())
+		{
+			FeedbackText = TEXT("You are out of the vehicle: climb back in first (F at the hatch)");
+			FeedbackSecondsLeft = 3.0f;
+		}
 		else
 		{
 			SetInCabin(!bInCabin);
@@ -1308,6 +1342,14 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		ApplyStationView();
 		return;
 	}
+	// Out of the vehicle, or led along a way: his feet and eyes are HandleOutside's.
+	USimWorldSubsystem* BodySim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (IsOutside())
+	{
+		HandleOutside(DeltaSeconds, Pc, BodySim);
+		return;
+	}
+	Body = bWalking ? EBodyMode::Cabin : EBodyMode::Seat;
 	if (Pc->WasInputKeyJustPressed(NextStationKey))
 	{
 		NextStation();
@@ -1315,6 +1357,15 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	if (Pc->WasInputKeyJustPressed(StandKey))
 	{
 		ToggleWalking();
+	}
+	if (Pc->WasInputKeyJustPressed(ClimbKey) && BodySim != nullptr)
+	{
+		Body = bWalking ? EBodyMode::Cabin : EBodyMode::Seat;
+		Climb(BodySim);
+		if (IsOutside())
+		{
+			return;
+		}
 	}
 	if (bWalking)
 	{
@@ -1454,11 +1505,11 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	else if (bLeft)
 	{
-		ShowFeedback(Cabin->ClickItem(HoveredItem, 1));
+		ShowFeedback(ClickOrGoOut(HoveredItem, 1));
 	}
 	else if (bRight)
 	{
-		ShowFeedback(Cabin->ClickItem(HoveredItem, -1));
+		ShowFeedback(ClickOrGoOut(HoveredItem, -1));
 	}
 }
 
@@ -1681,4 +1732,563 @@ void ASimOsaVehicle::ShowTourView()
 	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	UE_LOG(LogSAM3D, Log, TEXT("Cabin tour view %d/%d at t=%.0f s: %s"), TourIndex + 1, TourViews.Num(),
 		Sim != nullptr ? Sim->GetSimTimeSeconds() : 0.0, *V.Label);
+}
+
+// ---------------------------------------------------------------------------------------------- out of the vehicle
+// docs/crew/13_OUT_OF_THE_VEHICLE.md: through a hatch onto the roof, down a side by a wheel, over the ground, and back the
+// same way. Every climb is simcore's leg (CrewMover), walked in first person; nothing is a teleport.
+
+namespace
+{
+	std::string ToStdS(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
+	FString ToFS(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
+
+	// The eye above the feet standing upright (data/crew/body.json), and stooping in a compartment.
+	double StandingEyeCm(const USimWorldSubsystem* Sim)
+	{
+		const simcore::BodyData* B = Sim != nullptr ? Sim->GetBodyData() : nullptr;
+		return B != nullptr ? 100.0 * B->dims.eye_frac * B->dims.stature_m : 161.0;
+	}
+}
+
+FString ASimOsaVehicle::GetBodyText() const
+{
+	switch (Body)
+	{
+	case EBodyMode::Cabin: return TEXT("On your feet inside");
+	case EBodyMode::Guided: return TEXT("On your way");
+	case EBodyMode::Hull: return TEXT("On the roof");
+	case EBodyMode::Ground: return TEXT("On the ground");
+	default: return FString();
+	}
+}
+
+double ASimOsaVehicle::GroundZ(const FVector& VehicleCm) const
+{
+	UWorld* World = GetWorld();
+	const FTransform T = GetActorTransform();
+	const FVector At = T.TransformPosition(FVector(VehicleCm.X, VehicleCm.Y, 0.0));
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimWalkGround), false, this);
+	if (World != nullptr && World->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 5000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+	{
+		return T.InverseTransformPosition(Hit.ImpactPoint).Z;
+	}
+	return 0.0;  // the ground the vehicle stands on
+}
+
+void ASimOsaVehicle::SetOutsideLook(bool bOutside)
+{
+	if (bOutside == bOutsideLook)
+	{
+		return;
+	}
+	bOutsideLook = bOutside;
+	// Outside, the hull is seen and the daylight is in; the closed compartment (the PU-12M's) is hidden as from the orbit
+	// camera. Back in, as SetInCabin has it.
+	for (UStaticMeshComponent* Outside : {Hull.Get(), Turret.Get(), SearchAntenna.Get()})
+	{
+		if (Outside != nullptr)
+		{
+			Outside->SetVisibility(bOutside && !bIsPost);
+		}
+	}
+	if (PostExterior != nullptr)
+	{
+		PostExterior->SetVisibility(bOutside);
+	}
+	Cabin->SetCabinHidden(bIsPost && bOutside);
+	SetDaylightShut(bIsPost && !bOutside);
+}
+
+bool ASimOsaVehicle::GoBody(USimWorldSubsystem* Sim, const simcore::MoveGoal& Goal)
+{
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	if (R == nullptr || !R->HasVehicle())
+	{
+		FeedbackText = TEXT("This vehicle has no ways out yet (data/vehicles)");
+		FeedbackSecondsLeft = 3.0f;
+		return false;
+	}
+	if (!bHoldingSeat || StationId.IsEmpty())
+	{
+		FeedbackText = TEXT("Take the seat first (T): you go out as its crewman");
+		FeedbackSecondsLeft = 3.0f;
+		return false;
+	}
+	ReportBody(Sim);  // where he is now: the way starts there
+	FString Why;
+	if (!Sim->PlayerBodyGoTo(StationId, Goal, Why))
+	{
+		FeedbackText = Why.IsEmpty() ? FString(TEXT("No way there")) : Why;
+		FeedbackSecondsLeft = 4.0f;
+		return false;
+	}
+	Body = EBodyMode::Guided;
+	bWalking = false;
+	StandStation = INDEX_NONE;
+	DraggedWheel = INDEX_NONE;
+	bWheelWatch = bWatchReturn = false;
+	BodyYawDeg = 0.0;  // led: the head's turn off the way he goes
+	BodyPitchDeg = 0.0;
+	HoverText.Reset();
+	Cabin->SetHighlightedItem(INDEX_NONE);
+	return true;
+}
+
+void ASimOsaVehicle::Climb(USimWorldSubsystem* Sim)
+{
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	const simcore::VehicleDef* V = R != nullptr ? R->Vehicle() : nullptr;
+	if (V == nullptr)
+	{
+		FeedbackText = TEXT("This vehicle has no ways out yet (data/vehicles)");
+		FeedbackSecondsLeft = 3.0f;
+		return;
+	}
+	const std::string Me = ToStdS(StationId);
+	auto Near2 = [](const simcore::Vec3& A, const simcore::Vec3& B) { return std::hypot(A.x - B.x, A.y - B.y); };
+	switch (Body)
+	{
+	case EBodyMode::Seat:
+	{
+		if (Cabin->GetStationId(Station) != StationId)
+		{
+			FeedbackText = TEXT("Your own seat first (Tab): you go out as its crewman");
+			FeedbackSecondsLeft = 3.0f;
+			return;
+		}
+		for (const simcore::VehicleExit& E : V->exits)
+		{
+			for (const std::string& S : E.stations)
+			{
+				if (S == Me && !E.emergency)
+				{
+					if (GoBody(Sim, simcore::MoveGoal::OnHull(E.out_m)))
+					{
+						FeedbackText = FString::Printf(TEXT("Out by %s"), *ToFS(E.label));
+						FeedbackSecondsLeft = 3.0f;
+					}
+					return;
+				}
+			}
+		}
+		return;
+	}
+	case EBodyMode::Cabin:
+	{
+		const simcore::Vec3 Feet = ToBodyM(WalkEye);
+		const simcore::VehicleExit* Best = nullptr;
+		double BestD = 0.9;
+		for (const simcore::VehicleExit& E : V->exits)
+		{
+			const double D = Near2(Feet, E.under_m);
+			if (!E.emergency && D < BestD)
+			{
+				BestD = D;
+				Best = &E;
+			}
+		}
+		if (Best == nullptr)
+		{
+			FeedbackText = TEXT("No hatch above you: stand under one (F climbs out)");
+			FeedbackSecondsLeft = 3.0f;
+			return;
+		}
+		GoBody(Sim, simcore::MoveGoal::OnHull(Best->out_m));
+		return;
+	}
+	case EBodyMode::Hull:
+	{
+		const simcore::Vec3 Feet = ToBodyM(OutFeet);
+		for (const simcore::VehicleWayDown& W : V->ways)
+		{
+			if (Near2(Feet, W.top_m) < 0.9)
+			{
+				GoBody(Sim, simcore::MoveGoal::OnGround(R->Pose().ToEnu(W.bottom_m)));
+				return;
+			}
+		}
+		for (const simcore::VehicleExit& E : V->exits)
+		{
+			if (!E.to_ground && Near2(Feet, E.out_m) < 0.9)
+			{
+				GoBody(Sim, simcore::MoveGoal::InCabin(E.under_m));
+				return;
+			}
+		}
+		FeedbackText = TEXT("Walk to a hatch to climb in, or to the edge by a wheel to climb down");
+		FeedbackSecondsLeft = 3.0f;
+		return;
+	}
+	case EBodyMode::Ground:
+	{
+		const simcore::Vec3 Feet = ToBodyM(OutFeet);
+		for (const simcore::VehicleWayDown& W : V->ways)
+		{
+			if (Near2(Feet, W.bottom_m) < 1.5)
+			{
+				GoBody(Sim, simcore::MoveGoal::OnHull(W.top_m));
+				return;
+			}
+		}
+		FeedbackText = TEXT("Walk up to a wheel on the vehicle's side to climb up");
+		FeedbackSecondsLeft = 3.0f;
+		return;
+	}
+	default:
+		return;
+	}
+}
+
+void ASimOsaVehicle::FollowGuide(USimWorldSubsystem* Sim, float DeltaSeconds)
+{
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	const simcore::CrewMover* M = R != nullptr ? R->Mover(ToStdS(StationId)) : nullptr;
+	if (M == nullptr)
+	{
+		Body = EBodyMode::Seat;
+		return;
+	}
+	Sim->StepPlayerBody(StationId, DeltaSeconds);  // a client leads his own walk
+	const simcore::MoverView V = M->View(R->Pose());
+	SetOutsideLook(!V.inside);
+	const double Stand = StandingEyeCm(Sim);
+	const simcore::CabinLayout* Layout = Sim->GetCabinLayout();
+	const double Stoop = Layout != nullptr && Layout->stand_eye_m > 0.0 ? 100.0 * Layout->stand_eye_m : 100.0 * V.feet_m.z + 0.83 * Stand;
+	FVector Eye = FromBodyM(V.feet_m);
+	if (V.place == simcore::BodyPlace::Hatch)
+	{
+		// Out of the hatch he straightens up: from the compartment's stoop to his full height over the roof.
+		const double In = V.leg == simcore::LegKind::ClimbIn ? V.leg_progress : 1.0 - V.leg_progress;
+		Eye.Z = FMath::Lerp(Eye.Z + Stand, Stoop, FMath::Clamp(In, 0.0, 1.0));
+	}
+	else if (V.inside)
+	{
+		Eye.Z = Stoop;
+	}
+	else
+	{
+		Eye.Z += Stand;
+	}
+	CabinCamera->SetRelativeLocationAndRotation(Eye, FRotator(BodyPitchDeg, FMath::RadiansToDegrees(V.yaw_m) + BodyYawDeg, 0.0));
+	HoverText = FString::Printf(TEXT("%s"), *ToFS(simcore::ToString(V.leg)));
+	if (M->Moving())
+	{
+		return;
+	}
+	// Arrived: he is where the way ended.
+	const double Yaw = FRotator::NormalizeAxis(FMath::RadiansToDegrees(V.yaw_m) + BodyYawDeg);
+	HoverText.Reset();
+	switch (V.place)
+	{
+	case simcore::BodyPlace::Hull:
+	case simcore::BodyPlace::Ground:
+		Body = V.place == simcore::BodyPlace::Hull ? EBodyMode::Hull : EBodyMode::Ground;
+		OutFeet = FromBodyM(V.feet_m);
+		if (Body == EBodyMode::Ground)
+		{
+			OutFeet.Z = GroundZ(OutFeet);
+		}
+		BodyYawDeg = Yaw;
+		FeedbackText = Body == EBodyMode::Hull ? TEXT("On the roof: W A S D, F at a hatch or by a wheel") : TEXT("On the ground: W A S D, Shift runs, F by a wheel climbs up");
+		FeedbackSecondsLeft = 3.0f;
+		break;
+	case simcore::BodyPlace::Cabin:
+		Body = EBodyMode::Cabin;
+		bWalking = true;
+		WalkEye = FromBodyM(V.feet_m);
+		WalkEye.Z = Stoop;
+		WalkYawDeg = Yaw;
+		WalkPitchDeg = BodyPitchDeg;
+		SetOutsideLook(false);
+		FeedbackText = TEXT("Inside: X sits you down at a seat");
+		FeedbackSecondsLeft = 3.0f;
+		break;
+	default:
+	{
+		Body = EBodyMode::Seat;
+		bWalking = false;
+		const int32 Mine = FindStation(StationId);
+		Station = Mine != INDEX_NONE ? Mine : Station;
+		LookYawDeg = LookPitchDeg = 0.0;
+		SetOutsideLook(false);
+		break;
+	}
+	}
+	BodyPitchDeg = Body == EBodyMode::Cabin ? 0.0 : BodyPitchDeg;
+	ApplyStationView();
+	// A job he was walked out to: worked now that he is there.
+	if (!PendingJob.IsEmpty())
+	{
+		const int32 Item = Cabin->FindItem(PendingJob);
+		if (V.place == simcore::BodyPlace::Ground && Item != INDEX_NONE)
+		{
+			ShowFeedback(Cabin->ClickItem(Item, PendingJobDirection));
+		}
+		PendingJob.Reset();
+	}
+}
+
+void ASimOsaVehicle::ReportBody(USimWorldSubsystem* Sim)
+{
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	if (R == nullptr || !R->HasVehicle() || !bHoldingSeat || StationId.IsEmpty() || Body == EBodyMode::Guided)
+	{
+		return;
+	}
+	simcore::BodyPlace Place = simcore::BodyPlace::Seated;
+	simcore::Vec3 Feet;
+	double YawDeg = 0.0;
+	switch (Body)
+	{
+	case EBodyMode::Cabin:
+	{
+		Place = simcore::BodyPlace::Cabin;
+		Feet = ToBodyM(WalkEye);
+		const simcore::VehicleSeat* Seat = R->Vehicle()->Seat(ToStdS(StationId));
+		Feet.z = Seat != nullptr ? Seat->stand_m.z : 0.6;
+		YawDeg = WalkYawDeg;
+		break;
+	}
+	case EBodyMode::Hull:
+	case EBodyMode::Ground:
+		Place = Body == EBodyMode::Hull ? simcore::BodyPlace::Hull : simcore::BodyPlace::Ground;
+		Feet = ToBodyM(OutFeet);
+		YawDeg = BodyYawDeg;
+		break;
+	default:
+		break;
+	}
+	Sim->ReportPlayerBody(StationId, Place, Feet, FMath::DegreesToRadians(YawDeg));
+}
+
+ESimPlayerActionResult ASimOsaVehicle::ClickOrGoOut(int32 Item, int32 Direction)
+{
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	const FString Control = Cabin->GetItemControl(Item);
+	if (R != nullptr && R->HasVehicle() && bHoldingSeat && !Control.IsEmpty() && (Body == EBodyMode::Seat || Body == EBodyMode::Cabin))
+	{
+		const std::string Place = R->JobPlace(ToStdS(Control));
+		const simcore::ControlDef* Def = R->Console().panel.Find(ToStdS(Control));
+		if (!Place.empty() && Def != nullptr && ToFS(Def->station) == StationId)
+		{
+			// The case of a job done outside (the AB-1, the aiming circle): he takes it out to where it is worked.
+			PendingJob = Control;
+			PendingJobDirection = Direction;
+			const simcore::VehiclePlace* P = R->Vehicle()->Place(Place);
+			if (GoBody(Sim, simcore::MoveGoal::AtPlace(Place)))
+			{
+				FeedbackText = FString::Printf(TEXT("Out to %s"), P != nullptr ? *ToFS(P->label) : *ToFS(Place));
+				FeedbackSecondsLeft = 4.0f;
+				return ESimPlayerActionResult::Sent;
+			}
+			PendingJob.Reset();
+			return ESimPlayerActionResult::Blocked;
+		}
+	}
+	return Cabin->ClickItem(Item, Direction);
+}
+
+void ASimOsaVehicle::UpdateJobMarkers(USimWorldSubsystem* Sim)
+{
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	const simcore::VehicleDef* V = R != nullptr ? R->Vehicle() : nullptr;
+	if (V == nullptr)
+	{
+		return;
+	}
+	// The job's object on the ground while it is set up there (the AB-1 set, the aiming circle on its tripod); a stake
+	// marks the spot otherwise. Engine basic shapes until real models exist.
+	for (const simcore::VehicleJob& J : V->jobs)
+	{
+		const FString Id = ToFS(J.place);
+		const simcore::VehiclePlace* P = V->Place(J.place);
+		if (P == nullptr)
+		{
+			continue;
+		}
+		TObjectPtr<UStaticMeshComponent>* Found = JobMarkers.Find(Id);
+		if (Found == nullptr)
+		{
+			UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+			C->SetupAttachment(Root);
+			C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			C->RegisterComponent();
+			Found = &JobMarkers.Add(Id, C);
+		}
+		UStaticMeshComponent* C = Found->Get();
+		const bool bSet = R->Console().panel.Get(J.control) >= 1;
+		const bool bBox = J.place == "ab1";
+		const TCHAR* Shape = bSet && bBox ? TEXT("/Engine/BasicShapes/Cube.Cube") : TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, Shape);
+		if (C->GetStaticMesh() != Mesh)
+		{
+			C->SetStaticMesh(Mesh);
+		}
+		const FVector Size = bSet ? (bBox ? FVector(0.6, 0.45, 0.55) : FVector(0.12, 0.12, 1.3)) : FVector(0.04, 0.04, 0.5);
+		FVector At = FromBodyM(P->face_m);
+		At.Z = GroundZ(At) + 50.0 * Size.Z;
+		C->SetRelativeLocation(At);
+		C->SetRelativeScale3D(Size);
+		C->SetVisibility(!bInCabin || IsOutside() || !bIsPost);
+	}
+}
+
+void ASimOsaVehicle::HandleOutside(float DeltaSeconds, APlayerController* Pc, USimWorldSubsystem* Sim)
+{
+	if (Body == EBodyMode::Guided)
+	{
+		float Dx = 0.0f;
+		float Dy = 0.0f;
+		Pc->GetInputMouseDelta(Dx, Dy);
+		BodyYawDeg = FMath::Clamp(BodyYawDeg + Dx * CabinLookDegPerMouseUnit, -120.0, 120.0);
+		BodyPitchDeg = FMath::Clamp(BodyPitchDeg + Dy * CabinLookDegPerMouseUnit, -70.0, 60.0);
+		FollowGuide(Sim, DeltaSeconds);
+		return;
+	}
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	const simcore::VehicleDef* V = R != nullptr ? R->Vehicle() : nullptr;
+	if (V == nullptr)
+	{
+		return;
+	}
+	SetOutsideLook(true);
+	float Dx = 0.0f;
+	float Dy = 0.0f;
+	Pc->GetInputMouseDelta(Dx, Dy);
+	BodyYawDeg = FRotator::NormalizeAxis(BodyYawDeg + Dx * CabinLookDegPerMouseUnit);
+	BodyPitchDeg = FMath::Clamp(BodyPitchDeg + Dy * CabinLookDegPerMouseUnit, -80.0, 70.0);
+	// His feet: W A S D along where he looks.
+	const double Fwd = (Pc->IsInputKeyDown(EKeys::W) ? 1.0 : 0.0) - (Pc->IsInputKeyDown(EKeys::S) ? 1.0 : 0.0);
+	const double Side = (Pc->IsInputKeyDown(EKeys::D) ? 1.0 : 0.0) - (Pc->IsInputKeyDown(EKeys::A) ? 1.0 : 0.0);
+	const FVector Move = (FRotator(0.0, BodyYawDeg, 0.0).Vector() * Fwd + FRotator(0.0, BodyYawDeg + 90.0, 0.0).Vector() * Side).GetSafeNormal2D();
+	const simcore::GaitDef& Gait = R->Walking().gait;
+	if (!Move.IsNearlyZero())
+	{
+		if (Body == EBodyMode::Hull)
+		{
+			// On the roof's walkable part only: not past its edges, not onto the antenna unit or the mast; along an edge he
+			// slides.
+			const double Step = 100.0 * Gait.hull_mps * DeltaSeconds;
+			auto Ok = [V](const FVector& P) { return V->OnHull(P.Y / 100.0, P.X / 100.0); };
+			const FVector To = OutFeet + Move * Step;
+			if (Ok(To))
+			{
+				OutFeet = To;
+			}
+			else if (Ok(FVector(To.X, OutFeet.Y, OutFeet.Z)))
+			{
+				OutFeet.X = To.X;
+			}
+			else if (Ok(FVector(OutFeet.X, To.Y, OutFeet.Z)))
+			{
+				OutFeet.Y = To.Y;
+			}
+			OutFeet.Z = 100.0 * V->hull_top_m;
+		}
+		else
+		{
+			// Over the ground at the drill's pace, slowed up a slope (Tobler) and in a wood, never into the hull.
+			const double Ahead = (GroundZ(OutFeet + Move * 100.0) - GroundZ(OutFeet)) / 100.0;
+			const simcore::Vec3 Enu = R->Pose().ToEnu(ToBodyM(OutFeet));
+			double Mps = simcore::GroundSpeed(Gait, nullptr, R->MapGround(), Enu.x, Enu.y, 0.0, 1.0, Pc->IsInputKeyDown(RunKey));
+			Mps = std::fabs(Ahead) > Gait.steepest ? 0.0 : Mps * simcore::ToblerFactor(Ahead);
+			const FVector To = OutFeet + Move * (100.0 * Mps * DeltaSeconds);
+			const simcore::Vec3 B = ToBodyM(To);
+			const simcore::PlanRect& F = V->footprint;
+			const bool bUnder = B.x > F.x0 - 0.3 && B.x < F.x1 + 0.3 && B.y > F.y0 - 0.3 && B.y < F.y1 + 0.3;
+			if (!bUnder)
+			{
+				OutFeet = To;
+			}
+			OutFeet.Z = GroundZ(OutFeet);
+		}
+	}
+	CabinCamera->SetRelativeLocationAndRotation(OutFeet + FVector(0.0, 0.0, StandingEyeCm(Sim)), FRotator(BodyPitchDeg, BodyYawDeg, 0.0));
+	if (Pc->WasInputKeyJustPressed(ClimbKey))
+	{
+		Climb(Sim);
+		return;
+	}
+	// What F does here, and a job of his seat in front of him (left click works it, right click steps it back).
+	HoverText.Reset();
+	HoveredJob.Reset();
+	const simcore::Vec3 Feet = ToBodyM(OutFeet);
+	const FVector Look = FRotator(BodyPitchDeg, BodyYawDeg, 0.0).Vector();
+	const FVector EyeAt = OutFeet + FVector(0.0, 0.0, StandingEyeCm(Sim));
+	// The jobs of his seat at the place he looks at, within 3 m: the first not yet done (else the last), or the one the
+	// mouse wheel picked.
+	TArray<const simcore::VehicleJob*> Here;
+	for (const simcore::VehicleJob& J : V->jobs)
+	{
+		const simcore::VehiclePlace* P = V->Place(J.place);
+		if (P == nullptr || ToFS(J.station) != StationId || Body != EBodyMode::Ground)
+		{
+			continue;
+		}
+		FVector Obj = FromBodyM(P->face_m);
+		Obj.Z = GroundZ(Obj) + 50.0;
+		const FVector To = Obj - EyeAt;
+		if (To.Size() < 300.0 && FVector::DotProduct(To.GetSafeNormal(), Look) > 0.85 && (Here.Num() == 0 || Here[0]->place == J.place))
+		{
+			Here.Add(&J);
+		}
+	}
+	if (Here.Num() == 0)
+	{
+		JobPick = -1;
+	}
+	else
+	{
+		if (Here.Num() > 1 && (Pc->WasInputKeyJustPressed(EKeys::MouseScrollUp) || Pc->WasInputKeyJustPressed(EKeys::MouseScrollDown)))
+		{
+			JobPick = (FMath::Max(JobPick, 0) + 1) % Here.Num();
+		}
+		int32 Pick = JobPick >= 0 && JobPick < Here.Num() ? JobPick : Here.Num() - 1;
+		if (JobPick < 0)
+		{
+			for (int32 I = Here.Num() - 1; I >= 0; --I)
+			{
+				if (R->Console().panel.Get(Here[I]->control) == 0)
+				{
+					Pick = I;
+				}
+			}
+		}
+		HoveredJob = ToFS(Here[Pick]->control);
+		const simcore::ControlDef* Def = R->Console().panel.Find(Here[Pick]->control);
+		HoverText = FString::Printf(TEXT("%s   (left click%s)"), Def != nullptr ? *ToFS(Def->label) : *HoveredJob,
+			Here.Num() > 1 ? TEXT("; wheel: the next job here") : TEXT(""));
+	}
+	if (HoverText.IsEmpty())
+	{
+		for (const simcore::VehicleWayDown& W : V->ways)
+		{
+			const simcore::Vec3& At = Body == EBodyMode::Hull ? W.top_m : W.bottom_m;
+			if (std::hypot(Feet.x - At.x, Feet.y - At.y) < (Body == EBodyMode::Hull ? 0.9 : 1.5))
+			{
+				HoverText = FString::Printf(TEXT("F: climb %s (%s)"), Body == EBodyMode::Hull ? TEXT("down") : TEXT("up"), *ToFS(W.label));
+			}
+		}
+		for (const simcore::VehicleExit& E : V->exits)
+		{
+			if (Body == EBodyMode::Hull && !E.to_ground && std::hypot(Feet.x - E.out_m.x, Feet.y - E.out_m.y) < 0.9)
+			{
+				HoverText = FString::Printf(TEXT("F: climb in (%s)"), *ToFS(E.label));
+			}
+		}
+	}
+	if (!HoveredJob.IsEmpty())
+	{
+		const int32 Item = Cabin->FindItem(HoveredJob);
+		const bool bLeft = Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton);
+		const bool bRight = Pc->WasInputKeyJustPressed(EKeys::RightMouseButton);
+		if (Item != INDEX_NONE && (bLeft || bRight))
+		{
+			ReportBody(Sim);  // simcore checks he is at the place
+			ShowFeedback(Cabin->ClickItem(Item, bLeft ? 1 : -1));
+		}
+	}
 }

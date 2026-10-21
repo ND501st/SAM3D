@@ -444,9 +444,9 @@ SC_TEST("crew body: in the PU-12M, a crewman reaching for any control keeps his 
         SC_EXPECT(off < 0.03);
         if (!plan.seated) ++stood;
     }
-    // the DTP and the mast's winch, crouching under the roof; and the R-407's lower controls (its power, the modes and
-    // meter switches, the measure button), on the floor behind the battery commander
-    SC_EXPECT(stood == 6);
+    // the DTP and the mast's winch, crouching under the roof; and the R-111's antenna distributor, on the SAU block under
+    // the bench's back behind the battery commander
+    SC_EXPECT(stood == 3);
 }
 
 namespace {

@@ -658,11 +658,44 @@ preparation, firing under jamming, kill assessment (246-267).
 ### Recorded, not built
 
 - The ARM drill (emission discipline by Table 7.3, the 2-in-3-4 search bursts, ARM signs): roadmap E6's next step.
-- Kill assessment from the instruments' signs (the crew now learns the result from the outcome model).
-- Group targets (selection rules in a designation), small drones' signs, helicopter sectors and duty launchers.
+- Small drones' signs, helicopter sectors and duty launchers; the other group rules (the lead or the brightest mark when
+  tracking a group; which mark to take when a group splits before or after the launch; two missiles 6-8 s apart).
 - The stabilisation's ДР mode and ПРЕДЕЛЬНЫЙ УГОЛ fault, ventilation summer / winter, pressurisation, the noise strip
   and clutter on the scopes as signs of normal operation; the PPI's parameter scale.
 - The inertial range tracking at a burst, the fuze-delay and Vг < 100 lamp, the trainer's modes for a training screen,
-  the fire-capability formula as an air-war yardstick, the march's radio silence (flags and lamps) for the command
-  pipeline.
+  the fire-capability formula as an air-war yardstick.
 
+Built since (20 Oct 2026, `scenario_runner.hpp` `MarchRadioBan`): **the march's radio discipline** (pp. 232-239). While
+the battery forms its column and marches, the battery commander's orders go by flags (lamps at night) from the column's
+head, seen by the column's drivers and commanders, not on the battery net; the post's net orders and its report to the
+regiment are refused on the march with the reason, and the NPC commander neither moves a jammed net nor calls the
+launchers. Radio opens again for fire control while the battery repels an attack: a hostile within the range at which the
+column stops where it is to fight (`short_halt_in_column_m`, p254), or a target being engaged.
+
+Built since (20 Oct 2026, `simcore/kill_assessment.hpp`): **kill assessment from the instruments' signs** (p267). The
+outcome model still decides what happened; the crew learns it only from the signs: the burst and the missile's reply gone
+(the range indicator, else the launch console's ЗАХВАТ lamp), the target's mark gone (read from the instruments: the range
+indicator, else the search scope), its elevation dropping (the elevation dial), a group's mark splitting, a jammer's strobe
+or a chaff drop stopping (the search scope), fire on the TV; for a miss the reply lost before the meeting or still there
+after it, the target flying on unchanged, the target whole on the TV. Each sign is called by the seat whose instrument
+shows it (`kill_sign_*`); the deputy commander (the TV and the elevation dial: the book's fullest source) calls the result
+once a sign settles it, no sooner than 2 s, or with what he has at 8 s, and may call it wrong where the signs settle
+nothing (a near miss at night: the burst, then the target flying on; a target diving away after a near miss). The crew's
+picture, the report to the battery and the commander's next move (wait for the call; drop a target called destroyed;
+engage again after a miss) follow his call. A target called destroyed that is still on the search scope 10 s later is
+reported flying on and taken back. The World has no wreck, so the wreck's fall, fire and the group and jamming signs are
+drawn; the miss's signs are read from the live target. The game numbers: `data/gameplay/osa_ak.json` `kill_assessment`
+(estimates).
+
+Built since (20 Oct 2026, `simcore/group_designation.hpp`): **a target in a group in a designation** (p261, printed page;
+the "pp. 258-267" above is the section). When the post's picture can't resolve a group (its hostile marks linked closer
+together than 3 km, the PU-12M's own error after `flak11`: a sam3d reading), its designation is the group's centre and a
+selection rule: «группа 6201, центр, азимут …, дальность …, правило 2» (`order_assign`). The NPC battery commander gives
+each launcher on the group the next rule, a launcher per aircraft, four at most; a player's designation does the same
+unless a rule is given. The launcher's crew counts the group on its own screen: rule n is the n-th from the left of the
+nearest targets, on one azimuth (within the search radar's 1.3 deg beam, p24) by range; with no rule the crew chief
+chooses (SAM3D: the first). "The nearest targets" is read as the group nearest the given centre: the echo nearest it
+within 6 km and the echoes linked to it within 2 km (estimates). In the Osa the commander passes it on
+(`designation_group`), the senior operator counts it on his scope and reports the pick (`group_pick`), and the commander
+takes that aircraft; the post's other launchers count from their own places. A rule beyond the group's size takes the last
+(sam3d).

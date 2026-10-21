@@ -63,9 +63,20 @@ post's own manual. It gives the role three layers (table above):
 (art. 17); the operator-plotter's voice is his reports, which the commander decides on. Nothing found has him advise or
 propose. The NVA plotters' handbook may say more.
 
-**For SAM3D (proposed, not built):** the plotter speaks the art. 23 reports aloud to the commander (a new target on the
-board, jamming reported on the net, a target lost), not only writes them; as the operator of art. 20 he can stand in for
-the squad leader; and the art. 19 duties (watching, camouflage, digging in) are the whole crew's at deployment.
+**For SAM3D:** the plotter speaks the art. 23 reports aloud to the commander, beside him in the cabin (built 20 Oct
+2026, `scenario_runner.hpp` "the plotter's voice", `data/crew/pu12m_crew.json` `plot_new`, `plot_turn`, `plot_lost`):
+
+* a new target as he writes it: its number, bearing and range from the post, height, identity (the board's identity
+  digit: a jammer, a friend, a training target, a hostile, no IFF reply) and size (single, or a group of n);
+* its actions: a turn of 60° or more between its reports (`data/gameplay/comms.json` `plot_turn_deg`);
+* a target lost: three reporting periods with no new mark (`plot_lost_s`).
+
+An NPC plotter says each as it happens; a player's reports wait, filled in from his board, in his reports menu (O) until
+he says them, and one unsaid for two minutes is missed and named in the debrief. The commander decides on them
+(art. 17): the NPC commander takes a new board target into his picture (the covered regiment's warning, the fire
+distribution) when the plotter calls it, or only when he finds it on his next look over the board, 30 s on
+(`notice_board_s`, a SAM3D estimate). Still not built: the plotter as the squad leader's stand-in (art. 20) and the art. 19
+duties at deployment.
 
 **The NVA handbook:** no scan online. The NVA book dealer [nva.4mg.com](http://nva.4mg.com/shopbaus.htm) lists
 *Handbuch für Funkorter und Planzeichner der Truppenluftabwehr* (order no. 11065H, €49.95, marked as an original, stock

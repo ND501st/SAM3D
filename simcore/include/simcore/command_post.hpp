@@ -195,10 +195,14 @@ struct AspdTrack {
 
 // A command the regiment's post sends by telecode: a two-digit decimal shown on the IT-45 (rwd_mb3 pu12: commands and
 // reports "in Form von Dezimalzahlen"; flak11 PU12-0: "in Form zweistelliger Ziffern"). What each code means is the
-// table's (data/command/aspd_codes.json).
+// table's (data/command/aspd_codes.json). Or a group of the talk table ПТ-1 said on the regiment's command net only, with
+// no telecode of the same meaning («Рябина, я Тополь: 707. Приём.»: docs/crew/12_COMMUNICATIONS.md §2.9). A command held
+// on cue goes out when a lesson calls for it (tutorial.hpp "regiment:<group or code>"), not at a time.
 struct RegimentCommand {
     double at_s = 0.0;
-    int code = 0;
+    int code = -1;        // the telecode's two digits (-1: a group only)
+    std::string group;    // a talk-table group said on the command net ("" : the code's, if ПТ-1 has one)
+    bool on_cue = false;
 };
 
 // The code table: each code's meaning and what the battery does on it.
@@ -388,7 +392,7 @@ struct PostRegiment {
     std::vector<C2Outage> outages;
     bool telecode = true;              // false: the regiment sends no telecode (peacetime: the ASPD-U left off)
     double designate_within_m = 0.0;   // the regiment designates to the battery the targets this near it (0: none)
-    std::vector<RegimentCommand> commands;  // two-digit commands sent by telecode, oldest first
+    std::vector<RegimentCommand> commands;  // its commands: by telecode and its voice net, oldest first; held on cue anywhere
 };
 
 class CommandPost {

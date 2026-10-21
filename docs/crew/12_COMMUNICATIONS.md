@@ -139,6 +139,11 @@ Every producer asks the router who hears it, so nothing reaches anyone without a
   the gameplay threshold the enemy is taken to have fixed the net and a spot jammer comes on it (`palii_1989`, inference;
   `data/gameplay/comms.json`).
 * **The R-407's АПЧ off in interference** and **the R-111's ЗАЩИТА ВХОДА** stay as `radio_sets.hpp` has them.
+* **On the march** (`voenizdat_osa_1991` pp. 232-239): the battery commander, at the column's head in the PU-12M,
+  signals by flags and lamps; radio is forbidden but for fire control while the battery repels an attack. The battery's
+  march orders reach the column as flag (or lamp) signals seen by the drivers and commanders; the net orders and the
+  report to the regiment are refused on the march; the warning to the covered troops stays open talk. A hostile within the
+  column's stop-and-fight range (`short_halt_in_column_m`) or an engagement opens the radio (`MarchRadioBan`).
 
 ### 2.8 Telephones
 
@@ -159,6 +164,23 @@ battery's signal table («Воздух», «Отбой», the warnings). The gro
 table on his desk (a document in the cabin). The ASPD-U's two-digit telecode commands stay as they are
 (`data/command/aspd_codes.json`).
 
+**The papers in the cabin** (`ScenarioRunner::DocumentText`, drawn on lit, matt paper by `M_CabinPaper`, not the tubes'
+glowing material): the radiotelephonist's **radio data** on their form (`rrs_1986`, `vst_1988`): each net's frequencies by
+number with the decimal comma, the call signs (his own and the main station's; on the battery net the launchers'), the
+scheduled changes as Ч+minutes (the scenarios keep no clock), the mode (telephony), the azimuth to the regiment's post;
+then the R-407's telecode channel and the RTK-1's lines. The squad leader hands the radiotelephonists their data
+(`pvo_bu_ix_1984`), so the extract lies on the radiotelephonist's table. The commander's **talk tables**: ПТ-1 as groups and
+meanings, ПТ-2 as the signal table, each signal with its visible sign (`bstudy_tactics`: «Воздух» a green flare, «Отбой» a
+white one). Everything on them is in Russian, as issued; passwords and the talk tables' keys are not modelled.
+
+### 2.10 The plotter's voice
+
+The operator-plotter has no box: he speaks in the cabin, beside the commander. He reports aloud (`pvo_bu_x_1984` art. 23)
+each new target as he writes it (number, bearing and range from the post, height, identity, size), a turn, and a target
+lost; the commander decides (art. 17). An NPC plotter says each at once; a player's wait in his reports menu, filled in,
+and go stale after `plot_stale_s`. The NPC commander knows a board target from the plotter's call, or only on his next look
+over the board (`notice_board_s`). Details: `docs/research/PLOTTING_BOARD_2026-10.md`.
+
 ## 3. The crews' loops, interconnected
 
 **PU-12M deployment.**
@@ -173,6 +195,7 @@ table on his desk (a document in the cabin). The ASPD-U's two-digit telecode com
 **PU-12M in battle.**
 * The radiotelephonist hears the air picture and reads it to the plotter.
 * The plotter writes the board, and the commander reads it.
+* The plotter calls each new target, a turn and a lost target to the commander aloud (§2.10).
 * The commander hears the regiment on РСТ-3 and decodes its orders with ПТ-1 (a crewman whose box is on the net
   too reads the group with him and says what it means; nobody else decodes it for him).
 * He designates on РСТ-4 and hears the read-backs and reports; the squad leader keys the reports into the IT-1.
@@ -193,6 +216,17 @@ table on his desk (a document in the cabin). The ASPD-U's two-digit telecode com
 1. The commander hears it on Р-123 and reads it back.
 2. He turns A-1 to ВС, gives it to the senior operator, and turns back.
 3. The battery commander hears the read-back. A designation without a read-back is said again.
+
+**A target in a group** (`voenizdat_osa_1991` p261; `simcore/group_designation.hpp`). When the post's picture can't tell
+the group's aircraft apart (its marks closer together than `group.post_unresolved_m`), the battery commander gives the
+group's centre and a selection rule instead of a target:
+* PU-12M, `order_assign`: «21, я 10: группа 6201, центр, азимут 015, дальность 24, правило 2 — уничтожить! Приём.» (a
+  single target as before: «…: цель 6201, азимут …»). The NPC gives each launcher on the group the next rule (1-4, a
+  launcher per aircraft); the player's designation does the same unless he names a rule (0: none, the crew chief chooses).
+* Osa: the commander reads it back and passes it on, `designation_group`: «Группа номер 6201, центр: азимут …, дальность
+  …, высота …, правило 2!». The senior operator counts the group on his scope (the first to fourth from the left of the
+  nearest targets; on one azimuth by range) and reports the one the rule picks, `group_pick`: «По правилу 2: цель, азимут
+  …, дальность …!». The commander takes it (counting on what he knows himself if the report doesn't come in 15 s).
 
 ## 4. Unreal
 
@@ -215,26 +249,35 @@ table on his desk (a document in the cabin). The ASPD-U's two-digit telecode com
 ## 5. Tutorials
 
 Built (20 Oct 2026; `docs/TUTORIALS.md`). Every seat lesson but the plotter's starts with the headset off (the lesson
-scenario's `own_unit.controls`) and puts it on first. The lessons cue the nets with `net_order:<net>`, `jam:<net>` and
-`line_call:<n>` (`simcore/tutorial.hpp`); what follows is the crew's real answer.
+scenario's `own_unit.controls`) and puts it on first. The lessons cue the nets with `net_order:<net>`, `jam:<net>`,
+`line_call:<n>` and `regiment:<group or code>` (a regiment's command held `"on_cue"` in `post.regiment.commands`), and wait
+on them with `group:<code>` and `given_target` (`simcore/tutorial.hpp`); what follows is the crew's real answer.
 
 * **Radiotelephonist**: the PVS-1, the R-123M's presets, the RK-1U's data path (the lesson starts it on ВЫКЛ / С-23),
   the radio data; the PVS-1 to РСТ-1 in the deploy drill; reading the radar company's report out to the plotter; the
   regiment moving its net (the commander, who hears it on his second receiver, says «Р-111 — на запасную, ЗПЧ два!»);
   the battery net jammed and the FuG-4 to its spare on the commander's order.
 * **Battery commander**: the RTK-1 (talk on РСТ-4, the regiment on its second receiver, the lines and calls); the talk
-  tables (a tour); designating on the battery net with call signs and hearing the read-back; ordering the battery net to
-  the spare under jamming; answering line 5.
-* **Squad leader**: the PVS-2 to the covered regiment's net in the deploy drill; the check of communications and
-  «Связь готова!».
+  tables (a tour); the regiment's ПТ-1 group in his second receiver («Рябина, я Тополь: 707. Приём.»), decoded by hand
+  against the table on his desk (a `"decode"` step: nothing marks the answer, nobody else is on the net to decode it for
+  him) and answered with «Доложить в полк о готовности!» (the radiotelephonist reports on РСТ-3); designating on the
+  battery net with call signs and hearing the read-back; ordering the battery net to the spare under jamming; answering
+  line 5.
+* **Squad leader**: the PVS-2 to the covered regiment's net in the deploy drill; the radio data read (on the
+  radiotelephonist's table), then the check of communications against it and «Связь готова!».
 * **Plotter**: no headset; the radiotelephonist reads him the reports.
 * **Driver**: the headset and the PVS-3.
 * **Each Osa seat's lesson**: the headset first; the deputy and the operators check in on the intercom right after
   «К бою!» («Первый (второй, третий) готов!»).
+* **Osa commander**: the A-1 starts on ВС; after «К бою!» his own part: the headset switch to the right set (the battery
+  net) and the A-1 to Р-123; «21 к бою готов, каналы 2, ракет 6!» to the post; the battery's PU-12M (his lesson's
+  scenario now has it, as `c2` primary) gives him the drone on the battery net and he reads it back
+  («10, я 21: цель …, понял. Приём.»); the A-1 to ВС to give the crew «Цель номер … — взять!», and back to Р-123. The
+  crew menu lists his readiness report and read-back after his orders (`ScenarioRunner::PlayerRadioReports`).
 
-Not yet: a lesson step decoding a regiment's ПТ-1 group by hand (the crew decodes it and tells the commander); the Osa
-commander's lesson on the A-1 between ВС and Р-123 and the read-back of a PU-12M designation (his lesson has no post);
-the squad leader reading the radio data.
+Not yet: a crewman whose box is on the regiment's net decoding a group for a player commander in a lesson (the NPC path
+exists: `DecodeHeard`); the Osa commander's lesson on the spare frequency (the post's order «Переходите на запасную
+частоту» heard and the set turned).
 
 ## 6. Phases
 

@@ -77,6 +77,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|PU12M")
 	void PlotTrack(int32 Number);
 
+	/** The player's body out of his seat to the server (simcore::BodyPlace as a number, the feet in the vehicle's body
+	 *  frame in m, the facing in rad): docs/crew/13_OUT_OF_THE_VEHICLE.md. */
+	void SetBody(int32 Place, const FVector& FeetM, double YawRad) { ServerSetBody(Place, FeetM, YawRad); }
+
 	/** Console snapshots applied on this machine (network clients). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	int32 GetConsoleSnapshotsApplied() const { return SnapshotsApplied; }
@@ -110,6 +114,9 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerPlotTrack(int32 Number);
+
+	UFUNCTION(Server, Unreliable)
+	void ServerSetBody(int32 Place, FVector FeetM, double YawRad);
 
 	UFUNCTION(Client, Unreliable)
 	void ClientReceiveConsole(const TArray<uint8>& Bytes);

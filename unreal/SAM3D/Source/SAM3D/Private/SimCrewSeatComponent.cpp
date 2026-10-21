@@ -148,6 +148,14 @@ void USimCrewSeatComponent::ServerSetControl_Implementation(const FString& Contr
 	ClientActionResult(ControlId, bMoved, Why);
 }
 
+void USimCrewSeatComponent::ServerSetBody_Implementation(int32 Place, FVector FeetM, double YawRad)
+{
+	if (!SeatRole.IsEmpty() && Sim() != nullptr)
+	{
+		Sim()->SeatSetBody(SeatRole, Place, FeetM, YawRad, SeatVehicle);
+	}
+}
+
 void USimCrewSeatComponent::ServerTurnWheel_Implementation(const FString& ControlId, double Value)
 {
 	if (!SeatRole.IsEmpty() && Sim() != nullptr)

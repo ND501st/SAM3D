@@ -577,9 +577,10 @@ def r111(L, manifest):
                        'notes': 'Seen through the eyepiece: the hundreds of kHz within the MHz (the whole MHz is the knob\'s position on '
                                 'the scale). SAM3D draws it as a dial on the eyepiece.'})
     # the SAU block's antenna distributor (r111_to p. 64), on the block in the commander's corner (csla_pu12_manual item 26)
-    p = L.panel('sau_panel', 'R-111 SAU block (antenna distributor)', 'battery_commander', 'sau', (0.16, 0.10), face='top',
+    p = L.panel('sau_panel', 'R-111 SAU block (antenna distributor)', 'battery_commander', 'sau', (0.16, 0.10), face='left',
                 notes="The R-111's antenna tuner (csla_pu12_manual item 26, under the bench's back, at the commander's place): "
-                      "he sets the antenna distributor for the radio operator (r111_to p. 64: set before work).")
+                      "he sets the antenna distributor for the radio operator (r111_to p. 64: set before work). On the "
+                      "block's inboard end (SAM3D: the plan shows the block from above only), where he can turn round to it.")
     L.control('radio.fug3.antenna', p, (0.03, 0.0), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.03, 'color': 'black'})
     L.fixture(p, (-0.045, 0.0), 'socket', 0.022, 'chrome')
     L.nameplate(p, (0.0, 0.035), 'САУ', 0.04)
@@ -592,8 +593,9 @@ def r407(L, manifest):
     uv = L.radio_set(T, 'r407', 'SM_RadioR407', 'battery_commander', manifest, {
         'r407_panel': ('R-407 radio (FuG-5)', 3.5, None),
         'r407_meter_face': ('R-407: the meter', T.Z['meter_box'] + 0.5, T.region('meter_box')['rect']),
-    }, 'The R-407 traced from r407_photos (its size r407_to); on the floor behind the battery commander, its back to the '
-       'side (csla_pu12_manual item 25: the plan draws it smaller than the set is).')
+    }, 'The R-407 traced from r407_photos (its size r407_to); on a bracket at the side behind the battery commander\'s '
+       'seat back, over the BP-3 (csla_pu12_manual item 25: the plan places it, smaller than the set is; his workplace '
+       'drawing gives its height).')
     styles = {'radio.fug5.rx_freq': ('wheel', {'kind': 'knob', 'size_m': 0.046, 'color': 'black'}),
               'radio.fug5.tx_freq': ('wheel', {'kind': 'knob', 'size_m': 0.046, 'color': 'black'}),
               'radio.fug5.rx_level': ('wheel', {'kind': 'knob', 'size_m': 0.02, 'color': 'black'}),

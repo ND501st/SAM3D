@@ -25,6 +25,7 @@ struct TalkEntry {
     std::string effect;   // "readiness", "fire_ban", "fire_free", "cease_fire", "silence_on", "silence_off",
                           // "spare_frequency", "report_readiness", "air_warning", "all_clear", or "" (said only)
     int aspd = -1;        // the ASPD-U's two-digit command of the same meaning (-1: none)
+    std::string visual;   // a signal table's sign seen instead of heard ("зелёная ракета"), "" if none
 };
 struct TalkTable {
     std::string id;       // "pt1"
@@ -97,9 +98,9 @@ public:
                 const json::Value& x = entries->items[k];
                 TalkEntry te;
                 double aspd = -1.0;
-                if (!Keys(x, ep, {"code", "ru", "en", "effect", "aspd", "notes"}) || !RequireString(x, ep, "code", te.code) ||
+                if (!Keys(x, ep, {"code", "ru", "en", "effect", "aspd", "visual", "notes"}) || !RequireString(x, ep, "code", te.code) ||
                     !RequireString(x, ep, "ru", te.ru) || !RequireString(x, ep, "en", te.en) || !OptionalString(x, ep, "effect", te.effect) ||
-                    !OptionalNumber(x, ep, "aspd", aspd)) {
+                    !OptionalNumber(x, ep, "aspd", aspd) || !OptionalString(x, ep, "visual", te.visual)) {
                     return false;
                 }
                 te.aspd = static_cast<int>(aspd);
@@ -124,7 +125,8 @@ public:
     bool Load(const json::Value& root, CommsTuning& t) {
         if (!Keys(root, "", {"comms_id", "display_name", "status", "notes", "headset_s", "box_select_s", "answer_line_s", "recognise_jamming_s",
                              "order_spare_s", "weak_jam_loss", "call_wait_s", "both_frequencies_s", "loss_report_s", "df_window_s", "df_fix_s",
-                             "df_reaction_s", "warn_covered_m"})) {
+                             "df_reaction_s", "warn_covered_m", "notice_board_s", "plot_lost_s", "plot_turn_deg",
+                             "plot_stale_s"})) {
             return false;
         }
         cite_path_ = "comms";
@@ -134,7 +136,9 @@ public:
                               std::make_pair("call_wait_s", &t.call_wait_s), std::make_pair("both_frequencies_s", &t.both_frequencies_s),
                               std::make_pair("loss_report_s", &t.loss_report_s), std::make_pair("df_window_s", &t.df_window_s),
                               std::make_pair("df_fix_s", &t.df_fix_s), std::make_pair("df_reaction_s", &t.df_reaction_s),
-                              std::make_pair("warn_covered_m", &t.warn_covered_m)}) {
+                              std::make_pair("warn_covered_m", &t.warn_covered_m),
+                              std::make_pair("notice_board_s", &t.notice_board_s), std::make_pair("plot_lost_s", &t.plot_lost_s),
+                              std::make_pair("plot_turn_deg", &t.plot_turn_deg), std::make_pair("plot_stale_s", &t.plot_stale_s)}) {
             if (!Cited(root, f.first, *f.second)) return false;
         }
         if (t.weak_jam_loss > 1.0) return Fail("comms.weak_jam_loss", "a chance, 0-1");

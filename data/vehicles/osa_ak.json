@@ -1,0 +1,86 @@
+{
+  "system_id": "osa_ak",
+  "status": "first pass (docs/crew/13_OUT_OF_THE_VEHICLE.md, docs/research/MOUNTING_2026-10.md)",
+  "notes": "The 9A33BM2 on its chassis 5937 as a body to climb: where each seat's crewman stands up, the roof hatches over the cab and the opening windscreen, the roof in front of the antenna-launcher unit, the ways down over the front wheels, the places round it and the jobs done there. Body frame: x right, y forward, z up, metres, origin on the ground under the reference point (as data/cabins/osa_ak.json).",
+  "source": "voenizdat_osa_1991 pp173-174 (an entry hatch in the roof, two windscreens of which one opens by hand as the crew's emergency exit, an emergency hatch on the engine compartment's roof, a door in the bulkhead), p207 (hatches shut in БР; leave only once the readiness to launch is cancelled); data/cabins/osa_ak.json (seats, floor, hatches)",
+  "confidence": "medium",
+  "inside_noise_db": 72.0,
+  "hull": {
+    "top_m": 2.22,
+    "areas": [
+      { "from_m": [-1.25, 0.7], "to_m": [1.25, 4.45], "notes": "The roof over the operators' compartment and the cab, from the antenna-launcher unit's swing forward to the windscreens' top edge (4.55)." }
+    ],
+    "footprint": { "from_m": [-1.4, -4.55], "to_m": [1.4, 4.95], "notes": "Hull 9.1 m long, 2.8 wide (the Unreal placeholder's; data/systems lists the chassis 5937); the bow at 4.9 (data/cabins/osa_ak.json)." },
+    "source": "data/cabins/osa_ak.json (roof lining 2.10 m and 0.12 m of plate: tools/blender/build_cabin_interior.py ROOF_Z, THICK); the roof's walkable part: sam3d estimate from cabin_photos (opisybroni exterior)",
+    "confidence": "estimate"
+  },
+  "keep_out": [
+    { "id": "turret", "why": "The antenna-launcher unit turns ±342° with its antennas and six containers sweeping over the roof; the tracking radar's beam is a hazard close to (voenizdat_osa_1991 p207: 15-20 m sector, 15 min at 80 m)",
+      "from_m": [-1.35, -2.8], "to_m": [1.35, 0.7],
+      "source": "mon_2112_80 (the unit turns ±342°); voenizdat_osa_1991 p207; the unit's footprint: sam3d estimate (the Unreal placeholder's turret, 2.4 x 2.0 m about y -1.0)", "confidence": "estimate" }
+  ],
+  "seats": [
+    { "station": "driver", "stand_m": [-0.1, 3.72, 0.62], "notes": "The gap between the cab seats (data/cabins/osa_ak.json walk)." },
+    { "station": "commander", "stand_m": [0.1, 3.72, 0.62] },
+    { "station": "deputy_commander", "stand_m": [-0.08, 2.2, 0.62], "notes": "The aisle behind the bench." },
+    { "station": "senior_operator", "stand_m": [-0.08, 1.555, 0.62] },
+    { "station": "operator", "stand_m": [-0.08, 0.95, 0.62] }
+  ],
+  "exits": [
+    { "id": "hatch_commander", "label": "The commander's roof hatch (the entry hatch)", "kind": "roof_hatch",
+      "opening_m": [0.33, 3.8, 2.22], "size_m": [0.55, 0.6], "under_m": [0.1, 3.75, 0.62], "out_m": [0.33, 3.15, 2.22],
+      "open_s": 2.0, "climb_out_s": 4.0, "climb_in_s": 5.0,
+      "stations": ["commander", "deputy_commander", "senior_operator", "operator"],
+      "shut_when": [ { "control": "fo.mode", "is": 0 }, { "subsystem": "power", "is": "ready" } ],
+      "shut_why": "The hatches stay shut in combat work (РОД РАБОТЫ at БР with the equipment on): leave only once the readiness to launch is cancelled (voenizdat_osa_1991 p207)",
+      "source": "voenizdat_osa_1991 p173 (the entry hatch on the roof), p207 (shut in БР); data/cabins/osa_ak.json (two hatches over the cab seats, 0.55 x 0.6 m from usaf_shaw_2017 -036); the times: sam3d estimate",
+      "confidence": "medium",
+      "notes": "The textbook names one entry hatch; the cabin model has two over the cab seats (usaf_shaw_2017). SAM3D takes the commander's as the entry hatch the operators use, walking up the aisle and stepping onto his seat. Which hatch the drill uses is not known." },
+    { "id": "hatch_driver", "label": "The driver's roof hatch", "kind": "roof_hatch",
+      "opening_m": [-0.36, 3.8, 2.22], "size_m": [0.55, 0.6], "under_m": [-0.1, 3.75, 0.62], "out_m": [-0.36, 3.15, 2.22],
+      "open_s": 2.0, "climb_out_s": 4.0, "climb_in_s": 5.0,
+      "stations": ["driver"],
+      "shut_when": [ { "control": "fo.mode", "is": 0 }, { "subsystem": "power", "is": "ready" } ],
+      "shut_why": "The hatches stay shut in combat work (РОД РАБОТЫ at БР with the equipment on): leave only once the readiness to launch is cancelled (voenizdat_osa_1991 p207)",
+      "source": "data/cabins/osa_ak.json (the hatch over the driver's seat; usaf_shaw_2017 -036); voenizdat_osa_1991 p207; the times: sam3d estimate",
+      "confidence": "estimate" },
+    { "id": "windscreen", "label": "The opening windscreen (emergency exit)", "kind": "window", "emergency": true, "to_ground": true,
+      "opening_m": [0.55, 4.67, 1.86], "size_m": [0.8, 0.4], "under_m": [0.33, 4.25, 0.62], "out_m": [0.6, 5.7, 0.0],
+      "open_s": 3.0, "climb_out_s": 10.0, "climb_in_s": 14.0,
+      "stations": ["commander", "driver", "deputy_commander", "senior_operator", "operator"],
+      "source": "voenizdat_osa_1991 p173 (two windscreens in the front plate, one opened by hand for the crew's emergency exit); which one, its size and the times: sam3d estimate",
+      "confidence": "estimate",
+      "notes": "Out over the bow onto the ground in front. The emergency hatch on the engine compartment's roof (p174) is reached through the bulkhead door, which must not be used with the engine running (p207): not modelled yet." }
+  ],
+  "ways_down": [
+    { "id": "front_left", "label": "Down the left side over the front wheel", "top_m": [-1.15, 2.9, 2.22], "bottom_m": [-1.75, 2.9, 0.0],
+      "holds_m": [[-1.35, 2.9, 1.15]], "down_s": 3.0, "up_s": 4.0,
+      "source": "stroevoy_ustav_1993 art. 149 (men get on using the wheels, tracks and steps); where the front axle is and the times: sam3d estimate",
+      "confidence": "estimate",
+      "notes": "On a road's right edge the drill forbids getting down on the left (stroevoy_ustav_1993 art. 147, 154): the crew uses the right side; not enforced yet." },
+    { "id": "front_right", "label": "Down the right side over the front wheel", "top_m": [1.15, 2.9, 2.22], "bottom_m": [1.75, 2.9, 0.0],
+      "holds_m": [[1.35, 2.9, 1.15]], "down_s": 3.0, "up_s": 4.0,
+      "source": "stroevoy_ustav_1993 art. 149; the place and times: sam3d estimate", "confidence": "estimate" }
+  ],
+  "places": [
+    { "id": "aiming_circle", "label": "The aiming circle, 35 m ahead of the vehicle", "at_m": [0.0, 35.6], "face_m": [0.0, 35.0],
+      "source": "voenizdat_osa_1991 p250 (the aiming circle set up 20-50 m ahead of the vehicle, its monocular laid on the TV sight's lens)", "confidence": "high",
+      "notes": "He stands behind the tripod (face_m, where the instrument is) looking back at the vehicle." }
+  ],
+  "jobs": [
+    { "control": "nav.aiming_circle", "place": "aiming_circle", "stay_until": [ { "subsystem": "qc_measured", "is": "ready" } ], "source": "voenizdat_osa_1991 p249-250", "confidence": "medium",
+      "notes": "The crew chief finds Qc: setting the aiming circle up, reading it and stowing it are done out there." }
+  ],
+  "noise": [
+    { "subsystem": "gta", "db_at_1m": 110.0, "at_m": [0.0, -4.2, 1.8],
+      "source": "voenizdat_osa_1991 p207 (no closer than 10 m to the gas-turbine set's exhaust); the level: sam3d estimate", "confidence": "estimate" },
+    { "subsystem": "pto_generator", "db_at_1m": 95.0, "at_m": [0.0, -3.0, 1.5],
+      "source": "sam3d estimate (the diesel running for the take-off generator)", "confidence": "estimate" }
+  ],
+  "lineup": {
+    "first_m": [1.2, 6.45], "step_m": [-0.6, 0.0], "face_m": [0.0, 100.0],
+    "order": ["commander", "deputy_commander", "senior_operator", "operator", "driver"],
+    "source": "stroevoy_ustav_1993 art. 146 (a crew lines up in one rank in front of its vehicle, the commander two steps ahead of the right track, the others to his left), art. 150 (on ПО МЕСТАМ they turn about together); the crew's order: sam3d (by seat)",
+    "confidence": "medium",
+    "notes": "The regulation's tank crew rule taken for a wheeled crew. Facing away from the vehicle: they turn about to mount." }
+}

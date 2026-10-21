@@ -134,6 +134,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	double WalkSpeedCmPerS = 90.0;
 
+	/**
+	 * Out of the vehicle and back by its real ways (docs/crew/13_OUT_OF_THE_VEHICLE.md, simcore/crew_mobility.hpp): under a
+	 * hatch (or in the seat beside it) the hatch opens and he climbs out onto the roof; at the roof's edge by a way down
+	 * he climbs down; on the ground by it he climbs up; on the roof by a hatch he climbs in. Each climb is walked along
+	 * simcore's legs in first person. Needs a seat held (T) and the vehicle's file (data/vehicles/<system>.json).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey ClimbKey = EKeys::F;
+
+	/** On the ground: running (the drill's 165-180 steps a minute) while held. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey RunKey = EKeys::LeftShift;
+
 	/** In a battery link: to the other vehicle (the Osa <-> the PU-12M). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey SwitchVehicleKey = EKeys::V;
@@ -169,6 +182,14 @@ public:
 	/** Up from the seat, walking in the cabin. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsWalking() const { return bInCabin && bWalking; }
+
+	/** Out of the vehicle (on its roof or on the ground), or on his way through a hatch or down its side. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsOutside() const { return bInCabin && Body != EBodyMode::Seat && Body != EBodyMode::Cabin; }
+
+	/** Where the player's body is, for the HUD ("on the roof", "on the ground", "climbing out"...). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetBodyText() const;
 
 	/** X: up from the seat onto the cabin's floor, or down into the seat he stands by (FeedbackText says why not). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -380,6 +401,47 @@ protected:
 	TObjectPtr<USimPu12MastComponent> PostMast;
 
 private:
+	/** Where the player's body is: in a seat, on his feet inside (bWalking), led along simcore's legs (a climb, a walk to
+	 *  a job), on the roof, on the ground. */
+	enum class EBodyMode : uint8 { Seat, Cabin, Guided, Hull, Ground };
+	EBodyMode Body = EBodyMode::Seat;
+	/** On the roof or the ground: his feet in the vehicle's frame (cm, X forward, Y right, Z up) and his look (yaw and
+	 *  pitch in the vehicle's frame). Led: the extra turn of his head off the way he goes. */
+	FVector OutFeet = FVector::ZeroVector;
+	double BodyYawDeg = 0.0;
+	double BodyPitchDeg = 0.0;
+	/** A job's switch clicked inside (the AB-1's, the PAB-2's case): he is walked out to it and works it there. */
+	FString PendingJob;
+	int32 PendingJobDirection = 1;
+	/** The body seen from outside: the hull shown, the closed compartment hidden, the daylight in. */
+	bool bOutsideLook = false;
+	/** The job objects on the ground (the AB-1 set, the aiming circle), by place id. */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UStaticMeshComponent>> JobMarkers;
+	FString HoveredJob;
+	/** Several jobs at one place (the AB-1: set out, start): the mouse wheel picks among them. */
+	int32 JobPick = -1;
+	float BodyReportClock = 0.0f;
+
+	void HandleOutside(float DeltaSeconds, class APlayerController* Pc, USimWorldSubsystem* Sim);
+	/** F: the next climb where he stands. */
+	void Climb(USimWorldSubsystem* Sim);
+	/** Walked along simcore's legs to a goal; false (FeedbackText says why) if there is no way. */
+	bool GoBody(USimWorldSubsystem* Sim, const simcore::MoveGoal& Goal);
+	/** The led walk's camera, and what he becomes when it ends. */
+	void FollowGuide(USimWorldSubsystem* Sim, float DeltaSeconds);
+	/** The body's place and feet to simcore (and the server). */
+	void ReportBody(USimWorldSubsystem* Sim);
+	void SetOutsideLook(bool bOutside);
+	/** A cabin control clicked: a job outside walks him out to it first; anything else is clicked. */
+	ESimPlayerActionResult ClickOrGoOut(int32 Item, int32 Direction);
+	void UpdateJobMarkers(USimWorldSubsystem* Sim);
+	/** The vehicle's frame (cm) <-> simcore's body frame (m: x right, y forward, z up). */
+	static simcore::Vec3 ToBodyM(const FVector& VehicleCm) { return simcore::Vec3{VehicleCm.Y / 100.0, VehicleCm.X / 100.0, VehicleCm.Z / 100.0}; }
+	static FVector FromBodyM(const simcore::Vec3& B) { return FVector(B.y, B.x, B.z) * 100.0; }
+	/** The ground's height under a point of the vehicle's frame (cm, the vehicle's frame), from what the world has. */
+	double GroundZ(const FVector& VehicleCm) const;
+
 	void Drive(float DeltaSeconds, class APlayerController* Pc);
 	void FollowGround();
 	void UpdateSim(USimWorldSubsystem* Sim);

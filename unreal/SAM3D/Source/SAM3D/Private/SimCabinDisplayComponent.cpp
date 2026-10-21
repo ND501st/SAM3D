@@ -316,6 +316,16 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			ScreenMaterialBase = Glass;
 		}
 	}
+	// A paper (the radio data, the talk tables) is lit by the cabin like everything round it, not by itself: its own lit,
+	// matt material (tools/ue_make_paper_material.py).
+	if (Kind == simcore::CabinDisplayKind::Document)
+	{
+		if (UMaterialInterface* Paper = LoadObject<UMaterialInterface>(nullptr,
+				TEXT("/Game/SAM3D/Cabin/Materials/M_CabinPaper.M_CabinPaper"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			ScreenMaterialBase = Paper;
+		}
+	}
 	if (ScreenMaterialBase != nullptr && Target != nullptr)
 	{
 		ScreenMaterial = UMaterialInstanceDynamic::Create(ScreenMaterialBase, this);
@@ -328,7 +338,7 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			: Kind == simcore::CabinDisplayKind::Counters ? 10.0f
 			: Kind == simcore::CabinDisplayKind::PlotBoard ? 2.5f
 			: Kind == simcore::CabinDisplayKind::StatusBoard ? 4.0f
-			: Kind == simcore::CabinDisplayKind::Document ? 2.5f : 6.0f;
+			: Kind == simcore::CabinDisplayKind::Document ? 1.0f : 6.0f;  // paper: its own colour, lit by the cabin
 		ScreenMaterial->SetVectorParameterValue(TEXT("TintColorAndOpacity"),
 			bTv ? FLinearColor(0.93f * Gain, 0.97f * Gain, Gain, 1.0f) : FLinearColor(Gain, Gain, Gain, 1.0f));
 		// The tube's character (M_CabinCRT): curvature, halo (amount, radius), raster lines (strength, count), noise
@@ -1666,9 +1676,10 @@ void USimCabinDisplayComponent::DrawKeypadWindow(UCanvas* Canvas, const FVector2
 
 void USimCabinDisplayComponent::DrawDocument(UCanvas* Canvas, const FVector2D& Size, const TArray<FString>& Lines)
 {
-	// Typed on ivory paper, a line a row, small enough for the table to fit; a thin rule under the heading.
-	Fill(Canvas, FVector2D::ZeroVector, Size, FLinearColor(0.11f, 0.105f, 0.09f));
-	const FLinearColor Ink(0.006f, 0.006f, 0.008f);
+	// Typed on a form of off-white paper, a line a row, small enough for the table to fit. The paper's own colour (the
+	// lit material multiplies it by the cabin's light): an aged off-white, the typewriter's ribbon nearly black.
+	Fill(Canvas, FVector2D::ZeroVector, Size, FLinearColor(0.62f, 0.58f, 0.47f));
+	const FLinearColor Ink(0.02f, 0.02f, 0.025f);
 	const int32 Rows = FMath::Max(14, Lines.Num());
 	const double Row = (Size.Y * 0.94) / Rows;
 	const float Scale = static_cast<float>(FMath::Clamp(Row / 18.0, 0.35, 0.8));

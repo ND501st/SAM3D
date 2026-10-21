@@ -63,6 +63,8 @@
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/group_designation.hpp"
+#include "simcore/kill_assessment.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/world.hpp"
@@ -160,6 +162,11 @@ struct EngagementTuning {
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
+    // The crew judging a shot's result from its instruments' signs (kill_assessment.hpp; "kill_assessment"), and picking
+    // an aircraft in a group the post designated by its centre and a rule (group_designation.hpp; "group"). Without the
+    // blocks, these defaults.
+    KillAssessmentTuning kill;
+    GroupTuning group;
 
     double MethodFactor(const char* method) const {
         const auto it = method_factor.find(method);
@@ -345,7 +352,8 @@ namespace detail {
 class TuningLoader : public ConsoleLoader {
 public:
     bool LoadTuning(const json::Value& root, EngagementTuning& t) {
-        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome"}) ||
+        if (!Keys(root, "", {"system_id", "status", "notes", "zone", "zones", "methods", "tv", "search", "track", "aim", "missile", "outcome",
+                             "kill_assessment", "group"}) ||
             !RequireString(root, "", "system_id", t.system_id)) {
             return false;
         }
@@ -464,10 +472,65 @@ public:
             }
         }
         if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
-        return LoadLowAltitude(*g, t);
+        if (!LoadLowAltitude(*g, t)) return false;
+        if (root.Find("kill_assessment") != nullptr && !LoadKillAssessment(root, t.kill)) return false;
+        if (root.Find("group") != nullptr && !LoadGroup(root, t.group)) return false;
+        return true;
     }
 
 private:
+    bool Chance(const json::Value& g, const char* group, const char* key, double& out) {
+        if (!Num(g, group, key, out, 0.0)) return false;
+        if (out > 1.0) return Fail(Join(group, key), "must be from 0 to 1");
+        return true;
+    }
+    bool LoadKillAssessment(const json::Value& root, KillAssessmentTuning& k) {
+        const char* G = "kill_assessment";
+        const json::Value* g = nullptr;
+        if (!Group(root, G,
+                   {"judge_role", "judge_min_s", "judge_max_s", "watch_s", "mark_gone_s", "scope_gone_s", "near_burst_chance",
+                    "early_burst_chance", "elevation_drop_chance", "tv_fire_chance", "elevation_drop_deg_s", "strobe_match_deg",
+                    "beside_m", "ambiguous_wrong_chance", "recheck_s", "decisive", "weight", "delay_s"},
+                   g) ||
+            !RequireString(*g, G, "judge_role", k.judge_role) || !Num(*g, G, "judge_min_s", k.judge_min_s, 0.0) ||
+            !Num(*g, G, "judge_max_s", k.judge_max_s, k.judge_min_s) || !Num(*g, G, "watch_s", k.watch_s, 0.0) ||
+            !Num(*g, G, "mark_gone_s", k.mark_gone_s, 0.0) || !Num(*g, G, "scope_gone_s", k.scope_gone_s, 0.0) ||
+            !Chance(*g, G, "near_burst_chance", k.near_burst_chance) || !Chance(*g, G, "early_burst_chance", k.early_burst_chance) ||
+            !Chance(*g, G, "elevation_drop_chance", k.elevation_drop_chance) || !Chance(*g, G, "tv_fire_chance", k.tv_fire_chance) ||
+            !Num(*g, G, "elevation_drop_deg_s", k.elevation_drop_deg_s, 0.0) || !Num(*g, G, "strobe_match_deg", k.strobe_match_deg, 0.0) ||
+            !Num(*g, G, "beside_m", k.beside_m, 0.0) || !Chance(*g, G, "ambiguous_wrong_chance", k.ambiguous_wrong_chance) ||
+            !Num(*g, G, "recheck_s", k.recheck_s, 0.0) || !Num(*g, G, "decisive", k.decisive, 0.01)) {
+            return false;
+        }
+        if (k.near_burst_chance + k.early_burst_chance > 1.0) return Fail(Join(G, "near_burst_chance"), "with early_burst_chance at most 1");
+        for (const char* name : {"weight", "delay_s"}) {
+            const std::string table = name;
+            const json::Value* w = g->Find(table);
+            const std::string p = Join(G, table);
+            if (w == nullptr) return Fail(p, "required: a number for each sign");
+            if (!w->Is(json::Type::Object)) return Fail(p, "expected an object of sign: number");
+            for (std::size_t i = 0; i < w->keys.size(); ++i) {
+                KillSign s = KillSign::Burst;
+                if (!KillSignFromId(w->keys[i], s)) return Fail(Join(p, w->keys[i]), "unknown sign");
+                if (!w->items[i].Is(json::Type::Number)) return Fail(Join(p, w->keys[i]), "expected a number");
+                const double v = w->items[i].number;
+                const bool for_hit = s <= KillSign::TvFire;
+                if (table == "delay_s" && v < 0.0) return Fail(Join(p, w->keys[i]), "must be >= 0");
+                if (table == "weight" && (for_hit ? v <= 0.0 : v >= 0.0)) {  // a hit's sign weighs for it, a miss's against
+                    return Fail(Join(p, w->keys[i]), for_hit ? "a hit's sign: must be > 0" : "a miss's sign: must be < 0");
+                }
+                (table == "weight" ? k.weight : k.delay_s)[static_cast<std::size_t>(s)] = v;
+            }
+            if (w->keys.size() != kKillSignCount) return Fail(p, "needs every sign (" + std::to_string(kKillSignCount) + ")");
+        }
+        return true;
+    }
+    bool LoadGroup(const json::Value& root, GroupTuning& gt) {
+        const json::Value* g = nullptr;
+        return Group(root, "group", {"post_unresolved_m", "search_m", "link_m", "same_azimuth_deg"}, g) &&
+               Num(*g, "group", "post_unresolved_m", gt.post_unresolved_m, 0.0) && Num(*g, "group", "search_m", gt.search_m, 1.0) &&
+               Num(*g, "group", "link_m", gt.link_m, 0.0) && Num(*g, "group", "same_azimuth_deg", gt.same_azimuth_deg, 0.0);
+    }
     bool LoadSpeedBand(const json::Value& v, const std::string& path, EngagementTuning::SpeedBand& b) {
         return Num(v, path.c_str(), "max_speed_mps", b.max_speed_mps, 0.0) &&
                Num(v, path.c_str(), "min_altitude_m", b.min_alt_m, 0.0) &&
@@ -695,6 +758,10 @@ struct EngagementEvent {
     double range_m = 0.0;
     TrackMethod method = TrackMethod::None;
     std::string detail;
+    // Hit and Miss: the missile's number and what the instruments showed of its target at that moment (the kill
+    // assessment's start, kill_assessment.hpp). The crew learns the result from those signs, not from this event.
+    int shot = 0;
+    MeetingView view;
 };
 
 // Which aiming seats have an NPC in them. A seat the player sits in (or nobody) is left alone.
@@ -735,7 +802,7 @@ public:
         UpdateOrientation(t, dt, console, log, aim_crew.elevation);
         UpdateBeams(dt, console);
         Measure(dt, world, targets);
-        ResolveShots(t, world, targets, log, rng);
+        ResolveShots(t, world, console, targets, log, rng);
         if (em_ != nullptr) StepEm(dt, world, console, targets);
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
@@ -1133,8 +1200,43 @@ private:
         return s.early_actions + s.out_of_order_actions;
     }
 
-    void ResolveShots(double t, World& world, const std::vector<EngagementTarget>& targets, SessionLog& log,
-                      std::mt19937& rng) {
+    // What the instruments show of a shot's target now (its geometry before a hit takes it out of the sky): the tracking
+    // radar's range channel and antenna, the TV, the search scope and what is beside it there.
+    MeetingView MeetingOf(const ConsoleData& console, const std::string& id, const Geometry& g) const {
+        MeetingView v;
+        const bool tracked = method_ != TrackMethod::None && tracked_ == id;
+        v.radar_range = tracked && method_ == TrackMethod::Radar;
+        v.antenna_on = tracked;
+        v.noise_tracked = tracked && method_ == TrackMethod::RadarOnJam;
+        const TrackSensorDef& d = console.track;
+        v.on_tv = tracked && !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera) && TvLookAt(console, g).seen;
+        v.elevation_deg = g.el_deg;
+        const KillAssessmentTuning& k = tuning_.kill;
+        const Contact* own = nullptr;
+        for (const Contact& c : picture_) {
+            if (c.target_id == id) own = &c;
+        }
+        v.on_scope = own != nullptr;
+        for (const ScopeStrobe& st : strobes_) v.strobe = v.strobe || std::fabs(Wrap180(st.azimuth_deg - g.az_deg)) <= k.strobe_match_deg;
+        if (own == nullptr) return v;
+        for (const Contact& c : picture_) {
+            if (&c == own) continue;
+            const double a = DegToRad(c.azimuth_deg), b = DegToRad(own->azimuth_deg);
+            const double dx = c.range_m * std::sin(a) - own->range_m * std::sin(b);
+            const double dy = c.range_m * std::cos(a) - own->range_m * std::cos(b);
+            if (dx * dx + dy * dy > k.beside_m * k.beside_m) continue;
+            // An aircraft's echo beside it is its group; an echo of no aircraft (a chaff cloud, em_link.hpp's ghosts), its chaff.
+            if (geo_.count(c.target_id) != 0) {
+                v.group = true;
+            } else {
+                v.chaff = true;
+            }
+        }
+        return v;
+    }
+
+    void ResolveShots(double t, World& world, const ConsoleData& console, const std::vector<EngagementTarget>& targets,
+                      SessionLog& log, std::mt19937& rng) {
         for (Shot& s : shots_) {
             if (s.done) continue;
             const std::string who = "Missile " + std::to_string(s.number);
@@ -1142,14 +1244,15 @@ private:
             if (it == geo_.end() || !it->second.alive) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "target already down"});
-                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "target already down"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "target already down", s.number});
                 continue;
             }
             const Geometry& g = it->second;
             if (method_ == TrackMethod::None || tracked_ != s.target_id) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "track lost: no guidance commands"});
-                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "track lost"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, "track lost", s.number,
+                                   MeetingOf(console, s.target_id, g)});
                 continue;
             }
             if (g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
@@ -1157,7 +1260,8 @@ private:
             if (s.out_of_reach) {
                 Finish(s, false);
                 log.Record({t, DebriefEntry::Kind::Miss, who, s.target_id, "out of reach: flight time ran out"});
-                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, "out of reach"});
+                events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, "out of reach", s.number,
+                                   MeetingOf(console, s.target_id, g)});
                 continue;
             }
             const double base = tuning_.HitChanceFor(g.target_class);
@@ -1202,7 +1306,8 @@ private:
                           manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim_text, draw);
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
-            events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method, std::string()});
+            events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method,
+                               std::string(), s.number, MeetingOf(console, s.target_id, g)});
             if (hit) {
                 Aircraft* a = TargetAircraft(world, targets, s.target_id);
                 if (a != nullptr) a->alive = false;

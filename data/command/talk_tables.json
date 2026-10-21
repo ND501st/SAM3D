@@ -29,8 +29,8 @@
       "name_ru": "ПТ-2",
       "name_en": "Talk table no. 2: the battery's signals",
       "entries": [
-        { "code": "333", "ru": "Воздух", "en": "air raid warning", "effect": "air_warning" },
-        { "code": "777", "ru": "Отбой", "en": "all clear", "effect": "all_clear" },
+        { "code": "333", "ru": "Воздух", "en": "air raid warning", "effect": "air_warning", "visual": "зелёная ракета", "notes": "bstudy_tactics: «Воздух» by voice, a green flare" },
+        { "code": "777", "ru": "Отбой", "en": "all clear", "effect": "all_clear", "visual": "белая ракета", "notes": "bstudy_tactics: «Отбой» by voice, a white flare" },
         { "code": "444", "ru": "Химическая тревога", "en": "chemical alarm" },
         { "code": "555", "ru": "Сбор", "en": "assemble" }
       ]

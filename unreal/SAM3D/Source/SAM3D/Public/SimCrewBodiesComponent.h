@@ -70,7 +70,13 @@ private:
 		TUniquePtr<simcore::BodyAnimator> Animator;
 		TArray<FPart> Parts;
 		bool bVisible = true;
+		/** Up and away from his seat (out of the vehicle, or on his way): drawn on his feet where his body is
+		 *  (simcore::WalkingPose), stepping as he walks. */
+		bool bAway = false;
+		double StridePhase = 0.0;
+		simcore::Vec3 LastFeet;
 	};
+	void PoseAway(FBody& Body, const simcore::MoverView& View, const simcore::BodyDims& Dims);
 
 	bool Build(USimWorldSubsystem* Sim);
 	void Clear();

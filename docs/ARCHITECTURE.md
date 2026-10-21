@@ -189,6 +189,12 @@ roadmap phase 6:
   frame); gyro drift, the OR-31M Qc scale and the crew chief's compass work are not, and the player deputy reads
   the commanded Qc from the log. (6.5)
 - IFF: interrogation, replies on the scope and the gated mode; no codes, modes I/II or the AKM's launch blocking.
+- Out of the vehicle (`simcore/crew_mobility.hpp`, `docs/crew/13_OUT_OF_THE_VEHICLE.md`, 8.14): the climbing times, the
+  Osa's axles and which hatch each seat uses are estimates; the hatches don't touch the console's ЛЮКИ ЗАКР. (an open
+  crew hatch doesn't hold off ПУСК ГОТОВ); the walk on the hull is in straight lines round rectangles, on the ground
+  round the hull only (not round woods, buildings or water); a road's traffic side isn't kept; the drill master and the
+  lessons don't know a job's walk; on a networked client the NPCs' bodies out of their seats aren't mirrored (they stay
+  seated there), only the player's own goes to the server. The RF hazard near the radars (p. 207) isn't modelled.
 - TV channel: locks and follows automatically; the real one is tracked by hand. (6.6)
 - Engagement: zones (with the crossing parameter) and the methods T/T, Горка, Ф and Н are selected. A noise jammer
   drowns the tracking radar's echo and the radar follows it in angle; the range is then by hand (search scope or PU-12)

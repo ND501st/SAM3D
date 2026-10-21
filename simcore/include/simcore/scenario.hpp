@@ -24,6 +24,7 @@
 #include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/crew_mobility.hpp"
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
@@ -149,6 +150,11 @@ struct ScenarioDef {
     std::string crew_file;         // the crew data (own_unit.crew_data, or data/crew/<system>_crew.json when it exists)
     bool has_crew_data = false;
     CrewData crew_data;
+    // The vehicle as a body to climb (data/vehicles/<system>.json, crew_mobility.hpp) and the crew's pace and voice
+    // (data/crew/walking.json), loaded when the system has a vehicle file: its crew then gets in and out by its hatches.
+    bool has_vehicle = false;
+    VehicleDef vehicle;
+    WalkingDef walking;
     bool has_skills = false;       // a crew member has a "skill": the tiers are loaded
     SkillTable skills;
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
@@ -272,6 +278,7 @@ public:
         if (!LoadC2(root, data_dir, out)) return false;
         if (!LoadPost(root, data_dir, out, console)) return false;
         if (!LoadRadioData(root, data_dir, out, console)) return false;
+        if (!CheckRegimentGroups(out)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
         if (const json::Value* cc = root.Find("crew_commander")) {
@@ -299,6 +306,24 @@ public:
     }
 
 private:
+    // The regiment's commands said as talk-table groups go on its command net: the scenario's radio data must have that net
+    // and the group must be in its talk tables. Radio silence and the spare frequency are ordered by the radio data
+    // (silence_orders, the net's changes), and the warnings are the battery's own signals, so those groups are refused here.
+    bool CheckRegimentGroups(const ScenarioDef& out) {
+        for (std::size_t j = 0; j < out.post_regiment.commands.size(); ++j) {
+            const RegimentCommand& c = out.post_regiment.commands[j];
+            if (c.group.empty()) continue;
+            const std::string cp = Index("post.regiment.commands", j);
+            if (out.radio_data.Find("regiment") == nullptr) return Fail(cp, "a group goes on the regiment's net: radio_data has no net \"regiment\"");
+            const TalkEntry* e = out.talk_tables.Decode(c.group);
+            if (e == nullptr) return Fail(Join(cp, "group"), "group " + c.group + " is not in the radio data's talk tables");
+            for (const char* other : {"silence_on", "silence_off", "spare_frequency", "air_warning", "all_clear"}) {
+                if (e->effect == other) return Fail(Join(cp, "group"), "group " + c.group + " (" + e->effect + ") is ordered by the radio data, not as a command");
+            }
+        }
+        return true;
+    }
+
     // "radio_data": the battery's nets and lines (radio_nets.hpp). A net's set must be one of the console's voice sets,
     // its frequencies inside that set's band.
     bool LoadRadioData(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
@@ -581,6 +606,13 @@ private:
             out.has_crew_data = true;
         } else {
             out.crew_file.clear();
+        }
+        // The vehicle's hatches, hull and the places round it (docs/crew/13_OUT_OF_THE_VEHICLE.md), when it has a file.
+        const std::string vehicle_file = data_dir + "/vehicles/" + console.system_id + ".json";
+        if (std::ifstream(vehicle_file).good()) {
+            if (!LoadVehicleFile(vehicle_file, console, out.vehicle, &error)) return Fail("own_unit", error);
+            if (!LoadWalkingFile(data_dir + "/crew/walking.json", out.walking, &error)) return Fail("own_unit", error);
+            out.has_vehicle = true;
         }
         if (!OptionalString(*u, "own_unit", "tuning", out.tuning_file)) return false;
         if (!out.tuning_file.empty()) {
@@ -1226,7 +1258,8 @@ private:
     //   "library": "command/regiment_radars.json",
     //   "codes": "command/aspd_codes.json",
     //   "regiment": { "position": {...}, "radars": [ { "id", "type", "position" } ], "outages": [ { "from_s", "to_s", "reason" } ],
-    //                 "telecode": true, "designate_within_m": 40000, "commands": [ { "at_s", "code" } ] },
+    //                 "telecode": true, "designate_within_m": 40000,
+    //                 "commands": [ { "at_s", "code" } | { "at_s", "group" } | { "code" or "group", "on_cue": true } ] },
     //   "radar": { "type": "p19", "position": {...} } }  (a radar cabled to the post; optional)
     // Required when the console has "post", refused otherwise.
     bool LoadPost(const json::Value& root, const std::string& data_dir, ScenarioDef& out, const ConsoleData& console) {
@@ -1282,18 +1315,27 @@ private:
                 return message_.empty() ? Fail(rp, "expected an object") : false;
             }
             if (const json::Value* cmds = OptionalArray(*r, rp, "commands")) {
+                double last_s = -1e18;
                 for (std::size_t j = 0; j < cmds->items.size(); ++j) {
                     const std::string cp = Index(Join(rp, "commands"), j);
+                    const json::Value& x = cmds->items[j];
                     RegimentCommand c;
                     double code = -1.0;
-                    if (!Keys(cmds->items[j], cp, {"at_s", "code", "notes"}) || !RequireNumber(cmds->items[j], cp, "at_s", c.at_s) ||
-                        !RequireNumber(cmds->items[j], cp, "code", code)) {
+                    if (!Keys(x, cp, {"at_s", "code", "group", "on_cue", "notes"}) || !OptionalNumber(x, cp, "code", code) ||
+                        !OptionalString(x, cp, "group", c.group) || !OptionalBool(x, cp, "on_cue", c.on_cue)) {
                         return false;
                     }
-                    if (code < 0.0 || code > 99.0 || code != std::floor(code)) return Fail(Join(cp, "code"), "a two-digit number, 00-99");
-                    c.code = static_cast<int>(code);
-                    if (!out.post_regiment.commands.empty() && c.at_s < out.post_regiment.commands.back().at_s) {
-                        return Fail(Join(cp, "at_s"), "the commands in time order");
+                    if ((x.Find("code") != nullptr) == !c.group.empty()) return Fail(cp, "a telecode \"code\" or a talk-table \"group\", one of them");
+                    if (x.Find("code") != nullptr) {
+                        if (code < 0.0 || code > 99.0 || code != std::floor(code)) return Fail(Join(cp, "code"), "a two-digit number, 00-99");
+                        c.code = static_cast<int>(code);
+                    }
+                    if (c.on_cue) {
+                        if (x.Find("at_s") != nullptr) return Fail(Join(cp, "at_s"), "a command held on cue has no time: the lesson sends it");
+                    } else {
+                        if (!RequireNumber(x, cp, "at_s", c.at_s)) return false;
+                        if (c.at_s < last_s) return Fail(Join(cp, "at_s"), "the commands in time order");
+                        last_s = c.at_s;
                     }
                     out.post_regiment.commands.push_back(c);
                 }

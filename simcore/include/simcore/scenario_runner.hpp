@@ -51,6 +51,7 @@
 #include "simcore/crew_body.hpp"
 #include "simcore/crew_callouts.hpp"
 #include "simcore/crew_decisions.hpp"
+#include "simcore/crew_mobility.hpp"
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
@@ -125,6 +126,7 @@ public:
             eng_targets_.push_back(e);
         }
         engagement_.SetOpticalConditions(def_.optics);
+        kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
         rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
@@ -175,6 +177,7 @@ public:
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
         }
         StartCallouts();
+        StartMovers();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -220,6 +223,7 @@ public:
             c.Update(dt, console_.panel, &console_.equipment);
         }
         player_.Update(dt);
+        UpdateMovers(dt);
         for (Seat& st : seats_) st.tracker.Update(dt);  // a seat's min_wait_s counts as the single player's does
         for (WheelWatch& w : wheels_) {  // who is turning a hand wheel (the bodies, roadmap 8.10)
             const double v = console_.panel.GetValue(w.id);
@@ -363,7 +367,8 @@ public:
     // (roadmap 7.8). The same path serves the scenario's triggers and the player's order menu.
     void GiveOrder(CrewMember& crew, const Procedure& procedure, bool queue) {
         SayOrder(crew.Role(), procedure.id);
-        const double delay = OrderDelayS(crew.Role());
+        // A man out of the vehicle is off the intercom: the order is called to him, and waits until he can hear it.
+        const double delay = Outside(crew.Role()) ? ShoutS() : OrderDelayS(crew.Role());
         if (delay <= 0.0) {
             Hand(crew, procedure, queue);
             return;
@@ -542,6 +547,7 @@ public:
                 a.standing = in.standing;
                 a.stand_control = in.stand_control;
             }
+            if (const CrewMover* mv = Mover(m.Role())) a.away = mv->Place() != BodyPlace::Seated || mv->Moving();
             a.last_control = in.last_control;
             a.since_last_s = in.since_last_s;
             for (const WheelWatch& w : wheels_) {
@@ -552,6 +558,184 @@ public:
             out.push_back(std::move(a));
         }
         return out;
+    }
+
+    // ---- The crew out of their seats (docs/crew/13_OUT_OF_THE_VEHICLE.md, crew_mobility.hpp): each crewman's body over the
+    // vehicle and the ground, out and in by the vehicle's hatches. Nothing of it without a vehicle file
+    // (data/vehicles/<system>.json): the crew then stays in its seats as before.
+    bool HasVehicle() const { return def_.has_vehicle; }
+    const VehicleDef* Vehicle() const { return def_.has_vehicle ? &def_.vehicle : nullptr; }
+    const WalkingDef& Walking() const { return def_.walking; }
+    // The vehicle's body frame on the map: its origin on the ground under the unit's position, its heading.
+    VehiclePose Pose() const {
+        VehiclePose p;
+        p.origin = Vec3{def_.unit_position.x, def_.unit_position.y,
+                        world_.GetTerrain().HeightAt(def_.unit_position.x, def_.unit_position.y)};
+        p.heading_rad = DegToRad(def_.unit_heading_deg);
+        return p;
+    }
+    const CrewMover* Mover(const std::string& station) const {
+        const auto it = movers_.find(station);
+        return it != movers_.end() ? &it->second : nullptr;
+    }
+    // Every crewman's body now (seated ones too), in the scenario's crew order.
+    std::vector<MoverView> CrewBodies() const {
+        std::vector<MoverView> out;
+        const VehiclePose pose = Pose();
+        for (const CrewMember& c : crew_) {
+            if (const CrewMover* m = Mover(c.Role())) out.push_back(m->View(pose));
+        }
+        return out;
+    }
+    // Out of the compartment (on the hull, past half way out of a hatch, on the ground): off the intercom, away from his
+    // instruments, heard only by those in earshot.
+    bool Outside(const std::string& station) const {
+        const CrewMover* m = Mover(station);
+        return m != nullptr && !m->Inside();
+    }
+    // The exits standing open.
+    const std::map<std::string, bool>& Hatches() const { return hatches_; }
+    // The place a control is worked at ("" inside, at its seat).
+    std::string JobPlace(const std::string& control) const { return def_.has_vehicle ? def_.vehicle.JobPlace(control) : std::string(); }
+
+    // The player's body (the engine): he walks himself and reports where he is (SetPlayerBody), or asks to be walked
+    // along the vehicle's ways to a goal (PlayerGoTo: out through his hatch, down, to a place; or back to his seat). Once
+    // the engine reports a seat's body, its jobs need him where they are done (PlayerJobRefusal).
+    // `feet` in the vehicle's body frame (m), `facing_rad` clockwise from its forward, whatever the place; on the ground
+    // he is at a place round the vehicle when within 1.5 m of where it is worked.
+    void SetPlayerBody(const std::string& station, BodyPlace place, const Vec3& feet, double facing_rad) {
+        auto it = movers_.find(station);
+        if (it == movers_.end()) return;
+        tracked_.insert(station);
+        if (it->second.Moving()) return;  // being walked: the mover leads until he arrives
+        if (place == BodyPlace::Seated) {
+            it->second.SitDown();
+            return;
+        }
+        if (place != BodyPlace::Ground) {
+            it->second.Hold(place, feet, facing_rad);
+            return;
+        }
+        const VehiclePose pose = Pose();
+        Vec3 enu = pose.ToEnu(feet);
+        enu.z = world_.GetTerrain().HeightAt(enu.x, enu.y);
+        std::string at = "point";
+        double best = 1.5;
+        for (const VehiclePlace& p : def_.vehicle.places) {
+            const double d = (Vec3{feet.x, feet.y, 0.0} - Vec3{p.at_m.x, p.at_m.y, 0.0}).Length();
+            if (d <= best) {
+                best = d;
+                at = p.id;
+            }
+        }
+        it->second.Hold(BodyPlace::Ground, enu, pose.ToMapHeading(facing_rad), at);
+    }
+    // A machine that mirrors the server steps the player's led walk itself (its runner isn't stepped).
+    void StepMover(const std::string& station, double dt) {
+        auto it = movers_.find(station);
+        if (it == movers_.end()) return;
+        const std::map<std::string, int> still_out = StillOut();
+        it->second.Update(dt, Pose(), &world_.GetTerrain(), map_ground_.get(), def_.walking.gait, hatches_, &still_out);
+    }
+    bool PlayerGoTo(const std::string& station, const MoveGoal& goal, std::string* why = nullptr) {
+        auto it = movers_.find(station);
+        if (it == movers_.end()) {
+            if (why != nullptr) *why = "no vehicle data";
+            return false;
+        }
+        tracked_.insert(station);
+        MoveGoal g = goal;
+        if (g.kind == MoveGoal::Kind::Seat || g.kind == MoveGoal::Kind::Cabin) g.shut_after = true;  // unless a man is still out
+        const bool ok = it->second.GoTo(g, &console_, Pose(), why);
+        if (ok) Event(station, g.kind == MoveGoal::Kind::Seat ? std::string("back to his seat") : "on his way: " + it->second.At());
+        return ok;
+    }
+    // He sat down at his seat himself (the engine's X).
+    void PlayerSatDown(const std::string& station) {
+        auto it = movers_.find(station);
+        if (it != movers_.end()) it->second.SitDown();
+    }
+    // The engine stops reporting the seat's body (the player left it): back to the NPC's.
+    void ReleasePlayerBody(const std::string& station) { tracked_.erase(station); }
+    bool PlayerBodyTracked(const std::string& station) const { return tracked_.count(station) != 0; }
+    // Why the player at `station` can't work `control` from where his body is ("" : he can): a job outside needs him at
+    // its place; a control inside needs him inside. Only once the engine reports his body (headless play has none).
+    std::string PlayerJobRefusal(const std::string& station, const std::string& control) const {
+        if (!def_.has_vehicle || !PlayerBodyTracked(station)) return std::string();
+        const CrewMover* m = Mover(station);
+        if (m == nullptr) return std::string();
+        const std::string place = def_.vehicle.JobPlace(control);
+        if (!place.empty()) {
+            if (m->Moving() || m->At() != place || m->Place() != BodyPlace::Ground) {
+                const VehiclePlace* p = def_.vehicle.Place(place);
+                return "That is done outside: " + (p != nullptr ? p->label : place);
+            }
+            return std::string();
+        }
+        if (!m->Inside()) return "You are outside the vehicle";
+        return std::string();
+    }
+
+    // "К машинам!" (stroevoy_ustav_1993 art. 154): the NPC crew out to their places in the line-up beside the vehicle.
+    // False (and why) without a line-up. "По местам!" (art. 149-150): back to their seats.
+    bool OrderDismount(std::string* why = nullptr) {
+        if (!def_.has_vehicle || !def_.vehicle.lineup.present) {
+            if (why != nullptr) *why = "no line-up for this vehicle";
+            return false;
+        }
+        Say("order_dismount", Cmdr());
+        for (CrewMember& c : crew_) {  // they leave what they are doing and get out
+            Vec3 at;
+            if (!SeatHolder(c.Role()).empty() || !def_.vehicle.LineupPoint(c.Role(), at)) continue;
+            c.CancelOrder();
+            c.StayAt("lineup");
+        }
+        Event(Cmdr(), "К машинам: the crew lines up beside the vehicle");
+        return true;
+    }
+    // The commander's order of one drill to a seat (a situational drill no order of the crew data starts: measure_qc).
+    bool GiveDrill(const std::string& station, const std::string& procedure_id, bool queue = false) {
+        CrewMember* m = MemberAt(station);
+        const Procedure* p = console_.FindProcedure(procedure_id);
+        if (m == nullptr || p == nullptr) return false;
+        GiveOrder(*m, *p, queue);
+        return true;
+    }
+    bool OrderMount() {
+        if (!def_.has_vehicle) return false;
+        Say("order_mount", Cmdr());
+        for (CrewMember& c : crew_) c.StayAt(std::string());
+        Event(Cmdr(), "По местам: the crew mounts");
+        return true;
+    }
+    // Can `to` hear `from` speaking aloud (not on the intercom)? Both inside: yes (the compartment). Otherwise by the
+    // distance between them, the noise where `to` is (the machinery running near, or the compartment's own) and what
+    // the hull takes off (less through an open hatch near the man outside): crew_mobility.hpp, data/crew/walking.json.
+    bool InEarshot(const std::string& from, const std::string& to, bool shout = true) const {
+        if (!def_.has_vehicle) return true;
+        const CrewMover* a = Mover(from);
+        const CrewMover* b = Mover(to);
+        const bool a_in = a == nullptr || a->Inside();
+        const bool b_in = b == nullptr || b->Inside();
+        if (a_in && b_in) return true;
+        const VehiclePose pose = Pose();
+        const Vec3 up{0.0, 0.0, 1.55};
+        const Vec3 pa = (a != nullptr ? a->View(pose).feet_enu : pose.origin) + up;
+        const Vec3 pb = (b != nullptr ? b->View(pose).feet_enu : pose.origin) + up;
+        const EarshotDef& e = def_.walking.earshot;
+        double level = shout ? e.shout_db : e.talk_db;
+        if (a_in != b_in) {  // through the hull, or an open hatch near the man outside
+            const Vec3 out = a_in ? pb : pa;
+            double loss = e.hull_db;
+            for (const VehicleExit& x : def_.vehicle.exits) {
+                const auto h = hatches_.find(x.id);
+                if (h == hatches_.end() || !h->second) continue;
+                if ((pose.ToEnu(x.opening_m) - out).Length() < 6.0 && e.hatch_db < loss) loss = e.hatch_db;
+            }
+            level -= loss;
+        }
+        const double noise = b_in ? def_.vehicle.inside_noise_db : NoiseAt(pb, pose);
+        return SpeechLevelAt(level, (pb - pa).Length()) - noise >= e.needed_snr_db;
     }
 
     // ---- The crew's voice (roadmap 8.4, docs/crew/04_COMMANDS_AND_CALLOUTS.md): orders, acknowledgements, reports
@@ -624,6 +808,10 @@ public:
             return std::string();
         };
         const std::string net = net_of();
+        if (!net.empty() && net != "covered" && MarchRadioBan()) {  // the warnings to the covered troops are open talk
+            return refuse("на марше радио — только для управления огнём при отражении налёта",
+                          "on the march the radio is for fire control only, while repelling an attack");
+        }
         if (!net.empty()) {
             std::string why = CanTalkOnNet(Cmdr(), net);
             if (!why.empty() && net != "battery") {  // the squad leader or the radiotelephonist may talk for him
@@ -849,6 +1037,11 @@ public:
             return StepResult::Blocked;
         }
         if (!AtStation(role, control_id, why)) return StepResult::Blocked;
+        const std::string away = PlayerJobRefusal(role, control_id);  // his body isn't where the control is
+        if (!away.empty()) {
+            if (why != nullptr) *why = away;
+            return StepResult::Blocked;
+        }
         JudgeMove(role, control_id, position);
         st->last_action_s = time_;
         // A drill with only checks left (its switches already where it puts them) is done: the next one ordered is due.
@@ -916,6 +1109,23 @@ public:
         std::string callout;
     };
     const std::vector<MadeReport>& ReportsMade() const { return reports_made_; }
+    // What a player at this seat says on the air from the crew menu besides orders (listed after them): the Osa
+    // commander's «к бою готов» and his read-back of a target the battery commander gave him.
+    std::vector<std::string> PlayerRadioReports(const std::string& station) const {
+        std::vector<std::string> out;
+        if (!c2_ || station != Cmdr() || !def_.has_crew_data) return out;
+        for (const char* id : {"report_ready", "readback"}) {
+            if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
+        }
+        return out;
+    }
+    // Targets given this vehicle on the battery net that its commander heard (the PU-12's designations), so far.
+    int DesignationsHeard() const { return static_cast<int>(designations_heard_.size()); }
+    // The crew's results judged from the instruments' signs (kill_assessment.hpp), the wrong ones among them, and the
+    // targets the senior operator saw flying on after they were called destroyed.
+    int KillCalls() const { return kill_calls_; }
+    int KillCallsWrong() const { return kill_calls_wrong_; }
+    int StillFlyingCalls() const { return still_flying_; }
 
     // A target held "on_cue" appears now (a lesson brings it in at the learner's pace). False if there is no such
     // target held.
@@ -1320,11 +1530,48 @@ private:
         }
         for (const Battery::Event& e : battery_->TakeEvents()) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.who, "battery", e.text});
+            if (MarchRadioBan() && e.who == "Battery commander") {
+                // voenizdat_osa_1991 pp. 232-239: on the march the battery commander, at the column's head in the
+                // PU-12M, signals by flags and lamps; the column's drivers and commanders see them.
+                std::vector<std::string> seen;
+                for (const char* st : {"driver", "commander", "battery_commander", "squad_leader"}) {
+                    if (console_.FindStation(st) != nullptr) seen.push_back(st);
+                }
+                Radio(def_.battery_night ? "lamp signals" : "flag signals", e.who, e.text, false, seen);
+                continue;
+            }
             Radio("battery net", e.who, e.text);
             // The post speaking on its battery net (FuG-4): a strong transmitter beside the R-111 for the while.
             if (def_.has_post && e.who == "Battery commander") own_tx_until_["fug4"] = time_ + kOwnTransmissionS;
         }
     }
+
+    // On the march the battery keeps radio silence but for fire control while repelling an attack (voenizdat_osa_1991
+    // pp. 232-239: the commander signals by flags and lamps from the column's head). Repelling: a hostile known within
+    // the range at which the column stops where it is to fight (battery tactics' short_halt_in_column_m, p254), or a
+    // target being engaged.
+    bool OnMarch() const {
+        if (!battery_) return false;
+        const Battery::Mode m = battery_->CurrentMode();
+        return m == Battery::Mode::Forming || m == Battery::Mode::Marching;
+    }
+    bool RepellingAttack() const {
+        const double reach = battery_ && battery_->Tactics().short_halt_in_column_m > 0.0 ? battery_->Tactics().short_halt_in_column_m : 20000.0;
+        if (engagement_on_ && engagement_.Method() != TrackMethod::None) return true;
+        if (post_) {
+            for (const BoardMark& m : CommanderPicture()) {
+                if (m.type != 1 && (m.position - def_.unit_position).HorizontalLength() <= reach) return true;
+            }
+            return false;
+        }
+        const auto it = pictures_.find(Cmdr());
+        if (it == pictures_.end()) return false;
+        for (const KnownTarget& k : it->second.Recent(time_, 30.0)) {
+            if (k.has_range && !k.friendly && k.range_m <= reach) return true;
+        }
+        return false;
+    }
+    bool MarchRadioBan() const { return OnMarch() && !RepellingAttack(); }
 
     // The reload and refuel drills: an empty launcher calls the TZM; a crew asking for fuel calls the fuel truck (or the
     // TZM). What goes across is counted off the service vehicle; it goes back when the vehicle is full or it is empty.
@@ -1353,6 +1600,12 @@ private:
                 continue;
             }
             const PendingOrder o = pending_orders_[i];
+            if (const CrewMember* to = Crew(o.crew)) {  // out of the vehicle and out of earshot: it waits until he can hear
+                if (Outside(to->Role()) && !InEarshot(Cmdr(), to->Role())) {
+                    ++i;
+                    continue;
+                }
+            }
             pending_orders_.erase(pending_orders_.begin() + static_cast<std::ptrdiff_t>(i));
             // By id: the order's procedure may have been a copy (a drill master's plan) that is gone by now.
             const Procedure* pr = console_.FindProcedure(o.procedure);
@@ -1573,6 +1826,11 @@ private:
         CalloutBus::Route r;
         r.channel = def.kind == CalloutKind::Radio ? "battery net" : "intercom";
         if (def.kind == CalloutKind::Radio || !voice_ || console_.FindStation(from) == nullptr) return r;
+        if (Outside(from)) {  // out of the vehicle: called out aloud
+            r.channel = "cabin";
+            r.extra_s = ShoutS();
+            return r;
+        }
         if (!def.to.empty() && voice_->Unboxed(def.to)) {
             r.channel = "cabin";
             return r;
@@ -1594,11 +1852,18 @@ private:
         if (!voice_) return out;
         if (s.channel == "battery net") return BatteryNetHearers();
         for (const ConsoleStation& st : console_.stations) {
-            if (s.channel == "cabin" || voice_->HearsIntercom(st.id) || (s.call && voice_->HearsCall(st.id)) || st.id == s.from) {
-                out.push_back(st.id);
-            }
+            if (HeardBy(s, st.id)) out.push_back(st.id);
         }
         return out;
+    }
+    // Did `station` hear a callout said on the intercom or aloud? The intercom only inside (a man out of the vehicle has
+    // his headset off its box); aloud only within earshot (InEarshot: always so inside the compartment).
+    bool HeardBy(const SpokenCallout& s, const std::string& station) const {
+        if (station == s.from) return true;
+        if (!voice_) return true;
+        if (s.channel == "cabin") return InEarshot(s.from, station);
+        if (Outside(station)) return false;
+        return voice_->HearsIntercom(station) || (s.call && voice_->HearsCall(station));
     }
 
     // ---- the sets
@@ -1873,6 +2138,7 @@ private:
             }
             const std::string group = e != nullptr ? e->code : std::string(on ? "радиомолчание" : "радиомолчание отменить");
             Radio("regiment net", r->main_call_sign, "Всем, я " + r->main_call_sign + ": " + group + ". " + group + ".", false, ears);
+            if (e != nullptr) HeardGroup(e->code, "regiment", ears);
             DecodeHeard(ears, e);
             ApplySilence(on);
         }
@@ -1939,7 +2205,7 @@ private:
             }
             const std::string net = it->first;
             it = jam_order_due_s_.erase(it);
-            if (net == "battery" && NpcAt(Cmdr()) && nets_->Jam(net, time_) > 0) OrderBatteryNetSpare("Battery commander");
+            if (net == "battery" && NpcAt(Cmdr()) && nets_->Jam(net, time_) > 0 && !MarchRadioBan()) OrderBatteryNetSpare("Battery commander");
         }
     }
 
@@ -2010,7 +2276,7 @@ private:
             const std::string did = nets_->StepMember("battery", s.callsign, time_);
             if (!did.empty()) Event(s.callsign, did);
             RadioNets::Member& m = nets_->MemberOf("battery", s.callsign);
-            if (m.waiting && m.on == nets_->Current("battery") && SetTuned(n->set) && time_ - nets_->MovedS("battery") > 5.0 &&
+            if (m.waiting && !MarchRadioBan() && m.on == nets_->Current("battery") && SetTuned(n->set) && time_ - nets_->MovedS("battery") > 5.0 &&
                 nets_->GetsThrough("battery", time_)) {
                 m.waiting = false;
                 Radio("battery net", n->own_call_sign, s.callsign + ", я " + n->own_call_sign + ", как слышите? Приём.", false, BatteryNetHearers());
@@ -2103,7 +2369,7 @@ private:
     void UpdateCoveredWarning() {
         if (!post_ || def_.radio_data.Find("covered") == nullptr) return;
         bool inside = false;
-        for (const BoardMark& m : PostPicture()) {
+        for (const BoardMark& m : CommanderPicture()) {
             if (m.type == 1) continue;
             inside = inside || (m.position - def_.unit_position).HorizontalLength() <= Tuning().warn_covered_m;
         }
@@ -2173,7 +2439,7 @@ private:
     }
     // The NPC commander reports once the post's communications are ready and every launcher has reported ready.
     void UpdateRegimentReport() {
-        if (regiment_reported_ || !post_ || !NpcAt(Cmdr()) || def_.radio_data.Find("regiment") == nullptr) return;
+        if (regiment_reported_ || !post_ || !NpcAt(Cmdr()) || def_.radio_data.Find("regiment") == nullptr || MarchRadioBan()) return;
         if (!console_.equipment.IsReady("comms_ready") || status_boards_.empty()) return;
         for (const LauncherStatus& l : status_boards_) {
             if (l.state != LauncherStatus::State::Ready) return;
@@ -2253,6 +2519,151 @@ private:
         }
     }
 
+    // ---- the plotter's voice (pvo_bu_x_1984 art. 23): aloud in the cabin he reports to the commander the targets
+    // appearing on the board (number, bearing and range from the post, height, identity and size), their actions (a
+    // turn) and those lost. An NPC says each as it happens; a player's wait, filled in, in his reports menu until he says
+    // them or they go stale (plot_stale_s). The commander decides on them (art. 17): the NPC commander takes a new board
+    // target into his picture when the plotter calls it, or when he finds it on his next look over the board.
+    struct PlotterEvent {
+        std::string callout;  // plot_new, plot_turn, plot_lost
+        std::string target_id;
+        double at_s = 0.0;
+        std::map<std::string, std::string> fields;
+    };
+    std::vector<PlotterEvent> plotter_events_;        // a player plotter's, not yet said
+    std::set<std::string> plot_new_seen_, plot_lost_said_;
+    std::map<std::string, double> plot_course_deg_;   // each target's course as last reported (or first seen)
+    std::map<std::string, double> board_known_s_;     // when the commander was told of each board target
+    int plot_reports_due_ = 0, plot_reports_made_ = 0, plot_reports_missed_ = 0;
+    // The board's identity digit as the plotter says it (samsim_osa p20, bguir_tsp; 2 the training target by the project
+    // owner's decision of 19 Oct 2026; docs/research/PLOTTING_BOARD_2026-10.md).
+    static std::pair<std::string, std::string> IdentityWords(int type) {
+        switch (type) {
+            case 0: return {"постановщик помех", "jammer"};
+            case 1: return {"свой", "friendly"};
+            case 2: return {"учебная", "training target"};
+            case 3: return {"нарушитель границы", "border violator"};
+            case 4: return {"контрольный", "control aircraft"};
+            case 5: return {"свой по запросу", "friendly on request"};
+            case 6: return {"нарушитель режима", "breaking the flying rules"};
+            case 8: return {"противник", "hostile"};
+            case 9: return {"опознавания нет", "no IFF reply"};
+            default: return {"индекс " + std::to_string(type), "index " + std::to_string(type)};
+        }
+    }
+    std::map<std::string, std::string> PlotFields(const BoardMark& m) const {
+        char n[8];
+        std::snprintf(n, sizeof(n), "%04d", m.number);
+        const Vec3 d = m.position - post_->Position();
+        double az = RadToDeg(std::atan2(d.x, d.y));
+        if (az < 0.0) az += 360.0;
+        const std::pair<std::string, std::string> who = IdentityWords(m.type);
+        const bool group = m.formation > 1;
+        return {{"number", n},
+                {"azimuth", std::to_string(static_cast<int>(std::lround(az)) % 360)},
+                {"range", std::to_string(static_cast<int>(std::lround(d.HorizontalLength() / 1000.0)))},
+                {"height", std::to_string(m.height_hm * 100)},
+                {"identity", who.first},
+                {"identity_en", who.second},
+                {"size", group ? "группа " + std::to_string(m.formation) : std::string("одиночная")},
+                {"size_en", group ? "a group of " + std::to_string(m.formation) : std::string("single")}};
+    }
+    void PlotterSays(const PlotterEvent& e) {
+        const std::string& plotter = console_.post_plotter;
+        callouts_->Say(time_, e.callout, plotter, e.fields, NpcAt(plotter) ? SpeakDelayS(plotter) : 0.0);
+        if (e.callout == "plot_new") board_known_s_[e.target_id] = time_;
+        ++plot_reports_made_;
+    }
+    void UpdatePlotterReports() {
+        const std::string& plotter = console_.post_plotter;
+        if (!post_ || plotter.empty() || !callouts_ || def_.crew_data.FindCallout("plot_new") == nullptr) return;
+        // each target's latest mark on the board
+        std::map<std::string, const BoardMark*> latest;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            const BoardMark*& l = latest[m.target_id];
+            if (l == nullptr || m.time_s >= l->time_s) l = &m;
+        }
+        std::vector<PlotterEvent> events;
+        for (const auto& kv : latest) {
+            const BoardMark& m = *kv.second;
+            if (reported_kills_.count(m.target_id) != 0) continue;
+            if (plot_new_seen_.insert(m.target_id).second) {
+                events.push_back({"plot_new", m.target_id, time_, PlotFields(m)});
+                continue;
+            }
+            if (time_ - m.time_s >= Tuning().plot_lost_s) {
+                if (plot_lost_said_.insert(m.target_id).second) events.push_back({"plot_lost", m.target_id, time_, PlotFields(m)});
+                continue;
+            }
+            // its course: from its latest mark at least 3 km back along its track (clear of the plotting error)
+            const BoardMark* back = nullptr;
+            for (const BoardMark& o : post_->Board().Marks()) {
+                if (o.target_id != m.target_id || o.time_s >= m.time_s || (m.position - o.position).HorizontalLength() < 3000.0) continue;
+                if (back == nullptr || o.time_s > back->time_s) back = &o;
+            }
+            if (back == nullptr) continue;
+            const Vec3 d = m.position - back->position;
+            double course = RadToDeg(std::atan2(d.x, d.y));
+            if (course < 0.0) course += 360.0;
+            auto c = plot_course_deg_.find(m.target_id);
+            if (c == plot_course_deg_.end()) {
+                plot_course_deg_[m.target_id] = course;
+            } else if (std::fabs(std::remainder(course - c->second, 360.0)) >= Tuning().plot_turn_deg) {
+                c->second = course;
+                PlotterEvent e{"plot_turn", m.target_id, time_, PlotFields(m)};
+                e.fields["course"] = std::to_string(static_cast<int>(std::lround(course)) % 360);
+                events.push_back(e);
+            }
+        }
+        for (const PlotterEvent& e : events) {
+            ++plot_reports_due_;
+            if (NpcAt(plotter)) {
+                PlotterSays(e);
+            } else {
+                plotter_events_.push_back(e);
+            }
+        }
+        for (auto it = plotter_events_.begin(); it != plotter_events_.end();) {
+            if (time_ - it->at_s <= Tuning().plot_stale_s) {
+                ++it;
+                continue;
+            }
+            ++plot_reports_missed_;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(plotter), it->callout,
+                         "not reported to the commander: target " + it->fields["number"]});
+            it = plotter_events_.erase(it);
+        }
+        SetRadioInput(console_.equipment.HasInput("plot_report_waiting") ? std::string("plot_report_waiting") : std::string(),
+                      !plotter_events_.empty());
+    }
+    // The oldest of a player plotter's reports of this kind still to say (null: none).
+    const PlotterEvent* PendingPlot(const std::string& callout) const {
+        for (const PlotterEvent& e : plotter_events_) {
+            if (e.callout == callout) return &e;
+        }
+        return nullptr;
+    }
+    // The commander's picture as an NPC commander has it: the tube's tracks (his own eyes), and of the board's targets
+    // those the plotter called or he has since found there himself; a player commander reads the board himself.
+    std::vector<BoardMark> CommanderPicture() const {
+        std::vector<BoardMark> all = PostPicture();
+        const bool npc = MemberAtConst(Cmdr()) != nullptr && SeatHolder(Cmdr()).empty();
+        if (!post_ || !npc || console_.post_plotter.empty() || def_.crew_data.FindCallout("plot_new") == nullptr) return all;
+        std::vector<BoardMark> out;
+        for (const BoardMark& m : all) {
+            const auto first = post_first_mark_.find(m.target_id);
+            const bool on_board = first != post_first_mark_.end();
+            if (!on_board || board_known_s_.count(m.target_id) != 0 || time_ - first->second >= Tuning().notice_board_s) {
+                out.push_back(m);
+                continue;
+            }
+            for (const AspdTrack& k : post_->Tracks()) {  // not yet his from the board: on the tube, if it is there
+                if (k.target_id == m.target_id && !k.imitated) out.push_back(TubeMark(k));
+            }
+        }
+        return out;
+    }
+
     // How long the commander's order takes to reach a seat: at once on the intercom (a moment to turn his box to ВС if it
     // is on a set; the call reaches a box on the radio); shouted over the cabin when either has no headset or no box.
     double OrderDelayS(const std::string& role) const {
@@ -2282,6 +2693,49 @@ private:
         std::snprintf(n, sizeof(n), "%04d", e.number);
         callouts_->Say(time_, "readback", Cmdr(), {{"number", n}, {"callsign", OwnCallsign()}, {"post", "10"}}, SpeakDelayS(Cmdr()));
         if (LinkedToPost()) own_readbacks_.push_back(e.number);
+    }
+    // A player in command speaks on the battery net himself (the crew menu): «21 к бою готов, …» (voenizdat_osa_1991
+    // pp. 246-247) or the read-back of the latest designation, with his A-1 on Р-123, the headset switch on the set that
+    // hears the net, that set able to transmit. False with LastRefusal() saying why.
+    bool PlayerOnBatteryNet(const std::string& station, const std::string& callout_id) {
+        if (!callouts_ || !c2_ || station != Cmdr()) {
+            last_refusal_ = "only the commander speaks on the battery net";
+            return false;
+        }
+        if (callout_id == "readback" && designations_heard_.empty()) {
+            last_refusal_ = "no target has been given you on the battery net";
+            return false;
+        }
+        if (!c2_->Hearing()) {
+            last_refusal_ = "you are not on the battery net: A-1 to Р-123, the headset switch on its set";
+            return false;
+        }
+        if (comms_ && !comms_->Transmitting(c2_->ListeningSet(), console_)) {
+            last_refusal_ = "the set can't transmit: on Д. ПРИЁМ, or its transmitter warming";
+            return false;
+        }
+        if (!callouts_->Say(time_, callout_id, Cmdr(), NetReportFields(callout_id))) return false;
+        reports_made_.push_back({time_, station, callout_id});
+        if (callout_id == "readback" && LinkedToPost()) own_readbacks_.push_back(designations_heard_.back().number);
+        return true;
+    }
+    // The blanks of the commander's words on the battery net: his call sign, the post's, the latest target given him, his
+    // channels and missiles. A blank he has nothing for is left out.
+    std::map<std::string, std::string> NetReportFields(const std::string& callout_id) const {
+        std::map<std::string, std::string> f{{"callsign", OwnCallsign()}};
+        if (callout_id == "readback") {
+            f["post"] = "10";
+            if (!designations_heard_.empty()) {
+                char n[16];
+                std::snprintf(n, sizeof(n), "%04d", designations_heard_.back().number);
+                f["number"] = n;
+            }
+        }
+        if (callout_id == "report_ready") {
+            f["channels"] = "2";
+            if (launcher_) f["missiles"] = std::to_string(launcher_->LoadedCount());
+        }
+        return f;
     }
     // «К бою»: the deputy and the operators check the intercom and report «Первый (второй, третий) готов»
     // (voenizdat_osa_1991 pp. 246-247), each as he takes up his drill (the R-124 runs on the vehicle's 27 V), or at once
@@ -2329,6 +2783,7 @@ public:
             const TalkEntry* e = def_.talk_tables.ByEffect("spare_frequency");
             const std::string group = e != nullptr ? e->code : std::string("переходите на запасную частоту");
             Radio("battery net", "10", "Всем, я 10: " + group + ". " + group + ".");
+            if (e != nullptr) HeardGroup(e->code, "battery", BatteryNetHearers());
             if (NpcAt(Cmdr())) c2_->TuneSet(c2_->ListeningSet(), to, time_, "Commander");
         } else {
             osa_net_lost_s_ = time_;
@@ -2405,35 +2860,106 @@ private:
         if (voice_ && !SetOfNet("regiment").empty()) voice = voice && !NetHearers("regiment").empty();
         if (!telecode && !voice) return;  // nothing comes on either net: it waits
         const std::vector<RegimentCommand>& cmds = def_.post_regiment.commands;
-        while (next_command_ < cmds.size() && cmds[next_command_].at_s <= time_ + 1e-9) {
-            const RegimentCommand& c = cmds[next_command_++];
-            const AspdCode* code = def_.post_codes.Find(c.code);
-            char text[96];
-            if (telecode) {
-                post_command_ = c.code;
-                std::snprintf(text, sizeof(text), "%02d on the IT-45: %s", c.code, code != nullptr ? code->meaning.c_str() : "(not in the table)");
-                Event("regiment", text);
-            }
-            const bool got = voice && (!nets_ || def_.radio_data.Find("regiment") == nullptr || nets_->GetsThrough("regiment", time_, true));
-            const TalkEntry* te = def_.talk_tables.ByAspd(c.code);
-            const RadioNetDef* rn = def_.radio_data.Find("regiment");
-            if (got && code != nullptr && te != nullptr && rn != nullptr) {  // a group of ПТ-1: decoded by whoever keeps the table
-                Radio("regiment net", rn->main_call_sign, rn->own_call_sign + ", я " + rn->main_call_sign + ": " + te->code + ". Приём.");
-                DecodeHeard(NetHearers("regiment"), te);
-            } else if (got && code != nullptr) {
-                std::string said = code->meaning;
-                if (!said.empty()) said[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(said[0])));
-                Radio("regiment net", "Regiment", said + "!");
-            }
-            if (!telecode && !got) continue;  // jammed out: lost
-            if (code == nullptr) continue;
-            if (code->effect == "fire_ban" || code->effect == "cease_fire") fire_banned_ = true;
-            if (code->effect == "fire_free") fire_banned_ = false;
-            if (code->effect == "readiness" && battery_) {
-                battery_->SetAirThreat(true, time_);
-                air_threat_forced_ = true;
-            }
+        while (next_command_ < cmds.size()) {
+            const RegimentCommand& c = cmds[next_command_];
+            if (!c.on_cue && c.at_s > time_ + 1e-9) break;
+            if (!c.on_cue && !TakeRegimentCommand(c, telecode, voice)) break;  // a group waits for the voice net
+            ++next_command_;
         }
+        while (!cued_commands_.empty() && TakeRegimentCommand(cued_commands_.front(), telecode, voice)) {
+            cued_commands_.erase(cued_commands_.begin());
+        }
+    }
+    // One command taken off the nets that are up; false while it must wait (a group, said by voice only, with the voice
+    // net down). Lost when jammed out.
+    std::vector<RegimentCommand> cued_commands_;
+    bool TakeRegimentCommand(const RegimentCommand& c, bool telecode, bool voice) {
+        const RadioNetDef* rn = def_.radio_data.Find("regiment");
+        const bool got = voice && (!nets_ || rn == nullptr || nets_->GetsThrough("regiment", time_, true));
+        if (!c.group.empty()) {  // a group of ПТ-1, on the command net only
+            if (!voice) return false;
+            const TalkEntry* te = def_.talk_tables.Decode(c.group);
+            if (!got || te == nullptr || rn == nullptr) {
+                Event("regiment net", "group " + c.group + " lost in the jamming");
+                return true;
+            }
+            SayRegimentGroup(*rn, *te);
+            ApplyRegimentEffect(te->effect);
+            return true;
+        }
+        const AspdCode* code = def_.post_codes.Find(c.code);
+        char text[96];
+        if (telecode) {
+            post_command_ = c.code;
+            std::snprintf(text, sizeof(text), "%02d on the IT-45: %s", c.code, code != nullptr ? code->meaning.c_str() : "(not in the table)");
+            Event("regiment", text);
+        }
+        const TalkEntry* te = def_.talk_tables.ByAspd(c.code);
+        if (got && code != nullptr && te != nullptr && rn != nullptr) {  // a group of ПТ-1: decoded by whoever keeps the table
+            SayRegimentGroup(*rn, *te);
+        } else if (got && code != nullptr) {
+            std::string said = code->meaning;
+            if (!said.empty()) said[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(said[0])));
+            Radio("regiment net", "Regiment", said + "!");
+        }
+        if ((telecode || got) && code != nullptr) ApplyRegimentEffect(code->effect);  // else jammed out: lost
+        return true;
+    }
+    // The regiment's call with a group («Рябина, я Тополь: 143. Приём.»): heard by whoever's box is on its net, and read
+    // against the table by an NPC among them (a player reads the table on his desk).
+    void SayRegimentGroup(const RadioNetDef& rn, const TalkEntry& te) {
+        const std::vector<std::string> ears = NetHearers("regiment");
+        Radio("regiment net", rn.main_call_sign, rn.own_call_sign + ", я " + rn.main_call_sign + ": " + te.code + ". Приём.", false, ears);
+        HeardGroup(te.code, "regiment", ears);
+        DecodeHeard(ears, &te);
+    }
+    void ApplyRegimentEffect(const std::string& effect) {
+        if (effect == "fire_ban" || effect == "cease_fire") fire_banned_ = true;
+        if (effect == "fire_free") fire_banned_ = false;
+        if (effect == "readiness" && battery_) {
+            battery_->SetAirThreat(true, time_);
+            air_threat_forced_ = true;
+        }
+        if (effect == "report_readiness") {  // asked again: the NPC commander reports (a player answers it himself)
+            regiment_reported_ = false;
+            if (NpcAt(Cmdr())) ReportToRegiment();
+        }
+    }
+
+public:
+    // A lesson's cue (tutorial.hpp "regiment:<group or code>"): the regiment's command held on cue goes out now, on the
+    // nets that are up (a group waits for the command net). False if the scenario holds none such, or it has gone already.
+    bool ReleaseRegimentCommand(const std::string& what) {
+        for (std::size_t i = 0; i < def_.post_regiment.commands.size(); ++i) {
+            const RegimentCommand& c = def_.post_regiment.commands[i];
+            if (!c.on_cue || cued_released_.count(i) != 0 || !RegimentCommandIs(c, what)) continue;
+            cued_released_.insert(i);
+            cued_commands_.push_back(c);
+            return true;
+        }
+        return false;
+    }
+    // Is it this command: its group, or its two digits?
+    static bool RegimentCommandIs(const RegimentCommand& c, const std::string& what) {
+        if (!c.group.empty()) return c.group == what;
+        char code[8];
+        std::snprintf(code, sizeof(code), "%02d", c.code);
+        return what == code || what == std::to_string(c.code);
+    }
+    // A talk-table group said on a net, and the seats whose boxes were on it (the lessons' "group:<code>").
+    struct GroupHeard {
+        double time_s = 0.0;
+        std::string code;
+        std::string net;
+        std::vector<std::string> ears;
+    };
+    const std::vector<GroupHeard>& GroupsHeard() const { return groups_heard_; }
+
+private:
+    std::set<std::size_t> cued_released_;
+    std::vector<GroupHeard> groups_heard_;
+    void HeardGroup(const std::string& code, const std::string& net, const std::vector<std::string>& ears) {
+        groups_heard_.push_back({time_, code, net, ears});
     }
     std::string PostCommandText() const {
         if (post_command_ < 0) return std::string();
@@ -2521,6 +3047,7 @@ private:
             post_first_mark_[m.target_id] = m.time_s;
             Event(m.target_id, "on the post's board: " + post_->Board().Describe(m));
         }
+        UpdatePlotterReports();
         UpdateKeypad();
     }
     // The DT-2 marker and the ДХ keypad (rwd_mb3: the Pult DCh enters a target's number, height zone, characteristics and
@@ -2688,6 +3215,16 @@ private:
                 designations_.push_back(e);
                 designations_heard_.push_back(e);
                 OsaReadBack(e);
+                if (e.group_centre) {  // a group's centre is no aircraft: the crew counts the group on its scope by the rule
+                    GroupOrder g;
+                    g.number = e.number;
+                    g.rule = e.rule > 0 ? e.rule : 1;  // none given: the crew chief chooses (sam3d: the first)
+                    g.azimuth_deg = e.azimuth_mils * 360.0 / 6000.0;
+                    g.range_m = e.range_m;
+                    g.heard_s = time_;
+                    group_orders_.push_back(g);
+                    continue;
+                }
                 KnownTarget k;
                 k.target = e.subject;
                 k.number = e.number;
@@ -2878,7 +3415,7 @@ private:
             return;
         }
         if (!def_.end_when_targets_gone || def_.targets.empty()) return;
-        if (engagement_on_ && engagement_.ShotsInFlight()) return;
+        if (engagement_on_ && (engagement_.ShotsInFlight() || kill_.OpenCount() > 0)) return;
         for (const TargetState& s : targets_) {
             if (!s.spawned || !s.gone) return;
         }
@@ -2929,6 +3466,105 @@ private:
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;
+    // ---- The crew's bodies out of their seats (crew_mobility.hpp).
+    std::map<std::string, CrewMover> movers_;
+    std::map<std::string, bool> hatches_;           // exit id -> standing open
+    std::set<std::string> tracked_;                 // seats whose body the engine reports (the players')
+    std::map<std::string, double> move_refused_s_;  // a seat's last refused way (tried again every 2 s)
+
+    void StartMovers() {
+        if (!def_.has_vehicle) return;
+        const double stand_s = def_.has_crew_data ? def_.crew_data.stand_s : def_.walking.gait.stand_up_s;
+        const double sit_s = def_.has_crew_data ? def_.crew_data.sit_s : def_.walking.gait.sit_down_s;
+        for (CrewMember& c : crew_) {
+            if (def_.vehicle.Seat(c.Role()) == nullptr) continue;
+            CrewMover m(&def_.vehicle, c.Role());
+            m.SetSeatTimes(stand_s, sit_s);
+            // A slower hand is a slower climber (docs/crew/05_SKILL.md): the tier's reaction against a trained man's 1 s.
+            if (c.HasSkill()) m.SetPace(Clamp(c.Skill().reaction_s, 0.7, 1.8));
+            movers_.emplace(c.Role(), m);
+            std::vector<OutsideJob> jobs;
+            for (const VehicleJob& j : def_.vehicle.jobs) {
+                if (j.station == c.Role()) jobs.push_back({j.control, j.place, j.stay_until});
+            }
+            c.SetOutsideJobs(std::move(jobs));
+        }
+    }
+    // The men still out of the vehicle, by the exit each comes back in by (his seat's): a hatch is left open for them.
+    std::map<std::string, int> StillOut() const {
+        std::map<std::string, int> out;
+        for (const auto& m : movers_) {
+            if (m.second.Inside()) continue;
+            for (const VehicleExit& e : def_.vehicle.exits) {
+                bool mine = false;
+                for (const std::string& s : e.stations) mine = mine || (s == m.first && !e.emergency);
+                if (mine) {
+                    ++out[e.id];
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+    bool OthersOutside(const std::string& station) const {
+        for (const auto& m : movers_) {
+            if (m.first != station && m.second.Place() != BodyPlace::Seated && m.second.Place() != BodyPlace::Cabin) return true;
+        }
+        return false;
+    }
+    // The noise at a point outside: the countryside's, and the vehicle's machinery running.
+    double NoiseAt(const Vec3& enu, const VehiclePose& pose) const {
+        double n = def_.walking.earshot.quiet_db;
+        for (const VehicleNoise& v : def_.vehicle.noise) {
+            if (console_.equipment.IsReady(v.subsystem)) n = AddNoise(n, v.db_at_1m, (pose.ToEnu(v.at_m) - enu).Length());
+        }
+        return n;
+    }
+    static MoveGoal GoalFor(const std::string& want) {
+        if (want.empty()) return MoveGoal::Seat();
+        if (want == "lineup") return MoveGoal::InLineup();
+        return MoveGoal::AtPlace(want);
+    }
+    std::string PlaceLabel(const std::string& id) const {
+        if (id == "lineup") return "the line-up";
+        const VehiclePlace* p = def_.vehicle.Place(id);
+        return p != nullptr ? p->label : id;
+    }
+    // Each NPC goes where his drill wants him (CrewMember::WantedPlace); every body walks on; each crew member learns
+    // where his body is.
+    void UpdateMovers(double dt) {
+        if (!def_.has_vehicle) return;
+        const VehiclePose pose = Pose();
+        const MapTerrain* map = map_ground_.get();
+        for (CrewMember& c : crew_) {
+            auto it = movers_.find(c.Role());
+            if (it == movers_.end()) continue;
+            CrewMover& m = it->second;
+            const bool npc = SeatHolder(c.Role()).empty();
+            if (npc && !PlayerBodyTracked(c.Role())) {
+                const std::string want = c.WantedPlace();
+                const bool there = m.At() == want && (!want.empty() || m.Place() == BodyPlace::Seated || m.Moving());
+                const auto refused = move_refused_s_.find(c.Role());
+                const bool retry = refused == move_refused_s_.end() || time_ - refused->second >= 2.0;
+                if (!there && retry) {
+                    MoveGoal g = GoalFor(want);
+                    g.shut_after = want.empty();  // the last man in by a hatch shuts it
+                    std::string why;
+                    if (m.GoTo(g, &console_, pose, &why)) {
+                        move_refused_s_.erase(c.Role());
+                        Event(c.Role(), want.empty() ? std::string("back to his seat") : "out to " + PlaceLabel(want));
+                    } else {
+                        if (refused == move_refused_s_.end()) Event(c.Role(), "can't go out: " + why);
+                        move_refused_s_[c.Role()] = time_;
+                    }
+                }
+            }
+            const std::map<std::string, int> still_out = StillOut();
+            m.Update(dt, pose, &world_.GetTerrain(), map, def_.walking.gait, hatches_, &still_out);
+            c.SetWhere(m.Moving() ? std::string("moving") : m.At(), m.Moving());
+        }
+    }
+
     struct PendingOrder {
         double at_s = 0.0;
         std::string crew;
@@ -3478,6 +4114,11 @@ private:
                 if (battery_ && def_.battery_drive_own) {  // the battery drives us: its short halt (inside 20 km: in the column)
                     BatteryOrder o;
                     o.kind = BatteryOrder::Kind::ShortHalt;
+                    o.threat_range_m = k.range_m;
+                    if (k.has_azimuth && k.true_azimuth) {
+                        o.threat_has_azimuth = true;
+                        o.threat_az_deg = k.azimuth_deg;
+                    }
                     battery_->Order(o, time_);
                 } else if (NpcAt("driver")) {  // our driver stops the vehicle
                     npc_halt_at_ = time_ + SpeakDelayS("driver") + 2.0;
@@ -3499,6 +4140,8 @@ private:
         const std::string tracked = eng.TrackedTarget();
         // A missile in the air: wait for the result; under a two-missile salvo (doctrine salvo) the second goes first.
         if (eng.ShotsInFlight() && !NpcSalvoDue(tracked)) return;
+        // A missile's result being judged: the call decides whether to engage again (voenizdat_osa_1991 p267).
+        if (!tracked.empty() && kill_.Pending(tracked)) return;
         if (m == TrackMethod::None) {
             npc_target_.clear();
             // Take the nearest contact once it is within the tracking radar's reach (the drill switches the tracking
@@ -3525,7 +4168,7 @@ private:
             };
             for (const KnownTarget& k : recent) {
                 if (k.has_range && !k.friendly && !eng.KnownFriend(k.target) && !theirs(k) && !beside_theirs(k) &&
-                    decoys_known_.count(k.target) == 0) {
+                    decoys_known_.count(k.target) == 0 && reported_kills_.count(k.target) == 0) {
                     known.push_back(k);
                 }
             }
@@ -3534,7 +4177,19 @@ private:
             // to it of a target still in the picture (the post reads out only this vehicle's on its net).
             if (LinkedToPost()) {
                 for (auto d = designations_heard_.rbegin(); d != designations_heard_.rend(); ++d) {
-                    const auto at = std::find_if(known.begin(), known.end(), [&](const KnownTarget& k) { return k.target == d->subject; });
+                    std::string want = d->subject;
+                    if (d->group_centre) {  // a group's centre: the aircraft the rule picks
+                        GroupOrder* g = FindGroupOrder(d->number);
+                        if (g == nullptr) continue;
+                        if (g->pick.empty() && NpcAt(def_.tuning.aim_az_role)) {  // the senior operator counts: wait for his report
+                            const bool counting = g->told_s >= 0.0 ? (g->reported ? time_ - g->reported_s < kGroupPickWaitS : time_ - g->told_s < kGroupLookS)
+                                                                   : time_ - g->heard_s < kGroupPickWaitS;
+                            if (counting) return;
+                        }
+                        if (g->pick.empty()) g->pick = SelectByRule(EchoesOf(known, eng), g->azimuth_deg, g->range_m, g->rule, def_.tuning.group);
+                        want = g->pick;
+                    }
+                    const auto at = std::find_if(known.begin(), known.end(), [&](const KnownTarget& k) { return k.target == want; });
                     if (at == known.end()) continue;
                     std::rotate(known.begin(), at, at + 1);
                     break;
@@ -3575,6 +4230,15 @@ private:
             }
             return;
         }
+        // A target his crew has called destroyed and still held (a wrong call, or the track not yet broken): "Цель
+        // сбросить!". If it flies on, the senior operator says so (AssessKills) and it may be taken again.
+        if (reported_kills_.count(tracked) != 0) {
+            if (npc_dropped_kill_ != tracked) {
+                npc_dropped_kill_ = tracked;
+                GiveCrewOrder("order_drop_target");
+            }
+            return;
+        }
         // Never at a friend: "Пуск запрещаю!" and the track let go ("Цель сбросить!").
         const KnownTarget* told = pictures_[Cmdr()].Find(tracked);
         if (eng.KnownFriend(tracked) || (told != nullptr && told->friendly)) {
@@ -3606,11 +4270,6 @@ private:
             const SkillTier* t = CommanderTier();
             const bool slow = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->branch_error_chance;
             npc_branch_at_ = time_ + (slow ? 10.0 : 0.0);
-                    o.threat_range_m = k.range_m;
-                    if (k.has_azimuth && k.true_azimuth) {
-                        o.threat_has_azimuth = true;
-                        o.threat_az_deg = k.azimuth_deg;
-                    }
         }
         if (branch && time_ < npc_branch_at_) return;
         if (m == TrackMethod::Radar && console_.equipment.GetInput("target_too_low")) {
@@ -3999,17 +4658,18 @@ private:
                         }
                         break;
                     case EngagementEvent::Kind::Hit:
-                        if (NpcAt("deputy_commander")) Say("hit", "deputy_commander");
-                        HeardDestroyed(e.target);
-                        OwnReport(BatteryFire::Event::Kind::Hit, e.target);
-                        break;
                     case EngagementEvent::Kind::Miss:
-                        if (NpcAt("deputy_commander")) Say("miss", "deputy_commander");
-                        OwnReport(BatteryFire::Event::Kind::Miss, e.target);
+                        // Nobody aboard knows the outcome: the crew judges it from the signs on its instruments (AssessKills).
+                        // A missile whose target was already down has nothing to show.
+                        if (e.detail != "target already down") {
+                            kill_.Open(time_, e.shot, e.target, e.kind == EngagementEvent::Kind::Hit, e.detail, e.view);
+                        }
                         break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
                 }
             }
+            AssessKills();
+            UpdateGroupPicks();
         }
         // Until something is tracked the senior operator keeps the crew up to date: the nearest echo on his scope,
         // every 15 s (the first report of each contact is spoken when it appears).
@@ -4045,6 +4705,12 @@ private:
                     std::snprintf(n, sizeof(n), "%04d", e.number);
                     std::snprintf(r, sizeof(r), "%.0f", e.range_m / 1000.0);
                     std::snprintf(h, sizeof(h), "%d", e.height_hm);
+                    if (e.group_centre) {
+                        const GroupOrder* g = FindGroupOrder(e.number);
+                        Say("designation_group", Cmdr(), {{"number", n}, {"azimuth", az}, {"range_km", r}, {"height_hm", h},
+                                                          {"rule", std::to_string(g != nullptr ? g->rule : 1)}});
+                        continue;
+                    }
                     KnownTarget k;
                     k.target = e.subject;
                     k.number = e.number;
@@ -4163,7 +4829,7 @@ private:
         // What the other vehicles see (geometric sensors), with each target's number on the board: the post's own when
         // the player's vehicle is the post, else what the commander has been told.
         std::vector<BatteryFireTarget> targets;
-        std::vector<BoardMark> marks = post_ ? PostPicture() : c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
+        std::vector<BoardMark> marks = post_ ? CommanderPicture() : c2_ ? c2_->Known(time_) : std::vector<BoardMark>();
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (!targets_[i].spawned || targets_[i].gone) continue;
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
@@ -4207,6 +4873,11 @@ private:
                     for (const BatteryFireTarget& t : targets) alive = alive || t.id == m.target_id;
                 }
                 if (!alive) continue;
+                // A group he can't resolve takes a launcher per aircraft, one rule each, four at most (voenizdat_osa_1991 p261).
+                if (post_) {
+                    const std::vector<BoardMark> group = PostGroupOf(m);
+                    if (group.size() > 1 && LaunchersOnGroup(group) >= std::min<int>(4, static_cast<int>(group.size()))) continue;
+                }
                 // The nearest ready launcher whose sector of fire covers it; any ready launcher if none does.
                 const BatteryFire::Shooter* best = nullptr;
                 double best_r = battery_fire_->ReachM() + 10000.0;
@@ -4371,6 +5042,7 @@ private:
     bool own_empty_reported_ = false;
     std::map<std::string, std::string> given_elsewhere_;  // target -> the launcher the post gave it (heard on the net)
     std::string npc_released_;                            // the last such target his crew let go
+    std::string npc_dropped_kill_;                        // the last target called destroyed whose track he had dropped
     static constexpr double kBesideTheirsM = 2500.0;     // an echo this close to another launcher's target is it (sam3d)
     bool GivenElsewhere(const std::string& target) const {
         return given_elsewhere_.count(target) != 0 && reported_kills_.count(target) == 0;
@@ -4443,7 +5115,10 @@ private:
         r.callsign = OwnCallsign();
         r.target = target;
         for (const C2Network::Event& e : designations_heard_) {
-            if (e.subject == target) r.number = e.number;
+            if (e.subject == target && !e.group_centre) r.number = e.number;
+        }
+        for (const GroupOrder& g : group_orders_) {
+            if (g.pick == target) r.number = g.number;
         }
         r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
         own_reports_.push_back(r);
@@ -4496,7 +5171,38 @@ private:
         double heard_s = 0.0;  // the launcher's commander has it (the message ended)
         bool by_line = false;  // on a telephone line: no emission, no jamming
         int repeats = 0;       // said again for want of a read-back
+        // Into a group the post can't resolve (voenizdat_osa_1991 p261): `point` is its centre, the launcher picks by the
+        // rule; the group's targets as the post has them.
+        bool group = false;
+        int rule = 0;
+        std::vector<std::string> group_ids;
     };
+    // The selection rules' numbers (group_designation.hpp): the launchers' tuning in the post, else the vehicle's own.
+    const GroupTuning& GroupRules() const { return def_.has_launcher_tuning ? def_.launcher_tuning.group : def_.tuning.group; }
+    // The group a mark is in on the post's picture: the hostile marks linked to it by marks closer together than the post
+    // can resolve, each at its newest place. The mark alone when it is single.
+    std::vector<BoardMark> PostGroupOf(const BoardMark& m) const {
+        std::vector<BoardMark> marks{OnTheTube(m)};
+        for (const BoardMark& o : PostPicture()) {
+            if (o.target_id != m.target_id && o.type != 1) marks.push_back(OnTheTube(o));
+        }
+        std::vector<Vec3> at;
+        for (const BoardMark& k : marks) at.push_back(k.position);
+        std::vector<BoardMark> out;
+        for (std::size_t i : UnresolvedGroup(at, 0, GroupRules().post_unresolved_m)) out.push_back(marks[i]);
+        return out;
+    }
+    // How many launchers the post has on a group: its targets taken, and designations into it still on their way.
+    int LaunchersOnGroup(const std::vector<BoardMark>& group) const {
+        int n = 0;
+        for (const BoardMark& g : group) n += battery_fire_ && battery_fire_->Engaged(g.target_id) ? 1 : 0;
+        for (const VoiceDesignation& d : designations_out_) {
+            bool in = false;
+            for (const BoardMark& g : group) in = in || std::find(d.group_ids.begin(), d.group_ids.end(), g.target_id) != d.group_ids.end();
+            n += d.group && in ? 1 : 0;
+        }
+        return n;
+    }
     int designations_lost_ = 0;
     std::vector<VoiceDesignation> designations_out_;
     double battery_net_free_s_ = 0.0;
@@ -4572,7 +5278,9 @@ private:
     }
     // One designation read out on the battery net: number, azimuth and range from the launcher (flak11: by voice,
     // azimuth and range), one message at a time (the board's operator delay and message time).
-    bool DesignateByVoice(const std::string& callsign, const BoardMark& m, int repeats = 0) {
+    // A mark in a group his picture can't resolve goes as the group's centre and a selection rule (voenizdat_osa_1991
+    // p261): `rule` 1-4, 0 none (the crew chief chooses), -1 the next one no launcher has on that group yet.
+    bool DesignateByVoice(const std::string& callsign, const BoardMark& m, int repeats = 0, int rule = -1) {
         if (!battery_fire_) return false;
         const BatteryFire::Shooter* sh = battery_fire_->Find(callsign);
         if (sh == nullptr || sh->missiles <= 0) return false;
@@ -4598,31 +5306,55 @@ private:
         battery_net_free_s_ = start + bd.message_s * (twice ? 2.0 : 1.0);
         // He reads the number off the board and the place off the IT-45: its latest fix, led along its speed vector to
         // when the launcher will have it (the tube shows the vector, ru_pu12_text). Not on the tube: the board's mark.
+        // A group: the centre of its marks, each led on the same way.
+        auto led = [&](const BoardMark& b) {
+            for (const AspdTrack& k : post_->Tracks()) {
+                if (k.target_id == b.target_id) return k.position + k.velocity * (battery_net_free_s_ - k.time_s);
+            }
+            return b.position;
+        };
+        const std::vector<BoardMark> group = PostGroupOf(m);
+        const bool grouped = group.size() > 1;
+        if (grouped && rule < 0) rule = std::min(4, LaunchersOnGroup(group) + 1);
+        if (!grouped) rule = 0;
         BoardMark at = m;
-        for (const AspdTrack& k : post_->Tracks()) {
-            if (k.target_id == m.target_id) at.position = k.position + k.velocity * (battery_net_free_s_ - k.time_s);
-        }
-        designations_out_.push_back({callsign, m, at.position, battery_net_free_s_, by_line, repeats});
+        at.position = Vec3{};
+        for (const BoardMark& g : group) at.position = at.position + led(g) / static_cast<double>(group.size());
+        at.group_centre = grouped;
+        at.rule = rule;
+        VoiceDesignation out{callsign, m, at.position, battery_net_free_s_, by_line, repeats};
+        out.group = grouped;
+        out.rule = rule;
+        for (const BoardMark& g : group) out.group_ids.push_back(g.target_id);
+        designations_out_.push_back(out);
         if (ExternalLauncher(callsign)) linked_out_.push_back({callsign, at, start, battery_net_free_s_});
         const PlottingBoard::Designation d = PlottingBoard::Designate(at, sh->position);
         char n[16], r[16], az[16];
         std::snprintf(n, sizeof(n), "%04d", m.number);
         std::snprintf(r, sizeof(r), "%.0f", d.range_m / 1000.0);
         std::snprintf(az, sizeof(az), "%03.0f", std::fmod(d.azimuth_deg + 360.0, 360.0));  // degrees on the battery net (bguir_tsp)
+        // The words: "цель 6201", or "группа 6201, центр" with ", правило 2" after the range.
+        const std::string what = grouped ? std::string("группа ") + n + ", центр" : std::string("цель ") + n;
+        const std::string what_en = grouped ? std::string("group ") + n + ", centre" : std::string("target ") + n;
+        const std::string rule_ru = grouped && rule > 0 ? ", " + RuleWordsRu(rule) : std::string();
+        const std::string rule_en = grouped && rule > 0 ? ", " + RuleWordsEn(rule) : std::string();
         if (by_line) {
             const std::string label = "line " + std::to_string(line->line);
-            Radio(label, "Battery commander", callsign + ", я " + OwnCallSignOn("battery") + ": цель " + n + ", азимут " + az + ", дальность " + r +
-                                                  " — уничтожить!");
+            Radio(label, "Battery commander", callsign + ", я " + OwnCallSignOn("battery") + ": " + what + ", азимут " + az + ", дальность " + r +
+                                                  rule_ru + " — уничтожить!");
         } else {
             if (callouts_) {
                 callouts_->Say(time_, "order_assign", Cmdr(), {{"callsign", callsign}, {"own", OwnCallSignOn("battery")}, {"number", n},
-                                                                {"azimuth", az}, {"range_km", r}});
+                                                                {"target", what}, {"target_en", what_en}, {"rule", rule_ru},
+                                                                {"rule_en", rule_en}, {"azimuth", az}, {"range_km", r}});
             }
             Transmitted("battery", "Battery commander", bd.message_s * (twice ? 2.0 : 1.0));
         }
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign,
-                     std::string("target ") + n + (by_line ? " by line" : twice ? " by voice, said twice" : " by voice") + ": azimuth " + az +
-                         ", range " + r + " km"});
+                     (grouped ? std::string("group ") + n + " (" + std::to_string(group.size()) + " marks; its centre, rule " +
+                                    std::to_string(rule) + ")"
+                              : std::string("target ") + n) +
+                         (by_line ? " by line" : twice ? " by voice, said twice" : " by voice") + ": azimuth " + az + ", range " + r + " km"});
         ++designations_made_;
         return true;
     }
@@ -4648,17 +5380,37 @@ private:
                 ++designations_lost_;
                 Event(d.callsign, "the designation did not get through (jammed, or off the battery net)");
                 // No read-back: the NPC commander says it again (twice more at most).
-                if (NpcAt(Cmdr()) && d.repeats < 2 && reported_kills_.count(d.mark.target_id) == 0) DesignateByVoice(d.callsign, d.mark, d.repeats + 1);
+                if (NpcAt(Cmdr()) && d.repeats < 2 && reported_kills_.count(d.mark.target_id) == 0) {
+                    DesignateByVoice(d.callsign, d.mark, d.repeats + 1, d.group ? d.rule : -1);
+                }
                 continue;
             }
             const BatteryFireTarget* best = nullptr;
-            double best_d = kDesignationSearchM;
-            for (const BatteryFireTarget& t : targets) {
-                if (!t.alive || t.friendly) continue;
-                const double dist = (Vec3{t.position.x, t.position.y, 0.0} - Vec3{d.point.x, d.point.y, 0.0}).Length();
-                if (dist < best_d) {
-                    best_d = dist;
-                    best = &t;
+            if (d.group) {
+                // A group's centre: its crew counts the group on its own screen by the rule (group_designation.hpp).
+                const BatteryFire::Shooter* sh = battery_fire_->Find(d.callsign);
+                const Vec3 from = sh != nullptr ? sh->position : def_.unit_position;
+                auto echo = [&](const std::string& id, const Vec3& p) {
+                    const Vec3 rel = p - from;
+                    return GroupEcho{id, RadToDeg(std::atan2(rel.x, rel.y)), rel.HorizontalLength()};
+                };
+                std::vector<GroupEcho> echoes;
+                for (const BatteryFireTarget& t : targets) {
+                    if (t.alive && !t.friendly) echoes.push_back(echo(t.id, t.position));
+                }
+                const GroupEcho c = echo(std::string(), d.point);
+                const std::string pick = SelectByRule(echoes, c.azimuth_deg, c.range_m, d.rule, GroupRules());
+                for (const BatteryFireTarget& t : targets) best = t.id == pick ? &t : best;
+                if (best != nullptr) Event(d.callsign, "takes " + best->id + " in the group by rule " + std::to_string(d.rule));
+            } else {
+                double best_d = kDesignationSearchM;
+                for (const BatteryFireTarget& t : targets) {
+                    if (!t.alive || t.friendly) continue;
+                    const double dist = (Vec3{t.position.x, t.position.y, 0.0} - Vec3{d.point.x, d.point.y, 0.0}).Length();
+                    if (dist < best_d) {
+                        best_d = dist;
+                        best = &t;
+                    }
                 }
             }
             if (best == nullptr) {
@@ -4666,7 +5418,7 @@ private:
                 if (callouts_) callouts_->Say(time_, "report_no_target", "battery", {{"callsign", d.callsign}});
                 continue;
             }
-            if (best->id != d.mark.target_id) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
+            if (best->id != d.mark.target_id && !d.group) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
             battery_fire_->Assign(d.callsign, best->id, d.mark.number, time_);
             // Its read-back (rrs_1986): heard at the post if the launcher can transmit and the post hears the net.
             char rn[16];
@@ -4748,10 +5500,12 @@ public:
     // The battery commander in the post gives a launcher the target with this number on the post's board, by voice on the
     // battery net. False if the vehicle is no post, the net is down, the launcher is unknown or empty, or no target on
     // the board has the number.
-    bool DesignateBatteryTarget(const std::string& callsign, int number) {
+    // A target in a group the post can't resolve goes as the group's centre and a selection rule (`rule` 1-4, 0 none: the
+    // crew chief chooses; -1: the next rule no launcher has on that group yet).
+    bool DesignateBatteryTarget(const std::string& callsign, int number, int rule = -1) {
         if (!post_) return false;
         for (const BoardMark& m : PostMarks()) {
-            if (m.number == number) return DesignateByVoice(callsign, m);
+            if (m.number == number) return DesignateByVoice(callsign, m, 0, rule);
         }
         return false;
     }
@@ -4806,7 +5560,7 @@ public:
     double MarkedArrivalS() const { return marked_arrival_s_; }
     // The battery commander gives a launcher the target with this number on the IT-45 (the ASPD-U's): its board number
     // if the plotter has written it, else the tube's; by voice on the battery net as DesignateBatteryTarget.
-    bool DesignateFromTube(const std::string& callsign, int aspd_number) {
+    bool DesignateFromTube(const std::string& callsign, int aspd_number, int rule = -1) {
         if (!post_) return false;
         const AspdTrack* track = nullptr;
         for (const AspdTrack& t : post_->Tracks()) {
@@ -4814,9 +5568,9 @@ public:
         }
         if (track == nullptr || reported_kills_.count(track->target_id) != 0) return false;
         for (const BoardMark& m : PostMarks()) {
-            if (m.target_id == track->target_id) return DesignateByVoice(callsign, m);
+            if (m.target_id == track->target_id) return DesignateByVoice(callsign, m, 0, rule);
         }
-        return DesignateByVoice(callsign, TubeMark(*track));
+        return DesignateByVoice(callsign, TubeMark(*track), 0, rule);
     }
     // A player's designation through his seat (multiplayer): only the commanding seat gives the launchers targets.
     bool SeatDesignate(const std::string& seat, const std::string& callsign, int number, std::string* why = nullptr) {
@@ -4865,6 +5619,169 @@ private:
         if (assigned_target_ == target) assigned_target_.clear();
     }
     std::string assigned_target_;  // the target the commander ordered taken ("" = none yet)
+
+    // ---- The kill assessment (kill_assessment.hpp, voenizdat_osa_1991 p267): each seat calls the signs its instruments
+    // show of a missile's target; the judge calls the result from what he has seen and heard. What the crew knows of a
+    // kill, its report to the battery and its next move follow his call, right or wrong.
+    KillAssessment kill_;
+    std::map<std::string, double> own_kills_;  // targets our judge called destroyed -> when (looked for again on the scope)
+    int kill_calls_ = 0, kill_calls_wrong_ = 0, still_flying_ = 0;
+    // The seat whose instrument shows a sign: the range indicator the range wheel's, the search scope the azimuth
+    // wheel's, the elevation dial, the TV and the launch console's lamps the elevation wheel's (flak11, voenizdat_osa_1991 p17).
+    std::string KillSeat(KillInstrument where) const {
+        switch (where) {
+            case KillInstrument::RangeIndicator: return def_.tuning.aim_range_role;
+            case KillInstrument::SearchScope: return def_.tuning.aim_az_role;
+            case KillInstrument::LaunchLamps:
+            case KillInstrument::ElevationDial:
+            case KillInstrument::Tv: return def_.tuning.aim_el_role;
+        }
+        return def_.tuning.aim_el_role;
+    }
+    // Who calls the result: the tuning's judge (the deputy commander) when an NPC sits there, else the commander; nobody
+    // when players hold both (they judge for themselves).
+    std::string KillJudge() {
+        if (NpcAt(def_.tuning.kill.judge_role)) return def_.tuning.kill.judge_role;
+        return NpcAt(Cmdr()) ? Cmdr() : std::string();
+    }
+    // What the instruments show of a target now.
+    KillLook KillLookOf(const std::string& id) {
+        KillLook l;
+        l.tracked = engagement_.Method() != TrackMethod::None && engagement_.TrackedTarget() == id;
+        l.on_range = l.tracked && engagement_.Method() == TrackMethod::Radar;
+        for (const Contact& c : engagement_.TrackReturns()) l.on_range = l.on_range || c.target_id == id;
+        l.elevation_deg = engagement_.AntennaElevationDeg();
+        for (const Contact& c : engagement_.SearchPicture()) l.on_scope = l.on_scope || c.target_id == id;
+        const TrackSensorDef& d = console_.track;
+        l.on_tv = l.tracked && !d.tv_camera.empty() && console_.equipment.IsReady(d.tv_camera) && engagement_.TvLook(console_, id).seen;
+        return l;
+    }
+    double PerceptionS(const std::string& station) {
+        for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
+            if (crew_[i].Role() != station) continue;
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->perception_s * (crew_[i].Stressed() ? t->stress_factor : 1.0);
+        }
+        return 0.5;
+    }
+    void AssessKills() {
+        kill_.Observe(time_, [this](const std::string& id) { return KillLookOf(id); });
+        const std::string judge = KillJudge();
+        for (const KillAssessment::Sign& s : kill_.TakeSigns()) {
+            const std::string seat = KillSeat(s.where);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(seat), s.target,
+                         std::string("sees ") + KillSignText(s.sign) + " (" + ToString(s.where) + ", missile " + std::to_string(s.shot) + ")"});
+            if (seat == judge) kill_.Learn(s.shot, s.sign, time_ + PerceptionS(judge));  // his own instrument
+            if (NpcAt(seat)) Say(KillSignCallout(s.sign), seat);
+        }
+        double wrong = def_.tuning.kill.ambiguous_wrong_chance;
+        if (const SkillTier* t = judge.empty() ? nullptr : TierAt(judge)) wrong += t->branch_error_chance;
+        for (const KillAssessment::Judgement& j : kill_.Judge(time_, wrong < 1.0 ? wrong : 1.0)) {
+            ++kill_calls_;
+            if (j.wrong) ++kill_calls_wrong_;
+            std::string by;
+            for (KillSign k : j.known) by += (by.empty() ? "" : ", ") + std::string(KillSignId(k));
+            std::string text = std::string("judges missile ") + std::to_string(j.shot) + ": " + KillAssessment::ToString(j.call) + " (" +
+                               (by.empty() ? std::string("no sign") : by) + (j.settled ? "" : "; the signs settle nothing") + ")";
+            if (j.wrong) text += j.hit ? " - WRONG: it was hit" : " - WRONG: it was missed";
+            if (judge.empty()) text += "; the players judge for themselves";
+            log_.Record({time_, DebriefEntry::Kind::Scenario, judge.empty() ? std::string("Crew") : SpeakerName(judge), j.target, text});
+            if (judge.empty()) continue;
+            if (j.call == KillAssessment::Call::Hit) {
+                Say("hit", judge);
+                HeardDestroyed(j.target);
+                own_kills_[j.target] = time_;
+                OwnReport(BatteryFire::Event::Kind::Hit, j.target);
+            } else if (j.call == KillAssessment::Call::Miss) {
+                Say("miss", judge);
+                OwnReport(BatteryFire::Event::Kind::Miss, j.target);
+            } else {
+                Say("result_unknown", judge);
+            }
+        }
+        // A target called destroyed still on the search scope a while later: it flies on (the call was wrong).
+        const std::string scope = def_.tuning.aim_az_role;
+        for (auto it = own_kills_.begin(); it != own_kills_.end();) {
+            if (time_ - it->second < def_.tuning.kill.recheck_s) {
+                ++it;
+                continue;
+            }
+            for (const Contact& c : engagement_.SearchPicture()) {
+                if (c.target_id != it->first || !NpcAt(scope)) continue;
+                KnownTarget k;
+                k.target = c.target_id;
+                k.has_azimuth = k.has_range = true;
+                k.azimuth_deg = c.azimuth_deg;
+                k.range_m = c.range_m;
+                char r[16];
+                std::snprintf(r, sizeof(r), "%.0f", c.range_m / 1000.0);
+                Say("target_still_flying", scope, {{"azimuth", MilsText(c.azimuth_deg)}, {"range_km", r}}, &k);
+                ++still_flying_;
+            }
+            it = own_kills_.erase(it);
+        }
+    }
+    // ---- A group's centre and a selection rule from the battery post (voenizdat_osa_1991 p261, group_designation.hpp):
+    // the senior operator counts the group on his scope and reports the aircraft the rule picks; the commander takes it.
+    struct GroupOrder {
+        int number = 0;
+        int rule = 1;
+        double azimuth_deg = 0.0;  // the centre, true azimuth from the vehicle
+        double range_m = 0.0;
+        double heard_s = 0.0;      // the commander heard it on the radio
+        double told_s = -1.0;      // the senior operator heard it passed on (-1: not yet)
+        double next_look_s = 0.0;  // he looks again (the group not on his scope yet)
+        bool reported = false;
+        double reported_s = 0.0;
+        std::string pick;          // the aircraft the commander knows was picked (the report, or his own count)
+    };
+    std::vector<GroupOrder> group_orders_;
+    static constexpr double kGroupPickWaitS = 15.0;  // the commander waits this long for a count not coming, then counts himself (sam3d)
+    static constexpr double kGroupLookS = 120.0;     // the senior operator gives up looking for the group (sam3d)
+    GroupOrder* FindGroupOrder(int number) {
+        for (auto g = group_orders_.rbegin(); g != group_orders_.rend(); ++g) {
+            if (g->number == number) return &*g;
+        }
+        return nullptr;
+    }
+    static std::vector<GroupEcho> EchoesOf(const std::vector<KnownTarget>& known, const EngagementModel& eng) {
+        std::vector<GroupEcho> out;
+        for (const KnownTarget& k : known) {
+            if (!k.has_azimuth || !k.has_range) continue;
+            out.push_back({k.target, k.true_azimuth ? k.azimuth_deg : eng.IndicatedToTrueDeg(k.azimuth_deg), k.range_m});
+        }
+        return out;
+    }
+    void UpdateGroupPicks() {
+        const std::string so = def_.tuning.aim_az_role;
+        for (GroupOrder& g : group_orders_) {
+            if (g.reported || g.told_s < 0.0 || !NpcAt(so) || time_ < g.next_look_s || time_ - g.told_s > kGroupLookS) continue;
+            std::vector<GroupEcho> echoes;
+            for (const Contact& c : engagement_.SearchPicture()) {
+                if (!engagement_.KnownFriend(c.target_id)) echoes.push_back({c.target_id, engagement_.IndicatedToTrueDeg(c.azimuth_deg), c.range_m});
+            }
+            const std::string id = SelectByRule(echoes, g.azimuth_deg, g.range_m, g.rule, def_.tuning.group);
+            if (id.empty()) {
+                g.next_look_s = time_ + 5.0;  // not on his scope yet
+                continue;
+            }
+            g.reported = true;
+            g.reported_s = time_;
+            for (const Contact& c : engagement_.SearchPicture()) {
+                if (c.target_id != id) continue;
+                KnownTarget k;
+                k.target = id;
+                k.number = g.number;
+                k.has_azimuth = k.has_range = true;
+                k.azimuth_deg = c.azimuth_deg;
+                k.range_m = c.range_m;
+                char r[16];
+                std::snprintf(r, sizeof(r), "%.0f", c.range_m / 1000.0);
+                Say("group_pick", so, {{"rule", std::to_string(g.rule)}, {"azimuth", MilsText(c.azimuth_deg)}, {"range_km", r}}, &k);
+                log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(so), id,
+                             "counts the group " + std::to_string(g.number) + " on his scope: rule " + std::to_string(g.rule) + " picks this one"});
+            }
+        }
+    }
     std::mt19937 hear_rng_{97u};    // who misses a callout (the outcome draws stay where they were)
     int say_agains_ = 0;
     double next_contact_update_s_ = 0.0;
@@ -4905,7 +5822,7 @@ private:
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             CrewMember& c = crew_[i];
             if (c.Role() == s.from) continue;
-            if (voice_ && s.channel == "intercom" && !voice_->HearsIntercom(c.Role()) && !(s.call && voice_->HearsCall(c.Role()))) continue;
+            if (!HeardBy(s, c.Role())) continue;
             const bool addressed = s.to == "crew" || s.to == "any" || s.to == c.Role();
             if (!addressed) continue;
             const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
@@ -4921,6 +5838,22 @@ private:
                     callouts_->Repeat(s, time_, 1.0 + SpeakDelayS(s.from));
                     continue;
                 }
+            }
+            KillSign sign = KillSign::Burst;
+            if (KillSignOfCallout(s.id, sign) && c.Role() == KillJudge()) kill_.LearnHeard(sign, time_);
+            if (s.id == "designation_group" && c.Role() == def_.tuning.aim_az_role) {
+                for (GroupOrder& g : group_orders_) {
+                    if (g.told_s < 0.0) g.told_s = time_;  // passed on in the order they came
+                }
+            }
+            if (s.id == "group_pick" && s.has_about && c.Role() == Cmdr()) {
+                for (GroupOrder& g : group_orders_) {
+                    if (g.number == s.about.number && g.pick.empty()) g.pick = s.about.target;
+                }
+            }
+            if (s.id == "target_still_flying" && s.has_about && c.Role() == Cmdr() && reported_kills_.erase(s.about.target) != 0) {
+                Event(s.about.target, "not destroyed after all: back in the commander's picture");
+                npc_dropped_kill_.clear();
             }
             if (!s.has_about) continue;
             KnownTarget k = s.about;
@@ -4963,6 +5896,94 @@ public:
 
     // A player in a seat speaks a report of the crew data (the UI's report buttons): what it says comes from his own
     // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.
+    // A paper kept in the cabin (a cabin display of kind "document"), line by line as typed, in Russian as issued.
+    // "radio_data": the radiotelephonist's extract of the radio data on its form (rrs_1986, vst_1988: each net's
+    // frequencies by number, the call signs, the times they change, the mode of communication, where needed the azimuth
+    // to a correspondent), with the telecode channel and the RTK-1's lines. "talk_tables": the commander's ПТ-1 and the
+    // signal table ПТ-2 (bstudy_tactics' form: a group, its meaning, a signal's visible sign). Times are counted from the
+    // exercise's start (Ч+minutes): the scenarios keep no clock.
+    std::vector<std::string> DocumentText(const std::string& document) const {
+        std::vector<std::string> out;
+        auto number = [](double v, int decimals) {
+            char b[32];
+            std::snprintf(b, sizeof(b), "%.*f", decimals, v);
+            std::string s(b);
+            for (char& c : s) {
+                if (c == '.') c = ',';  // the decimal comma
+            }
+            return s;
+        };
+        if (document == "talk_tables") {
+            for (const TalkTable& t : def_.talk_tables.tables) {
+                bool signals = false;
+                for (const TalkEntry& e : t.entries) signals = signals || !e.visual.empty();
+                out.push_back(std::string(signals ? "ТАБЛИЦА СИГНАЛОВ " : "ПЕРЕГОВОРНАЯ ТАБЛИЦА ") + t.name_ru);
+                for (const TalkEntry& e : t.entries) {
+                    std::string line = "  " + e.code + " — " + (signals ? "«" + e.ru + "»" : e.ru);
+                    if (!e.visual.empty()) line += " — " + e.visual;
+                    out.push_back(line);
+                }
+                out.push_back(std::string());
+            }
+            if (!out.empty()) out.pop_back();
+            return out;
+        }
+        if (document != "radio_data") return out;
+        out.push_back("РАДИОДАННЫЕ");
+        for (const RadioNetDef& n : def_.radio_data.nets) {
+            out.push_back(UpperFirst(n.name_ru));
+            std::string f = "  частоты: ";
+            for (std::size_t i = 0; i < n.frequencies_mhz.size(); ++i) {
+                f += (i > 0 ? "; № " : "№ ") + std::to_string(i + 1) + " — " + number(n.frequencies_mhz[i], 3);
+            }
+            out.push_back(f + " МГц");
+            if (n.main == "self") {
+                std::string members;
+                if (battery_fire_) {
+                    for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) members += (members.empty() ? "" : ", ") + s.callsign;
+                }
+                out.push_back("  позывные: свой — " + n.own_call_sign + " (главная)" + (members.empty() ? std::string() : "; " + members));
+            } else {
+                out.push_back("  позывные: свой — " + n.own_call_sign + "; главная — " + n.main_call_sign);
+            }
+            for (const RadioNetDef::Change& c : n.changes) {
+                out.push_back("  смена: Ч+" + std::to_string(static_cast<int>(c.at_s / 60.0)) + " — на № " + std::to_string(c.to));
+            }
+            std::string mode = "  вид связи: телефония";
+            if (n.main == "regiment" && def_.post_regiment.has_position) {
+                const Vec3 d = def_.post_regiment.position - def_.unit_position;
+                double az = RadToDeg(std::atan2(d.x, d.y));
+                if (az < 0.0) az += 360.0;
+                mode += "; азимут на КП полка " + std::to_string(static_cast<int>(std::lround(az)) % 360) + "°";
+            }
+            out.push_back(mode);
+        }
+        if (def_.radio_plan.telecode_hz > 0.0) {
+            out.push_back("Телекодовый канал (Р-407): приём " + number(def_.radio_plan.telecode_hz / 1.0e6, 1) + ", передача " +
+                          number(def_.radio_plan.telecode_return_hz / 1.0e6, 1) + " МГц");
+        }
+        std::string lines;
+        for (const LineDef& l : def_.radio_data.lines) {
+            if (!l.laid) continue;
+            const std::string to = l.to == "regiment" ? std::string("КП полка") : l.to == "radar" ? std::string("РЛР") : l.to;
+            lines += (lines.empty() ? "" : "; ") + std::to_string(l.line) + " — " + to;
+        }
+        if (!lines.empty()) out.push_back("Линии (РТК-1): " + lines);
+        return out;
+    }
+    // A Russian name with its first letter capitalised (the Cyrillic lower case а-я, as UTF-8).
+    static std::string UpperFirst(std::string s) {
+        if (s.size() >= 2) {
+            unsigned char a = static_cast<unsigned char>(s[0]), b = static_cast<unsigned char>(s[1]);
+            if (a == 0xD0 && b >= 0xB0 && b <= 0xBF) {
+                s[1] = static_cast<char>(b - 0x20);  // а-п
+            } else if (a == 0xD1 && b >= 0x80 && b <= 0x8F) {
+                s[0] = static_cast<char>(0xD0);      // р-я
+                s[1] = static_cast<char>(b + 0x20);
+            }
+        }
+        return s;
+    }
     // A report's words as the player's menu shows them (Russian, English): the blanks his seat can fill filled (the
     // report he would read out to the plotter, his seat's number), any other blank «…».
     std::pair<std::string, std::string> ReportWords(const std::string& station, const std::string& callout_id) const {
@@ -4972,6 +5993,7 @@ public:
         if (callout_id == "air_report") {
             f["report"] = post_ && !post_->Held().empty() ? post_->Held().front().text : std::string("(нет донесения / no report waiting)");
         }
+        if (const PlotterEvent* e = PendingPlot(callout_id)) f = e->fields;
         if (callout_id == "seat_ready") {
             static const char* const words[3][3] = {{"deputy_commander", "Первый", "1"}, {"senior_operator", "Второй", "2"}, {"operator", "Третий", "3"}};
             for (const auto& w : words) {
@@ -4980,6 +6002,7 @@ public:
                 f["seat_number_en"] = w[2];
             }
         }
+        if ((callout_id == "readback" || callout_id == "report_ready") && c2_ && station == Cmdr()) f = NetReportFields(callout_id);
         auto blanks = [](std::string t) {
             for (std::size_t a = t.find('{'); a != std::string::npos; a = t.find('{', a)) {
                 const std::size_t b = t.find('}', a);
@@ -4990,6 +6013,17 @@ public:
         };
         return {blanks(FillCallout(c->ru, f)), blanks(FillCallout(c->en, f))};
     }
+    // The plotter's reports to the commander (art. 23): due, made, and a player's left too late.
+    int PlotReportsDue() const { return plot_reports_due_; }
+    int PlotReportsMade() const { return plot_reports_made_; }
+    int PlotReportsMissed() const { return plot_reports_missed_; }
+    // When the commander learned of a board target from the plotter's report (-1: not from him).
+    double BoardTargetToldS(const std::string& target_id) const {
+        const auto it = board_known_s_.find(target_id);
+        return it != board_known_s_.end() ? it->second : -1.0;
+    }
+    // The NPC commander's picture of the air (the post's board as the plotter has called it, and the tube).
+    std::vector<BoardMark> CommanderPictureNow() const { return CommanderPicture(); }
     bool PlayerSay(const std::string& station, const std::string& callout_id) {
         if (!callouts_ || def_.crew_data.FindCallout(callout_id) == nullptr) return false;
         if (callout_id == "seat_ready") {  // «Первый (второй, третий) готов» (voenizdat_osa_1991 p. 247)
@@ -5007,11 +6041,25 @@ public:
             }
             return false;
         }
+        if (callout_id == "plot_new" || callout_id == "plot_turn" || callout_id == "plot_lost") {  // the plotter's art. 23 reports
+            if (station != console_.post_plotter) return false;
+            for (auto it = plotter_events_.begin(); it != plotter_events_.end(); ++it) {
+                if (it->callout != callout_id) continue;
+                const PlotterEvent e = *it;
+                plotter_events_.erase(it);
+                PlotterSays(e);
+                reports_made_.push_back({time_, station, callout_id});
+                return true;
+            }
+            last_refusal_ = "nothing of that kind to report";
+            return false;
+        }
         if (callout_id == "air_report") {  // the radiotelephonist reads the oldest report he heard to the plotter
             if (!PlayerReadOutAirReport(station)) return false;
             reports_made_.push_back({time_, station, callout_id});
             return true;
         }
+        if ((callout_id == "readback" || callout_id == "report_ready") && c2_) return PlayerOnBatteryNet(station, callout_id);
         if (callout_id == "contact" && engagement_on_) {
             const Contact* nearest = nullptr;
             for (const Contact& c : engagement_.SearchPicture()) {

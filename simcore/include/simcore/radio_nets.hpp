@@ -83,6 +83,10 @@ struct CommsTuning {
     double df_fix_s = 30.0;
     double df_reaction_s = 120.0;
     double warn_covered_m = 60000.0;     // a hostile this near: the covered unit is warned («Воздух», ПТ-2)
+    double notice_board_s = 30.0;        // a new mark on the board the plotter didn't call: the commander sees it this late
+    double plot_lost_s = 180.0;          // a target the board has no new mark of this long: the plotter reports it lost
+    double plot_turn_deg = 60.0;         // a target's course changing this much between its reports: he reports the turn
+    double plot_stale_s = 120.0;         // a report the player plotter hasn't made this long after the event: too late
 };
 
 struct RadioDataDef {

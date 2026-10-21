@@ -349,6 +349,9 @@ public:
         int azimuth_mils = 0;
         double range_m = 0.0;
         int height_hm = 0;
+        // A group's centre the post could not resolve, and the selection rule to pick the aircraft by (BoardMark).
+        bool group_centre = false;
+        int rule = 0;
     };
 
     // What a display shows for one source.
@@ -841,8 +844,9 @@ private:
             std::snprintf(detail, sizeof(detail), "designation %04d: azimuth %02d-%02d, range %.0f km, height %d hm", m.number,
                           d.azimuth_mils / 100, d.azimuth_mils % 100, d.range_m / 1000.0, m.height_hm);
             std::string text = detail;
+            if (m.group_centre) text += ", a group's centre: rule " + std::to_string(m.rule);
             if (s.def.id != policy_.primary) text += " [" + s.def.short_name + "]";
-            events_.push_back({t, "Commander", m.target_id, text, m.number, d.azimuth_mils, d.range_m, m.height_hm});
+            events_.push_back({t, "Commander", m.target_id, text, m.number, d.azimuth_mils, d.range_m, m.height_hm, m.group_centre, m.rule});
         }
     }
 

@@ -251,8 +251,10 @@ _add('map_board', 24, 'Air-situation map board', MAP_BOARD['x'] - 0.018, MAP_BOA
      MAP_BOARD['z0'], MAP_BOARD['z1'], mat='Metal_Steel',
      note="deployed: swung open on its hinge (the left edge, at the front end of the plan's folded strip), facing the plotter")
 rect('bp3', 21, 'BP-3 power unit', 1382, 1430, 262, 285, 1.05, 1.30, note='on a bracket on the side, beside the R-407')
-rect('r407', 25, 'R-407 radio (FuG-5, telecode)', 1375, 1440, 285, 327, FLOOR_Z, FLOOR_Z + 0.52,
-     note='behind the operator, its face inboard (the drawing: lower right)')
+rect('r407', 25, 'R-407 radio (FuG-5, telecode)', 1375, 1440, 285, 327, 1.31, 1.83,
+     note="on a bracket at the side over the BP-3, its face inboard: the battery commander's drawing stands it upright "
+          "behind his seat back, its upper half above the back (item 25's leader; the box on the floor at the drawing's "
+          "lower right has no number)")
 rect('sau', 26, 'SAU antenna tuner', 1386, 1460, 355, 430, FLOOR_Z, FLOOR_Z + 0.28,
      note="under the bench's back")
 
@@ -364,8 +366,9 @@ R407_PLATE = (0.108, -0.0098)
 
 def _fit_radios():
     """Stand the R-111 and the R-407 at their plan places at their real size: the R-111 on its stand, its front where the
-    plan has it, centred across it; the R-407 on the floor, its front where the plan has it, centred along it (the plan
-    draws it 0.28 x 0.19 m; the set is 0.42 m across its latches and 0.25 m deep, r407_to)."""
+    plan has it, centred across it; the R-407 on its bracket over the BP-3, its front and its forward edge where the plan
+    has them (the plan draws it 0.28 x 0.19 m; the set is 0.42 m across its latches and 0.25 m deep, r407_to: it grows
+    rearward and outboard, the seat back being ahead of it)."""
     r111 = item('r111')
     w, d, h = R111_SIZE
     cy = 0.5 * (r111['y0'] + r111['y1'])
@@ -375,17 +378,10 @@ def _fit_radios():
     r111['z1'] = r111['z0'] + h
     r407 = item('r407')
     w, d, h = R407_SIZE
-    cx = 0.5 * (r407['x0'] + r407['x1'])
-    r407['x0'], r407['x1'] = cx - w / 2, cx + w / 2
-    r407['y0'] = -(half_width(cx, r407['z0']) - 0.01)      # its back against the side, its front 0.28 m inboard
-    r407['y1'] = r407['y0'] + d
+    r407['x0'] = r407['x1'] - w                             # the plan's forward edge kept
+    r407['y0'] = r407['y1'] - d                             # the plan's front kept: its back over the BP-3
+    r407['z0'] = item('bp3')['z1'] + 0.01                   # on its bracket, clear of the BP-3 under it
     r407['z1'] = r407['z0'] + h
-    # the BP-3 power unit on its bracket over it (the plan draws it beside the set, at the side)
-    bp3 = item('bp3')
-    lift = r407['z1'] + 0.01 - bp3['z0']
-    if lift > 0:
-        bp3['z0'] += lift
-        bp3['z1'] += lift
 
 
 _fit_radios()

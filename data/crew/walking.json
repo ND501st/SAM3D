@@ -1,0 +1,30 @@
+{
+  "status": "first pass (docs/crew/13_OUT_OF_THE_VEHICLE.md)",
+  "notes": "A crewman on his feet: his pace inside a compartment, on a hull's top and over the ground, and how far his voice carries out of doors (simcore/crew_mobility.hpp). Generic human numbers, not system data.",
+  "source": "stroevoy_ustav_1993; tobler_1993; iso_9921", "confidence": "medium",
+  "gait": {
+    "walk_mps": 1.44,
+    "run_mps": 2.49,
+    "cabin_mps": 0.9,
+    "hull_mps": 0.8,
+    "woods_factor": 0.6,
+    "woods_canopy_m": 3.0,
+    "steepest": 1.0,
+    "stand_up_s": 1.5,
+    "sit_down_s": 1.0,
+    "source": "stroevoy_ustav_1993 art. 31 (110-120 steps a minute of 70-80 cm walking: 1.28-1.60 m/s, the middle taken; running 165-180 steps of 85-90 cm: 2.34-2.70 m/s); the slope by tobler_1993 (simcore's ToblerFactor); cabin, hull, woods, the steepest slope and the seat times: sam3d estimate (the cabin pace is the in-cabin walk's, 90 cm/s; standing and sitting as data/crew/osa_ak_crew.json)",
+    "confidence": "medium",
+    "notes": "The woods factor stands for undergrowth and roots; a road through a wood is not told apart yet."
+  },
+  "earshot": {
+    "talk_db": 66.0,
+    "shout_db": 78.0,
+    "quiet_db": 45.0,
+    "needed_snr_db": 3.0,
+    "hull_db": 25.0,
+    "hatch_db": 8.0,
+    "source": "iso_9921 (vocal efforts at 1 m: normal 60, raised 66, loud 72, very loud 78 dB(A); intelligibility with the speech-to-noise ratio); the countryside's background, the needed ratio and the hull's and hatch's losses: sam3d estimate",
+    "confidence": "low",
+    "notes": "A man talks raised to a man near him and shouts across distance; machinery running near (data/vehicles/<system>.json \"noise\") raises the noise he must beat."
+  }
+}

@@ -4,8 +4,10 @@
 // never deviates from the drill.
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 
 #include "simcore/cabin.hpp"
@@ -61,6 +63,7 @@ struct LessonRun {
     int refusals = 0;           // moves the lesson asked for and then refused
     int launches = 0;
     int designations = 0;
+    int decoded = 0;            // talk-table groups a crewman decoded aloud (none, where the learner decodes them himself)
     double sim_s = 0.0;
     double real_s = 0.0;
     std::string timeline;
@@ -212,14 +215,16 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                     } else {
                         r->SeatSet(seat, st.control, to);
                     }
-                } else if (!st.order.empty()) {
-                    if (!g.MenuRefusal(*r, st.order, ui).empty()) ++run.refusals;
+                } else if (!st.order.empty() || !st.decode.empty()) {
+                    // A group to decode: the card doesn't name the answer; he reads the group against the table himself.
+                    const std::string want = !st.order.empty() ? st.order : (s->order.empty() ? s->report : s->order);
+                    if (!g.MenuRefusal(*r, want, ui).empty()) ++run.refusals;
                     if (st.report) {
-                        if (!r->PlayerSay(def.seat, st.order)) std::printf("    can't say %s at %.0f s\n", st.order.c_str(), r->Time());
+                        if (!r->PlayerSay(def.seat, want)) std::printf("    can't say %s at %.0f s\n", want.c_str(), r->Time());
                     } else {
                         ScenarioRunner::OrderCheck why;
-                        if (!r->TryCrewOrder(st.order, &why)) {
-                            std::printf("    order %s refused at %.0f s: %s\n", st.order.c_str(), r->Time(), why.reason_en.c_str());
+                        if (!r->TryCrewOrder(want, &why)) {
+                            std::printf("    order %s refused at %.0f s: %s\n", want.c_str(), r->Time(), why.reason_en.c_str());
                         }
                     }
                 }
@@ -246,6 +251,9 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
     }
     run.launches = r->Launches();
     run.designations = r->DesignationsMade();
+    if (r->Callouts() != nullptr) {
+        for (const SpokenCallout& c : r->Callouts()->Log()) run.decoded += c.id == "decoded" ? 1 : 0;
+    }
     run.sim_s = r->Time();
     run.real_s = ui.real_time_s;
     return run;
@@ -323,6 +331,9 @@ SC_TEST("tutorial: conditions and steps are checked as a lesson loads; a wrong o
     SC_EXPECT(Refused("subsystem:power=hot", "a state is ready"));
     SC_EXPECT(Refused("control:soc.hv=on", "a number"));
     SC_EXPECT(Refused("smell:smoke", "unknown condition"));
+    SC_EXPECT(Refused("given_target:21", "takes no value"));
+    SC_EXPECT(Refused("group:", "needs a value"));
+    SC_EXPECT(StepRefused("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"continue\": true, \"decode\": \"707\"}", "for an order or report step"));
     SC_EXPECT(StepRefused("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"control\": \"soc.hv\", \"position\": 1, \"continue\": true}",
                           "one action a step"));
     SC_EXPECT(StepRefused("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"control\": \"soc.hv\"}", "needs the position"));
@@ -355,6 +366,64 @@ SC_TEST("tutorial: conditions and steps are checked as a lesson loads; a wrong o
                          "{\"id\": \"z\", \"title\": \"Z\", \"lines\": [\"y\"]}", "held on cue"));
     SC_EXPECT(bind_fails("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"report\": \"contact\"}, "
                          "{\"id\": \"z\", \"title\": \"Z\", \"lines\": [\"y\"]}", "senior_operator's report"));
+    // The voice paths: a regiment's command the scenario doesn't hold on cue, a group not in its talk tables, a target
+    // given on a battery net it hasn't got.
+    SC_EXPECT(bind_fails("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"continue\": true, \"on_start\": [\"regiment:707\"]}, "
+                         "{\"id\": \"z\", \"title\": \"Z\", \"lines\": [\"y\"]}", "no regiment's command '707'"));
+    SC_EXPECT(bind_fails("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"done_when\": [\"group:707\"]}, "
+                         "{\"id\": \"z\", \"title\": \"Z\", \"lines\": [\"y\"]}", "no such group"));
+    SC_EXPECT(bind_fails("{\"id\": \"a\", \"title\": \"A\", \"lines\": [\"x\"], \"done_when\": [\"given_target\"]}, "
+                         "{\"id\": \"z\", \"title\": \"Z\", \"lines\": [\"y\"]}", "no battery net"));
+}
+
+SC_TEST("tutorial: a group the learner decodes himself: nothing names the answer, another order is refused with the group; named after its time") {
+    // The deployed battery (pu12m_battery.json) with the regiment's ПТ-1 707 (report readiness) held on cue.
+    std::ifstream f(kData + "/scenarios/pu12m_battery.json", std::ios::binary);
+    std::ostringstream ss;
+    ss << f.rdbuf();
+    std::string text = ss.str();
+    const std::string from = "\"commands\": [ { \"at_s\": 5, \"code\": 10 } ]";
+    SC_EXPECT(text.find(from) != std::string::npos);
+    text.replace(text.find(from), from.size(), "\"commands\": [ { \"at_s\": 5, \"code\": 10 }, { \"group\": \"707\", \"on_cue\": true } ]");
+    ScenarioDef sdef;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(text, kData, sdef, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    ScenarioRunner r(std::move(sdef), std::move(console));
+    TutorialDef def;
+    SC_EXPECT(LoadTutorialJson("{\"tutorial_id\": \"t\", \"title\": \"T\", \"scenario\": \"s.json\", \"seat\": \"battery_commander\", \"strict\": true, \"steps\": ["
+                               "{\"id\": \"wait\", \"title\": \"W\", \"lines\": [\"x\"], \"done_when\": [\"time:240\"]},"
+                               "{\"id\": \"call\", \"title\": \"C\", \"lines\": [\"x\"], \"on_start\": [\"regiment:707\"], \"done_when\": [\"group:707\"]},"
+                               "{\"id\": \"decode\", \"title\": \"D\", \"lines\": [\"x\"], \"order\": \"order_report_regiment\", \"decode\": \"707\"},"
+                               "{\"id\": \"end\", \"title\": \"E\", \"lines\": [\"x\"]}]}", def, &e));
+    TutorialGuide g(def);
+    SC_EXPECT(g.Bind(r, &e));
+    SC_EXPECT(r.TakeSeat("battery_commander", "Player"));
+    TutorialUi ui;
+    ui.in_cabin = true;
+    ui.seat = ui.holding = "battery_commander";
+    for (int i = 0; i < 4000 && g.Index() < 2; ++i) {
+        r.Step(0.1);
+        ui.real_time_s += 0.1;
+        g.Update(r, ui);
+    }
+    SC_EXPECT(g.Index() == 2);  // the group heard in his second receiver (the post deployed: the RTK-1 monitors РСТ-3)
+    bool decoded_for_him = false;
+    for (const SpokenCallout& s : r.Callouts()->Log()) decoded_for_him = decoded_for_him || s.id == "decoded";
+    SC_EXPECT(!decoded_for_him);  // nobody else in the post is on the regiment's net
+    g.Update(r, ui);
+    TutorialStatus st = g.Status(r, ui);
+    SC_EXPECT(st.phase == TutorialStatus::Phase::Act && st.decode == "707" && st.order.empty() && st.order_ru.empty());
+    const std::string no = g.MenuRefusal(r, "order_battery_spare", ui);
+    SC_EXPECT(no.find("707") != std::string::npos && no.find("ПТ-1") != std::string::npos && no.find("Доложить") == std::string::npos);
+    SC_EXPECT(g.MenuRefusal(r, "order_report_regiment", ui).empty());
+    ui.real_time_s += TutorialGuide::kDecodeRevealS + 1.0;  // he hasn't found it: the card names it
+    st = g.Status(r, ui);
+    SC_EXPECT(st.order == "order_report_regiment" && !st.order_ru.empty() && st.decode.empty());
+    SC_EXPECT(r.TryCrewOrder("order_report_regiment"));
+    g.Update(r, ui);
+    SC_EXPECT(g.AtEnd());
 }
 
 SC_TEST("tutorial: a strict lesson works only the step's control, after its wait; a button counts when pressed; the guide stays on the last step") {
@@ -613,7 +682,7 @@ SC_TEST("tutorial: a student who does what each step asks finishes each of the P
     for (const char* seat : {"driver", "radio_operator", "squad_leader", "operator", "battery_commander"}) {
         const LessonRun run = PlayLesson(std::string("tutorials/school_pu12m_") + seat + ".json", 5000.0);
         ExpectFinished(run, seat);
-        if (std::string(seat) == "battery_commander") SC_EXPECT(run.designations >= 1);
+        if (std::string(seat) == "battery_commander") SC_EXPECT(run.designations >= 1 && run.decoded == 0);  // he read 707 himself
         SC_EXPECT(run.deviations == 0 && run.refusals == 0);
     }
 }

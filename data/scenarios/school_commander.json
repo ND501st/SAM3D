@@ -4,7 +4,7 @@
   "description": "A step-by-step lesson in the commander's seat of the Osa 21, with the lesson's guide (data/tutorials/school_commander.json) on the screen: the seat, the panels and what each control does, then your part of the drill from cold, one switch at a time, each highlighted, the next only once it is done. The rest of the crew are NPCs and the commander's orders come at your pace. A practice drone comes in when the lesson is ready for it. Fictional.",
   "source": "sam3d",
   "confidence": "estimate",
-  "notes": "Fictional. The Kesmark range (as kesmark_range_test.json), the vehicle cold at a halt. No crew_commander: the lesson gives the commander's orders (simcore/tutorial.hpp on_start). Crew class 1 so the demonstration around the learner is clean. The drone's numbers are PLACEHOLDERS; it is held on cue. when_targets_gone off: the lesson ends the mission, not the drone.",
+  "notes": "Fictional. The Kesmark range (as kesmark_range_test.json), the vehicle cold at a halt. No crew_commander: the lesson gives the commander's orders (simcore/tutorial.hpp on_start). Crew class 1 so the demonstration around the learner is clean. The drone's numbers are PLACEHOLDERS; it is held on cue. when_targets_gone off: the lesson ends the mission, not the drone. The battery's PU-12M (c2 primary pu12) gives the drone to the 21 on the battery net, as the command post's plotting board does in the missions; the commander starts with his headset off and his A-1 on ВС (the lesson turns it to Р-123).",
   "seed": 11,
   "origin": {
     "lat_deg": 46.817217,
@@ -16,6 +16,11 @@
     "map": "maps/kesmark_range.json"
   },
   "weather": "clear",
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12"
+  },
   "battery": {
     "own": {
       "id": "21",
@@ -53,7 +58,7 @@
   },
   "own_unit": {
     "console": "procedures/osa_ak.json",
-    "controls": {"headset.commander": 0},
+    "controls": {"headset.commander": 0, "intercom.a1": 1},
     "tuning": "gameplay/osa_ak.json",
     "em": {
       "library": "em/osa_ak.json",

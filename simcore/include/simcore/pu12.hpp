@@ -69,6 +69,10 @@ struct BoardMark {
     int height_hm = 0;      // height above sea level in hectometres
     int type = 9;           // tens digit of the code: 0 jamming, 1 friend, 2 training target, ..., 8 enemy, 9 no IFF
     int formation = 1;      // ones digit: aircraft in the formation
+    // A designation into a group the post can't resolve (voenizdat_osa_1991 p261, group_designation.hpp): `position` is
+    // the group's centre and the crew picks the aircraft by the selection rule (1-4; 0: the crew chief chooses).
+    bool group_centre = false;
+    int rule = 0;
 
     // The code under the height, as written on the board (e.g. 71: practice target, one aircraft).
     int Code() const { return type * 10 + (formation > 9 ? 9 : formation); }

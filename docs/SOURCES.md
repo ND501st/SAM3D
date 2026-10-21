@@ -213,6 +213,20 @@ in their form.
 | `andryushchenko_2004` | 4 (later than the period, Soviet lineage) | V. A. Andryushchenko, P. A. Pirozhkov, *Командно-штабные машины*, Tambov State Technical University 2004 ([vuzmen.com](https://vuzmen.com/book/40-komandno-shtabnye-mashiny-va-andryushhenko/18-24-ustrojstvo-i-rabota-sostavnyx-chastej-kshm.html)) | The R-145BM on the same chassis: its crew boxes (a channel selector, radio-busy lamps, calls, one shared intercom, a circular call) and line calls: the analogue for the PU-12M's PVS and RTK-1 behaviour |
 | `airbase_ek32_2012` | 2 | A veteran of an Osa unit in the Northern Group of Forces, forums.airbase.ru (2012) ([thread](https://forums.airbase.ru/2014/04/t83098_3--istoriya-razrabotki-zrk-osa.html)) | Night checks of each vehicle by field telephone; crews wearing headsets with the TA-57 handset to the ear |
 
+## Getting in and out of the vehicles, and walking (added 20 October 2026)
+
+For the crew's bodies out of their seats: the hatches, the hull, the ways down, the pace over the ground and the
+voice's carry (`docs/crew/13_OUT_OF_THE_VEHICLE.md`, research in `docs/research/MOUNTING_2026-10.md`,
+`data/vehicles/`, `data/crew/walking.json`). The vehicles' own hatches come from `voenizdat_osa_1991` and the traces.
+
+| Id | Tier | Source | Used for |
+|---|---|---|---|
+| `stroevoy_ustav_1993` | 1 | *Строевой устав Вооружённых Сил Российской Федерации*, order of the Minister of Defence no. 600 of 15 Dec 1993 (text on [ru.wikisource.org](https://ru.wikisource.org/wiki/%D0%A1%D1%82%D1%80%D0%BE%D0%B5%D0%B2%D0%BE%D0%B9_%D1%83%D1%81%D1%82%D0%B0%D0%B2_%D0%92%D0%A1_%D0%A0%D0%A4_(1993)/%D0%93%D0%BB%D0%B0%D0%B2%D0%B0_5), chapters 2 and 5). The RF's first drill regulation, carrying over the USSR's of 1975 (the 1975 text itself was not found online); public | Art. 31: the pace, 110-120 steps a minute of 70-80 cm, running 165-180 of 85-90 cm. Arts. 141-154: К МАШИНАМ (line up at the vehicles, or get out and line up beside them), ПО МЕСТАМ (get in quickly by the wheels, tracks and steps, take the places), BMP and BTR through their hatches, men told off to open them, the hatches shut once in, never on or off on the traffic side at a road's right edge, a tank crew in one rank in front of its vehicle with the commander two steps ahead of the right track, turning about to mount |
+| `fair_btr_compare` | 4 | «БТР-70: легендарний бронетранспортер радянської епохи», fair.org.ua (Ukraine, an operator), the table comparing the BTR-60PB, -70 and -80 | The BTR-60PB's troops get in and out by the roof hatches (the BTR-70 adds side doors) |
+| `vk_btr60` | 4 | «Бронетранспортёр БТР-60», Unfair Advantage, vk.ru (Russian-language article) | The BTR-60PB's troop roof hatches set diagonally over the compartment and two rectangular hatches high in the sides near the turret; the earlier BTR-60P's side doors |
+| `tobler_1993` | textbook | W. Tobler, *Three presentations on geographical analysis and modeling*, NCGIA Technical Report 93-1, 1993 (the hiking function) | A man's pace against the slope, fastest a little downhill: `simcore::ToblerFactor` |
+| `iso_9921` | textbook | ISO 9921:2003, *Ergonomics. Assessment of speech communication* (vocal effort: normal 60, raised 66, loud 72, very loud 78 dB(A) at 1 m; intelligibility against the speech-to-noise ratio) | How far a voice carries out of doors: `data/crew/walking.json` "earshot" |
+
 ## World, weather and sky sources (added 18 October 2026)
 
 For the test map and the weather over the airspace (`data/maps/`, `data/weather/`, `simcore/terrain_map.hpp`,

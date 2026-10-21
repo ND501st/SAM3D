@@ -1334,6 +1334,12 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 				Out.Add(E);
 			}
 		}
+		// After the orders, what he says on the air himself (the Osa commander's read-back of a designation).
+		for (const std::string& Id : Runner->PlayerRadioReports(Seat))
+		{
+			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, Id);
+			Out.Add({ToF(Id), ToF(Words.first), ToF(Words.second), false});
+		}
 		return Out;
 	}
 	for (const simcore::CalloutDef& C : Crew.callouts)
@@ -1830,6 +1836,56 @@ bool USimWorldSubsystem::SeatSetControl(const FString& Role, const FString& Cont
 		Why = W.empty() ? FString(StaticEnum<ESimPlayerActionResult>()->GetNameStringByValue(static_cast<int64>(A))) : FString(UTF8_TO_TCHAR(W.c_str()));
 	}
 	return bMoved;
+}
+
+void USimWorldSubsystem::ReportPlayerBody(const FString& Station, simcore::BodyPlace Place, const simcore::Vec3& FeetM, double YawRad)
+{
+	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
+	{
+		if (!Seat->SeatRole.IsEmpty() && IsMirrorOnly())
+		{
+			Seat->SetBody(static_cast<int32>(Place), FVector(FeetM.x, FeetM.y, FeetM.z), YawRad);
+			if (Runner)
+			{
+				Runner->SetPlayerBody(ToStd(Station), Place, FeetM, YawRad);  // this machine plans his next way from it
+			}
+			return;
+		}
+	}
+	if (Runner)
+	{
+		Runner->SetPlayerBody(ToStd(Station), Place, FeetM, YawRad);
+	}
+}
+
+void USimWorldSubsystem::SeatSetBody(const FString& Role, int32 Place, const FVector& FeetM, double YawRad, const FString& Vehicle)
+{
+	simcore::ScenarioRunner* In = RunnerFor(Vehicle);
+	if (In != nullptr && Place >= 0 && Place <= static_cast<int32>(simcore::BodyPlace::Ground))
+	{
+		In->SetPlayerBody(ToStd(Role), static_cast<simcore::BodyPlace>(Place), simcore::Vec3{FeetM.X, FeetM.Y, FeetM.Z}, YawRad);
+	}
+}
+
+bool USimWorldSubsystem::PlayerBodyGoTo(const FString& Station, const simcore::MoveGoal& Goal, FString& Why)
+{
+	if (!Runner)
+	{
+		Why = TEXT("no scenario");
+		return false;
+	}
+	std::string W;
+	const bool bOk = Runner->PlayerGoTo(ToStd(Station), Goal, &W);
+	Why = UTF8_TO_TCHAR(W.c_str());
+	return bOk;
+}
+
+void USimWorldSubsystem::StepPlayerBody(const FString& Station, float DeltaSeconds)
+{
+	if (Runner && IsMirrorOnly() && !IsSimPaused())
+	{
+		Runner->StepMover(ToStd(Station), static_cast<double>(DeltaSeconds) * GetTimeScale());
+	}
 }
 
 bool USimWorldSubsystem::SeatTurnWheel(const FString& Role, const FString& ControlId, double Value, FString& Why, const FString& Vehicle)
@@ -2342,39 +2398,13 @@ bool USimWorldSubsystem::AnswerCall(const FString& Station)
 
 TArray<FString> USimWorldSubsystem::GetDocumentLines(const FString& Document) const
 {
+	// The paper as typed: simcore's (the radio data's form, the talk tables), in Russian as issued.
 	TArray<FString> Out;
-	if (!Runner)
+	if (Runner)
 	{
-		return Out;
-	}
-	if (Document == TEXT("talk_tables"))
-	{
-		for (const simcore::TalkTable& T : Runner->GetTalkTables().tables)
+		for (const std::string& L : Runner->DocumentText(ToStd(Document)))
 		{
-			Out.Add(FString::Printf(TEXT("%s  %s"), *ToF(T.name_ru), *ToF(T.name_en)));
-			for (const simcore::TalkEntry& E : T.entries)
-			{
-				Out.Add(FString::Printf(TEXT("   %s   %s"), *ToF(E.code), *ToF(E.ru)));
-			}
-			Out.Add(FString());
-		}
-	}
-	else if (Document == TEXT("radio_data"))
-	{
-		Out.Add(TEXT("РАДИОДАННЫЕ"));
-		for (const simcore::RadioNetDef& N : Runner->RadioData().nets)
-		{
-			FString Freqs;
-			for (size_t I = 0; I < N.frequencies_mhz.size(); ++I)
-			{
-				Freqs += FString::Printf(TEXT("%s%d: %.3f"), I > 0 ? TEXT("   ") : TEXT(""), static_cast<int32>(I) + 1, N.frequencies_mhz[I]);
-			}
-			Out.Add(ToF(N.name_ru));
-			Out.Add(FString::Printf(TEXT("   %s    я %s, ГС %s"), *Freqs, *ToF(N.own_call_sign), *ToF(N.main_call_sign)));
-			for (const simcore::RadioNetDef::Change& Ch : N.changes)
-			{
-				Out.Add(FString::Printf(TEXT("   смена в %02d:%02d на %d"), static_cast<int32>(Ch.at_s) / 60, static_cast<int32>(Ch.at_s) % 60, Ch.to));
-			}
+			Out.Add(ToF(L));
 		}
 	}
 	return Out;

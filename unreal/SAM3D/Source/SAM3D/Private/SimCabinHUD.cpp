@@ -1028,9 +1028,12 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom,
 		{
 			continue;
 		}
-		const bool bRadio = !M.Net.StartsWith(TEXT("cabin")) && M.Net != TEXT("intercom");
+		// Flags and lamps on the march are seen, not heard (voenizdat_osa_1991: the commander signals from the column's head).
+		const bool bSignal = M.Net == TEXT("flag signals") || M.Net == TEXT("lamp signals");
+		const bool bRadio = !M.Net.StartsWith(TEXT("cabin")) && M.Net != TEXT("intercom") && !bSignal;
 		const bool bLine = M.Net.StartsWith(TEXT("line "));
-		FLinearColor Ink = M.Net == TEXT("air picture") || bReadOut ? FLinearColor(1.0f, 0.72f, 0.25f)	 // amber: the air picture
+		FLinearColor Ink = bSignal ? FLinearColor(1.0f, 0.55f, 0.45f)  // red-orange: a signal seen from the column's head
+						   : M.Net == TEXT("air picture") || bReadOut ? FLinearColor(1.0f, 0.72f, 0.25f)	 // amber: the air picture
 						   : M.Net == TEXT("command net")  ? FLinearColor(0.35f, 0.85f, 1.0f)  // cyan: designations
 						   : M.Net == TEXT("regiment net") ? FLinearColor(0.78f, 0.55f, 1.0f)  // violet: the regiment (the R-111)
 						   : M.Net == TEXT("covered net")  ? FLinearColor(0.55f, 0.9f, 0.55f)  // green: the covered unit (FuG-2)

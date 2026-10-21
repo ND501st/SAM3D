@@ -5,8 +5,8 @@
   "seat": "commander",
   "strict": true,
   "status": "A seat lesson (docs/TUTORIALS.md): step by step, each order highlighted in the crew menu, the next step only once it is given.",
-  "source": "sam3d; the orders, the drills they start and the reports that answer them are the crew data's (data/crew/osa_ak_crew.json), with their sources",
-  "notes": "The lesson's scenario starts with the headset off. The lesson's scenario starts with the headset off. The commander's half of the game: the learner gives the orders, the NPC crew carries them out. Orders that can't be carried out yet are greyed in the menu with the reason (the order menu's honest greying).",
+  "source": "sam3d; the orders, the drills they start and the reports that answer them are the crew data's (data/crew/osa_ak_crew.json), with their sources; the R-124's A-1 and the R-123M sets (r124_refs, r124_bmp2, r123m_training; voenizdat_osa_1991 p. 246: the crew chief switches on and tunes the sets at «К бою»); the designation by voice from the PU-12M and its read-back (flak11, rrs_1986; docs/crew/12_COMMUNICATIONS.md §3)",
+  "notes": "The lesson's scenario starts with the headset off and the A-1 on ВС. The commander's half of the game: the learner gives the orders, the NPC crew carries them out. Orders that can't be carried out yet are greyed in the menu with the reason (the order menu's honest greying). The battery's PU-12M (the scenario's c2 primary) gives the drone to the 21 on the battery net; the learner reads it back from the crew menu (the line after the orders).",
   "steps": [
     {
       "id": "hello", "chapter": "Your seat", "title": "The commander's seat",
@@ -21,8 +21,8 @@
     {
       "id": "headset", "title": "Your headset (шлемофон)", "control": "headset.commander", "position": 1, "look": "r124_a1_panel",
       "lines": [
-        "First your шлемофон: put it on and plug its cord into your Р-124 box.",
-        "Your orders reach the crew on the intercom; without the headset you hear only the cabin and must shout them over the turbine, slower and not always heard. Your A-1 box puts you on the intercom or on a radio: on a radio you still hear the intercom."
+        "First your шлемофон: put it on and plug its cord into your Р-124 box, the A-1.",
+        "Your orders reach the crew on the intercom; without the headset you hear only the cabin and must shout them over the turbine, slower and not always heard."
       ],
       "why": "The Osa's crew work in their headsets: the turbine and the fans drown a voice in the cabin (r124_refs; voenizdat_osa_1991).",
       "hint": "J: put it on (or point the cross at it, left click)."
@@ -36,26 +36,53 @@
       "continue": true
     },
     {
-      "id": "tour_radio", "title": "The right radio and your intercom", "look": "radio_right_panel",
+      "id": "tour_radio", "title": "The right radio: the battery net", "look": "radio_right_panel",
       "lines": [
-        "Beside you on the right: the right R-123M radio set and your intercom box (Р-124). On the radio you hear the battery's command post: its warnings and target designations."
+        "Beside you on the right: the right R-123M radio set. It keeps the battery net: the battery commander in the PU-12M (call sign 10) gives you, the 21, targets and warnings on it, and you answer him on it.",
+        "The small switch at its front is your headset's: it picks which of the two R-123M your A-1 puts you on, the left or this one."
       ],
-      "hint": "Enter: next.",
+      "hint": "L: look at it.   Enter: next.",
+      "continue": true
+    },
+    {
+      "id": "tour_a1", "title": "Your A-1 box: ВС or Р-123", "look": "r124_a1_panel",
+      "lines": [
+        "Your A-1 box (Р-124) has three positions: ВЫКЛ, ВС and Р-123. On ВС you hear your crew on the intercom and they hear you; the radio is not in your ears. On Р-123 you hear the R-123M your headset switch picks, and the crew's intercom with it.",
+        "It is on ВС now. You will turn it to Р-123 to hear the battery net, and back to ВС to give your crew a target."
+      ],
+      "why": "Every target the battery commander gives the vehicle comes through you: only the A-1 and the A-2 reach a radio (r124_refs).",
+      "hint": "L: look at it.   Enter: next.",
       "continue": true
     },
     {
       "id": "tour_menu", "title": "Your orders: the crew menu", "done_when": ["ui:crew_menu"],
       "lines": [
-        "You give orders through the crew menu: press O to open it. It lists the orders of the drill; an order the crew can't carry out yet is greyed, with the reason. O or Esc closes it.",
+        "You give orders through the crew menu: press O to open it. It lists the orders of the drill; an order the crew can't carry out yet is greyed, with the reason. After the orders comes what you say on the battery net yourself: your readiness report and the read-back of a target. O or Esc closes it.",
         "Open it now (O), look, and close it."
       ],
       "hint": "O: the crew menu."
     },
     {
       "id": "k_boyu", "chapter": "Action stations (К бою)", "title": "Give «К бою!»", "order": "order_k_boyu",
-      "lines": ["O, then «К бою!» (Action stations!)."],
+      "lines": ["O, then «К бою!» (Action stations!). Your A-1 is on ВС: the crew hears you on the intercom."],
       "why": "It brings the whole crew to readiness from cold: the driver starts the turbine, the operator switches the equipment on and unlocks the turret, the senior operator brings up the search radar, the deputy commander orients the vehicle.",
       "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "set_right", "title": "Your sets: the headset to the right set", "control": "radio.headset", "position": 1, "look": "radio_right_panel",
+      "lines": [
+        "Your own part of «К бою»: the radios. Both R-123M are on and warm, on their presets, as you left them. Put the headset switch to the right set, the one beside you: the battery net."
+      ],
+      "why": "At «К бою» the crew chief switches on and tunes the R-123M sets himself (voenizdat_osa_1991 p. 246).",
+      "hint": "Point the cross at the switch, left click."
+    },
+    {
+      "id": "a1_radio", "title": "A-1 to Р-123: on the battery net", "control": "intercom.a1", "position": 2,
+      "lines": [
+        "Now turn your A-1 to Р-123: the battery net in your ears, and your crew's intercom with it. Their check-in («Первый готов!» ...) still reaches you."
+      ],
+      "why": "From now on the battery commander can reach you: a designation said while you are on ВС is lost to the vehicle.",
+      "hint": "Point the cross at the A-1's knob, left click (one position on)."
     },
     {
       "id": "readiness", "title": "The crew at work", "done_when": ["task:searching"], "fast_forward": true,
@@ -66,22 +93,53 @@
       "wait_text": "the search radar to come up («Готов СОЦ!»)"
     },
     {
+      "id": "report_ready", "title": "Report to the post: «21 к бою готов!»", "report": "report_ready",
+      "wait_until": ["task:searching"], "wait_text": "your crew ready, the search radar up",
+      "lines": ["Your vehicle is ready: tell the battery commander on the net. O, then your report, after the orders: «21 к бою готов, каналы 2, ракет 6!» (ready for action, its two channels and its missiles)."],
+      "why": "When the crew is ready the crew chief reports to the battery's command post, with his channels and missiles (voenizdat_osa_1991 pp. 246-247): the battery commander gives targets only to launchers he knows are ready.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
       "id": "target", "chapter": "The target", "title": "A target",
-      "lines": ["A practice drone is flying at you from the north-west. The senior operator searches for it; when he finds it he asks it (IFF) and calls it to you."],
+      "lines": ["A practice drone is flying at you from the north-west. The battery commander has it on his tube and will give it to you on the battery net; your senior operator searches for it too, and when he finds it he asks it (IFF) and calls it to you."],
       "hint": "Enter: next.",
       "on_start": ["release:d1"],
       "continue": true
     },
     {
-      "id": "contact", "title": "Search", "done_when": ["contact:commander"], "fast_forward": true,
-      "lines": ["Wait for his report: «Цель, азимут …, дальность …!», and «Ответа нет!»: not one of ours."],
+      "id": "designation", "title": "The battery commander's designation", "done_when": ["given_target"], "fast_forward": true,
+      "lines": ["Listen on the battery net: «21, я 10: цель …» with its azimuth and range from you. The battery commander gives each target to one launcher, by number."],
+      "wait_text": "the battery commander's designation on the battery net"
+    },
+    {
+      "id": "readback", "title": "Read it back: «10, я 21: цель …, понял. Приём.»", "report": "readback",
+      "lines": ["At once, on the net: O, then your read-back, the line after the orders: the target's number back to the post (10), with your call sign (21)."],
+      "why": "A command on the net is acknowledged at once by repeating it (rrs_1986): until the battery commander hears his number back he doesn't know you have it, and says it again.",
+      "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "contact", "title": "Search", "done_when": ["heard:contact"], "fast_forward": true,
+      "lines": ["Your senior operator searches round the bearing the post gave. Wait for his report on the intercom: «Цель, азимут …, дальность …!», and «Ответа нет!»: not one of ours."],
       "wait_text": "the senior operator's report"
     },
     {
+      "id": "a1_crew", "title": "A-1 to ВС: to the crew", "control": "intercom.a1", "position": 1,
+      "lines": ["Now give the target to your crew: first your A-1 back to ВС."],
+      "why": "The drill: the designation goes to the crew on the intercom, and on ВС nothing you say to them goes out on the battery net (docs/crew/12_COMMUNICATIONS.md §3).",
+      "hint": "Right click on the A-1's knob: one position back."
+    },
+    {
       "id": "take", "title": "Give «Цель — взять!»", "order": "order_take_target",
-      "lines": ["O, then «Цель номер … — взять!» (Take the target!)."],
+      "wait_until": ["task:searching"], "wait_text": "the crew ready, the search radar up («Готов СОЦ!»): an order to take a target now would break off their drills",
+      "lines": ["O, then «Цель номер … — взять!» (Take the target!): the number is the one the battery commander gave you."],
       "why": "You decide what to engage. The senior operator puts the tracking radar's azimuth on it, the deputy commander designates it (ЦУ), the operator switches the transmitter on: the radar captures it.",
       "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "a1_back", "title": "A-1 back to Р-123", "control": "intercom.a1", "position": 2,
+      "lines": ["And back on the net: A-1 to Р-123."],
+      "why": "The battery commander may give you another target, or forbid the launch: you must hear him until the target is down.",
+      "hint": "Point the cross at the A-1's knob, left click (one position on)."
     },
     {
       "id": "captured", "title": "The capture", "done_when": ["task:captured"], "fast_forward": true,
@@ -129,7 +187,7 @@
     {
       "id": "end", "chapter": "Done", "title": "In command: done",
       "lines": [
-        "That is the commander's drill for one target: К бою, the search, the target taken, looked at on the TV, the missiles prepared, and the launch permitted in the zone.",
+        "That is the commander's drill for one target: К бою, your A-1 on the battery net, the target given by the battery commander and read back, passed to your crew on ВС and taken, looked at on the TV, the missiles prepared, and the launch permitted in the zone.",
         "Practise it without the highlights: the Missions group's «Osa: crew practice, one target» in the commander's seat; then the battery fight, and the ranges and battles.",
         "Esc: the menu."
       ]

@@ -10,7 +10,8 @@
     D:/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe C:/dev/SAM3D/unreal/SAM3D/SAM3D.uproject ^
         -run=pythonscript -script="C:/dev/SAM3D/tools/ue_import_pu12m.py" -unattended -nullrhi
 
-(Runs inside Unreal's Python, with the editor closed. SAM3D_PU12M_STEPS=interior imports only the compartment.)
+(Runs inside Unreal's Python, with the editor closed. SAM3D_PU12M_STEPS=interior imports only the compartment;
+SAM3D_PU12M_ONLY=SM_PU12MEquipment,... only those of its meshes.)
 """
 import glob
 import os
@@ -105,6 +106,9 @@ def pipeline(name):
 
 def interior():
     files = sorted(glob.glob(os.path.join(REPO, 'art', 'pu12m_interior', 'SM_*.fbx')))
+    only = [n for n in os.environ.get('SAM3D_PU12M_ONLY', '').split(',') if n]   # e.g. SM_PU12MEquipment: just those
+    if only:
+        files = [f for f in files if os.path.splitext(os.path.basename(f))[0] in only]
     tasks = []
     for f in files:
         # a re-import goes by the pipeline stored with the asset at its first import, so the meshes are made new each time

@@ -15,5 +15,9 @@
   "df_window_s": { "value": 300.0, "source": "sam3d", "confidence": "estimate" },
   "df_fix_s": { "value": 30.0, "source": "sam3d (a tier-4 lesson: 30 s on air is detected; palii_1989: 6-12 bearings a minute)", "confidence": "estimate" },
   "df_reaction_s": { "value": 120.0, "source": "sam3d estimate (the jammer is tasked and tuned)", "confidence": "estimate" },
-  "warn_covered_m": { "value": 60000.0, "source": "sam3d (pvo_bu_x_1984: the air-defence units warn the covered troops of the air enemy; how far out is the battery commander's call)", "confidence": "estimate" }
+  "warn_covered_m": { "value": 60000.0, "source": "sam3d (pvo_bu_x_1984: the air-defence units warn the covered troops of the air enemy; how far out is the battery commander's call)", "confidence": "estimate" },
+  "notice_board_s": { "value": 30.0, "source": "sam3d estimate (pvo_bu_x_1984 art. 17 and 23: the commander reads the board and the tube, the plotter calls each new target to him; uncalled, he finds it on his next look over the board)", "confidence": "estimate" },
+  "plot_lost_s": { "value": 180.0, "source": "sam3d (pvo_bu_x_1984 art. 23: the plotter reports targets lost; three of the board's one-minute reporting periods without a new mark)", "confidence": "estimate" },
+  "plot_turn_deg": { "value": 60.0, "source": "sam3d (pvo_bu_x_1984 art. 23: the plotter reports the targets' actions; a turn this large stands clear of the plotting error)", "confidence": "estimate" },
+  "plot_stale_s": { "value": 120.0, "source": "sam3d (a report two of the board's reporting periods old tells the commander nothing he can act on)", "confidence": "estimate" }
 }

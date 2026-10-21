@@ -45,6 +45,7 @@ add_executable(simcore_tests
   tests/test_console.cpp
   tests/test_scenario.cpp
   tests/test_engagement_model.cpp
+  tests/test_kill_assessment.cpp
   tests/test_cabin.cpp
   tests/test_scopes.cpp
   tests/test_em_models.cpp
@@ -66,6 +67,7 @@ add_executable(simcore_tests
   tests/test_threats.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp
+  tests/test_crew_mobility.cpp
   tests/test_crew_voice.cpp
   tests/test_crew_training.cpp
   tests/test_crew_systems.cpp

@@ -874,6 +874,7 @@ struct SeatActivity {
     std::vector<std::string> wheels;  // hand wheels he is turning (tracking by hand)
     bool speaking = false;
     bool stressed = false;
+    bool away = false;            // up and away from his seat (crew_mobility.hpp): his body is the mover's, not the seat's
 };
 
 // A seat's body over time: the hands go to the controls the crewmate is about to move, stay a moment, and come back;

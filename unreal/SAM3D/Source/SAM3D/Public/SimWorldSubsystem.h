@@ -1076,6 +1076,17 @@ public:
 	void LeaveCrewSeat(const FString& Role, const FString& Vehicle = FString());
 	/** Server: a seated player's control move / wheel turn. True if the control moved; otherwise Why says why not. */
 	bool SeatSetControl(const FString& Role, const FString& ControlId, int32 Position, FString& Why, const FString& Vehicle = FString());
+	/** The player's body out of his seat (docs/crew/13_OUT_OF_THE_VEHICLE.md): his place and feet in the vehicle's body
+	 *  frame (m: x right, y forward, z up) and his facing (rad, clockwise from the vehicle's forward) to the runner, or from
+	 *  a client to the server through his seat. */
+	void ReportPlayerBody(const FString& Station, simcore::BodyPlace Place, const simcore::Vec3& FeetM, double YawRad);
+	/** Server (and single player): a seated player's body, as his machine reports it. */
+	void SeatSetBody(const FString& Role, int32 Place, const FVector& FeetM, double YawRad, const FString& Vehicle = FString());
+	/** Lead the player's body along the vehicle's ways to a goal (this machine's runner; a client steps it itself,
+	 *  StepPlayerBody, and reports the pose). False and Why if there is no way (the hatches shut in combat work). */
+	bool PlayerBodyGoTo(const FString& Station, const simcore::MoveGoal& Goal, FString& Why);
+	/** A client: the led walk stepped on this machine (the runner here isn't stepped). Nothing on the server. */
+	void StepPlayerBody(const FString& Station, float DeltaSeconds);
 	/** Server: a seated player's designation (the commanding seat only) or plot (the plotter's only). */
 	bool SeatDesignate(const FString& Role, const FString& Callsign, int32 Number, FString& Why, const FString& Vehicle = FString());
 	bool SeatPlot(const FString& Role, int32 Number, FString& Why, const FString& Vehicle = FString());

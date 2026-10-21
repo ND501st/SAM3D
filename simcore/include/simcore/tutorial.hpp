@@ -23,11 +23,16 @@
 // says what it waits for. "on_start" actions run when the step comes up: "order:<id>" (the commander, an NPC in a seat
 // lesson, gives that order: the lesson keeps the drill at the learner's pace) and "release:<target>" (a target held
 // with "on_cue" appears); for the voice paths (docs/crew/12_COMMUNICATIONS.md) "net_order:<net>" (the net's main station
-// orders it to its other frequency now, on air), "jam:<net>" (a strong spot jammer comes on the net now) and
-// "line_call:<n>" (the far end of the RTK-1's line n rings). "fast_forward": the front end may run time faster while the
-// step only waits.
+// orders it to its other frequency now, on air), "jam:<net>" (a strong spot jammer comes on the net now),
+// "line_call:<n>" (the far end of the RTK-1's line n rings) and "regiment:<group or code>" (the regiment's command held
+// "on_cue" in the scenario goes out now: a ПТ-1 group on its command net, or a telecode). "fast_forward": the front end
+// may run time faster while the step only waits.
 // "conditions_only": the step's action is shown and asked for, but only its "done_when" finishes it (the ДХ's launcher
 // key: done when the designation has gone out, not when the key is pressed).
+// "decode": "<group>": the step's order or report answers a talk-table group the learner reads against the table himself
+// (docs/crew/12_COMMUNICATIONS.md §2.9). Until he has done it the card doesn't name it and the crew menu doesn't mark it;
+// another line is refused with the group, not the answer. kDecodeRevealS after its wait is over (or once skipped) it is
+// named like any other.
 //
 // A "strict" lesson lets the learner work only the step's control (Refusal says why not), at the lesson's "seat".
 //
@@ -61,6 +66,9 @@
 //   marked           the PU-12M's DT-2 marker is on a target of the IT-45
 //   designated       the battery commander has given a launcher a target since the step began
 //   plotted          the plotter has written a target on the board since the step began
+//   given_target     the Osa's commander has heard a target given his vehicle on the battery net since the step began
+//   group:707        a talk-table group has been said on a net the lesson's seat hears (any seat in a free lesson) since
+//                    the step began
 // A step without an action or conditions is the last: it stays until the player leaves the mission. A step finished by
 // conditions alone is the learner's move when one of them is his own doing (a view, the cabin, a seat, the keys, driving
 // or halting: the vehicle moves only under his keys); otherwise he watches the crew or the world finish it.
@@ -86,7 +94,7 @@ namespace simcore {
 struct TutorialCondition {
     enum class Kind {
         View, Views, Cabin, Seat, Holding, Task, Order, Heard, Debrief, Input, Subsystem, Control, Contact, ContactIn,
-        Moved, Ended, Time, After, Ui, Marked, Designated, Plotted
+        Moved, Ended, Time, After, Ui, Marked, Designated, Plotted, GivenTarget, Group
     };
     Kind kind = Kind::Ended;
     std::string arg;
@@ -96,7 +104,7 @@ struct TutorialCondition {
 };
 
 struct TutorialAction {
-    enum class Kind { Order, Release, NetOrder, Jam, LineCall };
+    enum class Kind { Order, Release, NetOrder, Jam, LineCall, Regiment };
     Kind kind = Kind::Order;
     std::string arg;
     std::string text;
@@ -140,6 +148,7 @@ struct TutorialStep {
     std::vector<TutorialAction> on_start;
     bool fast_forward = false;
     bool conditions_only = false;        // the action is shown and expected, but only "done_when" finishes the step
+    std::string decode;                  // a talk-table group the order or report answers: the learner reads it himself
 
     bool HasAction() const { return continue_key || !control.empty() || !wheel.empty() || !order.empty() || !report.empty(); }
 };
@@ -217,6 +226,8 @@ struct TutorialStatus {
     std::string feedback;         // the learner's last move off the step, in words ("" none)
     bool review = false;          // gone back to: shown again to read (Phase::Read); Enter moves on
     bool instructor = false;      // skipped: the instructor is doing it
+    std::string decode;           // the group the learner reads against his table; while set, order and its words are
+                                  // left empty (the menu marks no line)
 };
 
 // A condition the learner meets himself (TutorialStatus::Phase::Act), not one the crew or the world meets.
@@ -287,16 +298,17 @@ inline bool ParseTutorialCondition(const std::string& text, TutorialCondition& o
         return true;
     };
     out.arg = arg;
-    if (head == "cabin" || head == "ended" || head == "marked" || head == "designated" || head == "plotted") {
+    if (head == "cabin" || head == "ended" || head == "marked" || head == "designated" || head == "plotted" || head == "given_target") {
         if (!arg.empty()) {
             why = "'" + text + "': takes no value";
             return false;
         }
-        out.kind = head == "cabin"    ? TutorialCondition::Kind::Cabin
-                 : head == "ended"    ? TutorialCondition::Kind::Ended
-                 : head == "marked"   ? TutorialCondition::Kind::Marked
-                 : head == "designated" ? TutorialCondition::Kind::Designated
-                                      : TutorialCondition::Kind::Plotted;
+        out.kind = head == "cabin"        ? TutorialCondition::Kind::Cabin
+                 : head == "ended"        ? TutorialCondition::Kind::Ended
+                 : head == "marked"       ? TutorialCondition::Kind::Marked
+                 : head == "designated"   ? TutorialCondition::Kind::Designated
+                 : head == "given_target" ? TutorialCondition::Kind::GivenTarget
+                                          : TutorialCondition::Kind::Plotted;
         return true;
     }
     if (head == "view") {
@@ -352,9 +364,11 @@ inline bool ParseTutorialCondition(const std::string& text, TutorialCondition& o
     else if (head == "heard") out.kind = TutorialCondition::Kind::Heard;
     else if (head == "input") out.kind = TutorialCondition::Kind::Input;
     else if (head == "contact") out.kind = TutorialCondition::Kind::Contact;
+    else if (head == "group") out.kind = TutorialCondition::Kind::Group;
     else {
         why = "'" + text + "': unknown condition (view, views, cabin, seat, holding, task, order, heard, debrief, input, "
-              "subsystem, control, contact, contact_in, moved, ended, time, after, ui)";
+              "subsystem, control, contact, contact_in, moved, ended, time, after, ui, marked, designated, plotted, "
+              "given_target, group)";
         return false;
     }
     return needs_arg();
@@ -371,8 +385,9 @@ inline bool ParseTutorialAction(const std::string& text, TutorialAction& out, st
     else if (head == "net_order") out.kind = TutorialAction::Kind::NetOrder;
     else if (head == "jam") out.kind = TutorialAction::Kind::Jam;
     else if (head == "line_call") out.kind = TutorialAction::Kind::LineCall;
+    else if (head == "regiment") out.kind = TutorialAction::Kind::Regiment;
     else {
-        why = "'" + text + "': unknown action (order, release, net_order, jam, line_call)";
+        why = "'" + text + "': unknown action (order, release, net_order, jam, line_call, regiment)";
         return false;
     }
     if (out.arg.empty()) {
@@ -408,7 +423,7 @@ private:
     bool LoadStep(const json::Value& s, const std::string& p, const TutorialDef& def, TutorialStep& step) {
         if (!Keys(s, p, {"id", "title", "chapter", "lines", "why", "hint", "look", "continue", "control", "position", "wheel",
                          "aim", "target", "tolerance", "hold", "order", "report", "done_when", "procedure", "wait_until", "wait_text",
-                         "on_start", "fast_forward", "conditions_only", "notes"}) ||
+                         "on_start", "fast_forward", "conditions_only", "decode", "notes"}) ||
             !RequireString(s, p, "id", step.id) || !RequireString(s, p, "title", step.title) ||
             !OptionalString(s, p, "chapter", step.chapter) || !OptionalString(s, p, "why", step.why) ||
             !OptionalString(s, p, "hint", step.hint) || !OptionalString(s, p, "look", step.look) ||
@@ -419,8 +434,11 @@ private:
             !OptionalString(s, p, "order", step.order) || !OptionalString(s, p, "report", step.report) ||
             !OptionalString(s, p, "procedure", step.procedure) ||
             !OptionalString(s, p, "wait_text", step.wait_text) || !OptionalBool(s, p, "fast_forward", step.fast_forward) ||
-            !OptionalBool(s, p, "conditions_only", step.conditions_only)) {
+            !OptionalBool(s, p, "conditions_only", step.conditions_only) || !OptionalString(s, p, "decode", step.decode)) {
             return false;
+        }
+        if (!step.decode.empty() && step.order.empty() && step.report.empty()) {
+            return Fail(Join(p, "decode"), "for an order or report step: what the group asks of the learner");
         }
         for (const TutorialStep& other : def.steps) {
             if (other.id == step.id) return Fail(Join(p, "id"), "duplicate step '" + step.id + "'");
@@ -592,6 +610,12 @@ inline bool BindTutorial(TutorialDef& def, const ScenarioDef& scenario, const Co
                 if (d->kind == ControlKind::Continuous || c.number >= d->positions) return fail(", '" + c.text + "': no such position");
                 break;
             }
+            case TutorialCondition::Kind::Group:
+                if (scenario.talk_tables.Decode(c.arg) == nullptr) return fail(", '" + c.text + "': no such group in the scenario's talk tables");
+                break;
+            case TutorialCondition::Kind::GivenTarget:
+                if (scenario.c2_sources.empty()) return fail(", '" + c.text + "': the scenario has no battery net to give targets on (\"c2\")");
+                break;
             default:
                 break;
         }
@@ -620,6 +644,16 @@ inline bool BindTutorial(TutorialDef& def, const ScenarioDef& scenario, const Co
                 for (const ScenarioTarget& t : scenario.targets) held = held || (t.id == a.arg && t.on_cue);
                 if (!held) return fail(", '" + a.text + "': no target '" + a.arg + "' held on cue in the scenario");
             }
+            if (a.kind == TutorialAction::Kind::Regiment) {
+                bool held = false;
+                for (const RegimentCommand& c : scenario.post_regiment.commands) {
+                    held = held || (c.on_cue && ScenarioRunner::RegimentCommandIs(c, a.arg));
+                }
+                if (!held) return fail(", '" + a.text + "': no regiment's command '" + a.arg + "' held on cue in the scenario");
+            }
+        }
+        if (!s.decode.empty() && scenario.talk_tables.Decode(s.decode) == nullptr) {
+            return fail(": decode '" + s.decode + "': no such group in the scenario's talk tables");
         }
         if (!s.order.empty() && (crew == nullptr || crew->FindOrder(s.order) == nullptr)) return fail(": no order '" + s.order + "' in the crew data");
         if (!s.report.empty()) {
@@ -746,8 +780,28 @@ public:
             case TutorialCondition::Kind::Marked: return r.MarkedTarget() >= 0;
             case TutorialCondition::Kind::Designated: return r.DesignationsMade() > step_designations_;
             case TutorialCondition::Kind::Plotted: return r.PlotsMade() > step_plots_;
+            case TutorialCondition::Kind::GivenTarget: return r.DesignationsHeard() > step_given_;
+            case TutorialCondition::Kind::Group:
+                for (const ScenarioRunner::GroupHeard& g : r.GroupsHeard()) {
+                    if (g.code != c.arg || g.time_s < step_sim_s_) continue;
+                    if (def_.seat.empty()) return true;
+                    for (const std::string& e : g.ears) {
+                        if (e == def_.seat) return true;
+                    }
+                }
+                return false;
         }
         return false;
+    }
+
+    // How long a "decode" step leaves the learner to read the group himself, once its wait is over, before the card names
+    // the answer (sam3d: time to find the table and the group in it; the hints that grow, docs/TUTORIALS.md rule 9).
+    static constexpr double kDecodeRevealS = 45.0;
+    // Is the current step's answer shown (no group to decode, the instructor doing it, gone back to, or the time up)?
+    bool Revealed(const TutorialUi& ui) const {
+        const TutorialStep* s = Current();
+        return s == nullptr || s->decode.empty() || auto_ || Reviewing() ||
+               (act_real_s_ >= 0.0 && ui.real_time_s - act_real_s_ >= kDecodeRevealS);
     }
 
     // The step as the front end shows it now.
@@ -804,6 +858,12 @@ public:
                 const std::pair<std::string, std::string> w = r.ReportWords(def_.seat, st.order);
                 st.order_ru = w.first;
                 st.order_en = w.second;
+            }
+            if (!Revealed(ui)) {  // he reads the group himself: nothing on the card or in the menu gives it away
+                st.decode = s->decode;
+                st.order.clear();
+                st.order_ru.clear();
+                st.order_en.clear();
             }
         }
         st.instructor = auto_;
@@ -864,6 +924,12 @@ public:
         if (s == nullptr) return std::string();
         const std::string& want = s->order.empty() ? s->report : s->order;
         if (want.empty()) return "Not now: the lesson isn't asking for that yet";
+        if (want != callout_id && !Revealed(ui)) {
+            const TalkTable* t = nullptr;
+            r.GetTalkTables().Decode(s->decode, &t);
+            return "Not what " + s->decode + " means: read it in " + (t != nullptr ? t->name_ru : std::string("the talk table")) +
+                   " on your desk (L)";
+        }
         if (want != callout_id) {
             const CalloutDef* words = r.Def().has_crew_data ? r.Def().crew_data.FindCallout(want) : nullptr;
             return std::string("Not that one: the lesson asks for ") + (words != nullptr ? words->ru + " (" + words->en + ")" : want);
@@ -883,6 +949,7 @@ public:
         const TutorialStep* s = Current();
         if (s == nullptr) return false;
         UpdateFeedback(*s, r);
+        if (act_real_s_ < 0.0 && WaitingFor(*s, r, ui).empty()) act_real_s_ = ui.real_time_s;  // his move from now
         if (auto_) Perform(*s, r, ui);
         if (!Done(*s, r, ui)) return false;
         Next(r, ui);
@@ -894,7 +961,7 @@ public:
     void Skip(ScenarioRunner& r, const TutorialUi& ui) {
         const TutorialStep* s = Current();
         if (s == nullptr || AtEnd()) return;
-        const bool action = !s->control.empty() || !s->wheel.empty() || !s->order.empty() || !s->report.empty();
+        const bool action = !s->control.empty() || !s->wheel.empty() || !s->order.empty() || !s->report.empty() || PlotStep(*s);
         if (!action || Reviewing()) {
             Next(r, ui);
             return;
@@ -1065,6 +1132,8 @@ private:
                 const CrewFact* f = r.Def().has_crew_data ? r.Def().crew_data.FindFact(w.arg) : nullptr;
                 return f != nullptr && !f->unmet_en.empty() ? f->unmet_en : w.arg;
             }
+            case TutorialCondition::Kind::Group: return "group " + w.arg + " on the net";
+            case TutorialCondition::Kind::GivenTarget: return "a target from the battery commander on the battery net";
             default: return w.text;
         }
     }
@@ -1146,9 +1215,24 @@ private:
 
     // The instructor's hand on a skipped step: one click (a selector a position at a time), the wheel onto its mark, the
     // order or the report; nothing while its wait lasts.
+    // A step done when the learner writes a mark on the plotting board.
+    static bool PlotStep(const TutorialStep& s) {
+        for (const TutorialCondition& c : s.done_when) {
+            if (c.kind == TutorialCondition::Kind::Plotted) return true;
+        }
+        return false;
+    }
     void Perform(const TutorialStep& s, ScenarioRunner& r, const TutorialUi& ui) {
         if (!WaitingFor(s, r, ui).empty() || r.Time() < next_perform_s_) return;
         next_perform_s_ = r.Time() + 0.5;
+        if (PlotStep(s)) {  // the oldest report heard, written where it puts the target (exact at any scale: no miss)
+            if (r.Post() != nullptr && !r.Post()->Heard().empty()) {
+                const CommandPost::AirReport& h = r.Post()->Heard().front();
+                r.PlayerPlotAt(h.number, h.contact.position.x, h.contact.position.y, 200000.0 / 0.17);
+            }
+            next_perform_s_ = r.Time() + 1.0;
+            return;
+        }
         if (!s.control.empty()) {
             const ControlDef* d = r.Console().panel.Find(s.control);
             if (d == nullptr) return;
@@ -1187,8 +1271,8 @@ private:
             return;
         }
         if (!s.report.empty()) {
-            r.PlayerSay(def_.seat, s.report);
-            next_perform_s_ = r.Time() + 1e9;  // once
+            // Once; a report refused (nothing to read back yet, the set not on the net) again a little later.
+            next_perform_s_ = r.PlayerSay(def_.seat, s.report) ? r.Time() + 1e9 : r.Time() + 2.0;
         }
     }
 
@@ -1197,10 +1281,12 @@ private:
         next_perform_s_ = 0.0;
         step_sim_s_ = r.Time();
         step_real_s_ = ui.real_time_s;
+        act_real_s_ = -1.0;
         step_continues_ = ui.continues;
         step_unit_ = r.UnitPosition();
         step_designations_ = r.DesignationsMade();
         step_plots_ = r.PlotsMade();
+        step_given_ = r.DesignationsHeard();
         actions_seen_ = r.SeatActions().size();
         feedback_seen_ = actions_seen_;
         feedback_.clear();
@@ -1215,6 +1301,7 @@ private:
             if (a.kind == TutorialAction::Kind::NetOrder) r.ExternalNetOrder(a.arg);
             if (a.kind == TutorialAction::Kind::Jam) r.StartJamming(a.arg);
             if (a.kind == TutorialAction::Kind::LineCall) r.RingLine(std::atoi(a.arg.c_str()));
+            if (a.kind == TutorialAction::Kind::Regiment) r.ReleaseRegimentCommand(a.arg);
         }
     }
 
@@ -1232,10 +1319,12 @@ private:
     bool started_ = false;
     double step_sim_s_ = 0.0;
     double step_real_s_ = 0.0;
+    double act_real_s_ = -1.0;   // when the step's action could first be done (its wait over); -1 not yet
     int step_continues_ = 0;
     Vec3 step_unit_;
     int step_designations_ = 0;
     int step_plots_ = 0;
+    int step_given_ = 0;
     std::size_t actions_seen_ = 0;
     std::size_t feedback_seen_ = 0;
     std::string feedback_;

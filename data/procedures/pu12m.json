@@ -63,7 +63,8 @@
     { "id": "pvs1_call", "description": "A call to PVS-1 from the RTK-1", "source": "the sim sets it (simcore/scenario_runner.hpp, the voice paths: docs/crew/12_COMMUNICATIONS.md)", "confidence": "medium" },
     { "id": "pvs2_call", "description": "A call to PVS-2 from the RTK-1", "source": "the sim sets it (simcore/scenario_runner.hpp, the voice paths: docs/crew/12_COMMUNICATIONS.md)", "confidence": "medium" },
     { "id": "pvs3_call", "description": "A call to PVS-3 from the RTK-1", "source": "the sim sets it (simcore/scenario_runner.hpp, the voice paths: docs/crew/12_COMMUNICATIONS.md)", "confidence": "medium" },
-    { "id": "air_report_waiting", "description": "A report heard on the air-picture net waits to be read out to the plotter", "source": "the sim sets it (pvo_bu_x_1984 art. 23: the radiotelephonist passes the reports to the plotter)", "confidence": "medium" }
+    { "id": "air_report_waiting", "description": "A report heard on the air-picture net waits to be read out to the plotter", "source": "the sim sets it (pvo_bu_x_1984 art. 23: the radiotelephonist passes the reports to the plotter)", "confidence": "medium" },
+    { "id": "plot_report_waiting", "description": "A target appeared, turned or was lost on the board, and the plotter hasn't reported it to the commander yet", "source": "the sim sets it (pvo_bu_x_1984 art. 23: the plotter reports targets appearing, their actions and those lost)", "confidence": "medium" }
   ],
 
   "controls": [
@@ -248,7 +249,7 @@
       "source": "flak11 (PU12-0), valka_pu12 (generator G-290B: to power the car while driving)", "confidence": "medium",
       "notes": "On the move only: at a halt the post runs on the AB-1 set (or an external network)." },
     { "id": "ab1_placed", "name": "AB-1 set on the ground, earthed and cabled", "enable": [ { "control": "pwr.ab1_set", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
-      "start_time_s": { "value": 240, "source": "estimate (two men lift the set down, earth and cable it; fitted with the other jobs under the 18 min norm of ru_pu12_text)", "confidence": "estimate" },
+      "start_time_s": { "value": 220, "source": "estimate (two men lift the set down, earth and cable it; fitted with the other jobs under the 18 min norm of ru_pu12_text; 20 s less since 21 Oct 2026, when the driver's walk out to the set became his own, docs/crew/13_OUT_OF_THE_VEHICLE.md)", "confidence": "estimate" },
       "stop_time_s": { "value": 180, "source": "estimate (uncable and lift back)", "confidence": "estimate" },
       "source": "csla_pu12_manual (combat position drawing)", "confidence": "medium" },
     { "id": "ab1", "name": "AB-1 set running (220 V 50 Hz)", "enable": [ { "control": "pwr.ab1_start", "is": 1 }, { "subsystem": "ab1_placed", "is": "ready" } ],
@@ -314,7 +315,7 @@
       "start_time_s": { "value": 300, "source": "estimate (the 1G13M's run-up time is not found)", "confidence": "estimate" },
       "source": "valka_pu12 (GAK 1G13M)", "confidence": "medium" },
     { "id": "pab2_measured", "name": "Direction measured with the PAB-2", "enable": [ { "control": "nav.pab2", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
-      "start_time_s": { "value": 240, "source": "estimate (set up the aiming circle away from the hull, level it, measure to a reference)", "confidence": "estimate" },
+      "start_time_s": { "value": 210, "source": "estimate (set up the aiming circle, level it, measure to a reference; 30 s less since 21 Oct 2026, when carrying it out 35 m became the squad leader's own walk, docs/crew/13_OUT_OF_THE_VEHICLE.md)", "confidence": "estimate" },
       "source": "flak11 (PU12-0: PAB-2A)", "confidence": "medium" },
     { "id": "oriented", "name": "Post oriented (the GAK holds the measured direction)",
       "enable": [ { "control": "gak.enter_heading", "is": 1 }, { "subsystem": "gak", "is": "ready" }, { "subsystem": "pab2_measured", "is": "ready" } ],
@@ -383,7 +384,7 @@
       "steps": [
         { "control": "radio.fug3.call", "position": 1, "description": "ВЫЗОВ: a short transmission resets the protection", "wait_for": [ { "input": "r111_protect", "is": true } ] }
       ] },
-    { "id": "deploy_orient", "name": "Deploy: orient the post (PAB-2, GAK, KP-4, DTP) and the air-picture net", "source": "flak11 (PU12-0: survey the position and set up the navigation equipment with the aiming circle PAB-2A; DTP); valka_pu12; the order is sam3d", "confidence": "estimate", "notes": "Squad leader.", "steps": [{"control": "radio.fug1.power", "position": 1, "description": "R-123M FuG-1 on (the air-picture net)"}, {"control": "gak.power", "position": 1, "description": "GAK on: the gyro runs up"}, {"control": "nav.pab2", "position": 1, "description": "Out: set up the PAB-2 away from the hull and measure the post's direction", "wait_for": [{"input": "vehicle_stopped", "is": true}]}, {"control": "gak.enter_heading", "position": 1, "description": "Enter the measured direction into the GAK", "wait_for": [{"subsystem": "gak", "is": "ready"}, {"subsystem": "pab2_measured", "is": "ready"}]}, {"control": "nav.pab2", "position": 0, "description": "Stow the aiming circle", "wait_for": [{"subsystem": "oriented", "is": "ready"}]}, {"control": "kp4.power", "position": 1, "description": "KP-4 on: the post's position plotted"}, {"control": "dtp.parallax", "position": 1, "description": "DTP: set the post's offset from the reference point"}, {"control": "intercom.pvs2", "position": 2, "description": "PVS-2 to РСТ-2: the covered unit's net (FuG-2)"}] },
+    { "id": "deploy_orient", "name": "Deploy: orient the post (PAB-2, GAK, KP-4, DTP) and the air-picture net", "source": "flak11 (PU12-0: survey the position and set up the navigation equipment with the aiming circle PAB-2A; DTP); valka_pu12; the order is sam3d", "confidence": "estimate", "notes": "Squad leader.", "steps": [{"control": "radio.fug1.power", "position": 1, "description": "R-123M FuG-1 on (the air-picture net)"}, {"control": "gak.power", "position": 1, "description": "GAK on: the gyro runs up"}, {"control": "nav.pab2", "position": 1, "description": "Out: set up the PAB-2 away from the hull and measure the post's direction", "wait_for": [{"input": "vehicle_stopped", "is": true}]}, {"control": "gak.enter_heading", "position": 1, "description": "Enter the measured direction into the GAK", "wait_for": [{"subsystem": "gak", "is": "ready"}, {"subsystem": "pab2_measured", "is": "ready"}]}, {"control": "kp4.power", "position": 1, "description": "KP-4 on: the post's position plotted"}, {"control": "dtp.parallax", "position": 1, "description": "DTP: set the post's offset from the reference point"}, {"control": "intercom.pvs2", "position": 2, "description": "PVS-2 to РСТ-2: the covered unit's net (FuG-2)"}, {"control": "nav.pab2", "position": 0, "description": "Out again: stow the aiming circle and bring it in (last: the work inside done first)", "wait_for": [{"subsystem": "oriented", "is": "ready"}]}] },
     { "id": "deploy_aspd", "name": "Deploy: the ASPD-U on and working",
       "source": "flak11 (PU12-0: ASPD-U); shilka_narod (the ФР block's РАБОТА / КОНТРОЛЬ and scale); the order is sam3d", "confidence": "estimate",
       "notes": "The battery commander at the tube (rwd_mb3: the ФР block is at his workplace), once the equipment has power.",
