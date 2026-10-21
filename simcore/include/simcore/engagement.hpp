@@ -787,6 +787,9 @@ struct AimCrew {
     const CrewPicture* range_knows = nullptr;
     // Contacts the commander has called false (decoys made out on the TV, roadmap E6): the wheels leave them alone.
     std::set<std::string> ignore;
+    // The helper (docs/crew/14_HELPER.md): work out where each wheel's NPC would bring it even where a player sits, for
+    // EngagementModel::WheelWanted. Only the NPCs' wheels move.
+    bool advise = false;
 };
 
 class EngagementModel {
@@ -799,7 +802,7 @@ public:
               SessionLog& log, std::mt19937& rng, const AimCrew& aim_crew) {
         if (!console.has_sensors) return;
         time_ = t;
-        UpdateOrientation(t, dt, console, log, aim_crew.elevation);
+        UpdateOrientation(t, dt, console, log, aim_crew.elevation, aim_crew.advise);
         UpdateBeams(dt, console);
         Measure(dt, world, targets);
         ResolveShots(t, world, console, targets, log, rng);
@@ -1375,7 +1378,7 @@ private:
 
     // The aiming crew turn their wheels toward the nearest contact, as the scope shows it. A locked wheel doesn't turn.
     void Aim(double dt, ConsoleData& console, const AimCrew& crew) {
-        if (!crew.azimuth && !crew.elevation && !crew.range) return;
+        if (!crew.azimuth && !crew.elevation && !crew.range && !crew.advise) return;
         const TrackSensorDef& d = console.track;
         struct Aimpoint {
             double range_m = 0.0;
@@ -1479,13 +1482,14 @@ private:
             tv_search_s_ = 0.0;
         }
         const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
-        if (crew.azimuth && !az_locked) {
+        if ((crew.azimuth || crew.advise) && !az_locked) {
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             // The board gives true azimuth, set on the wheel as it is: right only if the vehicle is oriented.
             const double want_az = WheelAzimuth(from_board ? board_true_az : best.az_deg, wheel_az, d.az_limit_deg);
-            console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
+            Want(d.az_wheel, want_az, best_id, crew.assigned);
+            if (crew.azimuth) console.panel.SetValue(d.az_wheel, Toward(wheel_az, want_az, tuning_.aim_az_rate_deg_s * crew.az_rate_factor * dt));
         }
-        if (crew.range) {
+        if (crew.range || crew.advise) {
             double want_r = -1.0;
             if (crew.range_knows == nullptr) {
                 if (range_known) want_r = best.range_m;
@@ -1501,8 +1505,9 @@ private:
                 }
             }
             if (want_r >= 0.0) {
+                Want(d.range_wheel, want_r, best_id, crew.assigned);
                 const double wheel_r = console.panel.GetValue(d.range_wheel);
-                console.panel.SetValue(d.range_wheel, Toward(wheel_r, want_r, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
+                if (crew.range) console.panel.SetValue(d.range_wheel, Toward(wheel_r, want_r, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
             }
         }
         // The elevation seat aims by the TV, or by the elevation-search indicator once the target shows on it
@@ -1511,13 +1516,45 @@ private:
         if (d.beam_width_deg > 0.0) {
             for (const Contact& c : track_returns_) on_indicator = on_indicator || c.target_id == best_id;
         }
-        if (crew.elevation && (tv_search || on_indicator)) {
+        if ((crew.elevation || crew.advise) && (tv_search || on_indicator)) {
+            Want(d.el_wheel, best.el_deg, best_id, crew.assigned);
             const double wheel_el = console.panel.GetValue(d.el_wheel);
-            console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
+            if (crew.elevation) console.panel.SetValue(d.el_wheel, Toward(wheel_el, best.el_deg, tuning_.aim_el_rate_deg_s * crew.el_rate_factor * dt));
         }
     }
 
     static double TvHalfFov(const ConsoleData& console) { return 0.5 * TvFieldOfViewDeg(console); }
+    // Where the wheels' NPCs would bring them (AimCrew::advise), by wheel id: the value, the target it is on, when.
+    struct WheelWant {
+        double value = 0.0;
+        std::string target;
+        double t = 0.0;
+    };
+    std::map<std::string, WheelWant> wanted_;
+    // A want not renewed this long is gone (the NPC would leave the wheel). One on the target the commander ordered taken
+    // isn't replaced by another target's for kOrderedHoldS: the ordered target out of the picture for a few scans (a low
+    // flier in the clutter) leaves the wheel where it was last seen, it doesn't send it to the next echo (sam3d: an NPC's
+    // wheel barely moves in such a moment; a mark that flips between targets would turn a player's onto the wrong one).
+    static constexpr double kWantFreshS = 1.0;
+    static constexpr double kOrderedHoldS = 8.0;
+    void Want(const std::string& wheel, double value, const std::string& target = std::string(), const std::string& assigned = std::string()) {
+        const auto it = wanted_.find(wheel);
+        if (it != wanted_.end() && !assigned.empty() && target != assigned && it->second.target == assigned && time_ - it->second.t < kOrderedHoldS) {
+            return;
+        }
+        wanted_[wheel] = {value, target, time_};
+    }
+
+public:
+    // Where the NPC at a wheel would bring it now (with AimCrew::advise on): false when he would leave it.
+    bool WheelWanted(const std::string& wheel, double& value) const {
+        const auto it = wanted_.find(wheel);
+        if (it == wanted_.end() || time_ - it->second.t > kWantFreshS) return false;
+        value = it->second.value;
+        return true;
+    }
+
+private:
 
     void UpdateTrackReturns(const ConsoleData& console) {
         track_returns_.clear();
@@ -1627,7 +1664,14 @@ private:
     // to the range the commander gave.
     void FollowRangeByHand(double dt, ConsoleData& console, const AimCrew& crew) {
         const RangeSource source = RangeFrom(console);
-        if (!crew.range || !ByHand(source)) return;
+        if (!ByHand(source)) return;
+        if (!crew.range) {  // a player's wheel: where the NPC would put it (the helper)
+            const Contact* blip = source == RangeSource::Search ? SearchContact(tracked_) : nullptr;
+            if (crew.advise && (blip != nullptr || source != RangeSource::Search)) {
+                Want(console.track.range_wheel, blip != nullptr ? blip->range_m : BoardRange(tracked_));
+            }
+            return;
+        }
         if (range_bias_for_ != tracked_) {  // a crewmate's error setting a range by hand, one draw per target
             range_bias_for_ = tracked_;
             range_bias_m_ = crew.range_error_m > 0.0 ? crew.range_error_m * AimNormal() : 0.0;
@@ -1687,6 +1731,10 @@ private:
             tracked_.clear();
             tv_masked_s_ = 0.0;
             return false;
+        }
+        if (g.los && crew.advise) {  // where the target is now, for a player's wheels (the helper)
+            if (d.lock_control.empty() || console.panel.Get(d.lock_control) >= 1) Want(d.az_wheel, WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg));
+            Want(d.el_wheel, g.el_deg);
         }
         if (g.los) {
             // The NPC seats follow the target as it was a moment ago (each seat's own lag), with their own aim error.
@@ -1894,7 +1942,7 @@ private:
     // value (fast after СОГЛАСОВАНИЕ, until they agree). Without power it loses its orientation and starts again
     // taking the hull to face north. When the setter is connected the crew chief gives the measured heading
     // (logged), and an NPC in the elevation seat (the deputy commander) turns the setter to it.
-    void UpdateOrientation(double t, double dt, ConsoleData& console, SessionLog& log, bool npc_sets_heading) {
+    void UpdateOrientation(double t, double dt, ConsoleData& console, SessionLog& log, bool npc_sets_heading, bool advise = false) {
         const double turned = Wrap180(unit_heading_deg_ - last_unit_heading_deg_);
         last_unit_heading_deg_ = unit_heading_deg_;
         if (!console.has_orientation) {
@@ -1917,6 +1965,7 @@ private:
             log.Record({t, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
         }
         was_setting_ = setting;
+        if (setting && advise) Want(o.setter, true_heading);  // where the NPC turns the setter (the helper)
         if (setting && npc_sets_heading) {
             const double now = Wrap360(console.panel.GetValue(o.setter));
             const double err = Wrap180(true_heading - now);

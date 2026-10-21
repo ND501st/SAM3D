@@ -151,6 +151,13 @@ void ASimMissionMenuHUD::StartSelected()
 	UGameplayStatics::OpenLevel(this, FName(*Level), true, Options);
 }
 
+void ASimMissionMenuHUD::CycleHelper()
+{
+	const FString Next = USimWorldSubsystem::NextHelperLevel(USimWorldSubsystem::GetHelperPreference());
+	USimWorldSubsystem::SetHelperPreference(Next);
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: the helper %s"), *Next);
+}
+
 void ASimMissionMenuHUD::MoveSelection(int32 Step)
 {
 	if (Missions.Num() == 0)
@@ -204,6 +211,10 @@ void ASimMissionMenuHUD::HandleInput()
 		StartSelected();
 		return;
 	}
+	if (Pc->WasInputKeyJustPressed(EKeys::H))
+	{
+		CycleHelper();
+	}
 	// The air war: 1-4 a new campaign against that adversary, C continues the one under way.
 	const FKey CampaignKeys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four};
 	for (int32 I = 0; I < 4; ++I)
@@ -234,6 +245,11 @@ void ASimMissionMenuHUD::HandleInput()
 			if (StartBox.bIsValid && StartBox.IsInside(At))
 			{
 				StartSelected();
+				return;
+			}
+			if (HelperBox.bIsValid && HelperBox.IsInside(At))
+			{
+				CycleHelper();
 				return;
 			}
 			for (int32 I = 0; I < CampaignBoxes.Num(); ++I)
@@ -375,6 +391,18 @@ void ASimMissionMenuHUD::DrawHUD()
 		DrawText(FString::Printf(TEXT("%d of %d: Left and Right choose"), StartIndex + 1, Choices.Num()), Dim, X, Y, Small);
 		Y += 30.0f;
 	}
+	// The helper: what the seat's NPC would do, highlighted like a lesson's step (docs/crew/14_HELPER.md).
+	DrawText(TEXT("Helper"), Amber, X, Y, Medium);
+	Y += 26.0f;
+	const FString HelperLine = FString::Printf(TEXT("<  %s  >"), *USimWorldSubsystem::HelperLevelLabel(USimWorldSubsystem::GetHelperPreference()));
+	float Hw = 0.0f;
+	float Hh = 0.0f;
+	GetTextSize(HelperLine, Hw, Hh, Medium);
+	HelperBox = FBox2D(FVector2D(X, Y - 2.0f), FVector2D(X + Hw, Y + Hh + 2.0f));
+	DrawText(HelperLine, Paper, X, Y, Medium);
+	Y += 26.0f;
+	DrawText(TEXT("H turns it: the switch, wheel, order or report your seat's crewman would take next, lit in the cabin"), Dim, X, Y, Small);
+	Y += 30.0f;
 	const float Bw = 160.0f;
 	const float Bh = 34.0f;
 	StartBox = FBox2D(FVector2D(X, Y), FVector2D(X + Bw, Y + Bh));
@@ -384,7 +412,7 @@ void ASimMissionMenuHUD::DrawHUD()
 	const float BoxW = FMath::Min(420.0f, W * 0.3f);
 	DrawCampaignBox(W - Margin - BoxW, H - Margin - 200.0f, BoxW);
 
-	DrawText(TEXT("Up / Down a mission    Left / Right where you start    Enter start    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
+	DrawText(TEXT("Up / Down a mission    Left / Right where you start    H the helper    Enter start    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
 		Dim, Margin, H - Margin, Small);
 }
 

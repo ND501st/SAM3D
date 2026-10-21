@@ -274,6 +274,101 @@ struct SAM3D_API FSimMoveVerdict
 	double CostSeconds = 0.0;
 };
 
+/** One move the helper shows for the seat a player holds (simcore/helper.hpp, docs/crew/14_HELPER.md): what that seat's
+ *  NPC would do now, in the lessons' terms. Kind: control, wheel, order, report, designate, plot, halt or wait. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimHelpStep
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Kind;
+
+	/** Where it comes from: duty (the NPC would have done it already), drill (the order's next step), wheel, wait, ahead
+	 *  (the drill master, nobody will order the seat), demonstrate. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Source;
+
+	/** Why, one line: the NPC's rule, the drill's step. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Rule;
+
+	/** The move in a few words, for the hint line. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Text;
+
+	/** A control or wheel to work (highlight it in the cabin), its label and the position or mark. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Control;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString ControlLabel;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	int32 Position = -1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString PositionLabel;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	double Target = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	double Value = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	bool bOnMark = false;
+
+	/** An order or report: its callout id (the crew menu's line) and words. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Callout;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString WordsRu;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString WordsEn;
+
+	/** A target to give a launcher or plot: its number on the board, and the launcher. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	int32 Number = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Callsign;
+
+	/** What the move waits for (a wait), or why the menu would refuse the order now. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString WaitingFor;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Blocked;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	double DueInSeconds = 0.0;
+};
+
+/** The helper for one seat at the level set (simcore::HelpFor). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimSeatHelp
+{
+	GENERATED_BODY()
+
+	/** The level: unassisted (off), hint, guided (on), demonstrate, exam. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	FString Level;
+
+	/** The level shows the moves now (on; hints once the player has hesitated longer than his seat's NPC would). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	bool bShown = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	bool bHesitating = false;
+
+	/** Best first. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Helper")
+	TArray<FSimHelpStep> Steps;
+};
+
 /** One line of the crew menu: an order (the commander's seat) or a report (any other seat), from the crew data. */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimCrewMenuEntry
@@ -874,6 +969,32 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	FSimMoveVerdict GetLastMoveVerdict(const FString& Station) const;
 
+	/** The helper (docs/crew/14_HELPER.md): for the seat the player holds, the moves its NPC would make now, best first,
+	 *  at the helper's level (the assist level). Cheap: call it a few times a second. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Helper")
+	FSimSeatHelp GetHelp(const FString& Station) const;
+
+	/** The helper's first move for the seat, made as the player's hand would make it ("do it for me"). False with the
+	 *  reason when there is none or it can't be made yet. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Helper")
+	bool DoHelpMove(const FString& Station, FString& OutWhy);
+
+	/** The helper's level as the menus keep it, saved in GameUserSettings.ini (section SAM3D.Helper): unassisted (off),
+	 *  hint, guided (on) or demonstrate; never set: off. Every scenario that starts takes it (?SimHelper=<level> overrides
+	 *  it for one start); an exam keeps the helper off. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Helper")
+	static FString GetHelperPreference();
+
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Helper")
+	static void SetHelperPreference(const FString& Level);
+
+	/** The menus' round of levels: off, hints, on, back to off. */
+	static FString NextHelperLevel(const FString& Level);
+
+	/** A level in the menus' words: Off, Hints, On, Watch the crewman, Exam (off); and in one word for a button. */
+	static FString HelperLevelLabel(const FString& Level);
+	static FString HelperLevelShort(const FString& Level);
+
 	/** The order menu: give an order if it can be carried out; otherwise the seat answers and OutReason says why. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	bool TryCrewOrder(const FString& OrderId, FString& OutReason);
@@ -1308,6 +1429,12 @@ private:
 	void ClearScenario();
 	/** The crew's bodies and voices for the runner the player is in (presentation data: a scenario runs without them). */
 	void LoadCrewPresentation(const FString& DataDir);
+	/** The helper's level (?SimHelper, else the saved preference) on every runner of the scenario; an exam keeps its own. */
+	void ApplyHelperLevel();
+	/** A level on one runner: the assist level, and the helper's NPC reckoning (shadow commander, wheels) on or off. */
+	static void SetRunnerHelper(simcore::ScenarioRunner& R, simcore::AssistLevel Level);
+	/** The drill master's advice for GetHelp, kept until the console changes (a ghost run is tens of milliseconds). */
+	mutable simcore::HelpMemo HelpMemoState;
 	TUniquePtr<simcore::CabinLayout> Cabin;
 	TUniquePtr<simcore::BodyData> CrewBodies;
 	TUniquePtr<simcore::VoiceData> CrewVoices;

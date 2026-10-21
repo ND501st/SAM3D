@@ -79,6 +79,7 @@ add_executable(simcore_tests
   tests/test_battery_link.cpp
   tests/test_missions.cpp
   tests/test_tutorial.cpp
+  tests/test_helper.cpp
   tests/test_em_guidance.cpp
   tests/test_em_threats.cpp
   tests/test_ranges_history.cpp
@@ -130,6 +131,11 @@ add_executable(crew_pose_dump examples/crew_pose_dump.cpp)
 simcore_configure_target(crew_pose_dump)
 add_test(NAME crew_pose_dump
          COMMAND crew_pose_dump "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/crew_poses.json")
+
+# Every mission played from every seat by a player who follows the helper, against the NPC crew (docs/crew/14_HELPER.md);
+# writes docs/crew/generated/helper_coverage.md. Not a test: it takes minutes (test_helper.cpp checks a few).
+add_executable(helper_coverage examples/helper_coverage.cpp)
+simcore_configure_target(helper_coverage)
 
 # The crew scenarios at every skill tier over many seeds, tabulated (roadmap 8.12; not a test: it takes minutes).
 add_executable(crew_balance examples/crew_balance.cpp)
