@@ -23,5 +23,6 @@
 #include "simcore/em/deception.hpp"
 #include "simcore/em/debug_draw.hpp"
 #include "simcore/em/world.hpp"
+#include "simcore/em/replication.hpp"
 #include "simcore/em/data.hpp"
 #include "simcore/em/demo_scenario.hpp"
