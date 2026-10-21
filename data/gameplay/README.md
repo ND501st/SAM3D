@@ -66,8 +66,14 @@ The mean distance of the target from the crosshair (the 3-mil reticle, 0.18 degr
 chance, and the debrief prints it ("TV aim"). Close crossing targets are the hard case: at 1.5 km abeam a 150 m/s
 target outruns the operators' lag. `track.clutter_altitude_m` (optional, 100 m, an estimate): a target lower than this
 can't be held by the tracking radar unless the operator has its СДЦ on (`ssc.mti`; the capture drill switches it on).
-Not done: drawing the reticle, and the range read from the target's size in it, in
-the TV view (Unreal). Without the group the old behaviour stays: the servo drives the wheels onto the target.
+Range from the TV picture (roadmap 6.6, optional `span_m` with `size_error` and `size_min_mils`): with no radar range
+and nothing on the search scope or the board, the crew judge the range from the tracked target's span (its class's, or
+the scenario target's own `span_m`) against the reticle, by the formula of the thousandth (range = size × 1000 /
+thousandths, which reads about 5 % long because a thousandth is 1/955 of a radian), with a judgement error of
+`size_error` drawn once per target; a target smaller than `size_min_mils` can't be judged. The deputy calls the range
+("Дальность по телевизору …"), the range wheel is set to it by hand and ЦЕЛЬ В ЗОНЕ lights from it. The Unreal TV view
+draws the reticle's marks every 3 thousandths along the crosshair for the lens in use. Without the group the old
+behaviour stays: the servo drives the wheels onto the target.
 
 Losing the track during the flight loses the missile (command guidance), and a shot whose flight time would exceed
 `missile.max_flight_time_s` runs out. The debrief prints every factor and the random draw for each shot, and the

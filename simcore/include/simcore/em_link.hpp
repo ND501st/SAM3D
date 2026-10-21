@@ -28,6 +28,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -244,6 +245,25 @@ public:
         }
     }
 
+    // The unit transmits on radio source `id`'s net, from start_s to end_s (roadmap 7.8): it radiates (the other side's ESM
+    // can hear and find it) and the link budget decides at its end whether the source got it. Returns the message id, 0 if
+    // there is no such source.
+    long long SendVoiceFromUnit(const std::string& id, double start_s, double end_s) {
+        em::EmScene& s = world_.Scene();
+        for (RadioSource& rs : radio_sources_) {
+            if (rs.id != id) continue;
+            em::NetState* net = s.FindNet(rs.net);
+            const em::NodeState* u = s.FindNode(node_);
+            if (net == nullptr || u == nullptr) return 0;
+            const long long mid = em::SendVoice(s, *net, *u, rs.node, start_s, end_s);
+            unit_sent_.push_back(mid);
+            return mid;
+        }
+        return 0;
+    }
+    // Messages the unit has put on the air so far.
+    std::size_t UnitTransmissions() const { return unit_sent_.size(); }
+
     bool HasRadioSource(const std::string& id) const {
         for (const RadioSource& rs : radio_sources_) {
             if (rs.id == id) return true;
@@ -320,6 +340,30 @@ public:
     // The unit's antenna position now (the hull moved). Its velocity follows from the movement between steps.
     void SetUnit(const Vec3& position) { unit_ = position; }
 
+    // The instructor switches a target's jammer on or off (roadmap 10.3, instructor.hpp): from then on it follows his
+    // switch, not the scenario's times. False if the target carries none.
+    bool SetJammerSwitch(const std::string& target_id, bool on) {
+        if (!CarriesJammer(target_id)) return false;
+        jam_switch_[target_id] = on;
+        return true;
+    }
+    bool CarriesJammer(const std::string& target_id) const {
+        for (const EmJammerDef& j : effects_.jammers) {
+            if (!target_id.empty() && j.target_id == target_id) return true;
+        }
+        return false;
+    }
+    // Is its jammer radiating now (by the scenario's times or the instructor's switch)?
+    bool TargetJamming(const std::string& target_id) const {
+        for (std::size_t i = 0; i < effects_.jammers.size(); ++i) {
+            if (effects_.jammers[i].target_id != target_id || jammer_ids_[i] == 0) continue;
+            for (const em::JammerState& js : world_.Scene().jammers) {
+                if (js.id == jammer_ids_[i] && js.on) return true;
+            }
+        }
+        return false;
+    }
+
     // A target as it is now. Added on first sight; once not alive it stops echoing.
     void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly) {
         int pid = PlatformOf(id);
@@ -384,11 +428,22 @@ public:
         if (em::RadarState* r = Radar(search_)) r->iff_interrogating = on;
     }
 
-    void SetTrack(bool radiating) {
+    // The tracking radar: radiating; its СДЦ (staggered repetition periods: a repeater that walks the gate in becomes
+    // non-synchronous) and its pull-off circuit (УВ. ПОМЕХА: the video after the tracked echo is blanked, so a repeater
+    // that walks the gate out can't take it): roadmap 9.4, voenizdat_osa_1991 p80-81.
+    void SetTrack(bool radiating, bool mti = false, bool rgpo_protect = false) {
         em::RadarState* r = Radar(track_);
         if (r == nullptr) return;
         if (!radiating && r->on) ClearLock();
         r->on = radiating;
+        r->prf_staggered = mti;
+        r->rgpo_trailing_blank = rgpo_protect;
+    }
+    // A repeater holds the tracking radar's range gate (range-gate pull-off): the operator sees the target's mark and
+    // the jamming pulse split apart on the range indicator.
+    bool RangePulled() const {
+        const em::RadarState* r = Radar(track_);
+        return r != nullptr && r->rgpo_captured;
     }
 
     // Point the tracking radar at a place for the next ticks: where the console's wheels say (azimuth from north,
@@ -402,6 +457,21 @@ public:
 
     void ClearDesignation() {
         if (em::RadarState* r = Radar(track_)) r->has_designation = false;
+    }
+
+    // Point the tracking antenna (true azimuth from north and elevation, degrees) with no designation: the TV holding a
+    // target turns the antenna it sits on, so the radar's beam looks where the TV looks (its range-only mode ranges on the
+    // echo there). Ignored while the radar holds a lock or a jammer of its own.
+    void PointTrackAntenna(double true_az_deg, double el_deg) {
+        em::RadarState* r = Radar(track_);
+        if (r == nullptr || r->locked_track != 0 || r->on_jam) return;
+        em::EmitterState* e = world_.Scene().FindEmitter(r->emitter_id);
+        if (e == nullptr) return;
+        const double turn = 2.0 * DegToRad(180.0);
+        double az = std::fmod(DegToRad(true_az_deg), turn);
+        if (az < 0.0) az += turn;
+        e->pointing_az_rad = az;
+        e->pointing_el_rad = DegToRad(el_deg);
     }
 
     // Break the tracking radar's lock (the operator dropped it, or the antenna was released).
@@ -935,7 +1005,9 @@ private:
             if (jammer_ids_[i] == 0) continue;
             em::JammerState* js = world_.Scene().FindJammer(jammer_ids_[i]);
             if (js == nullptr) continue;
-            const bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            const auto sw = j.target_id.empty() ? jam_switch_.end() : jam_switch_.find(j.target_id);
+            if (sw != jam_switch_.end()) on = sw->second;  // the instructor's switch
             if (on != js->on) {
                 js->on = on;
                 world_.Scene().Log(on ? em::EmEventKind::JammerOn : em::EmEventKind::JammerOff, js->id, 0, j.jammer_id);
@@ -1098,6 +1170,7 @@ private:
         std::vector<std::pair<long long, long long>> voice;  // (sender's tag, EM message id)
     };
     std::vector<RadioSource> radio_sources_;
+    std::vector<long long> unit_sent_;
     std::vector<int> decoy_emitters_;
     std::vector<int> decoy_platforms_;
     std::vector<int> dummy_platforms_;
@@ -1116,6 +1189,7 @@ private:
     double accum_ = 0.0;
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
     std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
+    std::map<std::string, bool> jam_switch_;             // target id -> the instructor's jammer switch
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {

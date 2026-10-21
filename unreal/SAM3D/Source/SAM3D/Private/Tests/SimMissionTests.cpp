@@ -46,8 +46,10 @@ bool FSimMissionsMenuTest::RunTest(const FString& Parameters)
 	TArray<FSimMission> Missions;
 	FString Error;
 	TestTrue(FString::Printf(TEXT("the catalogue loads %s"), *Error), Sim->GetMissions(Missions, Error));
-	TestEqual(TEXT("eleven lessons (the Osa's and the PU-12M's), sixteen missions, seven of ranges and history, the air war's seven sample raids and the test range's map"),
-		Missions.Num(), 11 + 16 + 7 + 7 + 1);
+	TestEqual(TEXT("eleven lessons (the Osa's and the PU-12M's), twenty-two missions and drills (with the two ARM drills and "
+		"the counter-jamming, low flier, VHF jamming and trainer drills), seven of ranges and history, the air war's seven sample "
+		"raids and the test range's map"),
+		Missions.Num(), 11 + 16 + 2 + 4 + 7 + 7 + 1);
 	TestTrue(TEXT("the first lesson first, starting outside, with its guide"), Missions.Num() > 0 && Missions[0].Id == TEXT("tutorial_basics") &&
 		Missions[0].Start == TEXT("outside") && Missions[0].Tutorial == TEXT("tutorials/basics.json"));
 	// Then a lesson for each seat of the Osa, each starting in its seat.

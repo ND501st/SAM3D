@@ -64,6 +64,8 @@ add_executable(simcore_tests
   tests/test_comms.cpp
   tests/test_voice_comms.cpp
   tests/test_fuel.cpp
+  tests/test_orientation.cpp
+  tests/test_radio_setup.cpp
   tests/test_threats.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp
@@ -85,6 +87,7 @@ add_executable(simcore_tests
   tests/test_em_arm.cpp
   tests/test_arm_drill.cpp
   tests/test_ranges_history.cpp
+  tests/test_instructor.cpp
   tests/test_air_war.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp

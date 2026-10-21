@@ -53,9 +53,13 @@
         { "file": "scenarios/osa_emcon_tv.json", "title": "Osa: radars silent, the TV only" },
         { "file": "scenarios/osa_low_level_em.json", "title": "Osa: a low strike and a pop-up helicopter" },
         { "file": "scenarios/osa_jamming_em.json", "title": "Osa: a jamming strike aircraft" },
+        { "file": "scenarios/osa_rgpo_em.json", "title": "Osa: a range-gate pull-off, the counter-jamming" },
+        { "file": "scenarios/osa_low_flier_em.json", "title": "Osa: a low flier, the TV and range-only" },
         { "file": "scenarios/osa_practice_em_ew.json", "title": "Osa: a drone with a noise pod and chaff" },
         { "file": "scenarios/osa_practice_c2.json", "title": "Osa: the PU-12 lost, warning from the EWR net" },
-        { "file": "scenarios/osa_battery_practice.json", "title": "Osa: the battery in a prepared position" }
+        { "file": "scenarios/osa_vhf_jamming_em.json", "title": "Osa: the command net jammed, the EWR's net below the band" },
+        { "file": "scenarios/osa_battery_practice.json", "title": "Osa: the battery in a prepared position" },
+        { "file": "scenarios/osa_trainer.json", "title": "Osa: the 9F632 trainer, the instructor's drill" }
       ]
     },
     {

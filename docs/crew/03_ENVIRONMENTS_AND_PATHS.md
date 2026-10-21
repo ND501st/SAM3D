@@ -86,7 +86,10 @@ with the function check (`flak11`).
 | All | Low target (НЛЦ lit): deputy calls it; switch to TV angles (`track_low_target`) | – | `too_low` ("НЛЦ") |
 
 Branches: radar capture; TV (deputy ПА, `tv_track`); ПОЛУАВТОМАТ (operator, `track_range_semi_auto`); radar on a jammer
-(`on_jammer`, 9.1). Ideal (network chart, `voenizdat_osa_1991` Fig. 7.2): the tracking radar on the target 10 s,
+(`on_jammer`, 9.1). The NPC commander orders the TV (`order_low_target`) on НЛЦ, whether the radar holds the target, has
+lost it, or never had it (the search radar may have lost it too: the TV looks along the azimuth line), and ПОЛУАВТОМАТ
+(`order_semi_auto`) once the TV holds it with the tracking transmitter on; with nothing in the air a lost lock frees the
+deputy from his launch drill. Mission: `osa_low_flier_em.json`. Ideal (network chart, `voenizdat_osa_1991` Fig. 7.2): the tracking radar on the target 10 s,
 capture 6–7 s.
 
 ### 2.4 Identification and decision (E3 → E4)

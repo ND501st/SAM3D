@@ -26,6 +26,8 @@
 #include "simcore/engagement.hpp"
 #include "simcore/kill_assessment.hpp"
 #include "simcore/group_designation.hpp"
+#include "simcore/orientation.hpp"
+#include "simcore/crew_audio.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "simcore/command_post.hpp"

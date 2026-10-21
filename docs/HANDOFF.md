@@ -127,6 +127,15 @@ that carry the aircraft, cloud that blinds the TV), `simcore/solar.hpp`. Scenari
 `/Game/Maps/KesmarkRange` (`tools/ue_build_kesmark_range.py`), `-SimMapShots` for a scripted look. Built alongside the
 air war session's basic models (`simcore/scenery/`), which draw the aircraft and vehicles on it.
 
+### The trainer's instructor (18 October 2026)
+
+Roadmap 10.3: the 9Ф632 trainer's instructor seat (`flak11`, ePap). `simcore/instructor.hpp` and
+`ScenarioRunner::Instruct` / `InstructorEnter` / `InstructorPicture`: he takes up to two targets and turns them, sends
+them up or down, sets their speed, makes them jink, switches their pods, lets them go back to their routes, and enters
+new targets. Scripted with the trigger action `"instructor"` (`osa_trainer.json`); in Unreal the instructor panel (F9).
+Tests `test_instructor.cpp` (6) and `SAM3D.Instructor.Panel`. Built in a separate worktree (`C:/dev/SAM3D-p10`) while the
+enemy-air-command session builds in the main one.
+
 ### Ranges and history (18 October 2026)
 
 Roadmap 10.1-10.2: six scenarios in the missions menu's "Ranges and history" group (`data/scenarios/README.md`): range

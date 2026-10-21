@@ -780,7 +780,7 @@ public:
             case TutorialCondition::Kind::Marked: return r.MarkedTarget() >= 0;
             case TutorialCondition::Kind::Designated: return r.DesignationsMade() > step_designations_;
             case TutorialCondition::Kind::Plotted: return r.PlotsMade() > step_plots_;
-            case TutorialCondition::Kind::GivenTarget: return r.DesignationsHeard() > step_given_;
+            case TutorialCondition::Kind::GivenTarget: return r.DesignationsHeardCount() > step_given_;
             case TutorialCondition::Kind::Group:
                 for (const ScenarioRunner::GroupHeard& g : r.GroupsHeard()) {
                     if (g.code != c.arg || g.time_s < step_sim_s_) continue;
@@ -1286,7 +1286,7 @@ private:
         step_unit_ = r.UnitPosition();
         step_designations_ = r.DesignationsMade();
         step_plots_ = r.PlotsMade();
-        step_given_ = r.DesignationsHeard();
+        step_given_ = r.DesignationsHeardCount();
         actions_seen_ = r.SeatActions().size();
         feedback_seen_ = actions_seen_;
         feedback_.clear();

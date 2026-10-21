@@ -194,7 +194,11 @@ useful for missions and NPC battery behaviour):
 - Jamming (`video_osa`, citing manuals): "mixed" tracking, switching between semi-automatic and automatic modes; the
   counter-jamming facility only when no other way to track is left, and only while firing, not while just tracking.
   The video's guess that this is a range-memory circuit is speculation; ePap's memory mode (last angular rates) and the
-  method Н (no range) are the documented parts.
+  method Н (no range) are the documented parts. **Resolved (17 Oct 2026) from `voenizdat_osa_1991`:** the counter-jamming
+  means are switched on only when search or automatic tracking is impossible and off when the jamming stops (p259); against
+  a range-gate pull-off the SSC has the УВ. ПОМЕХА circuit (blanks the video after the tracked echo: a delayed pull-off
+  can't take the gate) and СДЦ's staggered periods (a leading one becomes non-synchronous) (p80-81, p98-99, p266); the
+  SOC has СА against non-synchronous pulses from neighbouring radars (p30). Built as roadmap 9.4.
 - Anti-radiation missiles (`video_osa`): track without emitting or with as little as possible: the TV sight (wide
   lens for an approaching aircraft), the search radar on for only two turns, a brief tracking-radar burst to get data
   then off, the radar off once the missile has gone far enough or as soon as it detonates. Consistent with ePap's

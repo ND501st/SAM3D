@@ -427,6 +427,23 @@ engagement model keeps the gyro's heading:
   picture turned by its error, and plotting-board designations (true azimuth) point the antenna wrong.
 - The crew chief's Qc is logged when ЗК is selected; an NPC deputy turns the setter to it.
 
+**Drift and the compass work** (added 17 Oct 2026; `voenizdat_osa_1991` p48, p51–52, p249–250):
+
+- After orienting, АК — ЗК goes to АК and РЕЛЕ — Qc to РЕЛЕ: the GA-3's correction unit then works as latitude
+  correction (p48). Block 0005-8M carries the potentiometer φ with the scale ШИРОТА that feeds the site's latitude into
+  it, a switch φ АВТ. — РУЧН. (start РУЧН.), and a lamp ОТКАЗ Qc for a lost phase of the gyro's supply (p51–52). The
+  textbook gives no drift figure; the Earth's rate (15.041 deg/h × sin latitude) is textbook physics of a gyro
+  half-compass. In SAM3D: the wheel `orient.latitude` and the drift in `simcore/orientation.hpp`; the GA-3's own
+  drift (0.5 deg/h) is an estimate.
+- OR-31M carries the follow-up systems' scales and a switch СС — ОТКЛ. for maintenance (p52). In SAM3D: the dial
+  `or31_qc` on the SP-2M rack reads the gyro.
+- The crew chief's compass work (p249–250): the artillery compass ПАБ 20–50 m in front of the vehicle; the launcher
+  laid on it with the TV sight (or the sight); the angle qв read off block 0094-9; the compass's azimuth on the vehicle
+  read on its black ring and drum, turned by 30-00, corrected (ΔAm from the map's declination and convergence, the
+  compass's daily change and its instrument error) to the grid bearing α; Qc = α − qв (or 60-00 + α − qв). The
+  textbook names the commander's check of "the correctness of the orientation" among the readiness checks (p252).
+  In SAM3D it is one timed activity of the commander's at a halt (180 s, 0.2 deg error: estimates).
+
 **IFF** (`mon_2112_80` p14, p21; `voenizdat_osa_1991` p17, p53–56):
 
 - The interrogator's antenna is built into the search antenna.

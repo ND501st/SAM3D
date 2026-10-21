@@ -28,7 +28,8 @@
 
   "tv": {
     "reticle_deg": 0.18, "npc_delay_s": 0.4, "memory_s": 5, "error_penalty_per_reticle": 0.08, "error_factor_min": 0.4,
-    "source": "reticle_deg: ePap (samsim_thread): the TV sight is tracked by hand with a 3-mil reticle, 3 thousandths on the 6000-division circle = 0.18 degrees; memory_s follows ePap's memory mode (it carries on at the last angular rates when the target is masked). The rest are game values.",
+    "span_m": { "default": 12, "drone": 5, "helicopter": 14, "fighter": 10, "bomber": 30 }, "size_error": 0.15, "size_min_mils": 0.3,
+    "source": "reticle_deg: ePap (samsim_thread): the TV sight is tracked by hand with a 3-mil reticle, 3 thousandths on the 6000-division circle = 0.18 degrees; memory_s follows ePap's memory mode (it carries on at the last angular rates when the target is masked). Range judged from the target's size in the reticle: ePap (samsim_thread), by the artillery formula of the thousandth (range = size x 1000 / thousandths). span_m are PLACEHOLDER sizes typical of each class (a scenario target can give its own span_m); size_error (0.15 of the span, one sigma, one judgement per target) and size_min_mils (0.3 thousandths: a tenth of the reticle) are estimates. The rest are game values.",
     "notes": "Manual TV tracking. The TV channel follows the wheels: the target has to stay in the lens field (data/procedures/osa_ak.json, sensors.track.fov_deg) around where the azimuth and elevation wheels point, or the track is lost. An NPC in a wheel's seat follows the target npc_delay_s behind it and no faster than the aim rates; the player turns the wheels. The mean distance of the target from the crosshair during a missile's flight costs hit chance: factor = max(error_factor_min, 1 - error_penalty_per_reticle x mean error / reticle). Without this group the servo drives the wheels onto the target by itself once the TV has locked."
   },
 

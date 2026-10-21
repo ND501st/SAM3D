@@ -43,6 +43,14 @@ real time, from 0.25 to 32. A cold start takes minutes (roadmap 6.2: 3.8 min swi
 `sam3d.TimeScale 8` gets through it in under a minute. The sim stays on its fixed step; only how many steps a frame
 runs changes.
 
+## Cabin audio
+
+`USimCrewAudioComponent` (on the Osa vehicle, roadmap 7.7) plays what the commander's headset carries
+(`simcore::HeadsetSoundNow`): the R-123M's hiss when his A-1 is on Р-123 and the set works, shut off by ШУМЫ (the
+noise suppressor) and quietened under a carrier (a report on the net, our own transmission: the R-124 sidetone), and the
+1 kHz call tone of ТОН. ВЫЗОВ, synthesised. The words themselves are the crew's voices (`USimCrewVoiceComponent`,
+roadmap 8.10). `sam3d.Audio 0` silences the headset's hiss and tone.
+
 ## First level: Osa practice scenario on Cesium terrain
 
 The level is in the repository (`Content/Maps/OsaPractice`, stored with Git LFS: run `git lfs install` once per
@@ -365,5 +373,12 @@ Multiplayer crew: `ASimCrewGameMode` gives every player a crew seat and a knowle
 
 The PU-12M (`docs/PU12_DEVELOPMENT.md`): when the scenario's own vehicle is the command post (`scenarios/pu12m_deploy.json`, `pu12m_battery.json`), `ASimOsaVehicle` wears `SM_PU12M` and its mast (`USimPu12MastComponent`) instead of the Osa's boxes, and the director loads `cabins/pu12m.json` (an empty `CabinFile` loads the scenario's own vehicle's cabin; "none" loads none). In the cabin: at the battery commander's seat `[` `]` pick a target on the post's board and 1-5 give it to that launcher on the battery net; at the operator-plotter's seat `[` `]` pick a target on the IT-45 and P writes it on the board (take the seat with T first). Art: `tools/blender/pu12m_model.py` (exterior), `tools/blender/build_pu12m_interior.py` (interior), imported headless with the editor closed by `UnrealEditor-Cmd.exe SAM3D.uproject -run=pythonscript -script=C:/dev/SAM3D/tools/ue_import_pu12m.py -unattended -nullrhi` (`SAM3D_PU12M_STEPS=interior` for the interior alone; it takes every `art/pu12m_interior/SM_*.fbx`, the R-111's and the R-407's `SM_RadioR111`, `SM_RadioR407` among them, whose materials, `Lens_Amber` the newest, `python tools/ue_import_cabin_interior.py materials` makes first). The sets' meters read the sets (`simcore::MeterValue`). A battery link (`-SimScenario=scenarios/battery_link_practice.json`, docs/PU12_DEVELOPMENT.md P8) puts the Osa and the PU-12M in one battery: the player starts in the Osa (`-SimVehicle=post` for the post) and **V** moves him to the other vehicle, whose crew he leaves behind fighting on as NPCs. Networked, each player joins in his vehicle (`-SimVehicle=post` or `osa`; docs/MULTIPLAYER.md). The interior is imported without Nanite (its fallback mesh made the round parts polygons) and with finer distance fields, set through `USimEditorScripting` (a commandlet has no static mesh editor subsystem, and the import pipeline's build settings don't reach the mesh). The compartment is closed: while the camera is in it the level's sky lights are put out (`ASimOsaVehicle::SetDaylightShut`; Lumen otherwise tints the cream lining mauve), and from outside the cabin is hidden (`USimCabinComponent::SetCabinHidden`). At the battery commander's seat the instruments work too: the DT-2's two wheels put the IT-45's marker on a target, the ДХ's digits pick a number, ЦУ and a digit give it to that launcher, СБР clears.
 
-Command-line options for scripted runs: `-SimScenario=scenarios/<file>.json` plays that scenario whatever the map's director says (server and clients alike). `-SimCabinShots=<folder> [-SimShotDelay=<s>]` photographs every seat and instrument of the cabin after the delay (default 20 s), one PNG each, then quits: with `UnrealEditor.exe SAM3D.uproject -game -RenderOffscreen -ResX=1280 -ResY=720` a run is checked from its pictures alone, no window and no editor (the PU-12M's: `-SimScenario=scenarios/pu12m_battery.json -SimCabinShots=C:/dev/SAM3D/out/pu12m_cabin_shots -SimShotDelay=40`). `-SimShotsAround` adds five more views from every seat (left, right, behind, down, up) to check the cabin all round; `-SimVehicle=post` photographs the post in a battery link.
+Command-line options for scripted runs: `-SimScenario=scenarios/<file>.json` plays that scenario whatever the map's director says (server and clients alike). `-SimCabinShots=<folder> [-SimShotDelay=<s>]` photographs every seat and instrument of the cabin after the delay (default 20 s), one PNG each, then quits: with `UnrealEditor.exe SAM3D.uproject -game -RenderOffscreen -ResX=1280 -ResY=720` a run is checked from its pictures alone, no window and no editor (the PU-12M's: `-SimScenario=scenarios/pu12m_battery.json -SimCabinShots=C:/dev/SAM3D/out/pu12m_cabin_shots -SimShotDelay=40`). `-SimShotsAround` adds five more views from every seat (left, right, behind, down, up) to check the cabin all round; `-SimVehicle=post` photographs the post in a battery link. `-SimShotsUI` keeps the HUD in the pictures; `-SimInstructor` starts with the instructor panel open.
+
+**The instructor panel** (roadmap 10.3, the 9Ф632 trainer): F9 opens it where the simulation runs (single player, or the
+server). It lists every target in the sky as it is (range, bearing, heading, height, speed, held, jammer) and has the keys
+while open: Tab the next target, Left/Right turn it 30 degrees, Up/Down its height, -/= its speed, E a manoeuvre (a jink),
+J its jammer, R let it go back to its route, N a training drone 30 km out ahead of the vehicle; the trainer holds two
+targets at a time. `USimWorldSubsystem::Instruct`, `InstructorEnterDrone`, `GetInstructorPicture`; test
+`SAM3D.Instructor.Panel`.
 

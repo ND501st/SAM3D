@@ -100,6 +100,8 @@ struct ViewScope {
     double swept_high_deg = 0.0;
     double antenna_el_deg = 0.0;
     double indicated_to_true_deg = 0.0;   // the wheels' azimuth + this = true azimuth
+    double gyro_heading_deg = 0.0;        // the gyro half-compass's heading (the OR-31M Qc scale)
+    double fuel_l = -1.0;                 // the tank's level (the driver's fuel gauge), -1 without one
     double missile_range_m[2] = {-1.0, -1.0};  // guidance channels I and II (-1: none in flight)
     Vec3 unit_position;
     std::vector<ViewStrobe> strobes;      // jamming strobes on the search scope (roadmap E3)
@@ -134,6 +136,15 @@ struct ViewVehicle {
     bool deployed = false;
 };
 
+// A prepared position's works at one vehicle's place (roadmap 7.6): the emplacement dug there (it stays when the vehicle
+// drives off) and the camouflage net over it (taken down when the vehicle leaves).
+struct ViewWork {
+    Vec3 position;
+    double heading_deg = 0.0;
+    bool emplacement = false;
+    bool nets = false;
+};
+
 // The command post's own instruments (post_feed.hpp): an IT-45 track (fractions of the scale) and a launcher on the IT
 // boards (state: LauncherStatus::State).
 struct ViewPostTrack {
@@ -162,6 +173,7 @@ struct ViewExtras {
     std::vector<ViewBoardMark> board;
     std::vector<ViewRadio> radio;  // oldest first
     std::vector<ViewVehicle> battery;
+    std::vector<ViewWork> works;
     // the player's vehicle is the command post: its IT-45, where it is, its IT boards (the board's marks are `board`)
     bool post = false;
     double post_scale_m = 0.0;
@@ -467,6 +479,8 @@ inline std::vector<std::uint8_t> ScopeBytes(const ViewScope& sc) {
     w.Q(sc.swept_high_deg, kDegStep);
     w.Q(sc.antenna_el_deg, kDegStep);
     w.Q(sc.indicated_to_true_deg, kDegStep);
+    w.Q(sc.gyro_heading_deg, kDegStep);
+    w.Q(sc.fuel_l, kPosStep);
     w.Q(sc.missile_range_m[0], kPosStep);
     w.Q(sc.missile_range_m[1], kPosStep);
     w.V3(sc.unit_position, kPosStep);
@@ -488,6 +502,8 @@ inline bool GetScope(Reader& r, ViewScope& sc) {
     sc.swept_high_deg = r.Q(kDegStep);
     sc.antenna_el_deg = r.Q(kDegStep);
     sc.indicated_to_true_deg = r.Q(kDegStep);
+    sc.gyro_heading_deg = r.Q(kDegStep);
+    sc.fuel_l = r.Q(kPosStep);
     sc.missile_range_m[0] = r.Q(kPosStep);
     sc.missile_range_m[1] = r.Q(kPosStep);
     sc.unit_position = r.V3(kPosStep);
@@ -532,6 +548,12 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.V3(v.position, kPosStep);
         w.Q(v.heading_deg, kDegStep);
         w.U8(v.deployed ? 1 : 0);
+    }
+    w.U32(static_cast<std::uint32_t>(x.works.size()));
+    for (const ViewWork& k : x.works) {
+        w.V3(k.position, kPosStep);
+        w.Q(k.heading_deg, kDegStep);
+        w.U8((k.emplacement ? 1u : 0u) | (k.nets ? 2u : 0u));
     }
     w.U8(x.post ? 1 : 0);
     if (!x.post) return w.bytes;
@@ -609,6 +631,17 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         v.heading_deg = r.Q(kDegStep);
         v.deployed = r.U8() != 0;
         x.battery.push_back(v);
+    }
+    n = r.U32();
+    if (!r.ok || n > 100000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewWork k;
+        k.position = r.V3(kPosStep);
+        k.heading_deg = r.Q(kDegStep);
+        const std::uint32_t f = r.U8();
+        k.emplacement = (f & 1u) != 0;
+        k.nets = (f & 2u) != 0;
+        x.works.push_back(k);
     }
     x.post = r.U8() != 0;
     if (!r.ok || !x.post) return r.ok;

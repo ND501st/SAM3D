@@ -278,6 +278,24 @@ SC_TEST("prepared position: emplacement and nets shrink the vehicle's echo; dumm
     SC_EXPECT(r.UnitPosition().y > 100.0);
     SC_EXPECT(r.Debrief().find("climb out") != std::string::npos);
     SC_EXPECT(r.Acmi().Text().find("Dummy position") != std::string::npos);
+    // The works (roadmap 7.6): an emplacement at each starting place (ours, the launcher's, the two dummies'); the nets
+    // came down where a vehicle drove off, the dummies keep theirs; and they reach a player through the stream.
+    const std::vector<em::ViewWork> works = r.Works();
+    SC_EXPECT(works.size() == 4);
+    if (works.size() == 4) {
+        for (const em::ViewWork& k : works) SC_EXPECT(k.emplacement);
+        SC_EXPECT(!works[0].nets && std::fabs(works[0].position.y) < 1.0);  // ours, left behind
+        SC_EXPECT(works[2].nets && works[3].nets);                        // the dummy positions
+    }
+    em::KnowledgeView v;
+    v.extras = r.ViewExtrasNow();
+    em::KnowledgeView back;
+    SC_EXPECT(em::DecodeView(em::EncodeView(v), back));
+    SC_EXPECT(back.extras.works.size() == works.size());
+    if (back.extras.works.size() == 4) {
+        SC_EXPECT(back.extras.works[2].emplacement && back.extras.works[2].nets && !back.extras.works[0].nets);
+        SC_EXPECT(std::fabs(back.extras.works[2].position.x - 800.0) < 1.0);
+    }
 }
 
 SC_TEST("battery view: the designations heard, the radio traffic and the battery's vehicles reach a player through the stream") {

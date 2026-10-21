@@ -111,7 +111,10 @@ SC_TEST("readiness: a unit can start powered on the march or deployed and orient
     const Equipment& de = deployed->Console().equipment;
     deployed->Step(0.1);
     SC_EXPECT(de.IsReady("pto_generator") && de.IsReady("antenna_drives") && de.IsReady("apu_free"));
-    SC_EXPECT(std::fabs(deployed->Engagement().GyroHeadingDeg() - deployed->Engagement().UnitHeadingDeg()) < 1e-9);
+    // Oriented, with the site's latitude on the correction: only the gyro's own drift is left (far below 0.001 deg in 0.1 s).
+    SC_EXPECT(std::fabs(deployed->Engagement().GyroHeadingDeg() - deployed->Engagement().UnitHeadingDeg()) < 1e-3);
+    SC_EXPECT(deployed->Engagement().Oriented() && deployed->OrientedAtHalt());
+    SC_EXPECT_NEAR(deployed->Console().panel.GetValue("orient.latitude"), 45.0, 1e-9);
     SC_EXPECT(deployed->Debrief().find("starts deployed") != std::string::npos);
 
     // An unknown state is refused at load, naming the ones there are.

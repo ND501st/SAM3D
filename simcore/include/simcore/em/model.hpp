@@ -131,6 +131,7 @@ struct RadarDef {
     double mti_improvement_db = 25.0;
     double mti_notch_mps = 15.0;            // radial speeds below this are cancelled with the clutter
     double mti_notch_attenuation_db = 30.0;
+    double mti_max_range_m = 0.0;           // the MTI's working range (0: all of it); beyond it the normal channel, uncancelled
     double clutter_cnr_db_at_10km = 40.0;   // ground clutter-to-noise in the target's cell at 10 km
     double clutter_max_elevation_rad = 0.026;  // targets below ~1.5 deg share cells with the ground
     // Tracking.
@@ -220,7 +221,7 @@ struct JammerDef {
     std::string name;
     JamTechnique technique = JamTechnique::Barrage;
     EmitterDef emitter;  // waveform.freq_hz/bandwidth_hz = the jammed band; power and antenna
-    double rgpo_walk_mps = 150.0;
+    double rgpo_walk_mps = 150.0;    // > 0: walks the gate out (delayed); < 0: walks it in (leading)
     double rgpo_max_m = 2500.0;
     double rgpo_off_s = 3.0;         // jammer silent after a walk-off, dragging the gate onto nothing
     double rgpo_js_needed_db = 3.0;  // repeater must beat the skin echo by this to capture the gate
@@ -326,8 +327,14 @@ struct RadarState {
     bool has_designation = false;
     Vec3 designation;
     int locked_track = 0;
-    double rgpo_offset_m = 0.0;  // how far a repeater has walked the range gate
+    double rgpo_offset_m = 0.0;  // how far a repeater has walked the range gate (negative: walked in)
     bool rgpo_captured = false;
+    // Counter-jamming against a range-gate pull-off (voenizdat_osa_1991 p80-81): a circuit that blanks the video just
+    // after the tracked echo, so a pull-off that walks out (a delayed repeater) can't take the gate; and staggered
+    // repetition periods (the tracking radar in СДЦ), which make a repeater that walks in (anticipating the next pulse)
+    // non-synchronous.
+    bool rgpo_trailing_blank = false;
+    bool prf_staggered = false;
     // Angle tracking on a noise jammer (RadarDef::angle_track_on_jam): the echo is drowned, so the antenna follows the
     // jamming's direction, measured, with no range. The gate stays at jam_range_m (the last range it had, or the
     // designation's) so that it can take the echo again when it burns through.

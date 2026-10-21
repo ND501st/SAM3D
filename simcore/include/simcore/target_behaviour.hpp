@@ -47,7 +47,7 @@ struct TargetBehaviourDef {
 };
 
 struct EvadeDef {
-    enum class On { Launch, Lock };
+    enum class On { Launch, Lock, Order };  // Order: only when the instructor orders it (instructor.hpp)
     enum class Kind { Break, Dive, Jink };
     bool present = false;
     On on = On::Launch;
@@ -74,6 +74,12 @@ public:
 
     bool ControlsHeight() const { return b_.kind != TargetBehaviourDef::Kind::None || diving_; }
     bool Evading() const { return evading_; }
+    // The height above the ground it holds from now on (the instructor's order: a terrain-following pilot).
+    void SetAgl(double agl_m) {
+        b_.agl_m = agl_m;
+        b_.waypoint_agl_m.clear();
+    }
+    double Agl() const { return b_.agl_m; }
 
     // When the aircraft enters the world: a hovering helicopter needs a tight capture circle at its hide.
     void OnSpawn(Aircraft& a) {
@@ -107,6 +113,17 @@ public:
     }
     std::string OnLocked(Aircraft& a, const Vec3& unit, double t) {
         return e_.present && e_.on == EvadeDef::On::Lock ? Evade(a, unit, t) : std::string();
+    }
+    // The instructor's order to manoeuvre now (and again later, if he likes), whatever would set it off otherwise.
+    std::string EvadeNow(Aircraft& a, const Vec3& unit, double t) {
+        if (evading_) return std::string();
+        e_.present = true;
+        return Evade(a, unit, t);
+    }
+    // The route it is on: during a jink the one it will go back to, else the aircraft's own.
+    std::pair<std::vector<Vec3>, std::size_t> Route(const Aircraft& a) const {
+        if (evading_ && e_.kind == EvadeDef::Kind::Jink) return {saved_waypoints_, saved_next_};
+        return {a.waypoints, a.next_waypoint};
     }
 
     // The height above the ground the pilot is holding now.

@@ -93,11 +93,23 @@
       "wait_text": "the search radar to come up («Готов СОЦ!»)"
     },
     {
+      "id": "chest_send", "title": "The chest switch to ПРД", "control": "radio.chest", "position": 1,
+      "lines": ["To talk on the set your headset is on, hold your chest switch at ПРД (send). It hangs on its cord from your A-1."],
+      "why": "Released at ПРМ the set only receives; at ПРД it transmits your words (r123m_training). The NPC commander keys it as he speaks.",
+      "hint": "Point the cross at the chest switch on the A-1 box, left click."
+    },
+    {
       "id": "report_ready", "title": "Report to the post: «21 к бою готов!»", "report": "report_ready",
       "wait_until": ["task:searching"], "wait_text": "your crew ready, the search radar up",
       "lines": ["Your vehicle is ready: tell the battery commander on the net. O, then your report, after the orders: «21 к бою готов, каналы 2, ракет 6!» (ready for action, its two channels and its missiles)."],
       "why": "When the crew is ready the crew chief reports to the battery's command post, with his channels and missiles (voenizdat_osa_1991 pp. 246-247): the battery commander gives targets only to launchers he knows are ready.",
       "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "chest_receive", "title": "Release it: ПРМ", "control": "radio.chest", "position": 0,
+      "lines": ["Said: let the chest switch go back to ПРМ (receive), so the set hears the post again."],
+      "why": "A set that transmits hears nothing on its frequency; the post's designation comes next (r123m_training).",
+      "hint": "Right click on the chest switch."
     },
     {
       "id": "target", "chapter": "The target", "title": "A target",
@@ -112,10 +124,20 @@
       "wait_text": "the battery commander's designation on the battery net"
     },
     {
+      "id": "chest_send_readback", "title": "The chest switch to ПРД", "control": "radio.chest", "position": 1,
+      "lines": ["Hold the chest switch at ПРД again to answer."],
+      "hint": "Left click on the chest switch."
+    },
+    {
       "id": "readback", "title": "Read it back: «10, я 21: цель …, понял. Приём.»", "report": "readback",
       "lines": ["At once, on the net: O, then your read-back, the line after the orders: the target's number back to the post (10), with your call sign (21)."],
       "why": "A command on the net is acknowledged at once by repeating it (rrs_1986): until the battery commander hears his number back he doesn't know you have it, and says it again.",
       "hint": "O: the crew menu, then the highlighted line's number."
+    },
+    {
+      "id": "chest_receive_readback", "title": "Release it: ПРМ", "control": "radio.chest", "position": 0,
+      "lines": ["Back to ПРМ: the post may call you again."],
+      "hint": "Right click on the chest switch."
     },
     {
       "id": "contact", "title": "Search", "done_when": ["heard:contact"], "fast_forward": true,

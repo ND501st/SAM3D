@@ -29,6 +29,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/instructor.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radio_nets.hpp"
@@ -84,6 +85,7 @@ struct ScenarioTarget {
     bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
     int board_type = -1;                   // its type on the PU-12 board (0-9; -1: 1 if a friend, else 9, no IFF)
     int formation = 1;                     // aircraft in its formation, as the board notes it
+    double span_m = 0.0;                   // its span as the TV sight sees it (0: the gameplay tuning's for its class)
     TargetBehaviourDef behaviour;          // terrain following, pop-up (target_behaviour.hpp)
     EvadeDef evade;                        // evasion on launch or lock (takes the place of evade_on_launch)
     double size_m = 4.5;                   // critical dimension for the TV sight (em/optical.hpp; estimate for a fighter)
@@ -130,7 +132,7 @@ struct CrewDoctrineDef {
 };
 
 struct TriggerAction {
-    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat };
+    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat, Instructor };
     Kind kind = Kind::SetInput;
     std::string input;      // SetInput
     bool value = true;      // SetInput
@@ -140,6 +142,7 @@ struct TriggerAction {
     std::string c2_id;      // C2Source (a source id or "none"), C2Fail, C2Restore
     simcore::BatteryOrder battery_order;  // BatteryOrder
     bool air_threat = false;              // AirThreat
+    InstructorOrder instructor;           // Instructor: the trainer's scripted drill (roadmap 10.3)
 };
 
 struct ScenarioTrigger {
@@ -193,6 +196,7 @@ struct ScenarioDef {
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
     EngagementTuning tuning;
     double fuel_fraction = 1.0;    // the tank's starting level, 0 to 1 (own_unit.fuel_fraction)
+    bool radio_presets_set = true;  // own_unit.radio_presets: "set" (the frequency plan is on the fixators) or "unset"
     PositionPowerDef position_power;
     PreparedPositionDef prepared;  // own_unit.prepared_position (roadmap 7.6)
     std::string readiness;         // the state the unit starts in: "" or "cold", or a console readiness state
@@ -621,8 +625,8 @@ private:
     bool LoadOwnUnit(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         const json::Value* u = nullptr;
         if (!RequireObject(root, "", "own_unit", u) ||
-            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "position_power", "prepared_position",
-                                   "position", "heading_deg", "inputs", "controls", "empty_containers"})) {
+            !Keys(*u, "own_unit", {"console", "tuning", "crew_data", "em", "readiness", "fuel_fraction", "radio_presets", "position_power",
+                                   "prepared_position", "position", "heading_deg", "inputs", "controls", "empty_containers"})) {
             return false;
         }
         if (!RequireString(*u, "own_unit", "console", out.console_file)) return false;
@@ -663,6 +667,12 @@ private:
             }
         }
         if (!OptionalNumber(*u, "own_unit", "fuel_fraction", out.fuel_fraction)) return false;
+        if (const json::Value* rp = u->Find("radio_presets")) {
+            if (!rp->Is(json::Type::String) || (rp->string != "set" && rp->string != "unset")) {
+                return Fail("own_unit.radio_presets", "\"set\" (the frequency plan on the fixators) or \"unset\"");
+            }
+            out.radio_presets_set = rp->string == "set";
+        }
         if (out.fuel_fraction < 0.0 || out.fuel_fraction > 1.0) return Fail("own_unit.fuel_fraction", "from 0 to 1");
         if (!LoadPositionPower(*u, console, out.position_power)) return false;
         if (!OptionalString(*u, "own_unit", "readiness", out.readiness)) return false;
@@ -1020,7 +1030,7 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1032,7 +1042,11 @@ private:
                 return false;
             }
             if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
-            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation)) return false;
+            if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation) ||
+                !OptionalNumber(t, p, "span_m", tg.span_m)) {
+                return false;
+            }
+            if (tg.span_m < 0.0) return Fail(Join(p, "span_m"), "must be >= 0");
             if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
                 return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 2 training target, 8 enemy, 9 no IFF...)");
             }
@@ -1106,15 +1120,31 @@ private:
                     TriggerAction& out) {
         if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
                          "battery_order", "route", "covered", "axis_deg", "air_threat", "bounding", "roving", "points",
-                         "crossing", "width_m", "vehicle", "radiate"})) {
+                         "crossing", "width_m", "vehicle", "radiate", "instructor", "target", "to"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
                           (a.Find("end") != nullptr) + (a.Find("c2_source") != nullptr) + (a.Find("c2_fail") != nullptr) +
                           (a.Find("c2_restore") != nullptr) + (a.Find("battery_order") != nullptr) +
-                          (a.Find("air_threat") != nullptr);
+                          (a.Find("air_threat") != nullptr) + (a.Find("instructor") != nullptr);
         if (kinds != 1) {
-            return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail, c2_restore, battery_order or air_threat");
+            return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail, c2_restore, battery_order, "
+                           "air_threat or instructor");
+        }
+        // {"instructor": "turn", "target": "t1", "to": 90}: the trainer's instructor gives an order (instructor.hpp).
+        if (a.Find("instructor") != nullptr) {
+            out.kind = TriggerAction::Kind::Instructor;
+            std::string kind;
+            if (!RequireString(a, p, "instructor", kind) || !RequireString(a, p, "target", out.instructor.target)) return false;
+            if (!InstructorKindFrom(kind, out.instructor.kind)) {
+                return Fail(Join(p, "instructor"), "unknown order '" + kind + "' (take, release, turn, height, speed, evade, jam)");
+            }
+            bool known = false;
+            for (const ScenarioTarget& t : def.targets) known = known || t.id == out.instructor.target;
+            if (!known) return Fail(Join(p, "target"), "unknown target '" + out.instructor.target + "'");
+            if (InstructorOrderHasValue(out.instructor.kind)) return RequireNumber(a, p, "to", out.instructor.value);
+            if (a.Find("to") != nullptr) return Fail(Join(p, "to"), "'" + kind + "' takes no value");
+            return true;
         }
         if (a.Find("battery_order") != nullptr || a.Find("air_threat") != nullptr) {
             if (!def.has_battery) return Fail(p, "the scenario has no battery block");

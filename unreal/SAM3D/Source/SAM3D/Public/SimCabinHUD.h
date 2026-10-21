@@ -73,4 +73,5 @@ private:
 	TArray<FString> Wrap(const FString& Text, float Width, class UFont* Font, float Scale = 1.0f);
 	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
 	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
+	void DrawInstructor(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 };

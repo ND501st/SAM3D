@@ -402,7 +402,8 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			USimCabinComponent::UseCabinLighting(Line);
 			Line->RegisterComponent();
 			Line->SetRelativeLocationAndRotation(Centre + Normal * 1.4, FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
-			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.4 * Display.width_m, 0.0012) : FVector(0.001, 0.0012, 0.4 * Display.height_m));
+			// The arms reach 80 % of the way to the edges, as far as the reticle's marks go.
+			Line->SetRelativeScale3D(I == 0 ? FVector(0.001, 0.8 * Display.width_m, 0.0012) : FVector(0.001, 0.0012, 0.8 * Display.height_m));
 			if (ShapeMaterial != nullptr)
 			{
 				// Black reads against the bright sky the camera mostly sees.
@@ -410,6 +411,30 @@ void USimCabinDisplayComponent::Setup(const USimWorldSubsystem* Sim, int32 InLay
 			}
 			Line->SetVisibility(false);
 			Parts.Add(Line);
+		}
+		// The reticle's marks, placed for the lens in use each frame (UpdateTv).
+		TvCentre = Centre;
+		TvNormal = Normal;
+		TvRight = Right;
+		TvUp = Up;
+		TvWidthCm = WidthCm;
+		TvHeightCm = HeightCm;
+		for (int32 I = 0; I < 4 * kMarksPerArm && Cube != nullptr; ++I)
+		{
+			UStaticMeshComponent* Mark = NewObject<UStaticMeshComponent>(GetOwner());
+			Mark->SetStaticMesh(Cube);
+			Mark->SetupAttachment(GetAttachParent());
+			Mark->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mark->SetCastShadow(false);
+			USimCabinComponent::UseCabinLighting(Mark);
+			Mark->RegisterComponent();
+			Mark->SetRelativeRotation(FRotationMatrix::MakeFromXZ(Normal, Up).Rotator());
+			if (ShapeMaterial != nullptr)
+			{
+				Mark->CreateDynamicMaterialInstance(0, ShapeMaterial)->SetVectorParameterValue(TEXT("Color"), FLinearColor::Black);
+			}
+			Mark->SetVisibility(false);
+			ReticleMarks.Add(Mark);
 		}
 	}
 }
@@ -424,6 +449,14 @@ void USimCabinDisplayComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 		}
 	}
 	Parts.Reset();
+	for (UStaticMeshComponent* Mark : ReticleMarks)
+	{
+		if (Mark != nullptr)
+		{
+			Mark->DestroyComponent();
+		}
+	}
+	ReticleMarks.Reset();
 	if (Screen != nullptr)
 	{
 		Screen->DestroyComponent();
@@ -477,7 +510,7 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const bool bMirror = Sim->IsMirrorOnly();
 	const simcore::em::ViewScope* Mirrored = bMirror ? Sim->GetMirroredScope() : nullptr;
 	Feed = Mirrored != nullptr ? simcore::FromViewScope(*Mirrored)
-	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time());
+	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time(), Runner->Fuel());
 	auto StepSeconds = [&]() {
 		if (bMirror)
 		{
@@ -750,10 +783,14 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		}
 	}
 
-	// The range marks: painted by the sweep as it passes, fading behind it. Every 5 km (10 km on the long scales).
-	const double Ring = Span > 20000.0 ? 10000.0 : 5000.0;
-	for (double K = FMath::CeilToDouble((MinM + 1.0) / Ring) * Ring; K <= MaxM + 1.0; K += Ring)
+	// The range marks for the scale (the console's list, as the operators describe the scope; roadmap 6.4): painted by
+	// the sweep as it passes, fading behind it.
+	for (const double K : simcore::ScopeRingsM(Search, ScaleIndex))
 	{
+		if (K <= MinM || K > MaxM + 1.0)
+		{
+			continue;
+		}
 		const double Rr = RadiusOf(K);
 		for (int32 I = 0; I < Sectors; ++I)
 		{
@@ -1120,7 +1157,8 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 	{
 		return;
 	}
-	const double A = UE_DOUBLE_TWO_PI * Console.panel.GetValue(Display.control) / Display.value_per_turn;
+	// A control's value, or for a readout dial (the OR-31M Qc scale) the simulation's, from the feed (the server's on a client).
+	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) / Display.value_per_turn;
 	Line(Canvas, C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
 	Disc(Canvas, C, 0.06 * R, Ink);
 }
@@ -1776,6 +1814,37 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 		return;
 	}
 	Capture->bCaptureEveryFrame = false;  // filmed by hand below, at sam3d.TvHz
+	// The reticle's marks: every reticle (3 thousandths) along each arm, for the lens in use; a short bar across the arm.
+	{
+		const simcore::ConsoleData& C = Runner.Console();
+		const double Reticle = Runner.Def().tuning.has_tv_manual ? Runner.Def().tuning.tv_reticle_deg : 0.0;
+		const double HalfW = 0.5 * simcore::TvFieldOfViewDeg(C);
+		const std::vector<double> Across = simcore::ReticleMarks(HalfW, Reticle);
+		const std::vector<double> Upward = simcore::ReticleMarks(HalfW * C.track.fov_height_ratio, Reticle);
+		const double MarkM = 0.025 * FMath::Min(TvWidthCm, TvHeightCm) / 100.0;
+		for (int32 I = 0; I < ReticleMarks.Num(); ++I)
+		{
+			UStaticMeshComponent* Mark = ReticleMarks[I];
+			if (Mark == nullptr)
+			{
+				continue;
+			}
+			const int32 Arm = I / kMarksPerArm;  // 0 right, 1 left, 2 up, 3 down
+			const int32 K = I % kMarksPerArm;
+			const bool bAcross = Arm < 2;
+			const std::vector<double>& Marks = bAcross ? Across : Upward;
+			const bool bShow = bOn && K < static_cast<int32>(Marks.size());
+			Mark->SetVisibility(bShow);
+			if (!bShow)
+			{
+				continue;
+			}
+			const double Sign = (Arm == 0 || Arm == 2) ? 1.0 : -1.0;
+			const FVector Along = bAcross ? TvRight * (Sign * Marks[K] * 0.5 * TvWidthCm) : TvUp * (Sign * Marks[K] * 0.5 * TvHeightCm);
+			Mark->SetRelativeLocation(TvCentre + TvNormal * 1.4 + Along);
+			Mark->SetRelativeScale3D(bAcross ? FVector(0.001, 0.0012, MarkM) : FVector(0.001, MarkM, 0.0012));
+		}
+	}
 	if (!bOn)
 	{
 		// A dark screen. Cleared on each redraw, not just when switched off: a capture can land in the target before the

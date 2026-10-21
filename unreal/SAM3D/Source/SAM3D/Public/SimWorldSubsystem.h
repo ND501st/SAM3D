@@ -369,6 +369,25 @@ struct SAM3D_API FSimSeatHelp
 	TArray<FSimHelpStep> Steps;
 };
 
+/** A prepared position's works at one place (roadmap 7.6): where, which way, the emplacement, the net. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimPositionWorkState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	double YawDeg = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	bool bEmplacement = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Battery")
+	bool bNets = false;
+};
+
 /** One line of the crew menu: an order (the commander's seat) or a report (any other seat), from the crew data. */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimCrewMenuEntry
@@ -760,6 +779,45 @@ struct SAM3D_API FSimTutorialStep
 	float LastDoneSeconds = 1000.0f;
 };
 
+/** A target as the trainer's instructor sees it (roadmap 10.3): the truth, for his seat only. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimInstructorTrack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	FString Name;
+
+	/** Range from the vehicle, km, and true azimuth from north, degrees. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double RangeKm = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double AzimuthDeg = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double HeadingDeg = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double SpeedMps = 0.0;
+
+	/** Height above the ground, m. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	double AglM = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	bool bHeld = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	bool bHasJammer = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Instructor")
+	bool bJamming = false;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimEvent, const FSimEvent&, Event);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimDebriefEntry, const FSimDebriefEntry&, Entry);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSimTerrainReady, bool, bSucceeded);
@@ -999,6 +1057,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	bool TryCrewOrder(const FString& OrderId, FString& OutReason);
 
+	// ------------------------------------------------------------------ the trainer's instructor (roadmap 10.3)
+
+	/** The instructor's seat works where the simulation runs (single player, or the server); a mirror can't. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	bool CanInstruct() const { return Runner != nullptr && !IsMirrorOnly(); }
+
+	/** Every target in the sky as it truly is, nearest first. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	TArray<FSimInstructorTrack> GetInstructorPicture() const;
+
+	/**
+	 * One order: Kind is take, release, turn (Value: the true heading, deg), height (m above the ground), speed (m/s),
+	 * evade or jam (Value 1 on, 0 off). The trainer holds two targets at a time. False, and OutWhy, if it can't be done.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Instructor")
+	bool Instruct(const FString& Target, const FString& Kind, double Value, FString& OutWhy);
+
+	/** Enters a training drone into the air picture, RangeKm out on a true bearing, flying past the vehicle. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Instructor")
+	bool InstructorEnterDrone(double BearingDeg, double RangeKm, double HeightM, FString& OutId, FString& OutWhy);
+
 	/** Whether a task of the crew data holds now (e.g. "ready_halted"). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	bool IsCrewTaskDone(const FString& TaskId) const;
@@ -1006,6 +1085,10 @@ public:
 	/** The crew menu for a seat: the orders of the crew data at the commander's seat, else the seat's own reports. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	TArray<FSimCrewMenuEntry> GetCrewMenu(const FString& Station) const;
+
+	/** A prepared position's works (roadmap 7.6): the emplacements and nets at the battery's places (also on a client). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Battery")
+	TArray<FSimPositionWorkState> GetPositionWorks() const;
 
 	/** A player in a seat speaks a report (filled from his own instruments: a contact from his scope). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")

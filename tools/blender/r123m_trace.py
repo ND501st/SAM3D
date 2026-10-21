@@ -76,8 +76,8 @@ WELLS = [
     {'id': 'squelch',      'c': (53.8, 32.7),   'r': 14.7, 'sim': 'squelch', 'knob': 'bar'},
     {'id': 'mode',         'c': (98.5, 39.9),   'r': 22.3, 'sim': 'mode',    'knob': 'bar'},
     {'id': 'voltage',      'c': (36.0, 86.8),   'r': 22.5, 'sim': None,      'knob': 'bar'},
-    {'id': 'freq_set',     'c': (90.5, 101.8),  'r': 21.8, 'sim': None,      'knob': 'bar'},
-    {'id': 'antenna_tune', 'c': (272.0, 76.1),  'r': 36.8, 'sim': None,      'knob': 'red'},
+    {'id': 'freq_set',     'c': (90.5, 101.8),  'r': 21.8, 'sim': 'freq',    'knob': 'bar'},
+    {'id': 'antenna_tune', 'c': (272.0, 76.1),  'r': 36.8, 'sim': 'antenna_tune', 'knob': 'red'},
     {'id': 'selector',     'c': (278.4, 162.1), 'r': 42.3, 'sim': 'preset',  'knob': 'bar'},
     {'id': 'volume',       'c': (364.2, 160.9), 'r': 24.1, 'sim': 'volume',  'knob': 'bar'},
 ]
@@ -203,6 +203,7 @@ SIDE_BOLTS = [4.0, 105.0, 166.0]       # y of the bolt heads on the casing's rig
 # bushing out to the plate's plane, so the cabin's toggle and knob meet it).
 CONTROL_MM = {
     'squelch': (53.8, 32.7), 'mode': (98.5, 39.9), 'preset': (278.4, 162.1), 'volume': (364.2, 160.9),
+    'freq': (90.5, 101.8), 'antenna_tune': (272.0, 76.1),   # the preset set-up's knobs (roadmap 7.8)
     'power': (91.0, 206.0), 'antenna': (40.0, 205.0), 'headset': (326.0, 207.0),
     'lamp_ready': (349.2, 130.8), 'lamp_warm': (379.7, 130.8),
 }

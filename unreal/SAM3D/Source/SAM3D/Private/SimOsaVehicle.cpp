@@ -1,5 +1,7 @@
 #include "SimOsaVehicle.h"
 
+#include "SimCrewAudioComponent.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -91,6 +93,7 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CrewBodies->SetupAttachment(Cabin);
 	CrewVoice = CreateDefaultSubobject<USimCrewVoiceComponent>(TEXT("CrewVoice"));
 	Views = CreateDefaultSubobject<USimViewComponent>(TEXT("Views"));
+	CrewAudio = CreateDefaultSubobject<USimCrewAudioComponent>(TEXT("CrewAudio"));
 	CabinCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CabinCamera"));
 	CabinCamera->SetupAttachment(Root);
 	CabinCamera->SetFieldOfView(80.0f);
@@ -205,14 +208,22 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			PendingSeat.Reset();
 		}
 		UpdateSim(Sim);
-		if (!bMenuOpen)
+		if (Pc != nullptr && Pc->WasInputKeyJustPressed(EKeys::F9) && (bInstructorOpen || Sim->CanInstruct()))
+		{
+			SetInstructorOpen(!bInstructorOpen);
+		}
+		if (bInstructorOpen)
+		{
+			HandleInstructor(Pc, Sim);
+		}
+		else if (!bMenuOpen)
 		{
 			HandleHotkeys(Pc, Sim);
 		}
 		AnimateFromSim(Sim);
 	}
 	HandleCabin(DeltaSeconds, Pc);
-	if (Sim != nullptr && Sim->IsScenarioRunning())
+	if (Sim != nullptr && Sim->IsScenarioRunning() && !bInstructorOpen)
 	{
 		// The player's body out of his seat to simcore (docs/crew/13_OUT_OF_THE_VEHICLE.md): ten times a second.
 		BodyReportClock += DeltaSeconds;
@@ -597,6 +608,93 @@ void ASimOsaVehicle::RunLessonAutoplay(USimWorldSubsystem* Sim, const FSimTutori
 			AutoThrottle = 0.0;
 			bAutoBrake = true;
 		}
+	}
+}
+
+void ASimOsaVehicle::SetInstructorOpen(bool bOpen)
+{
+	bInstructorOpen = bOpen;
+	bMenuOpen = false;
+	InstructorFeedback.Reset();
+}
+
+void ASimOsaVehicle::HandleInstructor(APlayerController* Pc, USimWorldSubsystem* Sim)
+{
+	if (Pc == nullptr || Sim == nullptr || !Sim->CanInstruct())
+	{
+		bInstructorOpen = false;
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Escape))
+	{
+		SetInstructorOpen(false);
+		return;
+	}
+	const TArray<FSimInstructorTrack> Picture = Sim->GetInstructorPicture();
+	int32 Pick = Picture.IndexOfByPredicate([this](const FSimInstructorTrack& T) { return T.Id == InstructorPick; });
+	if (Pick == INDEX_NONE && Picture.Num() > 0)
+	{
+		Pick = 0;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Tab) && Picture.Num() > 0)
+	{
+		Pick = (Pick + 1) % Picture.Num();
+	}
+	InstructorPick = Pick != INDEX_NONE ? Picture[Pick].Id : FString();
+	FString Why;
+	const auto Give = [&](const TCHAR* Kind, double Value, const FString& Done)
+	{
+		if (InstructorPick.IsEmpty())
+		{
+			InstructorFeedback = TEXT("No target in the sky: N enters one");
+			return;
+		}
+		InstructorFeedback = Sim->Instruct(InstructorPick, Kind, Value, Why) ? Done : FString::Printf(TEXT("%s: %s"), *InstructorPick, *Why);
+	};
+	if (Pc->WasInputKeyJustPressed(EKeys::N))
+	{
+		// A training drone 30 km out, on the bearing the hull faces, 1500 m up.
+		const double Bearing = FMath::Fmod(GetActorRotation().Yaw + 360.0, 360.0);
+		FString Id;
+		InstructorFeedback = Sim->InstructorEnterDrone(Bearing, 30.0, 1500.0, Id, Why) ? FString::Printf(TEXT("%s enters the picture"), *Id) : Why;
+		if (!Id.IsEmpty() && Why.IsEmpty())
+		{
+			InstructorPick = Id;
+		}
+		return;
+	}
+	if (Pick == INDEX_NONE)
+	{
+		return;
+	}
+	const FSimInstructorTrack& T = Picture[Pick];
+	if (Pc->WasInputKeyJustPressed(EKeys::Left) || Pc->WasInputKeyJustPressed(EKeys::Right))
+	{
+		const double To = FMath::Fmod(T.HeadingDeg + (Pc->WasInputKeyJustPressed(EKeys::Left) ? -30.0 : 30.0) + 360.0, 360.0);
+		Give(TEXT("turn"), To, FString::Printf(TEXT("%s: onto %03.0f degrees"), *T.Id, To));
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Up) || Pc->WasInputKeyJustPressed(EKeys::Down))
+	{
+		const double Step = T.AglM < 400.0 ? 50.0 : 250.0;
+		const double To = FMath::Clamp(T.AglM + (Pc->WasInputKeyJustPressed(EKeys::Up) ? Step : -Step), 10.0, 6000.0);
+		Give(TEXT("height"), FMath::RoundToDouble(To / 10.0) * 10.0, FString::Printf(TEXT("%s: to %.0f m above the ground"), *T.Id, To));
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Hyphen) || Pc->WasInputKeyJustPressed(EKeys::Equals))
+	{
+		const double To = T.SpeedMps + (Pc->WasInputKeyJustPressed(EKeys::Equals) ? 25.0 : -25.0);
+		Give(TEXT("speed"), To, FString::Printf(TEXT("%s: %.0f m/s"), *T.Id, To));
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::E))
+	{
+		Give(TEXT("evade"), 0.0, FString::Printf(TEXT("%s manoeuvres"), *T.Id));
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::J))
+	{
+		Give(TEXT("jam"), T.bJamming ? 0.0 : 1.0, FString::Printf(TEXT("%s: jammer %s"), *T.Id, T.bJamming ? TEXT("off") : TEXT("on")));
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::R))
+	{
+		Give(TEXT("release"), 0.0, FString::Printf(TEXT("%s goes back to its route"), *T.Id));
 	}
 }
 
@@ -1398,7 +1496,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		return;
 	}
 	Body = bWalking ? EBodyMode::Cabin : EBodyMode::Seat;
-	if (Pc->WasInputKeyJustPressed(NextStationKey))
+	if (!bInstructorOpen && Pc->WasInputKeyJustPressed(NextStationKey))  // the instructor's panel has Tab while open
 	{
 		NextStation();
 	}
@@ -1736,7 +1834,7 @@ void ASimOsaVehicle::UpdateTour(float DeltaSeconds)
 		// The picture late in the view: the lamps and the exposure have settled.
 		FString Name = TourViews[TourIndex].Label.Replace(TEXT(" "), TEXT("_")).Replace(TEXT("/"), TEXT("_"));
 		const FString File = FPaths::Combine(ShotFolder, FString::Printf(TEXT("%02d_%s.png"), TourIndex + 1, *Name));
-		FScreenshotRequest::RequestScreenshot(File, false, false);
+		FScreenshotRequest::RequestScreenshot(File, FParse::Param(FCommandLine::Get(), TEXT("SimShotsUI")), false);  // -SimShotsUI: with the HUD
 		UE_LOG(LogSAM3D, Log, TEXT("Cabin shot: %s"), *File);
 		ShotTaken = TourIndex;
 	}

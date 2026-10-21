@@ -32,7 +32,7 @@ SC_TEST("missions: the catalogue loads and every mission in it starts, with its 
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("    %zu missions in %zu groups, loaded in %.0f ms\n", c.Count(), c.groups.size(), ms);
-    SC_EXPECT(c.Count() == 13 + 16 + 7 + 7 + 1 && c.groups.size() == 6);  // the missions (with the two ARM drills) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
+    SC_EXPECT(c.Count() == 13 + 16 + 4 + 7 + 7 + 1 && c.groups.size() == 6);  // the missions (with the two ARM drills) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
     for (const MissionGroup& g : c.groups) {
         SC_EXPECT(!g.label.empty() && !g.notes.empty());
         for (const MissionDef& m : g.missions) {
@@ -90,7 +90,7 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
         if (!listed) std::printf("    not in the menu: scenarios/%s\n", name.c_str());
         SC_EXPECT(listed);
     }
-    SC_EXPECT(files == 13 + 18 + 7 + 7 + 1);  // the missions (with the two ARM drills) and drills, the tutorial and the seat lessons, + ranges and history, + data/scenarios/air_war_*.json, + the test range
+    SC_EXPECT(files == 13 + 18 + 4 + 7 + 7 + 1);  // the missions (with the two ARM drills) and drills, the tutorial and the seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + data/scenarios/air_war_*.json, + the test range
 }
 
 SC_TEST("missions: a mission that would not start is refused, naming its place in the list") {

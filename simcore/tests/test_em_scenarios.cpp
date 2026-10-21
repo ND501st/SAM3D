@@ -491,6 +491,76 @@ SC_TEST("em scenario: range-gate pull-off breaks a tracking radar's lock") {
     SC_EXPECT(lost_after[1] > 50);
 }
 
+// Roadmap 9.4 (voenizdat_osa_1991 p80-81): a circuit that blanks the video just after the tracked echo stops a pull-off
+// that walks the gate out; staggered repetition periods stop one that walks it in (the repeater can't anticipate the
+// next pulse). Each protection does nothing against the other kind.
+SC_TEST("em scenario: the trailing blank defeats a pull-off walking out, staggered periods one walking in") {
+    struct Case {
+        const char* jammer;
+        bool blank;
+        bool stagger;
+        bool holds;
+    };
+    const Case cases[] = {
+        {"generic_rgpo_ku", false, false, false}, {"generic_rgpo_ku", true, false, true}, {"generic_rgpo_ku", false, true, false},
+        {"generic_rgpo_leading_ku", false, false, false}, {"generic_rgpo_leading_ku", false, true, true},
+        {"generic_rgpo_leading_ku", true, false, false},
+    };
+    for (const Case& c : cases) {
+        EmWorld w(kOrigin, nullptr, 3);
+        SC_EXPECT(w.SetLibrary(GenericLib()));
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 4.5);
+        const int tr = w.AddRadar(site, "generic_track_ku", true);
+        const int jet = AddAircraft(w, "striker", Side::Blue, 2000.0, 15000.0, 2000.0, {0.0, -150.0, 0.0});
+        const int j = w.AddJammer(jet, c.jammer, false);
+        RadarState* r = w.Scene().FindRadar(tr);
+        r->has_designation = true;
+        r->designation = w.Scene().FindPlatform(jet)->position;
+        r->rgpo_trailing_blank = c.blank;
+        r->prf_staggered = c.stagger;
+        bool locked = false, lost = false, captured = false;
+        for (int i = 0; i < 400; ++i) {
+            if (i == 50) w.Scene().FindJammer(j)->on = true;
+            Fly(w, 0.1);
+            w.Step(0.1);
+            r = w.Scene().FindRadar(tr);
+            captured = captured || r->rgpo_captured;
+            if (r->locked_track != 0) locked = true;
+            if (locked && r->locked_track == 0) lost = true;
+        }
+        SC_EXPECT(locked);
+        if (lost == c.holds || captured == c.holds) {
+            std::printf("    %s blank %d stagger %d: lost %d captured %d\n", c.jammer, c.blank, c.stagger, lost, captured);
+        }
+        SC_EXPECT(lost != c.holds);
+        SC_EXPECT(captured != c.holds);
+    }
+}
+
+// Switched on while the gate is still on the echo, the protection takes it back from the repeater.
+SC_TEST("em scenario: switching the protection on in time keeps the gate on the echo") {
+    EmWorld w(kOrigin, nullptr, 3);
+    SC_EXPECT(w.SetLibrary(GenericLib()));
+    const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 4.5);
+    const int tr = w.AddRadar(site, "generic_track_ku", true);
+    const int jet = AddAircraft(w, "striker", Side::Blue, 2000.0, 15000.0, 2000.0, {0.0, -150.0, 0.0});
+    const int j = w.AddJammer(jet, "generic_rgpo_ku", false);
+    RadarState* r = w.Scene().FindRadar(tr);
+    r->has_designation = true;
+    r->designation = w.Scene().FindPlatform(jet)->position;
+    bool released = false;
+    for (int i = 0; i < 400; ++i) {
+        if (i == 50) w.Scene().FindJammer(j)->on = true;
+        Fly(w, 0.1);
+        w.Step(0.1);
+        r = w.Scene().FindRadar(tr);
+        if (r->rgpo_captured && !r->rgpo_trailing_blank) r->rgpo_trailing_blank = true;  // at once
+        if (r->rgpo_trailing_blank && !r->rgpo_captured) released = true;
+    }
+    SC_EXPECT(released);
+    SC_EXPECT(r->locked_track != 0);
+}
+
 SC_TEST("em scenario: chaff fools a radar without MTI; external coherence cancels drifting chaff") {
     int false_plots[3] = {0, 0, 0};
     for (int mode = 0; mode < 3; ++mode) {
@@ -513,6 +583,34 @@ SC_TEST("em scenario: chaff fools a radar without MTI; external coherence cancel
     SC_EXPECT(false_plots[0] > 5);
     SC_EXPECT(false_plots[1] > 5);   // 25 m/s drift is outside the MTI notch
     SC_EXPECT(false_plots[2] < false_plots[1] / 3 + 1);
+}
+
+// Roadmap 6.4: the MTI works out to its working range only; beyond it the normal channel is gated in and nothing is
+// cancelled (the Osa's search radar: 35 km, voenizdat_osa_1991 p30). Still chaff, calm air, internal coherence.
+SC_TEST("em scenario: past the MTI's working range still chaff is no longer cancelled") {
+    int false_plots[2] = {0, 0};
+    const double north[2] = {25000.0, 40000.0};
+    for (int k = 0; k < 2; ++k) {
+        EmLibrary lib = GenericLib();
+        const int rd = lib.Radar("generic_search_c");
+        SC_EXPECT(rd >= 0);
+        if (rd < 0) return;
+        lib.radars[static_cast<std::size_t>(rd)].mti_max_range_m = 35000.0;
+        SC_EXPECT(lib.radars[static_cast<std::size_t>(rd)].max_range_m > 45000.0);
+        EmWorld w(kOrigin, nullptr, 9);
+        SC_EXPECT(w.SetLibrary(lib));
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+        const int radar = w.AddRadar(site, "generic_search_c", true);
+        w.Scene().FindRadar(radar)->mti = MtiMode::Internal;
+        w.AddChaff(EnuAt(0.0, north[k], 2000.0), 50.0, 120.0);
+        for (int i = 0; i < 300; ++i) {
+            w.Step(0.1);
+            for (const RadarPlot& p : w.Scene().FindRadar(radar)->last_plots) false_plots[k] += p.false_target ? 1 : 0;
+        }
+    }
+    std::printf("    still chaff plots with MTI: at 25 km %d, at 40 km %d\n", false_plots[0], false_plots[1]);
+    SC_EXPECT(false_plots[0] <= 1);
+    SC_EXPECT(false_plots[1] > 5);
 }
 
 SC_TEST("em scenario: a TDOA group fixes an airborne radar (Ramona/Tamara style)") {

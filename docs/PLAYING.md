@@ -151,6 +151,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | Keys | What |
 |---|---|
 | F1-F8, F10, F11 | Camera views (above) |
+| F9 | The trainer's instructor panel (roadmap 10.3; where the simulation runs: single player or the server) |
 | Right mouse, wheel | Turn the camera, closer / further |
 | Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |
 | W / S, A / D, Space | Drive, steer, brake (a halt for the crew) |

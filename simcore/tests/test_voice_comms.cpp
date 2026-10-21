@@ -420,14 +420,16 @@ SC_TEST("osa: the commander hears the PU-12's designation only with his A-1 on �
     SC_EXPECT(r.PlayerRadioReports("senior_operator").empty());
     SC_EXPECT(r.ReleaseTarget("d1"));
     Steps(r, 150.0);
-    SC_EXPECT(r.DesignationsHeard() == 0);  // on ВС: the net is not in his ears
+    SC_EXPECT(r.DesignationsHeardCount() == 0);  // on ВС: the net is not in his ears
     SC_EXPECT(!r.PlayerSay("commander", "readback") && r.LastRefusal().find("no target") != std::string::npos);
     SC_EXPECT(!r.PlayerSay("commander", "report_ready"));  // nor his readiness
     r.SeatSet("commander", "intercom.a1", 2);  // Р-123
     Steps(r, 150.0);
     SC_EXPECT(r.ReportWords("commander", "report_ready").first == "21 к бою готов, каналы 2, ракет 6!");
+    SC_EXPECT(!r.PlayerSay("commander", "report_ready"));  // his chest switch at ПРМ: nothing goes out (7.8)
+    r.SeatSet("commander", "radio.chest", 1);              // held at ПРД to talk
     SC_EXPECT(r.PlayerSay("commander", "report_ready"));
-    SC_EXPECT(r.DesignationsHeard() >= 1);
+    SC_EXPECT(r.DesignationsHeardCount() >= 1);
     const std::pair<std::string, std::string> w = r.ReportWords("commander", "readback");
     SC_EXPECT(w.first.find("10, я 21: цель ") != std::string::npos && w.first.find("…") == std::string::npos);
     SC_EXPECT(r.PlayerSay("commander", "readback"));

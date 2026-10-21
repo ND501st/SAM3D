@@ -16,6 +16,7 @@
 // It only reads the console and sets what the C2 network and the link model expose; it decides nothing about the battle.
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <string>
 #include <utility>
@@ -52,7 +53,22 @@ public:
             default: break;
         }
         if (console.panel.Get(r.squelch) == 1) loss += RangeLossDb(def_.range_whip_4m_km, def_.range_whip_4m_squelch_km);
-        return loss;
+        return loss + tuning_[static_cast<std::size_t>(set)].loss_db;
+    }
+
+    // What the set's tuning means now (radio_setup.hpp; the runner tells it each step): on its net's frequency or not
+    // (`why` then says what it is on), and the antenna mismatch's loss.
+    void SetTuning(int set, bool on_frequency, const std::string& why, double loss_db) {
+        if (set < 0 || set > 1) return;
+        tuning_[static_cast<std::size_t>(set)] = {on_frequency, why, loss_db};
+    }
+
+    // Is set `set` keyed now: the commander's chest switch at ПРД with his A-1 on Р-123 and his headset on that set
+    // (`commander_set`), or for the left set the driver's chest switch with his ПВ on РС.
+    bool Keyed(int set, int commander_set, const ConsoleData& console) const {
+        if (ChestKeyed(console) && CommanderOnRadio(console) && set == commander_set) return true;
+        return set == 0 && !def_.driver_chest.empty() && console.panel.Get(def_.driver_chest) == 1 &&
+               console.panel.Get(def_.driver) == def_.driver_radio_position;
     }
 
     // Can this set hear? Switched on, warm, volume up. `why` says what is wrong.
@@ -67,6 +83,8 @@ public:
             reason = name + " is still warming up (10 min after switching on)";
         } else if (console.panel.Get(r.volume) != 1) {
             reason = name + " has its volume turned right down";
+        } else if (!tuning_[static_cast<std::size_t>(set)].on_frequency) {
+            reason = name + " " + tuning_[static_cast<std::size_t>(set)].why;
         }
         if (why != nullptr) *why = reason;
         return reason.empty();
@@ -78,10 +96,66 @@ public:
         return console.panel.Get(r.power) == 1 && console.equipment.IsReady(r.transmit);
     }
 
+    // Can the commander go on the air on this set (roadmap 7.8)? The set switched on and its transmitter ready (СИМПЛЕКС,
+    // warmed up: 3 min after duty reception), and his A-1 on Р-123 with the intercom working, so his chest switch keys it
+    // (r123m_training: the chest switch's tangent to ПРД transmits, released it receives). `why` says what is wrong.
+    bool CanTransmit(int set, const ConsoleData& console, std::string* why = nullptr) const {
+        std::string reason;
+        if (set < 0 || set >= static_cast<int>(def_.radios.size())) {
+            reason = "no such set";
+        } else {
+            const CommsRadioDef& r = def_.radios[static_cast<std::size_t>(set)];
+            const std::string name = "R-123M " + r.name;
+            if (console.panel.Get(r.power) != 1) {
+                reason = name + " is switched off";
+            } else if (!console.equipment.IsReady(r.warm)) {
+                reason = name + " is still warming up (10 min after switching on)";
+            } else if (!console.equipment.IsReady(r.transmit)) {
+                reason = name + " is not ready to transmit (СИМПЛЕКС, 3 min after duty reception)";
+            } else if (!tuning_[static_cast<std::size_t>(set)].on_frequency) {
+                reason = name + " " + tuning_[static_cast<std::size_t>(set)].why;
+            } else if (!CommanderOnRadio(console)) {
+                reason = "the commander's A-1 is not on Р-123";
+            }
+        }
+        if (why != nullptr) *why = reason;
+        return reason.empty();
+    }
+    // The commander's chest switch is at ПРД (a player holds it there to talk; an NPC keys it as he speaks).
+    bool ChestKeyed(const ConsoleData& console) const { return !def_.chest.empty() && console.panel.Get(def_.chest) == 1; }
+    bool HasChest() const { return !def_.chest.empty(); }
+    // The set whose ТОН. ВЫЗОВ is pressed this step (-1: none).
+    int TonePressed(const ConsoleData& console) const {
+        for (std::size_t i = 0; i < def_.radios.size(); ++i) {
+            if (!def_.radios[i].tone.empty() && console.panel.Get(def_.radios[i].tone) == 1) return static_cast<int>(i);
+        }
+        return -1;
+    }
+    const std::string& SetName(int set) const {
+        static const std::string none;
+        return set >= 0 && set < static_cast<int>(def_.radios.size()) ? def_.radios[static_cast<std::size_t>(set)].name : none;
+    }
+
     bool CommanderOnRadio(const ConsoleData& console) const {
         return console.panel.Get(def_.commander) == def_.commander_radio_position && console.equipment.IsReady(def_.intercom_subsystem);
     }
     bool CommanderOff(const ConsoleData& console) const { return console.panel.Get(def_.commander) == def_.commander_off_position; }
+
+    // Does the seat have an R-124 subscriber box (is it on the intercom)? Every seat does when the data lists none.
+    bool HasBox(const std::string& station) const {
+        if (def_.subscribers.empty()) return true;
+        for (const CommsDef::Subscriber& s : def_.subscribers) {
+            if (s.station == station) return true;
+        }
+        return false;
+    }
+    // The box at a seat ("" if none).
+    std::string BoxOf(const std::string& station) const {
+        for (const CommsDef::Subscriber& s : def_.subscribers) {
+            if (s.station == station) return s.box;
+        }
+        return std::string();
+    }
 
     // The cabin is too loud to talk: the turbine or the take-off generator is running.
     bool Noisy(const ConsoleData& console) const {
@@ -97,6 +171,7 @@ public:
     double OrderDelayS(const std::string& role, const ConsoleData& console) const {
         if (role == "commander") return 0.0;
         if (CommanderOff(console)) return ShoutS(console);
+        if (!HasBox(role)) return ShoutS(console);  // no subscriber box at his seat: not on the intercom
         if (role == "deputy_commander" && console.panel.Get(def_.deputy) == def_.deputy_radio_position) return ShoutS(console);
         if (role == "driver" && console.panel.Get(def_.driver) == def_.driver_radio_position) return ShoutS(console);
         return 0.0;
@@ -136,7 +211,13 @@ public:
     }
 
 private:
+    struct Tuning {
+        bool on_frequency = true;
+        std::string why;
+        double loss_db = 0.0;
+    };
     CommsDef def_;
+    std::array<Tuning, 2> tuning_{};
     bool started_ = false;
     bool was_off_ = false;
     bool was_noisy_ = false;

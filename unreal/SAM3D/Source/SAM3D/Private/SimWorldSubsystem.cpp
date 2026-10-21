@@ -1440,6 +1440,96 @@ bool USimWorldSubsystem::TryCrewOrder(const FString& OrderId, FString& OutReason
 	return bOk;
 }
 
+TArray<FSimInstructorTrack> USimWorldSubsystem::GetInstructorPicture() const
+{
+	TArray<FSimInstructorTrack> Out;
+	if (!Runner)
+	{
+		return Out;
+	}
+	const simcore::Vec3 Unit = Runner->Def().unit_position;
+	for (const simcore::ScenarioRunner::InstructorTrack& T : Runner->InstructorPicture())
+	{
+		FSimInstructorTrack F;
+		F.Id = ToF(T.id);
+		F.Name = ToF(T.name);
+		const simcore::Vec3 Rel = T.position - Unit;
+		F.RangeKm = FMath::Sqrt(Rel.x * Rel.x + Rel.y * Rel.y) / 1000.0;
+		F.AzimuthDeg = FMath::Fmod(FMath::RadiansToDegrees(FMath::Atan2(Rel.x, Rel.y)) + 360.0, 360.0);
+		F.HeadingDeg = T.heading_deg;
+		F.SpeedMps = T.speed_mps;
+		F.AglM = T.agl_m;
+		F.bHeld = T.held;
+		F.bHasJammer = T.has_jammer;
+		F.bJamming = T.jamming;
+		Out.Add(F);
+	}
+	Out.Sort([](const FSimInstructorTrack& A, const FSimInstructorTrack& B) { return A.RangeKm < B.RangeKm; });
+	return Out;
+}
+
+bool USimWorldSubsystem::Instruct(const FString& Target, const FString& Kind, double Value, FString& OutWhy)
+{
+	if (!CanInstruct())
+	{
+		OutWhy = TEXT("the instructor's seat works where the simulation runs");
+		return false;
+	}
+	simcore::InstructorOrder Order;
+	if (!simcore::InstructorKindFrom(ToStd(Kind), Order.kind))
+	{
+		OutWhy = FString::Printf(TEXT("unknown order '%s'"), *Kind);
+		return false;
+	}
+	Order.target = ToStd(Target);
+	Order.value = Value;
+	std::string Why;
+	const bool bOk = Runner->Instruct(Order, &Why);
+	OutWhy = bOk ? FString() : ToF(Why);
+	return bOk;
+}
+
+bool USimWorldSubsystem::InstructorEnterDrone(double BearingDeg, double RangeKm, double HeightM, FString& OutId, FString& OutWhy)
+{
+	if (!CanInstruct())
+	{
+		OutWhy = TEXT("the instructor's seat works where the simulation runs");
+		return false;
+	}
+	// A fresh id: i1, i2, ...
+	TSet<FString> Taken;
+	for (const simcore::ScenarioTarget& T : Runner->Def().targets)
+	{
+		Taken.Add(ToF(T.id));
+	}
+	int32 N = 1;
+	while (Taken.Contains(FString::Printf(TEXT("i%d"), N)))
+	{
+		++N;
+	}
+	OutId = FString::Printf(TEXT("i%d"), N);
+	const double B = FMath::DegreesToRadians(BearingDeg);
+	const simcore::Vec3 Unit = Runner->Def().unit_position;
+	simcore::ScenarioTarget T;
+	T.id = ToStd(OutId);
+	T.name = "Instructor's drone (placeholder)";
+	T.type = "Air+FixedWing+Drone";
+	T.target_class = "drone";
+	T.size_m = 4.0;
+	T.speed_mps = 150.0;
+	T.rcs_m2 = 1.0;
+	// From RangeKm out on the bearing, straight past the vehicle 2 km to its side and on as far again.
+	const simcore::Vec3 Out{FMath::Sin(B), FMath::Cos(B), 0.0};
+	const simcore::Vec3 Side{Out.y, -Out.x, 0.0};
+	T.start = Unit + Out * (RangeKm * 1000.0) + simcore::Vec3{0.0, 0.0, HeightM};
+	T.waypoints = {Unit - Out * (RangeKm * 1000.0) + Side * 2000.0 + simcore::Vec3{0.0, 0.0, HeightM}};
+	T.start = T.start + Side * 2000.0;
+	std::string Why;
+	const bool bOk = Runner->InstructorEnter(T, &Why);
+	OutWhy = bOk ? FString() : ToF(Why);
+	return bOk;
+}
+
 FSimDrillAdvice USimWorldSubsystem::GetDrillAdvice(const FString& Station, const FString& TaskId) const
 {
 	FSimDrillAdvice Out;
@@ -1521,6 +1611,27 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, C.id);
 			Out.Add({ToF(C.id), ToF(Words.first), ToF(Words.second), false});
 		}
+	}
+	return Out;
+}
+
+TArray<FSimPositionWorkState> USimWorldSubsystem::GetPositionWorks() const
+{
+	TArray<FSimPositionWorkState> Out;
+	simcore::em::ViewExtras Scratch;
+	const simcore::em::ViewExtras* X = GetViewExtras(Scratch);
+	if (X == nullptr)
+	{
+		return Out;
+	}
+	for (const simcore::em::ViewWork& K : X->works)
+	{
+		FSimPositionWorkState W;
+		W.Location = ToUnreal(K.position);
+		W.YawDeg = HeadingToYawDeg(W.Location, K.heading_deg);
+		W.bEmplacement = K.emplacement;
+		W.bNets = K.nets;
+		Out.Add(W);
 	}
 	return Out;
 }
@@ -1911,7 +2022,7 @@ void USimWorldSubsystem::PumpKnowledge()
 			V.time_s = Now;
 			if (R != nullptr && R->EngagementOn())
 			{
-				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time()), Keys);
+				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time(), R->Fuel()), Keys);
 			}
 			if (R != nullptr)
 			{

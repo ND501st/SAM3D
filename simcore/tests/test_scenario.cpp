@@ -57,7 +57,7 @@ SC_TEST("scenario: the practice shoot runs from the march to a launch with no mi
     std::string error;
     SC_EXPECT(LoadScenarioFile(PracticePath(), kData, def, console, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(def.crew.size() == 5 && def.targets.size() == 1 && def.triggers.size() == 4);
+    SC_EXPECT(def.crew.size() == 5 && def.targets.size() == 1 && def.triggers.size() == 5);
     ScenarioRunner runner(std::move(def), std::move(console));
     SC_EXPECT(runner.RunToEnd(0.1));
     SC_EXPECT(runner.EndReason() == "all targets gone");

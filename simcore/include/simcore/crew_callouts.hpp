@@ -180,6 +180,8 @@ public:
     }
     // Everything said so far.
     const std::vector<SpokenCallout>& Log() const { return log_; }
+    // What is being said now (started, not finished), on every channel.
+    const std::vector<SpokenCallout>& SpeakingNow() const { return speaking_; }
     std::size_t Pending() const { return pending_.size(); }
     bool Speaking(const std::string& channel) const { return Busy(channel); }
     // What is being said right now, one per channel (the voice and the speakers' bodies, roadmap 8.10).

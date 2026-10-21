@@ -1,0 +1,46 @@
+{
+  "scenario_id": "osa_rgpo_em",
+  "name": "Osa-AK against a range-gate pull-off (EM radars; the NPC commander runs the crew)",
+  "description": "A fictional practice shoot against deception jamming (roadmap 9.4). A strike aircraft with a range-gate pull-off repeater comes in from the north. Once the tracking radar has it, the repeater takes the range gate and walks it off: the operator sees the mark split from the jamming pulse and reports it, the commander orders the counter-jamming on (УВ. ПОМЕХА, СДЦ), the lock is taken again and holds, and the crew fires. When the fight is over the commander has the protection switched off again (voenizdat_osa_1991 p259). Take any seat.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. The aircraft's numbers and the repeater (generic_rgpo_ku in data/em/generic.json) are PLACEHOLDERS. The drills are counter_pull_off and pull_off_protection_off (data/procedures/osa_ak.json).",
+  "seed": 1,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "readiness": "deployed",
+    "em": {
+      "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
+      "extra_libraries": [ "em/generic.json" ],
+      "jammers": [
+        { "jammer": "generic_rgpo_ku", "target": "t1", "on_at_s": 0,
+          "notes": "A repeater that answers the tracking radar's pulses and walks the range gate out (delayed pull-off)." }
+      ]
+    },
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander" },
+    { "name": "Deputy commander", "role": "deputy_commander" },
+    { "name": "Senior operator", "role": "senior_operator" },
+    { "name": "Operator", "role": "operator" },
+    { "name": "Driver", "role": "driver" }
+  ],
+  "targets": [
+    {
+      "id": "t1", "name": "Strike aircraft with a pull-off repeater (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": 3000, "north_m": 40000, "up_m": 1500 },
+      "waypoints": [ { "east_m": 3000, "north_m": -30000, "up_m": 1500 } ],
+      "speed_mps": 200, "rcs_m2": 3.0, "appear_at_s": 20,
+      "notes": "Placeholder numbers."
+    }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 600, "when_targets_gone": false }
+}

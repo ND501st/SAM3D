@@ -36,6 +36,8 @@ the readiness state they start in (march, deployed, powered).
     "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },  // optional, see below
     "readiness": "deployed",                          // optional: "cold" (default) or a console readiness state
     "fuel_fraction": 1.0,                             // optional: the tank's starting level, 0 to 1 (roadmap 7.4)
+    "radio_presets": "set",                           // optional: "set" (the c2 frequency plan on the R-123Ms' fixators) or
+                                                      // "unset" (the crew must set them up: preset_setup_left/right, 7.8)
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "heading_deg": 0,                                 // optional: the hull's true heading, clockwise from north
     "inputs": { "vehicle_stopped": false },           // starting values of console inputs
@@ -231,6 +233,13 @@ each change. The 24 h is the only figure a source gives (`video_osa`, unverified
 post's navigation error, and the vehicle crews aim by its last marks instead of the truth when their radars are
 silent. A target gives its board type with `"board_type"` (0-9; default 1 for a friend, else 9) and its formation with
 `"formation"`. The debrief logs each target's first mark ("PU-12 ... on the board: 6201 12/21 at 45 km, 00-71").
+
+A trigger can give the trainer's instructor's orders (roadmap 10.3, `simcore/instructor.hpp`): `{ "instructor": "turn",
+"target": "t1", "to": 270 }`. Orders: `take`, `release`, `turn` (`to`: the true heading, degrees), `height` (`to`: metres
+above the ground), `speed` (`to`: m/s), `evade` (a jink), `jam` (`to`: 1 on, 0 off; the target must carry a jammer in
+`own_unit.em.jammers`, which then follows his switch). He holds two targets at a time; an order he can't give is logged
+("turn not done: ..."). `osa_trainer.json` is his scripted drill: a drone turned away and brought back low, then a strike
+aircraft whose pod he switches on.
 
 ## Ranges and history (roadmap 10.1, 10.2)
 

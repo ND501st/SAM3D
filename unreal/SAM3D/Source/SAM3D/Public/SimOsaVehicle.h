@@ -12,6 +12,7 @@ class USimCrewBodiesComponent;
 class USimCrewVoiceComponent;
 class USimPu12MastComponent;
 class USimViewComponent;
+class USimCrewAudioComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
@@ -287,6 +288,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
 	bool IsMissionMenuOpen() const { return bMissionMenuOpen; }
 
+	/**
+	 * The trainer's instructor panel (roadmap 10.3): F9 opens and closes it (F7 is a camera view) where the simulation runs. While it is open
+	 * it has the keys: Tab the next target, Left/Right turn it 30 degrees, Up/Down send it up or down, -/= its speed,
+	 * E a manoeuvre, J its jammer, R let it go, N enter a training drone ahead of the vehicle.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Instructor")
+	void SetInstructorOpen(bool bOpen);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	bool IsInstructorOpen() const { return bInstructorOpen; }
+
+	/** The target the panel has picked ("" for none). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	FString GetInstructorPick() const { return InstructorPick; }
+
+	/** What his last order did, or why it couldn't be done. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Instructor")
+	FString GetInstructorFeedback() const { return InstructorFeedback; }
+
 	/** Restart and the missions menu are single player (a networked game only resumes or quits). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
 	bool CanLeaveMission() const;
@@ -390,6 +410,9 @@ protected:
 	/** The crew's voices: their callouts on the intercom and the battery net (roadmap 8.10). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USimCrewVoiceComponent> CrewVoice;
+	/** What the crew hears: the radio's hiss and call tone in the commander's headset, the crew's words (roadmap 7.7). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimCrewAudioComponent> CrewAudio;
 
 	/** The camera views on the F keys (docs/PLAYING.md). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
@@ -483,6 +506,10 @@ private:
 	FString PendingSeat;
 	bool bMissionMenuOpen = false;
 	void HandleMissionMenu(APlayerController* Pc);
+	bool bInstructorOpen = false;
+	FString InstructorPick;
+	FString InstructorFeedback;
+	void HandleInstructor(APlayerController* Pc, USimWorldSubsystem* Sim);
 	int32 Station = 0;
 	FString StationLabel;
 	/** Standing at a far panel of the seat (L onto one of its controls beyond arm's reach): the eye's step from the seat

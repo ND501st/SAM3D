@@ -73,7 +73,11 @@ struct OrderDef {
     // 07_COMMANDER_MODE.md §1.3): "contact" (a hostile reported, with its range), "tracked" (a target tracked),
     // "jamming" (the track is on a jammer), "missiles" (a missile on the launcher).
     std::vector<std::string> needs;
+    // Work the order starts that is not a console drill (ScenarioRunner carries it out; IsOrderAction lists them):
+    //   compass_survey  the crew chief finds Qc with the artillery compass at a halt (orientation.hpp)
+    std::vector<std::string> actions;
 };
+inline bool IsOrderAction(const std::string& a) { return a == "compass_survey"; }
 
 // The kinds an order's "needs" may name.
 inline bool KnownOrderNeed(const std::string& n) {
@@ -381,7 +385,7 @@ private:
             const json::Value& o = arr->items[i];
             const std::string p = Index("orders", i);
             OrderDef d;
-            if (!Keys(o, p, {"callout", "task", "procedures", "needs", "source", "confidence", "notes"}) ||
+            if (!Keys(o, p, {"callout", "task", "procedures", "needs", "actions", "source", "confidence", "notes"}) ||
                 !RequireString(o, p, "callout", d.callout) || !OptionalString(o, p, "task", d.task) || !Provenance(o, p) ||
                 !StringList(o, p, "needs", d.needs)) {
                 return false;
@@ -412,6 +416,10 @@ private:
                 }
             } else if (!message_.empty()) {
                 return false;
+            }
+            if (!StringList(o, p, "actions", d.actions)) return false;
+            for (std::size_t j = 0; j < d.actions.size(); ++j) {
+                if (!IsOrderAction(d.actions[j])) return Fail(Index(Join(p, "actions"), j), "unknown action '" + d.actions[j] + "'");
             }
             out.orders.push_back(std::move(d));
         }
