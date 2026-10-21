@@ -47,9 +47,9 @@ The sources disagree:
   searcher-draughtsman (the plotter), signalman, driver.
 * `armforc_pu12`: four: squad leader, radiotelephone operator-reconnaissance, operator, driver-mechanic-electrician.
 
-Decision (to confirm): five, as the ČSLA manual, with the battery commander one of them; the four-man version is the
-crew without the battery commander. The flak11 PU-12 pages (`flak11`, NVA) should settle it; the site's certificate had
-expired on 16 Oct 2026.
+**Settled (17 Oct 2026, `docs/research/PU12_RESEARCH_2026-10.md`):** five, as the ČSLA manual: the battery commander
+works in the post, and the post has four numbers of its own (squad leader, operator-plotter, radiotelephone operator,
+driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without him.
 
 ### 2.3 Equipment (PU-12M, ČSLA manual via `valka_pu12`; cross-checked with `armforc_pu12`)
 
@@ -63,7 +63,7 @@ expired on 16 Oct 2026.
 | Power | AB-1-P/30 petrol generator set (220 V, 50 Hz) with URB control; G-290B generator on the move; VS-27 rectifier, regulators, filters; 2 x 6ST-75 batteries |
 | NBC and other | DP-3B radiometer, chemical survey kit, DK-4, filter-ventilation; hours counter 228-CP-PO; water tank; operators' table; lights, fans; the SChK command panel |
 | Capacity (armforc) | 99 targets displayed, 10 processed at once, 6 fire units controlled |
-| Mast | 6 m (armforc); "about 16 m" raised by the signalman (a forum user on valka): to be settled |
+| Mast | **16 m** (`flak11` PU12-1, tier 1; a ČSLA caption on valka); 6 m in `armforc_pu12` and `shilka_narod` |
 | Radars it can take | 1RL-14, 1RL-114(M), 1RL-111D, 1RL-128D(M1), 1RL-131, 1RL-13M1/M2 (`valka_pu12`) |
 
 ### 2.4 How it works (what the sim already does, and what is missing)
@@ -131,11 +131,127 @@ expired on 16 Oct 2026.
 | P6 | Interior model and cabin data; displays; seats | a player can sit at every PU-12M station |
 | P7 | Multiplayer: PU-12M seats in the crew system; the battery commander's picture over the network | a commander and Osa crews play together |
 
-## 6. Placeholder now
+## Status
 
-`SM_PU12M` (`art/support_vehicles/`, imported to `/Game/SAM3D/Vehicles/`): the BTR-60PB hull at 7.22 x 2.825 m, 2.055 m
-to the armour top, four axles at the BTR-60PB's spacing, the mast stowed on the roof, four whip antennas, the roof box,
-vision blocks and side doors. No interior. Battery entities of kind `command_post` use it on the map.
+- **P0 done (17 Oct 2026):** `docs/research/PU12_RESEARCH_2026-10.md`. The crew (five), the stations and the equipment
+  at each from the ČSLA manual's plan and workplace drawings (`csla_pu12_manual`, tier 1), the NVA pages PU12-0 and
+  PU12-1 (`flak11`, tier 1), a Russian training text (`ru_pu12_text`) and a veteran's photographs (`shilka_narod`).
+  Still to find: the ASPD-U panels' controls, the deployment drill's order, the plotters' handbook.
+- **P1 done:** `data/systems/pu12m.json` (every value cited) and `data/procedures/pu12m.json`: five stations, 25
+  controls, 26 subsystems (power from the AB-1, the G-290B or a network; the mast; five radios; GAK, PAB-2, KP-4, DTP;
+  the ASPD-U), one deployment drill per seat, stowing, the march and deployed states. Tests
+  `simcore/tests/test_pu12m_console.cpp`: a crew of five deploys from cold in about 10 min (the norm: at most 18).
+- **P2 first pass:** `data/crew/pu12m_crew.json` (the five seats, the orders Пункт управления развернуть / свернуть and
+  the single jobs, the reports, the tasks, the world facts) and `data/scenarios/pu12m_deploy.json`: with nothing
+  scripted, the NPC battery commander has the post deployed in 602 s; each seat reports its part. The crew data names
+  its commanding seat (`commander_seat`), so the runner's NPC commander, reminders and pictures work for any crew. The
+  post's own board (`post` in the console; the scenario's `command_post`) fills only while the ASPD-U receives the
+  regiment's picture or a radar is cabled in. Crew map: `docs/crew/generated/pu12m_action_map.md`.
+- **P3 done (simcore):** `simcore/command_post.hpp`, `data/command/aspd_u.json`, the scenario's `post` block.
+  - The regiment's telecode arrives once a cycle while the post is within the R-407's 15 km of the regiment's post and
+    the net is on the air (outages: jamming, a cut).
+  - The ASPD-U's tracks on the IT-45: numbers 00-99, heights in 0.2 km steps and zones H1-H3, speed vectors in 12.5 m/s
+    steps. The tube follows the ФР block's scale switch (35, 50, 100 km).
+  - A cabled radar's picture is taken off by the operator, 12 targets at 2-3 s each.
+  - The operator-plotter writes the board by hand, one mark at a time, new targets first and nearest first, a target
+    again after each new fix; his tier sets his pace. A player in the seat writes the marks himself.
+  - The navigation error comes from the orientation drill: up to 5 degrees and 3 km until the post is oriented with the
+    aiming circle (flak11), then small (his tier's), growing on the move by up to 1 % of the distance (the KP-4).
+  - Not yet: the telecode through the EM layer's link budget (its reach is the R-407's published range, jamming an
+    outage); the IT-45 drawn in Unreal (P6).
+- **P4 done (simcore):** the battery commander in the post. Scenario `data/scenarios/pu12m_battery.json` (four NPC
+  launchers, a TZM, a raid with a friend in it); tests `simcore/tests/test_pu12m_battery.cpp`.
+  - Designations go by voice on the battery net (the post's FuG-4 up and the mast raised), one message at a time:
+    number, azimuth and range from the launcher (flak11). He reads the number off the board and the place off the
+    IT-45, its latest fix led along its speed vector to when the launcher hears it.
+  - The launcher's crew takes the target nearest the point it was told within 6 km (sam3d): with the post's navigation
+    error it can take another target, or report «цели не наблюдаю».
+  - The NPC battery commander gives each hostile on the board to the nearest free launcher (its sector first), never a
+    friend; a player in his seat does it himself (`DesignateBatteryTarget`).
+  - The launchers report on the battery net (к бою готов with their missiles, launch, result, out of missiles, reloaded);
+    the post hears them only while its set is up, and writes them on the IT-1 and IT-2 boards (`StatusBoards`).
+  - Battery orders (march, halt, formation, ambush, river crossing, reload, emission control) and sectors of fire work
+    from the post as before (`OrderBattery`, `SetBatterySector`). Not yet in Unreal: the boards and the designation UI
+    (P6).
+- **P5 done:** the exterior traced from photographs (docs/MODELLING_FROM_PHOTOS.md, the new "Vehicles" section).
+  - `tools/blender/pu12m_trace.py` (the hull's stations, wheels, roof fittings, the mast's geometry), tested by
+    `tools/tests/test_pu12m_trace.py` (published dimensions, the wheels clear of the hull, the fittings clear of each
+    other, the mast nesting and reaching 16 m).
+  - The side profile: a BTR-60PB's side photograph with its camera fitted (EXIF focal length, the published length,
+    roof height, track and the ČSLA plan's widths as priors; 3.5 px rms; the wheelbase lands on the published 4.40 m).
+    The overlay from that camera lines up the tyres, the chine, the ends and the glacis; the roof shows 6-10 cm low
+    (the photo reads 5-8 % taller than the published 2.055 m).
+  - `tools/blender/pu12m_model.py` builds `SM_PU12M` (hull, wheels, hatches, vision blocks, lights, the roof box, whips,
+    rails, the side stowage box, the exhaust, the mast's base), the mast's five sections, the AB-1 set and a guy, and
+    `art/pu12m/pu12m_rig.json`.
+  - Unreal: `USimPu12MastComponent` stands the sections for an extension 0-1 (stowed 1.5 m above the roof, raised to 16 m),
+    shows eight guys at two heights once it is up and the AB-1 once it is set out. A battery's PU-12M follows its
+    deployment at the mast's pace; the player's own post follows the console's `mast_up` progress
+    (`USimWorldSubsystem::GetPostMastExtension`, `IsPostGeneratorOut`). Test `SAM3D.PU12M.Mast`.
+
+- **P6 done (17-18 Oct 2026):** the interior, the cabin, the displays, the seats.
+  - `tools/blender/pu12m_interior_trace.py`: the ČSLA equipment plan read item by item (scaled on the hull's outline as
+    the exterior is; 47 of its 53 numbered items, every one inside the hull and clear of the others, each move noted),
+    heights from the workplace drawings and the veteran's photographs, the hull's inside from the exterior's stations.
+    Tests `tools/tests/test_pu12m_interior_trace.py`. Acceptance: the top view rendered from the model over the plan
+    (`out/pu12m_interior/overlay_plan.png`, made by the scratch overlay script described in the modelling doc).
+  - The seats from the plan: the driver front left, the squad leader front right, and **a bench across the compartment
+    facing forward with three places**: the operator-plotter at the right (the IT-45 straight ahead of him, the ДХ
+    keypad at its left and the ФР block at its right, as the photograph shows), the battery commander in the middle,
+    the radio operator at the left (the R-111 with an R-123M on it ahead, his table between). Eye points 1.22 m above
+    the floor (the body model's), every control within reach, three of them standing (`stand_for` in the crew data).
+  - `tools/blender/build_pu12m_interior.py` builds the lining (light grey, the photographs), the equipment, the bench,
+    the front seats, the driver's wheel, pedals and dash, the mast's foot with its hand winch; the Osa's traced R-123M
+    serves three times. `tools/ue_import_pu12m.py` imports it headless.
+  - `data/cabins/pu12m.json` is written by `tools/pu12m_cabin.py` from the trace: 27 panels on the equipment's faces,
+    all 25 controls, 37 lamps (each sourced), 153 fixtures (the ДХ keypad, the ФР block and the RTK-1 read off the
+    photographs). Displays: the IT-45 (`aspd_scope`: the ASPD-U's tracks on the ФР block's scale, numbers, zone marks,
+    speed vectors, with the grid glass over it carrying the plotter's marks in grease pencil) and the IT-1 / IT-2
+    (`status_board`: a column of legend lamps per launcher and its missiles). Tests
+    `simcore/tests/test_pu12m_cabin.cpp`.
+  - The mast corrected from the ČSLA mast drawings: a fixed section and **eight** moving ones, raised by a hand winch at
+    its foot; its place from the plan (2.30 m behind the bow, 0.63 m right).
+  - Unreal: the player's vehicle wears the PU-12M's exterior and mast when the scenario's own vehicle is the post; the
+    director loads the cabin of the scenario's own vehicle (`cabins/<system>.json`). At the battery commander's seat,
+    `[` `]` pick a target on the board and 1-5 give it to that launcher; at the plotter's, `[` `]` pick one on the IT-45
+    and P writes it on the board (`ASimOsaVehicle::PickTarget`, `DesignatePicked`, `PlotPicked`). Tests
+    `SAM3D.PU12M.Cabin`, `SAM3D.PU12M.Mast`; photographs of every seat from a scripted offscreen run
+    (`-SimScenario=scenarios/pu12m_battery.json -SimCabinShots=<folder>`).
+- **P7 done (18 Oct 2026):** multiplayer. The seats are the crew system's (any station id). The post's instruments ride in
+  each player's knowledge stream (`simcore/post_feed.hpp`, `em::ViewExtras`: the IT-45's tracks, the board as the
+  commander reads it, the IT boards), so a client's cabin draws the same picture; a client's designation or plot goes to
+  the server through its seat (`USimCrewSeatComponent::Designate`, `PlotTrack`), checked there (only the commanding seat
+  designates, only the plotter plots: `ScenarioRunner::SeatDesignate`, `SeatPlot`). Checked with
+  `tools/ue_crew_smoke.ps1 -Pu12m` (a dedicated server and two clients, `docs/MULTIPLAYER.md`).
+- **The look refined (18 Oct 2026):** research `docs/research/PU12_VISUALS_2026-10.md` (the NVA catalogue's PU-12 pages
+  and colour photographs, the Soviet tube table, GOST 21829-76).
+  - Corrections from it: the battery commander sits at the IT-45 (the ДХ, the IT-2M, the ФР block, the RTK-1 and the
+    DT-2 are his), the operator-plotter at his own air-situation map (the plan's item 24, a plexiglass board); the lining
+    cream, the ASPD-U's blocks blue-grey, the IT-45, the ДХ and the IT-2M light grey; the GAK on a stand over the PT-200;
+    the S-23 a black box.
+  - The instruments work: the DT-2's two wheels put the IT-45's marker on a target; the ДХ's digits pick a target, ЦУ and
+    a digit give it to the launcher in that place on the IT boards (by voice on the battery net), СБР clears
+    (`data/procedures/pu12m.json` keypad and marker, `ScenarioRunner::UpdateKeypad`, test in `test_pu12m_battery.cpp`).
+  - The displays: the IT-45 an amber long-afterglow tube with its sweep, range marks and a cabled radar's echoes fading,
+    the symbols steady, the marker and the marked target's time of arrival; the ДХ's window; the plotter's map with the
+    board's grease-pencil tracks; the IT-1M and IT-2M as lamp boards (`simcore::BoardLampsOf`); the cabin's lamps ease on
+    and off.
+  - Fixes: the mauve cast (Lumen's sky light through the closed compartment: the sky lights are put out while the camera
+    is inside, the lining 15 cm thick with a finer distance field, the cabin hidden from outside); the DT-2's and the
+    IT-45's round parts drawn as polygons (Nanite's fallback: the interior without Nanite). The PU-12M's crew has its
+    voices (`data/crew/voices.json` serves both crews).
+
+## 6. What is still SAM3D's
+
+- The plan's item 24 is the plotter's air-situation map (`rwd_mb3`); its grid, range circles and the pencil's colours
+  are SAM3D's.
+- Heights, the seats' cushions and the desk, the faces of the blocks not photographed (the S block, the ŠČK, the R-111,
+  the R-407, the power boards), the lamps' meanings. Of the ДХ's keys only the digits, ЦУ and СБР work (the console does
+  not model the characteristics, the height zone or the other keys); what its window shows is SAM3D's.
+- The IT-45's symbols and sweep period, the IT boards' lamp-to-report mapping and which board stands where (the NVA
+  catalogue's two pages disagree), the lamps' timings (`docs/research/PU12_VISUALS_2026-10.md` §9).
+- The two whips' bases inside: the plan's items 3 and 28 stand elsewhere than the exterior's whips (placed from the
+  photographs); left out of the interior until the photographs are read again.
 
 ## Sources
 

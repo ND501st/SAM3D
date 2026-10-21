@@ -7,6 +7,7 @@
 class USceneComponent;
 class UStaticMeshComponent;
 class UStaticMesh;
+class USimPu12MastComponent;
 
 /**
  * Visual stand-in for one simcore entity (aircraft or missile).
@@ -40,6 +41,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D")
 	bool UseVehicleModel(const FString& Kind);
 
+	/** The PU-12M's mast, guys and AB-1 (a command_post's model only; null otherwise). It follows the vehicle's deployment. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D")
+	USimPu12MastComponent* GetMast() const { return Mast; }
+
 	/** Called once when the entity stops being alive (shot down, missile detonated...). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "SAM3D")
 	void OnEntityInactive();
@@ -57,4 +62,7 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> BoxMesh;
+
+	UPROPERTY()
+	TObjectPtr<USimPu12MastComponent> Mast;
 };

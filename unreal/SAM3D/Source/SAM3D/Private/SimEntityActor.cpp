@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -59,6 +60,13 @@ bool ASimEntityActor::UseVehicleModel(const FString& Kind)
 	Mesh->SetStaticMesh(Model);
 	Mesh->SetRelativeRotation(FRotator::ZeroRotator);
 	Mesh->SetRelativeLocation(FVector::ZeroVector);
+	if (Kind == TEXT("command_post") && Mast == nullptr)
+	{
+		// The PU-12M's moving parts: the mast's sections, the guys, the AB-1 set (tools/blender/pu12m_model.py).
+		Mast = NewObject<USimPu12MastComponent>(this, TEXT("Pu12Mast"));
+		Mast->SetupAttachment(Mesh);
+		Mast->RegisterComponent();
+	}
 	return true;
 }
 
@@ -77,6 +85,12 @@ void ASimEntityActor::Tick(float DeltaSeconds)
 	if (State.bAlive)
 	{
 		SetActorLocationAndRotation(State.Location, State.Rotation);
+		if (Mast != nullptr)
+		{
+			// a battery's post raises its mast and sets the AB-1 out when it deploys, at the mast's own pace
+			Mast->SetTargetExtension(State.bDeployed ? 1.f : 0.f);
+			Mast->SetGeneratorOut(State.bDeployed);
+		}
 	}
 	else if (!bReportedInactive)
 	{

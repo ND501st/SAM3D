@@ -3,8 +3,7 @@
     SM_TZM_9T217    transport-loader for the Osa: BAZ-5937 6x6 amphibious hull, twelve missile containers on the rear
                     deck, the loading crane stowed over them (roadmap 7.3)
     SM_ATZ_38_131   fuel truck: ZIL-131 6x6 with the ATZ-3.8 tank and the rear pump cabinet (roadmap 7.4)
-    SM_PU12M        placeholder exterior of the PU-12M battery command post: BTR-60PB 8x8 hull, the telescopic antenna
-                    mast stowed on the roof, whip antennas, the roof box (docs/PU12_DEVELOPMENT.md: a full model later)
+(The PU-12M battery command post has its own traced model: tools/blender/pu12m_model.py, art/pu12m/.)
 
 Proportions from published dimensions (each function says which); shapes are simplified. The vehicle points along
 Blender -Y (Unreal +X after export), stands on Z = 0, and is centred between its axles. Material slots: M_Paint, M_Tyre,
@@ -209,45 +208,6 @@ def atz():
 
 # ------------------------------------------------------------------------------------------------ PU-12M placeholder
 
-def pu12m():
-    """PU-12M on the BTR-60PB: 7.22 m long, 2.825 m wide, 2.055 m to the top of the armour, 475 mm ground clearance
-    (valka.cz topic 23991, after the ČSLA manual Del-25-53/1); four axles. The hull is the BTR-60PB's boat shape with
-    its sloped upper sides; the telescopic antenna mast (raised to about 16 m in action, a user's account) lies stowed
-    along the roof; whip antennas for the three R-123M and the R-111; a box on the roof (2003 photographs)."""
-    p = Part()
-    sections = [
-        hull_ring(-3.61, 0.4, 0.7, 1.05, 1.55, 1.35, 0.75),
-        hull_ring(-3.1, 1.1, 0.95, 0.5, 1.95, 1.2, 1.41),
-        hull_ring(-1.9, 1.15, 0.95, 0.48, 2.055, 1.2, 1.41),
-        hull_ring(2.9, 1.15, 0.95, 0.48, 2.055, 1.2, 1.41),
-        hull_ring(3.61, 0.9, 0.85, 0.65, 1.85, 1.15, 1.2),
-    ]
-    p.loft(sections, 'M_Paint')
-    # driver's and commander's vision blocks at the front of the roof slope
-    for x in (-0.45, 0.45):
-        p.box((x, -2.95, 1.98), (0.6, 0.05, 0.22), 'M_Glass', rot_x=-0.9)
-    # roof hatches and the box
-    for y in (-1.3, 0.2):
-        p.box((0.0, y, 2.07), (0.9, 0.7, 0.04), 'M_Dark')
-    p.box((-0.35, 1.6, 2.25), (0.9, 1.0, 0.4), 'M_Paint')
-    # the telescopic mast stowed along the roof, from a pivot at the rear
-    p.cylinder((0.55, 0.4, 2.2), 0.09, 5.6, 'Y', 'M_Metal', 14)
-    p.box((0.55, 3.1, 2.25), (0.35, 0.35, 0.35), 'M_Metal')
-    # whip antennas
-    for x, y in ((-1.0, -1.9), (1.0, -1.9), (-1.0, 2.6), (1.0, 2.6)):
-        p.cylinder((x, y, 2.05 + 1.3), 0.012, 2.6, 'Z', 'M_Dark', 6)
-        p.cylinder((x, y, 2.1), 0.05, 0.1, 'Z', 'M_Metal', 10)
-    # the water-jet flap at the stern, side doors
-    p.box((0.0, 3.62, 1.1), (1.0, 0.06, 0.5), 'M_Dark')
-    for x in (-1.36, 1.36):
-        p.box((x, -0.6, 1.45), (0.04, 0.9, 0.55), 'M_Dark')
-    # wheels: four axles (BTR-60PB spacing 1.35 / 1.53 / 1.35 m), 1.1 m tyres
-    for y in (-2.12, -0.77, 0.76, 2.11):
-        for x in (-1.2, 1.2):
-            p.wheel(x, y, 0.55, 0.36)
-    return p.finish('SM_PU12M')
-
-
 # ------------------------------------------------------------------------------------------------ export and preview
 
 def export(obj):
@@ -309,7 +269,7 @@ def main():
     preview = os.path.abspath(argv[argv.index('--preview') + 1]) if '--preview' in argv else None
     bpy.ops.wm.read_factory_settings(use_empty=True)
     os.makedirs(OUT, exist_ok=True)
-    objs = [tzm(), atz(), pu12m()]
+    objs = [tzm(), atz()]
     x = 0.0
     for o in objs:
         print(o.name, 'faces', len(o.data.polygons), 'size', tuple(round(d, 2) for d in o.dimensions))

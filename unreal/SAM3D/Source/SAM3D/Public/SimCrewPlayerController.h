@@ -41,10 +41,14 @@ private:
 
 	void TryControl();
 	void LogSmoke();
+	void PlotFirstTrack();
+	void DesignateFirstTarget();
 
 	FTimerHandle SeatTimer;
 	FTimerHandle TryTimer;
 	FTimerHandle SmokeTimer;
+	FTimerHandle PlotTimer;
+	FTimerHandle DesignateTimer;
 };
 
 /** Game mode for the multiplayer crew: every player gets an ASimCrewPlayerController. Use ?game=SimCrew on the map URL or

@@ -1,0 +1,78 @@
+{
+  "system_id": "pu12m",
+  "display_name": "9S482M PU-12M battery command post",
+  "status": "P1 of docs/PU12_DEVELOPMENT.md: the vehicle and its equipment, every value cited. Research: docs/research/PU12_RESEARCH_2026-10.md",
+  "sources": [
+    { "id": "csla_pu12_manual", "notes": "ČSLA Del-25-53/1 (1982), figures via valka_pu12: the equipment plan and workplaces" },
+    { "id": "valka_pu12", "notes": "Equipment lists and dimensions (from PVOV-2-3, TMNO 24-65-86)" },
+    { "id": "flak11", "notes": "NVA: ASPD-U blocks, radios and nets, mast, navigation errors" },
+    { "id": "ru_pu12_text", "notes": "Crew numbers, ASPD-U data, deployment norms (later build: its radios are not used)" },
+    { "id": "shilka_narod", "notes": "Veteran: seats in the photographs, ДХ and ФР blocks" },
+    { "id": "armforc_pu12", "notes": "Crew of four, 18 min, capacity" }
+  ],
+  "crew": [
+    { "role": "battery_commander", "count": 1, "source": "ru_pu12_text (командир боевого расчёта), csla_pu12_manual via valka_pu12 (velitel baterie)", "confidence": "high",
+      "notes": "Works in the post but is not one of its four numbers (armforc_pu12 and shilka_narod list four). His seat can be empty: an NPC battery commander runs the battery from outside." },
+    { "role": "squad_leader", "count": 1, "source": "ru_pu12_text (командир отделения управления, No. 1), valka_pu12 (velitel družstva)", "confidence": "high" },
+    { "role": "operator", "count": 1, "source": "ru_pu12_text (оператор-планшетист, No. 2), valka_pu12 (pátrač-kreslič), shilka_narod (the operator's place at the IT-45)", "confidence": "high" },
+    { "role": "radio_operator", "count": 1, "source": "ru_pu12_text (радиотелефонист, No. 3), armforc_pu12 (радиотелефонист-разведчик), valka_pu12 (spojař)", "confidence": "high" },
+    { "role": "driver", "count": 1, "source": "ru_pu12_text (водитель-электромеханик, No. 4), valka_pu12 (řidič)", "confidence": "high" }
+  ],
+  "vehicle": {
+    "mobility": "wheeled",
+    "chassis": { "value": "BTR-60PB (BTR-60PU base without the turret), 8x8, amphibious", "source": "flak11 (PU12-0), valka_pu12", "confidence": "high" },
+    "length_m": { "value": 7.22, "source": "valka_pu12", "confidence": "high", "notes": "armforc_pu12 gives 7.56 m; ru_pu12_text 7.7 m is the later BTR-80 build." },
+    "width_m": { "value": 2.825, "source": "valka_pu12", "confidence": "high", "notes": "armforc_pu12: 2.83 m." },
+    "height_m": { "value": 3.357, "source": "valka_pu12 (the largest height; 2.055 m to the top of the armour)", "confidence": "high", "notes": "Another valka_pu12 post gives 3.32 m overall." },
+    "armour_top_height_m": { "value": 2.055, "source": "valka_pu12", "confidence": "high" },
+    "ground_clearance_m": { "value": 0.475, "source": "valka_pu12", "confidence": "high" },
+    "combat_mass_kg": { "value": 10400, "source": "valka_pu12", "confidence": "high", "notes": "10 500 kg in another valka_pu12 post; armforc_pu12 11 t; shilka_narod 12 t." },
+    "engines": { "value": "2 x GAZ-49B petrol, 66 kW (90 PS) each at 3600 rpm; the left drives axles 2 and 4, the right axles 1 and 3 and the winch", "source": "valka_pu12", "confidence": "high" },
+    "max_road_speed_mps": { "value": 22.8, "source": "valka_pu12 (82 km/h)", "confidence": "high", "notes": "shilka_narod: up to 60 km/h." },
+    "max_water_speed_mps": { "value": 2.8, "source": "valka_pu12 (10 km/h), shilka_narod", "confidence": "high" },
+    "road_range_m": { "value": 400000, "source": "shilka_narod (400 km)", "confidence": "medium", "notes": "docs/PU12_DEVELOPMENT.md quoted 500 km from armforc_pu12." },
+    "fuel": { "value": "petrol A-72 (A-76)", "source": "shilka_narod", "confidence": "medium" },
+    "deploy_time_s": { "value": 1080, "source": "ru_pu12_text (full deployment without wire lines: by day at most 18 min), armforc_pu12 (18 min)", "confidence": "high" },
+    "deploy_time_night_s": { "value": 1200, "source": "ru_pu12_text (at night at most 20 min)", "confidence": "medium" },
+    "deploy_time_with_wire_s": { "value": 1500, "source": "ru_pu12_text (with four wire lines laid to 500 m: by day at most 25 min, at night 30)", "confidence": "medium" }
+  },
+  "equipment": {
+    "aspd_u": {
+      "description": { "value": "RPS-M cabinet (telecode transmitter R, receiver P, synchronisation S; S23-1 block), SSP follow-up drive (220N), DTP parallax sensor, IT-45 screen, ДХ (DCh) characteristics keypad, DI marker, ФР deflection block, UO power", "source": "flak11 (PU12-0, from the GDR handbook), valka_pu12, shilka_narod", "confidence": "high" },
+      "targets": { "value": 100, "source": "ru_pu12_text (information on a hundred targets, numbers 00-99)", "confidence": "medium", "notes": "armforc_pu12: 99 displayed, 10 processed at once." },
+      "semi_auto_tracks": { "value": 12, "source": "ru_pu12_text", "confidence": "medium", "notes": "armforc_pu12: 10 processed at once." },
+      "fire_units": { "value": 6, "source": "armforc_pu12", "confidence": "medium" },
+      "take_off_time_s": { "value": 2.5, "source": "ru_pu12_text (semi-automatic take-off and sending of one target: 2-3 s)", "confidence": "medium" },
+      "height_zones_m": { "value": [[0, 1400], [1600, 3000], [3200, 25200]], "source": "ru_pu12_text (H1, H2, H3)", "confidence": "medium" },
+      "height_step_m": { "value": 200, "source": "ru_pu12_text", "confidence": "medium" },
+      "speed_step_mps": { "value": 12.5, "source": "ru_pu12_text (shown as a vector, 0 to 787.5 m/s)", "confidence": "medium" },
+      "display_scales_m": { "value": [35000, 50000, 100000], "source": "ru_pu12_text (scales 35, 50, 100 km); flak11 (two scales, to 100 and 50 km); the ФР block's three-position scale switch in shilka_narod's photograph", "confidence": "medium" },
+      "radar_cable_m": { "value": 300, "source": "flak11 (PU12-0: up to 300 m from the radar), ru_pu12_text", "confidence": "high" },
+      "max_power_w": { "value": 2500, "source": "ru_pu12_text (the equipment draws at most 2.5 kW)", "confidence": "medium" }
+    },
+    "radios": [
+      { "id": "fug1", "set": "R-123M", "net": "air picture (designation net no. 2, the plotters)", "range_m": { "value": 20000, "source": "flak11 (PU12-1: 15-20 km), valka_pu12", "confidence": "high" } },
+      { "id": "fug2", "set": "R-123M", "net": "the covered unit's net", "range_m": { "value": 20000, "source": "flak11 (PU12-1)", "confidence": "high" } },
+      { "id": "fug3", "set": "R-111", "net": "the regiment's command net", "range_m": { "value": 30000, "source": "flak11 (PU12-1: 25-30 km), valka_pu12", "confidence": "high" } },
+      { "id": "fug4", "set": "R-123M", "net": "command of the battery (designations to its launchers by voice)", "range_m": { "value": 20000, "source": "flak11 (PU12-1)", "confidence": "high" } },
+      { "id": "fug5", "set": "R-407", "net": "reception of the regiment's automated fire control (telecode)", "range_m": { "value": 15000, "source": "flak11 (PU12-1: to 15 km), valka_pu12", "confidence": "high" } }
+    ],
+    "mast_height_m": { "value": 16, "source": "flak11 (PU12-1: 16 m telescopic mast); valka_pu12 (a ČSLA caption: the signalman extends the 16 m mast)", "confidence": "high", "notes": "armforc_pu12 and shilka_narod give 6 m. The tier-1 figure is used. Guyed at two heights in the combat position (csla_pu12_manual)." },
+    "navigation": {
+      "description": { "value": "GAK (1G13M) gyro direction indicator and its control panel, KP-4 coordinate and course computer, distance sensor, VO (1T25) orientation telescope, PAB-2 aiming circle", "source": "valka_pu12, flak11 (PU12-0)", "confidence": "high" },
+      "kp4_error_fraction": { "value": 0.01, "source": "flak11 (PU12-0: at most 1 % of the distance travelled)", "confidence": "high" },
+      "designation_error_deg": { "value": 5, "source": "flak11 (PU12-0: working with the navigation equipment, up to 5 degrees in azimuth)", "confidence": "high" },
+      "designation_error_m": { "value": 3000, "source": "flak11 (PU12-0: and 3 000 m in range)", "confidence": "high" }
+    },
+    "power": {
+      "generator_set": { "value": "AB-1-P/30-M1 petrol set, 220 V 50 Hz, with the URB control unit; set on the ground behind the vehicle in the combat position", "source": "flak11 (PU12-0), valka_pu12, csla_pu12_manual (combat position drawing)", "confidence": "high" },
+      "on_the_move": { "value": "G-290B generator driven by the engine", "source": "flak11 (PU12-0), valka_pu12", "confidence": "high" },
+      "batteries": { "value": "2 x 6ST-75", "source": "valka_pu12", "confidence": "high" }
+    },
+    "status_boards": { "value": "IT-1 (at the squad leader) and IT-2 (at the commander's desk): the units' state, the vehicles' activity, ammunition", "source": "valka_pu12, csla_pu12_manual (plan items 4 and 18)", "confidence": "high" }
+  },
+  "procedures_file": "data/procedures/pu12m.json",
+  "validation_scenarios": [
+    { "name": "Deployment norm", "historical_reference": "Full deployment without wire lines", "expected_outcome": "At most 18 min by day, 20 at night", "source": "ru_pu12_text" }
+  ]
+}

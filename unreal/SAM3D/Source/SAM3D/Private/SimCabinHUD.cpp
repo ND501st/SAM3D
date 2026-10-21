@@ -48,12 +48,65 @@ void ASimCabinHUD::DrawHUD()
 	{
 		DrawText(Feedback, FLinearColor(1.0f, 0.4f, 0.3f), Cx + 16.0f, Cy + 32.0f, Font);
 	}
+	const FString CommanderStation = Sim != nullptr ? Sim->GetCommanderStation() : FString(TEXT("commander"));
 	DrawText(FString::Printf(TEXT("%s%s   |   C leave cabin   Tab next seat   T %s   O %s   H help   B plotting board"),
 				 *Vehicle->GetCabinStationLabel(), Vehicle->IsHoldingSeat() ? TEXT(" (your seat)") : TEXT(""),
 				 Vehicle->IsHoldingSeat() ? TEXT("give the seat back") : TEXT("take this seat"),
-				 Vehicle->GetStationId() == TEXT("commander") ? TEXT("orders") : TEXT("reports")),
+				 Vehicle->GetStationId() == CommanderStation ? TEXT("orders") : TEXT("reports")),
 		Ink, 20.0f, Canvas->ClipY - 40.0f, Font);
 	DrawCrew(Vehicle, Font);
+	if (Sim != nullptr && Vehicle->IsCommandPost())
+	{
+		DrawPost(Sim, Vehicle, Font);
+	}
+}
+
+void ASimCabinHUD::DrawPost(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle, UFont* Font)
+{
+	// The PU-12M's aids (the cabin's IT-45, glass and IT boards are the real picture): what the seat can pick and the
+	// keys. At the commander's seat the board's targets and the launchers as the IT boards show them; at the plotter's
+	// the IT-45's numbers.
+	const bool bCommander = Vehicle->GetStationId() == Sim->GetCommanderStation();
+	const bool bPlotter = Vehicle->GetStationId() == Sim->GetPlotterStation();
+	if (!bCommander && !bPlotter)
+	{
+		return;
+	}
+	const TArray<int32> Numbers = bCommander ? Sim->GetPostBoardNumbers() : Sim->GetPostTrackNumbers();
+	FString Line = bCommander ? TEXT("Board: ") : TEXT("IT-45: ");
+	for (int32 N : Numbers)
+	{
+		const FString Num = bCommander ? FString::FromInt(N) : FString::Printf(TEXT("%02d"), N);
+		Line += N == Vehicle->GetPickedTarget() ? FString::Printf(TEXT("[%s] "), *Num) : Num + TEXT(" ");
+	}
+	if (Numbers.Num() == 0)
+	{
+		Line += TEXT("(nothing)");
+	}
+	const float X = 20.0f;
+	float Y = Canvas->ClipY - (bCommander ? 142.0f : 120.0f);
+	const FLinearColor Ink(0.85f, 0.95f, 0.85f);
+	DrawText(Line, Ink, X, Y, Font);
+	Y += 22.0f;
+	if (bCommander)
+	{
+		FString Launchers = TEXT("");
+		const TArray<FSimLauncherStatus> List = Sim->GetLauncherStatus();
+		for (int32 I = 0; I < List.Num() && I < 5; ++I)
+		{
+			const FSimLauncherStatus& L = List[I];
+			Launchers += FString::Printf(TEXT("%d: %s %s%s   "), I + 1, *L.Callsign, *L.State,
+				L.Missiles >= 0 ? *FString::Printf(TEXT(" (%d)"), L.Missiles) : TEXT(""));
+		}
+		DrawText(Launchers + TEXT("|  [ ] pick a target, 1-5 give it to that launcher"), Ink, X, Y, Font);
+		Y += 22.0f;
+		DrawText(TEXT("Or on the instruments: the DT-2's wheels put the marker on a target (its number in the ДХ window), ЦУ then the ")
+			TEXT("launcher's place (1-5) on the ДХ's keys; СБР clears"), Ink, X, Y, Font);
+	}
+	else
+	{
+		DrawText(TEXT("[ ] pick a target, P write it on the board (take the seat first: T)"), Ink, X, Y, Font);
+	}
 }
 
 void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
@@ -104,7 +157,9 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 		const float X = Canvas->ClipX * 0.5f - 260.0f;
 		float Y = Canvas->ClipY * 0.25f;
 		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X - 10.0f, Y - 10.0f, 860.0f, 230.0f);
-		DrawText(FString::Printf(TEXT("%s (page %d/%d: 0 next, Esc close)"), Vehicle->GetStationId() == TEXT("commander") ? TEXT("Orders") : TEXT("Reports"),
+		const USimWorldSubsystem* MenuSim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		const bool bOrders = MenuSim != nullptr && Vehicle->GetStationId() == MenuSim->GetCommanderStation();
+		DrawText(FString::Printf(TEXT("%s (page %d/%d: 0 next, Esc close)"), bOrders ? TEXT("Orders") : TEXT("Reports"),
 					 Page + 1, Pages),
 			FLinearColor::White, X, Y, Font);
 		Y += 24.0f;

@@ -1,7 +1,8 @@
 # Cabin layouts
 
 One JSON file per system: where its operator stations, panels, controls and lamps sit in the vehicle, for the
-3D cabin. Loaded by `simcore::LoadCabinFile` (`simcore/include/simcore/cabin.hpp`) against the system's console
+3D cabin. `pu12m.json` (the PU-12M command post) is written by `tools/pu12m_cabin.py` from the interior's trace
+(`tools/blender/pu12m_interior_trace.py`): change those and run it again, not the file. Loaded by `simcore::LoadCabinFile` (`simcore/include/simcore/cabin.hpp`) against the system's console
 file (`data/procedures/<system>.json`), which still decides what every control does. The loader rejects unknown
 keys and bad references, and reports the path to the problem (e.g. `controls[3].panel: unknown panel 'x'`).
 
@@ -61,6 +62,8 @@ reference picture kept in `reference/`).
   "size_m": [w, h], "color" }`, inside their panel. `color` (a look colour) paints the plate, e.g. the black PU-303;
   without it the plate is the consoles' cream.
 - `fixtures`: items drawn but not operated, `{ "panel", "at_m", "kind", "size_m", "color", "ring", "label" }`.
+- A panel's optional `color` (a look colour) paints a panel without blocks, e.g. the PU-12M's `bluegrey` ASPD-U blocks
+  and `lightgrey` IT-45; without it the panel is the consoles' cream, darkened.
 - `look` on a control or lamp placement: `{ "kind", "size_m", "color", "ring", "label" }`, all optional.
 
 `kind`: `knob`, `pointer_knob`, `trim`, `toggle`, `lever`, `lamp`, `lamp_button` (cap `color` in a `ring`), `button`,
@@ -89,8 +92,8 @@ The instruments the crew reads. Each sits on a panel (`at_m` is its centre, `siz
 inside the panel), says when it is powered (`on_when`, `on_when_any`, console conditions; empty = always) and needs a
 `source` and `confidence`.
 
-The search indicator (`ppi`), the elevation-search indicator (`elevation_scope`) and `dial`s are round tubes or
-dials (a disc `size_m` across); the others are rectangular.
+The search indicator (`ppi`), the elevation-search indicator (`elevation_scope`), the IT-45 (`aspd_scope`) and `dial`s
+are round tubes or dials (a disc `size_m` across); the others are rectangular.
 
 | `kind` | Shows | Extra keys |
 |---|---|---|
@@ -100,6 +103,10 @@ dials (a disc `size_m` across); the others are rectangular.
 | `tv` | The TV sight's picture, looking along the tracking radar's azimuth and elevation with the selected lens, and a crosshair | none |
 | `dial` | A needle turning with a control's value (one turn = `value_per_turn`), scale `0..labels_per_turn` in `marks` divisions; `lit_when` for its backlight | `control`, `marks`, `value_per_turn`, `labels_per_turn` |
 | `meter` | A needle swinging with `value x scale`, full deflection at `full_scale` `unit`; rests at 0 when not powered | `control`, `marks`, `scale`, `full_scale`, `unit` |
+| `aspd_scope` | The command post's IT-45 (console `post` block, `simcore/post_feed.hpp`): an amber long-afterglow tube whose sweep turns once in `sweep_period_s` and lights the range marks and a cabled radar's echoes, which fade in `afterglow_s`; over it the ASPD-U's symbols on the scale the console's scale switch picks (number, height-zone mark, speed vector), the DT-2's marker and the marked target's time of arrival; with `glass`, the grid glass in front | `glass`, `sweep_period_s`, `afterglow_s` |
+| `status_board` | The command post's IT-1M / IT-2M: a light plate, the groups КОМПЛЕКТ, РАБОТА and ТЕХ. СОСТОЯНИЕ over a row of amber lamps per launcher, lit as the post heard it on the battery net (`simcore::BoardLampsOf`) | none |
+| `plot_board` | The plotter's air-situation map: etched plexiglass (squares, range circles) with the board's marks in grease pencil, each target's track, number and height over its code | none |
+| `keypad_window` | The ДХ keypad's window (needs the console's post `keypad`): the number it is on, ЦУ flashing while it waits for the launcher's place, the last designation, as vacuum-fluorescent digits | none |
 
 ```jsonc
 { "id": "beta_c", "label": "βс", "kind": "dial", "panel": "so_panel", "at_m": [0.3, 0.28], "size_m": [0.14, 0.14],

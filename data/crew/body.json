@@ -55,7 +55,10 @@
     {"station": "driver", "look": "forward", "hands_on": "steering", "feet_on": "pedals", "notes": "Hands on the steering wheel and feet on the pedals when he isn't reaching for a control; looks out through the windscreen."},
     {"station": "commander", "look": "forward", "notes": "Looks out through the windscreen when nothing calls him."},
     {"station": "senior_operator", "look": "soc_ppi", "notes": "Watches the search indicator."},
-    {"station": "operator", "look": "ssc_range", "notes": "Watches the range indicator."},
-    {"station": "deputy_commander", "look": "tov_monitor", "notes": "Watches the TV monitor."}
+    {"station": "operator", "look": "ssc_range|map", "notes": "Watches the range indicator (the Osa); the PU-12M's operator-plotter his air-situation map."},
+    {"station": "deputy_commander", "look": "tov_monitor", "notes": "Watches the TV monitor."},
+    {"station": "battery_commander", "look": "it45", "notes": "The PU-12M: watches the IT-45 beside the operator."},
+    {"station": "squad_leader", "look": "forward", "notes": "The PU-12M: looks ahead over the KP-4."},
+    {"station": "radio_operator", "look": "forward", "notes": "The PU-12M: at his sets."}
   ]
 }

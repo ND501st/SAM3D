@@ -391,7 +391,7 @@ private:
             case Condition::Kind::InputIs: {
                 const CrewFact* f = crew_ != nullptr ? crew_->FindFact(c.id) : nullptr;
                 if (f == nullptr) return 1e6;
-                if (f->by_action) return reaction_s_;
+                if (f->by_action && c.input_value) return reaction_s_;  // a seat makes it true, not false
                 double sum = 1e5;
                 for (const Condition& n : f->needs) sum += Cost(x, n, seen);
                 return sum;

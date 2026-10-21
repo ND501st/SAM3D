@@ -221,9 +221,9 @@ public:
             }
             if (vs.pitch < -10 || vs.pitch > 10) return Fail(Join(p, "pitch"), "must be from -10 to 10");
             if (vs.rate < -10 || vs.rate > 10) return Fail(Join(p, "rate"), "must be from -10 to 10");
-            if (crew != nullptr && vs.station != "battery" && crew->FindSeat(vs.station) == nullptr) {
-                return Fail(Join(p, "station"), "no seat '" + vs.station + "' in the crew data");
-            }
+            // One file voices every vehicle's crew: a seat this crew hasn't got is another crew's (the tests check that
+            // each one is somebody's).
+            if (crew != nullptr && vs.station != "battery" && crew->FindSeat(vs.station) == nullptr) continue;
             out.seats.push_back(std::move(vs));
         }
         if (crew != nullptr) {
@@ -288,7 +288,7 @@ private:
 
 }  // namespace detail
 
-// `crew` (may be null) checks that every seat has a voice.
+// `crew` (may be null) checks that every seat has a voice, and keeps only its own seats' voices.
 inline bool LoadVoiceData(const std::string& json_text, const CrewData* crew, VoiceData& out, std::string* error = nullptr) {
     json::Value root;
     std::string parse_error;

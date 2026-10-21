@@ -80,7 +80,8 @@ struct BodyDims {
 // A seat's rest posture and gaze (data/crew/body.json "seats").
 struct BodySeatDef {
     std::string station;
-    std::string look;      // "forward", or a display id of the cabin: where he looks when nothing else calls
+    std::string look;      // "forward", or a display id of the cabin: where he looks when nothing else calls; "a|b": the
+                           // first of these the cabin has (a station of the same name in two vehicles)
     std::string hands_on;  // a shell part his hands rest on (the driver's "steering"); "" = his thighs
     std::string feet_on;   // a shell part his feet rest on (the driver's "pedals"); "" = the floor
 };
@@ -971,11 +972,16 @@ private:
         if (!reach.empty() && TouchOf(*cabin_, reach, t)) return t.point;
         if (!a.control.empty() && a.act_in_s >= 0.0 && a.act_in_s < 1.5 && TouchOf(*cabin_, a.control, t)) return t.point;
         const std::string look = seat_def_ != nullptr ? seat_def_->look : std::string("forward");
-        if (look != "forward") {
+        std::size_t from = 0;
+        while (look != "forward" && from <= look.size()) {
+            const std::size_t bar = look.find('|', from);
+            const std::string id = look.substr(from, bar == std::string::npos ? std::string::npos : bar - from);
             for (const CabinDisplay& disp : cabin_->displays) {
-                if (disp.id != look) continue;
+                if (disp.id != id) continue;
                 if (const CabinPanel* p = cabin_->FindPanel(disp.panel_id)) return p->PointAt(disp.u_m, disp.v_m);
             }
+            if (bar == std::string::npos) break;
+            from = bar + 1;
         }
         const double pitch = seat_.view_pitch_rad;
         return seat_.eye + (seat_.forward * std::cos(pitch) + Vec3{0.0, 0.0, 1.0} * std::sin(pitch)) * 5.0;

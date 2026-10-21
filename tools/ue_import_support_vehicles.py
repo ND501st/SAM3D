@@ -1,11 +1,13 @@
-"""Import the support vehicles (art/support_vehicles/SM_*.fbx, built by tools/blender/build_support_vehicles.py) into the
-SAM3D project under /Game/SAM3D/Vehicles, without opening the editor:
+"""Import the support vehicles (art/support_vehicles/SM_*.fbx, built by tools/blender/build_support_vehicles.py) and the
+PU-12M (art/pu12m/SM_PU12M*.fbx, tools/blender/pu12m_model.py: the hull, the mast's sections, the AB-1 set, a guy) into
+the SAM3D project under /Game/SAM3D/Vehicles, without opening the editor:
 
     D:/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe C:/dev/SAM3D/unreal/SAM3D/SAM3D.uproject ^
         -run=pythonscript -script="C:/dev/SAM3D/tools/ue_import_support_vehicles.py" -unattended -nullrhi
 
 (Runs inside Unreal's Python.) ASimEntityActor loads them by name for battery entities of kind reload, fuel and
-command_post, and falls back to a box when one is missing.
+command_post (USimPu12MastComponent stands the mast's sections, the guys and the AB-1 on the PU-12M), and falls back
+to a box when one is missing.
 """
 import glob
 import os
@@ -15,7 +17,8 @@ import unreal
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEST = '/Game/SAM3D/Vehicles'
 
-files = sorted(glob.glob(os.path.join(REPO, 'art', 'support_vehicles', 'SM_*.fbx')))
+files = sorted(glob.glob(os.path.join(REPO, 'art', 'support_vehicles', 'SM_*.fbx')) +
+               glob.glob(os.path.join(REPO, 'art', 'pu12m', 'SM_*.fbx')))
 tasks = []
 for f in files:
     t = unreal.AssetImportTask()

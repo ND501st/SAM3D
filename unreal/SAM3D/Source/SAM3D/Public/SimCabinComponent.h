@@ -69,6 +69,9 @@ struct SAM3D_API FSimCabinItem
 
 	/** Shown with the cabin parts library's meshes (art/cabin_parts) rather than engine basic shapes. */
 	bool bParts = false;
+
+	/** A lamp's filament brightness, 0..1, easing towards lit or dark. */
+	float Glow = 0.0f;
 };
 
 /**
@@ -146,6 +149,13 @@ public:
 	/** A station's console id (e.g. "senior_operator"); "" if there is no such station. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetStationId(int32 Station) const;
+
+	/** Hides every part of the cabin (a closed compartment seen from outside: its lining stands proud of the hull). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void SetCabinHidden(bool bInHidden) { bHidden = bInHidden; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsCabinHidden() const { return bHidden; }
 
 private:
 	bool Build(const USimWorldSubsystem* Sim);
@@ -253,4 +263,6 @@ private:
 	const simcore::CabinLayout* BuiltLayout = nullptr;
 	int32 HighlightedItem = INDEX_NONE;
 	FString AdvisedControl;
+	bool bHidden = false;
+	bool bHiddenApplied = false;
 };
