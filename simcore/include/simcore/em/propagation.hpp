@@ -25,6 +25,7 @@
 #pragma once
 
 #include <cmath>
+#include <vector>
 #include <cstddef>
 #include <cstdint>
 #include <unordered_map>
@@ -74,6 +75,43 @@ inline double GaseousAttenuationDbPerKm(double freq_hz) {
     return kTable[n - 1][1];
 }
 
+// Specific attenuation of rain (dB/km, one way) for a rain rate (mm/h): gamma = k R^alpha, with k and alpha from the
+// ITU-R P.838-3 table for horizontal polarisation (1-40 GHz), interpolated in log frequency (k in log, alpha linear).
+inline double RainSpecificAttenuationDbPerKm(double freq_hz, double rain_mmh) {
+    if (rain_mmh <= 0.0 || freq_hz <= 0.0) return 0.0;
+    static const double kTable[][3] = {
+        {1.0e9, 0.0000259, 0.9691}, {2.0e9, 0.0000847, 1.0664}, {4.0e9, 0.0001071, 1.6009}, {6.0e9, 0.0007056, 1.5900},
+        {8.0e9, 0.004115, 1.3905},  {10.0e9, 0.01217, 1.2571},  {12.0e9, 0.02386, 1.1825},  {15.0e9, 0.04481, 1.1233},
+        {20.0e9, 0.09164, 1.0568},  {25.0e9, 0.1571, 0.9991},   {30.0e9, 0.2403, 0.9485},   {35.0e9, 0.3374, 0.9047},
+        {40.0e9, 0.4431, 0.8673}};
+    const std::size_t n = sizeof(kTable) / sizeof(kTable[0]);
+    double k = kTable[0][1], a = kTable[0][2];
+    if (freq_hz >= kTable[n - 1][0]) {
+        k = kTable[n - 1][1];
+        a = kTable[n - 1][2];
+    } else if (freq_hz > kTable[0][0]) {
+        for (std::size_t i = 1; i < n; ++i) {
+            if (freq_hz <= kTable[i][0]) {
+                const double t = std::log(freq_hz / kTable[i - 1][0]) / std::log(kTable[i][0] / kTable[i - 1][0]);
+                k = std::exp(std::log(kTable[i - 1][1]) + t * (std::log(kTable[i][1]) - std::log(kTable[i - 1][1])));
+                a = kTable[i - 1][2] + t * (kTable[i][2] - kTable[i - 1][2]);
+                break;
+            }
+        }
+    }
+    const double below = freq_hz < kTable[0][0] ? (freq_hz / kTable[0][0]) * (freq_hz / kTable[0][0]) : 1.0;  // below the table it falls off as f^2
+    return below * k * std::pow(rain_mmh, a);
+}
+
+// One-way rain loss (dB) over a horizontal range. Rain is not uniform over a long path: the effective length is the
+// range times 1 / (1 + d / d0), d0 = 35 exp(-0.015 R) km (ITU-R P.530 distance factor).
+inline double RainLossDb(double range_m, double freq_hz, double rain_mmh) {
+    if (rain_mmh <= 0.0 || range_m <= 0.0) return 0.0;
+    const double d_km = range_m / 1000.0;
+    const double d0 = 35.0 * std::exp(-0.015 * (rain_mmh < 100.0 ? rain_mmh : 100.0));
+    return RainSpecificAttenuationDbPerKm(freq_hz, rain_mmh) * d_km / (1.0 + d_km / d0);
+}
+
 // One-way gaseous loss (dB) along a path whose ends are at the given altitudes. The air thins
 // with height (exponential with a ~6 km scale height for the mix of oxygen and water vapour),
 // so the sea-level rate is scaled by the path's mean exp(-h / 6 km).
@@ -101,6 +139,11 @@ struct PathGeometry {
     // max over the profile of h * sqrt(1/d1 + 1/d2) [m^0.5], h = obstacle height above the ray.
     // v for a wavelength = worst_v_geometry * sqrt(2 / lambda).
     double worst_v_geometry = -1e9;
+    // Deygout's second and third edges (ITU-R P.526, section 4.3): when the main edge blocks the ray, the worst edge
+    // between the first terminal and the main edge's top, and between the top and the second terminal, in the same
+    // units. -1e9: none. Only these two are used (the classic three-edge form).
+    double sub_v_geometry_a = -1e9;
+    double sub_v_geometry_b = -1e9;
     int samples = 0;  // profile samples taken (for profiling)
 };
 
@@ -123,6 +166,7 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     if (n < 2) n = 2;
     g.samples = n - 1;
     const double inv_n = 1.0 / static_cast<double>(n);
+    int worst_i = -1;
     for (int i = 1; i < n; ++i) {
         const double t = static_cast<double>(i) * inv_n;
         const double s = t * g.ground_range_m;
@@ -134,15 +178,66 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
         if (-h < g.min_clearance_m) g.min_clearance_m = -h;
         if (h >= 0.0) g.line_of_sight = false;
         const double vg = h * std::sqrt(1.0 / s + 1.0 / rest);
-        if (vg > g.worst_v_geometry) g.worst_v_geometry = vg;
+        if (vg > g.worst_v_geometry) {
+            g.worst_v_geometry = vg;
+            worst_i = i;
+        }
+    }
+    // Deygout: if the main edge blocks the ray, look for the worst edge on each side of it against the line to its top.
+    // The profile with the Earth's bulge added is used: straight lines stay straight in it, so the main ray and every
+    // sub-path's ray are lines in these coordinates. (Recomputed here, only for blocked paths.)
+    if (worst_i > 0 && g.worst_v_geometry >= 0.0) {
+        auto pos = [&](int i) { return static_cast<double>(i) * inv_n * g.ground_range_m; };
+        auto ground_at = [&](int i) {
+            const double t = static_cast<double>(i) * inv_n;
+            const double s = t * g.ground_range_m;
+            return terrain.HeightAt(a_enu.x + dx * t, a_enu.y + dy * t) + s * (g.ground_range_m - s) / (2.0 * re);
+        };
+        const double sm = pos(worst_i);
+        const double em = ground_at(worst_i);
+        // A sub-edge must be a crest of its own, with a valley of at least kValleyM between it and the main edge:
+        // the flat top of one wide ridge is one edge, not many.
+        constexpr double kValleyM = 20.0;
+        for (int side = 0; side < 2; ++side) {
+            const bool before = side == 0;
+            const double s0 = before ? 0.0 : sm;
+            const double e0 = before ? a_alt_m : em;
+            const double s1 = before ? sm : g.ground_range_m;
+            const double e1 = before ? em : b_alt_m;
+            const double len = s1 - s0;
+            if (len < 1.0) continue;
+            double low = 1e18;  // lowest ground between the candidate and the main edge
+            double& slot = before ? g.sub_v_geometry_a : g.sub_v_geometry_b;
+            const int step = before ? -1 : 1;
+            for (int i = worst_i + step; i >= 1 && i < n; i += step) {
+                const double ground_here = ground_at(i);
+                const double lower_of_crests = ground_here < em ? ground_here : em;
+                if (low < lower_of_crests - kValleyM) {
+                    const double si = pos(i);
+                    const double line = e0 + (e1 - e0) * (si - s0) / len;
+                    const double d0 = si - s0;
+                    const double d1 = s1 - si;
+                    if (d0 >= 1.0 && d1 >= 1.0) {
+                        const double vg = (ground_here - line) * std::sqrt(1.0 / d0 + 1.0 / d1);
+                        if (vg > slot) slot = vg;
+                    }
+                }
+                if (ground_here < low) low = ground_here;
+            }
+        }
     }
     return g;
 }
 
-// Diffraction loss (dB) of a path at a frequency (single dominant edge).
+// Diffraction loss (dB) of a path at a frequency: the main edge plus Deygout's two sub-edges (ITU-R P.526 section
+// 4.3; a ridge line costs more than its highest crest alone, as it does in measurements).
 inline double DiffractionLossDb(const PathGeometry& g, double freq_hz) {
     if (g.ground_range_m < 1.0 || freq_hz <= 0.0) return 0.0;
-    return KnifeEdgeLossDb(g.worst_v_geometry * std::sqrt(2.0 / WavelengthOf(freq_hz)));
+    const double k = std::sqrt(2.0 / WavelengthOf(freq_hz));
+    double loss = KnifeEdgeLossDb(g.worst_v_geometry * k);
+    if (g.sub_v_geometry_a > -1e8) loss += KnifeEdgeLossDb(g.sub_v_geometry_a * k);
+    if (g.sub_v_geometry_b > -1e8) loss += KnifeEdgeLossDb(g.sub_v_geometry_b * k);
+    return loss;
 }
 
 // --------------------------------------------------------------------------- ground reflection

@@ -92,7 +92,7 @@ inline LinkLossResult LinkLossCore(const Environment& env, const PathGeometry& g
     r.line_of_sight = g.line_of_sight;
     r.range_m = range_m;
     r.diffraction_db = DiffractionLossDb(g, freq_hz);
-    r.gas_db = GaseousLossDb(range_m, alt1, alt2, freq_hz);
+    r.gas_db = GaseousLossDb(range_m, alt1, alt2, freq_hz) + RainLossDb(range_m, freq_hz, env.rain_rate_mmh);
     const double lambda = WavelengthOf(freq_hz);
     if (freq_hz < 1e9) {
         const double pe = PlaneEarthFactor(h1, h2, g.ground_range_m, lambda);
@@ -114,15 +114,19 @@ inline LinkLossResult LinkLossCore(const Environment& env, const PathGeometry& g
 
 // One-way propagation between platforms a and b at a frequency. `gain_ratio` is the amplitude
 // ratio of a's antenna gain towards the ground reflection to its gain towards b (1 = broad beam).
-inline LinkLossResult LinkLoss(EmScene& s, const Platform& a, const Platform& b, double freq_hz,
-                               double gain_ratio = 1.0) {
+inline LinkLossResult LinkLossCached(const EmScene& s, PathCache& cache, const Platform& a, const Platform& b, double freq_hz,
+                                     double gain_ratio = 1.0) {
     const bool ab = a.id < b.id;
     const Platform& lo = ab ? a : b;
     const Platform& hi = ab ? b : a;
-    const PathGeometry& g = s.paths.Get(PathCache::PairKey(lo.id, hi.id), s.GetTerrain(), lo.position, lo.altitude_m,
-                                        hi.position, hi.altitude_m, s.env.profile_spacing_m);
+    const PathGeometry& g = cache.Get(PathCache::PairKey(lo.id, hi.id), s.GetTerrain(), lo.position, lo.altitude_m,
+                                      hi.position, hi.altitude_m, s.env.profile_spacing_m);
     return LinkLossCore(s.env, g, a.height_agl_m, b.height_agl_m, a.altitude_m, b.altitude_m,
                         (b.position - a.position).Length(), freq_hz, gain_ratio);
+}
+
+inline LinkLossResult LinkLoss(const EmScene& s, const Platform& a, const Platform& b, double freq_hz, double gain_ratio = 1.0) {
+    return LinkLossCached(s, s.paths, a, b, freq_hz, gain_ratio);
 }
 
 // Amplitude ratio of an antenna's elevation pattern: towards the ground reflection vs the target.
@@ -144,9 +148,9 @@ inline double PairGrazing(const EmScene& s, const Platform& a, const Platform& b
 // Sum of J/N from active noise jammers in one look of a receiver on platform `rx` whose antenna
 // points at (look_az, look_el), at frequency/bandwidth (freq_hz, bw_hz). Repeater (deception)
 // jammers are not noise and are handled by the radar's range gate.
-inline double NoiseJammingToNoise(EmScene& s, const Platform& rx, const AntennaDef& rx_ant, double look_az,
+inline double NoiseJammingToNoise(const EmScene& s, const Platform& rx, const AntennaDef& rx_ant, double look_az,
                                   double look_el, double freq_hz, double bw_hz, double noise_figure_db,
-                                  double extra_noise_db = 0.0) {
+                                  double extra_noise_db = 0.0, PathCache* cache = nullptr) {
     double sum = 0.0;
     for (const JammerState& j : s.jammers) {
         if (!j.on || j.silent_until_s > s.time_s) continue;
@@ -164,7 +168,7 @@ inline double NoiseJammingToNoise(EmScene& s, const Platform& rx, const AntennaD
         const double az_back = AzimuthFromTo(jp->position, rx.position);
         const double el_back = s.ElevationAngle(*jp, rx);
         const double eirp = EirpW(jd.emitter, WrapPi(az_back - je->pointing_az_rad), el_back - je->pointing_el_rad);
-        const LinkLossResult loss = LinkLoss(s, *jp, rx, freq_hz);
+        const LinkLossResult loss = LinkLossCached(s, cache != nullptr ? *cache : s.paths, *jp, rx, freq_hz);
         const double pj = OneWayReceivedPowerW(eirp, g_rx, freq_hz, loss.range_m, loss.TotalOneWayDb()) * overlap;
         sum += JammingToNoise(pj, noise_figure_db + extra_noise_db, bw_hz);
     }

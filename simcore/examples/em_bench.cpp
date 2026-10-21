@@ -7,6 +7,7 @@
 //
 // Usage: em_bench [data_dir] [aircraft] [sam_sites] [esm_sites]
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -23,6 +24,7 @@ int main(int argc, char** argv) {
     const int n_air = argc > 2 ? std::atoi(argv[2]) : 200;
     const int n_sam = argc > 3 ? std::atoi(argv[3]) : 30;
     const int n_esm = argc > 4 ? std::atoi(argv[4]) : 12;
+    const int threads = argc > 5 ? std::atoi(argv[5]) : 1;
 
     EmLibrary lib;
     const EmLoadResult load = LoadEmLibraryFile(data_dir + "/em/generic.json", lib);
@@ -85,6 +87,8 @@ int main(int argc, char** argv) {
         }
     }
 
+    w.Rates().profile = true;
+    w.Rates().threads = static_cast<unsigned>(threads < 1 ? 1 : threads);
     const int ticks = 600;
     double worst_ms = 0.0;
     const auto t0 = std::chrono::steady_clock::now();
@@ -113,6 +117,22 @@ int main(int argc, char** argv) {
                 static_cast<double>(st.radar_candidates_culled) / ticks, static_cast<double>(st.esm_culled) / ticks,
                 100.0 * static_cast<double>(s.paths.Hits()) / static_cast<double>(s.paths.Hits() + s.paths.Misses() + 1),
                 static_cast<unsigned long long>(s.paths.Misses()));
+    const double k = 1e-6 / ticks;  // ns -> ms per tick
+    std::printf("  ms per tick by phase: platforms %.2f, emitters+doctrine %.2f, radars %.2f, ESM %.2f, TDOA %.2f, knowledge %.2f, comms+ageing %.2f\n",
+                static_cast<double>(st.ns_platforms) * k, static_cast<double>(st.ns_emitters) * k,
+                static_cast<double>(st.ns_radars) * k, static_cast<double>(st.ns_esm) * k, static_cast<double>(st.ns_tdoa) * k,
+                static_cast<double>(st.ns_knowledge) * k, static_cast<double>(st.ns_comms) * k);
+    // a checksum of everything the ESM sites and radars produced, to compare runs at different thread counts
+    std::uint64_t sum = 1469598103934665603ull;
+    auto mix = [&sum](double v) {
+        std::int64_t q = static_cast<std::int64_t>(v * 1e6);
+        sum = (sum ^ static_cast<std::uint64_t>(q)) * 1099511628211ull;
+    };
+    for (const EsmState& e : s.esm)
+        for (const EsmContact& c : e.contacts) { mix(c.bearing_rad); mix(c.sig.freq_hz); mix(static_cast<double>(c.intercepts)); }
+    for (const RadarState& r : s.radars) mix(static_cast<double>(r.tracker.Tracks().size()));
+    mix(static_cast<double>(s.events.size()));
+    std::printf("  threads %d, result checksum %016llx\n", threads, static_cast<unsigned long long>(sum));
     std::printf("  at the end: %zu sensor tracks, %zu ESM contacts\n", tracks, contacts);
     return 0;
 }

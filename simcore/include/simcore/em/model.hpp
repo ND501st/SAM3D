@@ -259,6 +259,7 @@ struct Environment {
     double k_factor = kStandardRefractionK;
     double profile_spacing_m = 100.0;
     Vec3 wind_mps;                      // chaff drift
+    double rain_rate_mmh = 0.0;         // rain over the whole scene (ITU-R P.838); never part of a radar's calibration
 };
 
 // Effective reflection coefficient: rho0 * Rayleigh roughness factor
@@ -327,6 +328,7 @@ struct RadarState {
     std::vector<JamStrobe> strobes;  // recent (kept a few seconds)
     std::vector<StrobeTrack> strobe_tracks;
     int next_strobe_id = 1;
+    mutable PathCache paths{25.0};  // this radar's own profiles (so radars can run on different threads with identical results)
 };
 
 struct EsmIntercept {
@@ -367,6 +369,7 @@ struct EsmState {
     std::vector<EsmIntercept> intercepts;  // this tick
     std::vector<EsmContact> contacts;
     int next_contact_id = 1;
+    mutable PathCache paths{25.0};  // this site's own profiles: sites can then run on different threads with identical results
 };
 
 // Several TDOA sites working as one system (Ramona/Tamara style): a pulse seen by enough sites
@@ -575,6 +578,8 @@ struct EmStats {
     std::uint64_t link_evaluations = 0;
     std::uint64_t plots = 0;
     std::uint64_t intercepts = 0;
+    // Wall-clock nanoseconds per phase of EmWorld::Step (only counted when EmRates::profile is set).
+    std::uint64_t ns_platforms = 0, ns_emitters = 0, ns_radars = 0, ns_esm = 0, ns_tdoa = 0, ns_knowledge = 0, ns_comms = 0;
 };
 
 // ------------------------------------------------------------------------------- spatial grid
@@ -641,7 +646,14 @@ struct EmScene {
     std::vector<EmEvent> events;
     EmStats stats;
 
-    PathCache paths{25.0};
+    mutable PathCache paths{25.0};  // shared profiles (links, comms); the per-site passes use their own
+    unsigned threads = 1;  // worker threads for the per-site passes (ESM); results do not depend on it
+
+    void ClearPaths() {
+        paths.Clear();
+        for (EsmState& e : esm) e.paths.Clear();
+        for (RadarState& r : radars) r.paths.Clear();
+    }
     SpatialGrid grid{10000.0};
     int next_id = 1;
     long long next_message_id = 1;
@@ -652,14 +664,28 @@ struct EmScene {
         events.push_back({time_s, kind, subject, object, text});
     }
 
+    // Entries are added with increasing ids and never reordered, so a binary search finds them; a miss falls back to a
+    // scan in case something was inserted out of order.
     template <typename T>
     static T* FindIn(std::vector<T>& v, int id) {
+        std::size_t lo = 0, hi = v.size();
+        while (lo < hi) {
+            const std::size_t mid = lo + (hi - lo) / 2;
+            if (v[mid].id < id) lo = mid + 1; else hi = mid;
+        }
+        if (lo < v.size() && v[lo].id == id) return &v[lo];
         for (T& x : v)
             if (x.id == id) return &x;
         return nullptr;
     }
     template <typename T>
     static const T* FindIn(const std::vector<T>& v, int id) {
+        std::size_t lo = 0, hi = v.size();
+        while (lo < hi) {
+            const std::size_t mid = lo + (hi - lo) / 2;
+            if (v[mid].id < id) lo = mid + 1; else hi = mid;
+        }
+        if (lo < v.size() && v[lo].id == id) return &v[lo];
         for (const T& x : v)
             if (x.id == id) return &x;
         return nullptr;
