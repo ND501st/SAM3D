@@ -357,6 +357,30 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	Accumulator = 0.0;
 	DebriefEntriesSent = 0;
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)"), *ToF(Runner->Def().name), *Path);
+	// The crew's bodies and voices (roadmap 8.10): presentation data, so a scenario runs without them.
+	{
+		TUniquePtr<simcore::BodyData> Bodies = MakeUnique<simcore::BodyData>();
+		if (simcore::LoadBodyDataFile(ToStd(FPaths::Combine(DataDir, TEXT("crew/body.json"))), *Bodies, &Error))
+		{
+			CrewBodies = MoveTemp(Bodies);
+		}
+		else
+		{
+			CrewBodies.Reset();
+			UE_LOG(LogSAM3D, Warning, TEXT("Crew bodies: %s"), *ToF(Error));
+		}
+		TUniquePtr<simcore::VoiceData> Voices = MakeUnique<simcore::VoiceData>();
+		const simcore::CrewData* Crew = Runner->Def().has_crew_data ? &Runner->Def().crew_data : nullptr;
+		if (simcore::LoadVoiceDataFile(ToStd(FPaths::Combine(DataDir, TEXT("crew/voices.json"))), Crew, *Voices, &Error))
+		{
+			CrewVoices = MoveTemp(Voices);
+		}
+		else
+		{
+			CrewVoices.Reset();
+			UE_LOG(LogSAM3D, Warning, TEXT("Crew voices: %s"), *ToF(Error));
+		}
+	}
 	BroadcastNewDebriefEntries();
 	return true;
 }
@@ -734,6 +758,81 @@ bool USimWorldSubsystem::GiveCrewOrder(const FString& OrderId)
 	return Runner && Runner->GiveCrewOrder(ToStd(OrderId));
 }
 
+FSimDrillAdvice USimWorldSubsystem::GetAssistance(const FString& Station) const
+{
+	FSimDrillAdvice Out;
+	if (!Runner)
+	{
+		return Out;
+	}
+	const simcore::AssistView V = Runner->Assistance(ToStd(Station));
+	Out.Station = Station;
+	Out.Task = ToF(V.task);
+	if (!V.show)
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Out.Control = ToF(V.control);
+	Out.Position = V.position;
+	Out.Description = ToF(V.description);
+	Out.DueInSeconds = V.due_in_s;
+	Out.bDemonstrating = V.demonstrating;
+	for (const std::string& W : V.why)
+	{
+		Out.Why.Add(ToF(W));
+	}
+	return Out;
+}
+
+bool USimWorldSubsystem::SetAssistLevel(const FString& Level)
+{
+	simcore::AssistLevel L = simcore::AssistLevel::Guided;
+	if (!Runner || !simcore::ParseAssistLevel(ToStd(Level), L))
+	{
+		return false;
+	}
+	Runner->SetAssistLevel(L);
+	return true;
+}
+
+FString USimWorldSubsystem::GetAssistLevel() const
+{
+	return Runner ? ToF(simcore::ToString(Runner->GetAssistLevel())) : FString();
+}
+
+FSimMoveVerdict USimWorldSubsystem::GetLastMoveVerdict(const FString& Station) const
+{
+	FSimMoveVerdict Out;
+	const simcore::MoveVerdict* V = Runner ? Runner->LastVerdict(ToStd(Station)) : nullptr;
+	if (V == nullptr)
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Out.TimeSeconds = V->time_s;
+	Out.Control = ToF(V->control);
+	Out.Position = V->position;
+	Out.bBest = V->best;
+	Out.BestControl = ToF(V->best_control);
+	Out.BestDescription = ToF(V->best_description);
+	Out.CostSeconds = V->cost_s;
+	return Out;
+}
+
+bool USimWorldSubsystem::TryCrewOrder(const FString& OrderId, FString& OutReason)
+{
+	if (!Runner)
+	{
+		OutReason = TEXT("no scenario");
+		return false;
+	}
+	simcore::ScenarioRunner::OrderCheck Why;
+	const bool bOk = Runner->TryCrewOrder(ToStd(OrderId), &Why);
+	OutReason = bOk ? FString() : FString::Printf(TEXT("%s / %s"), *ToF(Why.reason_ru), *ToF(Why.reason_en));
+	return bOk;
+}
+
 FSimDrillAdvice USimWorldSubsystem::GetDrillAdvice(const FString& Station, const FString& TaskId) const
 {
 	FSimDrillAdvice Out;
@@ -792,7 +891,11 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 		{
 			if (const simcore::CalloutDef* C = Crew.FindCallout(O.callout))
 			{
-				Out.Add({ToF(C->id), ToF(C->ru), ToF(C->en), true});
+				FSimCrewMenuEntry E{ToF(C->id), ToF(C->ru), ToF(C->en), true};
+				const simcore::ScenarioRunner::OrderCheck Check = Runner->CheckOrder(O.callout);
+				E.bAvailable = Check.can;
+				E.Reason = Check.can ? FString() : FString::Printf(TEXT("%s / %s"), *ToF(Check.reason_ru), *ToF(Check.reason_en));
+				Out.Add(E);
 			}
 		}
 		return Out;

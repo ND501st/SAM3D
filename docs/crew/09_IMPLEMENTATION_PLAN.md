@@ -79,3 +79,47 @@ Second session (17 October 2026):
   stow and march on, run by NPC commanders without a fault. Not yet: choosing the position, orientation as part of the
   readiness, a reload inside the mission, the map's version in Unreal.
 - 8.10 (bodies, animations, voices) and 8.12 (playtest and balance): not started.
+
+Third session (17 October 2026):
+
+- **8.10 done (first pass), `10_BODIES_AND_VOICES.md`.**
+  - **Bodies:** every NPC crewmate is a body in his seat (`simcore/crew_body.hpp`; Unreal
+    `USimCrewBodiesComponent`, meshes from `tools/blender/build_crew_body.py`). His hand goes to the control he is about
+    to move, grips the wheel he turns; he bends, turns on his seat, or stands up for a panel out of seated reach; he
+    looks at what he works and nods when he speaks.
+  - **Reach check:** a test finds the controls that need standing (the deputy's orientation, the commander's right
+    radio), and the drill pays the time.
+  - **Voices:** every callout is spoken in its seat's voice (`crew_voice.hpp`, `data/crew/voices.json`; Unreal
+    `FSimSpeech` and `USimCrewVoiceComponent` on Windows' speech engine). It is Russian with a Russian voice installed,
+    English otherwise; recorded lines take precedence.
+  - **Checked:** headless Unreal tests for the bodies and the speech, and 16 poses rendered in the furnished cabin.
+- **8.7 completed.**
+  - **Levels:** the assistance levels demonstrate, guided, hint, unassisted and exam (scenario `assistance`; H cycles
+    them in the cabin).
+  - **Wrong moves:** the cost of a move off the drill is shown at once ("that cost N s; the best move was ...") and
+    goes to the debrief.
+  - **Ghost hand:** it pulses on the advised control.
+- **8.8 completed but for a radial menu:** honest greying (`ScenarioRunner::CheckOrder`, orders' `needs`, facts'
+  `unmet_ru`/`unmet_en`), and a refused order is answered "Не могу: <reason>".
+- **8.3 completed.**
+  - **Network chart:** the engagement reference lays the network chart on the target's zone entry (the debrief judges
+    each launch).
+  - **Scored decisions** of `06` §3.6 (`crew_decisions.hpp`): target choice, launch timing, judged in the debrief.
+- **8.9 completed but for the PU-12M seat:** sectors of fire (battery vehicles' `sector_deg`;
+  `ScenarioRunner::SetBatterySector`).
+- **8.11 completed in simcore but for choosing the position:**
+  - orientation in the readiness: the NPC commander has the vehicle oriented;
+  - a reload inside the mission: `own_unit.empty_containers`; the mission starts with one missile and the TZM comes;
+  - the NPC commander gives no order whose needs are missing, and waits for the reload before marching on.
+- **8.12 first pass, `11_PLAYTEST_AND_BALANCE.md`:**
+  - `crew_balance` plays every tier over many seeds. Trained crews meet the published reaction time, recruits don't;
+    hits fall with the tier where there is more than one target; no tier faults equipment.
+  - A cold К бою barely depends on the crew: the equipment's warm-ups dominate.
+  - Two NPC commander faults were found and fixed.
+- **Not yet:**
+  - the PU-12M as a seat with its own console (`docs/PU12_DEVELOPMENT.md`);
+  - the other vehicles' crews as full NPC crews;
+  - choosing the position;
+  - a radial menu;
+  - skinned bodies, lips;
+  - a person playing the missions on the map (the second half of 8.12).

@@ -22,7 +22,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. |
-| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`) and skill tiers (`skill_levels.json`). See `docs/crew/`. |
+| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
 | `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
 | `docs/crew/` | **Crew and teamwork reference** (the design pillars below): roles and knowledge, interdependence, behaviour paths, commands and callouts, skill, the drill master, commander mode, training. `generated/` is written by `tools/crew_map.py`. |
@@ -49,6 +49,8 @@ python tools/panel_sheet.py                       # draw the cabin panels flat: 
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
+./simcore/build/crew_balance data 10              # every crew scenario at every skill tier over 10 seeds (docs/crew/11_*)
+./simcore/build/crew_pose_dump data out/crew_poses.json   # the crew's bodies posed; draw them: tools/blender/render_crew_poses.py
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 
@@ -127,7 +129,7 @@ Switch with `/model` in Claude Code.
 
 ## Current status / next steps
 
-See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.9 and 8.11 done in a first pass, next 8.10 (bodies, voices) and playing it on the map; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
+See `docs/DEVELOPMENT_ROADMAP.md` (phase 6, the accuracy pass, done; phase 7, the battery and PU-12, done in simcore with the PU-12M itself planned in `docs/PU12_DEVELOPMENT.md`; phase 9, threats (jamming, method Н, target behaviour), done in simcore; phase 8, crew and teamwork, re-planned around the crew pillars (`docs/crew/09_IMPLEMENTATION_PLAN.md`): 8.0-8.12 done in a first pass (8.10 bodies and voices, 8.12 a headless balance pass); next a person playing the missions on the map, then the PU-12M as a seat; the EM track is at E10) and `docs/HANDOFF.md`. Known gaps are listed in
 `docs/ARCHITECTURE.md` → "Known limitations". Unreal can be driven by script: `tools/ue_remote.py`,
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 

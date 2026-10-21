@@ -8,6 +8,8 @@
 
 class UCameraComponent;
 class USimCabinComponent;
+class USimCrewBodiesComponent;
+class USimCrewVoiceComponent;
 class USceneComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
@@ -166,6 +168,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	FString GetAssistTask() const { return AssistTask; }
 
+	/** The overlay's level (guided, hint, demonstrate; H cycles them and off). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetAssistLevel() const { return AssistLevel; }
+
+	/** The player's last move at this seat, judged (the overlay's "that cost" line). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FSimMoveVerdict GetLastVerdict() const { return LastVerdict; }
+
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	bool IsCrewMenuOpen() const { return bMenuOpen; }
 
@@ -238,6 +248,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<USimCabinComponent> Cabin;
 
+	/** The crewmates' bodies in the cabin (roadmap 8.10), in the cabin's frame. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimCrewBodiesComponent> CrewBodies;
+
+	/** The crew's voices: their callouts on the intercom and the battery net (roadmap 8.10). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
+	TObjectPtr<USimCrewVoiceComponent> CrewVoice;
+
 	/** First-person camera at the current station's eye point. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
 	TObjectPtr<UCameraComponent> CabinCamera;
@@ -277,6 +295,8 @@ private:
 	bool bAssist = false;
 	float AssistClock = 0.0f;
 	FString AssistTask;
+	FString AssistLevel;
+	FSimMoveVerdict LastVerdict;
 	FSimDrillAdvice Advice;
 	bool bMenuOpen = false;
 	int32 MenuPage = 0;

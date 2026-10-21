@@ -205,13 +205,39 @@ order hotkeys of `ASimOsaVehicle`, `GiveCrewOrder` (a whole order of `data/crew/
 `order_k_boyu`: the order menu's backend) and `GetDrillAdvice` (a seat's best next move toward a task, with why and
 when: the overlay's backend). The crew's callouts reach the HUD as radio lines (net "intercom").
 
-In the cabin: **H** turns the training overlay on (the drill master's next control for this seat pulses green; the
-HUD says what, why and when); **O** opens the crew menu (at the commander's seat the orders of the crew data, at any
-other seat that seat's reports; 1-9 choose, 0 next page, Esc close); **T** takes this seat from its NPC (his orders
-become yours, the crew waits for you and reminds you) or gives it back. With the board (B) open, the battery's other
-launchers are listed under it (missiles, target, phase). To play the crew half, set the director's ScenarioFile to
-`scenarios/osa_crew_practice.json` (NPC commander) or `scenarios/osa_mission_march.json`. To come: 8.10 (bodies and
-voices).
+In the cabin:
+
+- **H** cycles the training overlay: guided (the drill master's next control for this seat pulses green, a ghost hand
+  shows the move, the HUD says what, why and when), hint (the same once you hesitate), demonstrate (the seat's NPC does
+  it while the overlay names his move), off. A move off the drill shows what it cost. An exam scenario keeps it off.
+- **O** opens the crew menu: at the commander's seat the orders of the crew data, at any other seat that seat's
+  reports. 1-9 choose, 0 next page, Esc close. Orders that can't be carried out now are greyed with the reason, and the
+  crew answers "Не могу" if you give one anyway.
+- **T** takes this seat from its NPC (his orders become yours, the crew waits for you and reminds you) or gives it back.
+
+With the board (B) open, the battery's other launchers are listed under it (missiles, target, phase). To play the crew
+half, set the director's ScenarioFile to `scenarios/osa_crew_practice.json` (NPC commander) or
+`scenarios/osa_mission_march.json`.
+
+**Bodies and voices** (roadmap 8.10, `docs/crew/10_BODIES_AND_VOICES.md`):
+
+- `USimCrewBodiesComponent` (on the vehicle, in the cabin's frame) draws each NPC crewmate working his controls. Its
+  poses come from simcore's `BodyAnimator`. The body at the camera's seat is hidden.
+- The meshes are built from code and imported with the editor closed. Engine shapes stand in for any not imported.
+
+  ```
+  "C:\Program Files\Blender Foundation\Blender 4.2\blender.exe" --background --python tools/blender/build_crew_body.py
+  D:/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe C:/dev/SAM3D/unreal/SAM3D/SAM3D.uproject -run=pythonscript -script="C:/dev/SAM3D/tools/ue_import_crew_body.py" -unattended -nullrhi
+  ```
+- `USimCrewVoiceComponent` speaks every callout in its seat's voice through Windows' speech engine (`FSimSpeech`,
+  SAPI). It speaks Russian when a Russian voice is installed (Settings > Time & language > Speech > Add voices),
+  English otherwise. Recorded lines in `art/crew_voices/<language>/[<seat>/]<callout>.wav` take precedence.
+- Console: `sam3d.Voice 0/1`, `sam3d.VoiceLanguage auto|ru|en`, `sam3d.VoiceVolume`.
+- Headless checks:
+
+  ```
+  UnrealEditor-Cmd.exe SAM3D.uproject -ExecCmds="Automation RunTests SAM3D.Crew;Quit" -unattended -nullrhi
+  ```
 
 ## Not done yet
 

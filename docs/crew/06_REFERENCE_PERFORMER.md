@@ -142,6 +142,26 @@ Found while building it: the take-off generator has no warm-up in the console da
 the generator; the sourced К бою starts the turbine. Tasks therefore carry the doctrine's preference (`prefer`), and
 where the source says how, the plan follows the source.
 
+As built, 17 October 2026: the decisions of §3.6 and the engagement reference of §4.
+
+- **The evaluation** (`simcore/crew_decisions.hpp`), on straight-line tracks with the outcome model's numbers:
+  - `ZoneWindowOf`: when a track enters and leaves the firing zone.
+  - `EvaluateLaunch`: for a launch at a given time, the intercept, the chance per missile, how many missiles the window
+    allows one after another's result, and the chance of a kill.
+  - `BestLaunch`: the zone's entry. The first missile meets the target at the far edge, and the window keeps the most
+    shots.
+  - `ScoreTargets`: kill × urgency (1 / (1 + time to the closest point / 60 s)). A friend scores −1 and is never chosen.
+- **The debrief judges each decision on the truth** (allowed by §6). The section "Decisions" (`ScenarioRunner::Decisions`):
+  - each target the commander ordered taken, against the evaluation of the hostiles his crew had reported;
+  - each launch against the engagement reference: the network chart's 20.7 s (radar, capture, computer, with the
+    preparation in parallel, then the launch) from the detection, or from when the crew was free of the last target,
+    and no earlier than the zone's entry. A trained crew launches within the published norm, so "slower than the norm"
+    is beyond 40 s less the chart's own time.
+- **The cost of a move** (§3.5) is judged at every move a player makes at a held seat (`ScenarioRunner::MoveVerdicts`,
+  `08`).
+- **Not yet:** the NPC commander choosing his targets by the evaluation on his own picture. He takes the nearest he has
+  heard of, with his tier's priority slips; velocities aren't in a crewmate's picture.
+
 ## 6. What it is not
 
 - Not a learner: no training data, no randomness. Given the same state it gives the same answer, and every answer can

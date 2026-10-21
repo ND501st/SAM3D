@@ -38,6 +38,7 @@ struct SpokenCallout {
     bool has_about = false;
     KnownTarget about;
     int repeats = 0;  // said again after "Повторите"
+    std::size_t seq = 0;  // the order it started in (1, 2, ...): the voice plays each line once (roadmap 8.10)
 };
 
 // "{key}" replaced by fields[key]; unknown keys are left as they are.
@@ -143,6 +144,7 @@ public:
             if (best < 0) return;
             SpokenCallout s = pending_[static_cast<std::size_t>(best)];
             pending_.erase(pending_.begin() + best);
+            s.seq = ++started_;
             s.start_s = now_s;
             s.end_s = now_s + SpeakingTimeS(s.ru);
             speaking_.push_back(std::move(s));
@@ -159,6 +161,14 @@ public:
     const std::vector<SpokenCallout>& Log() const { return log_; }
     std::size_t Pending() const { return pending_.size(); }
     bool Speaking(const std::string& channel) const { return Busy(channel); }
+    // What is being said right now, one per channel (the voice and the speakers' bodies, roadmap 8.10).
+    const std::vector<SpokenCallout>& Now() const { return speaking_; }
+    bool SpeakingFrom(const std::string& station) const {
+        for (const SpokenCallout& s : speaking_) {
+            if (s.from == station) return true;
+        }
+        return false;
+    }
 
 private:
     bool Busy(const std::string& channel) const {
@@ -173,6 +183,7 @@ private:
     std::vector<SpokenCallout> speaking_;
     std::vector<SpokenCallout> heard_;
     std::vector<SpokenCallout> log_;
+    std::size_t started_ = 0;
 };
 
 }  // namespace simcore
