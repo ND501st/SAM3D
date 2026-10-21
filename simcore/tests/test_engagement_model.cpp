@@ -191,9 +191,35 @@ SC_TEST("engagement: launching beyond reach runs out of flight time") {
         { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
           "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
                   { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
-    const Run r = Play(Engage(Target(19000, 800), emcon));
+    // The NPC deputy waits until the target fills the crosshair (within range); a player in his seat launches as soon as
+    // the TV holds it, at 19 km.
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(Engage(Target(19000, 800), emcon), kData, def, console, &error));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    while (!runner.Finished() && runner.Time() < 700.0) {
+        runner.Step(0.1);
+        const Equipment& eq = runner.Console().equipment;
+        if (runner.Launches() == 0 && runner.Engagement().Method() == TrackMethod::Tv && eq.IsReady("missile_prep")) {
+            if (runner.Console().panel.Get("fo.key") == 1) runner.PlayerSet("fo.key", 2);
+            if (eq.IsReady("launch_armed")) runner.PlayerSet("fo.launch", 1);
+        }
+    }
+    Run r;
+    r.debrief = runner.Debrief();
     SC_EXPECT(Has(r, "OUTSIDE the zone"));
     SC_EXPECT(Has(r, "out of reach: flight time ran out"));
+}
+
+SC_TEST("engagement: under EMCON the NPC deputy launches only once the target fills the crosshair (within range)") {
+    const std::string emcon = R"(,
+        { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
+          "do": [ { "order": "emcon_tv_azimuth", "crew": "Senior operator" },
+                  { "order": "emcon_tv_engagement", "crew": "Deputy" } ] })";
+    const Run r = Play(Engage(Target(19000, 800), emcon));
+    SC_EXPECT(Has(r, "TV track, in the zone"));
+    SC_EXPECT(r.debrief.find("OUTSIDE the zone") == std::string::npos);
 }
 
 SC_TEST("engagement: swapped-in terrain masks a target; moving the unit moves the picture") {

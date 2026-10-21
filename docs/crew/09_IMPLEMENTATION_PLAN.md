@@ -116,6 +116,23 @@ Third session (17 October 2026):
     hits fall with the tier where there is more than one target; no tier faults equipment.
   - A cold К бою barely depends on the crew: the equipment's warm-ups dominate.
   - Two NPC commander faults were found and fixed.
+
+Fourth session (17 October 2026): **the Osa's systems in the NPC crew's decisions.** An audit of every system the console
+has against what the NPC commander and crew decide; each gap closed with a test in `simcore/tests/test_crew_systems.cpp`.
+
+| System | What the NPCs now do |
+|---|---|
+| IFF (ЗАПРОС) | The senior operator interrogates each new contact within the interrogator's reach (procedure `iff_interrogate`) and reports "Свой!" or "Ответа нет!" (event `IffNoReply`). The commander permits a launch only at a target interrogated with no reply or designated by the PU-12; otherwise he orders "Запрос!" (`order_iff`) first. |
+| A friend under track | "Пуск запрещаю!" and "Цель сбросить!" (`order_drop_target`): the operator lets the track go (`EngagementModel::DropTrack`). |
+| СДЦ (search MTI) | A designated hostile under the search radar's clutter height makes the commander order "СДЦ включить!" (`order_mti`, procedure `search_mti_on`). |
+| Emission control | The battery's `emcon` order (scenario battery orders, `"radiate": false`) or an ambush not yet sprung: the crew gets ready with the radars silent (task `ready_silent`) and switches the search transmitter off. A designated hostile within the TV's reach is fought by the TV ("Работать без излучения!"). The ambush is sprung when a hostile is designated inside 15 km. |
+| The TV search | With the radars silent the crew aims by the board, leading the designation along its last two plots, and searches with the TV 15° each side of it in three elevation bars until the target shows on the screen (`aim.tv_search_*`, game values). The range operator sets the board's range led on. |
+| The narrow lens | The NPC's tracking error shrinks with the lens's field (they hold the target as closely on the magnified screen). The deputy turns the launch key only when the target fills the crosshair (input `target_fills_crosshair`: within the zone at its true range, judged by its size; samsim_osa p33–35). A player can still launch at any time. |
+| The second missile | A miss with the target still in the zone brings "Вторая — пуск!" (`order_second_missile`). |
+| Radios | The commander's set found off with a command net to hear: "Радиостанции включить!" (`order_radio_on`). |
+| Fuel | At the fuel reserve the commander asks the battery for the fuel truck on the battery net (callout `request_fuel`). |
+| Kills on the net | A target the crew heard destroyed (its own "Цель поражена!" or the battery net's report) leaves every seat's picture, and a late designation of it is not passed on. |
+
 - **Not yet:**
   - the PU-12M as a seat with its own console (`docs/PU12_DEVELOPMENT.md`);
   - the other vehicles' crews as full NPC crews;

@@ -249,7 +249,7 @@ class MapBuilder:
                   + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control")])
             if es:
                 self.add_edge("m:elev", "m:track", "feed", "elevation search")
-            for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input"):
+            for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input", "crosshair_input"):
                 if track.get(k):
                     self.add_edge("m:track", "i:" + track[k], "signal", "sets this signal")
         if orient:

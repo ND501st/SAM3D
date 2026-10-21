@@ -126,6 +126,10 @@ struct EngagementTuning {
     double aim_el_rate_deg_s = 0.0;
     double aim_range_rate_mps = 0.0;
     double plotting_board_range_m = 0.0;
+    // The TV search on a designation (radars silent): the azimuth sector swept each side of it, and the elevation bars
+    // (one field height apart) swept in turn. 0 = none: the wheels sit on the designation.
+    double tv_search_half_deg = 0.0;
+    int tv_search_bars = 1;
     // Missile pacing (not a flight model).
     double missile_average_speed_mps = 0.0;
     double missile_max_flight_time_s = 0.0;
@@ -296,7 +300,7 @@ public:
             return Fail("track.em_capture_hits", "must be from 1 to em_capture_looks");
         }
         if (!Group(root, "aim", {"azimuth_role", "elevation_role", "range_role", "az_rate_deg_s", "el_rate_deg_s",
-                                 "range_rate_mps", "plotting_board_range_m"},
+                                 "range_rate_mps", "plotting_board_range_m", "tv_search_half_deg", "tv_search_bars"},
                    g) ||
             !RequireString(*g, "aim", "azimuth_role", t.aim_az_role) ||
             !RequireString(*g, "aim", "elevation_role", t.aim_el_role) ||
@@ -304,9 +308,15 @@ public:
             !Num(*g, "aim", "az_rate_deg_s", t.aim_az_rate_deg_s, 0.1) ||
             !Num(*g, "aim", "el_rate_deg_s", t.aim_el_rate_deg_s, 0.1) ||
             !Num(*g, "aim", "range_rate_mps", t.aim_range_rate_mps, 1.0) ||
-            !Num(*g, "aim", "plotting_board_range_m", t.plotting_board_range_m, 0.0)) {
+            !Num(*g, "aim", "plotting_board_range_m", t.plotting_board_range_m, 0.0) ||
+            !OptionalNumber(*g, "aim", "tv_search_half_deg", t.tv_search_half_deg)) {
             return false;
         }
+        double bars = 1.0;
+        if (!OptionalNumber(*g, "aim", "tv_search_bars", bars)) return false;
+        if (t.tv_search_half_deg < 0.0) return Fail("aim.tv_search_half_deg", "must be >= 0");
+        if (bars < 1.0 || bars > 9.0 || bars != std::floor(bars)) return Fail("aim.tv_search_bars", "must be a whole number from 1 to 9");
+        t.tv_search_bars = static_cast<int>(bars);
         if (!Group(root, "missile", {"average_speed_mps", "max_flight_time_s"}, g) ||
             !Num(*g, "missile", "average_speed_mps", t.missile_average_speed_mps, 1.0) ||
             !Num(*g, "missile", "max_flight_time_s", t.missile_max_flight_time_s, 0.1)) {
@@ -529,7 +539,7 @@ inline double Uniform01(std::mt19937& rng) { return static_cast<double>(rng()) /
 // What happened in the engagement this step, for the crew's callouts (crew_callouts.hpp): who spoke it is the
 // runner's business; the model only says what each instrument showed.
 struct EngagementEvent {
-    enum class Kind { Contact, Track, TrackLost, OnJammer, BurnThrough, IffFriend, Hit, Miss };
+    enum class Kind { Contact, Track, TrackLost, OnJammer, BurnThrough, IffFriend, IffNoReply, Hit, Miss };
     Kind kind = Kind::Contact;
     double t = 0.0;
     std::string target;
@@ -701,6 +711,20 @@ public:
     }
     // A target that has answered the IFF as a friend at some time (the crew remembers it).
     bool KnownFriend(const std::string& id) const { return replied_.count(id) != 0; }
+    // Interrogated and silent: a contact on the scope during an interrogation that didn't answer.
+    bool NoReply(const std::string& id) const { return silent_.count(id) != 0 && replied_.count(id) == 0; }
+
+    // The crew lets the track go ("Цель сбросить": the wheels off the target). The servo stops; the target may be taken
+    // again later. False if nothing is tracked.
+    bool DropTrack(double t, SessionLog& log, const std::string& why) {
+        if (method_ == TrackMethod::None) return false;
+        log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, "track dropped: " + why});
+        events_.push_back({EngagementEvent::Kind::TrackLost, t, tracked_, 0.0, 0.0, method_, "dropped"});
+        if (em_ != nullptr) em_->ClearLock();
+        method_ = TrackMethod::None;
+        tracked_.clear();
+        return true;
+    }
     // IFF replies painted on the search scope this step.
     const std::vector<Contact>& IffReplies() const { return iff_replies_; }
     const Vec3& UnitPosition() const { return unit_; }
@@ -1073,11 +1097,32 @@ private:
         const bool tv_search = !d.tv_camera.empty() && console.equipment.IsReady(d.tv_camera);
         bool from_board = false;
         double board_true_az = 0.0;
+        std::map<std::string, double> board_range;  // each designation's range, led along its track to now
         if (!have && tv_search && (board_ != nullptr || c2_ != nullptr)) {  // radars silent: the last designations, a minute old at worst
             double best_r = tuning_.plotting_board_range_m;
-            for (const BoardMark& m : c2_ != nullptr ? c2_->Known(time_) : board_->Known(time_)) {
+            bool have_assigned = false;  // the target the commander ordered taken, else the nearest
+            const std::vector<BoardMark> marks = c2_ != nullptr ? c2_->Known(time_) : board_->Known(time_);
+            for (const BoardMark& newest : marks) {
+                // The crew leads a designation along the track of plots (the board shows the last few): from its two newest
+                // marks, carried forward to now.
+                const BoardMark* before = nullptr;
+                bool latest = true;
+                for (const BoardMark& o : marks) {
+                    if (o.target_id != newest.target_id || &o == &newest) continue;
+                    if (o.time_s > newest.time_s) latest = false;
+                    if (o.time_s < newest.time_s && (before == nullptr || o.time_s > before->time_s)) before = &o;
+                }
+                if (!latest) continue;
+                BoardMark m = newest;
+                if (before != nullptr && newest.time_s - before->time_s > 1.0) {
+                    const Vec3 vel = (newest.position - before->position) / (newest.time_s - before->time_s);
+                    m.position = newest.position + vel * (time_ - newest.time_s);
+                }
                 const PlottingBoard::Designation des = PlottingBoard::Designate(m, unit_);
-                if (des.range_m > best_r) continue;
+                board_range[m.target_id] = des.range_m;
+                const bool assigned = !crew.assigned.empty() && m.target_id == crew.assigned;
+                if (des.range_m > tuning_.plotting_board_range_m || have_assigned || (!assigned && des.range_m > best_r)) continue;
+                have_assigned = assigned;
                 best_r = des.range_m;
                 best = {des.range_m, Wrap180(des.azimuth_deg), des.elevation_deg};
                 best_id = m.target_id;
@@ -1101,7 +1146,35 @@ private:
                 from_board = true;
             }
         }
-        if (!have) return;
+        if (!have) {
+            tv_search_s_ = 0.0;
+            return;
+        }
+        if (from_board) {
+            // On the board's word alone the target may be anywhere near the mark (plotted a scan or two ago, read out up to
+            // a minute ago). Once it shows on his TV screen the crew centre it there; until then, within the TV's reach, they
+            // search: the azimuth swept across the sector each side of the designation, the elevation a field height up or
+            // down each sweep.
+            auto on_screen = geo_.find(candidate_);
+            if (candidate_method_ == TrackMethod::Tv && on_screen != geo_.end() && on_screen->second.alive) {
+                best = {on_screen->second.range_m, on_screen->second.az_deg, on_screen->second.el_deg};
+                best_id = on_screen->first;
+                board_true_az = on_screen->second.true_az_deg;
+                tv_search_s_ = 0.0;
+            } else if (tuning_.tv_search_half_deg > 0.0 && tuning_.aim_az_rate_deg_s > 0.0 && best.range_m <= tuning_.tv_max_range_m) {
+                const double sweep_s = 2.0 * tuning_.tv_search_half_deg / (tuning_.aim_az_rate_deg_s * crew.az_rate_factor);
+                const double phase = std::fmod(tv_search_s_, 2.0 * sweep_s) / sweep_s;  // 0..2: out and back
+                const double offset = tuning_.tv_search_half_deg * (phase < 1.0 ? 2.0 * phase - 1.0 : 3.0 - 2.0 * phase);
+                const int sweeps = static_cast<int>(tv_search_s_ / sweep_s);
+                const int bars = tuning_.tv_search_bars;
+                const double bar = static_cast<double>(sweeps % bars - (bars - 1) / 2);
+                board_true_az = Wrap180(board_true_az + offset);
+                best.el_deg += bar * 2.0 * TvHalfFov(console) * d.fov_height_ratio;
+                tv_search_s_ += dt;
+            }
+        } else {
+            tv_search_s_ = 0.0;
+        }
         const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
         if (crew.azimuth && !az_locked) {
             const double wheel_az = console.panel.GetValue(d.az_wheel);
@@ -1113,10 +1186,12 @@ private:
             double want_r = -1.0;
             if (crew.range_knows == nullptr) {
                 if (range_known) want_r = best.range_m;
-            } else {  // his own range indicator first, then what he was told
+            } else {  // his own range indicator first, then the board's range led on, then what he was told
                 for (const Contact& c : track_returns_) {
                     if (c.target_id == best_id) want_r = c.range_m;
                 }
+                const auto led = board_range.find(best_id);
+                if (want_r < 0.0 && led != board_range.end()) want_r = led->second;
                 if (want_r < 0.0) {
                     const KnownTarget* k = crew.range_knows->Find(best_id);
                     if (k != nullptr && k->has_range) want_r = k->range_m;
@@ -1311,6 +1386,13 @@ private:
             }
             if (crew.az_noise_deg > 0.0) az += crew.az_noise_deg * AimNormal();
             if (crew.el_noise_deg > 0.0) el += crew.el_noise_deg * AimNormal();
+            // The narrow lens magnifies the picture: they hold the target as closely on the screen, so their error in
+            // angle shrinks with the field (sam3d; the wide lens is the reference the seat's lag and noise are set for).
+            if (d.fov_wide_deg > 0.0) {
+                const double magnified = TvFieldOfViewDeg(console) / d.fov_wide_deg;
+                az = g.az_deg + (az - g.az_deg) * magnified;
+                el = g.el_deg + (el - g.el_deg) * magnified;
+            }
             const bool az_locked = !d.lock_control.empty() && console.panel.Get(d.lock_control) < 1;
             if (crew.azimuth && !az_locked) {
                 console.panel.SetValue(d.az_wheel, Toward(wheel_az, WheelAzimuth(az, wheel_az, d.az_limit_deg),
@@ -1567,6 +1649,23 @@ private:
         const bool active = ready && t < iff_until_s_ + 1e-9;
         if (!d.iff_interrogating_input.empty()) console.equipment.SetInput(d.iff_interrogating_input, active);
         if (em_ != nullptr) em_->SetInterrogating(active);
+        // The contacts on the scope within the interrogator's range while it asks; those that never answered are reported
+        // when it stops ("Ответа нет!": not identified as friends).
+        if (active) {
+            for (const Contact& c : picture_) {
+                if (c.range_m <= d.iff_max_range_m) asked_.insert(c.target_id);
+            }
+        } else if (!asked_.empty()) {
+            for (const std::string& id : asked_) {
+                if (replied_.count(id) != 0) continue;
+                silent_.insert(id);
+                const Contact* c = SearchContact(id);
+                events_.push_back({EngagementEvent::Kind::IffNoReply, t, id, c != nullptr ? c->azimuth_deg : 0.0, c != nullptr ? c->range_m : 0.0,
+                                   TrackMethod::None, std::string()});
+                log.Record({t, DebriefEntry::Kind::Scenario, "IFF", id, "no reply"});
+            }
+            asked_.clear();
+        }
         if (!active) return;
         if (em_ != nullptr) {  // replies ride on the search radar's own tracks, from the transponder that answered
             for (const EmSensorLink::Contact& c : em_->SearchPicture()) {
@@ -1699,6 +1798,11 @@ private:
         }
         if (!d.tv_track_input.empty()) eq.SetInput(d.tv_track_input, method_ == TrackMethod::Tv);
         if (!d.in_zone_input.empty()) eq.SetInput(d.in_zone_input, in_zone);
+        // The deputy commander judges the range of a target on the TV by its size in the crosshair (samsim_osa p33-35):
+        // taken as in the zone at its true range, whatever the range wheel says.
+        if (!d.crosshair_input.empty()) {
+            eq.SetInput(d.crosshair_input, method_ == TrackMethod::Tv && !tracked_.empty() && InZone(geo_.at(tracked_)));
+        }
         if (!d.near_zone_input.empty()) {
             bool near_zone = in_zone;
             if (range_known && !in_zone && g->closing_mps > 0.0 && g->range_m > tuning_.zone_max_range_m) {
@@ -1743,6 +1847,8 @@ private:
     std::vector<Contact> track_returns_;
     std::set<std::string> seen_by_search_;
     std::set<std::string> replied_;
+    std::set<std::string> asked_;   // on the scope during the interrogation going on
+    std::set<std::string> silent_;  // asked, and never answered
     std::vector<Contact> iff_replies_;
     double iff_until_s_ = -1.0;
     bool iff_control_ = false;
@@ -1756,6 +1862,7 @@ private:
     std::string candidate_;
     TrackMethod candidate_method_ = TrackMethod::None;
     double candidate_time_s_ = 0.0;
+    double tv_search_s_ = 0.0;  // how long the crew have searched with the TV on a designation
     double antenna_el_deg_ = 0.0;
     double swept_low_deg_ = 0.0;
     double swept_high_deg_ = 0.0;
