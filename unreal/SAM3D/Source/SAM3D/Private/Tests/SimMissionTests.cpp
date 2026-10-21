@@ -230,22 +230,37 @@ bool FSimSeatLessonTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("in the senior operator's seat"), Car->GetStationId(), FString(TEXT("senior_operator")));
 	TestTrue(TEXT("a strict lesson, which may be skipped"), Sim->IsTutorialStrict() && Sim->CanSkipTutorialStep());
 	FSimTutorialStep Step = Sim->GetTutorialStep();
-	TestTrue(TEXT("24 steps, the first to read, for this seat"), Step.Count == 24 && Step.Phase == ESimTutorialPhase::Read &&
+	TestTrue(TEXT("26 steps, the first to read, for this seat"), Step.Count == 26 && Step.Phase == ESimTutorialPhase::Read &&
 		Step.Seat == TEXT("senior_operator"));
-	// The tour and the commander's order: five steps to read.
-	for (int32 I = 0; I < 5; ++I)
+	// The greeting to read, then his headset on (docs/crew/12_COMMUNICATIONS.md: the intercom only through it).
+	Sim->NoteTutorialContinue();
+	Run(1);
+	Step = Sim->GetTutorialStep();
+	TestTrue(TEXT("step 2: the headset"), Step.Number == 2 && Step.Control == TEXT("headset.senior_operator"));
+	Sim->PlayerSetControl(TEXT("headset.senior_operator"), 1);
+	Run(2);
+	// The tour and the commander's order: four steps to read.
+	for (int32 I = 0; I < 4; ++I)
 	{
 		Sim->NoteTutorialContinue();
 		Run(1);
 	}
-	// The first switch, once the order has been heard.
+	// His «Второй готов!» from the crew menu, once the order has been heard.
 	for (int32 I = 0; I < 600 && Sim->GetTutorialStep().Phase != ESimTutorialPhase::Act; ++I)
 	{
 		Run(1);
 	}
+	TestEqual(TEXT("step 7: his seat's report"), Sim->GetTutorialStep().Number, 7);
+	TestTrue(TEXT("«Второй готов!» said"), Sim->PlayerSay(TEXT("senior_operator"), TEXT("seat_ready")));
+	Run(2);
+	// The first switch.
+	for (int32 I = 0; I < 600 && (Sim->GetTutorialStep().Phase != ESimTutorialPhase::Act || Sim->GetTutorialStep().Number < 8); ++I)
+	{
+		Run(1);
+	}
 	Step = Sim->GetTutorialStep();
-	TestTrue(FString::Printf(TEXT("step 6: ПОИСК (%s, %s)"), *Step.Title, *Step.WaitText),
-		Step.Number == 6 && Step.Phase == ESimTutorialPhase::Act && Step.Control == TEXT("soc.search") && Step.Position == 1 &&
+	TestTrue(FString::Printf(TEXT("step 8: ПОИСК (%s, %s)"), *Step.Title, *Step.WaitText),
+		Step.Number == 8 && Step.Phase == ESimTutorialPhase::Act && Step.Control == TEXT("soc.search") && Step.Position == 1 &&
 		!Step.ControlLabel.IsEmpty() && !Step.PositionLabel.IsEmpty());
 	TestFalse(TEXT("another switch is refused, with the reason"), Sim->GetTutorialRefusal(TEXT("soc.hv")).IsEmpty());
 	TestTrue(TEXT("the step's switch is not"), Sim->GetTutorialRefusal(TEXT("soc.search")).IsEmpty());
@@ -258,18 +273,18 @@ bool FSimSeatLessonTest::RunTest(const FString& Parameters)
 	Sim->PlayerSetControl(TEXT("soc.search"), 1);
 	Run(2);
 	Step = Sim->GetTutorialStep();
-	TestTrue(FString::Printf(TEXT("set: on to the guard (%s)"), *Step.Title), Step.Number == 7 && Step.Control == TEXT("soc.hv_cover"));
-	// Backspace: step 6 again, to read; Enter: on again.
+	TestTrue(FString::Printf(TEXT("set: on to the guard (%s)"), *Step.Title), Step.Number == 9 && Step.Control == TEXT("soc.hv_cover"));
+	// Backspace: step 8 again, to read; Enter: on again.
 	Sim->BackTutorialStep();
 	Step = Sim->GetTutorialStep();
-	TestTrue(TEXT("back: step 6 to read again"), Step.Number == 6 && Step.bReview && Step.Phase == ESimTutorialPhase::Read);
+	TestTrue(TEXT("back: step 8 to read again"), Step.Number == 8 && Step.bReview && Step.Phase == ESimTutorialPhase::Read);
 	Sim->NoteTutorialContinue();
 	Run(1);
-	TestEqual(TEXT("Enter: on to step 7"), Sim->GetTutorialStep().Number, 7);
+	TestEqual(TEXT("Enter: on to step 9"), Sim->GetTutorialStep().Number, 9);
 	// N: the instructor lifts the guard.
 	Sim->SkipTutorialStep();
 	Run(2);
-	TestTrue(TEXT("skipped: the instructor lifted the guard"), Sim->GetTutorialStep().Number == 8 && Sim->GetControlPosition(TEXT("soc.hv_cover")) == 1);
+	TestTrue(TEXT("skipped: the instructor lifted the guard"), Sim->GetTutorialStep().Number == 10 && Sim->GetControlPosition(TEXT("soc.hv_cover")) == 1);
 
 	GEngine->DestroyWorldContext(World);
 	World->DestroyWorld(false);

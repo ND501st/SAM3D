@@ -129,7 +129,8 @@ bool FSimPu12CabinTest::RunTest(const FString& Parameters)
 		{
 			TestTrue(TEXT("into the cabin"), Car->SetInCabin(true));
 			TestEqual(TEXT("five seats"), Cabin->GetNumStations(), 5);
-			TestEqual(TEXT("the IT-45, the IT-1M, the IT-2M, the plotter's map, the ДХ's window and the two papers"), Cabin->GetNumDisplays(), 7);
+			TestEqual(TEXT("the IT-45, the IT-1M, the IT-2M, the plotter's map, the ДХ's window, the radio data and the talk tables, the "
+							"R-407's two drums and meter, the R-111's meter and scale"), Cabin->GetNumDisplays(), 12);
 			TestFalse(TEXT("the hull hidden from inside"), Exterior != nullptr && Exterior->IsVisible());
 			TestFalse(TEXT("the compartment shown inside"), Cabin->IsCabinHidden());
 			Car->SetInCabin(false);
