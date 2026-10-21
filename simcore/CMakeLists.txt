@@ -26,6 +26,11 @@ function(simcore_configure_target tgt)
     # meant to be left out of brace-initializers, which -Wmissing-field-initializers (in -Wextra) would reject.
     target_compile_options(${tgt} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
                                           -Wno-missing-field-initializers)
+    # GCC 13's -Wdangling-reference takes the loaders' loops over braced lists of std::make_pair("key", &member) for
+    # references to temporaries (the pointers passed to make_pair); nothing dangles there, so it is off for GCC.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13)
+      target_compile_options(${tgt} PRIVATE -Wno-dangling-reference)
+    endif()
     if(SIMCORE_STRICT)
       target_compile_options(${tgt} PRIVATE -Werror -fno-rtti)
     endif()

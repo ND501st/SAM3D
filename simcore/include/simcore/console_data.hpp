@@ -798,8 +798,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
             return false;
         }
-        for (const auto& sub : {std::make_pair("telecode", &out.post_telecode), std::make_pair("primary", &out.post_primary),
-                                std::make_pair("oriented", &out.post_oriented)}) {
+        // Named arrays, not braced lists of make_pair: GCC 13 takes those for dangling references (-Wdangling-reference).
+        const std::pair<const char*, std::string*> subs[] = {
+            {"telecode", &out.post_telecode}, {"primary", &out.post_primary}, {"oriented", &out.post_oriented}};
+        for (const auto& sub : subs) {
             if (out.equipment.Def(*sub.second) == nullptr) return Fail(Join("post", sub.first), "unknown subsystem '" + *sub.second + "'");
         }
         if (!out.equipment.HasInput(out.post_telecode_input)) return Fail("post.telecode_input", "unknown input '" + out.post_telecode_input + "'");
@@ -916,7 +918,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !Provenance(*r, "radios") || !RequireString(*r, "radios", "file", out.radios_file)) {
             return message_.empty() ? Fail("radios", "expected an object") : false;
         }
-        for (const auto& set : {std::make_pair("r111", &out.r111), std::make_pair("r407", &out.r407)}) {
+        const std::pair<const char*, RadioSetBinding*> sets[] = {{"r111", &out.r111}, {"r407", &out.r407}};
+        for (const auto& set : sets) {
             const json::Value* b = r->Find(set.first);
             if (b == nullptr) continue;
             const std::string bp = Join("radios", set.first);
@@ -1354,10 +1357,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         if (d.attention_input.empty()) return Fail(Join(lp, "attention_input"), "required");
-        for (const auto& t : {std::make_pair("capture_s", &d.capture_s), std::make_pair("medium_s", &d.medium_s),
-                              std::make_pair("narrow_s", &d.narrow_s), std::make_pair("fuse_range_m", &d.fuse_range_m),
-                              std::make_pair("nominal_flight_s", &d.nominal_flight_s),
-                              std::make_pair("min_interval_s", &d.min_interval_s)}) {
+        const std::pair<const char*, double*> times[] = {
+            {"capture_s", &d.capture_s}, {"medium_s", &d.medium_s}, {"narrow_s", &d.narrow_s}, {"fuse_range_m", &d.fuse_range_m},
+            {"nominal_flight_s", &d.nominal_flight_s}, {"min_interval_s", &d.min_interval_s}};
+        for (const auto& t : times) {
             if (l->Find(t.first) == nullptr) return Fail(Join(lp, t.first), "required");
             if (!OptionalNumber(*l, lp, t.first, *t.second)) return false;
             if (*t.second < 0.0) return Fail(Join(lp, t.first), "must be >= 0");

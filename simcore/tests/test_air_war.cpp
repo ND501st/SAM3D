@@ -643,8 +643,8 @@ SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation 
             if (runner.EndReason() == "the vehicle was hit by an anti-radiation missile") SC_EXPECT(bridge.UnitDestroyed() && !o.radars_killed.empty());
             c.CompletePlayerMission(o, rs.manifest.start_h + runner.Time() / 3600.0);
         }
-        std::printf("    %s: %d raids with EM ARM carriers, %d EM ARMs fired (%d on the vehicle), %d by the bridge's model\n", adversary, with_arms,
-                    em_fired, unit_hit, abstract_fired);
+        std::printf("    %s: %d raids with EM ARM carriers (%d played), %d EM ARMs fired (%d on the vehicle), %d by the bridge's model\n",
+                    adversary, with_arms, raids, em_fired, unit_hit, abstract_fired);
         SC_EXPECT(with_arms >= 1);
         // Every carrier with a warning receiver fires through the EM layer: the bridge's model only for the others.
         for (const AircraftType& t : d.faction.aircraft) {
