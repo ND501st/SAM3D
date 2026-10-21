@@ -134,8 +134,8 @@ playing them through.
 
 | # | Task |
 |---|---|
-| 10.1 | Training-range scenarios in the style of Ashuluk / Kapustin Yar / Ustka / NAMFI (drones, P-15 targets) |
-| 10.2 | Angola 1983–88 (dug-in Osa-AK unit, night moves, night bombers; Cuito Cuanavale) and Lebanon, 24 July 1982 |
+| 10.1 | **Done in simcore, 18 Oct 2026.** Range days in the style of Ashuluk (from cold, two La-17M drones, one high in the search radar's beam III), Ustka (P-15 targets from the sea, a two-missile salvo at each: `doctrine.salvo`, the second 3-5 s after the first, `korovin_tiv_2010`) and Kapustin Yar (a target entering the zone at its far edge: the missile goes at 8-10 km, the preparation starting in the zone). NAMFI (Crete) left for later |
+| 10.2 | **Done in simcore, 18 Oct 2026.** The Bekaa, 24 July 1982 (an F-4E pair over the mountains, hidden until the crest); Angola from the Pavlov memoir (dug in under nets, a night raid by Buccaneers and an Impala fought by the radars alone, a Puma hidden in a canyon); Cuito Cuanavale, 20 February 1988 (Mirage F1AZs tossing their bombs). The events are sourced, the profiles placeholders (`data/scenarios/README.md`, "Ranges and history"); the missions menu's "Ranges and history" group. Night moves with the search radar on are left for the march mission. Found and fixed on the way: targets circling a waypoint inside their turn circle for ever (after a jink), pull-ups that read as 100+ deg/s manoeuvres in the outcome, a high target's track losing its name in beam III, a manoeuvring target's split track and a kill's last blip reported as new echoes, НЛЦ lit by a target hidden behind the ground and called again at every flicker |
 | 10.3 | Instructor mode modelled on the 9Ф632 trainer: a second player changes target behaviour live |
 
 ## Electromagnetic (EM) track

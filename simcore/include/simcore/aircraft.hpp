@@ -5,6 +5,7 @@
 // once the engagement loop works end to end.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -28,6 +29,21 @@ struct Aircraft {
     bool alive = true;
 };
 
+// A waypoint inside one of the aircraft's turn circles (beside it, closer than its turn radius) can't be flown over
+// at its turn rate: it would circle it for ever. A pilot who has overshot a turn point flies on to the next.
+inline bool WaypointInsideTurn(const Aircraft& a, const Vec3& dir, const Vec3& wp) {
+    if (a.max_turn_rate_rad_s <= 1e-6 || a.speed_mps <= 0.0) return false;
+    const double h = std::hypot(dir.x, dir.y);
+    if (h <= 1e-9) return false;
+    const double radius_m = a.speed_mps / a.max_turn_rate_rad_s;
+    const double lx = -dir.y / h, ly = dir.x / h;  // to the left, in the horizontal
+    for (double side : {1.0, -1.0}) {
+        const double cx = a.position.x + side * radius_m * lx, cy = a.position.y + side * radius_m * ly;
+        if (std::hypot(wp.x - cx, wp.y - cy) < 0.98 * radius_m) return true;
+    }
+    return false;
+}
+
 inline void StepAircraft(Aircraft& a, double dt) {
     if (!a.alive) return;
     Vec3 dir = a.velocity.Normalized();
@@ -35,7 +51,7 @@ inline void StepAircraft(Aircraft& a, double dt) {
 
     if (a.next_waypoint < a.waypoints.size()) {
         const Vec3 to_wp = a.waypoints[a.next_waypoint] - a.position;
-        if (to_wp.Length() <= a.waypoint_capture_radius_m) {
+        if (to_wp.Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, dir, a.waypoints[a.next_waypoint])) {
             ++a.next_waypoint;
         } else {
             dir = TurnToward(dir, to_wp.Normalized(), a.max_turn_rate_rad_s * dt);

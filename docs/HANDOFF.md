@@ -109,6 +109,17 @@ a `ProcedureTracker` so the debrief records early and out-of-order actions.
 | Research review | Done (PR #8): research file, briefing, re-plan; the user's video transcript analysed (Korovin's «Техника и вооружение» series added as a tier-1 source) |
 | **6 Accuracy pass** | **6.1 done** (branch `feature/five-man-crew`): five seats, one seat per procedure, aiming split per wheel, red start-position dots. Next: 6.2 |
 
+### Ranges and history (18 October 2026)
+
+Roadmap 10.1-10.2: six scenarios in the missions menu's "Ranges and history" group (`data/scenarios/README.md`): range
+days at Ashuluk, Ustka (the two-missile salvo, `doctrine.salvo`) and Kapustin Yar, and the Bekaa (24 July 1982), Angola
+(the Pavlov memoir: dug in, night, a Puma in a canyon) and Cuito Cuanavale (20 February 1988). Events from the sources,
+profiles placeholders; `test_ranges_history.cpp` plays each. Playing them showed six faults in the shared models, fixed:
+a target circled a waypoint inside its turn circle for ever (`aircraft.hpp`, mirrored in the prototype); terrain-following
+pull-ups jumped the vertical speed, read as 100+ deg/s manoeuvres by the outcome (`target_behaviour.hpp`: 15 m/s2); a high
+target's search track lost its name in the 19-degree beam III (`em_link.hpp`); a manoeuvring target's split track and a
+kill's last blip showed as new echoes; НЛЦ lit for a target hidden behind the ground and was called at every flicker.
+
 ## 9. The research review (2 Oct 2026) and what it changed
 
 The user asked for a step back: read everything on SAM Simulator and research the real Osa, preferring documents

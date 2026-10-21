@@ -15,6 +15,7 @@
 // All numbers come from the scenario (PLACEHOLDER flight profiles, not data of a real aircraft).
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -233,14 +234,23 @@ private:
         const double alt = frame.AltitudeOf(a.position);
         const double want = ground + WantedAglM(a);
         const double rate = diving_ && b_.max_climb_mps < 50.0 ? 50.0 : b_.max_climb_mps;  // a dive is steeper
-        double dz = want - alt;
-        const double step = rate * dt;
-        if (dz > step) dz = step;
-        if (dz < -step) dz = -step;
-        if (alt + dz < here + 2.0) dz = here + 2.0 - alt;  // no flying into the ground
+        // The vertical speed changes no faster than a pull-up allows, and eases off in time to level at the height
+        // wanted (a sudden climb would read as a hard manoeuvre in the outcome).
+        const double gap = want - alt;
+        double vz_want = std::min({rate, std::sqrt(2.0 * kVerticalAccelMps2 * std::fabs(gap)), std::fabs(gap) / kLevelOffS});
+        if (gap < 0.0) vz_want = -vz_want;
+        const double dv = kVerticalAccelMps2 * dt;
+        vz_mps_ += std::max(-dv, std::min(dv, vz_want - vz_mps_));
+        double dz = vz_mps_ * dt;
+        if (alt + dz < here + 2.0) {  // no flying into the ground
+            dz = here + 2.0 - alt;
+            vz_mps_ = std::min(dz / dt, rate);
+        }
         a.position.z += dz;
         a.velocity.z = dz / dt;
     }
+    static constexpr double kVerticalAccelMps2 = 15.0;  // about 1.5 g beyond level flight: a game value
+    static constexpr double kLevelOffS = 1.0;
 
     TargetBehaviourDef b_;
     EvadeDef e_;
@@ -257,6 +267,7 @@ private:
     double jink_sign_ = 1.0;
     double jink_flip_s_ = 0.0;
     double jink_end_s_ = 0.0;
+    double vz_mps_ = 0.0;  // the vertical speed the pilot holds (the world moves the aircraft in the horizontal)
 };
 
 }  // namespace simcore

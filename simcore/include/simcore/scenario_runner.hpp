@@ -1457,6 +1457,13 @@ private:
             }
             ++launches_;
             if (engagement_on_ && !engagement_.TrackedTarget().empty()) ++npc_launched_at_[engagement_.TrackedTarget()];
+            if (engagement_on_) {  // a salvo (doctrine salvo): this launch opens one if nothing is in the air, else adds to it
+                if (!engagement_.ShotsInFlight() || salvo_target_ != engagement_.TrackedTarget()) {
+                    salvo_target_ = engagement_.TrackedTarget();
+                    salvo_count_ = 0;
+                }
+                ++salvo_count_;
+            }
             if (engagement_on_) OwnReport(BatteryFire::Event::Kind::Launch, engagement_.TrackedTarget());
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
@@ -1743,6 +1750,10 @@ private:
     std::unique_ptr<CalloutBus> callouts_;
     std::unique_ptr<DrillMaster> drill_;
     std::vector<char> report_state_;  // each automatic report's condition last step
+    std::vector<double> report_said_s_;  // when each was last said
+    std::vector<double> report_off_s_;   // when its condition last went false
+    static constexpr double kReportAgainS = 10.0;
+    static constexpr double kReportFlickerS = 3.0;
     struct WaitWatch {
         double since_s = -1.0;
         int reminded = 0;
@@ -2104,7 +2115,8 @@ private:
         const EngagementModel& eng = engagement_;
         const TrackMethod m = eng.Method();
         const std::string tracked = eng.TrackedTarget();
-        if (eng.ShotsInFlight()) return;  // a missile in the air: wait for the result
+        // A missile in the air: wait for the result; under a two-missile salvo (doctrine salvo) the second goes first.
+        if (eng.ShotsInFlight() && !NpcSalvoDue(tracked)) return;
         if (m == TrackMethod::None) {
             npc_target_.clear();
             // Take the nearest contact once it is within the tracking radar's reach (the drill switches the tracking
@@ -2244,6 +2256,13 @@ private:
             npc_permit_s_ = time_;
         }
     }
+    // Under a two-missile salvo (doctrine salvo) the second missile at the target goes as soon as the launcher allows
+    // (3-5 s after the first: korovin_tiv_2010), while the first is still in the air; after that the results are waited
+    // for, and a miss with the target still in the zone is engaged again with a new salvo.
+    bool NpcSalvoDue(const std::string& tracked) const {
+        return def_.doctrine.salvo > 1 && !tracked.empty() && tracked == salvo_target_ && salvo_count_ < def_.doctrine.salvo &&
+               engagement_.ShotsInFlightAt(tracked) == salvo_count_ && engagement_.Method() != TrackMethod::None;
+    }
     // Warned of decoys (doctrine tv_check), the commander launches only at what the TV has shown him (roadmap E6): the
     // deputy looks at what the radar holds through the narrow lens (tv_watch); once he can make its type out
     // (em/optical.hpp), a decoy (a small drone where the echo says aircraft) is reported, the launch forbidden and the
@@ -2353,6 +2372,8 @@ private:
     bool npc_ambush_sprung_ = false;
     std::string npc_held_;
     std::map<std::string, int> npc_launched_at_;  // launches at each target (the second missile's words)
+    std::string salvo_target_;  // the salvo in the air: its target and how many missiles it has (doctrine salvo)
+    int salvo_count_ = 0;
     double drop_at_s_ = -1.0;
     int npc_permit_launches_ = -1;
     double npc_permit_s_ = -1e9;
@@ -2526,11 +2547,19 @@ private:
             if (engagement_on_) engagement_.TakeEvents();  // nobody to say them
             return;
         }
-        // Automatic reports: a seat says it when its condition becomes true.
+        // Automatic reports: a seat says it when its condition becomes true. A lamp that flickers (out for a moment
+        // only) is not called again and again: he said it a moment ago.
+        report_said_s_.resize(def_.crew_data.reports.size(), -1e9);
+        report_off_s_.resize(def_.crew_data.reports.size(), -1e9);
         for (std::size_t i = 0; i < def_.crew_data.reports.size(); ++i) {
             const AutoReportDef& r = def_.crew_data.reports[i];
             const bool now = console_.equipment.Holds(r.when, console_.panel);
-            if (now && report_state_[i] == 0 && NpcAt(r.from)) Say(r.callout, r.from);
+            const bool flicker = time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS;
+            if (now && report_state_[i] == 0 && NpcAt(r.from) && !flicker) {
+                Say(r.callout, r.from);
+                report_said_s_[i] = time_;
+            }
+            if (!now && report_state_[i] != 0) report_off_s_[i] = time_;
             report_state_[i] = now ? 1 : 0;
         }
         // What the instruments showed.

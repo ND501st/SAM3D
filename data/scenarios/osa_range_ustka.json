@@ -1,0 +1,41 @@
+{
+  "scenario_id": "osa_range_ustka",
+  "name": "Range day at Ustka: P-15 targets in from the sea, a two-missile salvo at each",
+  "description": "A live-fire range shoot in the style of the Polish range at Ustka on the Baltic coast (roadmap 10.1): the vehicle stands deployed on the shore, and two targets made from P-15 anti-ship missiles come in from the sea one after the other, fast and low. The range's orders are a salvo of two missiles at each target: the second goes as soon as the launcher allows, before the first has reached it. The NPC commander runs the crew; take any seat, or his.",
+  "source": "sam3d", "confidence": "estimate",
+  "notes": "The range and the target type follow docs/research/OSA_RESEARCH_2026-10.md section 9 (samsim_thread, ilya_prosto: Osa shoots at Ustka; SAM Simulator has an Osa double kill against a P-15 target there). The two-missile salvo, 3-5 s apart: korovin_tiv_2010; two missiles selected at ВНИМАНИЕ: flak11. PLACEHOLDERS: the targets' speed (kept within the head-on zone's 300 m/s band), heights, courses and echo, the gap between them, the shore's height. The sea is flat ground: no sea clutter.",
+  "seed": 11,
+  "origin": { "lat_deg": 54.59, "lon_deg": 16.85, "alt_m": 5 },
+  "terrain": { "type": "flat", "height_m": 5, "notes": "The beach and the sea north of it, both flat." },
+  "environment": { "visibility_km": 25, "daylight": true },
+  "doctrine": { "salvo": 2 },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "readiness": "deployed",
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class1" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class2" },
+    { "name": "Operator", "role": "operator", "skill": "class2" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "p1", "name": "P-15 target (placeholder profile)", "type": "Air+Missile", "class": "cruise_missile", "size_m": 6.5,
+      "start": { "east_m": 3000, "north_m": 40000, "up_m": 200 }, "waypoints": [ { "east_m": 3000, "north_m": -20000, "up_m": 200 } ],
+      "speed_mps": 280, "rcs_m2": 1.0, "appear_at_s": 60,
+      "notes": "Straight in from the sea, 3 km to the side of the vehicle. Placeholder numbers." },
+    { "id": "p2", "name": "P-15 target, lower (placeholder profile)", "type": "Air+Missile", "class": "cruise_missile", "size_m": 6.5,
+      "start": { "east_m": -2500, "north_m": 40000, "up_m": 120 }, "waypoints": [ { "east_m": -2500, "north_m": -20000, "up_m": 120 } ],
+      "speed_mps": 280, "rcs_m2": 1.0, "appear_at_s": 300,
+      "notes": "The second target, lower. Placeholder numbers." }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 600, "when_targets_gone": true }
+}

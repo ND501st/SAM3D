@@ -1,0 +1,36 @@
+{
+  "scenario_id": "osa_range_kapustin_yar",
+  "name": "Range day at Kapustin Yar: a target at the far edge of the zone",
+  "description": "A live-fire range shoot in the style of Kapustin Yar on the lower Volga (roadmap 10.1): a slow target drone at medium height comes in on a course that passes 5 km to the side, so it enters the zone at its far edge, 10 km out. The task is to launch as early as the zone allows: the crew that is ready when ЦЕЛЬ В ЗОНЕ lights gets its missile away near the edge. The NPC commander runs the crew; take any seat, or his.",
+  "source": "sam3d", "confidence": "estimate",
+  "notes": "The range follows docs/research/OSA_RESEARCH_2026-10.md section 9 (samsim_thread, ilya_prosto, korovin_tiv_2010); docs/SOURCES.md's validation list has a kill near the maximum range, 10.3 km, at Kapustin Yar in 2013. That was in Russian service (an Osa-AKM, whose preparation starts at ВНИМАНИЕ); SAM3D's Osa-AK starts it when the target is in the zone (flak11, NVA), so here the missile goes about 15 s after the lamp, a little inside the edge. PLACEHOLDERS: the drone's speed, height, course and echo.",
+  "seed": 13,
+  "origin": { "lat_deg": 48.5, "lon_deg": 46.0, "alt_m": 20 },
+  "terrain": { "type": "flat", "height_m": 20, "notes": "The steppe of the lower Volga: flat." },
+  "environment": { "visibility_km": 40, "daylight": true },
+  "crew_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "readiness": "deployed",
+    "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
+    "heading_deg": 0,
+    "inputs": { "vehicle_stopped": true }
+  },
+  "crew": [
+    { "name": "Commander", "role": "commander", "skill": "class1" },
+    { "name": "Deputy commander", "role": "deputy_commander", "skill": "class1" },
+    { "name": "Senior operator", "role": "senior_operator", "skill": "class1" },
+    { "name": "Operator", "role": "operator", "skill": "class1" },
+    { "name": "Driver", "role": "driver", "skill": "class2" }
+  ],
+  "targets": [
+    { "id": "k1", "name": "Target drone (placeholder profile)", "type": "Air+FixedWing+Drone", "class": "drone", "size_m": 4.0,
+      "start": { "east_m": 5000, "north_m": 40000, "up_m": 3000 }, "waypoints": [ { "east_m": 5000, "north_m": -30000, "up_m": 3000 } ],
+      "speed_mps": 100, "rcs_m2": 0.5, "appear_at_s": 60,
+      "notes": "Straight in, 5 km to the side: inside the 6 km crossing parameter, so in the zone from its far edge. Placeholder numbers." }
+  ],
+  "triggers": [],
+  "end": { "time_limit_s": 600, "when_targets_gone": true }
+}

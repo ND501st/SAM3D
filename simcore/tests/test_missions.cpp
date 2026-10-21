@@ -32,7 +32,7 @@ SC_TEST("missions: the catalogue loads and every mission in it starts, with its 
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("    %zu missions in %zu groups, loaded in %.0f ms\n", c.Count(), c.groups.size(), ms);
-    SC_EXPECT(c.Count() == 16 && c.groups.size() == 2);
+    SC_EXPECT(c.Count() == 16 + 6 && c.groups.size() == 3);  // + ranges and history
     for (const MissionGroup& g : c.groups) {
         SC_EXPECT(!g.label.empty() && !g.notes.empty());
         for (const MissionDef& m : g.missions) {
@@ -90,7 +90,7 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
         if (!listed) std::printf("    not in the menu: scenarios/%s\n", name.c_str());
         SC_EXPECT(listed);
     }
-    SC_EXPECT(files == 18);
+    SC_EXPECT(files == 18 + 6);  // + ranges and history
 }
 
 SC_TEST("missions: a mission that would not start is refused, naming its place in the list") {

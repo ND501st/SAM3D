@@ -81,6 +81,10 @@ struct CrewDoctrineDef {
     // on for on_s then off for off_s (video_osa: the search radar on for two turns). 0: always on.
     double search_on_s = 0.0;
     double search_off_s = 0.0;
+    // Missiles per target at once: 2 is the two-missile salvo, the second launched as soon as the launcher allows
+    // (3-5 s), before the first's result (korovin_tiv_2010; flak11: two missiles selected at ВНИМАНИЕ). 1: one, and
+    // the second only after a miss.
+    int salvo = 1;
 };
 
 struct TriggerAction {
@@ -647,14 +651,16 @@ private:
         return true;
     }
 
-    // "doctrine": {"tv_check": true, "search_bursts": {"on_s": 4, "off_s": 20}}.
+    // "doctrine": {"tv_check": true, "search_bursts": {"on_s": 4, "off_s": 20}, "salvo": 2}.
     bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
         const json::Value* d = root.Find("doctrine");
         if (d == nullptr) return true;
-        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "notes"}) ||
-            !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check)) {
+        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "notes"}) ||
+            !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check) ||
+            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo)) {
             return false;
         }
+        if (out.doctrine.salvo < 1 || out.doctrine.salvo > 2) return Fail("doctrine.salvo", "must be 1 or 2");
         if (const json::Value* b = d->Find("search_bursts")) {
             if (!Keys(*b, "doctrine.search_bursts", {"on_s", "off_s", "notes"}) ||
                 !RequireNumber(*b, "doctrine.search_bursts", "on_s", out.doctrine.search_on_s) ||

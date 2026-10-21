@@ -32,6 +32,18 @@
         { "file": "scenarios/osa_practice_c2.json", "title": "Osa: the PU-12 lost, warning from the EWR net" },
         { "file": "scenarios/osa_battery_practice.json", "title": "Osa: the battery in a prepared position" }
       ]
+    },
+    {
+      "id": "ranges_history", "label": "Ranges and history",
+      "notes": "Live-fire range shoots in the style of the Soviet and Polish ranges, and battles where the Osa fought: the events come from the sources each scenario names, the flight profiles are SAM3D's. NPC commanders run the crew: take a seat, or command the vehicle.",
+      "missions": [
+        { "file": "scenarios/osa_range_ashuluk.json", "title": "Ashuluk: from cold to two La-17M drones" },
+        { "file": "scenarios/osa_range_ustka.json", "title": "Ustka: P-15 targets from the sea, a salvo at each" },
+        { "file": "scenarios/osa_range_kapustin_yar.json", "title": "Kapustin Yar: a target at the zone's far edge" },
+        { "file": "scenarios/osa_bekaa_1982.json", "title": "The Bekaa, 24 July 1982: F-4Es over the mountains" },
+        { "file": "scenarios/osa_angola_night.json", "title": "Angola: dug in, a night raid, a Puma in the canyon" },
+        { "file": "scenarios/osa_cuito_1988.json", "title": "Cuito Cuanavale, 20 February 1988: Mirage F1AZs" }
+      ]
     }
   ]
 }

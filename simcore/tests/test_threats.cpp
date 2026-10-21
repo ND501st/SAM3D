@@ -381,20 +381,49 @@ SC_TEST("threats 9.3: a low strike run follows its waypoints' heights: low ingre
     a.speed_mps = 250.0;
     a.velocity = {0.0, 250.0, 0.0};
     a.waypoints = {{0.0, -6000.0, 0.0}, {0.0, -1000.0, 0.0}, {0.0, 20000.0, 0.0}};
-    double t = 0.0, top = 0.0;
+    double t = 0.0, top = 0.0, max_pitch_rate_deg_s = 0.0;
+    Vec3 last = a.velocity;
     std::vector<double> agl_at;  // 10 km out and 8 km past
     Fly(pilot, a, flat, frame, t, 140.0, [&](const std::string&) {
         const double y = a.position.y;
         if ((agl_at.empty() && y > -10000.0) || (agl_at.size() == 1 && y > 9000.0)) agl_at.push_back(Agl(a, flat, frame));
         top = std::max(top, Agl(a, flat, frame));
+        max_pitch_rate_deg_s = std::max(max_pitch_rate_deg_s, RadToDeg(AngleBetween(last, a.velocity)) / 0.1);
+        last = a.velocity;
     });
     SC_EXPECT(agl_at.size() == 2);
     if (agl_at.size() == 2) {
-        std::printf("    ingress %.0f m, top of the pull-up %.0f m, egress %.0f m\n", agl_at[0], top, agl_at[1]);
+        std::printf("    ingress %.0f m, top of the pull-up %.0f m, egress %.0f m; the flight path turns up to %.1f deg/s\n", agl_at[0],
+                    top, agl_at[1], max_pitch_rate_deg_s);
         SC_EXPECT(std::fabs(agl_at[0] - 50.0) < 5.0);
-        SC_EXPECT(std::fabs(top - 600.0) < 10.0);
+        SC_EXPECT(std::fabs(top - 600.0) < 15.0);
         SC_EXPECT(std::fabs(agl_at[1] - 50.0) < 5.0);
     }
+    // The pull-up eases in and out (15 m/s2 at 250 m/s: 3.4 deg/s), not a jump in the vertical speed that would read as a
+    // hard manoeuvre in the outcome (before: 60 m/s of climb in one step, over 100 deg/s).
+    SC_EXPECT(max_pitch_rate_deg_s < 4.0);
+}
+
+SC_TEST("aircraft: a waypoint inside its turn circle is passed for the next, not circled for ever") {
+    Aircraft a;
+    a.position = {0.0, 0.0, 1000.0};
+    a.speed_mps = 230.0;
+    a.velocity = {0.0, 230.0, 0.0};
+    a.max_turn_rate_rad_s = DegToRad(6.0);  // a turn radius of 2.2 km
+    // 1.1 km to the right and 0.5 km ahead: inside the right-hand turn circle (its centre 2.2 km to the right).
+    a.waypoints = {{1100.0, 500.0, 1000.0}, {20000.0, 0.0, 1000.0}};
+    for (int i = 0; i < 600; ++i) StepAircraft(a, 0.1);
+    std::printf("    after 60 s: waypoint %zu, at (%.0f, %.0f)\n", a.next_waypoint, a.position.x, a.position.y);
+    SC_EXPECT(a.next_waypoint >= 1);
+    SC_EXPECT(a.position.x > 8000.0);  // on its way to the next one
+    // One straight ahead is still flown to.
+    Aircraft b;
+    b.position = {0.0, 0.0, 1000.0};
+    b.speed_mps = 230.0;
+    b.velocity = {0.0, 230.0, 0.0};
+    b.waypoints = {{0.0, 3000.0, 1000.0}};
+    for (int i = 0; i < 120; ++i) StepAircraft(b, 0.1);
+    SC_EXPECT(b.next_waypoint == 1 && std::fabs(b.position.x) < 1.0);
 }
 
 SC_TEST("threats 9.3: a pop-up helicopter hides, pops up, drops back and flies on") {

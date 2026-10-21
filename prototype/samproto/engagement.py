@@ -29,6 +29,21 @@ class Aircraft:
     next_wp: int = 0
     alive: bool = True
 
+    def waypoint_inside_turn(self, d: Vec3, wp: Vec3) -> bool:
+        """A waypoint inside one of the turn circles can't be flown over: the pilot flies on to the next."""
+        if self.max_turn_rate_rad_s <= 1e-6 or self.speed_mps <= 0:
+            return False
+        h = math.hypot(d.x, d.y)
+        if h <= 1e-9:
+            return False
+        radius = self.speed_mps / self.max_turn_rate_rad_s
+        lx, ly = -d.y / h, d.x / h
+        for side in (1.0, -1.0):
+            cx, cy = self.position.x + side * radius * lx, self.position.y + side * radius * ly
+            if math.hypot(wp.x - cx, wp.y - cy) < 0.98 * radius:
+                return True
+        return False
+
     def step(self, dt: float) -> None:
         if not self.alive:
             return
@@ -37,7 +52,7 @@ class Aircraft:
             d = Vec3(0, 1, 0)
         if self.next_wp < len(self.waypoints):
             to_wp = self.waypoints[self.next_wp] - self.position
-            if to_wp.length() <= self.capture_radius_m:
+            if to_wp.length() <= self.capture_radius_m or self.waypoint_inside_turn(d, self.waypoints[self.next_wp]):
                 self.next_wp += 1
             else:
                 d = turn_toward(d, to_wp.normalized(), self.max_turn_rate_rad_s * dt)
