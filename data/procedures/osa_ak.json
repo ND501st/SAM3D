@@ -153,7 +153,7 @@
     "tank_l": 300, "reserve_fraction": 0.5,
     "sources": [ { "subsystem": "gta", "stationary_lph": 75, "moving_lph": 100 },
                  { "subsystem": "pto_generator", "stationary_lph": 25, "moving_lph": 25 } ],
-    "stopped_input": "vehicle_stopped", "refuel_input": "tzm_alongside", "refuel_lpm": 60, "power_cut_input": "fuel_power_cut",
+    "stopped_input": "vehicle_stopped", "refuel_input": "tzm_alongside", "refuel_input_alt": "fuel_truck_alongside", "refuel_lpm": 60, "power_cut_input": "fuel_power_cut",
     "source": "samsim_thread (ePap: about 300 l tank; turbine about 75 l/h stationary and 100 l/h moving; take-off generator about 25 l/h; half the tank is kept for driving, and the crew asks for fuel at half)",
     "confidence": "medium",
     "notes": "Burning = the power source's subsystem is not off (it burns while starting). The take-off generator is taken as 25 l/h whether or not the vehicle moves (it only runs at a halt). At the reserve the crew asks for fuel (debrief) and both power sources are cut so the rest stays for driving; this reads 'half the tank is kept for driving' as a hard limit on the power sources. refuel_lpm 60 is a sam3d estimate (no source gives a refuelling rate): a full tank from the reserve in 2.5 min."
@@ -253,6 +253,7 @@
     { "id": "ammo_2_ii", "description": "A missile is in container 2-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
     { "id": "ammo_3_ii", "description": "A missile is in container 3-II (its ammunition lamp)", "source": "samsim_thread (ePap: 1/2/3-I, 1/2/3-II lamps; left launcher II, right I)", "confidence": "high" },
     { "id": "fuel_power_cut", "description": "The tank is down to the half kept for driving: the turbine and the take-off generator are shut down", "source": "samsim_thread (ePap: half the tank is kept for driving, and the crew asks for fuel at half)", "confidence": "medium" },
+    { "id": "fuel_truck_alongside", "description": "A fuel truck (ATZ) is alongside with its hose connected", "source": "samsim_thread (ePap: fuel and position changes are part of the crew's job); sam3d (the input)", "confidence": "estimate" },
     { "id": "tzm_alongside", "description": "The transport-loader vehicle (TZM 9Т217) is alongside, its crane over the launcher", "source": "flak11 (reloading six missiles from the TZM takes 6 min; the crane traverse holds up to 3 containers)", "confidence": "medium" },
     { "id": "external_power", "description": "An external 220 V 400 Hz supply is connected to the vehicle (a scenario sets it; the supply is not on the console)", "source": "mon_2112_80 p20 (at a halt the equipment can run on the GTA, the engine generator or an external supply)", "confidence": "medium" },
     { "id": "ch1_apch_lock", "description": "Channel I command transmitter is on and locked (ЗАХВ. АПЧ-I lamp); it goes out for a moment when the letter is changed", "source": "voenizdat_osa_1991 p150 (ЗАХВ. АПЧ-I, -II go out and back within 1 s on a letter change)", "confidence": "medium" },

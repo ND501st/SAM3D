@@ -1,7 +1,7 @@
 {
   "scenario_id": "osa_battery_practice",
   "name": "Osa-AK battery practice: the battery in a prepared position, PU-12, EM radars",
-  "description": "The EM practice shoot with the whole battery: the player's vehicle and three more 9A33 in pairs, a TZM and the battery commander's PU-12 in a prepared position (emplacements, nets, wire, two dummy positions, one with a decoy emitter). The PU-12 designates by voice; the other launchers' radars feed the crew as neighbour sources. Fictional; placeholder target numbers.",
+  "description": "The EM practice shoot with the whole battery: the player's vehicle and three more 9A33 in pairs, a TZM, an ATZ fuel truck and the battery commander's PU-12 in a prepared position (emplacements, nets, wire, two dummy positions, one with a decoy emitter). The PU-12 designates by voice; the other launchers' radars feed the crew as neighbour sources. Fictional; placeholder target numbers.",
   "source": "sam3d",
   "confidence": "estimate",
   "notes": "Fictional. The place is a flat plain chosen for convenience. The target's speed, height, route and RCS are PLACEHOLDER numbers for exercising the pipeline. Capture and zone lamps come from the gameplay engagement model (data/gameplay/osa_ak.json), not from this file. Battery layout from the combat formation in video_osa (pairs about 3 km apart, 200 m within; TZM behind), set out around the player's vehicle.",
@@ -60,6 +60,15 @@
         "position": {
           "east_m": 1600,
           "north_m": -500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": 1700,
+          "north_m": -700,
           "up_m": 3
         }
       },

@@ -155,7 +155,14 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 			Actor->SetActorScale3D(State.bIsGround ? GroundScale : (State.bIsMissile ? MissileScale : AircraftScale));
 			if (State.bIsGround && (!GroundActorClass || GroundActorClass == ASimEntityActor::StaticClass()))
 			{
-				Actor->UseGroundStandIn();
+				if (Actor->UseVehicleModel(State.Kind))
+				{
+					Actor->SetActorScale3D(FVector(1.0));  // the model is built to size
+				}
+				else
+				{
+					Actor->UseGroundStandIn();
+				}
 			}
 #if WITH_EDITOR
 			Actor->SetActorLabel(FString::Printf(TEXT("%s_%d"), *State.Name, State.Id));

@@ -26,6 +26,9 @@ public:
     explicit FuelModel(const FuelDef& def, double start_fraction = 1.0)
         : def_(def), level_l_(def.tank_l * std::min(1.0, std::max(0.0, start_fraction))) {}
 
+    bool Requested() const { return requested_; }
+    double TankL() const { return def_.tank_l; }
+
     // One step. Burns fuel for the power sources that are running, adds what the TZM pumps, and sets the power-cut input.
     Events Step(double dt, ConsoleData& console) {
         Events ev;
@@ -37,7 +40,8 @@ public:
         }
         level_l_ = std::max(0.0, level_l_ - burn_lph * dt / 3600.0);
         burned_l_ += burn_lph * dt / 3600.0;
-        if (def_.refuel_lpm > 0.0 && eq.GetInput(def_.refuel_input) && stopped && level_l_ < def_.tank_l) {
+        const bool hose = eq.GetInput(def_.refuel_input) || (!def_.refuel_input_alt.empty() && eq.GetInput(def_.refuel_input_alt));
+        if (def_.refuel_lpm > 0.0 && hose && stopped && level_l_ < def_.tank_l) {
             const double before = level_l_;
             level_l_ = std::min(def_.tank_l, level_l_ + def_.refuel_lpm * dt / 60.0);
             if (before < def_.tank_l && level_l_ >= def_.tank_l - 1e-9) ev.refuelled = true;
