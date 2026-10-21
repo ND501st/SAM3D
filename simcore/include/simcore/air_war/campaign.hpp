@@ -83,6 +83,7 @@ struct RaidPatterns {
     int decoy_waves = 0;
     int aircraft = 0;
     int double_taps = 0;
+    int arm_attacks = 0;  // our radars hit, or made to go silent, by anti-radiation missiles (their sites report it)
 };
 
 class AirCampaign {
@@ -341,6 +342,10 @@ public:
         }
         return false;
     }
+
+    // Our radars have come under ARM attack in this war: the batteries fight under the ARM drill from then on (the
+    // scenario doctrine's arm_threat, voenizdat_osa_1991 pp262-264).
+    bool ArmsExpected() const { return patterns_.arm_attacks > 0; }
 
     // How well the enemy knows where the player's battery is, 0..1 (the XCOM "knowledge" of the player).
     double EnemyKnowledgeOfBattery() const {
@@ -1300,6 +1305,12 @@ private:
             r.near_battery = TouchesPlayer(p);
             r.played = p.played;
             observed_.push_back(r);
+        }
+        const bool first_arms = patterns_.arm_attacks == 0;
+        patterns_.arm_attacks += static_cast<int>(o.radars_killed.size() + o.radars_suppressed.size());
+        if (first_arms && patterns_.arm_attacks > 0) {
+            Log("own_intel", "regiment", "The enemy has fired anti-radiation missiles at our radars: the regiment orders the "
+                                         "batteries to the ARM drill (least emission, silence after its signs).", true);
         }
         ++patterns_.packages;
         ++patterns_.by_part[static_cast<int>(p.part)];

@@ -653,6 +653,41 @@ SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation 
     }
 }
 
+SC_TEST("air war: once our radars have come under ARM attack the regiment orders the ARM drill, and the raids carry it (E6)") {
+    const AirWarData d = Load("nato");
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 3));
+    SC_EXPECT(!c.ArmsExpected());  // nothing seen yet: no drill ordered
+    c.Posture().emission = 0.9;    // a radiating battery draws the suppression
+    int before = 0, before_drill = 0, after = 0, after_drill = 0;
+    while (c.Now() < 20.0 * 24.0 && after < 2) {
+        if (!c.Advance(20.0 * 24.0)) continue;
+        const bool expected = c.ArmsExpected();
+        const Package* p = c.PlayerMission();
+        RaidScenarioBuilder builder;
+        const RaidScenario rs = builder.Build(c, *p);
+        c.SkipPlayerMission();
+        if (!rs.ok) continue;
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        if (!LoadScenario(rs.json_text, kData, def, console, &e)) {
+            std::printf("    %s\n", e.c_str());
+            SC_EXPECT(false);
+            break;
+        }
+        (expected ? after : before) += 1;
+        (expected ? after_drill : before_drill) += def.doctrine.arm_threat ? 1 : 0;
+    }
+    bool ordered = false;
+    for (const JournalEntry& j : c.Journal()) ordered = ordered || (j.who == "regiment" && j.visible && j.text.find("ARM drill") != std::string::npos);
+    std::printf("    raids before the first ARM attack: %d (with the drill %d); after: %d (with the drill %d)\n", before, before_drill, after,
+                after_drill);
+    SC_EXPECT(c.ArmsExpected() && ordered);
+    SC_EXPECT(before_drill == 0);
+    SC_EXPECT(after >= 1 && after_drill == after);
+}
+
 SC_TEST("air war: on the map a raid sets the battery and its dummies on open ground, and the runs at them follow") {
     std::string e;
     const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
