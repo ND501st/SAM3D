@@ -54,6 +54,9 @@ struct IntelEntry {
     double losses_credited = 0.0;       // aircraft the enemy believes it shot down
 
     bool IsThreat() const { return threat_radius_m > 0.0 && threat_lethality > 0.0; }
+    // A radar SAM site: what a rollback hunts and counts. Guns, radar-laid or not, are flown round or over and left to the
+    // strike's escort.
+    bool IsSamRadar() const { return kind == ObjectKind::SamSite && threat_radar; }
     // How much it is worth acting on now: believed there, believed working.
     double Live() const { return Clamp01(exists) * Clamp01(function) * (1.0 - 0.7 * suspected_decoy); }
 };
@@ -144,11 +147,13 @@ public:
     // ends on this): each weighed by the belief that it is there and real. A site found later counts like one known
     // from the start, so the share falls only as fast as the sites it knows of are destroyed, not as fast as it finds
     // new ones (the "percentage of known SAM sites destroyed or suppressed" a staff reports).
+    // The whole country's: a battery that survives anywhere keeps the rollback from ending (the enemy's freedom of action,
+    // docs/campaign/02_WHAT_WE_DEFEND.md §5).
     double BelievedIadsShare() const {
         double working = 0.0;
         double there = 0.0;
         for (const IntelEntry& e : entries) {
-            if (!IsAirDefence(e.kind) || !e.threat_radar) continue;
+            if (!e.IsSamRadar()) continue;
             const double w = Clamp01(e.exists) * (1.0 - 0.7 * e.suspected_decoy);
             working += w * Clamp01(e.function);
             there += w;

@@ -9,6 +9,7 @@
 // Positions are in the theatre's own ENU frame (metres, x east, y north) at the theatre origin; heights are separate.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -350,6 +351,13 @@ inline double SegmentDistance2d(const Vec3& p, const Vec3& a, const Vec3& b, dou
     t = Clamp01(t);
     if (along != nullptr) *along = t;
     return std::hypot(a.x + dx * t - p.x, a.y + dy * t - p.y);
+}
+
+// Distance from a point to a front line (polyline), horizontal.
+inline double DistanceToLine(const std::vector<Vec3>& line, const Vec3& p) {
+    double best = 1e18;
+    for (std::size_t i = 0; i + 1 < line.size(); ++i) best = std::min(best, SegmentDistance2d(p, line[i], line[i + 1]));
+    return best;
 }
 
 // Length of the part of segment a-b inside a circle (centre c, radius r), horizontal.

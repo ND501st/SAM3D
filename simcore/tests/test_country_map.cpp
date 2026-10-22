@@ -496,6 +496,13 @@ SC_TEST("the nation's theatre: the briefing's assets stand on open ground, each 
             SC_EXPECT(best < 1000.0);
         }
     }
+    // Where battery 21 deploys in each war: open ground too.
+    for (const airwar::FrontDef& f : t.fronts) {
+        if (!f.has_battery_position) continue;
+        const std::string why = open(ObjectKind::SamSite, f.battery_position);
+        if (!why.empty()) std::printf("    battery 21's position against %s: %s\n", f.faction.c_str(), why.c_str());
+        SC_EXPECT(why.empty());
+    }
     std::printf("    %d assets placed, %d prepared positions\n", placed, positions);
     SC_EXPECT(placed >= 120 && positions >= 100);
 }

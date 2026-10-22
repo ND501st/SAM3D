@@ -95,8 +95,9 @@ python tools/map_view.py out/pannonia_map.json --png                            
 
 ## What comes next
 
-- **N4**: the air war and its raids on the nation's theatre; supply and rebuilds routed over the networks (13.2, 13.5).
-  Whether the enemy's pre-war survey knows a unit's prepared positions is decided there.
+- **N4** (started; its first read: `docs/air_war/09_BALANCE.md` §8): the air war and its raids on the nation's theatre;
+  supply and rebuilds routed over the networks (13.2, 13.5). Whether the enemy's pre-war survey knows a unit's prepared
+  positions is still open.
 - **N5**: drawn in Unreal beyond the Kesmark range; the campaign screen's map from it.
 - **15.6**: districts generated where the battery fights, from this map's ground.
 

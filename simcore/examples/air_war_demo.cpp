@@ -1,9 +1,11 @@
 // air_war_demo: the enemy air command's war, end to end (docs/air_war/).
 //
-// Usage: air_war_demo [faction] [days] [data_dir] [out_dir] [seed] [map]
-//   faction: rebels, neutral, warsaw_pact or nato (default nato); days (default 3); data_dir (default data);
-//   out_dir (default out/air_war); seed (default 1); map: the raids on a map's ground (e.g. maps/kesmark_range.json),
-//   the battery and its dummies set down on open ground near where the campaign has them (default: flat ground).
+// Usage: air_war_demo [--theatre file] [faction] [days] [data_dir] [out_dir] [seed] [map]
+//   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json; theatre_pannonia_nation.json is the
+//   whole nation); faction: rebels, neutral, warsaw_pact or nato (default nato); days (default 3); data_dir (default
+//   data); out_dir (default out/air_war); seed (default 1); map: the raids on a map's ground (e.g.
+//   maps/kesmark_range.json), the battery and its dummies set down on open ground near where the campaign has them
+//   (default: flat ground).
 //
 // Runs the campaign hour by hour. The enemy's staff plans its air tasking orders; raids are flown abstractly, except
 // those through the player's battery's sector, which become scenarios (raid_scenario.hpp) loaded by the same loader
@@ -18,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "simcore/air_war.hpp"
 #include "simcore/scenario.hpp"
@@ -44,16 +47,26 @@ std::string Escape(const std::string& s) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    const std::string faction = argc > 1 ? argv[1] : "nato";
-    const double days = argc > 2 ? std::atof(argv[2]) : 3.0;
-    const std::string data_dir = argc > 3 ? argv[3] : "data";
-    const std::string out_dir = argc > 4 ? argv[4] : "out/air_war";
-    const unsigned seed = argc > 5 ? static_cast<unsigned>(std::atoi(argv[5])) : 1u;
-    const std::string map_file = argc > 6 ? argv[6] : "";
+    std::string theatre = "theatre_pannonia.json";
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--theatre" && i + 1 < argc) {
+            theatre = argv[++i];
+        } else {
+            args.push_back(a);
+        }
+    }
+    const std::string faction = args.size() > 0 ? args[0] : "nato";
+    const double days = args.size() > 1 ? std::atof(args[1].c_str()) : 3.0;
+    const std::string data_dir = args.size() > 2 ? args[2] : "data";
+    const std::string out_dir = args.size() > 3 ? args[3] : "out/air_war";
+    const unsigned seed = args.size() > 4 ? static_cast<unsigned>(std::atoi(args[4].c_str())) : 1u;
+    const std::string map_file = args.size() > 5 ? args[5] : "";
 
     AirWarData data;
     std::string error;
-    if (!LoadAirWarData(data_dir, "air_war/theatre_pannonia.json", "air_war/faction_" + faction + ".json", data, &error)) {
+    if (!LoadAirWarData(data_dir, "air_war/" + theatre, "air_war/faction_" + faction + ".json", data, &error)) {
         std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }

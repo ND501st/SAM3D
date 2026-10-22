@@ -54,6 +54,7 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/air_war_demo nato 5 data out/air_war 1          # enemy air command: a campaign, its raids played as scenarios, the journal
 python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign as a page: the enemy's mind beside what our side learned
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
+./simcore/build/air_war_balance --theatre theatre_pannonia_nation.json data 10 7   # the same on the whole nation (N4); the demo takes --theatre too
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson
@@ -210,7 +211,8 @@ small part of a large war. N0-N3 are done: the air war's infrastructure kinds an
 our order of battle (`simcore/command/oob.hpp`), the country's map (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`),
 and the briefing's assets placed on it (`data/air_war/theatre_pannonia_nation.json`, which extends the tuned theatre;
 mobile units move between their prepared positions), and a basic model for every equipment type of the order of battle,
-ours never drawn as the enemy's (`data/scenery/basic_models.json`). Next N4 (the air war running on the nation's theatre).
+ours never drawn as the enemy's (`data/scenery/basic_models.json`). N4 is started: the air war runs on the nation's theatre
+and its first read is done (`docs/air_war/09_BALANCE.md` §8); the game's campaigns stay on the tuned theatre until 13.8.
 
 The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
 M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a

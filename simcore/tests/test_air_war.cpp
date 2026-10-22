@@ -524,6 +524,10 @@ SC_TEST("air war: the believed air defences are the share of known sites working
     guns.threat_radar = false;  // guns are not part of the rollback
     pic.entries.push_back(guns);
     SC_EXPECT_NEAR(pic.BelievedIadsShare(), (1.0 + 0.3) / (2.0 + 0.3), 1e-12);
+    IntelEntry shilka = site("z", 1.0, 0.0);
+    shilka.kind = ObjectKind::Aaa;  // radar-laid guns neither (the nation's Shilkas, S-60s and KS-30s)
+    pic.entries.push_back(shilka);
+    SC_EXPECT_NEAR(pic.BelievedIadsShare(), (1.0 + 0.3) / (2.0 + 0.3), 1e-12);
 
     // NATO's rollback ends when the defences are believed broken and resumes when they are believed back.
     const AirWarData d = Load("nato");
@@ -846,5 +850,45 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
     if (at != std::string::npos) {
         bad.replace(at, 14, "\"kind\": \"jump\"");
         SC_EXPECT(!LoadCampaignJson(bad, kData, loaded, &e) && e.find("unknown action") != std::string::npos);
+    }
+}
+
+SC_TEST("air war on the nation's theatre: the rollback hunts SAM sites, never guns; the battery deploys to the war; the neutral spares its own oil") {
+    // The nation on the map, N4's first read (docs/air_war/09_BALANCE.md §8).
+    const auto load = [](const std::string& faction) {
+        AirWarData d;
+        std::string e;
+        if (!LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_" + faction + ".json", d, &e)) {
+            std::printf("    %s\n", e.c_str());
+        }
+        return d;
+    };
+    for (const char* f : {"warsaw_pact", "nato"}) {
+        const AirWarData d = load(f);
+        AirCampaign c;
+        const std::vector<Package> ps = PlanDays(d, 3, 2.0, &c);
+        // The nation's Shilkas, S-60s and KS-30s lay their guns by radar: still guns, flown round or over, never hunted.
+        int hunted = 0, guns = 0;
+        for (const Package& p : ps) {
+            if (p.kind != MissionKind::Dead && p.kind != MissionKind::Hunter && p.kind != MissionKind::Deception) continue;
+            const IntelEntry* e = c.Intel().Find(p.target_key);
+            if (e == nullptr) continue;
+            ++hunted;
+            guns += e->kind == ObjectKind::Aaa ? 1 : 0;
+        }
+        std::printf("    %s: %d DEAD, hunter and deception packages in two days, %d at guns\n", f, hunted, guns);
+        SC_EXPECT(hunted > 5 && guns == 0);
+        // In a war on this front battery 21 stands where the enemy raids, not at Kesmark.
+        const FrontDef* front = d.theatre.FrontFor(f);
+        SC_EXPECT(front != nullptr && front->has_battery_position);
+        if (front != nullptr) SC_EXPECT(Dist2d(c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos, front->battery_position) < 1.0);
+    }
+    // The neutral neighbour's smaller oil line is its own: it closes the valve, it doesn't bomb the station.
+    const AirWarData nd = load("neutral");
+    const std::vector<ObjectKind>& banned = nd.faction.politics.banned;
+    SC_EXPECT(std::find(banned.begin(), banned.end(), ObjectKind::PipelineStation) != banned.end());
+    for (const Package& p : PlanDays(nd, 4, 4.0)) {
+        const TheatreObject* o = nd.theatre.Find(p.target_object);
+        if (o != nullptr) SC_EXPECT(o->kind != ObjectKind::PipelineStation);
     }
 }

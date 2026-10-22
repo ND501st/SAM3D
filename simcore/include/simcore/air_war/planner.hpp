@@ -57,13 +57,6 @@ struct PlanContext {
     }
 };
 
-// Distance from a point to a front line (polyline), horizontal.
-inline double DistanceToLine(const std::vector<Vec3>& line, const Vec3& p) {
-    double best = 1e18;
-    for (std::size_t i = 0; i + 1 < line.size(); ++i) best = std::min(best, SegmentDistance2d(p, line[i], line[i + 1]));
-    return best;
-}
-
 inline double ProfileHeight(const AircraftType& a, Profile p) {
     switch (p) {
         case Profile::Low: return a.low_agl_m;
@@ -313,13 +306,13 @@ private:
                     break;
                 case MissionKind::Dead:
                     if (!ad || e.sigma_m > 4000.0) continue;
-                    if (IsAirDefence(e.kind) && !e.threat_radar) continue;  // guns are for the strike's escort, not DEAD
+                    if (IsAirDefence(e.kind) && !e.IsSamRadar()) continue;  // guns are for the strike's escort, not DEAD
                     break;
                 case MissionKind::Hunter:
-                    if (!(IsAirDefence(e.kind) && e.threat_radar)) continue;
+                    if (!e.IsSamRadar()) continue;
                     break;
                 case MissionKind::Deception:
-                    if (!(IsAirDefence(e.kind) && e.threat_radar)) continue;
+                    if (!e.IsSamRadar()) continue;
                     break;
                 case MissionKind::Recce:
                     if (e.kind == ObjectKind::City) continue;

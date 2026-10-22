@@ -1,8 +1,9 @@
 // air_war_balance: the enemy air command over many seeds, for the balance pass (roadmap A12, docs/air_war/09_BALANCE.md).
 //
-// Usage: air_war_balance [data_dir] [seeds] [days] [faction ...]
-//   data_dir (default data); seeds (default 10); days (default 6); factions (default all four: rebels, neutral,
-//   warsaw_pact, nato).
+// Usage: air_war_balance [--theatre file] [data_dir] [seeds] [days] [faction ...]
+//   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json, the one the balance pass tuned;
+//   theatre_pannonia_nation.json is the whole nation); data_dir (default data); seeds (default 10); days (default 6);
+//   factions (default all four: rebels, neutral, warsaw_pact, nato).
 //
 // Every campaign runs headless: the raids through the player's battery's sector are resolved abstractly like the rest
 // (SkipPlayerMission), with the battery's own lethality, so the numbers are the campaign layer's alone. Each faction is
@@ -10,14 +11,18 @@
 // moving) and a careful one (the demo's: radars mostly silent, ARM discipline, dummy traffic, a move every 20 hours).
 // For each, prints a table by day, averaged over the seeds:
 //   packages, sorties (manned aircraft; decoy drones are counted apart), SEAD share (DEAD and hunter packages, and SEAD flights in others), aircraft lost,
-//   loss rate per sortie, the player's side's air defences still working (true SAM sites and early-warning radars, the
-//   decoys left out), objects wrecked, raids through the battery's sector, the battery's state and how well the enemy
+//   loss rate per sortie, the player's side's air defences still working (the radar SAM sites the enemy measures, the
+//   decoys left out) and what the enemy believes of them, objects wrecked, raids through the battery's sector, the battery's state and how well the enemy
 //   knows where it is,
-// then totals: the mission mix, the staff's turnover, false claims found out, political events and pauses.
+// then totals: the mission mix, the staff's turnover, false claims found out, political events and pauses, and where the
+// packages went: the kinds of target and the objects struck most.
 // Exits non-zero if the data fail to load.
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war.hpp"
@@ -32,7 +37,7 @@ struct DayStats {
     double sorties = 0.0;
     double sead = 0.0;  // packages with a SEAD purpose
     double lost = 0.0;
-    double iads = 0.0;  // working share of the true SAM sites and EW radars at the day's end
+    double iads = 0.0;  // working share of the true radar SAM sites the enemy measures, at the day's end
     double believed = 0.0;  // the enemy's belief of the same (IntelPicture::BelievedIadsShare)
     double phase = 0.0;     // the doctrine phase at the day's end (0 the first)
     double wrecked = 0.0;
@@ -51,6 +56,8 @@ struct RunStats {
     double battery_wrecked = 0.0;  // runs in which the battery was wrecked at least once
     double arms_left = 0.0;
     double drones = 0.0;  // decoy drones flown
+    std::map<std::string, double> struck;       // packages by target object (ghosts as "(nothing there)")
+    std::map<std::string, double> struck_kind;  // packages by the target's kind as the enemy believed it
 };
 
 void Posture(BatteryPosture& p, bool careful) {
@@ -71,12 +78,13 @@ void Posture(BatteryPosture& p, bool careful) {
 
 bool Contains(const std::string& s, const char* what) { return s.find(what) != std::string::npos; }
 
+// The truth of what the enemy measures (IntelPicture::BelievedIadsShare): the radar SAM sites.
 double IadsShare(const AirCampaign& c) {
     double sum = 0.0;
     int n = 0;
     const std::vector<TheatreObject>& objs = c.Data().theatre.objects;
     for (std::size_t i = 0; i < objs.size() && i < c.Truth().size(); ++i) {
-        if (objs[i].decoy || (objs[i].kind != ObjectKind::SamSite && objs[i].kind != ObjectKind::EwRadar)) continue;
+        if (objs[i].decoy || objs[i].kind != ObjectKind::SamSite || !objs[i].defence.present || !objs[i].defence.radar) continue;
         sum += c.Truth()[i].function;
         ++n;
     }
@@ -144,6 +152,9 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
             s.lost += f.lost;
         }
         acc.kinds[static_cast<int>(p.kind)] += 1.0;
+        acc.struck[p.target_object.empty() ? std::string("(nothing there)") : p.target_object] += 1.0;
+        const IntelEntry* e = c.Intel().Find(p.target_key);
+        acc.struck_kind[e != nullptr ? ObjectKindName(e->kind) : "?"] += 1.0;
     }
     for (const JournalEntry& j : c.Journal()) {
         if (j.kind == "career" && (Contains(j.text, " was killed") || Contains(j.text, " was captured") ||
@@ -188,22 +199,45 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
     }
     std::printf(". Staff changes %.1f, false claims found out %.1f, political events %.1f (pauses %.1f) a campaign; battery wrecked in %.0f%% of runs; ARMs left %.0f; decoy drones %.0f.\n",
                 r.staff_changes / n, r.false_claims / n, r.events / n, r.pauses / n, 100.0 * r.battery_wrecked / n, r.arms_left / n, r.drones / n);
+    const auto top = [&](const std::map<std::string, double>& m, std::size_t count) {
+        std::vector<std::pair<double, std::string>> v;
+        for (const auto& kv : m) v.push_back({kv.second, kv.first});
+        std::sort(v.begin(), v.end(), [](const std::pair<double, std::string>& a, const std::pair<double, std::string>& b) {
+            return a.first != b.first ? a.first > b.first : a.second < b.second;
+        });
+        for (std::size_t i = 0; i < v.size() && i < count; ++i) std::printf(" %s %.1f%s", v[i].second.c_str(), v[i].first / n, i + 1 < count && i + 1 < v.size() ? "," : "");
+    };
+    std::printf("Targets by kind (packages a campaign):");
+    top(r.struck_kind, 12);
+    std::printf(".\nMost struck:");
+    top(r.struck, 12);
+    std::printf(".\n");
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-    const std::string data_dir = argc > 1 ? argv[1] : "data";
-    const int seeds = argc > 2 ? std::atoi(argv[2]) : 10;
-    const int days = argc > 3 ? std::atoi(argv[3]) : 6;
-    std::vector<std::string> factions;
-    for (int i = 4; i < argc; ++i) factions.push_back(argv[i]);
+    std::string theatre = "theatre_pannonia.json";
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--theatre" && i + 1 < argc) {
+            theatre = argv[++i];
+        } else {
+            args.push_back(a);
+        }
+    }
+    const std::string data_dir = args.size() > 0 ? args[0] : "data";
+    const int seeds = args.size() > 1 ? std::atoi(args[1].c_str()) : 10;
+    const int days = args.size() > 2 ? std::atoi(args[2].c_str()) : 6;
+    std::vector<std::string> factions(args.size() > 3 ? args.begin() + 3 : args.end(), args.end());
     if (factions.empty()) factions = {"rebels", "neutral", "warsaw_pact", "nato"};
+    std::printf("Theatre: air_war/%s\n", theatre.c_str());
 
     for (const std::string& faction : factions) {
         AirWarData data;
         std::string error;
-        if (!LoadAirWarData(data_dir, "air_war/theatre_pannonia.json", "air_war/faction_" + faction + ".json", data, &error)) {
+        if (!LoadAirWarData(data_dir, "air_war/" + theatre, "air_war/faction_" + faction + ".json", data, &error)) {
             std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
