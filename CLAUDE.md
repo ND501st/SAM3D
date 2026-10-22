@@ -34,6 +34,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/weather/` | Weather presets a scenario names (`"weather"`): winds, cloud layers, the air (`simcore/weather.hpp`). |
 | `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
+| `docs/campaign/` | **The battery's war** (planned, roadmap phases 13-21): the enemy's war aims and target picking, what we defend and why, how a battery mission starts (the regiment's order, the battery commander's sequence and working map), what is attacked, defended, ambushed, jammed and reconnoitred around the battery and why, the systems that run it as one continuous mission, the crew as people, the battery's day between fights, the enemy's reach, doctrine by opponent, and command under strain. Start at its README. |
 | `docs/crew/` | **Crew and teamwork reference** (the design pillars below): roles and knowledge, interdependence, behaviour paths, commands and callouts, skill, the drill master, commander mode, training. `generated/` is written by `tools/crew_map.py`. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
 | `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash); `panel_sheet.py` draws the cabin layout as a page; `button_map.py` draws every control's flow to subsystems, lamps and launch. |
@@ -200,5 +201,25 @@ move the player's seat's NPC would make now, so it has no rules of its own. **Ev
 speaks and how fast); a direct act inside the NPC commander's think checks `!shadow_` (the shadow commander thinks in a
 player commander's place and must change nothing). After changing the crew's behaviour, the consoles or the missions,
 run `helper_coverage` and read its Gaps; `test_helper.cpp` counts the `NpcAt(` uses to make you look.
+
+**Next, prioritised (22 Oct 2026): the nation on the map** (roadmap, before phase 13, not gated): the country's map
+(`terrain_map.hpp` extended to the whole country), ultra-basic placeholder models for every asset of the briefing
+(`docs/campaign/10_BRIEFING_FORCES_AND_NATION.md`), and the air war running on them.
+
+The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
+M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a
+time**, its doctrine and officers as built (`docs/air_war/`); the strategy layer stays thin (object roles, not an
+economy; the front as data; the regiment's tasking a rule table). Every objective has a traceable why: the enemy's war
+aims, its officers' target picking and its raids; our objects' roles, the regiment's order and the battery's task. A
+battery mission starts with the regiment's combat order and runs as one continuous session to the report from the
+records, with the enemy's packages entering it live. The battery's people have needs (sleep, food, morale) that change
+their effective skill, and the player may play any fit member of the battery; between fights the battery's activities
+hold people and equipment away from readiness, readiness is computed from where everyone is, and the war interrupts at
+any time. The enemy's reach (depth, hours, air superiority) is game logic; our doctrine is a profile per adversary; and
+command between the layers can break, so NPCs and the player improvise by sourced rules and then reconstitute.
+**The player cannot significantly change the wider war**: they change two outcomes, measured in ledgers, the survival
+of the assets they protect and the enemy's freedom of action (a battery that survives and threatens makes the enemy
+add SEAD, fire ARMs, spend sorties, re-route and lose aircraft). Targets can be rebuilt, but rebuilding needs teams,
+materials, transport and time, all of them targetable.
 
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

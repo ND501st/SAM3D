@@ -96,3 +96,8 @@ What our side learns is to come from its records, not from the fight's truth (`d
 as `docs/command/07_IMPLEMENTATION_PLAN.md` P9): the battery's after-action report is compiled from its radiotelephonist's
 journal and its board, so the `[ours]` lines will be as right or as wrong as the crew wrote them, and so will our side's
 answer to the enemy's next raid.
+
+**The battery's war** (`docs/campaign/`, roadmap phases 13-21) builds on this command as it is: it adds each faction's
+war aims to its file and one term to its officers' target picking (what a target's loss would cut, as their picture
+believes it: `docs/campaign/01_WAR_AIMS_AND_TARGETS.md`), and turns the raids through the battery's area into parts of
+the battery's own missions, each with its reasons on both sides (`docs/campaign/04_WHAT_HAPPENS_AND_WHY.md`).

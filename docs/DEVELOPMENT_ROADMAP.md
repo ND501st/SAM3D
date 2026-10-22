@@ -4,16 +4,16 @@ How the project gets built, in order. Complements `PROJECT_PLAN.md` (goals and m
 what blocks what, and how each task is finished. Written 30 Sep 2026; **re-sequenced 2 Oct 2026** after the research
 review (`docs/BRIEFING_2026-10.md`).
 
-**Status (2 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check),
-merged to `main` on 2 Oct 2026 (PRs ND501st/SAM3D#1–#8). **The briefing's decisions were all adopted (five-man
-crew, real timings with time compression, manual TV tracking, calibrated hit chances, Osa-AK, Osa scenarios). Next:
-phase 6, the accuracy pass: 6.0 and 6.1 are done (8 Oct 2026); 6.2 (real start-up and readiness states) is next.** The old "crew and mission"
-phase is now phase 8, after the battery (phase 7), because the real Osa got most of its targets from the battery's
-PU-12 and the crew changes ripple through everything after them.
+**Status (22 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check).
+Phase 6, the accuracy pass, done. Phase 7, the battery and PU-12, done in simcore, and the PU-12M built through its P8.
+Phase 8, crew and teamwork, first passes 8.0–8.15 done; its exit (M2) waits for a person to play the missions through.
+Phases 9 (threats) and 10 (scenarios and training) done in simcore. Phase 11, the enemy air command, built; a person's
+campaign playthrough left. Phase 12, our chain of command, C0–C5 built; P1–P3 and P9 next. The EM track: E0–E7 and E10
+done, E8 and E9 started. **Next: the nation on the map** (prioritised 22 Oct 2026, below): the country's map, ultra-basic
+placeholder models for every asset and the air war running on them; **then the battery's war, phases 13–21**.
 
-**Electromagnetic layer (7 Oct 2026):** phase E0 of the new EM track is done on branch `feature/em-environment`
-(research, architecture, `simcore::em`, MVP scenario, tests, Unreal overlays): see the EM track section below and
-`docs/EM_HANDOFF.md`. E1–E2 are proposed to run alongside 6.4, which they largely implement.
+The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
+targets from the battery's PU-12 and the crew changes ripple through everything after them (re-sequenced 2 Oct 2026).
 
 ## Principles
 
@@ -168,6 +168,7 @@ does. Design: `docs/air_war/` (plan and done-when: `docs/air_war/08_IMPLEMENTATI
 | A10 | **Built 18 Oct 2026:** the Unreal campaign screen (`USimAirCampaignSubsystem`, `ASimCampaignHUD`, the missions menu's campaign box): map, INTSUM, dossiers, posture and relocation, the raid warning, fight or let pass, the reveal; raids played as missions and brought back. Left: a person playing a campaign through |
 | A13 | **Done 18 Oct 2026:** save and load (`air_war/save.hpp`: the seed and the player's actions replayed exactly; saved after every step in the game) |
 | A12 | **First pass done 18 Oct 2026:** the balance pass (`examples/air_war_balance.cpp`, `docs/air_war/09_BALANCE.md`): every adversary over 20 seeds and two battery postures; the believed air defences, wreck-and-replace repair, a front-line belt for the neutral, the Pact's surge, wartime SAM posture, radars per battery, guns at the target, NATO's ARM stock, the rollback resuming. A person playing a campaign through is the second half |
+| A14-A15 | **Planned in the battery's war** (`docs/campaign/`): the battery's tasks given by the regiment's orders and the battery commander's planning (phase 14), the regiment's other batteries (17.5); our fighters in the battery's sky and in the enemy's escort need (17.2). The adversaries' doctrines and officers stay as built; they gain war aims in the data and one term in their target picking (phase 13). Our air force as a planner is not planned |
 | A11 | **Done 20 Oct 2026:** the ARM as an EM missile and the crew's ARM drill (EM track E6). A SEAD or hunter aircraft with a warning receiver gets the targets' `"arms"` (its type's `arm_em`: the HARM class with a memory, else the Shrike class; the Pact's MiG-25BM the Kh-58 class), aimed where the enemy's intelligence has the battery; the mission bridge reads the runner's ARM results (vehicle hit, a dummy taken, a miss) and fires its own abstract ARMs only for carriers without (`docs/air_war/05_EXECUTION.md`) |
 
 ## Phase 12 - Our side's chain of command and the information pipeline (first person)
@@ -182,7 +183,242 @@ officers included, on a map of a small city, towns, villages, works and countrys
 | C0-C4 | **Done in simcore, 18 Oct 2026.** Research and sources (`utin_2018`, `uvs_rf_2007`, `basta_lm`, `valka_lm`); the chain (38 posts from the national sector to a driver, the town's offices), the places (the city, the town, five villages, the posts), the means of signal (12) and the routines (briefings, visits, courier runs, the news) as data; the pipeline (`simcore/command/info_net.hpp`: facts travel hop by hop by the best means each pair has, routine news waits for contacts, carriers lost where bombs fall, wire cut, papers and summaries, the player's character passes nothing on by itself; deterministic); the air war's news fed in at its first knowers (`air_war_feed.hpp`); 6 tests |
 | C5 | **Built 18 Oct 2026:** the campaign screen shows only what reached the player's character, who told them and how; their chain and its coming contacts; the raid warning as received |
 | P1-P3 | Next: deliveries in the world (an officer who walks up and speaks, the telephone, the radio voice, the courier, papers, the evening briefing as a scene); the player telling people, by the means they choose; the pipeline's radio calls feeding the air war's intercept service (`docs/command/07_IMPLEMENTATION_PLAN.md`) |
-| P9 | **After-action reports from the records** (project owner, 22 Oct 2026: `docs/command/01_PRINCIPLES.md` 9): the battery's combat report compiled from the radiotelephonist's journal (`simcore/radio_journal.hpp`), the board and the commander's log, never the truth; the regiment checks records and trusts each unit's reports as they have checked out; the crew's rating carries it. The radiotelephonist's accuracy decides what the regiment and the battery learn and plan: critical to the after-action loop. Next after P2; the staff who read the reports are the campaign game's 15.3 |
+| P9 | **After-action reports from the records** (project owner, 22 Oct 2026: `docs/command/01_PRINCIPLES.md` 9): the battery's combat report compiled from the radiotelephonist's journal (`simcore/radio_journal.hpp`), the board and the commander's log, never the truth; the regiment checks records and trusts each unit's reports as they have checked out; the crew's rating carries it. The radiotelephonist's accuracy decides what the regiment and the battery learn and plan: critical to the after-action loop. Next after P2; the regiment's staff who read the reports, and the next order they give, are the battery's war's 18.2 and 18.3 |
+| P4-P8 | Later (`docs/command/07_IMPLEMENTATION_PLAN.md`): the crew's knowledge joined to the pipeline, radio hops through the EM layer, multiplayer posts, the district as a level, posts changing hands. The battery's war uses P1-P3 and P9 (phases 14-18) |
+
+## The nation on the map: next (prioritised 22 Oct 2026)
+
+The project owner, 22 Oct 2026: build out the map and ultra-basic placeholder assets, and combine them with the simcore
+logic, first. This track comes **before** the battery's war and **is not gated** by M2, A10/A12 or P1-P3: it builds the
+country of the briefing (`docs/campaign/10_BRIEFING_FORCES_AND_NATION.md`) as data, a map and placeholder models, and
+makes the air war that is built today run on it. Phase 13's roles, rebuild needs and ledgers are then added to a country
+that already exists.
+
+| # | Task |
+|---|---|
+| N0 | **Formats**: the theatre's new object kinds (fire units by system: S-75M2, S-125M1, Osa, Kub, Strela-1, Shilka, S-60, KS-30, ZU-23 and MANPADS groups; radar companies; sector and other command posts; air bases; the refinery, the pipelines' stations, thermal stations, the dam, substations, the reserve and materials depots, rail yards, the river port, the ministries, broadcasting, the exchanges), each with what the air war's strict loader needs (value, hardness, repair, mobility, emission, pre-war knowledge, and for defences their system, radius, lethality, cover, radars and rounds, as game values marked); the country map's format (`data/maps/pannonia.json`); our order of battle's (`data/command/oob_pannonia.json`) |
+| N1 | **The country's map**: `terrain_map.hpp` extended to the whole country, about 300 by 300 km at about 1 km (the Rava from the north through the capital and Kesmark to the south, the other rivers, the hills of the briefing's §2, main roads, railways, the two oil pipelines, the capital, the cities, towns and villages, the woods), deterministic for its seed; the Kesmark range inside it unchanged at its own detail; `map_dump` and `tools/map_view.py` for the country |
+| N2 | **The briefing's assets placed**: the National Air Defence (about 6 S-75M2 and 10 S-125M1 fire units, the KS-30 regiment, the radio-technical brigade's companies, the two sector posts, the fighter regiments' bases), the Air Force's bases, the Ground Forces (two motor rifle divisions of three regiments, the tank brigade, the 15th SAM Regiment's five batteries, the S-60 regiment, the tank brigade's Kub battery, the six regimental AA batteries of Strela-1s and Shilkas, MANPADS and ZU-23 groups), and the industry and infrastructure of the briefing's §3; each on open ground of the map with its prepared positions, in the theatre and in our order of battle |
+| N3 | **Ultra-basic placeholder models** for every new asset (`data/scenery/basic_models.json`, drawn by `FSimBasicModels`): the briefing's §9 list, from the Strela-1's BRDM-2, the Shilka, the S-60 and the KS-30 to the transloaders, the radars, the propellant tankers, the L-39, the Su-22s, the Mi-17, the Mi-2 and the An-26; checked in the gallery (`-SimModelGallery`) |
+| N4 | **Combined with the simcore logic**: the air war loads the built-up theatre (the new kinds with each faction's target weights, the bans unchanged); each defence resolved by its system in the abstract resolution; the regiment's radars and the warning nets from the new radar companies; raid scenarios written on the country's map with the neighbouring defences drawn and taking their kill chances (17.1's first form); the five Osa batteries and the regimental batteries in the battery's fire model where they are in the scenario; `air_war_demo` and `air_war_balance` run on it as a first read |
+| N5 | **Unreal**: the country's map drawn beyond the Kesmark range at strategic scale; the campaign screen's map from the country's map; the new assets drawn with their basic models in raids and on the map |
+| N6 | **Tests and tools**: the loaders and the new kinds; the map's agreement with the theatre and the places (`test_world_map.cpp`'s pattern, for the country); every asset on open ground; the gallery; the air war on the built-up theatre, deterministic; `tools/verify.ps1` and `verify.sh` |
+
+**Done when:** `air_war_demo` against each adversary runs on the built-up country with every asset of the briefing in
+the theatre; the country's map draws in Unreal with the Kesmark range inside it; the campaign screen shows the country;
+a raid on the map shows its neighbouring S-125, ZU-23s and the Kub as basic models, and their kills appear in the
+debrief; every new model shows in the gallery; the tests pass.
+
+## The battery's war: phases 13-21 (planned 22 Oct 2026)
+
+The project owner, 22 Oct 2026: our side and one enemy at a time fight over the fictional nation, the enemy grinding it
+down (military forces, logistics, critical infrastructure, sovereignty and production) while its officers use their
+intelligence to wear the defences down and strike. The strategy layer stays simple. The work is the game logic and the
+implementation of the wider systems the Osa and PU-12M crews, vehicles and battery fit into. How does a mission start,
+what are its objectives and why, what is attacked, defended, ambushed, jammed and reconnoitred around the battery and
+why, and what makes it run seamlessly? Then, from the owner's further notes the same day: the crew as people
+(fatigue and sleep, food, morale, progression) so the player can take different crew members across missions;
+the battery's and the regiment's activities between fights (maintenance, briefings, recreation), interrupted at any
+time, their scheduling part of the player's strategy; command between the layers that may break in combat and must be
+improvised and rebuilt; doctrine by opponent; and the enemy's reach, from limited to near air superiority, as game
+logic. And: the player cannot significantly change the wider war, only two outcomes (the survival of the assets they
+protect, and the enemy's freedom of action, limited by surviving and threatening aircraft); many targets can be
+rebuilt, but rebuilding takes time, resources, logistics and manpower that can be targeted too. Design: `docs/campaign/` (start at its README; done-when in
+`docs/campaign/09_IMPLEMENTATION_PLAN.md`).
+
+**What stays as built.** The four adversaries, one per campaign, with their doctrines, phases, target weights, bans,
+depth limits, intelligence, officers and politics as their files have them (`docs/air_war/01_FACTIONS.md`), and their
+officers' logic (`docs/air_war/02_AIR_STAFF.md`, `04_PLANNING.md`). The plan adds their war aims to the data and one
+term to their target picking: what a target's loss would cut (`docs/campaign/01_WAR_AIMS_AND_TARGETS.md`).
+
+**Starts after:** the nation on the map (above, not gated: it comes first), M2 (a person plays the missions through),
+a person's playthrough of the one-battery campaign (A10, A12), and phase 12's P1-P3; P9 before phase 18. E8, E9, the scenery's models, 8.14's next steps and the other
+leftovers can run alongside.
+
+## Phase 13 - Why: war aims, roles, rebuilds, and what the battery changes (planned)
+
+Every objective needs a reason that can be traced: the enemy's war aims → its officers' target picking → its raids,
+and our objects' roles → what the regiment covers (`docs/campaign/01_WAR_AIMS_AND_TARGETS.md`, `02_WHAT_WE_DEFEND.md`).
+The player cannot change the war's course. They change two outcomes, which the game measures: the survival of what
+the battery covers, and the enemy's freedom of action, limited by the battery surviving and threatening (`01` §6,
+`02` §5). Much can be rebuilt, at a cost in teams, materials, transport and time that the enemy can strike (`02` §3).
+
+| # | Task |
+|---|---|
+| 13.0 | **Research**: what an Osa regiment covered and how its objects were ranked (`voenizdat_osa_1991` ch. 6, other operator documents); the objects' roles in the fictional country are estimates |
+| 13.1 | **War aims** in each faction file (`aims`: text, and the phases it drives), shown at the reveal and in our analysts' estimate |
+| 13.2 | **Object roles**: `supports` with alternatives and supply shares; the new objects the roles need (the technical battery at the Horka siding, a ferry) |
+| 13.3 | **The worth term** in the enemy's target picking: what an object's loss would cut, as its picture believes it; bans and depth limits first |
+| 13.4 | **Consequences into the built systems**: regiment radars to the PU-12M's board, the warning net to the c2 outages, bridges to the TZM's and ATZ's runs, the depots and the technical battery to the stocks, power to the positions' diesels; each a fact at its first knower |
+| 13.5 | **Rebuilding**: jobs that need teams, materials, transport and time; temporary fixes; the division's priorities; the new kinds (engineer and railway units, materials depots, pontoon parks) in each faction's weights; re-strikes on repair and on its means; military units still replaced from the reserve |
+| 13.6 | **The two ledgers**: assets kept (the covered objects' hours, hits and releases prevented, rebuilds finished under cover) and freedom of action denied (per package, what battery 21's believed threat changed: SEAD, decoys, jammers, route, height, rejection, ARMs, DEAD and hunter sorties, aircraft lost and damaged; per day, the suppression phase held open), by re-planning without the battery's entry |
+| 13.7 | **The nation built up**: built first by the nation-on-the-map track (N0-N6, above) from the briefing (`docs/campaign/10_BRIEFING_FORCES_AND_NATION.md`); 13.7 adds what phase 13 brings to it: the roles (13.2) and rebuild needs (13.5) of every new object, fuel as a national stock fed mainly by the Pact neighbour's pipeline, Soviet missiles and spares cut in a war with the Pact, personnel establishments, intakes and reservists |
+| 13.8 | **Balance**: each faction's choice of targets still in its doctrine's shape (`docs/air_war/09_BALANCE.md` §2); the ledgers against a careful and a careless battery; re-run on the built-up nation |
+
+**Done when:** with the rail bridge down, NATO weighs the road bridge higher and its package's reasons say why; a
+wrecked P-40 leaves the PU-12M's board blind beyond the P-19 and the battery commander hears of it from a person; no
+ban is ever lifted by the new term; a rebuilt bridge comes back later when its materials depot is struck; a careful
+battery's ledger against NATO shows the SEAD, ARMs and sorties it drew, a careless battery's ends the day it is
+wrecked.
+
+## Phase 14 - The battery's mission (planned)
+
+How a mission starts: the regiment's order with its reasons, delivered through the chain; the battery commander's
+sequence and working map (`voenizdat_osa_1991` pp. 232-245); the mission kinds; objectives and their measures
+(`docs/campaign/03_THE_BATTERY_MISSION.md`).
+
+| # | Task |
+|---|---|
+| 14.0 | **Research**: the regiment's tasking of its batteries and the combat order's form |
+| 14.1 | **`BatteryTask`**: kind, covered object, reasons, situation (attack directions, helicopter, jammer and ARM lines), area (main, reserve, dummy positions), sectors, readiness and emission regime, time, coordination (neighbours, the friendly air corridor, IFF, call signs, nets), reports, support; a document in the pipeline |
+| 14.2 | **The regiment's tasking**: a rule table with reasons, run by the regiment's NPC officers with their traits and quirks, at the evening briefing and on urgent triggers (an uncovered priority object, the covered troops moving, a corridor the analysts named, the enemy knowing a battery, ARM attacks, low stocks, the enemy's phase changing, a battery lost) |
+| 14.3 | **The battery commander's planner**: the sequence, positions on the map with sight along the attack directions, sectors, dummies, regime, the oral combat order, an ideal timeline; the NPC battery commander, and the helper's shadow for a player |
+| 14.4 | **The working map** in the PU-12M: marks with their source and time, beside the board |
+| 14.5 | **The mission kinds** mapped to the battery's orders and drills: cover an object, cover troops, cover a march, cover a crossing, ambush (and roving), relocate; the end of a task |
+| 14.6 | **Objectives and the mission debrief**, by the player's two outcomes. Assets kept: the covered object, troops, column or rebuild, and the releases prevented. Freedom of action denied: the battery kept and how well the enemy knows it, the ledger of what it cost the enemy, reconnaissance denied. Then missiles and the record. Each with its why chain, no points; the mission kind "cover a rebuild" |
+
+**Done when:** `mission_demo` runs a cover task headless from the regiment's 19:00 order to «к бою готов» by the
+ready-by time; a person as battery 21's commander receives the order at the briefing, works the map and gives the
+oral combat order to NPC vehicle commanders who carry it out.
+
+## Phase 15 - The continuous mission (planned)
+
+One session for the whole task instead of one scenario per raid: the battery's state carried through it, the
+enemy's packages entering it live, time compressed between events (`docs/campaign/05_THE_SYSTEMS.md` §6-8).
+
+| # | Task |
+|---|---|
+| 15.1 | **`BatteryState`** in the campaign (positions, readiness, missiles per container, fuel, damage, dummies, the board, the journal, the crew's experience), replacing the posture-only battery |
+| 15.2 | **`MissionSession`** and the `MissionScenarioBuilder`: one runner for the whole task and on into the next (the battery's days continue in it), built from the task and the battery's state |
+| 15.3 | **Packages entering live**: the runner's `AddTargets`, `AddJammer`, `AddTrigger`; the raid builder split into its scenario part and a `PackageInjector`; the bridge per package; the campaign handing packages to the session instead of stopping at one pending mission |
+| 15.4 | **Time**: compression and the events that wake the player; a coarse quiet step; both measured |
+| 15.5 | **Levels of detail**: the regiment's other batteries at L1; L2 sessions headless; `war_calibrate` comparing L1 and L2 on the same packages (closes `09_BALANCE.md` §6) |
+| 15.6 | **Districts** for the rebels' and the neutral's fronts (70-110 km from the Kesmark range), generated like the test range |
+| 15.7 | **Saves** of a mission in progress |
+| 15.8 | **Unreal**: the session in the level from the order to the report |
+
+**Done when:** one task runs as one session from the order to the end, with three packages entering live and a reload
+and a relocation between them; an injected package matches the same raid built as a scenario within the calibration's
+bounds; a person plays a 24-hour cover task, woken only when something comes.
+
+## Phase 16 - The enemy around the battery (planned)
+
+Everything the enemy does near the battery as a real thing with a reason in its plan: strikes, DEAD, hunters, decoys,
+feints, reconnaissance, ELINT, radio intercept, jamming (`docs/campaign/04_WHAT_HAPPENS_AND_WHY.md`).
+
+| # | Task |
+|---|---|
+| 16.0 | **Research**: the period's jamming of voice nets and air reconnaissance practice, each side's own documents first |
+| 16.1 | **Reconnaissance in the scenario**: photographs of what it overflies, delivered to the enemy only if it gets home |
+| 16.2 | **Voice jamming** carried by packages where 16.0 supports it; the nets' drills answer; the jammer lines on the working map |
+| 16.3 | **ELINT and COMINT** from the session's real emissions each minute and its real radio calls (P3) |
+| 16.4 | **Each faction as its file has it**: no jammers or SEAD for the rebels and the neutral; the Pact's reconnaissance leads and suppression groups; NATO's decoys first |
+| 16.5 | **Balance**: `mission_balance`, each faction × mission kind |
+
+**Done when:** an RF-4C shot down before it gets home leaves the next strike planned on the old fix, and the reveal
+says so; a Pact strike's jammer takes the battery net down and the spare-frequency drill brings it back; a battery that
+radiates through a NATO morning is found by noon.
+
+## Phase 17 - Our side around the battery (planned)
+
+The layered defence, the warning, our fighters and the supply the battery depends on
+(`docs/campaign/02_WHAT_WE_DEFEND.md` §2, `05_THE_SYSTEMS.md` §10).
+
+| # | Task |
+|---|---|
+| 17.1 | **Neighbours' fire** on aircraft crossing their rings (the ZU-23 at the bridges, battery 22, the Strela platoons, the S-125), logged as theirs, heard on the net or seen |
+| 17.2 | **Our fighters**: the friendly corridor in the order, IFF codes and their changes, the fighter regiment's notices through the pipeline, friendly aircraft in the scenario, friendly fire when a notice or the codes did not arrive |
+| 17.3 | **The warning net and the regiment's radars** carried through the session with their outages |
+| 17.4 | **Supply over the real roads**: the TZM and the ATZ from the stocks, round wrecked bridges |
+| 17.5 | **The regiment's other four batteries** as units with their own tasks and NPC commanders, at L1 |
+
+**Done when:** a raid over the bridges loses an aircraft to their guns and the net says so; a MiG-21 in the corridor
+answers IFF on the player's scope, and a battery left without the notice fires on it; the TZM's run is longer the day
+the road bridge falls.
+
+## Phase 18 - The after-action loop (planned)
+
+The fight, the record, the report, the regiment's picture, the next order (`docs/command/01_PRINCIPLES.md` 9;
+`docs/campaign/05_THE_SYSTEMS.md` §11-12).
+
+| # | Task |
+|---|---|
+| 18.1 | **The report from the records** (P9) after every engagement and each day, sent up by the post's means |
+| 18.2 | **The regiment's picture** from the reports: the analysts' patterns, the enemy's estimated aims and phase, a trust per unit kept by checking records against one another |
+| 18.3 | **The next order** from that picture: 14.2's rules fed by 18.2, never by the truth |
+| 18.4 | **Consequences delivered** as facts: the bridge stood, the train passed, the depot is empty |
+| 18.5 | **Our side's journal** in the air war from the reports |
+| 18.6 | **A person plays a campaign at battery 21 through**, in a seat and in command |
+
+**Done when:** a battery whose radiotelephonist lost the 05:12 raid sends its regiment's next ambush to the wrong
+corridor; a battery whose records check out gets the hard sector; a person plays a week against NATO at battery 21 and
+can say why every order came and why every raid did.
+
+## Phase 19 - The crew as people (planned)
+
+The battery's people with their qualifications, experience and needs (sleep, food, morale, health), on duty or resting,
+always somewhere; the player may take any fit member of the battery across missions (`docs/campaign/06_THE_CREW_AS_PEOPLE.md`).
+
+| # | Task |
+|---|---|
+| 19.0 | **Research**: the period's daily routine, rest on duty and meal norms, how many people each readiness level keeps at the posts (`pvo_bu_ix_1984` and other operator documents); public human-factors studies of sleep loss and vigilance |
+| 19.1 | **The roster**: every member of battery 21 as a person: qualifications, experience, condition, place, duty, knowledge |
+| 19.2 | **Needs and the effective tier**: sleep, food, morale and health as multipliers on the skill dimensions, like `stress_factor` |
+| 19.3 | **The duty roster, and readiness as a computed time**: who is on watch at each readiness; the time to the posts from where each person is (`crew_mobility.hpp`, waking) |
+| 19.4 | **Progression per person**: experience per seat, classes by threshold and exam, cross-training, people moving up, replacements as recruits |
+| 19.5 | **Whom the player plays**: any fit member of the battery for a mission or an activity, with that person's knowledge; the main character's career apart |
+| 19.6 | **Needs heard, not shown**: reports and voices, slower acknowledgements |
+| 19.7 | **Balance**: `crew_balance` with needs |
+
+**Done when:** a 1st-class operator kept awake for two nights works like a 3rd-class one and their vehicle commander
+says so; readiness No. 1 from a sleeping battery takes as long as its people's walk; a person plays the driver on a
+night march and the radiotelephonist the next morning, each as tired as that person really is.
+
+## Phase 20 - Between fights (planned)
+
+The battery's day: watch, sleep, meals, maintenance, repairs, reloads, digging, wire, briefings, training, guard and
+recreation, each holding people and equipment away from readiness; scheduled by the battery commander, broken into by
+the war at any time (`docs/campaign/07_BETWEEN_FIGHTS.md`).
+
+| # | Task |
+|---|---|
+| 20.0 | **Research**: the textbook's maintenance pages (`voenizdat_osa_1991` pp. 206-224), the vehicles' and the PU-12M's servicing, the battery's daily routine |
+| 20.1 | **Activities as data**, run as jobs at places: who, where, what they leave open or away, how long, what they give, how fast they are dropped, what is lost |
+| 20.2 | **Readiness computed** from every person's and every piece of equipment's state |
+| 20.3 | **Wear and faults**: hours radiating, turbine hours, kilometres, held missiles; fault chances growing since the last maintenance |
+| 20.4 | **The schedule**: the NPC battery commander's daily routine given out in the morning orders; the player's schedule in the PU-12M; the helper's shadow; the vehicle commanders' shifts |
+| 20.5 | **Interruptions**: alarms, warnings, raids and orders breaking into any activity or task; drop, fight, resume or reschedule |
+| 20.6 | **The regiment's day**: the technical battery's tests and loads, the rear's runs, the routines; the battery under its deputy while the commander is at the briefing |
+| 20.7 | **Balance**: scheduling strategies against each adversary |
+
+**Done when:** a radar opened for maintenance at dawn against "the dawn raider" misses the first minutes of the raid and
+the debrief says why; a battery that skipped maintenance for three days has more faults; a person plans a day against
+the Noric Republic and another against NATO, and the two days differ for reasons they can name.
+
+## Phase 21 - Reach, doctrine, and command under strain (planned)
+
+The enemy's reach as game logic, from limited to near air superiority; our doctrine per opponent; command between the
+layers that may break, with improvisation and reconstitution (`docs/campaign/08_COMMAND_DOCTRINE_AND_REACH.md`).
+
+| # | Task |
+|---|---|
+| 21.0 | **Research**: the period's doctrine against each kind of enemy; succession, the alternate post (ЗКП) and action when contact is lost (`utin_2018`, `pvo_bu_ix_1984`, other operator documents) |
+| 21.1 | **The enemy's reach**: depth limits, the hours its aircraft can fly, its sorties, air superiority after its phase changes; a battery moving by day under air superiority may be seen |
+| 21.2 | **Our threat estimate** by area and hour, from the reports |
+| 21.3 | **Doctrine profiles** per adversary: readiness by hour, emission, moves, deception, cover priorities, ambushes, rest and maintenance windows, radio and road discipline; changed as the regiment's picture changes, at the pace of its officers' characters (14.2 runs on one default until this) |
+| 21.4 | **Command that breaks**: holders of posts who fall, command posts as objects (the regiment's CP added), the PU-12M, wire, radio, couriers, a commander away |
+| 21.5 | **Improvisation**: contact clocks for NPC commanders; readiness on own initiative, independent search and fire in the sectors, the last order and its intent, the next means, the next senior; the helper's shadow for the player |
+| 21.6 | **Reconstitution**: communications back, succession then replacements (P8), the alternate post, units merged, confirming orders |
+| 21.7 | **Balance**: each adversary with the regiment's CP lost on day 2 |
+
+**Done when:** against the rebels nothing comes beyond 80 km, while against NATO after the rollback a battery moving
+by day is found; the first ARM attack changes our doctrine within a day; with the regiment's CP destroyed, battery 21
+takes readiness No. 1 on its own, fights in its sectors, sends a runner, and receives the alternate post's orders.
+
+**Order:** 13, 14, 15; then 16, 17 and 19 in parallel; then 18 (with P9) and 20; then 21. **Milestones**
+(`docs/PROJECT_PLAN.md`): M5, the battery's war (13-18); M6, the battery's life (19-21). Not planned: the regiment's
+posts for the player, the neighbours at full detail, our air force as a planner, a ground war simulation, an
+economy, more than one enemy at a time.
 
 ## Scenery: ultra-basic models of every asset (18 Oct 2026)
 
@@ -223,7 +459,7 @@ tick at the 500-aircraft benchmark (14 ms mean today on one core).
 ## Later
 
 Phase 4 leftovers (Chaos Vehicles with a real model, performance check); Osa-AKM variant (9M33M3, hovering targets);
-ZSU-23-4 Shilka (shares the PU-12); mission editor; multiplayer crew (seats, console mirror and per-player knowledge done 16 Oct 2026, `docs/MULTIPLAYER.md`; left: scopes from the knowledge stream, voice, a lobby).
+ZSU-23-4 Shilka (shares the PU-12); mission editor; multiplayer crew (seats, console mirror and per-player knowledge done 16 Oct 2026, `docs/MULTIPLAYER.md`; left: scopes from the knowledge stream, voice, a lobby). After the battery's war (`docs/campaign/09_IMPLEMENTATION_PLAN.md` §4): the regiment's posts for the player, the neighbours at full detail, our air force as a planner.
 
 ## Parallel track (any time)
 

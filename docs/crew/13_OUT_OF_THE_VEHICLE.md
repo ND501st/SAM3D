@@ -153,6 +153,10 @@ as a subsystem's `start_time_s`, and the drill's procedure). The later tasks fit
 | Rest, meals, guard | the vehicle's side, a tent | the battery's routine (halts every 3-4 h, `voenizdat_osa_1991` p. 236) | the time of day |
 | Signals on the march by flags and lamps (pp. 232-239) | the commander in his hatch | a signal control | the hatch as a place to stand |
 
+**Planned** (the battery's war, `docs/campaign/07_BETWEEN_FIGHTS.md`, roadmap phase 20): the battery's activities between
+fights (maintenance, rest, meals, digging, wire, guard, briefings) run as jobs at places in this form, and the time to
+readiness is computed from where every person is and the legs to their seat.
+
 ## 5. Status and what is next
 
 | Step | Status |

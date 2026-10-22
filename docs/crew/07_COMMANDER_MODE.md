@@ -66,6 +66,11 @@ orders go on the battery net to the vehicle commanders (NPCs), who turn them int
 The progression (pillar 2): the player first commands one vehicle with NPC crew; when qualified (`08` §4) he commands
 the battery, where his vehicle commanders are NPCs with their own skill.
 
+Where the battery's orders come from (planned, the battery's war: `docs/campaign/03_THE_BATTERY_MISSION.md`): the
+regiment gives the battery its task by a combat order with its reasons; the battery commander turns it into these
+orders by the textbook's sequence (`voenizdat_osa_1991` pp. 240-245) on a working map, and gives them to the vehicle
+commanders as the oral combat order. An NPC battery commander does the same as a planner (roadmap 14.3).
+
 ## 4. What NPC commanders do
 
 When the commander is an NPC (the player in a working seat, or the other vehicles of the battery), the **NPC commander**

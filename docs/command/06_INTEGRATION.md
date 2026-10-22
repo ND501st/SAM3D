@@ -26,7 +26,7 @@ simulation saw it. They are to be compiled from the battery's records instead: t
 (`simcore/radio_journal.hpp`: what was said, what he wrote, what he lost), the board's marks and the commander's log. A
 raid's time, route and size in the combat report are the journal's; a ghost track on the board is a raid reported; a raid
 nobody wrote down is not in the report at all. `raid_seen` likewise comes from the regiment's own records of the warning
-net. What the regiment and the division then believe and plan (`docs/campaign/03_OUR_DEFENCE.md` §4-5) follows.
+net. What the regiment and the division then believe and plan (`docs/campaign/05_THE_SYSTEMS.md` §11: the regiment's picture and its next order) follows.
 
 The air war's own model of what the enemy learns from our radio traffic is still the posture's radio discipline; the
 pipeline's radio calls (`InfoNet::RadioCalls`) are the evidence to feed it next (`07` P3).

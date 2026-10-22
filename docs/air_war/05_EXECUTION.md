@@ -10,6 +10,11 @@ dummies or anything within that distance (what the battery defends), is a candid
 `AirCampaign::Advance` stops and offers it, at most `pacing.max_per_day` a day and `pacing.min_gap_h` apart; the rest are
 resolved abstractly. The pacing only chooses among the enemy's own raids (`l4d_director_2007`, used for that alone).
 
+**Planned** (the battery's war, `docs/campaign/05_THE_SYSTEMS.md` §6-8, roadmap phase 15): the battery's task runs as one
+continuous mission, and these packages enter it live as they come instead of as separate scenarios with the battery
+deployed in place. The battery's state (positions, missiles, fuel, damage, dummies, the board, the journal) carries
+from one raid to the next.
+
 ## 2. The abstract resolution
 
 Flights in the order they reach their target (decoys and SEAD first). Each route segment through each real air defence

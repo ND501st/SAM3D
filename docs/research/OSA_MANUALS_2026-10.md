@@ -674,6 +674,8 @@ preparation, firing under jamming, kill assessment (246-267).
 
 ### Recorded, not built
 
+- The battery commander's sequence and working map (pp. 240-245) and the battery's orders by task (pp. 232-239): planned
+  as the battery's war's 14.3 and 14.4 (`docs/campaign/03_THE_BATTERY_MISSION.md`).
 - (Built 20 Oct 2026, roadmap E6, `docs/EM_ARCHITECTURE.md` §35: the ARM drill, pp262-264. The search bursts, Table
   7.3 in `data/gameplay/osa_ak.json` `arm`, the tracking transmitter off after the burst, the search radar off while the
   tracking radar holds a target alone, the PPI signs and the turn away. The signs on the

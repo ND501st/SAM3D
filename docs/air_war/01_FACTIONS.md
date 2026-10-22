@@ -67,3 +67,7 @@ warning net), command posts and headquarters, a power station, a rail junction, 
 groups, six towns. Each has a value, hardness, repair time, mobility (and how often and how far it moves), emission,
 pre-war knowledge and, for air defences, a defence (system, radius, lethality, low and medium cover, radar or optical,
 rounds). All game values.
+
+Planned in the battery's war (`docs/campaign/`): each faction's war aims in its file
+(`docs/campaign/01_WAR_AIMS_AND_TARGETS.md` §2), its reach over our country read as game logic, and our doctrine
+against it (`docs/campaign/08_COMMAND_DOCTRINE_AND_REACH.md` §1-2).

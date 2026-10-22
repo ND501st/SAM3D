@@ -44,6 +44,10 @@ Code: `simcore/air_war/campaign.hpp` (`ApplyOutcome`, `BeliefsFrom`, `Lessons`, 
   battery by the posture's `relocate_every_h` or by `RelocateBattery` (its dummies move with it).
 - **Reports arrive**; the picture ages.
 
+**Planned** (the battery's war, `docs/campaign/02_WHAT_WE_DEFEND.md` §3, roadmap 13.5): objects are rebuilt by jobs
+that need teams, materials, transport and time, each of them a target; this repair rule becomes a job's progress
+with full means. Military units are still replaced from the reserve.
+
 ## 4. Resilience (the player's side)
 
 Dispersal (mobile units move), redundancy (the warning nets and radars the PU-12 falls back on), hardness, repair,

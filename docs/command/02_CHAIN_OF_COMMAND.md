@@ -62,3 +62,7 @@ A post's superior is never at a lower level (the loader checks it), and the chai
 - Replacing a post's holder when they fall (the air war does it for the enemy's staff: `docs/air_war/02_AIR_STAFF.md` §4).
 - The player's career moving them between posts (`docs/crew/08_TRAINING_AND_ASSISTANCE.md`), and the alternate command
   post under a deputy when the KP is lost (`utin_2018` §1).
+
+Planned in the battery's war: the regiment's other batteries (`docs/campaign/`, 17.5); holders who fall, succession,
+the alternate post, improvisation and reconstitution (`docs/campaign/08_COMMAND_DOCTRINE_AND_REACH.md` §3, roadmap
+phase 21).

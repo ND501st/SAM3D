@@ -79,3 +79,6 @@ within 10 km with nothing tracked.
   experience promotes the seat's tier (`08` §4). Thresholds are game values.
 - The player's own qualification (the exams passed per seat, `08`) unlocks the command half: first the vehicle, then
   the battery.
+- **Planned** (the battery's war, `docs/campaign/06_THE_CREW_AS_PEOPLE.md`, roadmap phase 19): skill per person rather
+  than per crew, and needs (sleep, food, morale, health) that change a person's effective tier hour by hour, as the
+  `stress_factor` does.

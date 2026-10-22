@@ -364,8 +364,16 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 The radiotelephonist's journal (`simcore/radio_journal.hpp`: every message with its time, taken down by hand by a player,
 with an NPC's slips) is the post's record of the fight, beside the board. The battery's after-action report is to be
 compiled from these records, not from the truth, and the regiment's and battery's strategy built on those reports:
-`docs/command/01_PRINCIPLES.md` 9, planned as `docs/command/07_IMPLEMENTATION_PLAN.md` P9 and the campaign game's 15.3.
+`docs/command/01_PRINCIPLES.md` 9, planned as `docs/command/07_IMPLEMENTATION_PLAN.md` P9 and the battery's war's 18.1-18.3 (`docs/campaign/05_THE_SYSTEMS.md` §11).
 The radiotelephonist's accuracy is therefore critical to the after-action loop, not only to the board.
+
+### The battery's missions (planned, 22 Oct 2026)
+
+The battery's war (`docs/campaign/`, roadmap phases 13-21) gives the post its reason to deploy: the regiment's combat
+order with its task and reasons, the battery commander's sequence, and the **working map** kept beside the board
+(attack directions, helicopter, jammer and ARM launch lines, detection limits, the zones' far edges, the friendly air
+corridor, call signs and signals: `voenizdat_osa_1991` pp. 240-245; `docs/campaign/03_THE_BATTERY_MISSION.md` §3,
+roadmap 14.4).
 
 ## 6. What is still SAM3D's
 
