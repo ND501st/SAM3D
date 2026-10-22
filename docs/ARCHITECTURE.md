@@ -212,6 +212,7 @@ roadmap phase 6:
   block (7.6), and so are emplacements, nets and dummy positions (drawn in Unreal: `ASimPositionWork`). The tank's level
   shows on the driver's fuel gauge (7.4); the drive's own consumption is not modelled. No smoke generators.
 - PU-12 board and voice designations are built (7.1, 7.2); the board's picture is the regiment radars' (P-19, P-40: range and horizon only; no clutter, terrain or blind cone) when the scenario lists them.
+- A radar cabled to the PU-12M (`post.radar`) paints its echoes and IFF replies on the IT-45 by the same coverage model, or, with `post.em`, from the EM layer (`data/em/p19.json`: jamming masks its echoes and paints strobes). The P-19's coherent modes are not modelled, its detection anchor is the published instrumented range (no source gives a range against a stated target), and the radar's crew exist only as the voice on its service line and its outages.
 
 The PU-12M's R-111 and R-407 (`simcore/radio_sets.hpp`): their reach is the documents' range by antenna and the fourth
 root of the power, not the EM layer's link budget over the terrain; interference on the telecode is a scenario outage

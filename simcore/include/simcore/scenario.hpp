@@ -226,6 +226,10 @@ struct ScenarioDef {
     PlottingTuning post_plotting;    // the player's hand on the board ("post.plotting"; the defaults without it)
     bool has_post_radar = false;
     RegimentRadar post_radar;
+    // The cabled radar in the electromagnetic layer ("post.em"): its echoes, IFF replies and jamming strobes from the EM
+    // world instead of the coverage model (a search radar alone, standing at post_radar.position).
+    bool has_post_em = false;
+    EmLinkDef post_em;
     // The post's R-111 and R-407 (the console's "radios"): their numbers, and the scenario's frequency plan for them.
     bool has_radio_sets = false;
     RadioSetsDef radio_sets;
@@ -712,25 +716,7 @@ private:
                     return false;
                 }
             }
-            if (const json::Value* jm = OptionalArray(*em, "own_unit.em", "jammers")) {
-                for (std::size_t i = 0; i < jm->items.size(); ++i) {
-                    const std::string jp = Index("own_unit.em.jammers", i);
-                    const json::Value& j = jm->items[i];
-                    if (!Keys(j, jp, {"jammer", "target", "position", "on_at_s", "off_at_s", "notes"})) return false;
-                    EmJammerDef jd;
-                    if (!RequireString(j, jp, "jammer", jd.jammer_id) || !OptionalString(j, jp, "target", jd.target_id) ||
-                        !OptionalNumber(j, jp, "on_at_s", jd.on_at_s) || !OptionalNumber(j, jp, "off_at_s", jd.off_at_s)) {
-                        return false;
-                    }
-                    if (out.em.library.Jammer(jd.jammer_id) < 0) return Fail(Join(jp, "jammer"), "unknown jammer '" + jd.jammer_id + "' (add its file to extra_libraries)");
-                    const json::Value* jpos = j.Find("position");
-                    if (jd.target_id.empty() == (jpos == nullptr)) return Fail(jp, "give either a target (self-screening) or a position (stand-off)");
-                    if (jpos != nullptr && !LoadPosition(*jpos, Join(jp, "position"), frame_, jd.position)) return false;
-                    out.em.jammers.push_back(jd);
-                }
-            } else if (!message_.empty()) {
-                return false;
-            }
+            if (!LoadEmJammers(*em, "own_unit.em", out.em)) return false;
             if (const json::Value* ch = OptionalArray(*em, "own_unit.em", "chaff")) {
                 for (std::size_t i = 0; i < ch->items.size(); ++i) {
                     const std::string cp = Index("own_unit.em.chaff", i);
@@ -1381,7 +1367,7 @@ private:
         }
         if (!console.has_post) return Fail("post", "the console is not a command post (no \"post\" block)");
         if (!p->Is(json::Type::Object) ||
-            !Keys(*p, "post", {"board", "aspd", "codes", "plotting", "library", "regiment", "radar", "radios", "notes"})) {
+            !Keys(*p, "post", {"board", "aspd", "codes", "plotting", "library", "regiment", "radar", "em", "radios", "notes"})) {
             return message_.empty() ? Fail("post", "expected an object") : false;
         }
         std::string board_file, aspd_file, codes_file, plotting_file, library_file, error;
@@ -1400,7 +1386,9 @@ private:
         if (!library_file.empty() && !LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail("post.library", error);
         auto radar_of = [&](const json::Value& e, const std::string& rp, bool with_id, RegimentRadar& radar) {
             std::string id, type;
-            if (!Keys(e, rp, {"id", "type", "position", "notes"}) || (with_id && !RequireString(e, rp, "id", id)) ||
+            // A cabled radar (no id) may also go off the air (its outages); a regiment's radar may not.
+            const bool keys = with_id ? Keys(e, rp, {"id", "type", "position", "notes"}) : Keys(e, rp, {"type", "position", "outages", "notes"});
+            if (!keys || (with_id && !RequireString(e, rp, "id", id)) ||
                 !RequireString(e, rp, "type", type)) {
                 return false;
             }
@@ -1420,8 +1408,9 @@ private:
             const std::string rp = "post.regiment";
             if (!r->Is(json::Type::Object) ||
                 !Keys(*r, rp, {"position", "radars", "outages", "telecode", "designate_within_m", "commands", "command_net_mhz",
-                               "telecode_mhz", "telecode_return_mhz", "mast", "messages", "notes"}) ||
+                               "telecode_mhz", "telecode_return_mhz", "mast", "messages", "telecode_wire", "notes"}) ||
                 !OptionalBool(*r, rp, "telecode", out.post_regiment.telecode) ||
+                !OptionalBool(*r, rp, "telecode_wire", out.post_regiment.telecode_wire) ||
                 !OptionalNumber(*r, rp, "designate_within_m", out.post_regiment.designate_within_m)) {
                 return message_.empty() ? Fail(rp, "expected an object") : false;
             }
@@ -1514,10 +1503,79 @@ private:
         if (const json::Value* r = p->Find("radar")) {
             if (!r->Is(json::Type::Object)) return Fail("post.radar", "expected an object");
             if (!radar_of(*r, "post.radar", false, out.post_radar)) return false;
+            // The radar's cable reaches only so far (flak11 PU12-0: up to 300 m).
+            const Vec3 d = out.post_radar.position - out.unit_position;
+            if (Vec3{d.x, d.y, 0.0}.Length() > out.post_aspd.radar_cable_m) {
+                char why[96];
+                std::snprintf(why, sizeof(why), "%.0f m from the post: its cable reaches %.0f m", Vec3{d.x, d.y, 0.0}.Length(),
+                              out.post_aspd.radar_cable_m);
+                return Fail("post.radar.position", why);
+            }
+            if (const json::Value* outs = OptionalArray(*r, "post.radar", "outages")) {
+                for (std::size_t j = 0; j < outs->items.size(); ++j) {
+                    const std::string op = Index("post.radar.outages", j);
+                    C2Outage o;
+                    if (!Keys(outs->items[j], op, {"from_s", "to_s", "reason"}) || !RequireNumber(outs->items[j], op, "from_s", o.from_s) ||
+                        !OptionalNumber(outs->items[j], op, "to_s", o.to_s) || !OptionalString(outs->items[j], op, "reason", o.reason)) {
+                        return false;
+                    }
+                    if (o.to_s <= o.from_s) return Fail(Join(op, "to_s"), "must be after from_s");
+                    out.post_radar.outages.push_back(o);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
             out.has_post_radar = true;
+        }
+        if (const json::Value* em = p->Find("em")) {
+            // "em": { "library": "em/p19.json", "radar": "p19", "extra_libraries": [...], "jammers": [...] }
+            const std::string ep = "post.em";
+            if (!out.has_post_radar) return Fail(ep, "needs post.radar: the EM layer runs the radar cabled to the post");
+            std::string library, radar;
+            if (!em->Is(json::Type::Object) || !Keys(*em, ep, {"library", "radar", "extra_libraries", "rain_mmh", "jammers", "notes"}) ||
+                !RequireString(*em, ep, "library", library) || !RequireString(*em, ep, "radar", radar)) {
+                return message_.empty() ? Fail(ep, "expected an object") : false;
+            }
+            std::vector<std::string> extras;
+            if (const json::Value* ex = OptionalArray(*em, ep, "extra_libraries")) {
+                for (std::size_t i = 0; i < ex->items.size(); ++i) {
+                    if (!ex->items[i].Is(json::Type::String)) return Fail(Index(Join(ep, "extra_libraries"), i), "expected a file name");
+                    extras.push_back(ex->items[i].string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (!LoadEmLinkDef(data_dir, library, radar, std::string(), out.post_em, &error, extras)) return Fail(ep, error);
+            if (!OptionalNumber(*em, ep, "rain_mmh", out.post_em.rain_mmh)) return false;
+            if (out.post_em.rain_mmh < 0.0) return Fail(Join(ep, "rain_mmh"), "must be >= 0");
+            if (!LoadEmJammers(*em, ep, out.post_em)) return false;
+            out.has_post_em = true;
         }
         if (!LoadPostRadios(*p, data_dir, out, console)) return false;
         out.has_post = true;
+        return true;
+    }
+
+    // An "em" block's jammers: each a library jammer on a target (self-screening) or at a position (stand-off), on and
+    // off at times.
+    bool LoadEmJammers(const json::Value& em, const std::string& path, EmLinkDef& out) {
+        const json::Value* jm = OptionalArray(em, path, "jammers");
+        if (jm == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < jm->items.size(); ++i) {
+            const std::string jp = Index(Join(path, "jammers"), i);
+            const json::Value& j = jm->items[i];
+            if (!Keys(j, jp, {"jammer", "target", "position", "on_at_s", "off_at_s", "notes"})) return false;
+            EmJammerDef jd;
+            if (!RequireString(j, jp, "jammer", jd.jammer_id) || !OptionalString(j, jp, "target", jd.target_id) ||
+                !OptionalNumber(j, jp, "on_at_s", jd.on_at_s) || !OptionalNumber(j, jp, "off_at_s", jd.off_at_s)) {
+                return false;
+            }
+            if (out.library.Jammer(jd.jammer_id) < 0) return Fail(Join(jp, "jammer"), "unknown jammer '" + jd.jammer_id + "' (add its file to extra_libraries)");
+            const json::Value* jpos = j.Find("position");
+            if (jd.target_id.empty() == (jpos == nullptr)) return Fail(jp, "give either a target (self-screening) or a position (stand-off)");
+            if (jpos != nullptr && !LoadPosition(*jpos, Join(jp, "position"), frame_, jd.position)) return false;
+            out.jammers.push_back(jd);
+        }
         return true;
     }
 

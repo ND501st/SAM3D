@@ -83,6 +83,12 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 5. R-407: the regiment's telecode; R-111: the higher command post's command net. **Modelled** as sets
    (`simcore/radio_sets.hpp`): their controls, warm-up, frequencies, tuning and reach, the R-407's channel and АПЧ, the
    R-111's presets and its input protection; the regiment's orders on the R-111 net (see Status, the radios).
+6. A radar cabled to the post (300 m) sends its raw echo video, trigger, aerial synchro, IFF replies and a service
+   telephone line (the 1984 GDR handbook's ASPD figure, via `flak11`; `p19_to` 4.3.1). **Modelled** (22 Oct 2026): every
+   echo on the tube, taken off by the NPC or with the DT-2's СЪЁМ; IFF from the radar's interrogator; the cable laid at
+   deployment and refused beyond 300 m; the radar crew on the service line; the post sending its picture on; telecode
+   by wire; with `post.em` the radar in the EM layer, its jamming strobes on the tube (`data/em/p19.json`).
+   `docs/research/PU12_RESEARCH_2026-10.md` → "What this changes in SAM3D".
 
 ## 3. What SAM3D needs to build
 

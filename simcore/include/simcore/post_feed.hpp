@@ -19,6 +19,7 @@ struct PostFeed {
     double scale_m = 0.0;                           // the IT-45's scale (0: no post)
     Vec3 position;                                  // where the post puts itself (ENU)
     std::vector<CommandPost::ScopeMark> scope;      // the IT-45 now (fractions of the scale)
+    std::vector<em::ViewStrobe> strobes;            // the cabled radar's jamming strobes (true azimuth, J/N), from the post
     std::vector<em::ViewBoardMark> glass;           // the board's marks of the last few minutes, oldest first
     std::vector<LauncherStatus> launchers;          // the IT boards
     double marker_x = 0.0;                          // the DT-2 marker (fractions of the scale, x east, y north)
@@ -69,8 +70,10 @@ inline PostFeed FromViewExtras(const em::ViewExtras& x) {
         m.primary = t.primary;
         m.designated = t.designated;
         m.imitated = t.imitated;
+        m.raw = t.raw;
         f.scope.push_back(m);
     }
+    f.strobes = x.post_strobes;
     f.glass = x.board;
     for (const em::ViewLauncher& l : x.launchers) {
         LauncherStatus s;
@@ -101,8 +104,9 @@ inline void ToViewExtras(const PostFeed& f, em::ViewExtras& x) {
     x.post_position = f.position;
     x.post_scope.clear();
     for (const CommandPost::ScopeMark& m : f.scope) {
-        x.post_scope.push_back({m.number, m.x, m.y, m.vx, m.vy, m.zone, m.friendly, m.group, m.primary, m.designated, m.imitated});
+        x.post_scope.push_back({m.number, m.x, m.y, m.vx, m.vy, m.zone, m.friendly, m.group, m.primary, m.designated, m.imitated, m.raw});
     }
+    x.post_strobes = f.strobes;
     x.board = f.glass;
     x.launchers.clear();
     for (const LauncherStatus& s : f.launchers) {

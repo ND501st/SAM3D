@@ -159,6 +159,7 @@ struct ViewPostTrack {
     bool primary = false;  // from a radar cabled to the post: its echo paints under the symbol
     bool designated = false;  // the regiment's designation to the battery
     bool imitated = false;    // the ФР block's imitated echo
+    bool raw = false;         // an echo with no symbol (the cabled radar's video, taken off or not)
 };
 
 struct ViewLauncher {
@@ -179,6 +180,7 @@ struct ViewExtras {
     double post_scale_m = 0.0;
     Vec3 post_position;
     std::vector<ViewPostTrack> post_scope;
+    std::vector<ViewStrobe> post_strobes;  // the radar cabled to the post: its jamming strobes
     std::vector<ViewLauncher> launchers;
     // the commander's marker and keypad (post_feed.hpp)
     double post_marker_x = 0.0;
@@ -568,7 +570,12 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Q(t.vy, kFracStep);
         w.U8(static_cast<std::uint8_t>(t.zone));
         w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0) | (t.primary ? 4 : 0) | (t.designated ? 8 : 0) |
-                                       (t.imitated ? 16 : 0)));
+                                       (t.imitated ? 16 : 0) | (t.raw ? 32 : 0)));
+    }
+    w.U32(static_cast<std::uint32_t>(x.post_strobes.size()));
+    for (const ViewStrobe& st : x.post_strobes) {
+        w.Q(st.azimuth_deg, kDegStep);
+        w.Q(st.jn_db, kDbStep);
     }
     w.U32(static_cast<std::uint32_t>(x.launchers.size()));
     for (const ViewLauncher& l : x.launchers) {
@@ -663,7 +670,16 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         t.primary = (flags & 4u) != 0;
         t.designated = (flags & 8u) != 0;
         t.imitated = (flags & 16u) != 0;
+        t.raw = (flags & 32u) != 0;
         x.post_scope.push_back(t);
+    }
+    n = r.U32();
+    if (!r.ok || n > 1000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewStrobe st;
+        st.azimuth_deg = r.Q(kDegStep);
+        st.jn_db = r.Q(kDbStep);
+        x.post_strobes.push_back(st);
     }
     n = r.U32();
     if (!r.ok || n > 100000u) return false;
