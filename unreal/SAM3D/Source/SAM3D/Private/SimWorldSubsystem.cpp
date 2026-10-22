@@ -2397,7 +2397,10 @@ TArray<int32> USimWorldSubsystem::GetPostTrackNumbers() const
 	});
 	for (const simcore::CommandPost::ScopeMark& M : Marks)
 	{
-		Out.Add(M.number);
+		if (M.number >= 0)  // an echo not taken off has no number
+		{
+			Out.Add(M.number);
+		}
 	}
 	return Out;
 }
@@ -2718,6 +2721,46 @@ bool USimWorldSubsystem::AnswerCall(const FString& Station)
 		return ActionMoved(R);
 	}
 	return false;
+}
+
+bool USimWorldSubsystem::JournalBegin(const FString& Role)
+{
+	return Runner && !IsMirrorOnly() && Runner->JournalBegin(ToStd(Role));
+}
+
+bool USimWorldSubsystem::JournalType(const FString& Role, int32 Digit)
+{
+	return Runner && !IsMirrorOnly() && Digit >= 0 && Digit <= 9 && Runner->JournalType(ToStd(Role), static_cast<char>('0' + Digit));
+}
+
+bool USimWorldSubsystem::JournalRub(const FString& Role)
+{
+	return Runner && !IsMirrorOnly() && Runner->JournalRub(ToStd(Role));
+}
+
+bool USimWorldSubsystem::JournalNextBox(const FString& Role, int32 Step)
+{
+	return Runner && !IsMirrorOnly() && Runner->JournalNextBox(ToStd(Role), Step);
+}
+
+bool USimWorldSubsystem::JournalFinish(const FString& Role, bool bBrief)
+{
+	const bool bOk = Runner && !IsMirrorOnly() && Runner->JournalFinish(ToStd(Role), bBrief);
+	if (bOk)
+	{
+		BroadcastNewDebriefEntries();
+	}
+	return bOk;
+}
+
+bool USimWorldSubsystem::IsJournalDrafting() const
+{
+	return Runner && Runner->Journal().Draft() != nullptr;
+}
+
+FString USimWorldSubsystem::GetJournalKeeper() const
+{
+	return Runner ? ToF(Runner->Console().post_journal_keeper) : FString();
 }
 
 TArray<FString> USimWorldSubsystem::GetDocumentLines(const FString& Document) const

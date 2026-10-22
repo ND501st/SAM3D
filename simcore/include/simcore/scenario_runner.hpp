@@ -57,6 +57,7 @@
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_journal.hpp"
 #include "simcore/radio_setup.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/seat_duty.hpp"
@@ -142,6 +143,8 @@ public:
             engagement_.SetGyroOwnDrift(east ? o.own_drift_deg_h : -o.own_drift_deg_h);
             compass_ = CompassSurvey(o.survey_s, o.survey_sigma_deg, def_.seed * 40503u + 977u);
         }
+        // A radar to cable to the post is a fact of the position, there before any readiness (its cable laid in "deployed").
+        if (!console_.post_radar_here.empty()) console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         for (const auto& c : def_.initial_controls) console_.panel.Set(c.first, c.second);
         if (console_.has_launcher) {
@@ -158,6 +161,11 @@ public:
             for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
             if (LinkedToPost()) c2_->SetExternal(def_.c2_policy.primary);  // the real PU-12M reads its designations out
             engagement_.SetAirPicture(c2_.get());
+        }
+        if (def_.has_post_em) {  // the cabled radar alone in an EM world of its own, standing where it stands
+            post_em_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed ^ 0x9e3779b9u, def_.post_em,
+                                                      def_.post_radar.position);
+            if (!post_em_->Ok()) Event("post radar", "the EM layer failed: the coverage model stands in");
         }
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
@@ -390,6 +398,7 @@ public:
     // writing the last one. The tube is the commander's: the plotter does not copy it.
     bool PlayerPlot(int number) {
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
+        RecallFromJournal(number);
         if (!post_->PlotHeard(time_, number, PlotterSpeed())) return false;
         ++plots_made_;
         return true;
@@ -400,6 +409,7 @@ public:
     CommandPost::PlotResult PlayerPlotAt(int number, double east_m, double north_m, double metres_per_board_m) {
         CommandPost::PlotResult r;
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return r;
+        RecallFromJournal(number);
         r = post_->PlotAt(time_, number, Vec3{east_m, north_m, 0.0}, metres_per_board_m, def_.post_plotting, PlotterSpeed());
         if (r.ok) {
             ++plots_made_;
@@ -1396,6 +1406,21 @@ public:
             }
             out += line;
         }
+        if (post_ && !console_.post_journal_keeper.empty() && (!journal_.Written().empty() || journal_.Forgotten() > 0)) {
+            int by_hand = 0, digits = 0, right = 0, brief = 0, wrong = 0;
+            for (const RadioJournalEntry& e : journal_.Written()) {
+                by_hand += e.by_hand ? 1 : 0;
+                digits += e.digits;
+                right += e.digits_right;
+                brief += e.brief ? 1 : 0;
+                wrong += !e.brief && e.text != e.said ? 1 : 0;
+            }
+            std::snprintf(line, sizeof(line), "  The radio journal: %d written (%d by hand, %d of %d digits as said; %d short), %d not as said, %d lost unwritten\n",
+                          static_cast<int>(journal_.Written().size()), by_hand, right, digits, brief, wrong, journal_.Forgotten());
+            out += line;
+            std::snprintf(line, sizeof(line), "  Plotted from the journal's page: %d (%d of them as the page had it wrong)\n", journal_reads_, journal_reads_wrong_);
+            out += line;
+        }
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             const CrewMember& c = crew_[i];
             const auto it = reminders_to_.find(c.Role());
@@ -1459,7 +1484,14 @@ private:
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
         console_.equipment.Update(0.0, console_.panel);
         for (const std::string& id : st.ready) {
-            if (!console_.equipment.Warm(id, console_.panel)) {
+            // Left cold for want of a world fact (no radar here to cable) is the position's, not the state's fault.
+            bool world_lacks = false;
+            if (const SubsystemDef* d = console_.equipment.Def(id)) {
+                for (const Condition& c : d->enable) {
+                    world_lacks = world_lacks || (c.kind == Condition::Kind::InputIs && !console_.equipment.Holds(c, console_.panel));
+                }
+            }
+            if (!console_.equipment.Warm(id, console_.panel) && !world_lacks) {
                 Event(id, "not commanded on in readiness '" + st.id + "': left cold");
             }
             console_.equipment.Update(0.0, console_.panel);
@@ -2078,9 +2110,23 @@ private:
             }
             r407_link_ = link;
             SetRadioInput(b.Input("link"), link);
-            const bool rk1 = console_.panel.Find("rk1.rx") == nullptr ||
-                             (console_.panel.Get("rk1.rx") == 3 && (console_.panel.Find("rk1.code") == nullptr || console_.panel.Get("rk1.code") == 1));
-            SetRadioInput(b.Input("telecode"), link && R407::ToEquipment(in) && rk1);
+            // The telecode reaches the ASPD-U by radio (the RK-1U's ПРИЕМ on Р-407) or by a telecode line from the regiment
+            // (ПРИЕМ on ПРОВОД; flak11 PU12-0: "per Funk oder Draht"): the line past any jamming and the set's reach, while
+            // the regiment sends at all.
+            const int rk1_rx = console_.panel.Find("rk1.rx") == nullptr ? 3 : console_.panel.Get("rk1.rx");
+            const bool rk1_code = console_.panel.Find("rk1.code") == nullptr || console_.panel.Get("rk1.code") == 1;
+            const bool by_radio = link && R407::ToEquipment(in) && rk1_rx == 3 && rk1_code;
+            const bool by_wire = def_.post_regiment.telecode_wire && rk1_rx == 4 && rk1_code && def_.post_regiment.telecode && !off_air;
+            SetRadioInput(b.Input("telecode"), by_radio || by_wire);
+            // The post's own telecode out (a transmitting post, flak11 PU12-0's figure: the RK-1's send side): ПЕРЕДАЧА on
+            // Р-407 with the set reaching the regiment's receiver in duplex, or on ПРОВОД down the telecode line.
+            if (!console_.post_telecode_out.empty()) {
+                const int rk1_tx = console_.panel.Find("rk1.tx") == nullptr ? 3 : console_.panel.Get("rk1.tx");
+                const bool out_radio = rk1_tx == 3 && rk1_code && R407::ToEquipment(in) &&
+                                       r407_->SendLink(in, plan.telecode_return_hz, distance, off_air || !def_.post_regiment.telecode);
+                const bool out_wire = rk1_tx == 4 && rk1_code && def_.post_regiment.telecode_wire;
+                SetRadioInput(console_.post_telecode_out, out_radio || out_wire);
+            }
             SetRadioInput(b.Input("call_radio"), time_ < r407_call_until_);
             SetRadioInput(b.Input("call_wire"), false);
         }
@@ -2101,6 +2147,7 @@ private:
         bool ringing = false;
         double ring_from_s = 0.0;
         std::string text;                            // what the far end will say once answered
+        std::vector<std::string> queued;             // the far end's calls waiting for the line (the radar crew's)
     };
     std::map<int, LineState> lines_;
     std::map<std::string, double> box_call_until_;   // an input -> lit until
@@ -2144,7 +2191,8 @@ private:
             r.extra_s = ShoutS();
             return r;
         }
-        if (!def.to.empty() && voice_->Unboxed(def.to)) {
+        // To a seat with no box, or whose headset is off: he hears only the cabin, so it is said aloud.
+        if (!def.to.empty() && (voice_->Unboxed(def.to) || (voice_->BoxOf(def.to) != nullptr && !voice_->HeadsetOn(def.to)))) {
             r.channel = "cabin";
             return r;
         }
@@ -2649,6 +2697,12 @@ private:
                 st.ring_from_s = time_;
                 st.text = l.calls[st.next_call++].text;
                 Event("line " + std::to_string(l.line), l.to_name + " rings");
+            } else if (!st.ringing && !st.queued.empty()) {
+                st.ringing = true;
+                st.ring_from_s = time_;
+                st.text = st.queued.front();
+                st.queued.erase(st.queued.begin());
+                Event("line " + std::to_string(l.line), l.to_name + " rings");
             }
             if (st.ringing) {
                 // Answered: the commander's lever up with his headset on (an NPC commander raises it himself).
@@ -2826,28 +2880,105 @@ public:
     }
     // The player at the radiotelephonist's seat (or any seat hearing the air picture) reads the oldest held report out to
     // the plotter. False if none is held, or his box isn't on the air-picture net.
+    // With a journal it is the keeper, reading from the page: only a report already written there.
     bool PlayerReadOutAirReport(const std::string& seat) {
-        if (!post_ || !callouts_ || post_->Held().empty() || !SeatHearsNet(seat, "air_picture")) return false;
-        const CommandPost::AirReport r = post_->Held().front();
-        ReadOut(seat, r);
+        if (!post_ || !callouts_ || post_->Held().empty()) return false;
+        if (console_.post_journal_keeper.empty()) {
+            if (!SeatHearsNet(seat, "air_picture")) return false;
+            ReadOut(seat, post_->Held().front());
+            return true;
+        }
+        if (seat != console_.post_journal_keeper) return false;
+        for (const CommandPost::AirReport& r : post_->Held()) {
+            if (!InJournal(r)) continue;
+            ReadOut(seat, r);
+            return true;
+        }
+        return false;
+    }
+    // The board numbers the plotter can write now: the reports he heard, and those he can read in the journal that are not
+    // on the board since (he finds them on the page, not on a screen).
+    std::vector<int> PlotterReportNumbers() const {
+        std::vector<int> out;
+        if (!post_) return out;
+        for (const CommandPost::AirReport& h : post_->Heard()) out.push_back(h.number);
+        for (const RadioJournalEntry& e : journal_.Legible(time_)) {
+            CommandPost::AirReport r;
+            if (!JournalReport(e, r) || OnBoardSince(e.said_number, e.heard_s)) continue;
+            if (std::find(out.begin(), out.end(), e.number) == out.end()) out.push_back(e.number);
+        }
+        return out;
+    }
+    const RadioJournal& Journal() const { return journal_; }
+    // The player radiotelephonist takes a message down (radio_journal.hpp's dictation): his pencil on the page starts
+    // the oldest one he heard and hasn't written (or the line he left half-written); digits fill its boxes; Finish
+    // writes it as it stands, `brief` the number and the time only. False if the seat isn't the journal's keeper's held
+    // by a player, or (Begin) with nothing to write.
+    bool JournalBegin(const std::string& seat) {
+        if (!PlayerKeeps(seat)) return false;
+        return journal_.BeginDraft(time_);
+    }
+    bool JournalType(const std::string& seat, char digit) {
+        if (!PlayerKeeps(seat) || journal_.Draft() == nullptr) return false;
+        journal_.Type(digit);
         return true;
+    }
+    bool JournalRub(const std::string& seat) {
+        if (!PlayerKeeps(seat) || journal_.Draft() == nullptr) return false;
+        journal_.Rub();
+        return true;
+    }
+    bool JournalNextBox(const std::string& seat, int step) {
+        if (!PlayerKeeps(seat) || journal_.Draft() == nullptr) return false;
+        journal_.NextBox(step);
+        return true;
+    }
+    bool JournalFinish(const std::string& seat, bool brief) {
+        if (!PlayerKeeps(seat) || !journal_.Finish(time_, brief)) return false;
+        const RadioJournalEntry& e = journal_.Written().back();
+        char line[160];
+        std::snprintf(line, sizeof(line), "wrote in the journal%s: %d of %d digits as said", e.brief ? " (short form)" : "", e.digits_right, e.digits);
+        Event(seat, line);
+        return true;
+    }
+    bool PlayerKeeps(const std::string& seat) const {
+        return post_ && !console_.post_journal_keeper.empty() && seat == console_.post_journal_keeper && !SeatHolder(seat).empty();
     }
 
 private:
     // A held report read out to the plotter (the callout "air_report", aloud beside him); heard, it goes to his hand.
-    std::set<int> reading_out_;
+    // With a journal it is read from the page: as written, right or wrong.
+    std::map<int, CommandPost::AirReport> reading_out_;  // the number it was said under -> the report as read out
     void ReadOut(const std::string& seat, const CommandPost::AirReport& r) {
         if (reading_out_.count(r.number) != 0) return;
-        reading_out_.insert(r.number);
+        CommandPost::AirReport read = r;
+        if (!console_.post_journal_keeper.empty()) {
+            const RadioJournalEntry* e = journal_.AirReport(r.number, r.heard_s - 2.0, time_);
+            if (e == nullptr || !JournalReport(*e, read)) return;
+        }
+        reading_out_[r.number] = read;
         KnownTarget k;
-        k.target = r.contact.target_id;
+        k.target = read.contact.target_id;
         k.number = r.number;
-        callouts_->Say(time_, "air_report", seat, {{"report", r.text}}, NpcAt(seat) ? SpeakDelayS(seat) : 0.0, &k);
+        callouts_->Say(time_, "air_report", seat, {{"report", read.text}}, NpcAt(seat) ? SpeakDelayS(seat) : 0.0, &k);
     }
+    // A report heard while the plotter was off FuG-1 (held): with a journal, it is read to him from the page, so only once
+    // written; an NPC plotter reads the page himself (PlotterReadsJournal).
     void RelayAirPicture() {
         if (!post_ || !voice_ || !callouts_) return;
+        const std::string& keeper = console_.post_journal_keeper;
+        if (!keeper.empty() && SeatHolder(console_.post_plotter).empty()) return;
         for (const CommandPost::AirReport& r : post_->Held()) {
             if (reading_out_.count(r.number) != 0) continue;
+            if (!keeper.empty()) {
+                const RadioJournalEntry* e = journal_.AirReport(r.number, r.heard_s - 2.0, time_);
+                CommandPost::AirReport readable;
+                if (e == nullptr || !JournalReport(*e, readable)) continue;  // not written, or written so it can't be read out
+                SeatDuty d = SeatDuty::Report(keeper, "air_report", "a report the plotter did not hear, written in the journal: read it to him");
+                d.number = r.number;
+                if (NpcDoes(keeper, d)) ReadOut(keeper, r);
+                continue;
+            }
             std::string reader;
             for (const std::string& s : NetHearers("air_picture")) {
                 if (reader.empty() && NpcAt(s) && s != console_.post_plotter) reader = s;
@@ -2861,6 +2992,116 @@ private:
                 SeatDuty d = SeatDuty::Report(s, "air_report", "an air report heard: read it out to the plotter");
                 d.number = r.number;
                 NpcDoes(s, d);
+            }
+        }
+    }
+
+    // ---- the radiotelephonist's journal (radio_journal.hpp; pvo_bu_x_1984 art. 24): every message the post's radios
+    // carry that he hears, written by hand, one at a time; the page is the only way back to a message missed.
+    RadioJournal journal_;
+    std::map<int, CommandPost::AirReport> journal_air_;  // each board number's latest air report heard, for the page's entry
+    int journal_press_ = 0;
+    int journal_reads_ = 0, journal_reads_wrong_ = 0;    // reports plotted from the page, and those it had wrong
+    // Does the journal's keeper hear this net now (his box on its set; everyone with no voice paths)?
+    bool KeeperHears(const std::string& label) const {
+        const std::string& keeper = console_.post_journal_keeper;
+        if (keeper.empty()) return false;
+        if (!voice_) return true;
+        return SeatHearsNet(keeper, NetIdOf(label));
+    }
+    // Is this air report (as said) written legibly in the journal?
+    bool InJournal(const CommandPost::AirReport& r) const { return journal_.AirReport(r.number, r.heard_s - 2.0, time_) != nullptr; }
+    // A mark of this board number on the board since `since_s`?
+    bool OnBoardSince(int number, double since_s) const {
+        if (!post_) return false;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (m.number == number && m.time_s + 1e-9 >= since_s) return true;
+        }
+        return false;
+    }
+    // The air report as a journal entry has it: what was said, read through what was written (a wrong digit puts it
+    // elsewhere, a wrong number makes a second track). False for a message that is no air report, a stale one, or an
+    // entry that doesn't read as a report (the short form, an empty box).
+    bool JournalReport(const RadioJournalEntry& e, CommandPost::AirReport& out) const {
+        if (!post_ || e.said_number <= 0 || time_ - e.heard_s > post_->Def().air_net_period_s) return false;
+        const auto it = journal_air_.find(e.said_number);
+        if (it == journal_air_.end() || std::fabs(it->second.heard_s - e.heard_s) > 2.0) return false;
+        return post_->FromWords(it->second, e.text, out);
+    }
+    // Writes a report read off the page onto the board (a plotter reading it, or hearing it read to him from it).
+    void TakeFromPage(const RadioJournalEntry& e, const CommandPost::AirReport& r) {
+        if (!post_->Recall(r, time_, e.said_number)) return;
+        ++journal_reads_;
+        if (e.text != e.said) ++journal_reads_wrong_;
+        Event(console_.post_plotter, "read from the journal: " + e.text + (e.text != e.said ? "  (said: " + e.said + ")" : std::string()));
+    }
+    // The keeper writes: an NPC the oldest message waiting whenever he is free, now and then a digit wrong (his tier's
+    // slip_chance); a player takes it down as dictation, his pencil on the page (journal_write, or the page itself in
+    // the cabin: JournalBegin). A message not written in time is lost.
+    void UpdateJournal() {
+        const std::string& keeper = console_.post_journal_keeper;
+        if (!post_ || keeper.empty()) return;
+        const AspdDef& a = post_->Def();
+        const int lost = journal_.Forgotten();
+        journal_.Forget(time_, a.journal_remember_s);
+        if (journal_.Forgotten() > lost) Event(keeper, "a message heard and never written in the journal");
+        const int press = console_.panel.Get(console_.post_journal_write);
+        const bool pressed = press == 1 && journal_press_ != 1;
+        journal_press_ = press;
+        if (journal_.Waiting().empty() || journal_.Busy(time_)) return;
+        const double speed = SeatSpeed(keeper);
+        const double write_s = a.journal_write_s / (speed > 0.1 ? speed : 0.1);
+        if (NpcDoes(keeper, SeatDuty::Control(keeper, console_.post_journal_write, 1, "a message heard: write it in the journal"))) {
+            const CrewMember* m = MemberAt(keeper);
+            if (m != nullptr && m->IsBusy()) return;
+            const SkillTier* t = TierAt(keeper);
+            const bool slip = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->slip_chance;
+            journal_.WriteNext(time_, write_s, slip ? static_cast<int>(hear_rng_() % 1000u) : -1);
+        } else if (pressed) {
+            journal_.BeginDraft(time_);
+        }
+    }
+    // The NPC plotter, with nothing heard waiting, looks over the journal for a report he has not written: one that came
+    // while his box was off FuG-1, or one he didn't take in (his tier's miss_chance). He writes it as the page has it.
+    void PlotterReadsJournal() {
+        if (!post_ || console_.post_journal_keeper.empty() || !SeatHolder(console_.post_plotter).empty() || !post_->Heard().empty()) return;
+        const CrewMember* plotter = MemberAt(console_.post_plotter);
+        if (plotter == nullptr || plotter->IsBusy()) return;
+        for (const RadioJournalEntry& e : journal_.Legible(time_)) {
+            CommandPost::AirReport r;
+            if (!JournalReport(e, r) || OnBoardSince(e.said_number, e.heard_s) || OnBoardSince(e.number, e.heard_s)) continue;
+            bool missed = false;
+            for (const CommandPost::AirReport& h : post_->Held()) missed = missed || h.number == e.said_number;
+            if (!missed) continue;
+            TakeFromPage(e, r);
+            return;
+        }
+    }
+    // A report the player plotter writes from the journal's page (its number as written): back among those waiting for
+    // his hand, as the page has it.
+    void RecallFromJournal(int number) {
+        if (!post_) return;
+        for (const CommandPost::AirReport& h : post_->Heard()) {
+            if (h.number == number) return;
+        }
+        const std::vector<RadioJournalEntry> page = journal_.Legible(time_);
+        for (auto it = page.rbegin(); it != page.rend(); ++it) {
+            CommandPost::AirReport r;
+            if (it->number != number || OnBoardSince(it->said_number, it->heard_s) || !JournalReport(*it, r)) continue;
+            TakeFromPage(*it, r);
+            return;
+        }
+    }
+    // The NPC plotter hears each report on his own headset; now and then one doesn't go in (his tier's miss_chance, more
+    // under stress): it waits, unwritten, until he finds it on the page.
+    void PlotterMayMiss(const CommandPost::AirReport& r) {
+        if (console_.post_journal_keeper.empty() || !SeatHolder(console_.post_plotter).empty()) return;
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            if (crew_[i].Role() != console_.post_plotter) continue;
+            const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
+            const double miss = t != nullptr ? t->miss_chance * (crew_[i].Stressed() ? t->stress_factor : 1.0) : 0.0;
+            if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss && post_->Miss(r.number)) {
+                Event(console_.post_plotter, "did not take in the report of " + std::to_string(r.number) + ": he will look in the journal");
             }
         }
     }
@@ -3169,6 +3410,12 @@ public:
         nets_->AddJamming(j);
         return true;
     }
+    // The far end has something to say on a laid line: it rings once the line is free.
+    void QueueLineCall(int line, const std::string& text) {
+        const LineDef* l = def_.radio_data.Line(line);
+        if (l == nullptr || !l->laid) return;
+        lines_[line].queued.push_back(text);
+    }
     bool RingLine(int line) {
         const LineDef* l = def_.radio_data.Line(line);
         if (l == nullptr || !l->laid) return false;
@@ -3334,7 +3581,7 @@ private:
         if (!post_) return;
         post_->MoveTo(def_.unit_position);
         if (!r407_) {  // without the set worked as a set: the R-407 net's published reach (aspd_u.json)
-            const bool reach = post_->TelecodeInReach(def_.post_regiment, time_);
+            const bool reach = post_->TelecodeInReach(def_.post_regiment, time_) || (def_.post_regiment.telecode_wire && def_.post_regiment.telecode);
             if (reach != console_.equipment.GetInput(console_.post_telecode_input)) console_.equipment.SetInput(console_.post_telecode_input, reach);
         }
         const bool oriented = console_.equipment.IsReady(console_.post_oriented);
@@ -3361,12 +3608,23 @@ private:
         post_->SetFrame(world_.Frame());
         ReceiveRegimentCommands();
         const std::vector<BoardContact> truth = TruthContacts();
+        // The cabled radar's picture (flak11 PU12-0's figure; p19_to 4.3.1): the targets it covers while it is on the air,
+        // each a friend only if its interrogator works and the target's transponder answers (the "Kennung" line).
         std::vector<BoardContact> radar;
-        if (def_.has_post_radar) {
+        if (post_em_ && post_em_->Ok()) {
+            radar = PostEmPicture(truth);  // its echoes as the EM layer gives them, its jamming strobes beside them
+        } else if (def_.has_post_radar && !PostRadarOff()) {
             for (const BoardContact& c : truth) {
-                if (CommandPost::Covers(def_.post_radar, c)) radar.push_back(c);
+                if (!CommandPost::Covers(def_.post_radar, c)) continue;
+                BoardContact e = c;
+                e.type = def_.post_radar.iff_interrogator && c.transponder ? 1 : 9;
+                radar.push_back(e);
             }
         }
+        if (!console_.post_radar_here.empty() && console_.equipment.GetInput(console_.post_radar_here) != def_.has_post_radar) {
+            console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
+        }
+        UpdateRadarLine();
         CommandPost::Inputs in;
         in.telecode = console_.equipment.IsReady(console_.post_telecode);
         in.primary = console_.equipment.IsReady(console_.post_primary);
@@ -3383,30 +3641,56 @@ private:
         const CrewMember* plotter = MemberAt(console_.post_plotter);
         in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
         in.operator_speed = PlotterSpeed();
-        if (voice_) {  // through the crew: a seat's box on FuG-1, the set on its net; read out to the plotter
+        if (voice_) {  // through the crew: a seat's box on FuG-1, the set on its net; the plotter's own headset, or read out
             in.air_net = in.air_net && !NetHearers("air_picture").empty();
-            in.relay = true;
+            in.relay = !SeatHearsNet(console_.post_plotter, "air_picture");
             in.air_net_loss = nets_ && nets_->Jam("air_picture", time_) == 1 ? Tuning().weak_jam_loss : 0.0;
         }
         // The tube is the commander-operator's (rwd_mb3): his hands take the cabled radar's targets off, an NPC's when
-        // he is free, a player's with the ASPD-U's semi-automatic take-off.
+        // he is free. A new echo: an NPC takes the nearest off himself; a player owes it with the DT-2 (the marker on it,
+        // then СЪЁМ: UpdateKeypad). The held ones the ASPD-U's semi-automatic round fixes again either way.
         const CrewMember* commander = MemberAt(Cmdr());
         in.tube_free = commander != nullptr && (!SeatHolder(Cmdr()).empty() || !commander->IsBusy());
         in.tube_speed = SeatSpeed(Cmdr());
+        in.take_off_new = SeatHolder(Cmdr()).empty();
+        in.send = !console_.post_sending.empty() && console_.equipment.IsReady(console_.post_sending);
         post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        if (in.primary || in.imitation) OweTakeOff();
+        if (in.send && post_->LastSentS() == time_) {
+            if (!post_sending_) Event("telecode", "the post sends its picture on: " + std::to_string(post_->Sent().size()) + " targets");
+            post_sending_ = true;
+        } else if (!in.send && post_sending_) {
+            post_sending_ = false;
+            Event("telecode", "the post stops sending its picture");
+        }
         if (!SeatHolder(console_.post_plotter).empty()) {  // the NPC plotter writes each report he hears; a player owes them
             for (const CommandPost::AirReport& h : post_->Heard()) {
                 NpcDoes(console_.post_plotter, SeatDuty::Plot(console_.post_plotter, h.number, h.contact.target_id,
                                                               "a report heard: write it on the board"));
             }
         }
-        // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person).
+        // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person), and in the
+        // radiotelephonist's head until he writes it in the journal.
         for (const CommandPost::Spoken& s : post_->TakeSpoken()) {
-            if (s.heard) Radio("air picture", "Regiment", s.report.text);
+            if (!s.heard) continue;
+            Radio("air picture", "Regiment", s.report.text);
+            if (KeeperHears("air picture")) {
+                journal_.Heard(time_, "air picture", "Regiment", s.report.text, s.report.number);
+                journal_air_[s.report.number] = s.report;
+            }
+            if (!voice_ || SeatHearsNet(console_.post_plotter, "air_picture")) PlotterMayMiss(s.report);
         }
+        UpdateJournal();
+        PlotterReadsJournal();
         RelayAirPicture();
-        SetRadioInput(console_.equipment.HasInput("air_report_waiting") ? std::string("air_report_waiting") : std::string(),
-                      !post_->Held().empty());
+        bool written_held = false;
+        for (const CommandPost::AirReport& h : post_->Held()) written_held = written_held || console_.post_journal_keeper.empty() || InJournal(h);
+        SetRadioInput(console_.equipment.HasInput("air_report_waiting") ? std::string("air_report_waiting") : std::string(), written_held);
+        SetRadioInput(console_.equipment.HasInput("journal_waiting") ? std::string("journal_waiting") : std::string(),
+                      !journal_.Waiting().empty() || journal_.Draft() != nullptr);
+        bool by_hand = false;
+        for (const RadioJournalEntry& e : journal_.Written()) by_hand = by_hand || e.by_hand;
+        SetRadioInput(console_.equipment.HasInput("journal_written_by_hand") ? std::string("journal_written_by_hand") : std::string(), by_hand);
         for (const BoardMark& m : post_->Board().Marks()) {
             if (post_first_mark_.count(m.target_id) != 0) continue;
             post_first_mark_[m.target_id] = m.time_s;
@@ -3430,6 +3714,7 @@ private:
             marker_y_ = r * std::cos(az);
             double best = kMarkerCaptureFraction;
             for (const CommandPost::ScopeMark& m : PostScope()) {
+                if (m.raw) continue;  // an echo has no number to mark: the symbol over it has
                 const double d = std::hypot(m.x - marker_x_, m.y - marker_y_);
                 if (d < best) {
                     best = d;
@@ -3437,6 +3722,15 @@ private:
                 }
             }
             if (marked_ >= 0) marked_arrival_s_ = ArrivalS(marked_);
+            // СЪЁМ: the echo under the marker taken off (p19_to: by hand with the electronic marker).
+            if (post_ && !c.post_marker_take_off.empty() && c.panel.Get(c.post_marker_take_off) == 1) {
+                const int n = post_->TakeOffAt(time_, marker_x_, marker_y_, PostScaleM(), kMarkerCaptureFraction, SeatSpeed(Cmdr()));
+                if (n >= 0) {
+                    char text[48];
+                    std::snprintf(text, sizeof(text), "echo taken off as %02d", n);
+                    Event("IT-45", text);
+                }
+            }
         }
         if (c.post_keypad_digits.empty()) return;
         PostKeypad& k = keypad_;
@@ -3483,6 +3777,87 @@ private:
                 if (k.entry.size() > 2) k.entry.erase(0, k.entry.size() - 2);
             }
         }
+    }
+    // The cabled radar in the EM layer (post.em): run its world to now with the targets where they are, the radar on the
+    // air unless an outage has it off, its interrogator with it; then its picture as the ASPD gets it down the cable
+    // (p19_to 4.3.1: echoes and identification marks): where its tracker puts each echo, a friend if a reply came back,
+    // its ghosts (chaff, false echoes) as echoes too; and its strobes (p19_to 4: the jammer's azimuth).
+    std::vector<BoardContact> PostEmPicture(const std::vector<BoardContact>& truth) {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            const ScenarioTarget& t = def_.targets[i];
+            if (a != nullptr) post_em_->SyncTarget(t.id, a->alive && !targets_[i].gone, a->position, a->velocity, t.rcs_m2, t.friendly);
+        }
+        const bool on = !PostRadarOff();
+        post_em_->SetSearch(on, false);
+        post_em_->SetInterrogating(on && def_.post_radar.iff_interrogator);
+        if (time_ > post_em_t_) post_em_->Advance(time_ - post_em_t_);
+        post_em_t_ = time_;
+        post_strobes_ = post_em_->SearchStrobes();
+        std::vector<BoardContact> out;
+        for (const EmSensorLink::Contact& c : post_em_->SearchPicture()) {
+            BoardContact e;
+            e.target_id = c.target_id;
+            e.position = c.position;
+            e.altitude_m = world_.Frame().AltitudeOf(c.position);
+            for (const BoardContact& tc : truth) {
+                if (tc.target_id != c.target_id) continue;
+                e.altitude_m = tc.altitude_m;  // the height zone is the operator's to give (a 2-coordinate radar)
+                e.formation = tc.formation;
+                e.transponder = tc.transponder;
+            }
+            e.type = c.iff ? 1 : 9;
+            out.push_back(e);
+        }
+        return out;
+    }
+    // The cabled radar's jamming strobes on the IT-45 (true azimuth from north, -180..180; J/N), while its picture is.
+    std::vector<em::ViewStrobe> PostStrobes() const {
+        std::vector<em::ViewStrobe> out;
+        if (!post_ || !console_.equipment.IsReady(console_.post_primary)) return out;
+        for (const EmSensorLink::Strobe& s : post_strobes_) out.push_back({s.true_az_deg, s.jn_db});
+        return out;
+    }
+    // The cabled radar off the air now (its outages: the ARM drill, a fault).
+    bool PostRadarOff() const {
+        for (const C2Outage& o : def_.post_radar.outages) {
+            if (time_ + 1e-9 >= o.from_s && time_ < o.to_s) return true;
+        }
+        return false;
+    }
+    // The cabled radar's crew on the service line (flak11 PU12-0's figure: the Dienstverbindung in the radar's cable):
+    // they ring the post when their radar goes off the air and when it is back. The post hears it only on a line laid to
+    // "radar" (the scenario's lines); otherwise its tube just goes empty.
+    void UpdateRadarLine() {
+        if (!def_.has_post_radar) return;
+        const bool off = PostRadarOff();
+        if (off == post_radar_off_) return;
+        post_radar_off_ = off;
+        std::string reason;
+        for (const C2Outage& o : def_.post_radar.outages) {
+            if (off && time_ + 1e-9 >= o.from_s && time_ < o.to_s) reason = o.reason;
+        }
+        Event("cabled radar", off ? "off the air" + (reason.empty() ? std::string() : ": " + reason) : std::string("on the air again"));
+        const LineDef* l = def_.radio_data.LineTo("radar");
+        if (l != nullptr && l->laid) QueueLineCall(l->line, off ? "Станция выключена. Работу прекратил." : "Станция включена, работаю.");
+    }
+    // A new echo on the tube while fewer than 12 are held: a player at the tube owes it with the DT-2 (the marker on the
+    // nearest one, then СЪЁМ). An NPC takes it off himself (CommandPost, take_off_new).
+    void OweTakeOff() {
+        const double scale = PostScaleM();
+        const BoardContact* e = post_->NextNewEcho();
+        if (e == nullptr || !(scale > 0.0) || console_.post_marker_azimuth.empty()) return;
+        const Vec3 rel = post_->Shown(e->position) - post_->Position();
+        if (rel.HorizontalLength() > scale) return;
+        double az = RadToDeg(std::atan2(rel.x, rel.y));
+        if (az < 0.0) az += 360.0;
+        const double r = rel.HorizontalLength() / scale;
+        const double az_tol = RadToDeg(std::atan2(0.7 * kMarkerCaptureFraction, std::max(r, kMarkerCaptureFraction)));
+        const std::string why = "a new echo on the IT-45: take it off with the DT-2";
+        if (NpcDoes(Cmdr(), SeatDuty::Wheel(Cmdr(), console_.post_marker_azimuth, az, az_tol, true, why))) return;
+        NpcDoes(Cmdr(), SeatDuty::Wheel(Cmdr(), console_.post_marker_range, r, 0.7 * kMarkerCaptureFraction, false, why));
+        if (!console_.post_marker_take_off.empty()) NpcDoes(Cmdr(), SeatDuty::Control(Cmdr(), console_.post_marker_take_off, 1, why));
     }
     // When a target on the IT-45 reaches the post at its closing speed (s), or -1 if it isn't closing.
     double ArrivalS(int aspd_number) const {
@@ -3542,6 +3917,7 @@ private:
             c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
             c.formation = t.formation;
+            c.transponder = t.friendly;
             contacts.push_back(c);
         }
         return contacts;
@@ -4151,6 +4527,9 @@ private:
     std::mt19937 rng_;
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
+    std::unique_ptr<EmSensorLink> post_em_;  // the radar cabled to the post, in the EM layer (scenario post.em)
+    double post_em_t_ = 0.0;                 // how far the post's EM world has run
+    std::vector<EmSensorLink::Strobe> post_strobes_;  // its jamming strobes now
     std::vector<int> rwr_warned_;            // per target: 1 a lock warning noted, 2 a launch warning noted
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
@@ -4546,6 +4925,12 @@ private:
         m.callout = callout;
         m.routed = voice_ != nullptr;
         m.heard_by = heard_by;
+        // The journal takes what came over the post's radios (the air picture with its report: the post's update).
+        if (post_ && !console_.post_journal_keeper.empty() && net != "air picture" && NetIdOf(net) != net) {
+            bool heard = !voice_;
+            for (const std::string& h : heard_by) heard = heard || h == console_.post_journal_keeper;
+            if (heard) journal_.Heard(time_, net, from, text);
+        }
         radio_.push_back(std::move(m));
         if (radio_.size() > kRadioKept) radio_.erase(radio_.begin());
     }
@@ -5082,6 +5467,12 @@ private:
             }
         }
         NpcReportReady(halted);
+        // A radar to cable to the post at this position: «Кабель к РЛС проложить!», an order of its own (most positions
+        // have none, and the deployment's order would wait on a radar that isn't there).
+        if (halted && !console_.post_radar_here.empty() && console_.equipment.GetInput(console_.post_radar_here)) {
+            const CrewTask* cabled = def_.crew_data.FindTask("radar_cabled");
+            if (cabled != nullptr && !console_.equipment.AllHold(cabled->conditions, console_.panel)) NpcGive("order_radar_cable", 120.0);
+        }
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once, in the column
                         // (mon_2112_80 p66; voenizdat_osa_1991 p254)
@@ -6855,6 +7246,8 @@ private:
     PostKeypad keypad_;
     double marker_x_ = 0.0;
     double marker_y_ = 0.0;
+    bool post_radar_off_ = false;  // the cabled radar off the air (its crew rang the post on the service line)
+    bool post_sending_ = false;    // the post sending its picture on as telecode
     int marked_ = -1;
     double marked_arrival_s_ = -1.0;
     std::map<std::string, bool> reported_deployed_;
@@ -7167,6 +7560,7 @@ public:
         f.scale_m = PostScaleM();
         f.position = post_->Position();
         f.scope = PostScope();
+        f.strobes = PostStrobes();
         const PlottingBoard& b = post_->Board();
         const std::vector<BoardMark> now = PostMarks();
         for (const BoardMark& m : b.Marks()) {
@@ -7188,7 +7582,7 @@ public:
         }
         f.keypad_designating = keypad_.designating;
         f.keypad_last = keypad_.last;
-        for (const CommandPost::AirReport& r : post_->Heard()) f.heard.push_back(r.number);
+        for (int n : PlotterReportNumbers()) f.heard.push_back(n);  // heard, or there to read in the journal
         f.command = post_command_;
         f.command_text = PostCommandText();
         return f;
@@ -7527,9 +7921,12 @@ private:
     // A callout was heard: what it says about a target goes into each listener's picture. An NPC listener may not take
     // it in (his tier's miss chance, more under stress): he says "Повторите!" and the speaker says it again (once).
     void Hear(const SpokenCallout& s) {
-        if (s.id == "air_report" && post_) {  // read out to the plotter: it waits for his hand now
-            post_->ReleaseHeld(s.about.number, time_);
-            reading_out_.erase(s.about.number);
+        if (s.id == "air_report" && post_) {  // read out to the plotter: it waits for his hand now, as it was read
+            const auto it = reading_out_.find(s.about.number);
+            if (it != reading_out_.end()) {
+                post_->Recall(it->second, time_, s.about.number);
+                reading_out_.erase(it);
+            }
             return;
         }
         if (s.channel != "intercom" && s.channel != "cabin") return;
@@ -7631,6 +8028,7 @@ public:
     // signal table ПТ-2 (bstudy_tactics' form: a group, its meaning, a signal's visible sign). Times are counted from the
     // exercise's start (Ч+minutes): the scenarios keep no clock.
     std::vector<std::string> DocumentText(const std::string& document) const {
+        if (document == "radio_journal") return journal_.Page(time_, 12);
         std::vector<std::string> out;
         auto number = [](double v, int decimals) {
             char b[32];
@@ -7719,7 +8117,13 @@ public:
         if (c == nullptr) return {std::string(), std::string()};
         std::map<std::string, std::string> f;
         if (callout_id == "air_report") {
-            f["report"] = post_ && !post_->Held().empty() ? post_->Held().front().text : std::string("(нет донесения / no report waiting)");
+            f["report"] = "(нет донесения / no report waiting)";
+            for (const CommandPost::AirReport& r : post_ ? post_->Held() : std::vector<CommandPost::AirReport>()) {
+                if (console_.post_journal_keeper.empty() || InJournal(r)) {
+                    f["report"] = r.text;
+                    break;
+                }
+            }
         }
         if (const PlotterEvent* e = PendingPlot(callout_id)) f = e->fields;
         if (callout_id == "seat_ready") {

@@ -139,7 +139,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | - | 0 |
-| battery_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | drill 12, duty 1 | 125 |
+| battery_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 51 | 0 | drill 12, duty 54 | 115 |
 | squad_leader | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 1 | 0 | drill 8, duty 2 | 0 |
 | operator | 900 time | - | - | - | 0 | 0 | 0 | 5 | 3 | 0 | 2 | 0 | drill 1, duty 8 | 10 |
 | radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | drill 7, duty 1 | 0 |
@@ -164,7 +164,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | battery_commander | 598 all targets gone | 0 | - | - | 0 | 4 | 4 | 0 | 0 | 3 | 0 | 0 | duty 7 | 10 |
 | squad_leader | 598 all targets gone | 0 | - | - | 0 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | operator | 598 all targets gone | 0 | - | - | 0 | 4 | 4 | 27 | 7 | 0 | 0 | 0 | duty 34 | 59 |
-| radio_operator | 598 all targets gone | 0 | - | - | 0 | 4 | 4 | 0 | 32 | 0 | 0 | 0 | duty 32 | 0 |
+| radio_operator | 598 all targets gone | 0 | - | - | 0 | 4 | 4 | 0 | 2 | 0 | 0 | 0 | duty 53 | 0 |
 | driver | 598 all targets gone | 0 | - | - | 0 | 4 | 4 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 
 ## battery_link_practice (osa): The battery: the Osa 21 and the PU-12M
@@ -186,7 +186,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | battery_commander | 598 all targets gone | 0 | - | - | 0 | 4 | 6 | 0 | 0 | 3 | 0 | 0 | duty 9 | 10 |
 | squad_leader | 598 all targets gone | 0 | - | - | 0 | 4 | 6 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | operator | 598 all targets gone | 0 | - | - | 0 | 4 | 6 | 26 | 7 | 0 | 0 | 0 | duty 33 | 59 |
-| radio_operator | 598 all targets gone | 0 | - | - | 0 | 4 | 6 | 0 | 28 | 0 | 0 | 0 | duty 28 | 0 |
+| radio_operator | 598 all targets gone | 0 | - | - | 0 | 4 | 6 | 0 | 2 | 0 | 0 | 0 | duty 53 | 0 |
 | driver | 598 all targets gone | 0 | - | - | 0 | 4 | 6 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 
 ## osa_mission_march: Osa: march, raid, fight, march on
@@ -413,12 +413,12 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 0 | - | - | 0 | 3 | 33 | 0 | 0 | 0 | 0 | 0 | - | 0 |
-| battery_commander | 900 time | 0 | - | - | 0 | 3 | 33 | 0 | 0 | 2 | 0 | 0 | duty 35 | 10 |
-| squad_leader | 900 time | 0 | - | - | 0 | 3 | 33 | 0 | 0 | 0 | 0 | 0 | - | 0 |
-| operator | 900 time | 0 | - | - | 0 | 3 | 33 | 46 | 8 | 0 | 0 | 0 | duty 54 | 78 |
-| radio_operator | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 46 | 0 | 0 | 0 | duty 46 | 0 |
-| driver | 900 time | 0 | - | - | 0 | 3 | 33 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| NPC crew | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| battery_commander | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 2 | 0 | 0 | duty 29 | 10 |
+| squad_leader | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| operator | 900 time | 0 | - | - | 0 | 3 | 27 | 44 | 8 | 0 | 0 | 0 | duty 52 | 77 |
+| radio_operator | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 2 | 0 | 0 | 0 | duty 53 | 0 |
+| driver | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 
 ## osa_bekaa_1982: The Bekaa, 24 July 1982: F-4Es over the mountains
 
@@ -585,9 +585,11 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Duty (seat): rule | Times |
 |---|---|
+| control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 1 |
 | control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 28 |
+| control (radio_operator): a message heard: write it in the journal | 3 |
 | control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 1 |
-| designate (battery_commander): the nearest ready launcher whose sector covers it | 43 |
+| designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 95 |
 | drill (senior_operator): the least emission against ARMs: both low beams in each burst | 8 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 108 |
@@ -598,7 +600,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (battery_commander): the raid has gone: the all clear | 2 |
 | order (commander): the commander's next order | 311 |
 | order (commander): the drills the crew needs next | 157 |
-| plot (operator): a report heard: write it on the board | 104 |
+| plot (operator): a report heard: write it on the board | 102 |
 | report (commander): a target destroyed: report it on the battery net | 4 |
 | report (commander): a target given on the battery net: read it back | 50 |
 | report (deputy_commander): a report the crew makes when its lamp or input comes on | 178 |
@@ -625,7 +627,6 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): the track was lost | 26 |
 | report (operator): К бою: the intercom checked | 34 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
-| report (radio_operator): an air report heard: read it out to the plotter | 99 |
 | report (senior_operator): a new echo on his scope | 110 |
 | report (senior_operator): a report the crew makes when its lamp or input comes on | 277 |
 | report (senior_operator): a sign of the shot on his instrument: the group's mark splitting | 1 |
@@ -636,6 +637,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (senior_operator): the nearest echo, every 15 s until a track | 210 |
 | report (senior_operator): К бою: the intercom checked | 34 |
 | report (squad_leader): a report the crew makes when its lamp or input comes on | 2 |
+| wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
 
 ## Drills the NPC commander hands out that no order of the crew data starts
 

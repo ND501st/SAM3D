@@ -664,7 +664,18 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 	case simcore::CabinDisplayKind::ElevationScope:
 		return !bOn;
 	case simcore::CabinDisplayKind::Document:
-		return true;  // the paper doesn't change
+		// A paper doesn't change, but the radiotelephonist's journal fills as he writes.
+		if (Display.document == "radio_journal")
+		{
+			if (const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+			{
+				for (const FString& L : Sim->GetDocumentLines(TEXT("radio_journal")))
+				{
+					Key = HashCombine(Key, GetTypeHash(L));
+				}
+			}
+		}
+		return true;
 	default:
 		return false;
 	}
@@ -1344,8 +1355,10 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			}
 		}
 
-		// A cabled radar's picture (any primary track): the receiver's noise speckled over the tube where the sweep has
-		// been, and each target's echo under its symbol. The speckle stays where it was painted until the sweep comes round.
+		// A cabled radar's picture (its echo video, flak11 PU12-0's figure; p19_to 4.3.1): the receiver's noise speckled over
+		// the tube where the sweep has been, and every echo the radar sees, taken off or not (the raw marks); an echo whose
+		// interrogation got a reply carries the reply's short dash just beyond it. The speckle stays where it was painted
+		// until the sweep comes round.
 		bool bPrimary = false;
 		for (const simcore::CommandPost::ScopeMark& M : Post.scope)
 		{
@@ -1373,7 +1386,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			}
 			for (const simcore::CommandPost::ScopeMark& M : Post.scope)
 			{
-				if (!M.primary)
+				if (!M.raw)
 				{
 					continue;
 				}
@@ -1386,6 +1399,31 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 					const double Aa = Az + I * 0.006;
 					Disc(Canvas, Polar(C, Aa, Rr), 0.007 * S, OnFace(Afterglow(B) * (0.6f - 0.1f * FMath::Abs(I))));
 				}
+				if (M.friendly)
+				{
+					// the IFF reply: a short radial dash just beyond the echo (its position is SAM3D's)
+					Line(Canvas, Polar(C, Az, Rr + 0.018 * S), Polar(C, Az, Rr + 0.034 * S), 2.0f, OnFace(Afterglow(B) * 0.55f));
+				}
+			}
+		}
+
+		// The cabled radar's jamming strobes (p19_to: its device finds an active jammer's azimuth; post_feed.hpp): a grainy
+		// spoke along each jammer's azimuth across the whole tube, as bright as the jamming is strong, painted by the sweep
+		// and fading in the afterglow like the echoes. Drawn from the centre: the radar is at most 300 m from the post.
+		for (const simcore::em::ViewStrobe& St : Post.strobes)
+		{
+			const double Az = FMath::DegreesToRadians(St.azimuth_deg);
+			const float Strength = FMath::Clamp(0.3f + static_cast<float>(St.jn_db - 6.0) / 24.0f, 0.3f, 1.0f) * static_cast<float>(BrightAt(Az));
+			if (Strength < 0.03f)
+			{
+				continue;
+			}
+			Glow(Canvas, C, Polar(C, Az, R), 2.5f, OnFace(Afterglow(0.9) * Strength));
+			FRandomStream Grain(static_cast<int32>(St.azimuth_deg * 100.0) + AspdTurns * 7919);
+			for (int32 I = 0; I < 40; ++I)
+			{
+				const FVector2D P = Polar(C, Az + Grain.FRandRange(-0.02, 0.02), R * Grain.FRand());
+				Polygon(Canvas, P, 1.3, 4, OnFace(Afterglow(Grain.FRandRange(0.4f, 1.0f)) * Strength));
 			}
 		}
 

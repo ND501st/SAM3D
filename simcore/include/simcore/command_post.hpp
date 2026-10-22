@@ -7,9 +7,14 @@
 //   * The regiment's radar battery reads the air picture out by voice on the air-picture net (FuG-1, the plotters'
 //     net): one report at a time, each target about once a minute, out to the board's extent (beyond the tube's
 //     100 km). The board is the long-range picture, the tube the near one.
-//   * Or a radar cabled to the post gives the primary picture, which the battery commander, the post's
-//     commander-operator at the IT-45 (rwd_mb3), tracks semi-automatically: up to 12 targets, 2-3 s to take each off
-//     (ru_pu12_text).
+//   * Or a radar cabled to the post (up to 300 m) gives the primary picture: its own echo video, trigger, aerial synchro
+//     and IFF replies (flak11 PU12-0, the 1984 handbook's figure; p19_to 4.3.1: echoes, trigger and range marks, azimuth
+//     marks, identification marks). Every echo it sees is on the tube (Scope's raw marks); the battery commander, the
+//     post's commander-operator at the IT-45 (rwd_mb3), takes them off and tracks them semi-automatically: up to 12
+//     targets, 2-3 s to take each off (ru_pu12_text). An NPC takes the nearest new echo; a player the one under the DT-2
+//     marker (TakeOffAt). A target is a friend on it only if that radar's interrogator works and its transponder answers.
+//   * A post with a cabled radar can send what it took off on as telecode (a transmitting post: flak11 PU12-0's figure,
+//     the RK-1's send side; the DTP's parallax goes into what is sent too): Sent().
 //   * The ASPD-U shows the picture on the IT-45 tube: up to 100 tracks, each with its number, its height in 0.2 km steps
 //     and zone H1-H3, and its speed as a vector in 12.5 m/s steps (AspdTrack, Scope).
 //   * The operator-plotter writes what he hears on the air-picture net on the glass board by hand, one mark at a time
@@ -36,6 +41,7 @@
 #include "simcore/json.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/pvo_grid.hpp"
+#include "simcore/radio_journal.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -82,6 +88,12 @@ struct AspdDef {
     double air_net_grid_levels = 0.0;
     // The regiment's command net (FuG-3, the R-111): its post's voice reaches this far (flak11: 25-30 km).
     double regiment_net_range_m = 30000.0;
+    // How far a radar can stand from the post and be cabled to it (flak11 PU12-0: up to 300 m).
+    double radar_cable_m = 300.0;
+    // The radiotelephonist's journal (radio_journal.hpp): one message written in `journal_write_s` at his speed; one
+    // heard and not written within `journal_remember_s` is lost.
+    double journal_write_s = 5.0;
+    double journal_remember_s = 30.0;
 };
 
 namespace detail {
@@ -101,7 +113,7 @@ public:
                                "plot_mark_s", "oriented_az_error_deg", "oriented_position_error_m", "drift_fraction",
                                "unoriented_az_error_deg", "unoriented_position_error_m", "telecode_take_off_s", "telecode_step_m",
                                "air_net_report_s", "air_net_period_s", "air_net_range_m", "air_net_az_step_deg", "air_net_range_step_m",
-                               "air_net_grid_levels", "regiment_net_range_m"})) {
+                               "air_net_grid_levels", "regiment_net_range_m", "journal_write_s", "journal_remember_s", "radar_cable_m"})) {
             return false;
         }
         // Optional: the telecode's sending post and the air-picture voice net (absent: off, or the defaults).
@@ -110,7 +122,10 @@ public:
                               std::make_pair("air_net_range_m", &d.air_net_range_m), std::make_pair("air_net_az_step_deg", &d.air_net_az_step_deg),
                               std::make_pair("air_net_range_step_m", &d.air_net_range_step_m),
                               std::make_pair("air_net_grid_levels", &d.air_net_grid_levels),
-                              std::make_pair("regiment_net_range_m", &d.regiment_net_range_m)}) {
+                              std::make_pair("regiment_net_range_m", &d.regiment_net_range_m),
+                              std::make_pair("journal_write_s", &d.journal_write_s),
+                              std::make_pair("journal_remember_s", &d.journal_remember_s),
+                              std::make_pair("radar_cable_m", &d.radar_cable_m)}) {
             if (a->Find(f.first) != nullptr && !Cited(*a, f.first, *f.second)) return false;
         }
         if (d.air_net_report_s > 0.0 && !(d.air_net_period_s > 0.0)) return Fail("aspd.air_net_period_s", "must be > 0");
@@ -391,6 +406,7 @@ struct PostRegiment {
     std::vector<RegimentRadar> radars;  // empty: the regiment sees every target
     std::vector<C2Outage> outages;
     bool telecode = true;              // false: the regiment sends no telecode (peacetime: the ASPD-U left off)
+    bool telecode_wire = false;        // a telecode line laid from it to the post (flak11 PU12-0: "per Funk oder Draht")
     double designate_within_m = 0.0;   // the regiment designates to the battery the targets this near it (0: none)
     std::vector<RegimentCommand> commands;  // its commands: by telecode and its voice net, oldest first; held on cue anywhere
 };
@@ -531,6 +547,10 @@ public:
         // report with this chance.
         bool relay = false;
         double air_net_loss = 0.0;
+        // Who takes new echoes off: the commander-operator himself (an NPC), or a player with the DT-2 (TakeOffAt). Held
+        // tracks are refreshed by the semi-automatic round either way.
+        bool take_off_new = true;
+        bool send = false;           // the ASPD-U's transmitter sending the picture on (console telecode_sending)
     };
 
     // `regiment`: the targets the regiment sends (RegimentSees); `radar`: those the cabled radar covers.
@@ -555,19 +575,25 @@ public:
                                      [&](const AspdTrack& k) { return t - k.time_s > (k.primary ? primary_stale : telecode_stale); }),
                       tracks_.end());
         // The commander-operator's hands at the tube take the primary picture off; the plotter's write the board.
-        imitation_on_ = in.imitation;
-        imitation_t_ = t;
         board_open_ = in.board_open;
         if (!in.imitation) {
             tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(), [](const AspdTrack& k) { return k.imitated; }), tracks_.end());
         }
+        // What is on the tube to take off: the cabled radar's echoes (or the imitated one).
+        echoes_ = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : in.primary ? radar : std::vector<BoardContact>{};
         if ((in.primary || in.imitation) && in.tube_free && t + 1e-9 >= tube_free_s_) {
-            const std::vector<BoardContact> echoes = in.imitation ? std::vector<BoardContact>{ImitatedEcho(t)} : radar;
-            if (const BoardContact* c = NextTakeOff(t, echoes)) {
+            if (const BoardContact* c = NextTakeOff(t, echoes_, in.take_off_new)) {
                 TakeOff(t, *c);
                 tube_free_s_ = t + def_.take_off_s / (in.tube_speed > 0.0 ? in.tube_speed : 1.0);
             }
         }
+        // The transmitting post: what it took off goes on once a cycle while it sends.
+        if (in.send && (!send_started_ || t + 1e-9 >= next_send_s_)) {
+            send_started_ = true;
+            next_send_s_ = t + def_.telecode_period_s;
+            Send(t);
+        }
+        if (!in.send) send_started_ = false;
         // The plotter writes what he heard on the air-picture net, oldest first (a report is read out once); folded,
         // the board takes nothing.
         if (!in.board_open || !in.operator_free || t + 1e-9 < operator_free_s_) return;
@@ -581,6 +607,8 @@ public:
         int number = 0;        // the board's number of the target
         double heard_s = 0.0;  // when its reading ended
         std::string text;      // as read out
+        double big_lat0_deg = 0.0;  // the PVO grid's big square it lies in (its corner), for reading written squares
+        double big_lon0_deg = 0.0;
     };
     // Reports heard and not yet written on the board, oldest first. One not written within a reporting period is
     // forgotten (the next report of that target has come or is coming).
@@ -598,6 +626,87 @@ public:
             return true;
         }
         return false;
+    }
+    // A report the plotter heard but didn't take in: out of those waiting for his hand, held (he finds it again on the
+    // journal's page). False if none is waiting with that number.
+    bool Miss(int number) {
+        for (std::size_t i = 0; i < heard_.size(); ++i) {
+            if (heard_[i].number != number) continue;
+            held_.push_back(heard_[i]);
+            heard_.erase(heard_.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+        return false;
+    }
+    // A report as written down (the radiotelephonist's journal, radio_journal.hpp): the form it was read out in, its
+    // digits perhaps not those said. The written digits decide where it goes on the board and what it says of the
+    // target; a written number not the one said makes the board a second track ("journal:<number>", no aircraft), as
+    // a plotter who trusts the page would. False if the words don't read as a report (a box left empty, a cell digit
+    // that is no cell).
+    bool FromWords(const AirReport& said, const std::string& words, AirReport& out) const {
+        out = said;
+        out.text = words;
+        // The written line cut at its digit groups; its printed words must be the report's form.
+        std::vector<std::string> printed, groups;
+        RadioJournal::Cut(words, printed, groups);
+        const auto form = [&](std::initializer_list<const char*> want) {
+            if (printed.size() != want.size()) return false;
+            std::size_t i = 0;
+            for (const char* w : want) {
+                if (printed[i++] != w) return false;
+            }
+            return true;
+        };
+        int number = 0, code = 0, height_hm = 0;
+        if (form({"", ": square ", ", ", ", height ", ", minute ", ""})) {
+            number = std::atoi(groups[0].c_str());
+            code = std::atoi(groups[2].c_str());
+            height_hm = std::atoi(groups[3].c_str());
+            const std::string& square = groups[1];
+            if (!has_frame_ || square.size() < 3) return false;
+            // The big square's two digits: a wrong one moves the report whole squares away.
+            const GeoPoint g = frame_.EnuToGeodetic(said.contact.position);
+            const std::string said_sq = pvo_grid::Encode(RadToDeg(g.lat_rad), RadToDeg(g.lon_rad), static_cast<int>(def_.air_net_grid_levels));
+            const auto shift = [](char w, char s) { return ((w - s) % 10 + 15) % 10 - 5; };
+            const double lat0 = said.big_lat0_deg + shift(square[0], said_sq[0]) * pvo_grid::kBigLatDeg;
+            const double lon0 = said.big_lon0_deg + shift(square[1], said_sq[1]) * pvo_grid::kBigLonDeg;
+            double clat = 0.0, clon = 0.0;
+            if (!pvo_grid::Centre(square, lat0, lon0, clat, clon)) return false;
+            const Vec3 centre = frame_.GeodeticToEnu(GeoPoint::FromDegrees(clat, clon, g.alt_m));
+            out.contact.position = Shown(Vec3{centre.x, centre.y, said.contact.position.z});
+        } else if (form({"", ": azimuth ", ", ", " km, ", ", height ", ", minute ", ""})) {
+            number = std::atoi(groups[0].c_str());
+            const double az_deg = std::atof(groups[1].c_str());
+            const double range = std::atof(groups[2].c_str()) * 1000.0;
+            code = std::atoi(groups[3].c_str());
+            height_hm = std::atoi(groups[4].c_str());
+            const Vec3 src = has_air_source_ ? air_source_ : position_;
+            out.contact.position =
+                Shown(Vec3{src.x + range * std::sin(DegToRad(az_deg)), src.y + range * std::cos(DegToRad(az_deg)), said.contact.position.z});
+        } else {
+            return false;
+        }
+        out.contact.altitude_m = height_hm * 100.0;
+        out.contact.type = code / 10;
+        out.contact.formation = code % 10;
+        out.number = number;
+        if (number != said.number) out.contact.target_id = "journal:" + std::to_string(number);
+        return true;
+    }
+    // A report found again in the radiotelephonist's journal (radio_journal.hpp): it waits for the plotter's hand once
+    // more, as if heard now, and leaves the held list (`said_number`: the number it was heard under, if written otherwise).
+    // False if it is waiting already.
+    bool Recall(const AirReport& r, double t, int said_number = -1) {
+        for (const AirReport& h : heard_) {
+            if (h.number == r.number) return false;
+        }
+        if (r.contact.target_id.compare(0, 8, "journal:") == 0) board_.NumberAs(r.contact.target_id, r.number);
+        const int held_number = said_number >= 0 ? said_number : r.number;
+        held_.erase(std::remove_if(held_.begin(), held_.end(), [&](const AirReport& h) { return h.number == held_number; }), held_.end());
+        AirReport c = r;
+        c.heard_s = t;
+        heard_.push_back(c);
+        return true;
     }
     // Every report read out on the net since the last call, and whether the post heard it (for the radio log).
     struct Spoken {
@@ -658,24 +767,29 @@ public:
         int zone = 1;
         bool friendly = false;
         bool group = false;
-        bool primary = false;  // a cabled radar's track: its echo is on the tube too
+        bool primary = false;  // a cabled radar's track (or, raw, its echo)
         bool designated = false;  // the regiment's designation to this battery
-        bool imitated = false;    // the ФР block's imitated echo (number -1: the echo not yet taken off)
+        bool imitated = false;    // the ФР block's imitated echo
+        // An echo with no symbol (number -1): the cabled radar's video where the target is now, taken off or not; friendly
+        // when the radar's interrogator got a reply. Symbols are the other marks.
+        bool raw = false;
     };
     std::vector<ScopeMark> Scope(double scale_m) const {
         std::vector<ScopeMark> out;
         if (!(scale_m > 0.0)) return out;
-        if (imitation_on_) {  // the imitated echo itself, taken off or not
-            const Vec3 rel = Shown(ImitatedEcho(imitation_t_).position) - position_;
-            if (rel.HorizontalLength() <= scale_m) {
-                ScopeMark m;
-                m.number = -1;
-                m.x = rel.x / scale_m;
-                m.y = rel.y / scale_m;
-                m.primary = true;
-                m.imitated = true;
-                out.push_back(m);
-            }
+        for (const BoardContact& c : echoes_) {  // the echoes themselves (the imitated one included)
+            const Vec3 rel = Shown(c.position) - position_;
+            if (rel.HorizontalLength() > scale_m) continue;
+            ScopeMark m;
+            m.number = -1;
+            m.x = rel.x / scale_m;
+            m.y = rel.y / scale_m;
+            m.zone = ZoneOf(c.altitude_m);
+            m.friendly = c.type == 1;
+            m.primary = true;
+            m.imitated = c.target_id == "imitation";
+            m.raw = true;
+            out.push_back(m);
         }
         for (const AspdTrack& k : tracks_) {
             const Vec3 rel = k.position - position_;
@@ -706,6 +820,52 @@ public:
         return std::min(def_.max_speed_mps, std::round(speed_mps / def_.speed_step_mps) * def_.speed_step_mps);
     }
     double LastTelecodeS() const { return last_telecode_s_; }
+
+    // The player at the tube takes off the echo under the DT-2 marker (p19_to: the operator takes a target off the ASPD's
+    // indicator by hand with the electronic marker): `x`, `y` the marker as fractions of `scale_m` (east, north), the
+    // echo within `capture` of it. A new echo while fewer than 12 are held, or a held one fixed again. Its number, or -1:
+    // nothing there, his hands still on the last one, or 12 held already.
+    int TakeOffAt(double t, double x, double y, double scale_m, double capture, double speed) {
+        if (!(scale_m > 0.0) || t + 1e-9 < tube_free_s_) return -1;
+        const BoardContact* best = nullptr;
+        double best_d = capture;
+        for (const BoardContact& c : echoes_) {
+            const Vec3 rel = Shown(c.position) - position_;
+            const double d = std::hypot(rel.x / scale_m - x, rel.y / scale_m - y);
+            if (d < best_d) {
+                best_d = d;
+                best = &c;
+            }
+        }
+        if (best == nullptr) return -1;
+        if (HeldPrimary(best->target_id) == nullptr && static_cast<double>(PrimaryHeld()) >= def_.semi_auto_tracks) return -1;
+        TakeOff(t, *best);
+        tube_free_s_ = t + def_.take_off_s / (speed > 0.0 ? speed : 1.0);
+        const AspdTrack* k = HeldPrimary(best->target_id);
+        return k != nullptr ? k->number : -1;
+    }
+    // The echo the commander-operator takes off next if new ones are his to take: the nearest not held, while fewer than
+    // 12 are held (nullptr: none).
+    const BoardContact* NextNewEcho() const {
+        if (static_cast<double>(PrimaryHeld()) >= def_.semi_auto_tracks) return nullptr;
+        const BoardContact* best = nullptr;
+        double nearest = 1e18;
+        for (const BoardContact& c : echoes_) {
+            if (HeldPrimary(c.target_id) != nullptr) continue;
+            const double r = (c.position - position_).HorizontalLength();
+            if (r < nearest) {
+                nearest = r;
+                best = &c;
+            }
+        }
+        return best;
+    }
+    // The cabled radar's echoes on the tube now (true positions; empty without a primary picture).
+    const std::vector<BoardContact>& Echoes() const { return echoes_; }
+    // The picture this post last sent on as telecode (a transmitting post): the targets it took off, where it puts them
+    // (its own error in them), in the telecode's steps, with its numbers. Another post receives it as its regiment's.
+    const std::vector<BoardContact>& Sent() const { return sent_; }
+    double LastSentS() const { return last_sent_s_; }
 
 private:
     double U() { return static_cast<double>(rng_()) / 4294967296.0; }
@@ -743,6 +903,12 @@ private:
         for (AspdTrack& e : tracks_) {
             if (e.target_id == c.target_id) k = &e;
         }
+        // A target the commander holds off his own cabled radar keeps that fix (finer and fresher than the telecode's);
+        // the telecode only brings the regiment's designation to it.
+        if (!primary && k != nullptr && k->primary) {
+            k->designated = designate_within_m_ > 0.0 && (c.position - position_).HorizontalLength() <= designate_within_m_;
+            return;
+        }
         const Vec3 shown = Shown(c.position);
         if (k == nullptr) {
             if (static_cast<double>(tracks_.size()) >= def_.max_targets) return;
@@ -765,8 +931,9 @@ private:
         k->group = c.formation > 1;
         k->primary = primary;
         k->imitated = c.target_id == "imitation";
-        // The regiment's designation to this battery rides with its telecode (its own picture decides it).
-        k->designated = !primary && designate_within_m_ > 0.0 && (c.position - position_).HorizontalLength() <= designate_within_m_;
+        // The regiment's designation to this battery rides with its telecode (its own picture decides it); a primary fix
+        // keeps one the telecode brought.
+        if (!primary) k->designated = designate_within_m_ > 0.0 && (c.position - position_).HorizontalLength() <= designate_within_m_;
         k->time_s = t;
         ApplyOverrides(*k);
     }
@@ -888,6 +1055,8 @@ private:
                              std::floor(lon / pvo_grid::kBigLonDeg) * pvo_grid::kBigLonDeg, clat, clon);
             const Vec3 centre = frame_.GeodeticToEnu(GeoPoint::FromDegrees(clat, clon, g.alt_m));
             r.contact.position = Shown(Vec3{centre.x, centre.y, best->position.z});
+            r.big_lat0_deg = std::floor(lat / pvo_grid::kBigLatDeg) * pvo_grid::kBigLatDeg;
+            r.big_lon0_deg = std::floor(lon / pvo_grid::kBigLonDeg) * pvo_grid::kBigLonDeg;
             std::snprintf(text, sizeof(text), "%04d: square %s, %02d, height %d, minute %02d", r.number, sq.c_str(), code, height_hm, minute % 100);
         } else {
             std::snprintf(text, sizeof(text), "%04d: azimuth %03.0f, %.0f km, %02d, height %d, minute %02d", r.number, az_deg, range / 1000.0,
@@ -905,27 +1074,34 @@ private:
         operator_free_s_ = t + def_.plot_mark_s / speed;
     }
 
-    // The primary target to take off next: one already held whose fix is oldest, else the nearest new one while fewer
-    // than 12 are held. Only once a radar turn has passed since its last fix.
-    const BoardContact* NextTakeOff(double t, const std::vector<BoardContact>& radar) const {
-        const BoardContact* best = nullptr;
-        double best_age = -1.0;
+    const AspdTrack* HeldPrimary(const std::string& id) const {
+        for (const AspdTrack& e : tracks_) {
+            if (e.target_id == id && e.primary) return &e;
+        }
+        return nullptr;
+    }
+    int PrimaryHeld() const {
         int held = 0;
         for (const AspdTrack& k : tracks_) held += k.primary ? 1 : 0;
+        return held;
+    }
+    // The primary target to take off next: the nearest new one while fewer than 12 are held (if `take_new`), else one
+    // already held whose fix is oldest. Only once a radar turn has passed since its last fix.
+    const BoardContact* NextTakeOff(double t, const std::vector<BoardContact>& radar, bool take_new) const {
+        const BoardContact* best = nullptr;
+        double best_age = -1.0;
+        const int held = PrimaryHeld();
         double nearest = 1e18;
         const BoardContact* new_one = nullptr;
         for (const BoardContact& c : radar) {
-            const AspdTrack* k = nullptr;
-            for (const AspdTrack& e : tracks_) {
-                if (e.target_id == c.target_id && e.primary) k = &e;
-            }
+            const AspdTrack* k = HeldPrimary(c.target_id);
             if (k != nullptr) {
                 const double age = t - k->time_s;
                 if (age + 1e-9 >= def_.radar_period_s && age > best_age) {
                     best_age = age;
                     best = &c;
                 }
-            } else if (static_cast<double>(held) < def_.semi_auto_tracks) {
+            } else if (take_new && static_cast<double>(held) < def_.semi_auto_tracks) {
                 const double r = (c.position - position_).HorizontalLength();
                 if (r < nearest) {
                     nearest = r;
@@ -939,6 +1115,22 @@ private:
         auto it = post_numbers_.find(c.target_id);
         if (it == post_numbers_.end()) it = post_numbers_.emplace(c.target_id, static_cast<int>(post_numbers_.size() % 100)).first;
         Fix(t, c, true, it->second);
+    }
+    // The transmitting post's cycle: every target it took off (not the imitated one), where it shows it, in the
+    // telecode's steps.
+    void Send(double t) {
+        last_sent_s_ = t;
+        sent_.clear();
+        for (const AspdTrack& k : tracks_) {
+            if (!k.primary || k.imitated) continue;
+            BoardContact c;
+            c.target_id = k.target_id;
+            c.position = Vec3{k.position.x, k.position.y, k.height_m};
+            c.altitude_m = k.height_m;
+            c.type = k.type;
+            c.formation = k.group ? 2 : 1;
+            sent_.push_back(Telecoded(c));
+        }
     }
 
     AspdDef def_;
@@ -961,8 +1153,6 @@ private:
     std::map<std::string, double> telecode_sent_;  // when the sending post last took each target off
     double designate_within_m_ = 0.0;
     std::map<std::string, Attributes> overrides_;   // the ДХ's characteristics, by target
-    bool imitation_on_ = false;
-    double imitation_t_ = 0.0;
     bool board_open_ = true;
     double telecode_round_s_ = 0.0;                // how long its round of all the targets takes
     Vec3 air_source_;
@@ -978,6 +1168,11 @@ private:
     double Uniform() { return static_cast<double>(rng_()) / 4294967296.0; }
     std::vector<AirReport> heard_;
     std::vector<Spoken> spoken_;
+    std::vector<BoardContact> echoes_;             // the cabled radar's (or the imitated) echoes on the tube now
+    std::vector<BoardContact> sent_;               // the picture last sent on as telecode
+    bool send_started_ = false;
+    double next_send_s_ = 0.0;
+    double last_sent_s_ = -1.0;
 };
 
 }  // namespace simcore
