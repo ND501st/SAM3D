@@ -66,7 +66,8 @@ platoons, the regiment's P-19 and P-40 (they feed the PU-12's picture), the radi
 warning net), command posts and headquarters, a power station, a rail junction, a factory, the forward troops of four
 groups, six towns. Each has a value, hardness, repair time, mobility (and how often and how far it moves), emission,
 pre-war knowledge and, for air defences, a defence (system, radius, lethality, low and medium cover, radar or optical,
-rounds). All game values.
+rounds, the fire-control radars an ARM can take one by one, and on the nation's theatre the fire channels). All game
+values.
 
 **The whole nation** (`theatre_pannonia_nation.json`, the nation on the map N2, `docs/COUNTRY_MAP.md`) extends this
 theatre with the briefing's forces, industry and infrastructure, 170 objects on the country's map, and gives every

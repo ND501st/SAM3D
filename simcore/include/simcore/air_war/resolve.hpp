@@ -35,9 +35,66 @@ struct ResolveContext {
     Rng* rng = nullptr;
     // A defence to leave out (the player's battery when its part of the raid was played as a mission).
     std::string skip_defence;
-    // Only the part of the routes from this hour on (the rest of a raid after the player's mission).
-    double from_h = -1e18;
+    // A played raid (AirCampaign::CompletePlayerMission): what flew inside this circle between these hours was the
+    // scenario's, and the defences there took their chances in it (mission_bridge.hpp); every other part of every route
+    // is resolved here, the way in before the scenario as much as the way out after it.
+    Vec3 played_centre;
+    double played_radius_m = 0.0;
+    double played_from_h = 0.0;
+    double played_to_h = 0.0;
 };
+
+// How much a package's SEAD suppresses a radar defence it meets: its SEAD and hunter aircraft, its SEAD officer's skill
+// and how well the package keeps together. Shared by the resolver and a played raid's neighbours (mission_bridge.hpp).
+inline double PackageSuppression(const Package& p, const AirStaff& staff, const TuningTable& tune) {
+    const int sead = p.Count(FlightRole::Sead) + p.Count(FlightRole::Hunter);
+    const Officer* so = staff.HolderPtr(StaffRole::Sead);
+    const double sead_skill = so != nullptr ? so->Effective(so->def.skills.sead) : 0.3;
+    return tune.Get("attrition.sead_suppression") * std::min(1.0, sead / 2.0) * (0.6 + 0.4 * sead_skill) * (0.5 + 0.5 * p.coordination);
+}
+
+// The package leader's airmanship (0.5 without a leader).
+inline double PackageAirmanship(const Package& p, const AirStaff& staff) {
+    const Officer* leader = p.leader >= 0 ? &staff.officers[static_cast<std::size_t>(p.leader)] : nullptr;
+    return leader != nullptr ? leader->Effective(leader->def.skills.airmanship) : 0.5;
+}
+
+// A share of a route leg, from a to b (fractions 0..1 of it).
+struct LegPiece {
+    double a = 0.0;
+    double b = 1.0;
+};
+
+// The parts of the leg r0-r1 the resolver resolves: all of it, less what a played raid's scenario flew (inside its
+// circle while it ran).
+inline std::vector<LegPiece> ResolvedPieces(const RoutePoint& r0, const RoutePoint& r1, const ResolveContext& c) {
+    if (c.played_radius_m <= 0.0) return {LegPiece{}};
+    const double dx = r1.pos.x - r0.pos.x, dy = r1.pos.y - r0.pos.y;
+    const double fx = r0.pos.x - c.played_centre.x, fy = r0.pos.y - c.played_centre.y;
+    const double qa = dx * dx + dy * dy;
+    const double qc = fx * fx + fy * fy - c.played_radius_m * c.played_radius_m;
+    double t_in = 0.0, t_out = 0.0;
+    if (qa <= 0.0) {
+        if (qc >= 0.0) return {LegPiece{}};
+        t_in = 0.0;
+        t_out = 1.0;
+    } else {
+        const double qb = 2.0 * (fx * dx + fy * dy);
+        const double disc = qb * qb - 4.0 * qa * qc;
+        if (disc <= 0.0) return {LegPiece{}};
+        const double sq = std::sqrt(disc);
+        t_in = Clamp01((-qb - sq) / (2.0 * qa));
+        t_out = Clamp01((-qb + sq) / (2.0 * qa));
+        if (t_out <= t_in) return {LegPiece{}};
+    }
+    // Played only if the inside part overlaps the scenario's hours.
+    const double h_in = r0.t_h + t_in * (r1.t_h - r0.t_h), h_out = r0.t_h + t_out * (r1.t_h - r0.t_h);
+    if (std::max(h_in, h_out) < c.played_from_h || std::min(h_in, h_out) > c.played_to_h) return {LegPiece{}};
+    std::vector<LegPiece> out;
+    if (t_in > 0.0) out.push_back(LegPiece{0.0, t_in});
+    if (t_out < 1.0) out.push_back(LegPiece{t_out, 1.0});
+    return out;
+}
 
 class Resolver {
 public:
@@ -50,14 +107,10 @@ public:
         const TuningTable& tune = d.tuning;
         const FactionDef& f = d.faction;
         const FrontDef* front = d.theatre.FrontFor(f.front);
-        const int sead = p.Count(FlightRole::Sead) + p.Count(FlightRole::Hunter);
         const bool jam = p.Has(FlightRole::Jammer);
-        const Officer* so = c.staff->HolderPtr(StaffRole::Sead);
-        const double sead_skill = so != nullptr ? so->Effective(so->def.skills.sead) : 0.3;
-        const double supp_base = tune.Get("attrition.sead_suppression") * std::min(1.0, sead / 2.0) * (0.6 + 0.4 * sead_skill) *
-                                 (0.5 + 0.5 * p.coordination);
+        const double supp_base = PackageSuppression(p, *c.staff, tune);
         const Officer* leader = p.leader >= 0 ? &c.staff->officers[static_cast<std::size_t>(p.leader)] : nullptr;
-        const double airmanship = leader != nullptr ? leader->Effective(leader->def.skills.airmanship) : 0.5;
+        const double airmanship = PackageAirmanship(p, *c.staff);
         // The leader's nerve: the share of the package he will lose before turning back.
         double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
         if (const Officer* pln = p.planner >= 0 ? &c.staff->officers[static_cast<std::size_t>(p.planner)] : nullptr) {
@@ -86,77 +139,80 @@ public:
             for (std::size_t si = 0; si + 1 < fl.route.size() && alive > 0; ++si) {
                 const RoutePoint& r0 = fl.route[si];
                 const RoutePoint& r1 = fl.route[si + 1];
-                if (r1.t_h < c.from_h) continue;
                 const bool before_release = fl.release_index < 0 || static_cast<int>(si) < fl.release_index;
                 if (main && abort_now && before_release) {
                     fl.aborted = true;
                     break;
                 }
-                for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
-                    const TheatreObject& def = d.theatre.objects[oj];
-                    ObjectState& st = (*c.truth)[oj];
-                    if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
-                    if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
-                    if (st.missiles == 0) continue;
-                    const double chord = ChordInCircle2d(r0.pos, r1.pos, st.pos, def.defence.radius_m);
-                    if (chord <= 0.0) continue;
-                    const bool radar = def.defence.radar;
-                    const bool emcon = def.player ? c.posture->fight_silent : false;
-                    // A radar defence radiates while it engages (not under EMCON): ELINT hears it; SEAD fires at it.
-                    if (radar && !emcon) {
-                        out.AddEmission(def.id, chord / std::max(50.0, a->cruise_mps) + 30.0);
-                        if (arms_left > 0 && (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter)) {
-                            const double dist = SegmentDistance2d(st.pos, r0.pos, r1.pos);
-                            if (dist <= a->arm_range_m) {
-                                FireArms(fl, *a, def, st, arms_left, out, suppressed[oj]);
+                for (const LegPiece& piece : ResolvedPieces(r0, r1, c)) {
+                    const Vec3 p0 = piece.a <= 0.0 ? r0.pos : r0.pos + (r1.pos - r0.pos) * piece.a;
+                    const Vec3 p1 = piece.b >= 1.0 ? r1.pos : r0.pos + (r1.pos - r0.pos) * piece.b;
+                    for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
+                        const TheatreObject& def = d.theatre.objects[oj];
+                        ObjectState& st = (*c.truth)[oj];
+                        if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
+                        if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
+                        if (st.missiles == 0) continue;
+                        const double chord = ChordInCircle2d(p0, p1, st.pos, def.defence.radius_m);
+                        if (chord <= 0.0) continue;
+                        const bool radar = def.defence.radar;
+                        const bool emcon = def.player ? c.posture->fight_silent : false;
+                        // A radar defence radiates while it engages (not under EMCON): ELINT hears it; SEAD fires at it.
+                        if (radar && !emcon) {
+                            out.AddEmission(def.id, chord / std::max(50.0, a->cruise_mps) + 30.0);
+                            if (arms_left > 0 && (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter)) {
+                                const double dist = SegmentDistance2d(st.pos, p0, p1);
+                                if (dist <= a->arm_range_m) {
+                                    FireArms(fl, *a, def, st, arms_left, out, suppressed[oj]);
+                                }
                             }
                         }
-                    }
-                    if (a->drone && fl.role == FlightRole::Decoy) {
-                        // A decoy draws fire: the defence wastes rounds and shows itself.
-                        if (!engaged[oj]) {
-                            engaged[oj] = true;
-                            Spend(st, 1 + c.rng->Index(2), out);
+                        if (a->drone && fl.role == FlightRole::Decoy) {
+                            // A decoy draws fire: the defence wastes rounds and shows itself.
+                            if (!engaged[oj]) {
+                                engaged[oj] = true;
+                                Spend(st, 1 + c.rng->Index(2), out);
+                                out.fired.push_back(def.id);
+                                if (c.rng->Chance(0.6)) ++fl.lost;  // drones are meant to be lost; not counted as losses
+                            }
+                            continue;
+                        }
+                        double env = 1.0;
+                        if (!radar && p.part == DayPart::Night) env *= tune.Get("attrition.night");
+                        if (!radar && c.weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");
+                        if (emcon) env *= tune.Get("attrition.emcon_lethality");
+                        double supp = radar && !emcon ? std::max(supp_base, suppressed[oj]) : 0.0;
+                        if (st.function < 1.0) env *= st.function;
+                        const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
+                                                        def.defence.low_cover, def.defence.medium_cover, radar, supp,
+                                                        jam && radar ? tune.Get("attrition.jamming") : 0.0, env,
+                                                        Clamp01(a->evasion + 0.3 * (airmanship - 0.5)), tune);
+                        if (k <= 0.0) continue;
+                        engaged[oj] = true;
+                        int shots = 0;
+                        for (int n = 0; n < EngagedAircraft(def.defence.channels, st.function, alive); ++n) {
+                            ++shots;
+                            if (c.rng->Chance(k)) {
+                                LossRecord lr;
+                                lr.flight = static_cast<int>(oi);
+                                lr.by = def.id;
+                                double along = 0.0;
+                                SegmentDistance2d(st.pos, p0, p1, &along);
+                                lr.where = p0 + (p1 - p0) * along;
+                                lr.officer = fl.officer >= 0 && fl.lost == 0;
+                                lr.captured = c.rng->Chance(0.5);
+                                out.losses.push_back(lr);
+                                ++fl.lost;
+                            } else if (c.rng->Chance(0.5 * k)) {
+                                ++fl.damaged;
+                                ++out.damaged;
+                            }
+                        }
+                        alive = fl.count - fl.lost;
+                        if (shots > 0) {
+                            Spend(st, std::min(shots, 2), out);
                             out.fired.push_back(def.id);
-                            if (c.rng->Chance(0.6)) ++fl.lost;  // drones are meant to be lost; not counted as losses
                         }
-                        continue;
-                    }
-                    double env = 1.0;
-                    if (!radar && p.part == DayPart::Night) env *= tune.Get("attrition.night");
-                    if (!radar && c.weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");
-                    if (emcon) env *= tune.Get("attrition.emcon_lethality");
-                    double supp = radar && !emcon ? std::max(supp_base, suppressed[oj]) : 0.0;
-                    if (st.function < 1.0) env *= st.function;
-                    const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
-                                                    def.defence.low_cover, def.defence.medium_cover, radar, supp,
-                                                    jam && radar ? tune.Get("attrition.jamming") : 0.0, env,
-                                                    Clamp01(a->evasion + 0.3 * (airmanship - 0.5)), tune);
-                    if (k <= 0.0) continue;
-                    engaged[oj] = true;
-                    int shots = 0;
-                    for (int n = 0; n < alive; ++n) {
-                        ++shots;
-                        if (c.rng->Chance(k)) {
-                            LossRecord lr;
-                            lr.flight = static_cast<int>(oi);
-                            lr.by = def.id;
-                            double along = 0.0;
-                            SegmentDistance2d(st.pos, r0.pos, r1.pos, &along);
-                            lr.where = r0.pos + (r1.pos - r0.pos) * along;
-                            lr.officer = fl.officer >= 0 && fl.lost == 0;
-                            lr.captured = c.rng->Chance(0.5);
-                            out.losses.push_back(lr);
-                            ++fl.lost;
-                        } else if (c.rng->Chance(0.5 * k)) {
-                            ++fl.damaged;
-                            ++out.damaged;
-                        }
-                    }
-                    alive = fl.count - fl.lost;
-                    if (shots > 0) {
-                        Spend(st, std::min(shots, 2), out);
-                        out.fired.push_back(def.id);
                     }
                 }
                 // The defender's fighters, where the package has no escort.

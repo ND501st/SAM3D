@@ -133,10 +133,12 @@ int main(int argc, char** argv) {
             if (!hit && (e.kind != DebriefEntry::Kind::Scenario || e.detail.compare(0, 9, "destroyed") != 0)) continue;
             for (const RaidAircraft& a : rs.manifest.aircraft) drones += a.drone && a.target_id == e.what ? 1 : 0;
         }
-        std::printf("  >> %s (%s '%s' on %s): %d aircraft, %d launches, %d shot down and %d decoys, radars on %.0f s, %d ARMs%s\n",
+        std::printf("  >> %s (%s '%s' on %s): %d aircraft, %d launches, %d shot down (%d by the %d neighbours in reach) and %d decoys, "
+                    "radars on %.0f s, %d ARMs%s\n",
                     rs.manifest.scenario_id.c_str(), MissionKindName(p->kind), p->name.c_str(), p->target_label.c_str(),
-                    static_cast<int>(rs.manifest.aircraft.size()), runner.Launches(), outcome.Lost(), drones, bridge.EmittedSeconds(),
-                    bridge.ArmsFired(), bridge.UnitDestroyed() ? ", OUR VEHICLE HIT" : "");
+                    static_cast<int>(rs.manifest.aircraft.size()), runner.Launches(), outcome.Lost(), bridge.NeighbourKills(),
+                    static_cast<int>(rs.manifest.neighbours.size()), drones, bridge.EmittedSeconds(), bridge.ArmsFired(),
+                    bridge.UnitDestroyed() ? ", OUR VEHICLE HIT" : "");
         campaign.CompletePlayerMission(outcome, rs.manifest.start_h + runner.Time() / 3600.0);
         ++played;
     }

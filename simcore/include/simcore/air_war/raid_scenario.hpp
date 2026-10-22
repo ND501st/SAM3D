@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -215,6 +216,20 @@ struct RaidAircraft {
     double strike_power = 0.0;
     bool officer = false;
     double appear_s = 0.0;
+    Profile profile = Profile::Low;  // its flight's (the defences' cover: low, medium)
+    double evasion = 0.0;            // the type's (AircraftType::evasion)
+};
+
+// One of our other air defences whose reach overlaps the scenario. As the raid's aircraft pass through its zone it takes
+// its kill chances at them by the abstract resolver's rule (mission_bridge.hpp): a played raid meets the neighbours
+// an abstract one would (17.1's first form; they are not drawn yet).
+struct RaidNeighbour {
+    std::string id;     // theatre object
+    std::string name;
+    Vec3 enu;           // scenario ENU
+    DefenceDef defence;
+    double function = 1.0;
+    int missiles = -1;  // ready rounds (-1: guns)
 };
 
 struct RaidManifest {
@@ -232,6 +247,13 @@ struct RaidManifest {
     std::vector<RaidAircraft> aircraft;
     std::vector<double> flight_exit_h;   // per flight: when it leaves the scenario's circle (-1e18: never in it)
     std::vector<bool> flight_in;         // per flight: some of it is in the scenario
+    std::vector<RaidNeighbour> neighbours;
+    // The package against the neighbours' radars and optics (resolve.hpp's rule).
+    double sead_supp = 0.0;    // PackageSuppression
+    double jam = 0.0;          // attrition.jamming with a jammer, else 0
+    double airmanship = 0.5;   // PackageAirmanship
+    bool night = false;
+    bool poor_weather = false;
 };
 
 struct RaidScenario {
@@ -532,6 +554,8 @@ public:
                 ra.strike_power = a->strike_power * p.load_factor;
                 ra.officer = fl.officer >= 0 && k == 0;
                 ra.appear_s = appear_s;
+                ra.profile = fl.profile;
+                ra.evasion = a->evasion;
                 m.aircraft.push_back(ra);
                 ++n_targets;
                 end_s = std::max(end_s, (cl.t_h.back() - m.start_h) * 3600.0);
@@ -575,6 +599,25 @@ public:
         json::Value radars = Arr();
         bool pu12_blind = true;
         bool any_regiment = false;
+        // The warning nets: of each kind, the nearest that still works within 150 km (else the nearest, out of action):
+        // the radar company the battery is nearest, the neighbouring battery on the radio. The rest of a net carries on
+        // when one post is lost.
+        std::map<std::string, std::size_t> warning;
+        for (std::size_t i = 0; i < th.objects.size(); ++i) {
+            const TheatreObject& o = th.objects[i];
+            if (o.c2_source.empty() || o.c2_source == "pu12" || o.player) continue;
+            const ObjectState& st = c.Truth()[i];
+            const double dist = to_scen(st.pos).HorizontalLength();
+            if (dist >= 150000.0) continue;
+            const auto it = warning.find(o.c2_source);
+            if (it == warning.end()) {
+                warning[o.c2_source] = i;
+                continue;
+            }
+            const ObjectState& best = c.Truth()[it->second];
+            const bool works = st.function > 0.3, best_works = best.function > 0.3;
+            if ((works && !best_works) || (works == best_works && dist < to_scen(best.pos).HorizontalLength())) it->second = i;
+        }
         for (std::size_t i = 0; i < th.objects.size(); ++i) {
             const TheatreObject& o = th.objects[i];
             const ObjectState& st = c.Truth()[i];
@@ -590,7 +633,8 @@ public:
                     pu12_blind = false;
                 }
             }
-            if (!o.c2_source.empty() && o.c2_source != "pu12" && e.HorizontalLength() < 150000.0) {
+            const auto chosen = warning.find(o.c2_source);
+            if (chosen != warning.end() && chosen->second == i) {
                 json::Value s = Obj();
                 Put(s, "id", Str(o.id));
                 Put(s, "type", Str(o.c2_source));
@@ -609,7 +653,23 @@ public:
                 Push(fallback, Str(o.id));
             }
             if (o.kind != ObjectKind::City && !o.player && !o.decoy && e.HorizontalLength() < clip) m.objects.push_back({o.id, e});
+            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 &&
+                e.HorizontalLength() < clip + o.defence.radius_m) {
+                RaidNeighbour nb;
+                nb.id = o.id;
+                nb.name = o.name;
+                nb.enu = e;
+                nb.defence = o.defence;
+                nb.function = st.function;
+                nb.missiles = st.missiles;
+                m.neighbours.push_back(nb);
+            }
         }
+        m.sead_supp = PackageSuppression(p, c.Staff(), tune);
+        m.jam = p.Has(FlightRole::Jammer) ? tune.Get("attrition.jamming") : 0.0;
+        m.airmanship = PackageAirmanship(p, c.Staff());
+        m.night = p.part == DayPart::Night;
+        m.poor_weather = c.WeatherNow() == Weather::Poor;
         if (!fallback.items.empty()) Put(c2, "fallback_order", fallback);
         if (!sources.items.empty()) Put(c2, "sources", sources);
         if (!radars.items.empty()) {

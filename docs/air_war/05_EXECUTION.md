@@ -29,8 +29,11 @@ that works and has rounds:
   the package;
 - decoy drones draw a launch or two and show where the defence is;
 - the kill chance per aircraft (`PassKillChance`: lethality × share of the pass × height cover × (1 − suppression) × (1 −
-  jamming) × night and weather for optical defences × EMCON × (1 − evasion)), drawn per aircraft; damaged aircraft too;
-  rounds spent;
+  jamming) × night and weather for optical defences × EMCON × (1 − evasion)), drawn per aircraft it engages; damaged
+  aircraft too; rounds spent. A defence engages as many aircraft of a passing flight as it has fire channels
+  (`defence.channels`: an S-75's or S-125's guidance radar one, an Osa battery four, a platoon's launchers four, scaled by
+  how much of it works: `EngagedAircraft`, which the planner's estimate uses too); without channels, every aircraft in
+  reach (the theatre the balance pass tuned has none; the nation's theatre sets them for every system);
 - the defender's fighters take their chance on unescorted packages;
 - the leader's nerve: once the losses reach his share (boldness, quirks) the main flights turn back.
 
@@ -55,7 +58,7 @@ hand-written scenario) accepts, and a manifest for the bridge:
 | own_unit.em.jammers | stand-off and self-protection jammers on their aircraft, the faction's EM libraries |
 | battery | the launchers it still has (fewer as the battery is hurt), TZM, fuel truck, PU-12, deployed; night; "emcon" order when the posture fights silent |
 | prepared_position | emplacement and nets by the posture; the dummies where they stand, with decoy emitters by the posture |
-| c2 | the theatre's warning nets near the battery (outages for the destroyed ones); the regiment's radars that still stand feed the PU-12; if none stands, the PU-12 is blind (a c2_fail trigger) |
+| c2 | the theatre's warning nets near the battery: of each kind (`c2_source`) the nearest that still works within 150 km, else the nearest with its outage (the radar company the battery is nearest, the neighbouring battery on the radio); the regiment's radars that still stand feed the PU-12; if none stands, the PU-12 is blind (a c2_fail trigger) |
 | triggers | the air-raid warning (`air_threat`) `own_intel.warning_s` before the first aircraft (15 min for a planner with loose lips) |
 | doctrine | the TV check when our side has seen decoys; search-radar bursts when the battery keeps emission discipline |
 | crew | five seats at the campaign's crew tier; NPC vehicle and battery commanders |
@@ -80,14 +83,25 @@ Stepped after every `ScenarioRunner::Step`, from the runner's public state only:
   tracking transmitter radiates it fires (one per 10 s); the ARM flies at `scenario.arm_speed_mps`; it hits by
   `scenario.arm_pk` if the radar radiates when it arrives, or radiated within `scenario.arm_memory_s` and the seeker has
   memory; otherwise it is logged as lost ("the radar went silent");
+- **the neighbours** (the nation on the map N4, 17.1's first form, 23 Oct 2026): our other air defences whose zones
+  reach into the scenario (`RaidManifest::neighbours`, with their state: working share, rounds) take their chances at
+  the aircraft passing through, by the abstract resolver's rule: as an aircraft enters a zone its pass is rolled
+  (`PassKillChance` on the chord it will fly on its heading, the package's SEAD suppression and jamming against a radar
+  one, night and weather against an optical one, the defence's fire channels and rounds), and an aircraft hit goes down
+  in the scenario half way through the zone (`ScenarioRunner::DestroyTarget`, "destroyed by" the defence; a decoy drone
+  draws rounds and is taken uncounted). Their kills, rounds, launches and radar time go to the outcome as theirs. They
+  are not drawn yet;
 - **what the enemy learns**: every second our radars radiate; every launch seen by an enemy aircraft within
   `scenario.revealed_by_launch_m`.
 
 Every event goes into the runner's log, so the debrief shows it. `Finish()` returns a `PackageOutcome`: aircraft shot
-down (the engagement model's HIT, the battery's other launchers' "destroyed by"), which flights released, which broke
-away, damage, dummies destroyed, missiles spent, ARMs fired, emissions, sightings, radar killed or silenced.
-`AirCampaign::CompletePlayerMission` applies it and resolves the rest of the raid (outside the circle, after the
-mission) abstractly without the battery.
+down (the engagement model's HIT, the battery's other launchers' "destroyed by", the neighbours' kills credited to
+them), which flights released, which broke away, damage, dummies destroyed, missiles spent (the neighbours' as
+`missiles_by`), ARMs fired, emissions, sightings, radar killed or silenced. `AirCampaign::CompletePlayerMission` applies
+it and resolves the rest of the raid abstractly without the battery: every part of every route except what the
+scenario flew (inside its circle while it ran: `ResolveContext::played_*`, `ResolvedPieces`), the way in before the
+scenario as much as the way out after it. (Until 23 Oct 2026 it resolved only from the scenario's end, so a played
+raid's approach met no defence at all.)
 
 The crew fights the ARMs by its drill (roadmap E6): a senior operator of class2 or better calls the signs of a launch on
 his scope and the commander has every transmitter off once the missile in the air has burst. Once our radars have come

@@ -203,10 +203,14 @@ public:
         Log("player_mission", "result", "Mission against '" + p.name + "' flown: " + std::to_string(outcome.Lost()) + " of " +
                                             std::to_string(p.Aircraft()) + " shot down in the battery's sector.", true);
         ApplyOutcome(p, outcome);
-        // The rest of the raid, outside the scenario, without the player's battery.
+        // The rest of the raid, without the player's battery: every part of every route but what the scenario flew
+        // (inside its circle while it ran, where the other defences took their chances: mission_bridge.hpp).
         ResolveContext rc = Context();
         rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
-        rc.from_h = end_h;
+        rc.played_centre = truth_[static_cast<std::size_t>(player_)].pos;
+        rc.played_radius_m = data_.tuning.Get("scenario.clip_m");
+        rc.played_from_h = now_h_;
+        rc.played_to_h = end_h;
         Resolver r;
         PackageOutcome rest = r.Resolve(p, rc);
         if (!rest.losses.empty() || rest.delivered || !rest.recce_seen.empty()) ApplyOutcome(p, rest, false);
@@ -706,6 +710,12 @@ private:
                 ObjectState& b = truth_[static_cast<std::size_t>(player_)];
                 if (b.missiles > 0) b.missiles = std::max(0, b.missiles - o.missiles_spent);
             }
+            for (const auto& m : o.missiles_by) {
+                const int i = data_.theatre.IndexOf(m.first);
+                if (i < 0) continue;
+                ObjectState& st = truth_[static_cast<std::size_t>(i)];
+                if (st.missiles > 0) st.missiles = std::max(0, st.missiles - m.second);
+            }
         }
         for (ObjectState& st : truth_) {
             if (st.function <= 0.0 && st.wrecked_h < 0.0) st.wrecked_h = std::max(now_h_, p.tot_h);
@@ -943,6 +953,7 @@ private:
             r.threat_low = d->low_cover;
             r.threat_medium = d->medium_cover;
             r.threat_radar = d->radar;
+            r.threat_channels = d->channels;
         }
         return r;
     }

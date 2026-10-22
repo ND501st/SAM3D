@@ -892,3 +892,153 @@ SC_TEST("air war on the nation's theatre: the rollback hunts SAM sites, never gu
         if (o != nullptr) SC_EXPECT(o->kind != ObjectKind::PipelineStation);
     }
 }
+
+SC_TEST("air war: a defence engages as many of a passing flight as it has fire channels") {
+    AirWarData d = Load("nato");
+    AirCampaign base;
+    base.Init(d, 1);
+    const int si = d.theatre.IndexOf("kecel_s125");
+    SC_EXPECT(si >= 0);
+    if (si < 0) return;
+    TheatreObject& site = d.theatre.objects[static_cast<std::size_t>(si)];
+    site.defence.lethality = 1.0;  // every engaged aircraft at the chance's cap
+    const Vec3 at = base.Truth()[static_cast<std::size_t>(si)].pos;
+    // Four strikers at medium straight over it, north to south, past no other defence's reach.
+    auto run = [&](int channels, int seed) {
+        site.defence.channels = channels;
+        std::vector<ObjectState> truth = base.Truth();
+        BatteryPosture posture;
+        AirStaff staff;
+        Rng rs(9);
+        staff.Build(d, rs, 0.0);
+        Package p;
+        p.id = 1;
+        p.kind = MissionKind::Strike;
+        p.part = DayPart::Day;
+        Flight fl;
+        fl.callsign = "Hammer 1";
+        fl.role = FlightRole::Strike;
+        fl.aircraft = "f4e";
+        fl.count = 4;
+        fl.profile = Profile::Medium;
+        fl.route = {{at + Vec3{0.0, -30000.0, 0.0}, 4000.0, 0.0, "entry"}, {at + Vec3{0.0, 10000.0, 0.0}, 4000.0, 0.1, "exit"}};
+        p.flights = {fl};
+        Rng rng(static_cast<std::uint64_t>(seed));
+        ResolveContext rc;
+        rc.data = &d;
+        rc.truth = &truth;
+        rc.posture = &posture;
+        rc.staff = &staff;
+        rc.rng = &rng;
+        Resolver r;
+        return r.Resolve(p, rc).Lost();
+    };
+    int most_one = 0, most_all = 0, total_one = 0, total_all = 0;
+    for (int seed = 1; seed <= 40; ++seed) {
+        const int one = run(1, seed), all = run(0, seed);
+        most_one = std::max(most_one, one);
+        most_all = std::max(most_all, all);
+        total_one += one;
+        total_all += all;
+    }
+    std::printf("    four strikers over an S-125, 40 passes: one channel %d lost (at most %d a pass), every aircraft engaged %d (at most %d)\n",
+                total_one, most_one, total_all, most_all);
+    SC_EXPECT(most_one == 1 && most_all > 1 && total_all > 2 * total_one);
+    // The planner's estimate follows the same rule, and a damaged Osa battery engages fewer.
+    SC_EXPECT(EngagedAircraft(0, 1.0, 4) == 4 && EngagedAircraft(1, 1.0, 4) == 1 && EngagedAircraft(4, 1.0, 2) == 2);
+    SC_EXPECT(EngagedAircraft(4, 0.5, 4) == 2 && EngagedAircraft(1, 0.2, 4) == 1);
+}
+
+SC_TEST("air war: after a played raid the rest is resolved, the way in included, all but what the scenario flew") {
+    ResolveContext c;
+    c.played_centre = Vec3{0.0, 0.0, 0.0};
+    c.played_radius_m = 70000.0;
+    c.played_from_h = 10.0;
+    c.played_to_h = 10.5;
+    const auto pieces = [&](const Vec3& a, double ta, const Vec3& b, double tb) {
+        return ResolvedPieces(RoutePoint{a, 1000.0, ta, ""}, RoutePoint{b, 1000.0, tb, ""}, c);
+    };
+    // Through the circle while it was played: the way in and the way out, not the middle.
+    std::vector<LegPiece> through = pieces(Vec3{-200000.0, 0.0, 0.0}, 9.8, Vec3{200000.0, 0.0, 0.0}, 10.6);
+    SC_EXPECT(through.size() == 2);
+    if (through.size() == 2) {
+        SC_EXPECT_NEAR(through[0].a, 0.0, 1e-12);
+        SC_EXPECT_NEAR(through[0].b, 130.0 / 400.0, 1e-9);
+        SC_EXPECT_NEAR(through[1].a, 270.0 / 400.0, 1e-9);
+        SC_EXPECT_NEAR(through[1].b, 1.0, 1e-12);
+    }
+    // Through it after the scenario ended (the way home): all of it.
+    SC_EXPECT(pieces(Vec3{-200000.0, 0.0, 0.0}, 11.0, Vec3{200000.0, 0.0, 0.0}, 11.8).size() == 1);
+    // Wholly inside while played: nothing; wholly outside: all of it; without a played raid: all of it.
+    SC_EXPECT(pieces(Vec3{-10000.0, 0.0, 0.0}, 10.1, Vec3{10000.0, 0.0, 0.0}, 10.2).empty());
+    SC_EXPECT(pieces(Vec3{-200000.0, 100000.0, 0.0}, 10.1, Vec3{200000.0, 100000.0, 0.0}, 10.2).size() == 1);
+    ResolveContext none;
+    SC_EXPECT(ResolvedPieces(RoutePoint{Vec3{}, 1000.0, 10.1, ""}, RoutePoint{Vec3{1000.0, 0.0, 0.0}, 1000.0, 10.2, ""}, none).size() == 1);
+}
+
+SC_TEST("air war on the nation's theatre: in a played raid the neighbours fire and the nearest warning posts report") {
+    AirWarData d;
+    std::string e;
+    SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_nato.json", d, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    int played = 0, neighbours = 0, fired = 0, kills = 0, credited = 0;
+    for (unsigned seed = 1; seed <= 4 && played < 3; ++seed) {
+        AirCampaign c;
+        SC_EXPECT(c.Init(d, seed));
+        while (c.Now() < 4.0 * 24.0 && played < 3) {
+            if (!c.Advance(4.0 * 24.0)) continue;
+            const Package* p = c.PlayerMission();
+            RaidScenarioBuilder builder;
+            const RaidScenario rs = builder.Build(c, *p);
+            if (!rs.ok) {
+                c.SkipPlayerMission();
+                continue;
+            }
+            // The warning nets: one post of each kind, the nearest that works.
+            json::Value root;
+            SC_EXPECT(json::Parse(rs.json_text, root, &e));
+            std::vector<std::string> kinds;
+            if (const json::Value* c2 = root.Find("c2")) {
+                if (const json::Value* src = c2->Find("sources")) {
+                    for (const json::Value& s : src->items) {
+                        const std::string kind = s.Find("type")->string;
+                        SC_EXPECT(std::find(kinds.begin(), kinds.end(), kind) == kinds.end());
+                        kinds.push_back(kind);
+                        if (kind != "ewr_voice") continue;
+                        // No working radar company nearer than the one reporting.
+                        const Vec3 b = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos;
+                        const int ri = d.theatre.IndexOf(s.Find("id")->string);
+                        const double dr = Dist2d(c.Truth()[static_cast<std::size_t>(ri)].pos, b);
+                        for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
+                            if (d.theatre.objects[i].c2_source != "ewr_voice" || c.Truth()[i].function <= 0.3) continue;
+                            SC_EXPECT(Dist2d(c.Truth()[i].pos, b) >= dr - 1.0);
+                        }
+                    }
+                }
+            }
+            SC_EXPECT(std::find(kinds.begin(), kinds.end(), "ewr_voice") != kinds.end());
+            neighbours += static_cast<int>(rs.manifest.neighbours.size());
+            ScenarioDef def;
+            ConsoleData console;
+            SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
+            ScenarioRunner runner(std::move(def), std::move(console));
+            MissionBridge bridge(rs.manifest, c.Data(), seed);
+            while (!runner.Finished() && !bridge.UnitDestroyed() && runner.Time() < rs.manifest.end_s + 60.0) {
+                runner.Step(0.1);
+                bridge.Step(runner);
+            }
+            const PackageOutcome o = bridge.Finish(runner);
+            kills += bridge.NeighbourKills();
+            for (const LossRecord& l : o.losses) credited += l.by != rs.manifest.own_object ? 1 : 0;
+            for (const RaidNeighbour& nb : rs.manifest.neighbours) {
+                fired += std::find(o.fired.begin(), o.fired.end(), nb.id) != o.fired.end() ? 1 : 0;
+            }
+            c.CompletePlayerMission(o, rs.manifest.start_h + runner.Time() / 3600.0);
+            ++played;
+        }
+    }
+    std::printf("    %d raids played: %d neighbouring defences in reach, %d of them fired, %d aircraft they shot down\n", played, neighbours,
+                fired, kills);
+    SC_EXPECT(played >= 2 && neighbours >= played && fired > 0);
+    SC_EXPECT(credited == kills);  // the neighbours' kills are theirs, not the battery's
+}

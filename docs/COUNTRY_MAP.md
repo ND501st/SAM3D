@@ -35,9 +35,10 @@ with them.
 
 `data/air_war/theatre_pannonia_nation.json` places the briefing's forces, industry and infrastructure on this map
 (`docs/campaign/10_BRIEFING_FORCES_AND_NATION.md` §3-9). It **extends** the theatre the balance pass tuned
-(`theatre_pannonia.json`, `"extends"`): the base's 40 objects keep their places in the list, 13 of them replaced where
-they stand (the S-75 and the S-125 become the S-75M2 and the S-125M1, the Strela-10 platoons Strela-1 platoons, and
-every mobile unit gets its prepared positions), and 130 are added: 170 objects. The air war keeps playing the tuned
+(`theatre_pannonia.json`, `"extends"`): the base's 40 objects keep their places in the list, 14 of them replaced where
+they stand (the S-75 and the S-125 become the S-75M2 and the S-125M1, the Strela-10 platoons Strela-1 platoons, every
+mobile unit gets its prepared positions, and the base's air defences their fire channels), and 130 are added: 170
+objects. The radar companies and Osa batteries 23 to 25 are warning posts (`c2_source`). The air war keeps playing the tuned
 theatre until N4 moves it here.
 
 | Who | Placed |

@@ -98,6 +98,15 @@ inline double PassKillChance(double lethality, double chord_m, double radius_m, 
     return std::min(k, tune.Get("attrition.max_per_pass"));
 }
 
+// How many aircraft of a passing flight a defence engages: its fire channels, scaled by how much of it works (an Osa
+// battery that has lost two of its four radars engages two); without channels every aircraft in reach. Shared by the
+// planner and the resolver.
+inline int EngagedAircraft(int channels, double function, int in_reach) {
+    if (channels <= 0) return in_reach;
+    const int working = std::max(1, static_cast<int>(std::lround(channels * Clamp01(function))));
+    return std::min(in_reach, working);
+}
+
 // Light guns and shoulder-fired missiles around a military target that has no air defence of its own in the theatre:
 // the chance an aircraft attacking it at low level (or a helicopter) is shot down on the attack. Troops carry the most
 // (their own anti-aircraft guns and missiles); towns none; medium altitude is out of their reach (Dugman 5: most
@@ -714,9 +723,10 @@ private:
                 if (optical && p.part == DayPart::Night) env *= tune.Get("attrition.night");
                 if (optical && w == Weather::Poor) env *= tune.Get("attrition.poor_weather");
                 const double supp = sead > 0 ? tune.Get("attrition.sead_suppression") * std::min(1.0, sead / 2.0) * (0.6 + 0.4 * sead_skill) : 0.0;
-                per += th->Live() * spread * PassKillChance(th->threat_lethality, chord, ring, fl.profile,
-                                                   a->helicopter, th->threat_low, th->threat_medium, th->threat_radar, supp,
-                                                   jam ? tune.Get("attrition.jamming") : 0.0, env, a->evasion, tune);
+                const double engaged = fl.count > 0 ? EngagedAircraft(th->threat_channels, th->function, fl.count) / static_cast<double>(fl.count) : 1.0;
+                per += th->Live() * spread * engaged *
+                       PassKillChance(th->threat_lethality, chord, ring, fl.profile, a->helicopter, th->threat_low, th->threat_medium,
+                                      th->threat_radar, supp, jam ? tune.Get("attrition.jamming") : 0.0, env, a->evasion, tune);
             }
             const bool attacks = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
             if (attacks && !target.IsThreat() && !target.ghost) {

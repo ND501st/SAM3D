@@ -46,6 +46,7 @@ struct IntelEntry {
     bool threat_low = true;
     bool threat_medium = true;
     bool threat_radar = true;
+    int threat_channels = 0;    // aircraft it engages at once (DefenceDef::channels; 0: all in reach)
     // Its record with the enemy.
     int strikes = 0;
     double last_struck_h = -1e9;
@@ -83,6 +84,7 @@ struct IntelReport {
     bool threat_low = true;
     bool threat_medium = true;
     bool threat_radar = true;
+    int threat_channels = 0;
     std::string label;
     std::string note;
 };
@@ -213,6 +215,7 @@ private:
             n.threat_low = r.threat_low;
             n.threat_medium = r.threat_medium;
             n.threat_radar = r.threat_radar;
+            n.threat_channels = r.threat_channels;
             n.losses_credited = r.losses;
             if (r.claim_destroyed) {
                 n.function = 0.0;
@@ -260,6 +263,7 @@ private:
             e->threat_low = r.threat_low;
             e->threat_medium = r.threat_medium;
             e->threat_radar = r.threat_radar;
+            e->threat_channels = r.threat_channels;
             e->emitter = r.threat_radar;
         }
         e->losses_credited += r.losses;

@@ -65,6 +65,9 @@ struct DefenceDef {
     int missiles = -1;         // ready rounds before a reload (-1: guns, no limit)
     int radars = 1;            // fire-control radars that can each fight alone (an Osa battery's four combat vehicles: 4);
                                // an anti-radiation missile's hit takes out one of them
+    int channels = 0;          // aircraft it engages at once as a flight passes (its fire channels: an S-75's or S-125's
+                               // guidance radar one, an Osa battery four, the platoon's launchers four); scaled by how much
+                               // of it works. 0: every aircraft in reach (the theatre the balance pass tuned)
 };
 
 struct TheatreObject {
@@ -826,13 +829,13 @@ public:
         if (const json::Value* d = v.Find("defence")) {
             const std::string dp = Join(p, "defence");
             double radius_km = 0.0;
-            if (!Keys(*d, dp, {"system", "radius_km", "lethality", "low_cover", "medium_cover", "radar", "missiles", "radars", "notes"}) ||
+            if (!Keys(*d, dp, {"system", "radius_km", "lethality", "low_cover", "medium_cover", "radar", "missiles", "radars", "channels", "notes"}) ||
                 !RequireString(*d, dp, "system", ob.defence.system) || !Num(*d, dp, "radius_km", radius_km, 0.1, 100.0) ||
                 !Num(*d, dp, "lethality", ob.defence.lethality, 0.0, 1.0) ||
                 !OptionalBool(*d, dp, "low_cover", ob.defence.low_cover) ||
                 !OptionalBool(*d, dp, "medium_cover", ob.defence.medium_cover) ||
                 !OptionalBool(*d, dp, "radar", ob.defence.radar) || !Int(*d, dp, "missiles", ob.defence.missiles, -1, 1000) ||
-                !Int(*d, dp, "radars", ob.defence.radars, 1, 16)) {
+                !Int(*d, dp, "radars", ob.defence.radars, 1, 16) || !Int(*d, dp, "channels", ob.defence.channels, 0, 64)) {
                 return false;
             }
             if (FindAirDefenceSystem(ob.defence.system) == nullptr) {

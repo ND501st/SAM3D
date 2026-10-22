@@ -278,7 +278,10 @@ air defences are the share of known sites working, and NATO's rollback ends and 
 
 On the nation's theatre (N4, `tests/test_air_war.cpp`, `tests/test_country_map.cpp`): radar-laid guns are not part of the
 enemy's measure; the Pact's and NATO's DEAD, hunter and deception packages go at SAM sites and radars, never guns; battery
-21 deploys to its position in their wars, on open ground; the neutral neighbour never strikes a pipeline station.
+21 deploys to its position in their wars, on open ground; the neutral neighbour never strikes a pipeline station; a
+one-channel S-125 takes at most one of a passing four-ship (`EngagedAircraft`); a played raid's rest is resolved but for
+what the scenario flew (`ResolvedPieces`); in played raids the neighbours fire, their kills are theirs, and the warning
+posts are one of each kind, the nearest working radar company among them.
 
 ## 8. The nation's theatre: the first read (N4, 22 October 2026)
 
@@ -330,11 +333,50 @@ theatre_pannonia_nation.json data 10 7`, against the tuned theatre (10 seeds eac
 The demo plays raids on the nation's theatre (`air_war_demo --theatre theatre_pannonia_nation.json <faction>`): NATO's
 hunters ARM'd a vehicle at the Dombas position; the neutral's strike on the south-western depot played through.
 
+### Continued (23 October 2026): fire channels, the warning posts, the neighbours in a played raid
+
+1. **A defence engaged a whole flight at once.** Every aircraft of a passing four-ship got its own chance from an S-75 or
+   S-125 whose guidance radar takes one target at a time. **Changed:** a defence has fire channels (`defence.channels`:
+   the S-75M2, S-125M1, Kub, KS-30 and S-60 batteries one, an Osa battery and a Shilka or Strela-1 platoon four, MANPADS
+   three, the ZU-23s every aircraft in reach), scaled by how much of it works; the resolver and the planner's estimate
+   share the rule (`EngagedAircraft`). The tuned theatre has no channels and is unchanged to the byte; on the nation's
+   (10 seeds, 7 days; before → after):
+
+| Adversary, battery | Sorties a week | Loss % | Defences working D3, D7 (believed) | Phase D7 | Battery raids a week | Battery wrecked |
+|---|---|---|---|---|---|---|
+| Rava Liberation Front's air wing, careless | 22.1 → 22.0 | 8.6% → 7.3% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 1.0 → 1.0 | 0.8 → 0.8 | 0 % → 0 % |
+| Rava Liberation Front's air wing, careful | 23.6 → 22.5 | 8.1% → 7.1% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 1.0 → 1.0 | 0.5 → 0.5 | 0 % → 0 % |
+| Noric Republic's air force, careless | 31.5 → 31.5 | 3.5% → 3.5% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 2.0 → 2.0 | 1.5 → 1.5 | 0 % → 0 % |
+| Noric Republic's air force, careful | 39.7 → 39.7 | 3.8% → 3.8% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 2.0 → 2.0 | 1.5 → 1.5 | 0 % → 0 % |
+| Warsaw Pact, careless | 705.7 → 695.1 | 3.2% → 3.2% | 73% (79%), 74% (64%) → 61% (75%), 61% (48%) | 2.0 → 2.0 | 1.3 → 1.9 | 10 % → 20 % |
+| Warsaw Pact, careful | 685.8 → 682.3 | 2.6% → 3.1% | 73% (83%), 69% (72%) → 65% (81%), 62% (65%) | 2.0 → 2.0 | 0.6 → 1.4 | 0 % → 0 % |
+| NATO, careless | 813.6 → 779.1 | 2.2% → 1.8% | 81% (85%), 67% (69%) → 74% (81%), 64% (66%) | 1.0 → 1.0 | 5.5 → 5.9 | 20 % → 10 % |
+| NATO, careful | 800.0 → 781.5 | 2.4% → 1.9% | 83% (87%), 67% (76%) → 77% (84%), 65% (70%) | 1.0 → 1.0 | 4.5 → 4.3 | 10 % → 0 % |
+
+   NATO loses less (1.8-1.9 % a sortie) and gets further with its rollback; the Pact's air operation leaves 61-65 % of
+   the radar SAM sites working on day 3 where it left 73 %.
+2. **The warning nets.** The radar companies and Osa batteries 23 to 25 are warning posts (`c2_source`); a raid's
+   scenario takes, of each kind, the nearest that still works within 150 km (the radar company the battery is nearest,
+   the neighbouring battery on the radio), not every post in reach.
+3. **A played raid's way in met nothing.** After a played raid the campaign resolved the rest only from the scenario's
+   end, so everything before it (a NATO raid's 150 km over the western defences, and flights elsewhere in the package)
+   went unopposed, and a flight not in the scenario that released before its end never delivered. **Changed:** every
+   part of every route is resolved except what the scenario flew, inside its circle while it ran (`ResolvedPieces`).
+   Unplayed raids are untouched (the tuned balance is identical to the byte).
+4. **The neighbours in a played raid** (17.1's first form). Our other air defences whose zones reach into the scenario
+   take their chances at the aircraft passing through, by the resolver's rule, rolled in the mission bridge as each
+   aircraft enters a zone; one hit goes down in the scenario half way through it, credited to that defence, which also
+   spends its rounds and shows itself (`docs/air_war/05_EXECUTION.md` §4). In the demo's raids on the nation's theatre
+   17-27 neighbours are in reach of a raid against the battery; the Pact's raids near the Rava dam lost three aircraft
+   to them in five. They are not drawn yet.
+
+The demo's raids also show the battery's own crew launching in few of them (on both theatres): the scenarios' own
+balance, the open item in §6.
+
 ### Still to do in N4, and after
 
-- Each defence resolved by its system in the abstract resolution; the warning nets from the new radar companies; raid
-  scenarios with the neighbouring defences drawn and taking their kill chances (17.1's first form); the other Osa and
-  regimental batteries in the battery's fire model where the scenario has them.
+- The neighbours drawn in the scenario and on the PU-12M's board; the other Osa and regimental batteries as fighting
+  batteries in the battery's fire model where the scenario has them (beyond their abstract chances).
 - The game's campaigns (`USimAirCampaignSubsystem`) stay on the tuned theatre until the rebalance (13.8) has run on the
   nation's.
 - The regiment's tasking (phase 13): the battery moved to where the enemy strikes, which is the remedy for the Pact's

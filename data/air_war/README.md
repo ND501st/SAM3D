@@ -43,7 +43,10 @@ A theatre may **extend** another in this folder (`"extends"`, `LoadTheatreFile` 
 replace the base's of the same faction, `"remove"` drops base objects, and its objects are added, one with a base
 object's id replacing it where it stands; it keeps the base's `origin` and `country`. An object's `"positions"` (a
 mobile unit with `relocate_h`, never the player's battery) are its prepared positions besides its own: it moves between
-them, never to one within 8 km of the enemy's front; without them it moves `relocate_km` in a random direction.
+them, never to one within 8 km of the enemy's front; without them it moves `relocate_km` in a random direction. A
+defence's `"channels"` are its fire channels, the aircraft of a passing flight it engages at once (an S-75's or S-125's
+guidance radar one, an Osa battery four; `docs/air_war/05_EXECUTION.md` §2); without them it engages every aircraft in
+reach. An object's `"c2_source"` makes it a warning post: a raid takes the nearest working one of each kind.
 
 Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`. Flight roles:
 `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`. Object kinds: `sam_site`, `aaa`,

@@ -134,6 +134,7 @@ struct PackageOutcome {
     std::vector<std::string> fired;                       // defences seen to launch
     std::vector<std::string> recce_seen;                  // objects the reconnaissance photographed
     int missiles_spent = 0;                               // the player's side's missiles, all defences
+    std::vector<std::pair<std::string, int>> missiles_by;  // (a played mission) rounds our other defences spent: the neighbours
     int arms_fired = 0;
     bool aborted = false;
     bool delivered = false;
