@@ -96,6 +96,14 @@ SC_TEST("crew voice: every seat has a voice; stress and the radio change it") {
     const VoiceSettings net = VoiceFor(o.voices, "commander", false, "battery net");
     SC_EXPECT(net.radio && net.high_hz == 3000.0);
     SC_EXPECT(VoiceFor(o.voices, "battery", false, "battery net").radio);
+    // Said aloud in the vehicle: never a radio voice (not even a seat whose usual voice is on a set), and wider than
+    // the intercom's band; the net stays narrower than both.
+    for (const char* ch : {"cabin", "cabin (shouted)"}) {
+        const VoiceSettings aloud = VoiceFor(o.voices, "commander", false, ch);
+        SC_EXPECT(!aloud.radio && aloud.low_hz < calm.low_hz && aloud.high_hz > calm.high_hz);
+        SC_EXPECT(!VoiceFor(o.voices, "battery", false, ch).radio);
+        SC_EXPECT(aloud.high_hz > net.high_hz);
+    }
     // A voice file that leaves a seat out is refused.
     std::string e;
     VoiceData v;

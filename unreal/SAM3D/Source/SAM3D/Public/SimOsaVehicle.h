@@ -354,6 +354,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	int32 GetPickedTarget() const { return PickedTarget; }
 	bool IsCrossOnBoard() const { return bOnBoard; }
+	/** The cross on the radio journal's page (a click opens it), and the page held before the eyes: writing in it (the
+	 * journal keeper) or reading it (anyone else). */
+	bool IsCrossOnJournal() const { return bOnJournal; }
+	bool IsAtJournal() const { return bAtJournal; }
+	bool IsWritingJournal() const { return bAtJournal && bJournalWriter; }
 	float GetLastPlotMissCm() const { return LastPlotMissCm; }
 	float GetLastPlotTime() const { return LastPlotTime; }
 
@@ -371,6 +376,13 @@ public:
 	bool PlotPicked();
 	/** The plotting board under the cross (the plotter's): the mouse wheel picks the number, a click writes it there. */
 	void HandleBoard(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
+	/** The radio journal's page under the cross: a click holds it before the eyes (OpenJournal). */
+	void HandleJournalPage(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
+	/** The page before the eyes, the camera locked on it: the keeper writes (dictation: digits into the line's boxes), the
+	 * others read. Esc or the right mouse button puts it down. */
+	bool OpenJournal();
+	void CloseJournal();
+	void HandleJournal(class APlayerController* Pc, class USimWorldSubsystem* Sim);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
@@ -565,6 +577,9 @@ private:
 	int32 PickedTarget = INDEX_NONE;
 	/** The cross is on the plotting board (HandleBoard): the HUD draws the picked number beside it. */
 	bool bOnBoard = false;
+	bool bOnJournal = false;
+	bool bAtJournal = false;
+	bool bJournalWriter = false;
 	/** The last mark written by hand: how far the click was (cm), and when (world seconds), for a moment's feedback. */
 	float LastPlotMissCm = -1.0f;
 	float LastPlotTime = -100.0f;

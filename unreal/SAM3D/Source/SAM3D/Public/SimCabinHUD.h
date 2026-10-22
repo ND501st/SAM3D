@@ -28,12 +28,13 @@ public:
 	/** The lesson card's lower edge this frame (0: no card); the crew menu opens below it. */
 	float GuideBottom = 0.0f;
 
-	/** Radio lines shown at the bottom left, and how long one stays (sim seconds). */
+	/** Radio lines shown at the bottom left, and how long one stays (sim seconds): a subtitle of what is being said, not a
+	 * record. In the PU-12M the record is the radiotelephonist's journal on his table (radio_journal.hpp). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Radio")
 	int32 RadioLines = 5;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Radio")
-	float RadioLineSeconds = 40.f;
+	float RadioLineSeconds = 10.f;
 
 	/** The air-picture net's reports fade much sooner: the plotter writes from what he heard, not from the screen. */
 	UPROPERTY(EditAnywhere, Category = "SAM3D|HUD")

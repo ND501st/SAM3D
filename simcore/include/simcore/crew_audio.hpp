@@ -38,7 +38,7 @@ inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) {
     out.squelched = c.panel.Get(radio.squelch) == 1;
     const double now = r.Time();
     if (const CalloutBus* bus = r.Callouts()) {
-        for (const SpokenCallout& s : bus->SpeakingNow()) out.carrier = out.carrier || s.channel != "intercom";
+        for (const SpokenCallout& s : bus->SpeakingNow()) out.carrier = out.carrier || (s.channel != "intercom" && s.channel.compare(0, 5, "cabin") != 0);
     }
     out.carrier = out.carrier || now - r.LastTransmissionS() < 1.0;
     if (!comms->Receiving(set, c)) out.carrier = false;  // off its net's frequency (or tuning) it hears nobody

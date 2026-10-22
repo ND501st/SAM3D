@@ -12,7 +12,9 @@
 //     reaches every box (SAM3D: an urgent callout is made with it). The intercom is powered while A-1 is not at ВЫКЛ.
 //   * The PU-12M's PVS family (flak11, rwd_mb3): the RTK-1 (the commander's: a talk selector ВС / РСТ-1..4, a second set it
 //     receives, five line levers, ЦИРКУЛЯР) and PVS-1/2/3 (ВС / РСТ-1..4). A box on a set still hears the intercom (one
-//     shared intercom net, the R-145BM analogue, andryushchenko_2004: SAM3D's inference). The plotter has no box.
+//     shared intercom net, the R-145BM analogue, andryushchenko_2004: SAM3D's inference). No source gives the plotter a
+//     box; SAM3D plugs a second headset into PVS-1 for him (docs/research/PLOTTING_BOARD_2026-10.md): he hears what the
+//     radiotelephonist's box is turned to, and loses FuG-1 when it is turned elsewhere.
 //
 // This class only reads the console: whether a set itself hears its net (on, warm, on frequency, in reach, not jammed)
 // is radio_nets.hpp's business; here a set is just a place a box can be turned to.
@@ -40,6 +42,7 @@ public:
             const VoiceBoxDef& b = def_.boxes[i];
             BoxState& s = state_[i];
             s.headset = console.panel.Get(b.headset) == 1;
+            s.second_headset = !b.second_station.empty() && (b.second_headset.empty() || console.panel.Get(b.second_headset) == 1);
             s.selected = b.selector.empty() ? std::string("intercom") : At(b.positions, console.panel.Get(b.selector));
             if (s.selected == "radio") s.selected = RadioOf(b, console);
             s.monitored = b.monitor.empty() ? std::string() : At(b.monitor_positions, console.panel.Get(b.monitor));
@@ -60,7 +63,7 @@ public:
     bool Powered() const { return powered_; }
     const VoiceBoxDef* BoxOf(const std::string& station) const {
         for (const VoiceBoxDef& b : def_.boxes) {
-            if (b.station == station) return &b;
+            if (b.station == station || (!b.second_station.empty() && b.second_station == station)) return &b;
         }
         return nullptr;
     }
@@ -72,7 +75,7 @@ public:
     }
     bool HeadsetOn(const std::string& station) const {
         const BoxState* s = StateOf(station);
-        return s != nullptr && s->headset;
+        return s != nullptr && (BoxOf(station)->station == station ? s->headset : s->second_headset);
     }
     // The box's selector: "off", "intercom" or a set's id ("" : no box).
     std::string Selected(const std::string& station) const {
@@ -112,7 +115,7 @@ public:
     // The seat can use its box at all: a box, the headset on, the boxes powered, not switched off.
     bool OnBox(const std::string& station) const {
         const BoxState* s = StateOf(station);
-        return s != nullptr && s->headset && powered_ && s->powered && s->selected != "off";
+        return s != nullptr && HeadsetOn(station) && powered_ && s->powered && s->selected != "off";
     }
     // Hears the intercom: on the box, and the box on ВС (or on a set where boxes on a set still hear the intercom).
     bool HearsIntercom(const std::string& station) const {
@@ -121,10 +124,7 @@ public:
         return sel == "intercom" || def_.intercom_on_radio || BoxOf(station)->keeps_intercom;
     }
     // Hears a circular call (ВЫЗ, ЦИРКУЛЯР): any box with the headset on and the boxes powered.
-    bool HearsCall(const std::string& station) const {
-        const BoxState* s = StateOf(station);
-        return s != nullptr && s->headset && powered_;
-    }
+    bool HearsCall(const std::string& station) const { return HeadsetOn(station) && powered_; }
     // Hears a set through the box: the selector or the second receiver on it.
     bool HearsSet(const std::string& station, const std::string& set) const {
         if (!OnBox(station) || set.empty()) return false;
@@ -143,6 +143,7 @@ public:
         std::vector<std::string> out;
         for (const VoiceBoxDef& b : def_.boxes) {
             if (HearsSet(b.station, set)) out.push_back(b.station);
+            if (!b.second_station.empty() && HearsSet(b.second_station, set)) out.push_back(b.second_station);
         }
         return out;
     }
@@ -207,6 +208,7 @@ public:
 private:
     struct BoxState {
         bool headset = false;
+        bool second_headset = false;
         std::string selected = "intercom";
         std::string monitored;
         std::vector<int> lines;
@@ -229,7 +231,9 @@ private:
     }
     const BoxState* StateOf(const std::string& station) const {
         for (std::size_t i = 0; i < def_.boxes.size(); ++i) {
-            if (def_.boxes[i].station == station) return &state_[i];
+            if (def_.boxes[i].station == station || (!def_.boxes[i].second_station.empty() && def_.boxes[i].second_station == station)) {
+                return &state_[i];
+            }
         }
         return nullptr;
     }

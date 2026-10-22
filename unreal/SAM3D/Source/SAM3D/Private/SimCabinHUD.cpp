@@ -124,6 +124,18 @@ void ASimCabinHUD::DrawHUD()
 		DrawText(Chip, FLinearColor(1.0f, 0.82f, 0.2f), Cx + 17.0f, Cy - 24.0f, Small);
 		DrawText(TEXT("wheel: number   click: write"), FLinearColor(1.0f, 1.0f, 1.0f, 0.35f), Cx + 14.0f, Cy + 12.0f, Small);
 	}
+	if (Vehicle->IsAtJournal())
+	{
+		// The page before his eyes: only the keys (what was said is in his head, or on the page).
+		UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : Font;
+		const FString Keys = Vehicle->IsWritingJournal()
+			? TEXT("Digits: write into the box   Backspace: rub out   Tab / Shift+Tab: next / last box   Enter: line done   S: short (number and time only)   Esc: put the page down")
+			: TEXT("Reading the radio journal   Esc: put the page down");
+		float W = 0.0f, H = 0.0f;
+		GetTextSize(Keys, W, H, Small);
+		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), Cx - W * 0.5f - 8.0f, Canvas->ClipY - 46.0f, W + 16.0f, H + 8.0f);
+		DrawText(Keys, FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), Cx - W * 0.5f, Canvas->ClipY - 42.0f, Small);
+	}
 	const FString Feedback = Vehicle->GetCabinFeedbackText();
 	if (!Feedback.IsEmpty())
 	{

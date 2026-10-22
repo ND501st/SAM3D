@@ -177,6 +177,15 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                         driving = false;
                         r->Console().equipment.SetInput("vehicle_stopped", true);
                     }
+                    // The radiotelephonist: the page before his eyes, the report taken down as he heard it.
+                    if (c.arg == "journal_written_by_hand" && r->Time() >= next_move_s && r->JournalBegin(def.seat)) {
+                        const JournalDraft d = *r->Journal().Draft();
+                        for (const std::string& group : d.said) {
+                            for (char digit : group) r->JournalType(def.seat, digit);
+                        }
+                        r->JournalFinish(def.seat, false);
+                        next_move_s = r->Time() + 1.0;
+                    }
                     break;
                 default:
                     break;

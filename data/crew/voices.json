@@ -20,7 +20,8 @@
   "bands": {
     "intercom_hz": [300, 3400],
     "radio_hz": [300, 3000],
-    "source": "sam3d estimate: a telephone-quality channel for the R-124 intercom, a narrower one for the R-123M's VHF FM voice",
+    "cabin_hz": [120, 8000],
+    "source": "sam3d estimate: a telephone-quality channel for the R-124 intercom, a narrower one for the R-123M's VHF FM voice, a voice across the compartment nearly full-band",
     "confidence": "estimate"
   },
   "say": {

@@ -1414,6 +1414,20 @@ public:
 	/** A document kept in the cabin (a cabin display of kind document): its lines of text. */
 	TArray<FString> GetDocumentLines(const FString& Document) const;
 
+	/** The radiotelephonist's journal by hand (simcore/radio_journal.hpp): his pencil on the page (the oldest message he
+	 * heard becomes the line he writes), a digit into its box, rub out, the next box (Step -1: the one before), the line done
+	 * (bBrief: the number and the time only). Only the journal keeper's seat held by the player; a local scenario (not yet
+	 * over the network). */
+	bool JournalBegin(const FString& Role);
+	bool JournalType(const FString& Role, int32 Digit);
+	bool JournalRub(const FString& Role);
+	bool JournalNextBox(const FString& Role, int32 Step);
+	bool JournalFinish(const FString& Role, bool bBrief);
+	/** A line is being written in the journal now. */
+	bool IsJournalDrafting() const;
+	/** The seat that keeps the post's radio journal ("" none). */
+	FString GetJournalKeeper() const;
+
 	/** The cabin layout of the scenario's own vehicle, relative to the data folder (cabins/<its system>.json), or "" if
 	 *  there is none. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")

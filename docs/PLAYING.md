@@ -55,10 +55,10 @@ shows you your panels first, then takes you through your part of the drill one s
 the commander's own lesson the battery's PU-12M is on the battery net: you turn your A-1 between the intercom (ВС) and
 the net (Р-123), report the vehicle ready, and read back the target the battery commander gives you.
 Then the **PU-12M**, the battery's command post, seat by seat: the driver-electrician (the AB-1 generator), the
-radiotelephone operator (the radios, the mast, the telecode's path, the air picture read out to the plotter, the sets
+radiotelephone operator (the radios, the mast, the telecode's path, every message written in the journal, the sets
 kept on frequency when a net moves or is jammed), the squad leader (orienting the post, the radio data, the check of
 communications),
-the operator-plotter (the radiotelephonist's reports onto the board, each new target called aloud to the commander) and the battery commander (deploying the post, his
+the operator-plotter (the air-picture net in his headset onto the board, each new target called aloud to the commander) and the battery commander (deploying the post, his
 RTK-1, the regiment's ПТ-1 group read by hand against the talk table on his desk, a target to a launcher with the DT-2
 marker and the ДХ keys and its read-back, the battery net out of jamming, a telephone line answered).
 
@@ -68,7 +68,13 @@ The box at your seat decides what your headset is on: the intercom, or a radio (
 still hear the intercom). The Osa's commander has the A-1 (intercom or one of the two R-123M), the deputy the A-2, the
 driver the ПВ; the senior operator and the operator are on the intercom. In the PU-12M the commander's RTK-1 talks on one
 set and listens to a second, and has five telephone lines; the PVS-1 (radiotelephonist), PVS-2 (squad leader) and PVS-3
-(driver) each pick the intercom or a set; the plotter has no box. A ringing line or the Osa's TA-57: Y answers, Y again
+(driver) each pick the intercom or a set; the plotter's headset is a second one on PVS-1, so he hears what the
+radiotelephonist's box is turned to. The radiotelephonist writes every message his radios bring into the journal open on
+his table: click the page and it comes up before your eyes; the oldest message you heard stands on its line, its words
+printed, a box for each group of digits: type them as you heard them (Backspace rubs out, Tab the next box, Enter writes
+the line, S the short form: the number and the time only; Esc puts the page down). One not written within half a minute
+is lost; what you write is what the page says, and the plotter plots a report he missed as the page has it. The radio
+lines on the screen fade in seconds: a missed report is found again only on that page (anyone may click it to read). A ringing line or the Osa's TA-57: Y answers, Y again
 puts it down. The bottom left of the screen shows your headset, your box and the sets it reaches (● alive), a call and
 a ringing line; the radio log above it shows only what your seat heard.
 
@@ -93,7 +99,7 @@ reads it for warning: his aids line gives each track's range and when it will be
 two-digit command. On the ДХ, СВ / Ч / ГР / Н1-Н3 set friend, foe, group and height zone on the target in the window; the
 ФР block's КОНТРОЛЬ position puts a training echo on the tube; the switch on the ФР block picks the cabled radar's type.
 Radio traffic is spoken through a radio voice and drawn in its net's colour (amber the air picture and the
-radiotelephonist's read-out, cyan the command net, blue the battery net, violet the regiment's net, green the covered
+radiotelephonist's read-out from the journal, cyan the command net, blue the battery net, violet the regiment's net, green the covered
 regiment's, pale yellow a telephone line). docs/research/PLOTTING_BOARD_2026-10.md.
 
 How a step works:

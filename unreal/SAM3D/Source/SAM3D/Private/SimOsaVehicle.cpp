@@ -159,8 +159,15 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	APlayerController* Pc = Cast<APlayerController>(GetController());
 	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	// The radio journal held before the eyes takes the keyboard (digits, Enter, Esc): nothing else hears them this frame.
+	const bool bWasAtJournal = bAtJournal;
+	if (bAtJournal)
+	{
+		HandleJournal(Pc, Sim);
+	}
+	APlayerController* KeysPc = bWasAtJournal ? nullptr : Pc;
 	// Esc: the mission's menu (unless the crew menu is open: Esc closes that). Nothing else moves while it is open.
-	if (Pc != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !bMenuOpen && !bTouring && Pc->WasInputKeyJustPressed(EKeys::Escape))
+	if (KeysPc != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !bMenuOpen && !bTouring && Pc->WasInputKeyJustPressed(EKeys::Escape))
 	{
 		SetMissionMenuOpen(!bMissionMenuOpen);
 	}
@@ -221,11 +228,11 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 		}
 		else if (!bMenuOpen)
 		{
-			HandleHotkeys(Pc, Sim);
+			HandleHotkeys(KeysPc, Sim);
 		}
 		AnimateFromSim(Sim);
 	}
-	HandleCabin(DeltaSeconds, Pc);
+	HandleCabin(DeltaSeconds, KeysPc);
 	if (Sim != nullptr && Sim->IsScenarioRunning() && !bInstructorOpen)
 	{
 		// The player's body out of his seat to simcore (docs/crew/13_OUT_OF_THE_VEHICLE.md): ten times a second.
@@ -236,14 +243,14 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			ReportBody(Sim);
 		}
 		UpdateJobMarkers(Sim);
-		HandleCrew(Pc, Sim, DeltaSeconds);
+		HandleCrew(KeysPc, Sim, DeltaSeconds);
 		if (bIsPost && !bMenuOpen)
 		{
-			HandlePost(Pc);
+			HandlePost(KeysPc);
 		}
 	}
 	// A lesson's highlight wins over the helper's (it is set after HandleCrew's).
-	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(Pc, Sim, DeltaSeconds) : FString();
+	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(KeysPc, Sim, DeltaSeconds) : FString();
 	// The body at the camera's seat isn't drawn (first person); the ghost hand shows the advised move.
 	// Walking, his own body is the one he walks in: the seat he holds is empty (another's seat keeps its crewman).
 	const FString Own = bWalking || IsOutside() ? (bHoldingSeat ? StationId : FString()) : Cabin->GetStationId(Station);
@@ -1231,6 +1238,132 @@ void ASimOsaVehicle::HandleBoard(APlayerController* Pc, const FVector& Start, co
 	}
 }
 
+// ---------------------------------------------------------------------------------------------- the radio journal
+
+void ASimOsaVehicle::HandleJournalPage(APlayerController* Pc, const FVector& Start, const FVector& Forward)
+{
+	// The radiotelephonist's journal open on his table (simcore/radio_journal.hpp): a click on the page holds it before the
+	// eyes. Everyone may read it; only its keeper writes.
+	bOnJournal = false;
+	double DistanceCm = 0.0;
+	if (Pc == nullptr || !bIsPost || Cabin == nullptr || !Cabin->TraceDocument(Start, Start + Forward * StandingReachCm, TEXT("radio_journal"), DistanceCm))
+	{
+		return;
+	}
+	// A control nearer than the page (the pencil on it, a knob over it) wins.
+	if (HoveredItem != INDEX_NONE && Cabin->GetItemControl(HoveredItem) != TEXT("journal.write"))
+	{
+		return;
+	}
+	bOnJournal = true;
+	HoveredItem = INDEX_NONE;
+	Cabin->SetHighlightedItem(INDEX_NONE);
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	const bool bKeeper = Sim != nullptr && !StationId.IsEmpty() && StationId == Sim->GetJournalKeeper();
+	HoverText = bKeeper ? TEXT("Radio journal (журнал радиосвязи): click to write") : TEXT("Radio journal (журнал радиосвязи): click to read");
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		OpenJournal();
+	}
+}
+
+bool ASimOsaVehicle::OpenJournal()
+{
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	FVector World;
+	FVector Facing;
+	FString Label;
+	FVector Eye;
+	FRotator View;
+	FString SeatLabel;
+	if (Sim == nullptr || Cabin == nullptr || !Cabin->GetHighlightTarget(TEXT("radio_journal"), World, Label, Facing) ||
+		!Cabin->GetStationView(Station, Eye, View, SeatLabel))
+	{
+		return false;
+	}
+	bJournalWriter = !StationId.IsEmpty() && StationId == Sim->GetJournalKeeper() && IsHoldingSeat();
+	if (bJournalWriter && !Sim->IsJournalDrafting() && !Sim->JournalBegin(StationId))
+	{
+		FeedbackText = TEXT("Nothing heard to write: the page is up to date");
+		FeedbackSecondsLeft = 2.5f;
+	}
+	// The eye a forearm above the page, looking down onto it, the page's top away from the man at it.
+	const FVector At = GetActorTransform().InverseTransformPosition(World);
+	const FVector Normal = GetActorTransform().InverseTransformVectorNoScale(Facing).GetSafeNormal();
+	FVector Away = At - Eye;
+	Away -= Normal * FVector::DotProduct(Away, Normal);
+	if (Away.IsNearlyZero())
+	{
+		Away = FVector::ForwardVector;
+	}
+	bAtJournal = true;
+	bViewOverride = true;
+	OverrideLocation = At + Normal * 24.0;
+	OverrideRotation = FRotationMatrix::MakeFromXZ(-Normal, Away.GetSafeNormal()).Rotator();
+	CabinCamera->SetFieldOfView(40.0f);
+	ApplyStationView();
+	return true;
+}
+
+void ASimOsaVehicle::CloseJournal()
+{
+	bAtJournal = false;
+	bJournalWriter = false;
+	ClearCabinViewOverride();
+}
+
+void ASimOsaVehicle::HandleJournal(APlayerController* Pc, USimWorldSubsystem* Sim)
+{
+	if (Pc == nullptr || Sim == nullptr)
+	{
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Escape) || Pc->WasInputKeyJustPressed(EKeys::RightMouseButton))
+	{
+		CloseJournal();
+		return;
+	}
+	if (!bJournalWriter)
+	{
+		return;  // reading only
+	}
+	if (!Sim->IsJournalDrafting())
+	{
+		// Between lines: Enter or a click takes the next message he heard.
+		if ((Pc->WasInputKeyJustPressed(EKeys::Enter) || Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton)) && !Sim->JournalBegin(StationId))
+		{
+			FeedbackText = TEXT("Nothing heard to write");
+			FeedbackSecondsLeft = 2.0f;
+		}
+		return;
+	}
+	static const FKey Digits[10] = {EKeys::Zero, EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven,
+		EKeys::Eight, EKeys::Nine};
+	static const FKey Pad[10] = {EKeys::NumPadZero, EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour,
+		EKeys::NumPadFive, EKeys::NumPadSix, EKeys::NumPadSeven, EKeys::NumPadEight, EKeys::NumPadNine};
+	for (int32 D = 0; D < 10; ++D)
+	{
+		if (Pc->WasInputKeyJustPressed(Digits[D]) || Pc->WasInputKeyJustPressed(Pad[D]))
+		{
+			Sim->JournalType(StationId, D);
+		}
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::BackSpace))
+	{
+		Sim->JournalRub(StationId);
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Tab))
+	{
+		Sim->JournalNextBox(StationId, Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
+	}
+	const bool bLine = Pc->WasInputKeyJustPressed(EKeys::Enter);
+	const bool bShort = Pc->WasInputKeyJustPressed(EKeys::S);
+	if ((bLine || bShort) && Sim->JournalFinish(StationId, bShort))
+	{
+		Sim->JournalBegin(StationId);  // the next message he heard, if any, straight on the next line
+	}
+}
+
 // ---------------------------------------------------------------------------------------------- the mission's menu
 
 void ASimOsaVehicle::StartInSeat(const FString& SeatId)
@@ -1601,6 +1734,11 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		HandleBoard(Pc, Start, Forward);
 		if (bOnBoard)
+		{
+			return;
+		}
+		HandleJournalPage(Pc, Start, Forward);
+		if (bOnJournal)
 		{
 			return;
 		}

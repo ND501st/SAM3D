@@ -50,6 +50,8 @@ public:
 	static constexpr double PlotBoardRadiusM = 200000.0;
 
 	simcore::CabinDisplayKind GetKind() const { return Kind; }
+	/** The layout display it draws (CabinLayout::displays). */
+	int32 GetLayoutIndex() const { return LayoutIndex; }
 
 	/**
 	 * Where a ray from WorldStart to WorldEnd meets the display's face, wherever its panel is now (a hinge turns the plotting

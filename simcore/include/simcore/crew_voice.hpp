@@ -41,6 +41,8 @@ struct VoiceData {
     double intercom_high_hz = 3400.0;
     double radio_low_hz = 300.0;
     double radio_high_hz = 3000.0;
+    double cabin_low_hz = 120.0;  // said aloud inside the vehicle: no set between speaker and ear
+    double cabin_high_hz = 8000.0;
     std::map<std::string, std::map<std::string, std::string>> say;  // language -> written -> spoken
 
     const VoiceSeat* Seat(const std::string& station) const {
@@ -50,6 +52,10 @@ struct VoiceData {
         return nullptr;
     }
 };
+
+// Said aloud in the vehicle ("cabin", "cabin (shouted)"): carried by the air, not by a set, so it never gets the radio's
+// squelch, hiss and limiter (the callout bus's channel labels, crew_callouts.hpp).
+inline bool IsAloudChannel(const std::string& channel) { return channel.compare(0, 5, "cabin") == 0; }
 
 // The voice for one line.
 struct VoiceSettings {
@@ -67,15 +73,25 @@ inline VoiceSettings VoiceFor(const VoiceData& v, const std::string& station, bo
         out.rate = s->rate;
         out.radio = s->radio;
     }
-    if (channel != "intercom") out.radio = true;
+    const bool aloud = IsAloudChannel(channel);
+    if (aloud) {
+        out.radio = false;  // a voice across the compartment is not a radio's, whatever the seat's usual set
+    } else if (channel != "intercom") {
+        out.radio = true;
+    }
     if (stressed) {
         out.pitch += v.stress_pitch;
         out.rate += v.stress_rate;
     }
     out.pitch = out.pitch < -10 ? -10 : (out.pitch > 10 ? 10 : out.pitch);
     out.rate = out.rate < -10 ? -10 : (out.rate > 10 ? 10 : out.rate);
-    out.low_hz = out.radio ? v.radio_low_hz : v.intercom_low_hz;
-    out.high_hz = out.radio ? v.radio_high_hz : v.intercom_high_hz;
+    if (aloud) {
+        out.low_hz = v.cabin_low_hz;
+        out.high_hz = v.cabin_high_hz;
+    } else {
+        out.low_hz = out.radio ? v.radio_low_hz : v.intercom_low_hz;
+        out.high_hz = out.radio ? v.radio_high_hz : v.intercom_high_hz;
+    }
     return out;
 }
 
@@ -292,8 +308,9 @@ public:
             }
         }
         if (const json::Value* b = root.Find("bands")) {
-            if (!Keys(*b, "bands", {"intercom_hz", "radio_hz", "source", "confidence", "notes"}) || !Provenance(*b, "bands") ||
-                !Band(*b, "intercom_hz", out.intercom_low_hz, out.intercom_high_hz) ||
+            if (!Keys(*b, "bands", {"intercom_hz", "radio_hz", "cabin_hz", "source", "confidence", "notes"}) ||
+                !Provenance(*b, "bands") || !Band(*b, "intercom_hz", out.intercom_low_hz, out.intercom_high_hz) ||
+                !Band(*b, "cabin_hz", out.cabin_low_hz, out.cabin_high_hz) ||
                 !Band(*b, "radio_hz", out.radio_low_hz, out.radio_high_hz)) {
                 return false;
             }
