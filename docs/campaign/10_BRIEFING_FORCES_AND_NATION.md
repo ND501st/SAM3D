@@ -165,8 +165,8 @@ alternate, and each is a target.
 | **2nd Fighter Regiment** | The same | A northern base | The same, facing the Pact border |
 | **3rd Fighter Regiment** | Two squadrons of MiG-21bis (about 24) and one of **MiG-23ML** (about 12, with two or three MiG-23UBs: decision 2). In a later campaign's option the MiG-23 squadron re-equips with MiG-29s | Tiszavar (in the theatre) | The MiG-23MLs are the best fighters the country has, held for the capital and the heaviest raids |
 
-The MiG-23 has a basic model already (`mig23mld`, the Pact's escort fighter), so in a war with the Pact both sides fly
-MiG-23s: one more reason a battery must know which of ours are up and trust its IFF (roadmap 17.2).
+Our MiG-23ML has its own basic model in our colours (`mig23ml`, N3), beside the Pact's escort fighter (`mig23mld`): in a
+war with the Pact both sides fly MiG-23s: one more reason a battery must know which of ours are up and trust its IFF (roadmap 17.2).
 
 ## 6. The Air Force (service)
 
@@ -263,10 +263,12 @@ move. Equipment names are families until research confirms the versions.
 | **Division** | Transport battalion (fuel and ammunition trucks), maintenance battalion, medical battalion, engineer battalion (a pontoon company, bridge layers, digging machines), chemical defence |
 | **Army and the nation** | The engineer brigade's pontoon park and the railway troops (the rebuild means); the central depots of fuel, ammunition, missiles and spares; the military transport offices; requisitioned civilian trucks and buses; the railway's rolling stock |
 
-New basic models needed (`docs/scenery/`): the Strela-1's BRDM-2, the Shilka, the S-60, the KS-30 and its tractor, the
-transloaders, the P-12/P-18, P-14, P-37 and PRV radars, the propellant tankers, the 9V210M3 and ZIP-2, the L-39, the
-Su-22's export versions, the Mi-17, the Mi-2, the An-26, airfield vehicles. The MiG-23 has `mig23mld`; the MiG-29 only
-with the later campaign's option.
+Basic models (`docs/scenery/`): N3 (22 October 2026) made one for every equipment type of the order of battle: the
+Strela-1's BRDM-2, the Shilka, the S-60 and the KS-30 with their gun-laying radars and the KS-30's tractor, the
+transloaders, the P-18, P-15, P-14 and PRV-11, the propellant tanker, the 9V210M3 and ZIP-2, and our own aircraft in our
+colours (the L-39, the Su-22M3, the MiG-23ML, the An-26, the An-2, the Mi-24D, the Mi-8 and Mi-17, the Mi-2). Not yet:
+the P-12 and P-37 (no unit of the order of battle has them yet), the airfield vehicles; the MiG-29 only with the later
+campaign's option.
 
 ## 10. Decisions
 

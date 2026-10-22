@@ -95,8 +95,6 @@ python tools/map_view.py out/pannonia_map.json --png                            
 
 ## What comes next
 
-- **N3**: the new assets' placeholder models (`data/scenery/basic_models.json`): the equipment types the order of
-  battle names that have none yet.
 - **N4**: the air war and its raids on the nation's theatre; supply and rebuilds routed over the networks (13.2, 13.5).
   Whether the enemy's pre-war survey knows a unit's prepared positions is decided there.
 - **N5**: drawn in Unreal beyond the Kesmark range; the campaign screen's map from it.

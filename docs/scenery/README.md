@@ -7,7 +7,7 @@ on it.
 
 ## What there is
 
-`data/scenery/basic_models.json` (79 models), loaded and expanded by `simcore/scenery/basic_models.hpp`
+`data/scenery/basic_models.json` (109 models), loaded and expanded by `simcore/scenery/basic_models.hpp`
 (`simcore::scenery::ModelLibrary`); drawn in Unreal by `FSimBasicModels` (`SimBasicModels.h/.cpp`).
 
 | Group | Models |
@@ -16,11 +16,12 @@ on it.
 | Warsaw Pact aircraft | MiG-23MLD, MiG-27, Su-24, Su-25, Su-17M3, MiG-25RB, MiG-25BM, Yak-28PP, Mi-24 |
 | The neutral neighbour's | Saab 105 class, Draken class, AB 212 class, Alouette III class |
 | The rebels' | An-2, UTVA 75 class, Mi-8, G-2 Galeb class |
-| Our side's aircraft | MiG-21 |
+| Our side's aircraft | MiG-21, MiG-23ML, Su-22M3, L-39, An-26, An-2, Mi-24D, Mi-8 (and Mi-17), Mi-2: our own models in our colours (`own_grey`, `own_camo`), never the enemy's model of the same type, so a MiG-23 or a Mi-24 of ours is not drawn as the Pact's |
 | Generic (a target without a model: by its class) | fighter, bomber, helicopter, drone, light aircraft |
 | Missiles | 9M33, an anti-radiation missile |
 | Our battery | 9A33 Osa-AK combat vehicle, its dummy, PU-12M, 9T217 reload vehicle, fuel truck, Ural, UAZ-469 |
 | Our air defence and army | Kub launcher and radar, S-125 launcher and radar, S-75 launcher and radar, Strela-10, ZU-23, P-19, P-40, T-55, BMP-1, BTR-60 |
+| The order of battle's equipment (the nation on the map, N3) | The Osa battery's 9V210M3 and ZIP-2, the Strela-2 launcher, the PU-12, the Shilka, the Strela-1's 9P31, the S-60 and its SON-9, the KS-30 and its SON-30, the AT-T tractor, the D-30, the S-75, S-125 and Kub transloaders, the propellant tanker, the diesel power station, the P-18, P-15 and P-14 radars and the PRV-11 height finder, the PMP pontoon truck |
 | Buildings and nature | house, large house, barn, apartment block, industrial hall, shed, barracks, town hall, hospital, station, hangar, bunker, church, chimney, cooling tower, fuel tank, crates, tent, command post tent, antenna mast, conifer, broadleaf tree, road bridge |
 
 Each model is an archetype and its overall dimensions (approximate public figures, for scale only) and colour; the code
@@ -30,11 +31,12 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
 | Archetype | Built from |
 |---|---|
 | jet | fuselage, nose cone, canopy, wings (swept, delta, straight, or a variable sweep half spread), tailplane (none for a delta), one or two fins, nozzles |
-| prop | box fuselage, propeller disc, wing (or two for a biplane), tail |
+| prop | box fuselage, propeller disc, wing (or two for a biplane), tail; two engines: a nacelle and a propeller under each wing |
 | helicopter | cabin and glazed nose, tail boom, mast, main and tail rotor discs, fin, stub wings for gunships, skids |
 | drone, missile | body, nose, wings or fins |
-| wheeled, tracked | hull, wheels or tracks, cab, turret and gun, missiles on their launchers, a radar dish or array on a mast, a tall mast (the PU-12M's) |
-| truck | cab, cargo body, tank or box body, wheels, a radar array (the P-19) |
+| wheeled, tracked | hull, wheels or tracks, cab, turret and gun (or several shorter barrels side by side: the Shilka), missiles on their launchers, a radar dish (its own `diameter_m` where given) or array (its own `span_m` and `antenna_h_m`) on a mast, a tall mast (the PU-12M's) |
+| truck | cab, cargo body, tank or box body, wheels, a radar array (the P-19's 7 by 1.6 m, or its own `span_m` and `antenna_h_m`); a missile transporter's low bed with its `missiles` lying on it (`missile_m`, `diameter_m`) |
+| radar | a radar post: its cabin, the post the antenna turns on, the antenna `span_m` wide and `antenna_h_m` tall (the P-14's great array, the PRV-11's tall narrow one), facing forward |
 | launcher, gun | base, turntable, rails with missiles at their elevation; barrels |
 | building, church, tower, tent | walls and a 45-degree pitched roof (or flat), a tower and spire; cylinders for chimneys, cooling towers and tanks |
 | tree, mast, crates, bridge | trunk and crown; pole and crossbar; stacked boxes; a deck on piers |
@@ -54,12 +56,16 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
 ## Checks
 
 - `simcore/tests/test_scenery.cpp`: every aircraft any adversary flies has a model (helicopters as helicopters); every
-  battery vehicle kind has one; a target's model, class and tags pick the right one; every model is built and is its
-  stated size (parts within 1.6 times its length and span; masts may stand higher); the loader refuses unknown archetypes
+  battery vehicle kind has one; every equipment type of our order of battle (`data/command/oob_pannonia.json`) has one,
+  and none of our aircraft is drawn as a model an adversary flies; a target's model, class and tags pick the right one; every model is built and is its
+  stated size (parts within 1.6 times its length and span; masts may stand higher), the trucks, guns, launchers and
+  radars too; the loader refuses unknown archetypes
   and colours; a generated raid's aircraft carry their models through the scenario loader.
 - **The gallery** (Unreal, `ASimModelGallery`): `UnrealEditor.exe SAM3D.uproject /Game/Maps/OsaPractice -game
   -SimModelGallery=<folder>` lays every model out in rows on a flat ground high above the terrain, labelled, and
-  photographs the rows (`gallery_<n>.png`).
+  photographs the rows (`gallery_<n>.png`). Its camera has a fixed exposure bias (−9 EV): on its bright slab high above
+  the terrain the auto exposure washed every view out white (found and fixed 22 October 2026). Run it from PowerShell
+  (Git Bash turns `/Game/...` into a path) with `-RenderOffscreen` to keep the window off the screen.
 - **Scenario photographs**: add `-SimShots=<folder> -SimShotTimes=20,60,120` (and `-SimTimeScale=6` to run the sim
   faster between them) to any scenario run: at each time the sim pauses, a chase camera behind the nearest aircraft and a
   view over the battery are photographed (`shot_<t>_air.png`, `shot_<t>_battery.png`), the log lists every entity with

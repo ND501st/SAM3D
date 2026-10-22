@@ -31,7 +31,7 @@ namespace
 	}
 	bool IsVehicleArchetype(const std::string& A)
 	{
-		return A == "wheeled" || A == "tracked" || A == "truck" || A == "launcher" || A == "gun";
+		return A == "wheeled" || A == "tracked" || A == "truck" || A == "launcher" || A == "gun" || A == "radar";
 	}
 }
 
@@ -98,6 +98,14 @@ void ASimModelGallery::LayOut()
 	if (Lib == nullptr)
 	{
 		return;
+	}
+	// A fixed exposure bias: on its bright slab high above the terrain the auto exposure washed every view out white
+	// (22 October 2026; -9 EV found by trying r.ExposureOffset).
+	if (Camera != nullptr)
+	{
+		Camera->GetCameraComponent()->PostProcessSettings.bOverride_AutoExposureBias = true;
+		Camera->GetCameraComponent()->PostProcessSettings.AutoExposureBias = -9.0f;
+		Camera->GetCameraComponent()->PostProcessBlendWeight = 1.0f;
 	}
 	// Three rows: aircraft, vehicles and sites, buildings and nature; each model after the last with room to spare.
 	TArray<const simcore::scenery::ModelDef*> Rows[3];

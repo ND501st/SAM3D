@@ -1,10 +1,13 @@
 // Ultra-basic models of every asset (simcore/scenery/, data/scenery/, docs/scenery/).
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/command.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenery.hpp"
 #include "test_framework.hpp"
@@ -87,7 +90,8 @@ SC_TEST("scenery: every aircraft of the air war and every battery vehicle has a 
         Vec3 lo, hi;
         const Vec3 ext = Extent(m, lo, hi);
         const double big = std::max(m.length_m, std::max(m.span_m, m.height_m));
-        if (m.archetype == "jet" || m.archetype == "wheeled" || m.archetype == "tracked" || m.archetype == "building") {
+        if (m.archetype == "jet" || m.archetype == "wheeled" || m.archetype == "tracked" || m.archetype == "building" || m.archetype == "truck" ||
+            m.archetype == "gun" || m.archetype == "launcher" || m.archetype == "radar") {
             // Masts and antennas may stand well above a vehicle's stated height; an aircraft's height is its height.
             const double tall = m.archetype == "jet" ? 1.6 * big + 2.0 : 4.0 * std::max(m.height_m, 1.0) + 6.0;
             const bool fits = ext.x <= 1.6 * std::max(m.length_m, 1.0) + 2.0 && ext.y <= 1.6 * std::max(m.span_m, 1.0) + 2.0 && ext.z <= tall;
@@ -116,6 +120,57 @@ SC_TEST("scenery: every aircraft of the air war and every battery vehicle has a 
     SC_EXPECT(!LoadModelLibraryJson(R"({"models_id": "x", "models": [{"id": "a", "name": "A", "archetype": "tower", "height_m": 5, "diameter_m": 2, "colour": "puce"}]})",
                                     bad, &e) &&
               e.find("colour") != std::string::npos);
+}
+
+SC_TEST("scenery: every equipment type of our order of battle has a basic model; ours are never the enemy's model of the type") {
+    const ModelLibrary lib = Library();
+    command::OrderOfBattle oob;
+    std::string e;
+    SC_EXPECT(command::LoadOrderOfBattle(kData, "command/oob_pannonia.json", oob, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    std::vector<std::string> types;
+    for (const command::OobUnit& u : oob.units) {
+        for (const std::pair<std::string, int>& eq : u.equipment) {
+            if (std::find(types.begin(), types.end(), eq.first) == types.end()) types.push_back(eq.first);
+        }
+    }
+    // Any adversary's aircraft: a battery that sees one of these models knows it for the enemy's.
+    std::vector<std::string> enemy;
+    for (const char* f : {"rebels", "neutral", "warsaw_pact", "nato"}) {
+        airwar::FactionDef fd;
+        SC_EXPECT(airwar::LoadFactionFile(kData + "/air_war/faction_" + f + ".json", fd, &e));
+        for (const airwar::AircraftType& a : fd.aircraft) enemy.push_back(a.id);
+    }
+    int aircraft = 0;
+    for (const std::string& t : types) {
+        const ModelDef* m = lib.Find(t);
+        if (m == nullptr) std::printf("    no model for %s\n", t.c_str());
+        SC_EXPECT(m != nullptr);
+        if (m == nullptr) continue;
+        const bool flies = m->archetype == "jet" || m->archetype == "prop" || m->archetype == "helicopter";
+        if (!flies) continue;
+        ++aircraft;
+        const bool theirs = std::find(enemy.begin(), enemy.end(), t) != enemy.end();
+        if (theirs) std::printf("    our %s is drawn as the enemy's model\n", t.c_str());
+        SC_EXPECT(!theirs);
+    }
+    std::printf("    %zu equipment types, %d of them aircraft\n", types.size(), aircraft);
+    SC_EXPECT(types.size() >= 45 && aircraft >= 8);
+    // The ones that needed something new of their archetype: a Shilka's four barrels, the transloaders' missiles lying
+    // on their beds, the An-26's two engines on its wings, the P-14's great array.
+    const auto count = [&](const std::string& id, Shape s) {
+        int n = 0;
+        const ModelDef* m = lib.Find(id);
+        if (m != nullptr) {
+            for (const Part& p : m->parts) n += p.shape == s ? 1 : 0;
+        }
+        return n;
+    };
+    SC_EXPECT(count("zsu_23_4", Shape::Cylinder) >= 6);   // a dish and its post, four barrels
+    SC_EXPECT(count("s125_transloader", Shape::Cylinder) == 2 + 6);  // two missiles and six wheels
+    SC_EXPECT(count("an26", Shape::Cylinder) == 4);       // two nacelles, two propellers
+    const ModelDef* p14 = lib.Find("p14");
+    SC_EXPECT(p14 != nullptr && p14->span_m == 32.0 && p14->parts.size() == 3);
 }
 
 SC_TEST("scenery: a raid's aircraft carry their model into the scenario, and the loader keeps it") {

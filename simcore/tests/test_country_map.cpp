@@ -366,7 +366,7 @@ SC_TEST("order of battle: every military object of the theatre has one unit, eve
     // The Kub is the tank brigade's air defence (decision 6); the MiG-23MLs fly with the 3rd Fighter Regiment (decision 2).
     const command::OobUnit* kub = oob.OwnerOfObject("tiszavar_kub");
     SC_EXPECT(kub != nullptr && oob.Under(kub->id, "tank_brigade"));
-    SC_EXPECT(oob.TotalEquipment("fighter_rgt_3", "mig23mld") == 12 && oob.TotalEquipment("national_air_defence", "mig29") == 0);
+    SC_EXPECT(oob.TotalEquipment("fighter_rgt_3", "mig23ml") == 12 && oob.TotalEquipment("national_air_defence", "mig29") == 0);
 }
 
 SC_TEST("order of battle: the loader refuses a loop, an unknown parent, service or kind") {
