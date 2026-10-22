@@ -30,7 +30,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/air_war/` | The enemy air command: the fictional theatre, the four adversaries (rebels, neutral neighbour, Warsaw Pact, NATO) with doctrine, intelligence, politics, aircraft, squadrons and officers, and the quirk catalogue. Balance numbers in `data/gameplay/air_war.json`. |
 | `data/tutorials/` | The lessons (`simcore/tutorial.hpp`): a first lesson and one per seat of the Osa and of the PU-12M, each step one action on a lit control, shown over a mission named in `missions.json` (`"tutorial"`). See `docs/TUTORIALS.md`. |
 | `data/scenery/` | Presentation data: the ultra-basic models of every asset (`basic_models.json`: archetype, size, colour per type; the air war's aircraft ids). Placeholders until real models exist. |
-| `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. |
+| `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. `pannonia.json` is **the whole country** (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`): ground at 1 km, borders, regions, rivers, and roads, railways and pipelines as networks with bridges that can be cut; the Kesmark range is a district of it and must keep agreeing (`tests/test_country_map.cpp`). |
 | `data/weather/` | Weather presets a scenario names (`"weather"`): winds, cloud layers, the air (`simcore/weather.hpp`). |
 | `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
@@ -75,6 +75,8 @@ blender --background --python tools/blender/pu12m_interior_check.py -- --poses o
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
 ./simcore/build/map_dump data maps/kesmark_range.json out/kesmark_range_map.json   # the test map's layout (or --height e_km n_km)
 python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
+./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json         # the whole country (or --route road e1 n1 e2 n2 [cut bridges], --height e n)
+python tools/map_view.py out/pannonia_map.json --png                              # the country with the theatre's objects and fronts
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)
 
@@ -202,9 +204,11 @@ speaks and how fast); a direct act inside the NPC commander's think checks `!sha
 player commander's place and must change nothing). After changing the crew's behaviour, the consoles or the missions,
 run `helper_coverage` and read its Gaps; `test_helper.cpp` counts the `NpcAt(` uses to make you look.
 
-**Next, prioritised (22 Oct 2026): the nation on the map** (roadmap, before phase 13, not gated): the country's map
-(`terrain_map.hpp` extended to the whole country), ultra-basic placeholder models for every asset of the briefing
-(`docs/campaign/10_BRIEFING_FORCES_AND_NATION.md`), and the air war running on them.
+**Next, prioritised (22 Oct 2026): the nation on the map** (roadmap, before phase 13, not gated): the goal is to
+simulate whole conflicts headless, to test and develop the game's systems without a player, so the player feels a
+small part of a large war. N0 and N1 are done: the air war's infrastructure kinds and checked air defence systems,
+our order of battle (`simcore/command/oob.hpp`), and the country's map (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`).
+Next N2 (the briefing's assets placed), N3 (their placeholder models), N4 (the air war running on them).
 
 The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
 M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a

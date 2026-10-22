@@ -23,6 +23,33 @@ def test_svg_has_every_layer_and_escapes_names():
     assert "<polyline" in svg and "Village &lt;A&gt;" in svg
 
 
+COUNTRY = {
+    "kind": "country", "map_id": "c", "name": "Country", "extent_km": [-20, -20, 20, 20],
+    "ground": {"west": -20, "south": -20, "step": 20, "rows": [[100, 120, 140], [100, 110, 120], [90, 100, 110]]},
+    "outline": [[-20, -20], [20, -20], [20, 20], [-20, 20]],
+    "borders": [{"id": "w", "neighbour": "nato", "points": [[-20, -20], [-20, 20]]}],
+    "regions": [{"id": "r", "name": "R", "points": [[-10, -10], [10, -10], [10, 10]]}],
+    "forests": [{"id": "f", "points": [[0, 0], [5, 0], [5, 5]]}],
+    "rivers": [{"id": "rv", "name": "River", "class": "river", "points": [[0, -20], [0, 20]]}],
+    "roads": [{"id": "m", "name": "Main", "class": "main", "points": [[-20, 0], [20, 0]]}],
+    "railways": [], "pipelines": [{"id": "p", "name": "Pipe", "class": "oil", "points": [[5, -20], [5, 20]]}],
+    "settlements": [{"id": "cap", "name": "Capital <C>", "kind": "capital", "at": [1, 1], "radius_km": 3, "population": 1}],
+    "landmarks": [{"id": "ref", "name": "Refinery", "kind": "refinery", "at": [5, 2]}],
+    "crossings": [{"id": "m@rv", "net": "road", "river": "rv", "at": [0, 0]}],
+}
+THEATRE = {"objects": [{"id": "s", "kind": "sam_site", "east_km": 3, "north_km": 3}],
+           "fronts": [{"faction": "nato", "entries": [{"id": "W1", "east_km": -30, "north_km": 0}], "bases": {"east_km": -50, "north_km": 0}}]}
+
+
+def test_the_country_draws_its_borders_lines_places_and_the_theatre_over_it():
+    svg = map_view.country_svg(COUNTRY, THEATRE)
+    assert svg.startswith("<svg") and svg.endswith("</svg>")
+    assert map_view.NEIGHBOUR_COLOURS["nato"] in svg and map_view.OBJECT_COLOURS["sam_site"] in svg
+    assert "Capital &lt;C&gt;" in svg and "nato bases" in svg
+    # The fronts' bases beyond the border widen the picture to hold them.
+    assert map_view.country_bounds(COUNTRY, THEATRE)[0] < -50
+
+
 def test_main_writes_a_page_and_a_picture(tmp_path):
     dump = tmp_path / "d.json"
     dump.write_text(json.dumps(DUMP), encoding="utf-8")

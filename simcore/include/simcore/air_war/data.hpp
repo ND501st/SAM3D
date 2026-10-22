@@ -25,10 +25,37 @@ namespace airwar {
 
 // ------------------------------------------------------------------------------------------------ the theatre
 
+// The air defence systems a theatre object may have: the id the data uses, and how the enemy's intelligence labels it
+// (NATO names, since every adversary's analysts used them or their own equivalent). The S-75M2 and S-125M1 are the
+// national air defence's variants (docs/campaign/10_BRIEFING_FORCES_AND_NATION.md decision 1); "s75" and "s125" stay
+// for the theatre's existing sites.
+struct AirDefenceSystem {
+    const char* id;
+    const char* label;
+};
+
+inline const std::vector<AirDefenceSystem>& AirDefenceSystems() {
+    static const std::vector<AirDefenceSystem> systems = {
+        {"osa", "SA-8 battery"},       {"kub", "SA-6 battery"},           {"s75", "SA-2 site"},
+        {"s75m2", "SA-2 site"},        {"s125", "SA-3 battery"},          {"s125m1", "SA-3 battery"},
+        {"strela10", "SA-13 platoon"}, {"strela1", "SA-9 platoon"},       {"zsu234", "ZSU-23-4 platoon"},
+        {"s60", "57 mm AAA battery"},  {"ks30", "130 mm AAA battery"},    {"zu23", "AAA"},
+        {"aaa", "AAA"},                {"manpads", "MANPADS"},
+    };
+    return systems;
+}
+
+inline const AirDefenceSystem* FindAirDefenceSystem(const std::string& id) {
+    for (const AirDefenceSystem& s : AirDefenceSystems()) {
+        if (id == s.id) return &s;
+    }
+    return nullptr;
+}
+
 // An object's air defence, as the abstract resolver and the enemy's threat picture see it (game values).
 struct DefenceDef {
     bool present = false;
-    std::string system;        // "osa", "s125", "kub", "s75", "strela10", "aaa", "manpads": display and notes
+    std::string system;        // an id of AirDefenceSystems(): display and notes
     double radius_m = 0.0;     // where it can engage
     double lethality = 0.0;    // chance per aircraft to be shot down on a pass through the heart of the zone
     bool low_cover = true;     // effective against low fliers
@@ -723,6 +750,9 @@ public:
                 !OptionalBool(*d, dp, "radar", ob.defence.radar) || !Int(*d, dp, "missiles", ob.defence.missiles, -1, 1000) ||
                 !Int(*d, dp, "radars", ob.defence.radars, 1, 16)) {
                 return false;
+            }
+            if (FindAirDefenceSystem(ob.defence.system) == nullptr) {
+                return Fail(Join(dp, "system"), "unknown air defence system '" + ob.defence.system + "' (AirDefenceSystems())");
             }
             ob.defence.present = true;
             ob.defence.radius_m = radius_km * 1000.0;

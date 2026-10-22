@@ -58,6 +58,16 @@ enum class ObjectKind {
     Troops,  // a formation in the field near the front
     Factory,
     City,  // protected by politics more often than by guns
+    // The nation's infrastructure (the nation on the map, N0; docs/campaign/10_BRIEFING_FORCES_AND_NATION.md §3).
+    Refinery,         // crude oil into fuel: the fuel system's heart
+    PipelineStation,  // a pipeline's border or pumping station: where the oil comes in
+    Substation,       // the grid between the power stations and the consumers (power, like PowerPlant)
+    Dam,              // a hydroelectric dam (power, like PowerPlant)
+    MaterialsDepot,   // spans, pontoons, rails, cable, spares: what rebuilds need (docs/campaign/02_WHAT_WE_DEFEND.md §3)
+    Port,             // a river port
+    Government,       // the ministries, the General Staff
+    Broadcast,        // state radio and television
+    Exchange,         // a telephone exchange or trunk node: the wire the command pipeline runs on
     Count
 };
 
@@ -76,6 +86,15 @@ inline const char* ObjectKindName(ObjectKind k) {
         case ObjectKind::Troops: return "troops";
         case ObjectKind::Factory: return "factory";
         case ObjectKind::City: return "city";
+        case ObjectKind::Refinery: return "refinery";
+        case ObjectKind::PipelineStation: return "pipeline_station";
+        case ObjectKind::Substation: return "substation";
+        case ObjectKind::Dam: return "dam";
+        case ObjectKind::MaterialsDepot: return "materials_depot";
+        case ObjectKind::Port: return "port";
+        case ObjectKind::Government: return "government";
+        case ObjectKind::Broadcast: return "broadcast";
+        case ObjectKind::Exchange: return "exchange";
         case ObjectKind::Count: break;
     }
     return "?";

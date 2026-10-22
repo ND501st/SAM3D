@@ -44,8 +44,10 @@
   "politics": {
     "support": 0.8, "pressure": 0.5, "loss_tolerance_per_day": 0.3, "pow_sensitivity": 0.6, "collateral_sensitivity": 0.3,
     "no_strike_city_radius_km": 0, "max_depth_km": 80, "banned": [ "city" ], "interference_per_cycle": 0.02,
-    "target_weights": { "headquarters": 1.4, "troops": 1.3, "bridge": 1.0, "depot": 1.0, "airfield": 0.7, "sam_site": 0.5, "ew_radar": 0.6, "power_plant": 0.6 },
-    "source": "game values: targets chosen for effect and propaganda; the faction's own people are not bombed",
+    "target_weights": { "headquarters": 1.4, "troops": 1.3, "bridge": 1.0, "depot": 1.0, "airfield": 0.7, "sam_site": 0.5, "ew_radar": 0.6, "power_plant": 0.6,
+                        "refinery": 0.6, "pipeline_station": 0.8, "substation": 0.7, "dam": 0.3, "materials_depot": 0.6, "port": 0.5,
+                        "government": 1.0, "broadcast": 1.0, "exchange": 0.6 },
+    "source": "game values: targets chosen for effect and propaganda; the faction's own people are not bombed. The nation's infrastructure kinds (refinery to exchange, 22 Oct 2026) are game values by analogy; a kind of the power grid (substation, dam) is banned wherever power_plant is.",
     "confidence": "estimate",
     "events": [
       { "id": "defector", "name": "A defector", "text": "A pilot of the federal air force has flown his light jet over to the Front.",

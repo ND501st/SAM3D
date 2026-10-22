@@ -956,13 +956,8 @@ private:
         return o.name;
     }
     static std::string SystemName(const std::string& s) {
-        if (s == "osa") return "SA-8 battery";
-        if (s == "s125") return "SA-3 battery";
-        if (s == "s75") return "SA-2 site";
-        if (s == "kub") return "SA-6 battery";
-        if (s == "strela10") return "SA-13 platoon";
-        if (s == "aaa") return "AAA";
-        return s + " battery";
+        const AirDefenceSystem* sys = FindAirDefenceSystem(s);
+        return sys != nullptr ? std::string(sys->label) : s + " battery";
     }
     std::string NearestPlace(const Vec3& p) const {
         double best = 1e18;

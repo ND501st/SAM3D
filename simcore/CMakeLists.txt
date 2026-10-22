@@ -96,7 +96,8 @@ add_executable(simcore_tests
   tests/test_air_war.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp
-  tests/test_world_map.cpp)
+  tests/test_world_map.cpp
+  tests/test_country_map.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -174,3 +175,13 @@ add_executable(air_war_demo examples/air_war_demo.cpp)
 simcore_configure_target(air_war_demo)
 add_test(NAME air_war_demo
          COMMAND air_war_demo warsaw_pact 2 "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/air_war" 1)
+
+# The generated maps: a district's layout (data/maps/kesmark_range.json, docs/TEST_RANGE.md) and the whole country's
+# (data/maps/pannonia.json, docs/COUNTRY_MAP.md), as JSON for tools/map_view.py; the country's also as routes over its
+# roads, railways and pipelines with bridges cut.
+add_executable(map_dump examples/map_dump.cpp)
+simcore_configure_target(map_dump)
+add_executable(country_dump examples/country_dump.cpp)
+simcore_configure_target(country_dump)
+add_test(NAME country_dump_route
+         COMMAND country_dump "${CMAKE_CURRENT_SOURCE_DIR}/../data" maps/pannonia.json --route road 9 -1 68 12 b_ralje@rava)

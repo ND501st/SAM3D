@@ -41,7 +41,10 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`. Flight roles:
 `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`. Object kinds: `sam_site`, `aaa`,
 `ew_radar`, `command_post`, `airfield`, `bridge`, `rail_junction`, `depot`, `power_plant`, `headquarters`, `troops`,
-`factory`, `city`. Staff roles: `commander`, `planner`, `intelligence`, `sead`, `political`, `squadron_leader`.
+`factory`, `city`, and the nation's infrastructure (22 Oct 2026, the nation on the map N0): `refinery`, `pipeline_station`,
+`substation`, `dam` (the grid: banned wherever `power_plant` is), `materials_depot`, `port`, `government`, `broadcast`,
+`exchange`. Air defence systems (`defence.system`, checked by the loader): `osa`, `kub`, `s75`, `s75m2`, `s125`,
+`s125m1`, `strela10`, `strela1`, `zsu234`, `s60`, `ks30`, `zu23`, `aaa`, `manpads`. Staff roles: `commander`, `planner`, `intelligence`, `sead`, `political`, `squadron_leader`.
 
 Every aircraft number is a PLACEHOLDER; the doctrine's shape is sourced where a source exists and is a game value where
 none does; the factions and the theatre are fictional.

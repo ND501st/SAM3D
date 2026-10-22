@@ -46,9 +46,10 @@
   },
   "politics": {
     "support": 0.6, "pressure": 0.3, "loss_tolerance_per_day": 1.0, "pow_sensitivity": 0.8, "collateral_sensitivity": 0.9,
-    "no_strike_city_radius_km": 6, "max_depth_km": 40, "banned": [ "city", "power_plant", "factory", "headquarters" ], "interference_per_cycle": 0.05,
-    "target_weights": { "troops": 1.4, "bridge": 1.1, "depot": 1.0, "sam_site": 0.7, "ew_radar": 0.8, "airfield": 0.6, "command_post": 0.9 },
-    "source": "game values: a neutral state's limited war aim (front-line targets only, nothing deep, nothing that kills civilians)",
+    "no_strike_city_radius_km": 6, "max_depth_km": 40, "banned": [ "city", "power_plant", "substation", "dam", "factory", "refinery", "headquarters", "government", "broadcast" ], "interference_per_cycle": 0.05,
+    "target_weights": { "troops": 1.4, "bridge": 1.1, "depot": 1.0, "sam_site": 0.7, "ew_radar": 0.8, "airfield": 0.6, "command_post": 0.9,
+                        "pipeline_station": 0.5, "materials_depot": 0.8, "port": 0.6, "exchange": 0.6 },
+    "source": "game values: a neutral state's limited war aim (front-line targets only, nothing deep, nothing that kills civilians). The nation's infrastructure kinds (refinery to exchange, 22 Oct 2026) are game values by analogy; a kind of the power grid (substation, dam) is banned wherever power_plant is. The refinery, the ministries and broadcasting are banned with the factories and headquarters: nothing that is the state itself",
     "confidence": "estimate",
     "events": [
       { "id": "mediation", "name": "Mediation", "text": "A neutral mediator brings both sides to the table: the raids pause for a day.",

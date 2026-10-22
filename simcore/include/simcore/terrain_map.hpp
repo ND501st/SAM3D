@@ -402,6 +402,34 @@ private:
 
 }  // namespace mapgeo
 
+// How deep a river's bed is cut below the ground around it.
+constexpr double kRiverBedDepthM = 2.0;
+
+// The ground as a map file's terrain shapes it, before any site is levelled: the relief, the hills, the river valleys
+// and beds. One function for every map, so a district (the Kesmark range) and the country it lies in (simcore/
+// country_map.hpp) share the same ground wherever their files share the same terrain.
+inline double NaturalGround(const MapDef& d, double e, double n) {
+    double h = d.base_m;
+    std::uint64_t s = d.seed;
+    for (const MapReliefDef& r : d.relief) {
+        s = noise::Mix64(s);
+        h += r.amplitude_m * (2.0 * noise::Value(s, e, n, r.wavelength_m) - 1.0);
+    }
+    for (const MapHillDef& hill : d.hills) {
+        const double dist = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
+        if (dist < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * dist / hill.radius_m));
+    }
+    for (const MapLineDef& r : d.rivers) {
+        const double dist = mapgeo::DistToLine(r.points, e, n);
+        if (dist < d.valley_half_width_m && d.valley_depth_m > 0.0) {
+            h -= d.valley_depth_m * 0.5 * (1.0 + std::cos(kPi * dist / d.valley_half_width_m));
+        }
+        const double bed = 0.5 * r.width_m + 15.0;
+        if (dist < bed) h -= kRiverBedDepthM * noise::Smooth(1.0 - dist / bed);
+    }
+    return h;
+}
+
 // ---------------------------------------------------------------------------------------------- the built map
 
 class MapData {
@@ -449,7 +477,7 @@ public:
     }
 
 private:
-    static constexpr double kBedDepthM = 2.0;
+    static constexpr double kBedDepthM = kRiverBedDepthM;
 
     struct Flat {
         double e, n, r, h;
@@ -458,29 +486,7 @@ private:
     explicit MapData(MapDef def) : def_(std::move(def)) {}
 
     // Relief, hills and the river valley: the ground before the sites are levelled.
-    double Natural(double e, double n) const {
-        double h = def_.base_m;
-        std::uint64_t s = def_.seed;
-        for (const MapReliefDef& r : def_.relief) {
-            s = noise::Mix64(s);
-            h += r.amplitude_m * (2.0 * noise::Value(s, e, n, r.wavelength_m) - 1.0);
-        }
-        for (const MapHillDef& hill : def_.hills) {
-            const double d = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
-            if (d < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * d / hill.radius_m));
-        }
-        if (!def_.rivers.empty()) {
-            for (const MapLineDef& r : def_.rivers) {
-                const double d = mapgeo::DistToLine(r.points, e, n);
-                if (d < def_.valley_half_width_m && def_.valley_depth_m > 0.0) {
-                    h -= def_.valley_depth_m * 0.5 * (1.0 + std::cos(kPi * d / def_.valley_half_width_m));
-                }
-                const double bed = 0.5 * r.width_m + 15.0;
-                if (d < bed) h -= kBedDepthM * noise::Smooth(1.0 - d / bed);
-            }
-        }
-        return h;
-    }
+    double Natural(double e, double n) const { return NaturalGround(def_, e, n); }
 
     static double SiteClearance(const MapSiteDef& s) {
         if (s.kind == "airfield") return 0.5 * s.runway_length_m + 400.0;
@@ -1174,7 +1180,7 @@ public:
                LoadSites(root, out);
     }
 
-private:
+protected:  // the country map's loader (simcore/country_map.hpp) reads its terrain, lines and polygons the same way
     bool Number(const json::Value& o, const std::string& path, const char* key, double& v) {
         if (o.Find(key) == nullptr) return Fail(Join(path, key), "required");
         return OptionalNumber(o, path, key, v);
@@ -1275,7 +1281,7 @@ private:
             }
             if (fixed_class[0] != '\0') {
                 line.line_class = fixed_class;
-                line.width_m = line.line_class == "rail" ? 5.0 : 60.0;
+                line.width_m = line.line_class == "rail" ? 5.0 : (line.line_class == "oil" ? 1.0 : 60.0);
             } else {
                 if (!RequireString(l, p, "class", line.line_class)) return false;
                 if (line.line_class == "main") line.width_m = 9.0;
