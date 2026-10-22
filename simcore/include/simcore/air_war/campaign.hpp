@@ -1409,6 +1409,18 @@ private:
             const bool player = static_cast<int>(i) == player_;
             const double every = player ? posture_.relocate_every_h : o.relocate_h;
             if (every <= 0.0 || now_h_ - st.last_moved_h < every || st.function <= 0.0) continue;
+            if (!player && !o.prepared.empty()) {
+                // To another of its prepared positions, none of them within 8 km of the enemy's front.
+                std::vector<Vec3> options;
+                for (const Vec3& q : o.prepared) {
+                    if (Dist2d(q, st.pos) > 1.0 && DistanceToFront(q) >= 8000.0) options.push_back(q);
+                }
+                if (!options.empty()) {
+                    st.pos = options[static_cast<std::size_t>(rng_.Index(static_cast<int>(options.size())))];
+                    st.last_moved_h = now_h_;
+                }
+                continue;
+            }
             const double dist = player ? 5000.0 : o.relocate_m;
             for (int tries = 0; tries < 6; ++tries) {
                 const double a = rng_.Uniform(0.0, 6.283185307179586);

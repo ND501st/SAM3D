@@ -50,6 +50,23 @@ def test_the_country_draws_its_borders_lines_places_and_the_theatre_over_it():
     assert map_view.country_bounds(COUNTRY, THEATRE)[0] < -50
 
 
+def test_a_theatre_that_extends_another_is_drawn_whole(tmp_path):
+    base = {"objects": [{"id": "a", "kind": "sam_site", "east_km": 0, "north_km": 0},
+                        {"id": "b", "kind": "depot", "east_km": 1, "north_km": 1},
+                        {"id": "c", "kind": "bridge", "east_km": 2, "north_km": 2}],
+            "fronts": [{"faction": "nato", "entries": [], "bases": {"east_km": -50, "north_km": 0}}]}
+    child = {"extends": "base.json", "remove": ["c"],
+             "objects": [{"id": "b", "kind": "depot", "east_km": 5, "north_km": 5}, {"id": "d", "kind": "refinery", "east_km": 3, "north_km": 3,
+                          "positions": [{"east_km": 4, "north_km": 3}]}]}
+    (tmp_path / "base.json").write_text(json.dumps(base), encoding="utf-8")
+    (tmp_path / "child.json").write_text(json.dumps(child), encoding="utf-8")
+    t = map_view.load_theatre(tmp_path / "child.json")
+    assert [o["id"] for o in t["objects"]] == ["a", "b", "d"] and t["objects"][1]["east_km"] == 5
+    assert t["fronts"] == base["fronts"]
+    svg = map_view.country_svg(COUNTRY, t)
+    assert map_view.OBJECT_COLOURS["refinery"] in svg and "prepared position" in svg
+
+
 def test_main_writes_a_page_and_a_picture(tmp_path):
     dump = tmp_path / "d.json"
     dump.write_text(json.dumps(DUMP), encoding="utf-8")

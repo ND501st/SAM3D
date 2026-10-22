@@ -31,6 +31,42 @@ is one small part of a large war (`docs/campaign/`).
 `tests/test_country_map.cpp` holds all of it. Change the range's terrain or lines, and the country's copy must change
 with them.
 
+## The nation's assets on it (N2)
+
+`data/air_war/theatre_pannonia_nation.json` places the briefing's forces, industry and infrastructure on this map
+(`docs/campaign/10_BRIEFING_FORCES_AND_NATION.md` §3-9). It **extends** the theatre the balance pass tuned
+(`theatre_pannonia.json`, `"extends"`): the base's 40 objects keep their places in the list, 13 of them replaced where
+they stand (the S-75 and the S-125 become the S-75M2 and the S-125M1, the Strela-10 platoons Strela-1 platoons, and
+every mobile unit gets its prepared positions), and 130 are added: 170 objects. The air war keeps playing the tuned
+theatre until N4 moves it here.
+
+| Who | Placed |
+|---|---|
+| **The National Air Defence** | Its central command post outside the capital; the two sectors' posts, each with an alternate (the 1st's is the bunker on Varos hill); six S-75M2 fire units (three round the capital, Novo Varosd, Paksany, the north-eastern approach) and ten S-125M1 (three in the capital's inner ring, Kecel, Tiszavar, the Kesmark bridges, Paksany, the refinery, Novo Varosd, the dam); the four KS-30 batteries round the capital; ten radar companies along the four borders and east of the capital, beside the Bugac battalion; Bory air base for the 2nd Fighter Regiment |
+| **The Air Force** | Soltvar (the Su-22s and the reconnaissance squadron), Lovas (the L-39s), the Dombas helicopter base, the capital's airport (the transports), each with its ZU-23s |
+| **The Ground Forces** | The two divisions' six regiments (the four forward groups already in the theatre, two tank regiments' assembly areas), each with its AA battery of a Strela-1 and a Shilka platoon; Osa batteries 23 to 25 and the 15th Regiment's technical battery at the Horka siding; the 9th Division's command post and its S-60 regiment's four batteries; both divisions' artillery; the tank brigade's area and its guns beside its Kub; the army's artillery and engineer brigades (the pontoon park), its rear base and its alternate post; the territorial defence's ZU-23s and Strela-2s at the works, the capital's bridges and the dam |
+| **The rear services** | The state's two fuel reserve depots, the central ammunition and missile depots, the S-75M2 and S-125M1 technical battalions, the railway troops' three materials depots |
+| **Industry and infrastructure** | The refinery and both pipeline stations at their landmarks; the capital's thermal power station, the dam, five substations; the arms plant, the vehicle works, the radio-electronics plant, the chemical works, the aircraft repair works; the river port; the ministries and the General Staff; state radio and television and the northern transmitter; three exchanges and a radio relay; the capital's marshalling yard; ten more bridges over the Rava and the Tisava; seven more towns |
+
+**On open ground.** Every new object stands inside the country. What stands in the field (SAM sites, radars, air
+bases, troops, command posts, depots) is out of the rivers (500 m) and the towns (their radius and 300 m); what needs a
+clear horizon or a field (SAM sites, radars, air bases) is out of the forests too and, inside the Kesmark range, whose
+own map has the woods, villages and farmsteads, on ground where nothing stands. The refinery, the dam, the pipeline
+stations and the port stand at the country's landmarks, every bridge on a crossing of its networks.
+`tests/test_country_map.cpp` checks every object and every prepared position.
+
+**Prepared positions.** A theatre object's `"positions"` are the prepared positions it moves between, every
+`relocate_h`, never to one within 8 km of the enemy's front (`AirCampaign::Relocate`); without them a unit moves
+`relocate_km` in a random direction, as on the tuned theatre, where a long war walks the troops across the country.
+Every unit of the nation's theatre that moves on its own has at least two besides where it starts; the player's
+battery moves where the player says. A three-day war on the nation's theatre is in the tests: each unit stays on its
+prepared positions.
+
+**Our order of battle** (`data/command/oob_pannonia.json`, 97 units) owns every military object once: six S-75M2 and
+ten S-125M1 fire units, four KS-30 and four S-60 batteries, five Osa batteries, six regimental AA batteries of a
+Strela-1 and a Shilka platoon each, ten radar companies and more, with their equipment and establishments (estimates
+unless a basis is named).
+
 ## What the simulation can ask it
 
 | Question | Call |
@@ -52,16 +88,17 @@ the Rava.
 
 ```bash
 ./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json            # Windows: simcore\build\Release\country_dump.exe
-python tools/map_view.py out/pannonia_map.json --png                                  # the country, with the theatre's objects and fronts
+python tools/map_view.py out/pannonia_map.json --png                                  # the country with the nation's theatre: objects, prepared positions, fronts
 ./simcore/build/country_dump data maps/pannonia.json --route road 9 -1 68 12 b_ralje@rava   # the way round a cut bridge
 ./simcore/build/country_dump data maps/pannonia.json --height 36 58 85 118          # ground, inside or not, region
 ```
 
 ## What comes next
 
-- **N2**: the briefing's forces, industry and infrastructure placed on it (the theatre and the order of battle,
-  `data/command/oob_pannonia.json`), each on open ground with its prepared positions.
-- **N4**: the air war and its raids on this map; supply and rebuilds routed over its networks (13.2, 13.5).
+- **N3**: the new assets' placeholder models (`data/scenery/basic_models.json`): the equipment types the order of
+  battle names that have none yet.
+- **N4**: the air war and its raids on the nation's theatre; supply and rebuilds routed over the networks (13.2, 13.5).
+  Whether the enemy's pre-war survey knows a unit's prepared positions is decided there.
 - **N5**: drawn in Unreal beyond the Kesmark range; the campaign screen's map from it.
 - **15.6**: districts generated where the battery fights, from this map's ground.
 
@@ -69,5 +106,7 @@ python tools/map_view.py out/pannonia_map.json --png                            
 
 - The ground is a sum of hills on a gentle relief: no mountain ranges, no river terraces.
 - Lines are straight between their points; the networks know length, not road class speed (yet).
+- Each unit has one set of prepared positions whatever the war: the Ground Forces stand where the briefing and the
+  theatre's forward groups put them, not deployed towards the front at war (the regiment's tasking, 13.x).
 - The Kesmark range's own far ground (out to 150 km, `kesmark_range.json`) is still its own, not this map's: a raid
   played on the range sees the range's far ground. Drawing the country beyond the range is N5.

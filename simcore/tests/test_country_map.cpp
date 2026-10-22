@@ -52,12 +52,16 @@ std::shared_ptr<const MapData> Range() {
     return map;
 }
 
-airwar::TheatreDef Theatre() {
+airwar::TheatreDef LoadTheatre(const std::string& file) {
     airwar::TheatreDef t;
     std::string e;
-    if (!airwar::LoadTheatreFile(kData + "/air_war/theatre_pannonia.json", t, &e)) std::printf("    %s\n", e.c_str());
+    if (!airwar::LoadTheatreFile(kData + "/air_war/" + file, t, &e)) std::printf("    %s\n", e.c_str());
     return t;
 }
+
+// The theatre the balance pass tuned, and the nation's theatre that extends it with the briefing's assets (N2).
+airwar::TheatreDef BaseTheatre() { return LoadTheatre("theatre_pannonia.json"); }
+airwar::TheatreDef Theatre() { return LoadTheatre("theatre_pannonia_nation.json"); }
 
 MapPoint At(const Vec3& p) { return {p.x, p.y}; }
 MapPoint Km(double e, double n) { return {e * 1000.0, n * 1000.0}; }
@@ -118,6 +122,7 @@ SC_TEST("country map: the theatre's objects and our places are inside it; the en
     for (const airwar::TheatreObject& o : t.objects) {
         if (!c->Inside(o.pos.x, o.pos.y)) std::printf("    outside: %s\n", o.id.c_str());
         SC_EXPECT(c->Inside(o.pos.x, o.pos.y));
+        for (const Vec3& q : o.prepared) SC_EXPECT(c->Inside(q.x, q.y));
     }
     for (const airwar::FrontDef& f : t.fronts) {
         const bool civil_war = f.faction == "rebels";
@@ -205,6 +210,21 @@ SC_TEST("country map: the theatre's bridges are crossings of its networks") {
     check_bridge("kesmark_road_bridge", CountryNet::Road, "rava");
     check_bridge("kesmark_rail_bridge", CountryNet::Rail, "rava");
     check_bridge("lenta_bridge", CountryNet::Road, "lenta");
+    check_bridge("capital_rail_bridge", CountryNet::Rail, "rava");
+    check_bridge("mezovar_road_bridge", CountryNet::Road, "tisava");
+    // Every bridge of the nation's theatre stands on a crossing of the road or rail network.
+    int bridges = 0;
+    for (const airwar::TheatreObject& o : t.objects) {
+        if (o.kind != airwar::ObjectKind::Bridge) continue;
+        ++bridges;
+        double dr = 0.0, dl = 0.0;
+        const CountryCrossing* xr = c->NearestCrossing(o.pos.x, o.pos.y, CountryNet::Road, &dr);
+        const CountryCrossing* xl = c->NearestCrossing(o.pos.x, o.pos.y, CountryNet::Rail, &dl);
+        const bool on = (xr != nullptr && dr < 300.0) || (xl != nullptr && dl < 300.0);
+        if (!on) std::printf("    bridge %s is on no crossing\n", o.id.c_str());
+        SC_EXPECT(on);
+    }
+    SC_EXPECT(bridges >= 13);
     // The Rava's road bridges: Kesmark, two in the capital, Ralje, Dravec.
     int rava_road = 0;
     for (const CountryCrossing& x : c->Crossings()) rava_road += x.net == CountryNet::Road && x.river_id == "rava" ? 1 : 0;
@@ -291,8 +311,8 @@ SC_TEST("order of battle: every military object of the theatre has one unit, eve
     using airwar::ObjectKind;
     for (const airwar::TheatreObject& o : t.objects) {
         const bool military = o.kind == ObjectKind::SamSite || o.kind == ObjectKind::Aaa || o.kind == ObjectKind::EwRadar ||
-                              o.kind == ObjectKind::CommandPost || o.kind == ObjectKind::Headquarters || o.kind == ObjectKind::Airfield ||
-                              o.kind == ObjectKind::Troops || o.kind == ObjectKind::Depot;
+                              o.kind == ObjectKind::CommandPost || o.kind == ObjectKind::Airfield || o.kind == ObjectKind::Troops ||
+                              o.kind == ObjectKind::Depot || o.kind == ObjectKind::MaterialsDepot || o.kind == ObjectKind::Headquarters;
         if (!military) continue;
         int owners = 0;
         for (const command::OobUnit& u : oob.units) owners += std::count(u.objects.begin(), u.objects.end(), o.id) > 0 ? 1 : 0;
@@ -308,7 +328,45 @@ SC_TEST("order of battle: every military object of the theatre has one unit, eve
     SC_EXPECT(batteries == 5);
     SC_EXPECT(oob.TotalEquipment("sam_15", "osa_9a33") == 20);
     SC_EXPECT(oob.Find("bty_21")->personnel.Total() == 48);
-    SC_EXPECT(oob.OwnerOfObject("tiszavar_kub") == oob.Find("tank_brigade"));
+    // The briefing's air defence (§5, §7.1, decisions 3, 4, 6 and 8), each fire unit, battery and company with its object.
+    const auto count_under = [&](const std::string& top, const std::string& kind, const std::string& system) {
+        int n = 0;
+        for (const command::OobUnit& u : oob.units) {
+            if (u.kind != kind || !oob.Under(u.id, top)) continue;
+            bool has = system.empty();
+            for (const std::string& id : u.objects) {
+                const airwar::TheatreObject* o = t.Find(id);
+                has = has || (o != nullptr && o->defence.present && o->defence.system == system);
+            }
+            n += has ? 1 : 0;
+        }
+        return n;
+    };
+    SC_EXPECT(count_under("s75_brigade", "fire_unit", "s75m2") == 6);
+    SC_EXPECT(count_under("s125_regiment", "fire_unit", "s125m1") == 10);
+    SC_EXPECT(count_under("ks30_regiment", "battery", "ks30") == 4);
+    SC_EXPECT(count_under("mrd_9", "battery", "s60") == 4);
+    SC_EXPECT(count_under("sam_15", "battery", "osa") == 5);
+    SC_EXPECT(count_under("rtb_brigade", "company", "") >= 10);
+    // Six regimental AA batteries, each a Strela-1 platoon and a Shilka platoon; no Strela-10 is left (decision 3).
+    int regimental = 0;
+    for (const command::OobUnit& u : oob.units) {
+        const command::OobUnit* parent = oob.Find(u.parent);
+        if (u.kind != "battery" || parent == nullptr || parent->kind != "regiment" || !oob.Under(u.id, "army_3")) continue;
+        int strela = 0, shilka = 0;
+        for (const std::string& id : u.objects) {
+            const airwar::TheatreObject* o = t.Find(id);
+            strela += o != nullptr && o->defence.system == "strela1" ? 1 : 0;
+            shilka += o != nullptr && o->defence.system == "zsu234" ? 1 : 0;
+        }
+        regimental += strela == 1 && shilka == 1 ? 1 : 0;
+    }
+    SC_EXPECT(regimental == 6);
+    for (const airwar::TheatreObject& o : t.objects) SC_EXPECT(o.defence.system != "strela10");
+    // The Kub is the tank brigade's air defence (decision 6); the MiG-23MLs fly with the 3rd Fighter Regiment (decision 2).
+    const command::OobUnit* kub = oob.OwnerOfObject("tiszavar_kub");
+    SC_EXPECT(kub != nullptr && oob.Under(kub->id, "tank_brigade"));
+    SC_EXPECT(oob.TotalEquipment("fighter_rgt_3", "mig23mld") == 12 && oob.TotalEquipment("national_air_defence", "mig29") == 0);
 }
 
 SC_TEST("order of battle: the loader refuses a loop, an unknown parent, service or kind") {
@@ -380,4 +438,135 @@ SC_TEST("air war: the theatre refuses an unknown air defence system; the new sys
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("s75m2")->label) == "SA-2 site");
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("ks30")->label) == "130 mm AAA battery");
     SC_EXPECT(airwar::FindAirDefenceSystem("osa") != nullptr);
+}
+
+// ---------------------------------------------------------------------------------------------- the nation's theatre (N2)
+
+SC_TEST("the nation's theatre: the briefing's assets stand on open ground, each mobile unit with its prepared positions") {
+    std::shared_ptr<const CountryMap> c = Country();
+    std::shared_ptr<const MapData> r = Range();
+    if (!c || !r) return;
+    using airwar::ObjectKind;
+    const airwar::TheatreDef base = BaseTheatre();
+    const airwar::TheatreDef t = Theatre();
+    const auto field = [](ObjectKind k) {
+        return k == ObjectKind::SamSite || k == ObjectKind::EwRadar || k == ObjectKind::Airfield || k == ObjectKind::Troops ||
+               k == ObjectKind::CommandPost || k == ObjectKind::Depot || k == ObjectKind::MaterialsDepot;
+    };
+    const auto clear = [](ObjectKind k) { return k == ObjectKind::SamSite || k == ObjectKind::EwRadar || k == ObjectKind::Airfield; };
+    // Open ground: not in a river or a town; what needs a clear horizon or a field not in a wood either, and inside the
+    // Kesmark range, whose own map has the woods, villages and farmsteads, nothing standing where it is.
+    const auto open = [&](ObjectKind k, const Vec3& p) -> std::string {
+        if (!c->Inside(p.x, p.y)) return "outside the country";
+        if (!field(k)) return "";
+        if (c->DistanceToRiver(p.x, p.y) < 500.0) return "in a river";
+        for (const CountrySettlementDef& s : c->Def().settlements) {
+            if (std::hypot(s.centre.east_m - p.x, s.centre.north_m - p.y) < s.radius_m + 300.0) return "in " + s.name;
+        }
+        if (!clear(k)) return "";
+        if (c->InForest(p.x, p.y)) return "in a forest";
+        if (std::fabs(p.x) < 20000.0 && std::fabs(p.y) < 20000.0 && r->ObstacleHeight(p.x, p.y) > 3.0) return "not open on the range";
+        return "";
+    };
+    int placed = 0, positions = 0;
+    for (const airwar::TheatreObject& o : t.objects) {
+        const bool own = base.Find(o.id) == nullptr;
+        std::string why = own ? open(o.kind, o.pos) : "";
+        if (!why.empty()) std::printf("    %s: %s\n", o.id.c_str(), why.c_str());
+        SC_EXPECT(why.empty());
+        placed += own ? 1 : 0;
+        for (std::size_t i = 1; i < o.prepared.size(); ++i) {
+            why = open(o.kind, o.prepared[i]);
+            if (!why.empty()) std::printf("    %s position %zu: %s\n", o.id.c_str(), i, why.c_str());
+            SC_EXPECT(why.empty());
+            ++positions;
+        }
+        if (!o.prepared.empty()) SC_EXPECT(airwar::Dist2d(o.prepared[0], o.pos) == 0.0);
+        // Every unit that moves on its own moves between prepared positions (the player's battery: where the player says).
+        if (o.relocate_h > 0.0 && !o.player) {
+            if (o.prepared.size() < 3) std::printf("    %s has %zu prepared positions\n", o.id.c_str(), o.prepared.size());
+            SC_EXPECT(o.prepared.size() >= 3);
+        }
+        // The nation's works stand at the country's landmarks of their kind.
+        if (o.kind == ObjectKind::Refinery || o.kind == ObjectKind::Dam || o.kind == ObjectKind::PipelineStation || o.kind == ObjectKind::Port) {
+            double best = 1e12;
+            for (const CountryLandmarkDef& l : c->Def().landmarks) {
+                if (l.kind == airwar::ObjectKindName(o.kind)) best = std::min(best, std::hypot(l.at.east_m - o.pos.x, l.at.north_m - o.pos.y));
+            }
+            SC_EXPECT(best < 1000.0);
+        }
+    }
+    std::printf("    %d assets placed, %d prepared positions\n", placed, positions);
+    SC_EXPECT(placed >= 120 && positions >= 100);
+}
+
+SC_TEST("the nation's theatre extends the tuned one: the base's objects keep their places; the loader refuses what it should") {
+    const airwar::TheatreDef base = BaseTheatre();
+    const airwar::TheatreDef t = Theatre();
+    SC_EXPECT(t.id == "pannonia_nation" && t.fronts.size() == base.fronts.size() && t.country_name == base.country_name);
+    SC_EXPECT(t.objects.size() > base.objects.size() + 100);
+    bool in_place = t.objects.size() > base.objects.size();
+    for (std::size_t i = 0; in_place && i < base.objects.size(); ++i) in_place = t.objects[i].id == base.objects[i].id;
+    SC_EXPECT(in_place);
+    // A replaced object: the S-75 at Novo Varosd is the S-75M2 (decision 1), where it stood, with its prepared sites.
+    const airwar::TheatreObject* v = t.Find("varosd_s75");
+    const airwar::TheatreObject* vb = base.Find("varosd_s75");
+    SC_EXPECT(v != nullptr && vb != nullptr);
+    if (v != nullptr && vb != nullptr) {
+        SC_EXPECT(v->defence.system == "s75m2" && vb->defence.system == "s75");
+        SC_EXPECT(airwar::Dist2d(v->pos, vb->pos) == 0.0 && v->prepared.size() == 3 && vb->prepared.empty());
+    }
+    SC_EXPECT(t.PlayerBattery() != nullptr && t.PlayerBattery()->id == "osa_21");
+
+    const std::string head = R"({"theatre_id": "t", "name": "t", "source": "sam3d", "confidence": "estimate",
+      "origin": {"lat_deg": 47, "lon_deg": 19, "alt_m": 100},
+      "fronts": [{"faction": "rebels", "name": "f", "line": [{"east_km": -5, "north_km": -20}, {"east_km": 5, "north_km": -20}],
+                  "entries": [{"id": "S1", "east_km": 0, "north_km": -30}], "bases": {"east_km": 0, "north_km": -40}}],
+      "objects": [{"id": "b", "name": "b", "kind": "sam_site", "east_km": 0, "north_km": 5, "player": true,
+                   "defence": {"system": "osa", "radius_km": 10, "lethality": 0.2}})";
+    const auto load = [&](const std::string& top, const std::string& more, std::string& e) {
+        airwar::TheatreDef x;
+        std::string text = head;
+        text.insert(1, top);
+        const bool ok = airwar::LoadTheatreJson(text + more + "]}", x, &e);
+        return ok ? static_cast<int>(x.objects.back().prepared.size()) : -1;
+    };
+    std::string e;
+    SC_EXPECT(load("", R"(, {"id": "s", "name": "s", "kind": "sam_site", "east_km": 3, "north_km": 5, "mobile": true,
+                          "relocate_h": 24, "positions": [{"east_km": 3, "north_km": 9}, {"east_km": 6, "north_km": 5}]})", e) == 3);
+    SC_EXPECT(load("\"extends\": \"theatre_pannonia.json\", ", "", e) < 0 && e.find("only a theatre file can extend") != std::string::npos);
+    SC_EXPECT(load("\"remove\": [\"b\"], ", "", e) < 0 && e.find("only a theatre that extends") != std::string::npos);
+    SC_EXPECT(load("", R"(, {"id": "s", "name": "s", "kind": "depot", "east_km": 3, "north_km": 5,
+                          "positions": [{"east_km": 4, "north_km": 5}]})", e) < 0 && e.find("mobile unit") != std::string::npos);
+    SC_EXPECT(load("", R"(, {"id": "s", "name": "s", "kind": "troops", "east_km": 3, "north_km": 5, "mobile": true, "relocate_h": 12,
+                          "positions": [{"east_km": 3.1, "north_km": 5}]})", e) < 0 && e.find("within 300 m") != std::string::npos);
+    std::string player = head;
+    player.replace(player.find("\"player\": true"), 14, "\"player\": true, \"positions\": [{\"east_km\": 2, \"north_km\": 5}]");
+    airwar::TheatreDef x;
+    SC_EXPECT(!airwar::LoadTheatreJson(player + "]}", x, &e) && e.find("the player chooses") != std::string::npos);
+}
+
+SC_TEST("air war on the nation's theatre: a unit with prepared positions moves only between them") {
+    airwar::AirWarData d;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_rebels.json", d, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    airwar::AirCampaign c;
+    SC_EXPECT(c.Init(d, 7u));
+    while (c.Now() < 72.0) {
+        if (c.Advance(72.0)) c.SkipPlayerMission();
+    }
+    int with = 0, moved = 0, off = 0;
+    for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
+        const airwar::TheatreObject& o = d.theatre.objects[i];
+        if (o.prepared.empty()) continue;
+        ++with;
+        const Vec3 at = c.Truth()[i].pos;
+        bool on = false;
+        for (const Vec3& q : o.prepared) on = on || airwar::Dist2d(q, at) < 1.0;
+        off += on ? 0 : 1;
+        moved += airwar::Dist2d(at, o.pos) > 1.0 ? 1 : 0;
+    }
+    std::printf("    %d units with prepared positions, %d moved in three days, %d off them\n", with, moved, off);
+    SC_EXPECT(with > 50 && moved > with / 2 && off == 0);
 }

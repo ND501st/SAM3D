@@ -8,7 +8,7 @@ docs/COUNTRY_MAP.md), with the theatre's objects and the enemy's fronts over it.
     python tools/map_view.py out/kesmark_range_map.json --far      # the ground beyond the map as well
     python tools/map_view.py out/kesmark_range_map.json --png      # a picture instead (needs Pillow)
     ./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json
-    python tools/map_view.py out/pannonia_map.json --png           # the country, with data/air_war/theatre_pannonia.json
+    python tools/map_view.py out/pannonia_map.json --png           # the country, with the nation's theatre over it
 """
 import argparse
 import html
@@ -135,8 +135,42 @@ NEIGHBOUR_COLOURS = {"nato": "#2456b0", "warsaw_pact": "#b02424", "neutral": "#2
 OBJECT_COLOURS = {
     "sam_site": "#d02020", "aaa": "#e07030", "ew_radar": "#7030a0", "command_post": "#202020", "headquarters": "#202020",
     "airfield": "#606060", "bridge": "#303030", "rail_junction": "#5a3a20", "depot": "#a08020", "power_plant": "#e0c000",
-    "factory": "#806040", "troops": "#406020", "city": "#000000",
+    "factory": "#806040", "troops": "#406020", "city": "#000000", "refinery": "#ff8c1a", "pipeline_station": "#ffb050",
+    "substation": "#c8a800", "dam": "#3a7ec0", "materials_depot": "#c0a070", "port": "#406080", "government": "#a00060",
+    "broadcast": "#d050d0", "exchange": "#5050d0",
 }
+
+
+def load_theatre(path, depth=0):
+    """A theatre file, following "extends" as simcore's LoadTheatreFile does: the base's objects in their places, one
+    with the same id replaced, "remove" dropped, the new ones after them; a front replaces the base's of its faction."""
+    path = Path(path)
+    t = json.loads(path.read_text(encoding="utf-8"))
+    if "extends" not in t:
+        return t
+    if depth >= 4:
+        raise ValueError(f"{path}: extends more than four deep (a loop?)")
+    base = load_theatre(path.parent / t["extends"], depth + 1)
+    removed = set(t.get("remove", []))
+    objects = [o for o in base.get("objects", []) if o["id"] not in removed]
+    index = {o["id"]: i for i, o in enumerate(objects)}
+    for o in t.get("objects", []):
+        if o["id"] in index:
+            objects[index[o["id"]]] = o
+        else:
+            index[o["id"]] = len(objects)
+            objects.append(o)
+    fronts = list(base.get("fronts", []))
+    for f in t.get("fronts", []):
+        at = next((i for i, g in enumerate(fronts) if g["faction"] == f["faction"]), None)
+        if at is None:
+            fronts.append(f)
+        else:
+            fronts[at] = f
+    merged = dict(base)
+    merged.update({k: v for k, v in t.items() if k not in ("extends", "remove", "objects", "fronts")})
+    merged["objects"], merged["fronts"] = objects, fronts
+    return merged
 
 
 def country_shapes(dump, theatre=None):
@@ -177,10 +211,26 @@ def country_shapes(dump, theatre=None):
         shapes.append(("dot", l["at"][0], l["at"][1], 1.2, "#e07a00" if l["kind"] in ("refinery", "pipeline_station") else "#333333"))
         shapes.append(("text", l["at"][0], l["at"][1] - 2.5, l["name"], 9))
     if theatre:
+        kinds = []
         for o in theatre.get("objects", []):
             if o["kind"] == "city":
                 continue
-            shapes.append(("dot", o["east_km"], o["north_km"], 0.8, OBJECT_COLOURS.get(o["kind"], "#888888")))
+            colour = OBJECT_COLOURS.get(o["kind"], "#888888")
+            for p in o.get("positions", []):  # its prepared positions
+                shapes.append(("line", [[o["east_km"], o["north_km"]], [p["east_km"], p["north_km"]]], colour, 1, True))
+                shapes.append(("dot", p["east_km"], p["north_km"], 0.35, colour))
+            shapes.append(("dot", o["east_km"], o["north_km"], 0.8, colour))
+            if o["kind"] not in kinds:
+                kinds.append(o["kind"])
+        w, _, _, n = country_bounds(dump, theatre)
+        for i, k in enumerate(kinds):
+            y = n - 8 - i * 6
+            shapes.append(("dot", w + 8, y, 1.2, OBJECT_COLOURS.get(k, "#888888")))
+            shapes.append(("ltext", w + 11, y - 1, k.replace("_", " "), 12))
+        if kinds:
+            y = n - 8 - len(kinds) * 6
+            shapes.append(("dot", w + 8, y, 0.35, "#888888"))
+            shapes.append(("ltext", w + 11, y - 1, "prepared position", 12))
         for f in theatre.get("fronts", []):
             colour = NEIGHBOUR_COLOURS.get(f["faction"], "#555555")
             for en in f.get("entries", []):
@@ -221,9 +271,10 @@ def country_svg(dump, theatre=None, size_px=1600):
             out.append(f'<polyline points="{pts}" fill="none" stroke="{sh[2]}" stroke-width="{sh[3]}"{dash}/>')
         elif sh[0] == "dot":
             out.append(f'<circle cx="{X(sh[1]):.1f}" cy="{Y(sh[2]):.1f}" r="{max(sh[3] * scale, 2):.1f}" fill="{sh[4]}" stroke="#111" stroke-width="0.6"/>')
-        elif sh[0] == "text":
+        elif sh[0] in ("text", "ltext"):
+            anchor = "middle" if sh[0] == "text" else "start"
             out.append(f'<text x="{X(sh[1]):.1f}" y="{Y(sh[2]):.1f}" font-family="sans-serif" font-size="{sh[4]}" fill="#111" stroke="#fff" '
-                       f'stroke-width="2.5" paint-order="stroke" text-anchor="middle">{html.escape(sh[3])}</text>')
+                       f'stroke-width="2.5" paint-order="stroke" text-anchor="{anchor}">{html.escape(sh[3])}</text>')
     out.append(f'<rect x="20" y="{size_px - 40}" width="{50 * scale:.1f}" height="6" fill="#111"/>')
     out.append(f'<text x="20" y="{size_px - 48}" font-family="sans-serif" font-size="13">50 km</text>')
     out.append("</svg>")
@@ -250,8 +301,9 @@ def country_png(dump, path, theatre=None, size_px=2400):
         elif sh[0] == "dot":
             r = max(sh[3] * scale, 3)
             d.ellipse([X(sh[1]) - r, Y(sh[2]) - r, X(sh[1]) + r, Y(sh[2]) + r], fill=sh[4], outline=(17, 17, 17))
-        elif sh[0] == "text":
-            d.text((X(sh[1]) - 3 * len(sh[3]), Y(sh[2]) - 6), sh[3], fill=(0, 0, 0), stroke_width=2, stroke_fill=(255, 255, 255))
+        elif sh[0] in ("text", "ltext"):
+            x = X(sh[1]) - (3 * len(sh[3]) if sh[0] == "text" else 0)
+            d.text((x, Y(sh[2]) - 6), sh[3], fill=(0, 0, 0), stroke_width=2, stroke_fill=(255, 255, 255))
     d.rectangle([20, size_px - 40, 20 + 50 * scale, size_px - 34], fill=(0, 0, 0))
     d.text((20, size_px - 58), "50 km", fill=(0, 0, 0))
     img.save(path)
@@ -262,7 +314,7 @@ def main(argv=None):
     ap.add_argument("dump")
     ap.add_argument("--far", action="store_true", help="draw the ground beyond the map too")
     ap.add_argument("--png", action="store_true", help="write a PNG instead of an HTML page (needs Pillow)")
-    ap.add_argument("--theatre", default=str(ROOT / "data" / "air_war" / "theatre_pannonia.json"),
+    ap.add_argument("--theatre", default=str(ROOT / "data" / "air_war" / "theatre_pannonia_nation.json"),
                     help="the country: the theatre whose objects and fronts to draw over it ('' none)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
@@ -270,7 +322,7 @@ def main(argv=None):
     out = Path(a.out) if a.out else ROOT / "out" / "map_view" / (dump["map_id"] + ("_far" if a.far else "") + (".png" if a.png else ".html"))
     out.parent.mkdir(parents=True, exist_ok=True)
     if dump.get("kind") == "country":
-        theatre = json.loads(Path(a.theatre).read_text(encoding="utf-8")) if a.theatre and Path(a.theatre).exists() else None
+        theatre = load_theatre(a.theatre) if a.theatre and Path(a.theatre).exists() else None
         if a.png:
             country_png(dump, out, theatre)
         else:

@@ -3,9 +3,11 @@
 For the project owner. A proposed outline of the Pannonian Socialist Federal Republic as the battery's war needs it: the
 country's map, its industry and infrastructure, its command structure, its national air defence, air force and ground
 forces, their people, and their support equipment and assets. The air defence follows your list; your decisions so far
-are in §10; everything else is my proposal. Section 11 is the research that would source it. Nothing here is in the
-data yet. It is built first, by the roadmap's nation-on-the-map track (N0-N6, prioritised 22 October 2026), and
-phase 13 (13.7) adds its roles, rebuilds and fuel.
+are in §10; everything else is my proposal. Section 11 is the research that would source it. It is built first, by
+the roadmap's nation-on-the-map track (N0-N6, prioritised 22 October 2026), and phase 13 (13.7) adds its roles,
+rebuilds and fuel. **In the data since N2** (22 October 2026): the country's map (`data/maps/pannonia.json`), the
+assets of §3-9 placed on it (`data/air_war/theatre_pannonia_nation.json`, `docs/COUNTRY_MAP.md`) and our order of battle
+(`data/command/oob_pannonia.json`).
 
 ## 1. Bottom line
 

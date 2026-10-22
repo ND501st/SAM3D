@@ -6,6 +6,7 @@
 // and is a game value where none does; the files say which.
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <fstream>
 #include <map>
@@ -75,7 +76,8 @@ struct TheatreObject {
     double hardness = 0.5;       // 0 soft .. 1 very hard
     double repair_h = 24.0;      // hours from wrecked to working (0: not repaired in the campaign)
     double relocate_h = 0.0;     // a mobile unit moves this often (0: stays); the player's battery: the player decides
-    double relocate_m = 0.0;     // how far
+    double relocate_m = 0.0;     // how far (a unit without prepared positions)
+    std::vector<Vec3> prepared;  // its prepared positions, `pos` first: it moves between these (empty: anywhere relocate_m away)
     bool mobile = false;
     bool emitter = false;        // radiates when it works (its share of the hour: `emission`)
     double emission = 0.5;       // share of each hour a radar radiates when not fighting
@@ -624,13 +626,24 @@ public:
     }
 
     // ---- theatre
-    bool LoadTheatre(const json::Value& root, TheatreDef& out) {
-        if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "country", "origin",
-                             "ground_height_m", "start_hour", "fronts", "objects"}) ||
-            !RequireString(root, "", "theatre_id", out.id) || !RequireString(root, "", "name", out.name) ||
+    // `base`: the theatre this one extends ("extends", LoadTheatreFile), or null. An extending theatre starts from its
+    // base: its fronts replace the base's front of the same faction, "remove" drops base objects, and its objects are
+    // added, one with a base object's id replacing it where it stands.
+    bool LoadTheatre(const json::Value& root, TheatreDef& out, const TheatreDef* base = nullptr) {
+        if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "extends", "remove", "country",
+                             "origin", "ground_height_m", "start_hour", "fronts", "objects"})) {
+            return false;
+        }
+        if (root.Find("extends") != nullptr && base == nullptr) {
+            return Fail("extends", "only a theatre file can extend another (LoadTheatreFile)");
+        }
+        if (root.Find("remove") != nullptr && base == nullptr) return Fail("remove", "only a theatre that extends another removes objects");
+        if (base != nullptr) out = *base;
+        if (!RequireString(root, "", "theatre_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
             return false;
         }
+        if (base != nullptr) return ExtendTheatre(root, out);
         if (const json::Value* c = root.Find("country")) {
             if (!Keys(*c, "country", {"name", "short", "notes"}) || !RequireString(*c, "country", "name", out.country_name) ||
                 !OptionalString(*c, "country", "short", out.country_short)) {
@@ -664,6 +677,59 @@ public:
             if (ob.player) ++players;
             out.objects.push_back(std::move(ob));
         }
+        if (players != 1) return Fail("objects", "exactly one object must be the player's battery (\"player\": true)");
+        return true;
+    }
+
+    bool ExtendTheatre(const json::Value& root, TheatreDef& out) {
+        if (root.Find("country") != nullptr || root.Find("origin") != nullptr) {
+            return Fail(root.Find("country") != nullptr ? "country" : "origin", "an extending theatre keeps its base's");
+        }
+        if (!Num(root, "", "ground_height_m", out.ground_height_m, -500.0, 5000.0) ||
+            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0)) {
+            return false;
+        }
+        if (const json::Value* fronts = OptionalArray(root, "", "fronts")) {
+            for (std::size_t i = 0; i < fronts->items.size(); ++i) {
+                TheatreDef one;
+                if (!LoadFront(fronts->items[i], Index("fronts", i), one)) return false;
+                bool replaced = false;
+                for (FrontDef& f : out.fronts) {
+                    if (f.faction != one.fronts[0].faction) continue;
+                    f = one.fronts[0];
+                    replaced = true;
+                }
+                if (!replaced) out.fronts.push_back(one.fronts[0]);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        std::vector<std::string> removed;
+        if (!StringList(root, "", "remove", removed)) return false;
+        for (std::size_t i = 0; i < removed.size(); ++i) {
+            const int at = out.IndexOf(removed[i]);
+            if (at < 0) return Fail(Index("remove", i), "the base has no object '" + removed[i] + "'");
+            out.objects.erase(out.objects.begin() + at);
+        }
+        std::vector<std::string> own;
+        if (const json::Value* objs = OptionalArray(root, "", "objects")) {
+            for (std::size_t i = 0; i < objs->items.size(); ++i) {
+                TheatreObject ob;
+                if (!LoadObject(objs->items[i], Index("objects", i), ob)) return false;
+                if (std::find(own.begin(), own.end(), ob.id) != own.end()) return Fail(Index("objects", i), "duplicate id '" + ob.id + "'");
+                own.push_back(ob.id);
+                const int at = out.IndexOf(ob.id);
+                if (at >= 0) {
+                    out.objects[static_cast<std::size_t>(at)] = std::move(ob);
+                } else {
+                    out.objects.push_back(std::move(ob));
+                }
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        int players = 0;
+        for (const TheatreObject& o : out.objects) players += o.player ? 1 : 0;
         if (players != 1) return Fail("objects", "exactly one object must be the player's battery (\"player\": true)");
         return true;
     }
@@ -710,8 +776,8 @@ public:
     bool LoadObject(const json::Value& v, const std::string& p, TheatreObject& ob) {
         std::string kind, looks;
         if (!Keys(v, p, {"id", "name", "kind", "east_km", "north_km", "value", "hardness", "repair_h", "relocate_h",
-                         "relocate_km", "mobile", "emitter", "emission", "player", "decoy", "looks_like", "prior_known",
-                         "defence", "c2_source", "regiment_radar", "radius_km", "notes"}) ||
+                         "relocate_km", "positions", "mobile", "emitter", "emission", "player", "decoy", "looks_like",
+                         "prior_known", "defence", "c2_source", "regiment_radar", "radius_km", "notes"}) ||
             !RequireString(v, p, "id", ob.id) || !RequireString(v, p, "name", ob.name) ||
             !RequireString(v, p, "kind", kind)) {
             return false;
@@ -733,6 +799,24 @@ public:
         ob.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
         ob.radius_m = rkm * 1000.0;
         ob.relocate_m = relkm * 1000.0;
+        // Its prepared positions besides the one it starts at: a mobile unit that moves on its own.
+        if (const json::Value* pos = OptionalArray(v, p, "positions")) {
+            const std::string pp = Join(p, "positions");
+            if (ob.player) return Fail(pp, "the player chooses the battery's positions");
+            if (!ob.mobile || ob.relocate_h <= 0.0) return Fail(pp, "prepared positions are for a mobile unit that moves (relocate_h)");
+            if (pos->items.empty()) return Fail(pp, "at least one");
+            ob.prepared.push_back(ob.pos);
+            for (std::size_t i = 0; i < pos->items.size(); ++i) {
+                Vec3 at;
+                if (!Km(pos->items[i], Index(pp, i), at)) return false;
+                for (const Vec3& q : ob.prepared) {
+                    if (Dist2d(q, at) < 300.0) return Fail(Index(pp, i), "within 300 m of another of its positions");
+                }
+                ob.prepared.push_back(at);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
         if (!looks.empty() && !ParseObjectKind(looks, ob.looks_like)) return Fail(Join(p, "looks_like"), "unknown object kind");
         if (ob.decoy && looks.empty()) return Fail(Join(p, "looks_like"), "a decoy says what it looks like");
         if (ob.player && ob.kind != ObjectKind::SamSite) return Fail(Join(p, "player"), "the player's battery is a sam_site");
@@ -1289,12 +1373,45 @@ bool LoadJsonWith(const std::string& path, Out& out, std::string* error, Fn&& fn
     return true;
 }
 
+inline bool LoadTheatreFileAt(const std::string& path, TheatreDef& out, std::string* error, int depth) {
+    std::string text;
+    if (!ReadFile(path, text, error)) return false;
+    json::Value root;
+    std::string perr;
+    if (!json::Parse(text, root, &perr)) {
+        if (error != nullptr) *error = path + ": " + perr;
+        return false;
+    }
+    TheatreDef base;
+    const json::Value* ext = root.Find("extends");
+    if (ext != nullptr) {
+        if (!ext->Is(json::Type::String) || ext->string.empty()) {
+            if (error != nullptr) *error = path + ": extends: the name of a theatre file in the same folder";
+            return false;
+        }
+        if (depth >= 4) {
+            if (error != nullptr) *error = path + ": extends: more than four deep (a loop?)";
+            return false;
+        }
+        const std::size_t slash = path.find_last_of("/\\");
+        const std::string dir = slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
+        if (!LoadTheatreFileAt(dir + ext->string, base, error, depth + 1)) return false;
+    }
+    AirWarLoader loader;
+    TheatreDef tmp;
+    if (!loader.LoadTheatre(root, tmp, ext != nullptr ? &base : nullptr)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = std::move(tmp);
+    return true;
+}
+
 }  // namespace detail
 
+// A theatre file may extend another in its folder ("extends"; AirWarLoader::LoadTheatre says how).
 inline bool LoadTheatreFile(const std::string& path, TheatreDef& out, std::string* error = nullptr) {
-    return detail::LoadJsonWith(path, out, error, [](detail::AirWarLoader& l, const json::Value& r, TheatreDef& o) {
-        return l.LoadTheatre(r, o);
-    });
+    return detail::LoadTheatreFileAt(path, out, error, 0);
 }
 
 inline bool LoadFactionFile(const std::string& path, FactionDef& out, std::string* error = nullptr) {

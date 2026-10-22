@@ -8,6 +8,7 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 | File | What |
 |---|---|
 | `theatre_pannonia.json` | The fictional country, its four fronts (entry points, the enemy's bases, the defender's fighter threat, where the player's battery deploys in a war on that front) and its objects (value, hardness, repair, mobility, emission, pre-war knowledge, air defence, C2 role). Positions in km east and north of `origin` |
+| `theatre_pannonia_nation.json` | **The whole nation** (the nation on the map, N2; `docs/COUNTRY_MAP.md`): `"extends": "theatre_pannonia.json"` and adds the briefing's forces, industry and infrastructure on open ground of the country's map, 170 objects, every mobile unit with its prepared positions. Our order of battle (`data/command/oob_pannonia.json`) owns every military object. The air war plays `theatre_pannonia.json` until N4 |
 | `faction_rebels.json` | Inferior: the Rava Liberation Front's improvised air wing |
 | `faction_neutral.json` | Near peer: the Noric Republic's small air force |
 | `faction_warsaw_pact.json` | Peer: the Warsaw Pact's air forces of the front |
@@ -37,6 +38,12 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
   "officers": [ { "id": "nato_cdr", "name": "...", "role": "commander", "traits": {}, "skills": {}, "quirks": ["sead_first"] } ]
 }
 ```
+
+A theatre may **extend** another in this folder (`"extends"`, `LoadTheatreFile` only): it starts from the base, its fronts
+replace the base's of the same faction, `"remove"` drops base objects, and its objects are added, one with a base
+object's id replacing it where it stands; it keeps the base's `origin` and `country`. An object's `"positions"` (a
+mobile unit with `relocate_h`, never the player's battery) are its prepared positions besides its own: it moves between
+them, never to one within 8 km of the enemy's front; without them it moves `relocate_km` in a random direction.
 
 Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`. Flight roles:
 `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`. Object kinds: `sam_site`, `aaa`,

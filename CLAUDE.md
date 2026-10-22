@@ -206,9 +206,10 @@ run `helper_coverage` and read its Gaps; `test_helper.cpp` counts the `NpcAt(` u
 
 **Next, prioritised (22 Oct 2026): the nation on the map** (roadmap, before phase 13, not gated): the goal is to
 simulate whole conflicts headless, to test and develop the game's systems without a player, so the player feels a
-small part of a large war. N0 and N1 are done: the air war's infrastructure kinds and checked air defence systems,
-our order of battle (`simcore/command/oob.hpp`), and the country's map (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`).
-Next N2 (the briefing's assets placed), N3 (their placeholder models), N4 (the air war running on them).
+small part of a large war. N0-N2 are done: the air war's infrastructure kinds and checked air defence systems,
+our order of battle (`simcore/command/oob.hpp`), the country's map (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`),
+and the briefing's assets placed on it (`data/air_war/theatre_pannonia_nation.json`, which extends the tuned theatre;
+mobile units move between their prepared positions). Next N3 (their placeholder models), N4 (the air war running on them).
 
 The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
 M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a

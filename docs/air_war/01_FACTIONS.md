@@ -68,6 +68,11 @@ groups, six towns. Each has a value, hardness, repair time, mobility (and how of
 pre-war knowledge and, for air defences, a defence (system, radius, lethality, low and medium cover, radar or optical,
 rounds). All game values.
 
+**The whole nation** (`theatre_pannonia_nation.json`, the nation on the map N2, `docs/COUNTRY_MAP.md`) extends this
+theatre with the briefing's forces, industry and infrastructure, 170 objects on the country's map, and gives every
+mobile unit its prepared positions (`"positions"`), which it moves between. The campaigns play this theatre until N4
+moves them there.
+
 Planned in the battery's war (`docs/campaign/`): each faction's war aims in its file
 (`docs/campaign/01_WAR_AIMS_AND_TARGETS.md` §2), its reach over our country read as game logic, and our doctrine
 against it (`docs/campaign/08_COMMAND_DOCTRINE_AND_REACH.md` §1-2).
