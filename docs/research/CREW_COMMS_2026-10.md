@@ -229,7 +229,7 @@ The crew chooses at the RK-1U's ПРОВОД position and its С-23/АСПД-У 
 
 Practice was thinner than the design. A Soviet veteran says the ASPDU was rarely switched on in peacetime and was not used in platoon live firings ([Chizhikov, USSR VA][shilka-pu12]). Poland had no ASPD in its batteries and passed targets by voice radio ([Opisy Broni, Poland RP][opisy]).
 
-The GDR also removed some blocks from its PU-12Ms and returned them to the USSR as sensitive equipment. They were labelled SAU and served cooperation with frontal aviation ([flak11, GDR OD*][flak-pu0]). The signals drawing uses the same abbreviation, SAU, for the R-111's antenna tuner.
+The GDR also removed some blocks from its PU-12Ms and returned them to the USSR as sensitive equipment. One veteran's page calls them SAU, for cooperation with frontal aviation ([flak11, GDR OD*][flak-pu0]). Every document that draws an SAU, the same site's signals drawing among them, means the R-111's antenna tuner. What went back in 1990 as sensitive was crypto, IFF and coding material, so the block was probably one of those (`docs/research/SAU_BLOCK_2026-10.md`).
 
 ### Neighbours and the covered unit shared nets, not a battery-to-battery link
 
