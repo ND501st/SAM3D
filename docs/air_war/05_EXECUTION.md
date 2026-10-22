@@ -28,6 +28,9 @@ that works and has rounds:
   battery one), and the battery is out of the fight with the last; a switched-off radar is suppressed for the rest of
   the package;
 - decoy drones draw a launch or two and show where the defence is;
+- a defence engages nothing faster than its `max_target_mps` (the Osa-AK 500 m/s); a cruise missile (a `missile` flight)
+  is engaged like an aircraft, but one shot down is the defence's (`missiles_downed`), never a crew lost, and those that
+  get through strike with their own `hit_chance`, day or night (`09_BALANCE.md` §8, cruise missiles);
 - the kill chance per aircraft (`PassKillChance`: lethality × share of the pass × height cover × (1 − suppression) × (1 −
   jamming) × night and weather for optical defences × EMCON × (1 − evasion)), drawn per aircraft it engages; damaged
   aircraft too; rounds spent. A defence engages as many aircraft of a passing flight as it has fire channels
@@ -89,8 +92,11 @@ Stepped after every `ScenarioRunner::Step`, from the runner's public state only:
   (`PassKillChance` on the chord it will fly on its heading, the package's SEAD suppression and jamming against a radar
   one, night and weather against an optical one, the defence's fire channels and rounds), and an aircraft hit goes down
   in the scenario half way through the zone (`ScenarioRunner::DestroyTarget`, "destroyed by" the defence; a decoy drone
-  draws rounds and is taken uncounted). Their kills, rounds, launches and radar time go to the outcome as theirs. They
-  are not drawn yet;
+  draws rounds and is taken uncounted). Their kills, rounds, launches and radar time go to the outcome as theirs. The
+  raid scenario lists them (`"neighbours"`: name, system, place, reach): the game draws each as its system's site of
+  basic models on the scenario's ground (`ASimScenarioDirector::SpawnNeighbourSites`, the site layouts in
+  `data/scenery/basic_models.json` `"systems"`), and the PU-12M's plotting board marks them in blue pencil with their
+  reach and our name for them (Оса, Куб, С-125, ЗУ-23...), as the regiment's order gives a battery its neighbours;
 - **what the enemy learns**: every second our radars radiate; every launch seen by an enemy aircraft within
   `scenario.revealed_by_launch_m`.
 

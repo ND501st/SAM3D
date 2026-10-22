@@ -166,6 +166,17 @@ struct PositionPowerDef {
     double diesel_hours = 0.0;
 };
 
+// One of our other air defences near the scenario (a raid's neighbours: air_war/raid_scenario.hpp). Drawn where it
+// stands (the model library's site layout for its system) and plotted on the command post's board, as the regiment's
+// order gives them; its fire at a raid's aircraft is the mission bridge's (air_war/mission_bridge.hpp).
+struct ScenarioNeighbour {
+    std::string id;
+    std::string name;
+    std::string system;     // an air defence system id (air_war/data.hpp AirDefenceSystems)
+    Vec3 position;          // ENU
+    double radius_m = 0.0;  // its reach
+};
+
 struct ScenarioDef {
     std::string id;
     std::string name;
@@ -213,6 +224,7 @@ struct ScenarioDef {
     std::vector<std::pair<std::string, int>> initial_controls;  // set after the readiness (own_unit.controls)
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
+    std::vector<ScenarioNeighbour> neighbours;
     std::vector<ScenarioTrigger> triggers;
     std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
     PlottingBoardDef board;
@@ -296,7 +308,7 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data"})) {
+                             "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -1009,6 +1021,26 @@ private:
     }
 
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
+        if (const json::Value* nbs = OptionalArray(root, "", "neighbours")) {
+            for (std::size_t i = 0; i < nbs->items.size(); ++i) {
+                const json::Value& v = nbs->items[i];
+                const std::string p = Index("neighbours", i);
+                ScenarioNeighbour nb;
+                const json::Value* at = nullptr;
+                double radius_km = 0.0;
+                if (!Keys(v, p, {"id", "name", "system", "position", "radius_km", "notes"}) || !RequireString(v, p, "id", nb.id) ||
+                    !RequireString(v, p, "name", nb.name) || !RequireString(v, p, "system", nb.system) ||
+                    !RequireObject(v, p, "position", at) || !LoadPosition(*at, Join(p, "position"), frame_, nb.position) ||
+                    !RequireNumber(v, p, "radius_km", radius_km)) {
+                    return false;
+                }
+                if (radius_km <= 0.0) return Fail(Join(p, "radius_km"), "must be > 0");
+                nb.radius_m = radius_km * 1000.0;
+                out.neighbours.push_back(nb);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
         const json::Value* arr = OptionalArray(root, "", "targets");
         if (arr == nullptr) return message_.empty();
         for (std::size_t i = 0; i < arr->items.size(); ++i) {

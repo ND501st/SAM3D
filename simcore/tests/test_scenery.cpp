@@ -173,6 +173,30 @@ SC_TEST("scenery: every equipment type of our order of battle has a basic model;
     SC_EXPECT(p14 != nullptr && p14->span_m == 32.0 && p14->parts.size() == 3);
 }
 
+SC_TEST("scenery: every air defence system has a site to draw: its vehicles round its centre") {
+    const ModelLibrary lib = Library();
+    for (const airwar::AirDefenceSystem& s : airwar::AirDefenceSystems()) {
+        const std::vector<std::pair<std::string, Vec3>> site = lib.SiteLayout(s.id);
+        if (site.empty()) std::printf("    no site for %s\n", s.id);
+        SC_EXPECT(!site.empty());
+        for (const auto& v : site) SC_EXPECT(lib.Find(v.first) != nullptr);
+    }
+    // An S-75M2 fire unit: its guidance radar at the centre, six launchers and the P-18 in a ring 80 m out.
+    const std::vector<std::pair<std::string, Vec3>> s75 = lib.SiteLayout("s75m2");
+    SC_EXPECT(s75.size() == 8 && s75.front().first == "s75_radar" && s75.front().second.HorizontalLength() < 1e-9);
+    int launchers = 0;
+    for (std::size_t i = 1; i < s75.size(); ++i) {
+        SC_EXPECT_NEAR(s75[i].second.HorizontalLength(), 80.0, 1e-6);
+        launchers += s75[i].first == "s75_launcher" ? 1 : 0;
+    }
+    SC_EXPECT(launchers == 6);
+    // An Osa battery: its four vehicles, all in the ring, 300 m out.
+    const std::vector<std::pair<std::string, Vec3>> osa = lib.SiteLayout("osa");
+    SC_EXPECT(osa.size() == 4);
+    for (const auto& v : osa) SC_EXPECT(v.first == "osa_9a33" && std::fabs(v.second.HorizontalLength() - 300.0) < 1e-6);
+    SC_EXPECT(lib.SiteLayout("no_such_system").empty());
+}
+
 SC_TEST("scenery: a raid's aircraft carry their model into the scenario, and the loader keeps it") {
     airwar::AirWarData d;
     std::string e;

@@ -437,6 +437,9 @@ SC_TEST("air war: the theatre refuses an unknown air defence system; the new sys
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("strela1")->label) == "SA-9 platoon");
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("s75m2")->label) == "SA-2 site");
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("ks30")->label) == "130 mm AAA battery");
+    // And ours, as the command post's board writes them.
+    SC_EXPECT(std::string(airwar::FindAirDefenceSystem("s125m1")->own) == "С-125М1");
+    for (const airwar::AirDefenceSystem& s : airwar::AirDefenceSystems()) SC_EXPECT(std::string(s.own).size() > 0);
     SC_EXPECT(airwar::FindAirDefenceSystem("osa") != nullptr);
 }
 

@@ -173,7 +173,9 @@ Enemy air command (roadmap phase 11, `docs/air_war/`): officers with characters 
 intelligence believes and learn from what they think happened; raids through the battery's sector become scenarios the
 runner plays; the game's missions menu starts a campaign (1-4) and its campaign screen (`ASimCampaignHUD`) runs it, saved
 after every step; a first balance pass is done (`docs/air_war/09_BALANCE.md`); once our radars have come under ARM attack the
-regiment orders the ARM drill and the raids carry it (E6). Next: a person playing a campaign through.
+regiment orders the ARM drill and the raids carry it (E6). The war has a year (1985) and types the year they entered
+service: the Pact fires Kh-22 cruise missiles now, NATO's Tomahawks (1986) and CALCMs (1988) come in a later war (A16).
+Next: a person playing a campaign through.
 
 **First person** (project owner, 18 Oct 2026; roadmap phase 12, `docs/command/`): the player's character knows only what
 reaches them through people and means of signal. Intelligence, warnings and after-action reports are facts held by posts

@@ -153,6 +153,7 @@ public:
                         if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
                         if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
                         if (st.missiles == 0) continue;
+                        if (def.defence.max_target_mps > 0.0 && a->cruise_mps > def.defence.max_target_mps) continue;  // too fast for it
                         const double chord = ChordInCircle2d(p0, p1, st.pos, def.defence.radius_m);
                         if (chord <= 0.0) continue;
                         const bool radar = def.defence.radar;
@@ -192,6 +193,14 @@ public:
                         int shots = 0;
                         for (int n = 0; n < EngagedAircraft(def.defence.channels, st.function, alive); ++n) {
                             ++shots;
+                            if (a->missile) {
+                                // A cruise missile shot down: the defence's, never a crew lost.
+                                if (c.rng->Chance(k)) {
+                                    ++fl.lost;
+                                    out.missiles_downed.push_back(def.id);
+                                }
+                                continue;
+                            }
                             if (c.rng->Chance(k)) {
                                 LossRecord lr;
                                 lr.flight = static_cast<int>(oi);
@@ -241,7 +250,7 @@ public:
                 }
                 // Weapons at the release point.
                 if (static_cast<int>(si + 1) == fl.release_index && alive > 0 && !fl.aborted && !fl.released) {
-                    if (main) {
+                    if (main || fl.role == FlightRole::Missile) {
                         Deliver(p, fl, oi, *a, alive, airmanship, out);
                         alive = fl.count - fl.lost;
                     }
@@ -327,10 +336,14 @@ private:
             }
         }
         double acc = tune.Get("strike.hit_chance") * p.load_factor;
-        if (p.part == DayPart::Night && !a.night) acc *= tune.Get("strike.night_accuracy");
-        if (p.part == DayPart::Night) acc *= 0.85;
-        if (c_->weather == Weather::Poor) acc *= tune.Get("strike.poor_weather_accuracy");
-        if (fl.profile == Profile::Low && !a.helicopter) acc *= 0.9 + 0.1 * tune.Get("strike.toss_accuracy");
+        if (a.missile) {
+            acc = a.hit_chance > 0.0 ? a.hit_chance : tune.Get("strike.hit_chance");  // its own guidance, day or night
+        } else {
+            if (p.part == DayPart::Night && !a.night) acc *= tune.Get("strike.night_accuracy");
+            if (p.part == DayPart::Night) acc *= 0.85;
+            if (c_->weather == Weather::Poor) acc *= tune.Get("strike.poor_weather_accuracy");
+            if (fl.profile == Profile::Low && !a.helicopter) acc *= 0.9 + 0.1 * tune.Get("strike.toss_accuracy");
+        }
         // Collateral: bombs near a town.
         for (const TheatreObject& o : d.theatre.objects) {
             if (o.kind == ObjectKind::City && Dist2d(o.pos, fl.aim_pos) < o.radius_m + tune.Get("strike.collateral_m")) {
@@ -344,8 +357,8 @@ private:
         }
         const TheatreObject& o = d.theatre.objects[static_cast<std::size_t>(hit_obj)];
         ObjectState& st = (*c_->truth)[static_cast<std::size_t>(hit_obj)];
-        // The guns around the target, on the attack run.
-        if (!o.decoy && !o.defence.present && st.function > 0.05) {
+        // The guns around the target, on the attack run (not at a missile).
+        if (!o.decoy && !o.defence.present && st.function > 0.05 && !a.missile) {
             double env = 1.0;
             if (p.part == DayPart::Night) env *= tune.Get("attrition.night");
             if (c_->weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");

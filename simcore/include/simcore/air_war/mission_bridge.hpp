@@ -81,8 +81,25 @@ public:
             s.prev_pos = s.seen ? s.last_pos : pos;
             s.last_pos = pos;
             s.seen = true;
+            // A cruise missile at its target: its warhead goes off where it arrives, and it is gone.
+            // (Within the release capture: the runner retires a target at its last waypoint before it is quite there.)
+            if (a.missile && a.has_release && !s.released && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
+                s.released = true;
+                s.impacted = true;
+                Impact imp;
+                imp.t = t;
+                imp.aircraft = static_cast<int>(i);
+                const double hit = a.hit_chance > 0.0 ? a.hit_chance : tune.Get("strike.hit_chance");
+                const double scatter = 20.0 + 300.0 * (1.0 - hit) * rng_.Uniform();
+                const double ang = rng_.Uniform(0.0, 6.283185307179586);
+                imp.where = a.aim_enu + Vec3{std::cos(ang) * scatter, std::sin(ang) * scatter, 0.0};
+                impacts_.push_back(imp);
+                r.DestroyTarget(a.target_id, "its own warhead");
+                Log(r, a.target_id, "strikes its target");
+                continue;
+            }
             // Weapons at the release point.
-            if (a.has_release && !s.released && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
+            if (a.has_release && !s.released && !a.missile && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
                 s.released = true;
                 if (a.role == FlightRole::Recce) {
                     photographed_ = true;
@@ -175,6 +192,11 @@ public:
             if (state_[i].released) flight_released[fi] = true;
             if (!down[i]) flight_alive[fi] = true;
             if (!down[i] || a.drone) continue;
+            if (a.missile) {
+                // Shot down before it struck: the defence's (the battery's or a neighbour's), never a crew lost.
+                if (!state_[i].impacted) o.missiles_downed.push_back(kill_by_[i].empty() ? m_.own_object : kill_by_[i]);
+                continue;
+            }
             LossRecord l;
             l.flight = a.flight;
             l.by = kill_by_[i].empty() ? m_.own_object : kill_by_[i];
@@ -229,6 +251,7 @@ private:
         double last_arm_t = -1e9;
         Vec3 last_pos;
         Vec3 prev_pos;  // where it was the step before
+        bool impacted = false;  // a cruise missile that struck (gone by its own warhead, not shot down)
     };
     // One aircraft's pass through one neighbour's zone: rolled as it enters, the hit (if any) half way through.
     struct Pass {
@@ -327,6 +350,7 @@ private:
         NeighbourState& ns = neighbours_[j];
         Pass& ps = passes_[i * m_.neighbours.size() + j];
         if (nb.function <= 0.05 || ns.missiles == 0) return;
+        if (nb.defence.max_target_mps > 0.0 && a.speed_mps > nb.defence.max_target_mps) return;  // too fast for it
         // The chord it will fly through the zone on its present heading.
         const double radius = nb.defence.radius_m;
         double chord = radius;

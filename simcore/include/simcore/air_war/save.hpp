@@ -87,6 +87,7 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "radars_suppressed", Strings(o.radars_suppressed));
     Put(v, "emissions", Pairs(o.emissions));
     Put(v, "fired", Strings(o.fired));
+    Put(v, "missiles_downed", Strings(o.missiles_downed));
     Put(v, "recce_seen", Strings(o.recce_seen));
     Put(v, "missiles_spent", Num(o.missiles_spent));
     std::vector<std::pair<std::string, double>> by;
@@ -213,6 +214,7 @@ public:
         o.radars_suppressed = Strings(v, "radars_suppressed");
         o.emissions = Pairs(v, "emissions");
         o.fired = Strings(v, "fired");
+        o.missiles_downed = Strings(v, "missiles_downed");
         o.recce_seen = Strings(v, "recce_seen");
         o.missiles_spent = Int(v, "missiles_spent");
         for (const auto& m : Pairs(v, "missiles_by")) o.missiles_by.push_back({m.first, static_cast<int>(std::lround(m.second))});

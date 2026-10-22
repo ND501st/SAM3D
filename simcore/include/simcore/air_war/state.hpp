@@ -70,9 +70,15 @@ struct Package {
     bool resolved = false;
     bool played = false;        // flown as the player's mission
 
+    // Aircraft in it (a cruise missile salvo has none: Missiles()).
     int Aircraft() const {
         int n = 0;
-        for (const Flight& f : flights) n += f.count;
+        for (const Flight& f : flights) n += f.role == FlightRole::Missile ? 0 : f.count;
+        return n;
+    }
+    int Missiles() const {
+        int n = 0;
+        for (const Flight& f : flights) n += f.role == FlightRole::Missile ? f.count : 0;
         return n;
     }
     int Main() const {
@@ -134,6 +140,7 @@ struct PackageOutcome {
     std::vector<std::string> fired;                       // defences seen to launch
     std::vector<std::string> recce_seen;                  // objects the reconnaissance photographed
     int missiles_spent = 0;                               // the player's side's missiles, all defences
+    std::vector<std::string> missiles_downed;             // the enemy's cruise missiles shot down: by which defence, one each
     std::vector<std::pair<std::string, int>> missiles_by;  // (a played mission) rounds our other defences spent: the neighbours
     int arms_fired = 0;
     bool aborted = false;

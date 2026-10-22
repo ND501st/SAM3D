@@ -1021,6 +1021,14 @@ SC_TEST("air war on the nation's theatre: in a played raid the neighbours fire a
             ScenarioDef def;
             ConsoleData console;
             SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
+            // The scenario carries them to be drawn and plotted: each where the manifest has it, with its system and reach.
+            SC_EXPECT(def.neighbours.size() == rs.manifest.neighbours.size());
+            for (std::size_t j = 0; j < def.neighbours.size() && j < rs.manifest.neighbours.size(); ++j) {
+                const RaidNeighbour& mn = rs.manifest.neighbours[j];
+                SC_EXPECT(def.neighbours[j].id == mn.id && def.neighbours[j].system == mn.defence.system);
+                SC_EXPECT_NEAR(def.neighbours[j].radius_m, mn.defence.radius_m, 1.0);
+                SC_EXPECT(Dist2d(def.neighbours[j].position, mn.enu) < 1.0);
+            }
             ScenarioRunner runner(std::move(def), std::move(console));
             MissionBridge bridge(rs.manifest, c.Data(), seed);
             while (!runner.Finished() && !bridge.UnitDestroyed() && runner.Time() < rs.manifest.end_s + 60.0) {
@@ -1041,4 +1049,162 @@ SC_TEST("air war on the nation's theatre: in a played raid the neighbours fire a
                 fired, kills);
     SC_EXPECT(played >= 2 && neighbours >= played && fired > 0);
     SC_EXPECT(credited == kills);  // the neighbours' kills are theirs, not the battery's
+}
+
+SC_TEST("air war: cruise missiles fly in the war's year, from their stock, at fixed targets") {
+    // 1985: the Pact's Kh-22s from its bombers; NATO's Tomahawk (1986) and CALCM (1988) not yet.
+    {
+        const AirWarData d = Load("warsaw_pact");
+        SC_EXPECT(d.theatre.year == 1985);
+        AirCampaign c;
+        const std::vector<Package> ps = PlanDays(d, 4, 3.0, &c);
+        int salvos = 0, fired = 0;
+        for (const Package& p : ps) {
+            if (p.kind != MissionKind::Missile) {
+                SC_EXPECT(p.Missiles() == 0);
+                continue;
+            }
+            ++salvos;
+            SC_EXPECT(p.Aircraft() == 0 && p.flights.size() == 1);
+            const Flight& fl = p.flights.front();
+            SC_EXPECT(fl.role == FlightRole::Missile && fl.aircraft == "kh22m");
+            fired += fl.count;
+            SC_EXPECT(fl.route.back().tag == "target" && fl.route.front().tag == "launch");
+            const IntelEntry* e = c.Intel().Find(p.target_key);
+            if (e != nullptr) SC_EXPECT(!e->mobile && !IsAirDefence(e->kind) && e->kind != ObjectKind::Troops);
+            double flown = 0.0;
+            for (std::size_t i = 0; i + 1 < fl.route.size(); ++i) flown += Dist2d(fl.route[i].pos, fl.route[i + 1].pos);
+            SC_EXPECT(flown <= d.faction.Aircraft("kh22m")->range_m + 1.0);
+        }
+        const AircraftType* kh = d.faction.Aircraft("kh22m");
+        std::printf("    the Pact in three days: %d Kh-22 salvos, %d missiles; %.0f left of %d and %.0f a day\n", salvos, fired,
+                    c.MissileStock("kh22m"), kh->stock, kh->resupply_per_day);
+        SC_EXPECT(salvos > 0 && c.MissileStock("kh22m") <= kh->stock + 3.0 * kh->resupply_per_day - fired + 1e-9);
+    }
+    {
+        const AirWarData d = Load("nato");
+        AirCampaign c;
+        for (const Package& p : PlanDays(d, 4, 3.0, &c)) SC_EXPECT(p.kind != MissionKind::Missile);
+        SC_EXPECT(c.MissileStock("tlam_c") == 0.0 && c.MissileStock("agm86c") == 0.0);
+    }
+    // A later war: NATO's Tomahawks come from its ships beyond the border, through its own entries.
+    {
+        AirWarData d = Load("nato");
+        d.theatre.year = 1990;
+        AirCampaign c;
+        int salvos = 0;
+        for (const Package& p : PlanDays(d, 4, 3.0, &c)) {
+            if (p.kind != MissionKind::Missile) continue;
+            ++salvos;
+            const Flight& fl = p.flights.front();
+            SC_EXPECT(fl.aircraft == "tlam_c" && fl.profile == Profile::Low);
+            SC_EXPECT(Dist2d(fl.route.front().pos, d.theatre.FrontFor("nato")->missile_launch) < 1.0 && fl.route[1].tag == "entry");
+        }
+        std::printf("    NATO in a war of 1990: %d Tomahawk salvos in three days\n", salvos);
+        SC_EXPECT(salvos > 0);
+    }
+}
+
+SC_TEST("air war: a Kh-22 is too fast for the Osa but not the S-75; a cruise missile shot down is never a crew lost") {
+    const AirWarData d = Load("warsaw_pact");
+    AirCampaign base;
+    base.Init(d, 1);
+    const Vec3 bridge = base.Truth()[static_cast<std::size_t>(d.theatre.IndexOf("kesmark_road_bridge"))].pos;
+    int by_osa = 0, by_s75 = 0, struck = 0, crews = 0;
+    for (int seed = 1; seed <= 40; ++seed) {
+        std::vector<ObjectState> truth = base.Truth();
+        BatteryPosture posture;
+        AirStaff staff;
+        Rng rs(9);
+        staff.Build(d, rs, 0.0);
+        Package p;
+        p.id = 1;
+        p.kind = MissionKind::Missile;
+        p.part = DayPart::Day;
+        p.target_object = "kesmark_road_bridge";
+        Flight fl;
+        fl.callsign = "601 10";
+        fl.role = FlightRole::Missile;
+        fl.aircraft = "kh22m";
+        fl.count = 4;
+        fl.profile = Profile::High;
+        // From the north past the S-75 near Novo Varosd, down onto the bridge by the battery.
+        fl.route = {{Vec3{-36000.0, 90000.0, 0.0}, 10000.0, 0.0, "launch"}, {bridge + Vec3{-7500.0, 15000.0, 0.0}, 10000.0, 0.03, "dive"},
+                    {bridge, 10.0, 0.035, "target"}};
+        fl.release_index = 2;
+        fl.aim_pos = bridge;
+        p.flights = {fl};
+        Rng rng(static_cast<std::uint64_t>(seed));
+        ResolveContext rc;
+        rc.data = &d;
+        rc.truth = &truth;
+        rc.posture = &posture;
+        rc.staff = &staff;
+        rc.rng = &rng;
+        Resolver r;
+        const PackageOutcome o = r.Resolve(p, rc);
+        for (const std::string& by : o.missiles_downed) {
+            by_osa += by == "osa_21" || by == "osa_22" ? 1 : 0;
+            by_s75 += by == "varosd_s75" ? 1 : 0;
+        }
+        struck += o.delivered ? 1 : 0;
+        crews += static_cast<int>(o.losses.size());
+    }
+    std::printf("    40 salvos of four Kh-22s: the S-75 shot down %d, the Osas %d; %d salvos struck; crews lost %d\n", by_s75, by_osa, struck, crews);
+    SC_EXPECT(by_osa == 0 && by_s75 > 0 && struck > 30 && crews == 0);
+}
+
+SC_TEST("air war: a cruise missile salvo through the battery's sector is a scenario: the missiles strike or are shot down") {
+    AirWarData d = Load("nato");
+    d.theatre.year = 1990;  // the Tomahawk
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 3u));
+    const Vec3 bridge = c.Truth()[static_cast<std::size_t>(d.theatre.IndexOf("kesmark_road_bridge"))].pos;
+    Package p;
+    p.id = 77;
+    p.kind = MissionKind::Missile;
+    p.part = DayPart::Day;
+    p.target_object = "kesmark_road_bridge";
+    p.target_label = "Kesmark road bridge";
+    p.entry = "W3";
+    p.exit = "W3";
+    p.tot_h = 2.0;
+    Flight fl;
+    fl.callsign = "Hammer 10";
+    fl.role = FlightRole::Missile;
+    fl.aircraft = "tlam_c";
+    fl.count = 4;
+    fl.profile = Profile::Low;
+    fl.route = {{bridge + Vec3{-120000.0, -8000.0, 0.0}, 50.0, 2.0 - 120000.0 / 245.0 / 3600.0, "entry"}, {bridge, 10.0, 2.0, "target"}};
+    fl.release_index = 1;
+    fl.aim_pos = bridge;
+    p.flights = {fl};
+    RaidScenarioBuilder builder;
+    const RaidScenario rs = builder.Build(c, p);
+    SC_EXPECT(rs.ok);
+    if (!rs.ok) {
+        std::printf("    %s\n", rs.error.c_str());
+        return;
+    }
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(def.targets.size() == 4);
+    for (const ScenarioTarget& t : def.targets) SC_EXPECT(t.target_class == "cruise_missile" && t.model == "tlam_c");
+    ScenarioRunner runner(std::move(def), std::move(console));
+    MissionBridge bridge_(rs.manifest, c.Data(), 3u);
+    while (!runner.Finished() && !bridge_.UnitDestroyed() && runner.Time() < rs.manifest.end_s + 60.0) {
+        runner.Step(0.1);
+        bridge_.Step(runner);
+    }
+    const PackageOutcome o = bridge_.Finish(runner);
+    int struck = 0;
+    for (const std::string& n : o.notes) struck += n.find("strikes its target") != std::string::npos ? 1 : 0;
+    std::printf("    four Tomahawks at the Kesmark bridge past the battery: %d struck, %d shot down (%d launches)\n", struck,
+                static_cast<int>(o.missiles_downed.size()), runner.Launches());
+    SC_EXPECT(o.losses.empty());                                         // missiles are never a crew lost
+    SC_EXPECT(struck + static_cast<int>(o.missiles_downed.size()) == 4);  // each struck or was shot down
+    SC_EXPECT(struck == 0 || o.delivered);
 }

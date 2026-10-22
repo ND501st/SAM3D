@@ -1682,6 +1682,27 @@ void USimCabinDisplayComponent::DrawPlotBoard(UCanvas* Canvas, const FVector2D& 
 	Text(Canvas, TEXT("С"), C + FVector2D(-4.0, -R - 0.025 * Size.Y), EtchText, 0.8f, false);  // север
 	Disc(Canvas, C, 0.008 * Size.X, Etch * 1.5f);  // the post
 
+	// Our neighbours, from the regiment's order (voenizdat_osa_1991 pp. 232-245: the neighbours and their tasks), in
+	// blue pencil: each one's place, its reach and our name for it.
+	for (const simcore::PostFeed::Neighbour& Nb : Post.neighbours)
+	{
+		const simcore::Vec3 Rel = Nb.position - Post.position;
+		const FVector2D P = ToScreen(Rel.x, Rel.y);
+		if (!Inside(P))
+		{
+			continue;
+		}
+		const double K = 0.006 * Size.X;
+		Line(Canvas, P - FVector2D(K, K), P + FVector2D(K, -K), 1.8f, Blue * 0.8f);
+		Line(Canvas, P + FVector2D(K, -K), P + FVector2D(K, K), 1.8f, Blue * 0.8f);
+		Line(Canvas, P + FVector2D(K, K), P - FVector2D(K, -K), 1.8f, Blue * 0.8f);
+		Line(Canvas, P - FVector2D(K, -K), P - FVector2D(K, K), 1.8f, Blue * 0.8f);
+		Circle(Canvas, P, Nb.radius_m / RadiusM * R, Blue * 0.45f, 1.2f);
+		const simcore::airwar::AirDefenceSystem* System = simcore::airwar::FindAirDefenceSystem(Nb.system);
+		const FString Name = System != nullptr ? FString(UTF8_TO_TCHAR(System->own)) : FString(UTF8_TO_TCHAR(Nb.system.c_str()));
+		Text(Canvas, Name, P + FVector2D(K + 2.0, -K - 2.0), Blue * 0.8f, 0.6f, false);
+	}
+
 	// The grease pencil: each target's crosses of the last minutes joined into its track, its number, height over code.
 	for (const simcore::em::ViewBoardMark& Latest : simcore::LatestMarks(Post))
 	{

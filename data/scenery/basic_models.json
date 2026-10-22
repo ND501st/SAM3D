@@ -19,6 +19,22 @@
     "fighter": "generic_fighter", "bomber": "generic_bomber", "helicopter": "generic_helicopter", "drone": "generic_drone",
     "default": "generic_light", "missile": "missile_9m33"
   },
+  "systems": {
+    "osa": { "models": [ [ "osa_9a33", 4 ] ], "spread_m": 300, "notes": "An Osa battery's four combat vehicles a few hundred metres apart round the site." },
+    "kub": { "models": [ [ "kub_radar", 1 ], [ "kub_launcher", 4 ] ], "spread_m": 150 },
+    "s75": { "models": [ [ "s75_radar", 1 ], [ "s75_launcher", 6 ] ], "spread_m": 80, "notes": "The launchers in a ring round the guidance radar." },
+    "s75m2": { "models": [ [ "s75_radar", 1 ], [ "s75_launcher", 6 ], [ "p18", 1 ] ], "spread_m": 80 },
+    "s125": { "models": [ [ "s125_radar", 1 ], [ "s125_launcher", 4 ] ], "spread_m": 60 },
+    "s125m1": { "models": [ [ "s125_radar", 1 ], [ "s125_launcher", 4 ], [ "p15", 1 ] ], "spread_m": 60 },
+    "strela10": { "models": [ [ "strela10", 4 ] ], "spread_m": 120 },
+    "strela1": { "models": [ [ "strela1_9p31", 4 ] ], "spread_m": 120 },
+    "zsu234": { "models": [ [ "zsu_23_4", 4 ] ], "spread_m": 100 },
+    "s60": { "models": [ [ "son9_radar", 1 ], [ "s60_gun", 6 ] ], "spread_m": 40 },
+    "ks30": { "models": [ [ "son30_radar", 1 ], [ "ks30_gun", 4 ] ], "spread_m": 50 },
+    "zu23": { "models": [ [ "zu23", 4 ] ], "spread_m": 60 },
+    "aaa": { "models": [ [ "zu23", 4 ] ], "spread_m": 60 },
+    "manpads": { "models": [ [ "tent", 1 ], [ "uaz469", 1 ] ], "spread_m": 15, "notes": "A team's tent and its vehicle: the launchers are carried." }
+  },
   "ground": {
     "launcher": "osa_9a33", "reload": "tzm_9t217", "fuel": "atz_38", "command_post": "pu12m", "maintenance": "ural_truck", "dummy": "dummy_osa"
   },
@@ -72,6 +88,9 @@
 
     { "id": "missile_9m33", "name": "9M33 missile", "archetype": "missile", "length_m": 3.16, "diameter_m": 0.21, "colour": "missile_white" },
     { "id": "missile_arm", "name": "Anti-radiation missile", "archetype": "missile", "length_m": 4.2, "diameter_m": 0.25, "colour": "missile_white" },
+    { "id": "kh22m", "name": "Kh-22M cruise missile", "archetype": "drone", "length_m": 11.7, "span_m": 3.0, "height_m": 0.9, "colour": "pact_silver" },
+    { "id": "tlam_c", "name": "BGM-109C Tomahawk", "archetype": "drone", "length_m": 5.6, "span_m": 2.7, "height_m": 0.5, "colour": "nato_grey" },
+    { "id": "agm86c", "name": "AGM-86C CALCM", "archetype": "drone", "length_m": 6.3, "span_m": 3.7, "height_m": 0.6, "colour": "nato_grey" },
 
     { "id": "osa_9a33", "name": "9A33 Osa-AK combat vehicle", "archetype": "wheeled", "length_m": 9.1, "width_m": 2.8, "height_m": 4.2, "axles": 3, "turret": true, "radar": "dish", "missiles": 6, "colour": "osa_green" },
     { "id": "dummy_osa", "name": "Dummy combat vehicle", "archetype": "wheeled", "length_m": 9.1, "width_m": 2.8, "height_m": 4.2, "axles": 3, "turret": true, "radar": "dish", "missiles": 6, "colour": "dummy_green" },

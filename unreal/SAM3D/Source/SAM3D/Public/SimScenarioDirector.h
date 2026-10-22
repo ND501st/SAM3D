@@ -148,6 +148,13 @@ private:
 	void SpawnMissingEntityActors();
 	/** The prepared position's works (roadmap 7.6): spawned once each, their nets following the sim. */
 	void UpdatePositionWorks();
+	/** Our other air defences near the scenario (a raid's neighbours), drawn where they stand: each system's site from the
+	 *  model library (simcore ModelLibrary::SiteLayout), on the scenario's ground. Once, when the scenario runs. */
+	void SpawnNeighbourSites(USimWorldSubsystem* Sim);
+	/** Sets each neighbour vehicle on the level's ground, which the sim's flat or map ground need not match and whose
+	 *  Cesium tiles load after the spawn: a trace each second for the first minute, then every 5 s; after the minute one
+	 *  that has found none is put as far from the scenario's ground as the others were. */
+	void GroundNeighbourSites(bool bFirstMinuteOver);
 	void ShowStatus(const USimWorldSubsystem* Sim) const;
 
 	UPROPERTY(Transient)
@@ -155,6 +162,16 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<class ASimPositionWork>> PositionWorks;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> NeighbourSites;
+	/** Each neighbour vehicle's place by the sim, and whether it stands on the level's ground yet. */
+	TArray<FVector> NeighbourSiteAt;
+	TArray<bool> NeighbourSiteGrounded;
+	bool bNeighboursSpawned = false;
+	bool bNeighbourFallbackPlaced = false;
+	float NeighboursSpawnedAt = 0.0f;
+	float NextNeighbourGroundAt = 0.0f;
 
 	bool bTerrainRequested = false;
 	float TimeSinceBeginPlay = 0.0f;

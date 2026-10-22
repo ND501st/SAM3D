@@ -7,7 +7,7 @@ on it.
 
 ## What there is
 
-`data/scenery/basic_models.json` (109 models), loaded and expanded by `simcore/scenery/basic_models.hpp`
+`data/scenery/basic_models.json` (112 models), loaded and expanded by `simcore/scenery/basic_models.hpp`
 (`simcore::scenery::ModelLibrary`); drawn in Unreal by `FSimBasicModels` (`SimBasicModels.h/.cpp`).
 
 | Group | Models |
@@ -18,7 +18,7 @@ on it.
 | The rebels' | An-2, UTVA 75 class, Mi-8, G-2 Galeb class |
 | Our side's aircraft | MiG-21, MiG-23ML, Su-22M3, L-39, An-26, An-2, Mi-24D, Mi-8 (and Mi-17), Mi-2: our own models in our colours (`own_grey`, `own_camo`), never the enemy's model of the same type, so a MiG-23 or a Mi-24 of ours is not drawn as the Pact's |
 | Generic (a target without a model: by its class) | fighter, bomber, helicopter, drone, light aircraft |
-| Missiles | 9M33, an anti-radiation missile |
+| Missiles | 9M33, an anti-radiation missile; the cruise missiles (Kh-22M, Tomahawk, AGM-86C) |
 | Our battery | 9A33 Osa-AK combat vehicle, its dummy, PU-12M, 9T217 reload vehicle, fuel truck, Ural, UAZ-469 |
 | Our air defence and army | Kub launcher and radar, S-125 launcher and radar, S-75 launcher and radar, Strela-10, ZU-23, P-19, P-40, T-55, BMP-1, BTR-60 |
 | The order of battle's equipment (the nation on the map, N3) | The Osa battery's 9V210M3 and ZIP-2, the Strela-2 launcher, the PU-12, the Shilka, the Strela-1's 9P31, the S-60 and its SON-9, the KS-30 and its SON-30, the AT-T tractor, the D-30, the S-75, S-125 and Kub transloaders, the propellant tanker, the diesel power station, the P-18, P-15 and P-14 radars and the PRV-11 height finder, the PMP pontoon truck |
@@ -52,6 +52,15 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
   `ASimEntityActor::UseVehicleModel`), else the basic model of their kind (`ground`: launcher → the 9A33, dummy → the
   dummy), else a box.
 - **The map**: its sites can use the same library for their vehicles and buildings.
+- **Air defence sites** (the nation on the map N4, 23 Oct 2026): `"systems"` gives each air defence system of the air
+  war (`osa`, `kub`, `s75`, `s125`, `strela10`, `zu23`, `aaa`, `manpads`...) its site as models and a spread:
+  `ModelLibrary::SiteLayout(system)` puts the first model at the centre when the site has several kinds (the S-125's
+  radar, the Kub's 1S91) and the rest on a ring `spread_m` out, facing out; a site of one kind (a ZU-23 battery, an Osa
+  pair) stands all on the ring. A raid's neighbours (`"neighbours"` in the scenario) are drawn so
+  (`ASimScenarioDirector::SpawnNeighbourSites`), placed through the level's georeference and set on its ground by a
+  trace as the Cesium tiles load; one whose tile never loads (tens of kilometres off) stands as far from the scenario's
+  ground as its nearest neighbour that found it. Seen in a game run 23 Oct 2026: an S-125 site and a ZU-23 battery on
+  the ground by the Osa, and the PU-12M's board with their blue marks.
 
 ## Checks
 

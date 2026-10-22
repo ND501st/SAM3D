@@ -6,8 +6,8 @@
   "notes": "Every key here is read by simcore/air_war (TuningTable::Defaults lists them with their defaults; an unknown key fails the load). Chances are per aircraft per pass unless said otherwise.",
   "utility": {
     "value_weight": 10.0, "loss_cost": 4.0, "noise_at_zero_skill": 3.0, "quirk_scale": 2.0, "grudge_weight": 0.4,
-    "stale_penalty": 4.0, "exploration": 1.0, "min_value": 0.5, "min_effect": 0.05,
-    "notes": "The planner's utility: value_weight x worth x chance it is there and works x chance of delivery x effect, minus loss_cost x expected losses x loss aversion (which grows as the faction's daily loss tolerance shrinks), plus quirk_scale x habits, minus the memory of losses that way, plus exploration x creativity / sqrt(1 + uses), plus noise that shrinks with planning skill. Packages below min_value are not flown."
+    "stale_penalty": 4.0, "exploration": 1.0, "min_value": 0.5, "min_effect": 0.05, "missile_cost": 0.4,
+    "notes": "The planner's utility: value_weight x worth x chance it is there and works x chance of delivery x effect, minus loss_cost x expected losses x loss aversion (which grows as the faction's daily loss tolerance shrinks), plus quirk_scale x habits, minus the memory of losses that way, plus exploration x creativity / sqrt(1 + uses), plus noise that shrinks with planning skill. Packages below min_value are not flown. A cruise missile salvo has no crew to lose: missile_cost per missile spent, times the square root of how many times scarcer the stock has become than at the start (game value, the nation on the map N4, 23 Oct 2026)."
   },
   "attrition": {
     "low_vs_long_range_sam": 0.35, "medium_vs_guns": 0.0, "high_vs_short_range": 0.0, "sead_suppression": 0.45, "jamming": 0.25,

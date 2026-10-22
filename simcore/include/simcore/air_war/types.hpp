@@ -125,6 +125,7 @@ enum class MissionKind {
     Harassment,  // a night nuisance raid by a few light aircraft
     HeloRaid,    // attack or armed utility helicopters near the line, popping up from cover
     Deception,   // a decoy or demonstration wave to make the defences radiate and fire
+    Missile,     // a cruise missile salvo at a fixed target (no crew: the missiles are spent either way)
     Count
 };
 
@@ -139,6 +140,7 @@ inline const char* MissionKindName(MissionKind m) {
         case MissionKind::Harassment: return "harassment";
         case MissionKind::HeloRaid: return "helo_raid";
         case MissionKind::Deception: return "deception";
+        case MissionKind::Missile: return "missile";
         case MissionKind::Count: break;
     }
     return "?";
@@ -169,6 +171,7 @@ enum class FlightRole {
     Recce,       // reconnaissance (and additional reconnaissance and marking)
     Decoy,       // decoy drones or a demonstration group
     Helicopter,  // armed helicopters
+    Missile,     // cruise missiles: a salvo flown like a flight, from a carrier or a launch area to the target
     Count
 };
 
@@ -183,6 +186,7 @@ inline const char* FlightRoleName(FlightRole r) {
         case FlightRole::Recce: return "recce";
         case FlightRole::Decoy: return "decoy";
         case FlightRole::Helicopter: return "helicopter";
+        case FlightRole::Missile: return "missile";
         case FlightRole::Count: break;
     }
     return "?";

@@ -132,6 +132,9 @@ public:
             squadrons_.push_back(st);
         }
         arm_stock_ = data_.faction.logistics.arm_stock;
+        for (const AircraftType& a : data_.faction.aircraft) {
+            if (a.missile && a.InService(data_.theatre.year)) missile_stock_[a.id] = a.stock;
+        }
         const PoliticsDef& pd = data_.faction.politics;
         politics_.support = pd.support;
         politics_.pressure = pd.pressure;
@@ -196,12 +199,16 @@ public:
         for (int i : outcome.aborted_flights) {
             if (i >= 0 && i < static_cast<int>(p.flights.size())) p.flights[static_cast<std::size_t>(i)].aborted = true;
         }
+        const std::string& own = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         int kills = 0;
-        for (const LossRecord& l : outcome.losses) kills += l.by == data_.theatre.objects[static_cast<std::size_t>(player_)].id ? 1 : 0;
+        for (const LossRecord& l : outcome.losses) kills += l.by == own ? 1 : 0;
+        const int missiles_down = static_cast<int>(std::count(outcome.missiles_downed.begin(), outcome.missiles_downed.end(), own));
         kills_by_player_ += kills;
-        CrewProgress(kills);
-        Log("player_mission", "result", "Mission against '" + p.name + "' flown: " + std::to_string(outcome.Lost()) + " of " +
-                                            std::to_string(p.Aircraft()) + " shot down in the battery's sector.", true);
+        CrewProgress(kills + missiles_down);
+        Log("player_mission", "result", "Mission against '" + p.name + "' flown: " +
+                                            (p.Missiles() > 0 ? std::to_string(outcome.missiles_downed.size()) + " of " + std::to_string(p.Missiles()) + " cruise missiles"
+                                                              : std::to_string(outcome.Lost()) + " of " + std::to_string(p.Aircraft())) +
+                                            " shot down in the battery's sector.", true);
         ApplyOutcome(p, outcome);
         // The rest of the raid, without the player's battery: every part of every route but what the scenario flew
         // (inside its circle while it ran, where the other defences took their chances: mission_bridge.hpp).
@@ -314,6 +321,11 @@ public:
     const std::vector<SquadronState>& Squadrons() const { return squadrons_; }
     const PoliticsState& Politics() const { return politics_; }
     double ArmStock() const { return arm_stock_; }
+    // Cruise missiles of a type left to the enemy (0 for a type not in service in the war's year).
+    double MissileStock(const std::string& id) const {
+        const auto it = missile_stock_.find(id);
+        return it == missile_stock_.end() ? 0.0 : it->second;
+    }
     int PlayerIndex() const { return player_; }
     const std::vector<int>& Dummies() const { return dummies_; }
     // Where the battery has been: (campaign hour, position) from the start, one entry per move (the information
@@ -447,6 +459,7 @@ private:
     std::vector<std::pair<double, Vec3>> battery_track_;  // (campaign hour, where the battery went), from the start
     std::vector<SquadronState> squadrons_;
     double arm_stock_ = 0.0;
+    std::map<std::string, double> missile_stock_;  // cruise missile type -> left
     PoliticsState politics_;
     AirStaff staff_;
     IntelPicture intel_;
@@ -631,6 +644,7 @@ private:
         pc.now_h = now_h_;
         pc.phase = phase_;
         pc.arm_stock = &arm_stock_;
+        pc.missile_stock = &missile_stock_;
         pc.rng = &rng_;
         pc.next_id = &next_package_id_;
         pc.journal = &journal_;
@@ -780,9 +794,10 @@ private:
         // What the officers make of it.
         Lessons(p, o, lost);
         // The journal (the enemy's mind) and what our side saw.
-        std::string text = std::string(MissionKindName(p.kind)) + " '" + p.name + "' on " + p.target_label + ": lost " +
-                           std::to_string(lost) + " of " + std::to_string(p.Aircraft()) + (o.aborted ? ", turned back" : "") +
-                           (o.delivered ? ", weapons delivered" : "") + ".";
+        std::string text = std::string(MissionKindName(p.kind)) + " '" + p.name + "' on " + p.target_label + ": " +
+                           (p.Missiles() > 0 ? std::to_string(o.missiles_downed.size()) + " of " + std::to_string(p.Missiles()) + " missiles shot down"
+                                             : "lost " + std::to_string(lost) + " of " + std::to_string(p.Aircraft())) +
+                           (o.aborted ? ", turned back" : "") + (o.delivered ? ", weapons delivered" : "") + ".";
         for (const std::string& n : o.notes) text += " " + n + ".";
         Log("result", "result", text, false);
         if (observe) ObserveRaid(p, o, lost);
@@ -954,6 +969,7 @@ private:
             r.threat_medium = d->medium_cover;
             r.threat_radar = d->radar;
             r.threat_channels = d->channels;
+            r.threat_max_target_mps = d->max_target_mps;
         }
         return r;
     }
@@ -1214,6 +1230,9 @@ private:
             }
         }
         arm_stock_ += f.logistics.arm_resupply_per_day;
+        for (auto& m : missile_stock_) {
+            if (const AircraftType* a = f.Aircraft(m.first)) m.second += a->resupply_per_day;
+        }
         // Careers.
         Careers(excess);
         // Stress eases.
@@ -1327,7 +1346,11 @@ private:
             if (fl.role == FlightRole::Decoy && a != nullptr && !a->drone) ++patterns_.feints;
             if (fl.role == FlightRole::Decoy && a != nullptr && a->drone) ++patterns_.decoy_waves;
         }
-        if (TouchesPlayer(p) || p.played) {
+        if ((TouchesPlayer(p) || p.played) && p.Missiles() > 0) {
+            Log("own_intel", "warning net", std::to_string(p.Missiles()) + " cruise missiles from " + p.entry + " at " +
+                                                FormatHour(p.tot_h, data_.theatre.start_hour) + ", " + std::to_string(o.missiles_downed.size()) +
+                                                " shot down" + (o.delivered ? "" : ", none reached its target") + ".", true);
+        } else if (TouchesPlayer(p) || p.played) {
             Log("own_intel", "warning net", std::to_string(p.Aircraft()) + " aircraft from " + p.entry + " at " +
                                                 FormatHour(p.tot_h, data_.theatre.start_hour) + " (" + DayPartName(p.part) + "), " +
                                                 std::to_string(lost) + " shot down" + (o.delivered ? "" : ", no bombs on target") + ".", true);

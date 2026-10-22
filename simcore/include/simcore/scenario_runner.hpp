@@ -7553,6 +7553,10 @@ public:
     // The post's instruments in one block (post_feed.hpp): the IT-45 now, the board as the commander reads it (the
     // targets of PostBoard, each with its marks of the last five minutes: the same numbers he can give out), the IT
     // boards. Empty (post false) when the vehicle is no post.
+    // Our other air defences near the scenario (drawn where they stand), and the ground's height (ENU up) anywhere on it.
+    const std::vector<ScenarioNeighbour>& Neighbours() const { return def_.neighbours; }
+    double GroundHeightAt(double east_m, double north_m) const { return world_.GetTerrain().HeightAt(east_m, north_m); }
+
     PostFeed PostFeedNow() const {
         PostFeed f;
         if (!post_) return f;
@@ -7570,6 +7574,7 @@ public:
             f.glass.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
         }
         f.launchers = status_boards_;
+        for (const ScenarioNeighbour& nb : def_.neighbours) f.neighbours.push_back({nb.name, nb.system, nb.position, nb.radius_m});
         f.marker_x = marker_x_;
         f.marker_y = marker_y_;
         f.marked = marked_;

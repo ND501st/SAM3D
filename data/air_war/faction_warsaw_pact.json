@@ -17,11 +17,11 @@
     "confidence": "medium",
     "phases": [
       { "id": "air_operation", "name": "the air operation: massed blows on airfields, command posts and radars",
-        "apportion": { "strike": 0.35, "dead": 0.25, "hunter": 0.05, "recce": 0.1, "deception": 0.1, "cas": 0.05, "helo_raid": 0.1 },
+        "apportion": { "strike": 0.35, "dead": 0.25, "hunter": 0.05, "recce": 0.1, "deception": 0.1, "cas": 0.05, "helo_raid": 0.1, "missile": 0.02 },
         "until_day": 2, "tempo": 1.5,
         "notes": "cia_1985_air_op: three crushing blows against the airbases in the first two days (the mid-1970s plan). tempo: a game value, the surge the massed blows need over the sustained rate (balance pass, docs/air_war/09_BALANCE.md)." },
       { "id": "front_support", "name": "support of the front's offensive",
-        "apportion": { "strike": 0.3, "cas": 0.25, "helo_raid": 0.15, "dead": 0.1, "recce": 0.1, "hunter": 0.05, "deception": 0.05 }, "tempo": 0.85,
+        "apportion": { "strike": 0.3, "cas": 0.25, "helo_raid": 0.15, "dead": 0.1, "recce": 0.1, "hunter": 0.05, "deception": 0.05, "missile": 0.01 }, "tempo": 0.85,
         "notes": "tempo: a game value, the sustained rate after the surge (losses, maintenance and the crews' fatigue)." }
     ],
     "packages": {
@@ -37,7 +37,9 @@
       "cas": { "main_flights": 1, "flight_size": 4, "aircraft": [ "su25" ], "sead_per_threat": 0.5, "sead_max": 2, "profiles": [ "low" ], "day_parts": [ "dawn", "day", "dusk" ] },
       "helo_raid": { "main_flights": 1, "flight_size": 4, "profiles": [ "low" ], "day_parts": [ "dawn", "day", "dusk" ] },
       "deception": { "main_flights": 1, "flight_size": 2, "profiles": [ "medium" ], "day_parts": [ "dawn", "day", "dusk" ],
-                     "notes": "A demonstration group (mai_tactics_vvs: группа демонстративных действий): real aircraft showing themselves to draw the defences." }
+                     "notes": "A demonstration group (mai_tactics_vvs: группа демонстративных действий): real aircraft showing themselves to draw the defences." },
+      "missile": { "main_flights": 1, "flight_size": 2, "aircraft": [ "kh22m" ], "profiles": [ "high" ], "day_parts": [ "night", "dawn", "day", "dusk" ],
+                   "notes": "Kh-22s from the long-range aviation's Tu-22M bombers, called on by the front for its deepest fixed targets: a pair at a bridge, a dam, a command post or a refinery, launched at the border." }
     }
   },
   "intelligence": {
@@ -104,7 +106,11 @@
       "source": "fm100_2_3 (Yak-28 electronic warfare aircraft in the reconnaissance regiment); the jammer is the EM layer's generic stand-off barrage jammer", "confidence": "low" },
     { "id": "mi24", "name": "Mi-24", "roles": [ "helicopter" ], "class": "helicopter", "helicopter": true, "rcs_m2": 8, "cruise_mps": 65, "attack_mps": 65,
       "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 10, "strike_power": 0.5, "evasion": 0.35,
-      "source": "fm100_2_3 (attack helicopter regiments of 40 Mi-24 and 20 Mi-8); numbers placeholders", "confidence": "low" }
+      "source": "fm100_2_3 (attack helicopter regiments of 40 Mi-24 and 20 Mi-8); numbers placeholders", "confidence": "low" },
+    { "id": "kh22m", "name": "Kh-22M cruise missile (from Tu-22M bombers)", "roles": [ "missile" ], "class": "cruise_missile", "missile": true,
+      "launch": "air", "rcs_m2": 1.0, "cruise_mps": 1000, "attack_mps": 1000, "low_agl_m": 100, "medium_alt_m": 20000, "max_turn_deg_s": 2,
+      "range_km": 400, "strike_power": 0.6, "hit_chance": 0.45, "evasion": 0.0, "in_service_year": 1976, "stock": 24, "resupply_per_day": 2,
+      "source": "game values on public reference figures for the Kh-22 (AS-4 Kitchen): about Mach 3 at height, a steep dive onto its target, a warhead near a tonne, a radar seeker that finds a bridge or a large building and little else; in service with the long-range aviation's Tu-22Ms from the 1970s (estimate). Too fast for the Osa (500 m/s, voenizdat_osa_1991 p15) and the S-125; the S-75 can take it", "confidence": "low" }
   ],
   "squadrons": [
     { "id": "iap_mig23", "name": "Fighter regiment (MiG-23), two squadrons", "aircraft": "mig23mld", "count": 30, "leader": "wp_ldr_fighter" },

@@ -69,6 +69,10 @@ pre-war knowledge and, for air defences, a defence (system, radius, lethality, l
 rounds, the fire-control radars an ARM can take one by one, and on the nation's theatre the fire channels). All game
 values.
 
+**The war's year** (`"year"`, 1985): an aircraft or missile type with a later `in_service_year` doesn't fly, so the
+MiG-29 of a later campaign and NATO's cruise missiles (the Tomahawk 1986, the CALCM 1988) wait for a later war; the
+Pact's Kh-22s from its Tu-22M bombers fly in this one (`09_BALANCE.md` §8).
+
 **The whole nation** (`theatre_pannonia_nation.json`, the nation on the map N2, `docs/COUNTRY_MAP.md`) extends this
 theatre with the briefing's forces, industry and infrastructure, 170 objects on the country's map, and gives every
 mobile unit its prepared positions (`"positions"`), which it moves between. The campaigns play this theatre until N4

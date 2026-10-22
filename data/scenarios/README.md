@@ -263,3 +263,10 @@ and kept as samples for the missions menu's "Air war" group. They use only the k
 `behaviour`, `evade`, `rwr` and `decoy`; `own_unit.em.jammers`; the `battery`, `prepared_position`, `c2` (with
 `regiment` radars and outages) and `command_post` blocks; an `air_threat` trigger; `doctrine`; `environment`; NPC
 commanders. Regenerate with `simcore/examples/air_war_demo` (it writes every raid it plays to its output folder).
+
+`"neighbours"` (the nation on the map N4, 23 Oct 2026) lists our other air defences whose zones reach into the scenario:
+`[ { "id": "tiszavar_kub", "name": "...", "system": "kub", "position": { "e_km": ..., "n_km": ... }, "radius_km": 24 } ]`
+(`system` an air war air defence id, `simcore/air_war/data.hpp` `kAirDefenceSystems`). They are presentation and the
+board's: the game draws each as its system's site (`data/scenery/basic_models.json` `"systems"`), the PU-12M's plotting
+board marks it in blue with its reach and our name for it (`PostFeed::neighbours`). Their fire in a raid is the mission
+bridge's (`docs/air_war/05_EXECUTION.md`), not the scenario's.

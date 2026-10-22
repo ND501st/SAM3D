@@ -46,7 +46,17 @@ mobile unit with `relocate_h`, never the player's battery) are its prepared posi
 them, never to one within 8 km of the enemy's front; without them it moves `relocate_km` in a random direction. A
 defence's `"channels"` are its fire channels, the aircraft of a passing flight it engages at once (an S-75's or S-125's
 guidance radar one, an Osa battery four; `docs/air_war/05_EXECUTION.md` §2); without them it engages every aircraft in
-reach. An object's `"c2_source"` makes it a warning post: a raid takes the nearest working one of each kind.
+reach. An object's `"c2_source"` makes it a warning post: a raid takes the nearest working one of each kind. A defence's
+`"max_target_mps"` is the fastest target it can engage. The theatre's `"year"` is the war's (1985): an aircraft or
+missile type with `"in_service_year"` later than it does not fly. A front's `"missile_launch"` is where its ships or
+ground launchers fire cruise missiles from.
+
+**Cruise missiles** are entries of a faction's `aircraft` with `"missile": true`, the role `"missile"` alone, a
+`"range_km"`, a `"launch"` (`air`: its carrier releases it at the border entry; `sea`: from the front's
+`missile_launch`), a `"hit_chance"`, a `"stock"` and `"resupply_per_day"`, and the class `cruise_missile`; the doctrine's
+`"missile"` package template (`flight_size` missiles of the first type in service with a salvo in stock, its profile:
+`high` for a dive from height, `low` for terrain following) and a share in the phases. The Pact has the Kh-22M (1970s);
+NATO the BGM-109C Tomahawk (1986) and AGM-86C CALCM (1988).
 
 Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`. Flight roles:
 `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`. Object kinds: `sam_site`, `aaa`,

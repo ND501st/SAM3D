@@ -15,6 +15,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/console_data.hpp"
@@ -55,6 +56,12 @@ struct ModelLibrary {
     std::map<std::string, std::string> fallbacks;  // aircraft class -> model
     std::map<std::string, std::string> ground;     // battery vehicle kind -> model
     std::map<std::string, std::string> colours;    // name -> #rrggbb
+    // How an air defence system's site is drawn: its vehicles (model, count) and how far apart they stand.
+    struct SiteDef {
+        std::vector<std::pair<std::string, int>> models;
+        double spread_m = 50.0;
+    };
+    std::map<std::string, SiteDef> systems;  // air defence system id -> site
 
     const ModelDef* Find(const std::string& id) const {
         for (const ModelDef& m : models) {
@@ -75,6 +82,31 @@ struct ModelLibrary {
     std::string ForGround(const std::string& kind) const {
         const auto it = ground.find(kind);
         return it == ground.end() ? std::string() : it->second;
+    }
+    // A site of an air defence system laid out round its centre (east, north metres): with several kinds of vehicle the
+    // first (the radar) at the centre and the rest in a ring `spread_m` out (an S-75's launchers round its guidance
+    // radar); with one kind all of them in the ring (an Osa battery's four vehicles, a platoon's guns). Empty for a
+    // system the library doesn't know.
+    std::vector<std::pair<std::string, Vec3>> SiteLayout(const std::string& system) const {
+        std::vector<std::pair<std::string, Vec3>> out;
+        const auto it = systems.find(system);
+        if (it == systems.end()) return out;
+        const SiteDef& s = it->second;
+        std::size_t first = 0;
+        if (s.models.size() > 1) {
+            out.push_back({s.models[0].first, Vec3{}});
+            first = 1;
+        }
+        int ring = 0;
+        for (std::size_t i = first; i < s.models.size(); ++i) ring += s.models[i].second;
+        int k = 0;
+        for (std::size_t i = first; i < s.models.size(); ++i) {
+            for (int n = 0; n < s.models[i].second; ++n, ++k) {
+                const double a = 6.283185307179586 * k / std::max(1, ring);
+                out.push_back({s.models[i].first, Vec3{s.spread_m * std::sin(a), s.spread_m * std::cos(a), 0.0}});
+            }
+        }
+        return out;
     }
 };
 
@@ -342,7 +374,7 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
 class ModelLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, ModelLibrary& out) {
-        if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "models"})) {
+        if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "systems", "models"})) {
             return false;
         }
         if (!Map(root, "colours", out.colours) || !Map(root, "fallbacks", out.fallbacks) || !Map(root, "ground", out.ground)) return false;
@@ -395,6 +427,32 @@ public:
         }
         for (const auto& kv : out.ground) {
             if (out.Find(kv.second) == nullptr) return Fail(Join("ground", kv.first), "no such model: " + kv.second);
+        }
+        return Systems(root, out);
+    }
+
+    // "systems": {system id: {"models": [[model id, count], ...], "spread_m": n}}.
+    bool Systems(const json::Value& root, ModelLibrary& out) {
+        const json::Value* v = root.Find("systems");
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Object)) return Fail("systems", "expected {system: site}");
+        for (std::size_t k = 0; k < v->keys.size(); ++k) {
+            const std::string p = Join("systems", v->keys[k]);
+            const json::Value& s = v->items[k];
+            ModelLibrary::SiteDef site;
+            if (!Keys(s, p, {"models", "spread_m", "notes"}) || !OptionalNumber(s, p, "spread_m", site.spread_m)) return false;
+            const json::Value* ms = s.Find("models");
+            if (ms == nullptr || !ms->Is(json::Type::Array) || ms->items.empty()) return Fail(Join(p, "models"), "required: [[model, count], ...]");
+            for (std::size_t i = 0; i < ms->items.size(); ++i) {
+                const json::Value& e = ms->items[i];
+                if (!e.Is(json::Type::Array) || e.items.size() != 2 || !e.items[0].Is(json::Type::String) || !e.items[1].Is(json::Type::Number) ||
+                    e.items[1].number < 1.0) {
+                    return Fail(Index(Join(p, "models"), i), "[model id, count >= 1]");
+                }
+                if (out.Find(e.items[0].string) == nullptr) return Fail(Index(Join(p, "models"), i), "no such model: " + e.items[0].string);
+                site.models.push_back({e.items[0].string, static_cast<int>(e.items[1].number + 0.5)});
+            }
+            out.systems[v->keys[k]] = site;
         }
         return true;
     }

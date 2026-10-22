@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -44,6 +45,7 @@ struct PlanContext {
     double now_h = 0.0;
     int phase = 0;
     double* arm_stock = nullptr;
+    std::map<std::string, double>* missile_stock = nullptr;  // cruise missiles left, by type
     Rng* rng = nullptr;
     int* next_id = nullptr;
     std::vector<JournalEntry>* journal = nullptr;
@@ -163,11 +165,11 @@ public:
         std::string bent;
         for (int k = 0; k < kMissionKinds; ++k) {
             double s = phase.apportion[k];
-            if (!f.doctrine.packages[k].allowed) {
+            const MissionKind mk = static_cast<MissionKind>(k);
+            if (!f.doctrine.packages[k].allowed || (mk == MissionKind::Missile && MissileType() == nullptr)) {
                 share[k] = 0.0;
                 continue;
             }
-            const MissionKind mk = static_cast<MissionKind>(k);
             double m = 1.0;
             if (mk == MissionKind::Dead || mk == MissionKind::Hunter) m *= 1.0 + 0.4 * (ct.methodical - 0.5) + 0.4 * (iads - 0.5);
             if (mk == MissionKind::Recce || mk == MissionKind::Bda) m *= 1.0 + 0.6 * (0.5 - coverage) + 0.3 * cdr->Quirk("recce_first");
@@ -188,9 +190,10 @@ public:
                 " sorties available this cycle." + (bent.empty() ? std::string() : " Apportionment bent:" + bent));
 
         // 2-4. Mission kinds in the order the staff fills them.
-        const MissionKind order[] = {MissionKind::Dead,     MissionKind::Hunter,   MissionKind::Deception,
-                                     MissionKind::Strike,   MissionKind::Recce,    MissionKind::Cas,
-                                     MissionKind::HeloRaid, MissionKind::Harassment, MissionKind::Bda};
+        const MissionKind order[] = {MissionKind::Missile, MissionKind::Dead,     MissionKind::Hunter,
+                                     MissionKind::Deception, MissionKind::Strike, MissionKind::Recce,
+                                     MissionKind::Cas,      MissionKind::HeloRaid, MissionKind::Harassment,
+                                     MissionKind::Bda};
         const int max_packages = static_cast<int>(f.doctrine.max_packages_per_cycle * phase.tempo * ClampTo(tempo, 0.3, 1.2) + 0.5);
         for (MissionKind mk : order) {
             const int k = static_cast<int>(mk);
@@ -205,7 +208,7 @@ public:
                                 static_cast<int>(out_.size()) < max_packages;
                  ++guard) {
                 Package p;
-                if (!BestPackage(mk, used, p)) break;
+                if (!(mk == MissionKind::Missile ? BestMissilePackage(used, p) : BestPackage(mk, used, p))) break;
                 used.insert(p.target_key);
                 if (!Approve(p, *cdr)) {
                     if (++rejected >= 2) break;  // the planner stops offering what the commander won't take
@@ -284,7 +287,7 @@ private:
         const auto& sq = *c_->squadrons;
         for (std::size_t i = 0; i < sq.size(); ++i) {
             const AircraftType* a = TypeOf(sq[i]);
-            if (a == nullptr || !Fits(*a, r)) continue;
+            if (a == nullptr || a->missile || !a->InService(c_->data->theatre.year) || !Fits(*a, r)) continue;
             if (only != nullptr && std::find(only->begin(), only->end(), a->id) == only->end()) continue;
             if (a->helicopter && p != Profile::Low) continue;
             if (part == DayPart::Night && !a->night) continue;
@@ -338,6 +341,10 @@ private:
                     break;
                 case MissionKind::Harassment:
                     if (to_front > 70000.0 || e.kind == ObjectKind::City) continue;
+                    break;
+                case MissionKind::Missile:
+                    // Fixed targets only: a missile flies to where it was told, and finds nothing that has moved.
+                    if (e.mobile || e.kind == ObjectKind::Troops || e.kind == ObjectKind::City || IsAirDefence(e.kind)) continue;
                     break;
                 case MissionKind::Count: continue;
             }
@@ -713,6 +720,7 @@ private:
             if (a == nullptr) continue;
             double per = 0.0;
             for (const IntelEntry* th : c_->intel->Threats()) {
+                if (th->threat_max_target_mps > 0.0 && a->cruise_mps > th->threat_max_target_mps) continue;  // too fast for it
                 // A threat whose place is uncertain covers a wider ring, but is less likely to be on any one route
                 // through it: the lethality is spread over the ring's area.
                 const double ring = th->threat_radius_m + 0.5 * th->sigma_m;
@@ -867,6 +875,113 @@ private:
         return true;
     }
 
+    // The cruise missile type the staff would fire now: the doctrine's first choice in service in the war's year with a
+    // salvo in stock. Null: none.
+    const AircraftType* MissileType() const {
+        const FactionDef& f = c_->data->faction;
+        const PackageTemplate& t = f.doctrine.packages[static_cast<int>(MissionKind::Missile)];
+        if (!t.allowed || c_->missile_stock == nullptr) return nullptr;
+        for (const std::string& id : t.aircraft) {
+            const AircraftType* a = f.Aircraft(id);
+            if (a == nullptr || !a->missile || !a->InService(c_->data->theatre.year)) continue;
+            const auto it = c_->missile_stock->find(id);
+            if (it != c_->missile_stock->end() && it->second + 1e-9 >= t.flight_size) return a;
+        }
+        return nullptr;
+    }
+
+    // Where a salvo is launched and how it flies in: a carrier releases it at the border entry ("air"); ships or ground
+    // launchers fire it from the front's launch area and it comes in over that entry ("sea"). High: at height to a dive
+    // 15 km short, then down onto the target; low: terrain-following all the way.
+    std::vector<RoutePoint> MissileRoute(const AircraftType& m, const EntryPoint& entry, const Vec3& target, Profile prof,
+                                         double tot_h) const {
+        const double agl = ProfileHeight(m, prof);
+        std::vector<RoutePoint> r;
+        if (m.launch == "sea" && front_->has_missile_launch) r.push_back({front_->missile_launch, agl, 0.0, "launch"});
+        r.push_back({entry.pos, agl, 0.0, r.empty() ? "launch" : "entry"});
+        const Vec3 d = target - entry.pos;
+        const double len = std::max(1.0, Dist2d(target, entry.pos));
+        if (prof == Profile::High && len > 20000.0) r.push_back({target - d * (15000.0 / len), agl, 0.0, "dive"});
+        r.push_back({target, 10.0, 0.0, "target"});
+        TimeRoute(r, r.size() - 1, tot_h, m.cruise_mps);
+        return r;
+    }
+
+    // A cruise missile salvo (MissionKind::Missile): one flight of missiles at a fixed target within their range, worth
+    // its expected effect (the missiles that get through, their warheads, their accuracy) less the missiles spent.
+    bool BestMissilePackage(const std::set<std::string>& used, Package& best_out) {
+        const AircraftType* mt = MissileType();
+        if (mt == nullptr) return false;
+        const FactionDef& f = c_->data->faction;
+        const PackageTemplate& t = f.doctrine.packages[static_cast<int>(MissionKind::Missile)];
+        Officer& pln = PlannerOfficer();
+        const TuningTable& tune = Tune();
+        const double noise_sd = tune.Get("utility.noise_at_zero_skill") * (1.0 - pln.Effective(pln.def.skills.planning));
+        const double left = (*c_->missile_stock)[mt->id];
+        const double scarcity = std::sqrt(std::max(1.0, static_cast<double>(mt->stock)) / std::max(1.0, left));
+        const double hit = mt->hit_chance > 0.0 ? mt->hit_chance : tune.Get("strike.hit_chance");
+        const Profile prof = t.profiles.empty() ? Profile::Low : t.profiles.front();
+        double best_u = -1e18;
+        bool found = false;
+        for (const IntelEntry* e : Candidates(MissionKind::Missile)) {
+            if (used.count(e->key) > 0) continue;
+            for (std::size_t ei = 0; ei < front_->entries.size(); ++ei) {
+                const EntryPoint& entry = front_->entries[ei];
+                for (DayPart part : t.day_parts) {
+                    double tot_h = 0.0;
+                    if (!NextTot(part, tot_h)) continue;
+                    Package p;
+                    p.kind = MissionKind::Missile;
+                    p.target_key = e->key;
+                    p.target_object = e->object_id;
+                    p.target_label = e->label;
+                    p.target_pos = e->pos;
+                    p.tot_h = tot_h;
+                    p.part = part;
+                    p.profile = prof;
+                    p.entry = entry.id;
+                    p.exit = entry.id;
+                    p.tactic = std::string("missile:") + mt->id;
+                    Flight fl;
+                    fl.callsign = f.callsigns[static_cast<std::size_t>((*c_->next_id * 7) % static_cast<int>(f.callsigns.size()))] + " " +
+                                  std::to_string(10 + (*c_->next_id % 9) * 10);
+                    fl.role = FlightRole::Missile;
+                    fl.aircraft = mt->id;
+                    fl.count = t.flight_size;
+                    fl.profile = prof;
+                    fl.route = MissileRoute(*mt, entry, e->pos, prof, tot_h);
+                    double flown = 0.0;
+                    for (std::size_t i = 0; i + 1 < fl.route.size(); ++i) flown += Dist2d(fl.route[i].pos, fl.route[i + 1].pos);
+                    if (flown > mt->range_m) continue;
+                    fl.release_index = ReleaseIndex(fl.route);
+                    fl.aim_key = e->key;
+                    fl.aim_pos = e->pos;
+                    p.flights.push_back(fl);
+                    const double lost = std::min(static_cast<double>(fl.count), ExpectedLosses(p, *e, nullptr));
+                    const double through = fl.count - lost;
+                    const double effect = Clamp01(through * mt->strike_power * hit / (0.5 + HardnessOf(*e)));
+                    std::vector<std::string> vwhy;
+                    const double ev = ValueOf(*e, MissionKind::Missile, &vwhy) * e->Live() * effect;
+                    double u = tune.Get("utility.value_weight") * ev - tune.Get("utility.missile_cost") * scarcity * fl.count;
+                    u += c_->rng->Normal(0.0, noise_sd);
+                    if (u > best_u && ev >= tune.Get("utility.min_effect")) {
+                        best_u = u;
+                        p.expected_losses = 0.0;
+                        p.expected_value = ev;
+                        p.utility = u;
+                        p.rationale = vwhy;
+                        p.rationale.insert(p.rationale.begin(), "expects " + Num1(through) + " of " + std::to_string(fl.count) + " " +
+                                                                    mt->name + " to get through, for an expected effect of " + Num1(ev) +
+                                                                    "; no crew at risk");
+                        best_out = p;
+                        found = true;
+                    }
+                }
+            }
+        }
+        return found && best_u >= tune.Get("utility.min_value");
+    }
+
     double HardnessOf(const IntelEntry& e) const {
         if (!e.object_id.empty()) {
             if (const TheatreObject* o = c_->data->theatre.Find(e.object_id)) return o->hardness;
@@ -876,7 +991,7 @@ private:
 
     bool Approve(Package& p, Officer& cdr) {
         const FactionDef& f = c_->data->faction;
-        const double risk = p.expected_losses / std::max(1, p.Aircraft());
+        const double risk = p.kind == MissionKind::Missile ? 0.0 : p.expected_losses / std::max(1, p.Aircraft());
         const double tolerance = std::max(0.3, f.politics.loss_tolerance_per_day);
         const double left = std::max(0.0, tolerance - c_->politics->losses_today) / tolerance;
         double limit = 0.04 + 0.16 * cdr.def.traits.boldness + 0.08 * c_->politics->pressure + 0.06 * cdr.Quirk("risk");
@@ -928,6 +1043,11 @@ private:
         }
         for (const Flight& fl : p.flights) *c_->arm_stock -= fl.arms;
         if (*c_->arm_stock < 0.0) *c_->arm_stock = 0.0;
+        for (const Flight& fl : p.flights) {
+            if (fl.role != FlightRole::Missile || c_->missile_stock == nullptr) continue;
+            double& left = (*c_->missile_stock)[fl.aircraft];
+            left = std::max(0.0, left - fl.count);
+        }
         p.name = p.flights.empty() ? std::string("Package") : p.flights.front().callsign;
         pln.last_entry = p.entry;
         std::string comp;

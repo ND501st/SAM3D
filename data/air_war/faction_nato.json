@@ -17,13 +17,13 @@
     "confidence": "medium",
     "phases": [
       { "id": "rollback", "name": "air superiority and the rollback of the air defences",
-        "apportion": { "dead": 0.25, "hunter": 0.15, "deception": 0.1, "recce": 0.15, "strike": 0.25, "bda": 0.05, "cas": 0.05 },
+        "apportion": { "dead": 0.25, "hunter": 0.15, "deception": 0.1, "recce": 0.15, "strike": 0.25, "bda": 0.05, "cas": 0.05, "missile": 0.06 },
         "until_iads": 0.45, "notes": "Until the intelligence believes fewer than 45% of the air defences still work." },
       { "id": "interdiction", "name": "interdiction: bridges, junctions, depots, airfields",
-        "apportion": { "strike": 0.45, "dead": 0.1, "hunter": 0.1, "recce": 0.1, "bda": 0.1, "cas": 0.1, "helo_raid": 0.05 },
+        "apportion": { "strike": 0.45, "dead": 0.1, "hunter": 0.1, "recce": 0.1, "bda": 0.1, "cas": 0.1, "helo_raid": 0.05, "missile": 0.06 },
         "until_day": 12 },
       { "id": "air_land", "name": "support of the land battle",
-        "apportion": { "cas": 0.3, "strike": 0.3, "helo_raid": 0.1, "hunter": 0.1, "dead": 0.05, "recce": 0.1, "bda": 0.05 } }
+        "apportion": { "cas": 0.3, "strike": 0.3, "helo_raid": 0.1, "hunter": 0.1, "dead": 0.05, "recce": 0.1, "bda": 0.05, "missile": 0.03 } }
     ],
     "packages": {
       "strike": { "main_flights": 2, "flight_size": 4, "aircraft": [ "f111f", "tornado_ids", "f16a", "f4e" ], "sead_per_threat": 1.0, "sead_max": 6, "escort_ratio": 0.5, "jammers": 1,
@@ -39,7 +39,9 @@
       "cas": { "main_flights": 1, "flight_size": 4, "aircraft": [ "a10a" ], "sead_per_threat": 0.5, "sead_max": 2, "profiles": [ "low" ], "day_parts": [ "day", "dawn", "dusk" ] },
       "helo_raid": { "main_flights": 1, "flight_size": 4, "profiles": [ "low" ], "day_parts": [ "day", "dusk" ] },
       "deception": { "main_flights": 1, "flight_size": 4, "profiles": [ "medium" ], "day_parts": [ "dawn", "day", "dusk" ],
-                     "notes": "A wave of decoy drones to drain the battery's missiles and make it radiate for the ELINT." }
+                     "notes": "A wave of decoy drones to drain the battery's missiles and make it radiate for the ELINT." },
+      "missile": { "main_flights": 1, "flight_size": 4, "aircraft": [ "tlam_c", "agm86c" ], "profiles": [ "low" ], "day_parts": [ "night", "dawn", "day", "dusk" ],
+                   "notes": "Cruise missile salvos at fixed targets deep or heavily defended, without a crew at risk: only in a war of 1986 or later (TLAM-C from ships, then the B-52s' AGM-86C); in the 1980-85 war NATO has none." }
     }
   },
   "intelligence": {
@@ -119,6 +121,14 @@
     { "id": "ah1s", "name": "AH-1S Cobra", "roles": [ "helicopter" ], "class": "helicopter", "helicopter": true, "rcs_m2": 6, "cruise_mps": 60, "attack_mps": 60,
       "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 12, "strike_power": 0.35, "evasion": 0.3,
       "source": "placeholder: a period NATO type named for flavour; no value is the real aircraft's", "confidence": "estimate" },
+    { "id": "tlam_c", "name": "BGM-109C Tomahawk (TLAM-C)", "roles": [ "missile" ], "class": "cruise_missile", "missile": true, "launch": "sea",
+      "rcs_m2": 0.05, "cruise_mps": 245, "attack_mps": 245, "low_agl_m": 50, "medium_alt_m": 3000, "max_turn_deg_s": 4,
+      "range_km": 1250, "strike_power": 0.35, "hit_chance": 0.8, "evasion": 0.0, "in_service_year": 1986, "stock": 60, "resupply_per_day": 4,
+      "source": "game values on public reference figures: the conventional land-attack Tomahawk entered US Navy service in 1986 (the nuclear TLAM-N in 1984); 6.25 m with its booster, a 1,000 lb warhead, about 1,250 km, terrain-following over land with a scene-matching terminal (navweaps, csis missile threat; tier 4, estimate)", "confidence": "low" },
+    { "id": "agm86c", "name": "AGM-86C CALCM (from B-52s)", "roles": [ "missile" ], "class": "cruise_missile", "missile": true, "launch": "air",
+      "rcs_m2": 0.1, "cruise_mps": 245, "attack_mps": 245, "low_agl_m": 60, "medium_alt_m": 3000, "max_turn_deg_s": 4,
+      "range_km": 1100, "strike_power": 0.45, "hit_chance": 0.75, "evasion": 0.0, "in_service_year": 1988, "stock": 30, "resupply_per_day": 2,
+      "source": "game values on public reference figures: AGM-86B nuclear cruise missiles converted with a blast-fragmentation warhead and GPS from June 1986 (AGM-86C), first used in January 1991 (fas.org, airandspaceforces.com; tier 4, estimate); the year here is the conversions'", "confidence": "low" },
     { "id": "bqm74", "name": "Decoy drone (BQM-74 class)", "roles": [ "decoy" ], "class": "drone", "drone": true, "rcs_m2": 3, "cruise_mps": 200, "attack_mps": 200,
       "low_agl_m": 100, "medium_alt_m": 3000, "max_turn_deg_s": 5, "evasion": 0.0,
       "source": "decoys (decoy drones drawing the radars on and the missiles off, the Bekaa 1982; the TALD class came later); numbers placeholders", "confidence": "low",

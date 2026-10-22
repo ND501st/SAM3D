@@ -32,6 +32,14 @@ struct PostFeed {
     std::vector<int> heard;                         // air-picture reports heard, not yet written (board numbers, oldest first)
     int command = -1;                               // the regiment's last two-digit command on the tube (-1 none)
     std::string command_text;                       // "20 fire ban" (the code table's meaning)
+    // Our other air defences round the post, as the regiment's order gives them: the board plots each and its reach.
+    struct Neighbour {
+        std::string name;
+        std::string system;  // an air defence system id
+        Vec3 position;       // ENU
+        double radius_m = 0.0;
+    };
+    std::vector<Neighbour> neighbours;
 };
 
 // The board's targets as the commander reads them: each number's latest mark.

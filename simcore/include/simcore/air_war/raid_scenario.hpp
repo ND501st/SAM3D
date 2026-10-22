@@ -218,6 +218,9 @@ struct RaidAircraft {
     double appear_s = 0.0;
     Profile profile = Profile::Low;  // its flight's (the defences' cover: low, medium)
     double evasion = 0.0;            // the type's (AircraftType::evasion)
+    bool missile = false;            // a cruise missile: it strikes where it arrives, and is never a crew lost
+    double speed_mps = 0.0;          // the type's cruise speed (a defence can't take what is too fast for it)
+    double hit_chance = 0.0;         // a missile's own accuracy (0: strike.hit_chance)
 };
 
 // One of our other air defences whose reach overlaps the scenario. As the raid's aircraft pass through its zone it takes
@@ -394,7 +397,8 @@ public:
             switch (p.flights[static_cast<std::size_t>(cl.flight)].role) {
                 case FlightRole::Strike:
                 case FlightRole::Dead:
-                case FlightRole::Helicopter: return 0;
+                case FlightRole::Helicopter:
+                case FlightRole::Missile: return 0;
                 case FlightRole::Sead:
                 case FlightRole::Hunter: return 1;
                 case FlightRole::Decoy: return 2;
@@ -436,7 +440,7 @@ public:
                 json::Value t = Obj();
                 Put(t, "id", Str(tid));
                 Put(t, "name", Str(fl.callsign + " " + std::to_string(k + 1) + ": " + a->name + " (" + FlightRoleName(fl.role) + ")"));
-                Put(t, "type", Str(a->helicopter ? "Air+Rotorcraft" : "Air+FixedWing"));
+                Put(t, "type", Str(a->missile ? "Air+Missile" : (a->helicopter ? "Air+Rotorcraft" : "Air+FixedWing")));
                 Put(t, "class", Str(a->target_class));
                 if (fmt.model) Put(t, "model", Str(a->id));
                 Vec3 start = cl.pts[0] + shift;
@@ -458,7 +462,7 @@ public:
                 Put(t, "waypoints", wps);
                 const double route_len = RouteLength(cl.pts);
                 const double dt_s = (cl.t_h.back() - cl.t_h.front()) * 3600.0;
-                const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, 600.0) : a->cruise_mps;
+                const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, std::max(600.0, a->cruise_mps * 1.2)) : a->cruise_mps;
                 Put(t, "speed_mps", Num(std::round(speed)));
                 Put(t, "max_turn_rate_deg_s", Num(a->max_turn_deg_s));
                 Put(t, "rcs_m2", Num(a->rcs_m2));
@@ -486,7 +490,7 @@ public:
                     Put(t, "behaviour", b);
                 }
                 const bool has_rwr = !a->rwr_em.empty();
-                if (!a->drone) {
+                if (!a->drone && !a->missile) {
                     json::Value e = Obj();
                     if (a->helicopter) {
                         Put(e, "on", Str("lock"));
@@ -544,7 +548,8 @@ public:
                 ra.helicopter = a->helicopter;
                 ra.drone = a->drone;
                 ra.has_release = cl.release && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
-                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce);
+                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
+                                                fl.role == FlightRole::Missile);
                 ra.release_enu = cl.release_pt + shift;
                 ra.aim_enu = to_scen(fl.aim_pos + moved_by(fl.aim_key));
                 ra.arms = arms;
@@ -556,6 +561,9 @@ public:
                 ra.appear_s = appear_s;
                 ra.profile = fl.profile;
                 ra.evasion = a->evasion;
+                ra.missile = a->missile;
+                ra.speed_mps = a->cruise_mps;
+                ra.hit_chance = a->hit_chance;
                 m.aircraft.push_back(ra);
                 ++n_targets;
                 end_s = std::max(end_s, (cl.t_h.back() - m.start_h) * 3600.0);
@@ -781,6 +789,20 @@ public:
         Put(root, "crew_commander", Str("npc"));
         Put(root, "battery_commander", Str("npc"));
         Put(root, "targets", targets);
+        // Our other air defences round the battery: drawn where they stand, plotted on the board (their fire is the bridge's).
+        if (!m.neighbours.empty()) {
+            json::Value nbs = Arr();
+            for (const RaidNeighbour& nb : m.neighbours) {
+                json::Value v = Obj();
+                Put(v, "id", Str(nb.id));
+                Put(v, "name", Str(nb.name));
+                Put(v, "system", Str(nb.defence.system));
+                Put(v, "position", Pos(Vec3{nb.enu.x, nb.enu.y, 0.0}));
+                Put(v, "radius_km", Num(nb.defence.radius_m / 1000.0));
+                Push(nbs, v);
+            }
+            Put(root, "neighbours", nbs);
+        }
 
         // The warning our side gets, and the PU-12 without its radars.
         json::Value triggers = Arr();

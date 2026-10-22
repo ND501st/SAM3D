@@ -56,6 +56,8 @@ struct RunStats {
     double battery_wrecked = 0.0;  // runs in which the battery was wrecked at least once
     double arms_left = 0.0;
     double drones = 0.0;  // decoy drones flown
+    double missiles = 0.0;  // cruise missiles fired
+    double missiles_downed = 0.0;
     std::map<std::string, double> struck;       // packages by target object (ghosts as "(nothing there)")
     std::map<std::string, double> struck_kind;  // packages by the target's kind as the enemy believed it
 };
@@ -148,6 +150,11 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
                 acc.drones += f.count;
                 continue;
             }
+            if (a != nullptr && a->missile) {
+                acc.missiles += f.count;
+                acc.missiles_downed += f.lost;
+                continue;
+            }
             s.sorties += f.count;
             s.lost += f.lost;
         }
@@ -199,6 +206,7 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
     }
     std::printf(". Staff changes %.1f, false claims found out %.1f, political events %.1f (pauses %.1f) a campaign; battery wrecked in %.0f%% of runs; ARMs left %.0f; decoy drones %.0f.\n",
                 r.staff_changes / n, r.false_claims / n, r.events / n, r.pauses / n, 100.0 * r.battery_wrecked / n, r.arms_left / n, r.drones / n);
+    if (r.missiles > 0.0) std::printf("Cruise missiles: %.1f fired a campaign, %.1f shot down.\n", r.missiles / n, r.missiles_downed / n);
     const auto top = [&](const std::map<std::string, double>& m, std::size_t count) {
         std::vector<std::pair<double, std::string>> v;
         for (const auto& kv : m) v.push_back({kv.second, kv.first});
