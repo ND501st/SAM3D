@@ -359,6 +359,14 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
   - **Shots all round.** `-SimShotsAround` adds left, right, behind, down and up to each seat's shots
     (`unreal/README.md`).
 
+### The post's records and the after-action loop (project owner, 22 Oct 2026)
+
+The radiotelephonist's journal (`simcore/radio_journal.hpp`: every message with its time, taken down by hand by a player,
+with an NPC's slips) is the post's record of the fight, beside the board. The battery's after-action report is to be
+compiled from these records, not from the truth, and the regiment's and battery's strategy built on those reports:
+`docs/command/01_PRINCIPLES.md` 9, planned as `docs/command/07_IMPLEMENTATION_PLAN.md` P9 and the campaign game's 15.3.
+The radiotelephonist's accuracy is therefore critical to the after-action loop, not only to the board.
+
 ## 6. What is still SAM3D's
 
 - The plan's item 24 is the plotter's air-situation map (`rwd_mb3`); its grid, range circles and the pencil's colours

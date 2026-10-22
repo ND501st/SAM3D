@@ -201,6 +201,13 @@ entry or an empty box can't be plotted at all. A report read to him from the pag
 plotter's mouse wheel offers the page's numbers not yet on the board. The debrief sets the journal against what was said
 (digits as said, entries not as said, lost) and counts the marks plotted from the page and those it had wrong.
 
+**Beyond the fight** (project owner, 22 Oct 2026; `docs/command/01_PRINCIPLES.md` 9). The journal is the battery's record
+of the fight, and the after-action report is to be compiled from it, not from the truth (`docs/command/07_IMPLEMENTATION_PLAN.md`
+P9): the raids' times, routes and sizes as written, the ones never written missing. The regiment's and the battery's
+analysis and planning are built on those reports, so the radiotelephonist's accuracy carries into the next raid: the
+corridors the analysts name, the ambush positions, the emission policy. It is critical to the after-action gameplay
+loop, and the regiment's checks of the record feed the crew's rating.
+
 ### 2.10 The plotter's voice
 
 The operator-plotter's headset is a second one on PVS-1 (`second_station` on the box): he hears FuG-1 while the

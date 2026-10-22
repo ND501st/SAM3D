@@ -177,7 +177,11 @@ of our side's chain of command (the national sector, the army, the division, the
 offices, placed on a map of a small city, a town, villages, works and countryside) and travel by in person, runners,
 despatch riders, couriers, telephone, radio, the warning net, sirens, the post and the news (`simcore/command/`). Never
 add an omniscient HUD panel: route new information through the pipeline. Next: deliveries as scenes in the world, the
-player telling people.
+player telling people. **The written record is the war's memory** (project owner, 22 Oct 2026;
+`docs/command/01_PRINCIPLES.md` 9): after-action reports are compiled from what the crews wrote down (the
+radiotelephonist's journal, `simcore/radio_journal.hpp`, then the board and the commander's log), never from the truth,
+and the battery's and regiment's analysis and plans are built on those reports. Keep the record's accuracy carrying
+through to the after-action loop in anything that builds reports, our side's picture or its planning.
 
 Out of the vehicle (roadmap 8.14, `docs/crew/13_OUT_OF_THE_VEHICLE.md`): a crewman's body is always somewhere (seated,
 inside, in a hatch, on the hull, on the ground) and moves only by the vehicle's real ways, leg by leg with their times

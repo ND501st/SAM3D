@@ -378,7 +378,7 @@ public:
 	void HandleBoard(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
 	/** The radio journal's page under the cross: a click holds it before the eyes (OpenJournal). */
 	void HandleJournalPage(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
-	/** The page before the eyes, the camera locked on it: the keeper writes (dictation: digits into the line's boxes), the
+	/** The page held up before the eyes (the HUD draws it): the keeper writes (dictation: digits into the line's boxes), the
 	 * others read. Esc or the right mouse button puts it down. */
 	bool OpenJournal();
 	void CloseJournal();

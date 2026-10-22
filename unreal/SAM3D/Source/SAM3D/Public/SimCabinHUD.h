@@ -43,6 +43,9 @@ public:
 private:
 	/** The radio lines, the newest at the bottom, ending above Bottom (clear of the PU-12M's aids). */
 	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font, float Bottom, const FString& Station);
+	/** The radio journal's page held up before the eyes: ruled paper, the entries in the radiotelephonist's hand, the line
+	 * being written with its printed words and a box for each group of digits. */
+	void DrawJournal(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 	/** The player's own voice paths, bottom left (his headset, his box, its lamps, a call): returns the height drawn. */
 	float DrawComms(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font, float Bottom);
 	/** Where the PU-12M's aids start at this seat (the radio lines stay above it); the screen's foot otherwise. */

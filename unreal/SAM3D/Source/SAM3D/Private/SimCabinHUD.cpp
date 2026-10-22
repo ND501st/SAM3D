@@ -22,6 +22,11 @@ void ASimCabinHUD::DrawHUD()
 	}
 	const APlayerController* Pc = OwnerPc;
 	const ASimOsaVehicle* Vehicle = Pc != nullptr ? Cast<ASimOsaVehicle>(Pc->GetPawn()) : nullptr;
+	// The radio journal held up: the keyboard is the pencil's (digits, Backspace, Tab, Enter, S), nothing here hears it.
+	if (Vehicle != nullptr && Vehicle->IsAtJournal())
+	{
+		OwnerPc = nullptr;
+	}
 	// G: every key; N: the guide's next step.
 	if (OwnerPc != nullptr && Vehicle != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::G))
 	{
@@ -124,18 +129,6 @@ void ASimCabinHUD::DrawHUD()
 		DrawText(Chip, FLinearColor(1.0f, 0.82f, 0.2f), Cx + 17.0f, Cy - 24.0f, Small);
 		DrawText(TEXT("wheel: number   click: write"), FLinearColor(1.0f, 1.0f, 1.0f, 0.35f), Cx + 14.0f, Cy + 12.0f, Small);
 	}
-	if (Vehicle->IsAtJournal())
-	{
-		// The page before his eyes: only the keys (what was said is in his head, or on the page).
-		UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : Font;
-		const FString Keys = Vehicle->IsWritingJournal()
-			? TEXT("Digits: write into the box   Backspace: rub out   Tab / Shift+Tab: next / last box   Enter: line done   S: short (number and time only)   Esc: put the page down")
-			: TEXT("Reading the radio journal   Esc: put the page down");
-		float W = 0.0f, H = 0.0f;
-		GetTextSize(Keys, W, H, Small);
-		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), Cx - W * 0.5f - 8.0f, Canvas->ClipY - 46.0f, W + 16.0f, H + 8.0f);
-		DrawText(Keys, FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), Cx - W * 0.5f, Canvas->ClipY - 42.0f, Small);
-	}
 	const FString Feedback = Vehicle->GetCabinFeedbackText();
 	if (!Feedback.IsEmpty())
 	{
@@ -161,6 +154,113 @@ void ASimCabinHUD::DrawHUD()
 	{
 		DrawPost(Sim, Vehicle, Font);
 	}
+	if (Sim != nullptr && Vehicle->IsAtJournal())
+	{
+		DrawJournal(Sim, Vehicle);
+	}
+}
+
+void ASimCabinHUD::DrawJournal(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle)
+{
+	// What he wrote is on the page and nowhere else (the first-person rule): the page as the cabin's paper has it, only
+	// held up close and in good light.
+	UFont* Large = GEngine != nullptr ? GEngine->GetLargeFont() : nullptr;
+	UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const FLinearColor PaperInk(0.93f, 0.91f, 0.84f);    // the page
+	const FLinearColor Rule(0.62f, 0.72f, 0.86f);        // its ruled lines
+	const FLinearColor Margin(0.85f, 0.45f, 0.45f);      // the margin line
+	const FLinearColor Printed(0.18f, 0.18f, 0.18f);     // the form's printed words
+	const FLinearColor Pen(0.06f, 0.12f, 0.42f);         // his pen
+	const FLinearColor Pencil(0.85f, 0.35f, 0.05f);      // the box he is on
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	const float W = FMath::Min(Canvas->ClipX - 80.0f, 1100.0f);
+	const float H = FMath::Min(Canvas->ClipY - 120.0f, 720.0f);
+	const float X = (Canvas->ClipX - W) * 0.5f;
+	const float Y = (Canvas->ClipY - H) * 0.5f - 20.0f;
+	DrawRect(PaperInk, X, Y, W, H);
+	const float Left = X + 0.09f * W;
+	DrawLine(Left - 12.0f, Y, Left - 12.0f, Y + H, Margin, 1.5f);
+	const float Scale = FMath::Clamp(W / 900.0f, 0.9f, 1.4f);
+	DrawText(TEXT("ЖУРНАЛ РАДИОСВЯЗИ"), Printed, Left, Y + 18.0f, Large, Scale);
+	DrawText(TEXT("Время     Сеть        От кого: содержание"), Printed, Left, Y + 58.0f * Scale, Small, Scale);
+	const float Row = 34.0f * Scale;
+	float Ry = Y + 90.0f * Scale;
+	// The entries written, in his hand (the paper's own lines without its two printed headings, and without the line being
+	// written, drawn below with its boxes).
+	TArray<FString> Lines = Sim->GetDocumentLines(TEXT("radio_journal"));
+	const bool bDraft = Sim->IsJournalDrafting();
+	if (Lines.Num() >= 2)
+	{
+		Lines.RemoveAt(0, 2);
+	}
+	if (bDraft && Lines.Num() > 0)
+	{
+		Lines.Pop();
+	}
+	const float TextW = X + W - 24.0f - Left;
+	for (const FString& L : Lines)
+	{
+		DrawLine(X + 8.0f, Ry + Row - 6.0f, X + W - 8.0f, Ry + Row - 6.0f, Rule, 1.0f);
+		float Tw = 0.0f, Th = 0.0f;
+		GetTextSize(L, Tw, Th, Medium, Scale);
+		DrawText(L, Pen, Left, Ry + 4.0f, Medium, Tw > TextW ? Scale * TextW / Tw : Scale);
+		Ry += Row;
+	}
+	// The line being written: the form's words printed, a box a group of digits, his digits in them.
+	FString Lead;
+	TArray<FString> Words, Typed;
+	TArray<int32> Widths;
+	int32 Box = 0;
+	if (bDraft && Sim->GetJournalDraft(Lead, Words, Typed, Widths, Box))
+	{
+		DrawRect(FLinearColor(1.0f, 0.96f, 0.72f), X + 8.0f, Ry - 4.0f, W - 16.0f, Row + 14.0f);
+		float Cx = Left;
+		float Tw = 0.0f, Th = 0.0f;
+		const float Ty = Ry + 6.0f;
+		auto Print = [&](const FString& S, const FLinearColor& Ink)
+		{
+			GetTextSize(S, Tw, Th, Medium, Scale);
+			DrawText(S, Ink, Cx, Ty, Medium, Scale);
+			Cx += Tw;
+		};
+		Print(Lead + TEXT(" "), Printed);
+		float Dw = 0.0f;
+		GetTextSize(TEXT("0"), Dw, Th, Medium, Scale);
+		const float Cell = Dw + 6.0f * Scale;
+		for (int32 I = 0; I < Widths.Num(); ++I)
+		{
+			Print(Words.IsValidIndex(I) ? Words[I] : FString(), Printed);
+			const bool bHere = I == Box;
+			for (int32 K = 0; K < Widths[I]; ++K)
+			{
+				const float Bx = Cx + K * Cell;
+				DrawRect(bHere ? Pencil : Printed, Bx, Ty + Th + 1.0f, Cell - 3.0f, bHere ? 2.0f : 1.0f);  // the box's line to write on
+				if (K < Typed[I].Len())
+				{
+					DrawText(Typed[I].Mid(K, 1), Pen, Bx + 1.5f * Scale, Ty, Medium, Scale);
+				}
+			}
+			if (bHere)
+			{
+				const float Px = Cx + FMath::Min(Typed[I].Len(), Widths[I] - 1) * Cell;
+				DrawRect(FLinearColor(Pencil.R, Pencil.G, Pencil.B, 0.18f), Px - 1.0f, Ty - 2.0f, Cell - 1.0f, Th + 5.0f);
+			}
+			Cx += Widths[I] * Cell + 2.0f;
+		}
+		if (Words.Num() > Widths.Num())
+		{
+			Print(Words.Last(), Printed);
+		}
+	}
+	// The keys, under the page.
+	const FString Keys = Vehicle->IsWritingJournal()
+		? (bDraft ? TEXT("Digits: write into the box   Backspace: rub out   Tab / Shift+Tab: next / last box   Enter: line done   S: short (number and time only)   Esc: put the page down")
+				  : TEXT("Nothing more heard to write   Enter: the next message when one comes   Esc: put the page down"))
+		: TEXT("Reading the radio journal   Esc: put the page down");
+	float Kw = 0.0f, Kh = 0.0f;
+	GetTextSize(Keys, Kw, Kh, Small);
+	DrawText(Keys, FLinearColor(1.0f, 1.0f, 1.0f, 0.9f), (Canvas->ClipX - Kw) * 0.5f, Y + H + 12.0f, Small);
 }
 
 TArray<FString> ASimCabinHUD::Wrap(const FString& Text, float Width, UFont* Font, float Scale)

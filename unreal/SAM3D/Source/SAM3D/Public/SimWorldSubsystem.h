@@ -1425,6 +1425,9 @@ public:
 	bool JournalFinish(const FString& Role, bool bBrief);
 	/** A line is being written in the journal now. */
 	bool IsJournalDrafting() const;
+	/** The line being written: its time and who passed it (Lead), its printed words (one more than the boxes), each box's
+	 * digits so far and its width in digits, the box the pencil is on. False when no line is being written. */
+	bool GetJournalDraft(FString& Lead, TArray<FString>& Words, TArray<FString>& Typed, TArray<int32>& Widths, int32& Box) const;
 	/** The seat that keeps the post's radio journal ("" none). */
 	FString GetJournalKeeper() const;
 

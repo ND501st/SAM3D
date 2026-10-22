@@ -1269,15 +1269,10 @@ void ASimOsaVehicle::HandleJournalPage(APlayerController* Pc, const FVector& Sta
 
 bool ASimOsaVehicle::OpenJournal()
 {
+	// The page comes up before him (the HUD draws it, ASimCabinHUD::DrawJournal): the cabin's own copy is too small and too
+	// dim to write on. The camera stays where he sits.
 	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-	FVector World;
-	FVector Facing;
-	FString Label;
-	FVector Eye;
-	FRotator View;
-	FString SeatLabel;
-	if (Sim == nullptr || Cabin == nullptr || !Cabin->GetHighlightTarget(TEXT("radio_journal"), World, Label, Facing) ||
-		!Cabin->GetStationView(Station, Eye, View, SeatLabel))
+	if (Sim == nullptr)
 	{
 		return false;
 	}
@@ -1287,21 +1282,7 @@ bool ASimOsaVehicle::OpenJournal()
 		FeedbackText = TEXT("Nothing heard to write: the page is up to date");
 		FeedbackSecondsLeft = 2.5f;
 	}
-	// The eye a forearm above the page, looking down onto it, the page's top away from the man at it.
-	const FVector At = GetActorTransform().InverseTransformPosition(World);
-	const FVector Normal = GetActorTransform().InverseTransformVectorNoScale(Facing).GetSafeNormal();
-	FVector Away = At - Eye;
-	Away -= Normal * FVector::DotProduct(Away, Normal);
-	if (Away.IsNearlyZero())
-	{
-		Away = FVector::ForwardVector;
-	}
 	bAtJournal = true;
-	bViewOverride = true;
-	OverrideLocation = At + Normal * 24.0;
-	OverrideRotation = FRotationMatrix::MakeFromXZ(-Normal, Away.GetSafeNormal()).Rotator();
-	CabinCamera->SetFieldOfView(40.0f);
-	ApplyStationView();
 	return true;
 }
 
@@ -1309,7 +1290,6 @@ void ASimOsaVehicle::CloseJournal()
 {
 	bAtJournal = false;
 	bJournalWriter = false;
-	ClearCabinViewOverride();
 }
 
 void ASimOsaVehicle::HandleJournal(APlayerController* Pc, USimWorldSubsystem* Sim)

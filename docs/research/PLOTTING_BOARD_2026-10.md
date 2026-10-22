@@ -275,5 +275,9 @@ No public source says how the PU-12M's plotter received the air picture. Full wr
   His headset's jack is a SAM3D choice. The radiotelephonist keeps the timed journal, the regiment's R-111 and FuG-4,
   and repeats a report from the journal when asked. The ČSLA reading (the air-situation broadcast on the R-111, so
   through the radiotelephonist) is recorded as the alternative.
+* **Checking a record.** Dedyaev (BGUIR 2010, a post-Soviet textbook of the Soviet method) checks an operator by having
+  "a well-trained plotter" plot his reports live while they are written down, then setting the record against the board;
+  and when reports go straight from the radar operator, a fix's time is the time the post's plotter received it. SAM3D
+  builds its after-action loop on such records (`docs/command/01_PRINCIPLES.md` 9).
 * **Would settle it:** the NVA *Handbuch für Planzeichner und Funkorter der Truppenluftabwehr* (1980), the ČSLA
   *PVOV-2-3 Bojová služba u PU-12(M)*, the PU-12(M)'s Soviet technical description. None is online.

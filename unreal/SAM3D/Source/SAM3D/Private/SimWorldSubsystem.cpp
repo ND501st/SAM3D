@@ -2758,6 +2758,32 @@ bool USimWorldSubsystem::IsJournalDrafting() const
 	return Runner && Runner->Journal().Draft() != nullptr;
 }
 
+bool USimWorldSubsystem::GetJournalDraft(FString& Lead, TArray<FString>& Words, TArray<FString>& Typed, TArray<int32>& Widths,
+	int32& Box) const
+{
+	const simcore::JournalDraft* D = Runner ? Runner->Journal().Draft() : nullptr;
+	if (D == nullptr)
+	{
+		return false;
+	}
+	const int32 S = static_cast<int32>(D->message.heard_s);
+	Lead = FString::Printf(TEXT("Ч+%02d:%02d  %s:"), S / 60, S % 60, *ToF(D->message.from));
+	Words.Reset();
+	Typed.Reset();
+	Widths.Reset();
+	for (const std::string& W : D->words)
+	{
+		Words.Add(ToF(W));
+	}
+	for (std::size_t I = 0; I < D->said.size(); ++I)
+	{
+		Typed.Add(ToF(D->typed[I]));
+		Widths.Add(static_cast<int32>(D->said[I].size()));
+	}
+	Box = static_cast<int32>(D->box);
+	return true;
+}
+
 FString USimWorldSubsystem::GetJournalKeeper() const
 {
 	return Runner ? ToF(Runner->Console().post_journal_keeper) : FString();

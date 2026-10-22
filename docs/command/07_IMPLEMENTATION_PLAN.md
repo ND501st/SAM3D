@@ -16,3 +16,4 @@
 | P6 | Multiplayer: each player's character a post; the server's net sends each client its own deliveries | Later |
 | P7 | The district as an Unreal level from `places_pannonia.json`: the city, the town, the villages, the works, the posts | Later (art) |
 | P8 | Posts change hands: casualties, replacements, the player's career; the alternate command post under a deputy | Later |
+| P9 | **After-action reports from the records** (`01_PRINCIPLES.md` 9): the battery's combat report and news compiled from the radiotelephonist's journal, the board and the commander's log, not the truth; the regiment's check of a record against others (the journal against the board and the radar company's log), and a per-unit trust in its reports that the staff weight; the crew's rating for its records | Next after P2 (the reports go up by the means P2 builds; the staff who read them are the campaign game's 15.3) |

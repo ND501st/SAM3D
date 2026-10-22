@@ -91,3 +91,8 @@ sector as a scenario with the NPC crew, prints the journal (the enemy's mind, an
 learned), the last intelligence summary and the whole truth about the enemy's staff, and writes each generated scenario
 and `air_war_<faction>.json` to the output folder; `python tools/air_war_view.py out/air_war/air_war_nato.json` turns that into
 a page with the enemy's mind beside what our side learned, day by day, and the reveal. Seven generated raids are in the game's missions menu ("Air war").
+
+What our side learns is to come from its records, not from the fight's truth (`docs/command/01_PRINCIPLES.md` 9, planned
+as `docs/command/07_IMPLEMENTATION_PLAN.md` P9): the battery's after-action report is compiled from its radiotelephonist's
+journal and its board, so the `[ours]` lines will be as right or as wrong as the crew wrote them, and so will our side's
+answer to the enemy's next raid.
