@@ -38,6 +38,7 @@ struct IntelEntry {
     IntelSource source = IntelSource::None;
     bool mobile = false;
     bool emitter = false;
+    double move_mps = 0.0;      // a supply column's speed: where it was last seen spreads with it
     double value = 0.5;         // its worth to the enemy's targeteers (before weights)
     double suspected_decoy = 0.0;
     // The air defence the enemy believes it has.
@@ -89,6 +90,7 @@ struct IntelReport {
     double threat_max_target_mps = 0.0;
     std::string label;
     std::string note;
+    double move_mps = 0.0;      // how fast it moves (a supply column): the picture spreads with it
 };
 
 class IntelPicture {
@@ -135,9 +137,11 @@ public:
         const double growth_m = tuning.Get("intel.mobile_sigma_growth_mps") * 3600.0 * dt_h;
         const double half = tuning.Get("intel.mobile_confidence_half_life_h");
         const double recovery = tuning.Get("intel.fixed_function_recovery");
+        const double column_share = tuning.Get("intel.column_sigma_share");
         for (IntelEntry& e : entries) {
             if (e.mobile || e.ghost) {
-                e.sigma_m += growth_m;  // it may have driven off in any direction at any time since
+                // It may have driven off in any direction at any time since (a column on the road at its own speed).
+                e.sigma_m += std::max(growth_m, e.move_mps * column_share * 3600.0 * dt_h);
                 if (half > 0.0) e.exists *= std::pow(0.5, dt_h / half);
             } else if (e.function < 1.0) {
                 e.function = std::min(1.0, e.function + recovery * dt_h / 48.0);
@@ -210,7 +214,8 @@ private:
             n.function = r.function >= 0.0 ? r.function : 1.0;
             n.observed_h = r.observed_h;
             n.source = r.source;
-            n.mobile = r.kind == ObjectKind::SamSite || r.kind == ObjectKind::Troops || r.ghost;
+            n.mobile = r.kind == ObjectKind::SamSite || r.kind == ObjectKind::Troops || IsColumn(r.kind) || r.ghost;
+            n.move_mps = r.move_mps;
             n.emitter = r.threat_radar && IsAirDefence(r.kind);
             n.threat_radius_m = r.threat_radius_m;
             n.threat_lethality = r.threat_lethality;

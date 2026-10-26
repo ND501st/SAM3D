@@ -41,13 +41,19 @@ that works and has rounds:
 - the leader's nerve: once the losses reach his share (boldness, quirks) the main flights turn back.
 
 At the release point the light guns and shoulder-fired missiles around a military target without an air defence of
-its own take their chance on each aircraft attacking low or by helicopter (`TargetGunsChance`: troops
+its own take their chance on each aircraft attacking, by the share of them its attack meets (`FlightExposure`: a laydown
+all, a pop-up two thirds, a toss or a dive a third or less, medium altitude and stand-off none; `10_WEAPONS.md`) (`TargetGunsChance`: troops
 `attrition.target_guns_troops`, other military objects `attrition.target_guns_site`, towns none; night and weather as
 for optical defences; medium altitude is out of their reach: Dugman 5's lesson, `wiki_model5`). The planner prices the
 same guns in its expected losses. Then the surviving main flights' bombs fall on what is really near the aim point: the target if it is
-within `strike.stale_miss_m`, a dummy within `strike.decoy_area_m`, a different object, or empty ground. Hits by
-`strike.hit_chance` × load × night, weather, toss accuracy; damage = strike power × (1 − 0.7 hardness). Bombs near a town's
-edge risk civilian casualties. Reconnaissance photographs what lies along its route.
+within `strike.stale_miss_m`, a dummy within `strike.decoy_area_m`, a different object, or empty ground. Each weapon falls
+on one of the target's aim points still working and puts it out of action by its CEP, footprint and effect on the
+target's class (`10_WEAPONS.md`); a type flying without weapons in the data strikes by its old strike power (hits by
+`strike.hit_chance` × load × night, weather, toss accuracy; damage = strike power × (1 − 0.7 hardness)). An armed
+reconnaissance first searches its stretch of road or railway and attacks the first column it sees on the move, or
+brings its weapons home (`14_LOGISTICS.md`). Every defence's lethality is a relative one, times `attrition.pass_scale`;
+a radar that fires at decoys is suppressed by the SEAD behind them (`09_BALANCE.md` §9). Bombs near a town's edge risk
+civilian casualties. Reconnaissance photographs what lies along its route.
 
 ## 3. The raid as the player's scenario
 
@@ -96,7 +102,13 @@ Stepped after every `ScenarioRunner::Step`, from the runner's public state only:
   raid scenario lists them (`"neighbours"`: name, system, place, reach): the game draws each as its system's site of
   basic models on the scenario's ground (`ASimScenarioDirector::SpawnNeighbourSites`, the site layouts in
   `data/scenery/basic_models.json` `"systems"`), and the PU-12M's plotting board marks them in blue pencil with their
-  reach and our name for them (Оса, Куб, С-125, ЗУ-23...), as the regiment's order gives a battery its neighbours;
+  reach and our name for them (Оса, Куб, С-125, ЗУ-23...), as the regiment's order gives a battery its neighbours.
+  The regiment's other **Osa batteries fight** instead of rolling (the nation on the map N4, 23 Oct 2026): the scenario
+  marks them `"fights"` with their working launchers and missiles, the runner sets those launchers up in the battery's
+  combat formation about their place as shooters of the battery fire model (`battery_fire.hpp`, each taking the nearest
+  hostile in reach: their post is not ours), and the bridge reads their kills ("destroyed by" the battery), missiles and
+  radar time from it (`ScenarioRunner::NeighbourFights`, `NeighbourKills`, `NeighbourLaunches`); the game draws them
+  where they fire from;
 - **what the enemy learns**: every second our radars radiate; every launch seen by an enemy aircraft within
   `scenario.revealed_by_launch_m`.
 

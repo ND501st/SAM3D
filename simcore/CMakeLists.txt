@@ -94,6 +94,8 @@ add_executable(simcore_tests
   tests/test_ranges_history.cpp
   tests/test_instructor.cpp
   tests/test_air_war.cpp
+  tests/test_logistics.cpp
+  tests/test_weapons.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp
   tests/test_world_map.cpp
@@ -169,12 +171,19 @@ simcore_configure_target(em_bench)
 add_executable(air_war_balance examples/air_war_balance.cpp)
 simcore_configure_target(air_war_balance)
 
+add_executable(air_war_bench examples/air_war_bench.cpp)
+simcore_configure_target(air_war_bench)
+
 # The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
-# as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact.
+# as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact,
+# and of NATO on the whole nation's theatre with its raids on the Kesmark map's ground (the nation on the map, N6).
 add_executable(air_war_demo examples/air_war_demo.cpp)
 simcore_configure_target(air_war_demo)
 add_test(NAME air_war_demo
          COMMAND air_war_demo warsaw_pact 2 "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/air_war" 1)
+add_test(NAME air_war_demo_nation
+         COMMAND air_war_demo --theatre theatre_pannonia_nation.json nato 2 "${CMAKE_CURRENT_SOURCE_DIR}/../data"
+                 "${CMAKE_CURRENT_BINARY_DIR}/air_war_nation" 1 maps/kesmark_range.json)
 
 # The generated maps: a district's layout (data/maps/kesmark_range.json, docs/TEST_RANGE.md) and the whole country's
 # (data/maps/pannonia.json, docs/COUNTRY_MAP.md), as JSON for tools/map_view.py; the country's also as routes over its

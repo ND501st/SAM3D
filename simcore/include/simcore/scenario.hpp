@@ -168,13 +168,18 @@ struct PositionPowerDef {
 
 // One of our other air defences near the scenario (a raid's neighbours: air_war/raid_scenario.hpp). Drawn where it
 // stands (the model library's site layout for its system) and plotted on the command post's board, as the regiment's
-// order gives them; its fire at a raid's aircraft is the mission bridge's (air_war/mission_bridge.hpp).
+// order gives them. Its fire at a raid's aircraft is the mission bridge's abstract chance (air_war/mission_bridge.hpp),
+// except an Osa battery that `fights`: its launchers are shooters of the runner's battery fire model
+// (ScenarioRunner::NeighbourLaunchers), firing on their own.
 struct ScenarioNeighbour {
     std::string id;
     std::string name;
     std::string system;     // an air defence system id (air_war/data.hpp AirDefenceSystems)
     Vec3 position;          // ENU
     double radius_m = 0.0;  // its reach
+    bool fights = false;    // an Osa battery fought in the battery fire model
+    int launchers = 4;      // its launchers that work (fights)
+    int missiles = -1;      // its missiles ready, all launchers together (-1: six each)
 };
 
 struct ScenarioDef {
@@ -1028,14 +1033,22 @@ private:
                 ScenarioNeighbour nb;
                 const json::Value* at = nullptr;
                 double radius_km = 0.0;
-                if (!Keys(v, p, {"id", "name", "system", "position", "radius_km", "notes"}) || !RequireString(v, p, "id", nb.id) ||
-                    !RequireString(v, p, "name", nb.name) || !RequireString(v, p, "system", nb.system) ||
-                    !RequireObject(v, p, "position", at) || !LoadPosition(*at, Join(p, "position"), frame_, nb.position) ||
-                    !RequireNumber(v, p, "radius_km", radius_km)) {
+                double launchers = 4.0, missiles = -1.0;
+                if (!Keys(v, p, {"id", "name", "system", "position", "radius_km", "fights", "launchers", "missiles", "notes"}) ||
+                    !RequireString(v, p, "id", nb.id) || !RequireString(v, p, "name", nb.name) ||
+                    !RequireString(v, p, "system", nb.system) || !RequireObject(v, p, "position", at) ||
+                    !LoadPosition(*at, Join(p, "position"), frame_, nb.position) || !RequireNumber(v, p, "radius_km", radius_km) ||
+                    !OptionalBool(v, p, "fights", nb.fights) || !OptionalNumber(v, p, "launchers", launchers) ||
+                    !OptionalNumber(v, p, "missiles", missiles)) {
                     return false;
                 }
                 if (radius_km <= 0.0) return Fail(Join(p, "radius_km"), "must be > 0");
                 nb.radius_m = radius_km * 1000.0;
+                if (nb.fights && nb.system != "osa") return Fail(Join(p, "fights"), "only an Osa battery fights in the battery fire model");
+                if (launchers < 1.0 || launchers > 4.0) return Fail(Join(p, "launchers"), "between 1 and 4");
+                if (missiles < -1.0 || missiles > 24.0) return Fail(Join(p, "missiles"), "between 0 and 24 (-1: six a launcher)");
+                nb.launchers = static_cast<int>(launchers);
+                nb.missiles = static_cast<int>(missiles);
                 out.neighbours.push_back(nb);
             }
         } else if (!message_.empty()) {

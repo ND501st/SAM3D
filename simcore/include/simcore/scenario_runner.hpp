@@ -216,6 +216,7 @@ public:
         UpdateOsaNet();
         UpdateIntercomCheck();
         UpdateBattery(dt);
+        UpdateNeighbourFire(dt);
         UpdateC2();
         UpdateRadios();
         UpdatePost();
@@ -6593,6 +6594,95 @@ private:
     std::unique_ptr<BatteryFire> battery_fire_;
     std::mt19937 battery_fire_rng_{4099u};
     double next_distribution_s_ = 0.0;
+
+    // ---- The regiment's other Osa batteries beside the scenario (neighbours that fight; the nation on the map N4).
+    std::unique_ptr<BatteryFire> neighbour_fire_;
+    std::mt19937 neighbour_fire_rng_{6151u};
+    bool neighbour_fire_built_ = false;
+    std::vector<std::size_t> shooter_neighbour_;            // per shooter: its neighbour (an index into def_.neighbours)
+    std::map<std::string, std::string> neighbour_kills_;    // target -> the neighbour's id that shot it down
+    std::map<std::string, int> neighbour_launches_;         // neighbour id -> missiles launched
+    std::map<std::string, double> neighbour_radar_s_;       // neighbour id -> launcher-seconds on a target (radiating)
+
+    // Whether the scenario has the Osa's tuning to fight its neighbours by (its own, or its launchers' at a post).
+    bool NeighbourFireTuned() const { return engagement_on_ || def_.has_launcher_tuning; }
+
+    // A fighting neighbour's working launchers in the battery's combat formation about its place: two pairs 3 km apart
+    // east and west, 200 m within (battery_tactics.json).
+    std::vector<Vec3> NeighbourLauncherPlaces(const ScenarioNeighbour& nb) const {
+        std::vector<Vec3> out;
+        const int n = std::max(1, std::min(4, nb.launchers));
+        for (int k = 0; k < n; ++k) {
+            const double east = k < 2 ? -1500.0 : 1500.0;
+            const double north = k % 2 == 0 ? -100.0 : 100.0;
+            out.push_back(Vec3{nb.position.x + east, nb.position.y + north, def_.unit_position.z});
+        }
+        return out;
+    }
+
+    // Each fighting neighbour's working launchers are shooters, set up in the battery's combat formation (pairs 3 km apart,
+    // 200 m within: battery_tactics.json, video_osa) about its place, with its missiles shared among them. Their battery
+    // post is not ours: each takes the nearest hostile in its reach itself (autonomous), and its kills are its battery's.
+    void UpdateNeighbourFire(double dt) {
+        if (!neighbour_fire_) {
+            if (neighbour_fire_built_) return;
+            neighbour_fire_built_ = true;
+            bool any = false;
+            for (const ScenarioNeighbour& nb : def_.neighbours) any = any || nb.fights;
+            if (!any || !NeighbourFireTuned()) return;
+            const EngagementTuning& tuning = def_.has_launcher_tuning ? def_.launcher_tuning : def_.tuning;
+            double reach = def_.has_launcher_tuning ? def_.launcher_reach_m : console_.track.max_range_m;
+            if (!(reach > 0.0)) reach = 28000.0;
+            neighbour_fire_ = std::make_unique<BatteryFire>(tuning, reach);
+            neighbour_fire_->SetAutonomous(true);
+            neighbour_fire_rng_.seed(def_.seed * 6151u + 11u);
+            for (std::size_t j = 0; j < def_.neighbours.size(); ++j) {
+                const ScenarioNeighbour& nb = def_.neighbours[j];
+                if (!nb.fights) continue;
+                const std::vector<Vec3> places = NeighbourLauncherPlaces(nb);
+                const int n = static_cast<int>(places.size());
+                const int total = nb.missiles < 0 ? 6 * n : std::min(nb.missiles, 6 * n);
+                for (int k = 0; k < n; ++k) {
+                    const int share = total / n + (k < total % n ? 1 : 0);
+                    neighbour_fire_->AddShooter(nb.id + "/" + std::to_string(k + 1), places[static_cast<std::size_t>(k)], share);
+                    shooter_neighbour_.push_back(j);
+                }
+                neighbour_launches_[nb.id] = 0;
+                neighbour_radar_s_[nb.id] = 0.0;
+            }
+        }
+        std::vector<BatteryFireTarget> targets;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            BatteryFireTarget t;
+            t.id = def_.targets[i].id;
+            t.position = a->position;
+            t.velocity = a->velocity;
+            t.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            t.target_class = def_.targets[i].target_class;
+            t.friendly = def_.targets[i].friendly;
+            targets.push_back(t);
+        }
+        neighbour_fire_->Step(time_, targets, neighbour_fire_rng_, nullptr, [](const std::string&) {});
+        const std::vector<BatteryFire::Shooter>& shooters = neighbour_fire_->Shooters();
+        for (std::size_t k = 0; k < shooters.size(); ++k) {
+            if (shooters[k].phase != BatteryFire::Phase::Idle) neighbour_radar_s_[def_.neighbours[shooter_neighbour_[k]].id] += dt;
+        }
+        for (const BatteryFire::Event& e : neighbour_fire_->TakeEvents()) {
+            std::size_t k = 0;
+            while (k < shooters.size() && shooters[k].callsign != e.callsign) ++k;
+            if (k == shooters.size()) continue;
+            const ScenarioNeighbour& nb = def_.neighbours[shooter_neighbour_[k]];
+            if (e.kind == BatteryFire::Event::Kind::Launch) {
+                ++neighbour_launches_[nb.id];
+                Event(e.target, "missile launched at it by " + nb.name);
+            } else if (e.kind == BatteryFire::Event::Kind::Hit) {
+                if (DestroyTarget(e.target, nb.name)) neighbour_kills_[e.target] = nb.id;
+            }
+        }
+    }
     // A board mark with the IT-45's newer and finer place, when the target is on the tube.
     BoardMark OnTheTube(const BoardMark& m) const {
         if (!post_) return m;
@@ -7556,6 +7646,42 @@ public:
     // Our other air defences near the scenario (drawn where they stand), and the ground's height (ENU up) anywhere on it.
     const std::vector<ScenarioNeighbour>& Neighbours() const { return def_.neighbours; }
     double GroundHeightAt(double east_m, double north_m) const { return world_.GetTerrain().HeightAt(east_m, north_m); }
+    // The point on the ground under (east, north), in ENU: the terrain's height is an altitude, and ENU up is not altitude
+    // far from the origin (the Earth curves away: 70 m at 30 km).
+    Vec3 GroundEnu(double east_m, double north_m) const {
+        GeoPoint g = world_.Frame().EnuToGeodetic(Vec3{east_m, north_m, 0.0});
+        g.alt_m = GroundHeightAt(east_m, north_m);
+        return world_.Frame().GeodeticToEnu(g);
+    }
+    // A neighbour that fights in the battery fire model here (an Osa battery with "fights", and the Osa's tuning to fight
+    // by); the mission bridge leaves its chances to the runner.
+    bool NeighbourFights(const std::string& id) const {
+        if (!NeighbourFireTuned()) return false;
+        for (const ScenarioNeighbour& nb : def_.neighbours) {
+            if (nb.id == id) return nb.fights;
+        }
+        return false;
+    }
+    // The aircraft the fighting neighbours shot down (target -> neighbour id), their missiles launched, the time their
+    // launchers had a target (their radars on it).
+    const std::map<std::string, std::string>& NeighbourKills() const { return neighbour_kills_; }
+    int NeighbourLaunches(const std::string& id) const {
+        const auto it = neighbour_launches_.find(id);
+        return it == neighbour_launches_.end() ? 0 : it->second;
+    }
+    double NeighbourRadarSeconds(const std::string& id) const {
+        const auto it = neighbour_radar_s_.find(id);
+        return it == neighbour_radar_s_.end() ? 0.0 : it->second;
+    }
+    // Where the fighting neighbours' launchers stand (neighbour id, ENU), to draw them there.
+    std::vector<std::pair<std::string, Vec3>> NeighbourLaunchers() const {
+        std::vector<std::pair<std::string, Vec3>> out;
+        for (const ScenarioNeighbour& nb : def_.neighbours) {
+            if (!NeighbourFights(nb.id)) continue;
+            for (const Vec3& at : NeighbourLauncherPlaces(nb)) out.push_back({nb.id, at});
+        }
+        return out;
+    }
 
     PostFeed PostFeedNow() const {
         PostFeed f;

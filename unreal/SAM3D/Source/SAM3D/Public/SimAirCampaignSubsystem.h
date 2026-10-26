@@ -197,6 +197,9 @@ private:
 	TUniquePtr<simcore::command::InfoNet> Net;
 	TUniquePtr<simcore::command::CampaignFeed> Feed;
 	FString FactionId;
+	/** The theatre the campaign is fought on (relative to data/): a new campaign the whole nation's (the nation on the map
+	 *  N4, rebalanced in docs/air_war/09_BALANCE.md section 8); a saved one the theatre it was saved with. */
+	FString TheatreFile = TEXT("air_war/theatre_pannonia_nation.json");
 	int32 CampaignSeed = 1;
 	bool bRaidActive = false;
 	bool bBridgeStarted = false;

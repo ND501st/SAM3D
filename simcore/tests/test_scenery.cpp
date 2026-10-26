@@ -197,6 +197,34 @@ SC_TEST("scenery: every air defence system has a site to draw: its vehicles roun
     SC_EXPECT(lib.SiteLayout("no_such_system").empty());
 }
 
+SC_TEST("scenery: every object of the nation's theatre is drawn on the map as its system's or its kind's site (cities as towns)") {
+    const ModelLibrary lib = Library();
+    airwar::TheatreDef th;
+    std::string e;
+    SC_EXPECT(airwar::LoadTheatreFile(kData + "/air_war/theatre_pannonia_nation.json", th, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    int drawn = 0, models = 0;
+    for (const airwar::TheatreObject& o : th.objects) {
+        const std::vector<std::pair<std::string, Vec3>> site = lib.ObjectLayout(airwar::ObjectKindName(o.kind), o.defence.system);
+        if (o.kind == airwar::ObjectKind::City) {
+            SC_EXPECT(site.empty());  // the country map's towns
+            continue;
+        }
+        if (site.empty()) std::printf("    nothing to draw for %s (%s)\n", o.id.c_str(), airwar::ObjectKindName(o.kind));
+        SC_EXPECT(!site.empty());
+        for (const auto& v : site) SC_EXPECT(lib.Find(v.first) != nullptr);
+        drawn += site.empty() ? 0 : 1;
+        models += static_cast<int>(site.size());
+    }
+    std::printf("    %d objects drawn with %d models\n", drawn, models);
+    // An air defence by its system, whatever its kind: the S-125M1 at Kecel is a SAM site of the S-125M1's layout.
+    SC_EXPECT(lib.ObjectLayout("sam_site", "s125m1").size() == lib.SiteLayout("s125m1").size());
+    // A refinery: its hall at the centre, the tanks and chimneys round it.
+    const std::vector<std::pair<std::string, Vec3>> ref = lib.ObjectLayout("refinery", "");
+    SC_EXPECT(ref.size() == 9 && ref.front().first == "hall" && ref.front().second.HorizontalLength() < 1e-9);
+    SC_EXPECT(lib.ObjectLayout("city", "").empty() && lib.ObjectLayout("no_such_kind", "").empty());
+}
+
 SC_TEST("scenery: a raid's aircraft carry their model into the scenario, and the loader keeps it") {
     airwar::AirWarData d;
     std::string e;
@@ -221,4 +249,13 @@ SC_TEST("scenery: a raid's aircraft carry their model into the scenario, and the
     }
     std::printf("    %zu aircraft in the raid, %d with their own model\n", def.targets.size(), with_model);
     SC_EXPECT(!def.targets.empty() && with_model == static_cast<int>(def.targets.size()));
+}
+
+SC_TEST("scenery: the loader refuses a kind's site with an unknown model") {
+    ModelLibrary bad;
+    std::string e;
+    SC_EXPECT(!LoadModelLibraryJson(R"({"models_id": "x", "models": [{"id": "a", "name": "A", "archetype": "tower", "height_m": 5, "diameter_m": 2, "colour": "#ffffff"}],
+        "kinds": {"refinery": {"models": [["a", 1], ["no_such_model", 3]], "spread_m": 50}}})",
+                                    bad, &e));
+    SC_EXPECT(e.find("kinds.refinery.models[1]") != std::string::npos);
 }

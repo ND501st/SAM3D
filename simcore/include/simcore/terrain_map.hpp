@@ -65,6 +65,24 @@ struct MapReliefDef {
     double amplitude_m = 0.0;
 };
 
+// A range of hills along a line, its crest rising and falling into peaks and saddles; or, as a valley, the trough a
+// river has cut through the hills along it (docs/COUNTRY_MAP.md).
+struct MapRidgeDef {
+    std::string id;
+    std::vector<MapPoint> points;
+    double half_width_m = 5000.0;
+    double height_m = 0.0;  // a ridge's crest above its foot; a valley's floor below its shoulders
+};
+
+// A lake or reservoir: the ground under it lies below its level, deepening from the shore.
+struct MapLakeDef {
+    std::string id;
+    std::string name;
+    std::vector<MapPoint> points;  // its shore, closed
+    double level_m = 0.0;          // its surface above sea level
+    double depth_m = 5.0;          // at a kilometre from the shore and beyond
+};
+
 struct MapSettlementDef {
     std::string id;
     std::string name;
@@ -117,8 +135,11 @@ struct MapDef {
     double roughness_m = 0.1;
     std::vector<MapReliefDef> relief;
     std::vector<MapHillDef> hills;
+    std::vector<MapRidgeDef> ridges;
+    std::vector<MapRidgeDef> valleys;
     double valley_depth_m = 0.0;
     double valley_half_width_m = 500.0;
+    std::vector<MapLakeDef> lakes;
     // Lines and places.
     std::vector<MapLineDef> rivers;
     std::vector<MapLineDef> roads;
@@ -408,6 +429,9 @@ constexpr double kRiverBedDepthM = 2.0;
 // The ground as a map file's terrain shapes it, before any site is levelled: the relief, the hills, the river valleys
 // and beds. One function for every map, so a district (the Kesmark range) and the country it lies in (simcore/
 // country_map.hpp) share the same ground wherever their files share the same terrain.
+// A valley's floor stays this far above the plain's base (the river runs out of the hills onto the plain).
+constexpr double kValleyFloorAbovePlainM = 15.0;
+
 inline double NaturalGround(const MapDef& d, double e, double n) {
     double h = d.base_m;
     std::uint64_t s = d.seed;
@@ -419,6 +443,23 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
         const double dist = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
         if (dist < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * dist / hill.radius_m));
     }
+    // Ranges: across, a smooth rise to the crest; along it, peaks and saddles (two thirds to four thirds of its height).
+    for (std::size_t i = 0; i < d.ridges.size(); ++i) {
+        const MapRidgeDef& r = d.ridges[i];
+        const double dist = mapgeo::DistToLine(r.points, e, n);
+        if (dist >= r.half_width_m) continue;
+        const double across = 0.5 * (1.0 + std::cos(kPi * dist / r.half_width_m));
+        const std::uint64_t rs = noise::Mix64(d.seed ^ (0x9E3779B97F4A7C15ULL * (i + 1)));
+        const double along = 2.0 / 3.0 + (2.0 / 3.0) * noise::Value(rs, e, n, 1.5 * r.half_width_m);
+        h += r.height_m * across * along;
+    }
+    // Valleys the rivers cut through the hills: a smooth trough along their line, never below the plain they run out to.
+    for (const MapRidgeDef& v : d.valleys) {
+        const double dist = mapgeo::DistToLine(v.points, e, n);
+        if (dist >= v.half_width_m) continue;
+        const double above_plain = std::max(0.0, h - (d.base_m + kValleyFloorAbovePlainM));
+        h -= std::min(v.height_m, above_plain) * 0.5 * (1.0 + std::cos(kPi * dist / v.half_width_m));
+    }
     for (const MapLineDef& r : d.rivers) {
         const double dist = mapgeo::DistToLine(r.points, e, n);
         if (dist < d.valley_half_width_m && d.valley_depth_m > 0.0) {
@@ -426,6 +467,14 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
         }
         const double bed = 0.5 * r.width_m + 15.0;
         if (dist < bed) h -= kRiverBedDepthM * noise::Smooth(1.0 - dist / bed);
+    }
+    // Under a lake the ground lies below its level, deepening from the shore over a kilometre.
+    for (const MapLakeDef& l : d.lakes) {
+        if (l.points.size() < 3 || !mapgeo::InPolygon(l.points, e, n)) continue;
+        std::vector<MapPoint> shore = l.points;
+        shore.push_back(l.points.front());
+        const double from_shore = mapgeo::DistToLine(shore, e, n);
+        h = std::min(h, l.level_m - 0.5 - l.depth_m * noise::Smooth(std::min(1.0, from_shore / 1000.0)));
     }
     return h;
 }
@@ -1132,7 +1181,7 @@ public:
     bool Load(const json::Value& root, MapDef& out) {
         if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "origin", "seed", "extent_km",
                              "far_km", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads", "forests",
-                             "woods", "marshes", "sites"}) ||
+                             "woods", "marshes", "lakes", "sites"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
             return false;
@@ -1176,7 +1225,8 @@ public:
         }
         return LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) && LoadLines(root, "roads", "", out.roads) &&
                LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) &&
-               LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadWoods(root, out) &&
+               LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadLakes(root, out.lakes) &&
+               LoadWoods(root, out) &&
                LoadSites(root, out);
     }
 
@@ -1217,7 +1267,8 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
     bool LoadTerrain(const json::Value& root, MapDef& out) {
         const json::Value* t = root.Find("terrain");
         if (t == nullptr) return Fail("terrain", "required");
-        if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "valley", "notes"}) ||
+        if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "ridges", "valleys", "valley",
+                                  "notes"}) ||
             !Number(*t, "terrain", "base_m", out.base_m) || !OptionalNumber(*t, "terrain", "core_spacing_m", out.core_spacing_m) ||
             !OptionalNumber(*t, "terrain", "far_spacing_m", out.far_spacing_m) || !OptionalNumber(*t, "terrain", "roughness_m", out.roughness_m)) {
             return false;
@@ -1258,6 +1309,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         } else if (!Message().empty()) {
             return false;
         }
+        if (!Ridges(*t, "ridges", "height_m", out.ridges) || !Ridges(*t, "valleys", "depth_m", out.valleys)) return false;
         if (const json::Value* v = t->Find("valley")) {
             if (!Keys(*v, "terrain.valley", {"depth_m", "half_width_m", "notes"}) || !Number(*v, "terrain.valley", "depth_m", out.valley_depth_m) ||
                 !Number(*v, "terrain.valley", "half_width_m", out.valley_half_width_m)) {
@@ -1333,6 +1385,45 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             out.farm_buildings_min = static_cast<int>(b->items[0].number);
             out.farm_buildings_max = static_cast<int>(b->items[1].number);
             if (out.farm_buildings_min < 1 || out.farm_buildings_max < out.farm_buildings_min) return Fail("farmsteads.buildings", "needs 1 <= min <= max");
+        }
+        return true;
+    }
+
+    // terrain.ridges or terrain.valleys: lines with a half width and a height (a valley's depth), both > 0.
+    bool Ridges(const json::Value& t, const char* key, const char* height_key, std::vector<MapRidgeDef>& out) {
+        const json::Value* list = OptionalArray(t, "terrain", key);
+        if (list == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index(std::string("terrain.") + key, i);
+            const json::Value& v = list->items[i];
+            MapRidgeDef r;
+            double hw = 0.0;
+            if (!Keys(v, p, {"id", "points", "half_width_km", height_key, "notes"}) || !RequireString(v, p, "id", r.id) ||
+                !Points(v, p, 2, r.points) || !Number(v, p, "half_width_km", hw) || !Number(v, p, height_key, r.height_m)) {
+                return false;
+            }
+            if (hw <= 0.0) return Fail(Join(p, "half_width_km"), "must be > 0");
+            if (r.height_m <= 0.0) return Fail(Join(p, height_key), "must be > 0");
+            r.half_width_m = hw * 1000.0;
+            out.push_back(std::move(r));
+        }
+        return true;
+    }
+
+    bool LoadLakes(const json::Value& root, std::vector<MapLakeDef>& out) {
+        const json::Value* list = OptionalArray(root, "", "lakes");
+        if (list == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index("lakes", i);
+            const json::Value& v = list->items[i];
+            MapLakeDef l;
+            if (!Keys(v, p, {"id", "name", "points", "level_m", "depth_m", "notes"}) || !RequireString(v, p, "id", l.id) ||
+                !OptionalString(v, p, "name", l.name) || !Points(v, p, 3, l.points) || !Number(v, p, "level_m", l.level_m) ||
+                !OptionalNumber(v, p, "depth_m", l.depth_m)) {
+                return false;
+            }
+            if (l.depth_m <= 0.0) return Fail(Join(p, "depth_m"), "must be > 0");
+            out.push_back(std::move(l));
         }
         return true;
     }

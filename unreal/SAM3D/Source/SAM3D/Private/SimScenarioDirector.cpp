@@ -404,12 +404,29 @@ void ASimScenarioDirector::SpawnNeighbourSites(USimWorldSubsystem* Sim)
 	bNeighboursSpawned = true;
 	NeighboursSpawnedAt = TimeSinceBeginPlay;
 	int32 Vehicles = 0;
+	const std::vector<std::pair<std::string, simcore::Vec3>> Fighting = Runner->NeighbourLaunchers();
 	for (const simcore::ScenarioNeighbour& Nb : Runner->Neighbours())
 	{
-		for (const std::pair<std::string, simcore::Vec3>& V : Lib->SiteLayout(Nb.system))
+		// An Osa battery that fights stands where its launchers fire from (the battery's combat formation); the others
+		// as their system's site.
+		std::vector<std::pair<std::string, simcore::Vec3>> Layout;
+		if (Runner->NeighbourFights(Nb.id))
 		{
-			simcore::Vec3 Enu = Nb.position + V.second;
-			Enu.z = Runner->GroundHeightAt(Enu.x, Enu.y);
+			for (const std::pair<std::string, simcore::Vec3>& L : Fighting)
+			{
+				if (L.first == Nb.id)
+				{
+					Layout.push_back({"osa_9a33", simcore::Vec3{L.second.x - Nb.position.x, L.second.y - Nb.position.y, 0.0}});
+				}
+			}
+		}
+		else
+		{
+			Layout = Lib->SiteLayout(Nb.system);
+		}
+		for (const std::pair<std::string, simcore::Vec3>& V : Layout)
+		{
+			const simcore::Vec3 Enu = Runner->GroundEnu(Nb.position.x + V.second.x, Nb.position.y + V.second.y);
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			AActor* Site = MyWorld->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);

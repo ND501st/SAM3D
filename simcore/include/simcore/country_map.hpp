@@ -332,6 +332,27 @@ public:
     }
 
     const CountryNetwork& Network(CountryNet net) const { return nets_[static_cast<std::size_t>(net)]; }
+
+    // What covers the ground at (e, n): "lake", "river", "marsh", "forest", "town" or "open" (a column off the road, a
+    // hide, the look of the land; docs/COUNTRY_MAP.md).
+    const char* LandCoverAt(double e, double n) const {
+        for (const MapLakeDef& l : def_.ground.lakes) {
+            if (mapgeo::InPolygon(l.points, e, n)) return "lake";
+        }
+        for (const MapLineDef& r : def_.ground.rivers) {
+            if (mapgeo::DistToLine(r.points, e, n) < 0.5 * r.width_m) return "river";
+        }
+        for (const MapPolygonDef& m : def_.ground.marshes) {
+            if (mapgeo::InPolygon(m.points, e, n)) return "marsh";
+        }
+        for (const MapPolygonDef& f : def_.ground.forests) {
+            if (mapgeo::InPolygon(f.points, e, n)) return "forest";
+        }
+        for (const CountrySettlementDef& s : def_.settlements) {
+            if (std::hypot(s.centre.east_m - e, s.centre.north_m - n) < s.radius_m) return "town";
+        }
+        return "open";
+    }
     const std::vector<CountryCrossing>& Crossings() const { return crossings_; }
 
     const CountryCrossing* Crossing(const std::string& id) const {
@@ -501,7 +522,7 @@ public:
         std::string kind;
         if (!Keys(root, "", {"map_id", "kind", "name", "description", "status", "source", "confidence", "notes", "origin", "seed",
                              "extent_km", "grid_km", "district", "terrain", "outline", "borders", "regions", "rivers", "roads",
-                             "railways", "pipelines", "settlements", "forests", "landmarks"}) ||
+                             "railways", "pipelines", "settlements", "forests", "marshes", "lakes", "landmarks"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "kind", kind) ||
             !RequireString(root, "", "name", out.name) || !OptionalString(root, "", "description", out.description) ||
             !OptionalString(root, "", "district", out.district) || !Provenance(root, "")) {
@@ -541,7 +562,8 @@ public:
         out.grid_spacing_m = grid_km * 1000.0;
         if (!LoadTerrain(root, g) || !LoadLines(root, "rivers", "river", g.rivers) || !LoadLines(root, "roads", "", g.roads) ||
             !LoadLines(root, "railways", "rail", g.railways) || !LoadLines(root, "pipelines", "oil", out.pipelines) ||
-            !LoadPolygons(root, "forests", g.forests) || !LoadPolygons(root, "regions", out.regions)) {
+            !LoadPolygons(root, "forests", g.forests) || !LoadPolygons(root, "marshes", g.marshes) || !LoadLakes(root, g.lakes) ||
+            !LoadPolygons(root, "regions", out.regions)) {
             return false;
         }
         return LoadOutline(root, out) && LoadBorders(root, out) && LoadSettlementsOf(root, out) && LoadLandmarks(root, out);

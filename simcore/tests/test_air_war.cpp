@@ -156,19 +156,24 @@ SC_TEST("air war: each adversary flies its own kind of war") {
             if (o != nullptr) SC_EXPECT(o->kind != ObjectKind::City && o->kind != ObjectKind::PowerPlant && o->kind != ObjectKind::Headquarters);
         }
     }
-    // NATO: DEAD and strike packages carry SEAD and jamming; power plants and towns are off limits at the start.
+    // NATO: most DEAD packages carry SEAD (one against a radar with no SAM known on its way goes without), and so does a
+    // strike whose route meets a radar threat it knows of (one on a depot behind the lines, or loosing stand-off weapons
+    // short of the target's own SAM, goes without); packages carry jamming; power plants and towns are off limits at the
+    // start.
     {
         const std::vector<Package> ps = PlanDays(Load("nato"), 2, 2.0);
-        int dead = 0, with_sead = 0, with_jam = 0;
+        int dead = 0, dead_sead = 0, strike = 0, strike_sead = 0, with_jam = 0;
         for (const Package& p : ps) {
             if (p.kind != MissionKind::Dead && p.kind != MissionKind::Strike) continue;
-            ++dead;
-            with_sead += p.Has(FlightRole::Sead) ? 1 : 0;
+            const bool dk = p.kind == MissionKind::Dead;
+            (dk ? dead : strike) += 1;
+            (dk ? dead_sead : strike_sead) += p.Has(FlightRole::Sead) ? 1 : 0;
             with_jam += p.Has(FlightRole::Jammer) ? 1 : 0;
             SC_EXPECT(p.target_label.find("power station") == std::string::npos);
         }
-        std::printf("    NATO strike/DEAD packages: %d, with SEAD %d, with jamming %d\n", dead, with_sead, with_jam);
-        SC_EXPECT(dead > 0 && with_sead * 2 >= dead && with_jam > 0);
+        std::printf("    NATO DEAD packages %d (with SEAD %d), strikes %d (with SEAD %d), with jamming %d\n", dead, dead_sead, strike, strike_sead,
+                    with_jam);
+        SC_EXPECT(dead > 0 && dead_sead * 2 > dead && strike_sead > 0 && with_jam > 0);
     }
     // The Pact: the opening air operation goes for airfields, command posts and radars, its strike groups in massed
     // blows (the hunters, scouts and decoys around them fly in pairs). Judged over eight campaigns: one campaign's first
@@ -396,16 +401,22 @@ SC_TEST("air war: an ARM takes one of an Osa battery's four radars but blinds a 
     SC_EXPECT(osa_hit > 10 && osa_out * 4 < osa_hit);
     SC_EXPECT(s125_hit > 5 && s125_out == s125_hit);
 
-    // Light guns at a target without an air defence of its own: troops more than a depot, only low and helicopters.
+    // Light guns at a target without an air defence of its own: troops more than a depot, as much as the attack exposes
+    // the attacker (a low pass over it fully, a loft a little, medium altitude and stand-off not at all).
     const TuningTable& t = d.tuning;
-    const double troops = TargetGunsChance(ObjectKind::Troops, Profile::Low, false, 0.0, 1.0, t);
-    const double depot = TargetGunsChance(ObjectKind::Depot, Profile::Low, false, 0.0, 1.0, t);
+    const double troops = TargetGunsChance(ObjectKind::Troops, 1.0, 0.0, 1.0, t);
+    const double depot = TargetGunsChance(ObjectKind::Depot, 1.0, 0.0, 1.0, t);
     SC_EXPECT_NEAR(troops, t.Get("attrition.target_guns_troops"), 1e-12);
     SC_EXPECT(troops > depot && depot > 0.0);
-    SC_EXPECT(TargetGunsChance(ObjectKind::Troops, Profile::Medium, false, 0.0, 1.0, t) == 0.0);
-    SC_EXPECT(TargetGunsChance(ObjectKind::Troops, Profile::Medium, true, 0.0, 1.0, t) == troops);  // a helicopter is always low
-    SC_EXPECT(TargetGunsChance(ObjectKind::City, Profile::Low, false, 0.0, 1.0, t) == 0.0);
-    SC_EXPECT_NEAR(TargetGunsChance(ObjectKind::Troops, Profile::Low, false, 1.0, 0.7, t), troops * 0.5 * 0.7, 1e-12);
+    SC_EXPECT(TargetGunsChance(ObjectKind::Troops, DeliveryExposure(Delivery::Level, t), 0.0, 1.0, t) == 0.0);
+    SC_EXPECT(TargetGunsChance(ObjectKind::Troops, DeliveryExposure(Delivery::Standoff, t), 0.0, 1.0, t) == 0.0);
+    SC_EXPECT(TargetGunsChance(ObjectKind::Troops, DeliveryExposure(Delivery::Laydown, t), 0.0, 1.0, t) == troops);
+    SC_EXPECT(TargetGunsChance(ObjectKind::Troops, DeliveryExposure(Delivery::Loft, t), 0.0, 1.0, t) < 0.5 * troops);
+    Flight heli;
+    heli.profile = Profile::Medium;
+    SC_EXPECT(FlightExposure(heli, true, t) == 1.0);  // a flight with no attack profile: a helicopter is always low
+    SC_EXPECT(TargetGunsChance(ObjectKind::City, 1.0, 0.0, 1.0, t) == 0.0);
+    SC_EXPECT_NEAR(TargetGunsChance(ObjectKind::Troops, 1.0, 1.0, 0.7, t), troops * 0.5 * 0.7, 1e-12);
     // In the resolver: four strikers at low on the southern group lose aircraft over many raids; at medium, none.
     auto strike_run = [&](Profile prof, int seed) {
         std::vector<ObjectState> truth = base.Truth();
@@ -529,22 +540,23 @@ SC_TEST("air war: the believed air defences are the share of known sites working
     pic.entries.push_back(shilka);
     SC_EXPECT_NEAR(pic.BelievedIadsShare(), (1.0 + 0.3) / (2.0 + 0.3), 1e-12);
 
-    // NATO's rollback ends when the defences are believed broken and resumes when they are believed back.
+    // NATO's rollback ends when the defences are believed broken and resumes when they are believed back (sites the
+    // suppression destroyed take days to return: twelve days of war).
     const AirWarData d = Load("nato");
     int ended = 0, resumed = 0;
     for (unsigned seed = 1; seed <= 10; ++seed) {
         AirCampaign c;
         c.Init(d, seed);
         c.Posture().emission = 0.5;
-        while (c.Now() < 7 * 24.0) {
-            if (c.Advance(7 * 24.0)) c.SkipPlayerMission();
+        while (c.Now() < 12 * 24.0) {
+            if (c.Advance(12 * 24.0)) c.SkipPlayerMission();
         }
         for (const JournalEntry& j : c.Journal()) {
             ended += j.text.find("the air defences are believed broken") != std::string::npos ? 1 : 0;
             resumed += j.text.find("The air defences are working again") != std::string::npos ? 1 : 0;
         }
     }
-    std::printf("    NATO over ten weeks: the rollback ended %d times and resumed %d times\n", ended, resumed);
+    std::printf("    NATO in ten campaigns of twelve days: the rollback ended %d times and resumed %d times\n", ended, resumed);
     SC_EXPECT(ended > 0 && resumed > 0 && resumed <= ended);
 }
 
@@ -761,7 +773,13 @@ SC_TEST("air war: on the map a raid sets the battery and its dummies on open gro
         SC_EXPECT(open_ground_at.ObstacleHeightAt(0.0, 0.0) <= 3.0);
         for (const auto& v : open.manifest.battery) SC_EXPECT(open_ground_at.ObstacleHeightAt(v.second.x, v.second.y) <= 3.0);
         for (const auto& dm : open.manifest.dummies) SC_EXPECT(open_ground_at.ObstacleHeightAt(dm.second.x, dm.second.y) <= 3.0);
-        // A run at the battery keeps its aim relative to the battery; one at anything else keeps its place on the map.
+        // A run at the battery keeps its aim relative to the battery, one at a dummy follows the dummy to its own open
+        // ground; one at anything else keeps its place on the map.
+        const auto dummy_at = [](const RaidManifest& m, const std::string& id, Vec3& at) {
+            for (const auto& dm : m.dummies) {
+                if (dm.first == id) at = dm.second;
+            }
+        };
         for (const RaidAircraft& a : open.manifest.aircraft) {
             const RaidAircraft* w = nullptr;
             for (const RaidAircraft& x : where.manifest.aircraft) {
@@ -772,7 +790,13 @@ SC_TEST("air war: on the map a raid sets the battery and its dummies on open gro
             if (key == battery_id) {
                 ++at_battery;
                 SC_EXPECT((a.aim_enu - w->aim_enu).HorizontalLength() < 5.0);
-            } else if (dummy_ids.count(key) == 0) {
+            } else if (dummy_ids.count(key) != 0) {
+                Vec3 open_at, where_at;
+                dummy_at(open.manifest, key, open_at);
+                dummy_at(where.manifest, key, where_at);
+                ++at_battery;
+                SC_EXPECT((a.aim_enu - w->aim_enu - (open_at - where_at)).HorizontalLength() < 5.0);
+            } else {
                 ++elsewhere;
                 SC_EXPECT((a.aim_enu + open.manifest.own_moved - w->aim_enu).HorizontalLength() < 5.0);
             }
@@ -785,7 +809,7 @@ SC_TEST("air war: on the map a raid sets the battery and its dummies on open gro
         if (raids == 1) std::printf("    the battery set %.0f m off the wood\n", moved);
         c.SkipPlayerMission();
     }
-    std::printf("    %d raids: %d aircraft aimed at the battery, %d at other things\n", raids, at_battery, elsewhere);
+    std::printf("    %d raids: %d aircraft aimed at the battery or its dummies, %d at other things\n", raids, at_battery, elsewhere);
     SC_EXPECT(raids >= 1 && at_battery >= 1);
 }
 
@@ -981,7 +1005,7 @@ SC_TEST("air war on the nation's theatre: in a played raid the neighbours fire a
     std::string e;
     SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_nato.json", d, &e));
     if (!e.empty()) std::printf("    %s\n", e.c_str());
-    int played = 0, neighbours = 0, fired = 0, kills = 0, credited = 0;
+    int played = 0, neighbours = 0, fired = 0, kills = 0, credited = 0, fighting = 0, fighting_launches = 0;
     for (unsigned seed = 1; seed <= 4 && played < 3; ++seed) {
         AirCampaign c;
         SC_EXPECT(c.Init(d, seed));
@@ -1028,6 +1052,9 @@ SC_TEST("air war on the nation's theatre: in a played raid the neighbours fire a
                 SC_EXPECT(def.neighbours[j].id == mn.id && def.neighbours[j].system == mn.defence.system);
                 SC_EXPECT_NEAR(def.neighbours[j].radius_m, mn.defence.radius_m, 1.0);
                 SC_EXPECT(Dist2d(def.neighbours[j].position, mn.enu) < 1.0);
+                // The regiment's other Osa batteries fight in the battery fire model, with the launchers that work.
+                SC_EXPECT(def.neighbours[j].fights == (mn.defence.system == "osa" && std::lround(4.0 * mn.function) >= 1 && mn.missiles != 0));
+                fighting += def.neighbours[j].fights ? 1 : 0;
             }
             ScenarioRunner runner(std::move(def), std::move(console));
             MissionBridge bridge(rs.manifest, c.Data(), seed);
@@ -1040,13 +1067,19 @@ SC_TEST("air war on the nation's theatre: in a played raid the neighbours fire a
             for (const LossRecord& l : o.losses) credited += l.by != rs.manifest.own_object ? 1 : 0;
             for (const RaidNeighbour& nb : rs.manifest.neighbours) {
                 fired += std::find(o.fired.begin(), o.fired.end(), nb.id) != o.fired.end() ? 1 : 0;
+                if (!runner.NeighbourFights(nb.id)) continue;
+                // A fighting battery's missiles are the runner's count.
+                int spent = 0;
+                for (const auto& mb : o.missiles_by) spent += mb.first == nb.id ? mb.second : 0;
+                SC_EXPECT(spent == runner.NeighbourLaunches(nb.id));
+                fighting_launches += spent;
             }
             c.CompletePlayerMission(o, rs.manifest.start_h + runner.Time() / 3600.0);
             ++played;
         }
     }
-    std::printf("    %d raids played: %d neighbouring defences in reach, %d of them fired, %d aircraft they shot down\n", played, neighbours,
-                fired, kills);
+    std::printf("    %d raids played: %d neighbouring defences in reach (%d Osa batteries fighting, %d missiles), %d of them fired, %d aircraft they shot down\n",
+                played, neighbours, fighting, fighting_launches, fired, kills);
     SC_EXPECT(played >= 2 && neighbours >= played && fired > 0);
     SC_EXPECT(credited == kills);  // the neighbours' kills are theirs, not the battery's
 }

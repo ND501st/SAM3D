@@ -32,6 +32,22 @@ $a = ($one | Select-String 'checksum (\w+)').Matches.Groups[1].Value
 $b = ($four | Select-String 'checksum (\w+)').Matches.Groups[1].Value
 if ($a -ne $b) { throw "em_bench: result differs between 1 and 4 threads ($a vs $b)" }
 
+Write-Host '==> the nation on the map: the country, two days of the air war on the whole nation against each adversary, the benchmark against history' -ForegroundColor Cyan
+$bin = if (Test-Path simcore/build/Release/country_dump.exe) { 'simcore/build/Release' } else { 'simcore/build' }
+# Their progress lines go to stderr, which Windows PowerShell 5.1 turns into errors under 'Stop': the exit codes judge.
+$ErrorActionPreference = 'Continue'
+& "$bin/country_dump" data maps/pannonia.json out/pannonia_map.json 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'country_dump failed' }
+foreach ($f in 'rebels', 'neutral', 'warsaw_pact', 'nato') {
+    # Its raids played on the Kesmark map's ground; non-zero if the data or a raid's scenario fails to load.
+    & "$bin/air_war_demo" --theatre theatre_pannonia_nation.json $f 2 data out/air_war_nation 1 maps/kesmark_range.json 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "air_war_demo on the nation's theatre failed against $f" }
+}
+# The weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9): the table to out/.
+& "$bin/air_war_bench" data 100 2>&1 | Out-File -Encoding utf8 out/air_war_bench.md
+if ($LASTEXITCODE -ne 0) { throw 'air_war_bench failed' }
+$ErrorActionPreference = 'Stop'
+
 Write-Host '==> prototype and tools: pytest' -ForegroundColor Cyan
 $py = if (Get-Command py -ErrorAction SilentlyContinue) { 'py' } else { 'python' }
 # Windows PowerShell 5.1 turns native stderr into a terminating error under 'Stop'; relax it for the probe.

@@ -55,6 +55,7 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign as a page: the enemy's mind beside what our side learned
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
 ./simcore/build/air_war_balance --theatre theatre_pannonia_nation.json data 10 7   # the same on the whole nation (N4); the demo takes --theatre too
+./simcore/build/air_war_bench data 400            # weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9)
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson
@@ -207,14 +208,23 @@ speaks and how fast); a direct act inside the NPC commander's think checks `!sha
 player commander's place and must change nothing). After changing the crew's behaviour, the consoles or the missions,
 run `helper_coverage` and read its Gaps; `test_helper.cpp` counts the `NpcAt(` uses to make you look.
 
-**Next, prioritised (22 Oct 2026): the nation on the map** (roadmap, before phase 13, not gated): the goal is to
-simulate whole conflicts headless, to test and develop the game's systems without a player, so the player feels a
-small part of a large war. N0-N3 are done: the air war's infrastructure kinds and checked air defence systems,
-our order of battle (`simcore/command/oob.hpp`), the country's map (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`),
-and the briefing's assets placed on it (`data/air_war/theatre_pannonia_nation.json`, which extends the tuned theatre;
-mobile units move between their prepared positions), and a basic model for every equipment type of the order of battle,
-ours never drawn as the enemy's (`data/scenery/basic_models.json`). N4 is started: the air war runs on the nation's theatre
-and its first read is done (`docs/air_war/09_BALANCE.md` §8); the game's campaigns stay on the tuned theatre until 13.8.
+**The nation on the map** (prioritised 22 Oct 2026, roadmap N0-N6, **done 23 Oct 2026**): whole conflicts simulated
+headless on the country of the briefing, so the player feels a small part of a large war. The air war's infrastructure
+kinds and checked air defence systems, our order of battle (`simcore/command/oob.hpp`), the country's map
+(`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`), the briefing's assets placed on it
+(`data/air_war/theatre_pannonia_nation.json`, which extends the tuned theatre; mobile units move between their prepared
+positions), a basic model for every equipment type, ours never drawn as the enemy's (`data/scenery/basic_models.json`).
+The air war runs on the nation's theatre (`docs/air_war/09_BALANCE.md` §8): fire channels, warning posts, a played
+raid's neighbours (drawn, and the regiment's other Osa batteries fighting in the battery fire model), cruise missiles by
+the war's year, and a rebalance for a whole nation (a front's `force_scale`); **the game's new campaigns are fought on
+it**. Unreal draws the whole country around the Kesmark range with every asset as basic models, and the campaign screen
+shows it. `theatre_pannonia.json` stays the theatre the tests and the first balance pass tuned. Left to 13.8: the
+ledgers and the factions' target choice re-read. N7 (23 Oct 2026), the air war as it was fought: weapons and attack
+profiles with damage calibrated against history (`docs/air_war/10_WEAPONS.md`, `simcore/examples/air_war_bench.cpp`,
+`09_BALANCE.md` sections 9-10), AWACS, tanker and ELINT orbits (`11_SUPPORT.md`), force build-ups (`12_FORCES.md`),
+package sizes (`13_PACKAGES.md`), our supply lines on the country's roads and railways and the enemy's armed
+reconnaissance (`simcore/air_war/logistics.hpp`, `14_LOGISTICS.md`), and the country's terrain: ranges, gorges, lakes and
+marshes (`docs/COUNTRY_MAP.md`).
 
 The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
 M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a

@@ -57,10 +57,20 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
   `ModelLibrary::SiteLayout(system)` puts the first model at the centre when the site has several kinds (the S-125's
   radar, the Kub's 1S91) and the rest on a ring `spread_m` out, facing out; a site of one kind (a ZU-23 battery, an Osa
   pair) stands all on the ring. A raid's neighbours (`"neighbours"` in the scenario) are drawn so
-  (`ASimScenarioDirector::SpawnNeighbourSites`), placed through the level's georeference and set on its ground by a
-  trace as the Cesium tiles load; one whose tile never loads (tens of kilometres off) stands as far from the scenario's
-  ground as its nearest neighbour that found it. Seen in a game run 23 Oct 2026: an S-125 site and a ZU-23 battery on
-  the ground by the Osa, and the PU-12M's board with their blue marks.
+  (`ASimScenarioDirector::SpawnNeighbourSites`) on the ground under them (`ScenarioRunner::GroundEnu`: the terrain's
+  altitude brought into ENU, which far from the origin is not altitude), placed through the level's georeference and set
+  on its ground by a trace as the Cesium tiles load; one whose tile never loads (tens of kilometres off) stands as far
+  from the scenario's ground as its nearest neighbour that found it. An Osa battery that fights stands where its
+  launchers fire from (`ScenarioRunner::NeighbourLaunchers`). Seen in game runs 23 Oct 2026: an S-125 site and a ZU-23
+  battery on the ground by the Osa, the PU-12M's board with their blue marks, and in a raid on the map the Shilka
+  platoon nearest the battery.
+- **The nation's assets on the map** (the nation on the map N5, 23 Oct 2026): `"kinds"` gives every other kind of theatre
+  object its site the same way (an airfield's hangars and fighters, a refinery's hall, tanks and chimneys, a radar
+  company's P-18, P-19 and PRV-11, a troops' tanks and BMPs, ...); `ModelLibrary::ObjectLayout(kind, system)` takes an
+  air defence's system first, its kind otherwise, and nothing for a city (the country map's towns are drawn instead).
+  `ASimMapActor` draws every object of the running campaign's theatre so (else the nation's theatre file), where the
+  campaign has it, the wrecked ones dark, but not what the scenario draws itself (its own battery, its dummies, its
+  neighbours): 157 objects, 797 models on the nation's theatre.
 
 ## Checks
 
@@ -76,10 +86,13 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
   the terrain the auto exposure washed every view out white (found and fixed 22 October 2026). Run it from PowerShell
   (Git Bash turns `/Game/...` into a path) with `-RenderOffscreen` to keep the window off the screen.
 - **Scenario photographs**: add `-SimShots=<folder> -SimShotTimes=20,60,120` (and `-SimTimeScale=6` to run the sim
-  faster between them) to any scenario run: at each time the sim pauses, a chase camera behind the nearest aircraft and a
-  view over the battery are photographed (`shot_<t>_air.png`, `shot_<t>_battery.png`), the log lists every entity with
-  its model, and the sim goes on; after the last the game quits. In Git Bash, set `MSYS_NO_PATHCONV=1` so `/Game/...`
-  isn't turned into a Windows path.
+  faster between them) to any scenario run: at each time the sim pauses, a chase camera behind the nearest aircraft, a
+  view over the battery and one of the nearest neighbour's site are photographed (`shot_<t>_air.png`,
+  `shot_<t>_battery.png`, `shot_<t>_neighbour.png`), the log lists every entity with its model, and the sim goes on;
+  after the last the game quits. In Git Bash, set `MSYS_NO_PATHCONV=1` so `/Game/...` isn't turned into a Windows path.
+  **Found and fixed 23 October 2026:** the vehicle's view component (`USimViewComponent`) took the view back every frame,
+  so since it came in these photographs (and the map's, `-SimMapShots`) showed its orbit view of the vehicle, not the
+  photographer's camera; with a photographer on the command line it now leaves the camera alone.
 
 ## On the map
 

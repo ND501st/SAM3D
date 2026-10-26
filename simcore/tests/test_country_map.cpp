@@ -516,7 +516,10 @@ SC_TEST("the nation's theatre extends the tuned one: the base's objects keep the
     SC_EXPECT(t.id == "pannonia_nation" && t.fronts.size() == base.fronts.size() && t.country_name == base.country_name);
     SC_EXPECT(t.objects.size() > base.objects.size() + 100);
     bool in_place = t.objects.size() > base.objects.size();
-    for (std::size_t i = 0; in_place && i < base.objects.size(); ++i) in_place = t.objects[i].id == base.objects[i].id;
+    // The written objects (a supply line's columns are made again after them, docs/air_war/14_LOGISTICS.md).
+    for (std::size_t i = 0; in_place && i < base.objects.size(); ++i) {
+        if (base.objects[i].supply_line < 0) in_place = t.objects[i].id == base.objects[i].id;
+    }
     SC_EXPECT(in_place);
     // A replaced object: the S-75 at Novo Varosd is the S-75M2 (decision 1), where it stood, with its prepared sites.
     const airwar::TheatreObject* v = t.Find("varosd_s75");
@@ -579,4 +582,183 @@ SC_TEST("air war on the nation's theatre: a unit with prepared positions moves o
     }
     std::printf("    %d units with prepared positions, %d moved in three days, %d off them\n", with, moved, off);
     SC_EXPECT(with > 50 && moved > with / 2 && off == 0);
+}
+
+SC_TEST("country map: its landmarks stand where the theatre has those objects; the chain's places where the country has its towns") {
+    std::shared_ptr<const CountryMap> c = Country();
+    if (!c) return;
+    const airwar::TheatreDef t = Theatre();
+    int compared = 0;
+    // The refinery, the dam, the pipeline stations and the port: each has the theatre's object of its kind on it.
+    for (const CountryLandmarkDef& l : c->Def().landmarks) {
+        if (l.kind == "border_crossing") continue;
+        double best = 1e18;
+        for (const airwar::TheatreObject& o : t.objects) {
+            if (std::string(airwar::ObjectKindName(o.kind)) != l.kind) continue;
+            best = std::min(best, std::hypot(o.pos.x - l.at.east_m, o.pos.y - l.at.north_m));
+        }
+        if (best > 1000.0) std::printf("    no %s object at the landmark %s (nearest %.0f m)\n", l.kind.c_str(), l.id.c_str(), best);
+        SC_EXPECT(best <= 1000.0);
+        ++compared;
+    }
+    // The chain of command's places: a town or village of the country where the country has it, a post at its object.
+    command::ChainData chain;
+    std::string e;
+    SC_EXPECT(command::LoadChainData(kData, "command/chain_pannonia.json", chain, &e));
+    for (const command::Place& p : chain.places) {
+        if (const CountrySettlementDef* s = c->Settlement(p.id)) {
+            const double d = std::hypot(s->centre.east_m - p.pos.x, s->centre.north_m - p.pos.y);
+            if (d > 10.0) std::printf("    %s is %.0f m off the country's\n", p.id.c_str(), d);
+            SC_EXPECT(d <= 10.0);
+            ++compared;
+        }
+        if (!p.theatre_object.empty()) {
+            const airwar::TheatreObject* o = t.Find(p.theatre_object);
+            SC_EXPECT(o != nullptr);
+            if (o != nullptr) SC_EXPECT(std::hypot(o->pos.x - p.pos.x, o->pos.y - p.pos.y) <= 1000.0);
+            ++compared;
+        }
+    }
+    std::printf("    %d positions compared\n", compared);
+    SC_EXPECT(compared >= 15);
+}
+
+SC_TEST("the nation's theatre: a whole nation's war is fought by a larger force (the front's force_scale); the tuned theatre's is the faction's") {
+    airwar::AirWarData tuned, nation;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", tuned, &e));
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json", nation, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    const airwar::FrontDef* f = nation.theatre.FrontFor("warsaw_pact");
+    SC_EXPECT(f != nullptr && f->force_scale == 2.0);
+    int a = 0, b = 0;
+    for (const airwar::SquadronDef& s : tuned.faction.squadrons) a += s.count;
+    for (const airwar::SquadronDef& s : nation.faction.squadrons) b += s.count;
+    std::printf("    the Pact: %d aircraft against the district, %d against the nation\n", a, b);
+    SC_EXPECT(b == 2 * a);
+    SC_EXPECT_NEAR(nation.faction.doctrine.max_packages_per_cycle, 2.0 * tuned.faction.doctrine.max_packages_per_cycle, 1e-9);
+    // The cruise missiles are the long-range aviation's, not the front's: their stocks stay.
+    for (std::size_t i = 0; i < tuned.faction.aircraft.size(); ++i) {
+        if (tuned.faction.aircraft[i].missile) SC_EXPECT(nation.faction.aircraft[i].stock == tuned.faction.aircraft[i].stock);
+    }
+    airwar::AirWarData nato;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_nato.json", nato, &e));
+    SC_EXPECT(nato.theatre.FrontFor("nato") != nullptr && nato.theatre.FrontFor("nato")->force_scale == 1.5);
+    // The loader keeps it within reason.
+    airwar::TheatreDef t;
+    std::string text;
+    SC_EXPECT(detail::ReadTextFile(kData + "/air_war/theatre_pannonia.json", text));
+    const std::string key = "\"friendly_fighters\": 0.35";
+    const std::size_t at = text.find(key);
+    SC_EXPECT(at != std::string::npos);
+    if (at != std::string::npos) {
+        std::string bad = text;
+        bad.insert(at, "\"force_scale\": 9, ");
+        airwar::detail::AirWarLoader loader;
+        json::Value root;
+        SC_EXPECT(json::Parse(bad, root, &e));
+        SC_EXPECT(!loader.LoadTheatre(root, t));
+        SC_EXPECT(loader.Message().find("force_scale") != std::string::npos);
+    }
+}
+
+SC_TEST("air war on the nation's theatre: every adversary's war runs two days, the same every time for a seed") {
+    for (const char* faction : {"rebels", "neutral", "warsaw_pact", "nato"}) {
+        airwar::AirWarData d;
+        std::string e;
+        SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", std::string("air_war/faction_") + faction + ".json", d, &e));
+        if (!e.empty()) std::printf("    %s\n", e.c_str());
+        std::string runs[3];
+        int packages = 0;
+        for (int k = 0; k < 3; ++k) {
+            airwar::AirCampaign c;
+            SC_EXPECT(c.Init(d, k < 2 ? 7u : 8u));
+            while (c.Now() < 48.0) {
+                if (c.Advance(48.0)) c.SkipPlayerMission();
+            }
+            runs[k] = airwar::SaveCampaignJson(c, "air_war/theatre_pannonia_nation.json", std::string("air_war/faction_") + faction + ".json");
+            if (k == 0) packages = static_cast<int>(c.Packages().size());
+        }
+        std::printf("    %s: %d packages in two days\n", faction, packages);
+        SC_EXPECT(packages > 0);
+        SC_EXPECT(runs[0] == runs[1]);  // the same seed, the same war
+        SC_EXPECT(runs[0] != runs[2]);  // another seed, another
+    }
+}
+
+// ---------------------------------------------------------------------------------------------- the terrain
+
+SC_TEST("country map: its terrain: ranges along the borders, the rivers' gorges through them, the reservoir above the dam, a lake and marshes") {
+    const std::shared_ptr<const CountryMap> c = Country();
+    SC_EXPECT(c != nullptr);
+    if (c == nullptr) return;
+    const MapDef& g = c->Def().ground;
+    SC_EXPECT(g.ridges.size() >= 5 && g.valleys.size() >= 4 && g.lakes.size() >= 2 && g.marshes.size() >= 2);
+    // The ranges stand high: the border range's crest some hundreds of metres above the plain.
+    const auto crest = [&](const MapRidgeDef& r) {
+        double best = 0.0;
+        for (std::size_t i = 0; i + 1 < r.points.size(); ++i) {
+            for (double f = 0.0; f <= 1.0; f += 0.05) {
+                const double e = r.points[i].east_m + f * (r.points[i + 1].east_m - r.points[i].east_m);
+                const double n = r.points[i].north_m + f * (r.points[i + 1].north_m - r.points[i].north_m);
+                best = std::max(best, c->GroundHeight(e, n));
+            }
+        }
+        return best;
+    };
+    for (const MapRidgeDef& r : g.ridges) SC_EXPECT(crest(r) > g.base_m + 0.6 * r.height_m);
+    // A river crosses a range in its gorge: the floor near the plain, the shoulders high above it.
+    const MapRidgeDef* border = nullptr;
+    for (const MapRidgeDef& r : g.ridges) border = r.id == "pact_border_range" ? &r : border;
+    SC_EXPECT(border != nullptr);
+    const double floor = c->GroundHeight(Km(52.3, 120.0).east_m, Km(52.3, 120.0).north_m);
+    const double shoulder = c->GroundHeight(Km(57.3, 120.0).east_m, Km(57.3, 120.0).north_m);
+    SC_EXPECT(floor < g.base_m + 60.0 && shoulder > floor + 150.0);
+    // Valleys never cut below the plain.
+    for (const MapRidgeDef& v : g.valleys) {
+        for (const MapPoint& p : v.points) SC_EXPECT(c->GroundHeight(p.east_m, p.north_m) > g.base_m - 20.0);
+    }
+    // The lakes: the ground under them below their level, their shores at it or above (within a grid cell's reach).
+    for (const MapLakeDef& l : g.lakes) {
+        double ce = 0.0, cn = 0.0;
+        for (const MapPoint& p : l.points) {
+            ce += p.east_m / static_cast<double>(l.points.size());
+            cn += p.north_m / static_cast<double>(l.points.size());
+        }
+        SC_EXPECT(NaturalGround(g, ce, cn) < l.level_m);
+        SC_EXPECT(std::string(c->LandCoverAt(ce, cn)) == "lake");
+    }
+    // The reservoir lies above the dam, on the Rava.
+    const CountryLandmarkDef* dam = c->Landmark("rava_dam");
+    const MapLakeDef* reservoir = nullptr;
+    for (const MapLakeDef& l : g.lakes) reservoir = l.id == "rava_reservoir" ? &l : reservoir;
+    SC_EXPECT(dam != nullptr && reservoir != nullptr);
+    if (dam != nullptr && reservoir != nullptr) {
+        double closest = 1e18;
+        for (const MapPoint& p : reservoir->points) closest = std::min(closest, std::hypot(p.east_m - dam->at.east_m, p.north_m - dam->at.north_m));
+        SC_EXPECT(closest < 1500.0);
+        bool upstream = true;
+        for (const MapPoint& p : reservoir->points) upstream = upstream && p.north_m >= dam->at.north_m - 500.0;
+        SC_EXPECT(upstream);
+    }
+    // Land cover: the marshes are marsh, a forest is forest, the capital town, the plain open.
+    SC_EXPECT(std::string(c->LandCoverAt(Km(40, -33).east_m, Km(40, -33).north_m)) == "marsh");
+    SC_EXPECT(std::string(c->LandCoverAt(Km(-11, -3).east_m, Km(-11, -3).north_m)) == "forest");
+    SC_EXPECT(std::string(c->LandCoverAt(Km(36, 58).east_m, Km(36, 58).north_m)) == "town");
+    SC_EXPECT(std::string(c->LandCoverAt(Km(-60, 60).east_m, Km(-60, 60).north_m)) == "open");
+    // No asset of the nation's theatre stands in a lake, and the secondary roads reach the western and south-western groups.
+    const airwar::TheatreDef t = Theatre();
+    for (const airwar::TheatreObject& o : t.objects) {
+        if (o.supply_line >= 0) continue;
+        const std::string cover = c->LandCoverAt(o.pos.x, o.pos.y);
+        if (cover == "lake") std::printf("    %s stands in a lake\n", o.id.c_str());
+        SC_EXPECT(cover != "lake");
+    }
+    const CountryNetwork& roads = c->Network(CountryNet::Road);
+    for (const char* id : {"group_west", "group_southwest", "sw_depot"}) {
+        const airwar::TheatreObject* o = t.Find(id);
+        SC_EXPECT(o != nullptr && roads.NearestNode(At(o->pos), 12000.0) >= 0);
+    }
+    std::printf("    %zu ranges, %zu gorges, %zu lakes, %zu marshes; the border range's gorge: floor %.0f m, shoulder %.0f m\n", g.ridges.size(),
+                g.valleys.size(), g.lakes.size(), g.marshes.size(), floor, shoulder);
 }

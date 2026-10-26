@@ -8,12 +8,13 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 | File | What |
 |---|---|
 | `theatre_pannonia.json` | The fictional country, its four fronts (entry points, the enemy's bases, the defender's fighter threat, where the player's battery deploys in a war on that front) and its objects (value, hardness, repair, mobility, emission, pre-war knowledge, air defence, C2 role). Positions in km east and north of `origin` |
-| `theatre_pannonia_nation.json` | **The whole nation** (the nation on the map, N2; `docs/COUNTRY_MAP.md`): `"extends": "theatre_pannonia.json"` and adds the briefing's forces, industry and infrastructure on open ground of the country's map, 170 objects, every mobile unit with its prepared positions, and where battery 21 deploys in the wars with NATO and the Pact. Our order of battle (`data/command/oob_pannonia.json`) owns every military object. `air_war_demo` and `air_war_balance` run on it with `--theatre theatre_pannonia_nation.json` (N4's first read, `docs/air_war/09_BALANCE.md` §8); the game's campaigns stay on `theatre_pannonia.json` until the rebalance (13.8) |
+| `theatre_pannonia_nation.json` | **The whole nation** (the nation on the map, N2; `docs/COUNTRY_MAP.md`): `"extends": "theatre_pannonia.json"` and adds the briefing's forces, industry and infrastructure on open ground of the country's map, 170 objects, every mobile unit with its prepared positions, and where battery 21 deploys in the wars with NATO and the Pact. Our order of battle (`data/command/oob_pannonia.json`) owns every military object. `air_war_demo` and `air_war_balance` run on it with `--theatre theatre_pannonia_nation.json` (`docs/air_war/09_BALANCE.md` §8). The Pact's and NATO's fronts carry a `force_scale` (2 and 1.5: the rebalance for a whole nation). **The game's new campaigns are fought on it** (N4, 23 Oct 2026); `theatre_pannonia.json` stays the theatre the tests and the first balance pass tuned |
 | `faction_rebels.json` | Inferior: the Rava Liberation Front's improvised air wing |
 | `faction_neutral.json` | Near peer: the Noric Republic's small air force |
 | `faction_warsaw_pact.json` | Peer: the Warsaw Pact's air forces of the front |
 | `faction_nato.json` | Superior: a composite allied tactical air force |
 | `traits.json` | The eight traits and the 31 quirks with their named effects, signatures and our analysts' phrases |
+| `weapons.json` | The weapons (facts from `wiki_weapons`; footprint and effect by target class are calibrated game values) and every object kind as a target: its class and aim points (`docs/air_war/10_WEAPONS.md`) |
 
 ## Faction format (summary; `docs/air_war/01_FACTIONS.md` has it all)
 
@@ -49,7 +50,23 @@ guidance radar one, an Osa battery four; `docs/air_war/05_EXECUTION.md` §2); wi
 reach. An object's `"c2_source"` makes it a warning post: a raid takes the nearest working one of each kind. A defence's
 `"max_target_mps"` is the fastest target it can engage. The theatre's `"year"` is the war's (1985): an aircraft or
 missile type with `"in_service_year"` later than it does not fly. A front's `"missile_launch"` is where its ships or
-ground launchers fire cruise missiles from.
+ground launchers fire cruise missiles from, and its `"force_scale"` (0.25-4, default 1) how many times its faction's
+strength fights on it: every squadron's aircraft and the packages its staff plans a cycle (not the cruise missiles'
+stocks); give its reason in the front's `"notes"`.
+
+A theatre's **`"supply_lines"`** (`docs/air_war/14_LOGISTICS.md`): each runs `"from"` a depot, junction or port `"to"`
+troops, by `"net"` `road` or `rail`, `"via"` objects on the way, with `"columns"` of `"column"` kind `convoy`, `train`
+(by rail) or `column` (an armoured march column), `"vehicles"`, `"carries"`, `"speed_kmh"`, `"load_h"`, `"delivery"` (of
+the troops' stocks, or of their strength for a march column), `"night_only"`, `"value"`, `"hardness"`, `"replace_h"`,
+`"prior_known"`, an optional `"defence"`, and its source. The loader makes each column a theatre object `<line>_<n>` at
+its depot (an extending theatre's lines replace the base's of the same id). `"country_map"` names the country's map the
+lines follow (`maps/pannonia.json` on the nation's theatre).
+
+Each aircraft type's **`"loads"`** (`[["weapon", count], ...]`), `"designator"` (`laser`), `"computing"` (its sight,
+0..1), `"radius_km"` (its published combat radius) and the support roles `awacs`, `tanker`, `elint` are in
+`docs/air_war/10_WEAPONS.md` and `11_SUPPORT.md`; a doctrine's `"delivery_risk"`, `"min_effect"` and `"min_value"`, and
+the logistics' `"buildup_initial"` and `"buildup_full_by_day"` (a squadron's own `"initial"` and `"full_by_day"`) in
+`10_WEAPONS.md`, `13_PACKAGES.md` and `12_FORCES.md`.
 
 **Cruise missiles** are entries of a faction's `aircraft` with `"missile": true`, the role `"missile"` alone, a
 `"range_km"`, a `"launch"` (`air`: its carrier releases it at the border entry; `sea`: from the front's
@@ -58,12 +75,13 @@ ground launchers fire cruise missiles from.
 `high` for a dive from height, `low` for terrain following) and a share in the phases. The Pact has the Kh-22M (1970s);
 NATO the BGM-109C Tomahawk (1986) and AGM-86C CALCM (1988).
 
-Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`. Flight roles:
-`strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`. Object kinds: `sam_site`, `aaa`,
+Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`, `missile`,
+`armed_recce`. Flight roles: `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`,
+`missile`, and the support roles `awacs`, `tanker`, `elint`. Object kinds: `sam_site`, `aaa`,
 `ew_radar`, `command_post`, `airfield`, `bridge`, `rail_junction`, `depot`, `power_plant`, `headquarters`, `troops`,
 `factory`, `city`, and the nation's infrastructure (22 Oct 2026, the nation on the map N0): `refinery`, `pipeline_station`,
 `substation`, `dam` (the grid: banned wherever `power_plant` is), `materials_depot`, `port`, `government`, `broadcast`,
-`exchange`. Air defence systems (`defence.system`, checked by the loader): `osa`, `kub`, `s75`, `s75m2`, `s125`,
+`exchange`, and the supply lines' columns `convoy`, `train`, `column` (made by the loader, never written). Air defence systems (`defence.system`, checked by the loader): `osa`, `kub`, `s75`, `s75m2`, `s125`,
 `s125m1`, `strela10`, `strela1`, `zsu234`, `s60`, `ks30`, `zu23`, `aaa`, `manpads`. Staff roles: `commander`, `planner`, `intelligence`, `sead`, `political`, `squadron_leader`.
 
 Every aircraft number is a PLACEHOLDER; the doctrine's shape is sourced where a source exists and is a game value where

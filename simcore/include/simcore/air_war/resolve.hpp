@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/planner.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
@@ -42,6 +43,7 @@ struct ResolveContext {
     double played_radius_m = 0.0;
     double played_from_h = 0.0;
     double played_to_h = 0.0;
+    double awacs = 0.0;  // the share of the day the enemy's AWACS is on station (docs/air_war/11_SUPPORT.md)
 };
 
 // How much a package's SEAD suppresses a radar defence it meets: its SEAD and hunter aircraft, its SEAD officer's skill
@@ -169,10 +171,12 @@ public:
                             }
                         }
                         if (a->drone && fl.role == FlightRole::Decoy) {
-                            // A decoy draws fire: the defence wastes rounds and shows itself.
+                            // A decoy draws fire: the defence wastes rounds and shows itself, and the SEAD behind the
+                            // decoys knows where to aim (the Bekaa, 1982).
                             if (!engaged[oj]) {
                                 engaged[oj] = true;
                                 Spend(st, 1 + c.rng->Index(2), out);
+                                if (radar && supp_base > 0.0) suppressed[oj] = std::max(suppressed[oj], tune.Get("attrition.decoy_exposure"));
                                 out.fired.push_back(def.id);
                                 if (c.rng->Chance(0.6)) ++fl.lost;  // drones are meant to be lost; not counted as losses
                             }
@@ -226,7 +230,8 @@ public:
                 }
                 // The defender's fighters, where the package has no escort.
                 if (front != nullptr && main && si == 1 && alive > 0) {
-                    const double pk = front->friendly_fighters * tune.Get("attrition.escort_fighter_kill") *
+                    const double ff = front->friendly_fighters * (1.0 - tune.Get("support.awacs_fighter_cut") * Clamp01(c.awacs));
+                    const double pk = ff * tune.Get("attrition.escort_fighter_kill") *
                                       (p.Has(FlightRole::Escort) ? 0.3 : 1.0) * (p.part == DayPart::Night ? 0.5 : 1.0);
                     for (int n = 0; n < alive; ++n) {
                         if (c.rng->Chance(pk)) {
@@ -274,6 +279,36 @@ private:
         return fl.route.empty() ? 0.0 : fl.route.front().t_h;
     }
 
+    // Armed reconnaissance (logistics.hpp): the flight searches its stretch of road or railway and attacks the first
+    // column it sees on the move there, nearest first; a column loading or unloading is inside its depot or with its
+    // troops. Nothing found, it brings its weapons home.
+    bool FindColumn(Package& p, Flight& fl, const AircraftType& a, PackageOutcome& out) {
+        const AirWarData& d = *c_->data;
+        const double reach = d.tuning.Get("logistics.search_m");
+        const double find = ColumnFindChance(p.part, c_->weather, a.night, d.tuning);
+        std::vector<std::pair<double, std::size_t>> on_road;
+        for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
+            const ObjectState& st = (*c_->truth)[i];
+            if (!IsColumn(d.theatre.objects[i].kind) || st.function <= 0.0 || (st.leg != 1 && st.leg != 3)) continue;
+            const double dist = Dist2d(st.pos, fl.aim_pos);
+            if (dist <= reach) on_road.push_back({dist, i});
+        }
+        std::sort(on_road.begin(), on_road.end());
+        for (const auto& c : on_road) {
+            if (!c_->rng->Chance(find)) continue;
+            const TheatreObject& o = d.theatre.objects[c.second];
+            fl.aim_pos = (*c_->truth)[c.second].pos;
+            p.target_object = o.id;
+            p.found = o.id;
+            out.recce_seen.push_back(o.id);
+            out.notes.push_back(fl.callsign + " found " + o.name + (o.kind == ObjectKind::Train ? " on the railway" : " on the road"));
+            return true;
+        }
+        out.hit_nothing = true;
+        out.notes.push_back(fl.callsign + " found nothing on its stretch and brought its weapons home");
+        return false;
+    }
+
     void Spend(ObjectState& st, int n, PackageOutcome& out) {
         if (st.missiles < 0) return;
         const int used = std::min(st.missiles, n);
@@ -291,7 +326,7 @@ private:
         const double discipline = def.player ? c_->posture->emcon_discipline : 0.5;
         for (int s = 0; s < shots; ++s) {
             const bool switched_off = c_->rng->Chance(discipline);
-            const double pk = switched_off ? (a.arm_memory ? tune.Get("attrition.arm_kill") * 0.5 : tune.Get("attrition.arm_kill_no_memory_off"))
+            const double pk = switched_off ? tune.Get(a.arm_memory ? "attrition.arm_kill_memory_off" : "attrition.arm_kill_no_memory_off")
                                            : tune.Get("attrition.arm_kill");
             if (c_->rng->Chance(pk)) {
                 // One of its fire-control radars is gone; with the last, the battery is out of the fight.
@@ -320,6 +355,7 @@ private:
     void Deliver(Package& p, Flight& fl, std::size_t flight_index, const AircraftType& a, int alive, double airmanship, PackageOutcome& out) {
         const AirWarData& d = *c_->data;
         const TuningTable& tune = d.tuning;
+        if (p.kind == MissionKind::ArmedRecce && !a.missile && !FindColumn(p, fl, a, out)) return;
         out.delivered = true;
         // What is really near the aim point: the target where they aimed, a dummy, or nothing.
         int hit_obj = -1;
@@ -336,7 +372,25 @@ private:
             }
         }
         double acc = tune.Get("strike.hit_chance") * p.load_factor;
-        if (a.missile) {
+        // Its weapons (docs/air_war/10_WEAPONS.md): how accurately they fall, as delivered now. A guided weapon that
+        // can't be guided after all (cloud over the laser spot, darkness for a TV seeker) falls like a bomb from height.
+        const WeaponDef* wd = a.missile ? nullptr : d.Weapon(fl.weapon);
+        double cep = 0.0;
+        if (wd != nullptr) {
+            cep = DeliveryCep(*wd, fl.delivery, a, p.part, c_->weather, airmanship, tune);
+            const bool night = p.part == DayPart::Night;
+            bool lost = false;
+            if (wd->guidance == "laser") {
+                lost = c_->weather == Weather::Poor || (night && !a.night) ||
+                       (c_->weather == Weather::Cloudy && !c_->rng->Chance(tune.Get("delivery.cloudy_laser")));
+            }
+            if (wd->guidance == "tv") lost = night || c_->weather == Weather::Poor;
+            if (lost) {
+                cep = tune.Get("delivery.cep_level_m") * tune.Get("delivery.poor_weather_factor");
+                out.notes.push_back(fl.callsign + "'s " + wd->name + " lost its guidance");
+            }
+            acc = 1.0 - std::pow(0.5, (wd->footprint_m / cep) * (wd->footprint_m / cep));
+        } else if (a.missile) {
             acc = a.hit_chance > 0.0 ? a.hit_chance : tune.Get("strike.hit_chance");  // its own guidance, day or night
         } else {
             if (p.part == DayPart::Night && !a.night) acc *= tune.Get("strike.night_accuracy");
@@ -362,7 +416,7 @@ private:
             double env = 1.0;
             if (p.part == DayPart::Night) env *= tune.Get("attrition.night");
             if (c_->weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");
-            const double k = TargetGunsChance(o.kind, fl.profile, a.helicopter, Clamp01(a.evasion + 0.3 * (airmanship - 0.5)),
+            const double k = TargetGunsChance(o.kind, FlightExposure(fl, a.helicopter, tune), Clamp01(a.evasion + 0.3 * (airmanship - 0.5)),
                                               env * st.function, tune);
             const int attacking = alive;
             for (int n = 0; n < attacking && k > 0.0; ++n) {
@@ -396,8 +450,28 @@ private:
         }
         if (o.id != p.target_object && !p.target_object.empty()) out.notes.push_back(fl.callsign + " hit " + o.name + " instead");
         double removed = 0.0;
-        for (int n = 0; n < alive; ++n) {
-            if (c_->rng->Chance(acc)) removed += a.strike_power * (1.0 - 0.7 * o.hardness);
+        if (wd != nullptr) {
+            // Each weapon on one of the aim points still working; each it puts out of action is gone. Under the fire of
+            // a defence that works and isn't suppressed, the aim is worse.
+            const TargetProfileDef tp = d.TargetOf(o);
+            if (o.defence.present && st.function > 0.3 && !p.Has(FlightRole::Sead)) cep *= tune.Get("delivery.under_fire_factor");
+            const double kill = WeaponKill(*wd, fl.delivery, tp.target_class, cep, tune);
+            const int aim = std::max(1, tp.aim_points);
+            int working = static_cast<int>(std::ceil(st.function * aim - 1e-9));
+            const int per_aircraft = std::max(0, static_cast<int>(std::lround(fl.weapons * p.load_factor)));
+            int killed = 0;
+            for (int n = 0; n < alive && working > 0; ++n) {
+                for (int k = 0; k < per_aircraft && working > 0; ++k) {
+                    if (!c_->rng->Chance(kill)) continue;
+                    --working;
+                    ++killed;
+                }
+            }
+            removed = static_cast<double>(killed) / aim;
+        } else {
+            for (int n = 0; n < alive; ++n) {
+                if (c_->rng->Chance(acc)) removed += a.strike_power * (1.0 - 0.7 * o.hardness);
+            }
         }
         if (removed <= 0.0) {
             out.notes.push_back(fl.callsign + " missed " + o.name);

@@ -15,6 +15,7 @@ class USimWorldSubsystem;
 
 namespace simcore
 {
+	class CountryMap;
 	class MapData;
 	class MapFrameLink;
 }
@@ -32,8 +33,14 @@ namespace simcore
  * Place one in a level with no Cesium (Content/Maps/KesmarkRange, tools/ue_build_kesmark_range.py). Editor: "Build
  * Preview" draws it at the map's own origin.
  *
+ * Beyond the map, the whole country it lies in (CountryFile, simcore/country_map.hpp) at strategic scale: its ground at
+ * 1 km in place of the map's far ground (the same ground function, so the two agree), the land beyond its borders
+ * coarser, its rivers, roads, railways and oil pipelines as ribbons, its towns as blocks on a patch, its border. And the
+ * nation's assets (bDrawAssets): every object of the theatre as the basic models of its system's or its kind's site.
+ *
  * -SimMapShots=<folder> photographs the map from a few views (the battery's position, over the town, the bridges, the
- * woods, high above with the far ground and the cloud) once it is drawn, then quits: a run checked from its pictures.
+ * woods, high above with the far ground and the cloud, the country from very high, the refinery and the capital's
+ * airfield) once it is drawn, then quits: a run checked from its pictures.
  */
 UCLASS()
 class SAM3D_API ASimMapActor : public AActor
@@ -59,6 +66,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	bool bCollision = true;
 
+	/** The country the map lies in (data/maps/<id>.json, "kind": "country"), drawn beyond the map at strategic scale. ""
+	 *  draws none (and the map's own far ground instead). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
+	FString CountryFile = TEXT("maps/pannonia.json");
+
+	/** The nation's assets on the map: every theatre object as its basic models where it stands, the running campaign's
+	 *  (where it has moved them; the wrecked dark) or else TheatreFile's. Not what the scenario draws itself: its own
+	 *  battery, its dummies and its neighbours. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
+	bool bDrawAssets = true;
+
+	/** The theatre whose objects are drawn when no campaign runs (relative to the data folder). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
+	FString TheatreFile = TEXT("air_war/theatre_pannonia_nation.json");
+
 	/** Draw the map for the scenario that is running now (or at the map's own origin with none). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Map")
 	bool BuildMap(FString& OutError);
@@ -68,6 +90,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Map")
 	int32 GetBoxCount() const { return BoxCount; }
+
+	/** The assets' vehicles and buildings drawn (basic models). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Map")
+	int32 GetAssetCount() const { return AssetCount; }
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -79,6 +105,10 @@ private:
 	void BuildGround(const simcore::MapFrameLink& Link);
 	void BuildStrips(const simcore::MapFrameLink& Link);
 	void BuildBoxes(const simcore::MapFrameLink& Link);
+	void BuildCountry(const FVector& FrameOriginLonLatAlt);
+	void BuildAssets(const FVector& FrameOriginLonLatAlt);
+	// The ground's height (above sea level) at a point of the country: the map's own where the map is, the country's else.
+	double CountryGround(double East, double North) const;
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
 	static FString FindDataDirectory();
 
@@ -95,6 +125,14 @@ private:
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Parts;
 
 	std::shared_ptr<const simcore::MapData> Map;
+	std::shared_ptr<const simcore::CountryMap> Country;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> CountryStrips;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<USceneComponent>> AssetParts;  // the assets' holders and their models' parts
+	int32 AssetCount = 0;
 	FVector BuiltFor = FVector(1e9);  // the frame origin (lon, lat, alt) the meshes are in
 	int32 BoxCount = 0;
 	float CheckTimer = 0.0f;

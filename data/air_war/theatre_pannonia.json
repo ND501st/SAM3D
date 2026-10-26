@@ -62,6 +62,13 @@
       "friendly_fighters": 0.4
     }
   ],
+  "supply_lines": [
+    {"id": "south_road", "name": "The southern group's supply road", "from": "southern_depot", "to": "group_south", "net": "road", "column": "convoy", "columns": 4, "vehicles": 20, "carries": "ammunition and fuel", "speed_kmh": 25, "load_h": 4, "delivery": 0.045, "value": 0.4, "hardness": 0.2, "replace_h": 24, "prior_known": 0.6, "source": "fm100_2_3", "confidence": "estimate", "notes": "a column of 30 to 40 trucks: half a materiel support battalion's ammunition or fuel company (fm100_2_3 p. 4-90: 60 Ural-375 cargo trucks, 80 fuel trucks of 5,200 l)"},
+    {"id": "north_road", "name": "The northern group's supply road over the Kesmark bridge", "from": "kesmark_depot", "to": "group_north", "via": ["kesmark_road_bridge"], "net": "road", "column": "convoy", "columns": 5, "vehicles": 22, "carries": "fuel and ammunition", "speed_kmh": 25, "load_h": 4, "delivery": 0.073, "value": 0.45, "hardness": 0.2, "replace_h": 24, "prior_known": 0.6, "source": "fm100_2_3", "confidence": "estimate", "notes": "a column of 30 to 40 trucks: half a materiel support battalion's ammunition or fuel company (fm100_2_3 p. 4-90: 60 Ural-375 cargo trucks, 80 fuel trucks of 5,200 l)"},
+    {"id": "west_rail", "name": "The western group's railhead line from Cegled", "from": "cegled_junction", "to": "group_west", "net": "rail", "column": "train", "columns": 2, "vehicles": 32, "carries": "ammunition, fuel and spares in 32 wagons", "speed_kmh": 30, "load_h": 6, "delivery": 0.17, "value": 0.5, "hardness": 0.3, "replace_h": 36, "prior_known": 0.8, "source": "fm100_2_3", "confidence": "estimate", "notes": "A military train of some 30 wagons; the railways carry the army's bulk supply from the interior to the railheads (fm100_2_3 p. 1-3: the railroad troops run the links between the front and the interior)."},
+    {"id": "sw_road", "name": "The border battalion's supply road", "from": "sw_depot", "to": "sw_border_battalion", "net": "road", "column": "convoy", "columns": 2, "vehicles": 10, "carries": "ammunition and food", "speed_kmh": 25, "load_h": 3, "delivery": 0.071, "value": 0.3, "hardness": 0.2, "replace_h": 24, "prior_known": 0.5, "source": "fm100_2_3", "confidence": "estimate", "notes": "a column of 30 to 40 trucks: half a materiel support battalion's ammunition or fuel company (fm100_2_3 p. 4-90: 60 Ural-375 cargo trucks, 80 fuel trucks of 5,200 l)"},
+    {"id": "north_march", "name": "March replacements for the northern group", "from": "cegled_junction", "to": "group_north", "net": "road", "column": "column", "columns": 1, "vehicles": 30, "carries": "a tank company and a motor rifle company with their trucks, moving up as replacements", "speed_kmh": 20, "load_h": 6, "delivery": 0.08, "night_only": true, "value": 0.6, "hardness": 0.6, "replace_h": 24, "prior_known": 0.4, "defence": {"system": "zsu234", "radius_km": 2.5, "lethality": 0.12, "low_cover": true, "medium_cover": false, "radar": true, "notes": "the march column's own ZSU-23-4 platoon"}, "source": "fm100_2_3", "confidence": "estimate", "notes": "An armoured column on the march: about ten tanks, ten infantry fighting vehicles, a ZSU-23-4 platoon and trucks; it moves at night under an enemy's air threat (the march practice of a Soviet-model army). Strength it brings: a game value."}
+  ],
   "objects": [
     { "id": "osa_21", "name": "Osa-AK battery 21 (the player's)", "kind": "sam_site", "east_km": 6, "north_km": -10,
       "value": 0.6, "hardness": 0.3, "repair_h": 72, "mobile": true, "emitter": true, "emission": 0.3, "player": true, "prior_known": 0.5,
@@ -138,10 +145,10 @@
       "value": 0.7, "hardness": 0.4, "repair_h": 24, "relocate_h": 12, "relocate_km": 6, "mobile": true, "prior_known": 0.8 },
     { "id": "group_southwest", "name": "South-western group, forward", "kind": "troops", "east_km": -105, "north_km": -80,
       "value": 0.7, "hardness": 0.4, "repair_h": 24, "relocate_h": 12, "relocate_km": 6, "mobile": true, "prior_known": 0.8 },
-    { "id": "sw_border_battalion", "name": "Border battalion at the Lenta crossing", "kind": "troops", "east_km": -120, "north_km": -75,
+    { "id": "sw_border_battalion", "name": "Border battalion at the Lenta crossing", "kind": "troops", "target_class": "light", "aim_points": 6, "east_km": -120, "north_km": -75,
       "value": 0.5, "hardness": 0.4, "repair_h": 24, "relocate_h": 24, "relocate_km": 3, "mobile": true, "prior_known": 0.9,
       "notes": "Dug in along the border, watched by the neighbour's observation posts. Outside battery 21's reach when it covers the south-western group." },
-    { "id": "sw_artillery", "name": "South-western group's artillery", "kind": "troops", "east_km": -110, "north_km": -90,
+    { "id": "sw_artillery", "name": "South-western group's artillery", "kind": "troops", "target_class": "light", "aim_points": 6, "east_km": -110, "north_km": -90,
       "value": 0.6, "hardness": 0.35, "repair_h": 24, "relocate_h": 8, "relocate_km": 5, "mobile": true, "prior_known": 0.5 },
     { "id": "lenta_bridge", "name": "Lenta road bridge", "kind": "bridge", "east_km": -125, "north_km": -55,
       "value": 0.6, "hardness": 0.7, "repair_h": 96, "prior_known": 1, "notes": "The south-western group's supply road over the border river." },

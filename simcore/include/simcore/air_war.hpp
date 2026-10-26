@@ -7,6 +7,7 @@
 #include "simcore/air_war/officers.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/state.hpp"
+#include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/planner.hpp"
 #include "simcore/air_war/resolve.hpp"
 #include "simcore/air_war/campaign.hpp"

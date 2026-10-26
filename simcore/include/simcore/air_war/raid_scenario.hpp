@@ -485,7 +485,7 @@ public:
                     json::Value b = Obj();
                     Put(b, "kind", Str("terrain_following"));
                     Put(b, "agl_m", Num(std::round(std::max(5.0, cl.agl[0]))));
-                    Put(b, "max_climb_mps", Num(a->helicopter ? 8 : 60));
+                    Put(b, "max_climb_mps", Num(a->helicopter ? 8 : 120));  // a jet's pop-up climbs at 100 m/s and more
                     Put(b, "lookahead_s", Num(6));
                     Put(t, "behaviour", b);
                 }
@@ -789,7 +789,9 @@ public:
         Put(root, "crew_commander", Str("npc"));
         Put(root, "battery_commander", Str("npc"));
         Put(root, "targets", targets);
-        // Our other air defences round the battery: drawn where they stand, plotted on the board (their fire is the bridge's).
+        // Our other air defences round the battery: drawn where they stand, plotted on the board. Their fire is the
+        // bridge's, except the regiment's other Osa batteries, which fight in the runner's battery fire model with the
+        // launchers that work and the missiles they have.
         if (!m.neighbours.empty()) {
             json::Value nbs = Arr();
             for (const RaidNeighbour& nb : m.neighbours) {
@@ -799,6 +801,12 @@ public:
                 Put(v, "system", Str(nb.defence.system));
                 Put(v, "position", Pos(Vec3{nb.enu.x, nb.enu.y, 0.0}));
                 Put(v, "radius_km", Num(nb.defence.radius_m / 1000.0));
+                const int launchers = static_cast<int>(std::lround(4.0 * nb.function));
+                if (nb.defence.system == "osa" && launchers >= 1 && nb.missiles != 0) {
+                    Put(v, "fights", Bool(true));
+                    Put(v, "launchers", Num(std::min(4, launchers)));
+                    if (nb.missiles > 0) Put(v, "missiles", Num(std::min(24, nb.missiles)));
+                }
                 Push(nbs, v);
             }
             Put(root, "neighbours", nbs);

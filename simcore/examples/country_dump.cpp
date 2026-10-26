@@ -147,6 +147,25 @@ int main(int argc, char** argv) {
         Points(out, d.ground.forests[i].points);
         out << "}";
     }
+    out << "],\n\"marshes\":[";
+    for (std::size_t i = 0; i < d.ground.marshes.size(); ++i) {
+        out << (i ? ",\n" : "\n") << "{\"id\":" << Quote(d.ground.marshes[i].id) << ",\"points\":";
+        Points(out, d.ground.marshes[i].points);
+        out << "}";
+    }
+    out << "],\n\"lakes\":[";
+    for (std::size_t i = 0; i < d.ground.lakes.size(); ++i) {
+        out << (i ? ",\n" : "\n") << "{\"id\":" << Quote(d.ground.lakes[i].id) << ",\"name\":" << Quote(d.ground.lakes[i].name)
+            << ",\"level_m\":" << d.ground.lakes[i].level_m << ",\"points\":";
+        Points(out, d.ground.lakes[i].points);
+        out << "}";
+    }
+    out << "],\n\"ridges\":[";
+    for (std::size_t i = 0; i < d.ground.ridges.size(); ++i) {
+        out << (i ? ",\n" : "\n") << "{\"id\":" << Quote(d.ground.ridges[i].id) << ",\"points\":";
+        Points(out, d.ground.ridges[i].points);
+        out << "}";
+    }
     out << "],\n";
     Lines(out, "rivers", d.ground.rivers);
     Lines(out, "roads", d.ground.roads);

@@ -29,6 +29,7 @@
 
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/intel.hpp"
+#include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/officers.hpp"
 #include "simcore/air_war/planner.hpp"
 #include "simcore/air_war/resolve.hpp"
@@ -128,9 +129,11 @@ public:
             SquadronState st;
             st.id = s.id;
             st.aircraft = s.aircraft;
-            st.total = s.count;
+            st.total = Arrived(s, 1);
             squadrons_.push_back(st);
         }
+        support_ = SupportNow();
+        supply_.Init(data_, truth_);
         arm_stock_ = data_.faction.logistics.arm_stock;
         for (const AircraftType& a : data_.faction.aircraft) {
             if (a.missile && a.InService(data_.theatre.year)) missile_stock_[a.id] = a.stock;
@@ -322,6 +325,23 @@ public:
     const PoliticsState& Politics() const { return politics_; }
     double ArmStock() const { return arm_stock_; }
     // Cruise missiles of a type left to the enemy (0 for a type not in service in the war's year).
+    // The enemy's support orbits as of the last plan, the support sorties flown, and the aircraft arrived in its build-up
+    // after the first day (docs/air_war/11_SUPPORT.md, 12_FORCES.md).
+    const SupportLevel& Support() const { return support_; }
+    // Our supply lines: their ways, and what they delivered and lost (docs/air_war/14_LOGISTICS.md).
+    const SupplyNetwork& Supply() const { return supply_; }
+    int SupportSorties() const { return support_sorties_; }
+    int Reinforcements() const { return reinforcements_; }
+    // Aircraft in theatre now, manned (not cruise missiles or drones), whole or damaged.
+    int AircraftInTheatre() const {
+        int n = 0;
+        for (const SquadronState& st : squadrons_) {
+            const AircraftType* a = data_.faction.Aircraft(st.aircraft);
+            if (a != nullptr && !a->missile && !a->drone) n += std::max(0, st.total - st.lost);
+        }
+        return n;
+    }
+
     double MissileStock(const std::string& id) const {
         const auto it = missile_stock_.find(id);
         return it == missile_stock_.end() ? 0.0 : it->second;
@@ -451,6 +471,11 @@ private:
     bool ok_ = false;
     double now_h_ = 0.0;
     int day_ = 1;
+    SupportLevel support_;         // the enemy's support orbits, as of the last plan (docs/air_war/11_SUPPORT.md)
+    SupplyNetwork supply_;         // the player's side's supply lines (docs/air_war/14_LOGISTICS.md)
+    double tanker_left_ = 0.0;     // aircraft the tankers can still refuel this cycle
+    int support_sorties_ = 0;      // support sorties flown so far
+    int reinforcements_ = 0;       // aircraft arrived in the build-up after day 1
     int phase_ = 0;
     double next_plan_h_ = 0.0;
     std::vector<ObjectState> truth_;
@@ -510,7 +535,48 @@ private:
         rc.staff = &staff_;
         rc.weather = WeatherAt(now_h_);
         rc.rng = &rng_;
+        rc.awacs = support_.awacs;
         return rc;
+    }
+
+    // A squadron's aircraft in theatre on `day` (the force build-up, docs/air_war/12_FORCES.md): its share on day 1,
+    // growing to the whole by its day.
+    int Arrived(const SquadronDef& s, int day) const {
+        const LogisticsDef& l = data_.faction.logistics;
+        const double initial = s.initial >= 0.0 ? s.initial : l.buildup_initial;
+        const int full = s.full_by_day >= 0 ? s.full_by_day : l.buildup_full_by_day;
+        double share = 1.0;
+        if (full > 1) share = initial + (1.0 - initial) * Clamp01((day - 1.0) / (full - 1.0));
+        return std::max(1, static_cast<int>(std::lround(s.count * Clamp01(share))));
+    }
+
+    // What the support squadrons keep up today (docs/air_war/11_SUPPORT.md): each serviceable support aircraft flies
+    // a long sortie a day; an AWACS or ELINT orbit round the clock takes a few, and a tanker sortie refuels about four
+    // aircraft (gwaps_vol3 table 16).
+    SupportLevel SupportNow() const {
+        const FactionDef& f = data_.faction;
+        const TuningTable& tune = data_.tuning;
+        SupportLevel s;
+        double awacs = 0.0, elint = 0.0, tanker = 0.0;
+        for (const SquadronState& st : squadrons_) {
+            const AircraftType* a = f.Aircraft(st.aircraft);
+            if (a == nullptr || !a->InService(data_.theatre.year)) continue;
+            const double sorties = st.Serviceable(now_h_, f.doctrine.serviceability) * tune.Get("support.sorties_per_aircraft_day");
+            if (a->Has(FlightRole::Awacs)) awacs += sorties;
+            if (a->Has(FlightRole::Elint)) {
+                elint += sorties;
+                s.has_elint_aircraft = true;
+            }
+            if (a->Has(FlightRole::Tanker)) {
+                tanker += sorties;
+                s.has_tankers = true;
+            }
+        }
+        s.awacs = Clamp01(awacs / tune.Get("support.awacs_sorties_per_orbit_day"));
+        s.elint = Clamp01(elint / tune.Get("support.elint_sorties_per_orbit_day"));
+        s.tanker_receivers = tanker * tune.Get("support.receivers_per_tanker_sortie");
+        s.sorties = static_cast<int>(std::lround(awacs + elint + tanker));
+        return s;
     }
 
     // One step of up to an hour, from now_h_ to t1. True if a player mission came due.
@@ -548,6 +614,12 @@ private:
         intel_.Decay(dt, data_.tuning);
         Repair(dt);
         Relocate();
+        {
+            // Our supply lines (logistics.hpp): what our side's people on them would report goes in the journal.
+            std::vector<std::string> events;
+            supply_.Step(data_, truth_, dt, DayPartAt(data_.theatre.start_hour + t0) != DayPart::Day, &events);
+            for (const std::string& ev : events) Log("logistics", "our side", ev, false);
+        }
         Deliver();
         now_h_ = t1;
         return false;
@@ -649,6 +721,12 @@ private:
         pc.next_id = &next_package_id_;
         pc.journal = &journal_;
         pc.truth = &truth_;
+        // The support orbits for this cycle (docs/air_war/11_SUPPORT.md).
+        support_ = SupportNow();
+        pc.awacs = support_.awacs;
+        tanker_left_ = support_.tanker_receivers * data_.faction.doctrine.planning_cycle_h / 24.0;
+        pc.tanker_receivers = &tanker_left_;
+        pc.supply = &supply_;
         Planner planner;
         std::vector<Package> plan = planner.Plan(pc);
         for (Package& p : plan) {
@@ -957,6 +1035,7 @@ private:
         r.sigma_m = sigma_m;
         r.exists = 0.9;
         r.label = Label(i);
+        r.move_mps = o.move_mps;
         const DefenceDef* d = &o.defence;
         if (o.decoy) {
             const TheatreObject& pb = data_.theatre.objects[static_cast<std::size_t>(player_)];
@@ -1012,8 +1091,16 @@ private:
         const TuningTable& tune = data_.tuning;
         const int i = data_.theatre.IndexOf(id);
         if (i < 0 || seconds <= 0.0) return;
-        if (DistanceToFront(truth_[static_cast<std::size_t>(i)].pos) > in.elint_reach_m) return;
-        const double sigma = in.elint_best_m + in.elint_k_m / std::sqrt(std::max(1.0, seconds));
+        // A faction with stand-off ELINT aircraft hears farther and fixes finer while one is on station; without, its
+        // ground stations alone (docs/air_war/11_SUPPORT.md).
+        double reach = in.elint_reach_m, fine = 1.0;
+        if (support_.has_elint_aircraft) {
+            const double without = tune.Get("support.elint_reach_without");
+            reach *= without + (1.0 - without) * support_.elint;
+            fine = tune.Get("support.elint_sigma_without") - (tune.Get("support.elint_sigma_without") - 1.0) * support_.elint;
+        }
+        if (DistanceToFront(truth_[static_cast<std::size_t>(i)].pos) > reach) return;
+        const double sigma = (in.elint_best_m + in.elint_k_m / std::sqrt(std::max(1.0, seconds))) * fine;
         const bool battery = i == player_;
         if (battery && !dummies_.empty() && !posture_.decoy_mode.empty() && posture_.dummies > 0 &&
             rng_.Chance(tune.Get("intel.ghost_fix_chance"))) {
@@ -1219,6 +1306,20 @@ private:
         }
         politics_.support = Clamp01(politics_.support - tune.Get("politics.support_per_excess_loss") * excess);
         Events();
+        // The build-up: squadrons reach the theatre (docs/air_war/12_FORCES.md).
+        int arrived = 0;
+        for (std::size_t i = 0; i < squadrons_.size() && i < f.squadrons.size(); ++i) {
+            const int target = Arrived(f.squadrons[i], day_);
+            if (target > squadrons_[i].total) {
+                arrived += target - squadrons_[i].total;
+                squadrons_[i].total = target;
+            }
+        }
+        if (arrived > 0) {
+            reinforcements_ += arrived;
+            Log("buildup", "logistics", std::to_string(arrived) + " more aircraft arrive in theatre", false);
+        }
+        support_sorties_ += support_.sorties;
         // Logistics.
         double repl = f.logistics.replacements_per_day;
         for (SquadronState& s : squadrons_) {
@@ -1419,9 +1520,11 @@ private:
     // it was wrecked, and comes back at `repair.restored_function`, a makeshift that the field repair then completes.
     void Repair(double dt) {
         const double restored = data_.tuning.Get("repair.restored_function");
+        const double needs_supply = data_.tuning.Get("logistics.repair_needs_supply");
         for (std::size_t i = 0; i < truth_.size(); ++i) {
             const TheatreObject& o = data_.theatre.objects[i];
             ObjectState& st = truth_[i];
+            if (o.kind == ObjectKind::Troops && st.supply < needs_supply) continue;  // out of stocks, nothing is mended
             if (st.function < 1.0 && o.repair_h > 0.0) {
                 if (st.function <= 0.0 && st.wrecked_h >= 0.0) {
                     if (now_h_ + dt >= st.wrecked_h + o.repair_h) st.function = restored;

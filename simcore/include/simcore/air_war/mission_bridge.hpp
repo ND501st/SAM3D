@@ -16,7 +16,9 @@
 //   * the neighbours: our other air defences whose zones reach into the scenario (RaidManifest::neighbours) take their
 //     kill chances at the aircraft passing through, by the abstract resolver's rule (its pass chance, fire channels,
 //     rounds, the package's SEAD and jamming, night and weather for the optical ones); an aircraft they hit goes down in
-//     the scenario, half way through their zone (17.1's first form);
+//     the scenario, half way through their zone (17.1's first form). The regiment's other Osa batteries fight in the
+//     runner's battery fire model instead (ScenarioRunner::NeighbourFights): their kills, missiles and radar time are
+//     read from it;
 //   * what the enemy learns: every second our radars radiate (ELINT), every launch an enemy aircraft sees.
 // Every event goes into the runner's log, so the debrief shows it. Finish() turns it all into a PackageOutcome for
 // AirCampaign::CompletePlayerMission.
@@ -171,6 +173,7 @@ public:
         o.package_id = m_.package_id;
         o.played = true;
         o.truth_applied = false;
+        ReadNeighbourKills(r);
         // Which aircraft went down: our missiles' hits (the engagement model's HIT), the battery's other launchers
         // ("destroyed by <launcher>") and anything else the world destroyed ("destroyed").
         std::vector<bool> down(m_.aircraft.size(), false);
@@ -226,11 +229,15 @@ public:
         }
         if (photographed_) o.recce_seen.push_back(m_.own_object);
         for (std::size_t j = 0; j < m_.neighbours.size(); ++j) {
+            const std::string& id = m_.neighbours[j].id;
+            const bool fights = r.NeighbourFights(id);
             const NeighbourState& ns = neighbours_[j];
-            if (!ns.fired) continue;
-            o.fired.push_back(m_.neighbours[j].id);
-            if (ns.emitted_s > 0.0) o.AddEmission(m_.neighbours[j].id, ns.emitted_s);
-            if (ns.spent > 0) o.missiles_by.push_back({m_.neighbours[j].id, ns.spent});
+            const int spent = fights ? r.NeighbourLaunches(id) : ns.spent;
+            const double emitted = fights ? r.NeighbourRadarSeconds(id) : ns.emitted_s;
+            if (fights ? spent == 0 && emitted <= 0.0 : !ns.fired) continue;
+            o.fired.push_back(id);
+            if (emitted > 0.0) o.AddEmission(id, emitted);
+            if (spent > 0) o.missiles_by.push_back({id, spent});
         }
         o.notes = notes_;
         return o;
@@ -310,7 +317,21 @@ private:
     std::vector<std::string> kill_by_;  // per aircraft: the neighbour that shot it down
 
     // The neighbours' fire (see the header): each aircraft's pass through each zone is rolled once, as it enters.
+    // The fighting neighbours' kills, as the runner's fire model made them.
+    void ReadNeighbourKills(const ScenarioRunner& r) {
+        for (const auto& k : r.NeighbourKills()) {
+            for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                if (m_.aircraft[i].target_id != k.first || !kill_by_[i].empty()) continue;
+                kill_by_[i] = k.second;
+                for (const RaidNeighbour& nb : m_.neighbours) {
+                    if (nb.id == k.second) notes_.push_back(k.first + " shot down by " + nb.name);
+                }
+            }
+        }
+    }
+
     void Neighbours(ScenarioRunner& r) {
+        ReadNeighbourKills(r);
         for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
             const RaidAircraft& a = m_.aircraft[i];
             const AircraftState& s = state_[i];
@@ -320,7 +341,7 @@ private:
             for (std::size_t j = 0; j < m_.neighbours.size() && r.TargetAlive(a.target_id); ++j) {
                 const RaidNeighbour& nb = m_.neighbours[j];
                 Pass& ps = passes_[i * m_.neighbours.size() + j];
-                if (ps.done) continue;
+                if (ps.done || r.NeighbourFights(nb.id)) continue;
                 const bool inside = Dist2d(s.last_pos, nb.enu) < nb.defence.radius_m;
                 if (inside && !ps.inside) {
                     ps.inside = true;

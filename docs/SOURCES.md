@@ -174,6 +174,31 @@ data.
 | `austrian_af_wiki` | 4 | Wikipedia, [Austrian Air Force](https://en.wikipedia.org/wiki/Austrian_Air_Force) and [List of military aircraft of Austria](https://en.wikipedia.org/wiki/List_of_military_aircraft_of_Austria) | The scale of a small neutral air arm: 40 Saab 105Ö from 1970, about two dozen AB 212 from 1980, Alouette III, Drakens in 1988 (24 or 28) with guns only under the guided-missile ban. The neutral neighbour is fictional |
 | `croatia_1991_migflug` | 4 | [Croatian Air Force combat history](https://migflug.com/?p=26215) (migflug.com) | The improvised air arm of a civil war (1991, later than the period): An-2 crop sprayers, UTVA and ultralights with home-made bombs, the Osijek air platoon of 8 October 1991. The rebel faction's shape. Low confidence |
 
+### Weapons, attacks, support, forces and logistics (added 23 October 2026)
+
+For the weapons model, the attack profiles, the support aircraft, the force build-ups, our supply lines and the
+benchmarks against history (`data/air_war/weapons.json`, the `delivery`, `support` and `logistics` groups of
+`data/gameplay/air_war.json`, `simcore/examples/air_war_bench.cpp`; research in `docs/research/AIR_WAR_MISSIONS_2026-10.md`).
+What a weapon is comes from these; what it does is a game value calibrated against what campaigns achieved, never a
+weapon-effects table.
+
+| Id | Tier | Source | Used for |
+|---|---|---|---|
+| `gwaps_vol3` | 1 (US study of its own campaign) | *Gulf War Air Power Survey*, Vol. III, *Logistics and Support* (Washington, 1993), the US Air Force's official survey (read in a mirror of the published volume) | Tankers: Desert Storm's average of 215 KC-135 and 35 KC-10 sorties a day refuelling 839 and 222 aircraft (Table 16); the deployment's pace, Phase I's squadrons in place within four weeks, positioning in five and a half months (pp. 298-299); the 1991 munitions' nomenclature (Table 18) |
+| `rjlee_ds_losses` | 4 | R. J. Lee, [Desert Storm fixed-wing losses](https://rjlee.org/air/ds-aaloss/), compiled from GWAPS Vol. V | The coalition's combat losses by cause (guns 11, IR SAMs 12 and 2 SA-13, radar SAMs 8 and 2 SA-2, a fighter 1) and by week (18 in the low-level first week, 22 after) |
+| `rand_mr1365` | 1 (US study of its own campaign) | B. S. Lambeth, *NATO's Air War for Kosovo: A Strategic and Operational Assessment*, RAND MR-1365-AF (2001), [rand.org](https://www.rand.org/pubs/monograph_reports/MR1365.html) | 430 allied aircraft at the start, nearly 1,000 committed; the first night's 400 sorties; more than 800 SAMs fired for two aircraft lost; at least 743 HARMs for 3 of some 25 SA-6 batteries confirmed destroyed; radars radiating 20 s and shutting down; the 15,000 ft floor |
+| `afmag_2003_bombs` | 4 | *Air Force Magazine*, March 2003, on the coming of precision bombing ([airandspaceforces.com](https://www.airandspaceforces.com/article/0310bombs/)) | 1972-73: 48 % direct hits for laser-guided bombs against 5.5 % unguided; average misses of 23 ft and 447 ft; the Thanh Hoa bridge |
+| `wiki_lgb` | 4 | Wikipedia, [Laser-guided bomb](https://en.wikipedia.org/wiki/Laser-guided_bomb) | The Paveway I's early combat CEP of 20 ft, the BOLT-117's 75 ft |
+| `wiki_thanh_hoa` | 4 | Wikipedia, [Thanh Hóa Bridge](https://en.wikipedia.org/wiki/Th%C3%A0nh_H%C3%B3a_Bridge) | 871 sorties and 11 aircraft lost from 1965 without dropping it; dropped by laser-guided bombs in 1972 (14 F-4s, 13 May) |
+| `wiki_weapons` | 4 | Wikipedia's pages on each weapon (the Mk 80 series, Rockeye, CBU-87, BL755, JP233, Durandal, Paveway, AGM-65, Hydra 70, TOW, GAU-8, FAB, OFAB, RBK, BetAB, KAB-500L, Kh-25, Kh-29, S-5, S-8, S-24, Shturm) and [airwar.ru](http://www.airwar.ru/weapon.html)'s Soviet weapon pages | What each weapon is: its mass, guidance, submunitions, range, the year it entered service and how it is delivered |
+| `mig27_book` | 4 | И. В. Приходченко, «Истребитель-бомбардировщик МиГ-27» (a Russian monograph on the type) | The MiG-27's attack methods: level, offset, dive and toss bombing up to 45° |
+| `navalgazing_falklands` | 4 | Naval Gazing, the Falklands air campaign (after M. Middlebrook) | Argentine bombs dropped too low to arm: 25 hit ships, 11 went off |
+| `wiki_focus` | 4 | Wikipedia, [Operation Focus](https://en.wikipedia.org/wiki/Operation_Focus) | 5 June 1967: 196 combat aircraft, flights of four with runway-piercing bombs over ten airfields, some 200 aircraft destroyed on the ground |
+| `jvl_1973_losses` | 4 | Jewish Virtual Library, the Israeli Air Force in the Yom Kippur War | 50 aircraft lost in about 1,220 sorties in the first three days (4 %), 102 in all |
+| `afmag_1984_nato` | 4 | «NATO on the Upbeat», *Air Force Magazine*, September 1984 ([airandspaceforces.com](https://www.airandspaceforces.com/article/0984nato/)) | The NATO AEW force's 18 E-3As (the first at Geilenkirchen 24 February 1982), an E-3's coverage of 312,000 km²; the forces facing each other in 1984 |
+| `wiki_support_aircraft` | 4 | Wikipedia, [Boeing E-3 Sentry](https://en.wikipedia.org/wiki/Boeing_E-3_Sentry), [Boeing KC-135 Stratotanker](https://en.wikipedia.org/wiki/Boeing_KC-135_Stratotanker), [Boeing RC-135](https://en.wikipedia.org/wiki/Boeing_RC-135), [Beriev A-50](https://en.wikipedia.org/wiki/Beriev_A-50), [Ilyushin Il-20M](https://en.wikipedia.org/wiki/Ilyushin_Il-18#Variants) | The support types' roles, service dates (the A-50 from 1984-85) and sizes |
+| `wiki_fofa` | 4 | Wikipedia, [Follow-on-forces attack](https://en.wikipedia.org/wiki/Follow-on-forces-attack); US Congress OTA, *New Technology for NATO: Implementing Follow-On Forces Attack* (1987, [princeton.edu](https://www.princeton.edu/~ota/disk2/1987/8718/871805.PDF)) | NATO's follow-on forces attack, adopted November 1984: the second echelon's columns, trains, bridges and chokepoints out to some 150 km behind the line |
+
 ### Design references (games)
 
 Not data sources: the games whose systems shaped the enemy air command's design (research §5). Cited in data only as

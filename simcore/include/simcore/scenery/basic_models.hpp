@@ -62,6 +62,7 @@ struct ModelLibrary {
         double spread_m = 50.0;
     };
     std::map<std::string, SiteDef> systems;  // air defence system id -> site
+    std::map<std::string, SiteDef> kinds;    // a theatre object's kind (air_war ObjectKind) -> its site
 
     const ModelDef* Find(const std::string& id) const {
         for (const ModelDef& m : models) {
@@ -88,10 +89,19 @@ struct ModelLibrary {
     // radar); with one kind all of them in the ring (an Osa battery's four vehicles, a platoon's guns). Empty for a
     // system the library doesn't know.
     std::vector<std::pair<std::string, Vec3>> SiteLayout(const std::string& system) const {
-        std::vector<std::pair<std::string, Vec3>> out;
         const auto it = systems.find(system);
-        if (it == systems.end()) return out;
-        const SiteDef& s = it->second;
+        return it == systems.end() ? std::vector<std::pair<std::string, Vec3>>() : Layout(it->second);
+    }
+    // A theatre object drawn on the map (the nation on the map N5): an air defence as its system's site, anything else
+    // as its kind's (an airfield's hangars, a refinery's tanks and chimneys, a radar company's radars). Empty for what
+    // the library doesn't draw (a city: the country map's towns are drawn instead).
+    std::vector<std::pair<std::string, Vec3>> ObjectLayout(const std::string& kind, const std::string& system) const {
+        if (!system.empty() && systems.count(system) != 0) return SiteLayout(system);
+        const auto it = kinds.find(kind);
+        return it == kinds.end() ? std::vector<std::pair<std::string, Vec3>>() : Layout(it->second);
+    }
+    static std::vector<std::pair<std::string, Vec3>> Layout(const SiteDef& s) {
+        std::vector<std::pair<std::string, Vec3>> out;
         std::size_t first = 0;
         if (s.models.size() > 1) {
             out.push_back({s.models[0].first, Vec3{}});
@@ -170,9 +180,25 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
         } else {
             o.push_back(P(Shape::Box, Vec3{0.16 * L, 0.14, fin_h}, Vec3{-0.4 * L, 0.0, d * 0.5 + fin_h * 0.5}, c));
         }
-        for (int e = 0; e < a.engines; ++e) {
-            const double y = a.engines == 1 ? 0.0 : (e == 0 ? -0.22 : 0.22) * d;
-            o.push_back(P(Shape::Cylinder, Vec3{d * 0.55, d * 0.55, 0.05 * L}, Vec3{-0.47 * L, y, 0.0}, dark, 'x'));
+        if (a.engines >= 3) {
+            // An airliner's layout (a tanker, an AWACS, an ELINT aircraft): pods hung under the wings, two a side.
+            for (double side : {-1.0, 1.0}) {
+                for (double out : {0.2, 0.36}) {
+                    o.push_back(P(Shape::Cylinder, Vec3{d * 0.45, d * 0.45, 0.09 * L}, Vec3{wx + 0.06 * L - out * 0.12 * L, side * out * wspan, -d * 0.5}, dark,
+                                  'x'));
+                }
+            }
+        } else {
+            for (int e = 0; e < a.engines; ++e) {
+                const double y = a.engines == 1 ? 0.0 : (e == 0 ? -0.22 : 0.22) * d;
+                o.push_back(P(Shape::Cylinder, Vec3{d * 0.55, d * 0.55, 0.05 * L}, Vec3{-0.47 * L, y, 0.0}, dark, 'x'));
+            }
+        }
+        if (a.radar == "dome") {
+            // An AWACS's rotodome on its two struts over the rear fuselage.
+            const double dome = 0.2 * L;
+            o.push_back(P(Shape::Box, Vec3{0.05 * L, 0.3, 0.06 * L}, Vec3{-0.16 * L, 0.0, d * 0.5 + 0.03 * L}, c));
+            o.push_back(P(Shape::Cylinder, Vec3{dome, dome, 0.04 * L}, Vec3{-0.16 * L, 0.0, d * 0.5 + 0.08 * L}, c2));
         }
     } else if (arch == "prop") {
         const double w = std::max(0.9, 0.11 * L), h = std::max(1.0, 0.16 * L);
@@ -180,10 +206,13 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
         const double chord = 0.15 * L;
         const double wz = a.high_wing ? h * 0.5 : -h * 0.35;
         if (a.engines >= 2) {
-            // Twin engines: a nacelle under each wing with its propeller ahead of the leading edge.
+            // Twin engines: a nacelle under each wing with its propeller ahead of the leading edge (four: two a side).
             for (double side : {-1.0, 1.0}) {
-                o.push_back(P(Shape::Cylinder, Vec3{0.06 * L, 0.06 * L, 0.22 * L}, Vec3{0.14 * L, side * 0.17 * S, wz - 0.03 * L}, c, 'x'));
-                o.push_back(P(Shape::Cylinder, Vec3{S * 0.13, S * 0.13, 0.06}, Vec3{0.26 * L, side * 0.17 * S, wz - 0.03 * L}, dark, 'x'));
+                for (double out : a.engines >= 4 ? std::vector<double>{0.15, 0.3} : std::vector<double>{0.17}) {
+                    const double prop = a.engines >= 4 ? S * 0.1 : S * 0.13;
+                    o.push_back(P(Shape::Cylinder, Vec3{0.06 * L, 0.06 * L, 0.22 * L}, Vec3{0.14 * L, side * out * S, wz - 0.03 * L}, c, 'x'));
+                    o.push_back(P(Shape::Cylinder, Vec3{prop, prop, 0.06}, Vec3{0.26 * L, side * out * S, wz - 0.03 * L}, dark, 'x'));
+                }
             }
         } else {
             o.push_back(P(Shape::Cylinder, Vec3{S * 0.16, S * 0.16, 0.06}, Vec3{0.44 * L, 0.0, 0.0}, dark, 'x'));
@@ -374,7 +403,8 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
 class ModelLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, ModelLibrary& out) {
-        if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "systems", "models"})) {
+        if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "systems", "kinds",
+                             "models"})) {
             return false;
         }
         if (!Map(root, "colours", out.colours) || !Map(root, "fallbacks", out.fallbacks) || !Map(root, "ground", out.ground)) return false;
@@ -428,16 +458,17 @@ public:
         for (const auto& kv : out.ground) {
             if (out.Find(kv.second) == nullptr) return Fail(Join("ground", kv.first), "no such model: " + kv.second);
         }
-        return Systems(root, out);
+        return Sites(root, "systems", out.systems, out) && Sites(root, "kinds", out.kinds, out);
     }
 
-    // "systems": {system id: {"models": [[model id, count], ...], "spread_m": n}}.
-    bool Systems(const json::Value& root, ModelLibrary& out) {
-        const json::Value* v = root.Find("systems");
+    // "systems" (an air defence system's site) and "kinds" (a theatre object kind's): {id: {"models": [[model id, count],
+    // ...], "spread_m": n}}.
+    bool Sites(const json::Value& root, const char* key, std::map<std::string, ModelLibrary::SiteDef>& sites, const ModelLibrary& out) {
+        const json::Value* v = root.Find(key);
         if (v == nullptr) return true;
-        if (!v->Is(json::Type::Object)) return Fail("systems", "expected {system: site}");
+        if (!v->Is(json::Type::Object)) return Fail(key, "expected {id: site}");
         for (std::size_t k = 0; k < v->keys.size(); ++k) {
-            const std::string p = Join("systems", v->keys[k]);
+            const std::string p = Join(key, v->keys[k]);
             const json::Value& s = v->items[k];
             ModelLibrary::SiteDef site;
             if (!Keys(s, p, {"models", "spread_m", "notes"}) || !OptionalNumber(s, p, "spread_m", site.spread_m)) return false;
@@ -452,7 +483,7 @@ public:
                 if (out.Find(e.items[0].string) == nullptr) return Fail(Index(Join(p, "models"), i), "no such model: " + e.items[0].string);
                 site.models.push_back({e.items[0].string, static_cast<int>(e.items[1].number + 0.5)});
             }
-            out.systems[v->keys[k]] = site;
+            sites[v->keys[k]] = site;
         }
         return true;
     }

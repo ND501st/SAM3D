@@ -35,6 +35,11 @@ struct Flight {
     Vec3 aim_pos;             // where the weapons are aimed (the believed position)
     int officer = -1;         // a staff officer flying in it (the lead aircraft)
     int arms = 0;             // ARMs carried by the flight
+    // Its weapons and how it puts them on the target (the planner's weaponeering, docs/air_war/10_WEAPONS.md); no
+    // weapon: the flight strikes by its type's strike_power (Delivery::Count: no attack profile).
+    std::string weapon;
+    int weapons = 0;          // on each aircraft
+    Delivery delivery = Delivery::Count;
     // What happened (filled by the resolution).
     int lost = 0;
     int damaged = 0;
@@ -64,11 +69,13 @@ struct Package {
     double utility = 0.0;
     double coordination = 1.0;  // how well the SEAD, jamming and strike are timed together
     double load_factor = 1.0;   // < 1: wrong or partial loads (a rushed plan)
+    int refuelled = 0;          // aircraft that need the tankers to reach the target and back (docs/air_war/11_SUPPORT.md)
     bool interference = false;  // higher authority set the time on target
     std::string tactic;         // TacticKey
     std::vector<std::string> rationale;
     bool resolved = false;
     bool played = false;        // flown as the player's mission
+    std::string found;          // an armed reconnaissance: the column it found on its stretch ("" nothing)
 
     // Aircraft in it (a cruise missile salvo has none: Missiles()).
     int Aircraft() const {
@@ -202,9 +209,26 @@ struct ObjectState {
     int missiles = -1;
     double last_moved_h = 0.0;
     double wrecked_h = -1.0;  // when it was wrecked (function 0)
+    // Logistics (docs/air_war/14_LOGISTICS.md, logistics.hpp). Troops: their stocks (1 full). A supply line's column:
+    // where it is on its round (0 loading at the depot, 1 on its way, 2 unloading, 3 coming back, -1 destroyed), how
+    // far along the line, and how long it has waited.
+    double supply = 1.0;
+    int leg = 0;
+    double along_m = 0.0;
+    double wait_h = 0.0;
 };
 
 // How the player's battery behaves between and during fights: the commander's choices the enemy reacts to.
+// What the enemy's support squadrons keep up (docs/air_war/11_SUPPORT.md).
+struct SupportLevel {
+    double awacs = 0.0;             // share of the day an AWACS is on station
+    double elint = 0.0;             // share of the day a stand-off ELINT aircraft is
+    double tanker_receivers = 0.0;  // aircraft the tankers can refuel a day
+    bool has_elint_aircraft = false;
+    bool has_tankers = false;
+    int sorties = 0;                // support sorties a day
+};
+
 struct BatteryPosture {
     double emission = 0.3;           // share of each hour its radars radiate when not fighting (0: strict EMCON)
     double emcon_discipline = 0.5;   // switching off when ARMs come, brief bursts: 0..1

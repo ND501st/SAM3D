@@ -12,16 +12,17 @@
   "callsigns": [ "Adler", "Falke", "Gams", "Steinbock", "Bergwind", "Edelweiss" ],
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 4, "on_call_fraction": 0.15, "centralisation": 0.5, "simultaneous_bias": 0.4,
-    "sortie_rate_per_day": 2.0, "serviceability": 0.75, "max_packages_per_cycle": 5,
+    "sortie_rate_per_day": 2.0, "serviceability": 0.75, "max_packages_per_cycle": 5, "delivery_risk": 0.7, "min_effect": 0.02, "min_value": 0.3,
     "source": "game values: a territorial-defence doctrine shaped like austrian_af_wiki's air arm (support of the own troops, raids near the front)",
     "confidence": "estimate",
     "phases": [
       { "id": "border_defence", "name": "defence of the border",
         "apportion": { "cas": 0.4, "helo_raid": 0.3, "recce": 0.2, "strike": 0.1 }, "until_day": 3 },
       { "id": "limited_raids", "name": "limited raids along the front",
-        "apportion": { "strike": 0.35, "cas": 0.25, "helo_raid": 0.2, "recce": 0.15, "bda": 0.05 } }
+        "apportion": {"strike": 0.3, "cas": 0.25, "helo_raid": 0.2, "recce": 0.15, "bda": 0.05, "armed_recce": 0.05} }
     ],
     "packages": {
+      "armed_recce": {"main_flights": 1, "flight_size": 2, "aircraft": ["saab105"], "profiles": ["low"], "day_parts": ["day", "dawn", "dusk"], "notes": "Pairs of light jets searching the roads near the line for convoys."},
       "strike": { "main_flights": 1, "flight_size": 4, "escort_ratio": 0.25, "profiles": [ "low" ], "day_parts": [ "dawn", "day", "dusk" ],
                   "notes": "Four light jets, low and fast; a pair of interceptors over them when the defender's fighters are about." },
       "cas": { "main_flights": 1, "flight_size": 2, "profiles": [ "low" ], "day_parts": [ "dawn", "day", "dusk" ] },
@@ -40,14 +41,14 @@
     "confidence": "estimate"
   },
   "logistics": {
-    "replacements_per_day": 0.2, "arm_stock": 0, "arm_resupply_per_day": 0, "damaged_return_h": 72,
+    "replacements_per_day": 0.2, "arm_stock": 0, "arm_resupply_per_day": 0, "damaged_return_h": 72, "buildup_initial": 1.0, "buildup_full_by_day": 0, "notes": "buildup: a small mobilised air force, all there from the start",
     "source": "game values: a small air arm with no reserve of aircraft and no anti-radiation missiles",
     "confidence": "estimate"
   },
   "politics": {
     "support": 0.6, "pressure": 0.3, "loss_tolerance_per_day": 1.0, "pow_sensitivity": 0.8, "collateral_sensitivity": 0.9,
     "no_strike_city_radius_km": 6, "max_depth_km": 40, "banned": [ "city", "power_plant", "substation", "dam", "factory", "refinery", "headquarters", "government", "broadcast", "pipeline_station" ], "interference_per_cycle": 0.05,
-    "target_weights": { "troops": 1.4, "bridge": 1.1, "depot": 1.0, "sam_site": 0.7, "ew_radar": 0.8, "airfield": 0.6, "command_post": 0.9,
+    "target_weights": { "convoy": 1.1, "train": 1.1, "column": 1.1, "troops": 1.4, "bridge": 1.1, "depot": 1.0, "sam_site": 0.7, "ew_radar": 0.8, "airfield": 0.6, "command_post": 0.9,
                         "materials_depot": 0.8, "port": 0.6, "exchange": 0.6 },
     "source": "game values: a neutral state's limited war aim (front-line targets only, nothing deep, nothing that kills civilians). The nation's infrastructure kinds (refinery to exchange, 22 Oct 2026) are game values by analogy; a kind of the power grid (substation, dam) is banned wherever power_plant is. The refinery, the ministries and broadcasting are banned with the factories and headquarters: nothing that is the state itself. The pipeline stations too: the smaller line carries its own oil, which it stops at the valve when the war begins (docs/campaign/10_BRIEFING_FORCES_AND_NATION.md §3.1), so there is nothing to gain in bombing it (the nation's theatre's first read, 22 Oct 2026)",
     "confidence": "estimate",
@@ -63,16 +64,20 @@
   "aircraft": [
     { "id": "saab105", "name": "Light attack jet (Saab 105 class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 200, "attack_mps": 220,
       "low_agl_m": 60, "medium_alt_m": 3000, "max_turn_deg_s": 10, "strike_power": 0.3, "recce_quality": 0.5, "evasion": 0.45,
+      "loads": [["rocket135", 2], ["sneb68", 4], ["gp250", 4]], "computing": 0.3, "radius_km": 350,
       "source": "austrian_af_wiki (40 Saab 105 light jets, trainer and light attack, delivered from 1970); every number a placeholder", "confidence": "low" },
     { "id": "ab212", "name": "Armed utility helicopter (AB 212 class)", "roles": [ "helicopter", "recce" ], "class": "helicopter", "helicopter": true,
       "rcs_m2": 8, "cruise_mps": 55, "attack_mps": 55, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 10, "strike_power": 0.25,
       "recce_quality": 0.3, "evasion": 0.3,
+      "loads": [["sneb68", 2], ["door_guns", 1]], "computing": 0.2, "radius_km": 150,
       "source": "austrian_af_wiki (about two dozen Agusta-Bell 212, from 1980); armed here for the game; numbers placeholders", "confidence": "low" },
     { "id": "draken_gun", "name": "Gun-armed interceptor (Draken class)", "roles": [ "escort" ], "class": "fighter", "rcs_m2": 4, "cruise_mps": 260, "attack_mps": 280,
       "low_agl_m": 150, "medium_alt_m": 6000, "max_turn_deg_s": 12, "air_to_air": 0.5, "evasion": 0.5,
+      "radius_km": 600,
       "source": "austrian_af_wiki (Draken interceptors with guns only under the ban on guided missiles; delivered 1988, later than this war, so here an analogue); numbers placeholders", "confidence": "low" },
     { "id": "alouette3", "name": "Liaison and observation helicopter (Alouette III class)", "roles": [ "recce" ], "class": "helicopter", "helicopter": true,
       "rcs_m2": 4, "cruise_mps": 50, "attack_mps": 50, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 10, "recce_quality": 0.35, "evasion": 0.3,
+      "loads": [["ss11", 4]], "computing": 0.2, "radius_km": 120,
       "source": "austrian_af_wiki (Alouette III for rescue and liaison); numbers placeholders", "confidence": "low" }
   ],
   "squadrons": [

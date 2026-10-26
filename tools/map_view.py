@@ -186,6 +186,15 @@ def country_shapes(dump, theatre=None):
             shapes.append(("rect", x0, y0, x0 + st, y0 + st, ground_colour(h, lo, hi)))
     for f in dump["forests"]:
         shapes.append(("poly", f["points"], "#2f4a24", None, 0))
+    for m in dump.get("marshes", []):
+        shapes.append(("poly", m["points"], "#5b6b45", None, 0))
+    for lake in dump.get("lakes", []):
+        shapes.append(("poly", lake["points"], "#2a5ea0", None, 0))
+        if lake.get("name"):
+            shapes.append(("text", sum(p[0] for p in lake["points"]) / len(lake["points"]),
+                           sum(p[1] for p in lake["points"]) / len(lake["points"]) - 2.0, lake["name"], 9))
+    for r in dump.get("ridges", []):
+        shapes.append(("line", r["points"], "#7a5a3a", 1, True))
     for reg in dump["regions"]:
         shapes.append(("line", reg["points"] + reg["points"][:1], "#6a6a5a", 1, True))
     for r in dump["rivers"]:
