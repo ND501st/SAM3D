@@ -414,20 +414,25 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	}
 	const simcore::MapData& M = *Map;
 	const simcore::MapDef& D = M.Def();
-	// With the country drawn, inside its grid the country's 1 km ground (the same ground function) stands in for the far
-	// ground: far cells there are skipped and their edge sunk like the map's.
+	// The far ground is drawn where the map has it, the country's 1 km ground only beyond (BuildCountry): a district's
+	// far ground is its country's ground ("far_ground"), at the map's own spacing and with its far sites levelled, so the
+	// far boxes and lines stand on what is drawn and the sim sees it. With the country drawn it takes its land cover.
 	const simcore::MapFrameLink ToCountry(Country ? Country->Def().ground.origin : D.origin, D.origin);
-	const auto InCountry = [&](double E, double N)
+	const auto FarColour = [&](double E, double N, double H)
 	{
+		const FLinearColor Fields = GroundColour(M.Def(), E, N, H);
 		if (!Country)
 		{
-			return false;
+			return Fields;
 		}
-		const simcore::MapGrid& Cg = Country->Grid();
 		const simcore::MapPoint P = ToCountry.FrameToMap(E, N);
-		return P.east_m > Cg.west_m + 1.0 && P.east_m < Cg.EastOf(Cg.cols - 1) - 1.0 && P.north_m > Cg.south_m + 1.0 &&
-			   P.north_m < Cg.NorthOf(Cg.rows - 1) - 1.0;
+		return CoverTint(Fields, Country->LandCoverAt(P.east_m, P.north_m));
 	};
+	if (Country && !D.far_ground)
+	{
+		UE_LOG(LogSAM3D, Warning, TEXT("Map %s: no \"far_ground\" (the country's file): its far ground is its own, not the country's drawn around it"),
+			*MapFile);
+	}
 	// One square of the grid as a mesh of its own, cells [C0, C1) x [R0, R1) every Step samples. Far squares skip the
 	// cells under the map and sink their edge against it, so no crack shows between the two.
 	auto AddSection = [&](const simcore::MapGrid& G, int32 C0, int32 C1, int32 R0, int32 R1, int32 Step, bool bFar, bool bCollide)
@@ -455,9 +460,9 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				const int32 Gc = FMath::Min(C0 + c * Step, G.cols - 1), Gr = FMath::Min(R0 + r * Step, G.rows - 1);
 				const double E = G.EastOf(Gc), N = G.NorthOf(Gr);
 				double H = G.At(Gc, Gr);
-				if (bFar && (D.InCore(E, N) || InCountry(E, N)))
+				if (bFar && D.InCore(E, N))
 				{
-					H -= 3.0;  // tucked under the map's (or the country's) edge
+					H -= 3.0;  // tucked under the map's edge
 				}
 				Verts.Add(ToUnreal(Link.MapToFrame(E, N, H)));
 				const double He = G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr);
@@ -465,7 +470,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				const simcore::Vec3 Local(-He / (2.0 * G.spacing_m), -Hn / (2.0 * G.spacing_m), 1.0);
 				const simcore::Vec3 Nrm = (Ae * Local.x + An * Local.y + Au * Local.z).Normalized();
 				Normals.Add(DirToUnreal(Nrm));
-				Colours.Add(GroundColour(M.Def(), E, N, H));
+				Colours.Add(bFar ? FarColour(E, N, H) : GroundColour(M.Def(), E, N, H));
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
 			}
 		}
@@ -476,7 +481,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				if (bFar)
 				{
 					const double Ce = G.EastOf(C0 + c * Step) + 0.5 * Step * G.spacing_m, Cn = G.NorthOf(R0 + r * Step) + 0.5 * Step * G.spacing_m;
-					if (InCore(Ce, Cn) || InCountry(Ce, Cn))
+					if (InCore(Ce, Cn))
 					{
 						continue;
 					}
@@ -626,12 +631,13 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 
 double ASimMapActor::CountryGround(double East, double North) const
 {
-	// The map's own ground where the map is drawn (its rivers' banks, its hills at 50 m), the country's 1 km ground else.
+	// The map's own ground where the map draws it (its rivers' banks and hills at 50 m, its far ground at 500 m), the
+	// country's 1 km ground beyond.
 	if (Map)
 	{
 		const simcore::MapFrameLink ToMap(Map->Def().origin, Country ? Country->Def().ground.origin : Map->Def().origin);
 		const simcore::MapPoint P = ToMap.FrameToMap(East, North);
-		if (Map->Def().InCore(P.east_m, P.north_m) || !Country)
+		if (Map->Def().InCore(P.east_m, P.north_m) || (bDrawFarGround && Map->FarGrid().Covers(P.east_m, P.north_m)) || !Country)
 		{
 			return Map->GroundHeight(P.east_m, P.north_m);
 		}
@@ -653,6 +659,17 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		const simcore::MapPoint P = ToMap.FrameToMap(E, N);
 		return P.east_m > D.west_m - Margin && P.east_m < D.east_m + Margin && P.north_m > D.south_m - Margin && P.north_m < D.north_m + Margin;
 	};
+	// Whether the map draws the ground there: its far ground (out to far_km, the country's ground at the map's spacing)
+	// when drawn, else only the map proper.
+	const auto UnderMapGround = [&](double E, double N, double Margin)
+	{
+		if (!bDrawFarGround)
+		{
+			return UnderMap(E, N, Margin);
+		}
+		const simcore::MapPoint P = ToMap.FrameToMap(E, N);
+		return FMath::Abs(P.east_m) < D.far_m + Margin && FMath::Abs(P.north_m) < D.far_m + Margin;
+	};
 	const simcore::MapGrid& G = Cm.Grid();
 	const double W0 = G.west_m, W1 = G.EastOf(G.cols - 1), S0 = G.south_m, S1 = G.NorthOf(G.rows - 1);
 	const auto InGrid = [&](double E, double N) { return E > W0 + 1.0 && E < W1 - 1.0 && N > S0 + 1.0 && N < S1 - 1.0; };
@@ -662,8 +679,8 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
 	}
 
-	// The ground: one mesh per square of cells, its points every Spacing from (E0, N0); cells under the map (or, beyond
-	// the country's grid, inside it) skipped and their edge sunk 3 m against the finer ground, as the map's far ground.
+	// The ground: one mesh per square of cells, its points every Spacing from (E0, N0); cells where the map draws its
+	// ground (or, beyond the country's grid, inside it) skipped and their edge sunk 3 m against the finer ground.
 	const auto AddSquare = [&](double E0, double N0, double Spacing, int32 Nc, int32 Nr, bool bBeyond)
 	{
 		TArray<FVector> Verts;
@@ -680,7 +697,7 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 			{
 				const double E = E0 + C * Spacing, N = N0 + R * Spacing;
 				double H = Cm.GroundHeight(E, N);
-				if (UnderMap(E, N, 1.0) || (bBeyond && InGrid(E, N)))
+				if (UnderMapGround(E, N, 1.0) || (bBeyond && InGrid(E, N)))
 				{
 					H -= 3.0;
 				}
@@ -698,7 +715,7 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 			for (int32 C = 0; C + 1 < Nc; ++C)
 			{
 				const double Ce = E0 + (C + 0.5) * Spacing, Cn = N0 + (R + 0.5) * Spacing;
-				if (UnderMap(Ce, Cn, -1.0) || (bBeyond && InGrid(Ce, Cn)))
+				if (UnderMapGround(Ce, Cn, -1.0) || (bBeyond && InGrid(Ce, Cn)))
 				{
 					continue;
 				}
@@ -739,16 +756,27 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 	}
 
 	// The lines as ribbons at strategic widths, on the ground's highest corner of the mesh cell under each point (so the
-	// 1 km mesh never covers them), every 400 m; not where the map draws its own.
+	// mesh never covers them: the map's far ground where it draws it, else the country's 1 km), every 400 m; not where
+	// the map draws its own.
+	const auto CellTop = [](const simcore::MapGrid& Gr, double E, double N)
+	{
+		const int32 C = FMath::Clamp(static_cast<int32>((E - Gr.west_m) / Gr.spacing_m), 0, Gr.cols - 2);
+		const int32 R = FMath::Clamp(static_cast<int32>((N - Gr.south_m) / Gr.spacing_m), 0, Gr.rows - 2);
+		return FMath::Max(FMath::Max(Gr.At(C, R), Gr.At(C + 1, R)), FMath::Max(Gr.At(C, R + 1), Gr.At(C + 1, R + 1)));
+	};
 	const auto MeshTop = [&](double E, double N)
 	{
+		if (UnderMapGround(E, N, 0.0))
+		{
+			const simcore::MapPoint P = ToMap.FrameToMap(E, N);
+			const simcore::MapGrid& Mg = D.InCore(P.east_m, P.north_m) ? Map->CoreGrid() : Map->FarGrid();
+			return CellTop(Mg, P.east_m, P.north_m);
+		}
 		if (!InGrid(E, N))
 		{
 			return Cm.GroundHeight(E, N);
 		}
-		const int32 C = FMath::Clamp(static_cast<int32>((E - W0) / G.spacing_m), 0, G.cols - 2);
-		const int32 R = FMath::Clamp(static_cast<int32>((N - S0) / G.spacing_m), 0, G.rows - 2);
-		return FMath::Max(FMath::Max(G.At(C, R), G.At(C + 1, R)), FMath::Max(G.At(C, R + 1), G.At(C + 1, R + 1)));
+		return CellTop(G, E, N);
 	};
 	CountryStrips = NewObject<UProceduralMeshComponent>(this, TEXT("CountryStrips"));
 	CountryStrips->SetupAttachment(Root);

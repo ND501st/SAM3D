@@ -66,8 +66,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	bool bCollision = true;
 
-	/** The country the map lies in (data/maps/<id>.json, "kind": "country"), drawn beyond the map at strategic scale. ""
-	 *  draws none (and the map's own far ground instead). */
+	/** The country the map lies in (data/maps/<id>.json, "kind": "country"), drawn at strategic scale: its lines and towns
+	 *  beyond the map, its ground beyond the map's far ground (which is the country's, the map's "far_ground"). "" draws
+	 *  none. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	FString CountryFile = TEXT("maps/pannonia.json");
 
@@ -107,7 +108,8 @@ private:
 	void BuildBoxes(const simcore::MapFrameLink& Link);
 	void BuildCountry(const FVector& FrameOriginLonLatAlt);
 	void BuildAssets(const FVector& FrameOriginLonLatAlt);
-	// The ground's height (above sea level) at a point of the country: the map's own where the map is, the country's else.
+	// The ground's height (above sea level) at a point of the country: the map's own where the map draws its ground, the
+	// country's else.
 	double CountryGround(double East, double North) const;
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
 	static FString FindDataDirectory();

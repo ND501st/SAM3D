@@ -25,6 +25,13 @@ is one small part of a large war (`docs/campaign/`).
 - **The Kesmark range is a district of it.** Both use one ground function (`NaturalGround`, `simcore/terrain_map.hpp`), and
   the country's file carries the range's base, relief, hills and valley unchanged; the country's own hills are placed
   so none reaches the range. The test compares the two grounds every 500 m across the range: equal to the last bit.
+- **Beyond the range, the range's ground is the country's.** `kesmark_range.json` names `"far_ground":
+  "maps/pannonia.json"`: `LoadMap` reads the country's terrain, rivers and lakes, and `NaturalGround` takes them outside
+  the map proper, so the range's far ground (out to 150 km at 500 m) has the country's ranges, gorges and lakes. Its far
+  towns, sites and woods stand on that ground, the sim's line of sight runs over it and Unreal draws it; the country's
+  own 1 km mesh is drawn only beyond it. (Until 27 Oct 2026 the range kept its own far ground and the country was drawn
+  over it: thousands of its far woods and houses lay under the border range.) The test checks the far grid is the
+  country's ground every 2 km, the seam at the range's edge, and that no far wood stands in a lake.
 - **The range's Rava and its main roads and railways** are lines of the country, point for point.
 - **Every theatre object and every place of our chain** is inside the country; every theatre town is a settlement of
   the country; the theatre's three bridges are crossings of its networks (the Kesmark road and rail bridges over the
@@ -117,7 +124,8 @@ the western and south-western groups.
 ## In the game (N5)
 
 - **The Kesmark range's level draws the whole country around the district** (`ASimMapActor`, `CountryFile`): the
-  country's ground at 1 km in place of the map's far ground (the same ground function, so the two meet), the land
+  map's far ground, which is the country's (`"far_ground"`), tinted by the country's land cover, and the country's
+  ground at 1 km beyond it (the same ground function, so the two meet), the land
   beyond its borders 100 km out at 4 km, its rivers, roads, railways and oil pipelines as ribbons at strategic widths
   (not where the map draws its own), its towns as a patch of town ground with blocks on it (the capital's and the
   cities' taller), the border as a dull red strip; and the nation's assets as basic models (`bDrawAssets`,
@@ -155,5 +163,5 @@ adversary with its raids on the Kesmark map's ground.
 - Lines are straight between their points; the networks know length, not road class speed (yet).
 - Each unit has one set of prepared positions whatever the war: the Ground Forces stand where the briefing and the
   theatre's forward groups put them, not deployed towards the front at war (the regiment's tasking, 13.x).
-- The Kesmark range's own far ground (out to 150 km, `kesmark_range.json`) is still its own, not this map's: a raid
-  played on the range sees the range's far ground. Drawing the country beyond the range is N5.
+- The range's far woods and towns are its own file's (scattered copses, the towns it names), not the country's forests
+  and settlements: the country draws its own towns there too.

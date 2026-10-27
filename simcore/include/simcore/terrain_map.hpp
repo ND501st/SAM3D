@@ -13,7 +13,9 @@
 // lies 1.8 km below the scenario's horizontal plane, which is where the sim's aircraft fly over it.
 //
 // Ground beyond the map ("far_km") is drawn coarser and carries only what the file lists there by name (towns, sites,
-// roads) and scattered woods, so aircraft coming in from the borders fly over land, not off an edge.
+// roads) and scattered woods, so aircraft coming in from the borders fly over land, not off an edge. A district of a
+// country names the country's file as its "far_ground": beyond the map proper the ground is then the country's (its
+// ranges, gorges, lakes and rivers), so what stands there, what the sim sees and what the game draws are one ground.
 #pragma once
 
 #include <algorithm>
@@ -159,6 +161,11 @@ struct MapDef {
     int far_scatter_count = 0;
     double far_scatter_min_m = 600.0, far_scatter_max_m = 3000.0;
     double riverside_min_m = 0.0, riverside_max_m = 0.0, riverside_share = 0.0;
+    // The ground beyond the map proper when it is a country's: the file ("far_ground", e.g. maps/pannonia.json) and its
+    // terrain, rivers and lakes as LoadMap read them (in the same frame: the file's origin is the map's). None: the map's
+    // own terrain carries on out to far_m.
+    std::string far_ground_file;
+    std::shared_ptr<const MapDef> far_ground;
 
     bool InCore(double e, double n) const { return e >= west_m && e <= east_m && n >= south_m && n <= north_m; }
 };
@@ -433,6 +440,7 @@ constexpr double kRiverBedDepthM = 2.0;
 constexpr double kValleyFloorAbovePlainM = 15.0;
 
 inline double NaturalGround(const MapDef& d, double e, double n) {
+    if (d.far_ground && !d.InCore(e, n)) return NaturalGround(*d.far_ground, e, n);  // beyond a district: its country's
     double h = d.base_m;
     std::uint64_t s = d.seed;
     for (const MapReliefDef& r : d.relief) {
@@ -929,6 +937,20 @@ private:
         return false;
     }
 
+    // Within margin_m of the far ground's water (its country's lakes and rivers): no wood of the far ground stands there.
+    bool OnFarWater(double e, double n, double margin_m) const {
+        if (!def_.far_ground) return false;
+        for (const MapLakeDef& l : def_.far_ground->lakes) {
+            std::vector<MapPoint> shore = l.points;
+            shore.push_back(l.points.front());
+            if (mapgeo::InPolygon(l.points, e, n) || mapgeo::DistToLine(shore, e, n) < margin_m) return true;
+        }
+        for (const MapLineDef& r : def_.far_ground->rivers) {
+            if (mapgeo::DistToLine(r.points, e, n) < margin_m + 0.5 * r.width_m) return true;
+        }
+        return false;
+    }
+
     void LayFarmsteads(noise::Stream& rng) {
         int placed = 0;
         for (int tries = 0; placed < def_.farmsteads && tries < def_.farmsteads * 50; ++tries) {
@@ -999,7 +1021,7 @@ private:
             const double r = rng.Range(def_.far_scatter_min_m, def_.far_scatter_max_m);
             const double ce = rng.Range(-def_.far_m + r, def_.far_m - r), cn = rng.Range(-def_.far_m + r, def_.far_m - r);
             if (def_.InCore(ce, cn) || def_.InCore(ce - r, cn - r) || def_.InCore(ce + r, cn + r) || def_.InCore(ce - r, cn + r) ||
-                def_.InCore(ce + r, cn - r) || NearSettlement(ce, cn, r + 300.0) || !occupied_.Free(ce, cn, r)) {
+                def_.InCore(ce + r, cn - r) || NearSettlement(ce, cn, r + 300.0) || OnFarWater(ce, cn, r) || !occupied_.Free(ce, cn, r)) {
                 continue;
             }
             copse(ce, cn, r, fb);
@@ -1180,23 +1202,13 @@ class MapLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, MapDef& out) {
         if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "origin", "seed", "extent_km",
-                             "far_km", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads", "forests",
-                             "woods", "marshes", "lakes", "sites"}) ||
+                             "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads",
+                             "forests", "woods", "marshes", "lakes", "sites"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
-            !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
+            !OptionalString(root, "", "description", out.description) || !OptionalString(root, "", "far_ground", out.far_ground_file) ||
+            !Provenance(root, "") || !OriginAndSeed(root, out)) {
             return false;
         }
-        const json::Value* o = root.Find("origin");
-        if (o == nullptr) return Fail("origin", "required");
-        double lat = 0.0, lon = 0.0, alt = 0.0;
-        if (!Keys(*o, "origin", {"lat_deg", "lon_deg", "alt_m"}) || !Number(*o, "origin", "lat_deg", lat) ||
-            !Number(*o, "origin", "lon_deg", lon) || !Number(*o, "origin", "alt_m", alt)) {
-            return false;
-        }
-        out.origin = GeoPoint::FromDegrees(lat, lon, alt);
-        double seed = 1.0;
-        if (!OptionalNumber(root, "", "seed", seed)) return false;
-        out.seed = static_cast<std::uint64_t>(std::max(0.0, seed));
         const json::Value* ext = root.Find("extent_km");
         if (ext == nullptr) return Fail("extent_km", "required");
         double w = 0.0, e = 0.0, s = 0.0, n = 0.0;
@@ -1230,7 +1242,29 @@ public:
                LoadSites(root, out);
     }
 
+    // The ground another file shapes (a country's, named as a district's "far_ground"): its origin, seed, terrain, rivers
+    // and lakes. The rest of that file is its own loader's business.
+    bool LoadGround(const json::Value& root, MapDef& out) {
+        return OriginAndSeed(root, out) && LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) &&
+               LoadLakes(root, out.lakes);
+    }
+
 protected:  // the country map's loader (simcore/country_map.hpp) reads its terrain, lines and polygons the same way
+    bool OriginAndSeed(const json::Value& root, MapDef& out) {
+        const json::Value* o = root.Find("origin");
+        if (o == nullptr) return Fail("origin", "required");
+        double lat = 0.0, lon = 0.0, alt = 0.0;
+        if (!Keys(*o, "origin", {"lat_deg", "lon_deg", "alt_m"}) || !Number(*o, "origin", "lat_deg", lat) ||
+            !Number(*o, "origin", "lon_deg", lon) || !Number(*o, "origin", "alt_m", alt)) {
+            return false;
+        }
+        out.origin = GeoPoint::FromDegrees(lat, lon, alt);
+        double seed = 1.0;
+        if (!OptionalNumber(root, "", "seed", seed)) return false;
+        out.seed = static_cast<std::uint64_t>(std::max(0.0, seed));
+        return true;
+    }
+
     bool Number(const json::Value& o, const std::string& path, const char* key, double& v) {
         if (o.Find(key) == nullptr) return Fail(Join(path, key), "required");
         return OptionalNumber(o, path, key, v);
@@ -1559,6 +1593,27 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
     }
     MapDef def;
     if (!LoadMapDefJson(text, def, error)) return nullptr;
+    if (!def.far_ground_file.empty()) {
+        // A district: its far ground is its country's (the same frame, so one ground meets the other at the map's edge).
+        std::string far_text;
+        json::Value root;
+        std::string parse_error;
+        if (!detail::ReadTextFile(data_dir + "/" + def.far_ground_file, far_text) || !json::Parse(far_text, root, &parse_error)) {
+            if (error) *error = "map: far_ground: cannot read " + def.far_ground_file + (parse_error.empty() ? "" : " (" + parse_error + ")");
+            return nullptr;
+        }
+        auto ground = std::make_shared<MapDef>();
+        detail::MapLoader loader;
+        if (!loader.LoadGround(root, *ground)) {
+            if (error) *error = "map: far_ground " + def.far_ground_file + ": " + loader.Message();
+            return nullptr;
+        }
+        if (std::fabs(ground->origin.LatDeg() - def.origin.LatDeg()) > 1e-9 || std::fabs(ground->origin.LonDeg() - def.origin.LonDeg()) > 1e-9) {
+            if (error) *error = "map: far_ground " + def.far_ground_file + ": its origin must be the map's";
+            return nullptr;
+        }
+        def.far_ground = std::move(ground);
+    }
     return MapData::Build(std::move(def));
 }
 

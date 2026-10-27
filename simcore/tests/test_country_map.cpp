@@ -103,6 +103,51 @@ SC_TEST("country map: it loads, and the ground of the Kesmark range inside it is
     SC_EXPECT(c->GroundHeight(85000.0, 118000.0) > c->GroundHeight(0.0, 0.0) + 250.0);
 }
 
+SC_TEST("country map: the range's far ground is the country's, so what stands there stands on what the game draws") {
+    std::shared_ptr<const CountryMap> c = Country();
+    std::shared_ptr<const MapData> r = Range();
+    if (!c || !r) return;
+    const MapDef& rd = r->Def();
+    SC_EXPECT(rd.far_ground_file == "maps/pannonia.json");
+    SC_EXPECT(rd.far_ground != nullptr);
+    // Every 2 km of the far grid (its own samples) is the country's ground, but where a far site is levelled.
+    const auto NearFarSite = [&](double e, double n) {
+        for (const MapSiteDef& s : rd.sites) {
+            if (!rd.InCore(s.centre.east_m, s.centre.north_m) && std::hypot(e - s.centre.east_m, n - s.centre.north_m) < 4000.0) return true;
+        }
+        return false;
+    };
+    double worst = 0.0;
+    int compared = 0;
+    for (double n = -rd.far_m; n <= rd.far_m; n += 2000.0) {
+        for (double e = -rd.far_m; e <= rd.far_m; e += 2000.0) {
+            if (rd.InCore(e, n) || NearFarSite(e, n)) continue;
+            worst = std::max(worst, std::fabs(r->GroundHeight(e, n) - c->Natural(e, n)));
+            ++compared;
+        }
+    }
+    SC_EXPECT(compared > 20000);
+    SC_EXPECT(worst < 1e-6);
+    // The border range stands in the range's far ground too (it once had none: its far woods and towns lay under it).
+    SC_EXPECT(r->GroundHeight(85000.0, 118000.0) > r->GroundHeight(0.0, 0.0) + 250.0);
+    // The two grounds meet at the range's edge: the core's last sample and the far ground just beyond it.
+    double seam = 0.0;
+    for (double t = rd.west_m; t <= rd.east_m; t += 250.0) {
+        seam = std::max(seam, std::fabs(r->GroundHeight(t, rd.north_m) - c->Natural(t, rd.north_m + 1.0)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(t, rd.south_m) - c->Natural(t, rd.south_m - 1.0)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(rd.east_m, t) - c->Natural(rd.east_m + 1.0, t)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(rd.west_m, t) - c->Natural(rd.west_m - 1.0, t)));
+    }
+    SC_EXPECT(seam < 0.5);
+    // No wood of the far ground stands in the country's lakes.
+    int wet = 0;
+    for (const MapBox& b : r->Layout().boxes) {
+        if (b.part != MapPart::Canopy || rd.InCore(b.east_m, b.north_m)) continue;
+        for (const MapLakeDef& l : rd.far_ground->lakes) wet += mapgeo::InPolygon(l.points, b.east_m, b.north_m) ? 1 : 0;
+    }
+    SC_EXPECT(wet == 0);
+}
+
 SC_TEST("country map: the grid is the same every time it is built") {
     std::string text;
     SC_EXPECT(detail::ReadTextFile(kData + "/maps/pannonia.json", text));
