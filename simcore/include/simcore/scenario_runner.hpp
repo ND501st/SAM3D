@@ -654,6 +654,7 @@ public:
             }
             a.speaking = callouts_ != nullptr && callouts_->SpeakingFrom(m.Role());
             a.stressed = m.Stressed();
+            a.stress = m.StressLevel();
             out.push_back(std::move(a));
         }
         return out;
@@ -2228,6 +2229,19 @@ private:
         }
         return out;
     }
+    // Whether a seat listens to a channel (CalloutBus::SetListens: an NPC doesn't start a line while another channel talks
+    // in his ear): the intercom by his box, the battery net by his box's set, the cabin while he is inside.
+    bool Listens(const std::string& station, const std::string& channel) const {
+        if (!voice_ || console_.FindStation(station) == nullptr) return false;
+        if (channel == "cabin") return !Outside(station);
+        if (channel == "intercom") return !Outside(station) && voice_->HearsIntercom(station);
+        if (channel == "battery net") {
+            for (const std::string& h : BatteryNetHearers()) {
+                if (h == station) return true;
+            }
+        }
+        return false;
+    }
     // Did `station` hear a callout said on the intercom or aloud? The intercom only inside (a man out of the vehicle has
     // his headset off its box); aloud only within earshot (InEarshot: always so inside the compartment).
     bool HeardBy(const SpokenCallout& s, const std::string& station) const {
@@ -3110,7 +3124,7 @@ private:
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             if (crew_[i].Role() != console_.post_plotter) continue;
             const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
-            const double miss = t != nullptr ? t->miss_chance * (crew_[i].Stressed() ? t->stress_factor : 1.0) : 0.0;
+            const double miss = t != nullptr ? t->miss_chance * TierStress(*t, crew_[i]) : 0.0;
             if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss && post_->Miss(r.number)) {
                 Event(console_.post_plotter, "did not take in the report of " + std::to_string(r.number) + ": he will look in the journal");
             }
@@ -5188,7 +5202,11 @@ private:
         if (!def_.has_crew_data) return;
         callouts_ = std::make_unique<CalloutBus>(&def_.crew_data);
         callouts_->SetRecordedLengths(recorded_lengths_s_);
-        if (voice_) callouts_->SetRouter([this](const CalloutDef& d, const std::string& from) { return RouteCallout(d, from); });
+        callouts_->SetPlayerSeat([this](const std::string& station) { return !SeatHolder(station).empty(); });
+        if (voice_) {
+            callouts_->SetRouter([this](const CalloutDef& d, const std::string& from) { return RouteCallout(d, from); });
+            callouts_->SetListens([this](const std::string& station, const std::string& channel) { return Listens(station, channel); });
+        }
         drill_ = std::make_unique<DrillMaster>(console_, &def_.crew_data, def_.has_skills && def_.skills.Reference() != nullptr
                                                                              ? def_.skills.Reference()->reaction_s : 0.55);
         for (const AutoReportDef& r : def_.crew_data.reports) {
@@ -5217,7 +5235,7 @@ private:
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() != station) continue;
             if (const SkillTier* t = SkillOf(def_.crew[i])) {
-                return (t->perception_s + t->callout_delay_s) * (crew_[i].Stressed() ? t->stress_factor : 1.0);
+                return (t->perception_s + t->callout_delay_s) * TierStress(*t, crew_[i]);
             }
         }
         return 0.6;
@@ -5388,33 +5406,38 @@ private:
         // let go. Radiation comes back on through the EMCON path when the silence is over (arm_silence_s).
         // Until the silence is over he sees to it: a drill that would radiate (a capture under way) is stopped, and a
         // transmitter found on again is ordered off again.
-        if (ArmSilent() && time_ - npc_arm_off_s_ >= 10.0) {
-            bool acted = false;
-            for (CrewMember& m : crew_) {
-                const std::string d = m.Tracker().GetProcedure().id;
-                if (SeatHolder(m.Role()).empty() && m.IsBusy() &&
-                    (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc" ||
-                     d == "fire_at_jammer")) {
-                    m.CancelOrder();
+        // One order where one covers it (docs/crew/15_TALK.md section 3): «Излучение выключить!» is the task "silent",
+        // both transmitters off (it starts the operator's ssc_tx_off beside the senior operator's stop_search), so no
+        // «Высокое ССЦ выключить!» beside it; the target is let go by «Цель сбросить!» only once the transmitters are off
+        // and a track is still held (by the TV), a moment later, not in the same breath.
+        if (ArmSilent()) {
+            const bool radiating = console_.panel.Get("soc.hv") == 1 || console_.panel.Get("soc.search") == 1 || console_.panel.Get("ssc.tx") == 1;
+            if (time_ - npc_arm_off_s_ >= 10.0) {
+                bool acted = false;
+                for (CrewMember& m : crew_) {
+                    const std::string d = m.Tracker().GetProcedure().id;
+                    if (!shadow_ && SeatHolder(m.Role()).empty() && m.IsBusy() &&
+                        (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc" ||
+                         d == "fire_at_jammer")) {
+                        m.CancelOrder();
+                        acted = true;
+                    }
+                }
+                if (radiating) {
+                    GiveCrewOrder("order_emcon_off");
+                    npc_ordered_["order"] = {"order_emcon_off", time_};
                     acted = true;
                 }
+                if (acted) {
+                    npc_arm_off_s_ = time_;
+                    Event(Cmdr(), "radiation off against the ARM");
+                }
             }
-            if (engagement_on_ && engagement_.Method() != TrackMethod::None) {
+            if (!radiating && engagement_on_ && engagement_.Method() != TrackMethod::None && time_ - npc_arm_off_s_ >= 3.0 &&
+                time_ - npc_arm_drop_s_ >= 10.0) {
                 GiveCrewOrder("order_drop_target");
-                acted = true;
-            }
-            if (console_.panel.Get("soc.hv") == 1 || console_.panel.Get("soc.search") == 1) {
-                GiveCrewOrder("order_emcon_off");
-                npc_ordered_["order"] = {"order_emcon_off", time_};
-                acted = true;
-            }
-            if (console_.panel.Get("ssc.tx") == 1) {
-                GiveCrewOrder("order_ssc_off");
-                acted = true;
-            }
-            if (acted) {
-                npc_arm_off_s_ = time_;
-                Event(Cmdr(), "radiation off against the ARM");
+                npc_arm_drop_s_ = time_;
+                Event(Cmdr(), "the transmitters off, the target let go against the ARM");
             }
         }
         // Under the threat of ARMs, the tracking transmitter off after the missile's burst (p262).
@@ -5535,6 +5558,9 @@ private:
         NpcOrient();
         NpcCounterJamming();
         if (NpcBetweenFights()) return;
+        // Silent against an ARM: no engagement order until the silence is over (a new target, method Н or a launch would
+        // put a transmitter on again); the ARM block above has the transmitters off and then the target let go.
+        if (ArmSilent()) return;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
         const EngagementModel& eng = engagement_;
@@ -5870,6 +5896,7 @@ private:
     bool arm_relocated_ = false;
     bool npc_arm_stow_ordered_ = false;
     double npc_arm_off_s_ = -1e9;
+    double npc_arm_drop_s_ = -1e9;
     bool npc_ssc_off_due_ = false;
     TrackMethod npc_track_method_ = TrackMethod::None;
     double npc_track_since_s_ = 0.0;
@@ -5966,7 +5993,7 @@ private:
             return false;
         }
         const CrewMember* m = MemberAt(seat);
-        const double miss = t != nullptr ? t->miss_chance * (m != nullptr && m->Stressed() ? t->stress_factor : 1.0) : 0.0;
+        const double miss = t != nullptr ? t->miss_chance * (m != nullptr ? TierStress(*t, *m) : 1.0) : 0.0;
         if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
             Event(seat, missed);
             return false;
@@ -6119,20 +6146,31 @@ private:
         if (!console_.equipment.GetInput("vehicle_stopped") || console_.panel.Get("soc.search") != 1 || NpcSilent()) return;
         if (!console_.equipment.IsReady("hv_ready") || (npc_arm_stow_ordered_ && !arm_relocated_) || (npc_stow_ordered_ && !npc_resumed_)) return;
         CrewMember* so = MemberAt(seat);
-        if (so != nullptr && SeatHolder(seat).empty() && so->IsBusy()) return;
-        if (console_.panel.Get("soc.beam") != kArmBeamProgram) {  // both low beams in each two-turn burst
+        const bool npc = so != nullptr && SeatHolder(seat).empty();
+        // ЗАПРОС waits on the search transmitter (the interrogator's antenna is built into the search antenna): between
+        // bursts he gives the burst for it, then interrogates (sam3d: otherwise each waited on the other all raid).
+        const bool query_waits = npc && so->Status() == CrewStatus::Waiting && so->Tracker().GetProcedure().id == "iff_interrogate";
+        if (npc && so->IsBusy() && !query_waits) return;
+        if (!query_waits && console_.panel.Get("soc.beam") != kArmBeamProgram) {  // both low beams in each two-turn burst
             if (const Procedure* p = console_.FindProcedure("arm_beams")) {
                 if (NpcDoes(seat, SeatDuty::Drill(seat, "arm_beams", "the least emission against ARMs: both low beams in each burst")) && so) so->Order(*p);
                 return;
             }
         }
         // Having seen a sign of an ARM launch himself he gives no more bursts until the silence is over.
-        const bool off = ArmSearchOff() || time_ - arm_seen_s_ < def_.doctrine.arm_silence_s;
+        const bool silence = time_ - arm_seen_s_ < def_.doctrine.arm_silence_s;
+        const bool off = silence || (!query_waits && ArmSearchOff());
         if (console_.panel.Get("soc.hv") != (off ? 1 : 0)) return;
         const char* drill = off ? "hv_off" : "hv_on";
         if (const Procedure* p = console_.FindProcedure(drill)) {
-            const char* why = off ? "the least emission against ARMs: ВЫСОКОЕ off between bursts" : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
-            if (NpcDoes(seat, SeatDuty::Drill(seat, drill, why)) && so) so->Order(*p);
+            const char* why = off ? "the least emission against ARMs: ВЫСОКОЕ off between bursts"
+                              : query_waits ? "ЗАПРОС needs the search transmitter: ВЫСОКОЕ on for the interrogation"
+                                            : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
+            if (NpcDoes(seat, SeatDuty::Drill(seat, drill, why)) && so) {
+                so->Order(*p);
+                const Procedure* query = query_waits ? console_.FindProcedure("iff_interrogate") : nullptr;
+                if (query != nullptr) so->Queue(*query);
+            }
         }
     }
 
@@ -6433,6 +6471,7 @@ private:
         }
     }
     std::map<std::string, std::vector<KnownTarget>> iff_companions_;  // a "Ответа нет!"'s target -> the other echoes it covers
+    std::map<std::string, double> drill_started_s_;  // "<seat>|<procedure>" -> when he began it (his "Есть!")
     std::map<std::string, double> passed_at_;  // when the commander last passed a target's designation on
     std::map<std::string, bool> passed_far_;    // it was still far out then (it is passed on again as it comes near)
 
@@ -6445,8 +6484,18 @@ private:
             if (r.kind == CrewReport::Kind::Completed || r.kind == CrewReport::Kind::Aborted) routine_drills_.erase(key);
             switch (r.kind) {
                 // The commanding seat doesn't answer himself; a standing order's routine needs no answer.
-                case CrewReport::Kind::Started: if (c.Role() != Cmdr() && !routine) Say("ack", c.Role()); break;
-                case CrewReport::Kind::Completed: if (c.Role() != Cmdr() && !routine) Say("done", c.Role()); break;
+                case CrewReport::Kind::Started:
+                    drill_started_s_[key] = time_;
+                    if (c.Role() != Cmdr() && !routine) Say("ack", c.Role());
+                    break;
+                // Under heavy stress the talk shrinks to what is needed (docs/crew/15_TALK.md section 4): a drill done
+                // within 10 s of its "Есть!" isn't reported done (the commander sees it on his lamps).
+                case CrewReport::Kind::Completed: {
+                    const auto started = drill_started_s_.find(key);
+                    const bool quick = c.StressLevel() >= 0.7 && started != drill_started_s_.end() && time_ - started->second < 10.0;
+                    if (c.Role() != Cmdr() && !routine && !quick) Say("done", c.Role());
+                    break;
+                }
                 // A drill the commander replaced or called off himself needs no "can't", nor does an unspoken routine
                 // (the burst's transmitter refused with the search stopped: he sees it and calls "Поиск!").
                 case CrewReport::Kind::Aborted:
@@ -7989,7 +8038,7 @@ private:
     double PerceptionS(const std::string& station) {
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() != station) continue;
-            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->perception_s * (crew_[i].Stressed() ? t->stress_factor : 1.0);
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->perception_s * TierStress(*t, crew_[i]);
         }
         return 0.5;
     }
@@ -8180,10 +8229,12 @@ private:
             return;
         }
         if (s.channel != "intercom" && s.channel != "cabin") return;
+        NoteStressHeard(s.from, s.id);  // he knows what he said himself
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             CrewMember& c = crew_[i];
             if (c.Role() == s.from) continue;
             if (!HeardBy(s, c.Role())) continue;
+            NoteStressHeard(c.Role(), s.id);
             const bool addressed = s.to == "crew" || s.to == "any" || s.to == c.Role();
             if (!addressed) continue;
             const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
@@ -8192,7 +8243,10 @@ private:
             const bool stake = s.to == c.Role() || c.Role() == Cmdr() || c.Role() == def_.tuning.aim_az_role ||
                                c.Role() == def_.tuning.aim_el_role || c.Role() == def_.tuning.aim_range_role;
             if (npc && stake && t != nullptr && s.has_about && s.repeats == 0) {
-                const double miss = t->miss_chance * (c.Stressed() ? t->stress_factor : 1.0);
+                // A man at his hand wheels, following a target, takes in less of what he hears (sam3d: half again).
+                bool at_wheels = false;
+                for (const WheelWatch& w : wheels_) at_wheels = at_wheels || (w.station == c.Role() && time_ - w.moved_s < 0.5);
+                const double miss = t->miss_chance * TierStress(*t, c) * (at_wheels ? 1.5 : 1.0);
                 if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
                     ++say_agains_;
                     Say("say_again", c.Role());
@@ -8248,9 +8302,29 @@ private:
         }
     }
 
-    // Stress (docs/crew/05_SKILL.md): the crew's own radars jammed, or a hostile they know of inside 10 km and nothing
-    // tracked. It multiplies every crewmate's delays and chances by his tier's stress factor.
+    // Stress (docs/crew/05_SKILL.md, docs/crew/15_TALK.md section 4): a level per crewman, 0 calm to 1, from what he
+    // knows: a war (not an exercise), the crew's own radars jammed, a hostile the commander knows of inside 10 km with
+    // nothing tracked, our missile in the air, an ARM bursting near the vehicle, and the warnings and reports he heard
+    // (kStressHeard). It rises at once to the strongest of them and falls back slowly (kStressFallS); what it does is
+    // scaled by his tier's stress factor (CrewMember::StressMultiplier, TierStress). sam3d estimates throughout.
+    struct StressSign {
+        const char* callout;
+        double level;
+        double for_s;  // how long hearing it keeps him at that level
+    };
+    static constexpr double kStressFallS = 40.0;
+    static constexpr double kNearBurstM = 500.0;  // an ARM bursting within this of the vehicle: felt by everyone in it
+    std::map<std::string, std::map<std::string, double>> stress_heard_;  // seat -> callout -> when he last heard (or said) it
+    double stress_updated_s_ = -1.0;
+    double near_burst_s_ = -1e9;
+    static double TierStress(const SkillTier& t, const CrewMember& m) { return 1.0 + (t.stress_factor - 1.0) * m.StressLevel(); }
+    void NoteStressHeard(const std::string& seat, const std::string& callout) { stress_heard_[seat][callout] = time_; }
     void UpdateStress() {
+        static const StressSign kStressHeard[] = {
+            {"air_alert", 0.5, 120.0},      {"target_near_zone", 0.4, 30.0}, {"target_in_zone", 0.5, 30.0},
+            {"jamming", 0.6, 30.0},         {"lock_lost", 0.5, 20.0},        {"launch", 0.6, 20.0},
+            {"missile_away", 0.6, 20.0},    {"arm_turn_away", 0.8, 60.0},    {"arm_launch", 0.9, 90.0},
+            {"arm_launch_track", 0.9, 90.0}, {"arm_launch_tv", 0.9, 90.0}};
         bool jammed = false;
         if (em_link_) {
             const em::RadarState* sr = em_link_->SearchRadar();
@@ -8263,7 +8337,29 @@ private:
                 pressed = pressed || (k.has_range && k.range_m < 10000.0 && !k.friendly);
             }
         }
-        for (CrewMember& c : crew_) c.SetStressed(jammed || pressed);
+        for (const EmSensorLink::ArmResult& r : arm_results_) {
+            if ((r.hit_what == "unit" || r.nearest_what == "unit") && r.miss_m >= 0.0 && r.miss_m < kNearBurstM) near_burst_s_ = r.burst_s;
+        }
+        const double base = def_.setting == "war" ? 0.2 : 0.0;
+        const double dt = stress_updated_s_ < 0.0 ? 0.0 : time_ - stress_updated_s_;
+        stress_updated_s_ = time_;
+        const double fall = std::exp(-dt / kStressFallS);
+        const bool in_flight = engagement_on_ && engagement_.ShotsInFlight();
+        for (CrewMember& c : crew_) {
+            double want = base;
+            if (jammed || pressed) want = std::max(want, 0.7);
+            if (in_flight) want = std::max(want, 0.6);
+            if (time_ - near_burst_s_ < 120.0) want = 1.0;
+            const auto heard = stress_heard_.find(c.Role());
+            if (heard != stress_heard_.end()) {
+                for (const StressSign& sign : kStressHeard) {
+                    const auto it = heard->second.find(sign.callout);
+                    if (it != heard->second.end() && time_ - it->second < sign.for_s) want = std::max(want, sign.level);
+                }
+            }
+            const double now = c.StressLevel();
+            c.SetStressLevel(want >= now ? want : want + (now - want) * fall);
+        }
     }
 
 public:
@@ -8278,6 +8374,33 @@ public:
     void AssignTarget(const std::string& target) { assigned_target_ = target; }
     // "Повторите" so far (a crewmate missed a report).
     int SayAgains() const { return say_agains_; }
+
+    // The player's quick replies (docs/crew/15_TALK.md section 5, the reply keys): «Есть!» and «Выполнено!» as any seat
+    // says them; «Повторите!» asks whoever said the last line that reached his seat for him or the crew (in the last 30 s)
+    // to say it again, as an NPC asks (Hear). False with nothing to reply to (LastRefusal says why).
+    bool PlayerReply(const std::string& station, const std::string& reply) {
+        last_refusal_.clear();
+        if (!callouts_ || (reply != "ack" && reply != "done" && reply != "say_again")) return false;
+        if (reply != "say_again") {
+            if (!callouts_->Say(time_, reply, station)) return false;
+            reports_made_.push_back({time_, station, reply});
+            return true;
+        }
+        const SpokenCallout* last = nullptr;
+        for (const SpokenCallout& s : callouts_->Log()) {
+            const bool to_him = s.to == station || s.to == "crew" || s.to == "any";
+            if (s.from != station && s.id != "say_again" && to_him && time_ - s.end_s < 30.0 && CalloutHeardAt(s, station)) last = &s;
+        }
+        if (last == nullptr) {
+            last_refusal_ = "nothing said to you in the last 30 s";
+            return false;
+        }
+        const SpokenCallout again = *last;
+        if (!callouts_->Say(time_, "say_again", station)) return false;
+        ++say_agains_;
+        if (SeatHolder(again.from).empty()) callouts_->Repeat(again, time_, 1.0 + SpeakDelayS(again.from));
+        return true;
+    }
 
     // A player in a seat speaks a report of the crew data (the UI's report buttons): what it says comes from his own
     // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.

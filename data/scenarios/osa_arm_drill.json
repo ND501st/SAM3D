@@ -1,5 +1,6 @@
 {
   "scenario_id": "osa_arm_drill",
+  "setting": "war",
   "name": "HARM drill: a SEAD pair with anti-radiation missiles ahead of the strike",
   "description": "A fictional raid: two defence-suppression aircraft come at the battery low and fast, straight at it, each with one HARM-class anti-radiation missile; two strike aircraft follow. The crew has been warned of ARMs: least emission (the search transmitter on for two turns in every five, the tracking transmitter only from Table 7.3's range, the search radar off while the tracking radar holds a target alone). The senior operator watches for the signs of a launch (a small fast mark coming straight at the vehicle; a target that came at the battery turning away); on hearing one the commander has every transmitter off once the missile in the air has burst, for a minute. A HARM-class missile remembers where the radar was: silent early it misses by hundreds of metres, silent late it does not. The attack is reported up the battery net, and the regiment's standing order moves the battery to its reserve position when the fight is over.",
   "source": "sam3d", "confidence": "estimate",

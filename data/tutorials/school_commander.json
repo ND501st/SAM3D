@@ -57,16 +57,16 @@
     {
       "id": "tour_menu", "title": "Your orders: the crew menu", "done_when": ["ui:crew_menu"],
       "lines": [
-        "You give orders through the crew menu: press O to open it. It lists the orders of the drill; an order the crew can't carry out yet is greyed, with the reason. After the orders comes what you say on the battery net yourself: your readiness report and the read-back of a target. O or Esc closes it.",
-        "Open it now (O), look, and close it."
+        "You give orders through the crew menu: press Caps Lock to open it. Its ring holds eight sectors by subject (fire, the target, search, emission and threats, readiness, march, the battery net, kill signs); a sector opens its orders, each always in the same place, an order the crew can't carry out yet greyed, with the reason. What you say on the battery net yourself, your readiness report and the read-back of a target, is in the battery net's sector. Caps Lock or Esc closes it. With practice: hold Caps Lock, flick the mouse to the sector and on to the line, and let go.",
+        "Open it now (Caps Lock), look, and close it."
       ],
-      "hint": "O: the crew menu."
+      "hint": "Caps Lock: the crew menu."
     },
     {
       "id": "k_boyu", "chapter": "Action stations (К бою)", "title": "Give «К бою!»", "order": "order_k_boyu",
-      "lines": ["O, then «К бою!» (Action stations!). Your A-1 is on ВС: the crew hears you on the intercom."],
+      "lines": ["Caps Lock, then «К бою!» (Action stations!). Your A-1 is on ВС: the crew hears you on the intercom."],
       "why": "It brings the whole crew to readiness from cold: the driver starts the turbine, the operator switches the equipment on and unlocks the turret, the senior operator brings up the search radar, the deputy commander orients the vehicle.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "set_right", "title": "Your sets: the headset to the right set", "control": "radio.headset", "position": 1, "look": "radio_right_panel",
@@ -101,9 +101,9 @@
     {
       "id": "report_ready", "title": "Report to the post: «21 к бою готов!»", "report": "report_ready",
       "wait_until": ["task:searching"], "wait_text": "your crew ready, the search radar up",
-      "lines": ["Your vehicle is ready: tell the battery commander on the net. O, then your report, after the orders: «21 к бою готов, каналы 2, ракет 6!» (ready for action, its two channels and its missiles)."],
+      "lines": ["Your vehicle is ready: tell the battery commander on the net. Caps Lock, then your report in the battery net's sector: «21 к бою готов, каналы 2, ракет 6!» (ready for action, its two channels and its missiles)."],
       "why": "When the crew is ready the crew chief reports to the battery's command post, with his channels and missiles (voenizdat_osa_1991 pp. 246-247): the battery commander gives targets only to launchers he knows are ready.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "chest_receive", "title": "Release it: ПРМ", "control": "radio.chest", "position": 0,
@@ -130,9 +130,9 @@
     },
     {
       "id": "readback", "title": "Read it back: «10, я 21: цель …, понял. Приём.»", "report": "readback",
-      "lines": ["At once, on the net: O, then your read-back, the line after the orders: the target's number back to the post (10), with your call sign (21)."],
+      "lines": ["At once, on the net: Caps Lock, then your read-back in the battery net's sector: the target's number back to the post (10), with your call sign (21)."],
       "why": "A command on the net is acknowledged at once by repeating it (rrs_1986): until the battery commander hears his number back he doesn't know you have it, and says it again.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "chest_receive_readback", "title": "Release it: ПРМ", "control": "radio.chest", "position": 0,
@@ -153,9 +153,9 @@
     {
       "id": "take", "title": "Give «Цель — взять!»", "order": "order_take_target",
       "wait_until": ["task:searching"], "wait_text": "the crew ready, the search radar up («Готов СОЦ!»): an order to take a target now would break off their drills",
-      "lines": ["O, then «Цель номер … — взять!» (Take the target!): the number is the one the battery commander gave you."],
+      "lines": ["Caps Lock, then «Цель номер … — взять!» (Take the target!): the number is the one the battery commander gave you."],
       "why": "You decide what to engage. The senior operator puts the tracking radar's azimuth on it, the deputy commander designates it (ЦУ), the operator switches the transmitter on: the radar captures it.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "a1_back", "title": "A-1 back to Р-123", "control": "intercom.a1", "position": 2,
@@ -170,9 +170,9 @@
     },
     {
       "id": "tv", "chapter": "Look before you shoot", "title": "Give «Цель осмотреть по ТВ!»", "order": "order_tv_watch",
-      "lines": ["O, then «Цель осмотреть по ТВ!» (Look the target over on the TV!)."],
+      "lines": ["Caps Lock, then «Цель осмотреть по ТВ!» (Look the target over on the TV!)."],
       "why": "The radar holds an echo; the TV shows what it is. Decoys and false targets look small where their echo says aircraft.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "tv_look", "title": "What the TV shows", "done_when": ["subsystem:tov_camera=ready"], "fast_forward": true,
@@ -181,9 +181,9 @@
     },
     {
       "id": "prepare", "chapter": "Firing", "title": "Give «Приготовиться к пуску!»", "order": "order_prepare",
-      "lines": ["O, then «Приготовиться к пуску!» (Prepare to launch!)."],
+      "lines": ["Caps Lock, then «Приготовиться к пуску!» (Prepare to launch!)."],
       "why": "The deputy commander sets live firing and puts the launch key in.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "zone", "title": "Into the zone", "done_when": ["input:target_in_zone"], "fast_forward": true,
@@ -192,9 +192,9 @@
     },
     {
       "id": "fire", "title": "Give «Пуск разрешаю!»", "order": "fire_permitted",
-      "lines": ["O, then «Пуск разрешаю!» (Launch permitted!)."],
+      "lines": ["Caps Lock, then «Пуск разрешаю!» (Launch permitted!)."],
       "why": "Only you permit a launch. The deputy commander turns the key and presses ПУСК.",
-      "hint": "O: the crew menu, then the highlighted line's number."
+      "hint": "Caps Lock: the crew menu; 0 gives the green line (or its sector, then its number)."
     },
     {
       "id": "launch", "title": "Launch", "done_when": ["debrief:LAUNCH"],

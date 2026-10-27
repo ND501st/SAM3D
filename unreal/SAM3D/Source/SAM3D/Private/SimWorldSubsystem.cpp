@@ -1619,36 +1619,144 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 	}
 	const simcore::CrewData& Crew = Runner->Def().crew_data;
 	const std::string Seat = ToStd(Station);
-	if (Seat == Crew.commander)
+	const bool bCommander = Seat == Crew.commander;
+	// The seat's lines (after the orders, what the commander says on the air himself: the read-back of a designation),
+	// placed in the crew data's sectors (docs/crew/15_TALK.md section 5).
+	std::vector<std::string> Unplaced;
+	const std::vector<std::string> Lines = simcore::MenuLines(Crew, Seat, Runner->PlayerRadioReports(Seat));
+	const std::vector<std::vector<std::string>> Placed = simcore::PlaceInMenu(Crew, Lines, &Unplaced);
+	const auto Add = [&](const std::string& Id, int32 Sector)
 	{
+		const simcore::CalloutDef* C = Crew.FindCallout(Id);
+		if (C == nullptr)
+		{
+			return;
+		}
+		const simcore::OrderDef* Order = nullptr;
 		for (const simcore::OrderDef& O : Crew.orders)
 		{
-			if (const simcore::CalloutDef* C = Crew.FindCallout(O.callout))
+			if (bCommander && O.callout == Id)
 			{
-				FSimCrewMenuEntry E{ToF(C->id), ToF(C->ru), ToF(C->en), true};
-				const simcore::ScenarioRunner::OrderCheck Check = Runner->CheckOrder(O.callout);
-				E.bAvailable = Check.can;
-				E.Reason = Check.can ? FString() : FString::Printf(TEXT("%s / %s"), *ToF(Check.reason_ru), *ToF(Check.reason_en));
-				Out.Add(E);
+				Order = &O;
+				break;
 			}
 		}
-		// After the orders, what he says on the air himself (the Osa commander's read-back of a designation).
-		for (const std::string& Id : Runner->PlayerRadioReports(Seat))
+		FSimCrewMenuEntry E;
+		E.Id = ToF(Id);
+		E.Sector = Sector;
+		if (Order != nullptr)
 		{
-			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, Id);
-			Out.Add({ToF(Id), ToF(Words.first), ToF(Words.second), false});
+			E.Ru = ToF(C->ru);
+			E.En = ToF(C->en);
+			E.bOrder = true;
+			E.Doer = ToF(simcore::OrderDoer(Crew, *Order));
+			const simcore::ScenarioRunner::OrderCheck Check = Runner->CheckOrder(Id);
+			E.bAvailable = Check.can;
+			E.Reason = Check.can ? FString() : FString::Printf(TEXT("%s / %s"), *ToF(Check.reason_ru), *ToF(Check.reason_en));
 		}
-		return Out;
-	}
-	for (const simcore::CalloutDef& C : Crew.callouts)
-	{
-		if (C.kind == simcore::CalloutKind::Report && (C.from == Seat || C.from == "any"))
+		else
 		{
 			// The words as he would say them: the report he would read out, his seat's number; other blanks «…».
-			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, C.id);
-			Out.Add({ToF(C.id), ToF(Words.first), ToF(Words.second), false});
+			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, Id);
+			E.Ru = ToF(Words.first);
+			E.En = ToF(Words.second);
+			const bool bToCrew = C->to.empty() || C->to == "any" || C->to == Seat;
+			E.Doer = C->kind == simcore::CalloutKind::Radio ? FString(TEXT("battery")) : bToCrew ? FString(TEXT("crew")) : ToF(C->to);
+		}
+		Out.Add(E);
+	};
+	for (std::size_t K = 0; K < Placed.size(); ++K)
+	{
+		for (const std::string& Id : Placed[K])
+		{
+			Add(Id, static_cast<int32>(K));
 		}
 	}
+	// A line the menu's data misses (a crew without a layout): after the sectors, eight to a sector "Other".
+	for (std::size_t I = 0; I < Unplaced.size(); ++I)
+	{
+		Add(Unplaced[I], static_cast<int32>(Crew.menu.size() + I / simcore::kMenuSectorLines));
+	}
+	return Out;
+}
+
+TArray<FSimCrewMenuGroup> USimWorldSubsystem::GetCrewMenuSectors() const
+{
+	TArray<FSimCrewMenuGroup> Out;
+	if (Runner && Runner->Def().has_crew_data)
+	{
+		for (const simcore::MenuSectorDef& S : Runner->Def().crew_data.menu)
+		{
+			Out.Add({ToF(S.id), ToF(S.ru), ToF(S.en)});
+		}
+	}
+	return Out;
+}
+
+TArray<FSimCrewMenuGroup> USimWorldSubsystem::GetCrewMenuDoers() const
+{
+	TArray<FSimCrewMenuGroup> Out;
+	if (!Runner || !Runner->Def().has_crew_data)
+	{
+		return Out;
+	}
+	Out.Add({TEXT("crew"), TEXT("Расчёт"), TEXT("The crew")});
+	for (const simcore::CrewSeatDef& S : Runner->Def().crew_data.seats)
+	{
+		Out.Add({ToF(S.station), ToF(S.title_ru), ToF(S.title_en)});
+	}
+	Out.Add({TEXT("battery"), TEXT("Батарея"), TEXT("The battery")});
+	return Out;
+}
+
+bool USimWorldSubsystem::PlayerReply(const FString& Station, const FString& Reply, FString& OutWhy)
+{
+	OutWhy.Reset();
+	if (!Runner)
+	{
+		return false;
+	}
+	const bool bOk = Runner->PlayerReply(ToStd(Station), ToStd(Reply));
+	if (!bOk)
+	{
+		OutWhy = Runner->LastRefusal().empty() ? FString(TEXT("not now")) : ToF(Runner->LastRefusal());
+	}
+	return bOk;
+}
+
+FString USimWorldSubsystem::GlossLine(const FString& Ru) const
+{
+	return CrewVoices.IsValid() ? ToF(simcore::GlossLine(ToStd(Ru), *CrewVoices)) : FString();
+}
+
+TArray<FSimHeardTarget> USimWorldSubsystem::GetSeatPicture(const FString& Station, double MaxAgeSeconds) const
+{
+	TArray<FSimHeardTarget> Out;
+	const simcore::CrewPicture* Picture = Runner ? Runner->PictureOf(ToStd(Station)) : nullptr;
+	if (Picture == nullptr)
+	{
+		return Out;
+	}
+	for (const simcore::KnownTarget& K : Picture->Recent(Runner->Time(), MaxAgeSeconds))
+	{
+		FSimHeardTarget H;
+		H.Number = K.number;
+		if (K.has_azimuth)
+		{
+			const double Deg = FMath::Fmod(FMath::Fmod(K.azimuth_deg, 360.0) + 360.0, 360.0);
+			const int32 Mils = FMath::RoundToInt32(Deg / 360.0 * 6000.0) % 6000;
+			H.Azimuth = FString::Printf(TEXT("%02d-%02d"), Mils / 100, Mils % 100);
+			H.bTrueAzimuth = K.true_azimuth;
+		}
+		H.RangeKm = K.has_range ? K.range_m / 1000.0 : -1.0;
+		H.HeightM = K.has_height ? K.height_m : -1.0;
+		H.AgeSeconds = Runner->Time() - K.time_s;
+		H.Source = ToF(K.source);
+		H.bFriendly = K.friendly;
+		H.bNoReply = K.interrogated && !K.friendly;
+		Out.Add(H);
+	}
+	Out.Sort([](const FSimHeardTarget& A, const FSimHeardTarget& B) { return A.AgeSeconds < B.AgeSeconds; });
 	return Out;
 }
 

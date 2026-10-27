@@ -6,6 +6,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
+#include "SimCrewBodiesComponent.h"
 #include "SimOsaVehicle.h"
 #include "SimSpeech.h"
 #include "SimWorldSubsystem.h"
@@ -126,6 +127,40 @@ namespace
 		}
 	}
 
+	// Through a laryngophone (the R-124 kit's headsets): the voice is taken off the throat, not from the lips, so the
+	// mouth's highs and the hiss of the fricatives are gone and the low middle is heavy; a little rough. The character is
+	// a sam3d estimate (docs/crew/15_TALK.md section 7); the intercom's band filter follows it.
+	void MakeThroatVoice(TArray<int16>& Pcm, int32 SampleRate)
+	{
+		TArray<float> X;
+		X.SetNumUninitialized(Pcm.Num());
+		float Peak = 1.0f;
+		for (int32 I = 0; I < Pcm.Num(); ++I)
+		{
+			X[I] = static_cast<float>(Pcm[I]);
+			Peak = FMath::Max(Peak, FMath::Abs(X[I]));
+		}
+		for (float& S : X)
+		{
+			S /= Peak;
+		}
+		const float Rate = static_cast<float>(SampleRate);
+		Biquad(X, Rate, 2200.0f, false);
+		Biquad(X, Rate, 2200.0f, false);
+		Biquad(X, Rate, 180.0f, true);
+		float Level = 1e-4f;
+		for (const float S : X)
+		{
+			Level = FMath::Max(Level, FMath::Abs(S));
+		}
+		const float Drive = 1.8f;
+		for (int32 I = 0; I < X.Num(); ++I)
+		{
+			const float V = FMath::Tanh(Drive * X[I] / Level) / FMath::Tanh(Drive);
+			Pcm[I] = static_cast<int16>(FMath::Clamp(V * 29000.0f, -32767.0f, 32767.0f));
+		}
+	}
+
 	// A radio log line as it is read out: the four-digit numbers in pairs ("62 01"), the way a report is spoken.
 	FString RadioSpeech(const FString& Text)
 	{
@@ -233,14 +268,59 @@ UAudioComponent* USimCrewVoiceComponent::ChannelComponent(const FString& Channel
 	}
 	UAudioComponent* Audio = NewObject<UAudioComponent>(GetOwner());
 	Audio->bAutoActivate = false;
-	Audio->bAllowSpatialization = false;  // the headset
+	// The headset, in both ears; a word said aloud in the cabin comes from where the speaker sits, at its full loudness
+	// anywhere in the vehicle.
+	const bool bAloud = Channel.StartsWith(TEXT("cabin"));
+	Audio->bAllowSpatialization = bAloud;
+	if (bAloud)
+	{
+		Audio->bOverrideAttenuation = true;
+		Audio->AttenuationOverrides.bSpatialize = true;
+		Audio->AttenuationOverrides.bAttenuate = true;
+		Audio->AttenuationOverrides.AttenuationShape = EAttenuationShape::Sphere;
+		Audio->AttenuationOverrides.AttenuationShapeExtents = FVector(400.0f, 0.0f, 0.0f);
+		Audio->AttenuationOverrides.FalloffDistance = 3000.0f;
+	}
 	Audio->bIsUISound = false;
 	Audio->RegisterComponent();
 	Channels.Add(Channel, Audio);
 	return Audio;
 }
 
-void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const FString& Channel, const simcore::VoiceSettings& Settings)
+void USimCrewVoiceComponent::Duck()
+{
+	// Under an urgent line the others go quieter (docs/crew/15_TALK.md section 7): the ear follows the one that matters.
+	const auto PriorityOf = [this](const FString& Channel) { const int32* P = ChannelPriority.Find(Channel); return P != nullptr ? *P : 1; };
+	int32 Urgent = MAX_int32;
+	for (const TPair<FString, TObjectPtr<UAudioComponent>>& C : Channels)
+	{
+		if (C.Value != nullptr && C.Value->IsPlaying())
+		{
+			Urgent = FMath::Min(Urgent, PriorityOf(C.Key));
+		}
+	}
+	for (const TPair<FString, TObjectPtr<UAudioComponent>>& C : Channels)
+	{
+		const bool bUnder = C.Value != nullptr && C.Value->IsPlaying() && PriorityOf(C.Key) > Urgent;
+		if (bUnder == Ducked.Contains(C.Key) || C.Value == nullptr)
+		{
+			continue;
+		}
+		const float* Base = ChannelVolume.Find(C.Key);
+		C.Value->SetVolumeMultiplier((Base != nullptr ? *Base : 1.0f) * (bUnder ? 0.35f : 1.0f));
+		if (bUnder)
+		{
+			Ducked.Add(C.Key);
+		}
+		else
+		{
+			Ducked.Remove(C.Key);
+		}
+	}
+}
+
+void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const FString& Channel, const simcore::VoiceSettings& Settings,
+	int32 Priority, const FString& From)
 {
 	if (Pcm.Num() == 0)
 	{
@@ -249,6 +329,10 @@ void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const F
 	if (Settings.radio)
 	{
 		MakeRadioVoice(Pcm, SampleRate, Settings.low_hz, Settings.high_hz);
+	}
+	else if (Settings.throat)
+	{
+		MakeThroatVoice(Pcm, SampleRate);
 	}
 	USoundWaveProcedural* Wave = NewObject<USoundWaveProcedural>(this);
 	Wave->SetSampleRate(SampleRate);
@@ -261,7 +345,22 @@ void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const F
 	UAudioComponent* Audio = ChannelComponent(Channel);
 	Audio->Stop();
 	Audio->SetSound(Wave);
-	Audio->SetVolumeMultiplier(FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f));
+	// Louder under stress (VoiceSettings.volume); ducked by Duck while a more urgent line plays.
+	const float Volume = FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f) * static_cast<float>(Settings.volume);
+	ChannelVolume.Add(Channel, Volume);
+	ChannelPriority.Add(Channel, Priority);
+	Ducked.Remove(Channel);
+	Audio->SetVolumeMultiplier(Volume);
+	if (Audio->bAllowSpatialization && !From.IsEmpty())
+	{
+		const USimCrewBodiesComponent* Bodies = GetOwner()->FindComponentByClass<USimCrewBodiesComponent>();
+		FVector Head;
+		bool bVisible = false;
+		if (Bodies != nullptr && Bodies->GetBodyHead(From, Head, bVisible))
+		{
+			Audio->SetWorldLocation(Bodies->GetComponentTransform().TransformPosition(Head));
+		}
+	}
 	Audio->SetLowPassFilterEnabled(true);
 	Audio->SetLowPassFilterFrequency(static_cast<float>(Settings.high_hz));
 	Audio->SetHighPassFilterEnabled(true);
@@ -287,7 +386,7 @@ bool USimCrewVoiceComponent::PlayRecorded(const simcore::SpokenCallout& Line, co
 		int32 Rate = 0;
 		if (ReadWav(Path, Pcm, Rate))
 		{
-			Play(MoveTemp(Pcm), Rate, Channel, Settings);
+			Play(MoveTemp(Pcm), Rate, Channel, Settings, Line.priority, ToF(Line.from));
 			return true;
 		}
 	}
@@ -352,7 +451,7 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 				Room.low_hz = 80.0;
 				Room.high_hz = 12000.0;
 				const float Seconds = static_cast<float>(Done.Pcm.Num()) / static_cast<float>(FMath::Max(1, Done.SampleRate));
-				Play(MoveTemp(Done.Pcm), Done.SampleRate, TEXT("instructor"), Room);
+				Play(MoveTemp(Done.Pcm), Done.SampleRate, TEXT("instructor"), Room, 0);  // the crew quieter while he explains
 				UE_LOG(LogSAM3D, Log, TEXT("Instructor: spoken (%.1f s)"), Seconds);
 			}
 			continue;
@@ -366,8 +465,9 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		{
 			continue;  // too late to matter (the engine was slow, or time ran fast)
 		}
-		Play(MoveTemp(Done.Pcm), Done.SampleRate, Line.Channel, Line.Settings);
+		Play(MoveTemp(Done.Pcm), Done.SampleRate, Line.Channel, Line.Settings, Line.Priority, Line.From);
 	}
+	Duck();
 	if (!bCrew)
 	{
 		return;
@@ -391,12 +491,12 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		{
 			continue;
 		}
-		bool bStressed = false;
+		double Stress = 0.0;  // graded, from what the speaker has heard (docs/crew/15_TALK.md section 4)
 		for (const simcore::SeatActivity& A : Activity)
 		{
-			bStressed = bStressed || (A.station == Line.from && A.stressed);
+			Stress = A.station == Line.from ? A.stress : Stress;
 		}
-		const simcore::VoiceSettings Settings = simcore::VoiceFor(*Voices, Line.from, bStressed, Line.channel);
+		const simcore::VoiceSettings Settings = simcore::VoiceFor(*Voices, Line.from, Stress, Line.channel);
 		const FString Channel = ToF(Line.channel);
 		if (PlayRecorded(Line, Settings, Channel))
 		{
@@ -414,7 +514,7 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		R.Pitch = Settings.pitch;
 		R.Rate = Settings.rate;
 		R.VoiceIndex = SeatIndex;
-		Pending.Add(R.Id, FPendingLine{Channel, Settings, Line.start_s});
+		Pending.Add(R.Id, FPendingLine{Channel, Settings, Line.start_s, Line.priority, ToF(Line.from)});
 		Speech.Request(R);
 	}
 	VoiceRadioLog(*Sim, *Runner, *Voices, Speech);

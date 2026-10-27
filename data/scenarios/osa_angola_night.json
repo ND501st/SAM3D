@@ -1,5 +1,6 @@
 {
   "scenario_id": "osa_angola_night",
+  "setting": "war",
   "name": "Angola, the north-south road: dug in, a night raid and a Puma in the canyon",
   "description": "An Osa-AK vehicle guarding the north-south road in southern Angola in the 1980s (roadmap 10.2): it stands in its 2 m-deep emplacement under nets. At night the TV sees nothing, so everything is fought by the radars. A pair of Buccaneers comes in low and pulls up to toss its bombs; later an Impala follows. Meanwhile a Puma helicopter flies west along a canyon north of the position, below its walls and out of the radar's sight, and climbs out of it over the hills to cross the road. The NPC commander runs the crew; take any seat, or his.",
   "source": "sam3d", "confidence": "estimate",

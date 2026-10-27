@@ -161,5 +161,17 @@
     { "callout": "aspd_ready", "from": "operator", "when": {"subsystem": "aspd_working", "is": "ready"}, "source": "sam3d", "confidence": "estimate" },
     { "callout": "telecode_on", "from": "operator", "when": {"subsystem": "telecode_reception", "is": "ready"}, "source": "sam3d", "confidence": "estimate" },
     { "callout": "comms_ready", "from": "squad_leader", "when": {"subsystem": "comms_ready", "is": "ready"}, "source": "voenizdat_osa_1991 (p. 251); pvo_bu_ix_1984", "confidence": "medium" }
-  ]
+  ],
+  "menu": {
+    "notes": "The radial crew menu (docs/crew/15_TALK.md section 5): eight sectors clockwise from the top, each with its lines in order; a seat sees the lines it may say (orders at the commander's seat, its reports and warnings elsewhere), each in a fixed place, a greyed one keeping it. Presentation data.",
+    "source": "sam3d", "confidence": "estimate",
+    "sectors": [
+      { "id": "post", "en": "The post", "ru": "Пункт", "items": ["order_deploy", "order_stow", "order_dismount", "order_mount", "order_mast", "order_radar_cable", "order_orient", "order_aspd_on"] },
+      { "id": "regiment", "en": "Regiment net (R-111)", "ru": "Сеть полка (Р-111)", "items": ["order_r111", "order_r111_protect", "order_apch_off", "order_apch_on", "order_r111_spare", "order_r111_working", "order_report_regiment"] },
+      { "id": "battery", "en": "Battery net", "ru": "Батарейная сеть", "items": ["order_fug4_spare", "order_fug4_working", "order_battery_spare", "order_battery_duty", "order_battery_simplex", "net_jammed"] },
+      { "id": "warning", "en": "Warning net", "ru": "Сеть оповещения", "items": ["order_fug1_spare", "order_fug1_working", "order_warn_covered", "order_all_clear_covered"] },
+      { "id": "reports", "en": "Ready reports", "ru": "Доклады о готовности", "items": ["oriented", "comms_ready", "mast_up", "radios_ready", "power_on", "aspd_ready", "telecode_on", "r111_tuned"] },
+      { "id": "air", "en": "Air picture", "ru": "Воздушная обстановка", "items": ["plot_new", "plot_turn", "plot_lost", "air_report", "decoded", "regiment_heard", "r111_protect"] }
+    ]
+  }
 }

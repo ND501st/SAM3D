@@ -8,14 +8,16 @@
 //   SpeechText       a callout's words with the azimuths in mils, the numbers and the abbreviations spelled out
 //   InstructorSpeech a lesson's words for an English voice (tutorial.hpp): the Russian in Latin letters
 //   RussianNumber    0..999 in words
-//   VoiceFor         the voice settings for a speaker, stressed or not
+//   VoiceFor         the voice settings for a speaker, by his stress level (0 calm to 1)
 //   RecordedLineLengths  the lengths of the recorded lines the game plays (art/crew_voices/<language>), for the bus
+//   GlossLine        what a heard line's abbreviations and azimuths mean, in English (the helper's comprehension aid)
 //
 // The simulation's timing is the bus's: a line takes SpeakingTimeS, and a recorded line the recording's length; a speech
 // engine's voice plays alongside it and doesn't move it.
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <fstream>
@@ -40,8 +42,9 @@ struct VoiceSeat {
 struct VoiceData {
     std::vector<std::string> languages;  // "ru", "en": the first one there is a voice for
     std::vector<VoiceSeat> seats;
-    int stress_pitch = 0;  // added while the speaker is stressed
+    int stress_pitch = 0;  // added at full stress (in proportion below it)
     int stress_rate = 0;
+    double stress_gain = 0.0;  // the voice's loudness, as a fraction more at full stress
     double intercom_low_hz = 300.0;
     double intercom_high_hz = 3400.0;
     double radio_low_hz = 300.0;
@@ -49,6 +52,7 @@ struct VoiceData {
     double cabin_low_hz = 120.0;  // said aloud inside the vehicle: no set between speaker and ear
     double cabin_high_hz = 8000.0;
     std::map<std::string, std::map<std::string, std::string>> say;  // language -> written -> spoken
+    std::map<std::string, std::string> gloss;  // "gloss": an abbreviation the crew says -> what it means, in English
 
     const VoiceSeat* Seat(const std::string& station) const {
         for (const VoiceSeat& s : seats) {
@@ -69,9 +73,14 @@ struct VoiceSettings {
     bool radio = false;
     double low_hz = 300.0;
     double high_hz = 3400.0;
+    double volume = 1.0;  // louder under stress (stress_gain)
+    // Picked up by a throat microphone: the R-124's headsets have laryngophones (r124_refs), so an intercom voice has
+    // the throat's dull, boomy sound rather than the mouth's.
+    bool throat = false;
 };
 
-inline VoiceSettings VoiceFor(const VoiceData& v, const std::string& station, bool stressed, const std::string& channel) {
+// `stress` is the speaker's level, 0 calm to 1 (ScenarioRunner::CrewActivity): pitch, pace and loudness rise with it.
+inline VoiceSettings VoiceFor(const VoiceData& v, const std::string& station, double stress, const std::string& channel) {
     VoiceSettings out;
     if (const VoiceSeat* s = v.Seat(station)) {
         out.pitch = s->pitch;
@@ -84,10 +93,10 @@ inline VoiceSettings VoiceFor(const VoiceData& v, const std::string& station, bo
     } else if (channel != "intercom") {
         out.radio = true;
     }
-    if (stressed) {
-        out.pitch += v.stress_pitch;
-        out.rate += v.stress_rate;
-    }
+    const double level = stress < 0.0 ? 0.0 : (stress > 1.0 ? 1.0 : stress);
+    out.pitch += static_cast<int>(std::lround(v.stress_pitch * level));
+    out.rate += static_cast<int>(std::lround(v.stress_rate * level));
+    out.volume = 1.0 + v.stress_gain * level;
     out.pitch = out.pitch < -10 ? -10 : (out.pitch > 10 ? 10 : out.pitch);
     out.rate = out.rate < -10 ? -10 : (out.rate > 10 ? 10 : out.rate);
     if (aloud) {
@@ -97,7 +106,11 @@ inline VoiceSettings VoiceFor(const VoiceData& v, const std::string& station, bo
         out.low_hz = out.radio ? v.radio_low_hz : v.intercom_low_hz;
         out.high_hz = out.radio ? v.radio_high_hz : v.intercom_high_hz;
     }
+    out.throat = channel == "intercom" && !out.radio;
     return out;
+}
+inline VoiceSettings VoiceFor(const VoiceData& v, const std::string& station, bool stressed, const std::string& channel) {
+    return VoiceFor(v, station, stressed ? 1.0 : 0.0, channel);
 }
 
 // 0..999 in Russian words (masculine): 35 -> "тридцать пять".
@@ -276,7 +289,7 @@ class VoiceLoader : public ConsoleLoader {
 public:
     bool LoadVoices(const json::Value& root, const CrewData* crew, VoiceData& out) {
         if (!Keys(root, "", {"voices_id", "status", "notes", "source", "confidence", "languages", "seats", "stress", "bands",
-                             "say"}) ||
+                             "say", "gloss"}) ||
             !Provenance(root, "") || !StringList(root, "", "languages", out.languages)) {
             return false;
         }
@@ -307,8 +320,9 @@ public:
             }
         }
         if (const json::Value* st = root.Find("stress")) {
-            if (!Keys(*st, "stress", {"pitch", "rate", "source", "confidence", "notes"}) || !Provenance(*st, "stress") ||
-                !OptionalInt(*st, "stress", "pitch", out.stress_pitch) || !OptionalInt(*st, "stress", "rate", out.stress_rate)) {
+            if (!Keys(*st, "stress", {"pitch", "rate", "gain", "source", "confidence", "notes"}) || !Provenance(*st, "stress") ||
+                !OptionalInt(*st, "stress", "pitch", out.stress_pitch) || !OptionalInt(*st, "stress", "rate", out.stress_rate) ||
+                !OptionalNumber(*st, "stress", "gain", out.stress_gain)) {
                 return false;
             }
         }
@@ -334,6 +348,16 @@ public:
                 }
                 if (!Provenance(*words, p)) return false;
             }
+        }
+        if (const json::Value* g = root.Find("gloss")) {
+            if (!g->Is(json::Type::Object)) return Fail("gloss", "expected an object: abbreviation -> meaning");
+            for (const std::string& w : g->keys) {
+                if (w == "source" || w == "confidence" || w == "notes") continue;
+                const json::Value* meaning = g->Find(w);
+                if (!meaning->Is(json::Type::String) || meaning->string.empty()) return Fail(Join("gloss", w), "expected a meaning");
+                out.gloss[w] = meaning->string;
+            }
+            if (!Provenance(*g, "gloss")) return false;
         }
         return true;
     }
@@ -393,6 +417,38 @@ inline bool LoadVoiceDataFile(const std::string& path, const CrewData* crew, Voi
         return false;
     }
     return true;
+}
+
+// What a heard line's short words mean, for a player still learning them (docs/crew/15_TALK.md section 6; the game
+// shows it under the line while the helper is on): each abbreviation of the gloss table in the line, and each azimuth in
+// thousandths as degrees. "" when there is nothing to explain. It explains what was heard and adds nothing to it.
+inline std::string GlossLine(const std::string& words, const VoiceData& v) {
+    const auto letter = [](unsigned char ch) { return ch >= 0x80 || (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'); };
+    std::string out;
+    const auto add = [&out](const std::string& s) { out += (out.empty() ? "" : "; ") + s; };
+    for (const auto& g : v.gloss) {
+        std::size_t at = 0;
+        while ((at = words.find(g.first, at)) != std::string::npos) {
+            const std::size_t end = at + g.first.size();
+            const bool alone = (at == 0 || !letter(static_cast<unsigned char>(words[at - 1]))) &&
+                               (end >= words.size() || !letter(static_cast<unsigned char>(words[end])));
+            if (alone) {
+                add(g.first + " = " + g.second);
+                break;
+            }
+            at = end;
+        }
+    }
+    for (std::size_t i = 0; i + 5 <= words.size(); ++i) {
+        const auto digit = [&words](std::size_t k) { return words[k] >= '0' && words[k] <= '9'; };
+        if (!(digit(i) && digit(i + 1) && words[i + 2] == '-' && digit(i + 3) && digit(i + 4))) continue;
+        if ((i > 0 && digit(i - 1)) || (i + 5 < words.size() && digit(i + 5))) continue;
+        const int mils = (words[i] - '0') * 1000 + (words[i + 1] - '0') * 100 + (words[i + 3] - '0') * 10 + (words[i + 4] - '0');
+        if (mils >= 6000) continue;
+        add(words.substr(i, 5) + " = " + std::to_string(static_cast<int>(std::lround(mils * 0.06)) % 360) + "° (thousandths of 6000)");
+        i += 4;
+    }
+    return out;
 }
 
 // The length in seconds of a WAV file the game can play (16-bit PCM, mono or stereo: SimCrewVoiceComponent's ReadWav);

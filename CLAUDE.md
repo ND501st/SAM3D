@@ -200,7 +200,10 @@ the drill master knowing the walk, wire laying.
 Voices (`docs/crew/12_COMMUNICATIONS.md`): inside a vehicle a seat hears the intercom, a radio or a telephone line only
 through its headset and its box's selector (`simcore/voice_comms.hpp`); a net only while its set is on, warm, on the net's
 numbered frequency and not jammed out (`simcore/radio_nets.hpp`). Route new speech through the callout bus's router, never
-straight to every seat.
+straight to every seat. The crew's talk (roadmap 8.15, `docs/crew/15_TALK.md`): the bus takes turns (a gap between
+speakers, urgent lines break in, stale lines dropped, one caller per fact), stress is a level per crewman from what he
+heard and saw, and the crew menu is a radial marking menu on Caps Lock (eight sectors in fixed places, the replies on U,
+I, P). A new callout or order needs a place in its crew data's `"menu"` (`test_crew_talk.cpp` checks every seat's lines).
 
 The helper (`docs/crew/14_HELPER.md`, `simcore/helper.hpp`; the missions menu's Helper, H in the cabin): it shows the
 move the player's seat's NPC would make now, so it has no rules of its own. **Every NPC act at a seat goes through

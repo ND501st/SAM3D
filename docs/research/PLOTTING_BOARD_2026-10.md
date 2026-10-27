@@ -71,7 +71,7 @@ propose. The NVA plotters' handbook may say more.
 * its actions: a turn of 60° or more between its reports (`data/gameplay/comms.json` `plot_turn_deg`);
 * a target lost: three reporting periods with no new mark (`plot_lost_s`).
 
-An NPC plotter says each as it happens; a player's reports wait, filled in from his board, in his reports menu (O) until
+An NPC plotter says each as it happens; a player's reports wait, filled in from his board, in his reports menu (Caps Lock; O until 27 Oct 2026) until
 he says them, and one unsaid for two minutes is missed and named in the debrief. The commander decides on them
 (art. 17): the NPC commander takes a new board target into his picture (the covered regiment's warning, the fire
 distribution) when the plotter calls it, or only when he finds it on his next look over the board, 30 s on

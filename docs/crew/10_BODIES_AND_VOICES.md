@@ -66,11 +66,11 @@ One `SeatActivity` per crew member, built from `CrewMember::CurrentIntent` and t
 
 | Piece | What it does |
 |---|---|
-| `data/crew/voices.json` | One file for every crew (the Osa's and the PU-12M's; a crew takes its own seats' voices). The languages in order (Russian, then English); each seat's voice (pitch and rate on the speech engine's −10..10 scale); stress (+2 pitch, +2 rate); the intercom's band (300–3400 Hz) and the radio's (300–3000 Hz); how the crew says its abbreviations (ГТА "гэ тэ а", ССЦ "эс эс цэ", СОЦ as a word) |
+| `data/crew/voices.json` | One file for every crew (the Osa's and the PU-12M's; a crew takes its own seats' voices). The languages in order (Russian, then English); each seat's voice (pitch and rate on the speech engine's −10..10 scale); stress (at full stress +2 pitch, +2 rate and 30 % louder, in proportion below it: `15_TALK.md` §4); what the abbreviations mean (`gloss`, shown with the helper on: `15_TALK.md` §6); the intercom's band (300–3400 Hz) and the radio's (300–3000 Hz); how the crew says its abbreviations (ГТА "гэ тэ а", ССЦ "эс эс цэ", СОЦ as a word) |
 | `crew_voice.hpp` | `SpeechText`: a callout's words for a speech engine. Azimuths in mils are read in pairs ("35-00": "тридцать пять ноль-ноль", "three five, zero zero"), board numbers in pairs, other numbers in Russian words, abbreviations spelled. `VoiceFor`: a speaker's voice, stressed or not, intercom or radio |
 | `CalloutBus` | Numbers each line as it starts (`seq`) and says what is being said now (`Now`), so a voice plays each line once |
 | Unreal `FSimSpeech` | Windows' own speech engine (SAPI) on a worker thread, with its desktop voices and the "OneCore" voices of the language packs. Text in, 16-bit PCM out |
-| Unreal `USimCrewVoiceComponent` | Plays every new line in its seat's voice through the intercom's or the radio's band. Radio lines get a little hiss and the squelch's tail. A new line on a channel keys over the old one |
+| Unreal `USimCrewVoiceComponent` | Plays every new line in its seat's voice through the intercom's or the radio's band. Intercom lines first go through a throat microphone (the R-124's laryngophone headsets: `15_TALK.md` §7); a word said aloud in the cabin comes from the speaker's head; a channel with a less urgent line is ducked under a more urgent one. Radio lines get a little hiss and the squelch's tail. A new line on a channel keys over the old one |
 
 **Languages.** The crew speaks Russian when a Russian voice is installed. On Windows that means Settings, then Time &
 language, then Speech, then Add voices, then Russian. Otherwise it speaks the English lines. The machine this was

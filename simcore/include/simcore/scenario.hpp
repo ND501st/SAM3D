@@ -186,6 +186,9 @@ struct ScenarioDef {
     std::string id;
     std::string name;
     std::string description;
+    // "exercise" (a range day, a drill, a lesson: the default) or "war" (a battle, the air war's raids): a war sets the
+    // crew's stress a step higher from the start (docs/crew/15_TALK.md section 4).
+    std::string setting = "exercise";
     unsigned seed = 1;
     GeoPoint origin;
     double ground_height_m = 0.0;  // flat terrain (MSL); terrain grids come with Cesium
@@ -313,13 +316,16 @@ public:
     bool Load(const json::Value& root, const std::string& data_dir, ScenarioDef& out, ConsoleData& console) {
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
-                             "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data"})) {
+                             "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
+                             "setting"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
             return false;
         }
+        if (!OptionalString(root, "", "setting", out.setting)) return false;
+        if (out.setting != "exercise" && out.setting != "war") return Fail("setting", "must be \"exercise\" or \"war\"");
         int seed = 1;
         if (!OptionalInt(root, "", "seed", seed)) return false;
         if (seed < 0) return Fail("seed", "must be >= 0");

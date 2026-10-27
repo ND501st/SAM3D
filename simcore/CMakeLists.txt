@@ -76,6 +76,7 @@ add_executable(simcore_tests
   tests/test_crew_body.cpp
   tests/test_crew_mobility.cpp
   tests/test_crew_voice.cpp
+  tests/test_crew_talk.cpp
   tests/test_crew_training.cpp
   tests/test_crew_systems.cpp
   tests/test_pu12m_console.cpp

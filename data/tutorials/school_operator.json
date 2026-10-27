@@ -66,10 +66,10 @@
     {
       "id": "seat_ready", "title": "Report your seat: «Третий готов!»", "report": "seat_ready",
       "lines": [
-        "At your place, your headset on: report to the commander on the intercom: O, then «Третий готов!» (Seat three ready!)."
+        "At your place, your headset on: report to the commander on the intercom: Caps Lock, then «Третий готов!» (Seat three ready!)."
       ],
       "why": "The intercom check: each seat says it is in place and hears the commander (voenizdat_osa_1991 p. 246). The R-124 runs on the vehicle's 27 V: it works before the turbine is up.",
-      "hint": "O: your reports, then the highlighted line's number."
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "equipment", "title": "Switch the equipment on", "control": "pwr.equipment", "position": 1, "procedure": "equipment_on",
@@ -117,9 +117,9 @@
     },
     {
       "id": "report_apu", "title": "Report it: «АПУ расстопорено!»", "report": "apu_free",
-      "lines": ["Tell the crew: open your reports with O and pick «АПУ расстопорено!» (Launcher-antenna unit unlocked!). The deputy commander waits for it."],
+      "lines": ["Tell the crew: open your reports with Caps Lock and pick «АПУ расстопорено!» (Launcher-antenna unit unlocked!). The deputy commander waits for it."],
       "why": "Knowledge moves only by voice: in the real crew nobody can see your switches, so you say what you did.",
-      "hint": "O: your reports, then the highlighted line's number."
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "warmup", "title": "Warming up", "done_when": ["subsystem:hv_ready=ready"], "fast_forward": true,
@@ -191,8 +191,8 @@
     },
     {
       "id": "report_capture", "title": "Report it: «Захват!»", "report": "captured",
-      "lines": ["Tell the crew: O, then «Захват!» (Captured!). The commander waits for it before he orders the missiles prepared."],
-      "hint": "O: your reports, then the highlighted line's number."
+      "lines": ["Tell the crew: Caps Lock, then «Захват!» (Captured!). The commander waits for it before he orders the missiles prepared."],
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "prepare", "chapter": "Firing", "title": "The commander: «Приготовиться к пуску!»", "done_when": ["subsystem:missile_prep=ready"],

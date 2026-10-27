@@ -16,7 +16,7 @@
     { "station": "radio_operator", "pitch": 1, "rate": 3, "notes": "The PU-12M's radiotelephone operator." },
     {"station": "battery", "pitch": -1, "rate": 2, "radio": true, "notes": "The battery commander on the battery net (an R-123M)."}
   ],
-  "stress": {"pitch": 2, "rate": 2, "source": "sam3d estimate: a stressed crewman speaks higher and faster", "confidence": "estimate"},
+  "stress": {"pitch": 2, "rate": 2, "gain": 0.3, "source": "sam3d estimate: at full stress a crewman speaks higher, faster and louder, in proportion below it (docs/crew/15_TALK.md section 4); reviews of stressed speech report pitch and loudness rising, with large differences between speakers (Kirchhübel, Howard and Stedmon 2011)", "confidence": "estimate"},
   "bands": {
     "intercom_hz": [300, 3400],
     "radio_hz": [300, 3000],
@@ -53,5 +53,28 @@
       "source": "sam3d: initialisms spelled out (an engine reads ARM as the word 'arm'); radio sets' numbers digit by digit, as the English lines read board numbers",
       "confidence": "estimate"
     }
+  },
+  "gloss": {
+    "ПРР": "anti-radiation missile (противорадиолокационная ракета)",
+    "СОЦ": "the search radar (станция обнаружения целей)",
+    "ССЦ": "the tracking radar (станция сопровождения целей)",
+    "СПК": "the missile command link (станция передачи команд)",
+    "ТОВ": "the TV-optical sight (телевизионно-оптический визир)",
+    "ТВ": "the TV tracker",
+    "АПУ": "the launcher-antenna unit (антенно-пусковое устройство)",
+    "ТЗМ": "the transloader (транспортно-заряжающая машина)",
+    "ГТА": "the gas-turbine power unit (газотурбинный агрегат)",
+    "СДЦ": "moving target indication (селекция движущихся целей)",
+    "НЛЦ": "a low-flying target (низколетящая цель)",
+    "РЛС": "a radar (радиолокационная станция)",
+    "КП": "command post (командный пункт)",
+    "ПУ": "control post (пункт управления)",
+    "ЦУ": "target designation (целеуказание)",
+    "АПЧ": "automatic frequency control (автоматическая подстройка частоты)",
+    "ЗПЧ": "a preset frequency (заранее подготовленная частота)",
+    "Р-111": "the R-111 radio set, on the regiment's net",
+    "source": "sam3d: the standard Russian expansions of the abbreviations the crew's lines use, in the English the lines use; СРП and АСПД are left out until a source gives their expansion",
+    "confidence": "high",
+    "notes": "Shown under a heard line while the helper is on (simcore GlossLine, docs/crew/15_TALK.md section 6). It explains words; it never adds what was not said."
   }
 }

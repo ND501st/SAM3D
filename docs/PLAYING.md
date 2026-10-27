@@ -91,7 +91,7 @@ what the regiment reads out on the air-picture net, square by square, out to 200
 commander's: the plotter doesn't copy it): with the cross on the board the mouse wheel picks the number of a report
 heard (a small chip beside the cross), a click writes it there. Within
 5 cm of the right square the mark is exact; further off it lands off the target. The air-picture lines fade in a few
-seconds: remember the square. He calls each new target to the commander aloud as he writes it (O, then «Новая цель …»,
+seconds: remember the square. He calls each new target to the commander aloud as he writes it (Caps Lock, then «Новая цель …»,
 filled in from the board), and a turn or a lost target the same way: the NPC commander has a new target from that call,
 or only half a minute later from his own look at the board, and a report left unsaid for two minutes is missed in the
 debrief. The battery commander
@@ -112,8 +112,9 @@ How a step works:
   your head onto it.
 - **Only the lit control works** in a seat lesson; anything else says why not. Do the step and the next one comes up,
   with a tick at the top of the screen. A hand wheel shows a gauge: where the wheel is, the mark, which way to turn.
-- **Orders and reports**: O opens the crew menu on the page with the step's line, marked *<-- this one*; pick it by its
-  number. It counts at once; the intercom says it when it is free.
+- **Orders and reports**: Caps Lock opens the crew menu, a ring of eight sectors; the sector with the step's line and the
+  line itself are green. Point the mouse at it and click (or flick out to it), or press its number; 0 says the green
+  line at once. It counts at once; the intercom says it when it is free.
 - **Waits** run time faster on their own (the turbine spinning up, the radar warming); it goes back to normal for your
   next move.
 - **The instructor** reads each new step aloud (English; `sam3d.InstructorVoice 0` in the console silences him).
@@ -173,14 +174,15 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | W A S D, Shift (outside) | Walk on the roof (not past its edges or onto the antenna unit or the mast) or over the ground at the drill pace; Shift runs. Never through the hull |
 | Click a job's case inside | A job done outside (the PU-12M's AB-1 set and PAB-2 aiming circle, the Osa's aiming circle): you are walked out to it and do it there. Out there, look at it within 3 m and click |
 | T | Take this seat, or give it back |
-| O | Orders (at the commander's seat; the Osa commander's own words on the battery net follow them: his readiness, a read-back) or reports (any other); 1-9 pick, 0 next page, Esc close |
+| Caps Lock | The crew menu, a ring of eight sectors always in the same places (docs/crew/15_TALK.md §5): orders at the commander's seat (with his words on the battery net: his readiness, a read-back), reports at any other. Tap to open and point with the mouse and click, or hold, flick to the sector and on to the line, and let go. 1-8 the places clockwise from the top, 0 the green (advised) line, 9 or the wheel the next page, Backspace back, Tab (commander) whom to order first, Esc close |
+| U / I / P | Reply «Есть!» / «Выполнено!» / «Повторите!» (the last line said to you said again) |
 | H | The helper: off, hints, on, watch the crewman (kept for the next missions) |
 | N | The helper makes its move for you (outside a lesson) |
 | J | Your headset on or off |
 | K / Shift+K | Turn your intercom box (ВС, РСТ-1..4; the Osa's А-1: off, intercom, radio) |
 | Y | Answer a ringing line or telephone; again: put it down |
 | 1-9 | Quick crew drills (outside the crew menu) |
-| B | In the PU-12M: its plotting board. In a launcher: the designations the crew has heard (the board is in the post) |
+| B | In the PU-12M: its plotting board. In a launcher: the designations the crew has heard (the board is in the post), and what your crewman knows of the air from his scope and what he was told |
 | V | The other vehicle (a battery link) |
 | [ ], 1-5 | PU-12M battery commander: pick a board target, give it to a launcher |
 | Wheel, click on the board | PU-12M plotter: pick the number to write, write it where you click |

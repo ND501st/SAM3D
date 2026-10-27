@@ -206,7 +206,8 @@ SC_TEST("crew voice: a recorded line takes its recording's time on the bus, so t
     SC_EXPECT(log.size() == 2u);
     if (log.size() == 2u) {
         SC_EXPECT_NEAR(log[0].end_s - log[0].start_s, 1.37, 1e-9);
-        SC_EXPECT(log[1].start_s >= log[0].end_s - 1e-9 && log[1].start_s < log[0].end_s + 0.1 + 1e-9);
+        // ... a moment after it ends (the gap between speakers, docs/crew/15_TALK.md section 2).
+        SC_EXPECT(log[1].start_s >= log[0].end_s + CalloutBus::kTurnGapS - 1e-9 && log[1].start_s < log[0].end_s + CalloutBus::kTurnGapS + 0.1 + 1e-9);
         SC_EXPECT_NEAR(log[1].end_s - log[1].start_s, SpeakingTimeS("Выполнено!"), 1e-9);
     }
 }

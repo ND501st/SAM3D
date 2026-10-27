@@ -124,7 +124,7 @@ Lamps: АНТЕННА СОЦ ЗАСТОПОРЕНА, СИСТЕМА СТАБ., �
 | `drv.el` | ПРИВОДЫ εн, СВР-I, СВР-II ВКЛ. — ОТКЛ. | ОТКЛ. / ВКЛ. | `antenna_drives` (enable =1) | `deploy_at_halt` 3→1; `stow_ssc` 3→0 | `order_k_boyu`, `order_march`, `order_otboy`, `order_unlock_apu` |
 | `tov.supply` | ТОВ — ОТКЛ. | ОТКЛ. / ТОВ | `tov_camera` (enable =1) | `equipment_on` 4→1; `equipment_off` 2→0 | `order_equipment_on`, `order_k_boyu`, `order_otboy` |
 | `ssc.tx_cover` | guard over ПЕРЕДАТЧИК | closed / open | – | `capture_with_ssc` 3→1; `stow_ssc` 2→0 | `order_march`, `order_otboy`, `order_take_target` |
-| `ssc.tx` | ПЕРЕДАТЧИК | ОТКЛ / ВКЛ | `ssc_transmitter` (enable =1); `range_semi_auto` (release =0) | `capture_with_ssc` 4→1; `ssc_tx_off` 1→0; `stow_ssc` 1→0 | `order_march`, `order_otboy`, `order_ssc_off`, `order_take_target` |
+| `ssc.tx` | ПЕРЕДАТЧИК | ОТКЛ / ВКЛ | `ssc_transmitter` (enable =1); `range_semi_auto` (release =0) | `capture_with_ssc` 4→1; `ssc_tx_off` 1→0; `stow_ssc` 1→0 | `order_emcon_off`, `order_march`, `order_otboy`, `order_ssc_off`, `order_take_target` |
 | `ssc.range_wheel` | range wheel | wheel | – | – | – |
 | `ssc.mti` | СДЦ / ШТ. (SSC) | ШТ. / СДЦ | – | `capture_with_ssc` 2→1; `counter_pull_off` 2→1 | `order_counter_pulloff`, `order_take_target` |
 | `ssc.rgpo` | УВ. ПОМЕХА — ОТКЛ. | ОТКЛ. / УВ. ПОМЕХА | – | `counter_pull_off` 1→1; `pull_off_protection_off` 1→0 | `order_counter_pulloff`, `order_protection_off` |
@@ -455,7 +455,7 @@ Lamps: R-123M left: настройка антенны, R-123M left: готова
 |---|---|---|---|---|
 | 1 | `soc.beam` | 4 | – | – |
 
-### `ssc_tx_off` (operator): Tracking transmitter off (against ARMs) — ordered by `order_ssc_off`
+### `ssc_tx_off` (operator): Tracking transmitter off (against ARMs) — ordered by `order_emcon_off`, `order_ssc_off`
 
 | Step | Control | Position | Waits for | Other seats it waits on |
 |---|---|---|---|---|
@@ -691,7 +691,7 @@ Rows wait for columns: the drills of the row's seat that wait on something the c
 | `order_drop_target` | Цель сбросить! | Drop the target! | – | – |
 | `order_counter_pulloff` | Уводящая помеха! Защиту включить! | Range pull-off! Protection on! | operator: `counter_pull_off` | – |
 | `order_protection_off` | Защиту от помех выключить! | Counter-jamming off! | operator: `pull_off_protection_off` | – |
-| `order_emcon_off` | Излучение выключить! | Radiation off! | senior_operator: `stop_search` | `silent` |
+| `order_emcon_off` | Излучение выключить! | Radiation off! | senior_operator: `stop_search`; operator: `ssc_tx_off` | `silent` |
 | `order_ssc_off` | Высокое ССЦ выключить! | Tracking transmitter off! | operator: `ssc_tx_off` | – |
 | `order_emcon_tv` | Работать без излучения! | Engage without radiating! | senior_operator: `emcon_tv_azimuth`; deputy_commander: `emcon_tv_engagement` | – |
 

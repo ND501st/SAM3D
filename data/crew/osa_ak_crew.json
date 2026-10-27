@@ -221,7 +221,7 @@
     { "callout": "order_drop_target", "needs": ["tracked"], "source": "sam3d: the track is let go (the operator's and the senior operator's wheels off the target); no switch of its own", "confidence": "estimate" },
     { "callout": "order_counter_pulloff", "needs": ["tracked"], "procedures": [ { "station": "operator", "procedure": "counter_pull_off" } ], "source": "voenizdat_osa_1991 p259, p266", "confidence": "medium" },
     { "callout": "order_protection_off", "procedures": [ { "station": "operator", "procedure": "pull_off_protection_off" } ], "source": "voenizdat_osa_1991 p259", "confidence": "medium" },
-    { "callout": "order_emcon_off", "task": "silent", "procedures": [ { "station": "senior_operator", "procedure": "stop_search" } ], "source": "sam3d", "confidence": "estimate" },
+    { "callout": "order_emcon_off", "task": "silent", "procedures": [ { "station": "senior_operator", "procedure": "stop_search" }, { "station": "operator", "procedure": "ssc_tx_off" } ], "source": "sam3d: both transmitters, its task silent (the tracking transmitter's drill as order_ssc_off's)", "confidence": "estimate" },
     { "callout": "order_ssc_off", "procedures": [ { "station": "operator", "procedure": "ssc_tx_off" } ], "source": "voenizdat_osa_1991 p262 (the tracking transmitter's high voltage off after the burst)", "confidence": "medium" },
     { "callout": "order_emcon_tv", "procedures": [ { "station": "senior_operator", "procedure": "emcon_tv_azimuth" }, { "station": "deputy_commander", "procedure": "emcon_tv_engagement" } ], "source": "sam3d, after samsim_osa p33-35", "confidence": "estimate" }
   ],
@@ -307,5 +307,19 @@
     { "callout": "missile_ready", "from": "deputy_commander", "when": { "subsystem": "missile_prep", "is": "ready" }, "source": "sam3d", "confidence": "estimate" },
     { "callout": "missile_away", "from": "deputy_commander", "when": { "input": "ch1_skhod", "is": true }, "source": "sam3d", "confidence": "estimate" },
     { "callout": "missile_away", "from": "deputy_commander", "when": { "input": "ch2_skhod", "is": true }, "source": "sam3d", "confidence": "estimate" }
-  ]
+  ],
+  "menu": {
+    "notes": "The radial crew menu (docs/crew/15_TALK.md section 5): eight sectors clockwise from the top, each with its lines in order; a seat sees the lines it may say (orders at the commander's seat, its reports and warnings elsewhere), each in a fixed place, a greyed one keeping it. Presentation data.",
+    "source": "sam3d", "confidence": "estimate",
+    "sectors": [
+      { "id": "fire", "en": "Fire", "ru": "Огонь", "items": ["order_prepare", "fire_permitted", "order_second_missile", "order_jammer", "missile_ready", "launch", "missile_away", "hit", "miss", "result_unknown", "launcher_empty", "kill_sign_flies_on"] },
+      { "id": "target", "en": "Target", "ru": "Цель", "items": ["order_take_target", "order_drop_target", "order_tv_watch", "order_low_target", "order_semi_auto", "order_iff", "az_on", "iff_friend", "iff_no_reply", "group_pick", "range_on", "captured", "capture_failed", "lock_lost", "range_pulled", "on_jammer", "tv_track", "tv_range", "too_low", "target_near_zone", "target_in_zone", "false_target"] },
+      { "id": "search", "en": "Search", "ru": "Поиск", "items": ["order_search", "order_search_on_march", "order_stop_search", "order_mti", "order_hv_on", "order_hv_off", "contact", "contact_lost", "jamming", "target_still_flying"] },
+      { "id": "threats", "en": "Emission and threats", "ru": "Излучение, угроза", "items": ["order_emcon_off", "order_emcon_on", "order_emcon_tv", "order_ssc_off", "order_counter_pulloff", "order_protection_off", "air_alert", "arm_launch", "arm_turn_away", "arm_launch_track", "arm_launch_tv"] },
+      { "id": "readiness", "en": "Readiness", "ru": "Готовность", "items": ["order_k_boyu", "order_otboy", "order_equipment_on", "order_function_check", "order_presets", "order_radio_on", "order_orient", "order_compass", "seat_ready", "soc_ready", "ssc_ready", "spk_ready", "missiles_ready", "power_on", "fault"] },
+      { "id": "march", "en": "March and position", "ru": "Марш, позиция", "items": ["order_march", "order_unlock_apu", "order_gta", "order_generator", "order_antenna_down", "order_antenna_up", "order_dismount", "order_mount", "ready_to_march", "halted", "fuel_half", "apu_locked", "apu_free"] },
+      { "id": "net", "en": "Battery net", "ru": "Батарея", "items": ["report_ready", "readback", "net_jammed"] },
+      { "id": "kill", "en": "Kill signs", "ru": "Признаки поражения", "items": ["kill_sign_burst", "kill_sign_mark_gone", "kill_sign_elevation_drop", "kill_sign_group_split", "kill_sign_jamming_stops", "kill_sign_chaff_stops", "kill_sign_tv_fire", "kill_sign_reply_early", "kill_sign_reply_after", "kill_sign_tv_whole"] }
+    ]
+  }
 }

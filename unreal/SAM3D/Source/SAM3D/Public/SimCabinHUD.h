@@ -41,8 +41,9 @@ public:
 	float AirPictureLineSeconds = 6.f;
 
 private:
-	/** The radio lines, the newest at the bottom, ending above Bottom (clear of the PU-12M's aids). */
-	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font, float Bottom, const FString& Station);
+	/** The radio lines, the newest at the bottom, ending above Bottom (clear of the PU-12M's aids); with bGloss (the
+	 *  helper on) what a line's abbreviations and azimuths mean, under it. */
+	void DrawRadio(class USimWorldSubsystem* Sim, class UFont* Font, float Bottom, const FString& Station, bool bGloss = false);
 	/** The radio journal's page held up before the eyes: ruled paper, the entries in the radiotelephonist's hand, the line
 	 * being written with its printed words and a box for each group of digits. */
 	void DrawJournal(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
@@ -53,7 +54,11 @@ private:
 	/** A faint dark backing for a block of text over the bright instruments. */
 	void DrawBacking(float X, float Y, float W, float H);
 	void DrawCrew(const class ASimOsaVehicle* Vehicle, class UFont* Font);
-	void DrawBoard(class USimWorldSubsystem* Sim, class UFont* Font);
+	/** The radial crew menu (Caps Lock), over the middle of the view. */
+	void DrawCrewMenu(const class ASimOsaVehicle* Vehicle, class UFont* Font);
+	/** The PU-12 board (B); in a launcher the designations heard, and beside them what the seat's crewman knows of the air
+	 *  (his own picture: what I've heard). */
+	void DrawBoard(class USimWorldSubsystem* Sim, class UFont* Font, const FString& Station);
 	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	/** The camera view's name, the view's last note and the time compression, at the top. */
 	void DrawView(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);

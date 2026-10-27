@@ -230,9 +230,18 @@ public:
     }
     bool HasSkill() const { return has_skill_; }
     const CrewSkill& Skill() const { return skill_; }
-    // Under stress (night, jamming, under fire, a target in the zone with no track) delays and chances grow.
-    void SetStressed(bool stressed) { stressed_ = stressed; }
+    // Under stress (night, jamming, under fire, a target in the zone with no track) delays and chances grow: by the tier's
+    // stress factor at full stress (level 1), in proportion below it (docs/crew/15_TALK.md section 4). Stressed() from
+    // half on.
+    void SetStressed(bool stressed) { SetStressLevel(stressed ? 1.0 : 0.0); }
+    void SetStressLevel(double level) {
+        stress_level_ = level < 0.0 ? 0.0 : (level > 1.0 ? 1.0 : level);
+        stressed_ = stress_level_ >= 0.5;
+    }
     bool Stressed() const { return stressed_; }
+    double StressLevel() const { return stress_level_; }
+    // What stress multiplies his delays and chances by now: 1 calm, the tier's stress factor at full stress.
+    double StressMultiplier() const { return 1.0 + (skill_.stress_factor - 1.0) * stress_level_; }
     // Slips and omissions so far (the debrief and the tests).
     int Slips() const { return slips_; }
     int Omissions() const { return omissions_; }
@@ -442,7 +451,7 @@ private:
     // How long the step takes this crew member (reaction and jitter, a forgotten step's patience, stress), and
     // whether he slips (does the next step first). A slip is only possible between two steps that wait for nothing.
     void DrawStep() {
-        const double stress = stressed_ ? skill_.stress_factor : 1.0;
+        const double stress = StressMultiplier();
         double d = skill_.reaction_s + (2.0 * Uniform() - 1.0) * skill_.jitter_s;
         d = (d > 0.05 ? d : 0.05) * stress;
         for (const std::string& c : skill_.decision_controls) {
@@ -522,6 +531,7 @@ private:
     CrewSkill skill_;
     std::mt19937 rng_;
     bool stressed_ = false;
+    double stress_level_ = 0.0;
     std::size_t drawn_for_step_ = static_cast<std::size_t>(-1);
     unsigned serial_ = 0;        // procedures started (a new one's first step is a new step even at the same index)
     unsigned drawn_serial_ = 0;

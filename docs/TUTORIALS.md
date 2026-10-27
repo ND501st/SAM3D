@@ -120,7 +120,8 @@ Top right (the left while the plotting board is up), `ASimCabinHUD::DrawGuide`:
   the tolerance as a green band, and which way to turn.
 - The lines, then "Why: ...", the hint, and a status line that always says what happens next: "Enter: continue",
   "Your move.", "Waiting for ...", "Watch: waiting for ...", or, away from the lesson's seat, "Back to your seat first".
-- The crew menu (O) opens below the card, on the page with the step's line, marked "<-- this one".
+- The crew menu (Caps Lock, a ring of eight sectors: `docs/crew/15_TALK.md` §5) opens below the card; the sector
+  with the step's line and the line itself are green, and 0 says it.
 - The card's sizes follow the window (laid out for 900 px high, up to twice that); UE5's small, medium and large
   engine fonts are one size, so the title and the action are scaled text.
 

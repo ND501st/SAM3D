@@ -55,10 +55,11 @@ void ASimCabinHUD::DrawHUD()
 	if (Sim != nullptr && Canvas != nullptr && (Vehicle == nullptr || !Vehicle->IsMissionMenuOpen()))
 	{
 		const float CommsH = DrawComms(Sim, Vehicle, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f);
-		DrawRadio(Sim, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f - CommsH, Vehicle != nullptr ? Vehicle->GetStationId() : FString());
+		DrawRadio(Sim, SmallFont, PostAidsTop(Sim, Vehicle) - 8.0f - CommsH, Vehicle != nullptr ? Vehicle->GetStationId() : FString(),
+			Vehicle != nullptr && Vehicle->IsAssistOn());
 		if (bShowBoard)
 		{
-			DrawBoard(Sim, SmallFont);
+			DrawBoard(Sim, SmallFont, Vehicle != nullptr ? Vehicle->GetStationId() : FString());
 		}
 	}
 	if (Vehicle != nullptr && Sim != nullptr && Canvas != nullptr && Sim->IsScenarioRunning())
@@ -666,7 +667,7 @@ void ASimCabinHUD::DrawGuide(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehi
 		Status = FString::Printf(TEXT("Watch: waiting for %s%s"), *Step.WaitText, Sim->GetTimeScale() > 1.0f ? TEXT("   (time faster)") : TEXT(""));
 		break;
 	case ESimTutorialPhase::Act:
-		Status = Step.Order.IsEmpty() ? FString(TEXT("Your move.")) : FString(TEXT("Your move: O opens the menu; the line is highlighted in green."));
+		Status = Step.Order.IsEmpty() ? FString(TEXT("Your move.")) : FString(TEXT("Your move: Caps Lock opens the menu; the line is green (0 says it)."));
 		StatusColor = Green;
 		break;
 	case ESimTutorialPhase::End:
@@ -780,9 +781,12 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("Drag or wheel on a hand wheel   turn it (held: the head turns to its display)"),
 				TEXT("X   get up and walk (W A S D); X again by a seat sits down")}},
 		{TEXT("The crew"),
-			{TEXT("T   take this seat, or give it back"), TEXT("O   orders (commander's seat) or reports; 1-9 pick, 0 next page"),
+			{TEXT("T   take this seat, or give it back"),
+				TEXT("Caps Lock   the crew menu: orders (commander) or reports; 1-8 or the mouse, 0 the green line"),
+				TEXT("Caps Lock held   flick to a sector, on to a line, let go; Tab (commander) seat first"),
+				TEXT("U / I / P   «Есть!» / «Выполнено!» / «Повторите!»"),
 				TEXT("H   the helper: off, hints, on, watch the crewman"), TEXT("1-9   quick crew drills (outside the crew menu)"),
-				TEXT("B   the PU-12 board (in a launcher: the designations heard)"), TEXT("V   the other vehicle (battery link)")}},
+				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)")}},
 		{TEXT("Headset and radios"),
 			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
 				TEXT("Y   answer a ringing line or telephone (again: put it down)")}},
@@ -1016,7 +1020,7 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 			FString Line = S.Text;
 			if (S.Kind == TEXT("order") || S.Kind == TEXT("report"))
 			{
-				Line += TEXT("   (O: the green line)");
+				Line += TEXT("   (Caps Lock: the green line)");
 			}
 			else if (S.Kind == TEXT("designate"))
 			{
@@ -1067,58 +1071,87 @@ void ASimCabinHUD::DrawCrew(const ASimOsaVehicle* Vehicle, UFont* Font)
 				FLinearColor(1.0f, 0.6f, 0.3f), 20.0f, Y, Font);
 		}
 	}
-	// The crew menu: orders at the commander's seat, this seat's reports elsewhere.
 	if (Vehicle->IsCrewMenuOpen())
 	{
-		const TArray<FSimCrewMenuEntry> Entries = Vehicle->GetCrewMenuEntries();
-		const int32 Page = Vehicle->GetCrewMenuPage();
-		const int32 Pages = FMath::Max(1, (Entries.Num() + 8) / 9);
-		const float X = Canvas->ClipX * 0.5f - 260.0f;
-		float Y = FMath::Max(Canvas->ClipY * 0.25f, GuideBottom + 20.0f);  // below a lesson's card
-		DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X - 10.0f, Y - 10.0f, 860.0f, 230.0f);
-		const USimWorldSubsystem* MenuSim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-		FString LessonLine = MenuSim != nullptr && MenuSim->HasTutorial() ? MenuSim->GetTutorialStep().Order : FString();
-		if (LessonLine.IsEmpty() && Vehicle->IsAssistOn())  // the helper's order or report, outside a lesson
-		{
-			const FSimSeatHelp Help = Vehicle->GetHelp();
-			for (int32 I = 0; Help.bShown && I < Help.Steps.Num() && LessonLine.IsEmpty(); ++I)
-			{
-				const FSimHelpStep& S = Help.Steps[I];
-				if ((S.Kind == TEXT("order") || S.Kind == TEXT("report")) && S.Blocked.IsEmpty())
-				{
-					LessonLine = S.Callout;
-				}
-			}
-		}
-		const bool bOrders = MenuSim != nullptr && Vehicle->GetStationId() == MenuSim->GetCommanderStation();
-		DrawText(FString::Printf(TEXT("%s (page %d/%d: 0 next, Esc close)"), bOrders ? TEXT("Orders") : TEXT("Reports"),
-					 Page + 1, Pages),
-			FLinearColor::White, X, Y, Font);
-		Y += 24.0f;
-		for (int32 I = 0; I < 9; ++I)
-		{
-			const int32 Index = Page * 9 + I;
-			if (!Entries.IsValidIndex(Index))
-			{
-				break;
-			}
-			const FSimCrewMenuEntry& E = Entries[Index];
-			if (!LessonLine.IsEmpty() && E.Id == LessonLine)
-			{
-				DrawRect(FLinearColor(0.1f, 0.45f, 0.15f, 0.6f), X - 6.0f, Y - 1.0f, 850.0f, 19.0f);
-				DrawText(FString::Printf(TEXT("%d  %s  (%s)     <-- this one"), I + 1, *Words(E.Ru), *Words(E.En)), FLinearColor(0.6f, 1.0f, 0.65f), X, Y, Font);
-			}
-			else if (E.bAvailable)
-			{
-				DrawText(FString::Printf(TEXT("%d  %s  (%s)"), I + 1, *Words(E.Ru), *Words(E.En)), FLinearColor(1.0f, 0.95f, 0.8f), X, Y, Font);
-			}
-			else  // honest greying: what stops it
-			{
-				DrawText(FString::Printf(TEXT("%d  %s  (%s): %s"), I + 1, *Words(E.Ru), *Words(E.En), *E.Reason), FLinearColor(0.5f, 0.5f, 0.5f), X, Y, Font);
-			}
-			Y += 20.0f;
-		}
+		DrawCrewMenu(Vehicle, Font);
 	}
+}
+
+// The radial crew menu (docs/crew/15_TALK.md section 5): eight places round the centre, the first at the top and on
+// clockwise, each always in its place (a line that can't be said now greyed with what stops it, a sector with nothing of
+// this seat's faint); the lesson's line or the helper's pick marked green, the place the mouse points at lit.
+void ASimCabinHUD::DrawCrewMenu(const ASimOsaVehicle* Vehicle, UFont* Font)
+{
+	const TArray<FSimCrewMenuSlot> Ring = Vehicle->GetCrewMenuRing();
+	const int32 Hover = Vehicle->GetCrewMenuHover();
+	const float S = FMath::Clamp(Canvas->ClipY / 1080.0f, 0.7f, 2.0f);
+	const float R = 200.0f * S;
+	const float Cx = Canvas->ClipX * 0.5f;
+	const float Cy = FMath::Max(Canvas->ClipY * 0.5f, GuideBottom + R + 50.0f * S);  // below a lesson's card
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), Cx - R - 250.0f * S, Cy - R - 40.0f * S, 2.0f * R + 500.0f * S, 2.0f * R + 110.0f * S);
+	// The centre: the ring's title, and the cursor from it.
+	float Tw = 0.0f;
+	float Th = 0.0f;
+	const FString Title = Vehicle->GetCrewMenuTitle();
+	GetTextSize(Title, Tw, Th, Font);
+	DrawText(Title, FLinearColor(1.0f, 0.78f, 0.35f), Cx - 0.5f * Tw, Cy - Th - 4.0f, Font);
+	const FVector2D Cursor = Vehicle->GetCrewMenuCursor() * S;
+	DrawLine(Cx, Cy, Cx + Cursor.X, Cy + Cursor.Y, FLinearColor(1.0f, 1.0f, 1.0f, 0.35f), 1.5f);
+	DrawRect(FLinearColor::White, Cx + Cursor.X - 3.0f, Cy + Cursor.Y - 3.0f, 6.0f, 6.0f);
+	if (Ring.IsValidIndex(Hover) && !Ring[Hover].Reason.IsEmpty())
+	{
+		const FString Why = TEXT("Not now: ") + Ring[Hover].Reason;
+		GetTextSize(Why, Tw, Th, Font);
+		DrawText(Why, FLinearColor(1.0f, 0.6f, 0.3f), Cx - 0.5f * Tw, Cy + 8.0f, Font);
+	}
+	for (int32 K = 0; K < Ring.Num() && K < 8; ++K)
+	{
+		const FSimCrewMenuSlot& Slot = Ring[K];
+		const float A = FMath::DegreesToRadians(45.0f * static_cast<float>(K));
+		const float Px = Cx + R * FMath::Sin(A);
+		const float Py = Cy - R * FMath::Cos(A);
+		const FString Top = FString::Printf(TEXT("%d  %s"), K + 1, *Words(Slot.Ru));
+		const FString Under = Words(Slot.En);
+		float W1 = 0.0f, H1 = 0.0f, W2 = 0.0f, H2 = 0.0f;
+		GetTextSize(Top, W1, H1, Font);
+		GetTextSize(Under, W2, H2, Font, 0.85f);
+		const float W = FMath::Max(W1, W2) + 12.0f;
+		const float H = H1 + H2 + 6.0f;
+		// The box beside its point: to the right of it on the right half, to the left on the left, centred top and bottom.
+		const float Side = FMath::Sin(A);
+		const float Bx = Side > 0.3f ? Px - 10.0f : Side < -0.3f ? Px - W + 10.0f : Px - 0.5f * W;
+		const float By = Py - 0.5f * H;
+		const bool bGrey = !Slot.Reason.IsEmpty() || Slot.bEmpty;
+		const FLinearColor Back = K == Hover ? FLinearColor(0.2f, 0.32f, 0.6f, 0.9f)
+								  : Slot.bAdvised ? FLinearColor(0.1f, 0.45f, 0.15f, 0.75f)
+												  : FLinearColor(0.05f, 0.05f, 0.05f, 0.8f);
+		DrawRect(Back, Bx, By, W, H);
+		if (Slot.bAdvised && K == Hover)
+		{
+			DrawRect(FLinearColor(0.6f, 1.0f, 0.65f), Bx, By + H - 2.0f, W, 2.0f);
+		}
+		const FLinearColor Ink = Slot.bEmpty ? FLinearColor(0.35f, 0.35f, 0.35f)
+								 : bGrey ? FLinearColor(0.55f, 0.55f, 0.55f)
+								 : Slot.bAdvised ? FLinearColor(0.6f, 1.0f, 0.65f)
+												 : FLinearColor(1.0f, 0.95f, 0.8f);
+		DrawText(Top, Ink, Bx + 6.0f, By + 2.0f, Font);
+		DrawText(Under, Ink * 0.85f, Bx + 6.0f, By + 4.0f + H1, Font, 0.85f);
+	}
+	// The keys, under the ring.
+	const bool bLines = Vehicle->GetCrewMenuLevel() == 1;
+	FString Keys = bLines ? TEXT("1-8 or point and click: say it   0: the green line   Backspace: back")
+						  : TEXT("1-8 or flick out: open   0: the green line   Esc or Caps Lock: close");
+	if (bLines && Vehicle->GetCrewMenuPages() > 1)
+	{
+		Keys += FString::Printf(TEXT("   9 or wheel: more (%d/%d)"), Vehicle->GetCrewMenuPage() + 1, Vehicle->GetCrewMenuPages());
+	}
+	const USimWorldSubsystem* MenuSim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (!bLines && MenuSim != nullptr && Vehicle->GetStationId() == MenuSim->GetCommanderStation())
+	{
+		Keys += Vehicle->IsCrewMenuSeatFirst() ? TEXT("   Tab: by subject") : TEXT("   Tab: seat first");
+	}
+	GetTextSize(Keys, Tw, Th, Font);
+	DrawText(Keys, FLinearColor(0.8f, 0.8f, 0.8f), Cx - 0.5f * Tw, Cy + R + 40.0f * S, Font);
 }
 
 float ASimCabinHUD::PostAidsTop(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehicle) const
@@ -1216,7 +1249,7 @@ float ASimCabinHUD::DrawComms(USimWorldSubsystem* Sim, const ASimOsaVehicle* Veh
 	return Height + 8.0f;
 }
 
-void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom, const FString& Station)
+void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom, const FString& Station, bool bGloss)
 {
 	// The lines still fresh, packed at the bottom: the oldest fades. Only what reached the player's seat: his headset and
 	// box, or the cabin (docs/crew/12_COMMUNICATIONS.md). What came over a radio stands out from the rest of the screen: a
@@ -1265,6 +1298,17 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom,
 		GetTextSize(Text, W, H, Font);
 		Widest = FMath::Max(Widest, W + 10.0f);
 		Lines.Add({Text, Ink, bRadio});
+		// With the helper on: what its abbreviations and azimuths mean, under it (docs/crew/15_TALK.md section 6).
+		const FString Gloss = bGloss ? Sim->GlossLine(M.Text) : FString();
+		if (!Gloss.IsEmpty())
+		{
+			const FString Under = TEXT("      = ") + Gloss;
+			GetTextSize(Under, W, H, Font);
+			Widest = FMath::Max(Widest, W + 10.0f);
+			FLinearColor Faint = Ink * 0.8f;
+			Faint.A = Ink.A * 0.8f;
+			Lines.Add({Under, Faint, false});
+		}
 	}
 	if (Lines.Num() == 0)
 	{
@@ -1283,13 +1327,51 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom,
 	}
 }
 
-void ASimCabinHUD::DrawBoard(USimWorldSubsystem* Sim, UFont* Font)
+void ASimCabinHUD::DrawBoard(USimWorldSubsystem* Sim, UFont* Font, const FString& Station)
 {
 	// In the command post its glass plotting board (samsim_osa p20): range rings at 50-200 km, the battery at the centre,
 	// north up, each target's marks with its number, height over code, and the minute stamp; older plots dimmer. In a
 	// launcher the board is not in front of the crew (it is in the post): the same page holds only the designations the
 	// crew has heard on the net, each target's latest (a training aid; first person).
 	const bool bPost = Sim->IsCommandPost();
+	// What I've heard (docs/crew/15_TALK.md section 6): in a launcher, top left, the targets as this seat's crewman knows
+	// them, from his instruments and from what reached his ears, never the truth.
+	if (!bPost && !Station.IsEmpty())
+	{
+		const TArray<FSimHeardTarget> Heard = Sim->GetSeatPicture(Station);
+		const float Hx = 20.0f;
+		float Hy = 40.0f;
+		const int32 Rows = FMath::Min(Heard.Num(), 12);
+		DrawBacking(Hx, Hy, 470.0f, 18.0f + 16.0f * FMath::Max(1, Rows));
+		DrawText(TEXT("What you have heard (the last 5 minutes)"), FLinearColor(1.0f, 0.78f, 0.35f), Hx, Hy, Font);
+		Hy += 18.0f;
+		if (Heard.Num() == 0)
+		{
+			DrawText(TEXT("nothing yet"), FLinearColor(0.7f, 0.7f, 0.7f), Hx, Hy, Font);
+		}
+		for (int32 I = 0; I < Rows; ++I)
+		{
+			const FSimHeardTarget& H = Heard[I];
+			FString Row = H.Number > 0 ? FString::Printf(TEXT("target %d"), H.Number) : FString(TEXT("a contact"));
+			if (!H.Azimuth.IsEmpty())
+			{
+				Row += FString::Printf(TEXT(", azimuth %s%s"), *H.Azimuth, H.bTrueAzimuth ? TEXT(" (true)") : TEXT(""));
+			}
+			if (H.RangeKm >= 0.0)
+			{
+				Row += FString::Printf(TEXT(", %.0f km"), H.RangeKm);
+			}
+			if (H.HeightM >= 0.0)
+			{
+				Row += FString::Printf(TEXT(", height %.0f m"), H.HeightM);
+			}
+			Row += H.bFriendly ? TEXT(", a friend") : H.bNoReply ? TEXT(", no IFF reply") : TEXT("");
+			Row += FString::Printf(TEXT("   %.0f s ago, %s"), H.AgeSeconds, *H.Source);
+			const FLinearColor Ink = H.bFriendly ? FLinearColor(0.55f, 0.95f, 0.6f) : FLinearColor(0.9f, 0.9f, 0.85f, FMath::Clamp(1.0f - static_cast<float>(H.AgeSeconds) / 400.0f, 0.4f, 1.0f));
+			DrawText(Row, Ink, Hx, Hy, Font);
+			Hy += 16.0f;
+		}
+	}
 	const float Size = Canvas->ClipY * 0.7f;
 	const FVector2D Origin(Canvas->ClipX - Size - 30.0f, 40.0f);
 	const FVector2D Centre = Origin + FVector2D(Size, Size) * 0.5f;
