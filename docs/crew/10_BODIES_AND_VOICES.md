@@ -80,6 +80,72 @@ built on has only English voices (David, Mark, Zira), so the crew there speaks E
 `art/crew_voices/<language>/<seat>/<callout>.wav`, or `art/crew_voices/<language>/<callout>.wav`, 16-bit PCM. Real
 voice actors can replace the engine line by line.
 
+The English fixed lines are recorded (27 Oct 2026; Russian later) by `tools/voice_lines.py` with Kokoro-82M, a free
+offline speech model (Apache-2.0), in a voice per seat from `data/crew/recorded_voices.json`:
+
+| Seat | Voice | | Seat | Voice |
+|---|---|---|---|---|
+| commander | am_echo | | battery_commander | am_adam |
+| deputy_commander | am_michael | | squad_leader | am_liam |
+| senior_operator | am_puck | | radio_operator | am_fenrir |
+| operator (both vehicles) | am_eric | | driver (both vehicles) | am_onyx |
+
+The voices were picked by measured pitch, pace and brightness so that the voices heard together (a crew's seats, and
+the two commanders on the battery net) are as far apart as possible, then approved by ear.
+
+- **What is recorded.** Every callout of the two crews whose words have nothing filled in, in the voice of each seat
+  that says it ("any" is every seat of that crew), 175 files. The words are the ones the game would give the speech
+  engine (`SpeechText`, ported: mils in digit pairs, `voices.json`'s `say` table: ARM is "A R M").
+- **Not recorded.**
+  - The driver's `power_on` is "Power on!" in the Osa and "Generator running, power on!" in the PU-12M. One file
+    can't be both, so it isn't recorded and both crews' engines say it. Recording it needs a folder per crew, a
+    change to `PlayRecorded`.
+  - "Air!" (`air_alert`) for the commander, the driver and the operator. Kokoro puts a consonant before the lone
+    vowel in these voices ("Where?", "There.", "Lear?") in every take tried, over 300 (phonemes, style lengths,
+    speeds, cutting the start). A retake with `"record": false` leaves it to the game's speech engine. The deputy
+    commander's and the senior operator's "Air!" are recorded; the senior operator's is heard as "Aaron." without the
+    hint, so listen to it.
+- **Each file.** Silence trimmed (30 ms before, 120 ms after), the speech at −18 dBFS RMS with peaks under −1 dBFS,
+  16-bit mono at 24 kHz. `art/crew_voices/en/manifest.json` keeps each line's words, voice, settings, the phonemes
+  the engine was given, its length and its checks. A rerun records only lines whose words, voice, settings or model
+  changed, and removes files no line wants.
+- **The checks.**
+  - *empty*: less than 0.25 s of speech.
+  - *clipped*: a flattened peak.
+  - *words*: Whisper (`faster-whisper`, base.en) transcribes the file twice, plain and with the crew's jargon as a
+    hint, and the closer transcript is compared with the words (word error over 0.25 fails). Listen to what it flags:
+    of the first 14 flags, the owner heard 9 said wrong and 5 said right. A line heard right goes in
+    `recorded_voices.json`'s `heard_right` with the transcript it was flagged for, and counts as *heard right* until a
+    new recording of it is heard differently. A line heard wrong gets a retake there (`retakes`, with why): its own
+    `speed`, the `phonemes` to give the engine in place of the words, or `style_length`, the voice's style for a
+    longer input (Kokoro styles a voice by the input's length, and a short line can come out wrong in the short
+    style). Retakes are found by trying the ways and keeping one Whisper hears right with and without the hint, as
+    saved to 16 bits, and preferably one whose neighbours (the next style length, speed or spelling) pass too: a
+    take that passes alone is a fluke of the transcriber. Six lines have retakes (27 Oct 2026).
+    Two wholesale fixes were tried and dropped: misaki's phoneme form (the one Kokoro was trained on) gave 26 misheard
+    lines against espeak's 20, and saying a line twice to keep the second gave worse lines.
+  - *long*: longer than the bus gives the line (0.4 s plus 0.35 s a word of the Russian), so the next line on the
+    channel cuts it off. Reported, not a failure: 113 of the 175 are long, which says the bus's timing, not the
+    recordings, needs changing.
+
+  The first three fail the run (exit 1). `out/voice_gen/review.html` lists every line with a player, what Whisper
+  heard, the phonemes and the checks, failures first, with a "said right" tick that writes the `heard_right` entry.
+  Serve the repo root to play it (`.claude/launch.json`'s `voice-lines`, then
+  `http://localhost:8766/out/voice_gen/review.html`).
+- **Running it.** The audio libraries live in their own environment, out of the repo:
+
+  ```
+  python -m venv out/voice_gen/.venv
+  out/voice_gen/.venv/Scripts/python -m pip install kokoro-onnx==0.6.1 faster-whisper==1.2.1 soundfile
+  ```
+
+  Put Kokoro's `kokoro-v1.0.onnx` (325 MB) and `voices-v1.0.bin` (28 MB) from the kokoro-onnx releases
+  (`model-files-v1.0`) in `out/voice_gen/models/`. Fetch Whisper with
+  `faster_whisper.download_model("base.en", output_dir="out/voice_gen/models/whisper-base.en")` (141 MB). Then:
+  `out/voice_gen/.venv/Scripts/python -I tools/voice_lines.py` (`--force` to record everything again, `--only
+  seat/callout` for some lines, `--list` to see the lines). `python tools/voice_lines.py --check` needs no audio
+  libraries and exits 1 when the recordings no longer match the crews' lines; `tools/tests/test_voice_lines.py` runs it.
+
 **Timing.** The simulation keeps its own timing: a line takes 0.4 s plus 0.35 s a word on the bus, whatever the voice
 does. The seats' rates are a little fast to stay close to that. Above 1.5× time compression the crew isn't voiced.
 Console: `sam3d.Voice`, `sam3d.VoiceLanguage auto|ru|en`, `sam3d.VoiceVolume`.
@@ -127,4 +193,6 @@ basic shapes stand in for any part that isn't imported.
 - Lips.
 - Players' bodies in multiplayer: another player's seat shows his body at rest.
 - Voices on a network client (the client mirrors the console, not the bus).
-- Russian voices on this machine.
+- Russian voices on this machine, and Russian recordings (Kokoro has no Russian; English first, by the owner's choice).
+- Recorded lines for callouts with filled-in words (azimuths, ranges, target numbers): they still go to the engine.
+- Stressed recordings: `voices.json`'s stress raises the engine's pitch and rate, not a recording's.

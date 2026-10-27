@@ -1,0 +1,5203 @@
+{
+ "generator": "tools/voice_lines.py",
+ "config": "data/crew/recorded_voices.json",
+ "language": "en",
+ "engine": "kokoro",
+ "model": "kokoro-v1.0.onnx",
+ "model_sha256": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+ "voice_pack": "voices-v1.0.bin",
+ "voice_pack_sha256": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+ "speed": 1.0,
+ "accent": "en-us",
+ "lines": {
+  "battery_commander/ack": {
+   "seat": "battery_commander",
+   "id": "ack",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.6,
+   "speech_s": 0.53,
+   "slot_s": 0.75,
+   "rms_db": -18.5,
+   "peak_db": -3.9,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "battery_commander/done": {
+   "seat": "battery_commander",
+   "id": "done",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.58,
+   "speech_s": 0.49,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -1.5,
+   "flags": [],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "battery_commander/order_all_clear_covered": {
+   "seat": "battery_commander",
+   "id": "order_all_clear_covered",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The covered unit: «All clear»!",
+   "spoken": "The covered unit: «All clear»!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The covered unit: «All clear»!",
+    "engine_text": "The covered unit: All clear!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.66,
+   "speech_s": 1.42,
+   "slot_s": 1.45,
+   "rms_db": -18.7,
+   "peak_db": -1.6,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The covered unit all clear.",
+   "word_error": 0.0,
+   "phonemes": "ðə kˈʌvɚd jˈuːnɪt: ˈɔːl klˈɪɹ!"
+  },
+  "battery_commander/order_apch_off": {
+   "seat": "battery_commander",
+   "id": "order_apch_off",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "AFC off!",
+   "spoken": "A F C off!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "A F C off!",
+    "engine_text": "A.F.C. off!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.15,
+   "speech_s": 1.08,
+   "slot_s": 1.1,
+   "rms_db": -18.3,
+   "peak_db": -2.2,
+   "flags": [
+    "long"
+   ],
+   "transcript": "A.F.C. off.",
+   "word_error": 0.0,
+   "phonemes": "ˈeɪ.ˈɛf.sˈiː. ˈɔf!"
+  },
+  "battery_commander/order_apch_on": {
+   "seat": "battery_commander",
+   "id": "order_apch_on",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "AFC on!",
+   "spoken": "A F C on!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "A F C on!",
+    "engine_text": "A.F.C. on!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.11,
+   "speech_s": 1.01,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -2.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "AFC on.",
+   "word_error": 0.0,
+   "phonemes": "ˈeɪ.ˈɛf.sˈiː. ˈɔn!"
+  },
+  "battery_commander/order_aspd_on": {
+   "seat": "battery_commander",
+   "id": "order_aspd_on",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "ASPD on!",
+   "spoken": "A S P D on!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "A S P D on!",
+    "engine_text": "A.S.P.D. on!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.3,
+   "speech_s": 1.18,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "ASP-D on",
+   "word_error": 0.0,
+   "phonemes": "ˈeɪ.ˈɛs.pˈiː.dˈiː. ˈɔn!"
+  },
+  "battery_commander/order_battery_duty": {
+   "seat": "battery_commander",
+   "id": "order_battery_duty",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery to duty reception!",
+   "spoken": "The battery to duty reception!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery to duty reception!",
+    "engine_text": "The battery to duty reception!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.86,
+   "speech_s": 1.71,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -1.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "the battery to duty reception.",
+   "word_error": 0.0,
+   "phonemes": "ðə bˈæɾɚɹi tə dˈuːɾi ɹᵻsˈɛpʃən!"
+  },
+  "battery_commander/order_battery_simplex": {
+   "seat": "battery_commander",
+   "id": "order_battery_simplex",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery back to transmit!",
+   "spoken": "The battery back to transmit!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery back to transmit!",
+    "engine_text": "The battery back to transmit!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.58,
+   "speech_s": 1.39,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -2.9,
+   "flags": [],
+   "transcript": "The battery back to transmit.",
+   "word_error": 0.0,
+   "phonemes": "ðə bˈæɾɚɹi bˈæk tə tɹænsmˈɪt!"
+  },
+  "battery_commander/order_battery_spare": {
+   "seat": "battery_commander",
+   "id": "order_battery_spare",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery to its spare frequency!",
+   "spoken": "The battery to its spare frequency!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery to its spare frequency!",
+    "engine_text": "The battery to its spare frequency!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.79,
+   "speech_s": 1.64,
+   "slot_s": 2.15,
+   "rms_db": -18.4,
+   "peak_db": -1.6,
+   "flags": [],
+   "transcript": "The battery to its spare frequency.",
+   "word_error": 0.0,
+   "phonemes": "ðə bˈæɾɚɹi tʊ ɪts spˈɛɹ fɹˈiːkwənsi!"
+  },
+  "battery_commander/order_deploy": {
+   "seat": "battery_commander",
+   "id": "order_deploy",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Deploy the post!",
+   "spoken": "Deploy the post!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Deploy the post!",
+    "engine_text": "Deploy the post!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.08,
+   "speech_s": 0.95,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -3.1,
+   "flags": [],
+   "transcript": "Deploy the post.",
+   "word_error": 0.0,
+   "phonemes": "dᵻplˈɔɪ ðə pˈoʊst!"
+  },
+  "battery_commander/order_dismount": {
+   "seat": "battery_commander",
+   "id": "order_dismount",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Dismount! Line up by the vehicle!",
+   "spoken": "Dismount! Line up by the vehicle!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Dismount! Line up by the vehicle!",
+    "engine_text": "Dismount! Line up by the vehicle!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.73,
+   "speech_s": 1.54,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -1.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Dismount, line up by the vehicle.",
+   "word_error": 0.0,
+   "phonemes": "dɪsmˈaʊnt! lˈaɪn ˌʌp baɪ ðə vˈiəkəl!"
+  },
+  "battery_commander/order_fug1_spare": {
+   "seat": "battery_commander",
+   "id": "order_fug1_spare",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The air-picture set to the spare!",
+   "spoken": "The air-picture set to the spare!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The air-picture set to the spare!",
+    "engine_text": "The air-picture set to the spare!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.75,
+   "speech_s": 1.54,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -3.3,
+   "flags": [],
+   "transcript": "The air picture set to the spare.",
+   "word_error": 0.0,
+   "phonemes": "ðɪ ˈɛɹpˈɪktʃɚ sˈɛt tə ðə spˈɛɹ!"
+  },
+  "battery_commander/order_fug1_working": {
+   "seat": "battery_commander",
+   "id": "order_fug1_working",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The air-picture set back to the working frequency!",
+   "spoken": "The air-picture set back to the working frequency!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The air-picture set back to the working frequency!",
+    "engine_text": "The air-picture set back to the working frequency!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.6,
+   "speech_s": 2.37,
+   "slot_s": 2.15,
+   "rms_db": -18.4,
+   "peak_db": -1.6,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The air picture set back to the working frequency.",
+   "word_error": 0.0,
+   "phonemes": "ðɪ ˈɛɹpˈɪktʃɚ sˈɛt bˈæk tə ðə wˈɜːkɪŋ fɹˈiːkwənsi!"
+  },
+  "battery_commander/order_fug4_spare": {
+   "seat": "battery_commander",
+   "id": "order_fug4_spare",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery net's set to the spare!",
+   "spoken": "The battery net's set to the spare!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery net's set to the spare!",
+    "engine_text": "The battery net's set to the spare!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.69,
+   "speech_s": 1.53,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -3.1,
+   "flags": [],
+   "transcript": "The battery nets set to the spare.",
+   "word_error": 0.0,
+   "phonemes": "ðə bˈæɾɚɹi nˈɛts sˈɛt tə ðə spˈɛɹ!"
+  },
+  "battery_commander/order_fug4_working": {
+   "seat": "battery_commander",
+   "id": "order_fug4_working",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery net's set back to the working frequency!",
+   "spoken": "The battery net's set back to the working frequency!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery net's set back to the working frequency!",
+    "engine_text": "The battery net's set back to the working frequency!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.53,
+   "speech_s": 2.32,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The battery nets set back to the working frequency.",
+   "word_error": 0.0,
+   "phonemes": "ðə bˈæɾɚɹi nˈɛts sˈɛt bˈæk tə ðə wˈɜːkɪŋ fɹˈiːkwənsi!"
+  },
+  "battery_commander/order_mast": {
+   "seat": "battery_commander",
+   "id": "order_mast",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Raise the mast!",
+   "spoken": "Raise the mast!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Raise the mast!",
+    "engine_text": "Raise the mast!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.05,
+   "speech_s": 0.93,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -3.0,
+   "flags": [],
+   "transcript": "Raise the mast.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪz ðə mˈæst!"
+  },
+  "battery_commander/order_mount": {
+   "seat": "battery_commander",
+   "id": "order_mount",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Mount up!",
+   "spoken": "Mount up!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Mount up!",
+    "engine_text": "Mount up!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.75,
+   "speech_s": 0.62,
+   "slot_s": 1.1,
+   "rms_db": -18.8,
+   "peak_db": -2.6,
+   "flags": [],
+   "transcript": "Mount up.",
+   "word_error": 0.0,
+   "phonemes": "mˈaʊnt ˈʌp!"
+  },
+  "battery_commander/order_orient": {
+   "seat": "battery_commander",
+   "id": "order_orient",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Orient the post!",
+   "spoken": "Orient the post!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Orient the post!",
+    "engine_text": "Orient the post!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.01,
+   "speech_s": 0.91,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -3.9,
+   "flags": [],
+   "transcript": "Orient the post.",
+   "word_error": 0.0,
+   "phonemes": "ˈɔːɹiənt ðə pˈoʊst!"
+  },
+  "battery_commander/order_r111": {
+   "seat": "battery_commander",
+   "id": "order_r111",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "R-111 onto the regiment's net, tune it!",
+   "spoken": "R one one one onto the regiment's net, tune it!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "R one one one onto the regiment's net, tune it!",
+    "engine_text": "R one one one onto the regiment's net, tune it!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.79,
+   "speech_s": 2.43,
+   "slot_s": 2.5,
+   "rms_db": -18.6,
+   "peak_db": -2.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "R111 onto the regiments net, tune it.",
+   "word_error": 0.0,
+   "phonemes": "ˈɑːɹ wˈʌn wˈʌn wˈʌn ˌɑːntʊ ðə ɹˈɛdʒɪmənts nˈɛt, tˈuːn ɪt!"
+  },
+  "battery_commander/order_r111_protect": {
+   "seat": "battery_commander",
+   "id": "order_r111_protect",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Reset the input protection!",
+   "spoken": "Reset the input protection!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Reset the input protection!",
+    "engine_text": "Reset the input protection!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.6,
+   "speech_s": 1.42,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -2.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Reset the input protection.",
+   "word_error": 0.0,
+   "phonemes": "ɹᵻsˈɛt ðɪ ˈɪnpʊt pɹətˈɛkʃən!"
+  },
+  "battery_commander/order_r111_spare": {
+   "seat": "battery_commander",
+   "id": "order_r111_spare",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The R-111 to the spare, preset two!",
+   "spoken": "The R one one one to the spare, preset two!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The R one one one to the spare, preset two!",
+    "engine_text": "The R one one one to the spare, preset two!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.45,
+   "speech_s": 2.19,
+   "slot_s": 2.85,
+   "rms_db": -18.5,
+   "peak_db": -3.2,
+   "flags": [],
+   "transcript": "The R111 to the spare preset 2.",
+   "word_error": 0.0,
+   "phonemes": "ðɪ ˈɑːɹ wˈʌn wˈʌn wˈʌn tə ðə spˈɛɹ, pɹˈiːsɛt tˈuː!"
+  },
+  "battery_commander/order_r111_working": {
+   "seat": "battery_commander",
+   "id": "order_r111_working",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The R-111 back to the working frequency, preset one!",
+   "spoken": "The R one one one back to the working frequency, preset one!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The R one one one back to the working frequency, preset one!",
+    "engine_text": "The R one one one back to the working frequency, preset one!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 3.56,
+   "speech_s": 3.08,
+   "slot_s": 2.85,
+   "rms_db": -18.6,
+   "peak_db": -2.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The r-111 back to the working frequency, preset 1.",
+   "word_error": 0.0,
+   "phonemes": "ðɪ ˈɑːɹ wˈʌn wˈʌn wˈʌn bˈæk tə ðə wˈɜːkɪŋ fɹˈiːkwənsi, pɹˈiːsɛt wˌʌn!"
+  },
+  "battery_commander/order_radar_cable": {
+   "seat": "battery_commander",
+   "id": "order_radar_cable",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Lay the cable to the radar!",
+   "spoken": "Lay the cable to the radar!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Lay the cable to the radar!",
+    "engine_text": "Lay the cable to the radar!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.57,
+   "speech_s": 1.43,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -2.3,
+   "flags": [],
+   "transcript": "Lay the cable to the radar.",
+   "word_error": 0.0,
+   "phonemes": "lˈeɪ ðə kˈeɪbəl tə ðə ɹˈeɪdɑːɹ!"
+  },
+  "battery_commander/order_report_regiment": {
+   "seat": "battery_commander",
+   "id": "order_report_regiment",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Report the battery ready to the regiment!",
+   "spoken": "Report the battery ready to the regiment!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Report the battery ready to the regiment!",
+    "engine_text": "Report the battery ready to the regiment!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.17,
+   "speech_s": 1.92,
+   "slot_s": 2.15,
+   "rms_db": -18.5,
+   "peak_db": -2.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Report the battery ready to the regiment.",
+   "word_error": 0.0,
+   "phonemes": "ɹᵻpˈɔːɹt ðə bˈæɾɚɹi ɹˈɛdi tə ðə ɹˈɛdʒɪmənt!"
+  },
+  "battery_commander/order_stow": {
+   "seat": "battery_commander",
+   "id": "order_stow",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Stow the post!",
+   "spoken": "Stow the post!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Stow the post!",
+    "engine_text": "Stow the post!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.98,
+   "speech_s": 0.84,
+   "slot_s": 1.45,
+   "rms_db": -18.7,
+   "peak_db": -2.8,
+   "flags": [],
+   "transcript": "Stow the post.",
+   "word_error": 0.0,
+   "phonemes": "stˈoʊ ðə pˈoʊst!"
+  },
+  "battery_commander/order_warn_covered": {
+   "seat": "battery_commander",
+   "id": "order_warn_covered",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Warn the covered unit: «Air»!",
+   "spoken": "Warn the covered unit: «Air»!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Warn the covered unit: «Air»!",
+    "engine_text": "Warn the covered unit: Air!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.69,
+   "speech_s": 1.45,
+   "slot_s": 1.45,
+   "rms_db": -18.7,
+   "peak_db": -2.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Warn the covered unit, air.",
+   "word_error": 0.0,
+   "phonemes": "wˈɔːɹn ðə kˈʌvɚd jˈuːnɪt: ˈɛɹ!"
+  },
+  "battery_commander/say_again": {
+   "seat": "battery_commander",
+   "id": "say_again",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.85,
+   "speech_s": 0.76,
+   "slot_s": 0.75,
+   "rms_db": -18.5,
+   "peak_db": -3.2,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Say again.",
+   "word_error": 0.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "commander/ack": {
+   "seat": "commander",
+   "id": "ack",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.84,
+   "speech_s": 0.69,
+   "slot_s": 0.75,
+   "rms_db": -18.9,
+   "peak_db": -4.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "commander/done": {
+   "seat": "commander",
+   "id": "done",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.79,
+   "speech_s": 0.64,
+   "slot_s": 0.75,
+   "rms_db": -18.9,
+   "peak_db": -3.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "commander/fire_permitted": {
+   "seat": "commander",
+   "id": "fire_permitted",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Launch permitted!",
+   "spoken": "Launch permitted!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Launch permitted!",
+    "engine_text": "Launch permitted!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.35,
+   "speech_s": 1.15,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -3.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Launch permitted.",
+   "word_error": 0.0,
+   "phonemes": "lˈɑːntʃ pɚmˈɪɾᵻd!"
+  },
+  "commander/hold_fire": {
+   "seat": "commander",
+   "id": "hold_fire",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Do not launch!",
+   "spoken": "Do not launch!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Do not launch!",
+    "engine_text": "Do not launch!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.28,
+   "speech_s": 1.13,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Do not launch.",
+   "word_error": 0.0,
+   "phonemes": "duːnˌɑːt lˈɑːntʃ!"
+  },
+  "commander/kill_sign_burst": {
+   "seat": "commander",
+   "id": "kill_sign_burst",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Burst, the missile's reply is gone!",
+   "spoken": "Burst, the missile's reply is gone!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Burst, the missile's reply is gone!",
+    "engine_text": "Burst, the missile's reply is gone!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.23,
+   "speech_s": 1.91,
+   "slot_s": 1.8,
+   "rms_db": -18.7,
+   "peak_db": -3.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "First, the missile's reply is gone.",
+   "word_error": 0.17,
+   "phonemes": "bˈɜːst, ðə mˈɪsəlz ɹᵻplˈaɪ ɪz ɡˈɔn!"
+  },
+  "commander/kill_sign_flies_on": {
+   "seat": "commander",
+   "id": "kill_sign_flies_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target flies on unchanged!",
+   "spoken": "The target flies on unchanged!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "The target flies on unchanged!",
+    "engine_text": "The target flies on unchanged!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.3,
+   "speech_s": 2.07,
+   "slot_s": 2.15,
+   "rms_db": -18.5,
+   "peak_db": -1.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target flies on unchanged.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪt flˈaɪz ˌɔn ʌntʃˈeɪndʒd!"
+  },
+  "commander/kill_sign_jamming_stops": {
+   "seat": "commander",
+   "id": "kill_sign_jamming_stops",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The jamming is gone!",
+   "spoken": "The jamming is gone!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "The jamming is gone!",
+    "engine_text": "The jamming is gone!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.65,
+   "speech_s": 1.43,
+   "slot_s": 1.1,
+   "rms_db": -18.6,
+   "peak_db": -1.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The jamming is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə dʒˈæmɪŋ ɪz ɡˈɔn!"
+  },
+  "commander/kill_sign_mark_gone": {
+   "seat": "commander",
+   "id": "kill_sign_mark_gone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target's mark is gone!",
+   "spoken": "The target's mark is gone!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "The target's mark is gone!",
+    "engine_text": "The target's mark is gone!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.93,
+   "speech_s": 1.67,
+   "slot_s": 1.45,
+   "rms_db": -18.8,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target's mark is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪts mˈɑːɹk ɪz ɡˈɔn!"
+  },
+  "commander/kill_sign_reply_after": {
+   "seat": "commander",
+   "id": "kill_sign_reply_after",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply is still there after the meeting!",
+   "spoken": "The missile's reply is still there after the meeting!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "The missile's reply is still there after the meeting!",
+    "engine_text": "The missile's reply is still there after the meeting!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.88,
+   "speech_s": 2.5,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -2.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missile's reply is still there after the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ ɪz stˈɪl ðɛɹ ˈæftɚ ðə mˈiːɾɪŋ!"
+  },
+  "commander/kill_sign_reply_early": {
+   "seat": "commander",
+   "id": "kill_sign_reply_early",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply went before the meeting!",
+   "spoken": "The missile's reply went before the meeting!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "The missile's reply went before the meeting!",
+    "engine_text": "The missile's reply went before the meeting!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.59,
+   "speech_s": 2.28,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missiles reply went before the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ wɛnt bᵻfˌɔːɹ ðə mˈiːɾɪŋ!"
+  },
+  "commander/order_antenna_down": {
+   "seat": "commander",
+   "id": "order_antenna_down",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Lower the antenna!",
+   "spoken": "Lower the antenna!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Lower the antenna!",
+    "engine_text": "Lower the antenna!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.6,
+   "speech_s": 1.41,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -1.4,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Lower the antenna.",
+   "word_error": 0.0,
+   "phonemes": "lˈoʊɚ ðɪ æntˈɛnə!"
+  },
+  "commander/order_antenna_up": {
+   "seat": "commander",
+   "id": "order_antenna_up",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Raise the antenna!",
+   "spoken": "Raise the antenna!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Raise the antenna!",
+    "engine_text": "Raise the antenna!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.68,
+   "speech_s": 1.49,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -3.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Raise the antenna.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪz ðɪ æntˈɛnə!"
+  },
+  "commander/order_as_you_were": {
+   "seat": "commander",
+   "id": "order_as_you_were",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "As you were!",
+   "spoken": "As you were!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "As you were!",
+    "engine_text": "As you were!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.22,
+   "speech_s": 1.07,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -2.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "as you were.",
+   "word_error": 0.0,
+   "phonemes": "æz juː wɜː!"
+  },
+  "commander/order_cease_fire": {
+   "seat": "commander",
+   "id": "order_cease_fire",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Cease fire!",
+   "spoken": "Cease fire!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Cease fire!",
+    "engine_text": "Cease fire!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+    "retake": {
+     "phonemes": "sˈiːsfˈaɪɚ!",
+     "style_length": 45,
+     "speed": 0.95
+    }
+   },
+   "phonemes": "sˈiːsfˈaɪɚ!",
+   "duration_s": 1.36,
+   "speech_s": 1.23,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -1.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "cease fire",
+   "word_error": 0.0
+  },
+  "commander/order_compass": {
+   "seat": "commander",
+   "id": "order_compass",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Compass to the vehicle!",
+   "spoken": "Compass to the vehicle!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Compass to the vehicle!",
+    "engine_text": "Compass to the vehicle!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.66,
+   "speech_s": 1.39,
+   "slot_s": 1.45,
+   "rms_db": -19.1,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Compass to the vehicle.",
+   "word_error": 0.0,
+   "phonemes": "kˈʌmpəs tə ðə vˈiəkəl!"
+  },
+  "commander/order_counter_pulloff": {
+   "seat": "commander",
+   "id": "order_counter_pulloff",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Range pull-off! Protection on!",
+   "spoken": "Range pull-off! Protection on!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Range pull-off! Protection on!",
+    "engine_text": "Range pull-off! Protection on!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.2,
+   "speech_s": 1.86,
+   "slot_s": 1.8,
+   "rms_db": -18.7,
+   "peak_db": -4.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Range pull-off protection on.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪndʒ pˈʊlˈɔf! pɹətˈɛkʃən ˈɔn!"
+  },
+  "commander/order_dismount": {
+   "seat": "commander",
+   "id": "order_dismount",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Dismount! Line up by the vehicle!",
+   "spoken": "Dismount! Line up by the vehicle!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Dismount! Line up by the vehicle!",
+    "engine_text": "Dismount! Line up by the vehicle!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.19,
+   "speech_s": 1.9,
+   "slot_s": 1.1,
+   "rms_db": -18.6,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Dismount line up by the vehicle.",
+   "word_error": 0.0,
+   "phonemes": "dɪsmˈaʊnt! lˈaɪn ˌʌp baɪ ðə vˈiəkəl!"
+  },
+  "commander/order_drop_target": {
+   "seat": "commander",
+   "id": "order_drop_target",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Drop the target!",
+   "spoken": "Drop the target!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Drop the target!",
+    "engine_text": "Drop the target!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+    "retake": {
+     "style_length": 6
+    }
+   },
+   "phonemes": "dɹˈɑːp ðə tˈɑːɹɡɪt!",
+   "duration_s": 1.42,
+   "speech_s": 1.2,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -3.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Drop the target.",
+   "word_error": 0.0
+  },
+  "commander/order_emcon_off": {
+   "seat": "commander",
+   "id": "order_emcon_off",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Radiation off!",
+   "spoken": "Radiation off!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Radiation off!",
+    "engine_text": "Radiation off!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.56,
+   "speech_s": 1.37,
+   "slot_s": 1.1,
+   "rms_db": -18.6,
+   "peak_db": -3.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Radiation off.",
+   "word_error": 0.0,
+   "phonemes": "ɹˌeɪdɪˈeɪʃən ˈɔf!"
+  },
+  "commander/order_emcon_on": {
+   "seat": "commander",
+   "id": "order_emcon_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Radiation on!",
+   "spoken": "Radiation on!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Radiation on!",
+    "engine_text": "Radiation on!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.51,
+   "speech_s": 1.36,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -3.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Radiation on.",
+   "word_error": 0.0,
+   "phonemes": "ɹˌeɪdɪˈeɪʃən ˈɔn!"
+  },
+  "commander/order_emcon_tv": {
+   "seat": "commander",
+   "id": "order_emcon_tv",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Engage without radiating!",
+   "spoken": "Engage without radiating!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Engage without radiating!",
+    "engine_text": "Engage without radiating!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.03,
+   "speech_s": 1.89,
+   "slot_s": 1.45,
+   "rms_db": -18.3,
+   "peak_db": -3.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Engage without radiating.",
+   "word_error": 0.0,
+   "phonemes": "ɛŋɡˈeɪdʒ wɪðˌaʊt ɹˈeɪdɪˌeɪɾɪŋ!"
+  },
+  "commander/order_engine_off": {
+   "seat": "commander",
+   "id": "order_engine_off",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Engine off!",
+   "spoken": "Engine off!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Engine off!",
+    "engine_text": "Engine off!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.24,
+   "speech_s": 1.08,
+   "slot_s": 1.1,
+   "rms_db": -18.6,
+   "peak_db": -4.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Engine off.",
+   "word_error": 0.0,
+   "phonemes": "ˈɛndʒɪn ˈɔf!"
+  },
+  "commander/order_equipment_on": {
+   "seat": "commander",
+   "id": "order_equipment_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Equipment on!",
+   "spoken": "Equipment on!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Equipment on!",
+    "engine_text": "Equipment on!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.29,
+   "speech_s": 1.11,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -1.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "equipment on.",
+   "word_error": 0.0,
+   "phonemes": "ɪkwˈɪpmənt ˈɔn!"
+  },
+  "commander/order_function_check": {
+   "seat": "commander",
+   "id": "order_function_check",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Function check!",
+   "spoken": "Function check!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Function check!",
+    "engine_text": "Function check!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+    "retake": {
+     "phonemes": "fˈʌŋkʃən ʧˈɛk!"
+    }
+   },
+   "phonemes": "fˈʌŋkʃən ʧˈɛk!",
+   "duration_s": 1.36,
+   "speech_s": 1.11,
+   "slot_s": 1.1,
+   "rms_db": -18.9,
+   "peak_db": -1.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Function check.",
+   "word_error": 0.0
+  },
+  "commander/order_generator": {
+   "seat": "commander",
+   "id": "order_generator",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Generator on line!",
+   "spoken": "Generator on line!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Generator on line!",
+    "engine_text": "Generator on line!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.57,
+   "speech_s": 1.39,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -2.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "generator online",
+   "word_error": 0.0,
+   "phonemes": "dʒˈɛnɚɹˌeɪɾɚɹ ˌɔn lˈaɪn!"
+  },
+  "commander/order_go": {
+   "seat": "commander",
+   "id": "order_go",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Move!",
+   "spoken": "Move!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Move!",
+    "engine_text": "Move!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.87,
+   "speech_s": 0.76,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -3.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "MOVE!",
+   "word_error": 0.0,
+   "phonemes": "mˈuːv!"
+  },
+  "commander/order_gta": {
+   "seat": "commander",
+   "id": "order_gta",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Start the turbine!",
+   "spoken": "Start the turbine!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Start the turbine!",
+    "engine_text": "Start the turbine!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.52,
+   "speech_s": 1.28,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -1.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Start the turbine.",
+   "word_error": 0.0,
+   "phonemes": "stˈɑːɹt ðə tˈɜːbaɪn!"
+  },
+  "commander/order_halt": {
+   "seat": "commander",
+   "id": "order_halt",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Halt!",
+   "spoken": "Halt!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Halt!",
+    "engine_text": "Halt!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.76,
+   "speech_s": 0.57,
+   "slot_s": 0.75,
+   "rms_db": -19.2,
+   "peak_db": -3.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "halt",
+   "word_error": 0.0,
+   "phonemes": "hˈɔlt!"
+  },
+  "commander/order_hv_off": {
+   "seat": "commander",
+   "id": "order_hv_off",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Transmitter off!",
+   "spoken": "Transmitter off!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Transmitter off!",
+    "engine_text": "Transmitter off!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.41,
+   "speech_s": 1.26,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -3.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Transmitter off.",
+   "word_error": 0.0,
+   "phonemes": "tɹænsmˈɪɾɚɹ ˈɔf!"
+  },
+  "commander/order_hv_on": {
+   "seat": "commander",
+   "id": "order_hv_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Transmitter on!",
+   "spoken": "Transmitter on!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Transmitter on!",
+    "engine_text": "Transmitter on!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.35,
+   "speech_s": 1.2,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -2.6,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Transmitter on.",
+   "word_error": 0.0,
+   "phonemes": "tɹænsmˈɪɾɚɹ ˈɔn!"
+  },
+  "commander/order_iff": {
+   "seat": "commander",
+   "id": "order_iff",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Interrogate!",
+   "spoken": "Interrogate!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Interrogate!",
+    "engine_text": "Interrogate!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.31,
+   "speech_s": 1.11,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -3.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "interrogate.",
+   "word_error": 0.0,
+   "phonemes": "ɪntˈɛɹəɡˌeɪt!"
+  },
+  "commander/order_jammer": {
+   "seat": "commander",
+   "id": "order_jammer",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "At the jammer, method N!",
+   "spoken": "At the jammer, method N!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "At the jammer, method N!",
+    "engine_text": "At the jammer, method N!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.9,
+   "speech_s": 1.71,
+   "slot_s": 2.15,
+   "rms_db": -18.5,
+   "peak_db": -2.0,
+   "flags": [],
+   "transcript": "at the Jammer Method N.",
+   "word_error": 0.0,
+   "phonemes": "æt ðə dʒˈæmɚ, mˈɛθəd ˈɛn!"
+  },
+  "commander/order_k_boyu": {
+   "seat": "commander",
+   "id": "order_k_boyu",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Action stations!",
+   "spoken": "Action stations!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Action stations!",
+    "engine_text": "Action stations!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.53,
+   "speech_s": 1.35,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -1.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Action Stations",
+   "word_error": 0.0,
+   "phonemes": "ˈækʃən stˈeɪʃənz!"
+  },
+  "commander/order_low_target": {
+   "seat": "commander",
+   "id": "order_low_target",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Low flier! Angles on the TV!",
+   "spoken": "Low flier! Angles on the T V!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Low flier! Angles on the T V!",
+    "engine_text": "Low flier! Angles on the T V!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.51,
+   "speech_s": 2.18,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -1.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Low flyer angles on the TV.",
+   "word_error": 0.17,
+   "phonemes": "lˈoʊ flˈaɪɚ! ˈæŋɡəlz ɔnðə tˈiː vˈiː!"
+  },
+  "commander/order_march": {
+   "seat": "commander",
+   "id": "order_march",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Prepare to march!",
+   "spoken": "Prepare to march!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Prepare to march!",
+    "engine_text": "Prepare to march!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.49,
+   "speech_s": 1.28,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -2.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Prepare to march.",
+   "word_error": 0.0,
+   "phonemes": "pɹɪpˈɛɹ tə mˈɑːɹtʃ!"
+  },
+  "commander/order_mount": {
+   "seat": "commander",
+   "id": "order_mount",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Mount up!",
+   "spoken": "Mount up!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Mount up!",
+    "engine_text": "Mount up!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.94,
+   "speech_s": 0.75,
+   "slot_s": 1.1,
+   "rms_db": -19.0,
+   "peak_db": -3.3,
+   "flags": [],
+   "transcript": "Mount Up",
+   "word_error": 0.0,
+   "phonemes": "mˈaʊnt ˈʌp!"
+  },
+  "commander/order_mti": {
+   "seat": "commander",
+   "id": "order_mti",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "MTI on!",
+   "spoken": "M T I on!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "M T I on!",
+    "engine_text": "M T I on!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.54,
+   "speech_s": 1.35,
+   "slot_s": 1.1,
+   "rms_db": -18.6,
+   "peak_db": -3.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "MT-ION",
+   "word_error": 0.0,
+   "phonemes": "ˈɛm tˈiː aɪ ˈɔn!"
+  },
+  "commander/order_orient": {
+   "seat": "commander",
+   "id": "order_orient",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Orient the vehicle!",
+   "spoken": "Orient the vehicle!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Orient the vehicle!",
+    "engine_text": "Orient the vehicle!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.48,
+   "speech_s": 1.22,
+   "slot_s": 1.1,
+   "rms_db": -18.8,
+   "peak_db": -2.2,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Orient the vehicle.",
+   "word_error": 0.0,
+   "phonemes": "ˈɔːɹiənt ðə vˈiəkəl!"
+  },
+  "commander/order_otboy": {
+   "seat": "commander",
+   "id": "order_otboy",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Stand down!",
+   "spoken": "Stand down!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Stand down!",
+    "engine_text": "Stand down!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.3,
+   "speech_s": 1.1,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Stand down.",
+   "word_error": 0.0,
+   "phonemes": "stˈænd dˈaʊn!"
+  },
+  "commander/order_prepare": {
+   "seat": "commander",
+   "id": "order_prepare",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Prepare to launch!",
+   "spoken": "Prepare to launch!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Prepare to launch!",
+    "engine_text": "Prepare to launch!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.51,
+   "speech_s": 1.31,
+   "slot_s": 1.45,
+   "rms_db": -18.6,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Prepare to launch.",
+   "word_error": 0.0,
+   "phonemes": "pɹɪpˈɛɹ tə lˈɑːntʃ!"
+  },
+  "commander/order_presets": {
+   "seat": "commander",
+   "id": "order_presets",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Set up the fixed frequencies!",
+   "spoken": "Set up the fixed frequencies!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Set up the fixed frequencies!",
+    "engine_text": "Set up the fixed frequencies!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.96,
+   "speech_s": 1.79,
+   "slot_s": 1.45,
+   "rms_db": -19.1,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Set up the fixed frequencies.",
+   "word_error": 0.0,
+   "phonemes": "sˈɛt ˌʌp ðə fˈɪkst fɹˈiːkwənsiz!"
+  },
+  "commander/order_protection_off": {
+   "seat": "commander",
+   "id": "order_protection_off",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Counter-jamming off!",
+   "spoken": "Counter-jamming off!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Counter-jamming off!",
+    "engine_text": "Counter-jamming off!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.65,
+   "speech_s": 1.48,
+   "slot_s": 1.8,
+   "rms_db": -18.5,
+   "peak_db": -2.2,
+   "flags": [],
+   "transcript": "Counter jamming off.",
+   "word_error": 0.0,
+   "phonemes": "kˈaʊntɚdʒˈæmɪŋ ˈɔf!"
+  },
+  "commander/order_radio_on": {
+   "seat": "commander",
+   "id": "order_radio_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Radios on!",
+   "spoken": "Radios on!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Radios on!",
+    "engine_text": "Radios on!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.37,
+   "speech_s": 1.22,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -2.4,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Radios on",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪdɪˌoʊz ˈɔn!"
+  },
+  "commander/order_refuel": {
+   "seat": "commander",
+   "id": "order_refuel",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Refuel!",
+   "spoken": "Refuel!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Refuel!",
+    "engine_text": "Refuel!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.09,
+   "speech_s": 0.94,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Refuel",
+   "word_error": 0.0,
+   "phonemes": "ɹᵻfjˈuːl!"
+  },
+  "commander/order_reload": {
+   "seat": "commander",
+   "id": "order_reload",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Reload!",
+   "spoken": "Reload!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Reload!",
+    "engine_text": "Reload!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.98,
+   "speech_s": 0.82,
+   "slot_s": 0.75,
+   "rms_db": -18.8,
+   "peak_db": -2.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Reload.",
+   "word_error": 0.0,
+   "phonemes": "ɹᵻlˈoʊd!"
+  },
+  "commander/order_relocate": {
+   "seat": "commander",
+   "id": "order_relocate",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Change position!",
+   "spoken": "Change position!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Change position!",
+    "engine_text": "Change position!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.49,
+   "speech_s": 1.27,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -3.2,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Change position.",
+   "word_error": 0.0,
+   "phonemes": "tʃˈeɪndʒ pəzˈɪʃən!"
+  },
+  "commander/order_search": {
+   "seat": "commander",
+   "id": "order_search",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Search!",
+   "spoken": "Search!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Search!",
+    "engine_text": "Search!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.79,
+   "speech_s": 0.64,
+   "slot_s": 0.75,
+   "rms_db": -18.9,
+   "peak_db": -3.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Search.",
+   "word_error": 0.0,
+   "phonemes": "sˈɜːtʃ!"
+  },
+  "commander/order_search_on_march": {
+   "seat": "commander",
+   "id": "order_search_on_march",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Search on the move!",
+   "spoken": "Search on the move!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Search on the move!",
+    "engine_text": "Search on the move!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.5,
+   "speech_s": 1.36,
+   "slot_s": 1.45,
+   "rms_db": -18.4,
+   "peak_db": -1.6,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Search on the move.",
+   "word_error": 0.0,
+   "phonemes": "sˈɜːtʃ ɔnðə mˈuːv!"
+  },
+  "commander/order_second_missile": {
+   "seat": "commander",
+   "id": "order_second_missile",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Second missile, launch!",
+   "spoken": "Second missile, launch!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Second missile, launch!",
+    "engine_text": "Second missile, launch!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.63,
+   "speech_s": 1.47,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "2nd missile launch",
+   "word_error": 0.0,
+   "phonemes": "sˈɛkənd mˈɪsəl, lˈɑːntʃ!"
+  },
+  "commander/order_semi_auto": {
+   "seat": "commander",
+   "id": "order_semi_auto",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Range only!",
+   "spoken": "Range only!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Range only!",
+    "engine_text": "Range only!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.35,
+   "speech_s": 1.16,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -1.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Range only.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪndʒ ˈoʊnli!"
+  },
+  "commander/order_ssc_off": {
+   "seat": "commander",
+   "id": "order_ssc_off",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Tracking transmitter off!",
+   "spoken": "Tracking transmitter off!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Tracking transmitter off!",
+    "engine_text": "Tracking transmitter off!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.9,
+   "speech_s": 1.71,
+   "slot_s": 1.45,
+   "rms_db": -19.8,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Tracking transmitter off.",
+   "word_error": 0.0,
+   "phonemes": "tɹˈækɪŋ tɹænsmˈɪɾɚɹ ˈɔf!"
+  },
+  "commander/order_stop_search": {
+   "seat": "commander",
+   "id": "order_stop_search",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Stop the search!",
+   "spoken": "Stop the search!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Stop the search!",
+    "engine_text": "Stop the search!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.35,
+   "speech_s": 1.14,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -2.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Stop the search.",
+   "word_error": 0.0,
+   "phonemes": "stˈɑːp ðə sˈɜːtʃ!"
+  },
+  "commander/order_track_tv": {
+   "seat": "commander",
+   "id": "order_track_tv",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Track on the TV!",
+   "spoken": "Track on the T V!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Track on the T V!",
+    "engine_text": "Track on the T V!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.71,
+   "speech_s": 1.48,
+   "slot_s": 1.45,
+   "rms_db": -18.6,
+   "peak_db": -1.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Track on the TV.",
+   "word_error": 0.0,
+   "phonemes": "tɹˈæk ɔnðə tˈiː vˈiː!"
+  },
+  "commander/order_tv_watch": {
+   "seat": "commander",
+   "id": "order_tv_watch",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Look the target over on the TV!",
+   "spoken": "Look the target over on the T V!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Look the target over on the T V!",
+    "engine_text": "Look the target over on the T V!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.38,
+   "speech_s": 2.03,
+   "slot_s": 1.8,
+   "rms_db": -18.7,
+   "peak_db": -1.2,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Look the target over on the TV.",
+   "word_error": 0.0,
+   "phonemes": "lˈʊk ðə tˈɑːɹɡɪt ˌoʊvɚɹ ɔnðə tˈiː vˈiː!"
+  },
+  "commander/say_again": {
+   "seat": "commander",
+   "id": "say_again",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.11,
+   "speech_s": 0.96,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -4.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Say again.",
+   "word_error": 0.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "deputy_commander/ack": {
+   "seat": "deputy_commander",
+   "id": "ack",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.71,
+   "speech_s": 0.56,
+   "slot_s": 0.75,
+   "rms_db": -19.0,
+   "peak_db": -1.2,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "deputy_commander/air_alert": {
+   "seat": "deputy_commander",
+   "id": "air_alert",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Air!",
+   "spoken": "Air!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Air!",
+    "engine_text": "Air!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.65,
+   "speech_s": 0.47,
+   "slot_s": 0.75,
+   "rms_db": -19.4,
+   "peak_db": -3.9,
+   "flags": [],
+   "transcript": "Air.",
+   "word_error": 0.0,
+   "phonemes": "ˈɛɹ!"
+  },
+  "deputy_commander/arm_launch_tv": {
+   "seat": "deputy_commander",
+   "id": "arm_launch_tv",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "On the TV: the target has fired an ARM!",
+   "spoken": "On the T V: the target has fired an A R M!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "On the T V: the target has fired an A R M!",
+    "engine_text": "On the T V: the target has fired an A.R.M.!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 3.4,
+   "speech_s": 2.82,
+   "slot_s": 2.5,
+   "rms_db": -20.9,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "On the TV, the target has fired an ARM.",
+   "word_error": 0.0,
+   "phonemes": "ɔnðə tˈiː vˈiː: ðə tˈɑːɹɡɪt hɐz fˈaɪɚd ɐn ˈeɪ.ˈɑːɹ.ˈɛm.!"
+  },
+  "deputy_commander/done": {
+   "seat": "deputy_commander",
+   "id": "done",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.68,
+   "speech_s": 0.53,
+   "slot_s": 0.75,
+   "rms_db": -19.1,
+   "peak_db": -1.9,
+   "flags": [],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "deputy_commander/false_target": {
+   "seat": "deputy_commander",
+   "id": "false_target",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "False target: a drone!",
+   "spoken": "False target: a drone!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "False target: a drone!",
+    "engine_text": "False target: a drone!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.7,
+   "speech_s": 1.46,
+   "slot_s": 1.8,
+   "rms_db": -20.8,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "False target, a drone.",
+   "word_error": 0.0,
+   "phonemes": "fˈɔls tˈɑːɹɡɪt: ɐ dɹˈoʊn!"
+  },
+  "deputy_commander/hit": {
+   "seat": "deputy_commander",
+   "id": "hit",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Target destroyed!",
+   "spoken": "Target destroyed!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Target destroyed!",
+    "engine_text": "Target destroyed!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.24,
+   "speech_s": 1.09,
+   "slot_s": 1.1,
+   "rms_db": -19.6,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Target destroyed.",
+   "word_error": 0.0,
+   "phonemes": "tˈɑːɹɡɪt dᵻstɹˈɔɪd!"
+  },
+  "deputy_commander/kill_sign_burst": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_burst",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Burst, the missile's reply is gone!",
+   "spoken": "Burst, the missile's reply is gone!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Burst, the missile's reply is gone!",
+    "engine_text": "Burst, the missile's reply is gone!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.17,
+   "speech_s": 1.94,
+   "slot_s": 1.8,
+   "rms_db": -19.7,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Burst, the missile's reply is gone.",
+   "word_error": 0.0,
+   "phonemes": "bˈɜːst, ðə mˈɪsəlz ɹᵻplˈaɪ ɪz ɡˈɔn!"
+  },
+  "deputy_commander/kill_sign_elevation_drop": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_elevation_drop",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target's elevation is dropping fast!",
+   "spoken": "The target's elevation is dropping fast!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "The target's elevation is dropping fast!",
+    "engine_text": "The target's elevation is dropping fast!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.59,
+   "speech_s": 2.33,
+   "slot_s": 2.15,
+   "rms_db": -20.2,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target's elevation is dropping fast.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪts ˌɛlɪvˈeɪʃən ɪz dɹˈɑːpɪŋ fˈæst!"
+  },
+  "deputy_commander/kill_sign_flies_on": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_flies_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target flies on unchanged!",
+   "spoken": "The target flies on unchanged!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "The target flies on unchanged!",
+    "engine_text": "The target flies on unchanged!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.97,
+   "speech_s": 1.82,
+   "slot_s": 2.15,
+   "rms_db": -20.6,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "The target flies on unchanged.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪt flˈaɪz ˌɔn ʌntʃˈeɪndʒd!"
+  },
+  "deputy_commander/kill_sign_jamming_stops": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_jamming_stops",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The jamming is gone!",
+   "spoken": "The jamming is gone!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "The jamming is gone!",
+    "engine_text": "The jamming is gone!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.41,
+   "speech_s": 1.26,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -1.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The jamming is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə dʒˈæmɪŋ ɪz ɡˈɔn!"
+  },
+  "deputy_commander/kill_sign_mark_gone": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_mark_gone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target's mark is gone!",
+   "spoken": "The target's mark is gone!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "The target's mark is gone!",
+    "engine_text": "The target's mark is gone!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.64,
+   "speech_s": 1.45,
+   "slot_s": 1.45,
+   "rms_db": -19.5,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target's mark is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪts mˈɑːɹk ɪz ɡˈɔn!"
+  },
+  "deputy_commander/kill_sign_reply_after": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_reply_after",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply is still there after the meeting!",
+   "spoken": "The missile's reply is still there after the meeting!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "The missile's reply is still there after the meeting!",
+    "engine_text": "The missile's reply is still there after the meeting!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.97,
+   "speech_s": 2.51,
+   "slot_s": 2.15,
+   "rms_db": -20.3,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missiles reply is still there after the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ ɪz stˈɪl ðɛɹ ˈæftɚ ðə mˈiːɾɪŋ!"
+  },
+  "deputy_commander/kill_sign_reply_early": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_reply_early",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply went before the meeting!",
+   "spoken": "The missile's reply went before the meeting!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "The missile's reply went before the meeting!",
+    "engine_text": "The missile's reply went before the meeting!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.39,
+   "speech_s": 2.1,
+   "slot_s": 2.15,
+   "rms_db": -21.2,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missile's reply went before the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ wɛnt bᵻfˌɔːɹ ðə mˈiːɾɪŋ!"
+  },
+  "deputy_commander/kill_sign_tv_fire": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_tv_fire",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "On the TV: the target is burning, breaking up!",
+   "spoken": "On the T V: the target is burning, breaking up!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "On the T V: the target is burning, breaking up!",
+    "engine_text": "On the T V: the target is burning, breaking up!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 3.24,
+   "speech_s": 2.64,
+   "slot_s": 2.15,
+   "rms_db": -19.5,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "On the TV, the target is burning, breaking up.",
+   "word_error": 0.0,
+   "phonemes": "ɔnðə tˈiː vˈiː: ðə tˈɑːɹɡɪt ɪz bˈɜːnɪŋ, bɹˈeɪkɪŋ ˈʌp!"
+  },
+  "deputy_commander/kill_sign_tv_whole": {
+   "seat": "deputy_commander",
+   "id": "kill_sign_tv_whole",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "On the TV: the target is whole!",
+   "spoken": "On the T V: the target is whole!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "On the T V: the target is whole!",
+    "engine_text": "On the T V: the target is whole!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.24,
+   "speech_s": 1.87,
+   "slot_s": 1.8,
+   "rms_db": -20.0,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "On the TV, the target is whole.",
+   "word_error": 0.0,
+   "phonemes": "ɔnðə tˈiː vˈiː: ðə tˈɑːɹɡɪt ɪz hˈoʊl!"
+  },
+  "deputy_commander/launch": {
+   "seat": "deputy_commander",
+   "id": "launch",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Launch!",
+   "spoken": "Launch!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Launch!",
+    "engine_text": "Launch!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.8,
+   "speech_s": 0.65,
+   "slot_s": 0.75,
+   "rms_db": -19.9,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Launch.",
+   "word_error": 0.0,
+   "phonemes": "lˈɑːntʃ!"
+  },
+  "deputy_commander/launcher_empty": {
+   "seat": "deputy_commander",
+   "id": "launcher_empty",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "No missiles left!",
+   "spoken": "No missiles left!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "No missiles left!",
+    "engine_text": "No missiles left!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.31,
+   "speech_s": 1.13,
+   "slot_s": 1.1,
+   "rms_db": -18.6,
+   "peak_db": -1.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "No missiles left.",
+   "word_error": 0.0,
+   "phonemes": "nˈoʊ mˈɪsəlz lˈɛft!"
+  },
+  "deputy_commander/miss": {
+   "seat": "deputy_commander",
+   "id": "miss",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Miss!",
+   "spoken": "Miss!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Miss!",
+    "engine_text": "Miss!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+    "retake": {
+     "speed": 0.9
+    }
+   },
+   "phonemes": "mˈɪs!",
+   "duration_s": 0.78,
+   "speech_s": 0.63,
+   "slot_s": 0.75,
+   "rms_db": -18.9,
+   "peak_db": -2.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Miss",
+   "word_error": 0.0
+  },
+  "deputy_commander/missile_away": {
+   "seat": "deputy_commander",
+   "id": "missile_away",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Missile away!",
+   "spoken": "Missile away!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Missile away!",
+    "engine_text": "Missile away!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.01,
+   "speech_s": 0.86,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Missile Away.",
+   "word_error": 0.0,
+   "phonemes": "mˈɪsəl ɐwˈeɪ!"
+  },
+  "deputy_commander/missile_ready": {
+   "seat": "deputy_commander",
+   "id": "missile_ready",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Launch ready!",
+   "spoken": "Launch ready!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Launch ready!",
+    "engine_text": "Launch ready!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.01,
+   "speech_s": 0.86,
+   "slot_s": 1.1,
+   "rms_db": -19.1,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "Launch ready.",
+   "word_error": 0.0,
+   "phonemes": "lˈɑːntʃ ɹˈɛdi!"
+  },
+  "deputy_commander/missiles_ready": {
+   "seat": "deputy_commander",
+   "id": "missiles_ready",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Link, tracker, missiles ready!",
+   "spoken": "Link, tracker, missiles ready!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Link, tracker, missiles ready!",
+    "engine_text": "Link, tracker, missiles ready!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.8,
+   "speech_s": 1.59,
+   "slot_s": 1.8,
+   "rms_db": -18.5,
+   "peak_db": -1.3,
+   "flags": [],
+   "transcript": "Link tracker missiles ready.",
+   "word_error": 0.0,
+   "phonemes": "lˈɪŋk, tɹˈækɚ, mˈɪsəlz ɹˈɛdi!"
+  },
+  "deputy_commander/order_drives_on": {
+   "seat": "deputy_commander",
+   "id": "order_drives_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Drives on!",
+   "spoken": "Drives on!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Drives on!",
+    "engine_text": "Drives on!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.0,
+   "speech_s": 0.85,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "Drives on.",
+   "word_error": 0.0,
+   "phonemes": "dɹˈaɪvz ˈɔn!"
+  },
+  "deputy_commander/order_unlock_apu": {
+   "seat": "deputy_commander",
+   "id": "order_unlock_apu",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Unlock the launcher-antenna unit!",
+   "spoken": "Unlock the launcher-antenna unit!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Unlock the launcher-antenna unit!",
+    "engine_text": "Unlock the launcher-antenna unit!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.03,
+   "speech_s": 1.84,
+   "slot_s": 1.1,
+   "rms_db": -19.0,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Unlock the launcher antenna unit.",
+   "word_error": 0.0,
+   "phonemes": "ʌnlˈɑːk ðə lˈɔːntʃɚɹæntˈɛnə jˈuːnɪt!"
+  },
+  "deputy_commander/result_unknown": {
+   "seat": "deputy_commander",
+   "id": "result_unknown",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Can't see the result!",
+   "spoken": "Can't see the result!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Can't see the result!",
+    "engine_text": "Can't see the result!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.34,
+   "speech_s": 1.14,
+   "slot_s": 1.45,
+   "rms_db": -21.7,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "can't see the result.",
+   "word_error": 0.0,
+   "phonemes": "kˈænt sˈiː ðə ɹɪzˈʌlt!"
+  },
+  "deputy_commander/say_again": {
+   "seat": "deputy_commander",
+   "id": "say_again",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.97,
+   "speech_s": 0.82,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Say again.",
+   "word_error": 0.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "deputy_commander/spk_ready": {
+   "seat": "deputy_commander",
+   "id": "spk_ready",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Command link ready!",
+   "spoken": "Command link ready!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Command link ready!",
+    "engine_text": "Command link ready!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.37,
+   "speech_s": 1.22,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -2.4,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Command link ready.",
+   "word_error": 0.0,
+   "phonemes": "kəmˈænd lˈɪŋk ɹˈɛdi!"
+  },
+  "deputy_commander/target_in_zone": {
+   "seat": "deputy_commander",
+   "id": "target_in_zone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Target in the zone!",
+   "spoken": "Target in the zone!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Target in the zone!",
+    "engine_text": "Target in the zone!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.36,
+   "speech_s": 1.21,
+   "slot_s": 1.45,
+   "rms_db": -18.8,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "Target in the zone.",
+   "word_error": 0.0,
+   "phonemes": "tˈɑːɹɡɪt ɪnðə zˈoʊn!"
+  },
+  "deputy_commander/target_near_zone": {
+   "seat": "deputy_commander",
+   "id": "target_near_zone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Attention: nearing the zone!",
+   "spoken": "Attention: nearing the zone!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Attention: nearing the zone!",
+    "engine_text": "Attention: nearing the zone!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.8,
+   "speech_s": 1.64,
+   "slot_s": 0.75,
+   "rms_db": -18.4,
+   "peak_db": -1.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Attention nearing the zone.",
+   "word_error": 0.0,
+   "phonemes": "ɐtˈɛnʃən: nˌɪɹɪŋ ðə zˈoʊn!"
+  },
+  "deputy_commander/too_low": {
+   "seat": "deputy_commander",
+   "id": "too_low",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Too low for the radar!",
+   "spoken": "Too low for the radar!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Too low for the radar!",
+    "engine_text": "Too low for the radar!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.47,
+   "speech_s": 1.36,
+   "slot_s": 0.75,
+   "rms_db": -18.3,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Too low for the radar.",
+   "word_error": 0.0,
+   "phonemes": "tˈuː lˈoʊ fɚðə ɹˈeɪdɑːɹ!"
+  },
+  "deputy_commander/tv_track": {
+   "seat": "deputy_commander",
+   "id": "tv_track",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Tracking on the TV!",
+   "spoken": "Tracking on the T V!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "Tracking on the T V!",
+    "engine_text": "Tracking on the T V!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.43,
+   "speech_s": 1.23,
+   "slot_s": 1.45,
+   "rms_db": -19.4,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "Tracking on the TV",
+   "word_error": 0.0,
+   "phonemes": "tɹˈækɪŋ ɔnðə tˈiː vˈiː!"
+  },
+  "driver/ack": {
+   "seat": "driver",
+   "id": "ack",
+   "crews": [
+    "osa_ak_crew.json",
+    "pu12m_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.58,
+   "speech_s": 0.52,
+   "slot_s": 0.75,
+   "rms_db": -18.5,
+   "peak_db": -2.2,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "driver/done": {
+   "seat": "driver",
+   "id": "done",
+   "crews": [
+    "osa_ak_crew.json",
+    "pu12m_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.61,
+   "speech_s": 0.55,
+   "slot_s": 0.75,
+   "rms_db": -18.4,
+   "peak_db": -3.5,
+   "flags": [],
+   "transcript": "done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "driver/fuel_half": {
+   "seat": "driver",
+   "id": "fuel_half",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Half the fuel left!",
+   "spoken": "Half the fuel left!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Half the fuel left!",
+    "engine_text": "Half the fuel left!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.49,
+   "speech_s": 1.36,
+   "slot_s": 1.1,
+   "rms_db": -20.0,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Have the fuel left.",
+   "word_error": 0.25,
+   "phonemes": "hˈæf ðə fjˈuːəl lˈɛft!"
+  },
+  "driver/halted": {
+   "seat": "driver",
+   "id": "halted",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Halted!",
+   "spoken": "Halted!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Halted!",
+    "engine_text": "Halted!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+    "retake": {
+     "speed": 0.9
+    }
+   },
+   "phonemes": "hˈɔltᵻd!",
+   "duration_s": 0.98,
+   "speech_s": 0.85,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -2.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Halted",
+   "word_error": 0.0
+  },
+  "driver/kill_sign_burst": {
+   "seat": "driver",
+   "id": "kill_sign_burst",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Burst, the missile's reply is gone!",
+   "spoken": "Burst, the missile's reply is gone!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Burst, the missile's reply is gone!",
+    "engine_text": "Burst, the missile's reply is gone!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.66,
+   "speech_s": 2.35,
+   "slot_s": 1.8,
+   "rms_db": -18.5,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Burst, the missile's reply is gone.",
+   "word_error": 0.0,
+   "phonemes": "bˈɜːst, ðə mˈɪsəlz ɹᵻplˈaɪ ɪz ɡˈɔn!"
+  },
+  "driver/kill_sign_flies_on": {
+   "seat": "driver",
+   "id": "kill_sign_flies_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target flies on unchanged!",
+   "spoken": "The target flies on unchanged!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "The target flies on unchanged!",
+    "engine_text": "The target flies on unchanged!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.62,
+   "speech_s": 2.34,
+   "slot_s": 2.15,
+   "rms_db": -20.4,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target flies on unchanged.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪt flˈaɪz ˌɔn ʌntʃˈeɪndʒd!"
+  },
+  "driver/kill_sign_jamming_stops": {
+   "seat": "driver",
+   "id": "kill_sign_jamming_stops",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The jamming is gone!",
+   "spoken": "The jamming is gone!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "The jamming is gone!",
+    "engine_text": "The jamming is gone!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.75,
+   "speech_s": 1.58,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The jamming is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə dʒˈæmɪŋ ɪz ɡˈɔn!"
+  },
+  "driver/kill_sign_mark_gone": {
+   "seat": "driver",
+   "id": "kill_sign_mark_gone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target's mark is gone!",
+   "spoken": "The target's mark is gone!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "The target's mark is gone!",
+    "engine_text": "The target's mark is gone!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.08,
+   "speech_s": 1.9,
+   "slot_s": 1.45,
+   "rms_db": -19.2,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target's mark is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪts mˈɑːɹk ɪz ɡˈɔn!"
+  },
+  "driver/kill_sign_reply_after": {
+   "seat": "driver",
+   "id": "kill_sign_reply_after",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply is still there after the meeting!",
+   "spoken": "The missile's reply is still there after the meeting!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "The missile's reply is still there after the meeting!",
+    "engine_text": "The missile's reply is still there after the meeting!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 3.18,
+   "speech_s": 2.85,
+   "slot_s": 2.15,
+   "rms_db": -18.5,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missile's reply is still there after the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ ɪz stˈɪl ðɛɹ ˈæftɚ ðə mˈiːɾɪŋ!"
+  },
+  "driver/kill_sign_reply_early": {
+   "seat": "driver",
+   "id": "kill_sign_reply_early",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply went before the meeting!",
+   "spoken": "The missile's reply went before the meeting!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "The missile's reply went before the meeting!",
+    "engine_text": "The missile's reply went before the meeting!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.88,
+   "speech_s": 2.53,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -1.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missile's reply went before the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ wɛnt bᵻfˌɔːɹ ðə mˈiːɾɪŋ!"
+  },
+  "driver/ready_to_march": {
+   "seat": "driver",
+   "id": "ready_to_march",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Ready to march!",
+   "spoken": "Ready to march!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Ready to march!",
+    "engine_text": "Ready to march!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.34,
+   "speech_s": 1.21,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -2.9,
+   "flags": [],
+   "transcript": "Ready to march.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈɛdi tə mˈɑːɹtʃ!"
+  },
+  "driver/say_again": {
+   "seat": "driver",
+   "id": "say_again",
+   "crews": [
+    "osa_ak_crew.json",
+    "pu12m_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_onyx",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_onyx",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.02,
+   "speech_s": 0.89,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -4.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Say again.",
+   "word_error": 0.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "operator/ack": {
+   "seat": "operator",
+   "id": "ack",
+   "crews": [
+    "osa_ak_crew.json",
+    "pu12m_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.75,
+   "speech_s": 0.6,
+   "slot_s": 0.75,
+   "rms_db": -19.0,
+   "peak_db": -4.6,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "operator/apu_free": {
+   "seat": "operator",
+   "id": "apu_free",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Launcher-antenna unit unlocked!",
+   "spoken": "Launcher-antenna unit unlocked!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Launcher-antenna unit unlocked!",
+    "engine_text": "Launcher-antenna unit unlocked!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.06,
+   "speech_s": 1.89,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -5.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Launcher antenna unit unlocked.",
+   "word_error": 0.0,
+   "phonemes": "lˈɔːntʃɚɹæntˈɛnə jˈuːnɪt ʌnlˈɑːkt!"
+  },
+  "operator/apu_locked": {
+   "seat": "operator",
+   "id": "apu_locked",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Launcher-antenna unit locked!",
+   "spoken": "Launcher-antenna unit locked!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Launcher-antenna unit locked!",
+    "engine_text": "Launcher-antenna unit locked!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.87,
+   "speech_s": 1.7,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -4.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Launcher-antenna unit locked.",
+   "word_error": 0.0,
+   "phonemes": "lˈɔːntʃɚɹæntˈɛnə jˈuːnɪt lˈɑːkt!"
+  },
+  "operator/arm_launch_track": {
+   "seat": "operator",
+   "id": "arm_launch_track",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "A pulse has left the target, closing on us: ARM launch!",
+   "spoken": "A pulse has left the target, closing on us: A R M launch!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "A pulse has left the target, closing on us: A R M launch!",
+    "engine_text": "A pulse has left the target, closing on us: A.R.M. launch!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 3.46,
+   "speech_s": 3.16,
+   "slot_s": 3.9,
+   "rms_db": -18.4,
+   "peak_db": -4.4,
+   "flags": [],
+   "transcript": "A pulse has left the target closing on us, ARM launch.",
+   "word_error": 0.0,
+   "phonemes": "ɐ pˈʌls hɐz lˈɛft ðə tˈɑːɹɡɪt, klˈoʊzɪŋ ˈɔn ˌʌs: ˈeɪ.ˈɑːɹ.ˈɛm. lˈɑːntʃ!"
+  },
+  "operator/aspd_ready": {
+   "seat": "operator",
+   "id": "aspd_ready",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "ASPD ready!",
+   "spoken": "A S P D ready!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "A S P D ready!",
+    "engine_text": "A.S.P.D. ready!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+    "retake": {
+     "phonemes": "ˈeɪ, ˈɛs, pˈiː, dˈiː ɹˈɛdi!",
+     "style_length": 8
+    }
+   },
+   "phonemes": "ˈeɪ, ˈɛs, pˈiː, dˈiː ɹˈɛdi!",
+   "duration_s": 1.32,
+   "speech_s": 1.15,
+   "slot_s": 1.8,
+   "rms_db": -18.6,
+   "peak_db": -4.7,
+   "flags": [],
+   "transcript": "A.S.P.D. Ready",
+   "word_error": 0.0
+  },
+  "operator/capture_failed": {
+   "seat": "operator",
+   "id": "capture_failed",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "No capture!",
+   "spoken": "No capture!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "No capture!",
+    "engine_text": "No capture!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.98,
+   "speech_s": 0.87,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -4.4,
+   "flags": [],
+   "transcript": "No capture.",
+   "word_error": 0.0,
+   "phonemes": "nˈoʊ kˈæptʃɚ!"
+  },
+  "operator/captured": {
+   "seat": "operator",
+   "id": "captured",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Captured!",
+   "spoken": "Captured!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Captured!",
+    "engine_text": "Captured!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.77,
+   "speech_s": 0.66,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -2.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "captured",
+   "word_error": 0.0,
+   "phonemes": "kˈæptʃɚd!"
+  },
+  "operator/done": {
+   "seat": "operator",
+   "id": "done",
+   "crews": [
+    "osa_ak_crew.json",
+    "pu12m_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.7,
+   "speech_s": 0.55,
+   "slot_s": 0.75,
+   "rms_db": -19.1,
+   "peak_db": -3.6,
+   "flags": [],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "operator/kill_sign_burst": {
+   "seat": "operator",
+   "id": "kill_sign_burst",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Burst, the missile's reply is gone!",
+   "spoken": "Burst, the missile's reply is gone!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Burst, the missile's reply is gone!",
+    "engine_text": "Burst, the missile's reply is gone!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.08,
+   "speech_s": 1.9,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -4.7,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Burst, the missile's reply is gone.",
+   "word_error": 0.0,
+   "phonemes": "bˈɜːst, ðə mˈɪsəlz ɹᵻplˈaɪ ɪz ɡˈɔn!"
+  },
+  "operator/kill_sign_flies_on": {
+   "seat": "operator",
+   "id": "kill_sign_flies_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target flies on unchanged!",
+   "spoken": "The target flies on unchanged!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "The target flies on unchanged!",
+    "engine_text": "The target flies on unchanged!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.02,
+   "speech_s": 1.84,
+   "slot_s": 2.15,
+   "rms_db": -18.4,
+   "peak_db": -4.5,
+   "flags": [],
+   "transcript": "The target flies on unchanged.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪt flˈaɪz ˌɔn ʌntʃˈeɪndʒd!"
+  },
+  "operator/kill_sign_jamming_stops": {
+   "seat": "operator",
+   "id": "kill_sign_jamming_stops",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The jamming is gone!",
+   "spoken": "The jamming is gone!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "The jamming is gone!",
+    "engine_text": "The jamming is gone!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.36,
+   "speech_s": 1.21,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -5.4,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The jamming is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə dʒˈæmɪŋ ɪz ɡˈɔn!"
+  },
+  "operator/kill_sign_mark_gone": {
+   "seat": "operator",
+   "id": "kill_sign_mark_gone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target's mark is gone!",
+   "spoken": "The target's mark is gone!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "The target's mark is gone!",
+    "engine_text": "The target's mark is gone!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.65,
+   "speech_s": 1.5,
+   "slot_s": 1.45,
+   "rms_db": -18.4,
+   "peak_db": -4.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The target's mark is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪts mˈɑːɹk ɪz ɡˈɔn!"
+  },
+  "operator/kill_sign_reply_after": {
+   "seat": "operator",
+   "id": "kill_sign_reply_after",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply is still there after the meeting!",
+   "spoken": "The missile's reply is still there after the meeting!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "The missile's reply is still there after the meeting!",
+    "engine_text": "The missile's reply is still there after the meeting!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.56,
+   "speech_s": 2.38,
+   "slot_s": 2.15,
+   "rms_db": -18.3,
+   "peak_db": -4.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missile's reply is still there after the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ ɪz stˈɪl ðɛɹ ˈæftɚ ðə mˈiːɾɪŋ!"
+  },
+  "operator/kill_sign_reply_early": {
+   "seat": "operator",
+   "id": "kill_sign_reply_early",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply went before the meeting!",
+   "spoken": "The missile's reply went before the meeting!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "The missile's reply went before the meeting!",
+    "engine_text": "The missile's reply went before the meeting!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.13,
+   "speech_s": 1.99,
+   "slot_s": 2.15,
+   "rms_db": -18.3,
+   "peak_db": -4.3,
+   "flags": [],
+   "transcript": "The missiles reply went before the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ wɛnt bᵻfˌɔːɹ ðə mˈiːɾɪŋ!"
+  },
+  "operator/lock_lost": {
+   "seat": "operator",
+   "id": "lock_lost",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Lost the lock!",
+   "spoken": "Lost the lock!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Lost the lock!",
+    "engine_text": "Lost the lock!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.1,
+   "speech_s": 0.94,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -4.5,
+   "flags": [
+    "heard right"
+   ],
+   "transcript": "Lost the lug.",
+   "word_error": 0.33,
+   "phonemes": "lˈɔst ðə lˈɑːk!"
+  },
+  "operator/on_jammer": {
+   "seat": "operator",
+   "id": "on_jammer",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "No range, tracking the jammer in angle!",
+   "spoken": "No range, tracking the jammer in angle!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "No range, tracking the jammer in angle!",
+    "engine_text": "No range, tracking the jammer in angle!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.28,
+   "speech_s": 2.11,
+   "slot_s": 2.5,
+   "rms_db": -18.3,
+   "peak_db": -5.4,
+   "flags": [],
+   "transcript": "No range tracking the jammer in angle.",
+   "word_error": 0.0,
+   "phonemes": "nˈoʊ ɹˈeɪndʒ, tɹˈækɪŋ ðə dʒˈæmɚɹ ɪn ˈæŋɡəl!"
+  },
+  "operator/range_on": {
+   "seat": "operator",
+   "id": "range_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Range on the target!",
+   "spoken": "Range on the target!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Range on the target!",
+    "engine_text": "Range on the target!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.44,
+   "speech_s": 1.29,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -4.5,
+   "flags": [],
+   "transcript": "Range on the target.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪndʒ ɔnðə tˈɑːɹɡɪt!"
+  },
+  "operator/range_pulled": {
+   "seat": "operator",
+   "id": "range_pulled",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Range gate pulled off!",
+   "spoken": "Range gate pulled off!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Range gate pulled off!",
+    "engine_text": "Range gate pulled off!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.52,
+   "speech_s": 1.37,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -4.6,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Range Gate pulled off.",
+   "word_error": 0.0,
+   "phonemes": "ɹˈeɪndʒ ɡˈeɪt pˈʊld ˈɔf!"
+  },
+  "operator/say_again": {
+   "seat": "operator",
+   "id": "say_again",
+   "crews": [
+    "osa_ak_crew.json",
+    "pu12m_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.99,
+   "speech_s": 0.84,
+   "slot_s": 0.75,
+   "rms_db": -18.7,
+   "peak_db": -5.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Say again.",
+   "word_error": 0.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "operator/ssc_ready": {
+   "seat": "operator",
+   "id": "ssc_ready",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Tracking radar ready!",
+   "spoken": "Tracking radar ready!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "Tracking radar ready!",
+    "engine_text": "Tracking radar ready!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.52,
+   "speech_s": 1.37,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -4.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Tracking radar ready.",
+   "word_error": 0.0,
+   "phonemes": "tɹˈækɪŋ ɹˈeɪdɑːɹ ɹˈɛdi!"
+  },
+  "operator/telecode_on": {
+   "seat": "operator",
+   "id": "telecode_on",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The regiment's picture is coming in!",
+   "spoken": "The regiment's picture is coming in!",
+   "voice": "am_eric",
+   "settings": {
+    "spoken": "The regiment's picture is coming in!",
+    "engine_text": "The regiment's picture is coming in!",
+    "voice": "am_eric",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.07,
+   "speech_s": 1.89,
+   "slot_s": 2.15,
+   "rms_db": -18.4,
+   "peak_db": -3.8,
+   "flags": [],
+   "transcript": "The regiment's picture is coming in.",
+   "word_error": 0.0,
+   "phonemes": "ðə ɹˈɛdʒɪmənts pˈɪktʃɚɹ ɪz kˈʌmɪŋ ˈɪn!"
+  },
+  "radio_operator/ack": {
+   "seat": "radio_operator",
+   "id": "ack",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.55,
+   "speech_s": 0.48,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -3.3,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "radio_operator/done": {
+   "seat": "radio_operator",
+   "id": "done",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.51,
+   "speech_s": 0.45,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -3.3,
+   "flags": [],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "radio_operator/mast_up": {
+   "seat": "radio_operator",
+   "id": "mast_up",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Mast up!",
+   "spoken": "Mast up!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "Mast up!",
+    "engine_text": "Mast up!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.73,
+   "speech_s": 0.6,
+   "slot_s": 1.1,
+   "rms_db": -18.8,
+   "peak_db": -4.0,
+   "flags": [
+    "heard right"
+   ],
+   "transcript": "Masked Up",
+   "word_error": 0.5,
+   "phonemes": "mˈæst ˈʌp!"
+  },
+  "radio_operator/r111_protect": {
+   "seat": "radio_operator",
+   "id": "r111_protect",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The R-111's input protection has tripped!",
+   "spoken": "The R one one one's input protection has tripped!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "The R one one one's input protection has tripped!",
+    "engine_text": "The R one one one's input protection has tripped!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.76,
+   "speech_s": 2.42,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -1.4,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The R111's input protection has tripped.",
+   "word_error": 0.0,
+   "phonemes": "ðɪ ˈɑːɹ wˈʌn wˈʌn wˈʌnz ˈɪnpʊt pɹətˈɛkʃən hɐz tɹˈɪpt!"
+  },
+  "radio_operator/r111_tuned": {
+   "seat": "radio_operator",
+   "id": "r111_tuned",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "R-111 tuned!",
+   "spoken": "R one one one tuned!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "R one one one tuned!",
+    "engine_text": "R one one one tuned!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.39,
+   "speech_s": 1.26,
+   "slot_s": 1.45,
+   "rms_db": -18.4,
+   "peak_db": -1.3,
+   "flags": [],
+   "transcript": "R111 tuned.",
+   "word_error": 0.0,
+   "phonemes": "ˈɑːɹ wˈʌn wˈʌn wˈʌn tˈuːnd!"
+  },
+  "radio_operator/radios_ready": {
+   "seat": "radio_operator",
+   "id": "radios_ready",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "In touch with the regiment!",
+   "spoken": "In touch with the regiment!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "In touch with the regiment!",
+    "engine_text": "In touch with the regiment!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.3,
+   "speech_s": 1.18,
+   "slot_s": 2.15,
+   "rms_db": -21.4,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "In touch with the regiment.",
+   "word_error": 0.0,
+   "phonemes": "ɪn tˈʌtʃ wɪððə ɹˈɛdʒɪmənt!"
+  },
+  "radio_operator/regiment_heard": {
+   "seat": "radio_operator",
+   "id": "regiment_heard",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Sir, an order from the regiment's post!",
+   "spoken": "Sir, an order from the regiment's post!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "Sir, an order from the regiment's post!",
+    "engine_text": "Sir, an order from the regiment's post!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.91,
+   "speech_s": 1.73,
+   "slot_s": 2.5,
+   "rms_db": -18.4,
+   "peak_db": -1.9,
+   "flags": [],
+   "transcript": "Sir in order from the regiments post.",
+   "word_error": 0.14,
+   "phonemes": "sˌɜː, ɐn ˈɔːɹdɚ fɹʌmðə ɹˈɛdʒɪmənts pˈoʊst!"
+  },
+  "radio_operator/say_again": {
+   "seat": "radio_operator",
+   "id": "say_again",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.77,
+   "speech_s": 0.68,
+   "slot_s": 0.75,
+   "rms_db": -18.5,
+   "peak_db": -3.3,
+   "flags": [
+    "heard right",
+    "long"
+   ],
+   "transcript": "See you again!",
+   "word_error": 1.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "senior_operator/ack": {
+   "seat": "senior_operator",
+   "id": "ack",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.58,
+   "speech_s": 0.48,
+   "slot_s": 0.75,
+   "rms_db": -18.8,
+   "peak_db": -4.0,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "senior_operator/air_alert": {
+   "seat": "senior_operator",
+   "id": "air_alert",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Air!",
+   "spoken": "Air!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Air!",
+    "engine_text": "Air!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.58,
+   "speech_s": 0.48,
+   "slot_s": 0.75,
+   "rms_db": -18.8,
+   "peak_db": -4.9,
+   "flags": [],
+   "transcript": "Air.",
+   "word_error": 0.0,
+   "phonemes": "ˈɛɹ!"
+  },
+  "senior_operator/az_on": {
+   "seat": "senior_operator",
+   "id": "az_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Azimuth on the target!",
+   "spoken": "Azimuth on the target!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Azimuth on the target!",
+    "engine_text": "Azimuth on the target!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.28,
+   "speech_s": 1.13,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -2.2,
+   "flags": [],
+   "transcript": "Azimuth on the target.",
+   "word_error": 0.0,
+   "phonemes": "ˈæzɪmˌʌθ ɔnðə tˈɑːɹɡɪt!"
+  },
+  "senior_operator/contact_lost": {
+   "seat": "senior_operator",
+   "id": "contact_lost",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Lost the target!",
+   "spoken": "Lost the target!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Lost the target!",
+    "engine_text": "Lost the target!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.07,
+   "speech_s": 0.9,
+   "slot_s": 1.1,
+   "rms_db": -18.7,
+   "peak_db": -2.6,
+   "flags": [],
+   "transcript": "Lost the target. //",
+   "word_error": 0.0,
+   "phonemes": "lˈɔst ðə tˈɑːɹɡɪt!"
+  },
+  "senior_operator/done": {
+   "seat": "senior_operator",
+   "id": "done",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.55,
+   "speech_s": 0.48,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -4.9,
+   "flags": [],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "senior_operator/iff_friend": {
+   "seat": "senior_operator",
+   "id": "iff_friend",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Friend!",
+   "spoken": "Friend!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Friend!",
+    "engine_text": "Friend!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.62,
+   "speech_s": 0.54,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -4.2,
+   "flags": [],
+   "transcript": "friend",
+   "word_error": 0.0,
+   "phonemes": "fɹˈɛnd!"
+  },
+  "senior_operator/iff_no_reply": {
+   "seat": "senior_operator",
+   "id": "iff_no_reply",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "No reply!",
+   "spoken": "No reply!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "No reply!",
+    "engine_text": "No reply!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.85,
+   "speech_s": 0.71,
+   "slot_s": 1.1,
+   "rms_db": -18.8,
+   "peak_db": -3.9,
+   "flags": [],
+   "transcript": "No reply.",
+   "word_error": 0.0,
+   "phonemes": "nˈoʊ ɹᵻplˈaɪ!"
+  },
+  "senior_operator/kill_sign_burst": {
+   "seat": "senior_operator",
+   "id": "kill_sign_burst",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Burst, the missile's reply is gone!",
+   "spoken": "Burst, the missile's reply is gone!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Burst, the missile's reply is gone!",
+    "engine_text": "Burst, the missile's reply is gone!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.8,
+   "speech_s": 1.63,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "Burst the missiles reply is gone.",
+   "word_error": 0.0,
+   "phonemes": "bˈɜːst, ðə mˈɪsəlz ɹᵻplˈaɪ ɪz ɡˈɔn!"
+  },
+  "senior_operator/kill_sign_chaff_stops": {
+   "seat": "senior_operator",
+   "id": "kill_sign_chaff_stops",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The chaff has stopped!",
+   "spoken": "The chaff has stopped!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The chaff has stopped!",
+    "engine_text": "The chaff has stopped!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.14,
+   "speech_s": 1.03,
+   "slot_s": 1.45,
+   "rms_db": -18.4,
+   "peak_db": -2.0,
+   "flags": [],
+   "transcript": "The chav has stopped.",
+   "word_error": 0.25,
+   "phonemes": "ðə tʃˈæf hɐz stˈɑːpt!"
+  },
+  "senior_operator/kill_sign_flies_on": {
+   "seat": "senior_operator",
+   "id": "kill_sign_flies_on",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target flies on unchanged!",
+   "spoken": "The target flies on unchanged!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The target flies on unchanged!",
+    "engine_text": "The target flies on unchanged!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.72,
+   "speech_s": 1.58,
+   "slot_s": 2.15,
+   "rms_db": -18.4,
+   "peak_db": -1.8,
+   "flags": [],
+   "transcript": "The target flies unchanged.",
+   "word_error": 0.2,
+   "phonemes": "ðə tˈɑːɹɡɪt flˈaɪz ˌɔn ʌntʃˈeɪndʒd!"
+  },
+  "senior_operator/kill_sign_group_split": {
+   "seat": "senior_operator",
+   "id": "kill_sign_group_split",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The group's mark has split!",
+   "spoken": "The group's mark has split!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The group's mark has split!",
+    "engine_text": "The group's mark has split!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.37,
+   "speech_s": 1.23,
+   "slot_s": 1.45,
+   "rms_db": -18.7,
+   "peak_db": -1.0,
+   "flags": [],
+   "transcript": "The group's mark is split.",
+   "word_error": 0.2,
+   "phonemes": "ðə ɡɹˈuːps mˈɑːɹk hɐz splˈɪt!"
+  },
+  "senior_operator/kill_sign_jamming_stops": {
+   "seat": "senior_operator",
+   "id": "kill_sign_jamming_stops",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The jamming is gone!",
+   "spoken": "The jamming is gone!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The jamming is gone!",
+    "engine_text": "The jamming is gone!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.15,
+   "speech_s": 1.02,
+   "slot_s": 1.1,
+   "rms_db": -18.5,
+   "peak_db": -2.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The jamming is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə dʒˈæmɪŋ ɪz ɡˈɔn!"
+  },
+  "senior_operator/kill_sign_mark_gone": {
+   "seat": "senior_operator",
+   "id": "kill_sign_mark_gone",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target's mark is gone!",
+   "spoken": "The target's mark is gone!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The target's mark is gone!",
+    "engine_text": "The target's mark is gone!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.44,
+   "speech_s": 1.27,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "The target's mark is gone.",
+   "word_error": 0.0,
+   "phonemes": "ðə tˈɑːɹɡɪts mˈɑːɹk ɪz ɡˈɔn!"
+  },
+  "senior_operator/kill_sign_reply_after": {
+   "seat": "senior_operator",
+   "id": "kill_sign_reply_after",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply is still there after the meeting!",
+   "spoken": "The missile's reply is still there after the meeting!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The missile's reply is still there after the meeting!",
+    "engine_text": "The missile's reply is still there after the meeting!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.56,
+   "speech_s": 2.37,
+   "slot_s": 2.15,
+   "rms_db": -18.3,
+   "peak_db": -1.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The missile's reply is still there after the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ ɪz stˈɪl ðɛɹ ˈæftɚ ðə mˈiːɾɪŋ!"
+  },
+  "senior_operator/kill_sign_reply_early": {
+   "seat": "senior_operator",
+   "id": "kill_sign_reply_early",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The missile's reply went before the meeting!",
+   "spoken": "The missile's reply went before the meeting!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The missile's reply went before the meeting!",
+    "engine_text": "The missile's reply went before the meeting!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 2.11,
+   "speech_s": 1.94,
+   "slot_s": 2.15,
+   "rms_db": -18.4,
+   "peak_db": -1.9,
+   "flags": [],
+   "transcript": "The missile's reply went before the meeting.",
+   "word_error": 0.0,
+   "phonemes": "ðə mˈɪsəlz ɹᵻplˈaɪ wɛnt bᵻfˌɔːɹ ðə mˈiːɾɪŋ!"
+  },
+  "senior_operator/say_again": {
+   "seat": "senior_operator",
+   "id": "say_again",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.79,
+   "speech_s": 0.69,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -3.7,
+   "flags": [
+    "heard right",
+    "long"
+   ],
+   "transcript": "See you again.",
+   "word_error": 1.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  },
+  "senior_operator/soc_ready": {
+   "seat": "senior_operator",
+   "id": "soc_ready",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Search radar ready!",
+   "spoken": "Search radar ready!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "Search radar ready!",
+    "engine_text": "Search radar ready!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.17,
+   "speech_s": 1.07,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -3.2,
+   "flags": [
+    "heard right",
+    "long"
+   ],
+   "transcript": "Sertrade are ready.",
+   "word_error": 0.67,
+   "phonemes": "sˈɜːtʃ ɹˈeɪdɑːɹ ɹˈɛdi!"
+  },
+  "squad_leader/ack": {
+   "seat": "squad_leader",
+   "id": "ack",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Yes!",
+   "spoken": "Yes!",
+   "voice": "am_liam",
+   "settings": {
+    "spoken": "Yes!",
+    "engine_text": "Yes!",
+    "voice": "am_liam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.68,
+   "speech_s": 0.6,
+   "slot_s": 0.75,
+   "rms_db": -18.6,
+   "peak_db": -4.5,
+   "flags": [],
+   "transcript": "Yes.",
+   "word_error": 0.0,
+   "phonemes": "jˈɛs!"
+  },
+  "squad_leader/comms_ready": {
+   "seat": "squad_leader",
+   "id": "comms_ready",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Communications ready!",
+   "spoken": "Communications ready!",
+   "voice": "am_liam",
+   "settings": {
+    "spoken": "Communications ready!",
+    "engine_text": "Communications ready!",
+    "voice": "am_liam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.63,
+   "speech_s": 1.5,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -2.2,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Communications ready.",
+   "word_error": 0.0,
+   "phonemes": "kəmjˌuːnɪkˈeɪʃənz ɹˈɛdi!"
+  },
+  "squad_leader/done": {
+   "seat": "squad_leader",
+   "id": "done",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Done!",
+   "spoken": "Done!",
+   "voice": "am_liam",
+   "settings": {
+    "spoken": "Done!",
+    "engine_text": "Done!",
+    "voice": "am_liam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 0.66,
+   "speech_s": 0.59,
+   "slot_s": 0.75,
+   "rms_db": -18.5,
+   "peak_db": -4.4,
+   "flags": [],
+   "transcript": "Done.",
+   "word_error": 0.0,
+   "phonemes": "dˈʌn!"
+  },
+  "squad_leader/oriented": {
+   "seat": "squad_leader",
+   "id": "oriented",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Post oriented!",
+   "spoken": "Post oriented!",
+   "voice": "am_liam",
+   "settings": {
+    "spoken": "Post oriented!",
+    "engine_text": "Post oriented!",
+    "voice": "am_liam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.4,
+   "speech_s": 1.26,
+   "slot_s": 1.1,
+   "rms_db": -18.8,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "post-oriented",
+   "word_error": 0.0,
+   "phonemes": "pˈoʊst ˈɔːɹiəntᵻd!"
+  },
+  "squad_leader/say_again": {
+   "seat": "squad_leader",
+   "id": "say_again",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Say again!",
+   "spoken": "Say again!",
+   "voice": "am_liam",
+   "settings": {
+    "spoken": "Say again!",
+    "engine_text": "Say again!",
+    "voice": "am_liam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "duration_s": 1.02,
+   "speech_s": 0.94,
+   "slot_s": 0.75,
+   "rms_db": -18.4,
+   "peak_db": -1.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Say again.",
+   "word_error": 0.0,
+   "phonemes": "sˈeɪ ɐɡˈɛn!"
+  }
+ },
+ "clashes": [
+  [
+   "driver/power_on",
+   [
+    [
+     "osa_ak_crew.json",
+     "Power on!"
+    ],
+    [
+     "pu12m_crew.json",
+     "Generator running, power on!"
+    ]
+   ]
+  ]
+ ],
+ "left_to_engine": [
+  [
+   "commander/air_alert",
+   "Kokoro puts a consonant before the lone vowel in every take tried (phonemes, style lengths, speeds, onset cuts): heard as 'Where?', 'There.', 'Layer.'"
+  ],
+  [
+   "driver/air_alert",
+   "as the commander's: heard as 'There.' in every take tried"
+  ],
+  [
+   "operator/air_alert",
+   "as the commander's: heard as 'Lear?', 'Near', 'Clear.' in every take tried"
+  ]
+ ]
+}

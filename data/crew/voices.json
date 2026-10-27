@@ -43,10 +43,14 @@
       "confidence": "estimate"
     },
     "en": {
+      "AFC": "A F C",
+      "ARM": "A R M",
+      "ASPD": "A S P D",
       "MTI": "M T I",
+      "R-111": "R one one one",
       "TV": "T V",
       "TZM": "T Z M",
-      "source": "sam3d: initialisms spelled out",
+      "source": "sam3d: initialisms spelled out (an engine reads ARM as the word 'arm'); radio sets' numbers digit by digit, as the English lines read board numbers",
       "confidence": "estimate"
     }
   }
