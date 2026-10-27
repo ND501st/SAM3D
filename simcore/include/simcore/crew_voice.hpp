@@ -9,11 +9,16 @@
 //   InstructorSpeech a lesson's words for an English voice (tutorial.hpp): the Russian in Latin letters
 //   RussianNumber    0..999 in words
 //   VoiceFor         the voice settings for a speaker, stressed or not
+//   RecordedLineLengths  the lengths of the recorded lines the game plays (art/crew_voices/<language>), for the bus
 //
-// The simulation's timing stays the bus's (SpeakingTimeS): a voice plays alongside it, it doesn't move it.
+// The simulation's timing is the bus's: a line takes SpeakingTimeS, and a recorded line the recording's length; a speech
+// engine's voice plays alongside it and doesn't move it.
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <cstring>
+#include <fstream>
 #include <map>
 #include <string>
 #include <utility>
@@ -388,6 +393,59 @@ inline bool LoadVoiceDataFile(const std::string& path, const CrewData* crew, Voi
         return false;
     }
     return true;
+}
+
+// The length in seconds of a WAV file the game can play (16-bit PCM, mono or stereo: SimCrewVoiceComponent's ReadWav);
+// 0 if there is no such file or it isn't one. Only the headers are read.
+inline double WavLengthS(const std::string& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return 0.0;
+    file.seekg(0, std::ios::end);
+    const long long size = static_cast<long long>(file.tellg());
+    unsigned char c[24];
+    file.seekg(0, std::ios::beg);
+    if (size < 44 || !file.read(reinterpret_cast<char*>(c), 12) || std::memcmp(c, "RIFF", 4) != 0) return 0.0;
+    const auto u16 = [](const unsigned char* p) { return static_cast<long long>(p[0]) | static_cast<long long>(p[1]) << 8; };
+    const auto u32 = [&u16](const unsigned char* p) { return u16(p) | u16(p + 2) << 16; };
+    long long channels = 0, rate = 0;
+    long long at = 12;
+    while (at + 8 <= size) {
+        file.seekg(static_cast<std::streamoff>(at));
+        if (!file.read(reinterpret_cast<char*>(c), 8)) return 0.0;
+        const long long chunk = u32(c + 4);
+        if (std::memcmp(c, "fmt ", 4) == 0 && chunk >= 16) {
+            if (!file.read(reinterpret_cast<char*>(c + 8), 16)) return 0.0;
+            channels = u16(c + 10);
+            rate = u32(c + 12);
+            if (u16(c + 8) != 1 || u16(c + 22) != 16 || channels < 1 || channels > 2 || rate <= 0) return 0.0;
+        } else if (std::memcmp(c, "data", 4) == 0 && channels > 0) {
+            const long long frames = std::min(chunk, size - at - 8) / (2 * channels);
+            return frames > 0 ? static_cast<double>(frames) / static_cast<double>(rate) : 0.0;
+        }
+        at += 8 + chunk + (chunk & 1);
+    }
+    return 0.0;
+}
+
+// The recorded lines the game would play for a crew's fixed callouts, with their lengths, for the bus
+// (CalloutBus::SetRecordedLengths): `dir` is art/crew_voices/<language>; for each callout with nothing to fill in, each
+// seat's <dir>/<seat>/<id>.wav (and the battery commander's on the net, "battery") as "<seat>/<id>", and the shared
+// <dir>/<id>.wav as "<id>" (SimCrewVoiceComponent::PlayRecorded tries them in that order).
+inline std::map<std::string, double> RecordedLineLengths(const std::string& dir, const CrewData& crew) {
+    std::vector<std::string> speakers;
+    for (const CrewSeatDef& s : crew.seats) speakers.push_back(s.station);
+    speakers.push_back("battery");
+    std::map<std::string, double> out;
+    for (const CalloutDef& c : crew.callouts) {
+        if (c.ru.find('{') != std::string::npos) continue;  // filled in when said: never a recording
+        for (const std::string& who : speakers) {
+            const double s = WavLengthS(dir + "/" + who + "/" + c.id + ".wav");
+            if (s > 0.0) out[who + "/" + c.id] = s;
+        }
+        const double shared = WavLengthS(dir + "/" + c.id + ".wav");
+        if (shared > 0.0) out[c.id] = shared;
+    }
+    return out;
 }
 
 }  // namespace simcore

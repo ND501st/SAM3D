@@ -196,6 +196,35 @@ void USimCrewVoiceComponent::ChooseLanguage(const simcore::VoiceData& Voices)
 	}
 }
 
+FString USimCrewVoiceComponent::RecordingsRoot(const USimWorldSubsystem& Sim) const
+{
+	return FPaths::Combine(Sim.GetDataDirectory(), TEXT(".."), TEXT("art"), TEXT("crew_voices"), Language);
+}
+
+void USimCrewVoiceComponent::GiveRecordedLengths(USimWorldSubsystem& Sim)
+{
+	// A recorded line takes its recording's time on the bus, so the next line on the channel doesn't cut it off. With no
+	// language (no voice installed) nothing plays, and every line takes the bus's speaking time.
+	simcore::ScenarioRunner* Runner = Sim.GetScenarioRunner();
+	if (Runner == nullptr || !Runner->Def().has_crew_data)
+	{
+		return;
+	}
+	const std::string From = Language.IsEmpty() ? std::string() : ToStd(RecordingsRoot(Sim));
+	if (Runner->RecordedLengthsFrom() == From)
+	{
+		return;
+	}
+	std::map<std::string, double> Lengths;
+	if (!From.empty())
+	{
+		Lengths = simcore::RecordedLineLengths(From, Runner->Def().crew_data);
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Crew voices: %d recorded lines take their recordings' time (%s)"), static_cast<int32>(Lengths.size()),
+		Language.IsEmpty() ? TEXT("no language") : *Language);
+	Runner->SetRecordedLengths(MoveTemp(Lengths), From);
+}
+
 UAudioComponent* USimCrewVoiceComponent::ChannelComponent(const FString& Channel)
 {
 	if (TObjectPtr<UAudioComponent>* Found = Channels.Find(Channel))
@@ -251,7 +280,7 @@ bool USimCrewVoiceComponent::PlayRecorded(const simcore::SpokenCallout& Line, co
 	{
 		return false;
 	}
-	const FString Root = FPaths::Combine(Sim->GetDataDirectory(), TEXT(".."), TEXT("art"), TEXT("crew_voices"), Language);
+	const FString Root = RecordingsRoot(*Sim);
 	for (const FString& Path : {FPaths::Combine(Root, ToF(Line.from), ToF(Line.id) + TEXT(".wav")), FPaths::Combine(Root, ToF(Line.id) + TEXT(".wav"))})
 	{
 		TArray<int16> Pcm;
@@ -307,6 +336,7 @@ void USimCrewVoiceComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	if (bCrew)
 	{
 		ChooseLanguage(*Voices);
+		GiveRecordedLengths(*Sim);
 	}
 	// Lines synthesised since the last frame.
 	FSimSpeechResult Done;

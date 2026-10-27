@@ -6,7 +6,8 @@
 //     said aloud, without the intercom: a seat with no headset or no box); the runner routes each line (its `Router`:
 //     docs/crew/12_COMMUNICATIONS.md) and marks a circular call (ВЫЗ, ЦИРКУЛЯР) that reaches boxes on the radio too;
 //   * urgent callouts (priority 0) are spoken before everything queued; otherwise first come, first spoken;
-//   * speaking takes time: 0.4 s plus 0.35 s a word (about 2.8 words a second; sam3d estimate);
+//   * speaking takes time: 0.4 s plus 0.35 s a word (about 2.8 words a second; sam3d estimate), or, for a fixed line
+//     the game plays from a recording (art/crew_voices), the recording's length, so the next line doesn't cut it off;
 //   * a callout can be delayed before it is queued (the speaker noticing and thinking: his skill).
 // What is said is filled in from fields: "{azimuth}", "{range_km}", "{seat}", "{what}" and so on.
 #pragma once
@@ -95,6 +96,22 @@ public:
     using Router = std::function<Route(const CalloutDef&, const std::string& from)>;
     void SetRouter(Router r) { router_ = std::move(r); }
 
+    // The lengths of the recorded lines the game plays (crew_voice.hpp RecordedLineLengths), keyed "<speaker>/<id>", or
+    // "<id>" for every speaker. Without them every line takes SpeakingTimeS.
+    void SetRecordedLengths(std::map<std::string, double> lengths_s) { recorded_s_ = std::move(lengths_s); }
+    // How long a line takes: a fixed line (the catalogue's words, nothing filled in) with a recording takes the
+    // recording's length, the speaker's own before the shared one, as SimCrewVoiceComponent::PlayRecorded picks it;
+    // any other line the speaking time of its Russian words.
+    double LineTimeS(const std::string& id, const std::string& from, const std::string& ru) const {
+        const CalloutDef* def = !recorded_s_.empty() && crew_ != nullptr ? crew_->FindCallout(id) : nullptr;
+        if (def != nullptr && def->ru == ru) {
+            auto it = recorded_s_.find(from + "/" + id);
+            if (it == recorded_s_.end()) it = recorded_s_.find(id);
+            if (it != recorded_s_.end() && it->second > 0.0) return it->second;
+        }
+        return SpeakingTimeS(ru);
+    }
+
     // Queue the catalogue's callout `id` from `from` (a station), after `delay_s`. Returns false for an unknown id.
     bool Say(double now_s, const std::string& id, const std::string& from, const std::map<std::string, std::string>& fields = {},
              double delay_s = 0.0, const KnownTarget* about = nullptr) {
@@ -179,7 +196,7 @@ public:
             pending_.erase(pending_.begin() + best);
             s.seq = ++started_;
             s.start_s = now_s;
-            s.end_s = now_s + SpeakingTimeS(s.ru);
+            s.end_s = now_s + LineTimeS(s.id, s.from, s.ru);
             speaking_.push_back(std::move(s));
         }
     }
@@ -215,6 +232,7 @@ private:
 
     const CrewData* crew_;
     Router router_;
+    std::map<std::string, double> recorded_s_;
     std::vector<SpokenCallout> pending_;
     std::vector<SpokenCallout> speaking_;
     std::vector<SpokenCallout> heard_;

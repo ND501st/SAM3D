@@ -37,8 +37,9 @@ under -1 dBFS, 16-bit mono at the engine's rate. The checks, kept in art/crew_vo
              the engine in place of the words, or the voice's style for a longer input ("style_length": Kokoro
              styles a voice by the input's length, and some short lines come out wrong in the short style); a line
              no retake fixes is "record": false, left to the game's speech engine (its recording removed)
-    long     longer than the time the crew's bus gives the line (crew_callouts.hpp SpeakingTimeS: 0.4 s and 0.35 s a
-             word of the Russian), so the next line on the channel cuts it off in the game; reported, not a failure
+    long     longer than the speaking time of the line's Russian (crew_callouts.hpp SpeakingTimeS: 0.4 s and 0.35 s a
+             word). The game's bus gives a recorded line its recording's time (CalloutBus::LineTimeS), so it isn't cut
+             off, but the crew is that much slower than in a headless run; reported, not a failure
 The first three are failures: the run exits 1.
 """
 import argparse
@@ -345,7 +346,8 @@ def review_page(path, out_dir, manifest):
 td,th{{padding:4px 8px;border-bottom:1px solid #ddd;text-align:left;vertical-align:middle}}span{{color:#777}}
 tr.flag td{{background:#fff4e5}}audio{{width:240px}}textarea{{width:100%;max-width:720px;height:6em}}</style>
 <h1>Crew voice lines ({manifest['language']}, {len(manifest['lines'])} files)</h1>
-<p>Checks: {summary}. "long": longer than the bus's time for the line (audio / slot). Under the words: the phonemes
+<p>Checks: {summary}. "long": longer than the speaking time of the line's words (audio / that time); the game's bus
+gives a recorded line its recording's time, so the crew is slower over it than headless. Under the words: the phonemes
 the engine was given.</p>
 <p>Not recorded (one file for two lines, or left to the game's speech engine):</p><ul>{clashes or '<li>none</li>'}</ul>
 <p>Lines flagged "words" that you listened to and heard said right: tick "said right", then put this in

@@ -19,7 +19,9 @@ class USimWorldSubsystem;
  * squelch's tail. The radio log's own lines (the command net's designations, the air-picture net's reports, the battery's
  * traffic) are read out the same way, in an English voice.
  *
- * The simulation keeps its own timing (the bus's speaking time); a voice plays alongside it. Under time compression
+ * The simulation keeps its own timing (the bus's speaking time); a speech engine's voice plays alongside it. A recorded
+ * line takes its recording's time: the component gives the scenario runner the lengths of the recordings its language
+ * plays (simcore RecordedLineLengths), so the next line on the channel doesn't cut one off. Under time compression
  * (above 1.5x) the crew is not voiced. Console: sam3d.Voice 0/1, sam3d.VoiceLanguage auto|ru|en, sam3d.VoiceVolume.
  *
  * A lesson's instructor (data/tutorials/, docs/TUTORIALS.md) reads each new step's title, and an action step's first line,
@@ -52,6 +54,10 @@ private:
 	};
 
 	void ChooseLanguage(const simcore::VoiceData& Voices);
+	/** art/crew_voices/<language>: the recorded lines this language plays. */
+	FString RecordingsRoot(const USimWorldSubsystem& Sim) const;
+	/** The recordings' lengths to the scenario runner's bus, once per runner and language. */
+	void GiveRecordedLengths(USimWorldSubsystem& Sim);
 	/** The lesson's new step, aloud (once the speech engine has its voices). */
 	void SpeakInstructor(USimWorldSubsystem& Sim, FSimSpeech& Speech);
 	bool PlayRecorded(const simcore::SpokenCallout& Line, const simcore::VoiceSettings& Settings, const FString& Channel);

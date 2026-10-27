@@ -26,7 +26,8 @@ the rules and the list in readable form.
    height (hectometres), as the PU-12 gives them (`pu12.hpp`) and as the commander passes them on.
 4. **One speaker at a time per channel.** The intercom and each radio net carry one voice at a time; urgent callouts
    (priority 0) cut in. A listener whose R-124 box is on the radio misses intercom traffic (`crew_comms.hpp`).
-5. **Speaking takes time:** 0.4 s plus 0.35 s per word (about 2.8 words/s; sam3d estimate). The listener acts after
+5. **Speaking takes time:** 0.4 s plus 0.35 s per word (about 2.8 words/s; sam3d estimate), or in the game, for a fixed
+   line played from a recording, the recording's length (`10_BODIES_AND_VOICES.md` section 4). The listener acts after
    hearing it and his perception delay (`05`).
 6. **Numbers are spoken as the crew reads them:** mils "пять сорок" for 05-40, ranges in km, heights in hectometres
    on the board, metres otherwise.

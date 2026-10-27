@@ -847,6 +847,15 @@ public:
     // ---- The crew's voice (roadmap 8.4, docs/crew/04_COMMANDS_AND_CALLOUTS.md): orders, acknowledgements, reports
     // and reminders as they were spoken (null without crew data). They also go to the radio log and the debrief.
     const CalloutBus* Callouts() const { return callouts_.get(); }
+    // The lengths of the recorded lines the game plays (crew_voice.hpp RecordedLineLengths, from `from`, its folder): a
+    // fixed line with a recording takes the recording's time on the bus and on the air, so the next line on the channel
+    // doesn't cut it off. Headless, nothing is played and every line takes SpeakingTimeS.
+    void SetRecordedLengths(std::map<std::string, double> lengths_s, std::string from) {
+        recorded_lengths_s_ = std::move(lengths_s);
+        recorded_lengths_from_ = std::move(from);
+        if (callouts_) callouts_->SetRecordedLengths(recorded_lengths_s_);
+    }
+    const std::string& RecordedLengthsFrom() const { return recorded_lengths_from_; }
     // The drill master on this console (null without crew data): the best move of any seat toward a task.
     const DrillMaster* Drill() const { return drill_.get(); }
     // The order menu's backend (roadmap 8.8): give a whole order of the crew data (an order callout id, e.g.
@@ -3316,7 +3325,9 @@ private:
         }
         const std::map<std::string, std::string> fields = NetReportFields(callout_id);
         if (!callouts_->Say(time_, callout_id, Cmdr(), fields)) return false;
-        if (const CalloutDef* def = def_.crew_data.FindCallout(callout_id)) OnAir(SpeakingTimeS(FillCallout(def->ru, fields)) + 0.5);
+        if (const CalloutDef* def = def_.crew_data.FindCallout(callout_id)) {
+            OnAir(callouts_->LineTimeS(callout_id, Cmdr(), FillCallout(def->ru, fields)) + 0.5);
+        }
         reports_made_.push_back({time_, station, callout_id});
         if (callout_id == "readback" && LinkedToPost()) own_readbacks_.push_back(designations_heard_.back().number);
         return true;
@@ -4163,7 +4174,7 @@ private:
         }
         const double delay = by_player ? 0.0 : SpeakDelayS(Cmdr());
         if (!callouts_->Say(time_, id, Cmdr(), fields, delay)) return false;
-        OnAir(delay + SpeakingTimeS(FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
+        OnAir(delay + callouts_->LineTimeS(id, Cmdr(), FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
         return true;
     }
     // The fields of the vehicle's radio reports: its callsign, the channels the КАНАЛЫ selector allows, missiles loaded.
@@ -5049,6 +5060,8 @@ private:
 
     // ---- Callouts (roadmap 8.4).
     std::unique_ptr<CalloutBus> callouts_;
+    std::map<std::string, double> recorded_lengths_s_;  // SetRecordedLengths
+    std::string recorded_lengths_from_;
     std::unique_ptr<DrillMaster> drill_;
     std::vector<char> report_state_;  // each automatic report's condition last step
     std::vector<double> report_said_s_;  // when each was last said
@@ -5174,6 +5187,7 @@ private:
     void StartCallouts() {
         if (!def_.has_crew_data) return;
         callouts_ = std::make_unique<CalloutBus>(&def_.crew_data);
+        callouts_->SetRecordedLengths(recorded_lengths_s_);
         if (voice_) callouts_->SetRouter([this](const CalloutDef& d, const std::string& from) { return RouteCallout(d, from); });
         drill_ = std::make_unique<DrillMaster>(console_, &def_.crew_data, def_.has_skills && def_.skills.Reference() != nullptr
                                                                              ? def_.skills.Reference()->reaction_s : 0.55);
