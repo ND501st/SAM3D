@@ -504,7 +504,8 @@ public:
                 }
                 if (fmt.target_decoy && a->drone) Put(t, "decoy", Bool(true));
                 const int arms = a->arms * (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter ? 1 : 0);
-                const bool em_arms = fmt.em && fmt.target_rwr && fmt.target_arms && has_rwr && arms > 0 && !a->arm_em.empty();
+                const std::string& arm_em = a->ArmEm(d.theatre.year);
+                const bool em_arms = fmt.em && fmt.target_rwr && fmt.target_arms && has_rwr && arms > 0 && !arm_em.empty();
                 if (fmt.em && fmt.target_rwr && has_rwr) {
                     Put(t, "rwr", Str(a->rwr_em));
                     for (const std::string& lib : f.em_libraries) {
@@ -515,7 +516,7 @@ public:
                 // where its intelligence has the battery (the flight's aim), within its launch range.
                 if (em_arms) {
                     json::Value ar = Obj();
-                    Put(ar, "weapon", Str(a->arm_em));
+                    Put(ar, "weapon", Str(arm_em));
                     Put(ar, "count", Num(arms));
                     Put(ar, "launch_range_km", Num(std::round(a->arm_range_m / 100.0) / 10.0));
                     Put(ar, "min_range_km", Num(std::min(3.0, 0.5 * a->arm_range_m / 1000.0)));

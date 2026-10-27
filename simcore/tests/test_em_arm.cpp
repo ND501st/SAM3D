@@ -155,6 +155,33 @@ SC_TEST("em arm: silent in time, the radar beats a Shrike; a HARM remembers it u
     SC_EXPECT(harm_early_hits <= 1);
 }
 
+SC_TEST("em arm: the AGM-78B Standard ARM hears the J band, homes on a radar left on and remembers one that goes silent late") {
+    EmLibrary lib;
+    SC_EXPECT(LoadEmLibraryFile(kData + "/em/nato_1985.json", lib).ok);
+    const int starm = lib.Arm("agm78b_class_standard_arm");
+    SC_EXPECT(starm >= 0);
+    if (starm < 0) return;
+    const ArmDef& d = lib.arms[static_cast<std::size_t>(starm)];
+    SC_EXPECT(d.memory);                   // "a simple memory circuit"
+    SC_EXPECT(d.freq_max_hz > 14.5e9);     // broadband: the Osa's tracking radar too, unlike the Shrike
+    SC_EXPECT(d.fov_rad > lib.arms[static_cast<std::size_t>(lib.Arm("agm45_class_shrike"))].fov_rad);  // gimballed
+    SC_EXPECT_NEAR(d.max_range_m, 90000.0, 1e-6);
+    int on_hits = 0, late_hits = 0, early_hits = 0;
+    for (std::uint64_t seed = 1; seed <= 4; ++seed) {
+        ArmRange a(seed), b(seed), c(seed);
+        const ArmState* on = a.Fire("agm78b_class_standard_arm");
+        const ArmState* late = b.Fire("agm78b_class_standard_arm", 1500.0);
+        const ArmState* early = c.Fire("agm78b_class_standard_arm", 11000.0);
+        if (on != nullptr && on->outcome == ArmOutcome::Hit && on->hit_platform == a.radar_platform) ++on_hits;
+        if (late != nullptr && late->outcome == ArmOutcome::Hit) ++late_hits;
+        if (early != nullptr && early->outcome == ArmOutcome::Hit) ++early_hits;
+        if (early != nullptr) std::printf("    standard arm off at 11 km, seed %d: burst %.0f m away\n", static_cast<int>(seed), early->miss_m);
+    }
+    SC_EXPECT(on_hits >= 3);
+    SC_EXPECT(late_hits >= 3);
+    SC_EXPECT(early_hits <= 1);
+}
+
 SC_TEST("em arm: a decoy on the radar's parameters 150 m away draws the burst off the radar") {
     int radar_hits = 0;
     for (std::uint64_t seed = 1; seed <= 4; ++seed) {

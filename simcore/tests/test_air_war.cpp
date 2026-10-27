@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <set>
 #include <string>
@@ -95,6 +97,43 @@ SC_TEST("air war: the loaders refuse unknown keys, bad values and unknown quirks
         if (full.values.count(kv.first) == 0) std::printf("    missing from data/gameplay/air_war.json: %s\n", kv.first.c_str());
         SC_EXPECT(full.values.count(kv.first) == 1);
     }
+}
+
+SC_TEST("air war: an ARM carrier fires the missile in service by the war's year (the F-4G: Standard ARM, then HARM)") {
+    const AirWarData d = Load("nato");
+    SC_EXPECT(d.theatre.year == 1985);
+    const AircraftType* f4g = d.faction.Aircraft("f4g");
+    SC_EXPECT(f4g != nullptr);
+    if (f4g == nullptr) return;
+    SC_EXPECT(f4g->ArmEm(1968) == "agm88a_class_harm");  // before its first entry: the type's arm_em
+    SC_EXPECT(f4g->ArmEm(1985) == "agm78b_class_standard_arm");
+    SC_EXPECT(f4g->ArmEm(1986) == "agm78b_class_standard_arm");
+    SC_EXPECT(f4g->ArmEm(1987) == "agm88a_class_harm");
+    SC_EXPECT(f4g->ArmEm(1991) == "agm88a_class_harm");
+    const AircraftType* f4e = d.faction.Aircraft("f4e");
+    SC_EXPECT(f4e != nullptr && f4e->arm_em_by_year.empty() && f4e->ArmEm(1985) == "agm45_class_shrike");
+    // Every missile named is in the EM library.
+    em::EmLibrary lib;
+    SC_EXPECT(em::LoadEmLibraryFile(kData + "/em/nato_1985.json", lib).ok);
+    for (const auto& e : f4g->arm_em_by_year) SC_EXPECT(lib.Arm(e.first) >= 0);
+    // The loader refuses years out of order and a list on a type without ARMs (the NATO file with one thing changed).
+    std::ifstream in(kData + "/air_war/faction_nato.json", std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    auto changed = [&](const std::string& from, const std::string& to) {
+        std::string t = text;
+        const std::size_t at = t.find(from);
+        SC_EXPECT(at != std::string::npos);
+        if (at != std::string::npos) t.replace(at, from.size(), to);
+        return t;
+    };
+    FactionDef f;
+    std::string e;
+    SC_EXPECT(LoadFactionJson(text, f, &e));
+    SC_EXPECT(!LoadFactionJson(changed("[[\"agm78b_class_standard_arm\", 1969], [\"agm88a_class_harm\", 1987]]",
+                                       "[[\"agm78b_class_standard_arm\", 1987], [\"agm88a_class_harm\", 1969]]"), f, &e) &&
+              e.find("rising order") != std::string::npos);
+    SC_EXPECT(!LoadFactionJson(changed("\"arms\": 2, \"arm_range_km\": 18, \"arm_memory\": true,", "\"arm_memory\": true,"), f, &e) &&
+              e.find("ARM carrier") != std::string::npos);
 }
 
 SC_TEST("air war: a campaign replays exactly for a seed, and differs for another") {
@@ -649,9 +688,13 @@ SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation 
             SC_EXPECT(loaded);
             if (!loaded) break;
             bool written = false;
-            for (const ScenarioTarget& t : def.targets) written = written || t.arms.count > 0;
+            for (const ScenarioTarget& t : def.targets) {
+                written = written || t.arms.count > 0;
+                // A war of 1985: NATO's Weasels fire the Standard ARM and the Shrike, the HARM not yet (USAF from 1987).
+                if (t.arms.count > 0 && std::string(adversary) == "nato") SC_EXPECT(t.arms.weapon != "agm88a_class_harm");
+            }
             SC_EXPECT(written);
-            SC_EXPECT(def.em.library.Arm(std::string(adversary) == "nato" ? "agm88a_class_harm" : "kh58_class") >= 0);
+            SC_EXPECT(def.em.library.Arm(std::string(adversary) == "nato" ? "agm78b_class_standard_arm" : "kh58_class") >= 0);
             ++with_arms;
             ScenarioRunner runner(std::move(def), std::move(console));
             MissionBridge bridge(rs.manifest, c.Data(), 5u);

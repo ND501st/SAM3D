@@ -279,6 +279,9 @@ struct AircraftType {
     // receiver the raid's scenario fires it as an EM missile; otherwise the mission bridge's gameplay model does. Default:
     // the HARM class with a memory, else the Shrike class.
     std::string arm_em;
+    // The ARM it carries by the war's year, when that changed: (EM library ARM, the year from which it is the one it
+    // fires), in order. The F-4G fired the AGM-78 Standard ARM until the HARM reached the USAF (1987). ArmEm(year).
+    std::vector<std::pair<std::string, int>> arm_em_by_year;
     double strike_power = 0.0;     // effect of one aircraft's load on a target (game value, 0..1 of a "standard" target);
                                    // the weapons model's fallback for a type without loads
     // The weapons it can carry: (weapon id, how many on one aircraft) (docs/air_war/10_WEAPONS.md); the planner picks
@@ -304,6 +307,14 @@ struct AircraftType {
     std::string notes;
 
     bool InService(int year) const { return in_service_year <= 0 || in_service_year <= year; }
+    // The ARM it fires in a war of `year`: the latest of arm_em_by_year in service by then, else arm_em.
+    const std::string& ArmEm(int year) const {
+        const std::string* pick = &arm_em;
+        for (const auto& e : arm_em_by_year) {
+            if (e.second <= year) pick = &e.first;
+        }
+        return *pick;
+    }
     bool Has(FlightRole r) const {
         for (FlightRole x : roles) {
             if (x == r) return true;
@@ -1193,7 +1204,7 @@ public:
             std::vector<std::string> roles;
             if (!Keys(a, p, {"id", "name", "roles", "class", "helicopter", "drone", "rcs_m2", "cruise_mps", "attack_mps",
                              "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em",
-                             "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "strike_power",
+                             "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
                              "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
                              "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "source",
                              "confidence", "notes"}) ||
@@ -1221,7 +1232,7 @@ public:
             double arm_km = 0.0, range_km = 0.0, radius_km = 0.0;
             if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0) || !Num(a, p, "range_km", range_km, 0.0, 5000.0) ||
                 !Num(a, p, "radius_km", radius_km, 0.0, 5000.0) || !Num(a, p, "computing", t.computing, 0.0, 1.0) ||
-                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads)) {
+                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year)) {
                 return false;
             }
             t.arm_range_m = arm_km * 1000.0;
@@ -1245,6 +1256,7 @@ public:
                 return Fail(Join(p, "class"), "a class of the gameplay tuning: default, drone, helicopter, fighter, bomber, cruise_missile");
             }
             if (t.arms > 0 && t.arm_range_m <= 0.0) return Fail(Join(p, "arm_range_km"), "an ARM carrier needs its range");
+            if (!t.arm_em_by_year.empty() && t.arms <= 0) return Fail(Join(p, "arm_em_by_year"), "only an ARM carrier (arms > 0)");
             if (out.Aircraft(t.id) != nullptr) return Fail(p, "duplicate aircraft id '" + t.id + "'");
             out.aircraft.push_back(std::move(t));
         }
@@ -1263,6 +1275,23 @@ public:
                 return Fail(Index(Join(p, "loads"), i), "[weapon id, count 1..60]");
             }
             out.push_back({e.items[0].string, static_cast<int>(e.items[1].number + 0.5)});
+        }
+        return true;
+    }
+
+    bool ArmsByYear(const json::Value& a, const std::string& p, std::vector<std::pair<std::string, int>>& out) {
+        const json::Value* v = a.Find("arm_em_by_year");
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Array)) return Fail(Join(p, "arm_em_by_year"), "expected [[EM ARM id, from year], ...]");
+        for (std::size_t i = 0; i < v->items.size(); ++i) {
+            const json::Value& e = v->items[i];
+            if (!e.Is(json::Type::Array) || e.items.size() != 2 || !e.items[0].Is(json::Type::String) || e.items[0].string.empty() ||
+                !e.items[1].Is(json::Type::Number) || e.items[1].number < 1950.0 || e.items[1].number > 2050.0) {
+                return Fail(Index(Join(p, "arm_em_by_year"), i), "[EM ARM id, from year 1950..2050]");
+            }
+            const int year = static_cast<int>(e.items[1].number + 0.5);
+            if (!out.empty() && year <= out.back().second) return Fail(Index(Join(p, "arm_em_by_year"), i), "years in rising order");
+            out.push_back({e.items[0].string, year});
         }
         return true;
     }

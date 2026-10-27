@@ -657,8 +657,10 @@ search radar holds it as a small, fast mark; on the scope a mark faster than 450
 confirmed, without the four updates other ghost marks wait for (`EmSensorLink::FastClosing`).
 
 The classes: `agm45_class_shrike` (2-10 GHz broad head, no memory, 600 m/s, 40 km), `agm88a_class_harm` (2-20 GHz,
-tuned within 10 %, memory, 700 m/s, 25 km at low level), `kh58_class` (an H-band head, no memory assumed, 900 m/s,
-60 km). Every value is cited or marked an estimate in the file.
+tuned within 10 %, memory, 700 m/s, 25 km at low level), `agm78b_class_standard_arm` (the AGM-78B: a gimballed
+broadband head taken as 2-18 GHz, tuned within 15 %, a simple memory, 650 m/s, 90 km from altitude, a 97 kg warhead;
+the F-4G's ARM in a war before the HARM reached the USAF in 1987), `kh58_class` (an H-band head, no memory assumed,
+900 m/s, 60 km). Every value is cited or marked an estimate in the file.
 
 **Carriers (`ScenarioTarget::arms`, `ScenarioRunner::UpdateArms`).** A target with a warning receiver fires when it hears
 a radar in its weapon's band on the bearing of where its briefing has the radar (within about 20 deg), one its library

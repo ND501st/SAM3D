@@ -83,7 +83,7 @@ Stepped after every `ScenarioRunner::Step`, from the runner's public state only:
   a couple of hundred metres; our vehicle, the battery's other vehicles, dummies and the objects inside the scenario take
   their chances (`scenario.bomb_lethal_m`, `bomb_pk_vehicle`, `rocket_pk_vehicle`, `strike.hit_chance`);
 - **ARMs** (A11, 20 Oct 2026): with the EM layer a SEAD or hunter aircraft with a warning receiver carries EM ARMs, the
-  target's `"arms"` written by the generator (its type's `arm_em`, `data/air_war/faction_*.json`: the F-4G's HARM class,
+  target's `"arms"` written by the generator (its type's `arm_em`, or by the war's year its `arm_em_by_year`, `data/air_war/faction_*.json`: the F-4G's AGM-78B Standard ARM class in a war before 1987, its HARM class after,
   the F-4E's Shrike class, the MiG-25BM's Kh-58 class; default the HARM class with `arm_memory`, else the Shrike class),
   aimed where the enemy's intelligence has the battery, within the type's `arm_range_km`. The runner fires and flies
   them (`docs/EM_ARCHITECTURE.md` §35); the bridge reads their ends from `ScenarioRunner::ArmResults`: one on our vehicle
