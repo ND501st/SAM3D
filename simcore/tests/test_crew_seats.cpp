@@ -74,6 +74,27 @@ SC_TEST("crew seats: a player works only the controls of their own station") {
     SC_EXPECT(!r.SeatTurn("commander", "ssc.az_wheel", 10.0, &why));
 }
 
+SC_TEST("crew seats: a wheel that won't turn says why: its lock, or its stop") {
+    Loaded l;
+    ScenarioRunner r(std::move(l.def), std::move(l.console));
+    SC_EXPECT(r.TakeSeat("senior_operator", "Ann"));
+    std::string why;
+    r.Console().panel.Set("ssc.az_lock", 0);
+    SC_EXPECT(!r.SeatTurn("senior_operator", "ssc.az_wheel", 10.0, &why));
+    SC_EXPECT(why.find("Locked") == 0 && why.find("azimuth wheel lock") != std::string::npos);
+    r.Console().panel.Set("ssc.az_lock", 1);
+    SC_EXPECT(r.SeatTurn("senior_operator", "ssc.az_wheel", 330.0, &why));
+    // On past the antenna's +330 degrees: nothing moves, and the reason is the stop, not a lock.
+    why.clear();
+    SC_EXPECT(!r.SeatTurn("senior_operator", "ssc.az_wheel", 335.0, &why));
+    SC_EXPECT(why.find("At its stop (330)") == 0);
+    SC_EXPECT_NEAR(r.Console().panel.GetValue("ssc.az_wheel"), 330.0, 1e-9);
+    SC_EXPECT(r.SeatTurn("senior_operator", "ssc.az_wheel", 320.0, &why));  // back off the stop
+    // Pushed past the stop from inside the travel, it stops there.
+    SC_EXPECT(r.SeatTurn("senior_operator", "ssc.az_wheel", 340.0, &why));
+    SC_EXPECT_NEAR(r.Console().panel.GetValue("ssc.az_wheel"), 330.0, 1e-9);
+}
+
 SC_TEST("crew seats: a player at an aiming seat stops the NPC's aiming; leaving hands it back") {
     Loaded l;
     ScenarioRunner r(std::move(l.def), std::move(l.console));

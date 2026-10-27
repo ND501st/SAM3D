@@ -76,7 +76,8 @@ the line, S the short form: the number and the time only; Esc puts the page down
 is lost; what you write is what the page says, and the plotter plots a report he missed as the page has it. The radio
 lines on the screen fade in seconds: a missed report is found again only on that page (anyone may click it to read). A ringing line or the Osa's TA-57: Y answers, Y again
 puts it down. The bottom left of the screen shows your headset, your box and the sets it reaches (● alive), a call and
-a ringing line; the radio log above it shows only what your seat heard.
+a ringing line; the radio log above it shows only what your seat heard. Only a headset on a set hears its hiss between
+the words; the set's ШУМЫ (the noise suppressor) silences it, at the cost of some range.
 
 **The papers.** On the radiotelephonist's table lie his radio data (each net's frequencies by number, the call signs, the
 changes as Ч+minutes, the telecode channel, the lines); on the commander's desk the talk tables (ПТ-1, and the signal table

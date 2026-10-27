@@ -46,7 +46,10 @@ on the elevation indicator), the range wheel the range gate onto the echo, each 
 within ±0.5° (the narrow TV's field) or 500 m; the course setter keeps its figure, the Qc the crew chief gave. A wheel the
 equipment turns itself is never advised and won't turn by hand (`ScenarioRunner::WheelDriven`, `SeatTurn` refuses with
 "Hands off: ..."): the angles and range while the tracking radar holds the target, the elevation while the elevation
-search scans, the range under ПОЛУАВТОМАТ. The helper's ghost hand shows switches only, never a wheel.
+search scans, the range under ПОЛУАВТОМАТ. The reason stays on the wheel while the player points at it. A wheel that
+won't turn says why the same way: its lock ("Locked: ..."), or its stop (the tracking antenna's ±330°: "At its stop ...").
+A target past a wheel's stop (beyond the range wheel's 28 km) is advised only as far as the stop.
+The helper's ghost hand shows switches only, never a wheel.
 
 At the **PU-12M** the battery commander's fire distribution runs for a player in his seat too: each target it would give
 a launcher is a designate duty. The plotter owes every report he has heard and not written; the radio operator owes the

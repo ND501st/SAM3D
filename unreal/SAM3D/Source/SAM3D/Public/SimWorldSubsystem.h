@@ -1267,6 +1267,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetWheelDriven(const FString& ControlId) const;
 
+	/** Why the player's last wheel turn did nothing ("Hands off: ...", "Locked: ...", "At its stop ..."), or "" if it
+	 *  turned. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetWheelRefusal() const { return LastWheelRefusal; }
+
 	/** Judge the player's actions against a procedure of the console; empty = free play. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool SetPlayerProcedure(const FString& ProcedureId);
@@ -1639,6 +1644,9 @@ private:
 	/** Where the battery (the player's vehicle) is, in ENU. */
 	simcore::Vec3 BatteryCentreEnu() const;
 	const simcore::LocalFrame* ActiveFrame() const;
+
+	/** Why the player's last wheel turn was refused (simcore's ScenarioRunner::SeatTurn). */
+	FString LastWheelRefusal;
 
 	// Demo mode.
 	TUniquePtr<simcore::World> SimWorld;

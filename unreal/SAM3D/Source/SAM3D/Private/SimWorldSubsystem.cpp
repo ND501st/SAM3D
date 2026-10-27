@@ -677,6 +677,15 @@ ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& Contr
 
 bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 {
+	LastWheelRefusal.Reset();
+	// At a held seat simcore says why a turn did nothing: the servo has it, its lock, its stop.
+	auto Turn = [this, &ControlId, Value](const std::string& Role)
+	{
+		std::string Why;
+		const bool bTurned = Runner->SeatTurn(Role, ToStd(ControlId), Value, &Why);
+		LastWheelRefusal = bTurned ? FString() : ToF(Why);
+		return bTurned;
+	};
 	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
 	{
 		if (!Seat->SeatRole.IsEmpty())
@@ -686,8 +695,7 @@ bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 				Seat->TurnWheel(ControlId, Value);
 				return true;
 			}
-			std::string Why;
-			return Runner && Runner->SeatTurn(ToStd(Seat->SeatRole), ToStd(ControlId), Value, &Why);
+			return Runner && Turn(ToStd(Seat->SeatRole));
 		}
 	}
 	if (Runner && !IsMirrorOnly())
@@ -696,8 +704,7 @@ bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 		{
 			if (!Def->station.empty() && !Runner->SeatHolder(Def->station).empty())
 			{
-				std::string Why;
-				return Runner->SeatTurn(Def->station, ToStd(ControlId), Value, &Why);
+				return Turn(Def->station);
 			}
 		}
 	}

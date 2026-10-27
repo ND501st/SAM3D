@@ -234,6 +234,8 @@ public:
 	/** The head's turn (yaw and pitch from the seat's view) that looks at a point in the world from where the eye is now
 	 *  (the seat, or standing at a far panel). False if the seat has no view. */
 	bool LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const;
+	/** Why a turn of this wheel did nothing, for the player (simcore's reason when it gave one). */
+	FString WheelRefusal(int32 Item) const;
 	/** The wheel just grabbed: start turning the head onto its display, if it has one. */
 	void StartWheelWatch(int32 Item);
 

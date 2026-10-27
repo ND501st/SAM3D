@@ -1273,6 +1273,22 @@ public:
             if (why != nullptr) *why = "Hands off: " + driven;
             return false;
         }
+        const ControlDef* d = console_.panel.Find(wheel_id);
+        if (d != nullptr && !d->guard_id.empty() && console_.panel.Get(d->guard_id) < 1) {
+            const ControlDef* g = console_.panel.Find(d->guard_id);
+            if (why != nullptr) *why = "Locked: release the lock first" + (g != nullptr && !g->label.empty() ? " (" + g->label + ")" : std::string());
+            return false;
+        }
+        // Turned on against its stop (the tracking antenna's ±330°): nothing moves.
+        const double before = console_.panel.GetValue(wheel_id);
+        if (d != nullptr && !d->wraps && ((value > d->max_value && before >= d->max_value) || (value < d->min_value && before <= d->min_value))) {
+            if (why != nullptr) {
+                char buf[64];
+                std::snprintf(buf, sizeof buf, "At its stop (%g): turn it back", value > d->max_value ? d->max_value : d->min_value);
+                *why = buf;
+            }
+            return false;
+        }
         st->last_action_s = time_;
         const bool moved = console_.panel.SetValue(wheel_id, value);
         seat_actions_.push_back({time_, role, wheel_id, 0, value, true, moved, StepResult::ProcedureComplete});

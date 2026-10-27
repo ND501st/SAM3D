@@ -1934,9 +1934,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		if (Dx != 0.0f && !Cabin->TurnWheel(DraggedWheel, Dx * WheelTurnsPerMouseUnit))
 		{
-			USimWorldSubsystem* WheelSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-			const FString Driven = WheelSim != nullptr ? WheelSim->GetWheelDriven(Cabin->GetItemControl(DraggedWheel)) : FString();
-			FeedbackText = Driven.IsEmpty() ? FString(TEXT("Locked: release the wheel lock first")) : TEXT("Hands off: ") + Driven;
+			FeedbackText = WheelRefusal(DraggedWheel);
 			FeedbackSecondsLeft = 2.0f;
 		}
 		// Eyes on the display the wheel is worked against (the range gate on the echo, the line on the target).
@@ -2010,13 +2008,15 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	// A lesson that only lets the step's control work says why another won't move.
 	USimWorldSubsystem* LessonSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	FString Refusal = LessonSim != nullptr ? LessonSim->GetTutorialRefusal(Cabin->GetItemControl(HoveredItem)) : FString();
-	// A wheel the equipment turns itself now (the tracking servo, the elevation search): hands off, and say why.
+	// A wheel the equipment turns itself now (the tracking servo, the elevation search): hands off, and say why, on the
+	// wheel itself for as long as it lasts (a lock can hold the antenna for minutes).
 	if (Refusal.IsEmpty() && LessonSim != nullptr && Cabin->IsWheel(HoveredItem))
 	{
 		const FString Driven = LessonSim->GetWheelDriven(Cabin->GetItemControl(HoveredItem));
 		if (!Driven.IsEmpty())
 		{
 			Refusal = TEXT("Hands off: ") + Driven;
+			HoverText += TEXT("   ") + Refusal;
 		}
 	}
 	auto Refuse = [this, &Refusal]()
@@ -2050,7 +2050,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		}
 		else if (Notches != 0.0 && !Cabin->TurnWheel(HoveredItem, Notches * WheelTurnsPerScrollNotch))
 		{
-			FeedbackText = TEXT("Locked: release the wheel lock first");
+			FeedbackText = WheelRefusal(HoveredItem);
 			FeedbackSecondsLeft = 2.0f;
 		}
 		return;
@@ -2069,6 +2069,19 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		ShowFeedback(ClickOrGoOut(HoveredItem, -1));
 	}
+}
+
+FString ASimOsaVehicle::WheelRefusal(int32 Item) const
+{
+	// Simcore's reason (the servo has it, its lock, its stop), else the equipment's, else its lock.
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	const FString Why = Sim != nullptr ? Sim->GetWheelRefusal() : FString();
+	if (!Why.IsEmpty())
+	{
+		return Why;
+	}
+	const FString Driven = Sim != nullptr && Cabin != nullptr ? Sim->GetWheelDriven(Cabin->GetItemControl(Item)) : FString();
+	return Driven.IsEmpty() ? FString(TEXT("Locked: release the wheel lock first")) : TEXT("Hands off: ") + Driven;
 }
 
 bool ASimOsaVehicle::LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const

@@ -380,6 +380,7 @@ inline std::vector<HelpStep> HelpMoves(const ScenarioRunner& r, const std::strin
         if (!r.WheelDriven(d.id).empty()) continue;                         // the equipment turns it: hands off
         double want = 0.0;
         if (!r.WheelWant(d.id, want)) continue;
+        if (!d.wraps) want = std::clamp(want, d.min_value, d.max_value);  // a target past its stop: as far as it goes
         HelpStep s;
         s.seat = seat;
         s.source = "wheel";

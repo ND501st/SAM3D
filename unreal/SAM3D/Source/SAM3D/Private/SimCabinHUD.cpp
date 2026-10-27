@@ -36,6 +36,11 @@ void ASimCabinHUD::DrawHUD()
 			Sim->NoteTutorialEvent(TEXT("keys_card"));
 		}
 	}
+	// The crew menu opened over the keys card: the card goes (the menu has the mouse and the keys, so it must be seen).
+	if (bShowKeys && Vehicle != nullptr && Vehicle->IsCrewMenuOpen())
+	{
+		bShowKeys = false;
+	}
 	if (OwnerPc != nullptr && Sim != nullptr && Sim->CanSkipTutorialStep() && Vehicle != nullptr && !Vehicle->IsMissionMenuOpen() &&
 		OwnerPc->WasInputKeyJustPressed(EKeys::N))
 	{
@@ -138,13 +143,13 @@ void ASimCabinHUD::DrawHUD()
 	const FString CommanderStation = Sim != nullptr ? Sim->GetCommanderStation() : FString(TEXT("commander"));
 	if (Vehicle->IsWalking())
 	{
-		DrawText(FString::Printf(TEXT("On your feet (from the %s's seat)   |   W A S D walk   mouse looks   X sit down at a seat   Tab back to a seat   O %s   G keys%s"),
+		DrawText(FString::Printf(TEXT("On your feet (from the %s's seat)   |   W A S D walk   mouse looks   X sit down at a seat   Tab back to a seat   Caps Lock %s   G keys%s"),
 					 *Vehicle->GetCabinStationLabel(), Vehicle->GetStationId() == CommanderStation ? TEXT("orders") : TEXT("reports"), *SwitchHint),
 			Ink, 20.0f, Canvas->ClipY - 40.0f, Font);
 	}
 	else
 	{
-		DrawText(FString::Printf(TEXT("%s%s   |   F1/Tab next seat   X get up   C or F2 outside   T %s   O %s   H help   B board   G keys%s"),
+		DrawText(FString::Printf(TEXT("%s%s   |   F1/Tab next seat   X get up   C or F2 outside   T %s   Caps Lock %s   H help   B board   G keys%s"),
 					 *Vehicle->GetCabinStationLabel(), Vehicle->IsHoldingSeat() ? TEXT(" (your seat)") : TEXT(""),
 					 Vehicle->IsHoldingSeat() ? TEXT("give the seat back") : TEXT("take this seat"),
 					 Vehicle->GetStationId() == CommanderStation ? TEXT("orders") : TEXT("reports"), *SwitchHint),
