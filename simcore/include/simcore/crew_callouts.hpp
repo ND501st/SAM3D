@@ -100,6 +100,18 @@ public:
              double delay_s = 0.0, const KnownTarget* about = nullptr) {
         const CalloutDef* def = crew_ != nullptr ? crew_->FindCallout(id) : nullptr;
         if (def == nullptr) return false;
+        // A seat's acknowledgement still waiting its turn when he reports the drill done: "Выполнено!" covers both; and
+        // one "Есть!" waiting is enough (sam3d: a busy intercom otherwise spoke strings of late "Есть! Выполнено!").
+        if (id == "done") {
+            pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
+                                          [&](const SpokenCallout& p) { return p.id == "ack" && p.from == from && p.repeats == 0; }),
+                           pending_.end());
+        }
+        if (id == "ack") {
+            for (const SpokenCallout& p : pending_) {
+                if (p.id == "ack" && p.from == from) return true;
+            }
+        }
         SpokenCallout s;
         s.id = id;
         s.from = from;

@@ -170,7 +170,10 @@ SC_TEST("arm drill: the crew sees the signs, goes silent and the vehicle mostly 
         SC_EXPECT(!o.silenced);
     }
     std::printf("    untrained senior operator: hit %d of 4\n", untrained_hit);
-    SC_EXPECT(untrained_hit >= 3);
+    // Never silent, hit far more often than the trained crew. Not always: since the crew's talk was trimmed (26 Oct
+    // 2026) the commander hears "Ответа нет!" about his target at once and fires, and the standing rule (the tracking
+    // transmitter off after our missile's burst) can silence the radar before the ARM arrives.
+    SC_EXPECT(untrained_hit >= 2 && untrained_hit > 6 - survived);
 }
 
 SC_TEST("arm drill: going silent beats a Shrike-class missile by kilometres; a HARM-class one it misses by less") {

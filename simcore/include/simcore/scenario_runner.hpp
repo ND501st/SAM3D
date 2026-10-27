@@ -877,6 +877,7 @@ public:
         for (const OrderStart& s : o->procedures) {
             CrewMember* m = MemberAt(s.station);
             const Procedure* p = console_.FindProcedure(s.procedure);
+            if (routine_order_) routine_drills_.insert(s.station + "|" + s.procedure);
             if (m != nullptr && p != nullptr) GiveOrder(*m, *p, s.queue);
         }
         quiet_orders_ = false;
@@ -3279,11 +3280,15 @@ private:
                 return;
             }
         }
+        // A target's number is read back when it is first given; the post's updates of it need none (sam3d: a raid of
+        // sixteen updated every few seconds read back every time kept the commander on the air).
+        if (!read_back_.insert(e.number).second) return;
         char n[16];
         std::snprintf(n, sizeof(n), "%04d", e.number);
         callouts_->Say(time_, "readback", Cmdr(), {{"number", n}, {"callsign", OwnCallsign()}, {"post", "10"}}, SpeakDelayS(Cmdr()));
         if (LinkedToPost()) own_readbacks_.push_back(e.number);
     }
+    std::set<int> read_back_;  // the target numbers read back
     // A player in command speaks on the battery net himself (the crew menu): «21 к бою готов, …» (voenizdat_osa_1991
     // pp. 246-247) or the read-back of the latest designation, with his A-1 on Р-123, the headset switch on the set that
     // hears the net, that set able to transmit. False with LastRefusal() saying why.
@@ -5225,6 +5230,10 @@ private:
 
     // The commander's order for a procedure, if the crew data has one: the most specific order that starts it.
     bool quiet_orders_ = false;
+    // A standing order's routine (the search radar's bursts): given without words; its drills (station|procedure) are
+    // neither acknowledged nor reported done.
+    bool routine_order_ = false;
+    std::set<std::string> routine_drills_;
     void SayOrder(const std::string& station, const std::string& procedure) {
         if (!callouts_ || quiet_orders_ || station == Cmdr()) return;  // his own drill needs no words
         const OrderDef* best = nullptr;
@@ -5267,7 +5276,7 @@ private:
             ShadowOrder(callout_id);
             return;
         }
-        if (!callouts_) return;
+        if (!callouts_ || routine_order_) return;
         if (callout_id == last_order_said_ && time_ - last_order_s_ < 3.0) return;
         const CalloutDef* def = def_.crew_data.FindCallout(callout_id);
         std::map<std::string, std::string> fields;
@@ -5370,7 +5379,8 @@ private:
             for (CrewMember& m : crew_) {
                 const std::string d = m.Tracker().GetProcedure().id;
                 if (SeatHolder(m.Role()).empty() && m.IsBusy() &&
-                    (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc")) {
+                    (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc" ||
+                     d == "fire_at_jammer")) {
                     m.CancelOrder();
                     acted = true;
                 }
@@ -5409,8 +5419,14 @@ private:
         // readiness drills then aim at the silent state, so they don't switch it back on or stop the antenna.
         const bool burst_off = !silent && NpcBurstOff(halted);
         if (def_.doctrine.search_on_s > 0.0 && halted && !silent && console_.equipment.IsReady("hv_ready")) {
-            if (burst_off && console_.panel.Get("soc.hv") == 1) NpcGive("order_hv_off", 1.0);
-            if (!burst_off && npc_burst_off_ && console_.panel.Get("soc.hv") == 0) NpcGive("order_hv_on", 1.0);
+            // The first burst is ordered aloud; after it the senior operator keeps the rhythm as a standing order, without
+            // a word each way (sam3d: seven callouts every 35 s kept the intercom talking without end).
+            routine_order_ = npc_bursts_said_;
+            bool given = false;
+            if (burst_off && console_.panel.Get("soc.hv") == 1) given = NpcGive("order_hv_off", 1.0);
+            if (!burst_off && npc_burst_off_ && console_.panel.Get("soc.hv") == 0) given = NpcGive("order_hv_on", 1.0) || given;
+            routine_order_ = false;
+            if (given && !shadow_) npc_bursts_said_ = true;
         }
         npc_burst_off_ = burst_off;
         // The radios: the commander's set off with a command net to hear (a scenario that starts them off).
@@ -5510,6 +5526,7 @@ private:
         const EngagementModel& eng = engagement_;
         const TrackMethod m = eng.Method();
         const std::string tracked = eng.TrackedTarget();
+        NpcReleaseStaleDrills(m);
         // A missile in the air: wait for the result; under a two-missile salvo (doctrine salvo) the second goes first.
         if (eng.ShotsInFlight() && !NpcSalvoDue(tracked)) return;
         // A missile's result being judged: the call decides whether to engage again (voenizdat_osa_1991 p267).
@@ -5781,6 +5798,30 @@ private:
     double npc_decoy_dropped_s_ = -1e9;
     std::set<std::string> decoys_known_;
     bool npc_burst_off_ = false;
+    // A drill bound to a track (the jammer's method Н, the TV's engagement, the launch) left waiting with nothing tracked
+    // and nothing in the air: after 10 s he lets the seat go, so the next target can be taken (sam3d: the deputy waited
+    // on a lost jammer's missile, or on a target lost in the haze, for the rest of the raid, and no "take the target"
+    // got through to a busy seat).
+    double npc_stale_since_s_ = -1.0;
+    void NpcReleaseStaleDrills(TrackMethod m) {
+        if (shadow_) return;
+        CrewMember* dep = MemberAt("deputy_commander");
+        const std::string id = dep != nullptr && dep->IsBusy() ? dep->Tracker().GetProcedure().id : std::string();
+        const bool bound = id == "fire_at_jammer" || id == "emcon_tv_engagement" || id == "track_low_target" || id == "launch" ||
+                           id == "prepare_firing";
+        if (!bound || m != TrackMethod::None || engagement_.ShotsInFlight() || !SeatHolder("deputy_commander").empty() ||
+            dep->Status() != CrewStatus::Waiting) {
+            npc_stale_since_s_ = -1.0;
+            return;
+        }
+        if (npc_stale_since_s_ < 0.0) npc_stale_since_s_ = time_;
+        if (time_ - npc_stale_since_s_ < 10.0) return;
+        dep->CancelOrder();
+        npc_stale_since_s_ = -1.0;
+        npc_permit_s_ = -1e9;
+        Event(Cmdr(), "lets the deputy's " + id + " go: nothing tracked");
+    }
+    bool npc_bursts_said_ = false;  // the burst rhythm has been ordered aloud once
 
     // Every hostile he has heard of within the interrogator's reach that isn't identified yet: "Запрос!" (the senior
     // operator's ЗАПРОС). Not one the PU-12 designated (identified by the battery commander), not under EMCON.
@@ -6333,17 +6374,70 @@ private:
         return true;
     }
     std::vector<C2Network::Event> designations_heard_;  // every designation so far (the latest last)
+    std::map<std::string, double> iff_unanswered_;      // when he last reported each target without a reply
+    std::vector<KnownTarget> iff_batch_;                // the echoes of the last interrogation without a reply
+    // One "Ответа нет!" for an interrogation's unanswered echoes (sam3d: one a target, fifteen in a row, said nothing
+    // new): about the target that matters, the one tracked or ordered taken, else the nearest he hasn't reported in the
+    // last two minutes; nothing when every one of them was reported.
+    void ReportNoReply() {
+        if (iff_batch_.empty()) return;
+        std::vector<KnownTarget> batch;
+        batch.swap(iff_batch_);
+        const std::string tracked = engagement_.TrackedTarget();
+        const KnownTarget* pick = nullptr;
+        for (const KnownTarget& k : batch) {
+            if (k.target == tracked || k.target == assigned_target_) pick = &k;
+        }
+        if (pick == nullptr) {
+            double best = 1e18;
+            for (const KnownTarget& k : batch) {
+                const auto said = iff_unanswered_.find(k.target);
+                if (said != iff_unanswered_.end() && time_ - said->second < 120.0) continue;
+                const double r = TargetRange(k.target);
+                const double key = r >= 0.0 ? r : 1e17;
+                if (key < best) {
+                    best = key;
+                    pick = &k;
+                }
+            }
+        } else {
+            const auto said = iff_unanswered_.find(pick->target);
+            if (said != iff_unanswered_.end() && time_ - said->second < 120.0) return;
+        }
+        if (pick == nullptr) return;
+        const KnownTarget k = *pick;
+        // The words cover every echo of the interrogation without a reply: a listener learns them all with it. Owed
+        // once whoever holds the seat.
+        std::vector<KnownTarget>& also = iff_companions_[k.target];
+        also.clear();
+        for (const KnownTarget& o : batch) {
+            iff_unanswered_[o.target] = time_;
+            if (o.target != k.target) also.push_back(o);
+        }
+        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "iff_no_reply", "no reply mark beside the echo").About(k))) {
+            Say("iff_no_reply", "senior_operator", {}, &k);
+        }
+    }
+    std::map<std::string, std::vector<KnownTarget>> iff_companions_;  // a "Ответа нет!"'s target -> the other echoes it covers
     std::map<std::string, double> passed_at_;  // when the commander last passed a target's designation on
+    std::map<std::string, bool> passed_far_;    // it was still far out then (it is passed on again as it comes near)
 
     // A crew member's reports as words: acknowledgement, done, can't, fault; and the start of a wait (reminders).
     void CrewCallouts(const CrewMember& c, const std::vector<CrewReport>& reports) {
         if (!callouts_ || !SeatHolder(c.Role()).empty()) return;
         for (const CrewReport& r : reports) {
+            const std::string key = c.Role() + "|" + r.procedure_id;
+            const bool routine = routine_drills_.count(key) != 0;
+            if (r.kind == CrewReport::Kind::Completed || r.kind == CrewReport::Kind::Aborted) routine_drills_.erase(key);
             switch (r.kind) {
-                // The commanding seat doesn't answer himself.
-                case CrewReport::Kind::Started: if (c.Role() != Cmdr()) Say("ack", c.Role()); break;
-                case CrewReport::Kind::Completed: if (c.Role() != Cmdr()) Say("done", c.Role()); break;
-                case CrewReport::Kind::Aborted: Say("cannot", c.Role(), {{"reason", r.detail}}); break;
+                // The commanding seat doesn't answer himself; a standing order's routine needs no answer.
+                case CrewReport::Kind::Started: if (c.Role() != Cmdr() && !routine) Say("ack", c.Role()); break;
+                case CrewReport::Kind::Completed: if (c.Role() != Cmdr() && !routine) Say("done", c.Role()); break;
+                // A drill the commander replaced or called off himself needs no "can't", nor does an unspoken routine
+                // (the burst's transmitter refused with the search stopped: he sees it and calls "Поиск!").
+                case CrewReport::Kind::Aborted:
+                    if (r.detail != "superseded" && r.detail != "cancelled" && !routine) Say("cannot", c.Role(), {{"reason", r.detail}});
+                    break;
                 case CrewReport::Kind::EquipmentFault: {
                     const SubsystemDef* d = console_.equipment.Def(r.detail);
                     Say("fault", c.Role(), {{"what", d != nullptr && !d->name.empty() ? d->name : r.detail}});
@@ -6367,10 +6461,12 @@ private:
             const AutoReportDef& r = def_.crew_data.reports[i];
             const bool now = console_.equipment.Holds(r.when, console_.panel);
             // Under the least emission against ARMs the search transmitter goes on every few turns: "Готов СОЦ!" once is enough.
-            const bool bursting = def_.doctrine.arm_threat && r.callout == "soc_ready" && time_ - report_said_s_[i] < 120.0;
+            const bool bursting = (def_.doctrine.arm_threat || def_.doctrine.search_on_s > 0.0) && r.callout == "soc_ready" &&
+                                  time_ - report_said_s_[i] < 300.0;
             const bool flicker = bursting || (time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS);
-            if (now && report_state_[i] == 0 && !flicker && NpcDoes(r.from, AutoReportDuty(r))) {
-                Say(r.callout, r.from);
+            // Owed once whoever holds the seat: a player's seat isn't asked for it again at every flicker or burst.
+            if (now && report_state_[i] == 0 && !flicker) {
+                if (NpcDoes(r.from, AutoReportDuty(r))) Say(r.callout, r.from);
                 report_said_s_[i] = time_;
             }
             if (!now && report_state_[i] != 0) report_off_s_[i] = time_;
@@ -6378,6 +6474,7 @@ private:
         }
         // What the instruments showed.
         if (engagement_on_) {
+            ReportNoReply();
             for (const EngagementEvent& e : engagement_.TakeEvents()) {
                 char range[16];
                 std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
@@ -6420,7 +6517,7 @@ private:
                         if (NpcCommanderActive() && !engagement_.ShotsInFlight() && SeatHolder("deputy_commander").empty()) {
                             if (CrewMember* dep = MemberAt("deputy_commander")) {
                                 const std::string id = dep->IsBusy() ? dep->Tracker().GetProcedure().id : std::string();
-                                if (id == "launch" || id == "prepare_firing") dep->CancelOrder();
+                                if (id == "launch" || id == "prepare_firing" || id == "fire_at_jammer") dep->CancelOrder();
                             }
                             npc_permit_s_ = -1e9;
                         }
@@ -6432,9 +6529,7 @@ private:
                         k.time_s = time_;
                         k.source = "IFF";
                         pictures_["senior_operator"].Learn(k);
-                        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "iff_no_reply", "no reply mark beside the echo").About(k))) {
-                            Say("iff_no_reply", "senior_operator", {}, &k);
-                        }
+                        iff_batch_.push_back(k);  // reported once for the interrogation, below
                         break;
                     }
                     case EngagementEvent::Kind::OnJammer:
@@ -6490,18 +6585,28 @@ private:
                 }
             }
         }
-        // Designations the commander heard on the radio, passed on to the crew: a new target, the one he has ordered
-        // taken, or one not passed on for 30 s (sam3d: every update of every target, four targets every 12 s, would
-        // keep the intercom talking without end and the orders waiting behind it). A target another launcher has, once.
+        // Designations the commander heard on the radio, passed on to the crew when they matter to it (sam3d: every
+        // update of every target of a massed raid kept the intercom talking without end and the orders waiting behind
+        // it): a new target near (within half again the tracking radar's reach), or far out when no other was passed on
+        // in the last minute (the raid's first); one passed on far out again as it comes near; the one he has ordered
+        // taken, every 15 s. A target another launcher has, once.
         if (c2_) {
+            const double near_m = 1.5 * (console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 25000.0);
+            int lately = 0;
+            for (const auto& pa : passed_at_) lately += time_ - pa.second < 60.0 ? 1 : 0;
             for (const C2Network::Event& e : designations_) {
                 const auto last = passed_at_.find(e.subject);
                 const bool fresh = last == passed_at_.end();
                 const bool ours = e.subject == assigned_target_;
                 const bool theirs = battery_fire_ && battery_fire_->Engaged(e.subject);
-                const bool stale = !fresh && time_ - last->second >= 30.0;
-                if (!(fresh || ours || (stale && !theirs))) continue;
+                const bool close_in = e.range_m <= near_m;
+                const auto was_far = passed_far_.find(e.subject);
+                const bool closing = !fresh && was_far != passed_far_.end() && was_far->second && close_in && !theirs;
+                const bool pass = (ours && (fresh || time_ - last->second >= 15.0)) || closing || (fresh && (close_in || lately == 0));
+                if (!pass) continue;
                 passed_at_[e.subject] = time_;
+                passed_far_[e.subject] = !close_in;
+                ++lately;
                 if (NpcAt(Cmdr())) {
                     char az[16], n[16], r[16], h[16];
                     std::snprintf(az, sizeof(az), "%02d-%02d", e.azimuth_mils / 100, e.azimuth_mils % 100);
@@ -8116,6 +8221,16 @@ private:
             k.time_s = s.start_s;
             k.source = "told by " + SpeakerName(s.from);
             pictures_[c.Role()].Learn(k);
+            if (s.id == "iff_no_reply") {  // the other echoes the one "Ответа нет!" covered
+                const auto also = iff_companions_.find(s.about.target);
+                if (also != iff_companions_.end()) {
+                    for (KnownTarget o : also->second) {
+                        o.time_s = s.start_s;
+                        o.source = k.source;
+                        pictures_[c.Role()].Learn(o);
+                    }
+                }
+            }
         }
     }
 

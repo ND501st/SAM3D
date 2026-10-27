@@ -32,6 +32,17 @@ the rules and the list in readable form.
    on the board, metres otherwise.
 7. **A callout is knowledge.** Its fields (azimuth, range, target number) enter every listener's picture with the time
    and the speaker (`01` §4).
+8. **Nothing is said that tells the listener nothing new** (26 Oct 2026, after a played massed raid where 409 lines in
+   17 minutes buried the orders): a standing order's routine (the search radar's bursts, `doctrine.search_bursts`) is
+   ordered aloud once and then kept without a word, unacknowledged and unreported, with "Готов СОЦ!" at most every five
+   minutes; an acknowledgement still waiting its turn when the drill is done is dropped ("Выполнено!" covers it), and one
+   waiting "Есть!" a seat is enough; a drill the commander replaced or called off himself gets no "Не могу"; a target's
+   number is read back on the net once, when first designated; designations are passed on to the crew when they matter
+   (a new target near, the raid's first far out, one coming within half again the tracking radar's reach, the one
+   ordered taken every 15 s); one "Ответа нет!" an interrogation, about the target tracked or ordered taken, else the
+   nearest not reported in the last two minutes (the commander's permission to fire waits on hearing it about his
+   target). `ScenarioRunner` (`ReportNoReply`, the designation relay, `routine_order_`), `crew_callouts.hpp` (`Say`);
+   `tests/test_em_threats.cpp`.
 
 ## 3. The catalogue
 

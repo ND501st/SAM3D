@@ -127,7 +127,52 @@ SC_TEST("em threats: with search bursts the transmitter radiates a fraction of t
     SC_EXPECT(fraction > 0.1 && fraction < 0.5);  // 4 s in 20, plus the senior operator's reaction
     SC_EXPECT(switches >= 2);
     SC_EXPECT(r->Launches() >= 1);
-    SC_EXPECT(r->Debrief().find("Высокое выключить!") != std::string::npos);
+    // The rhythm is ordered aloud once; after it the senior operator keeps it without a word, and "Готов СОЦ!" isn't
+    // said with every burst.
+    const std::string d = r->Debrief();
+    const auto count = [&](const std::string& what) {
+        int n = 0;
+        for (std::size_t at = d.find(what); at != std::string::npos; at = d.find(what, at + 1)) ++n;
+        return n;
+    };
+    const int orders = count("Высокое выключить!") + count("Высокое включить!");
+    std::printf("    the burst orders said %d times, \"Готов СОЦ!\" %d times\n", orders, count("Готов СОЦ!"));
+    SC_EXPECT(orders >= 1 && orders <= 2);
+    SC_EXPECT(count("Готов СОЦ!") <= 4);
+}
+
+SC_TEST("crew talk in a massed raid: each number read back once, one \"Ответа нет!\" an interrogation, the crew told of near targets; after the ARM the fight goes on") {
+    // The Pact's massed strike (18 aircraft at dusk, self-screening jammers, an ARM at the vehicle): the game's
+    // "Warsaw Pact 1", played by the NPC crew.
+    auto r = Runner(ReadFile(kData + "/scenarios/air_war_pact_massed_strike.json"));
+    SC_EXPECT(r != nullptr);
+    if (r == nullptr) return;
+    while (!r->Finished() && r->Time() < 1100.0) r->Step(0.1);
+    const std::string d = r->Debrief();
+    const auto count = [&](const std::string& what) {
+        int n = 0;
+        for (std::size_t at = d.find(what); at != std::string::npos; at = d.find(what, at + 1)) ++n;
+        return n;
+    };
+    // Every designation's number read back once.
+    std::set<std::string> numbers;
+    for (std::size_t at = d.find("designation "); at != std::string::npos; at = d.find("designation ", at + 1)) {
+        numbers.insert(d.substr(at + 12, 4));
+    }
+    const int readbacks = count("понял. Приём.");
+    const int said = static_cast<int>(std::count(d.begin(), d.end(), '\n'));
+    std::printf("    %zu numbers designated, read back %d times; \"Ответа нет!\" %d; relayed %d; ARM %s; captures %d\n", numbers.size(), readbacks,
+                count("Ответа нет!"), count("says  Цель номер"), Has(d, "Пуск ПРР") ? "yes" : "no", count("started    ready_capture"));
+    SC_EXPECT(!numbers.empty() && readbacks <= static_cast<int>(numbers.size()));
+    SC_EXPECT(count("Ответа нет!") <= 15);
+    SC_EXPECT(count("says  Цель номер") <= 2 * static_cast<int>(numbers.size()));
+    SC_EXPECT(count("Не могу: cancelled!") == 0 && count("Не могу: superseded!") == 0);
+    SC_EXPECT(count("Не могу: soc.hv!") == 0);  // the burst's unspoken "transmitter on", refused with the search stopped
+    // The ARM came, radiation went off, and the crew took targets again after it.
+    const std::size_t arm = d.find("radiation off against the ARM");
+    SC_EXPECT(arm != std::string::npos);
+    if (arm != std::string::npos) SC_EXPECT(d.find("started    ready_capture", arm) != std::string::npos);
+    (void)said;
 }
 
 SC_TEST("em threats: the battery's own vehicles and dummy positions don't show as contacts, and a deployed battery doesn't stow between raids") {

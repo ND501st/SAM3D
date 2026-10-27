@@ -546,7 +546,13 @@ follows a noise jammer in angle when the jamming drowns its echo (`RunTrackRadar
   (`AngleSigmaRad`, as for a strobe), drawn on the keyed random streams. There is no range: the gate stays at the
   range it had, or at the designation's range (the crew's range wheel), so the radar takes the echo again by itself
   when it burns through (about 2.6 km for a 5 m2 target against the placeholder `generic_selfscreen_noise_ku`).
-* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam.
+* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam. In the
+  engagement layer (`EngagementModel::TrackJammer`) the jamming leaving the beam is not at once a lost track: the
+  tracking radar carries on at the strobe's last smoothed angles and rates for the memory time (`tv.memory_s`, ePap's
+  memory mode) while the range operator turns the gate onto the echo, now on his range indicator
+  (`RangeGateOntoEcho`); with the echo in the gate it locks (the burn-through path). A strobe that flickers below the
+  threshold for a moment is carried the same way. Lost only when the memory runs out first (the target beyond the
+  radar's reach, or out of the beam).
 * `EmSensorLink::JamTracked` gives the engagement layer the target that direction lines up with (by angle only, the
   referee-side association of §23) and the measured angles, with `no_range` set. `RadarState::on_jam`, `jam_az_rad`,
   `jam_el_rad`, `jam_jn_db`, `jam_range_m` hold the state; `ClearLock` resets it.

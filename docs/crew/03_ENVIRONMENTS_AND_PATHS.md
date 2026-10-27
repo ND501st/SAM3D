@@ -153,6 +153,7 @@ Every phase's possible outcomes, what they look like to the crew, and the path t
 | Capture | Captured a ghost / the wrong target | Operator (no ЗАХВАТ: a ghost never captures) | Retry |
 | Tracking | Lock lost (masked, clutter, crossing too fast, RGPO walk-off, jammed, target down) | Operator | Re-acquire; jammer path; TV |
 | Tracking | Range lost in jamming, angles held | Operator (range indicator), deputy | `fire_at_jammer`: range by hand, ПОМЕХА |
+| Tracking | A target-bound drill left waiting with nothing tracked and nothing in the air (method Н on a jammer whose track is gone, the TV engagement on a target lost in the haze) | Commander | After 10 s he lets the deputy's drill go (`NpcReleaseStaleDrills`), so the next "take the target" reaches a free seat; before 26 Oct 2026 a busy deputy blocked every capture for the rest of a raid |
 | Identification | Friend / no reply | Senior op | E9 / E4 |
 | Decision | Fire / hold / drop | Commander | E5 / E3 / E1 |
 | Zone | Near zone (ВНИМАНИЕ), in zone, never in zone (passes outside: crossing parameter, height, speed) | Deputy | E5 / wait / drop; move (M7) |
