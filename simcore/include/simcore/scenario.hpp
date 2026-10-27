@@ -28,6 +28,7 @@
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
+#include "simcore/emission_regime.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/instructor.hpp"
 #include "simcore/position_prep.hpp"
@@ -106,10 +107,13 @@ struct CrewDoctrineDef {
     // Warned of decoys: the commander has the deputy look at what the radar holds on the TV (tv_watch) and launches
     // only at what he has made out; at night or in a haze where the TV sees nothing he goes by the radar.
     bool tv_check = false;
-    // Emission discipline against direction-finding: while nothing is tracked, the search radar radiates in bursts,
-    // on for on_s then off for off_s (video_osa: the search radar on for two turns). 0: always on.
-    double search_on_s = 0.0;
-    double search_off_s = 0.0;
+    // The emission regime the crew goes into the mission under (emission_regime.hpp): the battery commander's decision,
+    // or the regiment's order he passed on, given in the combat order before the vehicles deploy; the vehicle commander
+    // tells his crew before the radars come on. "emission": {"regime": "free" | "limited" | "arm" | "silent", "on_turns",
+    // "off_turns", "from": "battery" | "regiment"}. The older forms still load: "search_bursts" {on_s, off_s} is the
+    // limited regime in seconds (against direction finding: on for on_s, then off for off_s, while no hostile is within
+    // the tracking radar's reach); "arm_threat" is the least emission against ARMs.
+    EmissionRegime emission;
     // Missiles per target at once: 2 is the two-missile salvo, the second launched as soon as the launcher allows
     // (3-5 s), before the first's result (korovin_tiv_2010; flak11: two missiles selected at ВНИМАНИЕ). 1: one, and
     // the second only after a miss.
@@ -120,10 +124,9 @@ struct CrewDoctrineDef {
     // transmitter off while the tracking radar holds a stable track and nothing else is about; the tracking
     // transmitter off after the missile's burst. The commander's reaction to the signs of an ARM launch is part of
     // every crew's drill, threat or not: «Излучение выключить!» once the missile in the air has burst, for
-    // arm_silence_s after the last sign (a SAM3D estimate).
-    bool arm_threat = false;
+    // arm_silence_s after the last sign (a SAM3D estimate). The least emission is the regime "arm"; "arm_threat": true
+    // with "arm_search_off_turns" (the textbook's 3-4) is its older form.
     double arm_silence_s = 60.0;
-    double arm_search_off_turns = 3.0;  // the low end of the textbook's 3-4
     // A standing order from the regiment ("relocate_after_arm": {"to": position}): attacked by ARMs, the battery moves to
     // its reserve position when the fight is over (only where the battery drives this vehicle, battery_drive_own). The
     // battery commander changes position only on the regiment commander's order (voenizdat_osa_1991 p238).
@@ -222,7 +225,19 @@ struct ScenarioDef {
     bool has_em = false;           // the unit's radars come from the electromagnetic layer (own_unit.em)
     EmLinkDef em;
     em::OpticalConditions optics;  // "environment": the visibility and the daylight the TV sight works in
-    CrewDoctrineDef doctrine;      // "doctrine": the TV check against decoys, search bursts
+    CrewDoctrineDef doctrine;      // "doctrine": the TV check against decoys, the emission regime, the salvo
+    // The emission regimes' words and the chain's times (data/command/emission_regimes.json; the code's defaults if the
+    // data folder has none).
+    EmissionDef emission;
+    // Orders of the emission regime during the mission ("emission_orders": [{"at_s", "regime", "on_turns", "off_turns",
+    // "from"}]): from "regiment", said on the regiment's net and passed on by the battery commander (in an Osa's scenario
+    // the battery commander is the battery's own NPC; in the post's, the seat); from "battery", the battery commander's
+    // own decision at that time, said on the battery net.
+    struct EmissionOrderDef {
+        double at_s = 0.0;
+        EmissionRegime regime;
+    };
+    std::vector<EmissionOrderDef> emission_orders;
     Vec3 unit_position;            // ENU [m]
     double unit_heading_deg = 0.0; // the hull's true heading, clockwise from north
     // "empty_containers": the launcher's containers that start without a missile (e.g. ["1-I", "1-II"]): a mission that
@@ -317,7 +332,7 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting"})) {
+                             "setting", "emission_orders"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -331,6 +346,7 @@ public:
         if (seed < 0) return Fail("seed", "must be >= 0");
         out.seed = static_cast<unsigned>(seed);
         if (!LoadOrigin(root, out) || !LoadTerrain(root, data_dir, out)) return false;
+        if (!LoadEmissionData(data_dir, out)) return false;
         if (!LoadOwnUnit(root, data_dir, out, console)) return false;
         if (!OptionalString(root, "", "command_post", out.command_post_file)) return false;
         if (!out.command_post_file.empty()) {
@@ -364,6 +380,7 @@ public:
             }
         }
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
+        if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -961,20 +978,81 @@ private:
         return true;
     }
 
-    // "doctrine": {"tv_check": true, "search_bursts": {"on_s": 4, "off_s": 20}, "salvo": 2}.
+    // data/command/emission_regimes.json, if the data folder has it (else the code's defaults, the same numbers).
+    bool LoadEmissionData(const std::string& data_dir, ScenarioDef& out) {
+        const std::string path = data_dir + "/command/emission_regimes.json";
+        if (!std::ifstream(path, std::ios::binary)) return true;
+        std::string error;
+        if (!LoadEmissionFile(path, out.emission, &error)) return Fail("emission_regimes", error);
+        return true;
+    }
+    // {"regime": "limited", "on_turns": 2, "off_turns": 6, "from": "regiment"}: the turns default to the data's.
+    bool LoadEmissionRegime(const json::Value& v, const std::string& p, const ScenarioDef& def, EmissionRegime& out) {
+        std::string kind, from = "battery";
+        if (!RequireString(v, p, "regime", kind) || !OptionalString(v, p, "from", from)) return false;
+        EmissionKind k = EmissionKind::Free;
+        if (!ParseEmissionKind(kind, k)) return Fail(Join(p, "regime"), "must be \"free\", \"limited\", \"arm\" or \"silent\"");
+        if (from != "battery" && from != "regiment") return Fail(Join(p, "from"), "must be \"battery\" or \"regiment\"");
+        out = def.emission.Make(k, from);
+        if (!OptionalNumber(v, p, "on_turns", out.on_turns) || !OptionalNumber(v, p, "off_turns", out.off_turns)) return false;
+        if (!out.Bursts() && (v.Find("on_turns") != nullptr || v.Find("off_turns") != nullptr)) {
+            return Fail(p, "only the limited and arm regimes have bursts (on_turns, off_turns)");
+        }
+        if (out.Bursts() && (out.on_turns <= 0.0 || out.off_turns <= 0.0)) return Fail(p, "on_turns and off_turns must be > 0");
+        return true;
+    }
+    // "emission_orders": the regime changed during the mission, from the regiment or the battery commander.
+    bool LoadEmissionOrders(const json::Value& root, ScenarioDef& out) {
+        const json::Value* list = OptionalArray(root, "", "emission_orders");
+        if (list == nullptr) return message_.empty();
+        if (!out.has_battery && !out.has_post) return Fail("emission_orders", "an emission order goes to a battery: the scenario has none");
+        if (out.battery_commander == "post") return Fail("emission_orders", "the battery commander is at the linked post: its scenario gives them");
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index("emission_orders", i);
+            const json::Value& o = list->items[i];
+            ScenarioDef::EmissionOrderDef e;
+            if (!Keys(o, p, {"at_s", "regime", "on_turns", "off_turns", "from", "notes"}) || !RequireNumber(o, p, "at_s", e.at_s) ||
+                !LoadEmissionRegime(o, p, out, e.regime)) {
+                return false;
+            }
+            if (e.at_s <= 0.0) return Fail(Join(p, "at_s"), "> 0: the regime the mission starts under is the doctrine's \"emission\"");
+            if (e.regime.from == "regiment" && out.has_post && out.radio_data.Find("regiment") == nullptr) {
+                return Fail(Join(p, "from"), "the regiment's order goes on its net: radio_data has no net \"regiment\"");
+            }
+            out.emission_orders.push_back(e);
+        }
+        return true;
+    }
+
+    // "doctrine": {"tv_check": true, "emission": {"regime": "limited"}, "salvo": 2}.
     bool LoadDoctrine(const json::Value& root, ScenarioDef& out) {
         const json::Value* d = root.Find("doctrine");
         if (d == nullptr) return true;
-        if (!Keys(*d, "doctrine", {"tv_check", "search_bursts", "salvo", "arm_threat", "arm_silence_s", "arm_search_off_turns",
+        bool arm_threat = false;
+        double arm_off_turns = out.emission.arm.off_turns;
+        if (!Keys(*d, "doctrine", {"tv_check", "emission", "search_bursts", "salvo", "arm_threat", "arm_silence_s", "arm_search_off_turns",
                                    "relocate_after_arm", "notes"}) ||
             !OptionalBool(*d, "doctrine", "tv_check", out.doctrine.tv_check) ||
-            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo) || !OptionalBool(*d, "doctrine", "arm_threat", out.doctrine.arm_threat) ||
+            !OptionalInt(*d, "doctrine", "salvo", out.doctrine.salvo) || !OptionalBool(*d, "doctrine", "arm_threat", arm_threat) ||
             !OptionalNumber(*d, "doctrine", "arm_silence_s", out.doctrine.arm_silence_s) ||
-            !OptionalNumber(*d, "doctrine", "arm_search_off_turns", out.doctrine.arm_search_off_turns)) {
+            !OptionalNumber(*d, "doctrine", "arm_search_off_turns", arm_off_turns)) {
             return false;
         }
         if (out.doctrine.arm_silence_s < 0.0) return Fail("doctrine.arm_silence_s", "must be >= 0");
-        if (out.doctrine.arm_search_off_turns < 0.0) return Fail("doctrine.arm_search_off_turns", "must be >= 0");
+        if (arm_off_turns <= 0.0) return Fail("doctrine.arm_search_off_turns", "must be > 0");
+        const json::Value* em = d->Find("emission");
+        if (em != nullptr && (arm_threat || d->Find("search_bursts") != nullptr || d->Find("arm_search_off_turns") != nullptr)) {
+            return Fail("doctrine.emission", "give the regime once: \"emission\", or the older \"arm_threat\" / \"search_bursts\"");
+        }
+        if (em != nullptr) {
+            if (!em->Is(json::Type::Object) || !Keys(*em, "doctrine.emission", {"regime", "on_turns", "off_turns", "from", "notes"}) ||
+                !LoadEmissionRegime(*em, "doctrine.emission", out, out.doctrine.emission)) {
+                return message_.empty() ? Fail("doctrine.emission", "expected an object") : false;
+            }
+        } else if (arm_threat) {
+            out.doctrine.emission = out.emission.Make(EmissionKind::Arm, "battery");
+            out.doctrine.emission.off_turns = arm_off_turns;
+        }
         if (const json::Value* r = d->Find("relocate_after_arm")) {
             const json::Value* to = nullptr;
             if (!Keys(*r, "doctrine.relocate_after_arm", {"to", "notes"}) || !RequireObject(*r, "doctrine.relocate_after_arm", "to", to) ||
@@ -988,13 +1066,16 @@ private:
         }
         if (out.doctrine.salvo < 1 || out.doctrine.salvo > 2) return Fail("doctrine.salvo", "must be 1 or 2");
         if (const json::Value* b = d->Find("search_bursts")) {
-            if (!Keys(*b, "doctrine.search_bursts", {"on_s", "off_s", "notes"}) ||
-                !RequireNumber(*b, "doctrine.search_bursts", "on_s", out.doctrine.search_on_s) ||
-                !RequireNumber(*b, "doctrine.search_bursts", "off_s", out.doctrine.search_off_s)) {
+            double on_s = 0.0, off_s = 0.0;
+            if (!Keys(*b, "doctrine.search_bursts", {"on_s", "off_s", "notes"}) || !RequireNumber(*b, "doctrine.search_bursts", "on_s", on_s) ||
+                !RequireNumber(*b, "doctrine.search_bursts", "off_s", off_s)) {
                 return false;
             }
-            if (out.doctrine.search_on_s <= 0.0 || out.doctrine.search_off_s <= 0.0) {
-                return Fail("doctrine.search_bursts", "on_s and off_s must be > 0");
+            if (on_s <= 0.0 || off_s <= 0.0) return Fail("doctrine.search_bursts", "on_s and off_s must be > 0");
+            if (!arm_threat) {  // the least emission covers the bursts
+                out.doctrine.emission = out.emission.Make(EmissionKind::Limited, "battery");
+                out.doctrine.emission.on_s = on_s;
+                out.doctrine.emission.off_s = off_s;
             }
         }
         return true;
@@ -1157,7 +1238,8 @@ private:
                     TriggerAction& out) {
         if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
                          "battery_order", "route", "covered", "axis_deg", "air_threat", "bounding", "roving", "points",
-                         "crossing", "width_m", "vehicle", "radiate", "instructor", "target", "to"})) {
+                         "crossing", "width_m", "vehicle", "radiate", "regime", "on_turns", "off_turns", "from", "instructor", "target",
+                         "to"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
@@ -1191,7 +1273,7 @@ private:
             }
             out.kind = TriggerAction::Kind::BatteryOrder;
             std::string kind;
-            return RequireString(a, p, "battery_order", kind) && LoadBatteryOrder(a, p, kind, out.battery_order);
+            return RequireString(a, p, "battery_order", kind) && LoadBatteryOrder(a, p, kind, def, out.battery_order);
         }
         for (const char* key : {"c2_source", "c2_fail", "c2_restore"}) {
             if (a.Find(key) == nullptr) continue;
@@ -1733,11 +1815,21 @@ private:
     // An order to the battery: "march" with a "route" (positions), "short_halt", "combat_formation" with "covered"
     // (a position), "axis_deg" and "bounding", "halt", "resume", "ambush" with "points" (and "roving"),
     // "river_crossing" with "crossing", "axis_deg" and "width_m", "far_bank_held", "reload" / "refuel" with "vehicle",
-    // "emcon" with "radiate" (false: the battery's radars silent; true: they may radiate again).
-    bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, BatteryOrder& out) {
+    // "emcon" with "radiate" (false: the battery's radars silent; true: they may radiate again), "emission" with
+    // "regime" (and "on_turns", "off_turns", "from": emission_regime.hpp). Said on the battery net: the launchers know
+    // it once they hear it (at 0 s, it is part of the combat order given before the mission).
+    bool LoadBatteryOrder(const json::Value& o, const std::string& p, const std::string& kind_text, const ScenarioDef& def, BatteryOrder& out) {
         if (!ParseBatteryOrder(kind_text, out.kind)) {
             return Fail(p, "unknown battery order '" + kind_text +
-                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon, relocate)");
+                               "' (march, short_halt, combat_formation, halt, resume, ambush, river_crossing, far_bank_held, reload, refuel, emcon, "
+                               "relocate, emission)");
+        }
+        if (out.kind == BatteryOrder::Kind::Emission) {
+            if (!LoadEmissionRegime(o, p, def, out.regime)) return false;
+        } else {
+            for (const char* k : {"regime", "on_turns", "off_turns", "from"}) {
+                if (o.Find(k) != nullptr) return Fail(Join(p, k), "only an \"emission\" order has it");
+            }
         }
         if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
             !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle) ||
@@ -1871,13 +1963,13 @@ private:
                 const std::string p = Index(Join(bp, "orders"), i);
                 const json::Value& o = os->items[i];
                 if (!Keys(o, p, {"at_s", "order", "route", "covered", "axis_deg", "bounding", "roving", "points", "crossing", "width_m",
-                                 "vehicle", "radiate", "notes"})) {
+                                 "vehicle", "radiate", "regime", "on_turns", "off_turns", "from", "notes"})) {
                     return false;
                 }
                 std::string kind;
                 BatteryOrder ord;
                 if (!RequireString(o, p, "order", kind) || !OptionalNumber(o, p, "at_s", ord.at_s) ||
-                    !LoadBatteryOrder(o, p, kind, ord)) {
+                    !LoadBatteryOrder(o, p, kind, out, ord)) {
                     return false;
                 }
                 out.battery_orders.push_back(ord);

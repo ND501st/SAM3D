@@ -743,7 +743,7 @@ SC_TEST("air war: once our radars have come under ARM attack the regiment orders
             break;
         }
         (expected ? after : before) += 1;
-        (expected ? after_drill : before_drill) += def.doctrine.arm_threat ? 1 : 0;
+        (expected ? after_drill : before_drill) += def.doctrine.emission.kind == EmissionKind::Arm ? 1 : 0;
     }
     bool ordered = false;
     for (const JournalEntry& j : c.Journal()) ordered = ordered || (j.who == "regiment" && j.visible && j.text.find("ARM drill") != std::string::npos);

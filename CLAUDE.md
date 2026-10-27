@@ -204,6 +204,10 @@ straight to every seat. The crew's talk (roadmap 8.15, `docs/crew/15_TALK.md`): 
 speakers, urgent lines break in, stale lines dropped, one caller per fact), stress is a level per crewman from what he
 heard and saw, and the crew menu is a radial marking menu on Caps Lock (eight sectors in fixed places, the replies on U,
 I, P). A new callout or order needs a place in its crew data's `"menu"` (`test_crew_talk.cpp` checks every seat's lines).
+The emission regime (roadmap 8.16, `docs/crew/16_EMISSION.md`, `data/command/emission_regimes.json`): the regiment's
+order or the battery commander's decision, said on the nets, told to each crew by its commander with the turns and
+seconds of its bursts; the crew keeps only the regime it was told (`CrewRegime`), the commander orders by the one he heard
+(`CommanderRegime`). Never read a regime straight from the scenario's doctrine in crew behaviour.
 
 The helper (`docs/crew/14_HELPER.md`, `simcore/helper.hpp`; the missions menu's Helper, H in the cabin): it shows the
 move the player's seat's NPC would make now, so it has no rules of its own. **Every NPC act at a seat goes through

@@ -622,8 +622,9 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
 * **A stand-off jammer escort** is a target carrying a scripted jammer on a racetrack beyond the missiles' reach
   (`osa_soj_strike.json`): its strobe lies across the search scope and the strikers show late; one striker's
   self-protection pod is fought on its angle by method Н (9.1).
-* **Emission discipline** (`doctrine.search_bursts` {on_s, off_s}): while no hostile is within the tracking radar's
-  reach, the commander keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
+* **Emission discipline** (the limited regime, `docs/crew/16_EMISSION.md`; the older `doctrine.search_bursts` {on_s,
+  off_s}): once the commander has told his crew the regime, while no hostile is within the tracking radar's
+  reach, he keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
   the antenna turning); it stays on once one is near. Drills marked `situational` are never pulled into a plan by the
   drill master.
 * Anti-radiation missiles and the drill against them: §35.
@@ -673,7 +674,7 @@ pp262-264).**
 
 * *The signs, seen by the senior operator on his scope* (the marks' motion over their last looks, never the truth): a
   smaller mark separating and coming at the vehicle much faster than any aircraft at zero parameter ("Пуск ПРР!
-  Азимут ..."); and, warned of ARMs (`doctrine.arm_threat`), a target that came at the battery at zero parameter turning
+  Азимут ..."); and, warned of ARMs (told the arm regime), a target that came at the battery at zero parameter turning
   away out at stand-off range. A mark lost between bursts and a new one where it was heading are one blip to him.
   A "basic" tier (recruit, class3) doesn't know the signs; the others may miss one (`miss_chance`, more under stress).
 * *The signs on the tracking radar's indicators and on the TV* (`WatchTrackSigns`, 21 Oct 2026): while the tracking
@@ -691,8 +692,9 @@ pp262-264).**
   (60 s, an estimate), held so until it is over; radiation then comes back through the EMCON path. He reports the
   attack up the battery net ("21: пуск ПРР, азимут ..."). Having seen the sign himself the senior operator gives no more
   bursts.
-* *The least emission under the threat* (`doctrine.arm_threat`): the senior operator keeps the search transmitter's high
-  voltage on for 2 turns after every `arm_search_off_turns` (3; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
+* *The least emission under the threat* (the regime `arm`, once his commander has told him: `docs/crew/16_EMISSION.md`;
+  the older `doctrine.arm_threat`): the senior operator keeps the search transmitter's high
+  voltage on for 2 turns after every 3 (the regime's `off_turns`; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
   two-turn burst lights both low beams (under АВТ. I–III the low beam is dark in every third burst), and off while the
   tracking radar holds a target alone (5 s); the commander has the tracking transmitter put on a target only from Table
   7.3's far-edge range for its speed as the scope shows it (24 km over 300 m/s, 20 km under) and off after the burst.

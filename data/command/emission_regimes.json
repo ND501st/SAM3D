@@ -1,0 +1,43 @@
+{
+  "regimes_id": "osa_battery_emission",
+  "display_name": "The Osa battery's emission regimes (режим излучения)",
+  "status": "first pass",
+  "notes": "How long the radars may radiate, ordered from above and passed down by voice (docs/crew/16_EMISSION.md; simcore/emission_regime.hpp). The battery commander's decision fixes the measures against jamming and anti-radiation missiles and each launcher's order of search and fire (voenizdat_osa_1991 p243); under the threat of ARMs the radars radiate as little as possible (p262); above the battery the military district's signal frees the wartime frequencies and peacetime radiation keeps to permitted frequencies and directions (pp. 208-211). The four regimes and the words for them are SAM3D's: the textbook gives the least emission against ARMs, not a list of regimes. The battery's orders on its net use ПТ-1's groups (data/command/talk_tables.json), which are placeholders.",
+  "source": "voenizdat_osa_1991 p243, p262, pp. 208-211; the regimes as a list and their names: sam3d",
+  "confidence": "medium",
+  "regimes": {
+    "free": {
+      "ru": "без ограничений",
+      "en": "unrestricted",
+      "notes": "The radars radiate as the fight needs (the readiness drill: the search radar on at the halt)."
+    },
+    "limited": {
+      "ru": "ограниченный",
+      "en": "limited",
+      "on_turns": { "value": 2, "source": "voenizdat_osa_1991 p262 (the search transmitter's high voltage on for 2 antenna turns, the figure for the least emission); vr_1985_plss (transmitter discipline: every newly switched-on source detected within seconds)", "confidence": "medium" },
+      "off_turns": { "value": 6, "source": "estimate (against direction finding with no ARM threat the bursts can be rarer than the 3-4 turns of p262; the campaign's search bursts were 10-40 s off, 5-22 turns)", "confidence": "estimate" },
+      "notes": "Against direction finding with no ARM threat: the search transmitter in bursts while no hostile is within the tracking radar's reach; on all the time once one is."
+    },
+    "arm": {
+      "ru": "минимальный, угроза ПРР",
+      "en": "least emission, ARM threat",
+      "on_turns": { "value": 2, "source": "voenizdat_osa_1991 p262 («включения высокого напряжения передатчика СОЦ через 3—4 оборота антенны на 2 оборота»)", "confidence": "high" },
+      "off_turns": { "value": 3, "source": "voenizdat_osa_1991 p262 (3-4 turns off; the low end, as doctrine arm_search_off_turns)", "confidence": "high" },
+      "notes": "The whole least emission of p262: the search transmitter 2 turns on after every 3-4 off and off while the tracking radar holds a stable track alone; the tracking transmitter on only from Table 7.3's range and off after the missile's burst; the TV for tracking."
+    },
+    "silent": {
+      "ru": "излучение запрещено",
+      "en": "radiation forbidden",
+      "notes": "Both radars off: the TV and the battery's designations only (samsim_osa p33-35)."
+    }
+  },
+  "chain": {
+    "relay_s": { "value": 20, "source": "estimate (the battery commander hears the regiment's order, decodes the group and says it on the battery net)", "confidence": "estimate" },
+    "pass_on_s": { "value": 4, "source": "estimate (the vehicle commander takes the battery's order off his headset and tells the crew on the intercom)", "confidence": "estimate" },
+    "repeat_s": { "value": 45, "source": "estimate (an order not heard by a launcher is said again: rrs_1986, a main station repeats until it is received)", "confidence": "estimate" },
+    "repeats": { "value": 2, "source": "estimate", "confidence": "estimate" },
+    "arm_on_report_s": { "value": 15, "source": "voenizdat_osa_1991 p243 (the measures against ARMs are the battery commander's decision) and p262 (the least emission under the threat); the delay: estimate", "confidence": "estimate", "notes": "A launcher's report of an ARM attack puts the battery under the least emission this long after the battery commander hears it, if it isn't silent or under it already." },
+    "remind_quiet_s": { "value": 120, "source": "estimate (the commander reminds the radar seats of the regime when a hostile appears after this long without one)", "confidence": "estimate" },
+    "breach_turns": { "value": 1, "source": "estimate (a burst this many turns longer than ordered, with nothing tracked, and the commander tells the senior operator again)", "confidence": "estimate" }
+  }
+}

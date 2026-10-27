@@ -226,23 +226,34 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 3 | 336 | 350 | 1 | 4 | 0 | 0 | 0 | 9 | 0 | 0 | - | 0 |
-| commander | 900 time | - | 301 | 316 | 1 | 4 | 0 | 0 | 0 | 10 | 0 | 0 | duty 10 | 31 |
-| deputy_commander | 900 time | 3 | 310 | 324 | 1 | 4 | 0 | 0 | 7 | 9 | 0 | 0 | drill 8, duty 9 | 0 |
-| senior_operator | 900 time | 3 | 283 | 297 | 1 | 4 | 0 | 0 | 19 | 10 | 5 | 0 | drill 24, duty 136, wheel 508 | 0 |
-| operator | 900 time | 3 | 291 | 305 | 1 | 4 | 0 | 0 | 6 | 9 | 0 | 0 | drill 12, duty 6, wheel 89 | 0 |
-| driver | 900 time | 3 | 336 | 350 | 1 | 4 | 0 | 0 | 2 | 9 | 0 | 0 | drill 1, duty 2 | 0 |
+| NPC crew | 900 time | 3 | 285 | 299 | 1 | 4 | 0 | 0 | 0 | 14 | 0 | 0 | - | 0 |
+| commander | 900 time | - | 276 | 290 | 1 | 4 | 0 | 0 | 0 | 19 | 0 | 0 | duty 19 | 9 |
+| deputy_commander | 900 time | 3 | 285 | 299 | 1 | 4 | 0 | 0 | 7 | 14 | 0 | 0 | drill 8, duty 9 | 0 |
+| senior_operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 21 | 14 | 5 | 0 | drill 23, duty 130, wheel 468 | 0 |
+| operator | 900 time | 3 | 284 | 299 | 1 | 4 | 0 | 0 | 6 | 14 | 0 | 0 | drill 12, duty 6, wheel 90 | 0 |
+| driver | 900 time | 3 | 285 | 299 | 1 | 4 | 0 | 0 | 2 | 14 | 0 | 0 | drill 1, duty 2 | 0 |
 
 ## osa_arm_drill_shrike: Osa: Shrike drill, beaten by going silent
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 3 | 243 | 270 | 1 | 4 | 0 | 0 | 0 | 10 | 0 | 0 | - | 0 |
-| commander | 900 time | - | 153 | 287 | 1 | 4 | 0 | 0 | 0 | 9 | 1 | 0 | duty 9 | 18 |
-| deputy_commander | 900 time | 3 | 265 | 279 | 1 | 4 | 0 | 0 | 7 | 10 | 0 | 0 | drill 10, duty 9 | 0 |
-| senior_operator | 900 time | 3 | 281 | 295 | 1 | 4 | 0 | 0 | 20 | 10 | 5 | 0 | drill 23, duty 137, wheel 920 | 0 |
-| operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 8 | 11 | 0 | 0 | drill 16, duty 8, wheel 186 | 0 |
-| driver | 900 time | 3 | 243 | 270 | 1 | 4 | 0 | 0 | 2 | 10 | 0 | 0 | drill 1, duty 2 | 0 |
+| NPC crew | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 0 | 16 | 0 | 0 | - | 0 |
+| commander | 900 time | - | 238 | 270 | 1 | 4 | 0 | 0 | 0 | 23 | 0 | 0 | duty 23 | 13 |
+| deputy_commander | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 7 | 16 | 0 | 0 | drill 10, duty 9 | 0 |
+| senior_operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 23 | 18 | 5 | 0 | drill 23, duty 123, wheel 747 | 0 |
+| operator | 900 time | 3 | 244 | 270 | 1 | 4 | 0 | 0 | 8 | 16 | 0 | 0 | drill 16, duty 8, wheel 193 | 0 |
+| driver | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 2 | 16 | 0 | 0 | drill 1, duty 2 | 0 |
+
+## osa_emission_orders: Osa: the emission regime, passed down before a SEAD pair
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 0 | 27 | 0 | 0 | - | 0 |
+| commander | 900 time | - | 380 | 400 | 2 | 4 | 0 | 0 | 0 | 28 | 0 | 0 | duty 28 | 11 |
+| deputy_commander | 900 time | 3 | 382 | 400 | 1 | 4 | 0 | 0 | 7 | 27 | 0 | 0 | drill 9, duty 8 | 0 |
+| senior_operator | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 21 | 32 | 3 | 0 | drill 40, duty 109, wheel 622 | 0 |
+| operator | 900 time | 3 | 377 | 400 | 1 | 4 | 0 | 0 | 6 | 27 | 0 | 0 | drill 11, duty 6, wheel 156 | 0 |
+| driver | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 1 | 27 | 0 | 0 | drill 1, duty 1 | 0 |
 
 ## osa_practice: Osa: one drone
 
@@ -457,78 +468,78 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 0 | 53 | 0 | 0 | - | 0 |
-| commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 52 | 2 | 0 | duty 52 | 0 |
-| deputy_commander | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 1 | 53 | 0 | 0 | drill 3, duty 2 | 0 |
-| senior_operator | 900 time | 2 | - | - | 0 | 0 | 0 | 0 | 8 | 53 | 0 | 0 | drill 61, duty 9, wheel 48 | 0 |
-| operator | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 2 | 53 | 0 | 0 | drill 4, duty 2, wheel 50 | 0 |
-| driver | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 0 | 53 | 0 | 0 | - | 0 |
+| NPC crew | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 0 | 54 | 0 | 0 | - | 0 |
+| commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 67 | 2 | 0 | duty 67 | 0 |
+| deputy_commander | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 1 | 54 | 0 | 0 | drill 3, duty 2 | 0 |
+| senior_operator | 900 time | 3 | - | - | 0 | 0 | 0 | 0 | 5 | 52 | 0 | 0 | drill 60, duty 5 | 0 |
+| operator | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 2 | 54 | 0 | 0 | drill 4, duty 2, wheel 50 | 0 |
+| driver | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 0 | 54 | 0 | 0 | - | 0 |
 
 ## air_war_neutral_recce: Neutral neighbour: a light jet looks for you
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 875 all targets gone | 4 | 413 | 454 | 1 | 1 | 0 | 0 | 0 | 44 | 2 | 0 | - | 0 |
-| commander | 879 all targets gone | - | 402 | 454 | 1 | 1 | 0 | 0 | 0 | 39 | 0 | 0 | duty 39 | 11 |
-| deputy_commander | 892 all targets gone | 4 | 413 | 453 | 2 | 1 | 0 | 0 | 8 | 52 | 1 | 0 | drill 8, duty 9 | 0 |
-| senior_operator | 875 all targets gone | 2 | 402 | 454 | 1 | 1 | 0 | 0 | 16 | 44 | 1 | 0 | drill 44, duty 17, wheel 77 | 0 |
-| operator | 875 all targets gone | 4 | 413 | 454 | 1 | 1 | 0 | 0 | 8 | 44 | 2 | 0 | drill 4, duty 8, wheel 48 | 0 |
-| driver | 875 all targets gone | 4 | 413 | 454 | 1 | 1 | 0 | 0 | 0 | 44 | 2 | 0 | - | 0 |
+| NPC crew | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 0 | 50 | 0 | 0 | - | 0 |
+| commander | 842 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 0 | 57 | 0 | 0 | duty 57 | 0 |
+| deputy_commander | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 1 | 50 | 0 | 0 | drill 3, duty 2 | 0 |
+| senior_operator | 875 all targets gone | 3 | 403 | 454 | 1 | 1 | 0 | 0 | 17 | 45 | 1 | 0 | drill 44, duty 18, wheel 74 | 0 |
+| operator | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 2 | 50 | 0 | 0 | drill 4, duty 2, wheel 49 | 0 |
+| driver | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 0 | 50 | 0 | 0 | - | 0 |
 
 ## air_war_pact_massed_strike: Warsaw Pact: a massed blow
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 0 | 49 | 1 | 0 | - | 0 |
-| commander | 900 time | - | 808 | - | 0 | 1 | 0 | 0 | 0 | 50 | 0 | 0 | duty 50 | 115 |
-| deputy_commander | 900 time | 5 | 618 | - | 0 | 1 | 0 | 0 | 4 | 45 | 1 | 0 | drill 8, duty 5 | 0 |
-| senior_operator | 900 time | 2 | 619 | - | 0 | 1 | 0 | 0 | 37 | 49 | 4 | 0 | drill 69, duty 47, wheel 107 | 0 |
-| operator | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 5 | 46 | 1 | 0 | drill 7, duty 5, wheel 182 | 0 |
-| driver | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 0 | 49 | 1 | 0 | - | 0 |
+| NPC crew | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 0 | 51 | 0 | 0 | - | 0 |
+| commander | 900 time | - | 658 | - | 0 | 1 | 0 | 0 | 0 | 63 | 1 | 0 | duty 63 | 138 |
+| deputy_commander | 900 time | 5 | 618 | - | 0 | 1 | 0 | 0 | 4 | 48 | 0 | 0 | drill 8, duty 5 | 0 |
+| senior_operator | 900 time | 3 | 619 | - | 0 | 1 | 0 | 0 | 38 | 48 | 9 | 0 | drill 64, duty 69, wheel 102 | 0 |
+| operator | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 9 | 50 | 0 | 0 | drill 7, duty 9, wheel 344 | 0 |
+| driver | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 0 | 51 | 0 | 0 | - | 0 |
 
 ## air_war_pact_dead: Warsaw Pact: MiG-25BMs hunt the battery
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 776 all targets gone | 3 | 547 | - | 0 | 7 | 0 | 0 | 0 | 36 | 1 | 0 | - | 0 |
-| commander | 776 all targets gone | - | 373 | - | 0 | 7 | 0 | 0 | 0 | 34 | 1 | 0 | duty 34 | 0 |
-| deputy_commander | 776 all targets gone | 3 | 548 | - | 0 | 7 | 0 | 0 | 2 | 36 | 1 | 0 | drill 9, duty 3 | 0 |
-| senior_operator | 776 all targets gone | 2 | 502 | - | 0 | 7 | 0 | 0 | 26 | 36 | 2 | 0 | drill 54, duty 33, wheel 148 | 0 |
-| operator | 776 all targets gone | 3 | 548 | - | 0 | 7 | 0 | 0 | 4 | 36 | 1 | 0 | drill 4, duty 4, wheel 91 | 0 |
-| driver | 776 all targets gone | 3 | 547 | - | 0 | 7 | 0 | 0 | 0 | 36 | 1 | 0 | - | 0 |
+| NPC crew | 776 all targets gone | 3 | 344 | 453 | 1 | 7 | 0 | 0 | 0 | 34 | 0 | 0 | - | 0 |
+| commander | 776 all targets gone | - | 407 | - | 0 | 7 | 0 | 0 | 0 | 51 | 0 | 0 | duty 51 | 30 |
+| deputy_commander | 776 all targets gone | 3 | 343 | - | 0 | 7 | 0 | 0 | 5 | 29 | 0 | 0 | drill 5, duty 6 | 0 |
+| senior_operator | 776 all targets gone | 3 | 390 | 453 | 1 | 7 | 0 | 0 | 28 | 35 | 5 | 0 | drill 44, duty 88, wheel 93 | 0 |
+| operator | 776 all targets gone | 3 | 344 | - | 0 | 7 | 0 | 0 | 7 | 33 | 0 | 0 | drill 6, duty 7, wheel 157 | 0 |
+| driver | 776 all targets gone | 3 | 344 | 453 | 1 | 7 | 0 | 0 | 0 | 34 | 0 | 0 | - | 0 |
 
 ## air_war_nato_decoys: NATO: decoys first
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 4 | 461 | - | 0 | 0 | 0 | 0 | 0 | 51 | 2 | 0 | - | 0 |
-| commander | 900 time | 461 | 455 | - | 0 | 0 | 0 | 0 | 0 | 43 | 0 | 0 | duty 43 | 182 |
+| NPC crew | 900 time | 4 | 461 | - | 0 | 0 | 0 | 0 | 0 | 53 | 2 | 0 | - | 0 |
+| commander | 900 time | 463 | 455 | - | 0 | 0 | 0 | 0 | 0 | 54 | 2 | 0 | duty 54 | 181 |
 | deputy_commander | 900 time | 4 | 471 | 485 | 1 | 1 | 0 | 0 | 6 | 47 | 1 | 0 | drill 13, duty 7 | 0 |
-| senior_operator | 900 time | 2 | 432 | 447 | 1 | 1 | 0 | 0 | 28 | 55 | 2 | 0 | drill 44, duty 30, wheel 721 | 0 |
-| operator | 900 time | 4 | 461 | - | 0 | 0 | 0 | 0 | 8 | 53 | 1 | 0 | drill 4, duty 8, wheel 286 | 0 |
-| driver | 900 time | 4 | 461 | - | 0 | 0 | 0 | 0 | 0 | 51 | 2 | 0 | - | 0 |
+| senior_operator | 900 time | 3 | 454 | 468 | 1 | 1 | 0 | 0 | 27 | 54 | 1 | 0 | drill 44, duty 30, wheel 582 | 0 |
+| operator | 900 time | 4 | 461 | - | 0 | 0 | 0 | 0 | 8 | 55 | 1 | 0 | drill 4, duty 8, wheel 286 | 0 |
+| driver | 900 time | 4 | 461 | - | 0 | 0 | 0 | 0 | 0 | 53 | 2 | 0 | - | 0 |
 
 ## air_war_nato_strike: NATO: a strike package goes by
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 4 | - | - | 0 | 2 | 0 | 0 | 0 | 42 | 0 | 0 | - | 0 |
-| commander | 900 time | - | 772 | 795 | 1 | 2 | 0 | 0 | 0 | 49 | 2 | 0 | duty 49 | 112 |
-| deputy_commander | 900 time | 4 | - | - | 0 | 2 | 0 | 0 | 1 | 42 | 0 | 0 | duty 2 | 0 |
-| senior_operator | 900 time | 2 | 750 | 805 | 2 | 2 | 0 | 0 | 18 | 47 | 1 | 0 | drill 52, duty 23, wheel 40 | 0 |
-| operator | 900 time | 4 | - | - | 0 | 2 | 0 | 0 | 1 | 42 | 0 | 0 | duty 1, wheel 95 | 0 |
-| driver | 900 time | 4 | - | - | 0 | 2 | 0 | 0 | 0 | 42 | 0 | 0 | - | 0 |
+| NPC crew | 900 time | 4 | 747 | 797 | 2 | 3 | 0 | 0 | 0 | 54 | 1 | 0 | - | 0 |
+| commander | 900 time | - | 745 | 820 | 1 | 2 | 0 | 0 | 0 | 64 | 1 | 0 | duty 64 | 112 |
+| deputy_commander | 900 time | 4 | 747 | 805 | 2 | 3 | 0 | 0 | 15 | 52 | 0 | 0 | drill 15, duty 16 | 0 |
+| senior_operator | 900 time | 3 | 750 | 805 | 2 | 2 | 0 | 0 | 19 | 50 | 1 | 0 | drill 52, duty 24, wheel 40 | 0 |
+| operator | 900 time | 4 | 746 | 807 | 1 | 2 | 0 | 0 | 7 | 53 | 1 | 0 | drill 4, duty 7, wheel 333 | 0 |
+| driver | 900 time | 4 | 747 | 797 | 2 | 3 | 0 | 0 | 0 | 54 | 1 | 0 | - | 0 |
 
 ## air_war_nato_dead: NATO: DEAD on the battery
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 0 | 26 | 0 | 0 | - | 0 |
-| commander | 900 time | - | 378 | - | 0 | 2 | 0 | 0 | 0 | 23 | 0 | 0 | duty 23 | 204 |
-| deputy_commander | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 2 | 26 | 0 | 0 | drill 8, duty 3 | 0 |
-| senior_operator | 900 time | 2 | 504 | - | 0 | 2 | 0 | 0 | 34 | 39 | 1 | 0 | drill 48, duty 39, wheel 303 | 0 |
-| operator | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 3 | 26 | 0 | 0 | drill 4, duty 3, wheel 213 | 0 |
-| driver | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 0 | 26 | 0 | 0 | - | 0 |
+| NPC crew | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 0 | 28 | 0 | 0 | - | 0 |
+| commander | 900 time | - | 373 | - | 0 | 2 | 0 | 0 | 0 | 30 | 0 | 0 | duty 30 | 204 |
+| deputy_commander | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 2 | 28 | 0 | 0 | drill 8, duty 3 | 0 |
+| senior_operator | 900 time | 3 | 558 | - | 0 | 2 | 0 | 0 | 39 | 46 | 0 | 0 | drill 39, duty 45, wheel 216 | 0 |
+| operator | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 3 | 28 | 0 | 0 | drill 4, duty 3, wheel 213 | 0 |
+| driver | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 0 | 28 | 0 | 0 | - | 0 |
 
 ## kesmark_range_test: Kesmark range: raid at the bridges, broken cloud
 
@@ -541,7 +552,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | operator | 900 time | 253 | - | - | 0 | 1 | 0 | 0 | 2 | 2 | 0 | 0 | drill 7, duty 2, wheel 269 | 0 |
 | driver | 900 time | 252 | - | - | 0 | 1 | 0 | 0 | 1 | 2 | 0 | 0 | drill 2, duty 1 | 0 |
 
-## Gaps (36)
+## Gaps (41)
 
 - **osa_crew_practice, commander**: ready_halted never reached
 - **osa_battery_fight, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 6203, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
@@ -550,8 +561,9 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 - **osa_decoys, commander**: launched never reached; no launch. Last refused: Order: Пуск разрешаю!: nothing tracked
 - **osa_decoys, deputy_commander**: captured a minute or more later
 - **osa_soj_strike, commander**: ready_halted never reached
-- **osa_arm_drill, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: nothing tracked
-- **osa_arm_drill_shrike, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: nothing tracked
+- **osa_arm_drill, commander**: ready_halted never reached. Last refused: Report: 21: пуск ПРР, азимут 58-89!: the chest switch is at receive (hold it at ПРД to talk)
+- **osa_arm_drill_shrike, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: No target in the zone
+- **osa_emission_orders, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: No target in the zone
 - **osa_emcon_tv, deputy_commander**: launched never reached; no launch
 - **osa_rgpo_em, commander**: ready_halted never reached
 - **osa_low_flier_em, commander**: ready_halted never reached; launched never reached; no launch. Last refused: Order: Пуск разрешаю!: nothing tracked
@@ -569,11 +581,15 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 - **osa_angola_night, commander**: ready_halted never reached. Last refused: Order: Вторая — пуск!: No target in the zone
 - **osa_cuito_1988, commander**: ready_halted never reached. Last refused: Order: Вторая — пуск!: No target in the zone
 - **air_war_rebels_strike, commander**: ready_halted never reached
-- **air_war_neutral_recce, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: No target in the zone
-- **air_war_pact_massed_strike, commander**: ready_halted never reached; captured a minute or more later. Last refused: Report: 10, я 21: цель 6213, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
-- **air_war_pact_dead, commander**: ready_halted never reached
+- **air_war_neutral_recce, commander**: ready_halted never reached
+- **air_war_pact_massed_strike, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 6213, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
+- **air_war_pact_dead, commander**: ready_halted never reached; captured a minute or more later; launched never reached; no launch. Last refused: Report: 21: пуск ПРР, азимут 17-82!: the chest switch is at receive (hold it at ПРД to talk)
+- **air_war_pact_dead, deputy_commander**: launched never reached; no launch
+- **air_war_pact_dead, operator**: launched never reached; no launch
 - **air_war_nato_decoys, commander**: ready_halted a minute or more later. Last refused: Report: 10, я 21: цель 6204, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
-- **air_war_nato_strike, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 6209, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
+- **air_war_nato_strike, commander**: ready_halted never reached; fewer kills (2 vs 3). Last refused: Report: 10, я 21: цель 6209, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
+- **air_war_nato_strike, senior_operator**: fewer kills (2 vs 3)
+- **air_war_nato_strike, operator**: fewer kills (2 vs 3)
 - **air_war_nato_dead, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 6207, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
 - **air_war_nato_dead, senior_operator**: captured a minute or more later
 - **kesmark_range_test, commander**: ready_halted never reached. Last refused: Report: 21: цель 6202 поражена, израсходовано 1!: the chest switch is at receive (hold it at ПРД to talk)
@@ -585,54 +601,63 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Duty (seat): rule | Times |
 |---|---|
 | control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 1 |
-| control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 28 |
+| control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 29 |
 | control (radio_operator): a message heard: write it in the journal | 3 |
 | control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 1 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
-| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 93 |
-| drill (senior_operator): the least emission against ARMs: both low beams in each burst | 8 |
-| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 110 |
-| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 111 |
+| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
+| drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 10 |
+| drill (senior_operator): the least emission against ARMs: both low beams in each burst | 16 |
+| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 169 |
+| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 162 |
 | order (battery_commander): a raid within reach of the covered troops | 4 |
 | order (battery_commander): communications and every launcher ready | 4 |
 | order (battery_commander): the drills the crew needs next | 1 |
 | order (battery_commander): the raid has gone: the all clear | 2 |
-| order (commander): the commander's next order | 300 |
-| order (commander): the drills the crew needs next | 157 |
+| order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 13 |
+| order (commander): the battery's emission regime, told to the crew | 11 |
+| order (commander): the commander's next order | 189 |
+| order (commander): the drills the crew needs next | 104 |
+| order (commander): the least emission: the operator told the tracking transmitter's rule | 3 |
+| order (commander): the limited regime: ВЫСОКОЕ off between bursts | 138 |
+| order (commander): the limited regime: ВЫСОКОЕ on for a burst | 134 |
+| order (commander): the search transmitter on longer than the regime's burst | 10 |
 | plot (operator): a report heard: write it on the board | 102 |
 | report (commander): a target destroyed: report it on the battery net | 5 |
 | report (commander): a target given on the battery net: read it back | 50 |
-| report (deputy_commander): a report the crew makes when its lamp or input comes on | 160 |
-| report (deputy_commander): a sign of the shot on his instrument: fire and break-up on the TV | 13 |
-| report (deputy_commander): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 1 |
+| report (commander): an ARM launch: reported to the battery commander | 8 |
+| report (deputy_commander): a report the crew makes when its lamp or input comes on | 167 |
+| report (deputy_commander): a sign of the shot on his instrument: fire and break-up on the TV | 14 |
+| report (deputy_commander): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 2 |
+| report (deputy_commander): a sign of the shot on his instrument: the missile's reply lost before the meeting | 1 |
 | report (deputy_commander): a sign of the shot on his instrument: the missile's reply still there after the meeting | 2 |
 | report (deputy_commander): a sign of the shot on his instrument: the target flying on unchanged | 2 |
-| report (deputy_commander): a sign of the shot on his instrument: the target whole on the TV | 10 |
-| report (deputy_commander): a sign of the shot on his instrument: the target's elevation dropping fast | 22 |
+| report (deputy_commander): a sign of the shot on his instrument: the target whole on the TV | 9 |
+| report (deputy_commander): a sign of the shot on his instrument: the target's elevation dropping fast | 24 |
 | report (deputy_commander): no missile left on the launcher | 2 |
 | report (deputy_commander): the TV shows a decoy | 2 |
-| report (deputy_commander): К бою: the intercom checked | 34 |
+| report (deputy_commander): К бою: the intercom checked | 35 |
 | report (driver): a report the crew makes when its lamp or input comes on | 7 |
-| report (driver): stowed after the ARM attack: ready to march | 2 |
+| report (driver): stowed after the ARM attack: ready to march | 3 |
 | report (operator): a mark new, turned or lost on the board: tell the commander | 21 |
-| report (operator): a report the crew makes when its lamp or input comes on | 93 |
+| report (operator): a report the crew makes when its lamp or input comes on | 101 |
 | report (operator): a sign of the shot on his instrument: its jamming gone | 1 |
-| report (operator): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 20 |
-| report (operator): a sign of the shot on his instrument: the missile's reply still there after the meeting | 6 |
-| report (operator): a sign of the shot on his instrument: the target flying on unchanged | 8 |
-| report (operator): a sign of the shot on his instrument: the target's mark gone | 11 |
-| report (operator): the track was lost | 20 |
-| report (operator): К бою: the intercom checked | 34 |
+| report (operator): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 21 |
+| report (operator): a sign of the shot on his instrument: the missile's reply still there after the meeting | 5 |
+| report (operator): a sign of the shot on his instrument: the target flying on unchanged | 7 |
+| report (operator): a sign of the shot on his instrument: the target's mark gone | 13 |
+| report (operator): the track was lost | 22 |
+| report (operator): К бою: the intercom checked | 35 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
-| report (senior_operator): a new echo on his scope | 103 |
-| report (senior_operator): a report the crew makes when its lamp or input comes on | 49 |
-| report (senior_operator): a sign of the shot on his instrument: the group's mark splitting | 1 |
+| report (senior_operator): a new echo on his scope | 110 |
+| report (senior_operator): a report the crew makes when its lamp or input comes on | 50 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
-| report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 5 |
-| report (senior_operator): a target that came at the battery turns away | 1 |
-| report (senior_operator): no reply mark beside the echo | 63 |
-| report (senior_operator): the nearest echo, every 15 s until a track | 188 |
-| report (senior_operator): К бою: the intercom checked | 34 |
+| report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 6 |
+| report (senior_operator): a target that came at the battery turns away | 2 |
+| report (senior_operator): no reply mark beside the echo | 57 |
+| report (senior_operator): the bursts read back | 13 |
+| report (senior_operator): the nearest echo, every 15 s until a track | 210 |
+| report (senior_operator): К бою: the intercom checked | 35 |
 | report (squad_leader): a report the crew makes when its lamp or input comes on | 2 |
 | wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
 
@@ -640,7 +665,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 A player in command can't give these from his menu (the shadow commander would): an order missing in `data/crew/<system>_crew.json`.
 
-- deputy_commander: РАБ.РЕЖ. ВКЛ (tov.power) (25 runs)
+- deputy_commander: РАБ.РЕЖ. ВКЛ (tov.power) (26 runs)
 - radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (1 runs)
 
-294 runs.
+300 runs.

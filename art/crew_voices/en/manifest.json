@@ -216,6 +216,120 @@
    "word_error": 0.0,
    "phonemes": "ðə bˈæɾɚɹi tə dˈuːɾi ɹᵻsˈɛpʃən!"
   },
+  "battery_commander/order_battery_emission_arm": {
+   "seat": "battery_commander",
+   "id": "order_battery_emission_arm",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: ARM threat, least emission!",
+   "spoken": "The battery: A R M threat, least emission!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: A R M threat, least emission!",
+    "engine_text": "The battery: A.R.M. threat, least emission!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: ˈeɪ.ˈɑːɹ.ˈɛm. θɹˈɛt, lˈiːst ɪmˈɪʃən!",
+   "duration_s": 2.61,
+   "speech_s": 2.37,
+   "slot_s": 2.5,
+   "rms_db": -18.4,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "The Battery ARM Threat Least Emission",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_emission_free": {
+   "seat": "battery_commander",
+   "id": "order_battery_emission_free",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery may radiate freely!",
+   "spoken": "The battery may radiate freely!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery may radiate freely!",
+    "engine_text": "The battery may radiate freely!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi mˈeɪ ɹˈeɪdɪˌeɪt fɹˈiːli!",
+   "duration_s": 1.7,
+   "speech_s": 1.58,
+   "slot_s": 2.15,
+   "rms_db": -18.3,
+   "peak_db": -1.5,
+   "flags": [],
+   "transcript": "The battery may radiate freely.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_emission_limited": {
+   "seat": "battery_commander",
+   "id": "order_battery_emission_limited",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery to limited radiation!",
+   "spoken": "The battery to limited radiation!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery to limited radiation!",
+    "engine_text": "The battery to limited radiation!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi tə lˈɪmɪɾᵻd ɹˌeɪdɪˈeɪʃən!",
+   "duration_s": 2.03,
+   "speech_s": 1.88,
+   "slot_s": 2.15,
+   "rms_db": -18.3,
+   "peak_db": -1.2,
+   "flags": [],
+   "transcript": "The battery to limited radiation.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_emission_silent": {
+   "seat": "battery_commander",
+   "id": "order_battery_emission_silent",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: no radiation!",
+   "spoken": "The battery: no radiation!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: no radiation!",
+    "engine_text": "The battery: no radiation!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: nˈoʊ ɹˌeɪdɪˈeɪʃən!",
+   "duration_s": 1.68,
+   "speech_s": 1.54,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -1.2,
+   "flags": [],
+   "transcript": "The battery, no radiation.",
+   "word_error": 0.0
+  },
   "battery_commander/order_battery_simplex": {
    "seat": "battery_commander",
    "id": "order_battery_simplex",

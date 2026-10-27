@@ -36,7 +36,7 @@ the rules and the list in readable form.
 7. **A callout is knowledge.** Its fields (azimuth, range, target number) enter every listener's picture with the time
    and the speaker (`01` §4).
 8. **Nothing is said that tells the listener nothing new** (26 Oct 2026, after a played massed raid where 409 lines in
-   17 minutes buried the orders): a standing order's routine (the search radar's bursts, `doctrine.search_bursts`) is
+   17 minutes buried the orders): a standing order's routine (the search radar's bursts under the limited regime, `16_EMISSION.md`) is
    ordered aloud once and then kept without a word, unacknowledged and unreported, with "Готов СОЦ!" at most every five
    minutes; an acknowledgement still waiting its turn when the drill is done is dropped ("Выполнено!" covers it), and one
    waiting "Есть!" a seat is enough; a drill the commander replaced or called off himself gets no "Не могу"; a target's

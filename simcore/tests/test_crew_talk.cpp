@@ -212,7 +212,13 @@ SC_TEST("crew talk: silent against the ARM, the commander orders nothing that ra
     r.SetAssistLevel(AssistLevel::Guided);
     r.SetHelper(true);
     HelpFollower f("senior_operator");
-    while (!r.Finished() && r.Time() < 700.0) {
+    // The first ARM comes at about 1080 s since the crew is told its emission regime and reminded of it (16_EMISSION.md):
+    // their talk moves the fight's timings (before, about 600 s).
+    while (!r.Finished() && r.Time() < 1300.0 && Find(r.Callouts()->Log(), "order_emcon_off") == nullptr) {
+        r.Step(0.1);
+        f.Update(r);
+    }
+    for (int i = 0; i < 700 && !r.Finished(); ++i) {  // the minute after it
         r.Step(0.1);
         f.Update(r);
     }
@@ -306,7 +312,7 @@ SC_TEST("crew talk: the radial menu holds every line a seat can say, at most 8 s
             // What the commander says on the air himself, as ScenarioRunner::PlayerRadioReports offers it.
             std::vector<std::string> radio;
             if (seat.station == o.crew.commander) {
-                for (const char* id : {"report_ready", "readback"}) {
+                for (const char* id : {"report_ready", "readback", "report_arm_attack"}) {
                     const CalloutDef* c = o.crew.FindCallout(id);
                     if (c != nullptr && c->from == seat.station) radio.push_back(id);
                 }

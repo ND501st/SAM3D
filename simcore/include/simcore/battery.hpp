@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/emission_regime.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -98,7 +99,7 @@ struct BatteryVehicleDef {
 };
 
 struct BatteryOrder {
-    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon, Relocate };
+    enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon, Relocate, Emission };
     Kind kind = Kind::March;
     double at_s = 0.0;
     std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
@@ -110,6 +111,7 @@ struct BatteryOrder {
     double width_m = 100.0;   // RiverCrossing: the river's width
     std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
     bool radiate = false;     // Emcon: the radars may radiate again (false: radiation off, the battery fights silent)
+    EmissionRegime regime;    // Emission: the battery's emission regime (emission_regime.hpp)
     // ShortHalt: the target the halt is for, as the battery commander knows it: its range (< 0: not known) and, if
     // known, its true azimuth from the battery.
     double threat_range_m = -1.0;
@@ -131,6 +133,7 @@ inline const char* BatteryOrderName(BatteryOrder::Kind k) {
         case BatteryOrder::Kind::Refuel: return "refuel";
         case BatteryOrder::Kind::Emcon: return "emcon";
         case BatteryOrder::Kind::Relocate: return "relocate";
+        case BatteryOrder::Kind::Emission: return "emission";
     }
     return "?";
 }
@@ -139,7 +142,8 @@ inline bool ParseBatteryOrder(const std::string& s, BatteryOrder::Kind& out) {
     for (BatteryOrder::Kind k : {BatteryOrder::Kind::March, BatteryOrder::Kind::ShortHalt, BatteryOrder::Kind::CombatFormation,
                                  BatteryOrder::Kind::Halt, BatteryOrder::Kind::Resume, BatteryOrder::Kind::Ambush,
                                  BatteryOrder::Kind::RiverCrossing, BatteryOrder::Kind::FarBankHeld, BatteryOrder::Kind::Reload,
-                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon, BatteryOrder::Kind::Relocate}) {
+                                 BatteryOrder::Kind::Refuel, BatteryOrder::Kind::Emcon, BatteryOrder::Kind::Relocate,
+                                 BatteryOrder::Kind::Emission}) {
         if (s == BatteryOrderName(k)) {
             out = k;
             return true;
@@ -272,7 +276,11 @@ public:
     Mode CurrentMode() const { return mode_; }
     // The battery commander's emission control: the vehicles' radars silent (docs/crew/07 §3). An ambush is silent too
     // until it is sprung; the vehicle commanders decide that by the designations.
-    bool Emcon() const { return emcon_; }
+    bool Emcon() const { return regime_.kind == EmissionKind::Silent; }
+    // The emission regime he has ordered (emission_regime.hpp; the launchers know it only once they hear it on the net),
+    // and how many times he has changed it (a new order to say on the net).
+    const EmissionRegime& Regime() const { return regime_; }
+    int RegimeOrders() const { return regime_orders_; }
     bool AirThreat() const { return air_threat_; }
     double Spacing() const { return air_threat_ ? tactics_.threat_spacing_m : tactics_.march_spacing_m; }
     const Vehicle* Find(const std::string& id) const {
@@ -319,9 +327,26 @@ public:
             leave_s_ = 0.0;
         }
         switch (o.kind) {
-            case BatteryOrder::Kind::Emcon:
-                emcon_ = !o.radiate;
-                events_.push_back({t, "Battery commander", emcon_ ? "radiation off: the battery's radars silent" : "radiation on"});
+            case BatteryOrder::Kind::Emcon:  // silent, or back to the regime before the silence
+                if (o.radiate == (regime_.kind != EmissionKind::Silent)) return;
+                if (o.radiate) {
+                    regime_ = before_silence_;
+                } else {
+                    before_silence_ = regime_;
+                    regime_ = EmissionRegime{};
+                    regime_.kind = EmissionKind::Silent;
+                    regime_.from = "battery";
+                }
+                ++regime_orders_;
+                events_.push_back({t, "Battery commander", o.radiate ? "radiation on" : "radiation off: the battery's radars silent"});
+                return;
+            case BatteryOrder::Kind::Emission:
+                if (o.regime.Same(regime_)) return;
+                if (o.regime.kind == EmissionKind::Silent && regime_.kind != EmissionKind::Silent) before_silence_ = regime_;
+                regime_ = o.regime;
+                ++regime_orders_;
+                events_.push_back({t, "Battery commander", std::string("emission regime: ") + EmissionKindName(regime_.kind) +
+                                                               (regime_.from == "regiment" ? " (the regiment's order)" : "")});
                 return;
             case BatteryOrder::Kind::March:
                 if (o.route.size() < 2) return;
@@ -839,7 +864,9 @@ private:
     std::vector<Vehicle> vehicles_;
     Mode mode_ = Mode::Waiting;
     bool air_threat_ = false;
-    bool emcon_ = false;
+    EmissionRegime regime_;
+    EmissionRegime before_silence_;
+    int regime_orders_ = 0;
     bool night_ = false;
     bool drive_own_ = false;
     std::vector<Vec3> route_;

@@ -200,6 +200,7 @@ public:
         RecordWorkPlaces();
         StartCallouts();
         StartMovers();
+        StartEmission();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -216,6 +217,7 @@ public:
         UpdateOsaNet();
         UpdateIntercomCheck();
         UpdateBattery(dt);
+        UpdateEmission(dt);
         UpdateNeighbourFire(dt);
         UpdateC2();
         UpdateRadios();
@@ -271,6 +273,7 @@ public:
         WatchScope();
         WatchTrackSigns();
         ArmEmission();
+        QueryBurst();
         UpdateGrades();
         UpdateCallouts();
         UpdateTvRangeCallout();
@@ -867,6 +870,17 @@ public:
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
         if (shadow_) return ShadowOrder(order_id);  // the shadow commander only thinks it: the player's to give
+        // The emission regime (docs/crew/16_EMISSION.md): told to the crew with its numbers, or the battery's on its net.
+        if (order_id == "order_emission_regime" || order_id == "order_remind_bursts" || order_id == "order_remind_ssc") return TellRegime(order_id);
+        if (order_id.rfind("order_battery_emission_", 0) == 0) {
+            EmissionKind k = EmissionKind::Free;
+            if (!ParseEmissionKind(order_id.substr(23), k)) return false;
+            // The regime he owes (the regiment's, with its turns) when it is that kind; else his own with the data's turns.
+            const EmissionRegime r = pending_since_s_ >= 0.0 && pending_regime_.kind == k ? pending_regime_ : def_.emission.Make(k, "battery");
+            const bool done = OrderBatteryEmission(r, "Battery commander");
+            if (done) orders_given_.push_back({time_, order_id});
+            return done;
+        }
         // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
         if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
             order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment") {
@@ -882,6 +896,7 @@ public:
         }
         orders_given_.push_back({time_, order_id});
         SpeakOrder(order_id);
+        EmconOrderTells(order_id);
         if (order_id == "order_drop_target") drop_at_s_ = time_ + SpeakDelayS("operator") + 1.5;  // the wheels off the target
         quiet_orders_ = true;  // the order's own words were spoken: its drills don't each speak an order
         for (const OrderStart& s : o->procedures) {
@@ -928,6 +943,7 @@ public:
             if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
             if (order_id == "order_warn_covered" || order_id == "order_all_clear_covered") return "covered";
             if (order_id == "order_report_regiment") return "regiment";
+            if (order_id.rfind("order_battery_emission_", 0) == 0) return "battery";
             return std::string();
         };
         const std::string net = net_of();
@@ -943,6 +959,10 @@ public:
             }
             if (!why.empty()) return refuse("нет связи: " + why, "no way on the net: " + why);
             return out;
+        }
+        // The reminders: a regime with bursts told to the crew (the tracking transmitter's rule: the least emission).
+        if ((order_id == "order_remind_bursts" && !regime_crew_.Bursts()) || (order_id == "order_remind_ssc" && regime_crew_.kind != EmissionKind::Arm)) {
+            return refuse("экипажу не доведён режим с пачками излучения", "the crew has no regime of bursts to be reminded of");
         }
         if (!o->task.empty()) {
             const CrewTask* t = def_.crew_data.FindTask(o->task);
@@ -1332,10 +1352,14 @@ public:
     // commander's «к бою готов» and his read-back of a target the battery commander gave him.
     std::vector<std::string> PlayerRadioReports(const std::string& station) const {
         std::vector<std::string> out;
-        if (!c2_ || station != Cmdr() || !def_.has_crew_data) return out;
-        for (const char* id : {"report_ready", "readback"}) {
-            if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
+        if (station != Cmdr() || !def_.has_crew_data) return out;
+        if (c2_) {
+            for (const char* id : {"report_ready", "readback"}) {
+                if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
+            }
         }
+        // An ARM attack reported to the battery commander (refused until he has heard a sign of one).
+        if ((battery_ || LinkedToPost()) && def_.crew_data.FindCallout("report_arm_attack") != nullptr) out.push_back("report_arm_attack");
         return out;
     }
     // Targets given this vehicle on the battery net that its commander heard (the PU-12's designations), so far.
@@ -1830,7 +1854,10 @@ private:
         for (std::size_t i = 0; i < def_.battery_orders.size(); ++i) {
             if (battery_orders_done_[i] || def_.battery_orders[i].at_s > time_ + 1e-9) continue;
             battery_orders_done_[i] = 1;
-            battery_->Order(def_.battery_orders[i], time_);
+            const BatteryOrder& o = def_.battery_orders[i];
+            // The regime ordered at 0 s is the combat order's: the commander knows it before the battery deploys.
+            if (o.at_s <= 0.0 && (o.kind == BatteryOrder::Kind::Emcon || o.kind == BatteryOrder::Kind::Emission)) regime_from_combat_order_ = true;
+            battery_->Order(o, time_);
         }
         if ((c2_ || post_) && !air_threat_forced_) {
             // The battery commander reads the board (he is in the post): a track that will reach the edge of the
@@ -3437,6 +3464,60 @@ public:
             Event("battery net", "the order to change frequency was not heard");
         }
     }
+
+    // ---- The emission regime (emission_regime.hpp, docs/crew/16_EMISSION.md)
+    // The Osa: the regime its commander has heard from the battery, and the one he has told his crew (the senior
+    // operator keeps the bursts by this one). The post: the regime its battery commander has ordered (both the same).
+    const EmissionRegime& CommanderRegime() const { return regime_cmdr_; }
+    const EmissionRegime& CrewRegime() const { return regime_crew_; }
+    // The battery commander in a linked post said a regime on the battery net (battery_link.hpp): heard if the Osa's set
+    // hears the net; missed, the Osa goes on under the old one.
+    void HearBatteryEmissionOrder(const EmissionRegime& r) {
+        if (!(c2_ == nullptr || c2_->Hearing())) {
+            Event("battery net", std::string("the battery commander's order of the emission regime (") + EmissionKindName(r.kind) + ") was not heard");
+            return;
+        }
+        Radio("battery net", "10", "Всем, я 10: " + EmissionGroup(r) + ". " + EmissionGroup(r) + ".");
+        if (const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(r.kind))) HeardGroup(e->code, "battery", BatteryNetHearers());
+        CommanderHearsRegime(r, "the battery net");
+    }
+    // The post's side of the link: the regimes said on the battery net since the last call; a launcher's report of an ARM
+    // attack, heard on the net (its callsign and the azimuth as said).
+    std::vector<EmissionRegime> TakeBatteryEmissionOrders() {
+        std::vector<EmissionRegime> out;
+        out.swap(battery_emission_orders_);
+        return out;
+    }
+    void HearArmAttackReport(const std::string& callsign, const std::string& azimuth) {
+        Radio("battery net", callsign, callsign + ": пуск ПРР, азимут " + azimuth + "!", false, BatteryNetHearers());
+        log_.Record({time_, DebriefEntry::Kind::Scenario, callsign, "battery net", "reports an ARM attack, azimuth " + azimuth});
+        if (arm_report_heard_s_ < 0.0) arm_report_heard_s_ = time_;
+    }
+    // The Osa's side: its commander's reports of an ARM attack on the battery net since the last call (the azimuths).
+    std::vector<std::string> TakeArmAttackReports() {
+        std::vector<std::string> out;
+        out.swap(arm_reports_out_);
+        return out;
+    }
+    // The battery commander's order of a regime (the orders menu at the post): false with LastRefusal() saying why.
+    bool CommanderOrderEmission(EmissionKind k) {
+        if (def_.has_crew_data) return GiveCrewOrder(BatteryEmissionOrderId(k));
+        return OrderBatteryEmission(def_.emission.Make(k, "battery"), "Battery commander");
+    }
+    // How the crew kept the regime: at the halt with nothing tracked under a burst regime they were told, the seconds
+    // there and the seconds the search transmitter radiated; the reminders and the breaches that called for one; how long
+    // after the commander heard each regime his crew was told (the last).
+    struct EmissionRecord {
+        double bursts_s = 0.0;
+        double radiating_s = 0.0;
+        int reminders = 0;
+        int breaches = 0;
+        int regimes_heard = 0;
+        int regimes_told = 0;
+        double told_after_s = -1.0;
+    };
+    const EmissionRecord& GetEmissionRecord() const { return emission_record_; }
+
     // A lesson's cues (tutorial.hpp): a net's main station orders it to its other frequency now; a strong spot jammer
     // comes on a net; the far end of a line rings.
     bool ExternalNetOrder(const std::string& net) {
@@ -4200,6 +4281,7 @@ private:
         }
         if (!why.empty()) {
             TransmitBlocked(why);
+            if (by_player) last_refusal_ = why;
             return false;
         }
         const double delay = by_player ? 0.0 : SpeakDelayS(Cmdr());
@@ -4540,6 +4622,13 @@ private:
         end_reason_ = reason;
         Event(def_.id, "end: " + reason);
         WriteAcmiFrame();
+        const EmissionRecord& er = emission_record_;
+        if (!post_ && er.regimes_heard + er.regimes_told > 0) {  // the debrief's line on the emission regime
+            char line[200];
+            std::snprintf(line, sizeof(line), "%d heard, %d told the crew; bursts: %.0f s at the halt, radiating %.0f s; %d long, %d reminders",
+                          er.regimes_heard, er.regimes_told, er.bursts_s, er.radiating_s, er.breaches, er.reminders);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, std::string(), "emission regime", std::string(line) + " (last: " + RegimeText(regime_crew_) + ")"});
+        }
         if (callouts_) {  // what the crew was about to say is still said (the last result, a last report)
             for (double t = time_; t < time_ + 15.0 && (callouts_->Pending() > 0 || callouts_->Speaking("intercom") ||
                                                           callouts_->Speaking("battery net"));
@@ -5468,16 +5557,27 @@ private:
         if (silent && halted && console_.equipment.IsReady("soc_transmitter")) NpcGive("order_emcon_off", 30.0);
         if (!silent && npc_was_silent_) NpcGive("order_emcon_on", 30.0);
         npc_was_silent_ = silent;
-        // Emission discipline (doctrine search_bursts): between bursts the transmitter off, the antenna turning; the
+        // The emission regime: the crew told the one he heard (before they deploy, or as soon as it changes), and the
+        // radar seats reminded of its bursts.
+        NpcPassOnRegime();
+        NpcRemindRegime(halted);
+        // Emission discipline (the limited regime): between bursts the transmitter off, the antenna turning; the
         // readiness drills then aim at the silent state, so they don't switch it back on or stop the antenna.
         const bool burst_off = !silent && NpcBurstOff(halted);
-        if (def_.doctrine.search_on_s > 0.0 && halted && !silent && console_.equipment.IsReady("hv_ready")) {
+        if (regime_crew_.kind == EmissionKind::Limited && halted && !silent && console_.equipment.IsReady("hv_ready")) {
             // The first burst is ordered aloud; after it the senior operator keeps the rhythm as a standing order, without
             // a word each way (sam3d: seven callouts every 35 s kept the intercom talking without end).
             routine_order_ = npc_bursts_said_;
             bool given = false;
-            if (burst_off && console_.panel.Get("soc.hv") == 1) given = NpcGive("order_hv_off", 1.0);
-            if (!burst_off && npc_burst_off_ && console_.panel.Get("soc.hv") == 0) given = NpcGive("order_hv_on", 1.0) || given;
+            // Not while an NPC senior operator is at a drill (his ЗАПРОС between bursts, QueryBurst): the order would cut it.
+            const CrewMember* so = MemberAt("senior_operator");
+            const bool so_busy = so != nullptr && SeatHolder("senior_operator").empty() && so->IsBusy();
+            if (burst_off && console_.panel.Get("soc.hv") == 1 && !so_busy) given = NpcBurstOrder("order_hv_off", "the limited regime: ВЫСОКОЕ off between bursts");
+            bool hv_on_owed = false;  // the shadow's, from the burst's start until the player gives it
+            for (const SeatDuty& d : owed_) hv_on_owed = hv_on_owed || (d.kind == SeatDuty::Kind::Order && d.id == "order_hv_on");
+            if (!burst_off && (npc_burst_off_ || (shadow_ && hv_on_owed)) && console_.panel.Get("soc.hv") == 0) {
+                given = NpcBurstOrder("order_hv_on", "the limited regime: ВЫСОКОЕ on for a burst") || given;
+            }
             routine_order_ = false;
             if (given && !shadow_) npc_bursts_said_ = true;
         }
@@ -5490,8 +5590,12 @@ private:
             const bool was_quiet = quiet_orders_;
             quiet_orders_ = true;  // the words once for all the drills given now
             std::vector<std::pair<std::string, std::string>> given;
-            // Under the least emission against ARMs the senior operator works his transmitter himself (ArmEmission).
-            const bool own_bursts = def_.doctrine.arm_threat && halted && !silent && console_.panel.Get("soc.search") == 1;
+            // While the search runs in bursts its transmitter is the bursts', not the readiness drills': under the least
+            // emission the senior operator works it himself (ArmEmission); under the limited regime, between bursts, the
+            // orders above switch it off (sam3d: the plan, made the moment ВЫСОКОЕ went off and before the transmitter
+            // did, stopped the search). In a burst the plan still puts it on if the order to was missed.
+            const bool own_bursts = halted && !silent && console_.panel.Get("soc.search") == 1 &&
+                                    (regime_crew_.kind == EmissionKind::Arm || burst_off);
             for (const DrillPlan::Seat& s : plan.seats) {
                 if (!SeatFree(s.station) || (own_bursts && s.station == "senior_operator")) continue;
                 for (const std::string& drill : s.procedures) {
@@ -5838,16 +5942,20 @@ private:
         }
         return nullptr;
     }
-    // Emission discipline (doctrine search_bursts): halted, nothing tracked and no hostile he knows of within the
-    // tracking radar's reach, the search radar radiates in bursts, on for on_s and off for off_s.
+    // Emission discipline (the limited regime, as told to the crew): halted, nothing tracked and no hostile he knows of
+    // within the tracking radar's reach, the search radar radiates in bursts, on for its turns and off for its turns.
     bool NpcBurstOff(bool halted) {
-        if (def_.doctrine.arm_threat) return false;  // the senior operator's own rhythm (ArmEmission), not the commander's
-        if (def_.doctrine.search_on_s <= 0.0 || !halted || engagement_.Method() != TrackMethod::None) return false;
-        const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
-        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
-            if (k.has_range && !k.friendly && k.range_m <= reach) return false;
-        }
-        return std::fmod(time_, def_.doctrine.search_on_s + def_.doctrine.search_off_s) >= def_.doctrine.search_on_s;
+        if (regime_crew_.kind != EmissionKind::Limited || !BurstsApply(halted)) return false;  // arm: the senior operator's own (ArmEmission)
+        const double turn = SearchTurnS();
+        const double on = regime_crew_.OnS(turn);
+        return std::fmod(time_, on + regime_crew_.OffS(turn)) >= on;
+    }
+    // A burst's order. The shadow commander owes it the player at every burst: what the player said a burst ago doesn't
+    // count for this one (ShadowOrder's recall, kShadowRecallS, is longer than a cycle).
+    bool NpcBurstOrder(const std::string& order_id, const char* why) {
+        if (!shadow_) return NpcGive(order_id, 1.0);
+        NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), order_id, why));
+        return false;
     }
     std::string npc_tv_cleared_;
     std::string npc_decoy_dropped_;
@@ -5908,6 +6016,7 @@ private:
     double arm_sign_s_ = -1e9;          // when the commander last heard a sign of an ARM launch
     double arm_seen_s_ = -1e9;          // when the senior operator last called one
     double arm_reported_s_ = -1e9;
+    std::string arm_sign_az_;           // the azimuth of the last sign he heard (his report says it)
     bool arm_attacked_ = false;
     bool arm_relocated_ = false;
     bool npc_arm_stow_ordered_ = false;
@@ -5923,6 +6032,377 @@ private:
     static constexpr double kSameBlipM = 2500.0;       // a new mark this near where a lost one was heading is the same blip
     static constexpr int kArmBeamProgram = 4;          // ЛУЧ АВТ. I–II (data/procedures/osa_ak.json soc.beam)
     static constexpr double kStableTrackS = 5.0;       // a lock held this long is the textbook's "устойчивое сопровождение"
+
+    // ---- The emission regime (emission_regime.hpp, docs/crew/16_EMISSION.md): who knows which, and how it is passed down.
+    // The Osa: regime_cmdr_ is what its commander heard (the combat order before the mission, then the battery net),
+    // regime_crew_ what he has told his crew. The post: regime_cmdr_ is what its battery commander has ordered.
+    EmissionRegime regime_cmdr_;
+    EmissionRegime regime_crew_;
+    double regime_heard_s_ = -1e9;           // when the commander heard the regime he hasn't told his crew yet
+    bool regime_from_combat_order_ = false;  // a battery order of the regime at 0 s: the combat order, known before deploying
+    int battery_regime_said_ = 0;            // an Osa's own battery: its regime orders already said on the net
+    int battery_regime_tries_ = 0;
+    double battery_regime_next_s_ = -1.0;
+    std::size_t next_emission_order_ = 0;
+    EmissionRegime regiment_regime_;         // the regiment's order: being said on its net (the post), or heard (an Osa's battery)
+    double regiment_regime_s_ = -1.0;        // an Osa's battery: heard at, until passed on (< 0: none)
+    int regiment_regime_tries_ = 0;          // the post: the regiment says it until the post hears it
+    double regiment_regime_next_s_ = -1.0;
+    EmissionRegime pending_regime_;          // the post: a regime the battery commander owes the battery (the regiment's, an ARM attack)
+    double pending_since_s_ = -1.0;
+    double pending_delay_s_ = 0.0;
+    std::string pending_why_;
+    double arm_report_heard_s_ = -1.0;       // the battery commander heard a launcher's report of an ARM attack (< 0: none)
+    std::vector<EmissionRegime> battery_emission_orders_;  // the post: for a linked Osa
+    std::vector<std::string> arm_reports_out_;             // the Osa: for a linked post
+    double regime_hostile_s_ = -1e9;         // the commander last knew of a hostile (a reminder after a quiet spell)
+    double regime_reminded_s_ = -1e9;
+    double hv_on_since_s_ = -1.0;            // the search transmitter on since (a burst running long)
+    double ssc_rule_due_s_ = -1.0;           // the operator to be told the tracking transmitter's rule (the least emission)
+    EmissionRecord emission_record_;
+    static constexpr double kBurstGraceS = 3.0;  // sam3d: the drill's own seconds before a long burst counts as one
+
+    static std::string BatteryEmissionOrderId(EmissionKind k) { return std::string("order_battery_emission_") + EmissionKindName(k); }
+    // The regime as said on a net: the talk table's group (with the bursts for limited and arm), else its words.
+    std::string EmissionGroup(const EmissionRegime& r) const {
+        const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(r.kind));
+        std::string g = e != nullptr ? e->code : std::string("режим излучения ") + def_.emission.Of(r.kind).ru;
+        if (r.Bursts()) {
+            const std::map<std::string, std::string> w = EmissionWords(def_.emission, r, 60.0 / 33.0);
+            g += ", " + w.at("on") + " через " + w.at("off");
+        }
+        return g;
+    }
+    // The regime in English, for the log and the debrief.
+    std::string RegimeText(const EmissionRegime& r) {
+        std::string t = def_.emission.Of(r.kind).en;
+        if (r.Bursts()) t += " (" + EmissionWords(def_.emission, r, SearchTurnS()).at("bursts_en") + ")";
+        if (!r.from.empty()) t += r.from == "regiment" ? ", the regiment's order" : ", the battery commander's";
+        return t;
+    }
+    // A commander who tells his crew: an NPC, or a player. Without one (a script stands in for him, or no crew data) the
+    // crew goes by what he knows.
+    bool CommanderTellsCrew() const { return def_.has_crew_data && (NpcCommanderActive() || !SeatHolder(Cmdr()).empty()); }
+    // The regime the mission starts under (the combat order's: the doctrine), and the battery's own commander holding it.
+    void StartEmission() {
+        regime_cmdr_ = def_.doctrine.emission;
+        if (regime_cmdr_.kind != EmissionKind::Free) emission_record_.regimes_heard = 1;
+        if (!CommanderTellsCrew() || post_) regime_crew_ = regime_cmdr_;
+        if (battery_ && !LinkedToPost()) {
+            BatteryOrderRegime(regime_cmdr_);
+            battery_regime_said_ = battery_->RegimeOrders();
+        }
+    }
+    void BatteryOrderRegime(const EmissionRegime& r) {
+        BatteryOrder o;
+        o.kind = BatteryOrder::Kind::Emission;
+        o.regime = r;
+        o.at_s = time_;
+        battery_->Order(o, time_);
+    }
+    void CommanderHearsRegime(const EmissionRegime& r, const std::string& how) {
+        if (r.Same(regime_cmdr_)) return;
+        regime_cmdr_ = r;
+        regime_heard_s_ = how == "the combat order" ? -1e9 : time_;
+        ++emission_record_.regimes_heard;
+        Event(Cmdr(), "hears the emission regime by " + how + ": " + RegimeText(r));
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), how, "the emission regime: " + RegimeText(r)});
+        if (!CommanderTellsCrew()) regime_crew_ = r;
+    }
+
+    void UpdateEmission(double dt) {
+        if (post_) {
+            UpdatePostEmission();
+        } else {
+            UpdateOsaBatteryEmission();
+            RecordEmission(dt);
+        }
+    }
+    // An Osa whose battery commander is the battery's own NPC (not a linked post): the regiment's orders reach him and he
+    // passes them on after relay_s; a launcher's report of an ARM attack puts the battery under the least emission
+    // (voenizdat_osa_1991 p243, p262); every regime he orders is said on the battery net, again until the Osa hears it.
+    // One in force at the start is the combat order's, known before the vehicles deploy.
+    void UpdateOsaBatteryEmission() {
+        if (!battery_ || LinkedToPost()) return;
+        const bool npc = def_.battery_commander == "npc";
+        while (next_emission_order_ < def_.emission_orders.size() && def_.emission_orders[next_emission_order_].at_s <= time_ + 1e-9) {
+            const EmissionRegime& r = def_.emission_orders[next_emission_order_++].regime;
+            if (r.from == "regiment") {
+                regiment_regime_ = r;
+                regiment_regime_s_ = time_;
+                Event("regiment", "orders the battery's emission regime: " + RegimeText(r));
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "battery commander", "the emission regime: " + RegimeText(r)});
+            } else {
+                BatteryOrderRegime(r);
+            }
+        }
+        if (regiment_regime_s_ >= 0.0 && (!npc || time_ - regiment_regime_s_ >= def_.emission.relay_s)) {
+            regiment_regime_s_ = -1.0;
+            BatteryOrderRegime(regiment_regime_);
+        }
+        if (arm_report_heard_s_ >= 0.0 && time_ - arm_report_heard_s_ >= def_.emission.arm_on_report_s) {
+            arm_report_heard_s_ = -1.0;
+            const EmissionKind k = battery_->Regime().kind;
+            if (npc && k != EmissionKind::Arm && k != EmissionKind::Silent) {
+                Event("Battery commander", "a launcher reported an ARM attack: the battery under the least emission");
+                BatteryOrderRegime(def_.emission.Make(EmissionKind::Arm, "battery"));
+            }
+        }
+        if (battery_->RegimeOrders() != battery_regime_said_) {
+            battery_regime_said_ = battery_->RegimeOrders();
+            battery_regime_tries_ = 0;
+            battery_regime_next_s_ = time_;
+            if (regime_from_combat_order_) {
+                battery_regime_next_s_ = -1.0;
+                CommanderHearsRegime(battery_->Regime(), "the combat order");
+            }
+        }
+        regime_from_combat_order_ = false;
+        if (battery_regime_next_s_ < 0.0 || time_ + 1e-9 < battery_regime_next_s_) return;
+        const EmissionRegime& r = battery_->Regime();
+        ++battery_regime_tries_;
+        if (c2_ == nullptr || c2_->Hearing()) {
+            battery_regime_next_s_ = -1.0;
+            Radio("battery net", "10", "Всем, я 10: " + EmissionGroup(r) + ". " + EmissionGroup(r) + ".");
+            if (const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(r.kind))) HeardGroup(e->code, "battery", BatteryNetHearers());
+            CommanderHearsRegime(r, "the battery net");
+        } else if (battery_regime_tries_ > def_.emission.repeats) {
+            battery_regime_next_s_ = -1.0;
+            Event("battery net", "the battery commander's order of the emission regime never got through");
+        } else {
+            battery_regime_next_s_ = time_ + def_.emission.repeat_s;
+            Event("battery net", "the order of the emission regime was not heard: the battery commander says it again later");
+        }
+    }
+    // The post: the regiment's order comes on its command net (heard on the R-111 and decoded, else said again); the
+    // battery commander passes it on after relay_s, and puts the battery under the least emission when a launcher reports
+    // an ARM attack. An NPC does it; a player decides (the helper shows it as his duty until he orders a regime).
+    void UpdatePostEmission() {
+        while (next_emission_order_ < def_.emission_orders.size() && def_.emission_orders[next_emission_order_].at_s <= time_ + 1e-9) {
+            const EmissionRegime& r = def_.emission_orders[next_emission_order_++].regime;
+            if (r.from == "regiment") {
+                regiment_regime_ = r;
+                regiment_regime_tries_ = 0;
+                regiment_regime_next_s_ = time_;
+            } else {
+                OweBatteryRegime(r, 0.0, "the battery commander's decision");
+            }
+        }
+        if (regiment_regime_next_s_ >= 0.0 && time_ + 1e-9 >= regiment_regime_next_s_) {
+            ++regiment_regime_tries_;
+            const RadioNetDef* rn = def_.radio_data.Find("regiment");
+            const std::vector<std::string> ears = NetHearers("regiment");
+            if (rn != nullptr && !ears.empty()) {
+                regiment_regime_next_s_ = -1.0;
+                const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(regiment_regime_.kind));
+                const std::string g = EmissionGroup(regiment_regime_);
+                Radio("regiment net", rn->main_call_sign, "Всем, я " + rn->main_call_sign + ": " + g + ". " + g + ".", false, ears);
+                if (e != nullptr) HeardGroup(e->code, "regiment", ears);
+                DecodeHeard(ears, e);
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "regiment net", "the emission regime: " + RegimeText(regiment_regime_)});
+                OweBatteryRegime(regiment_regime_, def_.emission.relay_s, "the regiment's order of the emission regime, passed on to the battery");
+            } else if (regiment_regime_tries_ > def_.emission.repeats) {
+                regiment_regime_next_s_ = -1.0;
+                Event("regiment net", "the regiment's order of the emission regime never got through");
+            } else {
+                regiment_regime_next_s_ = time_ + def_.emission.repeat_s;
+                Event("regiment net", "the regiment's order of the emission regime was not heard on the R-111");
+            }
+        }
+        if (arm_report_heard_s_ >= 0.0 && time_ - arm_report_heard_s_ >= def_.emission.arm_on_report_s) {
+            arm_report_heard_s_ = -1.0;
+            if (regime_cmdr_.kind != EmissionKind::Arm && regime_cmdr_.kind != EmissionKind::Silent) {
+                OweBatteryRegime(def_.emission.Make(EmissionKind::Arm, "battery"), 0.0, "a launcher reports an ARM attack: the least emission");
+            }
+        }
+        if (pending_since_s_ < 0.0 || time_ - pending_since_s_ < pending_delay_s_ || MarchRadioBan()) return;
+        if (pending_regime_.Same(regime_cmdr_)) {
+            pending_since_s_ = -1.0;
+            return;
+        }
+        bool done = false;
+        if (!def_.has_crew_data) {
+            done = OrderBatteryEmission(pending_regime_, "Battery commander");
+        } else if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), BatteryEmissionOrderId(pending_regime_.kind), pending_why_))) {
+            done = GiveCrewOrder(BatteryEmissionOrderId(pending_regime_.kind));
+        } else {
+            return;  // a player's to decide: the helper shows it until he orders a regime
+        }
+        if (!done) pending_delay_s_ = time_ - pending_since_s_ + 5.0;  // no way on the net yet: he tries again in a while
+    }
+    void OweBatteryRegime(const EmissionRegime& r, double delay_s, const std::string& why) {
+        pending_regime_ = r;
+        pending_since_s_ = time_;
+        pending_delay_s_ = delay_s;
+        pending_why_ = why;
+    }
+    // The battery commander says a regime on the battery net: a circular command said twice, no receipt (rrs_1986).
+    bool OrderBatteryEmission(const EmissionRegime& r, const std::string& by) {
+        if (!post_) return false;
+        const std::string why = CanTalkOnNet(Cmdr(), "battery");
+        if (!why.empty()) {
+            last_refusal_ = why;
+            return false;
+        }
+        const std::string g = EmissionGroup(r);
+        Radio("battery net", by, "Всем, я " + OwnCallSignOn("battery") + ": " + g + ". " + g + ".", false, BatteryNetHearers());
+        Transmitted("battery", by, 4.0);
+        regime_cmdr_ = r;
+        regime_crew_ = r;
+        battery_emission_orders_.push_back(r);
+        pending_since_s_ = -1.0;
+        if (battery_) BatteryOrderRegime(r);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", "the emission regime: " + RegimeText(r)});
+        return true;
+    }
+
+    // The Osa's commander tells his crew the regime he heard (order_emission_regime): before they deploy (the combat
+    // order's) or pass_on_s after he hears a new one. A silence his «Излучение выключить!» already said needs no more
+    // words, nor does radiation lifted back to free by «Излучение включить!» (EmconOrderTells).
+    void NpcPassOnRegime() {
+        if (post_ || regime_crew_.Same(regime_cmdr_) || time_ - regime_heard_s_ < def_.emission.pass_on_s) return;
+        if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_emission_regime", "the battery's emission regime, told to the crew"))) {
+            GiveCrewOrder("order_emission_regime");
+        }
+    }
+    // «Излучение выключить!» under radiation forbidden tells the crew the regime, and «Излучение включить!» lifting it
+    // back to free does too: no words of the regime besides.
+    void EmconOrderTells(const std::string& order_id) {
+        const bool off = order_id == "order_emcon_off" && regime_cmdr_.kind == EmissionKind::Silent;
+        const bool on = order_id == "order_emcon_on" && regime_cmdr_.kind == EmissionKind::Free && regime_crew_.kind == EmissionKind::Silent;
+        if ((!off && !on) || post_ || regime_crew_.Same(regime_cmdr_)) return;
+        regime_crew_ = regime_cmdr_;
+        ++emission_record_.regimes_told;
+        emission_record_.told_after_s = regime_heard_s_ > -1e8 ? time_ - regime_heard_s_ : 0.0;
+        Event(Cmdr(), "tells the crew the emission regime by his order: " + RegimeText(regime_cmdr_));
+    }
+    // The bursts apply now: at the halt with nothing tracked, under a burst regime the crew knows (limited: and no hostile
+    // the commander knows of within the tracking radar's reach).
+    bool BurstsApply(bool halted) {
+        if (!regime_crew_.Bursts() || !halted || engagement_.Method() != TrackMethod::None || CaptureUnderWay()) return false;
+        if (regime_crew_.kind == EmissionKind::Arm) return true;
+        const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
+            if (k.has_range && !k.friendly && k.range_m <= reach) return false;
+        }
+        return true;
+    }
+    // Reminders (the radar seats told again): under a burst regime his crew knows, when he learns of a hostile after a quiet
+    // spell while the bursts still apply (it is far out: the bursts; under the least emission the tracking transmitter's
+    // range too), and under the least emission, where the senior operator keeps the rhythm himself, when a burst runs
+    // longer than the regime's after he has kept one (under the limited regime the commander orders each burst: his own
+    // «Высокое выключить!» is the correction). The reminders wait behind the fight's orders on the intercom.
+    void NpcRemindRegime(bool halted) {
+        if (post_ || !regime_crew_.Bursts() || !regime_crew_.Same(regime_cmdr_)) return;
+        if (ssc_rule_due_s_ >= 0.0 && time_ >= ssc_rule_due_s_ &&
+            NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_remind_ssc", "the least emission: the operator told the tracking transmitter's rule"))) {
+            GiveCrewOrder("order_remind_ssc");
+        }
+        bool hostile = false;
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) hostile = hostile || !k.friendly;
+        if (hostile) {
+            const bool after_quiet = time_ - regime_hostile_s_ > def_.emission.remind_quiet_s;
+            regime_hostile_s_ = time_;
+            if (after_quiet && halted && BurstsApply(halted) && time_ - regime_reminded_s_ > 30.0) {
+                RemindRegime("a hostile far out after a quiet spell: the radar seats reminded of the regime", true);
+                return;
+            }
+        }
+        if (regime_crew_.kind == EmissionKind::Arm && LongBurst(halted) && time_ - regime_reminded_s_ > 30.0) {
+            RemindRegime("the search transmitter on longer than the regime's burst", false);
+        }
+    }
+    // A target ordered taken («Цель ... — взять!») and not yet tracked nor let go: the search transmitter stays on until the
+    // tracking radar has it, at most kCaptureBurstS (the target designation is the search radar's picture; sam3d).
+    bool CaptureUnderWay() const {
+        if (engagement_.Method() != TrackMethod::None) return false;
+        for (auto it = orders_given_.rbegin(); it != orders_given_.rend() && time_ - it->time_s <= kCaptureBurstS; ++it) {
+            if (it->order == "order_drop_target") return false;
+            if (it->order == "order_take_target") return true;
+        }
+        return false;
+    }
+    static constexpr double kCaptureBurstS = 30.0;
+    // A burst running longer than the regime's, by breach_turns and a few seconds' grace, while the bursts apply and
+    // after the crew has kept one burst of the regime (the first is the search drill's, which switches the transmitter on
+    // among its other steps).
+    bool LongBurst(bool halted) {
+        const double turn = SearchTurnS();
+        return BurstsApply(halted) && hv_on_since_s_ >= 0.0 && burst_kept_ && burst_kept_of_.Same(regime_crew_) &&
+               time_ - hv_on_since_s_ > regime_crew_.OnS(turn) + def_.emission.breach_turns * turn + kBurstGraceS;
+    }
+    void RemindRegime(const std::string& why, bool with_ssc) {
+        if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_remind_bursts", why))) GiveCrewOrder("order_remind_bursts");
+        if (with_ssc && regime_crew_.kind == EmissionKind::Arm && NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_remind_ssc", why))) {
+            GiveCrewOrder("order_remind_ssc");
+        }
+        if (!shadow_) regime_reminded_s_ = time_;
+    }
+    // order_emission_regime, order_remind_bursts, order_remind_ssc: said with the regime's numbers (the turns and the
+    // seconds at this antenna's rate; Table 7.3's ranges). Passing the regime on is what the crew acts on from then; the
+    // senior operator reads the bursts back, and under the least emission the operator is told the tracking
+    // transmitter's rule with it.
+    bool TellRegime(const std::string& order_id) {
+        const bool pass_on = order_id == "order_emission_regime";
+        const EmissionRegime r = pass_on ? regime_cmdr_ : regime_crew_;
+        if (!pass_on && (!r.Bursts() || (order_id == "order_remind_ssc" && r.kind != EmissionKind::Arm))) return false;
+        std::map<std::string, std::string> f = EmissionWords(def_.emission, r, SearchTurnS());
+        if (order_id == "order_remind_ssc") {
+            const EngagementTuning& t = def_.tuning;
+            const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 20000.0;
+            f["range_km"] = std::to_string(static_cast<int>(std::lround((t.has_arm_table ? t.arm_track_on_slow_far_m : reach) / 1000.0)));
+            f["range_fast_km"] = std::to_string(static_cast<int>(std::lround((t.has_arm_table ? t.arm_track_on_fast_far_m : reach) / 1000.0)));
+        }
+        orders_given_.push_back({time_, order_id});
+        if (callouts_) callouts_->Say(time_, order_id, Cmdr(), f);
+        if (!pass_on) {
+            if (order_id == "order_remind_ssc") ssc_rule_due_s_ = -1.0;
+            ++emission_record_.reminders;
+            Event(Cmdr(), order_id == "order_remind_ssc" ? "reminds the operator of the tracking transmitter's rule" : "reminds the senior operator of the bursts");
+            return true;
+        }
+        regime_crew_ = r;
+        ++emission_record_.regimes_told;
+        emission_record_.told_after_s = regime_heard_s_ > -1e8 ? time_ - regime_heard_s_ : 0.0;
+        Event(Cmdr(), "tells the crew the emission regime: " + RegimeText(r));
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "intercom", "the emission regime told to the crew: " + RegimeText(r)});
+        if (r.Bursts() && (MemberAt("senior_operator") != nullptr || !SeatHolder("senior_operator").empty()) &&
+            NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "emission_readback", "the bursts read back", f))) {
+            Say("emission_readback", "senior_operator", f);
+        }
+        // Under the least emission the operator is told the tracking transmitter's rule once the senior operator has read
+        // the bursts back (NpcRemindRegime).
+        ssc_rule_due_s_ = r.kind == EmissionKind::Arm && (MemberAt("operator") != nullptr || !SeatHolder("operator").empty()) ? time_ + 8.0 : -1.0;
+        return true;
+    }
+    // The record: the search transmitter's seconds at the halt while the bursts apply, and how long each burst runs.
+    void RecordEmission(double dt) {
+        if (!engagement_on_ || !def_.has_crew_data) return;
+        const bool hv = console_.panel.Get("soc.hv") == 1 && console_.panel.Get("soc.search") == 1;  // radiating
+        const bool halted = console_.equipment.GetInput("vehicle_stopped");
+        if (hv && hv_on_since_s_ < 0.0) hv_on_since_s_ = time_;
+        if (!hv) {
+            if (hv_on_since_s_ >= 0.0 && regime_crew_.Bursts()) {  // a burst ended under the regime: the crew keeps it
+                burst_kept_ = true;
+                burst_kept_of_ = regime_crew_;
+            }
+            hv_on_since_s_ = -1.0;
+            burst_breached_ = false;
+        }
+        if (BurstsApply(halted) && console_.panel.Get("soc.search") == 1) {
+            emission_record_.bursts_s += dt;
+            if (hv) emission_record_.radiating_s += dt;
+        }
+        if (!burst_breached_ && LongBurst(halted)) {
+            burst_breached_ = true;
+            ++emission_record_.breaches;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("senior_operator"), "search radar",
+                         "the transmitter on longer than the regime's burst (" + RegimeText(regime_crew_) + ")"});
+        }
+    }
+    bool burst_breached_ = false;
+    bool burst_kept_ = false;        // a burst of this regime ended: the crew keeps its bursts
+    EmissionRegime burst_kept_of_;
 
     void WatchScope() {
         if (!engagement_on_ || !def_.has_crew_data || (MemberAt("senior_operator") == nullptr && SeatHolder("senior_operator").empty())) return;
@@ -5947,7 +6427,7 @@ private:
                 ArmSignSeen(c, "arm_launch");
                 continue;
             }
-            if (!def_.doctrine.arm_threat || span < 3.0) continue;
+            if (regime_crew_.kind != EmissionKind::Arm || span < 3.0) continue;
             if (at_us && speed > 100.0) tr.heading_in = true;
             // The turn by its last few seconds' marks (the long window lags a turn).
             std::size_t k = 0;
@@ -6102,13 +6582,26 @@ private:
     }
     // The commander heard a sign of an ARM launch: the missile in the air is guided to its burst, then every transmitter
     // goes off (ArmSilent); the attack is reported up the battery net.
+    // The commander hears a sign of an ARM launch: silent once the missile in the air has burst, and the attack reported
+    // to the battery commander (his NPC's report, or a player's duty).
     void ArmSignHeard(const SpokenCallout& s) {
         if (!arm_attacked_) Event(Cmdr(), "hears the sign of an ARM launch: radiation off once the missile in the air has burst");
         arm_attacked_ = true;
         arm_sign_s_ = time_;
-        if (battery_ && callouts_ && time_ - arm_reported_s_ > 60.0) {
-            arm_reported_s_ = time_;
-            callouts_->Say(time_, "report_arm_attack", Cmdr(), {{"callsign", OwnCallsign()}, {"azimuth", MilsText(s.about.azimuth_deg)}}, 3.0);
+        arm_sign_az_ = MilsText(s.about.azimuth_deg);
+        if (!battery_ || !callouts_ || time_ - arm_reported_s_ <= 60.0) return;
+        const std::map<std::string, std::string> f{{"callsign", OwnCallsign()}, {"azimuth", arm_sign_az_}};
+        if (!NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "report_arm_attack", "an ARM launch: reported to the battery commander", f))) return;
+        callouts_->Say(time_, "report_arm_attack", Cmdr(), f, 3.0);
+        ArmAttackReported(arm_sign_az_);
+    }
+    // The battery commander hears the report: a linked post's, or the battery's own (UpdateOsaBatteryEmission).
+    void ArmAttackReported(const std::string& az) {
+        arm_reported_s_ = time_;
+        if (LinkedToPost()) {
+            arm_reports_out_.push_back(az);
+        } else if (arm_report_heard_s_ < 0.0) {
+            arm_report_heard_s_ = time_;
         }
     }
     // Silent against an ARM: from the sign (once nothing of ours is in the air) for arm_silence_s.
@@ -6126,21 +6619,23 @@ private:
         }
         return 60.0 / 33.0;  // 33 rpm
     }
-    // The range at which the commander has the tracking transmitter put on a target: its reach, and under the threat of
-    // ARMs (doctrine arm_threat) Table 7.3's far-edge range for the target's speed as the scope shows it (unknown: fast).
+    // The range at which the commander has the tracking transmitter put on a target: its reach, and under the least
+    // emission (the arm regime he heard) Table 7.3's far-edge range for the target's speed as the scope shows it (unknown:
+    // fast).
     double TrackOnRangeM(const std::string& target) const {
         const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
         const EngagementTuning& t = def_.tuning;
-        if (!def_.doctrine.arm_threat || !t.has_arm_table) return reach;
+        if (regime_cmdr_.kind != EmissionKind::Arm || !t.has_arm_table) return reach;
         const double speed = ScopeSpeedMps(target);
         const double table = speed >= 0.0 && speed < t.arm_split_speed_mps ? t.arm_track_on_slow_far_m : t.arm_track_on_fast_far_m;
         return std::min(reach, table);
     }
-    // The least emission under the threat of ARMs (doctrine arm_threat, voenizdat_osa_1991 p262): the search
-    // transmitter's high voltage off now? Off while the tracking radar holds a stable track with nothing else about;
-    // with nothing tracked, on for 2 antenna turns after every arm_search_off_turns.
+    // The least emission under the threat of ARMs (the arm regime as told to the crew, voenizdat_osa_1991 p262): the
+    // search transmitter's high voltage off now? Off while the tracking radar holds a stable track with nothing else
+    // about; with nothing tracked, on for the regime's turns (2) after every off turns (3-4), and on through a capture.
     bool ArmSearchOff() {
         const TrackMethod m = engagement_.Method();
+        if (CaptureUnderWay()) return false;
         if (m != TrackMethod::None) {
             if (m != TrackMethod::Radar || time_ - npc_track_since_s_ < kStableTrackS) return false;
             const std::string tracked = engagement_.TrackedTarget();
@@ -6150,15 +6645,38 @@ private:
             return true;
         }
         const double turn = SearchTurnS();
-        return std::fmod(time_, turn * (2.0 + def_.doctrine.arm_search_off_turns)) >= 2.0 * turn;
+        const double on = regime_crew_.OnS(turn);
+        return std::fmod(time_, on + regime_crew_.OffS(turn)) >= on;
     }
 
-    // Under the threat of ARMs (doctrine arm_threat) the senior operator keeps the least emission himself, his duty under
-    // the doctrine as ЗАПРОС is with a new echo: ВЫСОКОЕ on and off by ArmSearchOff while the search runs at a halt. A
-    // player in his seat does it by hand.
+    // ЗАПРОС waiting on the search transmitter between the limited regime's bursts (the interrogator's antenna is built
+    // into the search antenna; his own query of a new echo seen in the last burst): the senior operator puts ВЫСОКОЕ on
+    // for it and interrogates, and the commander's next burst order puts it off (as under the least emission,
+    // ArmEmission; sam3d: otherwise the query, and the crew's orders behind it, waited for the next burst or for ever).
+    void QueryBurst() {
+        const std::string seat = "senior_operator";
+        if (regime_crew_.kind != EmissionKind::Limited || !engagement_on_ || console_.panel.Get("soc.hv") != 0) return;
+        if (!console_.equipment.GetInput("vehicle_stopped") || console_.panel.Get("soc.search") != 1 || NpcSilent() ||
+            !console_.equipment.IsReady("hv_ready")) {
+            return;
+        }
+        CrewMember* so = MemberAt(seat);
+        if (so == nullptr || !SeatHolder(seat).empty()) return;  // a player's query waits on his own hand
+        if (so->Status() != CrewStatus::Waiting || so->Tracker().GetProcedure().id != "iff_interrogate") return;
+        const Procedure* on = console_.FindProcedure("hv_on");
+        const Procedure* query = console_.FindProcedure("iff_interrogate");
+        if (on == nullptr || query == nullptr) return;
+        so->Order(*on);
+        so->Queue(*query);
+        Event(seat, "ЗАПРОС waits on the search transmitter: ВЫСОКОЕ on for the interrogation");
+    }
+
+    // Under the least emission (the arm regime, once his commander has told him) the senior operator keeps it himself, his
+    // duty as ЗАПРОС is with a new echo: ВЫСОКОЕ on and off by ArmSearchOff while the search runs at a halt. A player in
+    // his seat does it by hand.
     void ArmEmission() {
         const std::string seat = "senior_operator";
-        if (!def_.doctrine.arm_threat || !engagement_on_ || (MemberAt(seat) == nullptr && SeatHolder(seat).empty())) return;
+        if (regime_crew_.kind != EmissionKind::Arm || !engagement_on_ || (MemberAt(seat) == nullptr && SeatHolder(seat).empty())) return;
         if (!console_.equipment.GetInput("vehicle_stopped") || console_.panel.Get("soc.search") != 1 || NpcSilent()) return;
         if (!console_.equipment.IsReady("hv_ready") || (npc_arm_stow_ordered_ && !arm_relocated_) || (npc_stow_ordered_ && !npc_resumed_)) return;
         CrewMember* so = MemberAt(seat);
@@ -6179,9 +6697,10 @@ private:
         if (console_.panel.Get("soc.hv") != (off ? 1 : 0)) return;
         const char* drill = off ? "hv_off" : "hv_on";
         if (const Procedure* p = console_.FindProcedure(drill)) {
-            const char* why = off ? "the least emission against ARMs: ВЫСОКОЕ off between bursts"
-                              : query_waits ? "ЗАПРОС needs the search transmitter: ВЫСОКОЕ on for the interrogation"
-                                            : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
+            const char* why = off                ? "the least emission against ARMs: ВЫСОКОЕ off between bursts"
+                              : query_waits        ? "ЗАПРОС needs the search transmitter: ВЫСОКОЕ on for the interrogation"
+                              : CaptureUnderWay() ? "a target ordered taken: ВЫСОКОЕ on until the tracking radar has it"
+                                                   : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
             if (NpcDoes(seat, SeatDuty::Drill(seat, drill, why)) && so) {
                 so->Order(*p);
                 const Procedure* query = query_waits ? console_.FindProcedure("iff_interrogate") : nullptr;
@@ -6190,11 +6709,12 @@ private:
         }
     }
 
-    // The battery's EMCON, or an ambush not yet sprung: sprung once a hostile is designated within 15 km (sam3d).
+    // Radiation forbidden (the silent regime he heard), or an ambush not yet sprung: sprung once a hostile is designated
+    // within 15 km (sam3d).
     bool NpcSilent() {
         if (ArmSilent()) return true;
+        if (regime_cmdr_.kind == EmissionKind::Silent) return true;
         if (!battery_) return false;
-        if (battery_->Emcon()) return true;
         if (battery_->CurrentMode() != Battery::Mode::Ambush) {
             npc_ambush_sprung_ = false;
             return false;
@@ -6539,8 +7059,8 @@ private:
         for (std::size_t i = 0; i < def_.crew_data.reports.size(); ++i) {
             const AutoReportDef& r = def_.crew_data.reports[i];
             const bool now = console_.equipment.Holds(r.when, console_.panel);
-            // Under the least emission against ARMs the search transmitter goes on every few turns: "Готов СОЦ!" once is enough.
-            const bool bursting = (def_.doctrine.arm_threat || def_.doctrine.search_on_s > 0.0) && r.callout == "soc_ready" &&
+            // Under a regime of bursts the search transmitter goes on every few turns: "Готов СОЦ!" once is enough.
+            const bool bursting = regime_crew_.Bursts() && r.callout == "soc_ready" &&
                                   time_ - report_said_s_[i] < 300.0;
             const bool flicker = bursting || (time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS);
             // Owed once whoever holds the seat: a player's seat isn't asked for it again at every flicker or burst.
@@ -8084,7 +8604,7 @@ private:
             log_.Record({time_, DebriefEntry::Kind::Scenario, judge.empty() ? std::string("Crew") : SpeakerName(judge), j.target, text});
             if (judge.empty()) continue;
             if (j.call == KillAssessment::Call::Hit) {
-                if (def_.doctrine.arm_threat) npc_ssc_off_due_ = true;  // under the ARM threat the tracking transmitter goes off after the burst
+                if (regime_cmdr_.kind == EmissionKind::Arm) npc_ssc_off_due_ = true;  // under the least emission the tracking transmitter goes off after the burst
                 Say("hit", judge);
                 HeardDestroyed(j.target);
                 own_kills_[j.target] = time_;
@@ -8288,17 +8808,18 @@ private:
                 npc_dropped_kill_.clear();
             }
             if (!s.has_about) continue;
-            // The signs of an ARM launch (the ARM drill): the ARM's mark is not a target; the commander acts on either.
+            // The signs of an ARM launch (the ARM drill): the ARM's mark is not a target; the commander acts on either (a
+            // player in his seat heard it too: the shadow commander thinks on it, and his acts are the player's duties).
             if (s.id == "arm_launch" || s.id == "arm_turn_away") {
                 if (s.id == "arm_launch") pictures_[c.Role()].Forget(s.about.target);
-                if (c.Role() == Cmdr() && npc) {
+                if (c.Role() == Cmdr()) {
                     if (s.id == "arm_launch") arms_heard_.insert(s.about.target);
                     ArmSignHeard(s);
                 }
                 continue;
             }
             if (s.id == "arm_launch_track" || s.id == "arm_launch_tv") {  // about the tracked target that fired it
-                if (c.Role() == Cmdr() && npc) ArmSignHeard(s);
+                if (c.Role() == Cmdr()) ArmSignHeard(s);
                 continue;
             }
             KnownTarget k = s.about;
@@ -8534,6 +9055,10 @@ public:
             }
         }
         if ((callout_id == "readback" || callout_id == "report_ready") && c2_ && station == Cmdr()) f = NetReportFields(callout_id);
+        if (callout_id == "report_arm_attack" && station == Cmdr()) {  // the last sign he heard (ArmSignHeard)
+            f["callsign"] = OwnCallsign();
+            if (!arm_sign_az_.empty()) f["azimuth"] = arm_sign_az_;
+        }
         auto blanks = [](std::string t) {
             for (std::size_t a = t.find('{'); a != std::string::npos; a = t.find('{', a)) {
                 const std::size_t b = t.find('}', a);
@@ -8602,8 +9127,16 @@ public:
                     target = d.target;
                     break;
                 }
+                if (callout_id == "report_arm_attack") {  // the sign he heard last (ArmSignHeard)
+                    if (arm_sign_az_.empty()) {
+                        last_refusal_ = "no sign of an ARM launch heard";
+                        return false;
+                    }
+                    if (f.count("azimuth") == 0) f["azimuth"] = arm_sign_az_;
+                }
                 if (!SayOnRadio(callout_id, f, true)) return false;
                 SettleOwedReport(station, callout_id, target);
+                if (callout_id == "report_arm_attack") ArmAttackReported(f["azimuth"]);
                 if (callout_id == "report_result" && !target.empty()) results_reported_.insert(target);
                 if (callout_id == "report_not_destroyed" && !target.empty()) KillReportTakenBack(target);
                 return true;

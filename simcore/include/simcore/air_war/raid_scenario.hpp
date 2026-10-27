@@ -854,12 +854,20 @@ public:
         if (fmt.doctrine && (c.DecoysExpected() || c.ArmsExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2)) {
             json::Value doc = Obj();
             if (c.DecoysExpected()) Put(doc, "tv_check", Bool(true));
-            if (c.ArmsExpected()) Put(doc, "arm_threat", Bool(true));
-            if (posture.emcon_discipline >= 0.6 || posture.emission < 0.2) {
-                json::Value bursts = Obj();
-                Put(bursts, "on_s", Num(4));
-                Put(bursts, "off_s", Num(std::round(10.0 + 30.0 * posture.emcon_discipline)));
-                Put(doc, "search_bursts", bursts);
+            // The emission regime the combat order gives (docs/crew/16_EMISSION.md): the regiment's least emission once
+            // ARMs are expected, else the battery commander's bursts (2 turns on; off 10-40 s by the posture, in turns at
+            // the Osa's 33 rpm).
+            if (c.ArmsExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2) {
+                json::Value em = Obj();
+                if (c.ArmsExpected()) {
+                    Put(em, "regime", Str("arm"));
+                    Put(em, "from", Str("regiment"));
+                } else {
+                    Put(em, "regime", Str("limited"));
+                    Put(em, "on_turns", Num(2));
+                    Put(em, "off_turns", Num(std::max(2.0, std::round((10.0 + 30.0 * posture.emcon_discipline) * 33.0 / 60.0))));
+                }
+                Put(doc, "emission", em);
             }
             Put(doc, "notes", Str("From the campaign: our intelligence's warning of decoys, the ARM drill once our radars have been "
                                   "attacked by ARMs, and the battery's emission discipline."));

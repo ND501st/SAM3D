@@ -21,6 +21,10 @@
         { "code": "611", "ru": "Режим радиомолчания", "en": "radio silence", "effect": "silence_on" },
         { "code": "612", "ru": "Радиомолчание отменить", "en": "radio silence lifted", "effect": "silence_off" },
         { "code": "620", "ru": "Переходите на запасную частоту", "en": "go to the spare frequency", "effect": "spare_frequency" },
+        { "code": "631", "ru": "Режим излучения без ограничений", "en": "radiation unrestricted", "effect": "emission_free", "notes": "The emission regimes (data/command/emission_regimes.json): the battery commander's decision, or the regiment's order he passes on (voenizdat_osa_1991 p243). The four groups and their words are SAM3D's, like every group here." },
+        { "code": "632", "ru": "Режим излучения ограниченный", "en": "limited radiation", "effect": "emission_limited", "notes": "Said with the bursts: «632, два через шесть»." },
+        { "code": "633", "ru": "Угроза ПРР, излучение минимальное", "en": "ARM threat, least emission", "effect": "emission_arm", "notes": "voenizdat_osa_1991 p262." },
+        { "code": "634", "ru": "Излучение запрещаю", "en": "radiation forbidden", "effect": "emission_silent" },
         { "code": "707", "ru": "Доложить о готовности", "en": "report readiness", "effect": "report_readiness" }
       ]
     },

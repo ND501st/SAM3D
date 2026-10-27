@@ -507,7 +507,7 @@ SC_TEST("osa: the commander hears the PU-12's designation only with his A-1 on Ð
     SC_EXPECT(r.TakeSeat("commander", "Player"));
     r.SeatSet("commander", "headset.commander", 1);
     const std::vector<std::string> said = r.PlayerRadioReports("commander");
-    SC_EXPECT(said.size() == 2 && said[0] == "report_ready" && said[1] == "readback");
+    SC_EXPECT(said.size() == 3 && said[0] == "report_ready" && said[1] == "readback" && said[2] == "report_arm_attack");
     SC_EXPECT(r.PlayerRadioReports("senior_operator").empty());
     SC_EXPECT(r.ReleaseTarget("d1"));
     Steps(r, 150.0);

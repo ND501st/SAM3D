@@ -8,7 +8,9 @@
 //     with the message's own timing and over the Osa's link to the post; none while the post's battery net is off the air;
 //   - the Osa's commander's reports (к бою готов, пуск, цель поражена, ракет нет) go onto the post's IT boards, and the
 //     post's other launchers' reports are heard in the Osa;
-//   - the Osa's place in the post's fire distribution: its missiles and the target its crew is on.
+//   - the Osa's place in the post's fire distribution: its missiles and the target its crew is on;
+//   - the battery commander's emission regime, said on the battery net, to the Osa's commander (if his set hears the
+//     net), and the Osa's report of an ARM attack to the battery commander (docs/crew/16_EMISSION.md).
 //
 // The file (data/scenarios/<link>.json):
 //   { "link_id", "name", "description", "osa": "scenarios/<the Osa's>.json", "post": "scenarios/<the post's>.json",
@@ -86,6 +88,8 @@ private:
         }
         osa_->SetPostNetUp(post_->PostBatteryNetUp());
         for (int to : post_->TakeBatteryNetOrders()) osa_->HearBatteryNetOrder(to);  // the spare frequency (or back)
+        for (const EmissionRegime& r : post_->TakeBatteryEmissionOrders()) osa_->HearBatteryEmissionOrder(r);  // the emission regime
+        for (const std::string& az : osa_->TakeArmAttackReports()) post_->HearArmAttackReport(callsign_, az);  // an ARM attack
         for (int number : osa_->TakeReadbacks()) post_->HearReadback(callsign_, number);
         for (const ScenarioRunner::LinkReport& r : osa_->TakeOwnReports()) post_->HearBatteryReport(r);
         for (const ScenarioRunner::LinkReport& r : post_->TakeNetReports()) {

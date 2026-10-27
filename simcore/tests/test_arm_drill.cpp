@@ -107,7 +107,7 @@ SC_TEST("arm drill: a target's arms load, and need the EM layer, a warning recei
         SC_EXPECT(w1.arms.weapon == "agm88a_class_harm" && w1.arms.count == 1);
         SC_EXPECT_NEAR(w1.arms.launch_range_m, 22000.0, 1e-6);
         SC_EXPECT_NEAR(w1.arms.min_range_m, 3000.0, 1e-6);  // the weapon's own
-        SC_EXPECT(r->Def().doctrine.arm_threat && r->Def().doctrine.relocate_after_arm);
+        SC_EXPECT(r->Def().doctrine.emission.kind == EmissionKind::Arm && r->Def().doctrine.relocate_after_arm);
         SC_EXPECT(r->Def().tuning.has_arm_table);
         SC_EXPECT_NEAR(r->Def().tuning.arm_track_on_fast_far_m, 24000.0, 1e-6);  // Table 7.3
         SC_EXPECT_NEAR(r->Def().tuning.arm_track_on_slow_far_m, 20000.0, 1e-6);

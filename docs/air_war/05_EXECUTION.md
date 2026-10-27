@@ -125,7 +125,8 @@ The crew fights the ARMs by its drill (roadmap E6): a senior operator of class2 
 his scope and the commander has every transmitter off once the missile in the air has burst. Once our radars have come
 under ARM attack anywhere in the war (`RaidPatterns::arm_attacks`, from each raid's `radars_killed` and
 `radars_suppressed`: their sites report it), the regiment orders its batteries to the ARM drill (a journal line from
-"regiment", an order down the chain to the vehicle commanders, `command/air_war_feed.hpp`) and every generated raid
-sets the doctrine `arm_threat` (the least emission); the battery's posture gives `search_bursts` as before.
+"regiment", an order down the chain to the vehicle commanders, `command/air_war_feed.hpp`) and every generated raid's
+combat order gives the regiment's least emission (doctrine `emission`: `arm` from the regiment); otherwise the battery's
+posture gives the limited regime's bursts as before (`docs/crew/16_EMISSION.md`).
 `relocate_after_arm` is not set: it needs a battery that drives the vehicle, and a raid's battery is deployed in place.
 The player can switch off too.
