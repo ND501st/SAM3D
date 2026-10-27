@@ -120,7 +120,7 @@ SC_TEST("crew talk: a line left waiting goes stale (never the player's); one cal
     Crew o = LoadCrew("osa_ak");
     SC_EXPECT(o.ok);
     // Three contacts ahead of an «Есть!» (less urgent): it waits past its 5 s and isn't said.
-    const auto busy = [&o](CalloutBus& bus) {
+    const auto busy = [](CalloutBus& bus) {
         for (const char* az : {"05-40", "12-10", "33-00"}) bus.Say(0.0, "contact", "senior_operator", {{"azimuth", az}, {"range_km", "24"}});
         bus.Say(0.0, "ack", "operator");
         StepTo(bus, 0.0, 20.0);
