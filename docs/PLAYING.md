@@ -15,9 +15,11 @@ Build once (or let the editor build on opening the project), then:
 ```
 
 `play.ps1` runs the game in its own window (`UnrealEditor.exe SAM3D.uproject -game`); the engine is `D:\UE_5.8` unless
-`UE_ROOT` says otherwise. The lessons play on the Kesmark test range, which needs no Cesium token or internet. Playing
-from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from the vehicle,
-F11 the immersive view): use the standalone game for the full set of views.
+`UE_ROOT` says otherwise. When the game's code (`simcore/include`, `unreal/SAM3D/Source`) is newer than its build, it
+builds first without being asked: an old build reads the new data with the old loaders and the missions menu says "The
+missions don't load: ... unknown key". The lessons play on the Kesmark test range, which needs no Cesium token or
+internet. Playing from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from
+the vehicle, F11 the immersive view): use the standalone game for the full set of views.
 
 ## The missions menu
 

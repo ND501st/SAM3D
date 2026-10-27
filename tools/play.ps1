@@ -36,6 +36,17 @@ $engine = if ($env:UE_ROOT) { $env:UE_ROOT } else { 'D:\UE_5.8' }
 $editor = Join-Path $engine 'Engine\Binaries\Win64\UnrealEditor.exe'
 if (-not (Test-Path $editor)) { throw "Unreal Editor not found at $editor (set UE_ROOT to the engine folder)" }
 
+# A game built before the code it runs was changed reads the new data with the old loaders ("unknown key"): build it.
+$dll = Join-Path $root 'unreal\SAM3D\Binaries\Win64\UnrealEditor-SAM3D.dll'
+if (-not $Build) {
+    $built = if (Test-Path $dll) { (Get-Item $dll).LastWriteTime } else { [datetime]::MinValue }
+    $newer = Get-ChildItem -Recurse -File (Join-Path $root 'simcore\include'), (Join-Path $root 'unreal\SAM3D\Source') |
+        Where-Object { $_.LastWriteTime -gt $built } | Select-Object -First 1
+    if ($newer) {
+        Write-Host "==> The game's code changed since it was built ($($newer.Name)): building it first" -ForegroundColor Yellow
+        $Build = $true
+    }
+}
 if ($Build) {
     Write-Host '==> Building the game code (SAM3DEditor, Development)' -ForegroundColor Cyan
     & (Join-Path $engine 'Engine\Build\BatchFiles\Build.bat') SAM3DEditor Win64 Development "-Project=$project" -WaitMutex -NoHotReload
