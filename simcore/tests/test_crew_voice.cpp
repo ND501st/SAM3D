@@ -232,6 +232,14 @@ SC_TEST("crew voice: a WAV's length from its headers, and the recorded lines fou
 SC_TEST("crew voice: the English recordings (tools/voice_lines.py) are found for the seats that say them") {
     OsaVoices o = LoadOsaVoices();
     SC_EXPECT(o.ok);
+    // The recordings are in Git LFS; a checkout without LFS (CI) has only the pointers.
+    std::ifstream probe(kData + "/../art/crew_voices/en/commander/ack.wav", std::ios::binary);
+    std::string head(23, '\0');
+    probe.read(&head[0], 23);
+    if (head == "version https://git-lfs") {
+        std::printf("    the recordings are LFS pointers here (no git lfs pull): skipped\n");
+        return;
+    }
     const std::map<std::string, double> lengths = RecordedLineLengths(kData + "/../art/crew_voices/en", o.crew);
     SC_EXPECT(lengths.size() > 100u);
     SC_EXPECT(lengths.count("commander/order_k_boyu") == 1u);

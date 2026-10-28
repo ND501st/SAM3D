@@ -790,7 +790,8 @@ SC_TEST("command post scenario: the cabled P-19's echoes paint at once, friends 
     SC_EXPECT(raw == 2 && friends == 1);  // the transport answers; the drone (board type 2) does not
     for (int i = 0; i < 600; ++i) r.Step(0.1);
     int held = 0;
-    for (const AspdTrack& k : r.Post()->Tracks()) held += k.primary ? 1 : 0;    std::printf("    %d of 2 taken off by the NPC commander; scale %.0f km\n", held, r.PostFeedNow().scale_m / 1000.0);
+    for (const AspdTrack& k : r.Post()->Tracks()) held += k.primary ? 1 : 0;
+    std::printf("    %d of 2 taken off by the NPC commander; scale %.0f km\n", held, r.PostFeedNow().scale_m / 1000.0);
     SC_EXPECT(held == 2);  // the NPC commander took both off
 }
 
