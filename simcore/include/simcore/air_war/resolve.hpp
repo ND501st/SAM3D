@@ -128,7 +128,8 @@ public:
         // Decoys and SEAD go first in time; walk flights in order of their time over the target.
         std::vector<std::size_t> order(p.flights.size());
         for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
-        std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        // Stable: flights at the same time keep the package's order on every standard library.
+        std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
             return TargetTime(p.flights[a]) < TargetTime(p.flights[b]);
         });
         for (std::size_t oi : order) {

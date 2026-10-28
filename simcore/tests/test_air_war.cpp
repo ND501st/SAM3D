@@ -198,7 +198,7 @@ SC_TEST("air war: each adversary flies its own kind of war") {
     // NATO: most DEAD packages carry SEAD (one against a radar with no SAM known on its way goes without), and so does a
     // strike whose route meets a radar threat it knows of (one on a depot behind the lines, or loosing stand-off weapons
     // short of the target's own SAM, goes without); packages carry jamming; power plants and towns are off limits at the
-    // start. Judged over four campaigns: on Ubuntu one seed's maths library plans no strike that meets a known radar.
+    // start. Judged over four campaigns.
     {
         const AirWarData nato = Load("nato");
         std::vector<Package> ps;
@@ -219,9 +219,8 @@ SC_TEST("air war: each adversary flies its own kind of war") {
         std::printf("    NATO DEAD packages %d (with SEAD %d), strikes %d (with SEAD %d, %d with none for want of ARMs), with jamming %d\n", dead,
                     dead_sead, strike, strike_sead, strike_no_arms, with_jam);
         SC_EXPECT(dead > 0 && dead_sead * 2 > dead && with_jam > 0);
-        // A strike past a known radar takes SEAD, unless the DEAD packages have the ARMs. Built with GCC (Ubuntu's CI)
-        // these four campaigns plan no strike past a known radar at all (MSVC and Clang plan 3 of 33 with SEAD): not yet
-        // understood, so there the reasons of a few strikes are printed instead of failing.
+        // A strike past a known radar takes SEAD, unless the DEAD packages have the ARMs (if none does, a few strikes'
+        // reasons are printed to show why).
         if (strike_sead == 0 && strike_no_arms == 0) {
             int shown = 0;
             for (const Package& p : ps) {
@@ -231,11 +230,7 @@ SC_TEST("air war: each adversary flies its own kind of war") {
                 std::printf("\n");
             }
         }
-#if defined(__GNUC__) && !defined(__clang__)
-        if (strike_sead == 0 && strike_no_arms == 0) std::printf("    GCC: no strike with SEAD (see above), not counted as a failure\n");
-#else
         SC_EXPECT(strike_sead > 0 || strike_no_arms > 0);
-#endif
     }
     // The Pact: the opening air operation goes for airfields, command posts and radars, its strike groups in massed
     // blows (the hunters, scouts and decoys around them fly in pairs). Judged over eight campaigns: one campaign's first

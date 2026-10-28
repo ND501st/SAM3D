@@ -125,7 +125,10 @@ public:
             }
         }
         pending.swap(later);
-        std::sort(arrived.begin(), arrived.end(),
+        // Stable: reports arriving in the same hour merge in the order they were sent. A plain sort leaves ties to the
+        // standard library (libstdc++ reorders them above 16 reports, MSVC and libc++ not), and the merge order is the
+        // order of the picture's entries, which the planner walks: GCC's campaigns took their own course.
+        std::stable_sort(arrived.begin(), arrived.end(),
                   [](const IntelReport& a, const IntelReport& b) { return a.arrive_h < b.arrive_h; });
         for (const IntelReport& r : arrived) Merge(r, analyst_skill);
         return arrived;
