@@ -60,6 +60,7 @@ python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign
 
 # Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson
 .\tools\play.ps1 [-Tutorial | -Lesson senior_operator] [-Build]
+.\tools\play_latest.ps1 [-Tutorial | -Lesson ...] [-NoUpdate]   # the newest commit from its own copy, C:\dev\SAM3D-play
 
 # Python prototype and tools
 python -m pytest prototype tools -q

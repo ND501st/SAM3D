@@ -21,6 +21,23 @@ missions don't load: ... unknown key". The lessons play on the Kesmark test rang
 internet. Playing from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from
 the vehicle, F11 the immersive view): use the standalone game for the full set of views.
 
+**Playing while the code is being worked on.** `play.ps1` plays the checkout it is in, so while its code is being edited
+(by Claude or another session) it may not build, or it waits on someone else's build or stops at an open editor's Live
+Coding. `play_latest.ps1` plays a copy of its own instead: a second checkout beside this one, `C:\dev\SAM3D-play` (a git
+worktree), brought up to the newest commit of the branch this checkout is on and built there. Work not yet committed
+never reaches it; when the newest commit doesn't build, the copy goes back to the last one that did.
+
+```
+.\tools\play_latest.ps1 -Tutorial           # the newest commit; the same options as play.ps1
+.\tools\play_latest.ps1 -NoUpdate           # the copy as it is, at once
+.\tools\play_latest.ps1 -UpdateOnly         # bring it up to date and build it, without playing
+.\tools\play_latest.ps1 -Ref main           # another branch or commit
+```
+
+The first run makes the copy and builds it from nothing (about 12 minutes and 3 GB); later runs build only what
+changed. Close the copy's game before updating it. The copy keeps its own `Saved` folder (settings, logs, campaign
+saves), and isn't for editing: an update overwrites it. `play.ps1 -NoBuild` plays this checkout's build as it is.
+
 ## The missions menu
 
 Up/Down a mission, H the helper (Off, Hints, On: below), Enter (or Start) to choose who to play, Q to quit. Choosing
