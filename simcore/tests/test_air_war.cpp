@@ -198,9 +198,14 @@ SC_TEST("air war: each adversary flies its own kind of war") {
     // NATO: most DEAD packages carry SEAD (one against a radar with no SAM known on its way goes without), and so does a
     // strike whose route meets a radar threat it knows of (one on a depot behind the lines, or loosing stand-off weapons
     // short of the target's own SAM, goes without); packages carry jamming; power plants and towns are off limits at the
-    // start.
+    // start. Judged over four campaigns: on Ubuntu one seed's maths library plans no strike that meets a known radar.
     {
-        const std::vector<Package> ps = PlanDays(Load("nato"), 2, 2.0);
+        const AirWarData nato = Load("nato");
+        std::vector<Package> ps;
+        for (unsigned seed = 1; seed <= 4; ++seed) {
+            const std::vector<Package> one = PlanDays(nato, seed, 2.0);
+            ps.insert(ps.end(), one.begin(), one.end());
+        }
         int dead = 0, dead_sead = 0, strike = 0, strike_sead = 0, with_jam = 0;
         for (const Package& p : ps) {
             if (p.kind != MissionKind::Dead && p.kind != MissionKind::Strike) continue;
