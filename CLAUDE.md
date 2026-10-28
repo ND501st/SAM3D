@@ -251,4 +251,12 @@ of the assets they protect and the enemy's freedom of action (a battery that sur
 add SEAD, fire ARMs, spend sorties, re-route and lose aircraft). Targets can be rebuilt, but rebuilding needs teams,
 materials, transport and time, all of them targetable.
 
+**Track G, the ground** (project owner, 28 Oct 2026; `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md`, the roadmap's
+track G; not gated): command, battery orders and movement first. Routes are derived from the map's data at load and
+asked between anchors (places, positions) by id, never authored or saved as node numbers, so a changed map needs no
+navigation edits; changes in play are overlays, which a unit plans on only once it believes them. A battery order is
+carried by a means to a person who carries it out: no vehicle acts on an order its commander did not hear. Every
+element of the battery moves in Unreal, and everything within the player's visual range appears there, where simcore
+has it. Wear and maintenance (G6) and the battery's day (G7) are on hold; the TZM and its crew are not playable.
+
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

@@ -213,6 +213,43 @@ the theatre; the country's map draws in Unreal with the Kesmark range inside it;
 a raid on the map shows its neighbouring S-125, ZU-23s and the Kub as basic models, and their kills appear in the
 debrief; every new model shows in the gallery; the tests pass. **Met 23 Oct 2026**, with one difference: on the nation's theatre battery 21 deploys away from Kesmark in every war (by the Rava dam against the Pact), so the raid photographed on the map has the S-125M1, S-75M2, Shilka, Strela-1, S-60 and ZU-23 sites round the dam; the neighbours' kills are "destroyed by" them in the debrief (the abstract ones and the fighting Osa batteries' alike).
 
+## Track G: the ground (prioritised 28 Oct 2026)
+
+The project owner, 28 Oct 2026: the battery's accompanying elements (logistics, planning, maintenance, operations and
+recreation between raids) inside the dynamic campaign; unit-wide and battery-wide movements, coordinated; basic pathing
+of the map that keeps working as the map is changed; a visible chain of command; and the simcore systems built but not
+yet in the player's hands. Then, on review the same day: **the emphasis is the command structure, how battery-wide
+orders are communicated and carried out, and movement**; every element of the battery moves in Unreal and every
+element within the player's visual range appears there; wear and maintenance (G6) and the battery's day (G7) are on
+hold; the TZM and its crew are not playable; minigames later. Design: `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md`
+(decisions G-1 to G-14, the systems, the owner's answers in §8). Like the nation on the map it is **not gated**: G1-G4
+and G10 are simcore and headless, and G11 starts from today's Unreal entity stream. Unreal's navigation mesh is left
+open (§8, question 7); nothing the simulation moves is steered by it.
+
+| # | Task |
+|---|---|
+| G0 | **Research**: the march's organisation (`voenizdat_osa_1991` pp. 232-239, a march regulation of the period); how orders went to the battery's vehicles and came back (the oral combat order, the net, repeating back, the reports, the runner); every vehicle's mobility. Later: the camp and routine, norms, supply, maintenance |
+| G1 | **The route service** (`simcore/nav/`): road graphs for the district and the country joined at portals, trafficability tiles per mobility class, a foot layer; routes between anchors (places, positions), never node numbers; overlays as facts, truth and believed; integer costs, the same on MSVC and GCC; derived from the map at load, never authored; `nav_check`, `nav_bench` |
+| G2 | **Movers and the march** (`simcore/movement/`): vehicle, column, person, carrier, convoy at levels M0-M2; the march plan as a document with route cards; `battery.hpp`'s moves, the crew's walks, the pipeline's carriers and the supply lines on routes; a blocked leg stops and reports |
+| G3 | **Coordination**: the movement table (crossings reserved by time and priority), the commandant's regulators, the battery's order of march, exposure on the roads |
+| G4 | **The battery area** as places by sourced rules; position work and wire as jobs at places |
+| G5 | **Stocks and logistics** (with 15.1-15.2): stocks in places, requests up the chain, deliveries as movers with NPC crews |
+| G6 | **On hold**: wear and maintenance (20.0, 20.3 brought forward) |
+| G7 | **On hold**: the battery's day (20.1-20.5, 19.2-19.3, 15.4) |
+| G8 | **The visible chain of command** (with P1, P2): one registry of people, people at their places, papers (the communications diagram, call signs, the staff list, the order), contact by the means the diagram lists |
+| G9 | **The player's surfaces**: the working map (14.4), battery orders in the radial menu, route cards, papers, the campaign screen's relocation as a march |
+| G10 | **Battery orders, given and carried out**: each order carried by a means, heard only where the means reaches, repeated back, carried out by each vehicle's commander and driver as acts at their seats (`NpcDoes`), reported and logged; the battery's every vehicle with a commander and a driver as people; the emission regime's path (8.16) generalised |
+| G11 | **Unreal, everything the player could see**: every battery element drawn and moving; every mover and place within the player's visual range (eye or optic, the weather's visibility, the light) drawn at M2; no popping; presentation only |
+
+**Order:** G0, G1, G2; then G3, G8, G10 and G11 together, G4 as far as orders and marches need places; then G9;
+then G5. G6 and G7 wait.
+
+**Done when (milestone M-G):** a person plays a night and a dawn at battery 21 as its commander: drives to the
+regiment's briefing for the order, plans the march on the working map, gives the oral combat order and «К маршу!»,
+gets the vehicle whose set is off moving by runner, watches every vehicle form up and march in Unreal, is held by the
+regulator at the bridge, occupies, reports ready, fights the dawn raid and relocates on the regiment's order; then
+plays the same night from a vehicle commander's seat, hearing the order on the net and carrying it out.
+
 ## The battery's war: phases 13-21 (planned 22 Oct 2026)
 
 The project owner, 22 Oct 2026: our side and one enemy at a time fight over the fictional nation, the enemy grinding it
@@ -285,6 +322,9 @@ sequence and working map (`voenizdat_osa_1991` pp. 232-245); the mission kinds; 
 ready-by time; a person as battery 21's commander receives the order at the briefing, works the map and gives the
 oral combat order to NPC vehicle commanders who carry it out.
 
+**Track G** (above) carries this phase's orders to the vehicles and back (G10), gives 14.3 its places (G4) and the
+working map its surfaces (G9).
+
 ## Phase 15 - The continuous mission (planned)
 
 One session for the whole task instead of one scenario per raid: the battery's state carried through it, the
@@ -304,6 +344,9 @@ enemy's packages entering it live, time compressed between events (`docs/campaig
 **Done when:** one task runs as one session from the order to the end, with three packages entering live and a reload
 and a relocation between them; an injected package matches the same raid built as a scenario within the calibration's
 bounds; a person plays a 24-hour cover task, woken only when something comes.
+
+**Track G** (above): the session's movers and the march (G2), and what the level draws (15.8) by the player's visual
+range (G11). 15.7's saves on a changed map load the battery's state snapshot (G's §8, question 4).
 
 ## Phase 16 - The enemy around the battery (planned)
 
@@ -339,6 +382,9 @@ The layered defence, the warning, our fighters and the supply the battery depend
 **Done when:** a raid over the bridges loses an aircraft to their guns and the net says so; a MiG-21 in the corridor
 answers IFF on the player's scope, and a battery left without the notice fires on it; the TZM's run is longer the day
 the road bridge falls.
+
+**Track G** (above): 17.4 is a use of the route service and movers (G1, G2) and stocks (G5); 17.5's batteries move on
+the movement table (G3).
 
 ## Phase 18 - The after-action loop (planned)
 
@@ -378,6 +424,10 @@ always somewhere; the player may take any fit member of the battery across missi
 says so; readiness No. 1 from a sleeping battery takes as long as its people's walk; a person plays the driver on a
 night march and the radiotelephonist the next morning, each as tired as that person really is.
 
+**Track G** (above): 19.1's roster starts as G8's registry of people; 19.5's first form is G9.6 (the battery
+commander, a vehicle commander, a driver; the TZM and its crew are not playable). 19.2-19.3 would come forward with
+G7, on hold.
+
 ## Phase 20 - Between fights (planned)
 
 The battery's day: watch, sleep, meals, maintenance, repairs, reloads, digging, wire, briefings, training, guard and
@@ -398,6 +448,9 @@ the war at any time (`docs/campaign/07_BETWEEN_FIGHTS.md`).
 **Done when:** a radar opened for maintenance at dawn against "the dawn raider" misses the first minutes of the raid and
 the debrief says why; a battery that skipped maintenance for three days has more faults; a person plans a day against
 the Noric Republic and another against NATO, and the two days differ for reasons they can name.
+
+**Track G** (above): 20.0 and 20.3 would come forward as G6, and 20.1-20.5 as G7; both are on hold (the owner, 28 Oct
+2026).
 
 ## Phase 21 - Reach, doctrine, and command under strain (planned)
 
