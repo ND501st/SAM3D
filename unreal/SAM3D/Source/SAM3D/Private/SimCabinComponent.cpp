@@ -1579,6 +1579,29 @@ bool USimCabinComponent::TraceBoard(const FVector& WorldStart, const FVector& Wo
 	return false;
 }
 
+bool USimCabinComponent::TraceDocument(const FVector& WorldStart, const FVector& WorldEnd, const FString& Document,
+	double& OutDistanceCm) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	const simcore::CabinLayout* Layout = Sim != nullptr ? Sim->GetCabinLayout() : nullptr;
+	if (Layout == nullptr)
+	{
+		return false;
+	}
+	const std::string Want = TCHAR_TO_UTF8(*Document);
+	for (const USimCabinDisplayComponent* Display : Displays)
+	{
+		const int32 I = Display != nullptr ? Display->GetLayoutIndex() : INDEX_NONE;
+		FVector2D Uv;
+		if (I >= 0 && I < static_cast<int32>(Layout->displays.size()) && Layout->displays[I].kind == simcore::CabinDisplayKind::Document &&
+			Layout->displays[I].document == Want && Display->RayHit(WorldStart, WorldEnd, Uv, OutDistanceCm))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool USimCabinComponent::IsWheel(int32 Item) const
 {
 	return Items.IsValidIndex(Item) && Items[Item].LampId.IsEmpty() &&

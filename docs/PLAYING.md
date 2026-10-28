@@ -15,14 +15,18 @@ Build once (or let the editor build on opening the project), then:
 ```
 
 `play.ps1` runs the game in its own window (`UnrealEditor.exe SAM3D.uproject -game`); the engine is `D:\UE_5.8` unless
-`UE_ROOT` says otherwise. The lessons play on the Kesmark test range, which needs no Cesium token or internet. Playing
-from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from the vehicle,
-F11 the immersive view): use the standalone game for the full set of views.
+`UE_ROOT` says otherwise. When the game's code (`simcore/include`, `unreal/SAM3D/Source`) is newer than its build, it
+builds first without being asked: an old build reads the new data with the old loaders and the missions menu says "The
+missions don't load: ... unknown key". The lessons play on the Kesmark test range, which needs no Cesium token or
+internet. Playing from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from
+the vehicle, F11 the immersive view): use the standalone game for the full set of views.
 
 ## The missions menu
 
-Up/Down a mission, Left/Right where to start (a seat of the crew, the commander's seat, or outside), H the helper (Off,
-Hints, On: below), Enter to play, Q to quit. The groups:
+Up/Down a mission, H the helper (Off, Hints, On: below), Enter (or Start) to choose who to play, Q to quit. Choosing
+shows the mission's crew: every crewman of its vehicles, in command or in the crew, with his duties under the one chosen,
+and outside with no seat. Up/Down or 1-9 a crewman, Enter, Play or a second click on him to play, Esc or Back to the
+missions. (Left/Right on the mission's page still pick where to start.) The groups:
 
 | Group | What it is |
 |---|---|
@@ -53,10 +57,10 @@ shows you your panels first, then takes you through your part of the drill one s
 the commander's own lesson the battery's PU-12M is on the battery net: you turn your A-1 between the intercom (ВС) and
 the net (Р-123), report the vehicle ready, and read back the target the battery commander gives you.
 Then the **PU-12M**, the battery's command post, seat by seat: the driver-electrician (the AB-1 generator), the
-radiotelephone operator (the radios, the mast, the telecode's path, the air picture read out to the plotter, the sets
+radiotelephone operator (the radios, the mast, the telecode's path, every message written in the journal, the sets
 kept on frequency when a net moves or is jammed), the squad leader (orienting the post, the radio data, the check of
 communications),
-the operator-plotter (the radiotelephonist's reports onto the board, each new target called aloud to the commander) and the battery commander (deploying the post, his
+the operator-plotter (the air-picture net in his headset onto the board, each new target called aloud to the commander) and the battery commander (deploying the post, his
 RTK-1, the regiment's ПТ-1 group read by hand against the talk table on his desk, a target to a launcher with the DT-2
 marker and the ДХ keys and its read-back, the battery net out of jamming, a telephone line answered).
 
@@ -66,9 +70,16 @@ The box at your seat decides what your headset is on: the intercom, or a radio (
 still hear the intercom). The Osa's commander has the A-1 (intercom or one of the two R-123M), the deputy the A-2, the
 driver the ПВ; the senior operator and the operator are on the intercom. In the PU-12M the commander's RTK-1 talks on one
 set and listens to a second, and has five telephone lines; the PVS-1 (radiotelephonist), PVS-2 (squad leader) and PVS-3
-(driver) each pick the intercom or a set; the plotter has no box. A ringing line or the Osa's TA-57: Y answers, Y again
+(driver) each pick the intercom or a set; the plotter's headset is a second one on PVS-1, so he hears what the
+radiotelephonist's box is turned to. The radiotelephonist writes every message his radios bring into the journal open on
+his table: click the page and it comes up before your eyes; the oldest message you heard stands on its line, its words
+printed, a box for each group of digits: type them as you heard them (Backspace rubs out, Tab the next box, Enter writes
+the line, S the short form: the number and the time only; Esc puts the page down). One not written within half a minute
+is lost; what you write is what the page says, and the plotter plots a report he missed as the page has it. The radio
+lines on the screen fade in seconds: a missed report is found again only on that page (anyone may click it to read). A ringing line or the Osa's TA-57: Y answers, Y again
 puts it down. The bottom left of the screen shows your headset, your box and the sets it reaches (● alive), a call and
-a ringing line; the radio log above it shows only what your seat heard.
+a ringing line; the radio log above it shows only what your seat heard. Only a headset on a set hears its hiss between
+the words; the set's ШУМЫ (the noise suppressor) silences it, at the cost of some range.
 
 **The papers.** On the radiotelephonist's table lie his radio data (each net's frequencies by number, the call signs, the
 changes as Ч+minutes, the telecode channel, the lines); on the commander's desk the talk tables (ПТ-1, and the signal table
@@ -83,7 +94,7 @@ what the regiment reads out on the air-picture net, square by square, out to 200
 commander's: the plotter doesn't copy it): with the cross on the board the mouse wheel picks the number of a report
 heard (a small chip beside the cross), a click writes it there. Within
 5 cm of the right square the mark is exact; further off it lands off the target. The air-picture lines fade in a few
-seconds: remember the square. He calls each new target to the commander aloud as he writes it (O, then «Новая цель …»,
+seconds: remember the square. He calls each new target to the commander aloud as he writes it (Caps Lock, then «Новая цель …»,
 filled in from the board), and a turn or a lost target the same way: the NPC commander has a new target from that call,
 or only half a minute later from his own look at the board, and a report left unsaid for two minutes is missed in the
 debrief. The battery commander
@@ -91,7 +102,7 @@ reads it for warning: his aids line gives each track's range and when it will be
 two-digit command. On the ДХ, СВ / Ч / ГР / Н1-Н3 set friend, foe, group and height zone on the target in the window; the
 ФР block's КОНТРОЛЬ position puts a training echo on the tube; the switch on the ФР block picks the cabled radar's type.
 Radio traffic is spoken through a radio voice and drawn in its net's colour (amber the air picture and the
-radiotelephonist's read-out, cyan the command net, blue the battery net, violet the regiment's net, green the covered
+radiotelephonist's read-out from the journal, cyan the command net, blue the battery net, violet the regiment's net, green the covered
 regiment's, pale yellow a telephone line). docs/research/PLOTTING_BOARD_2026-10.md.
 
 How a step works:
@@ -104,8 +115,9 @@ How a step works:
   your head onto it.
 - **Only the lit control works** in a seat lesson; anything else says why not. Do the step and the next one comes up,
   with a tick at the top of the screen. A hand wheel shows a gauge: where the wheel is, the mark, which way to turn.
-- **Orders and reports**: O opens the crew menu on the page with the step's line, marked *<-- this one*; pick it by its
-  number. It counts at once; the intercom says it when it is free.
+- **Orders and reports**: Caps Lock opens the crew menu, a ring of eight sectors; the sector with the step's line and the
+  line itself are green. Point the mouse at it and click (or flick out to it), or press its number; 0 says the green
+  line at once. It counts at once; the intercom says it when it is free.
 - **Waits** run time faster on their own (the turbine spinning up, the radar warming); it goes back to normal for your
   next move.
 - **The instructor** reads each new step aloud (English; `sam3d.InstructorVoice 0` in the console silences him).
@@ -154,7 +166,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | F9 | The trainer's instructor panel (roadmap 10.3; where the simulation runs: single player or the server) |
 | Right mouse, wheel | Turn the camera, closer / further |
 | Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |
-| W / S, A / D, Space | Drive, steer, brake (a halt for the crew) |
+| W / S, A / D, Space | Drive, steer, brake (a halt for the crew): from the driver's seat only in a mission (from the others the commander orders it) |
 | C | In and out of the cabin |
 | Tab | The next seat |
 | Mouse (cabin) | Look round; the cross names the control |
@@ -165,14 +177,15 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | W A S D, Shift (outside) | Walk on the roof (not past its edges or onto the antenna unit or the mast) or over the ground at the drill pace; Shift runs. Never through the hull |
 | Click a job's case inside | A job done outside (the PU-12M's AB-1 set and PAB-2 aiming circle, the Osa's aiming circle): you are walked out to it and do it there. Out there, look at it within 3 m and click |
 | T | Take this seat, or give it back |
-| O | Orders (at the commander's seat; the Osa commander's own words on the battery net follow them: his readiness, a read-back) or reports (any other); 1-9 pick, 0 next page, Esc close |
+| Caps Lock | The crew menu, a ring of eight sectors always in the same places (docs/crew/15_TALK.md §5): orders at the commander's seat (with his words on the battery net: his readiness, a read-back), reports at any other. Tap to open and point with the mouse and click, or hold, flick to the sector and on to the line, and let go. 1-8 the places clockwise from the top, 0 the green (advised) line, 9 or the wheel the next page, Backspace back, Tab (commander) whom to order first, Esc close |
+| U / I / P | Reply «Есть!» / «Выполнено!» / «Повторите!» (the last line said to you said again) |
 | H | The helper: off, hints, on, watch the crewman (kept for the next missions) |
 | N | The helper makes its move for you (outside a lesson) |
 | J | Your headset on or off |
 | K / Shift+K | Turn your intercom box (ВС, РСТ-1..4; the Osa's А-1: off, intercom, radio) |
 | Y | Answer a ringing line or telephone; again: put it down |
 | 1-9 | Quick crew drills (outside the crew menu) |
-| B | In the PU-12M: its plotting board. In a launcher: the designations the crew has heard (the board is in the post) |
+| B | In the PU-12M: its plotting board. In a launcher: the designations the crew has heard (the board is in the post), and what your crewman knows of the air from his scope and what he was told |
 | V | The other vehicle (a battery link) |
 | [ ], 1-5 | PU-12M battery commander: pick a board target, give it to a launcher |
 | Wheel, click on the board | PU-12M plotter: pick the number to write, write it where you click |

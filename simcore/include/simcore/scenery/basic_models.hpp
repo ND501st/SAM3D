@@ -15,6 +15,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/console_data.hpp"
@@ -55,6 +56,13 @@ struct ModelLibrary {
     std::map<std::string, std::string> fallbacks;  // aircraft class -> model
     std::map<std::string, std::string> ground;     // battery vehicle kind -> model
     std::map<std::string, std::string> colours;    // name -> #rrggbb
+    // How an air defence system's site is drawn: its vehicles (model, count) and how far apart they stand.
+    struct SiteDef {
+        std::vector<std::pair<std::string, int>> models;
+        double spread_m = 50.0;
+    };
+    std::map<std::string, SiteDef> systems;  // air defence system id -> site
+    std::map<std::string, SiteDef> kinds;    // a theatre object's kind (air_war ObjectKind) -> its site
 
     const ModelDef* Find(const std::string& id) const {
         for (const ModelDef& m : models) {
@@ -76,13 +84,47 @@ struct ModelLibrary {
         const auto it = ground.find(kind);
         return it == ground.end() ? std::string() : it->second;
     }
+    // A site of an air defence system laid out round its centre (east, north metres): with several kinds of vehicle the
+    // first (the radar) at the centre and the rest in a ring `spread_m` out (an S-75's launchers round its guidance
+    // radar); with one kind all of them in the ring (an Osa battery's four vehicles, a platoon's guns). Empty for a
+    // system the library doesn't know.
+    std::vector<std::pair<std::string, Vec3>> SiteLayout(const std::string& system) const {
+        const auto it = systems.find(system);
+        return it == systems.end() ? std::vector<std::pair<std::string, Vec3>>() : Layout(it->second);
+    }
+    // A theatre object drawn on the map (the nation on the map N5): an air defence as its system's site, anything else
+    // as its kind's (an airfield's hangars, a refinery's tanks and chimneys, a radar company's radars). Empty for what
+    // the library doesn't draw (a city: the country map's towns are drawn instead).
+    std::vector<std::pair<std::string, Vec3>> ObjectLayout(const std::string& kind, const std::string& system) const {
+        if (!system.empty() && systems.count(system) != 0) return SiteLayout(system);
+        const auto it = kinds.find(kind);
+        return it == kinds.end() ? std::vector<std::pair<std::string, Vec3>>() : Layout(it->second);
+    }
+    static std::vector<std::pair<std::string, Vec3>> Layout(const SiteDef& s) {
+        std::vector<std::pair<std::string, Vec3>> out;
+        std::size_t first = 0;
+        if (s.models.size() > 1) {
+            out.push_back({s.models[0].first, Vec3{}});
+            first = 1;
+        }
+        int ring = 0;
+        for (std::size_t i = first; i < s.models.size(); ++i) ring += s.models[i].second;
+        int k = 0;
+        for (std::size_t i = first; i < s.models.size(); ++i) {
+            for (int n = 0; n < s.models[i].second; ++n, ++k) {
+                const double a = 6.283185307179586 * k / std::max(1, ring);
+                out.push_back({s.models[i].first, Vec3{s.spread_m * std::sin(a), s.spread_m * std::cos(a), 0.0}});
+            }
+        }
+        return out;
+    }
 };
 
 namespace detail {
 
 // The archetype's parameters, as read from the data.
 struct Params {
-    double length = 0.0, span = 0.0, width = 0.0, height = 0.0, diameter = 0.0, rotor = 0.0, missile = 0.0, elevation = 0.0;
+    double length = 0.0, span = 0.0, width = 0.0, height = 0.0, diameter = 0.0, rotor = 0.0, missile = 0.0, elevation = 0.0, antenna_h = 0.0;
     int engines = 1, axles = 2, missiles = 0, rails = 1, barrels = 1;
     bool biplane = false, high_wing = false, wings = false, turret = false, mast = false, cab = false, gun = false, tower = false;
     std::string wing = "swept", tail = "conventional", radar = "none", body = "cargo", roof = "pitched", crown = "cone";
@@ -138,16 +180,43 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
         } else {
             o.push_back(P(Shape::Box, Vec3{0.16 * L, 0.14, fin_h}, Vec3{-0.4 * L, 0.0, d * 0.5 + fin_h * 0.5}, c));
         }
-        for (int e = 0; e < a.engines; ++e) {
-            const double y = a.engines == 1 ? 0.0 : (e == 0 ? -0.22 : 0.22) * d;
-            o.push_back(P(Shape::Cylinder, Vec3{d * 0.55, d * 0.55, 0.05 * L}, Vec3{-0.47 * L, y, 0.0}, dark, 'x'));
+        if (a.engines >= 3) {
+            // An airliner's layout (a tanker, an AWACS, an ELINT aircraft): pods hung under the wings, two a side.
+            for (double side : {-1.0, 1.0}) {
+                for (double out : {0.2, 0.36}) {
+                    o.push_back(P(Shape::Cylinder, Vec3{d * 0.45, d * 0.45, 0.09 * L}, Vec3{wx + 0.06 * L - out * 0.12 * L, side * out * wspan, -d * 0.5}, dark,
+                                  'x'));
+                }
+            }
+        } else {
+            for (int e = 0; e < a.engines; ++e) {
+                const double y = a.engines == 1 ? 0.0 : (e == 0 ? -0.22 : 0.22) * d;
+                o.push_back(P(Shape::Cylinder, Vec3{d * 0.55, d * 0.55, 0.05 * L}, Vec3{-0.47 * L, y, 0.0}, dark, 'x'));
+            }
+        }
+        if (a.radar == "dome") {
+            // An AWACS's rotodome on its two struts over the rear fuselage.
+            const double dome = 0.2 * L;
+            o.push_back(P(Shape::Box, Vec3{0.05 * L, 0.3, 0.06 * L}, Vec3{-0.16 * L, 0.0, d * 0.5 + 0.03 * L}, c));
+            o.push_back(P(Shape::Cylinder, Vec3{dome, dome, 0.04 * L}, Vec3{-0.16 * L, 0.0, d * 0.5 + 0.08 * L}, c2));
         }
     } else if (arch == "prop") {
         const double w = std::max(0.9, 0.11 * L), h = std::max(1.0, 0.16 * L);
         o.push_back(P(Shape::Box, Vec3{0.85 * L, w, h}, Vec3{0.0, 0.0, 0.0}, c));
-        o.push_back(P(Shape::Cylinder, Vec3{S * 0.16, S * 0.16, 0.06}, Vec3{0.44 * L, 0.0, 0.0}, dark, 'x'));
         const double chord = 0.15 * L;
         const double wz = a.high_wing ? h * 0.5 : -h * 0.35;
+        if (a.engines >= 2) {
+            // Twin engines: a nacelle under each wing with its propeller ahead of the leading edge (four: two a side).
+            for (double side : {-1.0, 1.0}) {
+                for (double out : a.engines >= 4 ? std::vector<double>{0.15, 0.3} : std::vector<double>{0.17}) {
+                    const double prop = a.engines >= 4 ? S * 0.1 : S * 0.13;
+                    o.push_back(P(Shape::Cylinder, Vec3{0.06 * L, 0.06 * L, 0.22 * L}, Vec3{0.14 * L, side * out * S, wz - 0.03 * L}, c, 'x'));
+                    o.push_back(P(Shape::Cylinder, Vec3{prop, prop, 0.06}, Vec3{0.26 * L, side * out * S, wz - 0.03 * L}, dark, 'x'));
+                }
+            }
+        } else {
+            o.push_back(P(Shape::Cylinder, Vec3{S * 0.16, S * 0.16, 0.06}, Vec3{0.44 * L, 0.0, 0.0}, dark, 'x'));
+        }
         o.push_back(P(Shape::Box, Vec3{chord, S, 0.15}, Vec3{0.12 * L, 0.0, a.biplane ? -h * 0.4 : wz}, c));
         if (a.biplane) o.push_back(P(Shape::Box, Vec3{chord, S * 0.85, 0.15}, Vec3{0.14 * L, 0.0, h * 0.75}, c));
         o.push_back(P(Shape::Box, Vec3{0.1 * L, 0.32 * S, 0.1}, Vec3{-0.42 * L, 0.0, 0.0}, c));
@@ -192,7 +261,15 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
             const double th = std::max(0.6, std::min(1.4, 0.3 * H));
             o.push_back(P(Shape::Box, Vec3{0.38 * L, 0.6 * W, th}, Vec3{0.05 * L, 0.0, hull_h + th * 0.5}, c));
             top = hull_h + th;
-            if (a.gun) o.push_back(P(Shape::Cylinder, Vec3{0.18, 0.18, 0.55 * L}, Vec3{0.05 * L + 0.42 * L, 0.0, hull_h + th * 0.5}, dark, 'x'));
+            if (a.gun && a.barrels <= 1) {
+                o.push_back(P(Shape::Cylinder, Vec3{0.18, 0.18, 0.55 * L}, Vec3{0.05 * L + 0.42 * L, 0.0, hull_h + th * 0.5}, dark, 'x'));
+            } else if (a.gun) {
+                // Several shorter barrels side by side (the Shilka's four).
+                for (int b = 0; b < a.barrels; ++b) {
+                    const double y = (-0.5 + b / static_cast<double>(a.barrels - 1)) * 0.4 * W;
+                    o.push_back(P(Shape::Cylinder, Vec3{0.1, 0.1, 0.35 * L}, Vec3{0.05 * L + 0.19 * L + 0.175 * L, y, hull_h + th * 0.6}, dark, 'x'));
+                }
+            }
         }
         if (a.missiles > 0) {
             const int per_side = std::max(1, a.missiles / 2);
@@ -206,11 +283,15 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
             }
         }
         if (a.radar == "dish") {
+            // diameter_m: the dish's own diameter where the data gives one.
+            const double dish = a.diameter > 0.0 ? a.diameter : std::min(3.0, 0.9 * W);
             o.push_back(P(Shape::Cylinder, Vec3{0.25, 0.25, H - top}, Vec3{-0.1 * L, 0.0, top + (H - top) * 0.5}, dark));
-            o.push_back(P(Shape::Cylinder, Vec3{std::min(3.0, 0.9 * W), std::min(3.0, 0.9 * W), 0.25}, Vec3{-0.1 * L, 0.0, H - 0.6}, c, 'x', 15.0));
+            o.push_back(P(Shape::Cylinder, Vec3{dish, dish, 0.25}, Vec3{-0.1 * L, 0.0, H - 0.6}, c, 'x', 15.0));
         } else if (a.radar == "bar") {
+            // span_m and antenna_h_m: the array's own width and height where the data gives them.
+            const double bw = a.span > 0.0 ? a.span : std::max(2.5, 1.4 * W), bh = a.antenna_h > 0.0 ? a.antenna_h : 1.0;
             o.push_back(P(Shape::Cylinder, Vec3{0.25, 0.25, H - top}, Vec3{0.0, 0.0, top + (H - top) * 0.5}, dark));
-            o.push_back(P(Shape::Box, Vec3{0.5, std::max(2.5, 1.4 * W), 1.0}, Vec3{0.0, 0.0, H - 0.5}, c));
+            o.push_back(P(Shape::Box, Vec3{0.5, bw, bh}, Vec3{0.0, 0.0, H - bh * 0.5}, c));
         }
         if (a.mast) o.push_back(P(Shape::Cylinder, Vec3{0.18, 0.18, 2.6 * H}, Vec3{-0.35 * L, 0.0, H + 1.3 * H}, dark));
     } else if (arch == "truck") {
@@ -220,13 +301,24 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
         o.push_back(P(Shape::Box, Vec3{cab_l, W, 1.6}, Vec3{0.5 * L - cab_l * 0.5, 0.0, 1.0 + 0.8}, c));
         if (a.body == "tank") {
             o.push_back(P(Shape::Cylinder, Vec3{W * 0.9, 1.6, L - cab_l - 0.4}, Vec3{-cab_l * 0.5, 0.0, 1.0 + 0.8}, c, 'x'));
+        } else if (a.missiles > 0) {
+            // A missile transporter: a low bed and the missiles lying on it side by side (diameter_m: a missile's).
+            const double bed_l = L - cab_l - 0.4;
+            const double d = a.diameter > 0.0 ? a.diameter : 0.5;
+            o.push_back(P(Shape::Box, Vec3{bed_l, W, 0.4}, Vec3{-cab_l * 0.5, 0.0, 1.2}, c));
+            for (int i = 0; i < a.missiles; ++i) {
+                const double y = a.missiles == 1 ? 0.0 : (-0.5 + i / static_cast<double>(a.missiles - 1)) * (W - d);
+                o.push_back(P(Shape::Cylinder, Vec3{d, d, a.missile > 0.0 ? a.missile : bed_l}, Vec3{-cab_l * 0.5, y, 1.4 + d * 0.5}, "#dedad0", 'x'));
+            }
         } else {
             o.push_back(P(Shape::Box, Vec3{L - cab_l - 0.4, W, bed_h - 1.0}, Vec3{-cab_l * 0.5, 0.0, 1.0 + (bed_h - 1.0) * 0.5}, a.body == "box" ? c : c2));
         }
         Wheels(o, L, W, 1.0, 3, dark);
         if (a.radar == "bar") {
+            // span_m and antenna_h_m: the array's own width and height where the data gives them (the P-19's 7 by 1.6 m).
+            const double bw = a.span > 0.0 ? a.span : 7.0, bh = a.antenna_h > 0.0 ? a.antenna_h : 1.6;
             o.push_back(P(Shape::Cylinder, Vec3{0.25, 0.25, H - bed_h}, Vec3{-0.15 * L, 0.0, bed_h + (H - bed_h) * 0.5}, dark));
-            o.push_back(P(Shape::Box, Vec3{0.6, 7.0, 1.6}, Vec3{-0.15 * L, 0.0, H - 0.8}, c));
+            o.push_back(P(Shape::Box, Vec3{0.6, bw, bh}, Vec3{-0.15 * L, 0.0, H - bh * 0.5}, c));
         }
     } else if (arch == "launcher") {
         const double W = a.width;
@@ -237,6 +329,16 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
             o.push_back(P(Shape::Cylinder, Vec3{0.5, 0.5, a.missile}, Vec3{0.0, y, 1.8 + 0.25 * a.missile * std::sin(a.elevation * 3.141592653589793 / 180.0)},
                           "#dedad0", 'x', a.elevation));
         }
+    } else if (arch == "radar") {
+        // A radar post: its equipment cabin, the post the antenna turns on, and the antenna (span_m wide, antenna_h_m
+        // tall) at the top: the P-14's great array, a height finder's tall narrow one.
+        const double W = a.width;
+        const double cab_h = std::min(3.0, 0.25 * H);
+        const double ah = a.antenna_h > 0.0 ? a.antenna_h : 0.3 * S;
+        const double post = std::max(0.5, H - ah - cab_h);
+        o.push_back(P(Shape::Box, Vec3{L, W, cab_h}, Vec3{0.0, 0.0, cab_h * 0.5}, c));
+        o.push_back(P(Shape::Cylinder, Vec3{0.6, 0.6, post}, Vec3{0.0, 0.0, cab_h + post * 0.5}, dark));
+        o.push_back(P(Shape::Box, Vec3{0.6, S, ah}, Vec3{0.0, 0.0, cab_h + post + ah * 0.5}, c2));
     } else if (arch == "gun") {
         o.push_back(P(Shape::Box, Vec3{0.6 * L, a.width, 0.7}, Vec3{0.0, 0.0, 0.35}, c));
         o.push_back(P(Shape::Box, Vec3{0.8, 1.2, 0.9}, Vec3{0.0, 0.0, 1.15}, c));
@@ -301,7 +403,8 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
 class ModelLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, ModelLibrary& out) {
-        if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "models"})) {
+        if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "systems", "kinds",
+                             "models"})) {
             return false;
         }
         if (!Map(root, "colours", out.colours) || !Map(root, "fallbacks", out.fallbacks) || !Map(root, "ground", out.ground)) return false;
@@ -316,12 +419,13 @@ public:
             ModelDef m;
             Params a;
             if (!Keys(v, p, {"id", "name", "archetype", "length_m", "span_m", "width_m", "height_m", "diameter_m", "rotor_m", "missile_m",
-                             "elevation_deg", "engines", "axles", "missiles", "rails", "barrels", "biplane", "high_wing", "wings", "turret",
+                             "antenna_h_m", "elevation_deg", "engines", "axles", "missiles", "rails", "barrels", "biplane", "high_wing", "wings", "turret",
                              "mast", "cab", "gun", "tower", "wing", "tail", "radar", "body", "roof", "crown", "colour", "colour2", "notes"}) ||
                 !RequireString(v, p, "id", m.id) || !RequireString(v, p, "name", m.name) || !RequireString(v, p, "archetype", m.archetype) ||
                 !OptionalNumber(v, p, "length_m", a.length) || !OptionalNumber(v, p, "span_m", a.span) || !OptionalNumber(v, p, "width_m", a.width) ||
                 !OptionalNumber(v, p, "height_m", a.height) || !OptionalNumber(v, p, "diameter_m", a.diameter) ||
                 !OptionalNumber(v, p, "rotor_m", a.rotor) || !OptionalNumber(v, p, "missile_m", a.missile) ||
+                !OptionalNumber(v, p, "antenna_h_m", a.antenna_h) ||
                 !OptionalNumber(v, p, "elevation_deg", a.elevation) || !OptionalInt(v, p, "engines", a.engines) ||
                 !OptionalInt(v, p, "axles", a.axles) || !OptionalInt(v, p, "missiles", a.missiles) || !OptionalInt(v, p, "rails", a.rails) ||
                 !OptionalInt(v, p, "barrels", a.barrels) || !OptionalBool(v, p, "biplane", a.biplane) ||
@@ -353,6 +457,33 @@ public:
         }
         for (const auto& kv : out.ground) {
             if (out.Find(kv.second) == nullptr) return Fail(Join("ground", kv.first), "no such model: " + kv.second);
+        }
+        return Sites(root, "systems", out.systems, out) && Sites(root, "kinds", out.kinds, out);
+    }
+
+    // "systems" (an air defence system's site) and "kinds" (a theatre object kind's): {id: {"models": [[model id, count],
+    // ...], "spread_m": n}}.
+    bool Sites(const json::Value& root, const char* key, std::map<std::string, ModelLibrary::SiteDef>& sites, const ModelLibrary& out) {
+        const json::Value* v = root.Find(key);
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Object)) return Fail(key, "expected {id: site}");
+        for (std::size_t k = 0; k < v->keys.size(); ++k) {
+            const std::string p = Join(key, v->keys[k]);
+            const json::Value& s = v->items[k];
+            ModelLibrary::SiteDef site;
+            if (!Keys(s, p, {"models", "spread_m", "notes"}) || !OptionalNumber(s, p, "spread_m", site.spread_m)) return false;
+            const json::Value* ms = s.Find("models");
+            if (ms == nullptr || !ms->Is(json::Type::Array) || ms->items.empty()) return Fail(Join(p, "models"), "required: [[model, count], ...]");
+            for (std::size_t i = 0; i < ms->items.size(); ++i) {
+                const json::Value& e = ms->items[i];
+                if (!e.Is(json::Type::Array) || e.items.size() != 2 || !e.items[0].Is(json::Type::String) || !e.items[1].Is(json::Type::Number) ||
+                    e.items[1].number < 1.0) {
+                    return Fail(Index(Join(p, "models"), i), "[model id, count >= 1]");
+                }
+                if (out.Find(e.items[0].string) == nullptr) return Fail(Index(Join(p, "models"), i), "no such model: " + e.items[0].string);
+                site.models.push_back({e.items[0].string, static_cast<int>(e.items[1].number + 0.5)});
+            }
+            sites[v->keys[k]] = site;
         }
         return true;
     }

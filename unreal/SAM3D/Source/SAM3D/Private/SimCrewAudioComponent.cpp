@@ -6,12 +6,13 @@
 #include "HAL/IConsoleManager.h"
 #include "Sound/SoundWaveProcedural.h"
 #include "SimCoreIncludes.h"
+#include "SimOsaVehicle.h"
 #include "SimWorldSubsystem.h"
 
 namespace
 {
 	TAutoConsoleVariable<int32> CVarAudio(TEXT("sam3d.Audio"), 1,
-		TEXT("Cabin audio: the radio's hiss and call tone in the commander's headset (0 off)."));
+		TEXT("Cabin audio: the radio's hiss and call tone in the player's headset while his box is on a set (0 off)."));
 }
 
 USimCrewAudioComponent::USimCrewAudioComponent()
@@ -58,16 +59,25 @@ void USimCrewAudioComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		ToneLevel.store(0.0f);
 		return;
 	}
-	const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner);
+	// The player's own headset: a seat whose box is on the intercom hears no set (simcore::HeadsetSoundNow).
+	const ASimOsaVehicle* Vehicle = Cast<ASimOsaVehicle>(GetOwner());
+	const FString Seat = Vehicle != nullptr ? Vehicle->GetStationId() : FString();
+	if (Seat.IsEmpty())
+	{
+		HissLevel.store(0.0f);
+		ToneLevel.store(0.0f);
+		return;
+	}
+	const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner, TCHAR_TO_UTF8(*Seat));
 	HissLevel.store(static_cast<float>(H.hiss) * Volume);
 	ToneLevel.store(H.tone ? 0.25f * Volume : 0.0f);
-
 }
 
 void USimCrewAudioComponent::Generate(USoundWaveProcedural* InWave, int32 SamplesRequired)
 {
 	// Band-limited noise (a first-order high-pass near 300 Hz and low-pass near 3 kHz: a voice channel's band) and the
-	// call tone at 1 kHz. 16-bit mono.
+	// call tone at 1 kHz. 16-bit mono. The open hiss (0.35) comes out near -28 dBFS, some 20 dB under a voice on the
+	// radio: a bed under the words that the suppressor (ШУМЫ) silences, not a roar over them.
 	const float Hiss = HissLevel.load();
 	const float Tone = ToneLevel.load();
 	const int32 Count = FMath::Max(SamplesRequired, 512);
@@ -82,7 +92,7 @@ void USimCrewAudioComponent::Generate(USoundWaveProcedural* InWave, int32 Sample
 		LowState += LowA * (White - LowState);
 		HighState = HighA * (HighState + LowState - HighIn);
 		HighIn = LowState;
-		float Sample = 2.5f * Hiss * HighState;
+		float Sample = 0.6f * Hiss * HighState;
 		if (Tone > 0.0f)
 		{
 			Sample += Tone * static_cast<float>(FMath::Sin(TonePhase));

@@ -10,6 +10,7 @@
 //    "seed": 7, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -86,8 +87,12 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "radars_suppressed", Strings(o.radars_suppressed));
     Put(v, "emissions", Pairs(o.emissions));
     Put(v, "fired", Strings(o.fired));
+    Put(v, "missiles_downed", Strings(o.missiles_downed));
     Put(v, "recce_seen", Strings(o.recce_seen));
     Put(v, "missiles_spent", Num(o.missiles_spent));
+    std::vector<std::pair<std::string, double>> by;
+    for (const auto& m : o.missiles_by) by.push_back({m.first, static_cast<double>(m.second)});
+    Put(v, "missiles_by", Pairs(by));
     Put(v, "arms_fired", Num(o.arms_fired));
     Put(v, "aborted", Bool(o.aborted));
     Put(v, "delivered", Bool(o.delivered));
@@ -209,8 +214,10 @@ public:
         o.radars_suppressed = Strings(v, "radars_suppressed");
         o.emissions = Pairs(v, "emissions");
         o.fired = Strings(v, "fired");
+        o.missiles_downed = Strings(v, "missiles_downed");
         o.recce_seen = Strings(v, "recce_seen");
         o.missiles_spent = Int(v, "missiles_spent");
+        for (const auto& m : Pairs(v, "missiles_by")) o.missiles_by.push_back({m.first, static_cast<int>(std::lround(m.second))});
         o.arms_fired = Int(v, "arms_fired");
         o.aborted = Boolean(v, "aborted");
         o.delivered = Boolean(v, "delivered");

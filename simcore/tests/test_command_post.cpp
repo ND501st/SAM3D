@@ -161,7 +161,9 @@ SC_TEST("command post: a cabled radar's targets are taken off by the commander's
                                              Target("d", 0, 16000, 1000)};
     p.Update(0.0, {}, radar, in);
     SC_EXPECT(p.Tracks().size() == 1 && p.Tracks()[0].target_id == "a" && p.Tracks()[0].primary);
-    SC_EXPECT(p.Scope(50000.0).size() == 1 && p.Scope(50000.0)[0].primary);  // its echo on the IT-45 under the symbol
+    int symbols = 0, echoes = 0;
+    for (const CommandPost::ScopeMark& m : p.Scope(50000.0)) (m.raw ? echoes : symbols) += m.primary ? 1 : 0;
+    SC_EXPECT(symbols == 1 && echoes == 4);  // its symbol over its echo; the other three echoes painted, not yet taken
     p.Update(1.0, {}, radar, in);  // still taking the first off
     SC_EXPECT(p.Tracks().size() == 1);
     p.Update(2.0, {}, radar, in);
@@ -647,4 +649,254 @@ SC_TEST("command post scenario: the regiment's commands come by voice on the R-1
     }
     SC_EXPECT(heard);
     SC_EXPECT(r.PostFeedNow().command < 0);    // not on the tube: no telecode
+}
+
+// ---- The cabled radar (the 1984 GDR handbook's ASPD figure via flak11 PU12-0; p19_to 4.3.1, 4.3.3).
+
+SC_TEST("command post: every echo of the cabled radar is on the tube before anyone takes it off; a player takes it with the marker") {
+    CommandPost p = Exact();
+    CommandPost::Inputs in;
+    in.primary = true;
+    in.tube_free = true;
+    in.take_off_new = false;  // a player at the tube
+    const std::vector<BoardContact> radar{Target("a", 0, 20000, 1500), Target("b", 10000, 0, 800)};
+    p.Update(0.0, {}, radar, in);
+    int raw = 0, symbols = 0;
+    for (const CommandPost::ScopeMark& m : p.Scope(50000)) {
+        raw += m.raw ? 1 : 0;
+        symbols += m.raw ? 0 : 1;
+        if (m.raw) SC_EXPECT(m.number < 0 && m.primary);
+    }
+    SC_EXPECT(raw == 2 && symbols == 0);  // both echoes painted, neither has a number
+    SC_EXPECT(p.NextNewEcho() != nullptr && p.NextNewEcho()->target_id == "b");  // the nearest
+    // The marker on "a" (north, 20 of 50 km): taken off, numbered; the hands busy for take_off_s (2 s).
+    const int n = p.TakeOffAt(0.5, 0.0, 0.4, 50000, 0.05, 1.0);
+    SC_EXPECT(n >= 0 && p.Tracks().size() == 1 && p.Tracks()[0].target_id == "a" && p.Tracks()[0].primary);
+    SC_EXPECT(p.TakeOffAt(1.0, 0.2, 0.0, 50000, 0.05, 1.0) < 0);   // still writing the first
+    SC_EXPECT(p.TakeOffAt(3.0, 0.5, 0.5, 50000, 0.05, 1.0) < 0);   // nothing under the marker there
+    SC_EXPECT(p.TakeOffAt(3.0, 0.2, 0.0, 50000, 0.05, 1.0) >= 0);  // "b"
+    p.Update(3.5, {}, radar, in);
+    raw = symbols = 0;
+    for (const CommandPost::ScopeMark& m : p.Scope(50000)) {
+        raw += m.raw ? 1 : 0;
+        symbols += m.raw ? 0 : 1;
+    }
+    SC_EXPECT(raw == 2 && symbols == 2);  // the echoes stay; the symbols go over them
+    // Left to itself the semi-automatic round only refreshes what is held: a third echo waits for the player.
+    const std::vector<BoardContact> more{Target("a", 0, 20000, 1500), Target("b", 10000, 0, 800), Target("c", -5000, 5000, 500)};
+    for (double t = 4.0; t < 30.0; t += 0.5) p.Update(t, {}, more, in);
+    SC_EXPECT(p.Tracks().size() == 2);
+    in.take_off_new = true;  // an NPC at the tube takes it himself
+    for (double t = 30.0; t < 35.0; t += 0.5) p.Update(t, {}, more, in);
+    SC_EXPECT(p.Tracks().size() == 3);
+}
+
+SC_TEST("command post: an echo's IFF reply shows on the tube; the track limit holds for the marker too") {
+    AspdDef d = PlaceholderAspd();
+    d.semi_auto_tracks = 1;
+    CommandPost p = Exact(d);
+    CommandPost::Inputs in;
+    in.primary = true;
+    in.tube_free = true;
+    in.take_off_new = false;
+    p.Update(0.0, {}, {Target("friend", 0, 10000, 1000, 1), Target("x", 0, -10000, 1000, 9)}, in);
+    for (const CommandPost::ScopeMark& m : p.Scope(50000)) {
+        if (m.raw) SC_EXPECT(m.friendly == (m.y > 0.0));
+    }
+    SC_EXPECT(p.TakeOffAt(0.0, 0.0, 0.2, 50000, 0.05, 1.0) >= 0);
+    SC_EXPECT(!p.Tracks().empty() && p.Tracks()[0].friendly);
+    SC_EXPECT(p.TakeOffAt(5.0, 0.0, -0.2, 50000, 0.05, 1.0) < 0);  // one held of one
+    SC_EXPECT(p.NextNewEcho() == nullptr);
+}
+
+SC_TEST("command post: a transmitting post sends what it took off; another post receives it as its telecode") {
+    AspdDef d = PlaceholderAspd();
+    d.telecode_step_m = 1000;
+    CommandPost a = Exact(d);
+    CommandPost::Inputs in;
+    in.primary = true;
+    in.tube_free = true;
+    in.send = true;
+    const std::vector<BoardContact> radar{Target("a", 1200, 20400, 1500), Target("b", 10000, 0, 800)};
+    for (double t = 0.0; t < 10.0; t += 0.5) a.Update(t, {}, radar, in);
+    SC_EXPECT(a.Tracks().size() == 2);
+    // Sent once a cycle (10 s): the first cycle went at 0 s with one held; the next carries both.
+    a.Update(10.0, {}, radar, in);
+    SC_EXPECT(a.Sent().size() == 2);
+    for (const BoardContact& c : a.Sent()) {
+        SC_EXPECT_NEAR(std::fmod(std::fabs(c.position.x), 1000.0), 0.0, 1e-9);  // in the telecode's steps
+        SC_EXPECT_NEAR(std::fmod(std::fabs(c.position.y), 1000.0), 0.0, 1e-9);
+    }
+    // Post B, 10 km east, takes A's telecode in as its regiment's picture.
+    CommandPost b(d, PlaceholderBoard(), Vec3{10000, 0, 0}, 2);
+    CommandPost::Inputs bin;
+    bin.telecode = true;
+    b.Update(10.0, a.Sent(), {}, bin);
+    SC_EXPECT(b.Tracks().size() == 2 && !b.Tracks()[0].primary);
+    // Not sending: nothing new goes out.
+    in.send = false;
+    const double last = a.LastSentS();
+    for (double t = 10.5; t < 40.0; t += 0.5) a.Update(t, {}, radar, in);
+    SC_EXPECT_NEAR(a.LastSentS(), last, 1e-9);
+}
+
+namespace {
+
+// pu12m_deploy, deployed, with a P-19 cabled to the post `east`, `north` from it (and anything else spliced in).
+std::string CabledRadarScenario(double east, double north, const std::string& radar_extra = "", const std::string& regiment_extra = "") {
+    std::string t = ReadFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_deploy.json");
+    t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }", "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\"");
+    char radar[256];
+    std::snprintf(radar, sizeof(radar), "\"radar\": { \"type\": \"p19\", \"position\": { \"east_m\": %.0f, \"north_m\": %.0f, \"up_m\": 2 }%s }, \"regiment\": {%s",
+                  east, north, radar_extra.c_str(), regiment_extra.c_str());
+    return ReplaceOnce(t, "\"regiment\": {", radar);
+}
+
+}  // namespace
+
+SC_TEST("command post scenario: a radar beyond its cable's 300 m is refused") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(!LoadScenario(CabledRadarScenario(400, -300), SIMCORE_DATA_DIR, def, console, &error));
+    SC_EXPECT(error.find("cable reaches 300 m") != std::string::npos);
+    ScenarioDef ok_def;
+    ConsoleData ok_console;
+    SC_EXPECT(LoadScenario(CabledRadarScenario(150, -200), SIMCORE_DATA_DIR, ok_def, ok_console, &error));
+}
+
+SC_TEST("command post scenario: the cabled P-19's echoes paint at once, friends by their IFF reply; the NPC commander takes them off") {
+    std::string t = CabledRadarScenario(150, -200);
+    t = ReplaceOnce(t, "\"targets\": [",
+                    "\"targets\": [ { \"id\": \"own\", \"name\": \"Own transport (placeholder)\", \"type\": \"Air+FixedWing\", \"class\": \"transport\", \"iff\": \"friend\", "
+                    "\"start\": { \"east_m\": -20000, \"north_m\": 30000, \"up_m\": 3000 }, \"waypoints\": [ { \"east_m\": 20000, \"north_m\": 30000, \"up_m\": 3000 } ], "
+                    "\"speed_mps\": 120, \"rcs_m2\": 10, \"appear_at_s\": 0 },");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.post_radar.iff_interrogator);  // the P-19 with its 1L23-6 (p19_to 4.3.3)
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.Step(0.1);
+    SC_EXPECT(r.Console().equipment.IsReady("radar_cable_laid"));  // deployed: the cable laid
+    r.PlayerSet("fr.scale", 2);                                     // М100: both targets on the tube
+    for (int i = 0; i < 5; ++i) r.Step(0.1);
+    int raw = 0, friends = 0;
+    for (const CommandPost::ScopeMark& m : r.PostFeedNow().scope) {
+        raw += m.raw ? 1 : 0;
+        friends += m.raw && m.friendly ? 1 : 0;
+    }
+    SC_EXPECT(raw == 2 && friends == 1);  // the transport answers; the drone (board type 2) does not
+    for (int i = 0; i < 600; ++i) r.Step(0.1);
+    int held = 0;
+    for (const AspdTrack& k : r.Post()->Tracks()) held += k.primary ? 1 : 0;
+    std::printf("    %d of 2 taken off by the NPC commander; scale %.0f km\n", held, r.PostFeedNow().scale_m / 1000.0);
+    SC_EXPECT(held == 2);  // the NPC commander took both off
+}
+
+SC_TEST("command post scenario: deploying cold beside a radar, the NPC commander has the cable laid; without one he doesn't") {
+    for (const bool radar : {true, false}) {
+        std::string t = ReadFile(std::string(SIMCORE_DATA_DIR) + "/scenarios/pu12m_deploy.json");
+        if (radar) {
+            t = ReplaceOnce(t, "\"regiment\": {", "\"radar\": { \"type\": \"p19\", \"position\": { \"east_m\": 150, \"north_m\": -200, \"up_m\": 2 } }, \"regiment\": {");
+        }
+        ScenarioDef def;
+        ConsoleData console;
+        std::string error;
+        SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+        if (!error.empty()) std::printf("    %s\n", error.c_str());
+        ScenarioRunner r(std::move(def), std::move(console));
+        double laid_s = -1.0;
+        for (int i = 0; i < 15000 && laid_s < 0.0; ++i) {
+            r.Step(0.1);
+            if (r.Console().equipment.IsReady("radar_cable_laid")) laid_s = r.Time();
+        }
+        if (radar) std::printf("    the radar's cable laid at %.0f s\n", laid_s);
+        SC_EXPECT(radar ? laid_s > 0.0 : laid_s < 0.0);
+        SC_EXPECT(radar || r.Console().panel.Get("cable.radar") == 0);  // nobody walked out with a cable to nothing
+    }
+}
+
+SC_TEST("command post scenario: the cabled P-19 in the EM layer paints its echoes, and a jammer's strobe when one comes on") {
+    std::string t = CabledRadarScenario(150, -200);
+    t = ReplaceOnce(t, "\"radar\": {",
+                    "\"em\": { \"library\": \"em/p19.json\", \"radar\": \"p19\", \"extra_libraries\": [\"em/generic.json\"], "
+                    "\"jammers\": [ { \"jammer\": \"generic_soj_barrage_uhf\", \"position\": { \"east_m\": 2000, \"north_m\": 90000, \"up_m\": 8000 }, "
+                    "\"on_at_s\": 60 } ] }, \"radar\": {");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.has_post_em);
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.PlayerSet("fr.scale", 2);  // М100
+    for (int i = 0; i < 550; ++i) r.Step(0.1);
+    int raw = 0;
+    for (const CommandPost::ScopeMark& m : r.PostFeedNow().scope) raw += m.raw ? 1 : 0;
+    std::printf("    at 55 s: %d echoes from the EM layer, %d strobes\n", raw, static_cast<int>(r.PostFeedNow().strobes.size()));
+    SC_EXPECT(raw >= 1 && r.PostFeedNow().strobes.empty());  // the drone seen; no jamming yet
+    for (int i = 0; i < 450; ++i) r.Step(0.1);
+    const std::vector<em::ViewStrobe> strobes = r.PostFeedNow().strobes;
+    SC_EXPECT(!strobes.empty());
+    for (const em::ViewStrobe& s : strobes) std::printf("    strobe at %.1f deg, J/N %.0f dB\n", s.azimuth_deg, s.jn_db);
+    SC_EXPECT(!strobes.empty() && std::fabs(strobes.front().azimuth_deg - 1.3) < 5.0);  // the jammer, a little east of north
+    // The strobe goes off the tube with the picture: the source switch off the P-19's position.
+    r.PlayerSet("aspd.radar_source", 0);
+    for (int i = 0; i < 10; ++i) r.Step(0.1);
+    SC_EXPECT(r.PostFeedNow().strobes.empty());
+}
+
+SC_TEST("command post scenario: the radar's crew ring the post on the service line when it goes off the air and back") {
+    std::string t = CabledRadarScenario(150, -200, ", \"outages\": [ { \"from_s\": 20, \"to_s\": 60, \"reason\": \"ARM drill\" } ]");
+    t = ReplaceOnce(t, "\"comms\": \"gameplay/comms.json\",",
+                    "\"comms\": \"gameplay/comms.json\", \"lines\": [ { \"line\": 3, \"to\": \"radar\", \"to_name\": \"the P-19\" } ],");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    for (int i = 0; i < 400; ++i) r.Step(0.1);
+    bool off_heard = false;
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+        off_heard = off_heard || (m.net == "line 3" && m.text.find("Станция выключена") != std::string::npos && m.HeardAt("battery_commander"));
+    }
+    SC_EXPECT(off_heard);
+    int raw = 0;
+    for (const CommandPost::ScopeMark& m : r.PostFeedNow().scope) raw += m.raw ? 1 : 0;
+    SC_EXPECT(raw == 0);  // off the air: the tube goes empty of its echoes
+    for (int i = 0; i < 300; ++i) r.Step(0.1);
+    bool on_heard = false;
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+        on_heard = on_heard || (m.net == "line 3" && m.text.find("Станция включена") != std::string::npos);
+    }
+    SC_EXPECT(on_heard);
+}
+
+SC_TEST("command post scenario: the telecode comes by wire on ПРОВОД past a cold R-407; the post sends on only with the DTP set") {
+    const std::string t = CabledRadarScenario(150, -200, "", " \"telecode_wire\": true,");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, SIMCORE_DATA_DIR, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.PlayerSet("radio.fug5.power", 0);  // the R-407 off
+    r.PlayerSet("rk1.rx", 4);            // ПРИЕМ on ПРОВОД
+    r.PlayerSet("rk1.tx", 4);            // ПЕРЕДАЧА on ПРОВОД
+    for (int i = 0; i < 20; ++i) r.Step(0.1);
+    SC_EXPECT(r.Console().equipment.IsReady("telecode_reception"));
+    SC_EXPECT(r.Console().equipment.IsReady("telecode_sending"));
+    for (int i = 0; i < 300; ++i) r.Step(0.1);
+    SC_EXPECT(r.Post() != nullptr && !r.Post()->Sent().empty());  // what the commander took off goes on
+    r.PlayerSet("dtp.parallax", 0);
+    for (int i = 0; i < 5; ++i) r.Step(0.1);
+    SC_EXPECT(!r.Console().equipment.IsReady("telecode_sending") && !r.Console().equipment.IsReady("telecode_reception"));
+    // Back on the R-407's position with the set off: no telecode at all.
+    r.PlayerSet("dtp.parallax", 1);
+    r.PlayerSet("rk1.rx", 3);
+    for (int i = 0; i < 5; ++i) r.Step(0.1);
+    SC_EXPECT(!r.Console().equipment.IsReady("telecode_reception"));
 }

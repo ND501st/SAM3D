@@ -57,6 +57,7 @@
 #include "simcore/drill_master.hpp"
 #include "simcore/em/replication.hpp"
 #include "simcore/pu12.hpp"
+#include "simcore/radio_journal.hpp"
 #include "simcore/radio_setup.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/seat_duty.hpp"
@@ -142,6 +143,8 @@ public:
             engagement_.SetGyroOwnDrift(east ? o.own_drift_deg_h : -o.own_drift_deg_h);
             compass_ = CompassSurvey(o.survey_s, o.survey_sigma_deg, def_.seed * 40503u + 977u);
         }
+        // A radar to cable to the post is a fact of the position, there before any readiness (its cable laid in "deployed").
+        if (!console_.post_radar_here.empty()) console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         for (const auto& c : def_.initial_controls) console_.panel.Set(c.first, c.second);
         if (console_.has_launcher) {
@@ -158,6 +161,11 @@ public:
             for (const C2SourceDef& s : def_.c2_sources) c2_->AddSource(s, def_.unit_position);
             if (LinkedToPost()) c2_->SetExternal(def_.c2_policy.primary);  // the real PU-12M reads its designations out
             engagement_.SetAirPicture(c2_.get());
+        }
+        if (def_.has_post_em) {  // the cabled radar alone in an EM world of its own, standing where it stands
+            post_em_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed ^ 0x9e3779b9u, def_.post_em,
+                                                      def_.post_radar.position);
+            if (!post_em_->Ok()) Event("post radar", "the EM layer failed: the coverage model stands in");
         }
         if (def_.has_em && engagement_on_) {
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
@@ -192,6 +200,7 @@ public:
         RecordWorkPlaces();
         StartCallouts();
         StartMovers();
+        StartEmission();
         log_.Record({0.0, DebriefEntry::Kind::Scenario, std::string(), def_.id, "start: " + def_.name});
     }
 
@@ -208,6 +217,8 @@ public:
         UpdateOsaNet();
         UpdateIntercomCheck();
         UpdateBattery(dt);
+        UpdateEmission(dt);
+        UpdateNeighbourFire(dt);
         UpdateC2();
         UpdateRadios();
         UpdatePost();
@@ -260,7 +271,9 @@ public:
         }
         SeeInstruments();
         WatchScope();
+        WatchTrackSigns();
         ArmEmission();
+        QueryBurst();
         UpdateGrades();
         UpdateCallouts();
         UpdateTvRangeCallout();
@@ -389,6 +402,7 @@ public:
     // writing the last one. The tube is the commander's: the plotter does not copy it.
     bool PlayerPlot(int number) {
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return false;
+        RecallFromJournal(number);
         if (!post_->PlotHeard(time_, number, PlotterSpeed())) return false;
         ++plots_made_;
         return true;
@@ -399,6 +413,7 @@ public:
     CommandPost::PlotResult PlayerPlotAt(int number, double east_m, double north_m, double metres_per_board_m) {
         CommandPost::PlotResult r;
         if (!post_ || SeatHolder(console_.post_plotter).empty()) return r;
+        RecallFromJournal(number);
         r = post_->PlotAt(time_, number, Vec3{east_m, north_m, 0.0}, metres_per_board_m, def_.post_plotting, PlotterSpeed());
         if (r.ok) {
             ++plots_made_;
@@ -642,6 +657,7 @@ public:
             }
             a.speaking = callouts_ != nullptr && callouts_->SpeakingFrom(m.Role());
             a.stressed = m.Stressed();
+            a.stress = m.StressLevel();
             out.push_back(std::move(a));
         }
         return out;
@@ -771,6 +787,11 @@ public:
             return false;
         }
         Say("order_dismount", Cmdr());
+        LineUpCrew();
+        return true;
+    }
+    // The work of the two orders without their words (the order menu's orders speak their own: GiveCrewOrder).
+    void LineUpCrew() {
         for (CrewMember& c : crew_) {  // they leave what they are doing and get out
             Vec3 at;
             if (!SeatHolder(c.Role()).empty() || !def_.vehicle.LineupPoint(c.Role(), at)) continue;
@@ -778,7 +799,10 @@ public:
             c.StayAt("lineup");
         }
         Event(Cmdr(), "К машинам: the crew lines up beside the vehicle");
-        return true;
+    }
+    void MountCrew() {
+        for (CrewMember& c : crew_) c.StayAt(std::string());
+        Event(Cmdr(), "По местам: the crew mounts");
     }
     // The commander's order of one drill to a seat (a situational drill no order of the crew data starts: measure_qc).
     bool GiveDrill(const std::string& station, const std::string& procedure_id, bool queue = false) {
@@ -791,8 +815,7 @@ public:
     bool OrderMount() {
         if (!def_.has_vehicle) return false;
         Say("order_mount", Cmdr());
-        for (CrewMember& c : crew_) c.StayAt(std::string());
-        Event(Cmdr(), "По местам: the crew mounts");
+        MountCrew();
         return true;
     }
     // Can `to` hear `from` speaking aloud (not on the intercom)? Both inside: yes (the compartment). Otherwise by the
@@ -828,6 +851,15 @@ public:
     // ---- The crew's voice (roadmap 8.4, docs/crew/04_COMMANDS_AND_CALLOUTS.md): orders, acknowledgements, reports
     // and reminders as they were spoken (null without crew data). They also go to the radio log and the debrief.
     const CalloutBus* Callouts() const { return callouts_.get(); }
+    // The lengths of the recorded lines the game plays (crew_voice.hpp RecordedLineLengths, from `from`, its folder): a
+    // fixed line with a recording takes the recording's time on the bus and on the air, so the next line on the channel
+    // doesn't cut it off. Headless, nothing is played and every line takes SpeakingTimeS.
+    void SetRecordedLengths(std::map<std::string, double> lengths_s, std::string from) {
+        recorded_lengths_s_ = std::move(lengths_s);
+        recorded_lengths_from_ = std::move(from);
+        if (callouts_) callouts_->SetRecordedLengths(recorded_lengths_s_);
+    }
+    const std::string& RecordedLengthsFrom() const { return recorded_lengths_from_; }
     // The drill master on this console (null without crew data): the best move of any seat toward a task.
     const DrillMaster* Drill() const { return drill_.get(); }
     // The order menu's backend (roadmap 8.8): give a whole order of the crew data (an order callout id, e.g.
@@ -838,6 +870,17 @@ public:
         const OrderDef* o = def_.crew_data.FindOrder(order_id);
         if (o == nullptr) return false;
         if (shadow_) return ShadowOrder(order_id);  // the shadow commander only thinks it: the player's to give
+        // The emission regime (docs/crew/16_EMISSION.md): told to the crew with its numbers, or the battery's on its net.
+        if (order_id == "order_emission_regime" || order_id == "order_remind_bursts" || order_id == "order_remind_ssc") return TellRegime(order_id);
+        if (order_id.rfind("order_battery_emission_", 0) == 0) {
+            EmissionKind k = EmissionKind::Free;
+            if (!ParseEmissionKind(order_id.substr(23), k)) return false;
+            // The regime he owes (the regiment's, with its turns) when it is that kind; else his own with the data's turns.
+            const EmissionRegime r = pending_since_s_ >= 0.0 && pending_regime_.kind == k ? pending_regime_ : def_.emission.Make(k, "battery");
+            const bool done = OrderBatteryEmission(r, "Battery commander");
+            if (done) orders_given_.push_back({time_, order_id});
+            return done;
+        }
         // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
         if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
             order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment") {
@@ -853,16 +896,20 @@ public:
         }
         orders_given_.push_back({time_, order_id});
         SpeakOrder(order_id);
+        EmconOrderTells(order_id);
         if (order_id == "order_drop_target") drop_at_s_ = time_ + SpeakDelayS("operator") + 1.5;  // the wheels off the target
         quiet_orders_ = true;  // the order's own words were spoken: its drills don't each speak an order
         for (const OrderStart& s : o->procedures) {
             CrewMember* m = MemberAt(s.station);
             const Procedure* p = console_.FindProcedure(s.procedure);
+            if (routine_order_) routine_drills_.insert(s.station + "|" + s.procedure);
             if (m != nullptr && p != nullptr) GiveOrder(*m, *p, s.queue);
         }
         quiet_orders_ = false;
         for (const std::string& a : o->actions) {
             if (a == "compass_survey" && !engagement_.QcKnown() && !compass_.Running()) StartCompassSurvey();
+            if (a == "dismount" && def_.has_vehicle && def_.vehicle.lineup.present) LineUpCrew();
+            if (a == "mount" && def_.has_vehicle) MountCrew();
         }
         return true;
     }
@@ -896,6 +943,7 @@ public:
             if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
             if (order_id == "order_warn_covered" || order_id == "order_all_clear_covered") return "covered";
             if (order_id == "order_report_regiment") return "regiment";
+            if (order_id.rfind("order_battery_emission_", 0) == 0) return "battery";
             return std::string();
         };
         const std::string net = net_of();
@@ -912,11 +960,33 @@ public:
             if (!why.empty()) return refuse("нет связи: " + why, "no way on the net: " + why);
             return out;
         }
+        // The reminders: a regime with bursts told to the crew (the tracking transmitter's rule: the least emission).
+        if ((order_id == "order_remind_bursts" && !regime_crew_.Bursts()) || (order_id == "order_remind_ssc" && regime_crew_.kind != EmissionKind::Arm)) {
+            return refuse("экипажу не доведён режим с пачками излучения", "the crew has no regime of bursts to be reminded of");
+        }
         if (!o->task.empty()) {
             const CrewTask* t = def_.crew_data.FindTask(o->task);
             if (t != nullptr && !t->conditions.empty() && console_.equipment.AllHold(t->conditions, console_.panel)) {
                 return refuse("уже выполнено", "done already");
             }
+        }
+        for (const std::string& a : o->actions) {  // К машине and По местам: a vehicle with a line-up; not when it holds
+            if (a != "dismount" && a != "mount") continue;
+            if (!def_.has_vehicle || (a == "dismount" && !def_.vehicle.lineup.present)) {
+                return refuse("построения у машины нет", "no line-up for this vehicle");
+            }
+            bool holds = true;
+            for (const CrewMember& c : crew_) {
+                Vec3 at;
+                if (!SeatHolder(c.Role()).empty()) continue;
+                if (a == "dismount") {
+                    holds = holds && (!def_.vehicle.LineupPoint(c.Role(), at) || c.StaysAt() == "lineup");
+                } else {
+                    const CrewMover* mv = Mover(c.Role());
+                    holds = holds && c.StaysAt().empty() && (mv == nullptr || mv->Place() == BodyPlace::Seated);
+                }
+            }
+            if (holds) return refuse("уже выполнено", "done already");
         }
         for (const std::string& need : o->needs) {
             if (need == "contact") {
@@ -1064,6 +1134,11 @@ public:
     // Where the seat's NPC would bring a hand wheel now (with the helper on): the engagement's aim at the target the crew
     // is on. False when it would leave it where it is.
     bool WheelWant(const std::string& wheel, double& value) const { return engagement_on_ && engagement_.WheelWanted(wheel, value); }
+    // Why the equipment turns a hand wheel itself now ("" if a hand turns it): a player's drag on it does nothing then.
+    std::string WheelDriven(const std::string& wheel) const {
+        const char* why = engagement_on_ ? engagement_.WheelDrivenBy(console_, wheel) : nullptr;
+        return why != nullptr ? std::string(why) : std::string();
+    }
     // The next step of a drill a seat owes (SeatDuty::Kind::Drill): the first whose switch isn't where the step puts it,
     // or whose button that seat hasn't pressed since `since_s`. Null: all done.
     const ProcedureStep* DrillNextStep(const std::string& procedure, const std::string& seat, double since_s) const {
@@ -1213,6 +1288,27 @@ public:
     bool SeatTurn(const std::string& role, const std::string& wheel_id, double value, std::string* why = nullptr) {
         Seat* st = FindSeat(role);
         if (st == nullptr || !AtStation(role, wheel_id, why)) return false;
+        const std::string driven = WheelDriven(wheel_id);
+        if (!driven.empty()) {  // the equipment turns it now: a hand on it changes nothing
+            if (why != nullptr) *why = "Hands off: " + driven;
+            return false;
+        }
+        const ControlDef* d = console_.panel.Find(wheel_id);
+        if (d != nullptr && !d->guard_id.empty() && console_.panel.Get(d->guard_id) < 1) {
+            const ControlDef* g = console_.panel.Find(d->guard_id);
+            if (why != nullptr) *why = "Locked: release the lock first" + (g != nullptr && !g->label.empty() ? " (" + g->label + ")" : std::string());
+            return false;
+        }
+        // Turned on against its stop (the tracking antenna's ±330°): nothing moves.
+        const double before = console_.panel.GetValue(wheel_id);
+        if (d != nullptr && !d->wraps && ((value > d->max_value && before >= d->max_value) || (value < d->min_value && before <= d->min_value))) {
+            if (why != nullptr) {
+                char buf[64];
+                std::snprintf(buf, sizeof buf, "At its stop (%g): turn it back", value > d->max_value ? d->max_value : d->min_value);
+                *why = buf;
+            }
+            return false;
+        }
         st->last_action_s = time_;
         const bool moved = console_.panel.SetValue(wheel_id, value);
         seat_actions_.push_back({time_, role, wheel_id, 0, value, true, moved, StepResult::ProcedureComplete});
@@ -1256,10 +1352,14 @@ public:
     // commander's «к бою готов» and his read-back of a target the battery commander gave him.
     std::vector<std::string> PlayerRadioReports(const std::string& station) const {
         std::vector<std::string> out;
-        if (!c2_ || station != Cmdr() || !def_.has_crew_data) return out;
-        for (const char* id : {"report_ready", "readback"}) {
-            if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
+        if (station != Cmdr() || !def_.has_crew_data) return out;
+        if (c2_) {
+            for (const char* id : {"report_ready", "readback"}) {
+                if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
+            }
         }
+        // An ARM attack reported to the battery commander (refused until he has heard a sign of one).
+        if ((battery_ || LinkedToPost()) && def_.crew_data.FindCallout("report_arm_attack") != nullptr) out.push_back("report_arm_attack");
         return out;
     }
     // Targets given this vehicle on the battery net that its commander heard (the PU-12's designations), so far.
@@ -1269,6 +1369,9 @@ public:
     int KillCalls() const { return kill_calls_; }
     int KillCallsWrong() const { return kill_calls_wrong_; }
     int StillFlyingCalls() const { return still_flying_; }
+    // Kill reports the commander took back on the battery net; whether this runner (a post) holds a target destroyed.
+    int KillReportsTakenBack() const { return kill_reports_taken_back_; }
+    bool BelievesDestroyed(const std::string& target) const { return reported_kills_.count(target) != 0; }
 
     // A target held "on_cue" appears now (a lesson brings it in at the learner's pace). False if there is no such
     // target held.
@@ -1355,6 +1458,21 @@ public:
             }
             out += line;
         }
+        if (post_ && !console_.post_journal_keeper.empty() && (!journal_.Written().empty() || journal_.Forgotten() > 0)) {
+            int by_hand = 0, digits = 0, right = 0, brief = 0, wrong = 0;
+            for (const RadioJournalEntry& e : journal_.Written()) {
+                by_hand += e.by_hand ? 1 : 0;
+                digits += e.digits;
+                right += e.digits_right;
+                brief += e.brief ? 1 : 0;
+                wrong += !e.brief && e.text != e.said ? 1 : 0;
+            }
+            std::snprintf(line, sizeof(line), "  The radio journal: %d written (%d by hand, %d of %d digits as said; %d short), %d not as said, %d lost unwritten\n",
+                          static_cast<int>(journal_.Written().size()), by_hand, right, digits, brief, wrong, journal_.Forgotten());
+            out += line;
+            std::snprintf(line, sizeof(line), "  Plotted from the journal's page: %d (%d of them as the page had it wrong)\n", journal_reads_, journal_reads_wrong_);
+            out += line;
+        }
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             const CrewMember& c = crew_[i];
             const auto it = reminders_to_.find(c.Role());
@@ -1418,7 +1536,14 @@ private:
         for (const auto& in : def_.initial_inputs) console_.equipment.SetInput(in.first, in.second);
         console_.equipment.Update(0.0, console_.panel);
         for (const std::string& id : st.ready) {
-            if (!console_.equipment.Warm(id, console_.panel)) {
+            // Left cold for want of a world fact (no radar here to cable) is the position's, not the state's fault.
+            bool world_lacks = false;
+            if (const SubsystemDef* d = console_.equipment.Def(id)) {
+                for (const Condition& c : d->enable) {
+                    world_lacks = world_lacks || (c.kind == Condition::Kind::InputIs && !console_.equipment.Holds(c, console_.panel));
+                }
+            }
+            if (!console_.equipment.Warm(id, console_.panel) && !world_lacks) {
                 Event(id, "not commanded on in readiness '" + st.id + "': left cold");
             }
             console_.equipment.Update(0.0, console_.panel);
@@ -1729,7 +1854,10 @@ private:
         for (std::size_t i = 0; i < def_.battery_orders.size(); ++i) {
             if (battery_orders_done_[i] || def_.battery_orders[i].at_s > time_ + 1e-9) continue;
             battery_orders_done_[i] = 1;
-            battery_->Order(def_.battery_orders[i], time_);
+            const BatteryOrder& o = def_.battery_orders[i];
+            // The regime ordered at 0 s is the combat order's: the commander knows it before the battery deploys.
+            if (o.at_s <= 0.0 && (o.kind == BatteryOrder::Kind::Emcon || o.kind == BatteryOrder::Kind::Emission)) regime_from_combat_order_ = true;
+            battery_->Order(o, time_);
         }
         if ((c2_ || post_) && !air_threat_forced_) {
             // The battery commander reads the board (he is in the post): a track that will reach the edge of the
@@ -2037,9 +2165,23 @@ private:
             }
             r407_link_ = link;
             SetRadioInput(b.Input("link"), link);
-            const bool rk1 = console_.panel.Find("rk1.rx") == nullptr ||
-                             (console_.panel.Get("rk1.rx") == 3 && (console_.panel.Find("rk1.code") == nullptr || console_.panel.Get("rk1.code") == 1));
-            SetRadioInput(b.Input("telecode"), link && R407::ToEquipment(in) && rk1);
+            // The telecode reaches the ASPD-U by radio (the RK-1U's ПРИЕМ on Р-407) or by a telecode line from the regiment
+            // (ПРИЕМ on ПРОВОД; flak11 PU12-0: "per Funk oder Draht"): the line past any jamming and the set's reach, while
+            // the regiment sends at all.
+            const int rk1_rx = console_.panel.Find("rk1.rx") == nullptr ? 3 : console_.panel.Get("rk1.rx");
+            const bool rk1_code = console_.panel.Find("rk1.code") == nullptr || console_.panel.Get("rk1.code") == 1;
+            const bool by_radio = link && R407::ToEquipment(in) && rk1_rx == 3 && rk1_code;
+            const bool by_wire = def_.post_regiment.telecode_wire && rk1_rx == 4 && rk1_code && def_.post_regiment.telecode && !off_air;
+            SetRadioInput(b.Input("telecode"), by_radio || by_wire);
+            // The post's own telecode out (a transmitting post, flak11 PU12-0's figure: the RK-1's send side): ПЕРЕДАЧА on
+            // Р-407 with the set reaching the regiment's receiver in duplex, or on ПРОВОД down the telecode line.
+            if (!console_.post_telecode_out.empty()) {
+                const int rk1_tx = console_.panel.Find("rk1.tx") == nullptr ? 3 : console_.panel.Get("rk1.tx");
+                const bool out_radio = rk1_tx == 3 && rk1_code && R407::ToEquipment(in) &&
+                                       r407_->SendLink(in, plan.telecode_return_hz, distance, off_air || !def_.post_regiment.telecode);
+                const bool out_wire = rk1_tx == 4 && rk1_code && def_.post_regiment.telecode_wire;
+                SetRadioInput(console_.post_telecode_out, out_radio || out_wire);
+            }
             SetRadioInput(b.Input("call_radio"), time_ < r407_call_until_);
             SetRadioInput(b.Input("call_wire"), false);
         }
@@ -2060,6 +2202,7 @@ private:
         bool ringing = false;
         double ring_from_s = 0.0;
         std::string text;                            // what the far end will say once answered
+        std::vector<std::string> queued;             // the far end's calls waiting for the line (the radar crew's)
     };
     std::map<int, LineState> lines_;
     std::map<std::string, double> box_call_until_;   // an input -> lit until
@@ -2103,7 +2246,8 @@ private:
             r.extra_s = ShoutS();
             return r;
         }
-        if (!def.to.empty() && voice_->Unboxed(def.to)) {
+        // To a seat with no box, or whose headset is off: he hears only the cabin, so it is said aloud.
+        if (!def.to.empty() && (voice_->Unboxed(def.to) || (voice_->BoxOf(def.to) != nullptr && !voice_->HeadsetOn(def.to)))) {
             r.channel = "cabin";
             return r;
         }
@@ -2127,6 +2271,19 @@ private:
             if (HeardBy(s, st.id)) out.push_back(st.id);
         }
         return out;
+    }
+    // Whether a seat listens to a channel (CalloutBus::SetListens: an NPC doesn't start a line while another channel talks
+    // in his ear): the intercom by his box, the battery net by his box's set, the cabin while he is inside.
+    bool Listens(const std::string& station, const std::string& channel) const {
+        if (!voice_ || console_.FindStation(station) == nullptr) return false;
+        if (channel == "cabin") return !Outside(station);
+        if (channel == "intercom") return !Outside(station) && voice_->HearsIntercom(station);
+        if (channel == "battery net") {
+            for (const std::string& h : BatteryNetHearers()) {
+                if (h == station) return true;
+            }
+        }
+        return false;
     }
     // Did `station` hear a callout said on the intercom or aloud? The intercom only inside (a man out of the vehicle has
     // his headset off its box); aloud only within earshot (InEarshot: always so inside the compartment).
@@ -2608,6 +2765,12 @@ private:
                 st.ring_from_s = time_;
                 st.text = l.calls[st.next_call++].text;
                 Event("line " + std::to_string(l.line), l.to_name + " rings");
+            } else if (!st.ringing && !st.queued.empty()) {
+                st.ringing = true;
+                st.ring_from_s = time_;
+                st.text = st.queued.front();
+                st.queued.erase(st.queued.begin());
+                Event("line " + std::to_string(l.line), l.to_name + " rings");
             }
             if (st.ringing) {
                 // Answered: the commander's lever up with his headset on (an NPC commander raises it himself).
@@ -2785,28 +2948,105 @@ public:
     }
     // The player at the radiotelephonist's seat (or any seat hearing the air picture) reads the oldest held report out to
     // the plotter. False if none is held, or his box isn't on the air-picture net.
+    // With a journal it is the keeper, reading from the page: only a report already written there.
     bool PlayerReadOutAirReport(const std::string& seat) {
-        if (!post_ || !callouts_ || post_->Held().empty() || !SeatHearsNet(seat, "air_picture")) return false;
-        const CommandPost::AirReport r = post_->Held().front();
-        ReadOut(seat, r);
+        if (!post_ || !callouts_ || post_->Held().empty()) return false;
+        if (console_.post_journal_keeper.empty()) {
+            if (!SeatHearsNet(seat, "air_picture")) return false;
+            ReadOut(seat, post_->Held().front());
+            return true;
+        }
+        if (seat != console_.post_journal_keeper) return false;
+        for (const CommandPost::AirReport& r : post_->Held()) {
+            if (!InJournal(r)) continue;
+            ReadOut(seat, r);
+            return true;
+        }
+        return false;
+    }
+    // The board numbers the plotter can write now: the reports he heard, and those he can read in the journal that are not
+    // on the board since (he finds them on the page, not on a screen).
+    std::vector<int> PlotterReportNumbers() const {
+        std::vector<int> out;
+        if (!post_) return out;
+        for (const CommandPost::AirReport& h : post_->Heard()) out.push_back(h.number);
+        for (const RadioJournalEntry& e : journal_.Legible(time_)) {
+            CommandPost::AirReport r;
+            if (!JournalReport(e, r) || OnBoardSince(e.said_number, e.heard_s)) continue;
+            if (std::find(out.begin(), out.end(), e.number) == out.end()) out.push_back(e.number);
+        }
+        return out;
+    }
+    const RadioJournal& Journal() const { return journal_; }
+    // The player radiotelephonist takes a message down (radio_journal.hpp's dictation): his pencil on the page starts
+    // the oldest one he heard and hasn't written (or the line he left half-written); digits fill its boxes; Finish
+    // writes it as it stands, `brief` the number and the time only. False if the seat isn't the journal's keeper's held
+    // by a player, or (Begin) with nothing to write.
+    bool JournalBegin(const std::string& seat) {
+        if (!PlayerKeeps(seat)) return false;
+        return journal_.BeginDraft(time_);
+    }
+    bool JournalType(const std::string& seat, char digit) {
+        if (!PlayerKeeps(seat) || journal_.Draft() == nullptr) return false;
+        journal_.Type(digit);
         return true;
+    }
+    bool JournalRub(const std::string& seat) {
+        if (!PlayerKeeps(seat) || journal_.Draft() == nullptr) return false;
+        journal_.Rub();
+        return true;
+    }
+    bool JournalNextBox(const std::string& seat, int step) {
+        if (!PlayerKeeps(seat) || journal_.Draft() == nullptr) return false;
+        journal_.NextBox(step);
+        return true;
+    }
+    bool JournalFinish(const std::string& seat, bool brief) {
+        if (!PlayerKeeps(seat) || !journal_.Finish(time_, brief)) return false;
+        const RadioJournalEntry& e = journal_.Written().back();
+        char line[160];
+        std::snprintf(line, sizeof(line), "wrote in the journal%s: %d of %d digits as said", e.brief ? " (short form)" : "", e.digits_right, e.digits);
+        Event(seat, line);
+        return true;
+    }
+    bool PlayerKeeps(const std::string& seat) const {
+        return post_ && !console_.post_journal_keeper.empty() && seat == console_.post_journal_keeper && !SeatHolder(seat).empty();
     }
 
 private:
     // A held report read out to the plotter (the callout "air_report", aloud beside him); heard, it goes to his hand.
-    std::set<int> reading_out_;
+    // With a journal it is read from the page: as written, right or wrong.
+    std::map<int, CommandPost::AirReport> reading_out_;  // the number it was said under -> the report as read out
     void ReadOut(const std::string& seat, const CommandPost::AirReport& r) {
         if (reading_out_.count(r.number) != 0) return;
-        reading_out_.insert(r.number);
+        CommandPost::AirReport read = r;
+        if (!console_.post_journal_keeper.empty()) {
+            const RadioJournalEntry* e = journal_.AirReport(r.number, r.heard_s - 2.0, time_);
+            if (e == nullptr || !JournalReport(*e, read)) return;
+        }
+        reading_out_[r.number] = read;
         KnownTarget k;
-        k.target = r.contact.target_id;
+        k.target = read.contact.target_id;
         k.number = r.number;
-        callouts_->Say(time_, "air_report", seat, {{"report", r.text}}, NpcAt(seat) ? SpeakDelayS(seat) : 0.0, &k);
+        callouts_->Say(time_, "air_report", seat, {{"report", read.text}}, NpcAt(seat) ? SpeakDelayS(seat) : 0.0, &k);
     }
+    // A report heard while the plotter was off FuG-1 (held): with a journal, it is read to him from the page, so only once
+    // written; an NPC plotter reads the page himself (PlotterReadsJournal).
     void RelayAirPicture() {
         if (!post_ || !voice_ || !callouts_) return;
+        const std::string& keeper = console_.post_journal_keeper;
+        if (!keeper.empty() && SeatHolder(console_.post_plotter).empty()) return;
         for (const CommandPost::AirReport& r : post_->Held()) {
             if (reading_out_.count(r.number) != 0) continue;
+            if (!keeper.empty()) {
+                const RadioJournalEntry* e = journal_.AirReport(r.number, r.heard_s - 2.0, time_);
+                CommandPost::AirReport readable;
+                if (e == nullptr || !JournalReport(*e, readable)) continue;  // not written, or written so it can't be read out
+                SeatDuty d = SeatDuty::Report(keeper, "air_report", "a report the plotter did not hear, written in the journal: read it to him");
+                d.number = r.number;
+                if (NpcDoes(keeper, d)) ReadOut(keeper, r);
+                continue;
+            }
             std::string reader;
             for (const std::string& s : NetHearers("air_picture")) {
                 if (reader.empty() && NpcAt(s) && s != console_.post_plotter) reader = s;
@@ -2820,6 +3060,116 @@ private:
                 SeatDuty d = SeatDuty::Report(s, "air_report", "an air report heard: read it out to the plotter");
                 d.number = r.number;
                 NpcDoes(s, d);
+            }
+        }
+    }
+
+    // ---- the radiotelephonist's journal (radio_journal.hpp; pvo_bu_x_1984 art. 24): every message the post's radios
+    // carry that he hears, written by hand, one at a time; the page is the only way back to a message missed.
+    RadioJournal journal_;
+    std::map<int, CommandPost::AirReport> journal_air_;  // each board number's latest air report heard, for the page's entry
+    int journal_press_ = 0;
+    int journal_reads_ = 0, journal_reads_wrong_ = 0;    // reports plotted from the page, and those it had wrong
+    // Does the journal's keeper hear this net now (his box on its set; everyone with no voice paths)?
+    bool KeeperHears(const std::string& label) const {
+        const std::string& keeper = console_.post_journal_keeper;
+        if (keeper.empty()) return false;
+        if (!voice_) return true;
+        return SeatHearsNet(keeper, NetIdOf(label));
+    }
+    // Is this air report (as said) written legibly in the journal?
+    bool InJournal(const CommandPost::AirReport& r) const { return journal_.AirReport(r.number, r.heard_s - 2.0, time_) != nullptr; }
+    // A mark of this board number on the board since `since_s`?
+    bool OnBoardSince(int number, double since_s) const {
+        if (!post_) return false;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (m.number == number && m.time_s + 1e-9 >= since_s) return true;
+        }
+        return false;
+    }
+    // The air report as a journal entry has it: what was said, read through what was written (a wrong digit puts it
+    // elsewhere, a wrong number makes a second track). False for a message that is no air report, a stale one, or an
+    // entry that doesn't read as a report (the short form, an empty box).
+    bool JournalReport(const RadioJournalEntry& e, CommandPost::AirReport& out) const {
+        if (!post_ || e.said_number <= 0 || time_ - e.heard_s > post_->Def().air_net_period_s) return false;
+        const auto it = journal_air_.find(e.said_number);
+        if (it == journal_air_.end() || std::fabs(it->second.heard_s - e.heard_s) > 2.0) return false;
+        return post_->FromWords(it->second, e.text, out);
+    }
+    // Writes a report read off the page onto the board (a plotter reading it, or hearing it read to him from it).
+    void TakeFromPage(const RadioJournalEntry& e, const CommandPost::AirReport& r) {
+        if (!post_->Recall(r, time_, e.said_number)) return;
+        ++journal_reads_;
+        if (e.text != e.said) ++journal_reads_wrong_;
+        Event(console_.post_plotter, "read from the journal: " + e.text + (e.text != e.said ? "  (said: " + e.said + ")" : std::string()));
+    }
+    // The keeper writes: an NPC the oldest message waiting whenever he is free, now and then a digit wrong (his tier's
+    // slip_chance); a player takes it down as dictation, his pencil on the page (journal_write, or the page itself in
+    // the cabin: JournalBegin). A message not written in time is lost.
+    void UpdateJournal() {
+        const std::string& keeper = console_.post_journal_keeper;
+        if (!post_ || keeper.empty()) return;
+        const AspdDef& a = post_->Def();
+        const int lost = journal_.Forgotten();
+        journal_.Forget(time_, a.journal_remember_s);
+        if (journal_.Forgotten() > lost) Event(keeper, "a message heard and never written in the journal");
+        const int press = console_.panel.Get(console_.post_journal_write);
+        const bool pressed = press == 1 && journal_press_ != 1;
+        journal_press_ = press;
+        if (journal_.Waiting().empty() || journal_.Busy(time_)) return;
+        const double speed = SeatSpeed(keeper);
+        const double write_s = a.journal_write_s / (speed > 0.1 ? speed : 0.1);
+        if (NpcDoes(keeper, SeatDuty::Control(keeper, console_.post_journal_write, 1, "a message heard: write it in the journal"))) {
+            const CrewMember* m = MemberAt(keeper);
+            if (m != nullptr && m->IsBusy()) return;
+            const SkillTier* t = TierAt(keeper);
+            const bool slip = t != nullptr && static_cast<double>(hear_rng_()) / 4294967296.0 < t->slip_chance;
+            journal_.WriteNext(time_, write_s, slip ? static_cast<int>(hear_rng_() % 1000u) : -1);
+        } else if (pressed) {
+            journal_.BeginDraft(time_);
+        }
+    }
+    // The NPC plotter, with nothing heard waiting, looks over the journal for a report he has not written: one that came
+    // while his box was off FuG-1, or one he didn't take in (his tier's miss_chance). He writes it as the page has it.
+    void PlotterReadsJournal() {
+        if (!post_ || console_.post_journal_keeper.empty() || !SeatHolder(console_.post_plotter).empty() || !post_->Heard().empty()) return;
+        const CrewMember* plotter = MemberAt(console_.post_plotter);
+        if (plotter == nullptr || plotter->IsBusy()) return;
+        for (const RadioJournalEntry& e : journal_.Legible(time_)) {
+            CommandPost::AirReport r;
+            if (!JournalReport(e, r) || OnBoardSince(e.said_number, e.heard_s) || OnBoardSince(e.number, e.heard_s)) continue;
+            bool missed = false;
+            for (const CommandPost::AirReport& h : post_->Held()) missed = missed || h.number == e.said_number;
+            if (!missed) continue;
+            TakeFromPage(e, r);
+            return;
+        }
+    }
+    // A report the player plotter writes from the journal's page (its number as written): back among those waiting for
+    // his hand, as the page has it.
+    void RecallFromJournal(int number) {
+        if (!post_) return;
+        for (const CommandPost::AirReport& h : post_->Heard()) {
+            if (h.number == number) return;
+        }
+        const std::vector<RadioJournalEntry> page = journal_.Legible(time_);
+        for (auto it = page.rbegin(); it != page.rend(); ++it) {
+            CommandPost::AirReport r;
+            if (it->number != number || OnBoardSince(it->said_number, it->heard_s) || !JournalReport(*it, r)) continue;
+            TakeFromPage(*it, r);
+            return;
+        }
+    }
+    // The NPC plotter hears each report on his own headset; now and then one doesn't go in (his tier's miss_chance, more
+    // under stress): it waits, unwritten, until he finds it on the page.
+    void PlotterMayMiss(const CommandPost::AirReport& r) {
+        if (console_.post_journal_keeper.empty() || !SeatHolder(console_.post_plotter).empty()) return;
+        for (std::size_t i = 0; i < crew_.size(); ++i) {
+            if (crew_[i].Role() != console_.post_plotter) continue;
+            const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
+            const double miss = t != nullptr ? t->miss_chance * TierStress(*t, crew_[i]) : 0.0;
+            if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss && post_->Miss(r.number)) {
+                Event(console_.post_plotter, "did not take in the report of " + std::to_string(r.number) + ": he will look in the journal");
             }
         }
     }
@@ -2996,11 +3346,15 @@ private:
                 return;
             }
         }
+        // A target's number is read back when it is first given; the post's updates of it need none (sam3d: a raid of
+        // sixteen updated every few seconds read back every time kept the commander on the air).
+        if (!read_back_.insert(e.number).second) return;
         char n[16];
         std::snprintf(n, sizeof(n), "%04d", e.number);
         callouts_->Say(time_, "readback", Cmdr(), {{"number", n}, {"callsign", OwnCallsign()}, {"post", "10"}}, SpeakDelayS(Cmdr()));
         if (LinkedToPost()) own_readbacks_.push_back(e.number);
     }
+    std::set<int> read_back_;  // the target numbers read back
     // A player in command speaks on the battery net himself (the crew menu): «21 к бою готов, …» (voenizdat_osa_1991
     // pp. 246-247) or the read-back of the latest designation, with his A-1 on Р-123, the headset switch on the set that
     // hears the net, that set able to transmit. False with LastRefusal() saying why.
@@ -3028,7 +3382,9 @@ private:
         }
         const std::map<std::string, std::string> fields = NetReportFields(callout_id);
         if (!callouts_->Say(time_, callout_id, Cmdr(), fields)) return false;
-        if (const CalloutDef* def = def_.crew_data.FindCallout(callout_id)) OnAir(SpeakingTimeS(FillCallout(def->ru, fields)) + 0.5);
+        if (const CalloutDef* def = def_.crew_data.FindCallout(callout_id)) {
+            OnAir(callouts_->LineTimeS(callout_id, Cmdr(), FillCallout(def->ru, fields)) + 0.5);
+        }
         reports_made_.push_back({time_, station, callout_id});
         if (callout_id == "readback" && LinkedToPost()) own_readbacks_.push_back(designations_heard_.back().number);
         return true;
@@ -3108,6 +3464,60 @@ public:
             Event("battery net", "the order to change frequency was not heard");
         }
     }
+
+    // ---- The emission regime (emission_regime.hpp, docs/crew/16_EMISSION.md)
+    // The Osa: the regime its commander has heard from the battery, and the one he has told his crew (the senior
+    // operator keeps the bursts by this one). The post: the regime its battery commander has ordered (both the same).
+    const EmissionRegime& CommanderRegime() const { return regime_cmdr_; }
+    const EmissionRegime& CrewRegime() const { return regime_crew_; }
+    // The battery commander in a linked post said a regime on the battery net (battery_link.hpp): heard if the Osa's set
+    // hears the net; missed, the Osa goes on under the old one.
+    void HearBatteryEmissionOrder(const EmissionRegime& r) {
+        if (!(c2_ == nullptr || c2_->Hearing())) {
+            Event("battery net", std::string("the battery commander's order of the emission regime (") + EmissionKindName(r.kind) + ") was not heard");
+            return;
+        }
+        Radio("battery net", "10", "Всем, я 10: " + EmissionGroup(r) + ". " + EmissionGroup(r) + ".");
+        if (const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(r.kind))) HeardGroup(e->code, "battery", BatteryNetHearers());
+        CommanderHearsRegime(r, "the battery net");
+    }
+    // The post's side of the link: the regimes said on the battery net since the last call; a launcher's report of an ARM
+    // attack, heard on the net (its callsign and the azimuth as said).
+    std::vector<EmissionRegime> TakeBatteryEmissionOrders() {
+        std::vector<EmissionRegime> out;
+        out.swap(battery_emission_orders_);
+        return out;
+    }
+    void HearArmAttackReport(const std::string& callsign, const std::string& azimuth) {
+        Radio("battery net", callsign, callsign + ": пуск ПРР, азимут " + azimuth + "!", false, BatteryNetHearers());
+        log_.Record({time_, DebriefEntry::Kind::Scenario, callsign, "battery net", "reports an ARM attack, azimuth " + azimuth});
+        if (arm_report_heard_s_ < 0.0) arm_report_heard_s_ = time_;
+    }
+    // The Osa's side: its commander's reports of an ARM attack on the battery net since the last call (the azimuths).
+    std::vector<std::string> TakeArmAttackReports() {
+        std::vector<std::string> out;
+        out.swap(arm_reports_out_);
+        return out;
+    }
+    // The battery commander's order of a regime (the orders menu at the post): false with LastRefusal() saying why.
+    bool CommanderOrderEmission(EmissionKind k) {
+        if (def_.has_crew_data) return GiveCrewOrder(BatteryEmissionOrderId(k));
+        return OrderBatteryEmission(def_.emission.Make(k, "battery"), "Battery commander");
+    }
+    // How the crew kept the regime: at the halt with nothing tracked under a burst regime they were told, the seconds
+    // there and the seconds the search transmitter radiated; the reminders and the breaches that called for one; how long
+    // after the commander heard each regime his crew was told (the last).
+    struct EmissionRecord {
+        double bursts_s = 0.0;
+        double radiating_s = 0.0;
+        int reminders = 0;
+        int breaches = 0;
+        int regimes_heard = 0;
+        int regimes_told = 0;
+        double told_after_s = -1.0;
+    };
+    const EmissionRecord& GetEmissionRecord() const { return emission_record_; }
+
     // A lesson's cues (tutorial.hpp): a net's main station orders it to its other frequency now; a strong spot jammer
     // comes on a net; the far end of a line rings.
     bool ExternalNetOrder(const std::string& net) {
@@ -3127,6 +3537,12 @@ public:
         j.spot = true;
         nets_->AddJamming(j);
         return true;
+    }
+    // The far end has something to say on a laid line: it rings once the line is free.
+    void QueueLineCall(int line, const std::string& text) {
+        const LineDef* l = def_.radio_data.Line(line);
+        if (l == nullptr || !l->laid) return;
+        lines_[line].queued.push_back(text);
     }
     bool RingLine(int line) {
         const LineDef* l = def_.radio_data.Line(line);
@@ -3293,7 +3709,7 @@ private:
         if (!post_) return;
         post_->MoveTo(def_.unit_position);
         if (!r407_) {  // without the set worked as a set: the R-407 net's published reach (aspd_u.json)
-            const bool reach = post_->TelecodeInReach(def_.post_regiment, time_);
+            const bool reach = post_->TelecodeInReach(def_.post_regiment, time_) || (def_.post_regiment.telecode_wire && def_.post_regiment.telecode);
             if (reach != console_.equipment.GetInput(console_.post_telecode_input)) console_.equipment.SetInput(console_.post_telecode_input, reach);
         }
         const bool oriented = console_.equipment.IsReady(console_.post_oriented);
@@ -3320,12 +3736,23 @@ private:
         post_->SetFrame(world_.Frame());
         ReceiveRegimentCommands();
         const std::vector<BoardContact> truth = TruthContacts();
+        // The cabled radar's picture (flak11 PU12-0's figure; p19_to 4.3.1): the targets it covers while it is on the air,
+        // each a friend only if its interrogator works and the target's transponder answers (the "Kennung" line).
         std::vector<BoardContact> radar;
-        if (def_.has_post_radar) {
+        if (post_em_ && post_em_->Ok()) {
+            radar = PostEmPicture(truth);  // its echoes as the EM layer gives them, its jamming strobes beside them
+        } else if (def_.has_post_radar && !PostRadarOff()) {
             for (const BoardContact& c : truth) {
-                if (CommandPost::Covers(def_.post_radar, c)) radar.push_back(c);
+                if (!CommandPost::Covers(def_.post_radar, c)) continue;
+                BoardContact e = c;
+                e.type = def_.post_radar.iff_interrogator && c.transponder ? 1 : 9;
+                radar.push_back(e);
             }
         }
+        if (!console_.post_radar_here.empty() && console_.equipment.GetInput(console_.post_radar_here) != def_.has_post_radar) {
+            console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
+        }
+        UpdateRadarLine();
         CommandPost::Inputs in;
         in.telecode = console_.equipment.IsReady(console_.post_telecode);
         in.primary = console_.equipment.IsReady(console_.post_primary);
@@ -3342,30 +3769,56 @@ private:
         const CrewMember* plotter = MemberAt(console_.post_plotter);
         in.operator_free = plotter != nullptr && SeatHolder(console_.post_plotter).empty() && !plotter->IsBusy();
         in.operator_speed = PlotterSpeed();
-        if (voice_) {  // through the crew: a seat's box on FuG-1, the set on its net; read out to the plotter
+        if (voice_) {  // through the crew: a seat's box on FuG-1, the set on its net; the plotter's own headset, or read out
             in.air_net = in.air_net && !NetHearers("air_picture").empty();
-            in.relay = true;
+            in.relay = !SeatHearsNet(console_.post_plotter, "air_picture");
             in.air_net_loss = nets_ && nets_->Jam("air_picture", time_) == 1 ? Tuning().weak_jam_loss : 0.0;
         }
         // The tube is the commander-operator's (rwd_mb3): his hands take the cabled radar's targets off, an NPC's when
-        // he is free, a player's with the ASPD-U's semi-automatic take-off.
+        // he is free. A new echo: an NPC takes the nearest off himself; a player owes it with the DT-2 (the marker on it,
+        // then СЪЁМ: UpdateKeypad). The held ones the ASPD-U's semi-automatic round fixes again either way.
         const CrewMember* commander = MemberAt(Cmdr());
         in.tube_free = commander != nullptr && (!SeatHolder(Cmdr()).empty() || !commander->IsBusy());
         in.tube_speed = SeatSpeed(Cmdr());
+        in.take_off_new = SeatHolder(Cmdr()).empty();
+        in.send = !console_.post_sending.empty() && console_.equipment.IsReady(console_.post_sending);
         post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        if (in.primary || in.imitation) OweTakeOff();
+        if (in.send && post_->LastSentS() == time_) {
+            if (!post_sending_) Event("telecode", "the post sends its picture on: " + std::to_string(post_->Sent().size()) + " targets");
+            post_sending_ = true;
+        } else if (!in.send && post_sending_) {
+            post_sending_ = false;
+            Event("telecode", "the post stops sending its picture");
+        }
         if (!SeatHolder(console_.post_plotter).empty()) {  // the NPC plotter writes each report he hears; a player owes them
             for (const CommandPost::AirReport& h : post_->Heard()) {
                 NpcDoes(console_.post_plotter, SeatDuty::Plot(console_.post_plotter, h.number, h.contact.target_id,
                                                               "a report heard: write it on the board"));
             }
         }
-        // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person).
+        // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person), and in the
+        // radiotelephonist's head until he writes it in the journal.
         for (const CommandPost::Spoken& s : post_->TakeSpoken()) {
-            if (s.heard) Radio("air picture", "Regiment", s.report.text);
+            if (!s.heard) continue;
+            Radio("air picture", "Regiment", s.report.text);
+            if (KeeperHears("air picture")) {
+                journal_.Heard(time_, "air picture", "Regiment", s.report.text, s.report.number);
+                journal_air_[s.report.number] = s.report;
+            }
+            if (!voice_ || SeatHearsNet(console_.post_plotter, "air_picture")) PlotterMayMiss(s.report);
         }
+        UpdateJournal();
+        PlotterReadsJournal();
         RelayAirPicture();
-        SetRadioInput(console_.equipment.HasInput("air_report_waiting") ? std::string("air_report_waiting") : std::string(),
-                      !post_->Held().empty());
+        bool written_held = false;
+        for (const CommandPost::AirReport& h : post_->Held()) written_held = written_held || console_.post_journal_keeper.empty() || InJournal(h);
+        SetRadioInput(console_.equipment.HasInput("air_report_waiting") ? std::string("air_report_waiting") : std::string(), written_held);
+        SetRadioInput(console_.equipment.HasInput("journal_waiting") ? std::string("journal_waiting") : std::string(),
+                      !journal_.Waiting().empty() || journal_.Draft() != nullptr);
+        bool by_hand = false;
+        for (const RadioJournalEntry& e : journal_.Written()) by_hand = by_hand || e.by_hand;
+        SetRadioInput(console_.equipment.HasInput("journal_written_by_hand") ? std::string("journal_written_by_hand") : std::string(), by_hand);
         for (const BoardMark& m : post_->Board().Marks()) {
             if (post_first_mark_.count(m.target_id) != 0) continue;
             post_first_mark_[m.target_id] = m.time_s;
@@ -3389,6 +3842,7 @@ private:
             marker_y_ = r * std::cos(az);
             double best = kMarkerCaptureFraction;
             for (const CommandPost::ScopeMark& m : PostScope()) {
+                if (m.raw) continue;  // an echo has no number to mark: the symbol over it has
                 const double d = std::hypot(m.x - marker_x_, m.y - marker_y_);
                 if (d < best) {
                     best = d;
@@ -3396,6 +3850,15 @@ private:
                 }
             }
             if (marked_ >= 0) marked_arrival_s_ = ArrivalS(marked_);
+            // СЪЁМ: the echo under the marker taken off (p19_to: by hand with the electronic marker).
+            if (post_ && !c.post_marker_take_off.empty() && c.panel.Get(c.post_marker_take_off) == 1) {
+                const int n = post_->TakeOffAt(time_, marker_x_, marker_y_, PostScaleM(), kMarkerCaptureFraction, SeatSpeed(Cmdr()));
+                if (n >= 0) {
+                    char text[48];
+                    std::snprintf(text, sizeof(text), "echo taken off as %02d", n);
+                    Event("IT-45", text);
+                }
+            }
         }
         if (c.post_keypad_digits.empty()) return;
         PostKeypad& k = keypad_;
@@ -3442,6 +3905,87 @@ private:
                 if (k.entry.size() > 2) k.entry.erase(0, k.entry.size() - 2);
             }
         }
+    }
+    // The cabled radar in the EM layer (post.em): run its world to now with the targets where they are, the radar on the
+    // air unless an outage has it off, its interrogator with it; then its picture as the ASPD gets it down the cable
+    // (p19_to 4.3.1: echoes and identification marks): where its tracker puts each echo, a friend if a reply came back,
+    // its ghosts (chaff, false echoes) as echoes too; and its strobes (p19_to 4: the jammer's azimuth).
+    std::vector<BoardContact> PostEmPicture(const std::vector<BoardContact>& truth) {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            const ScenarioTarget& t = def_.targets[i];
+            if (a != nullptr) post_em_->SyncTarget(t.id, a->alive && !targets_[i].gone, a->position, a->velocity, t.rcs_m2, t.friendly);
+        }
+        const bool on = !PostRadarOff();
+        post_em_->SetSearch(on, false);
+        post_em_->SetInterrogating(on && def_.post_radar.iff_interrogator);
+        if (time_ > post_em_t_) post_em_->Advance(time_ - post_em_t_);
+        post_em_t_ = time_;
+        post_strobes_ = post_em_->SearchStrobes();
+        std::vector<BoardContact> out;
+        for (const EmSensorLink::Contact& c : post_em_->SearchPicture()) {
+            BoardContact e;
+            e.target_id = c.target_id;
+            e.position = c.position;
+            e.altitude_m = world_.Frame().AltitudeOf(c.position);
+            for (const BoardContact& tc : truth) {
+                if (tc.target_id != c.target_id) continue;
+                e.altitude_m = tc.altitude_m;  // the height zone is the operator's to give (a 2-coordinate radar)
+                e.formation = tc.formation;
+                e.transponder = tc.transponder;
+            }
+            e.type = c.iff ? 1 : 9;
+            out.push_back(e);
+        }
+        return out;
+    }
+    // The cabled radar's jamming strobes on the IT-45 (true azimuth from north, -180..180; J/N), while its picture is.
+    std::vector<em::ViewStrobe> PostStrobes() const {
+        std::vector<em::ViewStrobe> out;
+        if (!post_ || !console_.equipment.IsReady(console_.post_primary)) return out;
+        for (const EmSensorLink::Strobe& s : post_strobes_) out.push_back({s.true_az_deg, s.jn_db});
+        return out;
+    }
+    // The cabled radar off the air now (its outages: the ARM drill, a fault).
+    bool PostRadarOff() const {
+        for (const C2Outage& o : def_.post_radar.outages) {
+            if (time_ + 1e-9 >= o.from_s && time_ < o.to_s) return true;
+        }
+        return false;
+    }
+    // The cabled radar's crew on the service line (flak11 PU12-0's figure: the Dienstverbindung in the radar's cable):
+    // they ring the post when their radar goes off the air and when it is back. The post hears it only on a line laid to
+    // "radar" (the scenario's lines); otherwise its tube just goes empty.
+    void UpdateRadarLine() {
+        if (!def_.has_post_radar) return;
+        const bool off = PostRadarOff();
+        if (off == post_radar_off_) return;
+        post_radar_off_ = off;
+        std::string reason;
+        for (const C2Outage& o : def_.post_radar.outages) {
+            if (off && time_ + 1e-9 >= o.from_s && time_ < o.to_s) reason = o.reason;
+        }
+        Event("cabled radar", off ? "off the air" + (reason.empty() ? std::string() : ": " + reason) : std::string("on the air again"));
+        const LineDef* l = def_.radio_data.LineTo("radar");
+        if (l != nullptr && l->laid) QueueLineCall(l->line, off ? "Станция выключена. Работу прекратил." : "Станция включена, работаю.");
+    }
+    // A new echo on the tube while fewer than 12 are held: a player at the tube owes it with the DT-2 (the marker on the
+    // nearest one, then СЪЁМ). An NPC takes it off himself (CommandPost, take_off_new).
+    void OweTakeOff() {
+        const double scale = PostScaleM();
+        const BoardContact* e = post_->NextNewEcho();
+        if (e == nullptr || !(scale > 0.0) || console_.post_marker_azimuth.empty()) return;
+        const Vec3 rel = post_->Shown(e->position) - post_->Position();
+        if (rel.HorizontalLength() > scale) return;
+        double az = RadToDeg(std::atan2(rel.x, rel.y));
+        if (az < 0.0) az += 360.0;
+        const double r = rel.HorizontalLength() / scale;
+        const double az_tol = RadToDeg(std::atan2(0.7 * kMarkerCaptureFraction, std::max(r, kMarkerCaptureFraction)));
+        const std::string why = "a new echo on the IT-45: take it off with the DT-2";
+        if (NpcDoes(Cmdr(), SeatDuty::Wheel(Cmdr(), console_.post_marker_azimuth, az, az_tol, true, why))) return;
+        NpcDoes(Cmdr(), SeatDuty::Wheel(Cmdr(), console_.post_marker_range, r, 0.7 * kMarkerCaptureFraction, false, why));
+        if (!console_.post_marker_take_off.empty()) NpcDoes(Cmdr(), SeatDuty::Control(Cmdr(), console_.post_marker_take_off, 1, why));
     }
     // When a target on the IT-45 reaches the post at its closing speed (s), or -1 if it isn't closing.
     double ArrivalS(int aspd_number) const {
@@ -3501,6 +4045,7 @@ private:
             c.height_agl_m = c.altitude_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             c.type = t.board_type >= 0 ? t.board_type : (t.friendly ? 1 : 9);
             c.formation = t.formation;
+            c.transponder = t.friendly;
             contacts.push_back(c);
         }
         return contacts;
@@ -3736,11 +4281,12 @@ private:
         }
         if (!why.empty()) {
             TransmitBlocked(why);
+            if (by_player) last_refusal_ = why;
             return false;
         }
         const double delay = by_player ? 0.0 : SpeakDelayS(Cmdr());
         if (!callouts_->Say(time_, id, Cmdr(), fields, delay)) return false;
-        OnAir(delay + SpeakingTimeS(FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
+        OnAir(delay + callouts_->LineTimeS(id, Cmdr(), FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
         return true;
     }
     // The fields of the vehicle's radio reports: its callsign, the channels the КАНАЛЫ selector allows, missiles loaded.
@@ -4076,6 +4622,13 @@ private:
         end_reason_ = reason;
         Event(def_.id, "end: " + reason);
         WriteAcmiFrame();
+        const EmissionRecord& er = emission_record_;
+        if (!post_ && er.regimes_heard + er.regimes_told > 0) {  // the debrief's line on the emission regime
+            char line[200];
+            std::snprintf(line, sizeof(line), "%d heard, %d told the crew; bursts: %.0f s at the halt, radiating %.0f s; %d long, %d reminders",
+                          er.regimes_heard, er.regimes_told, er.bursts_s, er.radiating_s, er.breaches, er.reminders);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, std::string(), "emission regime", std::string(line) + " (last: " + RegimeText(regime_crew_) + ")"});
+        }
         if (callouts_) {  // what the crew was about to say is still said (the last result, a last report)
             for (double t = time_; t < time_ + 15.0 && (callouts_->Pending() > 0 || callouts_->Speaking("intercom") ||
                                                           callouts_->Speaking("battery net"));
@@ -4110,6 +4663,9 @@ private:
     std::mt19937 rng_;
     bool engagement_on_;
     std::unique_ptr<EmSensorLink> em_link_;  // before engagement_: the model keeps a pointer to it
+    std::unique_ptr<EmSensorLink> post_em_;  // the radar cabled to the post, in the EM layer (scenario post.em)
+    double post_em_t_ = 0.0;                 // how far the post's EM world has run
+    std::vector<EmSensorLink::Strobe> post_strobes_;  // its jamming strobes now
     std::vector<int> rwr_warned_;            // per target: 1 a lock warning noted, 2 a launch warning noted
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
@@ -4505,6 +5061,12 @@ private:
         m.callout = callout;
         m.routed = voice_ != nullptr;
         m.heard_by = heard_by;
+        // The journal takes what came over the post's radios (the air picture with its report: the post's update).
+        if (post_ && !console_.post_journal_keeper.empty() && net != "air picture" && NetIdOf(net) != net) {
+            bool heard = !voice_;
+            for (const std::string& h : heard_by) heard = heard || h == console_.post_journal_keeper;
+            if (heard) journal_.Heard(time_, net, from, text);
+        }
         radio_.push_back(std::move(m));
         if (radio_.size() > kRadioKept) radio_.erase(radio_.begin());
     }
@@ -4617,6 +5179,8 @@ private:
 
     // ---- Callouts (roadmap 8.4).
     std::unique_ptr<CalloutBus> callouts_;
+    std::map<std::string, double> recorded_lengths_s_;  // SetRecordedLengths
+    std::string recorded_lengths_from_;
     std::unique_ptr<DrillMaster> drill_;
     std::vector<char> report_state_;  // each automatic report's condition last step
     std::vector<double> report_said_s_;  // when each was last said
@@ -4742,7 +5306,12 @@ private:
     void StartCallouts() {
         if (!def_.has_crew_data) return;
         callouts_ = std::make_unique<CalloutBus>(&def_.crew_data);
-        if (voice_) callouts_->SetRouter([this](const CalloutDef& d, const std::string& from) { return RouteCallout(d, from); });
+        callouts_->SetRecordedLengths(recorded_lengths_s_);
+        callouts_->SetPlayerSeat([this](const std::string& station) { return !SeatHolder(station).empty(); });
+        if (voice_) {
+            callouts_->SetRouter([this](const CalloutDef& d, const std::string& from) { return RouteCallout(d, from); });
+            callouts_->SetListens([this](const std::string& station, const std::string& channel) { return Listens(station, channel); });
+        }
         drill_ = std::make_unique<DrillMaster>(console_, &def_.crew_data, def_.has_skills && def_.skills.Reference() != nullptr
                                                                              ? def_.skills.Reference()->reaction_s : 0.55);
         for (const AutoReportDef& r : def_.crew_data.reports) {
@@ -4771,7 +5340,7 @@ private:
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() != station) continue;
             if (const SkillTier* t = SkillOf(def_.crew[i])) {
-                return (t->perception_s + t->callout_delay_s) * (crew_[i].Stressed() ? t->stress_factor : 1.0);
+                return (t->perception_s + t->callout_delay_s) * TierStress(*t, crew_[i]);
             }
         }
         return 0.6;
@@ -4798,6 +5367,10 @@ private:
 
     // The commander's order for a procedure, if the crew data has one: the most specific order that starts it.
     bool quiet_orders_ = false;
+    // A standing order's routine (the search radar's bursts): given without words; its drills (station|procedure) are
+    // neither acknowledged nor reported done.
+    bool routine_order_ = false;
+    std::set<std::string> routine_drills_;
     void SayOrder(const std::string& station, const std::string& procedure) {
         if (!callouts_ || quiet_orders_ || station == Cmdr()) return;  // his own drill needs no words
         const OrderDef* best = nullptr;
@@ -4840,7 +5413,7 @@ private:
             ShadowOrder(callout_id);
             return;
         }
-        if (!callouts_) return;
+        if (!callouts_ || routine_order_) return;
         if (callout_id == last_order_said_ && time_ - last_order_s_ < 3.0) return;
         const CalloutDef* def = def_.crew_data.FindCallout(callout_id);
         std::map<std::string, std::string> fields;
@@ -4938,32 +5511,38 @@ private:
         // let go. Radiation comes back on through the EMCON path when the silence is over (arm_silence_s).
         // Until the silence is over he sees to it: a drill that would radiate (a capture under way) is stopped, and a
         // transmitter found on again is ordered off again.
-        if (ArmSilent() && time_ - npc_arm_off_s_ >= 10.0) {
-            bool acted = false;
-            for (CrewMember& m : crew_) {
-                const std::string d = m.Tracker().GetProcedure().id;
-                if (SeatHolder(m.Role()).empty() && m.IsBusy() &&
-                    (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc")) {
-                    m.CancelOrder();
+        // One order where one covers it (docs/crew/15_TALK.md section 3): «Излучение выключить!» is the task "silent",
+        // both transmitters off (it starts the operator's ssc_tx_off beside the senior operator's stop_search), so no
+        // «Высокое ССЦ выключить!» beside it; the target is let go by «Цель сбросить!» only once the transmitters are off
+        // and a track is still held (by the TV), a moment later, not in the same breath.
+        if (ArmSilent()) {
+            const bool radiating = console_.panel.Get("soc.hv") == 1 || console_.panel.Get("soc.search") == 1 || console_.panel.Get("ssc.tx") == 1;
+            if (time_ - npc_arm_off_s_ >= 10.0) {
+                bool acted = false;
+                for (CrewMember& m : crew_) {
+                    const std::string d = m.Tracker().GetProcedure().id;
+                    if (!shadow_ && SeatHolder(m.Role()).empty() && m.IsBusy() &&
+                        (d == "capture_with_ssc" || d == "ready_capture" || d == "azimuth_onto_target" || d == "hv_on" || d == "acquire_with_soc" ||
+                         d == "fire_at_jammer")) {
+                        m.CancelOrder();
+                        acted = true;
+                    }
+                }
+                if (radiating) {
+                    GiveCrewOrder("order_emcon_off");
+                    npc_ordered_["order"] = {"order_emcon_off", time_};
                     acted = true;
                 }
+                if (acted) {
+                    npc_arm_off_s_ = time_;
+                    Event(Cmdr(), "radiation off against the ARM");
+                }
             }
-            if (engagement_on_ && engagement_.Method() != TrackMethod::None) {
+            if (!radiating && engagement_on_ && engagement_.Method() != TrackMethod::None && time_ - npc_arm_off_s_ >= 3.0 &&
+                time_ - npc_arm_drop_s_ >= 10.0) {
                 GiveCrewOrder("order_drop_target");
-                acted = true;
-            }
-            if (console_.panel.Get("soc.hv") == 1 || console_.panel.Get("soc.search") == 1) {
-                GiveCrewOrder("order_emcon_off");
-                npc_ordered_["order"] = {"order_emcon_off", time_};
-                acted = true;
-            }
-            if (console_.panel.Get("ssc.tx") == 1) {
-                GiveCrewOrder("order_ssc_off");
-                acted = true;
-            }
-            if (acted) {
-                npc_arm_off_s_ = time_;
-                Event(Cmdr(), "radiation off against the ARM");
+                npc_arm_drop_s_ = time_;
+                Event(Cmdr(), "the transmitters off, the target let go against the ARM");
             }
         }
         // Under the threat of ARMs, the tracking transmitter off after the missile's burst (p262).
@@ -4978,12 +5557,29 @@ private:
         if (silent && halted && console_.equipment.IsReady("soc_transmitter")) NpcGive("order_emcon_off", 30.0);
         if (!silent && npc_was_silent_) NpcGive("order_emcon_on", 30.0);
         npc_was_silent_ = silent;
-        // Emission discipline (doctrine search_bursts): between bursts the transmitter off, the antenna turning; the
+        // The emission regime: the crew told the one he heard (before they deploy, or as soon as it changes), and the
+        // radar seats reminded of its bursts.
+        NpcPassOnRegime();
+        NpcRemindRegime(halted);
+        // Emission discipline (the limited regime): between bursts the transmitter off, the antenna turning; the
         // readiness drills then aim at the silent state, so they don't switch it back on or stop the antenna.
         const bool burst_off = !silent && NpcBurstOff(halted);
-        if (def_.doctrine.search_on_s > 0.0 && halted && !silent && console_.equipment.IsReady("hv_ready")) {
-            if (burst_off && console_.panel.Get("soc.hv") == 1) NpcGive("order_hv_off", 1.0);
-            if (!burst_off && npc_burst_off_ && console_.panel.Get("soc.hv") == 0) NpcGive("order_hv_on", 1.0);
+        if (regime_crew_.kind == EmissionKind::Limited && halted && !silent && console_.equipment.IsReady("hv_ready")) {
+            // The first burst is ordered aloud; after it the senior operator keeps the rhythm as a standing order, without
+            // a word each way (sam3d: seven callouts every 35 s kept the intercom talking without end).
+            routine_order_ = npc_bursts_said_;
+            bool given = false;
+            // Not while an NPC senior operator is at a drill (his ЗАПРОС between bursts, QueryBurst): the order would cut it.
+            const CrewMember* so = MemberAt("senior_operator");
+            const bool so_busy = so != nullptr && SeatHolder("senior_operator").empty() && so->IsBusy();
+            if (burst_off && console_.panel.Get("soc.hv") == 1 && !so_busy) given = NpcBurstOrder("order_hv_off", "the limited regime: ВЫСОКОЕ off between bursts");
+            bool hv_on_owed = false;  // the shadow's, from the burst's start until the player gives it
+            for (const SeatDuty& d : owed_) hv_on_owed = hv_on_owed || (d.kind == SeatDuty::Kind::Order && d.id == "order_hv_on");
+            if (!burst_off && (npc_burst_off_ || (shadow_ && hv_on_owed)) && console_.panel.Get("soc.hv") == 0) {
+                given = NpcBurstOrder("order_hv_on", "the limited regime: ВЫСОКОЕ on for a burst") || given;
+            }
+            routine_order_ = false;
+            if (given && !shadow_) npc_bursts_said_ = true;
         }
         npc_burst_off_ = burst_off;
         // The radios: the commander's set off with a command net to hear (a scenario that starts them off).
@@ -4994,8 +5590,12 @@ private:
             const bool was_quiet = quiet_orders_;
             quiet_orders_ = true;  // the words once for all the drills given now
             std::vector<std::pair<std::string, std::string>> given;
-            // Under the least emission against ARMs the senior operator works his transmitter himself (ArmEmission).
-            const bool own_bursts = def_.doctrine.arm_threat && halted && !silent && console_.panel.Get("soc.search") == 1;
+            // While the search runs in bursts its transmitter is the bursts', not the readiness drills': under the least
+            // emission the senior operator works it himself (ArmEmission); under the limited regime, between bursts, the
+            // orders above switch it off (sam3d: the plan, made the moment ВЫСОКОЕ went off and before the transmitter
+            // did, stopped the search). In a burst the plan still puts it on if the order to was missed.
+            const bool own_bursts = halted && !silent && console_.panel.Get("soc.search") == 1 &&
+                                    (regime_crew_.kind == EmissionKind::Arm || burst_off);
             for (const DrillPlan::Seat& s : plan.seats) {
                 if (!SeatFree(s.station) || (own_bursts && s.station == "senior_operator")) continue;
                 for (const std::string& drill : s.procedures) {
@@ -5041,6 +5641,12 @@ private:
             }
         }
         NpcReportReady(halted);
+        // A radar to cable to the post at this position: «Кабель к РЛС проложить!», an order of its own (most positions
+        // have none, and the deployment's order would wait on a radar that isn't there).
+        if (halted && !console_.post_radar_here.empty() && console_.equipment.GetInput(console_.post_radar_here)) {
+            const CrewTask* cabled = def_.crew_data.FindTask("radar_cabled");
+            if (cabled != nullptr && !console_.equipment.AllHold(cabled->conditions, console_.panel)) NpcGive("order_radar_cable", 120.0);
+        }
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once, in the column
                         // (mon_2112_80 p66; voenizdat_osa_1991 p254)
@@ -5072,11 +5678,15 @@ private:
         NpcOrient();
         NpcCounterJamming();
         if (NpcBetweenFights()) return;
+        // Silent against an ARM: no engagement order until the silence is over (a new target, method Н or a launch would
+        // put a transmitter on again); the ARM block above has the transmitters off and then the target let go.
+        if (ArmSilent()) return;
         // The engagement, by the crew data's orders (order_take_target, order_prepare, fire_permitted, order_jammer,
         // order_low_target): the seats and drills each order starts are data, not code.
         const EngagementModel& eng = engagement_;
         const TrackMethod m = eng.Method();
         const std::string tracked = eng.TrackedTarget();
+        NpcReleaseStaleDrills(m);
         // A missile in the air: wait for the result; under a two-missile salvo (doctrine salvo) the second goes first.
         if (eng.ShotsInFlight() && !NpcSalvoDue(tracked)) return;
         // A missile's result being judged: the call decides whether to engage again (voenizdat_osa_1991 p267).
@@ -5332,22 +5942,50 @@ private:
         }
         return nullptr;
     }
-    // Emission discipline (doctrine search_bursts): halted, nothing tracked and no hostile he knows of within the
-    // tracking radar's reach, the search radar radiates in bursts, on for on_s and off for off_s.
+    // Emission discipline (the limited regime, as told to the crew): halted, nothing tracked and no hostile he knows of
+    // within the tracking radar's reach, the search radar radiates in bursts, on for its turns and off for its turns.
     bool NpcBurstOff(bool halted) {
-        if (def_.doctrine.arm_threat) return false;  // the senior operator's own rhythm (ArmEmission), not the commander's
-        if (def_.doctrine.search_on_s <= 0.0 || !halted || engagement_.Method() != TrackMethod::None) return false;
-        const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
-        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
-            if (k.has_range && !k.friendly && k.range_m <= reach) return false;
-        }
-        return std::fmod(time_, def_.doctrine.search_on_s + def_.doctrine.search_off_s) >= def_.doctrine.search_on_s;
+        if (regime_crew_.kind != EmissionKind::Limited || !BurstsApply(halted)) return false;  // arm: the senior operator's own (ArmEmission)
+        const double turn = SearchTurnS();
+        const double on = regime_crew_.OnS(turn);
+        return std::fmod(time_, on + regime_crew_.OffS(turn)) >= on;
+    }
+    // A burst's order. The shadow commander owes it the player at every burst: what the player said a burst ago doesn't
+    // count for this one (ShadowOrder's recall, kShadowRecallS, is longer than a cycle).
+    bool NpcBurstOrder(const std::string& order_id, const char* why) {
+        if (!shadow_) return NpcGive(order_id, 1.0);
+        NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), order_id, why));
+        return false;
     }
     std::string npc_tv_cleared_;
     std::string npc_decoy_dropped_;
     double npc_decoy_dropped_s_ = -1e9;
     std::set<std::string> decoys_known_;
     bool npc_burst_off_ = false;
+    // A drill bound to a track (the jammer's method Н, the TV's engagement, the launch) left waiting with nothing tracked
+    // and nothing in the air: after 10 s he lets the seat go, so the next target can be taken (sam3d: the deputy waited
+    // on a lost jammer's missile, or on a target lost in the haze, for the rest of the raid, and no "take the target"
+    // got through to a busy seat).
+    double npc_stale_since_s_ = -1.0;
+    void NpcReleaseStaleDrills(TrackMethod m) {
+        if (shadow_) return;
+        CrewMember* dep = MemberAt("deputy_commander");
+        const std::string id = dep != nullptr && dep->IsBusy() ? dep->Tracker().GetProcedure().id : std::string();
+        const bool bound = id == "fire_at_jammer" || id == "emcon_tv_engagement" || id == "track_low_target" || id == "launch" ||
+                           id == "prepare_firing";
+        if (!bound || m != TrackMethod::None || engagement_.ShotsInFlight() || !SeatHolder("deputy_commander").empty() ||
+            dep->Status() != CrewStatus::Waiting) {
+            npc_stale_since_s_ = -1.0;
+            return;
+        }
+        if (npc_stale_since_s_ < 0.0) npc_stale_since_s_ = time_;
+        if (time_ - npc_stale_since_s_ < 10.0) return;
+        dep->CancelOrder();
+        npc_stale_since_s_ = -1.0;
+        npc_permit_s_ = -1e9;
+        Event(Cmdr(), "lets the deputy's " + id + " go: nothing tracked");
+    }
+    bool npc_bursts_said_ = false;  // the burst rhythm has been ordered aloud once
 
     // Every hostile he has heard of within the interrogator's reach that isn't identified yet: "Запрос!" (the senior
     // operator's ЗАПРОС). Not one the PU-12 designated (identified by the battery commander), not under EMCON.
@@ -5378,10 +6016,12 @@ private:
     double arm_sign_s_ = -1e9;          // when the commander last heard a sign of an ARM launch
     double arm_seen_s_ = -1e9;          // when the senior operator last called one
     double arm_reported_s_ = -1e9;
+    std::string arm_sign_az_;           // the azimuth of the last sign he heard (his report says it)
     bool arm_attacked_ = false;
     bool arm_relocated_ = false;
     bool npc_arm_stow_ordered_ = false;
     double npc_arm_off_s_ = -1e9;
+    double npc_arm_drop_s_ = -1e9;
     bool npc_ssc_off_due_ = false;
     TrackMethod npc_track_method_ = TrackMethod::None;
     double npc_track_since_s_ = 0.0;
@@ -5392,6 +6032,377 @@ private:
     static constexpr double kSameBlipM = 2500.0;       // a new mark this near where a lost one was heading is the same blip
     static constexpr int kArmBeamProgram = 4;          // ЛУЧ АВТ. I–II (data/procedures/osa_ak.json soc.beam)
     static constexpr double kStableTrackS = 5.0;       // a lock held this long is the textbook's "устойчивое сопровождение"
+
+    // ---- The emission regime (emission_regime.hpp, docs/crew/16_EMISSION.md): who knows which, and how it is passed down.
+    // The Osa: regime_cmdr_ is what its commander heard (the combat order before the mission, then the battery net),
+    // regime_crew_ what he has told his crew. The post: regime_cmdr_ is what its battery commander has ordered.
+    EmissionRegime regime_cmdr_;
+    EmissionRegime regime_crew_;
+    double regime_heard_s_ = -1e9;           // when the commander heard the regime he hasn't told his crew yet
+    bool regime_from_combat_order_ = false;  // a battery order of the regime at 0 s: the combat order, known before deploying
+    int battery_regime_said_ = 0;            // an Osa's own battery: its regime orders already said on the net
+    int battery_regime_tries_ = 0;
+    double battery_regime_next_s_ = -1.0;
+    std::size_t next_emission_order_ = 0;
+    EmissionRegime regiment_regime_;         // the regiment's order: being said on its net (the post), or heard (an Osa's battery)
+    double regiment_regime_s_ = -1.0;        // an Osa's battery: heard at, until passed on (< 0: none)
+    int regiment_regime_tries_ = 0;          // the post: the regiment says it until the post hears it
+    double regiment_regime_next_s_ = -1.0;
+    EmissionRegime pending_regime_;          // the post: a regime the battery commander owes the battery (the regiment's, an ARM attack)
+    double pending_since_s_ = -1.0;
+    double pending_delay_s_ = 0.0;
+    std::string pending_why_;
+    double arm_report_heard_s_ = -1.0;       // the battery commander heard a launcher's report of an ARM attack (< 0: none)
+    std::vector<EmissionRegime> battery_emission_orders_;  // the post: for a linked Osa
+    std::vector<std::string> arm_reports_out_;             // the Osa: for a linked post
+    double regime_hostile_s_ = -1e9;         // the commander last knew of a hostile (a reminder after a quiet spell)
+    double regime_reminded_s_ = -1e9;
+    double hv_on_since_s_ = -1.0;            // the search transmitter on since (a burst running long)
+    double ssc_rule_due_s_ = -1.0;           // the operator to be told the tracking transmitter's rule (the least emission)
+    EmissionRecord emission_record_;
+    static constexpr double kBurstGraceS = 3.0;  // sam3d: the drill's own seconds before a long burst counts as one
+
+    static std::string BatteryEmissionOrderId(EmissionKind k) { return std::string("order_battery_emission_") + EmissionKindName(k); }
+    // The regime as said on a net: the talk table's group (with the bursts for limited and arm), else its words.
+    std::string EmissionGroup(const EmissionRegime& r) const {
+        const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(r.kind));
+        std::string g = e != nullptr ? e->code : std::string("режим излучения ") + def_.emission.Of(r.kind).ru;
+        if (r.Bursts()) {
+            const std::map<std::string, std::string> w = EmissionWords(def_.emission, r, 60.0 / 33.0);
+            g += ", " + w.at("on") + " через " + w.at("off");
+        }
+        return g;
+    }
+    // The regime in English, for the log and the debrief.
+    std::string RegimeText(const EmissionRegime& r) {
+        std::string t = def_.emission.Of(r.kind).en;
+        if (r.Bursts()) t += " (" + EmissionWords(def_.emission, r, SearchTurnS()).at("bursts_en") + ")";
+        if (!r.from.empty()) t += r.from == "regiment" ? ", the regiment's order" : ", the battery commander's";
+        return t;
+    }
+    // A commander who tells his crew: an NPC, or a player. Without one (a script stands in for him, or no crew data) the
+    // crew goes by what he knows.
+    bool CommanderTellsCrew() const { return def_.has_crew_data && (NpcCommanderActive() || !SeatHolder(Cmdr()).empty()); }
+    // The regime the mission starts under (the combat order's: the doctrine), and the battery's own commander holding it.
+    void StartEmission() {
+        regime_cmdr_ = def_.doctrine.emission;
+        if (regime_cmdr_.kind != EmissionKind::Free) emission_record_.regimes_heard = 1;
+        if (!CommanderTellsCrew() || post_) regime_crew_ = regime_cmdr_;
+        if (battery_ && !LinkedToPost()) {
+            BatteryOrderRegime(regime_cmdr_);
+            battery_regime_said_ = battery_->RegimeOrders();
+        }
+    }
+    void BatteryOrderRegime(const EmissionRegime& r) {
+        BatteryOrder o;
+        o.kind = BatteryOrder::Kind::Emission;
+        o.regime = r;
+        o.at_s = time_;
+        battery_->Order(o, time_);
+    }
+    void CommanderHearsRegime(const EmissionRegime& r, const std::string& how) {
+        if (r.Same(regime_cmdr_)) return;
+        regime_cmdr_ = r;
+        regime_heard_s_ = how == "the combat order" ? -1e9 : time_;
+        ++emission_record_.regimes_heard;
+        Event(Cmdr(), "hears the emission regime by " + how + ": " + RegimeText(r));
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), how, "the emission regime: " + RegimeText(r)});
+        if (!CommanderTellsCrew()) regime_crew_ = r;
+    }
+
+    void UpdateEmission(double dt) {
+        if (post_) {
+            UpdatePostEmission();
+        } else {
+            UpdateOsaBatteryEmission();
+            RecordEmission(dt);
+        }
+    }
+    // An Osa whose battery commander is the battery's own NPC (not a linked post): the regiment's orders reach him and he
+    // passes them on after relay_s; a launcher's report of an ARM attack puts the battery under the least emission
+    // (voenizdat_osa_1991 p243, p262); every regime he orders is said on the battery net, again until the Osa hears it.
+    // One in force at the start is the combat order's, known before the vehicles deploy.
+    void UpdateOsaBatteryEmission() {
+        if (!battery_ || LinkedToPost()) return;
+        const bool npc = def_.battery_commander == "npc";
+        while (next_emission_order_ < def_.emission_orders.size() && def_.emission_orders[next_emission_order_].at_s <= time_ + 1e-9) {
+            const EmissionRegime& r = def_.emission_orders[next_emission_order_++].regime;
+            if (r.from == "regiment") {
+                regiment_regime_ = r;
+                regiment_regime_s_ = time_;
+                Event("regiment", "orders the battery's emission regime: " + RegimeText(r));
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "battery commander", "the emission regime: " + RegimeText(r)});
+            } else {
+                BatteryOrderRegime(r);
+            }
+        }
+        if (regiment_regime_s_ >= 0.0 && (!npc || time_ - regiment_regime_s_ >= def_.emission.relay_s)) {
+            regiment_regime_s_ = -1.0;
+            BatteryOrderRegime(regiment_regime_);
+        }
+        if (arm_report_heard_s_ >= 0.0 && time_ - arm_report_heard_s_ >= def_.emission.arm_on_report_s) {
+            arm_report_heard_s_ = -1.0;
+            const EmissionKind k = battery_->Regime().kind;
+            if (npc && k != EmissionKind::Arm && k != EmissionKind::Silent) {
+                Event("Battery commander", "a launcher reported an ARM attack: the battery under the least emission");
+                BatteryOrderRegime(def_.emission.Make(EmissionKind::Arm, "battery"));
+            }
+        }
+        if (battery_->RegimeOrders() != battery_regime_said_) {
+            battery_regime_said_ = battery_->RegimeOrders();
+            battery_regime_tries_ = 0;
+            battery_regime_next_s_ = time_;
+            if (regime_from_combat_order_) {
+                battery_regime_next_s_ = -1.0;
+                CommanderHearsRegime(battery_->Regime(), "the combat order");
+            }
+        }
+        regime_from_combat_order_ = false;
+        if (battery_regime_next_s_ < 0.0 || time_ + 1e-9 < battery_regime_next_s_) return;
+        const EmissionRegime& r = battery_->Regime();
+        ++battery_regime_tries_;
+        if (c2_ == nullptr || c2_->Hearing()) {
+            battery_regime_next_s_ = -1.0;
+            Radio("battery net", "10", "Всем, я 10: " + EmissionGroup(r) + ". " + EmissionGroup(r) + ".");
+            if (const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(r.kind))) HeardGroup(e->code, "battery", BatteryNetHearers());
+            CommanderHearsRegime(r, "the battery net");
+        } else if (battery_regime_tries_ > def_.emission.repeats) {
+            battery_regime_next_s_ = -1.0;
+            Event("battery net", "the battery commander's order of the emission regime never got through");
+        } else {
+            battery_regime_next_s_ = time_ + def_.emission.repeat_s;
+            Event("battery net", "the order of the emission regime was not heard: the battery commander says it again later");
+        }
+    }
+    // The post: the regiment's order comes on its command net (heard on the R-111 and decoded, else said again); the
+    // battery commander passes it on after relay_s, and puts the battery under the least emission when a launcher reports
+    // an ARM attack. An NPC does it; a player decides (the helper shows it as his duty until he orders a regime).
+    void UpdatePostEmission() {
+        while (next_emission_order_ < def_.emission_orders.size() && def_.emission_orders[next_emission_order_].at_s <= time_ + 1e-9) {
+            const EmissionRegime& r = def_.emission_orders[next_emission_order_++].regime;
+            if (r.from == "regiment") {
+                regiment_regime_ = r;
+                regiment_regime_tries_ = 0;
+                regiment_regime_next_s_ = time_;
+            } else {
+                OweBatteryRegime(r, 0.0, "the battery commander's decision");
+            }
+        }
+        if (regiment_regime_next_s_ >= 0.0 && time_ + 1e-9 >= regiment_regime_next_s_) {
+            ++regiment_regime_tries_;
+            const RadioNetDef* rn = def_.radio_data.Find("regiment");
+            const std::vector<std::string> ears = NetHearers("regiment");
+            if (rn != nullptr && !ears.empty()) {
+                regiment_regime_next_s_ = -1.0;
+                const TalkEntry* e = def_.talk_tables.ByEffect(EmissionEffect(regiment_regime_.kind));
+                const std::string g = EmissionGroup(regiment_regime_);
+                Radio("regiment net", rn->main_call_sign, "Всем, я " + rn->main_call_sign + ": " + g + ". " + g + ".", false, ears);
+                if (e != nullptr) HeardGroup(e->code, "regiment", ears);
+                DecodeHeard(ears, e);
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "regiment net", "the emission regime: " + RegimeText(regiment_regime_)});
+                OweBatteryRegime(regiment_regime_, def_.emission.relay_s, "the regiment's order of the emission regime, passed on to the battery");
+            } else if (regiment_regime_tries_ > def_.emission.repeats) {
+                regiment_regime_next_s_ = -1.0;
+                Event("regiment net", "the regiment's order of the emission regime never got through");
+            } else {
+                regiment_regime_next_s_ = time_ + def_.emission.repeat_s;
+                Event("regiment net", "the regiment's order of the emission regime was not heard on the R-111");
+            }
+        }
+        if (arm_report_heard_s_ >= 0.0 && time_ - arm_report_heard_s_ >= def_.emission.arm_on_report_s) {
+            arm_report_heard_s_ = -1.0;
+            if (regime_cmdr_.kind != EmissionKind::Arm && regime_cmdr_.kind != EmissionKind::Silent) {
+                OweBatteryRegime(def_.emission.Make(EmissionKind::Arm, "battery"), 0.0, "a launcher reports an ARM attack: the least emission");
+            }
+        }
+        if (pending_since_s_ < 0.0 || time_ - pending_since_s_ < pending_delay_s_ || MarchRadioBan()) return;
+        if (pending_regime_.Same(regime_cmdr_)) {
+            pending_since_s_ = -1.0;
+            return;
+        }
+        bool done = false;
+        if (!def_.has_crew_data) {
+            done = OrderBatteryEmission(pending_regime_, "Battery commander");
+        } else if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), BatteryEmissionOrderId(pending_regime_.kind), pending_why_))) {
+            done = GiveCrewOrder(BatteryEmissionOrderId(pending_regime_.kind));
+        } else {
+            return;  // a player's to decide: the helper shows it until he orders a regime
+        }
+        if (!done) pending_delay_s_ = time_ - pending_since_s_ + 5.0;  // no way on the net yet: he tries again in a while
+    }
+    void OweBatteryRegime(const EmissionRegime& r, double delay_s, const std::string& why) {
+        pending_regime_ = r;
+        pending_since_s_ = time_;
+        pending_delay_s_ = delay_s;
+        pending_why_ = why;
+    }
+    // The battery commander says a regime on the battery net: a circular command said twice, no receipt (rrs_1986).
+    bool OrderBatteryEmission(const EmissionRegime& r, const std::string& by) {
+        if (!post_) return false;
+        const std::string why = CanTalkOnNet(Cmdr(), "battery");
+        if (!why.empty()) {
+            last_refusal_ = why;
+            return false;
+        }
+        const std::string g = EmissionGroup(r);
+        Radio("battery net", by, "Всем, я " + OwnCallSignOn("battery") + ": " + g + ". " + g + ".", false, BatteryNetHearers());
+        Transmitted("battery", by, 4.0);
+        regime_cmdr_ = r;
+        regime_crew_ = r;
+        battery_emission_orders_.push_back(r);
+        pending_since_s_ = -1.0;
+        if (battery_) BatteryOrderRegime(r);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", "the emission regime: " + RegimeText(r)});
+        return true;
+    }
+
+    // The Osa's commander tells his crew the regime he heard (order_emission_regime): before they deploy (the combat
+    // order's) or pass_on_s after he hears a new one. A silence his «Излучение выключить!» already said needs no more
+    // words, nor does radiation lifted back to free by «Излучение включить!» (EmconOrderTells).
+    void NpcPassOnRegime() {
+        if (post_ || regime_crew_.Same(regime_cmdr_) || time_ - regime_heard_s_ < def_.emission.pass_on_s) return;
+        if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_emission_regime", "the battery's emission regime, told to the crew"))) {
+            GiveCrewOrder("order_emission_regime");
+        }
+    }
+    // «Излучение выключить!» under radiation forbidden tells the crew the regime, and «Излучение включить!» lifting it
+    // back to free does too: no words of the regime besides.
+    void EmconOrderTells(const std::string& order_id) {
+        const bool off = order_id == "order_emcon_off" && regime_cmdr_.kind == EmissionKind::Silent;
+        const bool on = order_id == "order_emcon_on" && regime_cmdr_.kind == EmissionKind::Free && regime_crew_.kind == EmissionKind::Silent;
+        if ((!off && !on) || post_ || regime_crew_.Same(regime_cmdr_)) return;
+        regime_crew_ = regime_cmdr_;
+        ++emission_record_.regimes_told;
+        emission_record_.told_after_s = regime_heard_s_ > -1e8 ? time_ - regime_heard_s_ : 0.0;
+        Event(Cmdr(), "tells the crew the emission regime by his order: " + RegimeText(regime_cmdr_));
+    }
+    // The bursts apply now: at the halt with nothing tracked, under a burst regime the crew knows (limited: and no hostile
+    // the commander knows of within the tracking radar's reach).
+    bool BurstsApply(bool halted) {
+        if (!regime_crew_.Bursts() || !halted || engagement_.Method() != TrackMethod::None || CaptureUnderWay()) return false;
+        if (regime_crew_.kind == EmissionKind::Arm) return true;
+        const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) {
+            if (k.has_range && !k.friendly && k.range_m <= reach) return false;
+        }
+        return true;
+    }
+    // Reminders (the radar seats told again): under a burst regime his crew knows, when he learns of a hostile after a quiet
+    // spell while the bursts still apply (it is far out: the bursts; under the least emission the tracking transmitter's
+    // range too), and under the least emission, where the senior operator keeps the rhythm himself, when a burst runs
+    // longer than the regime's after he has kept one (under the limited regime the commander orders each burst: his own
+    // «Высокое выключить!» is the correction). The reminders wait behind the fight's orders on the intercom.
+    void NpcRemindRegime(bool halted) {
+        if (post_ || !regime_crew_.Bursts() || !regime_crew_.Same(regime_cmdr_)) return;
+        if (ssc_rule_due_s_ >= 0.0 && time_ >= ssc_rule_due_s_ &&
+            NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_remind_ssc", "the least emission: the operator told the tracking transmitter's rule"))) {
+            GiveCrewOrder("order_remind_ssc");
+        }
+        bool hostile = false;
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) hostile = hostile || !k.friendly;
+        if (hostile) {
+            const bool after_quiet = time_ - regime_hostile_s_ > def_.emission.remind_quiet_s;
+            regime_hostile_s_ = time_;
+            if (after_quiet && halted && BurstsApply(halted) && time_ - regime_reminded_s_ > 30.0) {
+                RemindRegime("a hostile far out after a quiet spell: the radar seats reminded of the regime", true);
+                return;
+            }
+        }
+        if (regime_crew_.kind == EmissionKind::Arm && LongBurst(halted) && time_ - regime_reminded_s_ > 30.0) {
+            RemindRegime("the search transmitter on longer than the regime's burst", false);
+        }
+    }
+    // A target ordered taken («Цель ... — взять!») and not yet tracked nor let go: the search transmitter stays on until the
+    // tracking radar has it, at most kCaptureBurstS (the target designation is the search radar's picture; sam3d).
+    bool CaptureUnderWay() const {
+        if (engagement_.Method() != TrackMethod::None) return false;
+        for (auto it = orders_given_.rbegin(); it != orders_given_.rend() && time_ - it->time_s <= kCaptureBurstS; ++it) {
+            if (it->order == "order_drop_target") return false;
+            if (it->order == "order_take_target") return true;
+        }
+        return false;
+    }
+    static constexpr double kCaptureBurstS = 30.0;
+    // A burst running longer than the regime's, by breach_turns and a few seconds' grace, while the bursts apply and
+    // after the crew has kept one burst of the regime (the first is the search drill's, which switches the transmitter on
+    // among its other steps).
+    bool LongBurst(bool halted) {
+        const double turn = SearchTurnS();
+        return BurstsApply(halted) && hv_on_since_s_ >= 0.0 && burst_kept_ && burst_kept_of_.Same(regime_crew_) &&
+               time_ - hv_on_since_s_ > regime_crew_.OnS(turn) + def_.emission.breach_turns * turn + kBurstGraceS;
+    }
+    void RemindRegime(const std::string& why, bool with_ssc) {
+        if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_remind_bursts", why))) GiveCrewOrder("order_remind_bursts");
+        if (with_ssc && regime_crew_.kind == EmissionKind::Arm && NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_remind_ssc", why))) {
+            GiveCrewOrder("order_remind_ssc");
+        }
+        if (!shadow_) regime_reminded_s_ = time_;
+    }
+    // order_emission_regime, order_remind_bursts, order_remind_ssc: said with the regime's numbers (the turns and the
+    // seconds at this antenna's rate; Table 7.3's ranges). Passing the regime on is what the crew acts on from then; the
+    // senior operator reads the bursts back, and under the least emission the operator is told the tracking
+    // transmitter's rule with it.
+    bool TellRegime(const std::string& order_id) {
+        const bool pass_on = order_id == "order_emission_regime";
+        const EmissionRegime r = pass_on ? regime_cmdr_ : regime_crew_;
+        if (!pass_on && (!r.Bursts() || (order_id == "order_remind_ssc" && r.kind != EmissionKind::Arm))) return false;
+        std::map<std::string, std::string> f = EmissionWords(def_.emission, r, SearchTurnS());
+        if (order_id == "order_remind_ssc") {
+            const EngagementTuning& t = def_.tuning;
+            const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 20000.0;
+            f["range_km"] = std::to_string(static_cast<int>(std::lround((t.has_arm_table ? t.arm_track_on_slow_far_m : reach) / 1000.0)));
+            f["range_fast_km"] = std::to_string(static_cast<int>(std::lround((t.has_arm_table ? t.arm_track_on_fast_far_m : reach) / 1000.0)));
+        }
+        orders_given_.push_back({time_, order_id});
+        if (callouts_) callouts_->Say(time_, order_id, Cmdr(), f);
+        if (!pass_on) {
+            if (order_id == "order_remind_ssc") ssc_rule_due_s_ = -1.0;
+            ++emission_record_.reminders;
+            Event(Cmdr(), order_id == "order_remind_ssc" ? "reminds the operator of the tracking transmitter's rule" : "reminds the senior operator of the bursts");
+            return true;
+        }
+        regime_crew_ = r;
+        ++emission_record_.regimes_told;
+        emission_record_.told_after_s = regime_heard_s_ > -1e8 ? time_ - regime_heard_s_ : 0.0;
+        Event(Cmdr(), "tells the crew the emission regime: " + RegimeText(r));
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "intercom", "the emission regime told to the crew: " + RegimeText(r)});
+        if (r.Bursts() && (MemberAt("senior_operator") != nullptr || !SeatHolder("senior_operator").empty()) &&
+            NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "emission_readback", "the bursts read back", f))) {
+            Say("emission_readback", "senior_operator", f);
+        }
+        // Under the least emission the operator is told the tracking transmitter's rule once the senior operator has read
+        // the bursts back (NpcRemindRegime).
+        ssc_rule_due_s_ = r.kind == EmissionKind::Arm && (MemberAt("operator") != nullptr || !SeatHolder("operator").empty()) ? time_ + 8.0 : -1.0;
+        return true;
+    }
+    // The record: the search transmitter's seconds at the halt while the bursts apply, and how long each burst runs.
+    void RecordEmission(double dt) {
+        if (!engagement_on_ || !def_.has_crew_data) return;
+        const bool hv = console_.panel.Get("soc.hv") == 1 && console_.panel.Get("soc.search") == 1;  // radiating
+        const bool halted = console_.equipment.GetInput("vehicle_stopped");
+        if (hv && hv_on_since_s_ < 0.0) hv_on_since_s_ = time_;
+        if (!hv) {
+            if (hv_on_since_s_ >= 0.0 && regime_crew_.Bursts()) {  // a burst ended under the regime: the crew keeps it
+                burst_kept_ = true;
+                burst_kept_of_ = regime_crew_;
+            }
+            hv_on_since_s_ = -1.0;
+            burst_breached_ = false;
+        }
+        if (BurstsApply(halted) && console_.panel.Get("soc.search") == 1) {
+            emission_record_.bursts_s += dt;
+            if (hv) emission_record_.radiating_s += dt;
+        }
+        if (!burst_breached_ && LongBurst(halted)) {
+            burst_breached_ = true;
+            ++emission_record_.breaches;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName("senior_operator"), "search radar",
+                         "the transmitter on longer than the regime's burst (" + RegimeText(regime_crew_) + ")"});
+        }
+    }
+    bool burst_breached_ = false;
+    bool burst_kept_ = false;        // a burst of this regime ended: the crew keeps its bursts
+    EmissionRegime burst_kept_of_;
 
     void WatchScope() {
         if (!engagement_on_ || !def_.has_crew_data || (MemberAt("senior_operator") == nullptr && SeatHolder("senior_operator").empty())) return;
@@ -5416,7 +6427,7 @@ private:
                 ArmSignSeen(c, "arm_launch");
                 continue;
             }
-            if (!def_.doctrine.arm_threat || span < 3.0) continue;
+            if (regime_crew_.kind != EmissionKind::Arm || span < 3.0) continue;
             if (at_us && speed > 100.0) tr.heading_in = true;
             // The turn by its last few seconds' marks (the long window lags a turn).
             std::size_t k = 0;
@@ -5469,17 +6480,26 @@ private:
         const double span = m.back().first - m.front().first;
         return span >= 1.5 ? (m.back().second - m.front().second).Length() / span : -1.0;
     }
+    // Whether the seat takes a sign of an ARM in: a "basic" tier (recruit, class3) doesn't know the signs; the others may
+    // miss one (miss_chance, more under stress). The debrief says which.
+    bool ArmSignNoticed(const std::string& seat, const char* unknown, const char* missed) {
+        const SkillTier* t = TierAt(seat);
+        if (t != nullptr && t->knows == "basic") {
+            Event(seat, unknown);
+            return false;
+        }
+        const CrewMember* m = MemberAt(seat);
+        const double miss = t != nullptr ? t->miss_chance * (m != nullptr ? TierStress(*t, *m) : 1.0) : 0.0;
+        if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
+            Event(seat, missed);
+            return false;
+        }
+        return true;
+    }
     void ArmSignSeen(const Contact& c, const std::string& callout) {
         const bool launch = callout == "arm_launch";
-        const SkillTier* t = TierAt("senior_operator");
-        if (t != nullptr && t->knows == "basic") {
-            Event("senior_operator", launch ? "does not know the mark of an ARM for what it is" : "takes the target's turn for nothing");
-            return;
-        }
-        const CrewMember* so = MemberAt("senior_operator");
-        const double miss = t != nullptr ? t->miss_chance * (so != nullptr && so->Stressed() ? t->stress_factor : 1.0) : 0.0;
-        if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
-            Event("senior_operator", launch ? "misses the mark of an ARM on his scope" : "misses the target's turn away");
+        if (!ArmSignNoticed("senior_operator", launch ? "does not know the mark of an ARM for what it is" : "takes the target's turn for nothing",
+                            launch ? "misses the mark of an ARM on his scope" : "misses the target's turn away")) {
             return;
         }
         KnownTarget k;
@@ -5498,15 +6518,90 @@ private:
         Event("senior_operator", launch ? "sees a small fast mark coming straight at the vehicle: an ARM" : "sees a target that came at the battery turn away");
         Say(callout, "senior_operator", words, &k);
     }
+    // The other signs of a launch (voenizdat_osa_1991 p262), each from what its instrument shows: on the tracking
+    // radar's indicators the tracked target's pulse grows a moment, then a smaller pulse leaves it closing fast (the
+    // range wheel's seat, at his range indicator); on the TV the tracked target firing it (the TV's seat).
+    std::set<int> arm_signs_track_, arm_signs_tv_;
+    static constexpr double kPulseApartM = 100.0;     // sam3d: two pulses of 0.45 us (67 m) told apart at 1.5 lengths
+    static constexpr double kIndicatorSpanM = 3000.0;  // sam3d: the range indicator's expanded sweep about the gate
+    static constexpr double kTvLaunchM = 1500.0;       // sam3d: the launch seen on the TV within this of the carrier
+    void WatchTrackSigns() {
+        const std::string tracked = engagement_.TrackedTarget();
+        if (!em_link_ || !engagement_on_ || !def_.has_crew_data || tracked.empty()) return;
+        const TrackMethod m = engagement_.Method();
+        const double target_range = TargetRange(tracked);
+        if (m == TrackMethod::None || target_range < 0.0) return;
+        Vec3 target_at;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const Aircraft* a = def_.targets[i].id == tracked && targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+            if (a != nullptr) target_at = a->position;
+        }
+        const Vec3 unit = def_.unit_position;
+        const Vec3 rel_t = target_at - unit;
+        const double true_az = RadToDeg(std::atan2(rel_t.x, rel_t.y));
+        KnownTarget k;
+        k.target = tracked;
+        k.has_azimuth = k.has_range = true;
+        k.azimuth_deg = std::remainder(true_az - engagement_.UnitHeadingDeg() + engagement_.GyroHeadingDeg(), 360.0);  // the crew's frame
+        k.range_m = target_range;
+        k.time_s = time_;
+        const std::map<std::string, std::string> words{{"azimuth", MilsText(k.azimuth_deg)}};
+        const std::string range_seat = def_.tuning.aim_range_role;
+        const std::string tv_seat = def_.tuning.aim_el_role;
+        const bool radar = m == TrackMethod::Radar || m == TrackMethod::RadarOnJam;
+        const bool tv_on = !console_.track.tv_camera.empty() && console_.equipment.IsReady(console_.track.tv_camera);
+        const double tv_half_rad = DegToRad(0.5 * TvFieldOfViewDeg(console_));
+        for (const EmSensorLink::ArmView& a : em_link_->ArmsInFlight()) {
+            const Vec3 rel = a.position - unit;
+            const double range = rel.Length();
+            if (range < 1.0) continue;
+            const double closing = -Dot(a.velocity, rel / range);
+            // The indicators: its own echo in the beam, ahead of the target's pulse, closing faster than any aircraft.
+            if (radar && arm_signs_track_.count(a.id) == 0 && (MemberAt(range_seat) != nullptr || !SeatHolder(range_seat).empty()) &&
+                target_range - range > kPulseApartM && target_range - range < kIndicatorSpanM && closing > kArmMarkSpeedMps &&
+                em_link_->ArmEchoVisible(a.id)) {
+                arm_signs_track_.insert(a.id);
+                if (ArmSignNoticed(range_seat, "does not know the second pulse leaving the target for an ARM", "misses the second pulse leaving the target") &&
+                    NpcDoes(range_seat, SeatDuty::Report(range_seat, "arm_launch_track", "a smaller pulse leaves the tracked target, closing fast: an ARM", words).About(k))) {
+                    Event(range_seat, "sees a smaller pulse leave the tracked target's pulse on his indicator, closing fast: an ARM");
+                    Say("arm_launch_track", range_seat, words, &k);
+                }
+            }
+            // The TV: the launch itself, the missile leaving the target in the field of view.
+            if (tv_on && arm_signs_tv_.count(a.id) == 0 && (MemberAt(tv_seat) != nullptr || !SeatHolder(tv_seat).empty()) &&
+                (a.position - target_at).Length() < kTvLaunchM && AngleBetween(rel, rel_t) < tv_half_rad &&
+                engagement_.TvLook(console_, tracked).seen) {
+                arm_signs_tv_.insert(a.id);
+                if (ArmSignNoticed(tv_seat, "does not know the launch on the TV for an ARM", "misses the launch on the TV") &&
+                    NpcDoes(tv_seat, SeatDuty::Report(tv_seat, "arm_launch_tv", "the tracked target fires a missile on the TV: an ARM", words).About(k))) {
+                    Event(tv_seat, "sees the tracked target fire a missile on the TV: an ARM");
+                    Say("arm_launch_tv", tv_seat, words, &k);
+                }
+            }
+        }
+    }
     // The commander heard a sign of an ARM launch: the missile in the air is guided to its burst, then every transmitter
     // goes off (ArmSilent); the attack is reported up the battery net.
+    // The commander hears a sign of an ARM launch: silent once the missile in the air has burst, and the attack reported
+    // to the battery commander (his NPC's report, or a player's duty).
     void ArmSignHeard(const SpokenCallout& s) {
         if (!arm_attacked_) Event(Cmdr(), "hears the sign of an ARM launch: radiation off once the missile in the air has burst");
         arm_attacked_ = true;
         arm_sign_s_ = time_;
-        if (battery_ && callouts_ && time_ - arm_reported_s_ > 60.0) {
-            arm_reported_s_ = time_;
-            callouts_->Say(time_, "report_arm_attack", Cmdr(), {{"callsign", OwnCallsign()}, {"azimuth", MilsText(s.about.azimuth_deg)}}, 3.0);
+        arm_sign_az_ = MilsText(s.about.azimuth_deg);
+        if (!battery_ || !callouts_ || time_ - arm_reported_s_ <= 60.0) return;
+        const std::map<std::string, std::string> f{{"callsign", OwnCallsign()}, {"azimuth", arm_sign_az_}};
+        if (!NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "report_arm_attack", "an ARM launch: reported to the battery commander", f))) return;
+        callouts_->Say(time_, "report_arm_attack", Cmdr(), f, 3.0);
+        ArmAttackReported(arm_sign_az_);
+    }
+    // The battery commander hears the report: a linked post's, or the battery's own (UpdateOsaBatteryEmission).
+    void ArmAttackReported(const std::string& az) {
+        arm_reported_s_ = time_;
+        if (LinkedToPost()) {
+            arm_reports_out_.push_back(az);
+        } else if (arm_report_heard_s_ < 0.0) {
+            arm_report_heard_s_ = time_;
         }
     }
     // Silent against an ARM: from the sign (once nothing of ours is in the air) for arm_silence_s.
@@ -5524,21 +6619,23 @@ private:
         }
         return 60.0 / 33.0;  // 33 rpm
     }
-    // The range at which the commander has the tracking transmitter put on a target: its reach, and under the threat of
-    // ARMs (doctrine arm_threat) Table 7.3's far-edge range for the target's speed as the scope shows it (unknown: fast).
+    // The range at which the commander has the tracking transmitter put on a target: its reach, and under the least
+    // emission (the arm regime he heard) Table 7.3's far-edge range for the target's speed as the scope shows it (unknown:
+    // fast).
     double TrackOnRangeM(const std::string& target) const {
         const double reach = console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 1e9;
         const EngagementTuning& t = def_.tuning;
-        if (!def_.doctrine.arm_threat || !t.has_arm_table) return reach;
+        if (regime_cmdr_.kind != EmissionKind::Arm || !t.has_arm_table) return reach;
         const double speed = ScopeSpeedMps(target);
         const double table = speed >= 0.0 && speed < t.arm_split_speed_mps ? t.arm_track_on_slow_far_m : t.arm_track_on_fast_far_m;
         return std::min(reach, table);
     }
-    // The least emission under the threat of ARMs (doctrine arm_threat, voenizdat_osa_1991 p262): the search
-    // transmitter's high voltage off now? Off while the tracking radar holds a stable track with nothing else about;
-    // with nothing tracked, on for 2 antenna turns after every arm_search_off_turns.
+    // The least emission under the threat of ARMs (the arm regime as told to the crew, voenizdat_osa_1991 p262): the
+    // search transmitter's high voltage off now? Off while the tracking radar holds a stable track with nothing else
+    // about; with nothing tracked, on for the regime's turns (2) after every off turns (3-4), and on through a capture.
     bool ArmSearchOff() {
         const TrackMethod m = engagement_.Method();
+        if (CaptureUnderWay()) return false;
         if (m != TrackMethod::None) {
             if (m != TrackMethod::Radar || time_ - npc_track_since_s_ < kStableTrackS) return false;
             const std::string tracked = engagement_.TrackedTarget();
@@ -5548,40 +6645,76 @@ private:
             return true;
         }
         const double turn = SearchTurnS();
-        return std::fmod(time_, turn * (2.0 + def_.doctrine.arm_search_off_turns)) >= 2.0 * turn;
+        const double on = regime_crew_.OnS(turn);
+        return std::fmod(time_, on + regime_crew_.OffS(turn)) >= on;
     }
 
-    // Under the threat of ARMs (doctrine arm_threat) the senior operator keeps the least emission himself, his duty under
-    // the doctrine as ЗАПРОС is with a new echo: ВЫСОКОЕ on and off by ArmSearchOff while the search runs at a halt. A
-    // player in his seat does it by hand.
+    // ЗАПРОС waiting on the search transmitter between the limited regime's bursts (the interrogator's antenna is built
+    // into the search antenna; his own query of a new echo seen in the last burst): the senior operator puts ВЫСОКОЕ on
+    // for it and interrogates, and the commander's next burst order puts it off (as under the least emission,
+    // ArmEmission; sam3d: otherwise the query, and the crew's orders behind it, waited for the next burst or for ever).
+    void QueryBurst() {
+        const std::string seat = "senior_operator";
+        if (regime_crew_.kind != EmissionKind::Limited || !engagement_on_ || console_.panel.Get("soc.hv") != 0) return;
+        if (!console_.equipment.GetInput("vehicle_stopped") || console_.panel.Get("soc.search") != 1 || NpcSilent() ||
+            !console_.equipment.IsReady("hv_ready")) {
+            return;
+        }
+        CrewMember* so = MemberAt(seat);
+        if (so == nullptr || !SeatHolder(seat).empty()) return;  // a player's query waits on his own hand
+        if (so->Status() != CrewStatus::Waiting || so->Tracker().GetProcedure().id != "iff_interrogate") return;
+        const Procedure* on = console_.FindProcedure("hv_on");
+        const Procedure* query = console_.FindProcedure("iff_interrogate");
+        if (on == nullptr || query == nullptr) return;
+        so->Order(*on);
+        so->Queue(*query);
+        Event(seat, "ЗАПРОС waits on the search transmitter: ВЫСОКОЕ on for the interrogation");
+    }
+
+    // Under the least emission (the arm regime, once his commander has told him) the senior operator keeps it himself, his
+    // duty as ЗАПРОС is with a new echo: ВЫСОКОЕ on and off by ArmSearchOff while the search runs at a halt. A player in
+    // his seat does it by hand.
     void ArmEmission() {
         const std::string seat = "senior_operator";
-        if (!def_.doctrine.arm_threat || !engagement_on_ || (MemberAt(seat) == nullptr && SeatHolder(seat).empty())) return;
+        if (regime_crew_.kind != EmissionKind::Arm || !engagement_on_ || (MemberAt(seat) == nullptr && SeatHolder(seat).empty())) return;
         if (!console_.equipment.GetInput("vehicle_stopped") || console_.panel.Get("soc.search") != 1 || NpcSilent()) return;
         if (!console_.equipment.IsReady("hv_ready") || (npc_arm_stow_ordered_ && !arm_relocated_) || (npc_stow_ordered_ && !npc_resumed_)) return;
         CrewMember* so = MemberAt(seat);
-        if (so != nullptr && SeatHolder(seat).empty() && so->IsBusy()) return;
-        if (console_.panel.Get("soc.beam") != kArmBeamProgram) {  // both low beams in each two-turn burst
+        const bool npc = so != nullptr && SeatHolder(seat).empty();
+        // ЗАПРОС waits on the search transmitter (the interrogator's antenna is built into the search antenna): between
+        // bursts he gives the burst for it, then interrogates (sam3d: otherwise each waited on the other all raid).
+        const bool query_waits = npc && so->Status() == CrewStatus::Waiting && so->Tracker().GetProcedure().id == "iff_interrogate";
+        if (npc && so->IsBusy() && !query_waits) return;
+        if (!query_waits && console_.panel.Get("soc.beam") != kArmBeamProgram) {  // both low beams in each two-turn burst
             if (const Procedure* p = console_.FindProcedure("arm_beams")) {
                 if (NpcDoes(seat, SeatDuty::Drill(seat, "arm_beams", "the least emission against ARMs: both low beams in each burst")) && so) so->Order(*p);
                 return;
             }
         }
         // Having seen a sign of an ARM launch himself he gives no more bursts until the silence is over.
-        const bool off = ArmSearchOff() || time_ - arm_seen_s_ < def_.doctrine.arm_silence_s;
+        const bool silence = time_ - arm_seen_s_ < def_.doctrine.arm_silence_s;
+        const bool off = silence || (!query_waits && ArmSearchOff());
         if (console_.panel.Get("soc.hv") != (off ? 1 : 0)) return;
         const char* drill = off ? "hv_off" : "hv_on";
         if (const Procedure* p = console_.FindProcedure(drill)) {
-            const char* why = off ? "the least emission against ARMs: ВЫСОКОЕ off between bursts" : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
-            if (NpcDoes(seat, SeatDuty::Drill(seat, drill, why)) && so) so->Order(*p);
+            const char* why = off                ? "the least emission against ARMs: ВЫСОКОЕ off between bursts"
+                              : query_waits        ? "ЗАПРОС needs the search transmitter: ВЫСОКОЕ on for the interrogation"
+                              : CaptureUnderWay() ? "a target ordered taken: ВЫСОКОЕ on until the tracking radar has it"
+                                                   : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
+            if (NpcDoes(seat, SeatDuty::Drill(seat, drill, why)) && so) {
+                so->Order(*p);
+                const Procedure* query = query_waits ? console_.FindProcedure("iff_interrogate") : nullptr;
+                if (query != nullptr) so->Queue(*query);
+            }
         }
     }
 
-    // The battery's EMCON, or an ambush not yet sprung: sprung once a hostile is designated within 15 km (sam3d).
+    // Radiation forbidden (the silent regime he heard), or an ambush not yet sprung: sprung once a hostile is designated
+    // within 15 km (sam3d).
     bool NpcSilent() {
         if (ArmSilent()) return true;
+        if (regime_cmdr_.kind == EmissionKind::Silent) return true;
         if (!battery_) return false;
-        if (battery_->Emcon()) return true;
         if (battery_->CurrentMode() != Battery::Mode::Ambush) {
             npc_ambush_sprung_ = false;
             return false;
@@ -5829,17 +6962,81 @@ private:
         return true;
     }
     std::vector<C2Network::Event> designations_heard_;  // every designation so far (the latest last)
+    std::map<std::string, double> iff_unanswered_;      // when he last reported each target without a reply
+    std::vector<KnownTarget> iff_batch_;                // the echoes of the last interrogation without a reply
+    // One "Ответа нет!" for an interrogation's unanswered echoes (sam3d: one a target, fifteen in a row, said nothing
+    // new): about the target that matters, the one tracked or ordered taken, else the nearest he hasn't reported in the
+    // last two minutes; nothing when every one of them was reported.
+    void ReportNoReply() {
+        if (iff_batch_.empty()) return;
+        std::vector<KnownTarget> batch;
+        batch.swap(iff_batch_);
+        const std::string tracked = engagement_.TrackedTarget();
+        const KnownTarget* pick = nullptr;
+        for (const KnownTarget& k : batch) {
+            if (k.target == tracked || k.target == assigned_target_) pick = &k;
+        }
+        if (pick == nullptr) {
+            double best = 1e18;
+            for (const KnownTarget& k : batch) {
+                const auto said = iff_unanswered_.find(k.target);
+                if (said != iff_unanswered_.end() && time_ - said->second < 120.0) continue;
+                const double r = TargetRange(k.target);
+                const double key = r >= 0.0 ? r : 1e17;
+                if (key < best) {
+                    best = key;
+                    pick = &k;
+                }
+            }
+        } else {
+            const auto said = iff_unanswered_.find(pick->target);
+            if (said != iff_unanswered_.end() && time_ - said->second < 120.0) return;
+        }
+        if (pick == nullptr) return;
+        const KnownTarget k = *pick;
+        // The words cover every echo of the interrogation without a reply: a listener learns them all with it. Owed
+        // once whoever holds the seat.
+        std::vector<KnownTarget>& also = iff_companions_[k.target];
+        also.clear();
+        for (const KnownTarget& o : batch) {
+            iff_unanswered_[o.target] = time_;
+            if (o.target != k.target) also.push_back(o);
+        }
+        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "iff_no_reply", "no reply mark beside the echo").About(k))) {
+            Say("iff_no_reply", "senior_operator", {}, &k);
+        }
+    }
+    std::map<std::string, std::vector<KnownTarget>> iff_companions_;  // a "Ответа нет!"'s target -> the other echoes it covers
+    std::map<std::string, double> drill_started_s_;  // "<seat>|<procedure>" -> when he began it (his "Есть!")
     std::map<std::string, double> passed_at_;  // when the commander last passed a target's designation on
+    std::map<std::string, bool> passed_far_;    // it was still far out then (it is passed on again as it comes near)
 
     // A crew member's reports as words: acknowledgement, done, can't, fault; and the start of a wait (reminders).
     void CrewCallouts(const CrewMember& c, const std::vector<CrewReport>& reports) {
         if (!callouts_ || !SeatHolder(c.Role()).empty()) return;
         for (const CrewReport& r : reports) {
+            const std::string key = c.Role() + "|" + r.procedure_id;
+            const bool routine = routine_drills_.count(key) != 0;
+            if (r.kind == CrewReport::Kind::Completed || r.kind == CrewReport::Kind::Aborted) routine_drills_.erase(key);
             switch (r.kind) {
-                // The commanding seat doesn't answer himself.
-                case CrewReport::Kind::Started: if (c.Role() != Cmdr()) Say("ack", c.Role()); break;
-                case CrewReport::Kind::Completed: if (c.Role() != Cmdr()) Say("done", c.Role()); break;
-                case CrewReport::Kind::Aborted: Say("cannot", c.Role(), {{"reason", r.detail}}); break;
+                // The commanding seat doesn't answer himself; a standing order's routine needs no answer.
+                case CrewReport::Kind::Started:
+                    drill_started_s_[key] = time_;
+                    if (c.Role() != Cmdr() && !routine) Say("ack", c.Role());
+                    break;
+                // Under heavy stress the talk shrinks to what is needed (docs/crew/15_TALK.md section 4): a drill done
+                // within 10 s of its "Есть!" isn't reported done (the commander sees it on his lamps).
+                case CrewReport::Kind::Completed: {
+                    const auto started = drill_started_s_.find(key);
+                    const bool quick = c.StressLevel() >= 0.7 && started != drill_started_s_.end() && time_ - started->second < 10.0;
+                    if (c.Role() != Cmdr() && !routine && !quick) Say("done", c.Role());
+                    break;
+                }
+                // A drill the commander replaced or called off himself needs no "can't", nor does an unspoken routine
+                // (the burst's transmitter refused with the search stopped: he sees it and calls "Поиск!").
+                case CrewReport::Kind::Aborted:
+                    if (r.detail != "superseded" && r.detail != "cancelled" && !routine) Say("cannot", c.Role(), {{"reason", r.detail}});
+                    break;
                 case CrewReport::Kind::EquipmentFault: {
                     const SubsystemDef* d = console_.equipment.Def(r.detail);
                     Say("fault", c.Role(), {{"what", d != nullptr && !d->name.empty() ? d->name : r.detail}});
@@ -5862,11 +7059,13 @@ private:
         for (std::size_t i = 0; i < def_.crew_data.reports.size(); ++i) {
             const AutoReportDef& r = def_.crew_data.reports[i];
             const bool now = console_.equipment.Holds(r.when, console_.panel);
-            // Under the least emission against ARMs the search transmitter goes on every few turns: "Готов СОЦ!" once is enough.
-            const bool bursting = def_.doctrine.arm_threat && r.callout == "soc_ready" && time_ - report_said_s_[i] < 120.0;
+            // Under a regime of bursts the search transmitter goes on every few turns: "Готов СОЦ!" once is enough.
+            const bool bursting = regime_crew_.Bursts() && r.callout == "soc_ready" &&
+                                  time_ - report_said_s_[i] < 300.0;
             const bool flicker = bursting || (time_ - report_off_s_[i] < kReportFlickerS && time_ - report_said_s_[i] < kReportAgainS);
-            if (now && report_state_[i] == 0 && !flicker && NpcDoes(r.from, AutoReportDuty(r))) {
-                Say(r.callout, r.from);
+            // Owed once whoever holds the seat: a player's seat isn't asked for it again at every flicker or burst.
+            if (now && report_state_[i] == 0 && !flicker) {
+                if (NpcDoes(r.from, AutoReportDuty(r))) Say(r.callout, r.from);
                 report_said_s_[i] = time_;
             }
             if (!now && report_state_[i] != 0) report_off_s_[i] = time_;
@@ -5874,6 +7073,7 @@ private:
         }
         // What the instruments showed.
         if (engagement_on_) {
+            ReportNoReply();
             for (const EngagementEvent& e : engagement_.TakeEvents()) {
                 char range[16];
                 std::snprintf(range, sizeof(range), "%.0f", e.range_m / 1000.0);
@@ -5916,7 +7116,7 @@ private:
                         if (NpcCommanderActive() && !engagement_.ShotsInFlight() && SeatHolder("deputy_commander").empty()) {
                             if (CrewMember* dep = MemberAt("deputy_commander")) {
                                 const std::string id = dep->IsBusy() ? dep->Tracker().GetProcedure().id : std::string();
-                                if (id == "launch" || id == "prepare_firing") dep->CancelOrder();
+                                if (id == "launch" || id == "prepare_firing" || id == "fire_at_jammer") dep->CancelOrder();
                             }
                             npc_permit_s_ = -1e9;
                         }
@@ -5928,9 +7128,7 @@ private:
                         k.time_s = time_;
                         k.source = "IFF";
                         pictures_["senior_operator"].Learn(k);
-                        if (NpcDoes("senior_operator", SeatDuty::Report("senior_operator", "iff_no_reply", "no reply mark beside the echo").About(k))) {
-                            Say("iff_no_reply", "senior_operator", {}, &k);
-                        }
+                        iff_batch_.push_back(k);  // reported once for the interrogation, below
                         break;
                     }
                     case EngagementEvent::Kind::OnJammer:
@@ -5986,18 +7184,28 @@ private:
                 }
             }
         }
-        // Designations the commander heard on the radio, passed on to the crew: a new target, the one he has ordered
-        // taken, or one not passed on for 30 s (sam3d: every update of every target, four targets every 12 s, would
-        // keep the intercom talking without end and the orders waiting behind it). A target another launcher has, once.
+        // Designations the commander heard on the radio, passed on to the crew when they matter to it (sam3d: every
+        // update of every target of a massed raid kept the intercom talking without end and the orders waiting behind
+        // it): a new target near (within half again the tracking radar's reach), or far out when no other was passed on
+        // in the last minute (the raid's first); one passed on far out again as it comes near; the one he has ordered
+        // taken, every 15 s. A target another launcher has, once.
         if (c2_) {
+            const double near_m = 1.5 * (console_.track.max_range_m > 0.0 ? console_.track.max_range_m : 25000.0);
+            int lately = 0;
+            for (const auto& pa : passed_at_) lately += time_ - pa.second < 60.0 ? 1 : 0;
             for (const C2Network::Event& e : designations_) {
                 const auto last = passed_at_.find(e.subject);
                 const bool fresh = last == passed_at_.end();
                 const bool ours = e.subject == assigned_target_;
                 const bool theirs = battery_fire_ && battery_fire_->Engaged(e.subject);
-                const bool stale = !fresh && time_ - last->second >= 30.0;
-                if (!(fresh || ours || (stale && !theirs))) continue;
+                const bool close_in = e.range_m <= near_m;
+                const auto was_far = passed_far_.find(e.subject);
+                const bool closing = !fresh && was_far != passed_far_.end() && was_far->second && close_in && !theirs;
+                const bool pass = (ours && (fresh || time_ - last->second >= 15.0)) || closing || (fresh && (close_in || lately == 0));
+                if (!pass) continue;
                 passed_at_[e.subject] = time_;
+                passed_far_[e.subject] = !close_in;
+                ++lately;
                 if (NpcAt(Cmdr())) {
                     char az[16], n[16], r[16], h[16];
                     std::snprintf(az, sizeof(az), "%02d-%02d", e.azimuth_mils / 100, e.azimuth_mils % 100);
@@ -6090,6 +7298,95 @@ private:
     std::unique_ptr<BatteryFire> battery_fire_;
     std::mt19937 battery_fire_rng_{4099u};
     double next_distribution_s_ = 0.0;
+
+    // ---- The regiment's other Osa batteries beside the scenario (neighbours that fight; the nation on the map N4).
+    std::unique_ptr<BatteryFire> neighbour_fire_;
+    std::mt19937 neighbour_fire_rng_{6151u};
+    bool neighbour_fire_built_ = false;
+    std::vector<std::size_t> shooter_neighbour_;            // per shooter: its neighbour (an index into def_.neighbours)
+    std::map<std::string, std::string> neighbour_kills_;    // target -> the neighbour's id that shot it down
+    std::map<std::string, int> neighbour_launches_;         // neighbour id -> missiles launched
+    std::map<std::string, double> neighbour_radar_s_;       // neighbour id -> launcher-seconds on a target (radiating)
+
+    // Whether the scenario has the Osa's tuning to fight its neighbours by (its own, or its launchers' at a post).
+    bool NeighbourFireTuned() const { return engagement_on_ || def_.has_launcher_tuning; }
+
+    // A fighting neighbour's working launchers in the battery's combat formation about its place: two pairs 3 km apart
+    // east and west, 200 m within (battery_tactics.json).
+    std::vector<Vec3> NeighbourLauncherPlaces(const ScenarioNeighbour& nb) const {
+        std::vector<Vec3> out;
+        const int n = std::max(1, std::min(4, nb.launchers));
+        for (int k = 0; k < n; ++k) {
+            const double east = k < 2 ? -1500.0 : 1500.0;
+            const double north = k % 2 == 0 ? -100.0 : 100.0;
+            out.push_back(Vec3{nb.position.x + east, nb.position.y + north, def_.unit_position.z});
+        }
+        return out;
+    }
+
+    // Each fighting neighbour's working launchers are shooters, set up in the battery's combat formation (pairs 3 km apart,
+    // 200 m within: battery_tactics.json, video_osa) about its place, with its missiles shared among them. Their battery
+    // post is not ours: each takes the nearest hostile in its reach itself (autonomous), and its kills are its battery's.
+    void UpdateNeighbourFire(double dt) {
+        if (!neighbour_fire_) {
+            if (neighbour_fire_built_) return;
+            neighbour_fire_built_ = true;
+            bool any = false;
+            for (const ScenarioNeighbour& nb : def_.neighbours) any = any || nb.fights;
+            if (!any || !NeighbourFireTuned()) return;
+            const EngagementTuning& tuning = def_.has_launcher_tuning ? def_.launcher_tuning : def_.tuning;
+            double reach = def_.has_launcher_tuning ? def_.launcher_reach_m : console_.track.max_range_m;
+            if (!(reach > 0.0)) reach = 28000.0;
+            neighbour_fire_ = std::make_unique<BatteryFire>(tuning, reach);
+            neighbour_fire_->SetAutonomous(true);
+            neighbour_fire_rng_.seed(def_.seed * 6151u + 11u);
+            for (std::size_t j = 0; j < def_.neighbours.size(); ++j) {
+                const ScenarioNeighbour& nb = def_.neighbours[j];
+                if (!nb.fights) continue;
+                const std::vector<Vec3> places = NeighbourLauncherPlaces(nb);
+                const int n = static_cast<int>(places.size());
+                const int total = nb.missiles < 0 ? 6 * n : std::min(nb.missiles, 6 * n);
+                for (int k = 0; k < n; ++k) {
+                    const int share = total / n + (k < total % n ? 1 : 0);
+                    neighbour_fire_->AddShooter(nb.id + "/" + std::to_string(k + 1), places[static_cast<std::size_t>(k)], share);
+                    shooter_neighbour_.push_back(j);
+                }
+                neighbour_launches_[nb.id] = 0;
+                neighbour_radar_s_[nb.id] = 0.0;
+            }
+        }
+        std::vector<BatteryFireTarget> targets;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            BatteryFireTarget t;
+            t.id = def_.targets[i].id;
+            t.position = a->position;
+            t.velocity = a->velocity;
+            t.agl_m = world_.Frame().AltitudeOf(a->position) - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            t.target_class = def_.targets[i].target_class;
+            t.friendly = def_.targets[i].friendly;
+            targets.push_back(t);
+        }
+        neighbour_fire_->Step(time_, targets, neighbour_fire_rng_, nullptr, [](const std::string&) {});
+        const std::vector<BatteryFire::Shooter>& shooters = neighbour_fire_->Shooters();
+        for (std::size_t k = 0; k < shooters.size(); ++k) {
+            if (shooters[k].phase != BatteryFire::Phase::Idle) neighbour_radar_s_[def_.neighbours[shooter_neighbour_[k]].id] += dt;
+        }
+        for (const BatteryFire::Event& e : neighbour_fire_->TakeEvents()) {
+            std::size_t k = 0;
+            while (k < shooters.size() && shooters[k].callsign != e.callsign) ++k;
+            if (k == shooters.size()) continue;
+            const ScenarioNeighbour& nb = def_.neighbours[shooter_neighbour_[k]];
+            if (e.kind == BatteryFire::Event::Kind::Launch) {
+                ++neighbour_launches_[nb.id];
+                Event(e.target, "missile launched at it by " + nb.name);
+            } else if (e.kind == BatteryFire::Event::Kind::Hit) {
+                if (DestroyTarget(e.target, nb.name)) neighbour_kills_[e.target] = nb.id;
+            }
+        }
+    }
     // A board mark with the IT-45's newer and finer place, when the target is on the tube.
     BoardMark OnTheTube(const BoardMark& m) const {
         if (!post_) return m;
@@ -6242,6 +7539,7 @@ public:
         std::string target;
         int number = 0;     // its number on the board (0: not known)
         int missiles = -1;  // missiles left (-1: not said)
+        bool taken_back = false;  // a Miss taking back the Hit reported before: the target flies on
     };
     // The battery commander sits in a linked PU-12M (scenario "battery_commander": "post").
     bool LinkedToPost() const { return def_.battery_commander == "post"; }
@@ -6603,6 +7901,14 @@ private:
                 }
                 break;
             case BatteryFire::Event::Kind::Miss:
+                if (r.taken_back) {  // the kill it reported flies on: back on the board
+                    Event(r.callsign, "takes back the kill of " + r.target);
+                    if (hears) {
+                        reported_kills_.erase(r.target);
+                        if (callouts_) callouts_->Say(time_, "report_not_destroyed", "battery", {{"callsign", r.callsign}, {"number", number}});
+                    }
+                    break;
+                }
                 Event(r.callsign, "misses " + r.target);
                 if (hears) Status(r.callsign, LauncherStatus::State::Engaging, r.missiles, r.number);
                 break;
@@ -6639,6 +7945,7 @@ private:
         }
         r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
         own_reports_.push_back(r);
+        if (kind == BatteryFire::Event::Kind::Hit) results_reported_.insert(target);
         if (!callouts_ || !NpcAt(Cmdr())) {
             OnAir(1.0);  // a player's words go out as he speaks them; the data reaches the post
             return;
@@ -6733,6 +8040,8 @@ private:
     PostKeypad keypad_;
     double marker_x_ = 0.0;
     double marker_y_ = 0.0;
+    bool post_radar_off_ = false;  // the cabled radar off the air (its crew rang the post on the service line)
+    bool post_sending_ = false;    // the post sending its picture on as telecode
     int marked_ = -1;
     double marked_arrival_s_ = -1.0;
     std::map<std::string, bool> reported_deployed_;
@@ -7038,6 +8347,46 @@ public:
     // The post's instruments in one block (post_feed.hpp): the IT-45 now, the board as the commander reads it (the
     // targets of PostBoard, each with its marks of the last five minutes: the same numbers he can give out), the IT
     // boards. Empty (post false) when the vehicle is no post.
+    // Our other air defences near the scenario (drawn where they stand), and the ground's height (ENU up) anywhere on it.
+    const std::vector<ScenarioNeighbour>& Neighbours() const { return def_.neighbours; }
+    double GroundHeightAt(double east_m, double north_m) const { return world_.GetTerrain().HeightAt(east_m, north_m); }
+    // The point on the ground under (east, north), in ENU: the terrain's height is an altitude, and ENU up is not altitude
+    // far from the origin (the Earth curves away: 70 m at 30 km).
+    Vec3 GroundEnu(double east_m, double north_m) const {
+        GeoPoint g = world_.Frame().EnuToGeodetic(Vec3{east_m, north_m, 0.0});
+        g.alt_m = GroundHeightAt(east_m, north_m);
+        return world_.Frame().GeodeticToEnu(g);
+    }
+    // A neighbour that fights in the battery fire model here (an Osa battery with "fights", and the Osa's tuning to fight
+    // by); the mission bridge leaves its chances to the runner.
+    bool NeighbourFights(const std::string& id) const {
+        if (!NeighbourFireTuned()) return false;
+        for (const ScenarioNeighbour& nb : def_.neighbours) {
+            if (nb.id == id) return nb.fights;
+        }
+        return false;
+    }
+    // The aircraft the fighting neighbours shot down (target -> neighbour id), their missiles launched, the time their
+    // launchers had a target (their radars on it).
+    const std::map<std::string, std::string>& NeighbourKills() const { return neighbour_kills_; }
+    int NeighbourLaunches(const std::string& id) const {
+        const auto it = neighbour_launches_.find(id);
+        return it == neighbour_launches_.end() ? 0 : it->second;
+    }
+    double NeighbourRadarSeconds(const std::string& id) const {
+        const auto it = neighbour_radar_s_.find(id);
+        return it == neighbour_radar_s_.end() ? 0.0 : it->second;
+    }
+    // Where the fighting neighbours' launchers stand (neighbour id, ENU), to draw them there.
+    std::vector<std::pair<std::string, Vec3>> NeighbourLaunchers() const {
+        std::vector<std::pair<std::string, Vec3>> out;
+        for (const ScenarioNeighbour& nb : def_.neighbours) {
+            if (!NeighbourFights(nb.id)) continue;
+            for (const Vec3& at : NeighbourLauncherPlaces(nb)) out.push_back({nb.id, at});
+        }
+        return out;
+    }
+
     PostFeed PostFeedNow() const {
         PostFeed f;
         if (!post_) return f;
@@ -7045,6 +8394,7 @@ public:
         f.scale_m = PostScaleM();
         f.position = post_->Position();
         f.scope = PostScope();
+        f.strobes = PostStrobes();
         const PlottingBoard& b = post_->Board();
         const std::vector<BoardMark> now = PostMarks();
         for (const BoardMark& m : b.Marks()) {
@@ -7054,6 +8404,7 @@ public:
             f.glass.push_back({m.number, m.stamp, m.height_hm, m.Code(), m.position});
         }
         f.launchers = status_boards_;
+        for (const ScenarioNeighbour& nb : def_.neighbours) f.neighbours.push_back({nb.name, nb.system, nb.position, nb.radius_m});
         f.marker_x = marker_x_;
         f.marker_y = marker_y_;
         f.marked = marked_;
@@ -7066,7 +8417,7 @@ public:
         }
         f.keypad_designating = keypad_.designating;
         f.keypad_last = keypad_.last;
-        for (const CommandPost::AirReport& r : post_->Heard()) f.heard.push_back(r.number);
+        for (int n : PlotterReportNumbers()) f.heard.push_back(n);  // heard, or there to read in the journal
         f.command = post_command_;
         f.command_text = PostCommandText();
         return f;
@@ -7149,7 +8500,47 @@ private:
     // kill, its report to the battery and its next move follow his call, right or wrong.
     KillAssessment kill_;
     std::map<std::string, double> own_kills_;  // targets our judge called destroyed -> when (looked for again on the scope)
-    int kill_calls_ = 0, kill_calls_wrong_ = 0, still_flying_ = 0;
+    int kill_calls_ = 0, kill_calls_wrong_ = 0, still_flying_ = 0, kill_reports_taken_back_ = 0;
+    std::set<std::string> results_reported_;  // targets the commander reported destroyed on the battery net
+    std::set<std::string> corrections_due_;   // ...that the scope then showed flying on: the report to take back
+    // A target reported destroyed on the battery net that flies on: the commander takes the report back on the net, so
+    // the post puts it back on its board (voenizdat_osa_1991 p267: a target whose motion is unchanged is not destroyed).
+    void CorrectKillReport(const std::string& target) {
+        std::map<std::string, std::string> f = RadioFields();
+        const int number = BoardNumberOf(target);
+        char n[16];
+        std::snprintf(n, sizeof(n), "%04d", number);
+        f["number"] = number > 0 ? std::string(n) : target;
+        SeatDuty d = SeatDuty::Report(Cmdr(), "report_not_destroyed", "a target reported destroyed flies on: take the report back on the battery net", f);
+        d.target = target;
+        if (NpcDoes(Cmdr(), d) && SayOnRadio("report_not_destroyed", f, false)) KillReportTakenBack(target);
+    }
+    // The correction went on the air: a linked post hears it.
+    void KillReportTakenBack(const std::string& target) {
+        results_reported_.erase(target);
+        ++kill_reports_taken_back_;
+        Event(target, "the kill report taken back on the battery net: it flies on");
+        if (!LinkedToPost()) return;
+        LinkReport r;
+        r.kind = BatteryFire::Event::Kind::Miss;
+        r.callsign = OwnCallsign();
+        r.target = target;
+        r.number = BoardNumberOf(target);
+        r.missiles = launcher_ ? launcher_->LoadedCount() : -1;
+        r.taken_back = true;
+        own_reports_.push_back(r);
+    }
+    // The target's number on the post's board, from its designation or a group's pick (0: none heard).
+    int BoardNumberOf(const std::string& target) const {
+        int number = 0;
+        for (const C2Network::Event& e : designations_heard_) {
+            if (e.subject == target && !e.group_centre) number = e.number;
+        }
+        for (const GroupOrder& g : group_orders_) {
+            if (g.pick == target) number = g.number;
+        }
+        return number;
+    }
     // The seat whose instrument shows a sign: the range indicator the range wheel's, the search scope the azimuth
     // wheel's, the elevation dial, the TV and the launch console's lamps the elevation wheel's (flak11, voenizdat_osa_1991 p17).
     std::string KillSeat(KillInstrument where) const {
@@ -7183,7 +8574,7 @@ private:
     double PerceptionS(const std::string& station) {
         for (std::size_t i = 0; i < crew_.size() && i < def_.crew.size(); ++i) {
             if (crew_[i].Role() != station) continue;
-            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->perception_s * (crew_[i].Stressed() ? t->stress_factor : 1.0);
+            if (const SkillTier* t = SkillOf(def_.crew[i])) return t->perception_s * TierStress(*t, crew_[i]);
         }
         return 0.5;
     }
@@ -7213,7 +8604,7 @@ private:
             log_.Record({time_, DebriefEntry::Kind::Scenario, judge.empty() ? std::string("Crew") : SpeakerName(judge), j.target, text});
             if (judge.empty()) continue;
             if (j.call == KillAssessment::Call::Hit) {
-                if (def_.doctrine.arm_threat) npc_ssc_off_due_ = true;  // under the ARM threat the tracking transmitter goes off after the burst
+                if (regime_cmdr_.kind == EmissionKind::Arm) npc_ssc_off_due_ = true;  // under the least emission the tracking transmitter goes off after the burst
                 Say("hit", judge);
                 HeardDestroyed(j.target);
                 own_kills_[j.target] = time_;
@@ -7228,9 +8619,9 @@ private:
                         if (d.subject == j.target && d.number > 0) f["number"] = n;
                     }
                     f["spent"] = std::to_string(launches_);
-                    if (NpcDoes(Cmdr(), SeatDuty::Report(Cmdr(), "report_result", "a target destroyed: report it on the battery net", f))) {
-                        SayOnRadio("report_result", f, false);
-                    }
+                    SeatDuty d = SeatDuty::Report(Cmdr(), "report_result", "a target destroyed: report it on the battery net", f);
+                    d.target = j.target;
+                    if (NpcDoes(Cmdr(), d) && SayOnRadio("report_result", f, false)) results_reported_.insert(j.target);
                 }
             } else if (j.call == KillAssessment::Call::Miss) {
                 Say("miss", judge);
@@ -7262,6 +8653,8 @@ private:
             }
             it = own_kills_.erase(it);
         }
+        for (const std::string& t : corrections_due_) CorrectKillReport(t);
+        corrections_due_.clear();
     }
     // ---- A group's centre and a selection rule from the battery post (voenizdat_osa_1991 p261, group_designation.hpp):
     // the senior operator counts the group on his scope and reports the aircraft the rule picks; the commander takes it.
@@ -7363,16 +8756,21 @@ private:
     // A callout was heard: what it says about a target goes into each listener's picture. An NPC listener may not take
     // it in (his tier's miss chance, more under stress): he says "Повторите!" and the speaker says it again (once).
     void Hear(const SpokenCallout& s) {
-        if (s.id == "air_report" && post_) {  // read out to the plotter: it waits for his hand now
-            post_->ReleaseHeld(s.about.number, time_);
-            reading_out_.erase(s.about.number);
+        if (s.id == "air_report" && post_) {  // read out to the plotter: it waits for his hand now, as it was read
+            const auto it = reading_out_.find(s.about.number);
+            if (it != reading_out_.end()) {
+                post_->Recall(it->second, time_, s.about.number);
+                reading_out_.erase(it);
+            }
             return;
         }
         if (s.channel != "intercom" && s.channel != "cabin") return;
+        NoteStressHeard(s.from, s.id);  // he knows what he said himself
         for (std::size_t i = 0; i < crew_.size(); ++i) {
             CrewMember& c = crew_[i];
             if (c.Role() == s.from) continue;
             if (!HeardBy(s, c.Role())) continue;
+            NoteStressHeard(c.Role(), s.id);
             const bool addressed = s.to == "crew" || s.to == "any" || s.to == c.Role();
             if (!addressed) continue;
             const SkillTier* t = i < def_.crew.size() ? SkillOf(def_.crew[i]) : nullptr;
@@ -7381,7 +8779,10 @@ private:
             const bool stake = s.to == c.Role() || c.Role() == Cmdr() || c.Role() == def_.tuning.aim_az_role ||
                                c.Role() == def_.tuning.aim_el_role || c.Role() == def_.tuning.aim_range_role;
             if (npc && stake && t != nullptr && s.has_about && s.repeats == 0) {
-                const double miss = t->miss_chance * (c.Stressed() ? t->stress_factor : 1.0);
+                // A man at his hand wheels, following a target, takes in less of what he hears (sam3d: half again).
+                bool at_wheels = false;
+                for (const WheelWatch& w : wheels_) at_wheels = at_wheels || (w.station == c.Role() && time_ - w.moved_s < 0.5);
+                const double miss = t->miss_chance * TierStress(*t, c) * (at_wheels ? 1.5 : 1.0);
                 if (static_cast<double>(hear_rng_()) / 4294967296.0 < miss) {
                     ++say_agains_;
                     Say("say_again", c.Role());
@@ -7403,28 +8804,64 @@ private:
             }
             if (s.id == "target_still_flying" && s.has_about && c.Role() == Cmdr() && reported_kills_.erase(s.about.target) != 0) {
                 Event(s.about.target, "not destroyed after all: back in the commander's picture");
+                if (results_reported_.count(s.about.target) != 0) corrections_due_.insert(s.about.target);
                 npc_dropped_kill_.clear();
             }
             if (!s.has_about) continue;
-            // The signs of an ARM launch (the ARM drill): the ARM's mark is not a target; the commander acts on either.
+            // The signs of an ARM launch (the ARM drill): the ARM's mark is not a target; the commander acts on either (a
+            // player in his seat heard it too: the shadow commander thinks on it, and his acts are the player's duties).
             if (s.id == "arm_launch" || s.id == "arm_turn_away") {
                 if (s.id == "arm_launch") pictures_[c.Role()].Forget(s.about.target);
-                if (c.Role() == Cmdr() && npc) {
+                if (c.Role() == Cmdr()) {
                     if (s.id == "arm_launch") arms_heard_.insert(s.about.target);
                     ArmSignHeard(s);
                 }
+                continue;
+            }
+            if (s.id == "arm_launch_track" || s.id == "arm_launch_tv") {  // about the tracked target that fired it
+                if (c.Role() == Cmdr()) ArmSignHeard(s);
                 continue;
             }
             KnownTarget k = s.about;
             k.time_s = s.start_s;
             k.source = "told by " + SpeakerName(s.from);
             pictures_[c.Role()].Learn(k);
+            if (s.id == "iff_no_reply") {  // the other echoes the one "Ответа нет!" covered
+                const auto also = iff_companions_.find(s.about.target);
+                if (also != iff_companions_.end()) {
+                    for (KnownTarget o : also->second) {
+                        o.time_s = s.start_s;
+                        o.source = k.source;
+                        pictures_[c.Role()].Learn(o);
+                    }
+                }
+            }
         }
     }
 
-    // Stress (docs/crew/05_SKILL.md): the crew's own radars jammed, or a hostile they know of inside 10 km and nothing
-    // tracked. It multiplies every crewmate's delays and chances by his tier's stress factor.
+    // Stress (docs/crew/05_SKILL.md, docs/crew/15_TALK.md section 4): a level per crewman, 0 calm to 1, from what he
+    // knows: a war (not an exercise), the crew's own radars jammed, a hostile the commander knows of inside 10 km with
+    // nothing tracked, our missile in the air, an ARM bursting near the vehicle, and the warnings and reports he heard
+    // (kStressHeard). It rises at once to the strongest of them and falls back slowly (kStressFallS); what it does is
+    // scaled by his tier's stress factor (CrewMember::StressMultiplier, TierStress). sam3d estimates throughout.
+    struct StressSign {
+        const char* callout;
+        double level;
+        double for_s;  // how long hearing it keeps him at that level
+    };
+    static constexpr double kStressFallS = 40.0;
+    static constexpr double kNearBurstM = 500.0;  // an ARM bursting within this of the vehicle: felt by everyone in it
+    std::map<std::string, std::map<std::string, double>> stress_heard_;  // seat -> callout -> when he last heard (or said) it
+    double stress_updated_s_ = -1.0;
+    double near_burst_s_ = -1e9;
+    static double TierStress(const SkillTier& t, const CrewMember& m) { return 1.0 + (t.stress_factor - 1.0) * m.StressLevel(); }
+    void NoteStressHeard(const std::string& seat, const std::string& callout) { stress_heard_[seat][callout] = time_; }
     void UpdateStress() {
+        static const StressSign kStressHeard[] = {
+            {"air_alert", 0.5, 120.0},      {"target_near_zone", 0.4, 30.0}, {"target_in_zone", 0.5, 30.0},
+            {"jamming", 0.6, 30.0},         {"lock_lost", 0.5, 20.0},        {"launch", 0.6, 20.0},
+            {"missile_away", 0.6, 20.0},    {"arm_turn_away", 0.8, 60.0},    {"arm_launch", 0.9, 90.0},
+            {"arm_launch_track", 0.9, 90.0}, {"arm_launch_tv", 0.9, 90.0}};
         bool jammed = false;
         if (em_link_) {
             const em::RadarState* sr = em_link_->SearchRadar();
@@ -7437,7 +8874,29 @@ private:
                 pressed = pressed || (k.has_range && k.range_m < 10000.0 && !k.friendly);
             }
         }
-        for (CrewMember& c : crew_) c.SetStressed(jammed || pressed);
+        for (const EmSensorLink::ArmResult& r : arm_results_) {
+            if ((r.hit_what == "unit" || r.nearest_what == "unit") && r.miss_m >= 0.0 && r.miss_m < kNearBurstM) near_burst_s_ = r.burst_s;
+        }
+        const double base = def_.setting == "war" ? 0.2 : 0.0;
+        const double dt = stress_updated_s_ < 0.0 ? 0.0 : time_ - stress_updated_s_;
+        stress_updated_s_ = time_;
+        const double fall = std::exp(-dt / kStressFallS);
+        const bool in_flight = engagement_on_ && engagement_.ShotsInFlight();
+        for (CrewMember& c : crew_) {
+            double want = base;
+            if (jammed || pressed) want = std::max(want, 0.7);
+            if (in_flight) want = std::max(want, 0.6);
+            if (time_ - near_burst_s_ < 120.0) want = 1.0;
+            const auto heard = stress_heard_.find(c.Role());
+            if (heard != stress_heard_.end()) {
+                for (const StressSign& sign : kStressHeard) {
+                    const auto it = heard->second.find(sign.callout);
+                    if (it != heard->second.end() && time_ - it->second < sign.for_s) want = std::max(want, sign.level);
+                }
+            }
+            const double now = c.StressLevel();
+            c.SetStressLevel(want >= now ? want : want + (now - want) * fall);
+        }
     }
 
 public:
@@ -7453,6 +8912,33 @@ public:
     // "Повторите" so far (a crewmate missed a report).
     int SayAgains() const { return say_agains_; }
 
+    // The player's quick replies (docs/crew/15_TALK.md section 5, the reply keys): «Есть!» and «Выполнено!» as any seat
+    // says them; «Повторите!» asks whoever said the last line that reached his seat for him or the crew (in the last 30 s)
+    // to say it again, as an NPC asks (Hear). False with nothing to reply to (LastRefusal says why).
+    bool PlayerReply(const std::string& station, const std::string& reply) {
+        last_refusal_.clear();
+        if (!callouts_ || (reply != "ack" && reply != "done" && reply != "say_again")) return false;
+        if (reply != "say_again") {
+            if (!callouts_->Say(time_, reply, station)) return false;
+            reports_made_.push_back({time_, station, reply});
+            return true;
+        }
+        const SpokenCallout* last = nullptr;
+        for (const SpokenCallout& s : callouts_->Log()) {
+            const bool to_him = s.to == station || s.to == "crew" || s.to == "any";
+            if (s.from != station && s.id != "say_again" && to_him && time_ - s.end_s < 30.0 && CalloutHeardAt(s, station)) last = &s;
+        }
+        if (last == nullptr) {
+            last_refusal_ = "nothing said to you in the last 30 s";
+            return false;
+        }
+        const SpokenCallout again = *last;
+        if (!callouts_->Say(time_, "say_again", station)) return false;
+        ++say_agains_;
+        if (SeatHolder(again.from).empty()) callouts_->Repeat(again, time_, 1.0 + SpeakDelayS(again.from));
+        return true;
+    }
+
     // A player in a seat speaks a report of the crew data (the UI's report buttons): what it says comes from his own
     // instruments (a contact: the nearest echo on his scope). False if there is no such callout or no crew data.
     // A paper kept in the cabin (a cabin display of kind "document"), line by line as typed, in Russian as issued.
@@ -7462,6 +8948,7 @@ public:
     // signal table ПТ-2 (bstudy_tactics' form: a group, its meaning, a signal's visible sign). Times are counted from the
     // exercise's start (Ч+minutes): the scenarios keep no clock.
     std::vector<std::string> DocumentText(const std::string& document) const {
+        if (document == "radio_journal") return journal_.Page(time_, 12);
         std::vector<std::string> out;
         auto number = [](double v, int decimals) {
             char b[32];
@@ -7550,7 +9037,13 @@ public:
         if (c == nullptr) return {std::string(), std::string()};
         std::map<std::string, std::string> f;
         if (callout_id == "air_report") {
-            f["report"] = post_ && !post_->Held().empty() ? post_->Held().front().text : std::string("(нет донесения / no report waiting)");
+            f["report"] = "(нет донесения / no report waiting)";
+            for (const CommandPost::AirReport& r : post_ ? post_->Held() : std::vector<CommandPost::AirReport>()) {
+                if (console_.post_journal_keeper.empty() || InJournal(r)) {
+                    f["report"] = r.text;
+                    break;
+                }
+            }
         }
         if (const PlotterEvent* e = PendingPlot(callout_id)) f = e->fields;
         if (callout_id == "seat_ready") {
@@ -7562,6 +9055,10 @@ public:
             }
         }
         if ((callout_id == "readback" || callout_id == "report_ready") && c2_ && station == Cmdr()) f = NetReportFields(callout_id);
+        if (callout_id == "report_arm_attack" && station == Cmdr()) {  // the last sign he heard (ArmSignHeard)
+            f["callsign"] = OwnCallsign();
+            if (!arm_sign_az_.empty()) f["azimuth"] = arm_sign_az_;
+        }
         auto blanks = [](std::string t) {
             for (std::size_t a = t.find('{'); a != std::string::npos; a = t.find('{', a)) {
                 const std::size_t b = t.find('}', a);
@@ -7621,7 +9118,29 @@ public:
         if ((callout_id == "readback" || callout_id == "report_ready") && c2_) return PlayerOnBatteryNet(station, callout_id);
         if (station == "commander") {  // a radio callout of his goes on the air, by his chest switch at ПРД (7.8)
             const CalloutDef* cd = def_.crew_data.FindCallout(callout_id);
-            if (cd != nullptr && cd->kind == CalloutKind::Radio) return SayOnRadio(callout_id, RadioFields(), true);
+            if (cd != nullptr && cd->kind == CalloutKind::Radio) {
+                std::map<std::string, std::string> f = RadioFields();
+                std::string target;  // a report he owes says what his NPC would have (the target's number)
+                for (const SeatDuty& d : owed_) {
+                    if (d.kind != SeatDuty::Kind::Report || d.seat != station || d.id != callout_id) continue;
+                    for (const auto& kv : d.fields) f[kv.first] = kv.second;
+                    target = d.target;
+                    break;
+                }
+                if (callout_id == "report_arm_attack") {  // the sign he heard last (ArmSignHeard)
+                    if (arm_sign_az_.empty()) {
+                        last_refusal_ = "no sign of an ARM launch heard";
+                        return false;
+                    }
+                    if (f.count("azimuth") == 0) f["azimuth"] = arm_sign_az_;
+                }
+                if (!SayOnRadio(callout_id, f, true)) return false;
+                SettleOwedReport(station, callout_id, target);
+                if (callout_id == "report_arm_attack") ArmAttackReported(f["azimuth"]);
+                if (callout_id == "report_result" && !target.empty()) results_reported_.insert(target);
+                if (callout_id == "report_not_destroyed" && !target.empty()) KillReportTakenBack(target);
+                return true;
+            }
         }
         const Contact* nearest = nullptr;
         if (callout_id == "contact" && engagement_on_) {

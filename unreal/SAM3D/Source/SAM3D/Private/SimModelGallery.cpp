@@ -31,7 +31,7 @@ namespace
 	}
 	bool IsVehicleArchetype(const std::string& A)
 	{
-		return A == "wheeled" || A == "tracked" || A == "truck" || A == "launcher" || A == "gun";
+		return A == "wheeled" || A == "tracked" || A == "truck" || A == "launcher" || A == "gun" || A == "radar";
 	}
 }
 
@@ -98,6 +98,14 @@ void ASimModelGallery::LayOut()
 	if (Lib == nullptr)
 	{
 		return;
+	}
+	// A fixed exposure bias: on its bright slab high above the terrain the auto exposure washed every view out white
+	// (22 October 2026; -9 EV found by trying r.ExposureOffset).
+	if (Camera != nullptr)
+	{
+		Camera->GetCameraComponent()->PostProcessSettings.bOverride_AutoExposureBias = true;
+		Camera->GetCameraComponent()->PostProcessSettings.AutoExposureBias = -9.0f;
+		Camera->GetCameraComponent()->PostProcessBlendWeight = 1.0f;
 	}
 	// Three rows: aircraft, vehicles and sites, buildings and nature; each model after the last with room to spare.
 	TArray<const simcore::scenery::ModelDef*> Rows[3];
@@ -380,7 +388,7 @@ void ASimModelGallery::Tick(float DeltaSeconds)
 		Sim->SetTimeScale(TimeScale);
 	}
 	const float T = static_cast<float>(Sim->GetSimTimeSeconds());
-	constexpr int32 Subs = 5;
+	constexpr int32 Subs = 7;
 	// Keep the chase camera on the aircraft until its picture is taken (it may still move a frame after the pause).
 	if (Step % Subs == 1 && Followed.IsValid())
 	{
@@ -433,7 +441,66 @@ void ASimModelGallery::Tick(float DeltaSeconds)
 	}
 	else if (Sub == 4 && Clock >= NextAt)
 	{
+		bNeighbourShot = AimAtNeighbour();
+		NextAt = Clock + 0.6f;
+		++Step;
+	}
+	else if (Sub == 5 && Clock >= NextAt)
+	{
+		if (bNeighbourShot)
+		{
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("shot_%04.0f_neighbour.png"), When)), false, false);
+		}
+		NextAt = Clock + 0.5f;
+		++Step;
+	}
+	else if (Sub == 6 && Clock >= NextAt)
+	{
 		Sim->SetSimPaused(false);
 		++Step;
 	}
+}
+
+bool ASimModelGallery::AimAtNeighbour()
+{
+	const USimWorldSubsystem* Sim = GetWorld()->GetSubsystem<USimWorldSubsystem>();
+	const simcore::ScenarioRunner* Runner = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	if (Runner == nullptr || Runner->Neighbours().empty())
+	{
+		return false;
+	}
+	const simcore::Vec3 Own = Runner->UnitPosition();
+	const simcore::ScenarioNeighbour* Best = nullptr;
+	for (const simcore::ScenarioNeighbour& Nb : Runner->Neighbours())
+	{
+		if (Best == nullptr || (Nb.position - Own).HorizontalLength() < (Best->position - Own).HorizontalLength())
+		{
+			Best = &Nb;
+		}
+	}
+	// Its first vehicle: a fighting Osa battery's first launcher, else the first of its system's site (a ring of guns has
+	// none at the centre).
+	simcore::Vec3 At = Best->position;
+	const simcore::scenery::ModelLibrary* Lib = FSimBasicModels::Library();
+	const std::vector<std::pair<std::string, simcore::Vec3>> Site =
+		Lib != nullptr ? Lib->SiteLayout(Best->system) : std::vector<std::pair<std::string, simcore::Vec3>>();
+	if (!Site.empty())
+	{
+		At = Best->position + Site.front().second;
+	}
+	for (const std::pair<std::string, simcore::Vec3>& L : Runner->NeighbourLaunchers())
+	{
+		if (L.first == Best->id)
+		{
+			At = L.second;
+			break;
+		}
+	}
+	const FVector Target = Sim->ToUnreal(Runner->GroundEnu(At.x, At.y));
+	const FVector From = Sim->ToUnreal(Runner->GroundEnu(At.x - 110.0, At.y - 110.0)) + FVector(0.0, 0.0, 7000.0);
+	Aim(From, Target);
+	UE_LOG(LogSAM3D, Log, TEXT("Scenario photographs: the neighbour %s (%s), %.1f km from the battery, from %s at %s (camera %s)"),
+		UTF8_TO_TCHAR(Best->name.c_str()), UTF8_TO_TCHAR(Best->system.c_str()), (Best->position - Own).HorizontalLength() / 1000.0,
+		*From.ToString(), *Target.ToString(), Camera != nullptr ? *Camera->GetActorLocation().ToString() : TEXT("-"));
+	return true;
 }

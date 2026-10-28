@@ -73,7 +73,12 @@ change.
 | `06_ADAPTATION_POLITICS_LOGISTICS.md` | Lessons, stress and reputation, politics and events, logistics, repair, resilience |
 | `07_INTEGRATION.md` | Every existing system and how the air war uses it |
 | `08_IMPLEMENTATION_PLAN.md` | What is built (phase A of the roadmap), what is next, done-when |
-| `09_BALANCE.md` | The balance pass: every adversary over many seeds and two battery postures, the findings and the numbers they changed |
+| `09_BALANCE.md` | The balance pass: every adversary over many seeds and two battery postures, the findings and the numbers they changed; the benchmarks against history (§9) and the rebalance with weapons, support, build-ups, sizes and logistics (§10) |
+| `10_WEAPONS.md` | Weapons, attacks and damage: what each side carries, the weaponeer's choice, the attack profiles flown (laydown, toss, pop-up, dive, level, stand-off, the hover), what a weapon does to a target's aim points |
+| `11_SUPPORT.md` | AWACS, tankers and ELINT aircraft as orbits by the day, and what each does |
+| `12_FORCES.md` | Each enemy's force and its build-up over the first weeks; a front's force for a whole nation's war |
+| `13_PACKAGES.md` | Package sizes sized to the target, and what flies with the main flights |
+| `14_LOGISTICS.md` | Our supply lines (convoys, trains, march columns on the country's roads and railways, cut by bridges down) and the enemy's armed reconnaissance |
 
 ## Running it
 
@@ -81,6 +86,7 @@ change.
 cmake --build simcore/build --config Release --target air_war_demo
 ./simcore/build/air_war_demo nato 5 data out/air_war 1        # Windows: simcore\build\Release\air_war_demo.exe
 ./simcore/build/simcore_tests "air war"
+./simcore/build/air_war_bench data 400                          # the weapons and attacks against history (09_BALANCE.md §9)
 ```
 
 In the game: the missions menu's **AIR WAR CAMPAIGN** box (1-4 a new campaign, C continue) opens the campaign screen;
@@ -91,3 +97,13 @@ sector as a scenario with the NPC crew, prints the journal (the enemy's mind, an
 learned), the last intelligence summary and the whole truth about the enemy's staff, and writes each generated scenario
 and `air_war_<faction>.json` to the output folder; `python tools/air_war_view.py out/air_war/air_war_nato.json` turns that into
 a page with the enemy's mind beside what our side learned, day by day, and the reveal. Seven generated raids are in the game's missions menu ("Air war").
+
+What our side learns is to come from its records, not from the fight's truth (`docs/command/01_PRINCIPLES.md` 9, planned
+as `docs/command/07_IMPLEMENTATION_PLAN.md` P9): the battery's after-action report is compiled from its radiotelephonist's
+journal and its board, so the `[ours]` lines will be as right or as wrong as the crew wrote them, and so will our side's
+answer to the enemy's next raid.
+
+**The battery's war** (`docs/campaign/`, roadmap phases 13-21) builds on this command as it is: it adds each faction's
+war aims to its file and one term to its officers' target picking (what a target's loss would cut, as their picture
+believes it: `docs/campaign/01_WAR_AIMS_AND_TARGETS.md`), and turns the raids through the battery's area into parts of
+the battery's own missions, each with its reasons on both sides (`docs/campaign/04_WHAT_HAPPENS_AND_WHY.md`).

@@ -34,6 +34,7 @@ metal = param(unreal.MaterialExpressionScalarParameter, 'Metallic', 0.0, -500, 3
 mel.connect_material_property(color, '', unreal.MaterialProperty.MP_BASE_COLOR)
 mel.connect_material_property(rough, '', unreal.MaterialProperty.MP_ROUGHNESS)
 mel.connect_material_property(metal, '', unreal.MaterialProperty.MP_METALLIC)
+mat.set_editor_property('used_with_nanite', True)  # the cabin's meshes are Nanite: without it the game draws the default
 mel.recompile_material(mat)
 lib.save_asset(path)
 print('saved', path)

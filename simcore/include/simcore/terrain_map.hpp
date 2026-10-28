@@ -13,7 +13,9 @@
 // lies 1.8 km below the scenario's horizontal plane, which is where the sim's aircraft fly over it.
 //
 // Ground beyond the map ("far_km") is drawn coarser and carries only what the file lists there by name (towns, sites,
-// roads) and scattered woods, so aircraft coming in from the borders fly over land, not off an edge.
+// roads) and scattered woods, so aircraft coming in from the borders fly over land, not off an edge. A district of a
+// country names the country's file as its "far_ground": beyond the map proper the ground is then the country's (its
+// ranges, gorges, lakes and rivers), so what stands there, what the sim sees and what the game draws are one ground.
 #pragma once
 
 #include <algorithm>
@@ -63,6 +65,24 @@ struct MapHillDef {
 struct MapReliefDef {
     double wavelength_m = 1000.0;
     double amplitude_m = 0.0;
+};
+
+// A range of hills along a line, its crest rising and falling into peaks and saddles; or, as a valley, the trough a
+// river has cut through the hills along it (docs/COUNTRY_MAP.md).
+struct MapRidgeDef {
+    std::string id;
+    std::vector<MapPoint> points;
+    double half_width_m = 5000.0;
+    double height_m = 0.0;  // a ridge's crest above its foot; a valley's floor below its shoulders
+};
+
+// A lake or reservoir: the ground under it lies below its level, deepening from the shore.
+struct MapLakeDef {
+    std::string id;
+    std::string name;
+    std::vector<MapPoint> points;  // its shore, closed
+    double level_m = 0.0;          // its surface above sea level
+    double depth_m = 5.0;          // at a kilometre from the shore and beyond
 };
 
 struct MapSettlementDef {
@@ -117,8 +137,11 @@ struct MapDef {
     double roughness_m = 0.1;
     std::vector<MapReliefDef> relief;
     std::vector<MapHillDef> hills;
+    std::vector<MapRidgeDef> ridges;
+    std::vector<MapRidgeDef> valleys;
     double valley_depth_m = 0.0;
     double valley_half_width_m = 500.0;
+    std::vector<MapLakeDef> lakes;
     // Lines and places.
     std::vector<MapLineDef> rivers;
     std::vector<MapLineDef> roads;
@@ -138,6 +161,11 @@ struct MapDef {
     int far_scatter_count = 0;
     double far_scatter_min_m = 600.0, far_scatter_max_m = 3000.0;
     double riverside_min_m = 0.0, riverside_max_m = 0.0, riverside_share = 0.0;
+    // The ground beyond the map proper when it is a country's: the file ("far_ground", e.g. maps/pannonia.json) and its
+    // terrain, rivers and lakes as LoadMap read them (in the same frame: the file's origin is the map's). None: the map's
+    // own terrain carries on out to far_m.
+    std::string far_ground_file;
+    std::shared_ptr<const MapDef> far_ground;
 
     bool InCore(double e, double n) const { return e >= west_m && e <= east_m && n >= south_m && n <= north_m; }
 };
@@ -402,6 +430,63 @@ private:
 
 }  // namespace mapgeo
 
+// How deep a river's bed is cut below the ground around it.
+constexpr double kRiverBedDepthM = 2.0;
+
+// The ground as a map file's terrain shapes it, before any site is levelled: the relief, the hills, the river valleys
+// and beds. One function for every map, so a district (the Kesmark range) and the country it lies in (simcore/
+// country_map.hpp) share the same ground wherever their files share the same terrain.
+// A valley's floor stays this far above the plain's base (the river runs out of the hills onto the plain).
+constexpr double kValleyFloorAbovePlainM = 15.0;
+
+inline double NaturalGround(const MapDef& d, double e, double n) {
+    if (d.far_ground && !d.InCore(e, n)) return NaturalGround(*d.far_ground, e, n);  // beyond a district: its country's
+    double h = d.base_m;
+    std::uint64_t s = d.seed;
+    for (const MapReliefDef& r : d.relief) {
+        s = noise::Mix64(s);
+        h += r.amplitude_m * (2.0 * noise::Value(s, e, n, r.wavelength_m) - 1.0);
+    }
+    for (const MapHillDef& hill : d.hills) {
+        const double dist = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
+        if (dist < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * dist / hill.radius_m));
+    }
+    // Ranges: across, a smooth rise to the crest; along it, peaks and saddles (two thirds to four thirds of its height).
+    for (std::size_t i = 0; i < d.ridges.size(); ++i) {
+        const MapRidgeDef& r = d.ridges[i];
+        const double dist = mapgeo::DistToLine(r.points, e, n);
+        if (dist >= r.half_width_m) continue;
+        const double across = 0.5 * (1.0 + std::cos(kPi * dist / r.half_width_m));
+        const std::uint64_t rs = noise::Mix64(d.seed ^ (0x9E3779B97F4A7C15ULL * (i + 1)));
+        const double along = 2.0 / 3.0 + (2.0 / 3.0) * noise::Value(rs, e, n, 1.5 * r.half_width_m);
+        h += r.height_m * across * along;
+    }
+    // Valleys the rivers cut through the hills: a smooth trough along their line, never below the plain they run out to.
+    for (const MapRidgeDef& v : d.valleys) {
+        const double dist = mapgeo::DistToLine(v.points, e, n);
+        if (dist >= v.half_width_m) continue;
+        const double above_plain = std::max(0.0, h - (d.base_m + kValleyFloorAbovePlainM));
+        h -= std::min(v.height_m, above_plain) * 0.5 * (1.0 + std::cos(kPi * dist / v.half_width_m));
+    }
+    for (const MapLineDef& r : d.rivers) {
+        const double dist = mapgeo::DistToLine(r.points, e, n);
+        if (dist < d.valley_half_width_m && d.valley_depth_m > 0.0) {
+            h -= d.valley_depth_m * 0.5 * (1.0 + std::cos(kPi * dist / d.valley_half_width_m));
+        }
+        const double bed = 0.5 * r.width_m + 15.0;
+        if (dist < bed) h -= kRiverBedDepthM * noise::Smooth(1.0 - dist / bed);
+    }
+    // Under a lake the ground lies below its level, deepening from the shore over a kilometre.
+    for (const MapLakeDef& l : d.lakes) {
+        if (l.points.size() < 3 || !mapgeo::InPolygon(l.points, e, n)) continue;
+        std::vector<MapPoint> shore = l.points;
+        shore.push_back(l.points.front());
+        const double from_shore = mapgeo::DistToLine(shore, e, n);
+        h = std::min(h, l.level_m - 0.5 - l.depth_m * noise::Smooth(std::min(1.0, from_shore / 1000.0)));
+    }
+    return h;
+}
+
 // ---------------------------------------------------------------------------------------------- the built map
 
 class MapData {
@@ -449,7 +534,7 @@ public:
     }
 
 private:
-    static constexpr double kBedDepthM = 2.0;
+    static constexpr double kBedDepthM = kRiverBedDepthM;
 
     struct Flat {
         double e, n, r, h;
@@ -458,29 +543,7 @@ private:
     explicit MapData(MapDef def) : def_(std::move(def)) {}
 
     // Relief, hills and the river valley: the ground before the sites are levelled.
-    double Natural(double e, double n) const {
-        double h = def_.base_m;
-        std::uint64_t s = def_.seed;
-        for (const MapReliefDef& r : def_.relief) {
-            s = noise::Mix64(s);
-            h += r.amplitude_m * (2.0 * noise::Value(s, e, n, r.wavelength_m) - 1.0);
-        }
-        for (const MapHillDef& hill : def_.hills) {
-            const double d = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
-            if (d < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * d / hill.radius_m));
-        }
-        if (!def_.rivers.empty()) {
-            for (const MapLineDef& r : def_.rivers) {
-                const double d = mapgeo::DistToLine(r.points, e, n);
-                if (d < def_.valley_half_width_m && def_.valley_depth_m > 0.0) {
-                    h -= def_.valley_depth_m * 0.5 * (1.0 + std::cos(kPi * d / def_.valley_half_width_m));
-                }
-                const double bed = 0.5 * r.width_m + 15.0;
-                if (d < bed) h -= kBedDepthM * noise::Smooth(1.0 - d / bed);
-            }
-        }
-        return h;
-    }
+    double Natural(double e, double n) const { return NaturalGround(def_, e, n); }
 
     static double SiteClearance(const MapSiteDef& s) {
         if (s.kind == "airfield") return 0.5 * s.runway_length_m + 400.0;
@@ -874,6 +937,20 @@ private:
         return false;
     }
 
+    // Within margin_m of the far ground's water (its country's lakes and rivers): no wood of the far ground stands there.
+    bool OnFarWater(double e, double n, double margin_m) const {
+        if (!def_.far_ground) return false;
+        for (const MapLakeDef& l : def_.far_ground->lakes) {
+            std::vector<MapPoint> shore = l.points;
+            shore.push_back(l.points.front());
+            if (mapgeo::InPolygon(l.points, e, n) || mapgeo::DistToLine(shore, e, n) < margin_m) return true;
+        }
+        for (const MapLineDef& r : def_.far_ground->rivers) {
+            if (mapgeo::DistToLine(r.points, e, n) < margin_m + 0.5 * r.width_m) return true;
+        }
+        return false;
+    }
+
     void LayFarmsteads(noise::Stream& rng) {
         int placed = 0;
         for (int tries = 0; placed < def_.farmsteads && tries < def_.farmsteads * 50; ++tries) {
@@ -944,7 +1021,7 @@ private:
             const double r = rng.Range(def_.far_scatter_min_m, def_.far_scatter_max_m);
             const double ce = rng.Range(-def_.far_m + r, def_.far_m - r), cn = rng.Range(-def_.far_m + r, def_.far_m - r);
             if (def_.InCore(ce, cn) || def_.InCore(ce - r, cn - r) || def_.InCore(ce + r, cn + r) || def_.InCore(ce - r, cn + r) ||
-                def_.InCore(ce + r, cn - r) || NearSettlement(ce, cn, r + 300.0) || !occupied_.Free(ce, cn, r)) {
+                def_.InCore(ce + r, cn - r) || NearSettlement(ce, cn, r + 300.0) || OnFarWater(ce, cn, r) || !occupied_.Free(ce, cn, r)) {
                 continue;
             }
             copse(ce, cn, r, fb);
@@ -1125,23 +1202,13 @@ class MapLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, MapDef& out) {
         if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "origin", "seed", "extent_km",
-                             "far_km", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads", "forests",
-                             "woods", "marshes", "sites"}) ||
+                             "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads",
+                             "forests", "woods", "marshes", "lakes", "sites"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
-            !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
+            !OptionalString(root, "", "description", out.description) || !OptionalString(root, "", "far_ground", out.far_ground_file) ||
+            !Provenance(root, "") || !OriginAndSeed(root, out)) {
             return false;
         }
-        const json::Value* o = root.Find("origin");
-        if (o == nullptr) return Fail("origin", "required");
-        double lat = 0.0, lon = 0.0, alt = 0.0;
-        if (!Keys(*o, "origin", {"lat_deg", "lon_deg", "alt_m"}) || !Number(*o, "origin", "lat_deg", lat) ||
-            !Number(*o, "origin", "lon_deg", lon) || !Number(*o, "origin", "alt_m", alt)) {
-            return false;
-        }
-        out.origin = GeoPoint::FromDegrees(lat, lon, alt);
-        double seed = 1.0;
-        if (!OptionalNumber(root, "", "seed", seed)) return false;
-        out.seed = static_cast<std::uint64_t>(std::max(0.0, seed));
         const json::Value* ext = root.Find("extent_km");
         if (ext == nullptr) return Fail("extent_km", "required");
         double w = 0.0, e = 0.0, s = 0.0, n = 0.0;
@@ -1170,11 +1237,34 @@ public:
         }
         return LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) && LoadLines(root, "roads", "", out.roads) &&
                LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) &&
-               LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadWoods(root, out) &&
+               LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadLakes(root, out.lakes) &&
+               LoadWoods(root, out) &&
                LoadSites(root, out);
     }
 
-private:
+    // The ground another file shapes (a country's, named as a district's "far_ground"): its origin, seed, terrain, rivers
+    // and lakes. The rest of that file is its own loader's business.
+    bool LoadGround(const json::Value& root, MapDef& out) {
+        return OriginAndSeed(root, out) && LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) &&
+               LoadLakes(root, out.lakes);
+    }
+
+protected:  // the country map's loader (simcore/country_map.hpp) reads its terrain, lines and polygons the same way
+    bool OriginAndSeed(const json::Value& root, MapDef& out) {
+        const json::Value* o = root.Find("origin");
+        if (o == nullptr) return Fail("origin", "required");
+        double lat = 0.0, lon = 0.0, alt = 0.0;
+        if (!Keys(*o, "origin", {"lat_deg", "lon_deg", "alt_m"}) || !Number(*o, "origin", "lat_deg", lat) ||
+            !Number(*o, "origin", "lon_deg", lon) || !Number(*o, "origin", "alt_m", alt)) {
+            return false;
+        }
+        out.origin = GeoPoint::FromDegrees(lat, lon, alt);
+        double seed = 1.0;
+        if (!OptionalNumber(root, "", "seed", seed)) return false;
+        out.seed = static_cast<std::uint64_t>(std::max(0.0, seed));
+        return true;
+    }
+
     bool Number(const json::Value& o, const std::string& path, const char* key, double& v) {
         if (o.Find(key) == nullptr) return Fail(Join(path, key), "required");
         return OptionalNumber(o, path, key, v);
@@ -1211,7 +1301,8 @@ private:
     bool LoadTerrain(const json::Value& root, MapDef& out) {
         const json::Value* t = root.Find("terrain");
         if (t == nullptr) return Fail("terrain", "required");
-        if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "valley", "notes"}) ||
+        if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "ridges", "valleys", "valley",
+                                  "notes"}) ||
             !Number(*t, "terrain", "base_m", out.base_m) || !OptionalNumber(*t, "terrain", "core_spacing_m", out.core_spacing_m) ||
             !OptionalNumber(*t, "terrain", "far_spacing_m", out.far_spacing_m) || !OptionalNumber(*t, "terrain", "roughness_m", out.roughness_m)) {
             return false;
@@ -1252,6 +1343,7 @@ private:
         } else if (!Message().empty()) {
             return false;
         }
+        if (!Ridges(*t, "ridges", "height_m", out.ridges) || !Ridges(*t, "valleys", "depth_m", out.valleys)) return false;
         if (const json::Value* v = t->Find("valley")) {
             if (!Keys(*v, "terrain.valley", {"depth_m", "half_width_m", "notes"}) || !Number(*v, "terrain.valley", "depth_m", out.valley_depth_m) ||
                 !Number(*v, "terrain.valley", "half_width_m", out.valley_half_width_m)) {
@@ -1275,7 +1367,7 @@ private:
             }
             if (fixed_class[0] != '\0') {
                 line.line_class = fixed_class;
-                line.width_m = line.line_class == "rail" ? 5.0 : 60.0;
+                line.width_m = line.line_class == "rail" ? 5.0 : (line.line_class == "oil" ? 1.0 : 60.0);
             } else {
                 if (!RequireString(l, p, "class", line.line_class)) return false;
                 if (line.line_class == "main") line.width_m = 9.0;
@@ -1327,6 +1419,45 @@ private:
             out.farm_buildings_min = static_cast<int>(b->items[0].number);
             out.farm_buildings_max = static_cast<int>(b->items[1].number);
             if (out.farm_buildings_min < 1 || out.farm_buildings_max < out.farm_buildings_min) return Fail("farmsteads.buildings", "needs 1 <= min <= max");
+        }
+        return true;
+    }
+
+    // terrain.ridges or terrain.valleys: lines with a half width and a height (a valley's depth), both > 0.
+    bool Ridges(const json::Value& t, const char* key, const char* height_key, std::vector<MapRidgeDef>& out) {
+        const json::Value* list = OptionalArray(t, "terrain", key);
+        if (list == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index(std::string("terrain.") + key, i);
+            const json::Value& v = list->items[i];
+            MapRidgeDef r;
+            double hw = 0.0;
+            if (!Keys(v, p, {"id", "points", "half_width_km", height_key, "notes"}) || !RequireString(v, p, "id", r.id) ||
+                !Points(v, p, 2, r.points) || !Number(v, p, "half_width_km", hw) || !Number(v, p, height_key, r.height_m)) {
+                return false;
+            }
+            if (hw <= 0.0) return Fail(Join(p, "half_width_km"), "must be > 0");
+            if (r.height_m <= 0.0) return Fail(Join(p, height_key), "must be > 0");
+            r.half_width_m = hw * 1000.0;
+            out.push_back(std::move(r));
+        }
+        return true;
+    }
+
+    bool LoadLakes(const json::Value& root, std::vector<MapLakeDef>& out) {
+        const json::Value* list = OptionalArray(root, "", "lakes");
+        if (list == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index("lakes", i);
+            const json::Value& v = list->items[i];
+            MapLakeDef l;
+            if (!Keys(v, p, {"id", "name", "points", "level_m", "depth_m", "notes"}) || !RequireString(v, p, "id", l.id) ||
+                !OptionalString(v, p, "name", l.name) || !Points(v, p, 3, l.points) || !Number(v, p, "level_m", l.level_m) ||
+                !OptionalNumber(v, p, "depth_m", l.depth_m)) {
+                return false;
+            }
+            if (l.depth_m <= 0.0) return Fail(Join(p, "depth_m"), "must be > 0");
+            out.push_back(std::move(l));
         }
         return true;
     }
@@ -1462,6 +1593,27 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
     }
     MapDef def;
     if (!LoadMapDefJson(text, def, error)) return nullptr;
+    if (!def.far_ground_file.empty()) {
+        // A district: its far ground is its country's (the same frame, so one ground meets the other at the map's edge).
+        std::string far_text;
+        json::Value root;
+        std::string parse_error;
+        if (!detail::ReadTextFile(data_dir + "/" + def.far_ground_file, far_text) || !json::Parse(far_text, root, &parse_error)) {
+            if (error) *error = "map: far_ground: cannot read " + def.far_ground_file + (parse_error.empty() ? "" : " (" + parse_error + ")");
+            return nullptr;
+        }
+        auto ground = std::make_shared<MapDef>();
+        detail::MapLoader loader;
+        if (!loader.LoadGround(root, *ground)) {
+            if (error) *error = "map: far_ground " + def.far_ground_file + ": " + loader.Message();
+            return nullptr;
+        }
+        if (std::fabs(ground->origin.LatDeg() - def.origin.LatDeg()) > 1e-9 || std::fabs(ground->origin.LonDeg() - def.origin.LonDeg()) > 1e-9) {
+            if (error) *error = "map: far_ground " + def.far_ground_file + ": its origin must be the map's";
+            return nullptr;
+        }
+        def.far_ground = std::move(ground);
+    }
     return MapData::Build(std::move(def));
 }
 

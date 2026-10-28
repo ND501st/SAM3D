@@ -129,6 +129,19 @@ public:
         }
     }
 
+    // A launcher of no Battery here: another battery of the regiment beside the scenario (the runner's fighting
+    // neighbours). Set up where it stands, with its missiles; no TZM comes to it.
+    Shooter& AddShooter(const std::string& callsign, const Vec3& position, int missiles) {
+        shooters_.push_back(Shooter{});
+        Shooter& s = shooters_.back();
+        s.callsign = callsign;
+        s.position = position;
+        s.deployed = true;
+        s.missiles = missiles;
+        s.time_scale = time_scale_;
+        return s;
+    }
+
     // Every shooter's crew at one tier: its times are the chart's times this much longer (1 = the reference crew).
     void SetCrewTimeScale(double scale) {
         time_scale_ = scale > 0.1 ? scale : 0.1;

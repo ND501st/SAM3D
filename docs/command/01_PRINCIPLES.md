@@ -32,3 +32,17 @@
    them and how. The aim is for each delivery to happen in the world: the duty officer's voice on the radio, the
    courier's motorcycle at the battery, the chief of staff reading out the summary at the evening briefing, a paper in
    the cabin (`06_INTEGRATION.md` §6).
+9. **The written record is the war's memory** (project owner, 22 Oct 2026). What a unit reports after a fight, and what
+   its superiors plan on, comes from what its people wrote down at the time, never from the truth: above all the
+   radiotelephonist's journal, every message with the time he took it (`pvo_bu_x_1984` art. 24;
+   `simcore/radio_journal.hpp`, `docs/crew/12_COMMUNICATIONS.md` §2.9a), then the plotter's board and the commander's own
+   notes. The after-action report is compiled from those records, so a message lost unwritten, a short-form entry, a digit
+   written wrong or a ghost track on the board goes up the chain as fact: the wrong time of a raid, the wrong square of
+   its route, a raid that never was, a corridor missed, a kill claimed against the wrong target. The battery's and the
+   regiment's analysis and planning (the corridors and timings the analysts name, the ambushes, the positions, the
+   emission policy, our estimate of what the enemy knows of us) are built on those reports. So the radiotelephonist's
+   accuracy decides how well his side learns and how well it meets the next raid: it is the core of the after-action
+   loop, **the fight, the record, the report, the staff's picture, the plan, the next fight**. The staff check records
+   against one another (the journal against the board and the radar company's own log; a 2010 Belarusian textbook of the
+   Soviet method, Dedyaev's, checks an operator by setting a live plot against a written record:
+   `docs/research/PLOTTING_BOARD_2026-10.md`, "How the plotter got the picture"); a unit whose records prove wrong is believed less, and its people's ratings and careers carry it.

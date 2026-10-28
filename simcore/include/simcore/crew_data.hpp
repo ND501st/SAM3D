@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -75,9 +76,22 @@ struct OrderDef {
     std::vector<std::string> needs;
     // Work the order starts that is not a console drill (ScenarioRunner carries it out; IsOrderAction lists them):
     //   compass_survey  the crew chief finds Qc with the artillery compass at a halt (orientation.hpp)
+    //   dismount        the crew out and lined up beside the vehicle (К машине, crew_mobility.hpp)
+    //   mount           the crew back in their seats (По местам)
     std::vector<std::string> actions;
 };
-inline bool IsOrderAction(const std::string& a) { return a == "compass_survey"; }
+inline bool IsOrderAction(const std::string& a) { return a == "compass_survey" || a == "dismount" || a == "mount"; }
+
+// The radial crew menu (docs/crew/15_TALK.md section 5): up to eight sectors clockwise from the top, each with its lines
+// in order (callout ids). A seat sees the lines it may say, each in its fixed place (a greyed one keeps it). Presentation.
+struct MenuSectorDef {
+    std::string id;
+    std::string en;
+    std::string ru;
+    std::vector<std::string> items;
+};
+constexpr std::size_t kMenuSectors = 8;
+constexpr std::size_t kMenuSectorLines = 8;
 
 // The kinds an order's "needs" may name.
 inline bool KnownOrderNeed(const std::string& n) {
@@ -124,6 +138,7 @@ struct CrewData {
     std::vector<std::string> decision_controls;  // steps that are decisions (ПУСК): judgement delays them
     double stand_s = 0.0;  // "standing": getting up and stepping to a panel out of seated reach
     double sit_s = 0.0;    // and back to the seat
+    std::vector<MenuSectorDef> menu;  // "menu": the radial crew menu's sectors (may be empty: no menu layout)
 
     const CalloutDef* FindCallout(const std::string& id) const {
         for (const CalloutDef& c : callouts) {
@@ -216,7 +231,7 @@ class CrewLoader : public ConsoleLoader {
 public:
     bool LoadCrew(const json::Value& root, const ConsoleData& console, CrewData& out) {
         if (!Keys(root, "", {"system_id", "display_name", "status", "notes", "source", "confidence", "commander_seat", "seats", "callouts",
-                             "orders", "tasks", "facts", "reports", "decisions", "standing"}) ||
+                             "orders", "tasks", "facts", "reports", "decisions", "standing", "menu"}) ||
             !RequireString(root, "", "system_id", out.system_id) || !Provenance(root, "") ||
             !OptionalString(root, "", "commander_seat", out.commander)) {
             return false;
@@ -229,7 +244,36 @@ public:
         }
         return LoadSeats(root, console, out) && LoadCallouts(root, console, out) && LoadOrders(root, console, out) &&
                LoadTasks(root, console, out) && LoadFacts(root, console, out) && LoadReports(root, console, out) &&
-               LoadDecisions(root, console, out) && LoadStanding(root, out);
+               LoadDecisions(root, console, out) && LoadStanding(root, out) && LoadMenu(root, out);
+    }
+
+    // "menu": { "sectors": [ { "id", "en", "ru", "items": [callout ids] } ], "source", "confidence" }: at most eight
+    // sectors, each line a callout of the catalogue and in one sector only.
+    bool LoadMenu(const json::Value& root, CrewData& out) {
+        const json::Value* m = root.Find("menu");
+        if (m == nullptr) return true;
+        if (!Keys(*m, "menu", {"sectors", "source", "confidence", "notes"}) || !Provenance(*m, "menu")) return false;
+        const json::Value* arr = OptionalArray(*m, "menu", "sectors");
+        if (arr == nullptr || arr->items.empty()) return message_.empty() ? Fail("menu.sectors", "required, a non-empty list") : false;
+        if (arr->items.size() > kMenuSectors) return Fail("menu.sectors", "at most eight sectors");
+        std::map<std::string, std::string> placed;
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& s = arr->items[i];
+            const std::string p = Index("menu.sectors", i);
+            MenuSectorDef d;
+            if (!Keys(s, p, {"id", "en", "ru", "items", "notes"}) || !RequireString(s, p, "id", d.id) || !RequireString(s, p, "en", d.en) ||
+                !RequireString(s, p, "ru", d.ru) || !StringList(s, p, "items", d.items)) {
+                return false;
+            }
+            for (std::size_t k = 0; k < d.items.size(); ++k) {
+                if (out.FindCallout(d.items[k]) == nullptr) return Fail(Index(p + ".items", k), "unknown callout '" + d.items[k] + "'");
+                if (!placed.emplace(d.items[k], d.id).second) {
+                    return Fail(Index(p + ".items", k), "'" + d.items[k] + "' is already in sector '" + placed[d.items[k]] + "'");
+                }
+            }
+            out.menu.push_back(std::move(d));
+        }
+        return true;
     }
 
     bool LoadSkills(const json::Value& root, SkillTable& out) {
@@ -605,6 +649,68 @@ inline bool LoadSkillTableFile(const std::string& path, SkillTable& out, std::st
         return false;
     }
     return true;
+}
+
+// The lines a seat's crew menu offers (docs/crew/15_TALK.md section 5): at the commanding seat the orders, then what he
+// says on the air himself (`radio`: ScenarioRunner::PlayerRadioReports); at any other seat its reports; at every seat
+// the warnings it may give («Воздух!»).
+inline std::vector<std::string> MenuLines(const CrewData& crew, const std::string& station, const std::vector<std::string>& radio = {}) {
+    std::vector<std::string> out;
+    const bool commander = station == crew.commander;
+    if (commander) {
+        for (const OrderDef& o : crew.orders) {
+            if (crew.FindCallout(o.callout) != nullptr) out.push_back(o.callout);
+        }
+        for (const std::string& r : radio) out.push_back(r);
+    }
+    for (const CalloutDef& c : crew.callouts) {
+        const bool his = c.from == station || c.from == "any";
+        if (his && (c.kind == CalloutKind::Warning || (!commander && c.kind == CalloutKind::Report))) out.push_back(c.id);
+    }
+    return out;
+}
+
+// A seat's lines (the ids its menu offers) placed in the crew menu's sectors (docs/crew/15_TALK.md section 5): out[k] the
+// lines sector k holds, in the sector's order. A line no sector holds goes to `unplaced` (the menu's data misses it).
+inline std::vector<std::vector<std::string>> PlaceInMenu(const CrewData& crew, const std::vector<std::string>& lines,
+                                                         std::vector<std::string>* unplaced = nullptr) {
+    std::vector<std::vector<std::string>> out(crew.menu.size());
+    for (std::size_t k = 0; k < crew.menu.size(); ++k) {
+        for (const std::string& item : crew.menu[k].items) {
+            for (const std::string& l : lines) {
+                if (l == item) {
+                    out[k].push_back(l);
+                    break;
+                }
+            }
+        }
+    }
+    if (unplaced != nullptr) {
+        for (const std::string& l : lines) {
+            bool found = false;
+            for (const MenuSectorDef& s : crew.menu) {
+                for (const std::string& item : s.items) found = found || item == l;
+            }
+            if (!found) unplaced->push_back(l);
+        }
+    }
+    return out;
+}
+
+// Whom an order is addressed to, for the menu's seat-first ring (pick who, then what): the seat its words are said to, or
+// "crew" for an order to all of them; without an addressee, the one seat of its drills.
+inline std::string OrderDoer(const CrewData& crew, const OrderDef& order) {
+    const CalloutDef* c = crew.FindCallout(order.callout);
+    if (c != nullptr && !c->to.empty() && c->to != "any") return c->to;
+    std::string seat;
+    for (const OrderStart& p : order.procedures) {
+        if (seat.empty()) {
+            seat = p.station;
+        } else if (p.station != seat) {
+            return "crew";
+        }
+    }
+    return seat.empty() ? std::string("crew") : seat;
 }
 
 }  // namespace simcore

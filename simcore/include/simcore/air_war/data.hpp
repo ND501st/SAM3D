@@ -6,9 +6,12 @@
 // and is a game value where none does; the files say which.
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -16,6 +19,7 @@
 
 #include "simcore/air_war/types.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/country_map.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
@@ -25,18 +29,59 @@ namespace airwar {
 
 // ------------------------------------------------------------------------------------------------ the theatre
 
+// The air defence systems a theatre object may have: the id the data uses, and how the enemy's intelligence labels it
+// (NATO names, since every adversary's analysts used them or their own equivalent). The S-75M2 and S-125M1 are the
+// national air defence's variants (docs/campaign/10_BRIEFING_FORCES_AND_NATION.md decision 1); "s75" and "s125" stay
+// for the theatre's existing sites.
+struct AirDefenceSystem {
+    const char* id;
+    const char* label;  // the enemy's name for it
+    const char* own;    // ours, as the command post's board writes it
+};
+
+inline const std::vector<AirDefenceSystem>& AirDefenceSystems() {
+    static const std::vector<AirDefenceSystem> systems = {
+        {"osa", "SA-8 battery", "Оса"},
+        {"kub", "SA-6 battery", "Куб"},
+        {"s75", "SA-2 site", "С-75"},
+        {"s75m2", "SA-2 site", "С-75М2"},
+        {"s125", "SA-3 battery", "С-125"},
+        {"s125m1", "SA-3 battery", "С-125М1"},
+        {"strela10", "SA-13 platoon", "Стрела-10"},
+        {"strela1", "SA-9 platoon", "Стрела-1"},
+        {"zsu234", "ZSU-23-4 platoon", "ЗСУ-23-4"},
+        {"s60", "57 mm AAA battery", "С-60"},
+        {"ks30", "130 mm AAA battery", "КС-30"},
+        {"zu23", "AAA", "ЗУ-23"},
+        {"aaa", "AAA", "ЗА"},
+        {"manpads", "MANPADS", "ПЗРК"},
+    };
+    return systems;
+}
+
+inline const AirDefenceSystem* FindAirDefenceSystem(const std::string& id) {
+    for (const AirDefenceSystem& s : AirDefenceSystems()) {
+        if (id == s.id) return &s;
+    }
+    return nullptr;
+}
+
 // An object's air defence, as the abstract resolver and the enemy's threat picture see it (game values).
 struct DefenceDef {
     bool present = false;
-    std::string system;        // "osa", "s125", "kub", "s75", "strela10", "aaa", "manpads": display and notes
+    std::string system;        // an id of AirDefenceSystems(): display and notes
     double radius_m = 0.0;     // where it can engage
-    double lethality = 0.0;    // chance per aircraft to be shot down on a pass through the heart of the zone
+    double lethality = 0.0;    // chance per aircraft to be shot down on a pass through the heart of the zone (times attrition.pass_scale)
     bool low_cover = true;     // effective against low fliers
     bool medium_cover = true;  // effective against fliers at medium altitude
     bool radar = true;         // radiates: ELINT can locate it, ARMs can home on it (guns on optical sights: false)
     int missiles = -1;         // ready rounds before a reload (-1: guns, no limit)
     int radars = 1;            // fire-control radars that can each fight alone (an Osa battery's four combat vehicles: 4);
                                // an anti-radiation missile's hit takes out one of them
+    int channels = 0;          // aircraft it engages at once as a flight passes (its fire channels: an S-75's or S-125's
+                               // guidance radar one, an Osa battery four, the platoon's launchers four); scaled by how much
+                               // of it works. 0: every aircraft in reach (the theatre the balance pass tuned)
+    double max_target_mps = 0.0;  // the fastest target it can engage (the Osa-AK's 500 m/s); 0: any
 };
 
 struct TheatreObject {
@@ -48,7 +93,8 @@ struct TheatreObject {
     double hardness = 0.5;       // 0 soft .. 1 very hard
     double repair_h = 24.0;      // hours from wrecked to working (0: not repaired in the campaign)
     double relocate_h = 0.0;     // a mobile unit moves this often (0: stays); the player's battery: the player decides
-    double relocate_m = 0.0;     // how far
+    double relocate_m = 0.0;     // how far (a unit without prepared positions)
+    std::vector<Vec3> prepared;  // its prepared positions, `pos` first: it moves between these (empty: anywhere relocate_m away)
     bool mobile = false;
     bool emitter = false;        // radiates when it works (its share of the hour: `emission`)
     double emission = 0.5;       // share of each hour a radar radiates when not fighting
@@ -60,6 +106,39 @@ struct TheatreObject {
     std::string c2_source;       // the battery's C2 source this object is (command/c2_sources.json id, or "pu12")
     std::string regiment_radar;  // "p19" / "p40": it feeds the PU-12's picture (scenario c2.regiment)
     double radius_m = 0.0;       // a city's built-up area (collateral damage)
+    // As a target (docs/air_war/10_WEAPONS.md): its aim points and what they are, when not its kind's (weapons.json).
+    int aim_points = 0;
+    bool has_target_class = false;
+    TargetClass target_class = TargetClass::Light;
+    // A supply line's column (docs/air_war/14_LOGISTICS.md): made from TheatreDef::supply_lines, not written.
+    int supply_line = -1;   // index into TheatreDef::supply_lines, or -1
+    double move_mps = 0.0;  // how fast it moves: the enemy's picture of where it is spreads with it
+    std::string notes;
+};
+
+// A supply line of the player's side (docs/air_war/14_LOGISTICS.md): its columns load at a depot, drive or run by road or
+// rail to the troops, unload and come back, over and over. What they bring keeps the troops supplied (a march column
+// brings strength: tanks and men moving up). Each column is a theatre object the enemy can find on the move and strike.
+struct SupplyLineDef {
+    std::string id;
+    std::string name;
+    std::string from;               // where the columns load: a depot, rail junction, port or materials depot
+    std::string to;                 // the troops they feed
+    std::vector<std::string> via;   // objects on the way, in order (a bridge the road must cross)
+    std::string net = "road";       // "road" or "rail": the country map's network it follows
+    ObjectKind column = ObjectKind::Convoy;  // Convoy and Column by road, Train by rail
+    int columns = 2;
+    int vehicles = 30;              // trucks, wagons, or tanks and carriers in each column
+    std::string carries;            // what: ammunition and fuel; tanks and their crews
+    double speed_mps = 7.0;         // its average on the move, halts included
+    double load_h = 4.0;            // loading at the start (unloading takes half)
+    double delivery = 0.3;          // what one column brings: of the troops' stocks (1 full); a march column, of their strength
+    bool night_only = false;        // moves only in the dark (march practice under an enemy's air superiority)
+    double value = 0.5;
+    double hardness = 0.3;
+    double replace_h = 24.0;        // a destroyed column is replaced (vehicles and crews from the reserve) after this
+    double prior_known = 0.5;       // chance the enemy knows of the traffic on it before the war
+    DefenceDef defence;             // its own air defence on the move (an armoured column's ZSU-23-4s)
     std::string notes;
 };
 
@@ -78,6 +157,10 @@ struct FrontDef {
     double friendly_fighters = 0.3;   // the player's side's fighter threat over this front, 0..1 (escort need)
     bool has_battery_position = false;  // in a war on this front the player's battery deploys here (its dummies with it)
     Vec3 battery_position;
+    bool has_missile_launch = false;    // where this enemy's ships or ground launchers fire their cruise missiles from
+    Vec3 missile_launch;
+    double force_scale = 1.0;  // the enemy's squadrons this many times their faction's strength on this front (a war on a
+                               // whole nation is fought by a larger force than a district's)
 };
 
 struct TheatreDef {
@@ -89,8 +172,11 @@ struct TheatreDef {
     GeoPoint origin;
     double ground_height_m = 0.0;
     double start_hour = 6.0;    // local time at campaign hour 0
+    int year = 1985;            // the war's year: only what is in service by then flies (AircraftType::in_service_year)
     std::vector<FrontDef> fronts;
-    std::vector<TheatreObject> objects;
+    std::vector<TheatreObject> objects;  // a supply line's columns among them, after the written objects
+    std::vector<SupplyLineDef> supply_lines;
+    std::string country_map;  // the country's map its supply lines follow (data/maps/, simcore/country_map.hpp); "" none
 
     const TheatreObject* Find(const std::string& id_) const {
         for (const TheatreObject& o : objects) {
@@ -113,6 +199,54 @@ struct TheatreDef {
     const TheatreObject* PlayerBattery() const {
         for (const TheatreObject& o : objects) {
             if (o.player) return &o;
+        }
+        return nullptr;
+    }
+};
+
+// ------------------------------------------------------------------------------------------------ weapons
+
+// A weapon an aircraft carries (data/air_war/weapons.json; docs/air_war/10_WEAPONS.md). What it is (mass, guidance,
+// submunitions, the year it came) is encyclopedic and cited; what it does to a target is a game value, calibrated
+// against what campaigns achieved (sorties to drop a bridge, guided against unguided hits: docs/air_war/09_BALANCE.md),
+// never a weapon-effects table.
+struct WeaponDef {
+    std::string id;
+    std::string name;
+    std::string kind;              // bomb, retarded_bomb, cluster, runway, guided_bomb, missile, rockets, atgm, gun
+    double mass_kg = 0.0;
+    std::string guidance = "none"; // none, laser, tv, ir, wire
+    double standoff_m = 0.0;       // launched this far from the target (a stand-off weapon)
+    double footprint_m = 10.0;     // game value: how near an aim point it must fall to put it out of action
+    double effect[kTargetClasses] = {};  // game values 0..1: the chance it does, inside its footprint
+    double reliability = 0.95;     // it arms and goes off
+    double laydown_reliability = -1.0;   // dropped unretarded from low level the fuze has no time (Falklands): -1 as above
+    std::vector<Delivery> deliveries;    // how it can be put on a target
+    int in_service_year = 0;
+    std::string source;
+    std::string confidence;
+    std::string notes;
+
+    bool InService(int year) const { return in_service_year <= 0 || in_service_year <= year; }
+    bool Can(Delivery d) const { return std::find(deliveries.begin(), deliveries.end(), d) != deliveries.end(); }
+    bool Guided() const { return guidance != "none"; }
+};
+
+// How a kind of object stands as a target: what its aim points are and how many (a bridge's spans, an airfield's
+// runways, shelters and fuel, a depot's sheds and stacks). An object may override both.
+struct TargetProfileDef {
+    TargetClass target_class = TargetClass::Light;
+    int aim_points = 4;
+};
+
+// data/air_war/weapons.json: every weapon of every faction, and every kind of object as a target.
+struct WeaponsDef {
+    std::vector<WeaponDef> weapons;
+    TargetProfileDef targets[static_cast<int>(ObjectKind::Count)];
+
+    const WeaponDef* Find(const std::string& id) const {
+        for (const WeaponDef& w : weapons) {
+            if (w.id == id) return &w;
         }
         return nullptr;
     }
@@ -145,14 +279,42 @@ struct AircraftType {
     // receiver the raid's scenario fires it as an EM missile; otherwise the mission bridge's gameplay model does. Default:
     // the HARM class with a memory, else the Shrike class.
     std::string arm_em;
-    double strike_power = 0.0;     // effect of one aircraft's load on a target (game value, 0..1 of a "standard" target)
+    // The ARM it carries by the war's year, when that changed: (EM library ARM, the year from which it is the one it
+    // fires), in order. The F-4G fired the AGM-78 Standard ARM until the HARM reached the USAF (1987). ArmEm(year).
+    std::vector<std::pair<std::string, int>> arm_em_by_year;
+    double strike_power = 0.0;     // effect of one aircraft's load on a target (game value, 0..1 of a "standard" target);
+                                   // the weapons model's fallback for a type without loads
+    // The weapons it can carry: (weapon id, how many on one aircraft) (docs/air_war/10_WEAPONS.md); the planner picks
+    // one for each strike (weaponeering).
+    std::vector<std::pair<std::string, int>> loads;
+    std::string designator;        // "laser": it designates its own laser-guided weapons (Pave Tack, Kaira, Klen)
+    double computing = 0.5;        // its bombing computer and sight, 0 (iron sight) .. 1 (CCIP and a laser rangefinder)
+    double radius_m = 0.0;         // combat radius with a load, high-low-high (0: unlimited in the theatre)
     double recce_quality = 0.0;    // camera or sensor, 0..1
     double air_to_air = 0.0;       // value as an escort, 0..1
     double evasion = 0.3;          // how well its crews survive a pass (with the pilot's skill), 0..1
+    int in_service_year = 0;       // flies only in a war of this year or later (TheatreDef::year); 0: always
+    // A cruise missile (role "missile"): flown like an aircraft from where it is launched to its target, never a crew
+    // lost; its stock is spent and resupplied.
+    bool missile = false;
+    std::string launch = "air";    // "air": its carrier releases it at the border entry; "sea": from the front's missile_launch
+    double range_m = 0.0;
+    double hit_chance = 0.0;       // a missile's chance to hit what it is aimed at (0: strike.hit_chance)
+    int stock = 0;                 // at the start of the war
+    double resupply_per_day = 0.0;
     std::string source;
     std::string confidence;
     std::string notes;
 
+    bool InService(int year) const { return in_service_year <= 0 || in_service_year <= year; }
+    // The ARM it fires in a war of `year`: the latest of arm_em_by_year in service by then, else arm_em.
+    const std::string& ArmEm(int year) const {
+        const std::string* pick = &arm_em;
+        for (const auto& e : arm_em_by_year) {
+            if (e.second <= year) pick = &e.first;
+        }
+        return *pick;
+    }
     bool Has(FlightRole r) const {
         for (FlightRole x : roles) {
             if (x == r) return true;
@@ -167,6 +329,10 @@ struct SquadronDef {
     std::string aircraft;  // AircraftType id
     int count = 12;
     std::string leader;    // officer id ("" : one is generated)
+    // The force build-up (docs/air_war/12_FORCES.md): the share of it in theatre on day 1 and the day it is all there
+    // (the faction's logistics.buildup_* unless the squadron says otherwise; -1: the faction's).
+    double initial = -1.0;
+    int full_by_day = -1;
 };
 
 // How a faction builds a package of one mission kind (the tactical groups of mai_tactics_vvs §3.3.3; the package
@@ -208,6 +374,15 @@ struct DoctrineDef {
     double sortie_rate_per_day = 2.0;   // sorties per serviceable aircraft per day
     double serviceability = 0.7;
     double max_packages_per_cycle = 12.0;
+    // How much the planners weigh the target's own guns against the effect when choosing the attack (weaponeering):
+    // 0 the effect alone (low-level laydown), 1 avoid them at almost any cost (loft, stand-off, medium altitude).
+    double delivery_risk = 0.5;
+    // The least a package must be expected to achieve, and to be worth, to be flown (utility.min_effect and
+    // utility.min_value unless the doctrine sets its own): a light air arm flies for its presence, a war of pinpricks.
+    bool has_min_effect = false;
+    double min_effect = 0.0;
+    bool has_min_value = false;
+    double min_value = 0.0;
     std::vector<PhaseDef> phases;
     PackageTemplate packages[kMissionKinds];
 };
@@ -242,6 +417,10 @@ struct LogisticsDef {
     double arm_stock = 0.0;
     double arm_resupply_per_day = 0.0;
     double damaged_return_h = 48.0;     // a damaged aircraft back in service after
+    // The force build-up (docs/air_war/12_FORCES.md): the share of every squadron in theatre on day 1, and the day
+    // the whole force is (linear between; 0: all there from the start).
+    double buildup_initial = 1.0;
+    int buildup_full_by_day = 0;
 };
 
 struct PoliticalEventDef {
@@ -464,6 +643,7 @@ struct TuningTable {
             {"utility.exploration", 1.0},
             {"utility.min_value", 0.5},
             {"utility.min_effect", 0.05},
+            {"utility.missile_cost", 0.4},      // per cruise missile spent, at a full stock (scarcer, dearer)
             // attrition (abstract resolution)
             {"attrition.low_vs_long_range_sam", 0.35},
             {"attrition.medium_vs_guns", 0.0},
@@ -475,6 +655,9 @@ struct TuningTable {
             {"attrition.emcon_lethality", 0.6},
             {"attrition.arm_kill", 0.35},
             {"attrition.arm_kill_no_memory_off", 0.05},
+            {"attrition.arm_kill_memory_off", 0.08},
+            {"attrition.pass_scale", 1.0},
+            {"attrition.decoy_exposure", 0.0},
             {"attrition.escort_fighter_kill", 0.03},
             {"attrition.max_per_pass", 0.6},
             // effect of strikes
@@ -485,6 +668,71 @@ struct TuningTable {
             {"strike.stale_miss_m", 1500.0},
             {"strike.decoy_area_m", 1500.0},
             {"strike.collateral_m", 3000.0},
+            // weapons and attack profiles (docs/air_war/10_WEAPONS.md)
+            {"delivery.cep_laydown_m", 30.0},
+            {"delivery.cep_loft_m", 170.0},
+            {"delivery.cep_popup_m", 50.0},
+            {"delivery.cep_dive_m", 45.0},
+            {"delivery.cep_level_m", 130.0},
+            {"delivery.cep_standoff_m", 25.0},
+            {"delivery.cep_hover_fire_m", 25.0},
+            {"delivery.cep_laser_m", 6.0},
+            {"delivery.cep_tv_m", 3.0},
+            {"delivery.cep_wire_m", 2.0},
+            {"delivery.night_visual_factor", 2.5},
+            {"delivery.poor_weather_factor", 1.5},
+            {"delivery.under_fire_factor", 1.2},
+            {"delivery.cloudy_laser", 0.7},
+            {"delivery.exposure_laydown", 1.0},
+            {"delivery.exposure_loft", 0.3},
+            {"delivery.exposure_popup", 0.65},
+            {"delivery.exposure_dive", 0.35},
+            {"delivery.exposure_level", 0.0},
+            {"delivery.exposure_standoff", 0.0},
+            {"delivery.exposure_hover_fire", 0.6},
+            {"delivery.release_laydown_m", 0.0},
+            {"delivery.release_loft_m", 5000.0},
+            {"delivery.release_popup_m", 1500.0},
+            {"delivery.release_dive_m", 2500.0},
+            {"delivery.release_level_m", 0.0},
+            {"delivery.release_standoff_m", 5000.0},
+            {"delivery.release_hover_fire_m", 4000.0},
+            // support orbits (docs/air_war/11_SUPPORT.md)
+            {"delivery.runway_strip_m", 25.0},
+            {"delivery.popup_pull_m", 6000.0},     // a pop-up's pull-up, short of the target
+            {"delivery.popup_apex_m", 1200.0},     // its apex, above the ground
+            {"delivery.popup_release_m", 700.0},   // and its release, in the dive
+            {"delivery.loft_pull_m", 8000.0},      // a toss's pull-up (4-5 nm out, saaf_toss)
+            {"delivery.loft_release_m", 600.0},    // its release, climbing
+            {"delivery.dive_roll_in_m", 5000.0},   // a dive's roll-in from height, short of the target
+            {"delivery.dive_release_m", 1500.0},   // its release
+            {"delivery.hover_agl_m", 30.0},        // a helicopter firing from the hover, unmasked over its cover
+            // logistics (docs/air_war/14_LOGISTICS.md)
+            {"logistics.consumption_per_day", 0.33},      // of a supplied formation's stocks a day in the field
+            {"logistics.unsupplied_decay_per_day", 0.15},  // of its strength a day once the stocks are out
+            {"logistics.unsupplied_floor", 0.25},          // what an unsupplied formation still fights with
+            {"logistics.repair_needs_supply", 0.2},        // below this stock it mends nothing
+            {"logistics.bridge_open", 0.7},                // a bridge carries traffic again from this function
+            {"logistics.snap_m", 30000.0},                 // how far a depot or the troops may lie off the network
+            {"logistics.search_m", 15000.0},               // an armed reconnaissance's stretch of road, each way of its point
+            {"logistics.find_day", 0.7},                   // the chance to find a column on the move on the stretch
+            {"logistics.find_twilight", 0.5},
+            {"logistics.find_night", 0.15},
+            {"logistics.find_night_capable", 0.4},         // with a night attack system
+            {"logistics.find_poor_weather", 0.5},          // times this under low cloud
+            {"intel.column_sigma_share", 0.5},              // a column's believed position spreads at this share of its speed
+            {"delivery.footprint_soft", 3.0},
+            {"delivery.footprint_light", 1.8},
+            {"support.sorties_per_aircraft_day", 1.0},
+            {"support.awacs_sorties_per_orbit_day", 3.0},
+            {"support.elint_sorties_per_orbit_day", 2.0},
+            {"support.receivers_per_tanker_sortie", 4.0},
+            {"support.awacs_fighter_cut", 0.5},
+            {"support.elint_reach_without", 0.6},
+            {"support.elint_sigma_without", 1.3},
+            {"support.low_radius_share", 0.7},
+            {"support.refuelled_radius", 1.6},
+            {"utility.sortie_cost", 0.0},
             // intelligence
             {"intel.mobile_sigma_growth_mps", 0.15},
             {"intel.mobile_confidence_half_life_h", 18.0},
@@ -597,13 +845,24 @@ public:
     }
 
     // ---- theatre
-    bool LoadTheatre(const json::Value& root, TheatreDef& out) {
-        if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "country", "origin",
-                             "ground_height_m", "start_hour", "fronts", "objects"}) ||
-            !RequireString(root, "", "theatre_id", out.id) || !RequireString(root, "", "name", out.name) ||
+    // `base`: the theatre this one extends ("extends", LoadTheatreFile), or null. An extending theatre starts from its
+    // base: its fronts replace the base's front of the same faction, "remove" drops base objects, and its objects are
+    // added, one with a base object's id replacing it where it stands.
+    bool LoadTheatre(const json::Value& root, TheatreDef& out, const TheatreDef* base = nullptr) {
+        if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "extends", "remove", "country",
+                             "origin", "ground_height_m", "start_hour", "year", "fronts", "objects", "supply_lines", "country_map"})) {
+            return false;
+        }
+        if (root.Find("extends") != nullptr && base == nullptr) {
+            return Fail("extends", "only a theatre file can extend another (LoadTheatreFile)");
+        }
+        if (root.Find("remove") != nullptr && base == nullptr) return Fail("remove", "only a theatre that extends another removes objects");
+        if (base != nullptr) out = *base;
+        if (!RequireString(root, "", "theatre_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
             return false;
         }
+        if (base != nullptr) return ExtendTheatre(root, out);
         if (const json::Value* c = root.Find("country")) {
             if (!Keys(*c, "country", {"name", "short", "notes"}) || !RequireString(*c, "country", "name", out.country_name) ||
                 !OptionalString(*c, "country", "short", out.country_short)) {
@@ -619,7 +878,7 @@ public:
         }
         out.origin = GeoPoint::FromDegrees(lat, lon, alt);
         if (!Num(root, "", "ground_height_m", out.ground_height_m, -500.0, 5000.0) ||
-            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0)) {
+            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0) || !Int(root, "", "year", out.year, 1950, 2050)) {
             return false;
         }
         const json::Value* fronts = OptionalArray(root, "", "fronts");
@@ -638,14 +897,178 @@ public:
             out.objects.push_back(std::move(ob));
         }
         if (players != 1) return Fail("objects", "exactly one object must be the player's battery (\"player\": true)");
+        return OptionalString(root, "", "country_map", out.country_map) && LoadSupplyLines(root, out) && MakeColumns(out);
+    }
+
+    bool ExtendTheatre(const json::Value& root, TheatreDef& out) {
+        if (root.Find("country") != nullptr || root.Find("origin") != nullptr) {
+            return Fail(root.Find("country") != nullptr ? "country" : "origin", "an extending theatre keeps its base's");
+        }
+        if (!Num(root, "", "ground_height_m", out.ground_height_m, -500.0, 5000.0) ||
+            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0) || !Int(root, "", "year", out.year, 1950, 2050)) {
+            return false;
+        }
+        if (const json::Value* fronts = OptionalArray(root, "", "fronts")) {
+            for (std::size_t i = 0; i < fronts->items.size(); ++i) {
+                TheatreDef one;
+                if (!LoadFront(fronts->items[i], Index("fronts", i), one)) return false;
+                bool replaced = false;
+                for (FrontDef& f : out.fronts) {
+                    if (f.faction != one.fronts[0].faction) continue;
+                    f = one.fronts[0];
+                    replaced = true;
+                }
+                if (!replaced) out.fronts.push_back(one.fronts[0]);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        std::vector<std::string> removed;
+        if (!StringList(root, "", "remove", removed)) return false;
+        for (std::size_t i = 0; i < removed.size(); ++i) {
+            const int at = out.IndexOf(removed[i]);
+            if (at < 0) return Fail(Index("remove", i), "the base has no object '" + removed[i] + "'");
+            out.objects.erase(out.objects.begin() + at);
+        }
+        std::vector<std::string> own;
+        if (const json::Value* objs = OptionalArray(root, "", "objects")) {
+            for (std::size_t i = 0; i < objs->items.size(); ++i) {
+                TheatreObject ob;
+                if (!LoadObject(objs->items[i], Index("objects", i), ob)) return false;
+                if (std::find(own.begin(), own.end(), ob.id) != own.end()) return Fail(Index("objects", i), "duplicate id '" + ob.id + "'");
+                own.push_back(ob.id);
+                const int at = out.IndexOf(ob.id);
+                if (at >= 0) {
+                    out.objects[static_cast<std::size_t>(at)] = std::move(ob);
+                } else {
+                    out.objects.push_back(std::move(ob));
+                }
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        int players = 0;
+        for (const TheatreObject& o : out.objects) players += o.player ? 1 : 0;
+        if (players != 1) return Fail("objects", "exactly one object must be the player's battery (\"player\": true)");
+        return OptionalString(root, "", "country_map", out.country_map) && LoadSupplyLines(root, out) && MakeColumns(out);
+    }
+
+    // The supply lines (an extending theatre's replace the base's of the same id, or are added).
+    bool LoadSupplyLines(const json::Value& root, TheatreDef& out) {
+        const json::Value* lines = OptionalArray(root, "", "supply_lines");
+        if (lines == nullptr) return message_.empty();
+        std::vector<std::string> own;
+        for (std::size_t i = 0; i < lines->items.size(); ++i) {
+            const json::Value& v = lines->items[i];
+            const std::string p = Index("supply_lines", i);
+            SupplyLineDef l;
+            std::string column = "convoy";
+            double speed_kmh = 25.0;
+            if (!Keys(v, p, {"id", "name", "from", "to", "via", "net", "column", "columns", "vehicles", "carries", "speed_kmh", "load_h",
+                             "delivery", "night_only", "value", "hardness", "replace_h", "prior_known", "defence", "source",
+                             "confidence", "notes"}) ||
+                !RequireString(v, p, "id", l.id) || !RequireString(v, p, "name", l.name) || !RequireString(v, p, "from", l.from) ||
+                !RequireString(v, p, "to", l.to) || !StringList(v, p, "via", l.via) || !OptionalString(v, p, "net", l.net) ||
+                !OptionalString(v, p, "column", column) || !Int(v, p, "columns", l.columns, 1, 8) ||
+                !Int(v, p, "vehicles", l.vehicles, 1, 1000) || !OptionalString(v, p, "carries", l.carries) ||
+                !Num(v, p, "speed_kmh", speed_kmh, 5.0, 80.0) || !Num(v, p, "load_h", l.load_h, 0.0, 72.0) ||
+                !Num(v, p, "delivery", l.delivery, 0.0, 1.0) || !OptionalBool(v, p, "night_only", l.night_only) ||
+                !Num(v, p, "value", l.value, 0.0, 1.0) || !Num(v, p, "hardness", l.hardness, 0.0, 1.0) ||
+                !Num(v, p, "replace_h", l.replace_h, 1.0, 1000.0) || !Num(v, p, "prior_known", l.prior_known, 0.0, 1.0) ||
+                !Provenance(v, p) || !OptionalString(v, p, "notes", l.notes)) {
+                return false;
+            }
+            l.speed_mps = speed_kmh / 3.6;
+            if (column == "convoy") {
+                l.column = ObjectKind::Convoy;
+            } else if (column == "train") {
+                l.column = ObjectKind::Train;
+            } else if (column == "column") {
+                l.column = ObjectKind::Column;
+            } else {
+                return Fail(Join(p, "column"), "convoy, train or column");
+            }
+            if (l.net != "road" && l.net != "rail") return Fail(Join(p, "net"), "road or rail");
+            if ((l.column == ObjectKind::Train) != (l.net == "rail")) return Fail(Join(p, "net"), "a train runs by rail, a convoy or a column by road");
+            if (const json::Value* d = v.Find("defence")) {
+                if (!LoadDefence(*d, Join(p, "defence"), l.defence)) return false;
+            }
+            if (std::find(own.begin(), own.end(), l.id) != own.end()) return Fail(p, "duplicate id '" + l.id + "'");
+            own.push_back(l.id);
+            bool replaced = false;
+            for (SupplyLineDef& b : out.supply_lines) {
+                if (b.id != l.id) continue;
+                b = l;
+                replaced = true;
+            }
+            if (!replaced) out.supply_lines.push_back(std::move(l));
+        }
+        return true;
+    }
+
+    // Each supply line's columns as theatre objects, at their depot: made again from the lines (an extending theatre's
+    // replace its base's).
+    bool MakeColumns(TheatreDef& out) {
+        out.objects.erase(std::remove_if(out.objects.begin(), out.objects.end(), [](const TheatreObject& o) { return o.supply_line >= 0; }),
+                          out.objects.end());
+        for (std::size_t li = 0; li < out.supply_lines.size(); ++li) {
+            const SupplyLineDef& l = out.supply_lines[li];
+            const std::string p = Index("supply_lines", li);
+            const TheatreObject* from = out.Find(l.from);
+            const TheatreObject* to = out.Find(l.to);
+            if (from == nullptr) return Fail(Join(p, "from"), "no object '" + l.from + "'");
+            if (to == nullptr) return Fail(Join(p, "to"), "no object '" + l.to + "'");
+            if (to->kind != ObjectKind::Troops) return Fail(Join(p, "to"), "'" + l.to + "' is not troops");
+            for (std::size_t vi = 0; vi < l.via.size(); ++vi) {
+                if (out.Find(l.via[vi]) == nullptr) return Fail(Index(Join(p, "via"), vi), "no object '" + l.via[vi] + "'");
+            }
+            for (int k = 0; k < l.columns; ++k) {
+                TheatreObject o;
+                o.id = l.id + "_" + std::to_string(k + 1);
+                o.name = l.name + ", column " + std::to_string(k + 1);
+                o.kind = l.column;
+                o.pos = from->pos;
+                o.value = l.value;
+                o.hardness = l.hardness;
+                o.repair_h = l.replace_h;
+                o.mobile = true;
+                o.prior_known = l.prior_known;
+                o.defence = l.defence;
+                o.supply_line = static_cast<int>(li);
+                o.move_mps = l.speed_mps;
+                o.notes = l.carries;
+                if (out.Find(o.id) != nullptr) return Fail(p, "a column's id '" + o.id + "' is already an object's");
+                out.objects.push_back(std::move(o));
+            }
+        }
+        return true;
+    }
+
+    bool LoadDefence(const json::Value& d, const std::string& dp, DefenceDef& def) {
+        double radius_km = 0.0;
+        if (!Keys(d, dp, {"system", "radius_km", "lethality", "low_cover", "medium_cover", "radar", "missiles", "radars", "channels",
+                          "max_target_mps", "notes"}) ||
+            !RequireString(d, dp, "system", def.system) || !Num(d, dp, "radius_km", radius_km, 0.1, 100.0) ||
+            !Num(d, dp, "lethality", def.lethality, 0.0, 1.0) || !OptionalBool(d, dp, "low_cover", def.low_cover) ||
+            !OptionalBool(d, dp, "medium_cover", def.medium_cover) || !OptionalBool(d, dp, "radar", def.radar) ||
+            !Int(d, dp, "missiles", def.missiles, -1, 1000) || !Int(d, dp, "radars", def.radars, 1, 16) ||
+            !Int(d, dp, "channels", def.channels, 0, 64) || !Num(d, dp, "max_target_mps", def.max_target_mps, 0.0, 5000.0)) {
+            return false;
+        }
+        if (FindAirDefenceSystem(def.system) == nullptr) {
+            return Fail(Join(dp, "system"), "unknown air defence system '" + def.system + "' (AirDefenceSystems())");
+        }
+        def.present = true;
+        def.radius_m = radius_km * 1000.0;
         return true;
     }
 
     bool LoadFront(const json::Value& f, const std::string& p, TheatreDef& out) {
         FrontDef fr;
-        if (!Keys(f, p, {"faction", "name", "line", "entries", "bases", "friendly_fighters", "battery_position", "notes"}) ||
+        if (!Keys(f, p, {"faction", "name", "line", "entries", "bases", "friendly_fighters", "battery_position", "missile_launch",
+                         "force_scale", "notes"}) ||
             !RequireString(f, p, "faction", fr.faction) || !RequireString(f, p, "name", fr.name) ||
-            !Num(f, p, "friendly_fighters", fr.friendly_fighters, 0.0, 1.0)) {
+            !Num(f, p, "friendly_fighters", fr.friendly_fighters, 0.0, 1.0) || !Num(f, p, "force_scale", fr.force_scale, 0.25, 4.0)) {
             return false;
         }
         const json::Value* line = OptionalArray(f, p, "line");
@@ -676,6 +1099,10 @@ public:
             if (!Km(*bp, Join(p, "battery_position"), fr.battery_position)) return false;
             fr.has_battery_position = true;
         }
+        if (const json::Value* ml = f.Find("missile_launch")) {
+            if (!Km(*ml, Join(p, "missile_launch"), fr.missile_launch)) return false;
+            fr.has_missile_launch = true;
+        }
         out.fronts.push_back(std::move(fr));
         return true;
     }
@@ -683,8 +1110,9 @@ public:
     bool LoadObject(const json::Value& v, const std::string& p, TheatreObject& ob) {
         std::string kind, looks;
         if (!Keys(v, p, {"id", "name", "kind", "east_km", "north_km", "value", "hardness", "repair_h", "relocate_h",
-                         "relocate_km", "mobile", "emitter", "emission", "player", "decoy", "looks_like", "prior_known",
-                         "defence", "c2_source", "regiment_radar", "radius_km", "notes"}) ||
+                         "relocate_km", "positions", "mobile", "emitter", "emission", "player", "decoy", "looks_like",
+                         "prior_known", "defence", "c2_source", "regiment_radar", "radius_km", "aim_points", "target_class",
+                         "notes"}) ||
             !RequireString(v, p, "id", ob.id) || !RequireString(v, p, "name", ob.name) ||
             !RequireString(v, p, "kind", kind)) {
             return false;
@@ -706,6 +1134,30 @@ public:
         ob.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
         ob.radius_m = rkm * 1000.0;
         ob.relocate_m = relkm * 1000.0;
+        std::string tclass;
+        if (!Int(v, p, "aim_points", ob.aim_points, 0, 200) || !OptionalString(v, p, "target_class", tclass)) return false;
+        if (!tclass.empty()) {
+            if (!ParseTargetClass(tclass, ob.target_class)) return Fail(Join(p, "target_class"), "unknown target class '" + tclass + "'");
+            ob.has_target_class = true;
+        }
+        // Its prepared positions besides the one it starts at: a mobile unit that moves on its own.
+        if (const json::Value* pos = OptionalArray(v, p, "positions")) {
+            const std::string pp = Join(p, "positions");
+            if (ob.player) return Fail(pp, "the player chooses the battery's positions");
+            if (!ob.mobile || ob.relocate_h <= 0.0) return Fail(pp, "prepared positions are for a mobile unit that moves (relocate_h)");
+            if (pos->items.empty()) return Fail(pp, "at least one");
+            ob.prepared.push_back(ob.pos);
+            for (std::size_t i = 0; i < pos->items.size(); ++i) {
+                Vec3 at;
+                if (!Km(pos->items[i], Index(pp, i), at)) return false;
+                for (const Vec3& q : ob.prepared) {
+                    if (Dist2d(q, at) < 300.0) return Fail(Index(pp, i), "within 300 m of another of its positions");
+                }
+                ob.prepared.push_back(at);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
         if (!looks.empty() && !ParseObjectKind(looks, ob.looks_like)) return Fail(Join(p, "looks_like"), "unknown object kind");
         if (ob.decoy && looks.empty()) return Fail(Join(p, "looks_like"), "a decoy says what it looks like");
         if (ob.player && ob.kind != ObjectKind::SamSite) return Fail(Join(p, "player"), "the player's battery is a sam_site");
@@ -713,19 +1165,7 @@ public:
             return Fail(Join(p, "regiment_radar"), "p19 or p40 (data/command/regiment_radars.json)");
         }
         if (const json::Value* d = v.Find("defence")) {
-            const std::string dp = Join(p, "defence");
-            double radius_km = 0.0;
-            if (!Keys(*d, dp, {"system", "radius_km", "lethality", "low_cover", "medium_cover", "radar", "missiles", "radars", "notes"}) ||
-                !RequireString(*d, dp, "system", ob.defence.system) || !Num(*d, dp, "radius_km", radius_km, 0.1, 100.0) ||
-                !Num(*d, dp, "lethality", ob.defence.lethality, 0.0, 1.0) ||
-                !OptionalBool(*d, dp, "low_cover", ob.defence.low_cover) ||
-                !OptionalBool(*d, dp, "medium_cover", ob.defence.medium_cover) ||
-                !OptionalBool(*d, dp, "radar", ob.defence.radar) || !Int(*d, dp, "missiles", ob.defence.missiles, -1, 1000) ||
-                !Int(*d, dp, "radars", ob.defence.radars, 1, 16)) {
-                return false;
-            }
-            ob.defence.present = true;
-            ob.defence.radius_m = radius_km * 1000.0;
+            if (!LoadDefence(*d, Join(p, "defence"), ob.defence)) return false;
         }
         if (ob.player && !ob.defence.present) return Fail(p, "the player's battery needs its defence block");
         return true;
@@ -764,8 +1204,10 @@ public:
             std::vector<std::string> roles;
             if (!Keys(a, p, {"id", "name", "roles", "class", "helicopter", "drone", "rcs_m2", "cruise_mps", "attack_mps",
                              "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em",
-                             "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "strike_power",
-                             "recce_quality", "air_to_air", "evasion", "source", "confidence", "notes"}) ||
+                             "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
+                             "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
+                             "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "source",
+                             "confidence", "notes"}) ||
                 !RequireString(a, p, "id", t.id) || !RequireString(a, p, "name", t.name) ||
                 !StringList(a, p, "roles", roles) || !OptionalString(a, p, "class", t.target_class) ||
                 !OptionalBool(a, p, "helicopter", t.helicopter) || !OptionalBool(a, p, "drone", t.drone) ||
@@ -779,14 +1221,29 @@ public:
                 !OptionalBool(a, p, "arm_memory", t.arm_memory) || !OptionalString(a, p, "arm_em", t.arm_em) ||
                 !Num(a, p, "strike_power", t.strike_power, 0.0, 2.0) ||
                 !Num(a, p, "recce_quality", t.recce_quality, 0.0, 1.0) || !Num(a, p, "air_to_air", t.air_to_air, 0.0, 1.0) ||
-                !Num(a, p, "evasion", t.evasion, 0.0, 1.0) || !Provenance(a, p) ||
+                !Num(a, p, "evasion", t.evasion, 0.0, 1.0) || !Int(a, p, "in_service_year", t.in_service_year, 0, 2050) ||
+                !OptionalBool(a, p, "missile", t.missile) || !OptionalString(a, p, "launch", t.launch) ||
+                !Num(a, p, "hit_chance", t.hit_chance, 0.0, 1.0) || !Int(a, p, "stock", t.stock, 0, 100000) ||
+                !Num(a, p, "resupply_per_day", t.resupply_per_day, 0.0, 1000.0) || !Provenance(a, p) ||
                 !OptionalString(a, p, "source", t.source) || !OptionalString(a, p, "confidence", t.confidence) ||
                 !OptionalString(a, p, "notes", t.notes)) {
                 return false;
             }
-            double arm_km = 0.0;
-            if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0)) return false;
+            double arm_km = 0.0, range_km = 0.0, radius_km = 0.0;
+            if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0) || !Num(a, p, "range_km", range_km, 0.0, 5000.0) ||
+                !Num(a, p, "radius_km", radius_km, 0.0, 5000.0) || !Num(a, p, "computing", t.computing, 0.0, 1.0) ||
+                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year)) {
+                return false;
+            }
             t.arm_range_m = arm_km * 1000.0;
+            t.range_m = range_km * 1000.0;
+            t.radius_m = radius_km * 1000.0;
+            if (!t.designator.empty() && t.designator != "laser") return Fail(Join(p, "designator"), "\"laser\" or none");
+            if (t.missile && (t.range_m <= 0.0 || roles.size() != 1 || roles[0] != "missile")) {
+                return Fail(p, "a missile flies the role \"missile\" alone and needs its range_km");
+            }
+            if (!t.missile && std::find(roles.begin(), roles.end(), "missile") != roles.end()) return Fail(Join(p, "roles"), "only a missile flies \"missile\"");
+            if (t.launch != "air" && t.launch != "sea") return Fail(Join(p, "launch"), "air (from its carrier at the border) or sea (the front's missile_launch)");
             if (t.arms > 0 && t.arm_em.empty()) t.arm_em = t.arm_memory ? "agm88a_class_harm" : "agm45_class_shrike";
             if (roles.empty()) return Fail(Join(p, "roles"), "at least one role");
             for (const std::string& r : roles) {
@@ -795,12 +1252,46 @@ public:
                 t.roles.push_back(fr);
             }
             if (t.target_class != "default" && t.target_class != "drone" && t.target_class != "helicopter" &&
-                t.target_class != "fighter" && t.target_class != "bomber") {
-                return Fail(Join(p, "class"), "a class of the gameplay tuning: default, drone, helicopter, fighter, bomber");
+                t.target_class != "fighter" && t.target_class != "bomber" && t.target_class != "cruise_missile") {
+                return Fail(Join(p, "class"), "a class of the gameplay tuning: default, drone, helicopter, fighter, bomber, cruise_missile");
             }
             if (t.arms > 0 && t.arm_range_m <= 0.0) return Fail(Join(p, "arm_range_km"), "an ARM carrier needs its range");
+            if (!t.arm_em_by_year.empty() && t.arms <= 0) return Fail(Join(p, "arm_em_by_year"), "only an ARM carrier (arms > 0)");
             if (out.Aircraft(t.id) != nullptr) return Fail(p, "duplicate aircraft id '" + t.id + "'");
             out.aircraft.push_back(std::move(t));
+        }
+        return true;
+    }
+
+    // "loads": [[weapon id, count], ...] (the weapons are checked against weapons.json when the data are put together).
+    bool Loads(const json::Value& a, const std::string& p, std::vector<std::pair<std::string, int>>& out) {
+        const json::Value* v = a.Find("loads");
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Array)) return Fail(Join(p, "loads"), "expected [[weapon, count], ...]");
+        for (std::size_t i = 0; i < v->items.size(); ++i) {
+            const json::Value& e = v->items[i];
+            if (!e.Is(json::Type::Array) || e.items.size() != 2 || !e.items[0].Is(json::Type::String) || !e.items[1].Is(json::Type::Number) ||
+                e.items[1].number < 1.0 || e.items[1].number > 60.0) {
+                return Fail(Index(Join(p, "loads"), i), "[weapon id, count 1..60]");
+            }
+            out.push_back({e.items[0].string, static_cast<int>(e.items[1].number + 0.5)});
+        }
+        return true;
+    }
+
+    bool ArmsByYear(const json::Value& a, const std::string& p, std::vector<std::pair<std::string, int>>& out) {
+        const json::Value* v = a.Find("arm_em_by_year");
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Array)) return Fail(Join(p, "arm_em_by_year"), "expected [[EM ARM id, from year], ...]");
+        for (std::size_t i = 0; i < v->items.size(); ++i) {
+            const json::Value& e = v->items[i];
+            if (!e.Is(json::Type::Array) || e.items.size() != 2 || !e.items[0].Is(json::Type::String) || e.items[0].string.empty() ||
+                !e.items[1].Is(json::Type::Number) || e.items[1].number < 1950.0 || e.items[1].number > 2050.0) {
+                return Fail(Index(Join(p, "arm_em_by_year"), i), "[EM ARM id, from year 1950..2050]");
+            }
+            const int year = static_cast<int>(e.items[1].number + 0.5);
+            if (!out.empty() && year <= out.back().second) return Fail(Index(Join(p, "arm_em_by_year"), i), "years in rising order");
+            out.push_back({e.items[0].string, year});
         }
         return true;
     }
@@ -812,9 +1303,10 @@ public:
             const json::Value& s = arr->items[i];
             const std::string p = Index("squadrons", i);
             SquadronDef sq;
-            if (!Keys(s, p, {"id", "name", "aircraft", "count", "leader", "notes"}) || !RequireString(s, p, "id", sq.id) ||
+            if (!Keys(s, p, {"id", "name", "aircraft", "count", "leader", "initial", "full_by_day", "notes"}) || !RequireString(s, p, "id", sq.id) ||
                 !RequireString(s, p, "name", sq.name) || !RequireString(s, p, "aircraft", sq.aircraft) ||
-                !Int(s, p, "count", sq.count, 1, 200) || !OptionalString(s, p, "leader", sq.leader)) {
+                !Int(s, p, "count", sq.count, 1, 200) || !OptionalString(s, p, "leader", sq.leader) ||
+                !Num(s, p, "initial", sq.initial, -1.0, 1.0) || !Int(s, p, "full_by_day", sq.full_by_day, -1, 365)) {
                 return false;
             }
             if (out.Aircraft(sq.aircraft) == nullptr) return Fail(Join(p, "aircraft"), "no aircraft '" + sq.aircraft + "'");
@@ -852,8 +1344,8 @@ public:
         DoctrineDef& doc = out.doctrine;
         const std::string p = "doctrine";
         if (!Keys(*d, p, {"planning_cycle_h", "lead_time_h", "on_call_fraction", "centralisation", "simultaneous_bias",
-                          "sortie_rate_per_day", "serviceability", "max_packages_per_cycle", "phases", "packages",
-                          "source", "confidence", "notes"}) ||
+                          "sortie_rate_per_day", "serviceability", "max_packages_per_cycle", "delivery_risk", "min_effect", "min_value",
+                          "phases", "packages", "source", "confidence", "notes"}) ||
             !Provenance(*d, p) || !Num(*d, p, "planning_cycle_h", doc.planning_cycle_h, 1.0, 96.0) ||
             !Num(*d, p, "lead_time_h", doc.lead_time_h, 0.0, 72.0) ||
             !Num(*d, p, "on_call_fraction", doc.on_call_fraction, 0.0, 0.9) ||
@@ -861,8 +1353,17 @@ public:
             !Num(*d, p, "simultaneous_bias", doc.simultaneous_bias, 0.0, 1.0) ||
             !Num(*d, p, "sortie_rate_per_day", doc.sortie_rate_per_day, 0.1, 8.0) ||
             !Num(*d, p, "serviceability", doc.serviceability, 0.1, 1.0) ||
-            !Num(*d, p, "max_packages_per_cycle", doc.max_packages_per_cycle, 1.0, 100.0)) {
+            !Num(*d, p, "max_packages_per_cycle", doc.max_packages_per_cycle, 1.0, 100.0) ||
+            !Num(*d, p, "delivery_risk", doc.delivery_risk, 0.0, 1.0)) {
             return false;
+        }
+        if (d->Find("min_effect") != nullptr) {
+            doc.has_min_effect = true;
+            if (!Num(*d, p, "min_effect", doc.min_effect, 0.0, 1.0)) return false;
+        }
+        if (d->Find("min_value") != nullptr) {
+            doc.has_min_value = true;
+            if (!Num(*d, p, "min_value", doc.min_value, -10.0, 10.0)) return false;
         }
         const json::Value* phases = OptionalArray(*d, p, "phases");
         if (phases == nullptr || phases->items.empty()) return message_.empty() ? Fail(Join(p, "phases"), "at least one") : false;
@@ -981,12 +1482,13 @@ public:
         if (d == nullptr) return Fail("logistics", "required");
         const std::string p = "logistics";
         LogisticsDef& l = out.logistics;
-        return Keys(*d, p, {"replacements_per_day", "arm_stock", "arm_resupply_per_day", "damaged_return_h", "source",
-                            "confidence", "notes"}) &&
+        return Keys(*d, p, {"replacements_per_day", "arm_stock", "arm_resupply_per_day", "damaged_return_h", "buildup_initial",
+                            "buildup_full_by_day", "source", "confidence", "notes"}) &&
                Provenance(*d, p) && Num(*d, p, "replacements_per_day", l.replacements_per_day, 0.0, 100.0) &&
                Num(*d, p, "arm_stock", l.arm_stock, 0.0, 10000.0) &&
                Num(*d, p, "arm_resupply_per_day", l.arm_resupply_per_day, 0.0, 1000.0) &&
-               Num(*d, p, "damaged_return_h", l.damaged_return_h, 0.0, 1000.0);
+               Num(*d, p, "damaged_return_h", l.damaged_return_h, 0.0, 1000.0) &&
+               Num(*d, p, "buildup_initial", l.buildup_initial, 0.05, 1.0) && Int(*d, p, "buildup_full_by_day", l.buildup_full_by_day, 0, 365);
     }
 
     bool LoadPolitics(const json::Value& root, FactionDef& out) {
@@ -1200,6 +1702,79 @@ public:
     }
 
     // ---- tuning
+    // data/air_war/weapons.json (docs/air_war/10_WEAPONS.md).
+    bool LoadWeapons(const json::Value& root, WeaponsDef& out) {
+        if (!Keys(root, "", {"weapons_id", "status", "source", "confidence", "notes", "targets", "weapons"}) || !Provenance(root, "")) return false;
+        const json::Value* tg = root.Find("targets");
+        if (tg == nullptr || !tg->Is(json::Type::Object)) return Fail("targets", "required: {object kind: {class, aim_points}}");
+        bool seen[static_cast<int>(ObjectKind::Count)] = {};
+        for (std::size_t k = 0; k < tg->keys.size(); ++k) {
+            const std::string p = Join("targets", tg->keys[k]);
+            ObjectKind kind;
+            if (!ParseObjectKind(tg->keys[k], kind)) return Fail(p, "unknown object kind");
+            const json::Value& v = tg->items[k];
+            std::string cls;
+            TargetProfileDef t;
+            if (!Keys(v, p, {"class", "aim_points", "notes"}) || !RequireString(v, p, "class", cls) || !Int(v, p, "aim_points", t.aim_points, 1, 200)) {
+                return false;
+            }
+            if (!ParseTargetClass(cls, t.target_class)) return Fail(Join(p, "class"), "unknown target class '" + cls + "'");
+            out.targets[static_cast<int>(kind)] = t;
+            seen[static_cast<int>(kind)] = true;
+        }
+        for (int k = 0; k < static_cast<int>(ObjectKind::Count); ++k) {
+            if (!seen[k]) return Fail("targets", std::string("no profile for the object kind '") + ObjectKindName(static_cast<ObjectKind>(k)) + "'");
+        }
+        const json::Value* arr = OptionalArray(root, "", "weapons");
+        if (arr == nullptr || arr->items.empty()) return message_.empty() ? Fail("weapons", "required, a non-empty list") : false;
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& v = arr->items[i];
+            const std::string p = Index("weapons", i);
+            WeaponDef w;
+            std::vector<std::string> deliveries;
+            double standoff_km = 0.0;
+            if (!Keys(v, p, {"id", "name", "kind", "mass_kg", "guidance", "standoff_km", "footprint_m", "effect", "reliability",
+                             "laydown_reliability", "deliveries", "in_service_year", "source", "confidence", "notes"}) ||
+                !RequireString(v, p, "id", w.id) || !RequireString(v, p, "name", w.name) || !RequireString(v, p, "kind", w.kind) ||
+                !Num(v, p, "mass_kg", w.mass_kg, 0.0, 10000.0) || !OptionalString(v, p, "guidance", w.guidance) ||
+                !Num(v, p, "standoff_km", standoff_km, 0.0, 200.0) || !Num(v, p, "footprint_m", w.footprint_m, 0.5, 500.0) ||
+                !Num(v, p, "reliability", w.reliability, 0.0, 1.0) || !Num(v, p, "laydown_reliability", w.laydown_reliability, -1.0, 1.0) ||
+                !StringList(v, p, "deliveries", deliveries) || !Int(v, p, "in_service_year", w.in_service_year, 0, 2050) ||
+                !Provenance(v, p) || !OptionalString(v, p, "source", w.source) || !OptionalString(v, p, "confidence", w.confidence) ||
+                !OptionalString(v, p, "notes", w.notes)) {
+                return false;
+            }
+            w.standoff_m = standoff_km * 1000.0;
+            static const char* kKinds[] = {"bomb", "retarded_bomb", "cluster", "runway", "guided_bomb", "missile", "rockets", "atgm", "gun"};
+            if (std::find_if(std::begin(kKinds), std::end(kKinds), [&](const char* k) { return w.kind == k; }) == std::end(kKinds)) {
+                return Fail(Join(p, "kind"), "bomb, retarded_bomb, cluster, runway, guided_bomb, missile, rockets, atgm or gun");
+            }
+            if (w.guidance != "none" && w.guidance != "laser" && w.guidance != "tv" && w.guidance != "ir" && w.guidance != "wire") {
+                return Fail(Join(p, "guidance"), "none, laser, tv, ir or wire");
+            }
+            const json::Value* eff = v.Find("effect");
+            if (eff == nullptr || !eff->Is(json::Type::Object)) return Fail(Join(p, "effect"), "required: {target class: 0..1}");
+            for (std::size_t k = 0; k < eff->keys.size(); ++k) {
+                TargetClass c;
+                if (!ParseTargetClass(eff->keys[k], c)) return Fail(Join(Join(p, "effect"), eff->keys[k]), "unknown target class");
+                if (!eff->items[k].Is(json::Type::Number) || eff->items[k].number < 0.0 || eff->items[k].number > 1.0) {
+                    return Fail(Join(Join(p, "effect"), eff->keys[k]), "a number 0..1");
+                }
+                w.effect[static_cast<int>(c)] = eff->items[k].number;
+            }
+            if (deliveries.empty()) return Fail(Join(p, "deliveries"), "at least one");
+            for (const std::string& ds : deliveries) {
+                Delivery dl;
+                if (!ParseDelivery(ds, dl)) return Fail(Join(p, "deliveries"), "unknown delivery '" + ds + "'");
+                w.deliveries.push_back(dl);
+            }
+            if (w.Can(Delivery::Standoff) && w.standoff_m <= 0.0) return Fail(Join(p, "standoff_km"), "a stand-off weapon needs its range");
+            if (out.Find(w.id) != nullptr) return Fail(p, "duplicate weapon id '" + w.id + "'");
+            out.weapons.push_back(std::move(w));
+        }
+        return true;
+    }
+
     bool LoadTuning(const json::Value& root, TuningTable& out) {
         if (!root.Is(json::Type::Object)) return Fail("", "expected an object");
         for (std::size_t g = 0; g < root.keys.size(); ++g) {
@@ -1259,12 +1834,45 @@ bool LoadJsonWith(const std::string& path, Out& out, std::string* error, Fn&& fn
     return true;
 }
 
+inline bool LoadTheatreFileAt(const std::string& path, TheatreDef& out, std::string* error, int depth) {
+    std::string text;
+    if (!ReadFile(path, text, error)) return false;
+    json::Value root;
+    std::string perr;
+    if (!json::Parse(text, root, &perr)) {
+        if (error != nullptr) *error = path + ": " + perr;
+        return false;
+    }
+    TheatreDef base;
+    const json::Value* ext = root.Find("extends");
+    if (ext != nullptr) {
+        if (!ext->Is(json::Type::String) || ext->string.empty()) {
+            if (error != nullptr) *error = path + ": extends: the name of a theatre file in the same folder";
+            return false;
+        }
+        if (depth >= 4) {
+            if (error != nullptr) *error = path + ": extends: more than four deep (a loop?)";
+            return false;
+        }
+        const std::size_t slash = path.find_last_of("/\\");
+        const std::string dir = slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
+        if (!LoadTheatreFileAt(dir + ext->string, base, error, depth + 1)) return false;
+    }
+    AirWarLoader loader;
+    TheatreDef tmp;
+    if (!loader.LoadTheatre(root, tmp, ext != nullptr ? &base : nullptr)) {
+        if (error != nullptr) *error = path + ": " + loader.Message();
+        return false;
+    }
+    out = std::move(tmp);
+    return true;
+}
+
 }  // namespace detail
 
+// A theatre file may extend another in its folder ("extends"; AirWarLoader::LoadTheatre says how).
 inline bool LoadTheatreFile(const std::string& path, TheatreDef& out, std::string* error = nullptr) {
-    return detail::LoadJsonWith(path, out, error, [](detail::AirWarLoader& l, const json::Value& r, TheatreDef& o) {
-        return l.LoadTheatre(r, o);
-    });
+    return detail::LoadTheatreFileAt(path, out, error, 0);
 }
 
 inline bool LoadFactionFile(const std::string& path, FactionDef& out, std::string* error = nullptr) {
@@ -1276,6 +1884,12 @@ inline bool LoadFactionFile(const std::string& path, FactionDef& out, std::strin
 inline bool LoadQuirksFile(const std::string& path, std::vector<QuirkDef>& out, std::string* error = nullptr) {
     return detail::LoadJsonWith(path, out, error, [](detail::AirWarLoader& l, const json::Value& r, std::vector<QuirkDef>& o) {
         return l.LoadQuirks(r, o);
+    });
+}
+
+inline bool LoadWeaponsFile(const std::string& path, WeaponsDef& out, std::string* error = nullptr) {
+    return detail::LoadJsonWith(path, out, error, [](detail::AirWarLoader& l, const json::Value& r, WeaponsDef& o) {
+        return l.LoadWeapons(r, o);
     });
 }
 
@@ -1323,6 +1937,17 @@ struct AirWarData {
     FactionDef faction;
     std::vector<QuirkDef> quirks;
     TuningTable tuning;
+    WeaponsDef weapons;  // empty: every type strikes by its strike_power (the model before the weapons)
+    std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
+
+    const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
+    // An object as a target: its kind's profile, or its own.
+    TargetProfileDef TargetOf(const TheatreObject& o) const {
+        TargetProfileDef t = weapons.targets[static_cast<int>(o.kind)];
+        if (o.aim_points > 0) t.aim_points = o.aim_points;
+        if (o.has_target_class) t.target_class = o.target_class;
+        return t;
+    }
 
     const QuirkDef* Quirk(const std::string& id) const {
         for (const QuirkDef& q : quirks) {
@@ -1340,9 +1965,40 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadFactionFile(data_dir + "/" + faction_file, d.faction, error)) return false;
     if (!LoadQuirksFile(data_dir + "/air_war/traits.json", d.quirks, error)) return false;
     if (!LoadTuningFile(data_dir + "/gameplay/air_war.json", d.tuning, error)) return false;
-    if (d.theatre.FrontFor(d.faction.front) == nullptr) {
+    if (!LoadWeaponsFile(data_dir + "/air_war/weapons.json", d.weapons, error)) return false;
+    if (!d.theatre.country_map.empty()) {
+        d.country = LoadCountryMap(data_dir, d.theatre.country_map, error);
+        if (d.country == nullptr) {
+            if (error != nullptr) *error = theatre_file + ": country_map: " + *error;
+            return false;
+        }
+    }
+    for (const AircraftType& a : d.faction.aircraft) {
+        for (const auto& l : a.loads) {
+            if (d.Weapon(l.first) == nullptr) {
+                if (error != nullptr) *error = faction_file + ": " + a.id + " loads an unknown weapon '" + l.first + "' (air_war/weapons.json)";
+                return false;
+            }
+        }
+    }
+    const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+    if (front == nullptr) {
         if (error != nullptr) *error = faction_file + ": front '" + d.faction.front + "' is not a front of " + theatre_file;
         return false;
+    }
+    // The front's force: every squadron and the packages its staff plans a cycle, scaled to the war it fights here. The
+    // cruise missiles' stocks are not the front's (the long-range aviation's, the fleet's) and stay as they are.
+    if (front->force_scale != 1.0) {
+        d.faction.doctrine.max_packages_per_cycle *= front->force_scale;
+        for (SquadronDef& s : d.faction.squadrons) {
+            s.count = std::max(1, static_cast<int>(std::lround(s.count * front->force_scale)));
+        }
+    }
+    for (const AircraftType& a : d.faction.aircraft) {
+        if (a.missile && a.launch == "sea" && !front->has_missile_launch) {
+            if (error != nullptr) *error = faction_file + ": " + a.id + " is launched from the sea, and the front has no missile_launch in " + theatre_file;
+            return false;
+        }
     }
     for (const OfficerDef& o : d.faction.officers) {
         for (const std::string& q : o.quirks) {

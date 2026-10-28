@@ -1,8 +1,9 @@
 // air_war_balance: the enemy air command over many seeds, for the balance pass (roadmap A12, docs/air_war/09_BALANCE.md).
 //
-// Usage: air_war_balance [data_dir] [seeds] [days] [faction ...]
-//   data_dir (default data); seeds (default 10); days (default 6); factions (default all four: rebels, neutral,
-//   warsaw_pact, nato).
+// Usage: air_war_balance [--theatre file] [--set tuning.key=value ...] [data_dir] [seeds] [days] [faction ...]
+//   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json, the one the balance pass tuned;
+//   theatre_pannonia_nation.json is the whole nation); --set: try a tuning value (a calibration sweep); data_dir
+//   (default data); seeds (default 10); days (default 6); factions (default all four: rebels, neutral, warsaw_pact, nato).
 //
 // Every campaign runs headless: the raids through the player's battery's sector are resolved abstractly like the rest
 // (SkipPlayerMission), with the battery's own lethality, so the numbers are the campaign layer's alone. Each faction is
@@ -10,14 +11,20 @@
 // moving) and a careful one (the demo's: radars mostly silent, ARM discipline, dummy traffic, a move every 20 hours).
 // For each, prints a table by day, averaged over the seeds:
 //   packages, sorties (manned aircraft; decoy drones are counted apart), SEAD share (DEAD and hunter packages, and SEAD flights in others), aircraft lost,
-//   loss rate per sortie, the player's side's air defences still working (true SAM sites and early-warning radars, the
-//   decoys left out), objects wrecked, raids through the battery's sector, the battery's state and how well the enemy
+//   loss rate per sortie, the player's side's air defences still working (the radar SAM sites the enemy measures, the
+//   decoys left out) and what the enemy believes of them, objects wrecked, raids through the battery's sector, the battery's state and how well the enemy
 //   knows where it is,
-// then totals: the mission mix, the staff's turnover, false claims found out, political events and pauses.
+// then totals: the mission mix, the staff's turnover, false claims found out, political events and pauses, where the
+// packages went (the kinds of target and the objects struck most), how the attacks were flown (the deliveries and
+// weapons of the attacking flights, the strike groups' sizes), the support orbits and the force build-up, and our supply
+// lines (docs/air_war/10_WEAPONS.md, 11_SUPPORT.md, 12_FORCES.md, 13_PACKAGES.md, 14_LOGISTICS.md).
 // Exits non-zero if the data fail to load.
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war.hpp"
@@ -32,7 +39,7 @@ struct DayStats {
     double sorties = 0.0;
     double sead = 0.0;  // packages with a SEAD purpose
     double lost = 0.0;
-    double iads = 0.0;  // working share of the true SAM sites and EW radars at the day's end
+    double iads = 0.0;  // working share of the true radar SAM sites the enemy measures, at the day's end
     double believed = 0.0;  // the enemy's belief of the same (IntelPicture::BelievedIadsShare)
     double phase = 0.0;     // the doctrine phase at the day's end (0 the first)
     double wrecked = 0.0;
@@ -51,6 +58,24 @@ struct RunStats {
     double battery_wrecked = 0.0;  // runs in which the battery was wrecked at least once
     double arms_left = 0.0;
     double drones = 0.0;  // decoy drones flown
+    double missiles = 0.0;  // cruise missiles fired
+    double missiles_downed = 0.0;
+    std::map<std::string, double> struck;       // packages by target object (ghosts as "(nothing there)")
+    std::map<std::string, double> struck_kind;  // packages by the target's kind as the enemy believed it
+    std::map<std::string, double> deliveries;   // attacking flights by their delivery
+    std::map<std::string, double> weapons;      // attacking flights by their weapon
+    std::map<std::string, std::pair<double, double>> group_by_kind;  // target kind -> (strike packages, their attackers)
+    double strike_packages = 0.0;  // strike, DEAD and CAS packages
+    double strike_aircraft = 0.0;  // their attacking aircraft
+    double big_packages = 0.0;     // of them, with 8 or more attackers
+    double refuelled = 0.0;        // aircraft refuelled to reach their targets
+    double awacs = 0.0;            // AWACS on station, the last plan's
+    double support_sorties = 0.0;
+    double aircraft_day1 = 0.0;    // manned aircraft in theatre on day 1
+    double aircraft_end = 0.0;     // and at the end (after losses, replacements and the build-up)
+    // Our supply lines (logistics.hpp): what they brought and lost, how long they were cut, the troops' stocks at the end.
+    double lines = 0.0, delivered = 0.0, strength = 0.0, cargo_lost = 0.0, vehicles_lost = 0.0, columns_destroyed = 0.0;
+    double hours_cut = 0.0, reroutes = 0.0, stocks_end = 0.0, armed_recce = 0.0, columns_found = 0.0;
 };
 
 void Posture(BatteryPosture& p, bool careful) {
@@ -71,12 +96,13 @@ void Posture(BatteryPosture& p, bool careful) {
 
 bool Contains(const std::string& s, const char* what) { return s.find(what) != std::string::npos; }
 
+// The truth of what the enemy measures (IntelPicture::BelievedIadsShare): the radar SAM sites.
 double IadsShare(const AirCampaign& c) {
     double sum = 0.0;
     int n = 0;
     const std::vector<TheatreObject>& objs = c.Data().theatre.objects;
     for (std::size_t i = 0; i < objs.size() && i < c.Truth().size(); ++i) {
-        if (objs[i].decoy || (objs[i].kind != ObjectKind::SamSite && objs[i].kind != ObjectKind::EwRadar)) continue;
+        if (objs[i].decoy || objs[i].kind != ObjectKind::SamSite || !objs[i].defence.present || !objs[i].defence.radar) continue;
         sum += c.Truth()[i].function;
         ++n;
     }
@@ -105,6 +131,7 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         return false;
     }
     Posture(c.Posture(), careful);
+    acc.aircraft_day1 += c.AircraftInTheatre();
     if (acc.days.size() < static_cast<std::size_t>(days)) acc.days.resize(static_cast<std::size_t>(days));
     bool battery_wrecked = false;
     for (int d = 0; d < days; ++d) {
@@ -140,10 +167,34 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
                 acc.drones += f.count;
                 continue;
             }
+            if (a != nullptr && a->missile) {
+                acc.missiles += f.count;
+                acc.missiles_downed += f.lost;
+                continue;
+            }
             s.sorties += f.count;
             s.lost += f.lost;
         }
         acc.kinds[static_cast<int>(p.kind)] += 1.0;
+        acc.refuelled += p.refuelled;
+        const IntelEntry* e = c.Intel().Find(p.target_key);
+        if (p.kind == MissionKind::Strike || p.kind == MissionKind::Dead || p.kind == MissionKind::Cas) {
+            int attackers = 0;
+            for (const Flight& f : p.flights) {
+                if (f.role != FlightRole::Strike && f.role != FlightRole::Dead) continue;
+                attackers += f.count;
+                acc.deliveries[f.delivery == Delivery::Count ? std::string("(none)") : DeliveryName(f.delivery)] += 1.0;
+                acc.weapons[f.weapon.empty() ? std::string("(strike power)") : f.weapon] += 1.0;
+            }
+            acc.strike_packages += 1.0;
+            acc.strike_aircraft += attackers;
+            acc.big_packages += attackers >= 8 ? 1.0 : 0.0;
+            std::pair<double, double>& g = acc.group_by_kind[e != nullptr ? ObjectKindName(e->kind) : "?"];
+            g.first += 1.0;
+            g.second += attackers;
+        }
+        acc.struck[p.target_object.empty() ? std::string("(nothing there)") : p.target_object] += 1.0;
+        acc.struck_kind[e != nullptr ? ObjectKindName(e->kind) : "?"] += 1.0;
     }
     for (const JournalEntry& j : c.Journal()) {
         if (j.kind == "career" && (Contains(j.text, " was killed") || Contains(j.text, " was captured") ||
@@ -159,6 +210,26 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
     }
     acc.battery_wrecked += battery_wrecked ? 1.0 : 0.0;
     acc.arms_left += c.ArmStock();
+    acc.awacs += c.Support().awacs;
+    acc.support_sorties += c.SupportSorties();
+    acc.aircraft_end += c.AircraftInTheatre();
+    const SupplyLedger& led = c.Supply().Ledger();
+    acc.lines = static_cast<double>(c.Supply().Lines());
+    acc.delivered += led.delivered;
+    acc.strength += led.strength;
+    acc.cargo_lost += led.cargo_lost;
+    acc.vehicles_lost += led.vehicles_lost;
+    acc.columns_destroyed += led.columns_destroyed;
+    acc.hours_cut += led.line_hours_cut;
+    acc.reroutes += led.reroutes;
+    double stocks = 0.0;
+    for (int j : c.Supply().Served()) stocks += c.Truth()[static_cast<std::size_t>(j)].supply;
+    acc.stocks_end += c.Supply().Served().empty() ? 1.0 : stocks / static_cast<double>(c.Supply().Served().size());
+    for (const Package& p : c.Packages()) {
+        if (p.kind != MissionKind::ArmedRecce || !p.resolved) continue;
+        acc.armed_recce += 1.0;
+        acc.columns_found += p.found.empty() ? 0.0 : 1.0;
+    }
     return true;
 }
 
@@ -188,25 +259,78 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
     }
     std::printf(". Staff changes %.1f, false claims found out %.1f, political events %.1f (pauses %.1f) a campaign; battery wrecked in %.0f%% of runs; ARMs left %.0f; decoy drones %.0f.\n",
                 r.staff_changes / n, r.false_claims / n, r.events / n, r.pauses / n, 100.0 * r.battery_wrecked / n, r.arms_left / n, r.drones / n);
+    if (r.missiles > 0.0) std::printf("Cruise missiles: %.1f fired a campaign, %.1f shot down.\n", r.missiles / n, r.missiles_downed / n);
+    const auto top = [&](const std::map<std::string, double>& m, std::size_t count) {
+        std::vector<std::pair<double, std::string>> v;
+        for (const auto& kv : m) v.push_back({kv.second, kv.first});
+        std::sort(v.begin(), v.end(), [](const std::pair<double, std::string>& a, const std::pair<double, std::string>& b) {
+            return a.first != b.first ? a.first > b.first : a.second < b.second;
+        });
+        for (std::size_t i = 0; i < v.size() && i < count; ++i) std::printf(" %s %.1f%s", v[i].second.c_str(), v[i].first / n, i + 1 < count && i + 1 < v.size() ? "," : "");
+    };
+    std::printf("Targets by kind (packages a campaign):");
+    top(r.struck_kind, 12);
+    std::printf(".\nMost struck:");
+    top(r.struck, 12);
+    std::printf(".\n");
+    if (r.strike_packages > 0.0) {
+        std::printf("Attacks (flights a campaign):");
+        top(r.deliveries, 8);
+        std::printf("; weapons:");
+        top(r.weapons, 8);
+        std::printf(". Strike groups: %.1f attackers a package, %.0f%% of eight or more; by target:", r.strike_aircraft / r.strike_packages,
+                    100.0 * r.big_packages / r.strike_packages);
+        for (const auto& g : r.group_by_kind) {
+            if (g.second.first >= 0.5 * n) std::printf(" %s %.1f", g.first.c_str(), g.second.second / g.second.first);
+        }
+        std::printf(".\n");
+    }
+    std::printf("Support: AWACS on station %.0f%%, %.1f aircraft refuelled and %.1f support sorties a campaign. Force: %.0f aircraft on day 1, %.0f at the end.\n",
+                100.0 * r.awacs / n, r.refuelled / n, r.support_sorties / n, r.aircraft_day1 / n, r.aircraft_end / n);
+    if (r.lines > 0.0) {
+        std::printf("Our supply lines (%.0f): %.2f stocks and %.2f strength delivered, %.2f stocks lost on the way, %.1f columns destroyed (%.0f vehicles), %.0f line-hours cut, %.1f reroutes a campaign; the troops' stocks at the end %.0f%%. Armed reconnaissance: %.1f searches a campaign, a column found in %.0f%%.\n",
+                    r.lines, r.delivered / n, r.strength / n, r.cargo_lost / n, r.columns_destroyed / n, r.vehicles_lost / n, r.hours_cut / n,
+                    r.reroutes / n, 100.0 * r.stocks_end / n, r.armed_recce / n, r.armed_recce > 0.0 ? 100.0 * r.columns_found / r.armed_recce : 0.0);
+    }
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-    const std::string data_dir = argc > 1 ? argv[1] : "data";
-    const int seeds = argc > 2 ? std::atoi(argv[2]) : 10;
-    const int days = argc > 3 ? std::atoi(argv[3]) : 6;
-    std::vector<std::string> factions;
-    for (int i = 4; i < argc; ++i) factions.push_back(argv[i]);
+    std::string theatre = "theatre_pannonia.json";
+    std::vector<std::string> args;
+    std::vector<std::pair<std::string, double>> sets;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--theatre" && i + 1 < argc) {
+            theatre = argv[++i];
+        } else if (a == "--set" && i + 1 < argc) {
+            const std::string kv = argv[++i];
+            const std::size_t eq = kv.find('=');
+            if (eq == std::string::npos || TuningTable::Defaults().count(kv.substr(0, eq)) == 0) {
+                std::fprintf(stderr, "--set needs a tuning key=value: %s\n", kv.c_str());
+                return 1;
+            }
+            sets.push_back({kv.substr(0, eq), std::atof(kv.c_str() + eq + 1)});
+        } else {
+            args.push_back(a);
+        }
+    }
+    const std::string data_dir = args.size() > 0 ? args[0] : "data";
+    const int seeds = args.size() > 1 ? std::atoi(args[1].c_str()) : 10;
+    const int days = args.size() > 2 ? std::atoi(args[2].c_str()) : 6;
+    std::vector<std::string> factions(args.size() > 3 ? args.begin() + 3 : args.end(), args.end());
     if (factions.empty()) factions = {"rebels", "neutral", "warsaw_pact", "nato"};
+    std::printf("Theatre: air_war/%s\n", theatre.c_str());
 
     for (const std::string& faction : factions) {
         AirWarData data;
         std::string error;
-        if (!LoadAirWarData(data_dir, "air_war/theatre_pannonia.json", "air_war/faction_" + faction + ".json", data, &error)) {
+        if (!LoadAirWarData(data_dir, "air_war/" + theatre, "air_war/faction_" + faction + ".json", data, &error)) {
             std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
+        for (const auto& kv : sets) data.tuning.values[kv.first] = kv.second;
         for (int careful = 0; careful < 2; ++careful) {
             RunStats r;
             for (int s = 1; s <= seeds; ++s) {

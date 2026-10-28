@@ -57,6 +57,7 @@
 #include "simcore/weather.hpp"
 #include "simcore/weather_data.hpp"
 #include "simcore/terrain_map.hpp"
+#include "simcore/country_map.hpp"
 #include "simcore/solar.hpp"
 #include "simcore/scenery.hpp"
 #include "simcore/radio_nets.hpp"

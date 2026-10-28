@@ -583,3 +583,82 @@ SC_TEST("battery readiness: the commander reads the board; a fast track 150 km o
     SC_EXPECT(fast > 0.0 && fast < 200.0);
     SC_EXPECT(slow > 900.0);
 }
+
+#include <fstream>
+#include <sstream>
+
+namespace {
+
+// The practice scenario (one drone from the north past the battery) with our neighbours added before its targets.
+std::string PracticeWithNeighbours(const std::string& neighbours) {
+    std::ifstream f(kData + "/scenarios/osa_practice.json", std::ios::binary);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string text = ss.str();
+    const std::size_t at = text.find("\"targets\"");
+    if (at != std::string::npos) text.insert(at, "\"neighbours\": [" + neighbours + "],\n  ");
+    return text;
+}
+
+}  // namespace
+
+SC_TEST("neighbours: the regiment's other Osa battery fights in the battery fire model; its kills, missiles and radar time are its own") {
+    // Battery 23 30 km north on the drone's way in: its launchers take it on their own, long before it reaches us.
+    const std::string osa23 = R"({ "id": "osa_23", "name": "Osa battery 23", "system": "osa",
+        "position": { "east_m": 2000, "north_m": 30000, "up_m": 0 }, "radius_km": 10, "fights": true, "launchers": 3 })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(PracticeWithNeighbours(osa23), kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.neighbours.size() == 1 && def.neighbours[0].fights && def.neighbours[0].launchers == 3);
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.NeighbourFights("osa_23"));
+    // Its working launchers in the combat formation: pairs 3 km apart, 200 m within.
+    const std::vector<std::pair<std::string, Vec3>> places = r.NeighbourLaunchers();
+    SC_EXPECT(places.size() == 3);
+    if (places.size() == 3) {
+        SC_EXPECT_NEAR((places[1].second - places[0].second).HorizontalLength(), 200.0, 1.0);
+        SC_EXPECT_NEAR((places[2].second - places[0].second).x, 3000.0, 1.0);
+    }
+    for (int i = 0; i < 20 * 700 && !r.Finished(); ++i) r.Step(0.05);
+    const int launches = r.NeighbourLaunches("osa_23");
+    const bool killed = r.NeighbourKills().count("t1") != 0;
+    bool logged = false;
+    for (const DebriefEntry& e : r.Log().Entries()) logged = logged || (e.what == "t1" && e.detail == "destroyed by Osa battery 23");
+    std::printf("    battery 23: %d missiles, the drone %s, %.0f launcher-seconds on it\n", launches, killed ? "shot down" : "flew on",
+                r.NeighbourRadarSeconds("osa_23"));
+    SC_EXPECT(launches >= 1 && launches <= 18);
+    SC_EXPECT(r.NeighbourRadarSeconds("osa_23") > 0.0);
+    SC_EXPECT(killed == logged);
+    SC_EXPECT(killed || launches == 18);
+    if (killed) SC_EXPECT(r.NeighbourKills().at("t1") == "osa_23");
+}
+
+SC_TEST("neighbours: only an Osa battery fights; the others are drawn and plotted, their fire the mission bridge's") {
+    const std::string s125 = R"({ "id": "kecel_s125", "name": "S-125 at Kecel", "system": "s125m1",
+        "position": { "east_m": 2000, "north_m": 30000, "up_m": 0 }, "radius_km": 22 })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(PracticeWithNeighbours(s125), kData, def, console, &error));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(!r.NeighbourFights("kecel_s125") && r.NeighbourLaunchers().empty());
+    for (int i = 0; i < 20 * 400; ++i) r.Step(0.05);
+    SC_EXPECT(r.NeighbourLaunches("kecel_s125") == 0 && r.NeighbourKills().empty());
+    // A mistake is refused with its path.
+    const std::string fights = R"({ "id": "x", "name": "x", "system": "s125m1", "position": { "east_m": 0, "north_m": 0, "up_m": 0 },
+        "radius_km": 22, "fights": true })";
+    ScenarioDef d2;
+    ConsoleData c2;
+    error.clear();
+    SC_EXPECT(!LoadScenario(PracticeWithNeighbours(fights), kData, d2, c2, &error));
+    SC_EXPECT(error.find("neighbours[0].fights") != std::string::npos);
+    const std::string launchers = R"({ "id": "x", "name": "x", "system": "osa", "position": { "east_m": 0, "north_m": 0, "up_m": 0 },
+        "radius_km": 10, "fights": true, "launchers": 5 })";
+    ScenarioDef d3;
+    ConsoleData c3;
+    error.clear();
+    SC_EXPECT(!LoadScenario(PracticeWithNeighbours(launchers), kData, d3, c3, &error));
+    SC_EXPECT(error.find("neighbours[0].launchers") != std::string::npos);
+}

@@ -183,9 +183,22 @@ inline bool HelpWheelAngle(const ScenarioRunner& r, const std::string& wheel) {
 }
 
 inline double HelpWheelTolerance(const ScenarioRunner& r, const ControlDef& d) {
-    if (HelpWheelAngle(r, d.id)) return 0.1;                 // sam3d: a tenth of a degree (the narrow TV field is ±0.5°)
-    if (d.id == r.Console().track.range_wheel) return 250.0;  // sam3d: a quarter of a kilometre on the range scale
+    // The tracking wheels: on the mark when the target is on the narrow TV's screen (its field is ±0.5°), and the range
+    // gate within half a kilometre of the echo (sam3d: what an eye on the indicator holds, not the mark to a decimal).
+    const TrackSensorDef& t = r.Console().track;
+    if (d.id == t.az_wheel || d.id == t.el_wheel) return 0.5;
+    if (HelpWheelAngle(r, d.id)) return 0.1;  // the gyro's setter: onto the heading the crew chief gave, to a tenth
+    if (d.id == t.range_wheel) return 500.0;
     return 0.01 * (d.max_value - d.min_value);
+}
+
+// What a tracking wheel is for, in words (the player watches a display, not a number); "" for a wheel set to a number.
+inline std::string HelpWheelWords(const ScenarioRunner& r, const std::string& id) {
+    const TrackSensorDef& t = r.Console().track;
+    if (id == t.az_wheel) return "turn it to bring the tracking radar's azimuth line onto the target's mark on the search scope, and keep it there";
+    if (id == t.el_wheel) return "turn it to bring the target into the TV's crosshair (or onto its mark on the elevation indicator), and keep it there";
+    if (id == t.range_wheel) return "turn it to put the range gate on the target's echo on the range indicator, and keep it there";
+    return std::string();
 }
 
 inline void HelpWheel(const ScenarioRunner& r, const ControlDef& d, double target, double tolerance, HelpStep& s) {
@@ -198,6 +211,11 @@ inline void HelpWheel(const ScenarioRunner& r, const ControlDef& d, double targe
     double diff = s.value - target;
     if (d.wraps) diff = std::remainder(diff, d.max_value - d.min_value);
     s.on_mark = std::fabs(diff) <= tolerance;
+    const std::string words = HelpWheelWords(r, d.id);
+    if (!words.empty()) {
+        s.text = s.control_label + ": " + words;
+        return;
+    }
     char t[96];
     if (d.id == r.Console().track.range_wheel) {
         std::snprintf(t, sizeof(t), ": onto %.1f km", target / 1000.0);
@@ -359,8 +377,10 @@ inline std::vector<HelpStep> HelpMoves(const ScenarioRunner& r, const std::strin
     for (const ControlDef& d : con.panel.Controls()) {
         if (d.kind != ControlKind::Continuous || d.station != seat) continue;
         if (!d.guard_id.empty() && con.panel.Get(d.guard_id) < 1) continue;  // locked: its NPC can't turn it either
+        if (!r.WheelDriven(d.id).empty()) continue;                         // the equipment turns it: hands off
         double want = 0.0;
         if (!r.WheelWant(d.id, want)) continue;
+        if (!d.wraps) want = std::clamp(want, d.min_value, d.max_value);  // a target past its stop: as far as it goes
         HelpStep s;
         s.seat = seat;
         s.source = "wheel";

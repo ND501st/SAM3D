@@ -13,8 +13,9 @@
  * ASimScenarioDirector plays.
  *
  * Keys: Up/Down (W/S) a mission, Left/Right (A/D) where to start, H the helper (off, hints, on: docs/crew/14_HELPER.md,
- * kept in GameUserSettings.ini for every mission), Enter to start, Q to quit; a click picks a mission, turns the helper
- * or presses Start.
+ * kept in GameUserSettings.ini for every mission), Enter to choose who to play, Q to quit; a click picks a mission, turns
+ * the helper or presses Start. Enter or Start opens the crew: every crewman of the mission's vehicles with his duties
+ * (Up/Down or 1-9 one, Enter or a second click plays him, Esc back to the missions).
  *
  * Scripted check: -SimMenuTest=<folder> photographs the menu (menu.png), then -SimMenuPick=<mission>:<vehicle>:<seat>
  * picks and photographs (menu_pick.png) and starts it; without a pick it quits.
@@ -49,12 +50,23 @@ private:
 		FString Vehicle;
 		FString Seat;
 		FString Label;
+		FString Title;  // the crewman (the crew data's title), "" outside
+		TArray<FString> Duties;
+		bool bCommands = false;
 	};
 	TArray<FStartChoice> StartChoices(const FSimMission& Mission) const;
 	int32 DefaultStart(const FSimMission& Mission) const;
 	void MoveSelection(int32 Step);
 	float DrawWrapped(const FString& Text, float X, float Y, float Width, UFont* Font, const FLinearColor& Colour, float LineGap = 2.0f);
 	void HandleInput();
+	/** The crew of the selected mission: choose who to play, then start. */
+	void OpenCrewChoice();
+	void HandleCrewChoiceInput(APlayerController* Pc);
+	void DrawCrewChoice(float W, float H);
+	bool bChoosingCrew = false;
+	TArray<FBox2D> CrewBoxes;
+	FBox2D CrewPlayBox = FBox2D(ForceInit);
+	FBox2D CrewBackBox = FBox2D(ForceInit);
 	/** The air war: start a campaign against adversary 0-3 (rebels, neutral, Warsaw Pact, NATO) and open its screen. */
 	void StartCampaign(int32 Index);
 	/** Continue the campaign under way, or the saved one. */

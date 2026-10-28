@@ -418,6 +418,19 @@ SC_TEST("callouts: in the practice shoot the crew speaks its drill: orders, ackn
     SC_EXPECT(r.Debrief().find("Питание подано!") != std::string::npos);
 }
 
+SC_TEST("callouts: the runner's bus takes the recorded lines' lengths it is given") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_practice_em.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.Callouts() != nullptr && r.RecordedLengthsFrom().empty());
+    if (r.Callouts() == nullptr) return;
+    SC_EXPECT_NEAR(r.Callouts()->LineTimeS("order_search", "commander", "Поиск!"), 0.75, 1e-9);
+    r.SetRecordedLengths({{"commander/order_search", 1.37}}, "art/crew_voices/en");
+    SC_EXPECT(r.RecordedLengthsFrom() == "art/crew_voices/en");
+    SC_EXPECT_NEAR(r.Callouts()->LineTimeS("order_search", "commander", "Поиск!"), 1.37, 1e-9);
+}
+
 SC_TEST("callouts: a crewmate waiting on a player's seat reminds him, then the commander orders it by name") {
     ScenarioDef def;
     ConsoleData console;

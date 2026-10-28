@@ -32,7 +32,7 @@ SC_TEST("missions: the catalogue loads and every mission in it starts, with its 
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("    %zu missions in %zu groups, loaded in %.0f ms\n", c.Count(), c.groups.size(), ms);
-    SC_EXPECT(c.Count() == 13 + 16 + 4 + 7 + 7 + 1 && c.groups.size() == 6);  // the missions (with the two ARM drills) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
+    SC_EXPECT(c.Count() == 13 + 17 + 4 + 7 + 7 + 1 && c.groups.size() == 6);  // the missions (with the two ARM drills and the emission regime) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range
     for (const MissionGroup& g : c.groups) {
         SC_EXPECT(!g.label.empty() && !g.notes.empty());
         for (const MissionDef& m : g.missions) {
@@ -71,6 +71,32 @@ SC_TEST("missions: the commander's seat commands (the Osa's commander, the PU-12
     SC_EXPECT(c.Find("link_osa_21") == nullptr);  // a half of the link, not a mission of its own
 }
 
+SC_TEST("missions: every seat offered names its crewman and his duties, for the menu's choice of who to play") {
+    MissionCatalog c;
+    SC_EXPECT(LoadMissionCatalog(kData, c));
+    int seats = 0, missions = 0;
+    for (const MissionGroup& g : c.groups) {
+        for (const MissionDef& m : g.missions) {
+            ++missions;
+            for (const MissionVehicle& v : m.vehicles) {
+                for (const MissionSeat& s : v.seats) {
+                    ++seats;
+                    if (s.title.empty() || s.duties.empty()) std::printf("    %s %s: %s has no title or duties\n", m.id.c_str(), v.id.c_str(), s.id.c_str());
+                    SC_EXPECT(!s.title.empty() && !s.duties.empty());
+                }
+            }
+        }
+    }
+    const MissionDef* crew = c.Find("osa_crew_practice");
+    SC_EXPECT(crew != nullptr);
+    if (crew != nullptr) {
+        for (const MissionSeat& s : crew->vehicles[0].seats) {
+            if (s.id == "senior_operator") SC_EXPECT(s.title == "Senior operator (search)");
+        }
+    }
+    std::printf("    %d seats over %d missions\n", seats, missions);
+}
+
 SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half of a link in it") {
     MissionCatalog c;
     SC_EXPECT(LoadMissionCatalog(kData, c));
@@ -90,7 +116,7 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
         if (!listed) std::printf("    not in the menu: scenarios/%s\n", name.c_str());
         SC_EXPECT(listed);
     }
-    SC_EXPECT(files == 13 + 18 + 4 + 7 + 7 + 1);  // the missions (with the two ARM drills) and drills, the tutorial and the seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + data/scenarios/air_war_*.json, + the test range
+    SC_EXPECT(files == 13 + 19 + 4 + 7 + 7 + 1);  // the missions (with the two ARM drills and the emission regime) and drills, the tutorial and the seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + data/scenarios/air_war_*.json, + the test range
 }
 
 SC_TEST("missions: a mission that would not start is refused, naming its place in the list") {

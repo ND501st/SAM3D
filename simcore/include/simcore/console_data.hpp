@@ -217,6 +217,9 @@ struct VoiceBoxDef {
     std::string circular;              // the circular call button (ЦИРКУЛЯР)
     std::string power;                 // a subsystem this box needs besides the network's ("" : none)
     bool keeps_intercom = false;       // on a set it still hears and talks on the intercom (the commander's A-1, the RTK-1)
+    std::string second_station;        // a second headset on this box, hearing and talking as the first (the PU-12M's plotter
+                                       // on PVS-1: SAM3D's choice, no source gives him a box)
+    std::string second_headset;        // its control: СНЯТ / НАДЕТ
 };
 
 struct VoicePhoneDef {
@@ -414,6 +417,11 @@ struct ConsoleData {
     std::string post_regiment_net;    // subsystem: the regiment's command net heard (the R-111; "" none)
     std::string post_radar_switch;    // control: the primary radar's source switch, positions 0-2 = the library's 1-3 ("" none)
     std::string post_radar_input;     // input: set while a cabled radar's picture comes through (the switch on its type)
+    std::string post_radar_here;      // input: a radar stands within the cable's reach to be cabled to the post ("" none)
+    std::string post_sending;         // subsystem: the ASPD-U's transmitter sending the picture on ("" none)
+    std::string post_telecode_out;    // input: the RK-1U's send side on a set or a line that carries it ("" none)
+    std::string post_journal_keeper;  // station: writes what the post's radios carry into the journal (radio_journal.hpp; "" none)
+    std::string post_journal_write;   // control: his pencil on the journal, one message written a press
     // The ДХ characteristics keypad (optional "keypad"): its ten digit keys, the designation key (ЦУ) and the reset; the
     // station that works it. And the DT-2 coordinate pickup (optional "marker"): two wheels that move the marker on the
     // IT-45 in azimuth (deg) and range (a fraction of the scale).
@@ -425,6 +433,7 @@ struct ConsoleData {
     std::string post_keypad_zone[3];                                     // Н1, Н2, Н3 (optional)
     std::string post_marker_azimuth;
     std::string post_marker_range;
+    std::string post_marker_take_off;  // button: take off the echo under the marker (optional)
     // The post's radio sets worked as sets ("radios"): the R-111 (the regiment's command net) and the R-407 (the
     // regiment's telecode), and the data file with their numbers (relative to the data directory).
     std::string radios_file;
@@ -785,14 +794,18 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const json::Value* p = root.Find("post");
         if (p == nullptr) return true;
         if (!Keys(*p, "post", {"telecode", "primary", "telecode_input", "plotter", "oriented", "scale", "battery_net", "air_net", "imitation",
-                               "board_open", "regiment_net", "radar_switch", "radar_input", "keypad", "marker", "source", "confidence",
-                               "notes"}) ||
+                               "board_open", "regiment_net", "radar_switch", "radar_input", "keypad", "marker", "journal_keeper", "journal_write",
+                               "radar_here", "sending", "telecode_out", "source", "confidence", "notes"}) ||
+            !OptionalString(*p, "post", "radar_here", out.post_radar_here) || !OptionalString(*p, "post", "sending", out.post_sending) ||
+            !OptionalString(*p, "post", "telecode_out", out.post_telecode_out) ||
             !OptionalString(*p, "post", "regiment_net", out.post_regiment_net) ||
             !OptionalString(*p, "post", "board_open", out.post_board_open) ||
             !OptionalString(*p, "post", "scale", out.post_scale) || !OptionalString(*p, "post", "battery_net", out.post_battery_net) ||
             !OptionalString(*p, "post", "air_net", out.post_air_net) || !OptionalString(*p, "post", "imitation", out.post_imitation) ||
             !OptionalString(*p, "post", "radar_switch", out.post_radar_switch) ||
             !OptionalString(*p, "post", "radar_input", out.post_radar_input) ||
+            !OptionalString(*p, "post", "journal_keeper", out.post_journal_keeper) ||
+            !RefControl(*p, "post", "journal_write", out.panel, ControlKind::Momentary, !out.post_journal_keeper.empty(), out.post_journal_write) ||
             !Provenance(*p, "post") || !RequireString(*p, "post", "telecode", out.post_telecode) ||
             !RequireString(*p, "post", "primary", out.post_primary) || !RequireString(*p, "post", "telecode_input", out.post_telecode_input) ||
             !RequireString(*p, "post", "plotter", out.post_plotter) || !RequireString(*p, "post", "oriented", out.post_oriented)) {
@@ -827,8 +840,20 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!out.post_radar_input.empty() && !out.equipment.HasInput(out.post_radar_input)) {
             return Fail("post.radar_input", "unknown input '" + out.post_radar_input + "'");
         }
+        if (!out.post_radar_here.empty() && !out.equipment.HasInput(out.post_radar_here)) {
+            return Fail("post.radar_here", "unknown input '" + out.post_radar_here + "'");
+        }
+        if (!out.post_telecode_out.empty() && !out.equipment.HasInput(out.post_telecode_out)) {
+            return Fail("post.telecode_out", "unknown input '" + out.post_telecode_out + "'");
+        }
+        if (!out.post_sending.empty() && out.equipment.Def(out.post_sending) == nullptr) {
+            return Fail("post.sending", "unknown subsystem '" + out.post_sending + "'");
+        }
         if (!out.stations.empty() && out.FindStation(out.post_plotter) == nullptr) {
             return Fail("post.plotter", "'" + out.post_plotter + "' is not a station");
+        }
+        if (!out.post_journal_keeper.empty() && !out.stations.empty() && out.FindStation(out.post_journal_keeper) == nullptr) {
+            return Fail("post.journal_keeper", "'" + out.post_journal_keeper + "' is not a station");
         }
         if (const json::Value* k = p->Find("keypad")) {
             const std::string kp = "post.keypad";
@@ -858,9 +883,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         }
         if (const json::Value* m = p->Find("marker")) {
             const std::string mp = "post.marker";
-            if (!Keys(*m, mp, {"azimuth", "range"}) ||
+            if (!Keys(*m, mp, {"azimuth", "range", "take_off"}) ||
                 !RefControl(*m, mp, "azimuth", out.panel, ControlKind::Continuous, true, out.post_marker_azimuth) ||
-                !RefControl(*m, mp, "range", out.panel, ControlKind::Continuous, true, out.post_marker_range)) {
+                !RefControl(*m, mp, "range", out.panel, ControlKind::Continuous, true, out.post_marker_range) ||
+                !RefControl(*m, mp, "take_off", out.panel, ControlKind::Momentary, false, out.post_marker_take_off)) {
                 return false;
             }
         }
@@ -1265,7 +1291,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const json::Value& e = boxes->items[i];
             VoiceBoxDef b;
             if (!Keys(e, bp, {"id", "name", "station", "headset", "selector", "positions", "radio", "radio_select", "radio_select_sets",
-                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "notes"}) ||
+                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "second_station",
+                              "second_headset", "notes"}) ||
                 !RequireString(e, bp, "id", b.id) || !RequireString(e, bp, "name", b.name) || !RequireString(e, bp, "station", b.station) ||
                 !RefControl(e, bp, "headset", out.panel, ControlKind::Discrete, true, b.headset) ||
                 !RefControl(e, bp, "selector", out.panel, ControlKind::Discrete, false, b.selector) ||
@@ -1273,10 +1300,15 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RefControl(e, bp, "radio_select", out.panel, ControlKind::Discrete, false, b.radio_select) ||
                 !RefControl(e, bp, "monitor", out.panel, ControlKind::Discrete, false, b.monitor) ||
                 !RefControl(e, bp, "circular", out.panel, ControlKind::Momentary, false, b.circular) ||
-                !RefSubsystem(e, bp, "power", eq, false, b.power) || !OptionalBool(e, bp, "keeps_intercom", b.keeps_intercom)) {
+                !RefSubsystem(e, bp, "power", eq, false, b.power) || !OptionalBool(e, bp, "keeps_intercom", b.keeps_intercom) ||
+                !OptionalString(e, bp, "second_station", b.second_station) ||
+                !RefControl(e, bp, "second_headset", out.panel, ControlKind::Discrete, !b.second_station.empty(), b.second_headset)) {
                 return false;
             }
             if (!station_known(b.station)) return Fail(Join(bp, "station"), "unknown station '" + b.station + "'");
+            if (!b.second_station.empty() && (!station_known(b.second_station) || b.second_station == b.station)) {
+                return Fail(Join(bp, "second_station"), "unknown station '" + b.second_station + "', or the box's own");
+            }
             const auto channel = [&](const std::string& c) -> std::string {
                 if (c == "off" || c == "intercom" || c == "radio" || set_known(c)) return std::string();
                 return "unknown channel '" + c + "' (off, intercom, radio or a set's id)";
@@ -1309,7 +1341,10 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (names_radio && b.radio.empty() && b.radio_select.empty()) return Fail(bp, "\"radio\" needs radio or radio_select");
             for (const VoiceBoxDef& o : d.boxes) {
                 if (o.id == b.id) return Fail(Join(bp, "id"), "duplicate box '" + b.id + "'");
-                if (o.station == b.station) return Fail(Join(bp, "station"), "one box a seat");
+                if (o.station == b.station || (!o.second_station.empty() && o.second_station == b.station) ||
+                    (!b.second_station.empty() && (o.station == b.second_station || o.second_station == b.second_station))) {
+                    return Fail(Join(bp, "station"), "one box a seat");
+                }
             }
             d.boxes.push_back(std::move(b));
         }

@@ -229,7 +229,7 @@ The crew chooses at the RK-1U's ПРОВОД position and its С-23/АСПД-У 
 
 Practice was thinner than the design. A Soviet veteran says the ASPDU was rarely switched on in peacetime and was not used in platoon live firings ([Chizhikov, USSR VA][shilka-pu12]). Poland had no ASPD in its batteries and passed targets by voice radio ([Opisy Broni, Poland RP][opisy]).
 
-The GDR also removed some blocks from its PU-12Ms and returned them to the USSR as sensitive equipment. They were labelled SAU and served cooperation with frontal aviation ([flak11, GDR OD*][flak-pu0]). The signals drawing uses the same abbreviation, SAU, for the R-111's antenna tuner.
+The GDR also removed some blocks from its PU-12Ms and returned them to the USSR as sensitive equipment. One veteran's page calls them SAU, for cooperation with frontal aviation ([flak11, GDR OD*][flak-pu0]). Every document that draws an SAU, the same site's signals drawing among them, means the R-111's antenna tuner. What went back in 1990 as sensitive was crypto, IFF and coding material, so the block was probably one of those (`docs/research/SAU_BLOCK_2026-10.md`).
 
 ### Neighbours and the covered unit shared nets, not a battery-to-battery link
 
@@ -463,7 +463,7 @@ Several levels set and enforce the regime:
 
 - **The staff that organises the communications** sets it. Even without restrictions, transmit time must be minimal ([RRS-1986, USSR OD][rrs]).
 - The main station enforces it on air (same source).
-- The battery commander sets **emission by readiness level** and the sectors in which emission is allowed for checks and tuning ([BU-IX 1984, USSR OD][bu9]).
+- The battery commander sets **emission by readiness level** and the sectors in which emission is allowed for checks and tuning ([BU-IX 1984, USSR OD][bu9]). BU-IX is the regulation for gun batteries. For the Osa battery, the 1991 textbook gives the same authority to the battery commander: his decision fixes the measures against jamming and anti-radiation missiles, and each launcher's sector and order of search and fire (`voenizdat_osa_1991` p243). Under an ARM threat it sets the radars' least emission: the search radar on for 2 turns in every 3-4, the tracking radar on only from fixed ranges and off after the burst (p262).
 - The squad leader gives the order of radio work on the march (same source).
 
 The regulation also tasks the battery with hiding the composition, location and characteristics of its emitters from enemy technical reconnaissance (same source). Throughout, radios, telecode and automation stay ready to receive designation and warning, and open text stays allowed for air data and designation.
@@ -476,9 +476,17 @@ Company-level practice in a post-Soviet text fills in the rest ([Kostroma lectur
 
 Under silence a set may still be retuned **without radiating** to a scheduled frequency change ([RRS-1986, USSR OD][rrs]). The R-123M's drum may turn. The R-111's НАСТРОЙКА УМ, which tunes the output stage at 20 % power and so radiates, would be barred (inference).
 
+**Found later (27 Oct 2026),** in the Osa textbook, which this report did not search for radio rules (`voenizdat_osa_1991`):
+
+- **The Osa battery on the march:** the battery commander rides the PU-12M at the column's head and signals by flags and lamps. **Radio is forbidden except for fire control while repelling an air attack** (p240).
+- **The radars:**
+  - Wartime frequencies are released only at higher readiness, by one signal fixed in advance by the military district (pp. 208-209).
+  - In peacetime the radars radiate only on permitted frequencies, the tracking radar also only in permitted directions, and maintenance radiates into the dummy loads (p211).
+  - Further rules are in the troops' instructions on radio camouflage of SAM systems, which we don't hold (p211).
+
 **Not found:**
 
-- any radio-silence rule written for a SAM battery or for the Osa;
+- a radio-silence rule for an Osa battery in position (only the march rule above);
 - any NVA radio-silence (Funkstille) rule;
 - the formal wording to impose or lift radio silence.
 
@@ -787,7 +795,7 @@ Four data points contradict the stronger sources:
 | Duty reception forbids transmitting, radiating tuning and frequency changes; R-123M 3 minutes back to СИМПЛЕКС and a 10-minute warm-up; R-111 power at 1/20/100 % and 1.5-3 minutes for the cathodes | RRS-1986, KazNU 2017, R-111 ТО |
 | R-123M: four presets, change in 15 s or less. R-111: 45 s or less | helpiks ch. 9, SFU 2011, studopedia |
 | Open text for air data, designation, fire commands and warnings; units, officials and places coded; positions by PVO-grid squares or by the automated systems | BU-X, BU-IX |
-| Radio silence as transmit-inhibit with sets on duty reception, air defence and the warning net exempt; emission by readiness level, set by the battery commander | VST-1988, RRS-1986, BU-IX |
+| Radio silence as transmit-inhibit with sets on duty reception, air defence and the warning net exempt; emission by readiness level, set by the battery commander; the Osa battery's radios silent on the march but for fire control; the measures against ARMs in the battery commander's decision | VST-1988, RRS-1986, BU-IX, `voenizdat_osa_1991` pp240, 243 |
 | Jamming: log and report; the main station orders the spare; commands said twice; relay; a second-receiver watch; R-407 АПЧ off; R-111 ЗАЩИТА ВХОДА and its co-site rule | RRS-1986, BU-IX, R-407 plate, R-111 ТО |
 | Osa: two R-123M; R-124 (only A-1 and A-2 reach a radio); chest switch ПРМ / ПРД / ВЫЗ; TA-57 at a halt; no data link; radio range 12 km with the radar on, 15 km with it off | MON 2112/80, Wikipedia Р-124, BMP-2 lesson, flak11 |
 | Designation to launchers by voice as bearing and range, with errors up to 5° and 3,000 m; independent fire on sudden targets, with a report afterwards | flak11, wrk, BU-IX |

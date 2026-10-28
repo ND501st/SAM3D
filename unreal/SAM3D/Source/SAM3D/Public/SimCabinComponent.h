@@ -126,6 +126,10 @@ public:
 	bool TraceBoard(const FVector& WorldStart, const FVector& WorldEnd, FVector2D& OutUvM, double& OutDistanceCm, double& OutEastM,
 		double& OutNorthM, double& OutMetresPerBoardM) const;
 
+	/** Whether a ray meets a paper of the cabin (a document display: "radio_journal", "radio_data", "talk_tables"), and how far
+	 * along it. */
+	bool TraceDocument(const FVector& WorldStart, const FVector& WorldEnd, const FString& Document, double& OutDistanceCm) const;
+
 	/** Puts a cabin part on the cabin's own lighting channel (1), lit by the cabin lamps and never directly by the sun:
 	 * a sunlit patch would burn white at the cabin's fixed indoor exposure. Daylight still comes in through the windows
 	 * as Lumen's sky light, which the shell's meshes shade. Call before registering the component. */

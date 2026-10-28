@@ -99,7 +99,7 @@ Third session (17 October 2026):
   - **Wrong moves:** the cost of a move off the drill is shown at once ("that cost N s; the best move was ...") and
     goes to the debrief.
   - **Ghost hand:** it pulses on the advised control.
-- **8.8 completed but for a radial menu:** honest greying (`ScenarioRunner::CheckOrder`, orders' `needs`, facts'
+- **8.8 completed** (the radial menu on Caps Lock, 27 October 2026: `15_TALK.md` §5): honest greying (`ScenarioRunner::CheckOrder`, orders' `needs`, facts'
   `unmet_ru`/`unmet_en`), and a refused order is answered "Не могу: <reason>".
 - **8.3 completed.**
   - **Network chart:** the engagement reference lays the network chart on the target's zone entry (the debrief judges
@@ -138,6 +138,23 @@ has against what the NPC commander and crew decide; each gap closed with a test 
     `simcore/battery_link.hpp`; in Unreal single player and networked; `docs/PU12_DEVELOPMENT.md` P8);
   - the other vehicles' crews as full NPC crews;
   - choosing the position;
-  - a radial menu;
+  - ~~a radial menu~~: done 27 Oct 2026 (Caps Lock, `15_TALK.md` §5);
   - skinned bodies, lips;
   - a person playing the missions on the map (the second half of 8.12).
+
+27 October 2026: **8.15, the crew's talk** (`15_TALK.md`), from the communications brief of 26 October:
+
+- **Turn-taking:** a 0.2 s gap between speakers, urgent lines breaking in (the cut line said again after), stale lines
+  dropped, one caller per fact, an NPC not starting a line while another channel talks in his ear.
+- **The ARM moment:** «Излучение выключить!» alone, the target let go only once the transmitters are off; the senior
+  operator puts ВЫСОКОЕ on for an IFF query waiting between bursts (a deadlock the new timing exposed).
+- **Graded stress** per crewman from what he heard and saw (the old `SetStressed` flag is now a level): his reaction,
+  slips, misses and voice in proportion; «Выполнено!» left out under high stress for a drill just started.
+- **The radial menu** on Caps Lock (the project owner: easier than O): eight sectors in fixed places, greyed lines kept,
+  the advised line green, a hold-flick-release marking menu, the same layout on the digits, seat first (Tab); the
+  replies U «Есть!», I «Выполнено!», P «Повторите!».
+- **Understanding:** glosses of certain abbreviations and of azimuths in thousandths (with the helper on); the B page's
+  "What you have heard" (the seat's own picture).
+- **Voices:** the intercom through throat microphones, cabin lines at the speaker's head, ducking under a more urgent
+  line; a man at his hand wheels misses more of what he hears.
+- **Not yet:** voice input, skill push and pull between crewmen.

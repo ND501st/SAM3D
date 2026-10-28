@@ -152,6 +152,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	FKey SwitchVehicleKey = EKeys::V;
 
+	/** The radial crew menu (docs/crew/15_TALK.md section 5): tap it to open and close the menu, or hold it, flick the
+	 *  mouse to a sector and on to a line, and let go. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey CrewMenuKey = EKeys::CapsLock;
+
+	/** The quick replies at any seat: «Есть!», «Выполнено!», «Повторите!». */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey AckKey = EKeys::U;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey DoneKey = EKeys::I;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	FKey SayAgainKey = EKeys::P;
+
+	/** The radial menu's cursor: pixels per unit of mouse movement (the head doesn't turn while the menu is open). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
+	double MenuPxPerMouseUnit = 15.0;
+
 	/** Degrees of view turn per unit of mouse movement. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Cabin")
 	double CabinLookDegPerMouseUnit = 2.5;
@@ -215,6 +234,8 @@ public:
 	/** The head's turn (yaw and pitch from the seat's view) that looks at a point in the world from where the eye is now
 	 *  (the seat, or standing at a far panel). False if the seat has no view. */
 	bool LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const;
+	/** Why a turn of this wheel did nothing, for the player (simcore's reason when it gave one). */
+	FString WheelRefusal(int32 Item) const;
 	/** The wheel just grabbed: start turning the head onto its display, if it has one. */
 	void StartWheelWatch(int32 Item);
 
@@ -263,8 +284,33 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	TArray<FSimCrewMenuEntry> GetCrewMenuEntries() const { return MenuEntries; }
 
+	/** The radial crew menu as it is drawn now (docs/crew/15_TALK.md section 5): the places of the ring shown (the
+	 *  groups, or the open group's lines), the place the cursor points at (INDEX_NONE: none), the ring's title, the
+	 *  cursor's offset from the centre (px), and the open group's page when it has more than eight lines. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	TArray<FSimCrewMenuSlot> GetCrewMenuRing() const;
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	int32 GetCrewMenuHover() const { return MenuHover; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GetCrewMenuTitle() const;
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FVector2D GetCrewMenuCursor() const { return MenuCursor; }
+
+	/** 0: the ring of groups; 1: a group's lines. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	int32 GetCrewMenuLevel() const { return MenuLevel; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	bool IsCrewMenuSeatFirst() const { return bMenuSeatFirst; }
+
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	int32 GetCrewMenuPage() const { return MenuPage; }
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	int32 GetCrewMenuPages() const;
 
 	/** This seat's console id, and whether the player holds it (true) or its NPC works it. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
@@ -354,6 +400,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|PU12M")
 	int32 GetPickedTarget() const { return PickedTarget; }
 	bool IsCrossOnBoard() const { return bOnBoard; }
+	/** The cross on the radio journal's page (a click opens it), and the page held before the eyes: writing in it (the
+	 * journal keeper) or reading it (anyone else). */
+	bool IsCrossOnJournal() const { return bOnJournal; }
+	bool IsAtJournal() const { return bAtJournal; }
+	bool IsWritingJournal() const { return bAtJournal && bJournalWriter; }
 	float GetLastPlotMissCm() const { return LastPlotMissCm; }
 	float GetLastPlotTime() const { return LastPlotTime; }
 
@@ -371,6 +422,13 @@ public:
 	bool PlotPicked();
 	/** The plotting board under the cross (the plotter's): the mouse wheel picks the number, a click writes it there. */
 	void HandleBoard(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
+	/** The radio journal's page under the cross: a click holds it before the eyes (OpenJournal). */
+	void HandleJournalPage(class APlayerController* Pc, const FVector& Start, const FVector& Forward);
+	/** The page held up before the eyes (the HUD draws it): the keeper writes (dictation: digits into the line's boxes), the
+	 * others read. Esc or the right mouse button puts it down. */
+	bool OpenJournal();
+	void CloseJournal();
+	void HandleJournal(class APlayerController* Pc, class USimWorldSubsystem* Sim);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "SAM3D")
@@ -487,8 +545,20 @@ private:
 	/** -SimTutorialAutoplay=<folder>: the lesson played as a learner would, through the same clicks, wheel turns and
 	 *  menu lines, each step photographed as he sees it before it is done; the game quits at the end. */
 	void RunLessonAutoplay(USimWorldSubsystem* Sim, const struct FSimTutorialStep& Step, float DeltaSeconds);
-	/** The crew menu opens (O): this seat's orders or reports, on the page with the lesson's line if one is asked for. */
-	void OpenCrewMenu(USimWorldSubsystem* Sim);
+	/** The crew menu opens (Caps Lock): this seat's orders or reports on the ring of sectors; bAtAdvised (the lesson
+	 *  playing itself) opens it at the sector holding the lesson's line. */
+	void OpenCrewMenu(USimWorldSubsystem* Sim, bool bAtAdvised = false);
+	/** The radial menu: its first ring's groups (the sectors, or seat first the seats), a group's lines (indices into
+	 *  MenuEntries), the place a cursor offset points at among `Places`, a place picked (a group opens, a line is said),
+	 *  a line said, and the line to advise (a lesson's, else the helper's pick). */
+	TArray<FSimCrewMenuGroup> MenuGroups() const;
+	TArray<int32> MenuGroupLines(int32 Group) const;
+	static int32 MenuPlaceAt(const FVector2D& Cursor, int32 Places);
+	void PickMenuPlace(int32 Place, USimWorldSubsystem* Sim);
+	void SayMenuEntry(int32 Entry, USimWorldSubsystem* Sim);
+	FString AdvisedMenuLine(const USimWorldSubsystem* Sim) const;
+	/** The mouse moves the menu's cursor while it is open, not the head (Dx, Dy zeroed). */
+	void TakeMenuMouse(float& Dx, float& Dy);
 	/** The cabin seat with this station id (INDEX_NONE if none). */
 	int32 FindStation(const FString& StationId) const;
 	void ConfigureForScenario(USimWorldSubsystem* Sim);
@@ -552,8 +622,20 @@ private:
 	/** The first move the helper shows now (null: none shown). */
 	const FSimHelpStep* HelpTop() const;
 	bool bMenuOpen = false;
+	/** The ring shown (0 the groups, 1 the open group's lines), the open group, the page of a group with more than eight
+	 *  lines (seat first), seat first (the commander's choice, kept), the cursor (px from the centre), the place it points
+	 *  at, how long the menu key has been held since it opened the menu (< 0: let go, or a tap), the advised line. */
+	int32 MenuLevel = 0;
+	int32 MenuGroup = INDEX_NONE;
 	int32 MenuPage = 0;
+	bool bMenuSeatFirst = false;
+	FVector2D MenuCursor = FVector2D::ZeroVector;
+	int32 MenuHover = INDEX_NONE;
+	float MenuHeldSeconds = -1.0f;
+	FString MenuAdvised;
 	TArray<FSimCrewMenuEntry> MenuEntries;
+	TArray<FSimCrewMenuGroup> MenuSectors;
+	TArray<FSimCrewMenuGroup> MenuDoers;
 	FString StationId;
 	bool bHoldingSeat = false;
 
@@ -565,6 +647,9 @@ private:
 	int32 PickedTarget = INDEX_NONE;
 	/** The cross is on the plotting board (HandleBoard): the HUD draws the picked number beside it. */
 	bool bOnBoard = false;
+	bool bOnJournal = false;
+	bool bAtJournal = false;
+	bool bJournalWriter = false;
 	/** The last mark written by hand: how far the click was (cm), and when (world seconds), for a moment's feedback. */
 	float LastPlotMissCm = -1.0f;
 	float LastPlotTime = -100.0f;

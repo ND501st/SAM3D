@@ -60,15 +60,19 @@ procedure's first step began drawing its own reaction (it had reused the last on
 As built: reaction, jitter, slips, omissions and stress in `CrewMember`; wheel rates, TV lag, aim noise and the range
 error by hand in the engagement (`AimCrew`); perception and callout delay in the callouts; the miss chance in hearing
 reports; judgement as the launch timing on the decision controls (ПУСК), the commander's priority slips and his
-hesitation at a branch; patience in the reminders. Stress comes from the crew's own radars being jammed, or a hostile
-within 10 km with nothing tracked.
+hesitation at a branch; patience in the reminders. Stress is graded (27 October 2026, `15_TALK.md` §4): a level from 0
+to 1 per crewman, from a war's setting, the crew's own radars jammed, a hostile within 10 km with nothing tracked, our
+missile in flight, an ARM bursting near, and the warnings and reports he heard; it rises at once and falls back over
+about 40 s.
 
 ## 4. Per crewmate, per seat
 
 - Each NPC is a person with a name and a **tier per seat** (a senior operator who is 1st class at his own seat may be
   3rd class at the deputy's). Moving a crewmate to another seat uses that seat's tier.
-- **Stress** is the scenario's: night, jamming on the crew's own radars, the vehicle under fire, a target inside the
-  zone with no track. Stressed values = base × `stress_factor` for delays and chances.
+- **Stress** is each crewman's, from what he knows: jamming on the crew's own radars, the vehicle under fire, a target
+  inside the zone with no track, the warnings he heard. Stressed values = base × (1 + (`stress_factor` − 1) × level)
+  for delays and chances, so a crewman at full stress gets the whole factor and one at half stress half of it
+  (`15_TALK.md` §4). His voice rises with it, and above 0.7 he leaves out «Выполнено!» for a drill just started.
 - Randomness comes from the scenario's seeded stream, so a run is repeatable (`ScenarioRunner` rules).
 
 ## 5. Progression and quests
@@ -79,3 +83,6 @@ within 10 km with nothing tracked.
   experience promotes the seat's tier (`08` §4). Thresholds are game values.
 - The player's own qualification (the exams passed per seat, `08`) unlocks the command half: first the vehicle, then
   the battery.
+- **Planned** (the battery's war, `docs/campaign/06_THE_CREW_AS_PEOPLE.md`, roadmap phase 19): skill per person rather
+  than per crew, and needs (sleep, food, morale, health) that change a person's effective tier hour by hour, as the
+  `stress_factor` does.

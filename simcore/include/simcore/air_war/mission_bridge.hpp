@@ -13,6 +13,12 @@
 //     receiver) the gameplay model: in range while our search or tracking radar radiates it fires one; it flies at
 //     `scenario.arm_speed_mps` and hits if the radar still radiates when it arrives, or radiated within the seeker's
 //     memory if it has one;
+//   * the neighbours: our other air defences whose zones reach into the scenario (RaidManifest::neighbours) take their
+//     kill chances at the aircraft passing through, by the abstract resolver's rule (its pass chance, fire channels,
+//     rounds, the package's SEAD and jamming, night and weather for the optical ones); an aircraft they hit goes down in
+//     the scenario, half way through their zone (17.1's first form). The regiment's other Osa batteries fight in the
+//     runner's battery fire model instead (ScenarioRunner::NeighbourFights): their kills, missiles and radar time are
+//     read from it;
 //   * what the enemy learns: every second our radars radiate (ELINT), every launch an enemy aircraft sees.
 // Every event goes into the runner's log, so the debrief shows it. Finish() turns it all into a PackageOutcome for
 // AirCampaign::CompletePlayerMission.
@@ -37,6 +43,10 @@ public:
     MissionBridge(const RaidManifest& m, const AirWarData& d, unsigned seed) : m_(m), d_(&d), rng_(seed * 2654435761u + 99u) {
         state_.assign(m_.aircraft.size(), AircraftState{});
         for (std::size_t i = 0; i < m_.aircraft.size(); ++i) state_[i].arms_left = m_.aircraft[i].arms;
+        passes_.assign(m_.aircraft.size() * m_.neighbours.size(), Pass{});
+        neighbours_.assign(m_.neighbours.size(), NeighbourState{});
+        for (std::size_t j = 0; j < m_.neighbours.size(); ++j) neighbours_[j].missiles = m_.neighbours[j].missiles;
+        kill_by_.assign(m_.aircraft.size(), std::string());
     }
 
     // Call after every runner.Step().
@@ -70,10 +80,28 @@ public:
             AircraftState& s = state_[i];
             if (!r.TargetAlive(a.target_id)) continue;
             const Vec3 pos = r.TargetPosition(a.target_id);
+            s.prev_pos = s.seen ? s.last_pos : pos;
             s.last_pos = pos;
             s.seen = true;
+            // A cruise missile at its target: its warhead goes off where it arrives, and it is gone.
+            // (Within the release capture: the runner retires a target at its last waypoint before it is quite there.)
+            if (a.missile && a.has_release && !s.released && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
+                s.released = true;
+                s.impacted = true;
+                Impact imp;
+                imp.t = t;
+                imp.aircraft = static_cast<int>(i);
+                const double hit = a.hit_chance > 0.0 ? a.hit_chance : tune.Get("strike.hit_chance");
+                const double scatter = 20.0 + 300.0 * (1.0 - hit) * rng_.Uniform();
+                const double ang = rng_.Uniform(0.0, 6.283185307179586);
+                imp.where = a.aim_enu + Vec3{std::cos(ang) * scatter, std::sin(ang) * scatter, 0.0};
+                impacts_.push_back(imp);
+                r.DestroyTarget(a.target_id, "its own warhead");
+                Log(r, a.target_id, "strikes its target");
+                continue;
+            }
             // Weapons at the release point.
-            if (a.has_release && !s.released && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
+            if (a.has_release && !s.released && !a.missile && Dist2d(pos, a.release_enu) < tune.Get("scenario.release_capture_m")) {
                 s.released = true;
                 if (a.role == FlightRole::Recce) {
                     photographed_ = true;
@@ -105,6 +133,7 @@ public:
                 }
             }
         }
+        Neighbours(r);
         ReadEmArms(r);
         if (unit_destroyed_) return;
         // Weapons arriving.
@@ -144,6 +173,7 @@ public:
         o.package_id = m_.package_id;
         o.played = true;
         o.truth_applied = false;
+        ReadNeighbourKills(r);
         // Which aircraft went down: our missiles' hits (the engagement model's HIT), the battery's other launchers
         // ("destroyed by <launcher>") and anything else the world destroyed ("destroyed").
         std::vector<bool> down(m_.aircraft.size(), false);
@@ -165,9 +195,14 @@ public:
             if (state_[i].released) flight_released[fi] = true;
             if (!down[i]) flight_alive[fi] = true;
             if (!down[i] || a.drone) continue;
+            if (a.missile) {
+                // Shot down before it struck: the defence's (the battery's or a neighbour's), never a crew lost.
+                if (!state_[i].impacted) o.missiles_downed.push_back(kill_by_[i].empty() ? m_.own_object : kill_by_[i]);
+                continue;
+            }
             LossRecord l;
             l.flight = a.flight;
-            l.by = m_.own_object;
+            l.by = kill_by_[i].empty() ? m_.own_object : kill_by_[i];
             l.where = state_[i].last_pos;
             l.officer = a.officer;
             l.captured = rng_.Chance(0.5);
@@ -193,8 +228,26 @@ public:
             o.radars_suppressed.push_back(m_.own_object);
         }
         if (photographed_) o.recce_seen.push_back(m_.own_object);
+        for (std::size_t j = 0; j < m_.neighbours.size(); ++j) {
+            const std::string& id = m_.neighbours[j].id;
+            const bool fights = r.NeighbourFights(id);
+            const NeighbourState& ns = neighbours_[j];
+            const int spent = fights ? r.NeighbourLaunches(id) : ns.spent;
+            const double emitted = fights ? r.NeighbourRadarSeconds(id) : ns.emitted_s;
+            if (fights ? spent == 0 && emitted <= 0.0 : !ns.fired) continue;
+            o.fired.push_back(id);
+            if (emitted > 0.0) o.AddEmission(id, emitted);
+            if (spent > 0) o.missiles_by.push_back({id, spent});
+        }
         o.notes = notes_;
         return o;
+    }
+
+    // Aircraft the neighbours have shot down so far.
+    int NeighbourKills() const {
+        int n = 0;
+        for (const std::string& k : kill_by_) n += k.empty() ? 0 : 1;
+        return n;
     }
 
 private:
@@ -204,6 +257,23 @@ private:
         int arms_left = 0;
         double last_arm_t = -1e9;
         Vec3 last_pos;
+        Vec3 prev_pos;  // where it was the step before
+        bool impacted = false;  // a cruise missile that struck (gone by its own warhead, not shot down)
+    };
+    // One aircraft's pass through one neighbour's zone: rolled as it enters, the hit (if any) half way through.
+    struct Pass {
+        bool inside = false;
+        bool done = false;
+        bool hit = false;
+        double flown_m = 0.0;
+        double hit_at_m = 0.0;
+    };
+    struct NeighbourState {
+        int missiles = -1;
+        int spent = 0;
+        bool fired = false;
+        double emitted_s = 0.0;
+        std::vector<std::pair<int, int>> engaged;  // (flight, its aircraft engaged in their pass)
     };
     struct Impact {
         double t = 0.0;
@@ -242,6 +312,112 @@ private:
     std::vector<std::string> decoys_hit_;
     std::vector<std::string> destroyed_;
     std::vector<std::string> notes_;
+    std::vector<Pass> passes_;  // aircraft x neighbours
+    std::vector<NeighbourState> neighbours_;
+    std::vector<std::string> kill_by_;  // per aircraft: the neighbour that shot it down
+
+    // The neighbours' fire (see the header): each aircraft's pass through each zone is rolled once, as it enters.
+    // The fighting neighbours' kills, as the runner's fire model made them.
+    void ReadNeighbourKills(const ScenarioRunner& r) {
+        for (const auto& k : r.NeighbourKills()) {
+            for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                if (m_.aircraft[i].target_id != k.first || !kill_by_[i].empty()) continue;
+                kill_by_[i] = k.second;
+                for (const RaidNeighbour& nb : m_.neighbours) {
+                    if (nb.id == k.second) notes_.push_back(k.first + " shot down by " + nb.name);
+                }
+            }
+        }
+    }
+
+    void Neighbours(ScenarioRunner& r) {
+        ReadNeighbourKills(r);
+        for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+            const RaidAircraft& a = m_.aircraft[i];
+            const AircraftState& s = state_[i];
+            if (!s.seen || !r.TargetAlive(a.target_id)) continue;
+            const Vec3 step = s.last_pos - s.prev_pos;
+            const double step_m = std::hypot(step.x, step.y);
+            for (std::size_t j = 0; j < m_.neighbours.size() && r.TargetAlive(a.target_id); ++j) {
+                const RaidNeighbour& nb = m_.neighbours[j];
+                Pass& ps = passes_[i * m_.neighbours.size() + j];
+                if (ps.done || r.NeighbourFights(nb.id)) continue;
+                const bool inside = Dist2d(s.last_pos, nb.enu) < nb.defence.radius_m;
+                if (inside && !ps.inside) {
+                    ps.inside = true;
+                    Engage(r, i, j, step, step_m);
+                } else if (ps.inside) {
+                    ps.flown_m += step_m;
+                }
+                if (!ps.inside || ps.done) continue;
+                // The hit, half way through the zone, or as it leaves if it turned away sooner.
+                if (ps.hit && (ps.flown_m >= ps.hit_at_m || !inside)) {
+                    ps.done = true;
+                    if (r.DestroyTarget(a.target_id, nb.name)) {
+                        kill_by_[i] = nb.id;
+                        notes_.push_back(a.target_id + " shot down by " + nb.name);
+                    }
+                    continue;
+                }
+                if (!inside) ps.done = true;
+            }
+        }
+    }
+
+    void Engage(ScenarioRunner& r, std::size_t i, std::size_t j, const Vec3& step, double step_m) {
+        const TuningTable& tune = d_->tuning;
+        const RaidAircraft& a = m_.aircraft[i];
+        const RaidNeighbour& nb = m_.neighbours[j];
+        NeighbourState& ns = neighbours_[j];
+        Pass& ps = passes_[i * m_.neighbours.size() + j];
+        if (nb.function <= 0.05 || ns.missiles == 0) return;
+        if (nb.defence.max_target_mps > 0.0 && a.speed_mps > nb.defence.max_target_mps) return;  // too fast for it
+        // The chord it will fly through the zone on its present heading.
+        const double radius = nb.defence.radius_m;
+        double chord = radius;
+        if (step_m > 1.0) {
+            const Vec3 d = state_[i].last_pos - nb.enu;
+            const double along = (d.x * step.x + d.y * step.y) / step_m;
+            const double cross2 = std::max(0.0, d.x * d.x + d.y * d.y - along * along);
+            chord = 2.0 * std::sqrt(std::max(0.0, radius * radius - cross2));
+        }
+        const bool radar = nb.defence.radar;
+        if (radar) ns.emitted_s += chord / 250.0 + 30.0;
+        ns.fired = true;
+        if (a.drone) {
+            // A decoy draws fire: the defence wastes rounds on it and shows itself.
+            Spend(ns, 1 + rng_.Index(2));
+            if (rng_.Chance(0.6)) r.DestroyTarget(a.target_id, nb.name);  // drones are meant to be lost: never a loss
+            ps.done = true;
+            return;
+        }
+        // Its fire channels: how many of this flight it can take on in their pass.
+        std::size_t e = 0;
+        while (e < ns.engaged.size() && ns.engaged[e].first != a.flight) ++e;
+        if (e == ns.engaged.size()) ns.engaged.push_back({a.flight, 0});
+        int& engaged = ns.engaged[e].second;
+        if (EngagedAircraft(nb.defence.channels, nb.function, engaged + 1) <= engaged) return;
+        ++engaged;
+        double env = nb.function;
+        if (!radar && m_.night) env *= tune.Get("attrition.night");
+        if (!radar && m_.poor_weather) env *= tune.Get("attrition.poor_weather");
+        const double k = PassKillChance(nb.defence.lethality, chord, radius, a.profile, a.helicopter, nb.defence.low_cover,
+                                        nb.defence.medium_cover, radar, radar ? m_.sead_supp : 0.0, radar ? m_.jam : 0.0, env,
+                                        Clamp01(a.evasion + 0.3 * (m_.airmanship - 0.5)), tune);
+        if (k <= 0.0) return;
+        Spend(ns, 1);
+        if (rng_.Chance(k)) {
+            ps.hit = true;
+            ps.hit_at_m = 0.5 * chord;
+        }
+    }
+
+    static void Spend(NeighbourState& ns, int n) {
+        if (ns.missiles < 0) return;
+        const int used = std::min(ns.missiles, n);
+        ns.missiles -= used;
+        ns.spent += used;
+    }
 
     // The EM ARMs' ends (the runner logs each itself): on our vehicle, the radar is killed and the vehicle out of
     // action; on a dummy, that dummy is destroyed; a miss means the crew beat it (silent in time, or a decoy).

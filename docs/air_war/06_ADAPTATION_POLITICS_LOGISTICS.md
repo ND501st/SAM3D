@@ -40,9 +40,14 @@ Code: `simcore/air_war/campaign.hpp` (`ApplyOutcome`, `BeliefsFrom`, `Lessons`, 
   is being repaired. Air defences rearm a round an hour while working. The enemy assumes its own repair rate
   (`intel.fixed_function_recovery`); when reconnaissance shows something working sooner, it goes back on the list (the
   successive strikes "to prevent restoration" of `mai_tactics_vvs`).
-- **Mobile units move** by their `relocate_h` and `relocate_km` (never closer than 8 km to the enemy's front); the player's
+- **Mobile units move** every `relocate_h`: between their prepared positions where they have them (`"positions"`, the
+  nation's theatre), otherwise `relocate_km` in a random direction (never closer than 8 km to the enemy's front); the player's
   battery by the posture's `relocate_every_h` or by `RelocateBattery` (its dummies move with it).
 - **Reports arrive**; the picture ages.
+
+**Planned** (the battery's war, `docs/campaign/02_WHAT_WE_DEFEND.md` §3, roadmap 13.5): objects are rebuilt by jobs
+that need teams, materials, transport and time, each of them a target; this repair rule becomes a job's progress
+with full means. Military units are still replaced from the reserve.
 
 ## 4. Resilience (the player's side)
 

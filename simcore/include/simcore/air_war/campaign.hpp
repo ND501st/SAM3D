@@ -29,6 +29,7 @@
 
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/intel.hpp"
+#include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/officers.hpp"
 #include "simcore/air_war/planner.hpp"
 #include "simcore/air_war/resolve.hpp"
@@ -83,6 +84,7 @@ struct RaidPatterns {
     int decoy_waves = 0;
     int aircraft = 0;
     int double_taps = 0;
+    int arm_attacks = 0;  // our radars hit, or made to go silent, by anti-radiation missiles (their sites report it)
 };
 
 class AirCampaign {
@@ -127,10 +129,15 @@ public:
             SquadronState st;
             st.id = s.id;
             st.aircraft = s.aircraft;
-            st.total = s.count;
+            st.total = Arrived(s, 1);
             squadrons_.push_back(st);
         }
+        support_ = SupportNow();
+        supply_.Init(data_, truth_);
         arm_stock_ = data_.faction.logistics.arm_stock;
+        for (const AircraftType& a : data_.faction.aircraft) {
+            if (a.missile && a.InService(data_.theatre.year)) missile_stock_[a.id] = a.stock;
+        }
         const PoliticsDef& pd = data_.faction.politics;
         politics_.support = pd.support;
         politics_.pressure = pd.pressure;
@@ -195,17 +202,25 @@ public:
         for (int i : outcome.aborted_flights) {
             if (i >= 0 && i < static_cast<int>(p.flights.size())) p.flights[static_cast<std::size_t>(i)].aborted = true;
         }
+        const std::string& own = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         int kills = 0;
-        for (const LossRecord& l : outcome.losses) kills += l.by == data_.theatre.objects[static_cast<std::size_t>(player_)].id ? 1 : 0;
+        for (const LossRecord& l : outcome.losses) kills += l.by == own ? 1 : 0;
+        const int missiles_down = static_cast<int>(std::count(outcome.missiles_downed.begin(), outcome.missiles_downed.end(), own));
         kills_by_player_ += kills;
-        CrewProgress(kills);
-        Log("player_mission", "result", "Mission against '" + p.name + "' flown: " + std::to_string(outcome.Lost()) + " of " +
-                                            std::to_string(p.Aircraft()) + " shot down in the battery's sector.", true);
+        CrewProgress(kills + missiles_down);
+        Log("player_mission", "result", "Mission against '" + p.name + "' flown: " +
+                                            (p.Missiles() > 0 ? std::to_string(outcome.missiles_downed.size()) + " of " + std::to_string(p.Missiles()) + " cruise missiles"
+                                                              : std::to_string(outcome.Lost()) + " of " + std::to_string(p.Aircraft())) +
+                                            " shot down in the battery's sector.", true);
         ApplyOutcome(p, outcome);
-        // The rest of the raid, outside the scenario, without the player's battery.
+        // The rest of the raid, without the player's battery: every part of every route but what the scenario flew
+        // (inside its circle while it ran, where the other defences took their chances: mission_bridge.hpp).
         ResolveContext rc = Context();
         rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
-        rc.from_h = end_h;
+        rc.played_centre = truth_[static_cast<std::size_t>(player_)].pos;
+        rc.played_radius_m = data_.tuning.Get("scenario.clip_m");
+        rc.played_from_h = now_h_;
+        rc.played_to_h = end_h;
         Resolver r;
         PackageOutcome rest = r.Resolve(p, rc);
         if (!rest.losses.empty() || rest.delivered || !rest.recce_seen.empty()) ApplyOutcome(p, rest, false);
@@ -309,6 +324,28 @@ public:
     const std::vector<SquadronState>& Squadrons() const { return squadrons_; }
     const PoliticsState& Politics() const { return politics_; }
     double ArmStock() const { return arm_stock_; }
+    // Cruise missiles of a type left to the enemy (0 for a type not in service in the war's year).
+    // The enemy's support orbits as of the last plan, the support sorties flown, and the aircraft arrived in its build-up
+    // after the first day (docs/air_war/11_SUPPORT.md, 12_FORCES.md).
+    const SupportLevel& Support() const { return support_; }
+    // Our supply lines: their ways, and what they delivered and lost (docs/air_war/14_LOGISTICS.md).
+    const SupplyNetwork& Supply() const { return supply_; }
+    int SupportSorties() const { return support_sorties_; }
+    int Reinforcements() const { return reinforcements_; }
+    // Aircraft in theatre now, manned (not cruise missiles or drones), whole or damaged.
+    int AircraftInTheatre() const {
+        int n = 0;
+        for (const SquadronState& st : squadrons_) {
+            const AircraftType* a = data_.faction.Aircraft(st.aircraft);
+            if (a != nullptr && !a->missile && !a->drone) n += std::max(0, st.total - st.lost);
+        }
+        return n;
+    }
+
+    double MissileStock(const std::string& id) const {
+        const auto it = missile_stock_.find(id);
+        return it == missile_stock_.end() ? 0.0 : it->second;
+    }
     int PlayerIndex() const { return player_; }
     const std::vector<int>& Dummies() const { return dummies_; }
     // Where the battery has been: (campaign hour, position) from the start, one entry per move (the information
@@ -341,6 +378,10 @@ public:
         }
         return false;
     }
+
+    // Our radars have come under ARM attack in this war: the batteries fight under the ARM drill from then on (the
+    // scenario doctrine's arm_threat, voenizdat_osa_1991 pp262-264).
+    bool ArmsExpected() const { return patterns_.arm_attacks > 0; }
 
     // How well the enemy knows where the player's battery is, 0..1 (the XCOM "knowledge" of the player).
     double EnemyKnowledgeOfBattery() const {
@@ -430,6 +471,11 @@ private:
     bool ok_ = false;
     double now_h_ = 0.0;
     int day_ = 1;
+    SupportLevel support_;         // the enemy's support orbits, as of the last plan (docs/air_war/11_SUPPORT.md)
+    SupplyNetwork supply_;         // the player's side's supply lines (docs/air_war/14_LOGISTICS.md)
+    double tanker_left_ = 0.0;     // aircraft the tankers can still refuel this cycle
+    int support_sorties_ = 0;      // support sorties flown so far
+    int reinforcements_ = 0;       // aircraft arrived in the build-up after day 1
     int phase_ = 0;
     double next_plan_h_ = 0.0;
     std::vector<ObjectState> truth_;
@@ -438,6 +484,7 @@ private:
     std::vector<std::pair<double, Vec3>> battery_track_;  // (campaign hour, where the battery went), from the start
     std::vector<SquadronState> squadrons_;
     double arm_stock_ = 0.0;
+    std::map<std::string, double> missile_stock_;  // cruise missile type -> left
     PoliticsState politics_;
     AirStaff staff_;
     IntelPicture intel_;
@@ -488,7 +535,48 @@ private:
         rc.staff = &staff_;
         rc.weather = WeatherAt(now_h_);
         rc.rng = &rng_;
+        rc.awacs = support_.awacs;
         return rc;
+    }
+
+    // A squadron's aircraft in theatre on `day` (the force build-up, docs/air_war/12_FORCES.md): its share on day 1,
+    // growing to the whole by its day.
+    int Arrived(const SquadronDef& s, int day) const {
+        const LogisticsDef& l = data_.faction.logistics;
+        const double initial = s.initial >= 0.0 ? s.initial : l.buildup_initial;
+        const int full = s.full_by_day >= 0 ? s.full_by_day : l.buildup_full_by_day;
+        double share = 1.0;
+        if (full > 1) share = initial + (1.0 - initial) * Clamp01((day - 1.0) / (full - 1.0));
+        return std::max(1, static_cast<int>(std::lround(s.count * Clamp01(share))));
+    }
+
+    // What the support squadrons keep up today (docs/air_war/11_SUPPORT.md): each serviceable support aircraft flies
+    // a long sortie a day; an AWACS or ELINT orbit round the clock takes a few, and a tanker sortie refuels about four
+    // aircraft (gwaps_vol3 table 16).
+    SupportLevel SupportNow() const {
+        const FactionDef& f = data_.faction;
+        const TuningTable& tune = data_.tuning;
+        SupportLevel s;
+        double awacs = 0.0, elint = 0.0, tanker = 0.0;
+        for (const SquadronState& st : squadrons_) {
+            const AircraftType* a = f.Aircraft(st.aircraft);
+            if (a == nullptr || !a->InService(data_.theatre.year)) continue;
+            const double sorties = st.Serviceable(now_h_, f.doctrine.serviceability) * tune.Get("support.sorties_per_aircraft_day");
+            if (a->Has(FlightRole::Awacs)) awacs += sorties;
+            if (a->Has(FlightRole::Elint)) {
+                elint += sorties;
+                s.has_elint_aircraft = true;
+            }
+            if (a->Has(FlightRole::Tanker)) {
+                tanker += sorties;
+                s.has_tankers = true;
+            }
+        }
+        s.awacs = Clamp01(awacs / tune.Get("support.awacs_sorties_per_orbit_day"));
+        s.elint = Clamp01(elint / tune.Get("support.elint_sorties_per_orbit_day"));
+        s.tanker_receivers = tanker * tune.Get("support.receivers_per_tanker_sortie");
+        s.sorties = static_cast<int>(std::lround(awacs + elint + tanker));
+        return s;
     }
 
     // One step of up to an hour, from now_h_ to t1. True if a player mission came due.
@@ -526,6 +614,12 @@ private:
         intel_.Decay(dt, data_.tuning);
         Repair(dt);
         Relocate();
+        {
+            // Our supply lines (logistics.hpp): what our side's people on them would report goes in the journal.
+            std::vector<std::string> events;
+            supply_.Step(data_, truth_, dt, DayPartAt(data_.theatre.start_hour + t0) != DayPart::Day, &events);
+            for (const std::string& ev : events) Log("logistics", "our side", ev, false);
+        }
         Deliver();
         now_h_ = t1;
         return false;
@@ -622,10 +716,17 @@ private:
         pc.now_h = now_h_;
         pc.phase = phase_;
         pc.arm_stock = &arm_stock_;
+        pc.missile_stock = &missile_stock_;
         pc.rng = &rng_;
         pc.next_id = &next_package_id_;
         pc.journal = &journal_;
         pc.truth = &truth_;
+        // The support orbits for this cycle (docs/air_war/11_SUPPORT.md).
+        support_ = SupportNow();
+        pc.awacs = support_.awacs;
+        tanker_left_ = support_.tanker_receivers * data_.faction.doctrine.planning_cycle_h / 24.0;
+        pc.tanker_receivers = &tanker_left_;
+        pc.supply = &supply_;
         Planner planner;
         std::vector<Package> plan = planner.Plan(pc);
         for (Package& p : plan) {
@@ -701,6 +802,12 @@ private:
                 ObjectState& b = truth_[static_cast<std::size_t>(player_)];
                 if (b.missiles > 0) b.missiles = std::max(0, b.missiles - o.missiles_spent);
             }
+            for (const auto& m : o.missiles_by) {
+                const int i = data_.theatre.IndexOf(m.first);
+                if (i < 0) continue;
+                ObjectState& st = truth_[static_cast<std::size_t>(i)];
+                if (st.missiles > 0) st.missiles = std::max(0, st.missiles - m.second);
+            }
         }
         for (ObjectState& st : truth_) {
             if (st.function <= 0.0 && st.wrecked_h < 0.0) st.wrecked_h = std::max(now_h_, p.tot_h);
@@ -765,9 +872,10 @@ private:
         // What the officers make of it.
         Lessons(p, o, lost);
         // The journal (the enemy's mind) and what our side saw.
-        std::string text = std::string(MissionKindName(p.kind)) + " '" + p.name + "' on " + p.target_label + ": lost " +
-                           std::to_string(lost) + " of " + std::to_string(p.Aircraft()) + (o.aborted ? ", turned back" : "") +
-                           (o.delivered ? ", weapons delivered" : "") + ".";
+        std::string text = std::string(MissionKindName(p.kind)) + " '" + p.name + "' on " + p.target_label + ": " +
+                           (p.Missiles() > 0 ? std::to_string(o.missiles_downed.size()) + " of " + std::to_string(p.Missiles()) + " missiles shot down"
+                                             : "lost " + std::to_string(lost) + " of " + std::to_string(p.Aircraft())) +
+                           (o.aborted ? ", turned back" : "") + (o.delivered ? ", weapons delivered" : "") + ".";
         for (const std::string& n : o.notes) text += " " + n + ".";
         Log("result", "result", text, false);
         if (observe) ObserveRaid(p, o, lost);
@@ -927,6 +1035,7 @@ private:
         r.sigma_m = sigma_m;
         r.exists = 0.9;
         r.label = Label(i);
+        r.move_mps = o.move_mps;
         const DefenceDef* d = &o.defence;
         if (o.decoy) {
             const TheatreObject& pb = data_.theatre.objects[static_cast<std::size_t>(player_)];
@@ -938,6 +1047,8 @@ private:
             r.threat_low = d->low_cover;
             r.threat_medium = d->medium_cover;
             r.threat_radar = d->radar;
+            r.threat_channels = d->channels;
+            r.threat_max_target_mps = d->max_target_mps;
         }
         return r;
     }
@@ -951,13 +1062,8 @@ private:
         return o.name;
     }
     static std::string SystemName(const std::string& s) {
-        if (s == "osa") return "SA-8 battery";
-        if (s == "s125") return "SA-3 battery";
-        if (s == "s75") return "SA-2 site";
-        if (s == "kub") return "SA-6 battery";
-        if (s == "strela10") return "SA-13 platoon";
-        if (s == "aaa") return "AAA";
-        return s + " battery";
+        const AirDefenceSystem* sys = FindAirDefenceSystem(s);
+        return sys != nullptr ? std::string(sys->label) : s + " battery";
     }
     std::string NearestPlace(const Vec3& p) const {
         double best = 1e18;
@@ -985,8 +1091,16 @@ private:
         const TuningTable& tune = data_.tuning;
         const int i = data_.theatre.IndexOf(id);
         if (i < 0 || seconds <= 0.0) return;
-        if (DistanceToFront(truth_[static_cast<std::size_t>(i)].pos) > in.elint_reach_m) return;
-        const double sigma = in.elint_best_m + in.elint_k_m / std::sqrt(std::max(1.0, seconds));
+        // A faction with stand-off ELINT aircraft hears farther and fixes finer while one is on station; without, its
+        // ground stations alone (docs/air_war/11_SUPPORT.md).
+        double reach = in.elint_reach_m, fine = 1.0;
+        if (support_.has_elint_aircraft) {
+            const double without = tune.Get("support.elint_reach_without");
+            reach *= without + (1.0 - without) * support_.elint;
+            fine = tune.Get("support.elint_sigma_without") - (tune.Get("support.elint_sigma_without") - 1.0) * support_.elint;
+        }
+        if (DistanceToFront(truth_[static_cast<std::size_t>(i)].pos) > reach) return;
+        const double sigma = (in.elint_best_m + in.elint_k_m / std::sqrt(std::max(1.0, seconds))) * fine;
         const bool battery = i == player_;
         if (battery && !dummies_.empty() && !posture_.decoy_mode.empty() && posture_.dummies > 0 &&
             rng_.Chance(tune.Get("intel.ghost_fix_chance"))) {
@@ -1192,6 +1306,20 @@ private:
         }
         politics_.support = Clamp01(politics_.support - tune.Get("politics.support_per_excess_loss") * excess);
         Events();
+        // The build-up: squadrons reach the theatre (docs/air_war/12_FORCES.md).
+        int arrived = 0;
+        for (std::size_t i = 0; i < squadrons_.size() && i < f.squadrons.size(); ++i) {
+            const int target = Arrived(f.squadrons[i], day_);
+            if (target > squadrons_[i].total) {
+                arrived += target - squadrons_[i].total;
+                squadrons_[i].total = target;
+            }
+        }
+        if (arrived > 0) {
+            reinforcements_ += arrived;
+            Log("buildup", "logistics", std::to_string(arrived) + " more aircraft arrive in theatre", false);
+        }
+        support_sorties_ += support_.sorties;
         // Logistics.
         double repl = f.logistics.replacements_per_day;
         for (SquadronState& s : squadrons_) {
@@ -1203,6 +1331,9 @@ private:
             }
         }
         arm_stock_ += f.logistics.arm_resupply_per_day;
+        for (auto& m : missile_stock_) {
+            if (const AircraftType* a = f.Aircraft(m.first)) m.second += a->resupply_per_day;
+        }
         // Careers.
         Careers(excess);
         // Stress eases.
@@ -1301,6 +1432,12 @@ private:
             r.played = p.played;
             observed_.push_back(r);
         }
+        const bool first_arms = patterns_.arm_attacks == 0;
+        patterns_.arm_attacks += static_cast<int>(o.radars_killed.size() + o.radars_suppressed.size());
+        if (first_arms && patterns_.arm_attacks > 0) {
+            Log("own_intel", "regiment", "The enemy has fired anti-radiation missiles at our radars: the regiment orders the "
+                                         "batteries to the ARM drill (least emission, silence after its signs).", true);
+        }
         ++patterns_.packages;
         ++patterns_.by_part[static_cast<int>(p.part)];
         ++patterns_.by_entry[p.entry];
@@ -1310,7 +1447,11 @@ private:
             if (fl.role == FlightRole::Decoy && a != nullptr && !a->drone) ++patterns_.feints;
             if (fl.role == FlightRole::Decoy && a != nullptr && a->drone) ++patterns_.decoy_waves;
         }
-        if (TouchesPlayer(p) || p.played) {
+        if ((TouchesPlayer(p) || p.played) && p.Missiles() > 0) {
+            Log("own_intel", "warning net", std::to_string(p.Missiles()) + " cruise missiles from " + p.entry + " at " +
+                                                FormatHour(p.tot_h, data_.theatre.start_hour) + ", " + std::to_string(o.missiles_downed.size()) +
+                                                " shot down" + (o.delivered ? "" : ", none reached its target") + ".", true);
+        } else if (TouchesPlayer(p) || p.played) {
             Log("own_intel", "warning net", std::to_string(p.Aircraft()) + " aircraft from " + p.entry + " at " +
                                                 FormatHour(p.tot_h, data_.theatre.start_hour) + " (" + DayPartName(p.part) + "), " +
                                                 std::to_string(lost) + " shot down" + (o.delivered ? "" : ", no bombs on target") + ".", true);
@@ -1379,9 +1520,11 @@ private:
     // it was wrecked, and comes back at `repair.restored_function`, a makeshift that the field repair then completes.
     void Repair(double dt) {
         const double restored = data_.tuning.Get("repair.restored_function");
+        const double needs_supply = data_.tuning.Get("logistics.repair_needs_supply");
         for (std::size_t i = 0; i < truth_.size(); ++i) {
             const TheatreObject& o = data_.theatre.objects[i];
             ObjectState& st = truth_[i];
+            if (o.kind == ObjectKind::Troops && st.supply < needs_supply) continue;  // out of stocks, nothing is mended
             if (st.function < 1.0 && o.repair_h > 0.0) {
                 if (st.function <= 0.0 && st.wrecked_h >= 0.0) {
                     if (now_h_ + dt >= st.wrecked_h + o.repair_h) st.function = restored;
@@ -1403,6 +1546,18 @@ private:
             const bool player = static_cast<int>(i) == player_;
             const double every = player ? posture_.relocate_every_h : o.relocate_h;
             if (every <= 0.0 || now_h_ - st.last_moved_h < every || st.function <= 0.0) continue;
+            if (!player && !o.prepared.empty()) {
+                // To another of its prepared positions, none of them within 8 km of the enemy's front.
+                std::vector<Vec3> options;
+                for (const Vec3& q : o.prepared) {
+                    if (Dist2d(q, st.pos) > 1.0 && DistanceToFront(q) >= 8000.0) options.push_back(q);
+                }
+                if (!options.empty()) {
+                    st.pos = options[static_cast<std::size_t>(rng_.Index(static_cast<int>(options.size())))];
+                    st.last_moved_h = now_h_;
+                }
+                continue;
+            }
             const double dist = player ? 5000.0 : o.relocate_m;
             for (int tries = 0; tries < 6; ++tries) {
                 const double a = rng_.Uniform(0.0, 6.283185307179586);

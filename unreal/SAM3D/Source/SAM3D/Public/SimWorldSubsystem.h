@@ -414,6 +414,103 @@ struct SAM3D_API FSimCrewMenuEntry
 	/** Why not, in Russian and English. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
 	FString Reason;
+
+	/** The radial menu's sector that holds it (an index into GetCrewMenuSectors; one past them: a line the menu's data
+	 *  misses, in a sector "Other" of its own). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	int32 Sector = INDEX_NONE;
+
+	/** Whom it is said to (an order: the seat that carries it out, or "crew"; a radio line: "battery"), for the menu's
+	 *  seat-first ring. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Doer;
+};
+
+/** A group on the radial crew menu's first ring: a sector of lines by subject (the crew data's "menu"), or, seat first,
+ *  whom the commander's orders are said to (docs/crew/15_TALK.md section 5). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimCrewMenuGroup
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Id;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Ru;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString En;
+};
+
+/** One place on the radial crew menu's ring as it is drawn: a group (a sector or a seat) or a line. Places are fixed:
+ *  the first at the top, then clockwise, 45 degrees apart; a line that can't be said now keeps its place, greyed. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimCrewMenuSlot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Ru;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString En;
+
+	/** Why it can't be said now; empty when it can. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Reason;
+
+	/** A group with none of this seat's lines: drawn faint, in its place. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bEmpty = false;
+
+	/** The lesson's line or the helper's pick, or the group that holds it. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bAdvised = false;
+
+	/** A line: its index in the menu's entries; INDEX_NONE for a group. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	int32 Entry = INDEX_NONE;
+};
+
+/** A target as one crewman knows it: what reached him through his own instruments and his ears (simcore CrewPicture),
+ *  never the truth. The "what I've heard" page (docs/crew/15_TALK.md section 6). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimHeardTarget
+{
+	GENERATED_BODY()
+
+	/** The number it was designated by (0: none heard). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	int32 Number = 0;
+
+	/** Its azimuth in thousandths ("05-40"; empty: not known), and whether it is a true azimuth (a designation's). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Azimuth;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bTrueAzimuth = false;
+
+	/** Range (km) and height (m), negative when not known. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	double RangeKm = -1.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	double HeightM = -1.0;
+
+	/** How long ago he learnt it, and from what ("scope", "told by Senior operator", "radio"). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	double AgeSeconds = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	FString Source;
+
+	/** Answered the IFF or reported a friend; asked and didn't answer. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bFriendly = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Crew")
+	bool bNoReply = false;
 };
 
 /** One of the battery's other launchers in the fight (battery_fire.hpp). */
@@ -542,6 +639,13 @@ struct SAM3D_API FSimMissionSeat
 	/** Whoever sits here gives the orders (the crew data's commander_seat): the game's "in command" half. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	bool bCommands = false;
+
+	/** The crewman in it and what he does (data/crew/<system>_crew.json), for the menu's choice of who to play. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	FString Title;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FString> Duties;
 };
 
 /** A vehicle a mission can start in: one for a scenario, the Osa and the PU-12M in a battery link. */
@@ -1082,9 +1186,34 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
 	bool IsCrewTaskDone(const FString& TaskId) const;
 
-	/** The crew menu for a seat: the orders of the crew data at the commander's seat, else the seat's own reports. */
+	/** The crew menu for a seat, in its sectors' order: at the commander's seat the orders of the crew data, what he says
+	 *  on the air himself and the warnings; at any other the seat's own reports and warnings. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	TArray<FSimCrewMenuEntry> GetCrewMenu(const FString& Station) const;
+
+	/** The radial crew menu's sectors (the crew data's "menu"), in their fixed places. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	TArray<FSimCrewMenuGroup> GetCrewMenuSectors() const;
+
+	/** The commander's seat-first ring: the crew, each seat, the battery (an entry's Doer is one of these ids). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	TArray<FSimCrewMenuGroup> GetCrewMenuDoers() const;
+
+	/** The player's quick replies at his seat (docs/crew/15_TALK.md section 5): "ack" «Есть!», "done" «Выполнено!»,
+	 *  "say_again" «Повторите!» (the last line said to him is said again). False with OutWhy when there is nothing to
+	 *  reply to. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	bool PlayerReply(const FString& Station, const FString& Reply, FString& OutWhy);
+
+	/** What a heard line's abbreviations and azimuths mean, in English ("" when nothing needs explaining): the helper's
+	 *  aid under the subtitles (simcore GlossLine). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Crew")
+	FString GlossLine(const FString& Ru) const;
+
+	/** What a seat's crewman knows of the air in the last MaxAgeSeconds, newest first: his own picture, from his
+	 *  instruments and what he heard (the "what I've heard" page). */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
+	TArray<FSimHeardTarget> GetSeatPicture(const FString& Station, double MaxAgeSeconds = 300.0) const;
 
 	/** A prepared position's works (roadmap 7.6): the emplacements and nets at the battery's places (also on a client). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Battery")
@@ -1129,9 +1258,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	ESimPlayerActionResult PlayerSetControl(const FString& ControlId, int32 Position);
 
-	/** The player turning a hand wheel. False if its lock is closed or it isn't a wheel. */
+	/** The player turning a hand wheel. False if its lock is closed, the equipment turns it now, or it isn't a wheel. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool PlayerTurnWheel(const FString& ControlId, double Value);
+
+	/** Why the equipment turns this hand wheel itself now (the tracking servo, the elevation search, ПОЛУАВТОМАТ), or ""
+	 *  if a hand turns it: a drag on it then does nothing. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetWheelDriven(const FString& ControlId) const;
+
+	/** Why the player's last wheel turn did nothing ("Hands off: ...", "Locked: ...", "At its stop ..."), or "" if it
+	 *  turned. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	FString GetWheelRefusal() const { return LastWheelRefusal; }
 
 	/** Judge the player's actions against a procedure of the console; empty = free play. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
@@ -1402,6 +1541,23 @@ public:
 	/** A document kept in the cabin (a cabin display of kind document): its lines of text. */
 	TArray<FString> GetDocumentLines(const FString& Document) const;
 
+	/** The radiotelephonist's journal by hand (simcore/radio_journal.hpp): his pencil on the page (the oldest message he
+	 * heard becomes the line he writes), a digit into its box, rub out, the next box (Step -1: the one before), the line done
+	 * (bBrief: the number and the time only). Only the journal keeper's seat held by the player; a local scenario (not yet
+	 * over the network). */
+	bool JournalBegin(const FString& Role);
+	bool JournalType(const FString& Role, int32 Digit);
+	bool JournalRub(const FString& Role);
+	bool JournalNextBox(const FString& Role, int32 Step);
+	bool JournalFinish(const FString& Role, bool bBrief);
+	/** A line is being written in the journal now. */
+	bool IsJournalDrafting() const;
+	/** The line being written: its time and who passed it (Lead), its printed words (one more than the boxes), each box's
+	 * digits so far and its width in digits, the box the pencil is on. False when no line is being written. */
+	bool GetJournalDraft(FString& Lead, TArray<FString>& Words, TArray<FString>& Typed, TArray<int32>& Widths, int32& Box) const;
+	/** The seat that keeps the post's radio journal ("" none). */
+	FString GetJournalKeeper() const;
+
 	/** The cabin layout of the scenario's own vehicle, relative to the data folder (cabins/<its system>.json), or "" if
 	 *  there is none. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
@@ -1475,6 +1631,7 @@ public:
 
 private:
 	FString ResolveDataDirectory() const;
+	static void StopCesiumSplatSubsystem();
 	void RunDemoFireControl();
 	void BroadcastEvents();
 	void BroadcastNewDebriefEntries();
@@ -1487,6 +1644,9 @@ private:
 	/** Where the battery (the player's vehicle) is, in ENU. */
 	simcore::Vec3 BatteryCentreEnu() const;
 	const simcore::LocalFrame* ActiveFrame() const;
+
+	/** Why the player's last wheel turn was refused (simcore's ScenarioRunner::SeatTurn). */
+	FString LastWheelRefusal;
 
 	// Demo mode.
 	TUniquePtr<simcore::World> SimWorld;

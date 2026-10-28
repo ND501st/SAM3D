@@ -20,7 +20,8 @@ The PU-12M has no loudspeaker (`flak11` signals schematic). What a crewman knows
 | RK-1U: ПЕРЕДАЧА and ПРИЕМ rotaries, ВЫКЛ / Р-123 / Р-111 / Р-407 / ПРОВОД, and С-23 / АСПД-У toggles: the data path | `rwd_mb3` (photograph) | 1 |
 | Boxes by seat: PVS-2 squad leader (front right), PVS-3 driver (front left), PVS-1 radiotelephonist (rear left, with FuG-3 R-111, FuG-4 and RK-1U), RTK-1 battery commander (with FuG-2 and FuG-5) | `flak11` (1990 layout drawing), `rwd_mb3` captions | 1 |
 | **Correction:** FuG-2 (the covered unit's net) stands beside the commander, FuG-4 (the battery net) at the radiotelephonist's table: SAM3D had them the other way round | same | 1 |
-| The operator-plotter has no box or headset in any source; he "takes the signals and reports on targets from the radiotelephonist and plots them" | `rwd_mb3`, `pvo_bu_x_1984` art. 23 | 1 |
+| The operator-plotter has no box or headset in any source; he "takes the signals and reports on targets from the radiotelephonist and plots them", by no stated means. **SAM3D:** a second headset on PVS-1 (the reading of `docs/research/PLOTTING_BOARD_2026-10.md`: voice nets put plotters on headphones; FuG-1 is named for the plotters) | `rwd_mb3`, `pvo_bu_x_1984` art. 23, `flak11` | 1 / SAM3D |
+| The radiotelephonist takes and writes into the journal every radiogram, signal, report and designation with the time he took it, and reports them to the commander | `pvo_bu_x_1984` art. 24; `pvo_bu_ix_1984` App. 7 (the columns) | 1 |
 | Nets: FuG-1 air picture (designation net no. 2, the plotters), FuG-2 covered unit, FuG-3 R-111 the SAM regiment's command net, FuG-4 the battery's command net, FuG-5 R-407 the automated fire control (telecode); the ČSLA reads FuG-3/5 the other way (recorded, not used) | `flak11` | 1 |
 | FuG-2 (20-27 MHz) and FuG-4 (37-51.5 MHz) share one antenna through a diplexer | `flak11` schematic | 1 |
 | Every net has a main station (the senior commander's); call, answer, confirm; no answer in 3 min: repeat, three times, then report; checks and passwords only on order | `rrs_1986` | 1 |
@@ -112,7 +113,9 @@ An NPC who must talk on another channel turns his box to it (1 s), talks and tur
 Every producer asks the router who hears it, so nothing reaches anyone without a path:
 * the air-picture reports reach the plotter's queue only through a seat hearing FuG-1 who reads them out;
 * the regiment's voice orders count only when someone hears FuG-3 (and are understood once read against ПТ-1);
-* the telecode reaches the ASPD-U only through the RK-1U's ПРИЕМ on Р-407 (or ПРОВОД, a telecode line laid);
+* the telecode reaches the ASPD-U only through the RK-1U's ПРИЕМ on Р-407 (or ПРОВОД, a telecode line laid: the scenario's
+  `post.regiment.telecode_wire`); the post's own telecode goes out only through ПЕРЕДАЧА on Р-407 (the set reaching the
+  regiment's receiver in duplex) or ПРОВОД, with the DTP set (a transmitting post, `telecode_sending`);
 * a designation goes out only from a commander whose RTK-1 talks on РСТ-4 on a set that can transmit; the launchers'
   reports reach the IT boards only when someone hears FuG-4;
 * in the Osa, the commander hears the battery net only on A-1 Р-123; he reads a designation back on the net and passes
@@ -154,6 +157,11 @@ raising the lever (RTK-1) or taking the handset (`ta57.handset`, the Osa's at a 
 emission and no jamming: the commander may designate or check by line, as a veteran describes the night checks
 (`airbase_ek32_2012`).
 
+The coupled radar's line is the service line in its cable (the *Dienstverbindung* of the 1984 GDR handbook's ASPD figure,
+`flak11` PU12-0). Its crew ring the post when their radar goes off the air (the scenario's `post.radar.outages`: the ARM
+drill, a fault) and when it is back («Станция выключена. Работу прекратил.», «Станция включена, работаю.»). Without the
+line laid the post learns it only from its tube going empty (`ScenarioRunner::UpdateRadarLine`).
+
 ### 2.9 Talk tables (ПТ-1, ПТ-2)
 
 `data/command/talk_tables.json`: **ПТ-1**, the talk table of the regiment's command net (three-digit groups for readiness
@@ -173,9 +181,39 @@ then the R-407's telecode channel and the RTK-1's lines. The squad leader hands 
 meanings, ПТ-2 as the signal table, each signal with its visible sign (`bstudy_tactics`: «Воздух» a green flare, «Отбой» a
 white one). Everything on them is in Russian, as issued; passwords and the talk tables' keys are not modelled.
 
+### 2.9a The radiotelephonist's journal
+
+`simcore/radio_journal.hpp`: every message the post's radios carry that the radiotelephonist hears (the air picture,
+the regiment's net, the battery net, the covered unit's) waits in his head until he writes it into the journal open on
+his table (`pvo_bu_x_1984` art. 24, `pvo_bu_ix_1984` App. 7: the time, the net, who, what). Writing one takes
+`journal_write_s` at his speed, one at a time, now and then a digit wrong (his tier's `slip_chance`); one not written
+within `journal_remember_s` is lost (the debrief logs it). A player takes it down as **dictation**: a click on the page
+holds it before his eyes (the camera locked on it); the oldest message he heard stands on its line with its words
+printed and a box for each group of digits, which he fills from memory (digits, Backspace, Tab, Enter; S the short form,
+the number and the time only, `rrs_1986` art. 154; Esc puts the page down). What he writes is what the page says. The
+page is the cabin's document `radio_journal`, the only record: the screen's radio lines are a subtitle of what is being
+said and fade in seconds; anyone may click the page to read it.
+
+The plotter goes to the page only for a report he missed: one that came while PVS-1 was off FuG-1, or (an NPC) one his
+tier's `miss_chance` let slip. He plots it as the page has it (`CommandPost::FromWords`): a wrong square digit puts the
+mark in the wrong square, a wrong number makes a second track under that number with no aircraft behind it, a short
+entry or an empty box can't be plotted at all. A report read to him from the page carries the same errors. A player
+plotter's mouse wheel offers the page's numbers not yet on the board. The debrief sets the journal against what was said
+(digits as said, entries not as said, lost) and counts the marks plotted from the page and those it had wrong.
+
+**Beyond the fight** (project owner, 22 Oct 2026; `docs/command/01_PRINCIPLES.md` 9). The journal is the battery's record
+of the fight, and the after-action report is to be compiled from it, not from the truth (`docs/command/07_IMPLEMENTATION_PLAN.md`
+P9): the raids' times, routes and sizes as written, the ones never written missing. The regiment's and the battery's
+analysis and planning are built on those reports, so the radiotelephonist's accuracy carries into the next raid: the
+corridors the analysts name, the ambush positions, the emission policy. It is critical to the after-action gameplay
+loop, and the regiment's checks of the record feed the crew's rating.
+
 ### 2.10 The plotter's voice
 
-The operator-plotter has no box: he speaks in the cabin, beside the commander. He reports aloud (`pvo_bu_x_1984` art. 23)
+The operator-plotter's headset is a second one on PVS-1 (`second_station` on the box): he hears FuG-1 while the
+radiotelephonist's box is on it, and the intercom. Turned to the R-111 for an order, PVS-1 takes the picture from him
+until it is turned back; meanwhile the radiotelephonist writes what he hears, and reads a written report to the plotter
+from the page (`air_report`, the fallback). He reports (`pvo_bu_x_1984` art. 23)
 each new target as he writes it (number, bearing and range from the post, height, identity, size), a turn, and a target
 lost; the commander decides (art. 17). An NPC plotter says each at once; a player's wait in his reports menu, filled in,
 and go stale after `plot_stale_s`. The NPC commander knows a board target from the plotter's call, or only on his next look

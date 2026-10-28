@@ -107,6 +107,7 @@ inline bool LoadEmLinkDef(const std::string& data_dir, const std::string& librar
     }
     const em::Environment env;
     for (const auto& want : {std::make_pair(&search_id, em::RadarRole::Search), std::make_pair(&track_id, em::RadarRole::Track)}) {
+        if (want.first->empty() && want.second == em::RadarRole::Track) continue;  // a search radar alone (a radar cabled to a post)
         const int idx = lib.Radar(*want.first);
         if (idx < 0) return fail("radar '" + *want.first + "' is not in " + library_file);
         em::RadarDef d = lib.radars[static_cast<std::size_t>(idx)];
@@ -172,9 +173,10 @@ public:
         unit.position = Antenna();
         if (def.unit_rcs_m2 > 0.0) unit.rcs = em::RcsModel{def.unit_rcs_m2, def.unit_rcs_m2, def.unit_rcs_m2};
         unit_id_ = world_.AddPlatform(unit);
+        // No tracking radar: a search radar on its own (a radar cabled to a command post: its "unit" is the radar).
         search_ = world_.AddRadar(unit_id_, def.search_radar, false);
-        track_ = world_.AddRadar(unit_id_, def.track_radar, false);
-        if (search_ == 0 || track_ == 0) {
+        track_ = def.track_radar.empty() ? 0 : world_.AddRadar(unit_id_, def.track_radar, false);
+        if (search_ == 0 || (track_ == 0 && !def.track_radar.empty())) {
             error_ = "radar not found in the library";
             return;
         }
@@ -182,7 +184,7 @@ public:
         // reports from elsewhere (the battery's PU-12, roadmap phase 7 / E4).
         node_ = world_.AddNode("Own unit", unit_id_, em::Side::Red);
         world_.AttachSensor(node_, search_);
-        world_.AttachSensor(node_, track_);
+        if (track_ != 0) world_.AttachSensor(node_, track_);
         if (em::RadarState* sr = Radar(search_)) sr->iff_interrogating = false;  // until the console interrogates
         for (const EmDummyDef& dm : def.dummies) {
             const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
@@ -893,9 +895,16 @@ public:
     // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates. Chaff echoes are not drawn here yet.
-    bool EchoVisible(const std::string& target_id) {
+    bool EchoVisible(const std::string& target_id) { return EchoInTrackBeam(PlatformOf(target_id)); }
+    // The same for an anti-radiation missile in flight (its id from ArmsInFlight): its small echo on the indicators.
+    bool ArmEchoVisible(int arm_id) {
+        for (const em::ArmState& a : world_.Scene().arms) {
+            if (a.id == arm_id) return a.outcome == em::ArmOutcome::Flying && EchoInTrackBeam(a.platform_id);
+        }
+        return false;
+    }
+    bool EchoInTrackBeam(int pid) {
         em::RadarState* r = Radar(track_);
-        const int pid = PlatformOf(target_id);
         if (r == nullptr || !r->on || pid == 0) return false;
         em::EmScene& s = world_.Scene();
         const em::Platform* p = s.FindPlatform(unit_id_);

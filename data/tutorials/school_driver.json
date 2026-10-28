@@ -71,9 +71,9 @@
     },
     {
       "id": "report_halt", "title": "Report it: «Стою!»", "report": "halted",
-      "lines": ["Tell the crew you have stopped: open your reports with O and pick «Стою!» (Halted!)."],
+      "lines": ["Tell the crew you have stopped: open your reports with Caps Lock and pick «Стою!» (Halted!)."],
       "why": "Nobody in the back can see out: the crew only knows the vehicle has halted because you say so.",
-      "hint": "O: your reports, then the highlighted line's number."
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "order_k_boyu", "chapter": "Action stations (К бою)", "title": "The commander: «К бою!»",
@@ -98,8 +98,8 @@
     },
     {
       "id": "report_power", "title": "Report it: «Питание подано!»", "report": "power_on",
-      "lines": ["Tell the crew the power is on: O, then «Питание подано!» (Power on!). The operator switches the equipment on when he hears it."],
-      "hint": "O: your reports, then the highlighted line's number."
+      "lines": ["Tell the crew the power is on: Caps Lock, then «Питание подано!» (Power on!). The operator switches the equipment on when he hears it."],
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "arrest", "title": "Erect the gyro: АРРЕТИР.", "control": "gyro.arrest", "position": 1, "procedure": "power_up",

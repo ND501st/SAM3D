@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -215,6 +216,23 @@ struct RaidAircraft {
     double strike_power = 0.0;
     bool officer = false;
     double appear_s = 0.0;
+    Profile profile = Profile::Low;  // its flight's (the defences' cover: low, medium)
+    double evasion = 0.0;            // the type's (AircraftType::evasion)
+    bool missile = false;            // a cruise missile: it strikes where it arrives, and is never a crew lost
+    double speed_mps = 0.0;          // the type's cruise speed (a defence can't take what is too fast for it)
+    double hit_chance = 0.0;         // a missile's own accuracy (0: strike.hit_chance)
+};
+
+// One of our other air defences whose reach overlaps the scenario. As the raid's aircraft pass through its zone it takes
+// its kill chances at them by the abstract resolver's rule (mission_bridge.hpp): a played raid meets the neighbours
+// an abstract one would (17.1's first form; they are not drawn yet).
+struct RaidNeighbour {
+    std::string id;     // theatre object
+    std::string name;
+    Vec3 enu;           // scenario ENU
+    DefenceDef defence;
+    double function = 1.0;
+    int missiles = -1;  // ready rounds (-1: guns)
 };
 
 struct RaidManifest {
@@ -232,6 +250,13 @@ struct RaidManifest {
     std::vector<RaidAircraft> aircraft;
     std::vector<double> flight_exit_h;   // per flight: when it leaves the scenario's circle (-1e18: never in it)
     std::vector<bool> flight_in;         // per flight: some of it is in the scenario
+    std::vector<RaidNeighbour> neighbours;
+    // The package against the neighbours' radars and optics (resolve.hpp's rule).
+    double sead_supp = 0.0;    // PackageSuppression
+    double jam = 0.0;          // attrition.jamming with a jammer, else 0
+    double airmanship = 0.5;   // PackageAirmanship
+    bool night = false;
+    bool poor_weather = false;
 };
 
 struct RaidScenario {
@@ -372,7 +397,8 @@ public:
             switch (p.flights[static_cast<std::size_t>(cl.flight)].role) {
                 case FlightRole::Strike:
                 case FlightRole::Dead:
-                case FlightRole::Helicopter: return 0;
+                case FlightRole::Helicopter:
+                case FlightRole::Missile: return 0;
                 case FlightRole::Sead:
                 case FlightRole::Hunter: return 1;
                 case FlightRole::Decoy: return 2;
@@ -414,7 +440,7 @@ public:
                 json::Value t = Obj();
                 Put(t, "id", Str(tid));
                 Put(t, "name", Str(fl.callsign + " " + std::to_string(k + 1) + ": " + a->name + " (" + FlightRoleName(fl.role) + ")"));
-                Put(t, "type", Str(a->helicopter ? "Air+Rotorcraft" : "Air+FixedWing"));
+                Put(t, "type", Str(a->missile ? "Air+Missile" : (a->helicopter ? "Air+Rotorcraft" : "Air+FixedWing")));
                 Put(t, "class", Str(a->target_class));
                 if (fmt.model) Put(t, "model", Str(a->id));
                 Vec3 start = cl.pts[0] + shift;
@@ -436,7 +462,7 @@ public:
                 Put(t, "waypoints", wps);
                 const double route_len = RouteLength(cl.pts);
                 const double dt_s = (cl.t_h.back() - cl.t_h.front()) * 3600.0;
-                const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, 600.0) : a->cruise_mps;
+                const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, std::max(600.0, a->cruise_mps * 1.2)) : a->cruise_mps;
                 Put(t, "speed_mps", Num(std::round(speed)));
                 Put(t, "max_turn_rate_deg_s", Num(a->max_turn_deg_s));
                 Put(t, "rcs_m2", Num(a->rcs_m2));
@@ -459,12 +485,12 @@ public:
                     json::Value b = Obj();
                     Put(b, "kind", Str("terrain_following"));
                     Put(b, "agl_m", Num(std::round(std::max(5.0, cl.agl[0]))));
-                    Put(b, "max_climb_mps", Num(a->helicopter ? 8 : 60));
+                    Put(b, "max_climb_mps", Num(a->helicopter ? 8 : 120));  // a jet's pop-up climbs at 100 m/s and more
                     Put(b, "lookahead_s", Num(6));
                     Put(t, "behaviour", b);
                 }
                 const bool has_rwr = !a->rwr_em.empty();
-                if (!a->drone) {
+                if (!a->drone && !a->missile) {
                     json::Value e = Obj();
                     if (a->helicopter) {
                         Put(e, "on", Str("lock"));
@@ -478,7 +504,8 @@ public:
                 }
                 if (fmt.target_decoy && a->drone) Put(t, "decoy", Bool(true));
                 const int arms = a->arms * (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter ? 1 : 0);
-                const bool em_arms = fmt.em && fmt.target_rwr && fmt.target_arms && has_rwr && arms > 0 && !a->arm_em.empty();
+                const std::string& arm_em = a->ArmEm(d.theatre.year);
+                const bool em_arms = fmt.em && fmt.target_rwr && fmt.target_arms && has_rwr && arms > 0 && !arm_em.empty();
                 if (fmt.em && fmt.target_rwr && has_rwr) {
                     Put(t, "rwr", Str(a->rwr_em));
                     for (const std::string& lib : f.em_libraries) {
@@ -489,7 +516,7 @@ public:
                 // where its intelligence has the battery (the flight's aim), within its launch range.
                 if (em_arms) {
                     json::Value ar = Obj();
-                    Put(ar, "weapon", Str(a->arm_em));
+                    Put(ar, "weapon", Str(arm_em));
                     Put(ar, "count", Num(arms));
                     Put(ar, "launch_range_km", Num(std::round(a->arm_range_m / 100.0) / 10.0));
                     Put(ar, "min_range_km", Num(std::min(3.0, 0.5 * a->arm_range_m / 1000.0)));
@@ -522,7 +549,8 @@ public:
                 ra.helicopter = a->helicopter;
                 ra.drone = a->drone;
                 ra.has_release = cl.release && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
-                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce);
+                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
+                                                fl.role == FlightRole::Missile);
                 ra.release_enu = cl.release_pt + shift;
                 ra.aim_enu = to_scen(fl.aim_pos + moved_by(fl.aim_key));
                 ra.arms = arms;
@@ -532,6 +560,11 @@ public:
                 ra.strike_power = a->strike_power * p.load_factor;
                 ra.officer = fl.officer >= 0 && k == 0;
                 ra.appear_s = appear_s;
+                ra.profile = fl.profile;
+                ra.evasion = a->evasion;
+                ra.missile = a->missile;
+                ra.speed_mps = a->cruise_mps;
+                ra.hit_chance = a->hit_chance;
                 m.aircraft.push_back(ra);
                 ++n_targets;
                 end_s = std::max(end_s, (cl.t_h.back() - m.start_h) * 3600.0);
@@ -546,6 +579,7 @@ public:
         Put(root, "description", Str(Briefing(c, p)));
         Put(root, "source", Str("sam3d"));
         Put(root, "confidence", Str("estimate"));
+        Put(root, "setting", Str("war"));
         Put(root, "notes", Str("Generated by simcore/air_war/raid_scenario.hpp from campaign day " + std::to_string(c.Day()) +
                                ". Fictional; every aircraft number is a PLACEHOLDER (data/air_war/). The NPC commanders run the crew and the battery."));
         Put(root, "seed", Num(static_cast<double>(1 + (p.id * 7919) % 100000)));
@@ -575,6 +609,25 @@ public:
         json::Value radars = Arr();
         bool pu12_blind = true;
         bool any_regiment = false;
+        // The warning nets: of each kind, the nearest that still works within 150 km (else the nearest, out of action):
+        // the radar company the battery is nearest, the neighbouring battery on the radio. The rest of a net carries on
+        // when one post is lost.
+        std::map<std::string, std::size_t> warning;
+        for (std::size_t i = 0; i < th.objects.size(); ++i) {
+            const TheatreObject& o = th.objects[i];
+            if (o.c2_source.empty() || o.c2_source == "pu12" || o.player) continue;
+            const ObjectState& st = c.Truth()[i];
+            const double dist = to_scen(st.pos).HorizontalLength();
+            if (dist >= 150000.0) continue;
+            const auto it = warning.find(o.c2_source);
+            if (it == warning.end()) {
+                warning[o.c2_source] = i;
+                continue;
+            }
+            const ObjectState& best = c.Truth()[it->second];
+            const bool works = st.function > 0.3, best_works = best.function > 0.3;
+            if ((works && !best_works) || (works == best_works && dist < to_scen(best.pos).HorizontalLength())) it->second = i;
+        }
         for (std::size_t i = 0; i < th.objects.size(); ++i) {
             const TheatreObject& o = th.objects[i];
             const ObjectState& st = c.Truth()[i];
@@ -590,7 +643,8 @@ public:
                     pu12_blind = false;
                 }
             }
-            if (!o.c2_source.empty() && o.c2_source != "pu12" && e.HorizontalLength() < 150000.0) {
+            const auto chosen = warning.find(o.c2_source);
+            if (chosen != warning.end() && chosen->second == i) {
                 json::Value s = Obj();
                 Put(s, "id", Str(o.id));
                 Put(s, "type", Str(o.c2_source));
@@ -609,7 +663,23 @@ public:
                 Push(fallback, Str(o.id));
             }
             if (o.kind != ObjectKind::City && !o.player && !o.decoy && e.HorizontalLength() < clip) m.objects.push_back({o.id, e});
+            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 &&
+                e.HorizontalLength() < clip + o.defence.radius_m) {
+                RaidNeighbour nb;
+                nb.id = o.id;
+                nb.name = o.name;
+                nb.enu = e;
+                nb.defence = o.defence;
+                nb.function = st.function;
+                nb.missiles = st.missiles;
+                m.neighbours.push_back(nb);
+            }
         }
+        m.sead_supp = PackageSuppression(p, c.Staff(), tune);
+        m.jam = p.Has(FlightRole::Jammer) ? tune.Get("attrition.jamming") : 0.0;
+        m.airmanship = PackageAirmanship(p, c.Staff());
+        m.night = p.part == DayPart::Night;
+        m.poor_weather = c.WeatherNow() == Weather::Poor;
         if (!fallback.items.empty()) Put(c2, "fallback_order", fallback);
         if (!sources.items.empty()) Put(c2, "sources", sources);
         if (!radars.items.empty()) {
@@ -721,6 +791,28 @@ public:
         Put(root, "crew_commander", Str("npc"));
         Put(root, "battery_commander", Str("npc"));
         Put(root, "targets", targets);
+        // Our other air defences round the battery: drawn where they stand, plotted on the board. Their fire is the
+        // bridge's, except the regiment's other Osa batteries, which fight in the runner's battery fire model with the
+        // launchers that work and the missiles they have.
+        if (!m.neighbours.empty()) {
+            json::Value nbs = Arr();
+            for (const RaidNeighbour& nb : m.neighbours) {
+                json::Value v = Obj();
+                Put(v, "id", Str(nb.id));
+                Put(v, "name", Str(nb.name));
+                Put(v, "system", Str(nb.defence.system));
+                Put(v, "position", Pos(Vec3{nb.enu.x, nb.enu.y, 0.0}));
+                Put(v, "radius_km", Num(nb.defence.radius_m / 1000.0));
+                const int launchers = static_cast<int>(std::lround(4.0 * nb.function));
+                if (nb.defence.system == "osa" && launchers >= 1 && nb.missiles != 0) {
+                    Put(v, "fights", Bool(true));
+                    Put(v, "launchers", Num(std::min(4, launchers)));
+                    if (nb.missiles > 0) Put(v, "missiles", Num(std::min(24, nb.missiles)));
+                }
+                Push(nbs, v);
+            }
+            Put(root, "neighbours", nbs);
+        }
 
         // The warning our side gets, and the PU-12 without its radars.
         json::Value triggers = Arr();
@@ -756,17 +848,29 @@ public:
         }
         Put(root, "triggers", triggers);
         // The crew's orders from above, from what our side knows and the battery's posture: warned of decoys once our
-        // intelligence has seen the enemy use them; search in bursts when the battery keeps emission discipline.
-        if (fmt.doctrine && (c.DecoysExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2)) {
+        // intelligence has seen the enemy use them; the ARM drill once our radars have come under ARM attack; search in
+        // bursts when the battery keeps emission discipline. (The regiment's standing order to relocate after an ARM
+        // attack needs a battery that drives the vehicle, which a raid's battery, deployed in place, doesn't.)
+        if (fmt.doctrine && (c.DecoysExpected() || c.ArmsExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2)) {
             json::Value doc = Obj();
             if (c.DecoysExpected()) Put(doc, "tv_check", Bool(true));
-            if (posture.emcon_discipline >= 0.6 || posture.emission < 0.2) {
-                json::Value bursts = Obj();
-                Put(bursts, "on_s", Num(4));
-                Put(bursts, "off_s", Num(std::round(10.0 + 30.0 * posture.emcon_discipline)));
-                Put(doc, "search_bursts", bursts);
+            // The emission regime the combat order gives (docs/crew/16_EMISSION.md): the regiment's least emission once
+            // ARMs are expected, else the battery commander's bursts (2 turns on; off 10-40 s by the posture, in turns at
+            // the Osa's 33 rpm).
+            if (c.ArmsExpected() || posture.emcon_discipline >= 0.6 || posture.emission < 0.2) {
+                json::Value em = Obj();
+                if (c.ArmsExpected()) {
+                    Put(em, "regime", Str("arm"));
+                    Put(em, "from", Str("regiment"));
+                } else {
+                    Put(em, "regime", Str("limited"));
+                    Put(em, "on_turns", Num(2));
+                    Put(em, "off_turns", Num(std::max(2.0, std::round((10.0 + 30.0 * posture.emcon_discipline) * 33.0 / 60.0))));
+                }
+                Put(doc, "emission", em);
             }
-            Put(doc, "notes", Str("From the campaign: our intelligence's warning of decoys, and the battery's emission discipline."));
+            Put(doc, "notes", Str("From the campaign: our intelligence's warning of decoys, the ARM drill once our radars have been "
+                                  "attacked by ARMs, and the battery's emission discipline."));
             Put(root, "doctrine", doc);
         }
         if (fmt.environment) {

@@ -1302,13 +1302,13 @@
     {
       "id": "hv_off", "name": "Search transmitter off, the antenna turning (a burst ends)", "situational": true,
       "source": "sam3d", "confidence": "estimate",
-      "notes": "Senior operator. Emission discipline against direction-finding (scenario doctrine search_bursts): ВЫСОКОЕ off between bursts, the antenna turning on and the guard open, so the next burst is one switch (roadmap E6).",
+      "notes": "Senior operator. Emission discipline against direction-finding (the limited and arm regimes, docs/crew/16_EMISSION.md): ВЫСОКОЕ off between bursts, the antenna turning on and the guard open, so the next burst is one switch (roadmap E6).",
       "steps": [ { "control": "soc.hv", "position": 0, "description": "ВЫСОКОЕ ВЫКЛ, the SOC transmitter off" } ]
     },
     {
       "id": "hv_on", "name": "Search transmitter on again (a burst)", "situational": true,
       "source": "sam3d", "confidence": "estimate",
-      "notes": "Senior operator: the next burst of the search radar (doctrine search_bursts; video_osa: the search radar on for only two turns).",
+      "notes": "Senior operator: the next burst of the search radar (the limited and arm regimes; video_osa: the search radar on for only two turns).",
       "steps": [ { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, the SOC transmitter on", "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] } ]
     },
     {

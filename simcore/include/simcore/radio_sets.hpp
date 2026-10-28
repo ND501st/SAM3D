@@ -518,6 +518,13 @@ public:
         if (OnSpur(in.rx_mhz * 1.0e6, def_.rx_spurs_hz) || !DuplexClean(in)) return false;
         return distance_m <= RangeM(in);
     }
+    // The post's own telecode reaches the regiment's receiver (a transmitting post: flak11 PU12-0's figure): on, in
+    // duplex, the transmitter on the regiment's receive channel and off the spurs, in reach, the regiment on the air.
+    bool SendLink(const R407Inputs& in, double regiment_rx_hz, double distance_m, bool off_air) const {
+        if (!On(in) || in.mode != kR407Duplex || regiment_rx_hz <= 0.0 || off_air) return false;
+        if (std::fabs(in.tx_mhz * 1.0e6 - regiment_rx_hz) > HoldHz(in) || OnSpur(in.tx_mhz * 1.0e6, def_.tx_spurs_hz)) return false;
+        return distance_m <= RangeM(in);
+    }
     // The channel goes on to the ASPD-U on the 4-wire positions.
     static bool ToEquipment(const R407Inputs& in) { return in.lines == kR407FourWireIv || in.lines == kR407FourWireTv; }
 

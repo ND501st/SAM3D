@@ -506,32 +506,52 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     Steps(*r, 1.0);
     ConsoleData& c = r->Console();
     const std::string side = r->C2()->ListeningSet() == 0 ? "left" : "right";
-    HeadsetSound h = HeadsetSoundNow(*r);
+    HeadsetSound h = HeadsetSoundNow(*r, "commander");
     SC_EXPECT(h.on_radio && !h.squelched && !h.carrier);
     SC_EXPECT_NEAR(h.hiss, 0.35, 1e-12);
     c.panel.Set("radio." + side + ".squelch", 1);  // the suppressor: silence between transmissions
     Steps(*r, 0.5);
-    h = HeadsetSoundNow(*r);
+    h = HeadsetSoundNow(*r, "commander");
     SC_EXPECT(h.squelched && h.hiss == 0.0);
     // Our own transmission is a carrier on the net (and the sidetone): the hiss drops under it.
     c.panel.Set("radio." + side + ".squelch", 0);
     c.panel.Set("radio.chest", 1);
     Steps(*r, 1.0);
-    h = HeadsetSoundNow(*r);
+    h = HeadsetSoundNow(*r, "commander");
     SC_EXPECT(h.carrier);
     SC_EXPECT_NEAR(h.hiss, 0.05, 1e-12);
     // The call tone while ТОН. ВЫЗОВ is pressed.
     c.panel.Set("radio." + side + ".tone", 1);
     r->Step(0.5);
-    SC_EXPECT(HeadsetSoundNow(*r).tone);
+    SC_EXPECT(HeadsetSoundNow(*r, "commander").tone);
     Steps(*r, 2.0);
-    SC_EXPECT(!HeadsetSoundNow(*r).tone);
+    SC_EXPECT(!HeadsetSoundNow(*r, "commander").tone);
     // A1 on the intercom only: no set in his ears.
     c.panel.Set("radio.chest", 0);
     c.panel.Set("intercom.a1", 1);
     Steps(*r, 0.5);
-    h = HeadsetSoundNow(*r);
+    h = HeadsetSoundNow(*r, "commander");
     SC_EXPECT(!h.on_radio && h.hiss == 0.0);
+}
+
+SC_TEST("comms 7.7: only a seat whose box is on a set hears it: not the senior operator's A-3, the driver once his ПВ is on РС") {
+    auto r = Load(Text());
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("senior_operator", "player"));
+    Steps(*r, 1.0);
+    ConsoleData& c = r->Console();
+    SC_EXPECT(HeadsetSoundNow(*r, "commander").on_radio);  // A-1 on Р-123 from the start: the set hisses in his ears
+    HeadsetSound h = HeadsetSoundNow(*r, "senior_operator");
+    SC_EXPECT(!h.on_radio && h.hiss == 0.0 && !h.tone);  // A-3 has no switch: the intercom only
+    SC_EXPECT(!HeadsetSoundNow(*r, "driver").on_radio);  // ПВ on ВС
+    c.panel.Set("intercom.pv", 1);                       // ПВ on РС: the left set
+    Steps(*r, 0.5);
+    h = HeadsetSoundNow(*r, "driver");
+    SC_EXPECT(h.on_radio && h.hiss > 0.0);
+    c.panel.Set("headset.driver", 0);  // the headset off: nothing in his ears
+    Steps(*r, 0.5);
+    SC_EXPECT(!HeadsetSoundNow(*r, "driver").on_radio);
 }
 // Roadmap 7.8 / E4: a barrage jammer on the VHF band takes the PU-12's net (38.550 MHz, inside its 30-70 MHz) off the
 // air; the commander waits out the silence and changes to the early-warning site's net (25.375 MHz, below the band).

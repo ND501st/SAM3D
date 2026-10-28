@@ -15,6 +15,7 @@
 #include "Misc/Paths.h"
 #include "Engine/GameInstance.h"
 #include "SimAirCampaignSubsystem.h"
+#include "SimBasicModels.h"
 #include "SimCampaignHUD.h"
 #include "SimEntityActor.h"
 #include "SimMissionMenuHUD.h"
@@ -285,6 +286,15 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 	}
 	SpawnMissingEntityActors();
 	UpdatePositionWorks();
+	if (!bNeighboursSpawned && Sim->IsScenarioRunning())
+	{
+		SpawnNeighbourSites(Sim);
+	}
+	else if (bNeighboursSpawned && TimeSinceBeginPlay >= NextNeighbourGroundAt)
+	{
+		NextNeighbourGroundAt = TimeSinceBeginPlay + 1.0f;
+		GroundNeighbourSites(TimeSinceBeginPlay - NeighboursSpawnedAt >= 60.0f);
+	}
 	ShowStatus(Sim);
 	if (!MenuTestFolder.IsEmpty())
 	{
@@ -379,6 +389,143 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 #endif
 			SpawnedActors.Add(State.Id, Actor);
 		}
+	}
+}
+
+void ASimScenarioDirector::SpawnNeighbourSites(USimWorldSubsystem* Sim)
+{
+	const simcore::ScenarioRunner* Runner = Sim->GetScenarioRunner();
+	const simcore::scenery::ModelLibrary* Lib = FSimBasicModels::Library();
+	UWorld* MyWorld = GetWorld();
+	if (Runner == nullptr || Lib == nullptr || MyWorld == nullptr)
+	{
+		return;
+	}
+	bNeighboursSpawned = true;
+	NeighboursSpawnedAt = TimeSinceBeginPlay;
+	int32 Vehicles = 0;
+	const std::vector<std::pair<std::string, simcore::Vec3>> Fighting = Runner->NeighbourLaunchers();
+	for (const simcore::ScenarioNeighbour& Nb : Runner->Neighbours())
+	{
+		// An Osa battery that fights stands where its launchers fire from (the battery's combat formation); the others
+		// as their system's site.
+		std::vector<std::pair<std::string, simcore::Vec3>> Layout;
+		if (Runner->NeighbourFights(Nb.id))
+		{
+			for (const std::pair<std::string, simcore::Vec3>& L : Fighting)
+			{
+				if (L.first == Nb.id)
+				{
+					Layout.push_back({"osa_9a33", simcore::Vec3{L.second.x - Nb.position.x, L.second.y - Nb.position.y, 0.0}});
+				}
+			}
+		}
+		else
+		{
+			Layout = Lib->SiteLayout(Nb.system);
+		}
+		for (const std::pair<std::string, simcore::Vec3>& V : Layout)
+		{
+			const simcore::Vec3 Enu = Runner->GroundEnu(Nb.position.x + V.second.x, Nb.position.y + V.second.y);
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AActor* Site = MyWorld->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
+			if (Site == nullptr)
+			{
+				continue;
+			}
+			USceneComponent* Root = NewObject<USceneComponent>(Site, TEXT("Root"));
+			Site->SetRootComponent(Root);
+			Root->RegisterComponent();
+			// Each vehicle faces out from the site's centre (an S-75's launchers round its radar).
+			const double HeadingDeg = V.second.HorizontalLength() > 1.0 ? FMath::RadiansToDegrees(FMath::Atan2(V.second.x, V.second.y)) : 0.0;
+			const FVector At = Sim->ToUnreal(Enu);  // through the level's georeference where it has one (Cesium's X is east)
+			Site->SetActorLocationAndRotation(At, FRotator(0.0, Sim->HeadingToYawDeg(At, HeadingDeg), 0.0));
+			FSimBasicModels::Build(UTF8_TO_TCHAR(V.first.c_str()), Root);
+			NeighbourSites.Add(Site);
+			NeighbourSiteAt.Add(At);
+			NeighbourSiteGrounded.Add(false);
+			++Vehicles;
+		}
+	}
+	if (!Runner->Neighbours().empty())
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Neighbours: %d air defences near the scenario, %d vehicles drawn"),
+			static_cast<int32>(Runner->Neighbours().size()), Vehicles);
+	}
+}
+
+void ASimScenarioDirector::GroundNeighbourSites(bool bFirstMinuteOver)
+{
+	UWorld* MyWorld = GetWorld();
+	if (MyWorld == nullptr)
+	{
+		return;
+	}
+	int32 Grounded = 0;
+	for (int32 i = 0; i < NeighbourSites.Num(); ++i)
+	{
+		AActor* Site = NeighbourSites[i];
+		if (Site == nullptr || NeighbourSiteGrounded[i])
+		{
+			Grounded += Site != nullptr ? 1 : 0;
+			continue;
+		}
+		// A kilometre either way of the sim's ground: the real ground under a flat scenario, a map's under its own. A trace
+		// straight down a Cesium tile's seam can slip through, so a metre to each side too.
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SimNeighbourGround), false, Site);
+		const FVector At = NeighbourSiteAt[i];
+		for (const FVector& Side : {FVector::ZeroVector, FVector(100.0, 0.0, 0.0), FVector(-100.0, 0.0, 0.0), FVector(0.0, 100.0, 0.0), FVector(0.0, -100.0, 0.0)})
+		{
+			FHitResult Hit;
+			if (MyWorld->LineTraceSingleByChannel(Hit, At + Side + FVector(0.0, 0.0, 100000.0), At + Side - FVector(0.0, 0.0, 100000.0), ECC_Visibility, Params))
+			{
+				Site->SetActorLocation(FVector(At.X, At.Y, Hit.ImpactPoint.Z));
+				NeighbourSiteGrounded[i] = true;
+				++Grounded;
+				break;
+			}
+		}
+	}
+	if (Grounded == NeighbourSites.Num())
+	{
+		NextNeighbourGroundAt = TNumericLimits<float>::Max();  // all down (or none): no more traces
+		if (Grounded > 0)
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Neighbours: all %d vehicles on the level's ground"), Grounded);
+		}
+		return;
+	}
+	if (bFirstMinuteOver && !bNeighbourFallbackPlaced)
+	{
+		// The far ones' tiles may never load with collision: put each as far under or over the scenario's ground as the
+		// nearest one that found the level's (the globe's curve and the datum differ with the place), and keep trying.
+		bNeighbourFallbackPlaced = true;
+		for (int32 i = 0; i < NeighbourSites.Num(); ++i)
+		{
+			if (NeighbourSites[i] == nullptr || NeighbourSiteGrounded[i])
+			{
+				continue;
+			}
+			double BestD = TNumericLimits<double>::Max();
+			double Offset = 0.0;
+			for (int32 j = 0; j < NeighbourSites.Num(); ++j)
+			{
+				const double D = FVector::DistSquared2D(NeighbourSiteAt[i], NeighbourSiteAt[j]);
+				if (NeighbourSites[j] != nullptr && NeighbourSiteGrounded[j] && D < BestD)
+				{
+					BestD = D;
+					Offset = NeighbourSites[j]->GetActorLocation().Z - NeighbourSiteAt[j].Z;
+				}
+			}
+			NeighbourSites[i]->SetActorLocation(NeighbourSiteAt[i] + FVector(0.0, 0.0, Offset));
+		}
+		UE_LOG(LogSAM3D, Log, TEXT("Neighbours: %d of %d vehicles on the level's ground, the rest by their nearest"),
+			Grounded, NeighbourSites.Num());
+	}
+	if (bFirstMinuteOver)
+	{
+		NextNeighbourGroundAt += 4.0f;  // every 5 s after the first minute
 	}
 }
 

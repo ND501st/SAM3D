@@ -71,7 +71,7 @@ propose. The NVA plotters' handbook may say more.
 * its actions: a turn of 60° or more between its reports (`data/gameplay/comms.json` `plot_turn_deg`);
 * a target lost: three reporting periods with no new mark (`plot_lost_s`).
 
-An NPC plotter says each as it happens; a player's reports wait, filled in from his board, in his reports menu (O) until
+An NPC plotter says each as it happens; a player's reports wait, filled in from his board, in his reports menu (Caps Lock; O until 27 Oct 2026) until
 he says them, and one unsaid for two minutes is missed and named in the debrief. The commander decides on them
 (art. 17): the NPC commander takes a new board target into his picture (the covered regiment's warning, the fire
 distribution) when the plotter calls it, or only when he finds it on his next look over the board, 30 s on
@@ -253,3 +253,31 @@ board carries what was heard on the air-picture net, and the commander reads the
 commander gives out targets from both (`ScenarioRunner::PostPicture`), the player from the tube with the DT-2 and the
 ДХ, or from the board. A cabled radar's targets are taken off by the commander's hands at the tube (`Inputs::tube_free`),
 not the plotter's.
+
+## How the plotter got the picture (22 Oct 2026)
+
+No public source says how the PU-12M's plotter received the air picture. Full write-up, quotes and URLs:
+`reports/PU12M plotter air picture source.md` (git-ignored; the notes behind it in `research_notes/`). In short:
+
+* **Sourced.** The plotter (No. 2) and the radiotelephonist (No. 3) are separate men in every crew list (Russian, ČSLA,
+  NVA, Polish). The NVA names the R-123 FuG-1 net «Funknetz Luftlage (Netz ZZW Nr. 2, Planzeichner)», and its set
+  stands at the squad leader's place by his PWS-2 (`flak11`, `rwd_mb3`). The schematic draws four headsets (PWS-1..3,
+  RTK-1), none at the board, and no loudspeaker.
+* **The regulations point both ways.** `pvo_bu_x_1984` art. 23 (radar units) has the plotter take reports «от оператора
+  (радиотелеграфиста, радиотелефониста)», by no stated means; art. 24 has the radiotelephonist log every report with its
+  time and report to the commander. `pvo_bu_ix_1984` App. 2 (gun and ZSU batteries) makes one man a
+  «радиотелефонист-планшетист» who takes the senior commander's designation himself, plots it and reports.
+* **Comparable posts.** Morse or coded input at large posts: a radio operator writes a journal and a reader dictates.
+  Voice nets: the plotter hears them himself on headphones (the NVA troop air defence's 1980 plotters' handbook wires
+  the receivers to the plotters; FLW-59's listen-in devices; radar companies). Written slips: no support (the 1986
+  radio rules forbid notes on loose sheets).
+* **Reading used (inference).** FuG-1 is a voice net and the PU-12M has no reader, so the plotter hears FuG-1 himself.
+  His headset's jack is a SAM3D choice. The radiotelephonist keeps the timed journal, the regiment's R-111 and FuG-4,
+  and repeats a report from the journal when asked. The ČSLA reading (the air-situation broadcast on the R-111, so
+  through the radiotelephonist) is recorded as the alternative.
+* **Checking a record.** Dedyaev (BGUIR 2010, a post-Soviet textbook of the Soviet method) checks an operator by having
+  "a well-trained plotter" plot his reports live while they are written down, then setting the record against the board;
+  and when reports go straight from the radar operator, a fix's time is the time the post's plotter received it. SAM3D
+  builds its after-action loop on such records (`docs/command/01_PRINCIPLES.md` 9).
+* **Would settle it:** the NVA *Handbuch für Planzeichner und Funkorter der Truppenluftabwehr* (1980), the ČSLA
+  *PVOV-2-3 Bojová služba u PU-12(M)*, the PU-12(M)'s Soviet technical description. None is online.

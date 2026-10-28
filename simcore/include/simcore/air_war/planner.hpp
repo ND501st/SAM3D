@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -27,6 +28,7 @@
 
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/intel.hpp"
+#include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/officers.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
@@ -44,10 +46,23 @@ struct PlanContext {
     double now_h = 0.0;
     int phase = 0;
     double* arm_stock = nullptr;
+    std::map<std::string, double>* missile_stock = nullptr;  // cruise missiles left, by type
     Rng* rng = nullptr;
     int* next_id = nullptr;
     std::vector<JournalEntry>* journal = nullptr;
     const std::vector<ObjectState>* truth = nullptr;  // only to know which objects exist (hardness, value): never positions
+    // The support orbits (docs/air_war/11_SUPPORT.md): the share of the day an AWACS is on station, and the aircraft the
+    // tankers can still refuel this cycle (null: no tankers counted, every reach unlimited by them).
+    double awacs = 0.0;
+    double* tanker_receivers = nullptr;
+    // The player's side's supply lines (logistics.hpp): the roads and railways are on every map, so the enemy knows where
+    // its armed reconnaissance must search; never where the columns are (null: no armed reconnaissance).
+    const SupplyNetwork* supply = nullptr;
+
+    // The defender's fighter threat over the front, less what an AWACS on station takes away (warning, vectoring).
+    double FriendlyFighters(const FrontDef& f) const {
+        return f.friendly_fighters * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * Clamp01(awacs));
+    }
 
     Weather WeatherAt(double h) const {
         const double abs_h = data->theatre.start_hour + h;
@@ -56,13 +71,6 @@ struct PlanContext {
         return weather[static_cast<std::size_t>(std::min(std::max(d, 0), static_cast<int>(weather.size()) - 1))];
     }
 };
-
-// Distance from a point to a front line (polyline), horizontal.
-inline double DistanceToLine(const std::vector<Vec3>& line, const Vec3& p) {
-    double best = 1e18;
-    for (std::size_t i = 0; i + 1 < line.size(); ++i) best = std::min(best, SegmentDistance2d(p, line[i], line[i + 1]));
-    return best;
-}
 
 inline double ProfileHeight(const AircraftType& a, Profile p) {
     switch (p) {
@@ -99,21 +107,161 @@ inline double PassKillChance(double lethality, double chord_m, double radius_m, 
     } else {
         alt = (medium_cover && long_range) ? 1.0 : tune.Get("attrition.high_vs_short_range");
     }
-    double k = lethality * exposure * alt;
+    double k = lethality * tune.Get("attrition.pass_scale") * exposure * alt;
     if (radar) k *= (1.0 - sead_supp) * (1.0 - jam);
     k *= env * (1.0 - 0.5 * evasion);
     return std::min(k, tune.Get("attrition.max_per_pass"));
 }
 
+// How many aircraft of a passing flight a defence engages: its fire channels, scaled by how much of it works (an Osa
+// battery that has lost two of its four radars engages two); without channels every aircraft in reach. Shared by the
+// planner and the resolver.
+inline int EngagedAircraft(int channels, double function, int in_reach) {
+    if (channels <= 0) return in_reach;
+    const int working = std::max(1, static_cast<int>(std::lround(channels * Clamp01(function))));
+    return std::min(in_reach, working);
+}
+
 // Light guns and shoulder-fired missiles around a military target that has no air defence of its own in the theatre:
-// the chance an aircraft attacking it at low level (or a helicopter) is shot down on the attack. Troops carry the most
-// (their own anti-aircraft guns and missiles); towns none; medium altitude is out of their reach (Dugman 5: most
-// aircraft were hit by guns at the low approach height, wiki_model5). Shared by the planner and the resolver.
-inline double TargetGunsChance(ObjectKind k, Profile profile, bool helicopter, double evasion, double env, const TuningTable& tune) {
-    if (!helicopter && profile != Profile::Low) return 0.0;
-    if (k == ObjectKind::City) return 0.0;
+// the chance an aircraft attacking it is shot down on the attack, by how much the attack exposes it (`exposure`: 1 for
+// a low pass over the target, 0 for an attack from above their reach or from stand-off: DeliveryExposure). Troops carry
+// the most (their own anti-aircraft guns and missiles); towns none (Dugman 5: most aircraft were hit by guns at the low
+// approach height, wiki_model5; Desert Storm: AAA and infrared missiles took 25 of 39, rjlee_ds_losses). Shared by the
+// planner and the resolver.
+inline double TargetGunsChance(ObjectKind k, double exposure, double evasion, double env, const TuningTable& tune) {
+    if (exposure <= 0.0 || k == ObjectKind::City) return 0.0;
     const double g = k == ObjectKind::Troops ? tune.Get("attrition.target_guns_troops") : tune.Get("attrition.target_guns_site");
-    return std::min(tune.Get("attrition.max_per_pass"), g * env * (1.0 - 0.5 * evasion));
+    return std::min(tune.Get("attrition.max_per_pass"), g * exposure * env * (1.0 - 0.5 * evasion));
+}
+
+// ---- Weaponeering (docs/air_war/10_WEAPONS.md): which weapon and attack profile, how accurate, what it does.
+
+// How exposed an attack leaves the attacker to the target's own guns and missiles (game values "delivery.exposure_*").
+inline double DeliveryExposure(Delivery d, const TuningTable& tune) {
+    if (d == Delivery::Count) return 0.0;
+    return tune.Get(std::string("delivery.exposure_") + DeliveryName(d));
+}
+
+// A flight's exposure at the target: its delivery's, or (a flight with no attack profile) a low pass or none.
+inline double FlightExposure(const Flight& fl, bool helicopter, const TuningTable& tune) {
+    if (fl.delivery == Delivery::Count) return helicopter || fl.profile == Profile::Low ? 1.0 : 0.0;
+    return DeliveryExposure(fl.delivery, tune);
+}
+
+// How far short of the target the weapons go and the flight turns away (0: over the target).
+inline double ReleaseShort(Delivery d, const WeaponDef* w, const TuningTable& tune) {
+    if (d == Delivery::Count) return 0.0;
+    if (d == Delivery::Standoff || d == Delivery::HoverFire) {
+        const double own = w != nullptr ? w->standoff_m : 0.0;
+        return own > 0.0 ? own : tune.Get(std::string("delivery.release_") + DeliveryName(d) + "_m");
+    }
+    return tune.Get(std::string("delivery.release_") + DeliveryName(d) + "_m");
+}
+
+// Whether this aircraft can put this weapon on a target this way, flying `profile` at this time and in this weather:
+// the weapon's deliveries and year; low deliveries from low level, the others from medium altitude and above; a
+// helicopter hovers or pops up, a jet never hovers; laser guidance needs a designator, a clear enough sky and, at night,
+// a night designator; TV needs daylight; a visual attack needs to see the ground.
+inline bool CanDeliver(const WeaponDef& w, Delivery d, const AircraftType& a, Profile profile, DayPart part, Weather weather, int year) {
+    if (!w.InService(year) || !w.Can(d)) return false;
+    if (a.helicopter && d != Delivery::HoverFire && d != Delivery::PopUp) return false;
+    if (!a.helicopter && d == Delivery::HoverFire) return false;
+    if (d != Delivery::Standoff) {
+        if (DeliveryIsLow(d) != (profile == Profile::Low)) return false;
+    }
+    const bool night = part == DayPart::Night;
+    if (w.guidance == "laser" && (a.designator != "laser" || weather == Weather::Poor || (night && !a.night))) return false;
+    if (w.guidance == "tv" && (night || weather == Weather::Poor)) return false;
+    if (w.guidance == "ir" && weather == Weather::Poor) return false;
+    if (w.guidance == "wire" && night && !a.night) return false;
+    const bool visual = d == Delivery::PopUp || d == Delivery::Dive || d == Delivery::HoverFire;
+    if (visual && !w.Guided() && weather == Weather::Poor) return false;
+    if (d == Delivery::Level && weather == Weather::Poor && !a.all_weather) return false;
+    return true;
+}
+
+// The circular error probable (m) of a weapon delivered so: its guidance's, or the delivery's for an unguided one
+// (worse with a poor sight and at night by eye), and the crew's airmanship.
+inline double DeliveryCep(const WeaponDef& w, Delivery d, const AircraftType& a, DayPart part, Weather weather, double airmanship,
+                          const TuningTable& tune) {
+    double cep = 0.0;
+    if (w.guidance == "laser") {
+        cep = tune.Get("delivery.cep_laser_m");
+    } else if (w.guidance == "tv" || w.guidance == "ir") {
+        cep = tune.Get("delivery.cep_tv_m");
+    } else if (w.guidance == "wire") {
+        cep = tune.Get("delivery.cep_wire_m");
+    } else {
+        cep = tune.Get(std::string("delivery.cep_") + DeliveryName(d) + "_m") * (1.4 - 0.8 * Clamp01(a.computing));
+        const bool visual = d == Delivery::PopUp || d == Delivery::Dive || d == Delivery::HoverFire;
+        if (visual && part == DayPart::Night && !a.night) cep *= tune.Get("delivery.night_visual_factor");
+        if (weather == Weather::Poor) cep *= tune.Get("delivery.poor_weather_factor");
+    }
+    return cep * (1.25 - 0.5 * Clamp01(airmanship));
+}
+
+// The chance one weapon puts an aim point of this class out of action: it falls within its footprint (circular normal
+// error with this CEP), it goes off, and it does it (the game values of weapons.json). A bomb's footprint grows against
+// soft and light targets (delivery.footprint_soft, footprint_light); a runway is cut by a crater anywhere across its
+// width: there the footprint is at least the strip's (delivery.runway_strip_m).
+inline double WeaponKill(const WeaponDef& w, Delivery d, TargetClass c, double cep, const TuningTable& tune) {
+    double footprint = w.footprint_m;
+    // A bomb's blast and fragments reach further against people, trucks and stores than against armour or concrete.
+    const bool blast = w.kind == "bomb" || w.kind == "retarded_bomb" || w.kind == "guided_bomb";
+    if (blast && c == TargetClass::Soft) footprint *= tune.Get("delivery.footprint_soft");
+    if (blast && c == TargetClass::Light) footprint *= tune.Get("delivery.footprint_light");
+    if (c == TargetClass::Runway) footprint = std::max(footprint, tune.Get("delivery.runway_strip_m"));
+    const double r = footprint / std::max(0.1, cep);
+    const double inside = 1.0 - std::pow(0.5, r * r);
+    const double rel = d == Delivery::Laydown && w.laydown_reliability >= 0.0 ? w.laydown_reliability : w.reliability;
+    return inside * rel * w.effect[static_cast<int>(c)];
+}
+
+// The expected share of a target's aim points `weapons` such weapons put out of action, spread over its aim points.
+inline double ExpectedShare(double kill, double weapons, int aim_points) {
+    if (aim_points <= 0 || weapons <= 0.0) return 0.0;
+    return 1.0 - std::pow(1.0 - Clamp01(kill), weapons / aim_points);
+}
+
+// The planner's choice of weapon and attack for one aircraft type against a target (the weaponeering of the tasking
+// cycle, usaf_ato_doctrine): of what it can carry and deliver now, the most effect for the exposure the doctrine
+// accepts at the target (`risk`: 0 effect alone .. 1 avoid the target's guns at almost any cost).
+struct Weaponeering {
+    const WeaponDef* weapon = nullptr;
+    int count = 0;  // on each aircraft
+    Delivery delivery = Delivery::Count;
+    double kill = 0.0;      // one weapon on one aim point
+    double exposure = 0.0;  // at the target
+    double score = 0.0;
+};
+
+inline Weaponeering Weaponeer(const AirWarData& d, const AircraftType& a, TargetClass c, int aim_points, Profile profile, DayPart part,
+                              Weather weather, double airmanship, double risk) {
+    Weaponeering best;
+    const TuningTable& tune = d.tuning;
+    for (const auto& load : a.loads) {
+        const WeaponDef* w = d.Weapon(load.first);
+        if (w == nullptr) continue;
+        for (int di = 0; di < kDeliveries; ++di) {
+            const Delivery dl = static_cast<Delivery>(di);
+            if (!CanDeliver(*w, dl, a, profile, part, weather, d.theatre.year)) continue;
+            const double cep = DeliveryCep(*w, dl, a, part, weather, airmanship, tune);
+            double kill = WeaponKill(*w, dl, c, cep, tune);
+            if (w->guidance == "laser" && weather == Weather::Cloudy) kill *= tune.Get("delivery.cloudy_laser");
+            const double share = ExpectedShare(kill, load.second, aim_points);
+            const double exposure = DeliveryExposure(dl, tune);
+            const double score = share * (1.0 - Clamp01(risk) * exposure);
+            if (score > best.score + 1e-12) {
+                best.weapon = w;
+                best.count = load.second;
+                best.delivery = dl;
+                best.kill = kill;
+                best.exposure = exposure;
+                best.score = score;
+            }
+        }
+    }
+    return best;
 }
 
 class Planner {
@@ -161,11 +309,11 @@ public:
         std::string bent;
         for (int k = 0; k < kMissionKinds; ++k) {
             double s = phase.apportion[k];
-            if (!f.doctrine.packages[k].allowed) {
+            const MissionKind mk = static_cast<MissionKind>(k);
+            if (!f.doctrine.packages[k].allowed || (mk == MissionKind::Missile && MissileType() == nullptr)) {
                 share[k] = 0.0;
                 continue;
             }
-            const MissionKind mk = static_cast<MissionKind>(k);
             double m = 1.0;
             if (mk == MissionKind::Dead || mk == MissionKind::Hunter) m *= 1.0 + 0.4 * (ct.methodical - 0.5) + 0.4 * (iads - 0.5);
             if (mk == MissionKind::Recce || mk == MissionKind::Bda) m *= 1.0 + 0.6 * (0.5 - coverage) + 0.3 * cdr->Quirk("recce_first");
@@ -185,10 +333,12 @@ public:
             "Phase '" + phase.name + "'. Tempo " + Pct(tempo) + " of the " + std::to_string(static_cast<int>(available + 0.5)) +
                 " sorties available this cycle." + (bent.empty() ? std::string() : " Apportionment bent:" + bent));
 
-        // 2-4. Mission kinds in the order the staff fills them.
-        const MissionKind order[] = {MissionKind::Dead,     MissionKind::Hunter,   MissionKind::Deception,
-                                     MissionKind::Strike,   MissionKind::Recce,    MissionKind::Cas,
-                                     MissionKind::HeloRaid, MissionKind::Harassment, MissionKind::Bda};
+        // 2-4. Mission kinds in the order the staff fills them (a light air arm's nuisance raids before its strikes: the
+        // same few aircraft fly both).
+        const MissionKind order[] = {MissionKind::Missile, MissionKind::Dead,       MissionKind::Hunter,
+                                     MissionKind::Deception, MissionKind::Harassment, MissionKind::Strike,
+                                     MissionKind::Recce,   MissionKind::Cas,        MissionKind::ArmedRecce,
+                                     MissionKind::HeloRaid, MissionKind::Bda};
         const int max_packages = static_cast<int>(f.doctrine.max_packages_per_cycle * phase.tempo * ClampTo(tempo, 0.3, 1.2) + 0.5);
         for (MissionKind mk : order) {
             const int k = static_cast<int>(mk);
@@ -203,7 +353,7 @@ public:
                                 static_cast<int>(out_.size()) < max_packages;
                  ++guard) {
                 Package p;
-                if (!BestPackage(mk, used, p)) break;
+                if (!(mk == MissionKind::Missile ? BestMissilePackage(used, p) : BestPackage(mk, used, p))) break;
                 used.insert(p.target_key);
                 if (!Approve(p, *cdr)) {
                     if (++rejected >= 2) break;  // the planner stops offering what the commander won't take
@@ -282,7 +432,7 @@ private:
         const auto& sq = *c_->squadrons;
         for (std::size_t i = 0; i < sq.size(); ++i) {
             const AircraftType* a = TypeOf(sq[i]);
-            if (a == nullptr || !Fits(*a, r)) continue;
+            if (a == nullptr || a->missile || !a->InService(c_->data->theatre.year) || !Fits(*a, r)) continue;
             if (only != nullptr && std::find(only->begin(), only->end(), a->id) == only->end()) continue;
             if (a->helicopter && p != Profile::Low) continue;
             if (part == DayPart::Night && !a->night) continue;
@@ -299,12 +449,25 @@ private:
     }
     double PlannerQuirk(const std::string& k) const { return c_->staff->HolderPtr(StaffRole::Planner)->Quirk(k); }
 
+    // The least a package must achieve and be worth: the doctrine's, or the tuning's.
+    double MinEffect() const {
+        const DoctrineDef& doc = c_->data->faction.doctrine;
+        return doc.has_min_effect ? doc.min_effect : Tune().Get("utility.min_effect");
+    }
+    double MinValue() const {
+        const DoctrineDef& doc = c_->data->faction.doctrine;
+        return doc.has_min_value ? doc.min_value : Tune().Get("utility.min_value");
+    }
+
     // Candidates for a mission kind from the intelligence picture.
     std::vector<const IntelEntry*> Candidates(MissionKind mk) const {
         std::vector<const IntelEntry*> out;
         const double now = c_->now_h;
         for (const IntelEntry& e : c_->intel->entries) {
-            if (e.Live() < 0.15 && mk != MissionKind::Recce && mk != MissionKind::Bda) continue;
+            // An armed reconnaissance searches the road whatever the last sighting says.
+            if (e.Live() < 0.15 && mk != MissionKind::Recce && mk != MissionKind::Bda && mk != MissionKind::ArmedRecce) continue;
+            // A column on the move is found by searching its road, not struck where it was seen.
+            if (IsColumn(e.kind) && mk != MissionKind::ArmedRecce) continue;
             const double to_front = DistanceToLine(front_->line, e.pos);
             const bool ad = IsAirDefence(e.kind) || e.kind == ObjectKind::EwRadar;
             switch (mk) {
@@ -313,13 +476,13 @@ private:
                     break;
                 case MissionKind::Dead:
                     if (!ad || e.sigma_m > 4000.0) continue;
-                    if (IsAirDefence(e.kind) && !e.threat_radar) continue;  // guns are for the strike's escort, not DEAD
+                    if (IsAirDefence(e.kind) && !e.IsSamRadar()) continue;  // guns are for the strike's escort, not DEAD
                     break;
                 case MissionKind::Hunter:
-                    if (!(IsAirDefence(e.kind) && e.threat_radar)) continue;
+                    if (!e.IsSamRadar()) continue;
                     break;
                 case MissionKind::Deception:
-                    if (!(IsAirDefence(e.kind) && e.threat_radar)) continue;
+                    if (!e.IsSamRadar()) continue;
                     break;
                 case MissionKind::Recce:
                     if (e.kind == ObjectKind::City) continue;
@@ -337,6 +500,13 @@ private:
                 case MissionKind::Harassment:
                     if (to_front > 70000.0 || e.kind == ObjectKind::City) continue;
                     break;
+                case MissionKind::Missile:
+                    // Fixed targets only: a missile flies to where it was told, and finds nothing that has moved.
+                    if (e.mobile || e.kind == ObjectKind::Troops || e.kind == ObjectKind::City || IsAirDefence(e.kind)) continue;
+                    break;
+                case MissionKind::ArmedRecce:
+                    if (!IsColumn(e.kind) || c_->supply == nullptr || LineOf(e) < 0) continue;
+                    break;
                 case MissionKind::Count: continue;
             }
             if (c_->politics->Banned(e.kind)) continue;
@@ -344,7 +514,26 @@ private:
             if (InNoStrikeZone(e.pos) && mk != MissionKind::Recce && mk != MissionKind::Bda) continue;
             out.push_back(&e);
         }
+        if (mk == MissionKind::ArmedRecce) {
+            // One search a line: its freshest sighting stands for it.
+            std::stable_sort(out.begin(), out.end(), [](const IntelEntry* a, const IntelEntry* b) { return a->observed_h > b->observed_h; });
+            std::vector<const IntelEntry*> one;
+            std::vector<int> lines;
+            for (const IntelEntry* e : out) {
+                const int li = LineOf(*e);
+                if (std::find(lines.begin(), lines.end(), li) != lines.end()) continue;
+                lines.push_back(li);
+                one.push_back(e);
+            }
+            out.swap(one);
+        }
         return out;
+    }
+
+    // The supply line a sighting is of (a column's), or -1.
+    int LineOf(const IntelEntry& e) const {
+        const TheatreObject* o = e.object_id.empty() ? nullptr : c_->data->theatre.Find(e.object_id);
+        return o != nullptr ? o->supply_line : -1;
     }
 
     bool InNoStrikeZone(const Vec3& p) const {
@@ -385,6 +574,7 @@ private:
         Profile profile = Profile::Low;
         DayPart part = DayPart::Day;
         double tot_h = 0.0;
+        double size = 1.0;  // the strike group's size against the template's (a pair to a massed blow)
     };
 
     bool NextTot(DayPart part, double& tot_h) const {
@@ -432,13 +622,23 @@ private:
         }
         // Massed blows or a drip of small raids (doctrine, character).
         double mass = 1.0 + (f.doctrine.simultaneous_bias - 0.5) + 0.5 * pln.Quirk("massing") - 0.4 * pln.Quirk("drip_feed");
-        int main_flights = std::max(1, static_cast<int>(t.main_flights * mass + 0.5));
+        int main_flights = std::max(1, static_cast<int>(t.main_flights * mass * o.size + 0.5));
         if (mk == MissionKind::Recce || mk == MissionKind::Bda) main_flights = 1;
         const int fsize = t.flight_size;
         const int sq_main = PickSquadron(main_role, fsize, o.profile, o.part, w, reserved, t.aircraft.empty() ? nullptr : &t.aircraft);
         if (sq_main < 0) return false;
         const AircraftType& ma = *TypeOf((*c_->squadrons)[static_cast<std::size_t>(sq_main)]);
         if (ma.helicopter && o.profile != Profile::Low) return false;
+        // The weapons and the attack (weaponeering): the target as its kind stands, against the guns the doctrine accepts
+        // at the target. A type that can deliver nothing it carries this way, now, flies another way or not at all.
+        Weaponeering wpn;
+        const bool attacks = main_role == FlightRole::Strike || main_role == FlightRole::Dead || main_role == FlightRole::Helicopter;
+        if (attacks && !ma.loads.empty() && !d.weapons.weapons.empty()) {
+            const TargetProfileDef tp = d.weapons.targets[static_cast<int>(e.kind)];
+            wpn = Weaponeer(d, ma, tp.target_class, tp.aim_points, o.profile, o.part, w, 0.5, f.doctrine.delivery_risk);
+            if (wpn.weapon == nullptr) return false;
+        }
+        const double release_short = ReleaseShort(wpn.delivery, wpn.weapon, d.tuning);
         // As many main flights as the squadron can give, up to the plan.
         int flights_ok = 0;
         for (int i = 0; i < main_flights; ++i) {
@@ -463,12 +663,17 @@ private:
             fl.count = fsize;
             fl.profile = o.profile;
             fl.arms = main_role == FlightRole::Hunter ? ma.arms * fsize : 0;
+            if (wpn.weapon != nullptr) {
+                fl.weapon = wpn.weapon->id;
+                fl.weapons = wpn.count;
+                fl.delivery = wpn.delivery;
+            }
             const double offset_h = (1.0 - f.doctrine.simultaneous_bias) * 0.05 * i;  // successive flights a few minutes apart
             if (mk == MissionKind::Hunter) {
                 fl.route = LoiterRoute(entry, exit, e.pos, ProfileHeight(ma, o.profile), o.tot_h, ma.cruise_mps);
             } else {
                 fl.route = MainRoute(entry, exit, e.pos, ProfileHeight(ma, o.profile), o.tot_h + offset_h, ma, ip_dist,
-                                     mk == MissionKind::HeloRaid);
+                                     mk == MissionKind::HeloRaid, release_short, fl.delivery);
             }
             fl.release_index = ReleaseIndex(fl.route);
             fl.aim_key = e.key;
@@ -525,8 +730,8 @@ private:
             }
         }
         // Escort against the defender's fighters.
-        if (t.escort_ratio > 0.0 && front_->friendly_fighters > 0.05) {
-            const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * front_->friendly_fighters * 2.0));
+        if (t.escort_ratio > 0.0 && c_->FriendlyFighters(*front_) > 0.05) {
+            const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * c_->FriendlyFighters(*front_) * 2.0));
             if (want > 0) {
                 const int n = std::min(want, 4);
                 const int sq = PickSquadron(FlightRole::Escort, n, Profile::Medium, o.part, w, reserved);
@@ -627,26 +832,83 @@ private:
                 why.push_back("a feint from " + front_->entries[other].id + " first, the planner's signature");
             }
         }
+        // Reach: a flight whose type can't get to the target and back on its own fuel needs the tankers; beyond even a
+        // refuelled radius, or with no tanker to spare this cycle, this way can't be flown (docs/air_war/11_SUPPORT.md).
+        if (c_->tanker_receivers != nullptr) {
+            // Jets fly from the bases behind the entry point, helicopters from forward sites at it.
+            const double in = Dist2d(entry.pos, e.pos), depth = Dist2d(front_->bases, entry.pos);
+            int receivers = 0;
+            for (const Flight& fl : p.flights) {
+                const AircraftType* a = f.Aircraft(fl.aircraft);
+                if (a == nullptr || a->radius_m <= 0.0 || a->missile || a->drone) continue;
+                const double dist = in + (a->helicopter ? 0.0 : depth);
+                const double radius = a->radius_m * (fl.profile == Profile::Low ? d.tuning.Get("support.low_radius_share") : 1.0);
+                if (dist <= radius) continue;
+                if (dist > radius * d.tuning.Get("support.refuelled_radius")) return false;
+                receivers += fl.count;
+            }
+            if (receivers > 0) {
+                if (*c_->tanker_receivers + 1e-9 < receivers) return false;
+                p.refuelled = receivers;
+                why.push_back("refuelled on the way: " + std::to_string(receivers) + " aircraft beyond their own radius");
+            }
+        }
         return true;
     }
 
-    // entry -> IP -> target -> egress -> exit. Times anchored at the target.
+    // entry -> IP -> target -> egress -> exit. Times anchored at the target. `release_short`: the attack releases this far
+    // short of the target ("target" is the release point) and turns away there (a loft, a stand-off launch); a pass over
+    // the target flies on past it.
     std::vector<RoutePoint> MainRoute(const EntryPoint& entry, const EntryPoint& exit, const Vec3& target, double agl,
-                                      double tot_h, const AircraftType& a, double ip_dist, bool helicopter_hide) const {
+                                      double tot_h, const AircraftType& a, double ip_dist, bool helicopter_hide,
+                                      double release_short = 0.0, Delivery delivery = Delivery::Count) const {
         std::vector<RoutePoint> r;
         const Vec3 in = target - entry.pos;
         const double len = std::max(1.0, Dist2d(entry.pos, target));
         const Vec3 dir = Vec3{in.x / len, in.y / len, 0.0};
         const Vec3 side{-dir.y, dir.x, 0.0};
         const double ipd = std::min(ip_dist, 0.6 * len);
+        const double rs = std::min(release_short, 0.8 * ipd);
         RoutePoint p0{entry.pos, agl, 0.0, "entry"};
         RoutePoint ip{target - dir * ipd + side * (0.25 * ipd), helicopter_hide ? 5.0 : agl, 0.0, helicopter_hide ? "hide" : "ip"};
-        RoutePoint tg{target, agl, 0.0, "target"};
-        const Vec3 out = target + side * 12000.0 + dir * 4000.0;
+        RoutePoint tg{target - dir * rs, agl, 0.0, "target"};
+        // The attack between the initial point and the release, as the delivery flies it (docs/air_war/10_WEAPONS.md): a
+        // pop-up's pull-up to its apex and the dive onto the target, a toss's pull-up and the release climbing, a dive's
+        // roll-in from height. A helicopter keeps its hide and its own pop-up.
+        std::vector<RoutePoint> attack;
+        const TuningTable& tune = Tune();
+        const auto room = [&](double m) { return std::min(m, 0.9 * ipd); };
+        if (!a.helicopter) {
+            switch (delivery) {
+                case Delivery::PopUp: {
+                    const double pull = room(tune.Get("delivery.popup_pull_m"));
+                    attack.push_back({target - dir * pull + side * 1500.0, agl, 0.0, "pull_up"});
+                    attack.push_back({target - dir * (0.5 * (pull + rs)) + side * 800.0, tune.Get("delivery.popup_apex_m"), 0.0, "apex"});
+                    tg.agl_m = tune.Get("delivery.popup_release_m");
+                    break;
+                }
+                case Delivery::Loft:
+                    attack.push_back({target - dir * room(tune.Get("delivery.loft_pull_m")), agl, 0.0, "pull_up"});
+                    tg.agl_m = tune.Get("delivery.loft_release_m");
+                    break;
+                case Delivery::Dive:
+                    attack.push_back({target - dir * room(tune.Get("delivery.dive_roll_in_m")), agl, 0.0, "roll_in"});
+                    tg.agl_m = std::min(agl, tune.Get("delivery.dive_release_m"));
+                    break;
+                default: break;
+            }
+        } else if (delivery == Delivery::HoverFire) {
+            tg.agl_m = tune.Get("delivery.hover_agl_m");
+        }
+        const Vec3 out = rs > 1500.0 ? tg.pos + side * 12000.0 - dir * 2000.0 : target + side * 12000.0 + dir * 4000.0;
         RoutePoint eg{out, agl, 0.0, "egress"};
         RoutePoint ex{exit.pos, agl, 0.0, "exit"};
-        r = {p0, ip, tg, eg, ex};
-        TimeRoute(r, 2, tot_h, helicopter_hide ? a.cruise_mps : a.attack_mps);
+        r = {p0, ip};
+        r.insert(r.end(), attack.begin(), attack.end());
+        r.push_back(tg);
+        r.push_back(eg);
+        r.push_back(ex);
+        TimeRoute(r, 2 + attack.size(), tot_h, helicopter_hide ? a.cruise_mps : a.attack_mps);
         return r;
     }
 
@@ -693,6 +955,27 @@ private:
         return s;
     }
 
+    // The share of the target's aim points the package's attacking flights expect to put out of action with their
+    // weapons (docs/air_war/10_WEAPONS.md); -1 when a flight attacks with no weapon (its strike_power instead).
+    double WeaponsEffect(const Package& p, const IntelEntry& target) const {
+        const AirWarData& d = *c_->data;
+        const TargetProfileDef tp = d.weapons.targets[static_cast<int>(target.kind)];
+        const Weather w = c_->WeatherAt(p.tot_h);
+        double survive = 1.0;
+        bool any = false;
+        for (const Flight& fl : p.flights) {
+            if (fl.role != FlightRole::Strike && fl.role != FlightRole::Dead && fl.role != FlightRole::Helicopter) continue;
+            const WeaponDef* wd = d.Weapon(fl.weapon);
+            const AircraftType* a = d.faction.Aircraft(fl.aircraft);
+            if (wd == nullptr || a == nullptr) return -1.0;
+            double kill = WeaponKill(*wd, fl.delivery, tp.target_class, DeliveryCep(*wd, fl.delivery, *a, p.part, w, 0.5, d.tuning), d.tuning);
+            if (wd->guidance == "laser" && w == Weather::Cloudy) kill *= d.tuning.Get("delivery.cloudy_laser");
+            survive *= 1.0 - ExpectedShare(kill, static_cast<double>(fl.count) * fl.weapons * p.load_factor, tp.aim_points);
+            any = true;
+        }
+        return any ? 1.0 - survive : -1.0;
+    }
+
     // Losses the planner expects from the threats he believes in.
     double ExpectedLosses(const Package& p, const IntelEntry& target, double* main_loss) const {
         const TuningTable& tune = Tune();
@@ -711,6 +994,7 @@ private:
             if (a == nullptr) continue;
             double per = 0.0;
             for (const IntelEntry* th : c_->intel->Threats()) {
+                if (th->threat_max_target_mps > 0.0 && a->cruise_mps > th->threat_max_target_mps) continue;  // too fast for it
                 // A threat whose place is uncertain covers a wider ring, but is less likely to be on any one route
                 // through it: the lethality is spread over the ring's area.
                 const double ring = th->threat_radius_m + 0.5 * th->sigma_m;
@@ -721,16 +1005,17 @@ private:
                 if (optical && p.part == DayPart::Night) env *= tune.Get("attrition.night");
                 if (optical && w == Weather::Poor) env *= tune.Get("attrition.poor_weather");
                 const double supp = sead > 0 ? tune.Get("attrition.sead_suppression") * std::min(1.0, sead / 2.0) * (0.6 + 0.4 * sead_skill) : 0.0;
-                per += th->Live() * spread * PassKillChance(th->threat_lethality, chord, ring, fl.profile,
-                                                   a->helicopter, th->threat_low, th->threat_medium, th->threat_radar, supp,
-                                                   jam ? tune.Get("attrition.jamming") : 0.0, env, a->evasion, tune);
+                const double engaged = fl.count > 0 ? EngagedAircraft(th->threat_channels, th->function, fl.count) / static_cast<double>(fl.count) : 1.0;
+                per += th->Live() * spread * engaged *
+                       PassKillChance(th->threat_lethality, chord, ring, fl.profile, a->helicopter, th->threat_low, th->threat_medium,
+                                      th->threat_radar, supp, jam ? tune.Get("attrition.jamming") : 0.0, env, a->evasion, tune);
             }
             const bool attacks = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
             if (attacks && !target.IsThreat() && !target.ghost) {
                 double env = 1.0;
                 if (p.part == DayPart::Night) env *= tune.Get("attrition.night");
                 if (w == Weather::Poor) env *= tune.Get("attrition.poor_weather");
-                per += Clamp01(target.exists) * TargetGunsChance(target.kind, fl.profile, a->helicopter, a->evasion, env, tune);
+                per += Clamp01(target.exists) * TargetGunsChance(target.kind, FlightExposure(fl, a->helicopter, tune), a->evasion, env, tune);
             }
             if (a->drone) per = 0.0;  // decoys are meant to be lost
             const double fl_loss = std::min(1.0, per) * fl.count;
@@ -740,7 +1025,7 @@ private:
                 main += fl_loss;
             }
         }
-        const double fighters = front_->friendly_fighters * tune.Get("attrition.escort_fighter_kill") *
+        const double fighters = c_->FriendlyFighters(*front_) * tune.Get("attrition.escort_fighter_kill") *
                                 (p.Has(FlightRole::Escort) ? 0.3 : 1.0) * p.Main();
         total += fighters;
         main += fighters;
@@ -762,106 +1047,251 @@ private:
         const double over = std::max(0.0, c_->politics->losses_today - tolerance) / tolerance;
         const double loss_aversion = (1.5 - pln.def.traits.boldness) * std::sqrt(3.0 / tolerance) * (1.0 + over) *
                                      (1.0 - 0.3 * Clamp01(pln.Quirk("risk")));
-        for (const IntelEntry* e : Candidates(mk)) {
-            if (used.count(e->key) > 0) continue;
+        // An armed reconnaissance searches each line once a cycle.
+        std::set<int> used_lines;
+        if (mk == MissionKind::ArmedRecce) {
+            for (const std::string& k : used) {
+                const TheatreObject* uo = d.theatre.Find(k);
+                if (uo != nullptr && uo->supply_line >= 0) used_lines.insert(uo->supply_line);
+            }
+        }
+        for (const IntelEntry* seen : Candidates(mk)) {
+            if (used.count(seen->key) > 0) continue;
+            // An armed reconnaissance flies to the stretch of the line nearest the front, not to where a column was seen.
+            const IntelEntry* e = seen;
+            IntelEntry patrol;
+            const int line = mk == MissionKind::ArmedRecce ? LineOf(*seen) : -1;
+            if (mk == MissionKind::ArmedRecce) {
+                if (line < 0 || used_lines.count(line) > 0) continue;
+                patrol = *seen;
+                patrol.pos = c_->supply->PatrolPoint(static_cast<std::size_t>(line), front_->line);
+                patrol.sigma_m = 0.0;
+                e = &patrol;
+            }
             for (std::size_t ei = 0; ei < front_->entries.size(); ++ei) {
                 for (Profile prof : t.profiles) {
                     if (c_->politics->min_profile >= 1 && prof == Profile::Low) continue;
                     for (DayPart part : t.day_parts) {
-                        Option o;
-                        o.entry = static_cast<int>(ei);
-                        o.exit = static_cast<int>(ei);
-                        o.profile = prof;
-                        o.part = part;
-                        if (!NextTot(part, o.tot_h)) continue;
-                        Package p;
-                        std::vector<std::string> why;
-                        if (!Build(mk, *e, o, p, why)) continue;
-                        double main_loss = 0.0;
-                        const double eloss = ExpectedLosses(p, *e, &main_loss);
-                        // Worth and the chance the effort lands on something real and working.
-                        std::vector<std::string> vwhy;
-                        const double v = ValueOf(*e, mk, &vwhy);
-                        const double age = c_->now_h - e->observed_h;
-                        const double stale = tune.Get("strike.stale_miss_m");
-                        double p_loc = e->mobile ? 1.0 / (1.0 + (e->sigma_m / stale) * (e->sigma_m / stale)) : 1.0;
-                        if (mk == MissionKind::Recce || mk == MissionKind::Bda || mk == MissionKind::Hunter ||
-                            mk == MissionKind::Deception) {
-                            p_loc = 1.0;
-                        }
-                        const double main_n = std::max(1, p.Main());
-                        const double p_deliver = Clamp01(1.0 - main_loss / main_n);
-                        double effect = 1.0;
-                        const AircraftType* ma = f.Aircraft(p.flights.front().aircraft);
-                        if (mk == MissionKind::Strike || mk == MissionKind::Dead || mk == MissionKind::Cas ||
-                            mk == MissionKind::HeloRaid || mk == MissionKind::Harassment) {
-                            const double hard = HardnessOf(*e);
-                            effect = Clamp01(p.Main() * (ma != nullptr ? ma->strike_power : 0.2) * tune.Get("strike.hit_chance") /
-                                             (0.5 + hard));
-                        }
-                        double live = e->Live();
-                        if (mk == MissionKind::Recce) live = std::max(0.3, 1.0 - e->exists) + std::min(1.0, age / 24.0);
-                        if (mk == MissionKind::Bda) live = 1.0;
-                        if (pln.Quirk("elint_trust") > 0.0 && e->source == IntelSource::Elint) live = std::min(1.0, live + 0.3);
-                        const double ev = v * live * p_loc * p_deliver * effect;
-                        double u = tune.Get("utility.value_weight") * ev - tune.Get("utility.loss_cost") * eloss * loss_aversion;
-                        // His habits.
-                        const double qs = tune.Get("utility.quirk_scale");
-                        const char* pref[] = {"pref_night", "pref_dawn", "pref_day", "pref_dusk"};
-                        const double tod = pln.Quirk(pref[static_cast<int>(part)]);
-                        u += qs * tod;
-                        if (front_->entries[ei].id == pln.last_entry) u += qs * (pln.Quirk("axis_repeat") - pln.Quirk("axis_vary"));
-                        if (prof == Profile::Low) u += qs * pln.Quirk("low_level");
-                        if (prof == Profile::Medium) u += qs * pln.Quirk("medium_altitude");
-                        if (c_->WeatherAt(o.tot_h) == Weather::Poor) u -= qs * (1.0 - Clamp01(pln.Quirk("weather_tolerance")));
-                        if (e->mobile && age > 6.0 && (mk == MissionKind::Strike || mk == MissionKind::Dead)) {
-                            u -= qs * 2.0 * pln.Quirk("imagery_wait");
-                            u -= tune.Get("utility.stale_penalty") * Clamp01((age - 6.0) / 24.0) * (0.5 + pln.def.traits.methodical);
-                        }
-                        if (e->strikes > 0) u += qs * pln.Quirk("restrike");
-                        if (mk == MissionKind::HeloRaid) u += qs * pln.Quirk("helicopter_use");
-                        // What he remembers of this way of doing it, and his curiosity about untried ways.
-                        const auto mem = pln.tactics.find(p.tactic);
-                        int uses = 0;
-                        if (mem != pln.tactics.end()) {
-                            uses = mem->second.uses;
-                            u -= tune.Get("utility.loss_cost") * loss_aversion * mem->second.loss_rate * p.Aircraft() * 0.5;
-                            u += tune.Get("utility.value_weight") * 0.15 * (mem->second.success - 0.5);
-                        }
-                        u += tune.Get("utility.exploration") * pln.def.traits.creativity / std::sqrt(1.0 + uses);
-                        u += c_->rng->Normal(0.0, noise_sd);
-                        const bool achieves = ev >= tune.Get("utility.min_effect") || mk == MissionKind::Deception ||
-                                              mk == MissionKind::Hunter || mk == MissionKind::Recce || mk == MissionKind::Bda;
-                        if (u > best_u && achieves) {
-                            best_u = u;
-                            p.expected_losses = eloss;
-                            p.expected_value = ev;
-                            p.utility = u;
-                            best_out = p;
-                            best_why = vwhy;
-                            for (const std::string& w : why) best_why.push_back(w);
-                            if (tod > 0.15) best_why.push_back(std::string("chose ") + DayPartName(part) + ": the planner's habit");
-                            if (front_->entries[ei].id == pln.last_entry && pln.Quirk("axis_repeat") > 0.0) {
-                                best_why.push_back("the same way in as last time (" + front_->entries[ei].id + ")");
+                        // The strike group's size: with a cost for every sortie, the planner sizes it to the target (a pair
+                        // for a radar, a massed blow for an airfield; docs/air_war/13_PACKAGES.md).
+                        const bool sized = tune.Get("utility.sortie_cost") > 0.0 &&
+                                           (mk == MissionKind::Strike || mk == MissionKind::Dead || mk == MissionKind::Cas);
+                        for (double size : sized ? std::vector<double>{0.5, 1.0, 2.0} : std::vector<double>{1.0}) {
+                            Option o;
+                            o.entry = static_cast<int>(ei);
+                            o.exit = static_cast<int>(ei);
+                            o.profile = prof;
+                            o.part = part;
+                            o.size = size;
+                            if (!NextTot(part, o.tot_h)) continue;
+                            Package p;
+                            std::vector<std::string> why;
+                            if (!Build(mk, *e, o, p, why)) continue;
+                            double main_loss = 0.0;
+                            const double eloss = ExpectedLosses(p, *e, &main_loss);
+                            // Worth and the chance the effort lands on something real and working.
+                            std::vector<std::string> vwhy;
+                            const double v = ValueOf(*e, mk, &vwhy);
+                            const double age = c_->now_h - e->observed_h;
+                            const double stale = tune.Get("strike.stale_miss_m");
+                            double p_loc = e->mobile ? 1.0 / (1.0 + (e->sigma_m / stale) * (e->sigma_m / stale)) : 1.0;
+                            if (mk == MissionKind::Recce || mk == MissionKind::Bda || mk == MissionKind::Hunter ||
+                                mk == MissionKind::Deception) {
+                                p_loc = 1.0;
                             }
-                            if (mem != pln.tactics.end() && mem->second.loss_rate > 0.1) {
-                                best_why.push_back("remembers losing " + Pct(mem->second.loss_rate) + " this way, but the target is worth it");
+                            if (mk == MissionKind::ArmedRecce) {
+                                // A column on its stretch, and seen there (logistics.hpp).
+                                const AircraftType* lead = f.Aircraft(p.flights.front().aircraft);
+                                p_loc = c_->supply->OnStretchChance(d, static_cast<std::size_t>(line), part) *
+                                        ColumnFindChance(part, c_->WeatherAt(o.tot_h), lead != nullptr && lead->night, tune);
                             }
-                            if (e->mobile && age > 6.0) {
-                                best_why.push_back("last seen " + std::to_string(static_cast<int>(age + 0.5)) + " h ago: it may have moved");
+                            const double main_n = std::max(1, p.Main());
+                            const double p_deliver = Clamp01(1.0 - main_loss / main_n);
+                            double effect = 1.0;
+                            const AircraftType* ma = f.Aircraft(p.flights.front().aircraft);
+                            if (mk == MissionKind::Strike || mk == MissionKind::Dead || mk == MissionKind::Cas ||
+                                mk == MissionKind::HeloRaid || mk == MissionKind::Harassment || mk == MissionKind::ArmedRecce) {
+                                const double hard = HardnessOf(*e);
+                                effect = Clamp01(p.Main() * (ma != nullptr ? ma->strike_power : 0.2) * tune.Get("strike.hit_chance") /
+                                                 (0.5 + hard));
+                                const double we = WeaponsEffect(p, *e);
+                                if (we >= 0.0) effect = we;
                             }
-                            found = true;
+                            double live = e->Live();
+                            if (mk == MissionKind::Recce) live = std::max(0.3, 1.0 - e->exists) + std::min(1.0, age / 24.0);
+                            if (mk == MissionKind::Bda || mk == MissionKind::ArmedRecce) live = 1.0;
+                            if (pln.Quirk("elint_trust") > 0.0 && e->source == IntelSource::Elint) live = std::min(1.0, live + 0.3);
+                            const double ev = v * live * p_loc * p_deliver * effect;
+                            double u = tune.Get("utility.value_weight") * ev - tune.Get("utility.loss_cost") * eloss * loss_aversion -
+                                       tune.Get("utility.sortie_cost") * p.Aircraft();
+                            // His habits.
+                            const double qs = tune.Get("utility.quirk_scale");
+                            const char* pref[] = {"pref_night", "pref_dawn", "pref_day", "pref_dusk"};
+                            const double tod = pln.Quirk(pref[static_cast<int>(part)]);
+                            u += qs * tod;
+                            if (front_->entries[ei].id == pln.last_entry) u += qs * (pln.Quirk("axis_repeat") - pln.Quirk("axis_vary"));
+                            if (prof == Profile::Low) u += qs * pln.Quirk("low_level");
+                            if (prof == Profile::Medium) u += qs * pln.Quirk("medium_altitude");
+                            if (c_->WeatherAt(o.tot_h) == Weather::Poor) u -= qs * (1.0 - Clamp01(pln.Quirk("weather_tolerance")));
+                            if (e->mobile && age > 6.0 && (mk == MissionKind::Strike || mk == MissionKind::Dead)) {
+                                u -= qs * 2.0 * pln.Quirk("imagery_wait");
+                                u -= tune.Get("utility.stale_penalty") * Clamp01((age - 6.0) / 24.0) * (0.5 + pln.def.traits.methodical);
+                            }
+                            if (e->strikes > 0) u += qs * pln.Quirk("restrike");
+                            if (mk == MissionKind::HeloRaid) u += qs * pln.Quirk("helicopter_use");
+                            // What he remembers of this way of doing it, and his curiosity about untried ways.
+                            const auto mem = pln.tactics.find(p.tactic);
+                            int uses = 0;
+                            if (mem != pln.tactics.end()) {
+                                uses = mem->second.uses;
+                                u -= tune.Get("utility.loss_cost") * loss_aversion * mem->second.loss_rate * p.Aircraft() * 0.5;
+                                u += tune.Get("utility.value_weight") * 0.15 * (mem->second.success - 0.5);
+                            }
+                            u += tune.Get("utility.exploration") * pln.def.traits.creativity / std::sqrt(1.0 + uses);
+                            u += c_->rng->Normal(0.0, noise_sd);
+                            // A nuisance raid is flown for the sleep it costs, not the damage; an armed reconnaissance is
+                            // judged by what it does when it finds a column.
+                            const double gate = mk == MissionKind::ArmedRecce ? v * p_deliver * effect : ev;
+                            const bool achieves = gate >= MinEffect() || mk == MissionKind::Deception || mk == MissionKind::Hunter ||
+                                                  mk == MissionKind::Recce || mk == MissionKind::Bda || mk == MissionKind::Harassment;
+                            if (u > best_u && achieves) {
+                                best_u = u;
+                                p.expected_losses = eloss;
+                                p.expected_value = ev;
+                                p.utility = u;
+                                best_out = p;
+                                best_why = vwhy;
+                                for (const std::string& w : why) best_why.push_back(w);
+                                if (tod > 0.15) best_why.push_back(std::string("chose ") + DayPartName(part) + ": the planner's habit");
+                                if (front_->entries[ei].id == pln.last_entry && pln.Quirk("axis_repeat") > 0.0) {
+                                    best_why.push_back("the same way in as last time (" + front_->entries[ei].id + ")");
+                                }
+                                if (mem != pln.tactics.end() && mem->second.loss_rate > 0.1) {
+                                    best_why.push_back("remembers losing " + Pct(mem->second.loss_rate) + " this way, but the target is worth it");
+                                }
+                                if (e->mobile && age > 6.0) {
+                                    best_why.push_back("last seen " + std::to_string(static_cast<int>(age + 0.5)) + " h ago: it may have moved");
+                                }
+                                found = true;
+                            }
                         }
                     }
                 }
             }
         }
-        if (!found || best_u < tune.Get("utility.min_value")) return false;
+        if (!found || best_u < MinValue()) return false;
         best_out.rationale = best_why;
         best_out.rationale.insert(best_out.rationale.begin(),
                                   "expects to lose " + Num1(best_out.expected_losses) + " of " + std::to_string(best_out.Aircraft()) +
                                       " aircraft for an expected effect of " + Num1(best_out.expected_value));
         return true;
+    }
+
+    // The cruise missile type the staff would fire now: the doctrine's first choice in service in the war's year with a
+    // salvo in stock. Null: none.
+    const AircraftType* MissileType() const {
+        const FactionDef& f = c_->data->faction;
+        const PackageTemplate& t = f.doctrine.packages[static_cast<int>(MissionKind::Missile)];
+        if (!t.allowed || c_->missile_stock == nullptr) return nullptr;
+        for (const std::string& id : t.aircraft) {
+            const AircraftType* a = f.Aircraft(id);
+            if (a == nullptr || !a->missile || !a->InService(c_->data->theatre.year)) continue;
+            const auto it = c_->missile_stock->find(id);
+            if (it != c_->missile_stock->end() && it->second + 1e-9 >= t.flight_size) return a;
+        }
+        return nullptr;
+    }
+
+    // Where a salvo is launched and how it flies in: a carrier releases it at the border entry ("air"); ships or ground
+    // launchers fire it from the front's launch area and it comes in over that entry ("sea"). High: at height to a dive
+    // 15 km short, then down onto the target; low: terrain-following all the way.
+    std::vector<RoutePoint> MissileRoute(const AircraftType& m, const EntryPoint& entry, const Vec3& target, Profile prof,
+                                         double tot_h) const {
+        const double agl = ProfileHeight(m, prof);
+        std::vector<RoutePoint> r;
+        if (m.launch == "sea" && front_->has_missile_launch) r.push_back({front_->missile_launch, agl, 0.0, "launch"});
+        r.push_back({entry.pos, agl, 0.0, r.empty() ? "launch" : "entry"});
+        const Vec3 d = target - entry.pos;
+        const double len = std::max(1.0, Dist2d(target, entry.pos));
+        if (prof == Profile::High && len > 20000.0) r.push_back({target - d * (15000.0 / len), agl, 0.0, "dive"});
+        r.push_back({target, 10.0, 0.0, "target"});
+        TimeRoute(r, r.size() - 1, tot_h, m.cruise_mps);
+        return r;
+    }
+
+    // A cruise missile salvo (MissionKind::Missile): one flight of missiles at a fixed target within their range, worth
+    // its expected effect (the missiles that get through, their warheads, their accuracy) less the missiles spent.
+    bool BestMissilePackage(const std::set<std::string>& used, Package& best_out) {
+        const AircraftType* mt = MissileType();
+        if (mt == nullptr) return false;
+        const FactionDef& f = c_->data->faction;
+        const PackageTemplate& t = f.doctrine.packages[static_cast<int>(MissionKind::Missile)];
+        Officer& pln = PlannerOfficer();
+        const TuningTable& tune = Tune();
+        const double noise_sd = tune.Get("utility.noise_at_zero_skill") * (1.0 - pln.Effective(pln.def.skills.planning));
+        const double left = (*c_->missile_stock)[mt->id];
+        const double scarcity = std::sqrt(std::max(1.0, static_cast<double>(mt->stock)) / std::max(1.0, left));
+        const double hit = mt->hit_chance > 0.0 ? mt->hit_chance : tune.Get("strike.hit_chance");
+        const Profile prof = t.profiles.empty() ? Profile::Low : t.profiles.front();
+        double best_u = -1e18;
+        bool found = false;
+        for (const IntelEntry* e : Candidates(MissionKind::Missile)) {
+            if (used.count(e->key) > 0) continue;
+            for (std::size_t ei = 0; ei < front_->entries.size(); ++ei) {
+                const EntryPoint& entry = front_->entries[ei];
+                for (DayPart part : t.day_parts) {
+                    double tot_h = 0.0;
+                    if (!NextTot(part, tot_h)) continue;
+                    Package p;
+                    p.kind = MissionKind::Missile;
+                    p.target_key = e->key;
+                    p.target_object = e->object_id;
+                    p.target_label = e->label;
+                    p.target_pos = e->pos;
+                    p.tot_h = tot_h;
+                    p.part = part;
+                    p.profile = prof;
+                    p.entry = entry.id;
+                    p.exit = entry.id;
+                    p.tactic = std::string("missile:") + mt->id;
+                    Flight fl;
+                    fl.callsign = f.callsigns[static_cast<std::size_t>((*c_->next_id * 7) % static_cast<int>(f.callsigns.size()))] + " " +
+                                  std::to_string(10 + (*c_->next_id % 9) * 10);
+                    fl.role = FlightRole::Missile;
+                    fl.aircraft = mt->id;
+                    fl.count = t.flight_size;
+                    fl.profile = prof;
+                    fl.route = MissileRoute(*mt, entry, e->pos, prof, tot_h);
+                    double flown = 0.0;
+                    for (std::size_t i = 0; i + 1 < fl.route.size(); ++i) flown += Dist2d(fl.route[i].pos, fl.route[i + 1].pos);
+                    if (flown > mt->range_m) continue;
+                    fl.release_index = ReleaseIndex(fl.route);
+                    fl.aim_key = e->key;
+                    fl.aim_pos = e->pos;
+                    p.flights.push_back(fl);
+                    const double lost = std::min(static_cast<double>(fl.count), ExpectedLosses(p, *e, nullptr));
+                    const double through = fl.count - lost;
+                    const double effect = Clamp01(through * mt->strike_power * hit / (0.5 + HardnessOf(*e)));
+                    std::vector<std::string> vwhy;
+                    const double ev = ValueOf(*e, MissionKind::Missile, &vwhy) * e->Live() * effect;
+                    double u = tune.Get("utility.value_weight") * ev - tune.Get("utility.missile_cost") * scarcity * fl.count;
+                    u += c_->rng->Normal(0.0, noise_sd);
+                    if (u > best_u && ev >= MinEffect()) {
+                        best_u = u;
+                        p.expected_losses = 0.0;
+                        p.expected_value = ev;
+                        p.utility = u;
+                        p.rationale = vwhy;
+                        p.rationale.insert(p.rationale.begin(), "expects " + Num1(through) + " of " + std::to_string(fl.count) + " " +
+                                                                    mt->name + " to get through, for an expected effect of " + Num1(ev) +
+                                                                    "; no crew at risk");
+                        best_out = p;
+                        found = true;
+                    }
+                }
+            }
+        }
+        return found && best_u >= MinValue();
     }
 
     double HardnessOf(const IntelEntry& e) const {
@@ -873,7 +1303,7 @@ private:
 
     bool Approve(Package& p, Officer& cdr) {
         const FactionDef& f = c_->data->faction;
-        const double risk = p.expected_losses / std::max(1, p.Aircraft());
+        const double risk = p.kind == MissionKind::Missile ? 0.0 : p.expected_losses / std::max(1, p.Aircraft());
         const double tolerance = std::max(0.3, f.politics.loss_tolerance_per_day);
         const double left = std::max(0.0, tolerance - c_->politics->losses_today) / tolerance;
         double limit = 0.04 + 0.16 * cdr.def.traits.boldness + 0.08 * c_->politics->pressure + 0.06 * cdr.Quirk("risk");
@@ -925,6 +1355,12 @@ private:
         }
         for (const Flight& fl : p.flights) *c_->arm_stock -= fl.arms;
         if (*c_->arm_stock < 0.0) *c_->arm_stock = 0.0;
+        if (c_->tanker_receivers != nullptr) *c_->tanker_receivers = std::max(0.0, *c_->tanker_receivers - p.refuelled);
+        for (const Flight& fl : p.flights) {
+            if (fl.role != FlightRole::Missile || c_->missile_stock == nullptr) continue;
+            double& left = (*c_->missile_stock)[fl.aircraft];
+            left = std::max(0.0, left - fl.count);
+        }
         p.name = p.flights.empty() ? std::string("Package") : p.flights.front().callsign;
         pln.last_entry = p.entry;
         std::string comp;

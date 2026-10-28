@@ -159,8 +159,15 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	APlayerController* Pc = Cast<APlayerController>(GetController());
 	USimWorldSubsystem* Sim = GetWorld() ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	// The radio journal held before the eyes takes the keyboard (digits, Enter, Esc): nothing else hears them this frame.
+	const bool bWasAtJournal = bAtJournal;
+	if (bAtJournal)
+	{
+		HandleJournal(Pc, Sim);
+	}
+	APlayerController* KeysPc = bWasAtJournal ? nullptr : Pc;
 	// Esc: the mission's menu (unless the crew menu is open: Esc closes that). Nothing else moves while it is open.
-	if (Pc != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !bMenuOpen && !bTouring && Pc->WasInputKeyJustPressed(EKeys::Escape))
+	if (KeysPc != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !bMenuOpen && !bTouring && Pc->WasInputKeyJustPressed(EKeys::Escape))
 	{
 		SetMissionMenuOpen(!bMissionMenuOpen);
 	}
@@ -174,8 +181,11 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		Views->UpdateViews(Pc, DeltaSeconds);
 	}
-	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's.
-	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() ? nullptr : Pc);
+	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's. In a mission only
+	// the driver's seat drives the hull (the commander orders it); with no scenario running the hull is the player's.
+	const bool bDriverSeat = bInCabin && Body == EBodyMode::Seat && StationId == TEXT("driver");
+	const bool bMayDrive = bDriverSeat || (Sim == nullptr || !Sim->IsScenarioRunning());
+	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() || !bMayDrive ? nullptr : Pc);
 	if (bAutoBrake && SpeedMps == 0.0)
 	{
 		bAutoBrake = false;  // the lesson autoplay's halt is made
@@ -218,11 +228,11 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 		}
 		else if (!bMenuOpen)
 		{
-			HandleHotkeys(Pc, Sim);
+			HandleHotkeys(KeysPc, Sim);
 		}
 		AnimateFromSim(Sim);
 	}
-	HandleCabin(DeltaSeconds, Pc);
+	HandleCabin(DeltaSeconds, KeysPc);
 	if (Sim != nullptr && Sim->IsScenarioRunning() && !bInstructorOpen)
 	{
 		// The player's body out of his seat to simcore (docs/crew/13_OUT_OF_THE_VEHICLE.md): ten times a second.
@@ -233,14 +243,14 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			ReportBody(Sim);
 		}
 		UpdateJobMarkers(Sim);
-		HandleCrew(Pc, Sim, DeltaSeconds);
+		HandleCrew(KeysPc, Sim, DeltaSeconds);
 		if (bIsPost && !bMenuOpen)
 		{
-			HandlePost(Pc);
+			HandlePost(KeysPc);
 		}
 	}
 	// A lesson's highlight wins over the helper's (it is set after HandleCrew's).
-	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(Pc, Sim, DeltaSeconds) : FString();
+	const FString LessonHand = Sim != nullptr && Sim->HasTutorial() ? HandleLesson(KeysPc, Sim, DeltaSeconds) : FString();
 	// The body at the camera's seat isn't drawn (first person); the ghost hand shows the advised move.
 	// Walking, his own body is the one he walks in: the seat he holds is empty (another's seat keeps its crewman).
 	const FString Own = bWalking || IsOutside() ? (bHoldingSeat ? StationId : FString()) : Cabin->GetStationId(Station);
@@ -252,8 +262,8 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	// once the player has waited longer than his seat's NPC would, or when watching the crewman.
 	const bool bLesson = Sim != nullptr && Sim->HasTutorial();
 	const FSimHelpStep* Top = bLesson ? nullptr : HelpTop();
-	const bool bHand = Top != nullptr && (Top->Kind == TEXT("control") || Top->Kind == TEXT("wheel")) &&
-					   (Help.bHesitating || Help.Level == TEXT("demonstrate"));
+	// Not on a hand wheel: following a target is the player's own continuous work, and a hand on it looks like taking over.
+	const bool bHand = Top != nullptr && Top->Kind == TEXT("control") && (Help.bHesitating || Help.Level == TEXT("demonstrate"));
 	CrewBodies->SetGhostHand(StationId, bLesson ? LessonHand : (bHand ? Top->Control : FString()));
 }
 
@@ -475,7 +485,7 @@ void ASimOsaVehicle::RunLessonAutoplay(USimWorldSubsystem* Sim, const FSimTutori
 	// An order or a report: the crew menu opens first, as the learner opens it (the photograph shows the line marked).
 	if (Step.Phase == ESimTutorialPhase::Act && !Step.Order.IsEmpty() && AutoClock > 0.8f && AutoClicks == 0 && !bMenuOpen && bInCabin)
 	{
-		OpenCrewMenu(Sim);
+		OpenCrewMenu(Sim, true);
 	}
 	if (AutoClock < 2.2f)
 	{
@@ -786,8 +796,24 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		FeedbackText = Sim->AnswerCall(StationId) ? FString(TEXT("Line answered")) : FString(TEXT("Nothing rings here"));
 		FeedbackSecondsLeft = 2.0f;
 	}
-	// O: the crew menu. 1-9 choose a line, 0 the next page, O or Escape close it.
-	if (Pc->WasInputKeyJustPressed(EKeys::O))
+	// The quick replies (docs/crew/15_TALK.md section 5): U «Есть!», I «Выполнено!», P «Повторите!» (the last line said to
+	// him is said again).
+	const TPair<FKey, const TCHAR*> Replies[3] = {{AckKey, TEXT("ack")}, {DoneKey, TEXT("done")}, {SayAgainKey, TEXT("say_again")}};
+	for (const TPair<FKey, const TCHAR*>& R : Replies)
+	{
+		if (!Pc->WasInputKeyJustPressed(R.Key))
+		{
+			continue;
+		}
+		const TCHAR* Said = R.Key == AckKey ? TEXT("Есть!") : R.Key == DoneKey ? TEXT("Выполнено!") : TEXT("Повторите!");
+		FString Why;
+		FeedbackText = Sim->PlayerReply(StationId, R.Value, Why) ? FString::Printf(TEXT("You: «%s»"), Said)
+																  : FString::Printf(TEXT("«%s»: %s"), Said, *Why);
+		FeedbackSecondsLeft = 2.5f;
+	}
+	// Caps Lock: the radial crew menu (docs/crew/15_TALK.md section 5). A tap opens it and another closes it; held, a
+	// flick of the mouse out past the ring opens the sector it points at, and letting go says the line pointed at.
+	if (Pc->WasInputKeyJustPressed(CrewMenuKey))
 	{
 		Sim->NoteTutorialEvent(TEXT("crew_menu"));
 		if (bMenuOpen)
@@ -797,63 +823,317 @@ void ASimOsaVehicle::HandleCrew(APlayerController* Pc, USimWorldSubsystem* Sim, 
 		else
 		{
 			OpenCrewMenu(Sim);
+			MenuHeldSeconds = 0.0f;
 		}
 	}
 	if (!bMenuOpen)
 	{
 		return;
 	}
+	MenuAdvised = AdvisedMenuLine(Sim);
+	const TArray<FSimCrewMenuSlot> Ring = GetCrewMenuRing();
+	MenuHover = MenuPlaceAt(MenuCursor, Ring.Num());
+	static constexpr double OpenPx = 110.0;
+	if (MenuLevel == 0 && MenuHover != INDEX_NONE && !Ring[MenuHover].bEmpty && MenuCursor.Size() > OpenPx)
+	{
+		PickMenuPlace(MenuHover, Sim);
+		return;
+	}
+	if (MenuHeldSeconds >= 0.0f)
+	{
+		if (Pc->IsInputKeyDown(CrewMenuKey))
+		{
+			MenuHeldSeconds += DeltaSeconds;
+		}
+		else
+		{
+			const bool bFlicked = MenuHeldSeconds > 0.25f;  // a tap leaves the menu open for the keys or a click
+			MenuHeldSeconds = -1.0f;
+			if (bFlicked)
+			{
+				if (MenuHover != INDEX_NONE)
+				{
+					PickMenuPlace(MenuHover, Sim);
+				}
+				else
+				{
+					bMenuOpen = false;  // let go in the middle: nothing said
+				}
+				return;
+			}
+		}
+	}
 	if (Pc->WasInputKeyJustPressed(EKeys::Escape))
 	{
 		bMenuOpen = false;
 		return;
 	}
-	if (Pc->WasInputKeyJustPressed(EKeys::Zero))
+	if (Pc->WasInputKeyJustPressed(EKeys::BackSpace))
 	{
-		const int32 Pages = FMath::Max(1, (MenuEntries.Num() + 8) / 9);
-		MenuPage = (MenuPage + 1) % Pages;
+		bMenuOpen = MenuLevel != 0;
+		MenuLevel = 0;
+		MenuGroup = INDEX_NONE;
+		MenuPage = 0;
+		MenuCursor = FVector2D::ZeroVector;
+		return;
 	}
-	static const FKey Digits[9] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine};
-	for (int32 I = 0; I < 9; ++I)
+	// Tab at the commander's seat: by subject, or seat first (whom, then what).
+	if (Pc->WasInputKeyJustPressed(EKeys::Tab) && StationId == Sim->GetCommanderStation())
 	{
-		if (!Pc->WasInputKeyJustPressed(Digits[I]))
+		bMenuSeatFirst = !bMenuSeatFirst;
+		MenuLevel = 0;
+		MenuGroup = INDEX_NONE;
+		MenuPage = 0;
+		MenuCursor = FVector2D::ZeroVector;
+		return;
+	}
+	// A group of more than eight lines (seat first): 9 or the wheel, the next eight.
+	if (MenuLevel == 1 && (Pc->WasInputKeyJustPressed(EKeys::Nine) || Pc->WasInputKeyJustPressed(EKeys::MouseScrollDown) ||
+							  Pc->WasInputKeyJustPressed(EKeys::MouseScrollUp)))
+	{
+		MenuPage = (MenuPage + 1) % GetCrewMenuPages();
+	}
+	// 0: the advised line at once (the lesson's, or the helper's pick).
+	if (Pc->WasInputKeyJustPressed(EKeys::Zero) && !MenuAdvised.IsEmpty())
+	{
+		const int32 At = MenuEntries.IndexOfByPredicate([this](const FSimCrewMenuEntry& E) { return E.Id == MenuAdvised; });
+		if (At != INDEX_NONE)
 		{
-			continue;
+			SayMenuEntry(At, Sim);
+			return;
 		}
-		const int32 Index = MenuPage * 9 + I;
-		if (!MenuEntries.IsValidIndex(Index))
+	}
+	// 1-8: the place, the first at the top and on clockwise, as the mouse points; or a click on the place pointed at.
+	static const FKey Digits[8] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight};
+	for (int32 I = 0; I < 8; ++I)
+	{
+		if (Pc->WasInputKeyJustPressed(Digits[I]))
 		{
-			continue;
+			PickMenuPlace(I, Sim);
+			return;
 		}
-		const FSimCrewMenuEntry& E = MenuEntries[Index];
-		// A lesson: only the line its step asks for.
-		const FString Refusal = Sim->GetTutorialMenuRefusal(E.Id);
-		if (!Refusal.IsEmpty())
-		{
-			FeedbackText = Refusal;
-			FeedbackSecondsLeft = 3.0f;
-			continue;
-		}
-		FString Reason;
-		const bool bOk = E.bOrder ? Sim->TryCrewOrder(E.Id, Reason) : Sim->PlayerSay(StationId, E.Id);
-		const FString NotNow = FString::Printf(TEXT("  (not now: %s)"), Reason.IsEmpty() ? TEXT("can't") : *Reason);
-		FeedbackText = FString::Printf(TEXT("%s %s%s"), E.bOrder ? TEXT("Order:") : TEXT("Report:"), *E.Ru, bOk ? TEXT("") : *NotNow);
-		FeedbackSecondsLeft = 3.0f;
-		bMenuOpen = false;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton) && MenuHover != INDEX_NONE)
+	{
+		PickMenuPlace(MenuHover, Sim);
 	}
 }
 
-void ASimOsaVehicle::OpenCrewMenu(USimWorldSubsystem* Sim)
+void ASimOsaVehicle::OpenCrewMenu(USimWorldSubsystem* Sim, bool bAtAdvised)
 {
 	bMenuOpen = true;
 	MenuEntries = Sim->GetCrewMenu(StationId);
+	MenuSectors = Sim->GetCrewMenuSectors();
+	MenuDoers = Sim->GetCrewMenuDoers();
+	bMenuSeatFirst = bMenuSeatFirst && StationId == Sim->GetCommanderStation();
+	MenuLevel = 0;
+	MenuGroup = INDEX_NONE;
 	MenuPage = 0;
-	const FString Want = Sim->HasTutorial() ? Sim->GetTutorialStep().Order : FString();
-	const int32 At = Want.IsEmpty() ? INDEX_NONE : MenuEntries.IndexOfByPredicate([&Want](const FSimCrewMenuEntry& E) { return E.Id == Want; });
-	if (At != INDEX_NONE)
+	MenuCursor = FVector2D::ZeroVector;
+	MenuHover = INDEX_NONE;
+	MenuHeldSeconds = -1.0f;
+	MenuAdvised = AdvisedMenuLine(Sim);
+	if (!bAtAdvised || MenuAdvised.IsEmpty())
 	{
-		MenuPage = At / 9;
+		return;
 	}
+	const TArray<FSimCrewMenuGroup> Groups = MenuGroups();
+	for (int32 G = 0; G < Groups.Num(); ++G)
+	{
+		const int32 K = MenuGroupLines(G).IndexOfByPredicate([this](int32 I) { return MenuEntries[I].Id == MenuAdvised; });
+		if (K != INDEX_NONE)
+		{
+			MenuLevel = 1;
+			MenuGroup = G;
+			MenuPage = K / 8;
+			return;
+		}
+	}
+}
+
+TArray<FSimCrewMenuGroup> ASimOsaVehicle::MenuGroups() const
+{
+	if (bMenuSeatFirst)
+	{
+		return MenuDoers;
+	}
+	// The crew data's sectors in their places; a line its layout misses goes to a sector "Other" after them.
+	TArray<FSimCrewMenuGroup> Out = MenuSectors;
+	for (const FSimCrewMenuEntry& E : MenuEntries)
+	{
+		while (E.Sector >= Out.Num())
+		{
+			Out.Add({TEXT("other"), TEXT("Прочее"), TEXT("Other")});
+		}
+	}
+	return Out;
+}
+
+TArray<int32> ASimOsaVehicle::MenuGroupLines(int32 Group) const
+{
+	TArray<int32> Out;
+	const TArray<FSimCrewMenuGroup> Groups = MenuGroups();
+	if (!Groups.IsValidIndex(Group))
+	{
+		return Out;
+	}
+	for (int32 I = 0; I < MenuEntries.Num(); ++I)
+	{
+		if (bMenuSeatFirst ? MenuEntries[I].Doer == Groups[Group].Id : MenuEntries[I].Sector == Group)
+		{
+			Out.Add(I);
+		}
+	}
+	return Out;
+}
+
+TArray<FSimCrewMenuSlot> ASimOsaVehicle::GetCrewMenuRing() const
+{
+	TArray<FSimCrewMenuSlot> Out;
+	if (!bMenuOpen)
+	{
+		return Out;
+	}
+	const auto Advised = [this](int32 I) { return !MenuAdvised.IsEmpty() && MenuEntries[I].Id == MenuAdvised; };
+	if (MenuLevel == 0)
+	{
+		const TArray<FSimCrewMenuGroup> Groups = MenuGroups();
+		for (int32 G = 0; G < Groups.Num(); ++G)
+		{
+			const TArray<int32> Lines = MenuGroupLines(G);
+			FSimCrewMenuSlot S;
+			S.Ru = Groups[G].Ru;
+			S.En = Groups[G].En;
+			S.bEmpty = Lines.Num() == 0;
+			S.bAdvised = Lines.ContainsByPredicate(Advised);
+			Out.Add(S);
+		}
+		return Out;
+	}
+	const TArray<int32> Lines = MenuGroupLines(MenuGroup);
+	for (int32 K = MenuPage * 8; K < FMath::Min(Lines.Num(), MenuPage * 8 + 8); ++K)
+	{
+		const FSimCrewMenuEntry& E = MenuEntries[Lines[K]];
+		FSimCrewMenuSlot S;
+		S.Ru = E.Ru;
+		S.En = E.En;
+		S.Reason = E.bAvailable ? FString() : E.Reason;
+		S.bAdvised = Advised(Lines[K]);
+		S.Entry = Lines[K];
+		Out.Add(S);
+	}
+	return Out;
+}
+
+FString ASimOsaVehicle::GetCrewMenuTitle() const
+{
+	const TArray<FSimCrewMenuGroup> Groups = MenuGroups();
+	if (MenuLevel == 1 && Groups.IsValidIndex(MenuGroup))
+	{
+		return FString::Printf(TEXT("%s (%s)"), *Groups[MenuGroup].Ru, *Groups[MenuGroup].En);
+	}
+	return bMenuSeatFirst ? FString(TEXT("Кому? (To whom?)")) : FString(TEXT("Команды и доклады (Orders and reports)"));
+}
+
+int32 ASimOsaVehicle::GetCrewMenuPages() const
+{
+	return MenuLevel == 1 ? FMath::Max(1, (MenuGroupLines(MenuGroup).Num() + 7) / 8) : 1;
+}
+
+int32 ASimOsaVehicle::MenuPlaceAt(const FVector2D& Cursor, int32 Places)
+{
+	// Out of the dead centre, the nearest of the eight directions: the first at the top, then clockwise (screen y down).
+	if (Cursor.Size() < 28.0)
+	{
+		return INDEX_NONE;
+	}
+	const double Deg = FMath::RadiansToDegrees(FMath::Atan2(Cursor.X, -Cursor.Y));
+	const int32 Place = (FMath::RoundToInt32(Deg / 45.0) + 8) % 8;
+	return Place < Places ? Place : INDEX_NONE;
+}
+
+void ASimOsaVehicle::PickMenuPlace(int32 Place, USimWorldSubsystem* Sim)
+{
+	const TArray<FSimCrewMenuSlot> Ring = GetCrewMenuRing();
+	if (!Ring.IsValidIndex(Place))
+	{
+		return;
+	}
+	if (MenuLevel == 1)
+	{
+		SayMenuEntry(Ring[Place].Entry, Sim);
+		return;
+	}
+	if (Ring[Place].bEmpty)
+	{
+		FeedbackText = FString::Printf(TEXT("%s: nothing of yours to say there"), *Ring[Place].En);
+		FeedbackSecondsLeft = 2.0f;
+		return;
+	}
+	MenuLevel = 1;
+	MenuGroup = Place;
+	MenuPage = 0;
+	MenuCursor = FVector2D::ZeroVector;
+	MenuHover = INDEX_NONE;
+	// The page holding the advised line, if this group has it.
+	const int32 K = MenuGroupLines(Place).IndexOfByPredicate([this](int32 I) { return !MenuAdvised.IsEmpty() && MenuEntries[I].Id == MenuAdvised; });
+	MenuPage = K != INDEX_NONE ? K / 8 : 0;
+}
+
+void ASimOsaVehicle::SayMenuEntry(int32 Entry, USimWorldSubsystem* Sim)
+{
+	if (!MenuEntries.IsValidIndex(Entry))
+	{
+		return;
+	}
+	const FSimCrewMenuEntry E = MenuEntries[Entry];
+	// A lesson: only the line its step asks for.
+	const FString Refusal = Sim->GetTutorialMenuRefusal(E.Id);
+	if (!Refusal.IsEmpty())
+	{
+		FeedbackText = Refusal;
+		FeedbackSecondsLeft = 3.0f;
+		return;
+	}
+	FString Reason;
+	const bool bOk = E.bOrder ? Sim->TryCrewOrder(E.Id, Reason) : Sim->PlayerSay(StationId, E.Id);
+	const FString NotNow = FString::Printf(TEXT("  (not now: %s)"), Reason.IsEmpty() ? TEXT("can't") : *Reason);
+	FeedbackText = FString::Printf(TEXT("%s %s%s"), E.bOrder ? TEXT("Order:") : TEXT("Report:"), *E.Ru, bOk ? TEXT("") : *NotNow);
+	FeedbackSecondsLeft = 3.0f;
+	bMenuOpen = false;
+}
+
+FString ASimOsaVehicle::AdvisedMenuLine(const USimWorldSubsystem* Sim) const
+{
+	if (Sim != nullptr && Sim->HasTutorial())
+	{
+		return Sim->GetTutorialStep().Order;
+	}
+	for (int32 I = 0; bAssist && Help.bShown && I < Help.Steps.Num(); ++I)
+	{
+		const FSimHelpStep& S = Help.Steps[I];
+		if ((S.Kind == TEXT("order") || S.Kind == TEXT("report")) && S.Blocked.IsEmpty())
+		{
+			return S.Callout;
+		}
+	}
+	return FString();
+}
+
+void ASimOsaVehicle::TakeMenuMouse(float& Dx, float& Dy)
+{
+	if (!bMenuOpen)
+	{
+		return;
+	}
+	// Screen axes: x right, y down (the mouse's y is up).
+	MenuCursor += FVector2D(Dx, -Dy) * MenuPxPerMouseUnit;
+	const double Max = 160.0;
+	if (MenuCursor.Size() > Max)
+	{
+		MenuCursor = MenuCursor.GetSafeNormal() * Max;
+	}
+	Dx = Dy = 0.0f;
 }
 
 void ASimOsaVehicle::Drive(float DeltaSeconds, APlayerController* Pc)
@@ -999,7 +1279,7 @@ void ASimOsaVehicle::ConfigureForScenario(USimWorldSubsystem* Sim)
 	PostMast = NewObject<USimPu12MastComponent>(this, TEXT("PostMast"));
 	PostMast->SetupAttachment(Root);
 	PostMast->RegisterComponent();
-	// The crew's drills go through the crew menu (O) here; the number keys pick launchers in the commander's seat.
+	// The crew's drills go through the crew menu (Caps Lock) here; the number keys pick launchers in the commander's seat.
 	CrewHotkeys.Reset();
 	UE_LOG(LogSAM3D, Log, TEXT("Vehicle: the PU-12M command post%s"), Mesh != nullptr ? TEXT("") : TEXT(" (SM_PU12M not imported: no exterior)"));
 }
@@ -1225,6 +1505,112 @@ void ASimOsaVehicle::HandleBoard(APlayerController* Pc, const FVector& Start, co
 			}
 		}
 		FeedbackSecondsLeft = 2.0f;
+	}
+}
+
+// ---------------------------------------------------------------------------------------------- the radio journal
+
+void ASimOsaVehicle::HandleJournalPage(APlayerController* Pc, const FVector& Start, const FVector& Forward)
+{
+	// The radiotelephonist's journal open on his table (simcore/radio_journal.hpp): a click on the page holds it before the
+	// eyes. Everyone may read it; only its keeper writes.
+	bOnJournal = false;
+	double DistanceCm = 0.0;
+	if (Pc == nullptr || !bIsPost || Cabin == nullptr || !Cabin->TraceDocument(Start, Start + Forward * StandingReachCm, TEXT("radio_journal"), DistanceCm))
+	{
+		return;
+	}
+	// A control nearer than the page (the pencil on it, a knob over it) wins.
+	if (HoveredItem != INDEX_NONE && Cabin->GetItemControl(HoveredItem) != TEXT("journal.write"))
+	{
+		return;
+	}
+	bOnJournal = true;
+	HoveredItem = INDEX_NONE;
+	Cabin->SetHighlightedItem(INDEX_NONE);
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	const bool bKeeper = Sim != nullptr && !StationId.IsEmpty() && StationId == Sim->GetJournalKeeper();
+	HoverText = bKeeper ? TEXT("Radio journal (журнал радиосвязи): click to write") : TEXT("Radio journal (журнал радиосвязи): click to read");
+	if (Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		OpenJournal();
+	}
+}
+
+bool ASimOsaVehicle::OpenJournal()
+{
+	// The page comes up before him (the HUD draws it, ASimCabinHUD::DrawJournal): the cabin's own copy is too small and too
+	// dim to write on. The camera stays where he sits.
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim == nullptr)
+	{
+		return false;
+	}
+	bJournalWriter = !StationId.IsEmpty() && StationId == Sim->GetJournalKeeper() && IsHoldingSeat();
+	if (bJournalWriter && !Sim->IsJournalDrafting() && !Sim->JournalBegin(StationId))
+	{
+		FeedbackText = TEXT("Nothing heard to write: the page is up to date");
+		FeedbackSecondsLeft = 2.5f;
+	}
+	bAtJournal = true;
+	return true;
+}
+
+void ASimOsaVehicle::CloseJournal()
+{
+	bAtJournal = false;
+	bJournalWriter = false;
+}
+
+void ASimOsaVehicle::HandleJournal(APlayerController* Pc, USimWorldSubsystem* Sim)
+{
+	if (Pc == nullptr || Sim == nullptr)
+	{
+		return;
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Escape) || Pc->WasInputKeyJustPressed(EKeys::RightMouseButton))
+	{
+		CloseJournal();
+		return;
+	}
+	if (!bJournalWriter)
+	{
+		return;  // reading only
+	}
+	if (!Sim->IsJournalDrafting())
+	{
+		// Between lines: Enter or a click takes the next message he heard.
+		if ((Pc->WasInputKeyJustPressed(EKeys::Enter) || Pc->WasInputKeyJustPressed(EKeys::LeftMouseButton)) && !Sim->JournalBegin(StationId))
+		{
+			FeedbackText = TEXT("Nothing heard to write");
+			FeedbackSecondsLeft = 2.0f;
+		}
+		return;
+	}
+	static const FKey Digits[10] = {EKeys::Zero, EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven,
+		EKeys::Eight, EKeys::Nine};
+	static const FKey Pad[10] = {EKeys::NumPadZero, EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour,
+		EKeys::NumPadFive, EKeys::NumPadSix, EKeys::NumPadSeven, EKeys::NumPadEight, EKeys::NumPadNine};
+	for (int32 D = 0; D < 10; ++D)
+	{
+		if (Pc->WasInputKeyJustPressed(Digits[D]) || Pc->WasInputKeyJustPressed(Pad[D]))
+		{
+			Sim->JournalType(StationId, D);
+		}
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::BackSpace))
+	{
+		Sim->JournalRub(StationId);
+	}
+	if (Pc->WasInputKeyJustPressed(EKeys::Tab))
+	{
+		Sim->JournalNextBox(StationId, Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
+	}
+	const bool bLine = Pc->WasInputKeyJustPressed(EKeys::Enter);
+	const bool bShort = Pc->WasInputKeyJustPressed(EKeys::S);
+	if ((bLine || bShort) && Sim->JournalFinish(StationId, bShort))
+	{
+		Sim->JournalBegin(StationId);  // the next message he heard, if any, straight on the next line
 	}
 }
 
@@ -1457,7 +1843,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 			StartCabinTour(3.0f);
 		}
 	}
-	if (Pc->WasInputKeyJustPressed(CabinKey))
+	if (!bMenuOpen && Pc->WasInputKeyJustPressed(CabinKey))
 	{
 		if (bTouring)
 		{
@@ -1496,15 +1882,16 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		return;
 	}
 	Body = bWalking ? EBodyMode::Cabin : EBodyMode::Seat;
-	if (!bInstructorOpen && Pc->WasInputKeyJustPressed(NextStationKey))  // the instructor's panel has Tab while open
+	// The instructor's panel has Tab while open, the crew menu its keys.
+	if (!bInstructorOpen && !bMenuOpen && Pc->WasInputKeyJustPressed(NextStationKey))
 	{
 		NextStation();
 	}
-	if (Pc->WasInputKeyJustPressed(StandKey))
+	if (!bMenuOpen && Pc->WasInputKeyJustPressed(StandKey))
 	{
 		ToggleWalking();
 	}
-	if (Pc->WasInputKeyJustPressed(ClimbKey) && BodySim != nullptr)
+	if (!bMenuOpen && Pc->WasInputKeyJustPressed(ClimbKey) && BodySim != nullptr)
 	{
 		Body = bWalking ? EBodyMode::Cabin : EBodyMode::Seat;
 		Climb(BodySim);
@@ -1525,10 +1912,11 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		}
 	}
 
-	// Mouse: turns the dragged hand wheel, otherwise turns the head.
+	// Mouse: turns the dragged hand wheel, otherwise turns the head (the crew menu's cursor while it is open).
 	float Dx = 0.0f;
 	float Dy = 0.0f;
 	Pc->GetInputMouseDelta(Dx, Dy);
+	TakeMenuMouse(Dx, Dy);
 	// A lesson playing itself (-SimTutorialAutoplay) takes no mouse: a hand on the desk would move its head and its wheels.
 	const bool bAutoplaying = !AutoplayFolder.IsEmpty();
 	if (bAutoplaying)
@@ -1546,7 +1934,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		if (Dx != 0.0f && !Cabin->TurnWheel(DraggedWheel, Dx * WheelTurnsPerMouseUnit))
 		{
-			FeedbackText = TEXT("Locked: release the wheel lock first");
+			FeedbackText = WheelRefusal(DraggedWheel);
 			FeedbackSecondsLeft = 2.0f;
 		}
 		// Eyes on the display the wheel is worked against (the range gate on the echo, the line on the target).
@@ -1579,6 +1967,14 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		}
 	}
 	ApplyStationView();
+	if (bMenuOpen)
+	{
+		// The crew menu has the clicks.
+		HoveredItem = INDEX_NONE;
+		Cabin->SetHighlightedItem(INDEX_NONE);
+		HoverText.Reset();
+		return;
+	}
 
 	// An arm's length for anything; further for this seat's own controls, which the crewman stands and steps to.
 	const FVector Start = CabinCamera->GetComponentLocation();
@@ -1599,6 +1995,11 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		{
 			return;
 		}
+		HandleJournalPage(Pc, Start, Forward);
+		if (bOnJournal)
+		{
+			return;
+		}
 	}
 	if (HoveredItem == INDEX_NONE)
 	{
@@ -1606,7 +2007,18 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	}
 	// A lesson that only lets the step's control work says why another won't move.
 	USimWorldSubsystem* LessonSim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
-	const FString Refusal = LessonSim != nullptr ? LessonSim->GetTutorialRefusal(Cabin->GetItemControl(HoveredItem)) : FString();
+	FString Refusal = LessonSim != nullptr ? LessonSim->GetTutorialRefusal(Cabin->GetItemControl(HoveredItem)) : FString();
+	// A wheel the equipment turns itself now (the tracking servo, the elevation search): hands off, and say why, on the
+	// wheel itself for as long as it lasts (a lock can hold the antenna for minutes).
+	if (Refusal.IsEmpty() && LessonSim != nullptr && Cabin->IsWheel(HoveredItem))
+	{
+		const FString Driven = LessonSim->GetWheelDriven(Cabin->GetItemControl(HoveredItem));
+		if (!Driven.IsEmpty())
+		{
+			Refusal = TEXT("Hands off: ") + Driven;
+			HoverText += TEXT("   ") + Refusal;
+		}
+	}
 	auto Refuse = [this, &Refusal]()
 	{
 		FeedbackText = Refusal;
@@ -1638,7 +2050,7 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 		}
 		else if (Notches != 0.0 && !Cabin->TurnWheel(HoveredItem, Notches * WheelTurnsPerScrollNotch))
 		{
-			FeedbackText = TEXT("Locked: release the wheel lock first");
+			FeedbackText = WheelRefusal(HoveredItem);
 			FeedbackSecondsLeft = 2.0f;
 		}
 		return;
@@ -1657,6 +2069,19 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		ShowFeedback(ClickOrGoOut(HoveredItem, -1));
 	}
+}
+
+FString ASimOsaVehicle::WheelRefusal(int32 Item) const
+{
+	// Simcore's reason (the servo has it, its lock, its stop), else the equipment's, else its lock.
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	const FString Why = Sim != nullptr ? Sim->GetWheelRefusal() : FString();
+	if (!Why.IsEmpty())
+	{
+		return Why;
+	}
+	const FString Driven = Sim != nullptr && Cabin != nullptr ? Sim->GetWheelDriven(Cabin->GetItemControl(Item)) : FString();
+	return Driven.IsEmpty() ? FString(TEXT("Locked: release the wheel lock first")) : TEXT("Hands off: ") + Driven;
 }
 
 bool ASimOsaVehicle::LookAnglesTo(const FVector& World, double& OutYawDeg, double& OutPitchDeg) const
@@ -2289,6 +2714,7 @@ void ASimOsaVehicle::HandleOutside(float DeltaSeconds, APlayerController* Pc, US
 		float Dx = 0.0f;
 		float Dy = 0.0f;
 		Pc->GetInputMouseDelta(Dx, Dy);
+		TakeMenuMouse(Dx, Dy);
 		BodyYawDeg = FMath::Clamp(BodyYawDeg + Dx * CabinLookDegPerMouseUnit, -120.0, 120.0);
 		BodyPitchDeg = FMath::Clamp(BodyPitchDeg + Dy * CabinLookDegPerMouseUnit, -70.0, 60.0);
 		FollowGuide(Sim, DeltaSeconds);
@@ -2304,6 +2730,7 @@ void ASimOsaVehicle::HandleOutside(float DeltaSeconds, APlayerController* Pc, US
 	float Dx = 0.0f;
 	float Dy = 0.0f;
 	Pc->GetInputMouseDelta(Dx, Dy);
+	TakeMenuMouse(Dx, Dy);
 	BodyYawDeg = FRotator::NormalizeAxis(BodyYawDeg + Dx * CabinLookDegPerMouseUnit);
 	BodyPitchDeg = FMath::Clamp(BodyPitchDeg + Dy * CabinLookDegPerMouseUnit, -80.0, 70.0);
 	// His feet: W A S D along where he looks.

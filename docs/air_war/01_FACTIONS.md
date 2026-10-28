@@ -66,4 +66,18 @@ platoons, the regiment's P-19 and P-40 (they feed the PU-12's picture), the radi
 warning net), command posts and headquarters, a power station, a rail junction, a factory, the forward troops of four
 groups, six towns. Each has a value, hardness, repair time, mobility (and how often and how far it moves), emission,
 pre-war knowledge and, for air defences, a defence (system, radius, lethality, low and medium cover, radar or optical,
-rounds). All game values.
+rounds, the fire-control radars an ARM can take one by one, and on the nation's theatre the fire channels). All game
+values.
+
+**The war's year** (`"year"`, 1985): an aircraft or missile type with a later `in_service_year` doesn't fly, so the
+MiG-29 of a later campaign and NATO's cruise missiles (the Tomahawk 1986, the CALCM 1988) wait for a later war; the
+Pact's Kh-22s from its Tu-22M bombers fly in this one (`09_BALANCE.md` §8).
+
+**The whole nation** (`theatre_pannonia_nation.json`, the nation on the map N2, `docs/COUNTRY_MAP.md`) extends this
+theatre with the briefing's forces, industry and infrastructure, 170 objects on the country's map, and gives every
+mobile unit its prepared positions (`"positions"`), which it moves between. The campaigns play this theatre until N4
+moves them there.
+
+Planned in the battery's war (`docs/campaign/`): each faction's war aims in its file
+(`docs/campaign/01_WAR_AIMS_AND_TARGETS.md` §2), its reach over our country read as game logic, and our doctrine
+against it (`docs/campaign/08_COMMAND_DOCTRINE_AND_REACH.md` §1-2).

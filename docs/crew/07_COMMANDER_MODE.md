@@ -27,8 +27,10 @@ Waits the crew works through by itself (power, warm-up, the driver halting) don'
 `ScenarioRunner::TryCrewOrder` (the Unreal menu) refuses a greyed order, and the seat answers "Не могу: <reason>". The
 NPC commander is held to the same needs: no launch permission from an empty launcher. The battery commander sets
 sectors of fire (`ScenarioRunner::SetBatterySector`; battery vehicles' `sector_deg`). In free fire a launcher takes
-only targets in its sector, and the NPC battery commander gives targets to a launcher whose sector covers them. Still
-a list, not a radial menu.
+only targets in its sector, and the NPC battery commander gives targets to a launcher whose sector covers them. Since
+27 October 2026 the menu is radial, on Caps Lock: eight sectors in fixed places, greyed orders kept in their place
+with their reason, the advised order green, a hold-flick-release marking menu, the same layout on the digits, and the
+seat first on Tab (`15_TALK.md` §5). Its sectors are the crew data's `"menu"`; the groups below are the design's.
 
 ## 2. The vehicle commander's order menu
 
@@ -65,6 +67,11 @@ orders go on the battery net to the vehicle commanders (NPCs), who turn them int
 
 The progression (pillar 2): the player first commands one vehicle with NPC crew; when qualified (`08` §4) he commands
 the battery, where his vehicle commanders are NPCs with their own skill.
+
+Where the battery's orders come from (planned, the battery's war: `docs/campaign/03_THE_BATTERY_MISSION.md`): the
+regiment gives the battery its task by a combat order with its reasons; the battery commander turns it into these
+orders by the textbook's sequence (`voenizdat_osa_1991` pp. 240-245) on a working map, and gives them to the vehicle
+commanders as the oral combat order. An NPC battery commander does the same as a planner (roadmap 14.3).
 
 ## 4. What NPC commanders do
 

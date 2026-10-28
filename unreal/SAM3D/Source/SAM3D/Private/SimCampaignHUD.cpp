@@ -44,6 +44,25 @@ namespace
 	{
 		return FString(UTF8_TO_TCHAR(S.c_str()));
 	}
+
+	// The country the campaign is fought over (data/maps/pannonia.json, simcore/country_map.hpp), the map's ground: built
+	// once and kept. Its frame is the theatre's (the same origin; docs/COUNTRY_MAP.md).
+	const simcore::CountryMap* CampaignCountry()
+	{
+		static std::shared_ptr<const simcore::CountryMap> Country;
+		static bool bTried = false;
+		if (!bTried)
+		{
+			bTried = true;
+			std::string Error;
+			Country = simcore::LoadCountryMap(TCHAR_TO_UTF8(*USimAirCampaignSubsystem::DataDirectory()), "maps/pannonia.json", &Error);
+			if (!Country)
+			{
+				UE_LOG(LogSAM3D, Warning, TEXT("Campaign map: the country doesn't load (%s): the theatre's objects only"), UTF8_TO_TCHAR(Error.c_str()));
+			}
+		}
+		return Country.get();
+	}
 }
 
 ASimCampaignHUD::ASimCampaignHUD()
@@ -479,6 +498,72 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 			DrawText(Text, Colour, Lx, Ly, Small);
 		}
 	};
+
+	// The country under it all: its regions faintly, the border, the rivers, the railways, the main roads and the oil
+	// pipelines, its towns named (the district's villages are the chain of command's places, below).
+	if (const simcore::CountryMap* Cm = CampaignCountry())
+	{
+		const simcore::CountryDef& Cd = Cm->Def();
+		auto Poly = [&](const std::vector<simcore::MapPoint>& Points, bool bClosed, const FLinearColor& Colour, float Thick)
+		{
+			const int32 N = static_cast<int32>(Points.size());
+			for (int32 I = 0; I + 1 < N + (bClosed ? 1 : 0); ++I)
+			{
+				const simcore::MapPoint& A = Points[I];
+				const simcore::MapPoint& B = Points[(I + 1) % N];
+				MapLine(ToScreen(A.east_m, A.north_m), ToScreen(B.east_m, B.north_m), Colour, Thick);
+			}
+		};
+		for (const simcore::MapPolygonDef& R : Cd.regions)
+		{
+			Poly(R.points, true, FLinearColor(0.5f, 0.55f, 0.5f, 0.12f), 1.0f);
+		}
+		for (const simcore::MapLineDef& L : Cd.ground.rivers)
+		{
+			Poly(L.points, false, FLinearColor(0.3f, 0.5f, 0.8f, 0.55f), 2.0f);
+		}
+		for (const simcore::MapLineDef& L : Cd.ground.railways)
+		{
+			Poly(L.points, false, FLinearColor(0.55f, 0.5f, 0.45f, 0.35f), 1.0f);
+		}
+		for (const simcore::MapLineDef& L : Cd.ground.roads)
+		{
+			if (L.line_class == "main")
+			{
+				Poly(L.points, false, FLinearColor(0.75f, 0.7f, 0.55f, 0.3f), 1.0f);
+			}
+		}
+		for (const simcore::MapLineDef& L : Cd.pipelines)
+		{
+			Poly(L.points, false, FLinearColor(0.6f, 0.4f, 0.25f, 0.35f), 1.0f);
+		}
+		Poly(Cd.outline, true, FLinearColor(0.85f, 0.85f, 0.8f, 0.45f), 1.5f);
+		for (const simcore::CountrySettlementDef& S : Cd.settlements)
+		{
+			if (S.kind == "village")
+			{
+				continue;
+			}
+			const FVector2D P = ToScreen(S.centre.east_m, S.centre.north_m);
+			if (!Inside(P, 4.0f))
+			{
+				continue;
+			}
+			const float R = FMath::Max(2.0f, static_cast<float>(S.radius_m) * MapScale);
+			DrawRect(FLinearColor(0.7f, 0.7f, 0.65f, S.kind == "town" ? 0.25f : 0.4f), P.X - R, P.Y - R, 2.0f * R, 2.0f * R);
+			// Named here unless the theatre has it as a town of its own (named with our objects).
+			bool bTheatreTown = false;
+			for (const TheatreObject& O : Th.objects)
+			{
+				bTheatreTown = bTheatreTown || (O.kind == ObjectKind::City &&
+					FMath::Sqrt(FMath::Square(O.pos.x - S.centre.east_m) + FMath::Square(O.pos.y - S.centre.north_m)) < S.radius_m + 2000.0);
+			}
+			if (!bTheatreTown)
+			{
+				Label(CampaignToF(S.name), CDim, P.X + R + 3.0f, P.Y - 6.0f);
+			}
+		}
+	}
 
 	// The other fronts faintly, the enemy's front in red with its entry points.
 	for (const FrontDef& F : Th.fronts)

@@ -99,6 +99,12 @@ struct RegimentRadar {
     double max_range_m = 0.0;
     double antenna_height_m = 0.0;
     int switch_position = 0;  // the PU-12M's primary-source switch position for this radar's type (rwd_mb3 pu12e; 0: any)
+    // Works with a ground interrogator whose replies go to the PU-12M's ASPD with the echoes when cabled to it (p19_to
+    // 4.3.1, 4.3.3: the 1L23-6; flak11 PU12-0's figure: "Kennung" on the radar's cable).
+    bool iff_interrogator = false;
+    // Off the air at these times (the ARM drill, a fault): its picture and replies stop, and its crew ring the post on the
+    // service line if one is laid (scenario "post.radar.outages").
+    std::vector<C2Outage> outages;
 };
 
 struct RegimentRadarLibrary {
@@ -233,7 +239,7 @@ public:
             const json::Value& e = list->items[i];
             const std::string p = "radars[" + std::to_string(i) + "]";
             RegimentRadar r;
-            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "switch_position", "notes"}) ||
+            if (!Keys(e, p, {"id", "display_name", "max_range_m", "antenna_height_m", "switch_position", "iff_interrogator", "notes"}) ||
                 !RequireString(e, p, "id", r.id) ||
                 !RequireString(e, p, "display_name", r.name)) {
                 return false;
@@ -249,6 +255,12 @@ public:
                 if (!Cited(e, "switch_position", pos)) return false;
                 if (pos < 1.0 || pos > 3.0 || pos != std::floor(pos)) return Fail(Join(p, "switch_position"), "1, 2 or 3");
                 r.switch_position = static_cast<int>(pos);
+            }
+            if (e.Find("iff_interrogator") != nullptr) {
+                double iff = 0.0;
+                if (!Cited(e, "iff_interrogator", iff)) return false;
+                if (iff != 0.0 && iff != 1.0) return Fail(Join(p, "iff_interrogator"), "0 or 1");
+                r.iff_interrogator = iff == 1.0;
             }
             lib.types.push_back(std::move(r));
         }

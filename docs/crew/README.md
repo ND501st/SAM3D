@@ -59,6 +59,8 @@ handoff so that no change loses them.
 | `12_COMMUNICATIONS.md` | Headsets, intercom boxes, radio nets and telephones: who hears what |
 | `13_OUT_OF_THE_VEHICLE.md` | Out of the vehicle and back by its hatches, on the hull and the ground; jobs done outside; the voice out of doors |
 | `14_HELPER.md` | The helper: the move your seat's NPC would make now, shown as a lesson's step is; how it stays up to date |
+| `15_TALK.md` | The crew's talk: turn-taking on the bus, the ARM moment, graded stress, the radial menu (Caps Lock) and the reply keys, glosses and what you have heard, how the voices sound |
+| `16_EMISSION.md` | The emission regime (EMCON): the regiment's order or the battery commander's decision, said on the nets, told to each crew before it deploys with the turns and seconds of its bursts, kept by the radar seats and reminded |
 | `generated/osa_ak_action_map.md` | Every action of the Osa-AK console and how it connects (`python tools/crew_map.py`) |
 | `generated/helper_coverage.md` | Every mission from every seat, following the helper against the NPC crew (`simcore/build/helper_coverage`) |
 

@@ -64,10 +64,10 @@
     {
       "id": "seat_ready", "title": "Report your seat: «Первый готов!»", "report": "seat_ready",
       "lines": [
-        "At your place, your headset on: report to the commander on the intercom: O, then «Первый готов!» (Seat one ready!)."
+        "At your place, your headset on: report to the commander on the intercom: Caps Lock, then «Первый готов!» (Seat one ready!)."
       ],
       "why": "The intercom check: each seat says it is in place and hears the commander (voenizdat_osa_1991 p. 246). The R-124 runs on the vehicle's 27 V: it works before the turbine is up.",
-      "hint": "O: your reports, then the highlighted line's number."
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "ak_zk", "title": "Connect the course setter: АК — ЗК to ЗК", "control": "orient.ak_zk", "position": 1, "procedure": "orient_vehicle",
@@ -202,8 +202,8 @@
     },
     {
       "id": "report_zone", "title": "Report it: «Цель в зоне!»", "report": "target_in_zone",
-      "lines": ["Tell the commander: O, then «Цель в зоне!» (Target in the zone!). He permits the launch when he hears it."],
-      "hint": "O: your reports, then the highlighted line's number."
+      "lines": ["Tell the commander: Caps Lock, then «Цель в зоне!» (Target in the zone!). He permits the launch when he hears it."],
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "key_turn", "title": "«Пуск разрешаю!»: turn the key", "control": "fo.key", "position": 2, "procedure": "launch",
@@ -220,8 +220,8 @@
     },
     {
       "id": "report_launch", "title": "Report it: «Пуск!»", "report": "launch",
-      "lines": ["Tell the crew: O, then «Пуск!» (Launch!)."],
-      "hint": "O: your reports, then the highlighted line's number."
+      "lines": ["Tell the crew: Caps Lock, then «Пуск!» (Launch!)."],
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "result", "title": "Missile away", "done_when": ["debrief:HIT", "debrief:MISS"],
@@ -232,7 +232,7 @@
       "id": "end", "chapter": "Done", "title": "The deputy commander's part: done",
       "lines": [
         "That is the deputy commander's part of the drill: the vehicle oriented at the halt, the target designated to the tracking radar, looked at on the TV, and the launch: live firing, the key in, turned at the commander's permission, ПУСК.",
-        "If it was a hit, say «Цель поражена!»; if a miss, «Промах!»: both are in your reports (O).",
+        "If it was a hit, say «Цель поражена!»; if a miss, «Промах!»: both are in your reports (Caps Lock).",
         "Practise it without the highlights: the Missions group's «Osa: crew practice, one target», starting in the deputy commander's seat, with H set to hint. Or the last lesson: the commander.",
         "Esc: the menu."
       ]

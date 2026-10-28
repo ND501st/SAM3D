@@ -21,6 +21,13 @@ And the air war shapes the pipeline: every raid is a **danger zone** on the road
 (carriers lost: 6 km, 25 %), its bombs **cut the wire** of posts within 1.5 km for 6 hours, and the battery's post and
 vehicles **move with the battery** (its position history: `AirCampaign::BatteryTrack`). Game values, in `FeedRoles`.
 
+**From the records (principle 9; planned, `07` P9).** Today `raid_result` and `battery_news` start from the fight as the
+simulation saw it. They are to be compiled from the battery's records instead: the radiotelephonist's journal
+(`simcore/radio_journal.hpp`: what was said, what he wrote, what he lost), the board's marks and the commander's log. A
+raid's time, route and size in the combat report are the journal's; a ghost track on the board is a raid reported; a raid
+nobody wrote down is not in the report at all. `raid_seen` likewise comes from the regiment's own records of the warning
+net. What the regiment and the division then believe and plan (`docs/campaign/05_THE_SYSTEMS.md` §11: the regiment's picture and its next order) follows.
+
 The air war's own model of what the enemy learns from our radio traffic is still the posture's radio discipline; the
 pipeline's radio calls (`InfoNet::RadioCalls`) are the evidence to feed it next (`07` P3).
 

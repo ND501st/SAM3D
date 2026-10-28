@@ -8,7 +8,9 @@ screen is the second half of this step.
 
 ## 1. How
 
-`simcore/examples/air_war_balance [data dir] [seeds] [days] [faction ...]` runs each campaign hour by hour with the raids
+`simcore/examples/air_war_balance [--theatre file] [data dir] [seeds] [days] [faction ...]` runs each campaign hour by
+hour (on `theatre_pannonia.json`, the theatre tuned here, unless `--theatre` names another: `theatre_pannonia_nation.json`
+is the whole nation, §8) with the raids
 through the battery's sector resolved abstractly like the rest (`SkipPlayerMission`: the battery fights with its own
 lethality), so the numbers are the campaign layer's alone. Each adversary is run with two battery postures:
 
@@ -23,15 +25,16 @@ lethality), so the numbers are the campaign layer's alone. Each adversary is run
 | Packages, Sorties | Packages over their target that day; manned aircraft in them (decoy drones are counted apart) |
 | SEAD share | Packages with a SEAD purpose: DEAD and hunter packages, and others with a SEAD flight |
 | Lost, Loss % | Manned aircraft lost, and per sortie |
-| Air defence working (believed) | The true working share of the player's side's SAM sites and early-warning radars at the day's end (dummies left out); in brackets what the enemy believes (`IntelPicture::BelievedIadsShare`) |
+| Air defence working (believed) | The true working share of the player's side's radar SAM sites at the day's end (dummies left out), the set the enemy measures; in brackets what the enemy believes (`IntelPicture::BelievedIadsShare`). Until 22 October 2026 the true share also counted the early-warning radars and the optical Strela platoons; the enemy's belief never did |
 | Wrecked | Objects of the player's side wrecked and not yet back |
 | Battery raids | Raids offered to the player that day (the pacing's choice: through the sector, the gap, the daily cap, a working battery) |
 | Battery | The battery's working share at the day's end |
 | Enemy knows battery | `EnemyKnowledgeOfBattery`: how well the enemy knows where the battery is, 0..1 |
 
-The line under each table gives the mission mix over the campaign, the staff's turnover (killed, captured, relieved,
+The lines under each table give the mission mix over the campaign, the staff's turnover (killed, captured, relieved,
 promoted away), the false claims found out, the political events (and the pauses among them), in how many runs the
-battery was wrecked at least once, the ARMs left at the end and the decoy drones flown.
+battery was wrecked at least once, the ARMs left at the end and the decoy drones flown; then where the packages went,
+by the kind of target as the enemy believed it and by the objects struck most.
 
 ## 2. The shapes it was read against
 
@@ -43,6 +46,8 @@ battery was wrecked at least once, the ARMs left at the end and the decoy drones
 | NATO | A long, methodical rollback (hunter-killer teams, DEAD on located sites, decoys), scarce ARMs, low tolerance for losses | SEAD-heavy first days, the air defences falling over several days, losses falling as they do; the rollback stalls when ARMs and fixes run short and resumes when sites return |
 
 ## 3. Results (20 seeds, 7 days)
+
+The theatre the balance pass tuned (`theatre_pannonia.json`), its war in 1985: since 23 October 2026 with the Pact's Kh-22 cruise missiles (NATO's come in a later war).
 
 **The Rava Liberation Front's air wing, careless battery** (20 seeds):
 
@@ -58,6 +63,8 @@ battery was wrecked at least once, the ARMs left at the end and the decoy drones
 | all | | 15.4 | 24.6 | | 0.7 | 2.6% | | | 0.9 | | |
 
 Mix: strike 43% recce 41% harassment 16%. Staff changes 0.6, false claims found out 0.0, political events 1.9 (pauses 0.5) a campaign; battery wrecked in 0% of runs; ARMs left 0; decoy drones 0.
+Targets by kind (packages a campaign): troops 5.8, depot 4.8, bridge 1.8, power_plant 1.5, command_post 1.1, ? 0.1, sam_site 0.1, airfield 0.1.
+Most struck: sw_depot 2.9, sw_border_battalion 2.4, lenta_bridge 1.8, group_southwest 1.6, paksany_power 1.5, sw_artillery 1.4, kesmark_depot 1.2, sw_brigade_cp 1.1, southern_depot 0.8, group_south 0.5, (nothing there) 0.2, kecel_s125 0.1.
 
 **The Rava Liberation Front's air wing, careful battery** (20 seeds):
 
@@ -73,6 +80,8 @@ Mix: strike 43% recce 41% harassment 16%. Staff changes 0.6, false claims found 
 | all | | 15.8 | 25.1 | | 0.8 | 3.2% | | | 0.6 | | |
 
 Mix: strike 43% recce 40% harassment 17%. Staff changes 0.6, false claims found out 0.0, political events 1.9 (pauses 0.7) a campaign; battery wrecked in 0% of runs; ARMs left 0; decoy drones 0.
+Targets by kind (packages a campaign): troops 5.9, depot 5.1, bridge 2.4, power_plant 1.1, command_post 0.7, ? 0.3, airfield 0.2.
+Most struck: sw_depot 3.2, sw_border_battalion 2.8, lenta_bridge 2.4, group_southwest 1.5, kesmark_depot 1.5, sw_artillery 1.2, paksany_power 1.1, sw_brigade_cp 0.7, (nothing there) 0.4, southern_depot 0.4, group_south 0.3, kecel_airbase 0.2.
 
 **The Noric Republic's air force, careless battery** (20 seeds):
 
@@ -88,6 +97,8 @@ Mix: strike 43% recce 40% harassment 17%. Staff changes 0.6, false claims found 
 | all | | 15.4 | 39.0 | | 1.4 | 3.6% | | | 2.7 | | |
 
 Mix: strike 32% recce 39% bda 5% helo_raid 23%. Staff changes 0.9, false claims found out 0.0, political events 1.6 (pauses 0.8) a campaign; battery wrecked in 0% of runs; ARMs left 0; decoy drones 0.
+Targets by kind (packages a campaign): bridge 7.0, troops 6.0, command_post 1.2, depot 1.1, ? 0.1.
+Most struck: lenta_bridge 7.0, sw_border_battalion 2.7, sw_artillery 2.2, sw_brigade_cp 1.2, group_southwest 1.1, sw_depot 1.1, (nothing there) 0.1.
 
 **The Noric Republic's air force, careful battery** (20 seeds):
 
@@ -103,66 +114,78 @@ Mix: strike 32% recce 39% bda 5% helo_raid 23%. Staff changes 0.9, false claims 
 | all | | 17.1 | 44.6 | | 1.2 | 2.7% | | | 2.0 | | |
 
 Mix: strike 35% recce 40% bda 5% helo_raid 20%. Staff changes 0.8, false claims found out 0.1, political events 1.4 (pauses 0.9) a campaign; battery wrecked in 0% of runs; ARMs left 0; decoy drones 0.
+Targets by kind (packages a campaign): bridge 7.3, troops 6.7, depot 2.1, command_post 0.9, sam_site 0.1, ? 0.1.
+Most struck: lenta_bridge 7.3, sw_border_battalion 3.1, sw_artillery 2.4, sw_depot 2.1, group_southwest 1.1, sw_brigade_cp 0.9, (nothing there) 0.1.
 
 **The Warsaw Pact: air forces of the front, careless battery** (20 seeds):
 
 | Day | Phase | Packages | Sorties | SEAD share | Lost | Loss % | Air defence working (believed) | Wrecked | Battery raids | Battery | Enemy knows battery |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| D1 | 1.0 | 20.6 | 154.2 | 36% | 3.1 | 2.0% | 44% (52%) | 9.8 | 1.6 | 60% | 0.52 |
-| D2 | 2.0 | 18.9 | 148.6 | 39% | 2.5 | 1.7% | 31% (45%) | 14.8 | 0.7 | 19% | 0.29 |
-| D3 | 2.0 | 8.8 | 67.3 | 28% | 1.2 | 1.8% | 43% (37%) | 11.5 | 0.2 | 8% | 0.21 |
-| D4 | 2.0 | 9.3 | 66.7 | 33% | 0.5 | 0.7% | 50% (41%) | 8.7 | 0.1 | 29% | 0.29 |
-| D5 | 2.0 | 8.7 | 62.3 | 36% | 0.4 | 0.6% | 62% (34%) | 6.5 | 0.8 | 53% | 0.39 |
-| D6 | 2.0 | 8.4 | 61.7 | 38% | 1.8 | 2.8% | 75% (40%) | 5.4 | 0.8 | 68% | 0.36 |
-| D7 | 2.0 | 8.8 | 67.3 | 40% | 2.5 | 3.8% | 78% (48%) | 5.3 | 0.5 | 83% | 0.39 |
-| all | | 83.4 | 628.1 | | 11.9 | 1.9% | | | 4.8 | | |
+| D1 | 1.0 | 22.1 | 153.2 | 33% | 2.9 | 1.9% | 49% (58%) | 10.1 | 1.4 | 70% | 0.60 |
+| D2 | 2.0 | 20.1 | 142.6 | 35% | 2.1 | 1.5% | 24% (39%) | 14.8 | 0.9 | 12% | 0.22 |
+| D3 | 2.0 | 8.2 | 68.5 | 30% | 0.8 | 1.2% | 24% (38%) | 11.3 | 0.1 | 16% | 0.22 |
+| D4 | 2.0 | 9.2 | 65.9 | 32% | 0.9 | 1.4% | 26% (35%) | 8.6 | 0.2 | 27% | 0.27 |
+| D5 | 2.0 | 8.9 | 63.1 | 36% | 1.1 | 1.7% | 48% (37%) | 7.2 | 0.5 | 70% | 0.38 |
+| D6 | 2.0 | 8.9 | 64.5 | 39% | 2.7 | 4.2% | 77% (38%) | 5.8 | 0.9 | 88% | 0.48 |
+| D7 | 2.0 | 8.7 | 67.8 | 38% | 2.4 | 3.5% | 86% (51%) | 5.7 | 0.6 | 93% | 0.46 |
+| all | | 86.2 | 625.5 | | 12.8 | 2.1% | | | 4.7 | | |
 
-Mix: strike 38% dead 29% hunter 7% recce 9% cas 2% helo_raid 1% deception 13%. Staff changes 5.0, false claims found out 1.1, political events 1.2 (pauses 0.0) a campaign; battery wrecked in 100% of runs; ARMs left 2; decoy drones 0.
+Mix: strike 37% dead 27% hunter 8% recce 8% cas 2% helo_raid 1% deception 13% missile 5%. Staff changes 5.7, false claims found out 1.1, political events 1.1 (pauses 0.0) a campaign; battery wrecked in 80% of runs; ARMs left 3; decoy drones 0.
+Cruise missiles: 8.0 fired a campaign, 0.2 shot down.
+Targets by kind (packages a campaign): sam_site 26.1, ew_radar 15.6, command_post 9.7, airfield 9.3, troops 7.8, depot 7.0, bridge 4.4, rail_junction 2.5, ? 1.9, power_plant 1.0, headquarters 0.9.
+Most struck: osa_22 9.5, sw_brigade_cp 5.7, kesmark_p40 5.6, ludas_p19 5.5, (nothing there) 5.3, kecel_airbase 5.2, bugac_rtb 4.4, tiszavar_airbase 4.2, div_ad_cp 4.0, tiszavar_kub 3.8, group_north 3.6, kecel_s125 2.6.
 
 **The Warsaw Pact: air forces of the front, careful battery** (20 seeds):
 
 | Day | Phase | Packages | Sorties | SEAD share | Lost | Loss % | Air defence working (believed) | Wrecked | Battery raids | Battery | Enemy knows battery |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| D1 | 1.0 | 20.1 | 151.8 | 36% | 3.5 | 2.3% | 42% (70%) | 10.2 | 1.1 | 90% | 0.25 |
-| D2 | 2.0 | 18.2 | 145.8 | 39% | 1.5 | 1.0% | 34% (61%) | 13.8 | 1.1 | 63% | 0.27 |
-| D3 | 2.0 | 8.3 | 66.7 | 31% | 0.4 | 0.6% | 50% (63%) | 9.8 | 0.2 | 66% | 0.28 |
-| D4 | 2.0 | 7.3 | 62.8 | 34% | 0.9 | 1.4% | 59% (56%) | 8.0 | 0.5 | 73% | 0.26 |
-| D5 | 2.0 | 8.2 | 62.0 | 37% | 0.9 | 1.5% | 67% (55%) | 6.7 | 0.4 | 84% | 0.28 |
-| D6 | 2.0 | 8.4 | 64.2 | 39% | 1.7 | 2.7% | 73% (54%) | 6.2 | 0.2 | 95% | 0.30 |
-| D7 | 2.0 | 8.4 | 68.0 | 39% | 3.1 | 4.6% | 78% (58%) | 5.0 | 0.3 | 97% | 0.30 |
-| all | | 79.2 | 621.2 | | 12.0 | 1.9% | | | 3.9 | | |
+| D1 | 1.0 | 22.1 | 152.8 | 33% | 3.2 | 2.1% | 51% (70%) | 9.9 | 1.2 | 94% | 0.37 |
+| D2 | 2.0 | 19.1 | 139.9 | 32% | 2.6 | 1.9% | 37% (66%) | 14.1 | 1.1 | 79% | 0.33 |
+| D3 | 2.0 | 7.5 | 63.5 | 29% | 0.5 | 0.8% | 35% (59%) | 10.5 | 0.3 | 72% | 0.29 |
+| D4 | 2.0 | 8.4 | 64.3 | 32% | 1.2 | 1.9% | 32% (59%) | 7.3 | 0.4 | 67% | 0.29 |
+| D5 | 2.0 | 8.1 | 60.3 | 37% | 0.6 | 0.9% | 47% (56%) | 6.7 | 0.5 | 73% | 0.33 |
+| D6 | 2.0 | 8.4 | 62.6 | 35% | 1.9 | 3.0% | 73% (57%) | 5.8 | 0.1 | 83% | 0.29 |
+| D7 | 2.0 | 8.5 | 66.3 | 38% | 3.5 | 5.3% | 82% (62%) | 5.0 | 0.3 | 93% | 0.33 |
+| all | | 82.0 | 609.9 | | 13.4 | 2.2% | | | 4.0 | | |
 
-Mix: strike 40% dead 30% hunter 6% recce 10% cas 2% helo_raid 1% deception 11%. Staff changes 5.0, false claims found out 1.1, political events 1.1 (pauses 0.0) a campaign; battery wrecked in 30% of runs; ARMs left 1; decoy drones 0.
+Mix: strike 38% dead 28% hunter 5% recce 10% cas 2% helo_raid 1% deception 11% missile 5%. Staff changes 5.5, false claims found out 1.9, political events 1.1 (pauses 0.0) a campaign; battery wrecked in 40% of runs; ARMs left 2; decoy drones 0.
+Cruise missiles: 8.0 fired a campaign, 0.2 shot down.
+Targets by kind (packages a campaign): sam_site 22.9, ew_radar 15.5, command_post 9.4, airfield 8.8, troops 8.2, depot 7.0, bridge 4.4, rail_junction 2.9, ? 0.9, power_plant 0.9, headquarters 0.9.
+Most struck: osa_22 8.6, sw_brigade_cp 6.2, (nothing there) 6.0, kesmark_p40 6.0, ludas_p19 5.1, tiszavar_airbase 5.0, bugac_rtb 4.5, tiszavar_kub 4.4, kecel_airbase 3.8, group_north 3.7, div_ad_cp 3.3, cegled_junction 2.9.
 
 **NATO: an allied tactical air force (composite), careless battery** (20 seeds):
 
 | Day | Phase | Packages | Sorties | SEAD share | Lost | Loss % | Air defence working (believed) | Wrecked | Battery raids | Battery | Enemy knows battery |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| D1 | 1.0 | 16.1 | 108.0 | 60% | 1.4 | 1.3% | 63% (76%) | 6.8 | 0.9 | 96% | 0.79 |
-| D2 | 1.0 | 15.3 | 117.5 | 44% | 1.1 | 0.9% | 49% (63%) | 9.2 | 0.4 | 93% | 0.72 |
-| D3 | 1.1 | 14.5 | 100.8 | 38% | 0.6 | 0.6% | 42% (51%) | 9.0 | 1.1 | 35% | 0.40 |
-| D4 | 1.7 | 15.2 | 91.8 | 29% | 0.7 | 0.8% | 43% (40%) | 8.2 | 0.7 | 21% | 0.36 |
-| D5 | 1.8 | 14.8 | 103.2 | 26% | 1.6 | 1.6% | 54% (33%) | 6.6 | 0.3 | 22% | 0.36 |
-| D6 | 1.9 | 15.0 | 103.6 | 31% | 1.6 | 1.5% | 63% (46%) | 6.2 | 0.7 | 47% | 0.45 |
-| D7 | 1.8 | 14.3 | 102.1 | 29% | 1.8 | 1.8% | 70% (57%) | 4.8 | 0.9 | 67% | 0.53 |
+| D1 | 1.0 | 16.1 | 108.0 | 60% | 1.4 | 1.3% | 62% (76%) | 6.8 | 0.9 | 96% | 0.79 |
+| D2 | 1.0 | 15.3 | 117.5 | 44% | 1.1 | 0.9% | 46% (63%) | 9.2 | 0.4 | 93% | 0.72 |
+| D3 | 1.1 | 14.5 | 100.8 | 38% | 0.6 | 0.6% | 28% (51%) | 9.0 | 1.1 | 35% | 0.40 |
+| D4 | 1.7 | 15.2 | 91.8 | 29% | 0.7 | 0.8% | 21% (40%) | 8.2 | 0.7 | 21% | 0.36 |
+| D5 | 1.8 | 14.8 | 103.2 | 26% | 1.6 | 1.6% | 36% (33%) | 6.6 | 0.3 | 22% | 0.36 |
+| D6 | 1.9 | 15.0 | 103.6 | 31% | 1.6 | 1.5% | 57% (46%) | 6.2 | 0.7 | 47% | 0.45 |
+| D7 | 1.8 | 14.3 | 102.1 | 29% | 1.8 | 1.8% | 67% (57%) | 4.8 | 0.9 | 67% | 0.53 |
 | all | | 105.2 | 727.0 | | 8.7 | 1.2% | | | 5.0 | | |
 
 Mix: strike 35% dead 20% hunter 9% recce 21% bda 6% cas 2% helo_raid 0% deception 7%. Staff changes 5.8, false claims found out 3.5, political events 2.0 (pauses 0.0) a campaign; battery wrecked in 80% of runs; ARMs left 46; decoy drones 135.
+Targets by kind (packages a campaign): sam_site 34.2, ew_radar 14.6, command_post 11.8, troops 11.6, airfield 11.1, depot 10.2, rail_junction 4.5, ? 3.7, bridge 3.6.
+Most struck: sw_brigade_cp 7.5, (nothing there) 7.5, osa_22 6.6, kecel_s125 5.6, tiszavar_airbase 5.6, kecel_airbase 5.5, kesmark_p40 5.0, tiszavar_kub 5.0, ludas_p19 4.8, bugac_rtb 4.7, cegled_junction 4.5, div_ad_cp 4.3.
 
 **NATO: an allied tactical air force (composite), careful battery** (20 seeds):
 
 | Day | Phase | Packages | Sorties | SEAD share | Lost | Loss % | Air defence working (believed) | Wrecked | Battery raids | Battery | Enemy knows battery |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| D1 | 1.0 | 16.1 | 108.0 | 60% | 1.6 | 1.4% | 64% (82%) | 6.8 | 0.9 | 93% | 0.42 |
-| D2 | 1.0 | 15.8 | 118.5 | 42% | 0.8 | 0.6% | 45% (74%) | 9.8 | 0.6 | 92% | 0.60 |
-| D3 | 1.0 | 15.3 | 94.8 | 36% | 0.8 | 0.8% | 44% (69%) | 8.4 | 1.4 | 94% | 0.56 |
-| D4 | 1.0 | 14.5 | 81.3 | 26% | 0.6 | 0.7% | 53% (64%) | 7.1 | 1.7 | 93% | 0.42 |
-| D5 | 1.0 | 15.1 | 90.2 | 22% | 1.0 | 1.1% | 61% (66%) | 6.2 | 1.6 | 94% | 0.47 |
-| D6 | 1.0 | 15.2 | 99.2 | 30% | 1.9 | 2.0% | 64% (68%) | 4.8 | 1.7 | 85% | 0.46 |
-| D7 | 1.0 | 14.7 | 98.7 | 28% | 1.2 | 1.3% | 68% (71%) | 4.2 | 1.2 | 84% | 0.58 |
+| D1 | 1.0 | 16.1 | 108.0 | 60% | 1.6 | 1.4% | 61% (82%) | 6.8 | 0.9 | 93% | 0.42 |
+| D2 | 1.0 | 15.8 | 118.5 | 42% | 0.8 | 0.6% | 41% (74%) | 9.8 | 0.6 | 92% | 0.60 |
+| D3 | 1.0 | 15.3 | 94.8 | 36% | 0.8 | 0.8% | 36% (69%) | 8.4 | 1.4 | 94% | 0.56 |
+| D4 | 1.0 | 14.5 | 81.3 | 26% | 0.6 | 0.7% | 33% (64%) | 7.1 | 1.7 | 93% | 0.42 |
+| D5 | 1.0 | 15.1 | 90.2 | 22% | 1.0 | 1.1% | 48% (66%) | 6.2 | 1.6 | 94% | 0.47 |
+| D6 | 1.0 | 15.2 | 99.2 | 30% | 1.9 | 2.0% | 65% (68%) | 4.8 | 1.7 | 85% | 0.46 |
+| D7 | 1.0 | 14.7 | 98.7 | 28% | 1.2 | 1.3% | 70% (71%) | 4.2 | 1.2 | 84% | 0.58 |
 | all | | 106.7 | 690.6 | | 7.8 | 1.1% | | | 9.2 | | |
 
 Mix: strike 32% dead 19% hunter 6% recce 23% bda 5% cas 2% deception 14%. Staff changes 5.4, false claims found out 3.5, political events 2.0 (pauses 0.0) a campaign; battery wrecked in 15% of runs; ARMs left 47; decoy drones 161.
+Targets by kind (packages a campaign): sam_site 40.2, ew_radar 14.2, troops 12.5, command_post 11.4, airfield 10.1, depot 8.3, rail_junction 4.4, bridge 3.5, ? 2.0.
+Most struck: (nothing there) 15.9, sw_brigade_cp 6.8, kecel_s125 6.0, osa_22 5.9, tiszavar_kub 5.4, tiszavar_airbase 5.1, kecel_airbase 5.0, ludas_p19 4.8, bugac_rtb 4.7, kesmark_p40 4.7, sw_depot 4.5, cegled_junction 4.4.
 
 ## 4. Findings and the changes they made
 
@@ -213,15 +236,18 @@ order the runs showed the need:
 
 ## 5. What the tables say now
 
-1. **Posture decides the battery's fate.** A careless battery is wrecked at least once in 80-100 % of Pact and NATO
-   campaigns; a careful one in 15-30 %. The careful battery is also known far less well (on day 1, 0.25-0.42 against 0.52-0.79) and,
+1. **Posture decides the battery's fate.** A careless battery is wrecked at least once in 80 % of Pact and NATO
+   campaigns; a careful one in 15-40 %. The careful battery is also known far less well (on day 1, 0.37-0.42 against 0.60-0.79) and,
    because it survives, is offered more raids (NATO 9.2 a week against 5.0). This is the lesson the campaign is meant to
    teach.
-2. **The Pact's opening blows break the air defences, then its basic SEAD lets them come back.** The defences fall to
-   31-34 % by the end of day 2 at 1.0-2.3 % losses; after the air operation only a sixth of its effort is DEAD or hunting,
-   the replacements arrive, and its losses climb to 3.8-4.6 % by day 7. Not changed: this is "basic SEAD".
+2. **The Pact's opening blows break the air defences, then its basic SEAD lets them come back.** The radar SAM sites
+   fall to 24-37 % by the end of day 2 at 1.5-2.1 % losses; after the air operation only a sixth of its effort is DEAD or
+   hunting, the replacements arrive, the sites are back to 82-86 % by day 7 and its losses climb to 3.5-5.3 %. Its
+   Kh-22s (one pair a day at most, about eight missiles a week) go at the deepest fixed targets; only the S-75 can take
+   them (0.2 a week). Not changed:
+   this is "basic SEAD".
 3. **NATO's rollback takes days, stalls and resumes.** Its losses fall from 1.3-1.4 % on day 1 to 0.6-0.9 % on days 2-4
-   while the defences fall to 42-45 %; then its ARMs run short, the replaced sites return, the defences recover to 68-70 %
+   while the radar SAM sites fall to 21-33 % by day 4; then its ARMs run short, the replaced sites return, they recover to 67-70 %
    and the losses rise to 1.1-2.0 %; against the careless battery it goes back to the rollback. Against the careful
    battery the decoy emitters and ELINT ghosts keep NATO believing 64-82 % of the defences work: it never leaves the
    rollback in the week (the deception that kept Serbia's air defence alive in 1999, a design reference only).
@@ -253,3 +279,291 @@ order the runs showed the need:
 guns at the target hit low attackers but not medium ones; a wrecked object is out until its replacement comes, no raid is
 offered while the battery is repaired, and the Pact's day 1 is more than one and a half times its day 4; the believed
 air defences are the share of known sites working, and NATO's rollback ends and resumes.
+
+On the nation's theatre (N4, `tests/test_air_war.cpp`, `tests/test_country_map.cpp`): radar-laid guns are not part of the
+enemy's measure; the Pact's and NATO's DEAD, hunter and deception packages go at SAM sites and radars, never guns; battery
+21 deploys to its position in their wars, on open ground; the neutral neighbour never strikes a pipeline station; a
+one-channel S-125 takes at most one of a passing four-ship (`EngagedAircraft`); a played raid's rest is resolved but for
+what the scenario flew (`ResolvedPieces`); in played raids the neighbours fire, their kills are theirs, and the warning
+posts are one of each kind, the nearest working radar company among them. Cruise missiles: they fly in the war's year
+from their stock at fixed targets (the Pact's Kh-22 in 1985, NATO's Tomahawk only in a later war, from its sea launch
+area); a Kh-22 is too fast for the Osa but not the S-75, and one shot down is never a crew lost; a played Tomahawk salvo
+is four `cruise_missile` targets that strike or are shot down.
+
+## 8. The nation's theatre: the first read (N4, 22 October 2026)
+
+The roadmap's nation on the map, N4: the air war on `theatre_pannonia_nation.json`, the whole nation (170 objects:
+`docs/COUNTRY_MAP.md`), with `air_war_demo` and `air_war_balance` as a first read. `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7`, against the tuned theatre (10 seeds each; tuned → nation):
+
+| Adversary, battery | Sorties a week | Loss % | Defences working D3, D7 (believed) | Phase D7 | Battery raids a week | Battery wrecked |
+|---|---|---|---|---|---|---|
+| Rava Liberation Front's air wing, careless | 24.3 → 22.1 | 2.1% → 8.6% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 1.0 → 1.0 | 0.7 → 0.8 | 0 % → 0 % |
+| Rava Liberation Front's air wing, careful | 24.0 → 23.6 | 2.9% → 8.1% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 1.0 → 1.0 | 0.5 → 0.5 | 0 % → 0 % |
+| Noric Republic's air force, careless | 39.5 → 31.5 | 3.3% → 3.5% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 2.0 → 2.0 | 2.7 → 1.5 | 0 % → 0 % |
+| Noric Republic's air force, careful | 45.4 → 39.7 | 2.4% → 3.8% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 2.0 → 2.0 | 1.9 → 1.5 | 0 % → 0 % |
+| Warsaw Pact, careless | 620.5 → 705.7 | 2.0% → 3.2% | 21% (42%), 75% (39%) → 73% (79%), 74% (64%) | 2.0 → 2.0 | 5.2 → 1.3 | 100 % → 10 % |
+| Warsaw Pact, careful | 616.7 → 685.8 | 1.7% → 2.6% | 25% (60%), 80% (52%) → 73% (83%), 69% (72%) | 2.0 → 2.0 | 4.0 → 0.6 | 50 % → 0 % |
+| NATO, careless | 744.3 → 813.6 | 1.2% → 2.2% | 41% (62%), 56% (44%) → 81% (85%), 67% (69%) | 1.7 → 1.0 | 4.5 → 5.5 | 100 % → 20 % |
+| NATO, careful | 700.8 → 800.0 | 1.2% → 2.4% | 39% (72%), 67% (67%) → 83% (87%), 67% (76%) | 1.0 → 1.0 | 9.7 → 4.5 | 10 % → 10 % |
+
+### What the first read found, and what was changed
+
+1. **Radar-laid guns were hunted as SAM sites.** The nation's Shilkas, S-60s and KS-30s lay their guns by radar; the
+   planner's rule ("guns are for the strike's escort, not DEAD") only tested the radar, and on the tuned theatre no gun
+   had one. A quarter of the Pact's and NATO's packages went to Shilka platoons. **Changed:** DEAD, hunter and deception
+   packages, and the enemy's measure of the air defences, take radar SAM sites only (`IntelEntry::IsSamRadar`). The
+   tuned theatre's results are unchanged (every column but the air defence's, which is now the same set the enemy
+   measures).
+2. **The neutral neighbour bombed its own oil line**, the smaller pipeline's border station. **Changed:** banned; it
+   closes the valve when the war begins (`faction_neutral.json`).
+3. **The battery was out of the big wars.** At Kesmark neither the Pact nor NATO came near it: no raid through its
+   sector all week. **Changed:** the nation's theatre gives battery 21 a position in those wars too, as the tuned theatre
+   does in the rebels' and the neutral's: against NATO the Dombas hub (the helicopter base, the army's artillery, rear base
+   and materials depot, the Cegled junction), against the Pact the approach to the Rava dam and the northern group. NATO
+   now offers 4.5-5.5 raids a week; the Pact, whose war on the whole nation spreads from the border radars to the
+   airfields and command posts of the centre and west, 0.6-1.3 (no fixed position tried did better).
+4. **The air defences hold.** The whole nation has 22 radar SAM sites where the tuned theatre had five: the Pact's
+   opening blows leave 73 % of them working on day 3 (21-25 % on the tuned theatre) and NATO's rollback is still in its
+   first phase on day 7 with two thirds of them working. **Not changed:** this is the larger country working, and what the
+   player's battery is for: a battery that survives anywhere keeps the rollback from ending (the enemy's freedom of
+   action, `docs/campaign/02_WHAT_WE_DEFEND.md` §5). A measure limited to the area near the enemy's front was tried and
+   dropped for that reason. How large an air force fights a whole nation is the rebalance's question (13.8).
+5. **Losses rise.** The rebels lose 8-9 % a sortie (2-3 % on the tuned theatre): the south now has the regimental
+   Shilkas and Strela-1s and Osa batteries 24 and 25. The Pact loses 2.6-3.2 %, NATO 2.2-2.4 %.
+6. **The battery is wrecked less** (the Pact: 50-100 % of runs on the tuned theatre, 0-10 % on the nation's; NATO's
+   careless battery 100 % to 20 %): it is one of 22 sites, and the enemy has more to hunt.
+7. **It runs fast enough.** About 1.3 s a campaign-week on average (NATO's about 4 s), against 0.1 s on the tuned
+   theatre: the planner weighs every candidate against every threat on its routes. Fine for the balance runs and the
+   campaign screen's steps; a spatial filter is the remedy if it grows.
+
+The demo plays raids on the nation's theatre (`air_war_demo --theatre theatre_pannonia_nation.json <faction>`): NATO's
+hunters ARM'd a vehicle at the Dombas position; the neutral's strike on the south-western depot played through.
+
+### Continued (23 October 2026): fire channels, the warning posts, the neighbours in a played raid
+
+1. **A defence engaged a whole flight at once.** Every aircraft of a passing four-ship got its own chance from an S-75 or
+   S-125 whose guidance radar takes one target at a time. **Changed:** a defence has fire channels (`defence.channels`:
+   the S-75M2, S-125M1, Kub, KS-30 and S-60 batteries one, an Osa battery and a Shilka or Strela-1 platoon four, MANPADS
+   three, the ZU-23s every aircraft in reach), scaled by how much of it works; the resolver and the planner's estimate
+   share the rule (`EngagedAircraft`). The tuned theatre has no channels and is unchanged to the byte; on the nation's
+   (10 seeds, 7 days; before → after):
+
+| Adversary, battery | Sorties a week | Loss % | Defences working D3, D7 (believed) | Phase D7 | Battery raids a week | Battery wrecked |
+|---|---|---|---|---|---|---|
+| Rava Liberation Front's air wing, careless | 22.1 → 22.0 | 8.6% → 7.3% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 1.0 → 1.0 | 0.8 → 0.8 | 0 % → 0 % |
+| Rava Liberation Front's air wing, careful | 23.6 → 22.5 | 8.1% → 7.1% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 1.0 → 1.0 | 0.5 → 0.5 | 0 % → 0 % |
+| Noric Republic's air force, careless | 31.5 → 31.5 | 3.5% → 3.5% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 2.0 → 2.0 | 1.5 → 1.5 | 0 % → 0 % |
+| Noric Republic's air force, careful | 39.7 → 39.7 | 3.8% → 3.8% | 100% (100%), 100% (100%) → 100% (100%), 100% (100%) | 2.0 → 2.0 | 1.5 → 1.5 | 0 % → 0 % |
+| Warsaw Pact, careless | 705.7 → 695.1 | 3.2% → 3.2% | 73% (79%), 74% (64%) → 61% (75%), 61% (48%) | 2.0 → 2.0 | 1.3 → 1.9 | 10 % → 20 % |
+| Warsaw Pact, careful | 685.8 → 682.3 | 2.6% → 3.1% | 73% (83%), 69% (72%) → 65% (81%), 62% (65%) | 2.0 → 2.0 | 0.6 → 1.4 | 0 % → 0 % |
+| NATO, careless | 813.6 → 779.1 | 2.2% → 1.8% | 81% (85%), 67% (69%) → 74% (81%), 64% (66%) | 1.0 → 1.0 | 5.5 → 5.9 | 20 % → 10 % |
+| NATO, careful | 800.0 → 781.5 | 2.4% → 1.9% | 83% (87%), 67% (76%) → 77% (84%), 65% (70%) | 1.0 → 1.0 | 4.5 → 4.3 | 10 % → 0 % |
+
+   NATO loses less (1.8-1.9 % a sortie) and gets further with its rollback; the Pact's air operation leaves 61-65 % of
+   the radar SAM sites working on day 3 where it left 73 %.
+2. **The warning nets.** The radar companies and Osa batteries 23 to 25 are warning posts (`c2_source`); a raid's
+   scenario takes, of each kind, the nearest that still works within 150 km (the radar company the battery is nearest,
+   the neighbouring battery on the radio), not every post in reach.
+3. **A played raid's way in met nothing.** After a played raid the campaign resolved the rest only from the scenario's
+   end, so everything before it (a NATO raid's 150 km over the western defences, and flights elsewhere in the package)
+   went unopposed, and a flight not in the scenario that released before its end never delivered. **Changed:** every
+   part of every route is resolved except what the scenario flew, inside its circle while it ran (`ResolvedPieces`).
+   Unplayed raids are untouched (the tuned balance is identical to the byte).
+4. **The neighbours in a played raid** (17.1's first form). Our other air defences whose zones reach into the scenario
+   take their chances at the aircraft passing through, by the resolver's rule, rolled in the mission bridge as each
+   aircraft enters a zone; one hit goes down in the scenario half way through it, credited to that defence, which also
+   spends its rounds and shows itself (`docs/air_war/05_EXECUTION.md` §4). In the demo's raids on the nation's theatre
+   17-27 neighbours are in reach of a raid against the battery; the Pact's raids near the Rava dam lost three aircraft
+   to them in five. They are not drawn yet.
+
+The demo's raids also show the battery's own crew launching in few of them (on both theatres): the scenarios' own
+balance, the open item in §6.
+
+### Cruise missiles (23 October 2026)
+
+The war has a year (`TheatreDef::year`, 1985) and each aircraft or missile type the year it entered service: only what
+is in service flies. A cruise missile is a type with `"missile": true`: flown as a flight of its own mission kind
+(`missile`) from its launch (its carrier's release at the border entry, or the front's sea launch area through it) to a
+fixed target in its range, high and then a dive or low over the ground; from a stock resupplied daily; engaged by every
+defence on its way like an aircraft, but too fast for some (`defence.max_target_mps`: the Osa-AK's 500 m/s,
+`voenizdat_osa_1991` p15; the others estimates), and never a crew lost: one shot down is the defence's
+(`PackageOutcome::missiles_downed`). The planner weighs a salvo's expected effect against the missiles spent, dearer
+as the stock runs down; no crew at risk, so the commander's loss limit doesn't stop it. In a played raid the missiles are
+targets of the engagement model's `cruise_missile` class; each strikes where it arrives or is shot down.
+
+| Type | Who, from when | Notes |
+|---|---|---|
+| Kh-22M | the Pact, from the long-range aviation's Tu-22Ms, in service from the 1970s | about Mach 3 at height and a dive; too fast for the Osa and the S-125; the S-75 can take it |
+| BGM-109C Tomahawk (TLAM-C) | NATO, from ships beyond the western border, from 1986 | the conventional land-attack Tomahawk (the nuclear TLAM-N 1984); low and slow, small on radar |
+| AGM-86C CALCM | NATO, from B-52s, from 1988 | the nuclear AGM-86B converted from June 1986, first used in January 1991 |
+
+So in the 1980-85 war only the Pact fires cruise missiles; a later war (`year` 1986 or after) gives NATO its Tomahawks,
+and from 1988 the CALCMs. The tuned theatre's rebels, neutral and NATO are unchanged to the byte; the Pact fires about
+eight Kh-22s a week (5 % of its packages), the S-75s shooting down 0.2 on the tuned theatre and 0.3-0.7 on the nation's.
+
+In the test raid of four Tomahawks past the battery (`tests/test_air_war.cpp`) the crew had them on the PU-12M's board
+at 17 km from the regiment's radars, designated, took one on the TV and was cleared to launch, but the tracking radar had
+no echo from so small a target (range by hand) and no missile went before they struck; the search radar saw them at
+3.6 km. `flak11` gives the Osa 0.12-0.38 against cruise missiles: whether the crew launches on a TV track with the range
+by hand is a question for the scenarios' own balance (§6).
+
+### The other batteries fighting (23 October 2026)
+
+The regiment's other Osa batteries near a played raid no longer take abstract chances: the raid's scenario marks an Osa
+neighbour `"fights"`, with its launchers that work (four times its working share) and its missiles, and the runner sets
+its launchers up in the battery's combat formation about its place (two pairs 3 km apart, 200 m within) as shooters of
+the battery fire model, the one the player's battery's other launchers fight in (`battery_fire.hpp`: the network chart's
+times, the firing zones and hit chances of the Osa's gameplay tuning). Their own post is not ours, so each takes the
+nearest hostile in its reach itself. A missile launched is logged against its target, a hit is "destroyed by" the
+battery, and the mission bridge reads their kills, missiles and radar time from the runner instead of rolling for them
+(`ScenarioRunner::NeighbourFights`, `docs/air_war/05_EXECUTION.md`). The other systems (the S-75s, S-125s, the Kub, the
+guns and the Strelas) keep the abstract chance: the game has no fire model of theirs. In the test, battery 23 thirty
+kilometres up the practice drone's way in shot it down with its first missile.
+
+### The rebalance on the nation, and the game's campaigns on it (23 October 2026)
+
+**How large an air force fights a whole nation** (point 4 of the first read). The factions' squadrons were sized for the
+tuned district; a war on the whole nation is fought by more. A theatre's front now says by how much
+(`"force_scale"`: every squadron's aircraft and the packages the staff plans a cycle, `max_packages_per_cycle`; the
+cruise missiles' stocks are the long-range aviation's and the fleet's and stay): the Pact's front **2** (the Air Forces
+of the Front have two or three divisions of fighters and fighter-bombers, `fm100_2_3` pp. 4-127 to 4-134, and the
+faction's squadrons are one division's worth), NATO's **1.5** (a game value: an allied tactical air force commits more
+wings to the whole nation than to a district; at 1.5 and at 2 its rollback is held back alike by the sites returning to
+service, not by its numbers). The rebels and the neutral fight as they are. Scaling the squadrons alone changed little:
+the staff's packages a cycle held the tempo, so they scale too. The tuned theatre has no scale and is unchanged.
+
+10 seeds, 7 days, on the nation's theatre (before → after):
+
+| Adversary, battery | Sorties a week | Loss % | Defences working D3, D7 (believed) | Phase D7 | Battery raids a week | Battery wrecked |
+|---|---|---|---|---|---|---|
+| Warsaw Pact, careless | 697.8 → 1150.5 | 2.6% → 3.3% | 57% (71%), 68% (49%) → 41% (55%), 75% (52%) | 2.0 → 2.0 | 3.2 → 7.1 | 0 % → 0 % |
+| Warsaw Pact, careful | 675.0 → 1119.2 | 3.0% → 3.2% | 57% (78%), 71% (60%) → 47% (68%), 72% (57%) | 2.0 → 2.0 | 1.7 → 6.2 | 0 % → 0 % |
+| NATO, careless | 779.1 → 1106.8 | 1.8% → 2.4% | 63% (72%), 68% (69%) → 55% (63%), 72% (66%) | 1.0 → 1.0 | 5.9 → 8.1 | 10 % → 20 % |
+| NATO, careful | 781.5 → 1095.6 | 1.9% → 2.3% | 67% (77%), 73% (74%) → 52% (67%), 74% (73%) | 1.0 → 1.0 | 4.3 → 6.8 | 0 % → 10 % |
+
+Read against the shapes (§2): the Pact's two massed days now break much of the air defence (44 packages and over 300
+sorties on day 1, 41-47 % of the radar SAM sites working on day 3; the tuned theatre's 21-25 % is a district of five
+sites), then a lower sustained rate while sites return; it fires about 27 Kh-22s a week, its missile packages at their
+floor of one a cycle. NATO's air defences fall over the first three days (77-79 % working on day 1, 52-55 % on day 3) and
+the rollback stalls as sites return (72-74 % on day 7), with ARMs to spare: the shape of a rollback that cannot keep
+the sites down, which is the player's battery's work (§8, point 4). Both now offer the battery 6-8 raids a week, as the
+tuned theatre's 4-9. The rebels (0.5-0.8 raids a week, 7 % losses a sortie in the south's regimental air defence) and the
+neutral (1.5) are unchanged.
+
+**The game's campaigns move to the nation's theatre.** A new campaign on the missions menu is fought on
+`theatre_pannonia_nation.json` (`USimAirCampaignSubsystem::TheatreFile`); a saved one goes on on the theatre it was saved
+with. Its raids open in the Kesmark range's level, which now draws the whole country around the district (the nation on
+the map N5, `docs/COUNTRY_MAP.md`): battery 21 stands at the Rava dam against the Pact, the Dombas hub against NATO and
+in the south against the rebels and the neutral, on the map's ground everywhere (its far ground is the country's).
+Checked: the campaign screen on the nation's theatre against NATO (the country under it, a 19-aircraft raid warned down
+the chain), and Unreal's `SAM3D.AirWar.Raid` automation test.
+
+### Still to do, after N4
+
+- The ledgers against a careful and a careless battery, and the factions' target choice re-read (13.8, with phase 13's
+  roles and ledgers).
+- The regiment's tasking (phase 13): the battery moved to where the enemy strikes.
+- A fire model for the other systems (the S-75, S-125 and Kub batteries, the guns), so they fight in a raid as the Osa
+  batteries do.
+- Whether the enemy's pre-war survey knows our units' prepared positions (today it knows an object, then follows it).
+
+## 9. Against history: the benchmarks (23 October 2026)
+
+The weapons, attacks, support, forces and logistics of `10_WEAPONS.md` to `14_LOGISTICS.md` were calibrated against
+what the period's air wars recorded (`docs/research/AIR_WAR_MISSIONS_2026-10.md`). `simcore/examples/air_war_bench.cpp`
+flies each analogue through the abstract resolver, with the theatre's own defence values, many times:
+
+```bash
+./simcore/build/air_war_bench data 400                                     # Windows: simcore\build\Release\air_war_bench.exe
+./simcore/build/air_war_bench data 400 --why --set attrition.pass_scale=0.4   # losses by role and defence; try a value
+```
+
+| Benchmark | The model | History |
+|---|---|---|
+| A massive bridge, F-4Es with Mk 84s from medium altitude, up to 871 sorties | a span down in 29 % of campaigns | the Thanh Hoa bridge stood through 871 sorties (`wiki_thanh_hoa`) |
+| The same bridge, one strike of 24 GBU-10s | a span down in 48 % of strikes | damaged 27 April 1972, dropped 13 May |
+| Average miss: unguided from medium altitude, laser-guided | 472 ft, 21 ft | 447 ft, 23 ft (`afmag_2003_bombs`) |
+| Losses a 100 sorties over an airfield at night: low with JP233, medium with Mk 84 | 6.2, 0.4 | about 4 times a sortie low (`rjlee_ds_losses`) |
+| An airfield's runways cut: 2 Tornados with JP233; 4 Su-24s with BetAB in dives; 4 F-16s with Mk 84s from medium altitude | 54 %, 96 %, 5 % | Focus's flights of four closed runways (`wiki_focus`); medium altitude cratered few |
+| ARMs for each radar destroyed: radiating crews, crews that switch off | 3.6, 11.7 | the Bekaa; Allied Force's 743 HARMs for 3 SA-6 batteries (`rand_mr1365`) |
+| Unretarded bombs from low level that go off | 45 % | 11 of 25 (`navalgazing_falklands`) |
+| Four F-4Es popping up behind four Kub batteries and guns, no suppression | 25 lost a 100 sorties | 4 a 100 over all of Yom Kippur's first three days (`jvl_1973_losses`); Dugman 5's six F-4s (`wiki_model5`) |
+| A suppression package (decoys, a jammer, four F-4Gs, four F-4Es) against a radiating Kub battery | destroyed in 66 %, 4.5 lost a 100 sorties | the Bekaa: 17 of 19, none lost to them (`bekaa_popular`) |
+
+### What the first read found, and what was changed
+
+1. **Unguided bombs dropped the bridge** (264 sorties). A very hard target's effects were cut to a few per cent per
+   hit (a Mk 84's 0.1 to 0.03); 24 Paveways now drop a span half the time, as in 1972, and dumb bombs from medium
+   altitude seldom in 871 sorties.
+2. **Runway bombs did nothing from a dive** (8 %): the footprint was a crater's. A runway is cut by a crater anywhere
+   across its width (`delivery.runway_strip_m` 25 m); JP233's effect came down from 0.95 to 0.6 (a pair's pass cuts half
+   an airfield, not all of it).
+3. **Medium altitude was as deadly as low.** The benchmark's own guns and Strela had been given medium cover by mistake;
+   fixed, low costs nine to fifteen times medium against an airfield's thick guns (Desert Storm's average was about four).
+4. **SAMs were far too lethal per pass.** A pair of Wild Weasels past five radiating Kubs died 92 % of the time, a 4-ship
+   into a belt lost 44-50 %. Every defence's lethality is now a relative one times `attrition.pass_scale` (0.5); SEAD
+   suppresses 0.6 (was 0.45); a radar that fires at decoys is suppressed at least 0.6 by the SEAD behind them
+   (`attrition.decoy_exposure`, the Bekaa's method). The belt now costs 25 a 100 sorties, the Bekaa package 4.5.
+5. **ARMs barely cared about discipline** (5.9 against 3.7 for each radar). An ARM with memory against a radar that
+   switched off in time now kills 0.08 (was half the radiating chance): 11.7 against 3.6.
+6. **Light air arms stopped flying.** With weapons that do what they did, a pair of light aircraft achieves a few per
+   cent; their doctrines got their own thresholds (`13_PACKAGES.md`), a bomb's blast its reach against soft and light
+   targets, and the border battalion and the artillery their class (light).
+
+## 10. The rebalance with weapons, support, build-ups, sizes and logistics (23 October 2026)
+
+`air_war_balance data 20 7` (tuned) and `--theatre theatre_pannonia_nation.json data 10 7` (the nation) after §9 and with
+`utility.sortie_cost` 0.1, the support orbits, the build-ups and our supply lines; before is §3 (tuned) and §8 (nation).
+
+| Adversary, battery (tuned theatre) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week | Attackers a package |
+|---|---|---|---|---|---|
+| Rebels, careless | 24.6 → 21.9 | 2.6 % → 2.3 % | 100 %, 100 % | 0.9 → 2.9 | 2.0 |
+| Rebels, careful | 25.1 → 18.8 | 3.2 % → 2.1 % | 100 %, 100 % | 0.6 → 1.0 | 2.0 |
+| Neutral, careless | 39.0 → 35.1 | 3.6 % → 4.4 % | 100 %, 100 % | 2.7 → 7.7 | 4.9 |
+| Neutral, careful | 44.6 → 25.2 | 2.7 % → 5.2 % | 100 %, 100 % | 2.0 → 2.9 | 5.1 |
+| Warsaw Pact, careless | 625.5 → 560.1 | 2.1 % → 1.1 % | 24 %, 86 % → 26 %, 78 % | 4.7 → 6.8 | 7.1 |
+| Warsaw Pact, careful | 609.9 → 560.6 | 2.2 % → 1.3 % | 35 %, 82 % → 39 %, 80 % | 4.0 → 9.3 | 6.8 |
+| NATO, careless | 727.0 → 515.9 | 1.2 % → 0.9 % | 28 %, 67 % → 40 %, 69 % | 5.0 → 5.2 | 5.3 |
+| NATO, careful | 690.6 → 496.2 | 1.1 % → 0.7 % | 36 %, 70 % → 56 %, 64 % | 9.2 → 8.1 | 5.2 |
+
+Read against the shapes (§2) and the period's rates:
+
+1. **Losses fell to the period's.** The Pact loses 1.1-1.3 % a sortie and NATO 0.7-0.9 % (Israel's average over the
+   October war was about 1 %; Desert Storm's far less). The planners, expecting less, are bolder: the Pact offers the
+   battery 7-9 raids a week.
+2. **NATO's first week is lighter** (500 sorties against 700): its force arrives over four weeks (`12_FORCES.md`), so the
+   rollback is slower to bite (40-56 % of the radar SAM sites working on day 3 against 28-36 %).
+3. **The Pact's opening blows still break the air defences** (26-39 % working on day 3) and size themselves to the
+   target: 10-12 attackers at airfields and command posts, 4 at radars and SAM sites.
+4. **Weapons and attacks as the doctrines flew them.** The Pact: Kh-29Ls and KAB-500Ls from height, RBK-500s and BetABs
+   in dives, retarded FAB-500ShPs laid down; NATO: Paveways, Mavericks, Rockeye, JP233 and BL755 low, tosses.
+5. **The supply war grinds.** The Pact's bridges down cut our lines for 66-100 line-hours a week and the troops end it
+   with 80-86 % of their stocks; armed reconnaissance flies 6-11 searches a week and finds a column in 27-38 % of them.
+6. **The light air arms fly again**, the rebels by night with their crop sprayers (43-49 % of their packages), more
+   often through the battery's sector when it radiates all day (2.9 a week); the neutral's losses rose with the
+   regiment's guns in the south (4-5 %).
+
+| Adversary, battery (the nation) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 22.0 → 17.9 | 7.3 % → 7.3 % | 100 %, 100 % | 0.8 → 1.4 |
+| Rebels, careful | 22.5 → 18.6 | 7.1 % → 4.3 % | 100 %, 100 % | 0.5 → 0.6 |
+| Neutral, careless | 31.5 → 30.9 | 3.5 % → 3.6 % | 100 %, 100 % | 1.5 → 7.3 |
+| Neutral, careful | 39.7 → 25.6 | 3.8 % → 4.3 % | 100 %, 100 % | 1.5 → 4.3 |
+| Warsaw Pact, careless | 1150.5 → 1044.3 | 3.3 % → 2.0 % | 41 %, 75 % → 38 %, 72 % | 7.1 → 7.8 |
+| Warsaw Pact, careful | 1119.2 → 1009.4 | 3.2 % → 2.1 % | 47 %, 72 % → 42 %, 72 % | 6.2 → 7.0 |
+| NATO, careless | 1106.8 → 736.8 | 2.4 % → 1.5 % | 55 %, 72 % → 71 %, 69 % | 8.1 → 5.9 |
+| NATO, careful | 1095.6 → 732.3 | 2.3 % → 1.7 % | 52 %, 74 % → 66 %, 66 % | 6.8 → 6.8 |
+
+On the whole nation the shapes hold: the Pact's opening blows leave 38-42 % of the radar SAM sites working on day 3,
+NATO's rollback starts slower while its force arrives (66-71 % on day 3), both offer the battery 6-8 raids a week, and
+their losses fall to 1.5-2.1 % a sortie. The 14 supply lines are cut 75-127 line-hours a week by bridges down, sent
+round one to three times, and searched 8-14 times; the troops end the week with 83-87 % of their stocks (NATO's
+interdiction of the bridges bites hardest). The neutral's helicopter raids and the rebels' harassment come through the
+battery's sector more often when it radiates (4-7 a week for the neutral).
+
+### Still to do, after this pass
+
+- The direct-hit tail of unguided bombs (gross errors) if a target's survival turns on single hits.
+- Exercise records as a second check (`docs/research/AIR_WAR_MISSIONS_2026-10.md` §7).
+- Our side's reports of the supply war through the chain of command, and the regiment's answer to cut lines (13.x).

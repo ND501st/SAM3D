@@ -334,6 +334,57 @@ SC_TEST("kill assessment: a wrong call of a hit: the track let go, then the seni
     (void)dropped;
 }
 
+SC_TEST("kill assessment: a wrong kill reported on the battery net is taken back there once the target is seen flying on") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_practice.json", kData, def, console, &e));
+    for (auto& h : def.tuning.hit_chance) h.second = 0.0;  // every missile misses
+    def.tuning.kill.near_burst_chance = 1.0;
+    def.tuning.kill.early_burst_chance = 0.0;
+    def.tuning.kill.decisive = 100.0;
+    def.tuning.kill.ambiguous_wrong_chance = 1.0;  // and the deputy reads it the wrong way
+    ScenarioRunner r(std::move(def), std::move(console));
+    double reported_s = -1.0, flying_s = -1.0, taken_back_s = -1.0;
+    for (int i = 0; i < 9000 && taken_back_s < 0.0; ++i) {
+        r.Step(0.1);
+        for (const SpokenCallout& s : r.Callouts()->Log()) {
+            if (s.id == "report_result" && s.from == "commander" && reported_s < 0.0) reported_s = s.start_s;
+            if (s.id == "target_still_flying" && flying_s < 0.0) flying_s = s.start_s;
+            if (s.id == "report_not_destroyed" && taken_back_s < 0.0) {
+                taken_back_s = s.start_s;
+                SC_EXPECT(s.from == "commander" && s.channel != "intercom");
+                SC_EXPECT(s.ru.find("не поражена") != std::string::npos);
+            }
+        }
+    }
+    std::printf("    reported %.0f s, seen flying %.0f s, taken back %.0f s (%d)\n", reported_s, flying_s, taken_back_s,
+                r.KillReportsTakenBack());
+    SC_EXPECT(reported_s > 0.0 && flying_s > reported_s && taken_back_s >= flying_s);
+    SC_EXPECT(r.KillReportsTakenBack() == 1);
+    SC_EXPECT(r.Debrief().find("kill report taken back") != std::string::npos);
+}
+
+SC_TEST("kill assessment: the post hears a launcher take its kill back: the target is back on its board") {
+    std::string error;
+    std::unique_ptr<BatteryLink> link = LoadBatteryLinkFile(kData + "/scenarios/battery_link_practice.json", kData, &error);
+    SC_EXPECT(link != nullptr);
+    if (!link) return;
+    for (int i = 0; i < 50; ++i) link->Step(0.1);
+    ScenarioRunner::LinkReport r;
+    r.kind = BatteryFire::Event::Kind::Hit;
+    r.callsign = link->Callsign();
+    r.target = "t1";
+    r.missiles = 3;
+    link->Post().HearBatteryReport(r);
+    SC_EXPECT(link->Post().BelievesDestroyed("t1"));
+    r.kind = BatteryFire::Event::Kind::Miss;
+    r.taken_back = true;
+    link->Post().HearBatteryReport(r);
+    SC_EXPECT(!link->Post().BelievesDestroyed("t1"));
+    SC_EXPECT(link->Post().Debrief().find("takes back the kill of t1") != std::string::npos);
+}
+
 namespace {
 
 // Four hostiles abreast, 800 m apart, from the north: the strike aircraft of the scenario copied four times.

@@ -86,6 +86,7 @@ struct BoardContact {
     double height_agl_m = -1.0;  // above the ground, for a radar horizon (< 0: take altitude_m)
     int type = 9;
     int formation = 1;
+    bool transponder = false;  // answers an IFF interrogator (the scenario's "iff": "friend")
 };
 
 namespace detail {
@@ -432,6 +433,13 @@ public:
     void SetCentre(const Vec3& centre) { centre_ = centre; }
 
     // The board's number of a target: the radar battery's two digits, then its own sequence (given at first sight).
+    // A track the plotter writes under a number of his own (a report written down wrong: command_post.hpp FromWords).
+    void NumberAs(const std::string& id, int number) {
+        for (const auto& n : numbers_) {
+            if (n.first == id) return;
+        }
+        numbers_.emplace_back(id, number);
+    }
     int NumberFor(const std::string& id) {
         for (const auto& n : numbers_) {
             if (n.first == id) return n.second;

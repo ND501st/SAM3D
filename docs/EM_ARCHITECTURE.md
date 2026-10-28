@@ -546,7 +546,13 @@ follows a noise jammer in angle when the jamming drowns its echo (`RunTrackRadar
   (`AngleSigmaRad`, as for a strobe), drawn on the keyed random streams. There is no range: the gate stays at the
   range it had, or at the designation's range (the crew's range wheel), so the radar takes the echo again by itself
   when it burns through (about 2.6 km for a 5 m2 target against the placeholder `generic_selfscreen_noise_ku`).
-* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam.
+* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam. In the
+  engagement layer (`EngagementModel::TrackJammer`) the jamming leaving the beam is not at once a lost track: the
+  tracking radar carries on at the strobe's last smoothed angles and rates for the memory time (`tv.memory_s`, ePap's
+  memory mode) while the range operator turns the gate onto the echo, now on his range indicator
+  (`RangeGateOntoEcho`); with the echo in the gate it locks (the burn-through path). A strobe that flickers below the
+  threshold for a moment is carried the same way. Lost only when the memory runs out first (the target beyond the
+  radar's reach, or out of the beam).
 * `EmSensorLink::JamTracked` gives the engagement layer the target that direction lines up with (by angle only, the
   referee-side association of §23) and the measured angles, with `no_range` set. `RadarState::on_jam`, `jam_az_rad`,
   `jam_el_rad`, `jam_jn_db`, `jam_range_m` hold the state; `ClearLock` resets it.
@@ -616,8 +622,9 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
 * **A stand-off jammer escort** is a target carrying a scripted jammer on a racetrack beyond the missiles' reach
   (`osa_soj_strike.json`): its strobe lies across the search scope and the strikers show late; one striker's
   self-protection pod is fought on its angle by method Н (9.1).
-* **Emission discipline** (`doctrine.search_bursts` {on_s, off_s}): while no hostile is within the tracking radar's
-  reach, the commander keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
+* **Emission discipline** (the limited regime, `docs/crew/16_EMISSION.md`; the older `doctrine.search_bursts` {on_s,
+  off_s}): once the commander has told his crew the regime, while no hostile is within the tracking radar's
+  reach, he keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
   the antenna turning); it stays on once one is near. Drills marked `situational` are never pulled into a plan by the
   drill master.
 * Anti-radiation missiles and the drill against them: §35.
@@ -651,8 +658,10 @@ search radar holds it as a small, fast mark; on the scope a mark faster than 450
 confirmed, without the four updates other ghost marks wait for (`EmSensorLink::FastClosing`).
 
 The classes: `agm45_class_shrike` (2-10 GHz broad head, no memory, 600 m/s, 40 km), `agm88a_class_harm` (2-20 GHz,
-tuned within 10 %, memory, 700 m/s, 25 km at low level), `kh58_class` (an H-band head, no memory assumed, 900 m/s,
-60 km). Every value is cited or marked an estimate in the file.
+tuned within 10 %, memory, 700 m/s, 25 km at low level), `agm78b_class_standard_arm` (the AGM-78B: a gimballed
+broadband head taken as 2-18 GHz, tuned within 15 %, a simple memory, 650 m/s, 90 km from altitude, a 97 kg warhead;
+the F-4G's ARM in a war before the HARM reached the USAF in 1987), `kh58_class` (an H-band head, no memory assumed,
+900 m/s, 60 km). Every value is cited or marked an estimate in the file.
 
 **Carriers (`ScenarioTarget::arms`, `ScenarioRunner::UpdateArms`).** A target with a warning receiver fires when it hears
 a radar in its weapon's band on the bearing of where its briefing has the radar (within about 20 deg), one its library
@@ -665,23 +674,31 @@ pp262-264).**
 
 * *The signs, seen by the senior operator on his scope* (the marks' motion over their last looks, never the truth): a
   smaller mark separating and coming at the vehicle much faster than any aircraft at zero parameter ("Пуск ПРР!
-  Азимут ..."); and, warned of ARMs (`doctrine.arm_threat`), a target that came at the battery at zero parameter turning
+  Азимут ..."); and, warned of ARMs (told the arm regime), a target that came at the battery at zero parameter turning
   away out at stand-off range. A mark lost between bursts and a new one where it was heading are one blip to him.
   A "basic" tier (recruit, class3) doesn't know the signs; the others may miss one (`miss_chance`, more under stress).
-  Not built: the tracking radar's indicators (the tracked pulse briefly growing, a smaller one separating) and the
-  launch seen on the TV.
+* *The signs on the tracking radar's indicators and on the TV* (`WatchTrackSigns`, 21 Oct 2026): while the tracking
+  radar radiates on a target, an ARM's own echo in its beam (the EM layer's look at the missile, `ArmEchoVisible`) more
+  than a pulse ahead of the target's (100 m: 1.5 lengths of the 0.45 us pulse) and within the indicator's sweep about
+  it (3 km), closing faster than any aircraft, is the operator's sign at his range indicator («От цели отделился импульс, идёт на нас — пуск ПРР!»,
+  `arm_launch_track`); with the TV on, a missile leaving the tracked target (within 1.5 km of it) inside the TV's field
+  while the TV sees the target is the deputy commander's («По ТОВ: пуск ПРР с цели!», `arm_launch_tv`). The commander
+  acts on either as on the scope's sign. The same tiers know them and may miss them. The distances are estimates. The
+  radar's own look decides: a HARM-class missile (0.08 m2, an estimate) shows on the indicators only when fired from
+  about 8 km or nearer, for the few tenths of a second before its loft takes it out of the 1 deg beam; from 12 km its
+  echo is 8 dB, below detection (`test_arm_drill.cpp`).
 * *The commander, on hearing a sign*: the missile in the air is guided to its burst, then every transmitter off at
   once (`order_drop_target`, `order_emcon_off`, `order_ssc_off`; a capture under way is stopped) for `arm_silence_s`
   (60 s, an estimate), held so until it is over; radiation then comes back through the EMCON path. He reports the
   attack up the battery net ("21: пуск ПРР, азимут ..."). Having seen the sign himself the senior operator gives no more
   bursts.
-* *The least emission under the threat* (`doctrine.arm_threat`): the senior operator keeps the search transmitter's high
-  voltage on for 2 turns after every `arm_search_off_turns` (3; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
+* *The least emission under the threat* (the regime `arm`, once his commander has told him: `docs/crew/16_EMISSION.md`;
+  the older `doctrine.arm_threat`): the senior operator keeps the search transmitter's high
+  voltage on for 2 turns after every 3 (the regime's `off_turns`; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
   two-turn burst lights both low beams (under АВТ. I–III the low beam is dark in every third burst), and off while the
   tracking radar holds a target alone (5 s); the commander has the tracking transmitter put on a target only from Table
   7.3's far-edge range for its speed as the scope shows it (24 km over 300 m/s, 20 km under) and off after the burst.
-  Not built: the TV for tracking under the threat (the angles on the TV without НЛЦ, range by short bursts of the
-  tracking radar, p264).
+  Not built: the TV for tracking under the threat («использования ТОВ для сопровождения цели», p262).
 * *Relocation* (`doctrine.relocate_after_arm`): a position is changed only on the regiment commander's order (p238)
   and the battery commander's map carries the ARM launch lines (p244), so the attack is reported up and the regiment's
   standing order moves the battery when the fight is over: the crew stows (`order_march`), the battery moves to the

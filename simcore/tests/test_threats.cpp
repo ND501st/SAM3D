@@ -155,14 +155,14 @@ bool Has(const Run& r, const std::string& text) {
 }
 
 // The EM practice scenario with the Ku-band pod on its drone from `on_s`.
-std::string PracticeEmJammed(double on_s) {
+std::string PracticeEmJammed(double on_s, double off_s = -1.0) {
     const std::string em_block =
         "\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\" }";
     const std::string jammed =
         "\"em\": { \"library\": \"em/osa_ak.json\", \"search_radar\": \"osa_ak_soc\", \"track_radar\": \"osa_ak_ssc\", "
         "\"extra_libraries\": [\"em/generic.json\"], "
         "\"jammers\": [ { \"jammer\": \"generic_selfscreen_noise_ku\", \"target\": \"t1\", \"on_at_s\": " +
-        std::to_string(on_s) + " } ] }";
+        std::to_string(on_s) + ", \"off_at_s\": " + std::to_string(off_s) + " } ] }";
     return ReplaceAll(ReadFile(kData + "/scenarios/osa_practice_em.json"), em_block, jammed);
 }
 
@@ -273,6 +273,39 @@ SC_TEST("threats 9.1: jammed from the start, designating onto the strobe gives t
     }
     SC_EXPECT(on_jam);
     SC_EXPECT(runner.Debrief().find("radar on the jammer track") != std::string::npos);
+}
+
+SC_TEST("threats 9.1: when the pod falls silent on the jammer track, the memory holds the angles and the gate takes the echo") {
+    double on_jam_s = -1.0;
+    {
+        ScenarioDef def;
+        ConsoleData console;
+        SC_EXPECT(LoadScenario(PracticeEmJammed(0.0), kData, def, console));
+        ScenarioRunner runner(std::move(def), std::move(console));
+        while (!runner.Finished() && runner.Time() < 700.0 && on_jam_s < 0.0) {
+            runner.Step(0.1);
+            if (runner.Engagement().Method() == TrackMethod::RadarOnJam) on_jam_s = runner.Time();
+        }
+    }
+    SC_EXPECT(on_jam_s > 0.0);
+    // The same run, the pod off a minute after the crew is on the jammer (the target in the radar's reach by then) (the run is the same up to then).
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenario(PracticeEmJammed(0.0, on_jam_s + 60.0), kData, def, console));
+    ScenarioRunner runner(std::move(def), std::move(console));
+    bool radar_again = false;
+    while (!runner.Finished() && runner.Time() < on_jam_s + 90.0 && !radar_again) {
+        runner.Step(0.1);
+        radar_again = runner.Time() > on_jam_s + 60.0 && runner.Engagement().Method() == TrackMethod::Radar;
+    }
+    const std::string d = runner.Debrief();
+    std::printf("    on the jammer at %.0f s, the pod off at %.0f s: %s\n", on_jam_s, on_jam_s + 60.0,
+                radar_again ? "the echo locked again" : "lost");
+    SC_EXPECT(d.find("the jamming stopped: memory on the last angles") != std::string::npos);
+    SC_EXPECT(radar_again);
+    SC_EXPECT(d.find("burn-through: the echo is back in the gate") != std::string::npos);
+    SC_EXPECT(d.find("track lost: the jamming stopped") == std::string::npos);
+    if (!radar_again) std::printf("%s\n", d.c_str());
 }
 
 SC_TEST("threats 9.1: fired with no range, ПОМЕХА makes it method Н; without ПОМЕХА the fuse is never armed") {

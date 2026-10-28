@@ -69,7 +69,7 @@ bool LogHas(const ScenarioRunner& r, const std::string& net, const std::string& 
 
 }  // namespace
 
-SC_TEST("voice: the PU-12M's boxes: a seat hears a set only through its headset and box; the plotter has none") {
+SC_TEST("voice: the PU-12M's boxes: a seat hears a set only through its headset and box; the plotter's is PVS-1") {
     std::unique_ptr<ScenarioRunner> r = PostBattery();
     SC_EXPECT(r != nullptr && r->Voice() != nullptr);
     if (!r || r->Voice() == nullptr) return;
@@ -80,9 +80,15 @@ SC_TEST("voice: the PU-12M's boxes: a seat hears a set only through its headset 
     SC_EXPECT(v.HearsSet("radio_operator", "fug1") && !v.HearsSet("radio_operator", "fug4"));
     SC_EXPECT(v.HearsSet("battery_commander", "fug4") && v.HearsSet("battery_commander", "fug3") && v.TalksOnSet("battery_commander", "fug4"));
     SC_EXPECT(v.HearsSet("squad_leader", "fug2") && v.HearsIntercom("driver") && !v.HearsSet("driver", "fug1"));
-    // A PVS box on a set still hears the intercom (one shared intercom net); the plotter has no box at all.
-    SC_EXPECT(v.HearsIntercom("radio_operator") && v.Unboxed("operator") && !v.HearsIntercom("operator"));
+    // A PVS box on a set still hears the intercom (one shared intercom net). The plotter's headset is a second one on
+    // PVS-1 (SAM3D's choice): he hears FuG-1 as the radiotelephonist does.
+    SC_EXPECT(v.HearsIntercom("radio_operator") && !v.Unboxed("operator") && v.HearsIntercom("operator") && v.HearsSet("operator", "fug1"));
+    SC_EXPECT(r->SeatHearsNet("radio_operator", "air_picture") && r->SeatHearsNet("operator", "air_picture"));
+    // His headset off: the radiotelephonist still hears the net, he doesn't.
+    r->Console().panel.Set("headset.operator", 0);
+    Steps(*r, 0.2);
     SC_EXPECT(r->SeatHearsNet("radio_operator", "air_picture") && !r->SeatHearsNet("operator", "air_picture"));
+    r->Console().panel.Set("headset.operator", 1);
     // The headset off: nothing but the cabin.
     r->Console().panel.Set("headset.radio_operator", 0);
     Steps(*r, 0.2);
@@ -201,7 +207,7 @@ SC_TEST("talk tables: ПТ-1 and ПТ-2 load; a group decodes; an ASPD-U command
     SC_EXPECT_NEAR(tu.warn_covered_m, 60000.0, 1e-9);
 }
 
-SC_TEST("post: the air picture reaches the board only through the radiotelephonist's box on FuG-1, read out to the plotter") {
+SC_TEST("post: the plotter hears FuG-1 on PVS-1 and writes the board himself; the radiotelephonist writes the journal") {
     std::string t = ReadFile(kData + "/scenarios/pu12m_deploy.json");
     t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }", "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\"");
     std::unique_ptr<ScenarioRunner> r = LoadText(t);
@@ -209,9 +215,24 @@ SC_TEST("post: the air picture reaches the board only through the radiotelephoni
     if (!r) return;
     Steps(*r, 90.0);
     SC_EXPECT(r->Board()->Marks().size() >= 1);
-    // Heard on the radio by the radiotelephonist alone; read out in the cabin to the plotter (pvo_bu_x_1984 art. 23).
-    SC_EXPECT(LogHas(*r, "air picture", "square", "radio_operator") && !LogHas(*r, "air picture", "square", "operator"));
-    SC_EXPECT(LogHas(*r, "cabin", "square", "operator"));
+    // Heard on FuG-1 by both men on PVS-1; nobody reads it out (docs/research/PLOTTING_BOARD_2026-10.md).
+    SC_EXPECT(LogHas(*r, "air picture", "square", "radio_operator") && LogHas(*r, "air picture", "square", "operator"));
+    SC_EXPECT(!LogHas(*r, "cabin", "square") && !LogHas(*r, "intercom", "square"));
+    // The radiotelephonist wrote what he heard into the journal, the time first; the page shows it.
+    bool air = false;
+    for (const RadioJournalEntry& e : r->Journal().Legible(r->Time())) air = air || (e.number > 0 && e.net == "air picture");
+    SC_EXPECT(air);
+    bool on_page = false;
+    for (const std::string& line : r->DocumentText("radio_journal")) on_page = on_page || line.find("square") != std::string::npos;
+    SC_EXPECT(on_page);
+    // The plotter's headset off: he hears nothing, the radiotelephonist writes it, and the plotter reads it off the page.
+    std::string t3 = ReplaceOnce(t, "\"readiness\": \"deployed\"", "\"readiness\": \"deployed\", \"controls\": { \"headset.operator\": 0 }");
+    std::unique_ptr<ScenarioRunner> j = LoadText(t3);
+    SC_EXPECT(j != nullptr);
+    if (!j) return;
+    Steps(*j, 90.0);
+    SC_EXPECT(j->Board()->Marks().size() >= 1 && !LogHas(*j, "air picture", "square", "operator"));
+    SC_EXPECT(!LogHas(*j, "cabin", "square") && !LogHas(*j, "intercom", "square"));
     // PVS-1 left on ВС: nobody hears the net, nothing reaches the board.
     std::string t2 = ReplaceOnce(t, "\"readiness\": \"deployed\"", "\"readiness\": \"deployed\", \"controls\": { \"intercom.pvs1\": 0 }");
     std::unique_ptr<ScenarioRunner> q = LoadText(t2);
@@ -221,21 +242,91 @@ SC_TEST("post: the air picture reaches the board only through the radiotelephoni
     SC_EXPECT(q->Board()->Marks().empty() && q->Post()->Held().empty() && q->Post()->Heard().empty());
 }
 
-SC_TEST("post: a player radiotelephonist's reports wait for him; his menu shows the one he would read out") {
+SC_TEST("journal: dictation: the message's words printed, its digit groups boxes; what he writes is what the page says") {
+    RadioJournal j;
+    j.Heard(10.0, "air picture", "Regiment", "0012: square 4173, 89, height 32, minute 14", 12);
+    j.Heard(12.0, "air picture", "Regiment", "0013: square 4182, 89, height 40, minute 14", 13);
+    SC_EXPECT(j.BeginDraft(11.0) && j.Draft() != nullptr && j.Busy(11.0));
+    SC_EXPECT(j.Draft()->said.size() == 5u && j.Draft()->Line(false) == "____: square ____, __, height __, minute __");
+    for (char c : std::string("0012")) j.Type(c);  // a full box moves the pencil on
+    SC_EXPECT(j.Draft()->box == 1u);
+    for (char c : std::string("415")) j.Type(c);
+    j.Rub();
+    for (char c : std::string("74893214")) j.Type(c);  // the square's last digit written 4, not 3
+    SC_EXPECT(j.Draft()->Line(false) == "0012: square 4174, 89, height 32, minute 14");
+    SC_EXPECT(j.Finish(20.0, false) && j.Draft() == nullptr);
+    const RadioJournalEntry& e = j.Written().back();
+    SC_EXPECT(e.text == "0012: square 4174, 89, height 32, minute 14" && e.said != e.text && e.by_hand && e.number == 12);
+    SC_EXPECT(e.digits == 14 && e.digits_right == 13);
+    // The short form: the number and the time only (rrs_1986 art. 154).
+    SC_EXPECT(j.BeginDraft(21.0));
+    for (char c : std::string("0013")) j.Type(c);
+    SC_EXPECT(j.Finish(24.0, true));
+    SC_EXPECT(j.Written().back().brief && j.Written().back().text == "0013 — кратко" && j.Written().back().digits == 4);
+    // An NPC's slip: one digit of the message written wrong.
+    j.Heard(30.0, "regiment net", "Тополь", "620 620", 0);
+    SC_EXPECT(j.WriteNext(30.0, 5.0, 2));
+    int differ = 0;
+    for (std::size_t i = 0; i < j.Written().back().text.size(); ++i) differ += j.Written().back().text[i] != j.Written().back().said[i] ? 1 : 0;
+    SC_EXPECT(differ == 1 && j.Legible(31.0).size() == 2u && j.Legible(35.0).size() == 3u);
+    // A message he never writes is gone; one he left half-written is not.
+    j.Heard(40.0, "air picture", "Regiment", "0014: square 4191, 89, height 20, minute 15", 14);
+    j.Heard(41.0, "air picture", "Regiment", "0015: square 4192, 89, height 20, minute 15", 15);
+    SC_EXPECT(j.BeginDraft(42.0));
+    j.Forget(80.0, 30.0);
+    SC_EXPECT(j.Forgotten() == 1 && j.Draft() != nullptr && j.Waiting().empty());
+}
+
+SC_TEST("post: a player radiotelephonist takes reports down by hand; a wrong digit on the page is a wrong track on the board") {
     std::string t = ReadFile(kData + "/scenarios/pu12m_deploy.json");
-    t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }", "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\"");
+    // The plotter's headset off: every report reaches the board through the page.
+    t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }",
+                    "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\", \"controls\": { \"headset.operator\": 0 }");
     std::unique_ptr<ScenarioRunner> r = LoadText(t);
     SC_EXPECT(r != nullptr);
     if (!r) return;
     SC_EXPECT(r->TakeSeat("radio_operator", "Player"));
-    Steps(*r, 90.0);
-    SC_EXPECT(!r->Post()->Held().empty() && r->Board()->Marks().empty());  // heard by him alone: nobody else reads it out
-    SC_EXPECT(r->Console().equipment.GetInput("air_report_waiting"));
-    const std::string held = r->Post()->Held().front().text;
-    SC_EXPECT(r->ReportWords("radio_operator", "air_report").first == held);
-    SC_EXPECT(r->PlayerSay("radio_operator", "air_report"));
-    Steps(*r, 30.0);
-    SC_EXPECT(r->Board()->Marks().size() >= 1);  // read out: the plotter wrote it
+    SC_EXPECT(!r->JournalBegin("operator"));  // the journal is his
+    int written_number = 0;
+    for (int i = 0; i < 120 && written_number == 0; ++i) {
+        Steps(*r, 1.0);
+        if (!r->JournalBegin("radio_operator")) continue;
+        const JournalDraft d = *r->Journal().Draft();
+        for (std::size_t b = 0; b < d.said.size(); ++b) {
+            std::string g = d.said[b];
+            // An air report: its number written with the last digit wrong.
+            if (b == 0 && d.message.said_number > 0) g.back() = static_cast<char>('0' + (g.back() - '0' + 5) % 10);
+            for (char c : g) r->JournalType("radio_operator", c);
+        }
+        SC_EXPECT(r->JournalFinish("radio_operator", false));
+        if (d.message.said_number > 0) written_number = r->Journal().Written().back().number;
+    }
+    SC_EXPECT(written_number > 0);
+    Steps(*r, 20.0);
+    // The NPC plotter wrote it as the page has it: a track under the written number, of no aircraft.
+    bool ghost = false;
+    for (const BoardMark& m : r->Board()->Marks()) ghost = ghost || (m.number == written_number && m.target_id.compare(0, 8, "journal:") == 0);
+    SC_EXPECT(ghost);
+    SC_EXPECT(r->Debrief().find("as the page had it wrong") != std::string::npos);
+}
+
+SC_TEST("post: a player plotter off FuG-1: the radiotelephonist reads him the report from the journal; the page gives the number") {
+    std::string t = ReadFile(kData + "/scenarios/pu12m_deploy.json");
+    t = ReplaceOnce(t, "\"inputs\": { \"vehicle_stopped\": true }",
+                    "\"inputs\": { \"vehicle_stopped\": true }, \"readiness\": \"deployed\", \"controls\": { \"headset.operator\": 0 }");
+    std::unique_ptr<ScenarioRunner> r = LoadText(t);
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("operator", "Player"));
+    Steps(*r, 60.0);
+    // Heard by the radiotelephonist alone; written first, then read aloud from the page (the fallback, pvo_bu_x_1984 art. 23).
+    SC_EXPECT(LogHas(*r, "air picture", "square", "radio_operator") && !LogHas(*r, "air picture", "square", "operator"));
+    SC_EXPECT(!r->Journal().Legible(r->Time()).empty());
+    SC_EXPECT(LogHas(*r, "intercom", "square", "operator") || LogHas(*r, "cabin", "square", "operator"));
+    // What he can write: the read-out ones, and any on the page not yet on the board.
+    const std::vector<int> numbers = r->PlotterReportNumbers();
+    SC_EXPECT(!numbers.empty());
+    if (!numbers.empty()) SC_EXPECT(r->PlayerPlot(numbers.front()));
     // The Osa: a seat's check-in names its number; without the headset he can't say it on the intercom.
     ScenarioDef def;
     ConsoleData console;
@@ -416,7 +507,7 @@ SC_TEST("osa: the commander hears the PU-12's designation only with his A-1 on �
     SC_EXPECT(r.TakeSeat("commander", "Player"));
     r.SeatSet("commander", "headset.commander", 1);
     const std::vector<std::string> said = r.PlayerRadioReports("commander");
-    SC_EXPECT(said.size() == 2 && said[0] == "report_ready" && said[1] == "readback");
+    SC_EXPECT(said.size() == 3 && said[0] == "report_ready" && said[1] == "readback" && said[2] == "report_arm_attack");
     SC_EXPECT(r.PlayerRadioReports("senior_operator").empty());
     SC_EXPECT(r.ReleaseTarget("d1"));
     Steps(r, 150.0);

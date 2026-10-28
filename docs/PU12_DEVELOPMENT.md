@@ -83,6 +83,12 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
 5. R-407: the regiment's telecode; R-111: the higher command post's command net. **Modelled** as sets
    (`simcore/radio_sets.hpp`): their controls, warm-up, frequencies, tuning and reach, the R-407's channel and АПЧ, the
    R-111's presets and its input protection; the regiment's orders on the R-111 net (see Status, the radios).
+6. A radar cabled to the post (300 m) sends its raw echo video, trigger, aerial synchro, IFF replies and a service
+   telephone line (the 1984 GDR handbook's ASPD figure, via `flak11`; `p19_to` 4.3.1). **Modelled** (22 Oct 2026): every
+   echo on the tube, taken off by the NPC or with the DT-2's СЪЁМ; IFF from the radar's interrogator; the cable laid at
+   deployment and refused beyond 300 m; the radar crew on the service line; the post sending its picture on; telecode
+   by wire; with `post.em` the radar in the EM layer, its jamming strobes on the tube (`data/em/p19.json`).
+   `docs/research/PU12_RESEARCH_2026-10.md` → "What this changes in SAM3D".
 
 ## 3. What SAM3D needs to build
 
@@ -352,6 +358,22 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     shadows across the whole rear bulkhead.
   - **Shots all round.** `-SimShotsAround` adds left, right, behind, down and up to each seat's shots
     (`unreal/README.md`).
+
+### The post's records and the after-action loop (project owner, 22 Oct 2026)
+
+The radiotelephonist's journal (`simcore/radio_journal.hpp`: every message with its time, taken down by hand by a player,
+with an NPC's slips) is the post's record of the fight, beside the board. The battery's after-action report is to be
+compiled from these records, not from the truth, and the regiment's and battery's strategy built on those reports:
+`docs/command/01_PRINCIPLES.md` 9, planned as `docs/command/07_IMPLEMENTATION_PLAN.md` P9 and the battery's war's 18.1-18.3 (`docs/campaign/05_THE_SYSTEMS.md` §11).
+The radiotelephonist's accuracy is therefore critical to the after-action loop, not only to the board.
+
+### The battery's missions (planned, 22 Oct 2026)
+
+The battery's war (`docs/campaign/`, roadmap phases 13-21) gives the post its reason to deploy: the regiment's combat
+order with its task and reasons, the battery commander's sequence, and the **working map** kept beside the board
+(attack directions, helicopter, jammer and ARM launch lines, detection limits, the zones' far edges, the friendly air
+corridor, call signs and signals: `voenizdat_osa_1991` pp. 240-245; `docs/campaign/03_THE_BATTERY_MISSION.md` §3,
+roadmap 14.4).
 
 ## 6. What is still SAM3D's
 

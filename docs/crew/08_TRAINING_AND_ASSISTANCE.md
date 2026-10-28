@@ -86,3 +86,6 @@ an open research item).
   about the crew: train a recruit operator to 3rd class, run "К бою" in under the norm with a mixed crew.
 - Scenario files say which seat the player starts in, the assistance level and the crew's tiers (`crew[].skill`,
   phase 8.1).
+- **Planned** (the battery's war, `docs/campaign/06_THE_CREW_AS_PEOPLE.md` §5-6, roadmap phase 19): progression per
+  person and per seat across a campaign, cross-training, and the player taking any fit member of the battery across
+  missions while the main character's career goes on.

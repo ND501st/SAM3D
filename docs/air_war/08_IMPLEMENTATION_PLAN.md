@@ -16,8 +16,8 @@
 | A11 | **The ARM as an EM missile and the crew's ARM drill** (roadmap E6, the EM session): stop emitting on the warning, relocate, bursts; replace the bridge's ARM model | In progress on the EM track (18 Oct 2026): ARMs become scenario objects the runner fires and resolves, seen by the crew's instruments, with an NPC drill. Then the raid builder writes each aircraft's ARMs into its scenario target (`arms`: count, range, speed, memory) and the bridge reads the runner's ARM results instead of keeping its own |
 | A12 | **Balance pass** like crew 8.12: every faction over many seeds, the losses and tempo against the period's shapes (NATO's rollback taking days, the Pact's opening blows, small air arms' caution), the player's sector rate | **First pass done 18 Oct 2026** (`09_BALANCE.md`, `examples/air_war_balance.cpp`): eleven findings, ten changes to the models and data; a person's playthrough is the second half |
 | A13 | Save and load a campaign | **Done 18 Oct 2026** (`air_war/save.hpp`: the seed and the player's actions, replayed exactly; Unreal saves after every step to `Saved/AirWar/campaign.json`, the menu's C continues it) |
-| A14 | The battery commander's campaign orders through the PU-12M (in command, the battery level); several batteries of the player's side | Later |
-| A15 | Our side's air force as a player of the same game (the defender's fighters are a number today) | Later |
+| A14 | The battery commander's campaign orders through the PU-12M (in command, the battery level); several batteries of the player's side | Planned: the battery's war (`docs/campaign/`), phase 14 (the regiment's order and the battery commander's planning) and 17.5 (the regiment's other batteries) |
+| A15 | Our side's air force as a player of the same game (the defender's fighters are a number today) | In part: our fighters in the battery's sky, IFF and the enemy's escort need (the battery's war, 17.2). Our air force as a planner is not planned |
 | A16 | More doctrine from the documents still to acquire (CIA 1985 in full, FM 100-2-1, TT 100-44-1, Pact exercise records) | Parallel |
 
 ## Done-when for the next steps

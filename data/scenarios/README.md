@@ -45,8 +45,13 @@ the readiness state they start in (march, deployed, powered).
   },
   "environment": { "visibility_km": 40, "daylight": true },  // optional: the air and the light for the TV sight (em/optical.hpp)
   "doctrine": { "tv_check": true,                     // optional (roadmap E6): warned of decoys, look on the TV before a launch
-                "search_bursts": { "on_s": 4, "off_s": 16 },  // emission discipline: the search radar in bursts while nothing is near
+                "emission": { "regime": "limited" },  // the combat order's emission regime: free, limited, arm, silent (docs/crew/16_EMISSION.md);
+                                                      // optional "on_turns", "off_turns" (else data/command/emission_regimes.json's), "from": "battery" | "regiment".
+                                                      // Older forms: "search_bursts": { "on_s": 4, "off_s": 16 } (limited, in seconds), "arm_threat": true (arm)
                 "salvo": 2 },                         // missiles per target at once (roadmap 10.1): 2 sends the second before the first arrives
+  "emission_orders": [ { "at_s": 60, "regime": "arm", "from": "regiment" } ],  // optional: the regime changed during the mission (needs a
+                                                      // battery or a post): the battery commander says it on the battery net; the regiment's
+                                                      // he passes on (at a post it comes on the regiment's net); each commander tells his crew
   "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
@@ -206,8 +211,9 @@ range; each ARM is set to the signal heard; after its last it turns away hard. T
 it is a ghost mark `T<n>`, in Tacview a `Weapon+Missile`; one that bursts on the vehicle ends the scenario ("the vehicle
 was hit by an anti-radiation missile"), one on a dummy or decoy is logged (`ScenarioRunner::ArmResults`).
 
-`"doctrine": { "arm_threat": true, "arm_silence_s": 60, "arm_search_off_turns": 3, "relocate_after_arm": { "to": {...} } }`:
-the crew warned of ARMs fights with the least emission (`voenizdat_osa_1991` pp262-264): the senior operator puts the
+`"doctrine": { "emission": { "regime": "arm" }, "arm_silence_s": 60, "relocate_after_arm": { "to": {...} } }` (the older form:
+`"arm_threat": true, "arm_search_off_turns": 3`): the crew told the least emission by its commander (`docs/crew/16_EMISSION.md`)
+fights with it (`voenizdat_osa_1991` pp262-264): the senior operator puts the
 search transmitter's high voltage on for 2 antenna turns after every `arm_search_off_turns` (3-4 in the textbook), with
 ЛУЧ АВТ. I–II so that both low beams are in each burst, and off while the tracking radar holds a target alone; the
 commander puts the tracking transmitter on only from Table 7.3's range for the target's speed
@@ -263,3 +269,13 @@ and kept as samples for the missions menu's "Air war" group. They use only the k
 `behaviour`, `evade`, `rwr` and `decoy`; `own_unit.em.jammers`; the `battery`, `prepared_position`, `c2` (with
 `regiment` radars and outages) and `command_post` blocks; an `air_threat` trigger; `doctrine`; `environment`; NPC
 commanders. Regenerate with `simcore/examples/air_war_demo` (it writes every raid it plays to its output folder).
+
+`"neighbours"` (the nation on the map N4, 23 Oct 2026) lists our other air defences whose zones reach into the scenario:
+`[ { "id": "tiszavar_kub", "name": "...", "system": "kub", "position": { "e_km": ..., "n_km": ... }, "radius_km": 24 } ]`
+(`system` an air war air defence id, `simcore/air_war/data.hpp` `kAirDefenceSystems`). The game draws each as its
+system's site (`data/scenery/basic_models.json` `"systems"`), the PU-12M's plotting board marks it in blue with its reach
+and our name for it (`PostFeed::neighbours`). Their fire in a raid is the mission bridge's abstract chance
+(`docs/air_war/05_EXECUTION.md`), except an Osa battery with `"fights": true` (and optionally `"launchers"`, 1-4, its
+working launchers, default 4; `"missiles"`, all of them together, default six a launcher): the runner fights it in the
+battery fire model, its launchers in the combat formation about its place, each taking the nearest hostile in its reach
+(`ScenarioRunner::NeighbourLaunchers`, `NeighbourKills`).

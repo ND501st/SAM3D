@@ -1638,6 +1638,25 @@ public:
         value = it->second.value;
         return true;
     }
+    // Whether the equipment turns this hand wheel itself now, and why (nullptr: a hand turns it): the tracking servo on a
+    // radar lock (the angles, and the range while the radar has it), the elevation search scanning the antenna while
+    // nothing is tracked, ПОЛУАВТОМАТ's range. A hand on it changes nothing then; the helper offers no such wheel.
+    const char* WheelDrivenBy(const ConsoleData& console, const std::string& wheel) const {
+        const TrackSensorDef& d = console.track;
+        const bool angle = wheel == d.az_wheel || wheel == d.el_wheel;
+        if ((method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam) && !tracked_.empty()) {
+            if (angle) return "the tracking radar holds the target: its servo turns the antenna";
+            if (wheel == d.range_wheel && method_ == TrackMethod::Radar && RangeKnown(console)) return "the tracking radar holds the target's range";
+        }
+        if (method_ == TrackMethod::Tv && wheel == d.range_wheel && RangeFrom(console) == RangeSource::RangeOnly) {
+            return "ПОЛУАВТОМАТ follows the target's range";
+        }
+        if (method_ == TrackMethod::None && wheel == d.el_wheel && el_beam_ >= 0 && !d.el_search_mode.empty() &&
+            console.equipment.IsReady(d.el_search_mode)) {
+            return "the elevation search scans the antenna up and down";
+        }
+        return nullptr;
+    }
 
 private:
 
@@ -1808,6 +1827,18 @@ private:
         console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
     }
 
+    // The jamming gone from the beam, the echo shows on the tracking radar's range indicator: the range operator turns
+    // the gate onto it (an NPC by his skill; a player's wheel stays where he puts it, the helper shows where).
+    void RangeGateOntoEcho(double dt, ConsoleData& console, const AimCrew& crew, double echo_m) {
+        const TrackSensorDef& d = console.track;
+        if (!crew.range) {
+            if (crew.advise) Want(d.range_wheel, echo_m);
+            return;
+        }
+        const double wheel_r = console.panel.GetValue(d.range_wheel);
+        console.panel.SetValue(d.range_wheel, Toward(wheel_r, echo_m, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
+    }
+
     // Manual TV tracking: the target has to stay in the lens field around where the wheels point. An NPC in a wheel's seat
     // follows the target a little behind it and no faster than the wheel turns; a wheel in the player's hands stays
     // where the player puts it. A target masked by terrain is carried on at the last rates until the memory runs out.
@@ -1910,8 +1941,10 @@ private:
     }
 
     // The tracking radar follows a jammer in angle (no range). The servo turns the wheels to the measured angles; the
-    // range gate stays on the range wheel, so the radar takes the echo again by itself if it burns through. Returns
-    // false (and logs why) when there is nothing left to follow.
+    // range gate stays on the range wheel, so the radar takes the echo again by itself if it burns through. When the
+    // noise stops, the radar carries on at the last angular rates (the memory mode, the TV's memory time: ePap) while the
+    // range operator brings the gate onto the echo, now on his range indicator; with the echo in the gate the radar locks
+    // (the burn-through below). Returns false (and logs why) when there is nothing left to follow.
     bool TrackJammer(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
         const TrackSensorDef& d = console.track;
         const Geometry& g = geo_.at(tracked_);
@@ -1924,9 +1957,38 @@ private:
             std::snprintf(detail, sizeof(detail), "burn-through: the echo is back in the gate at %.1f km, radar range again", est.range_m / 1000.0);
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
             events_.push_back({EngagementEvent::Kind::BurnThrough, t, tracked_, 0.0, est.range_m, TrackMethod::Radar, std::string()});
+            jam_quiet_ = false;
             return true;
         }
-        if (problem == nullptr && !(em_->JamTracked(&id, &est) && id == tracked_)) problem = "the jamming stopped: nothing to follow in angle";
+        const bool jammed = em_->JamTracked(&id, &est) && id == tracked_;
+        if (problem == nullptr && !jammed && jam_angles_for_ == tracked_) {
+            // The strobe gone (the noise stopped, or flickers below the strobe threshold): the memory, said once a target.
+            if (!jam_quiet_) {
+                jam_quiet_ = true;
+                jam_quiet_s_ = t;
+                if (jam_quiet_said_for_ != tracked_) {
+                    jam_quiet_said_for_ = tracked_;
+                    log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_,
+                                "the jamming stopped: memory on the last angles, the range gate onto the echo"});
+                }
+            }
+            if (t - jam_quiet_s_ > tuning_.tv_memory_s + 1e-9) {
+                problem = "the jamming stopped: the memory ran out before the gate took the echo";
+            } else {
+                const double held_s = t - jam_meas_s_;
+                const double true_az = Wrap180(jam_az_deg_ + jam_rate_az_deg_s_ * held_s);
+                const double el = jam_el_deg_ + jam_rate_el_deg_s_ * held_s;
+                const double az_deg = Wrap180(true_az - unit_heading_deg_ + gyro_heading_deg_);
+                console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
+                console.panel.SetValue(d.el_wheel, el);
+                RangeGateOntoEcho(dt, console, crew, g.range_m);
+                em_->Designate(true_az, el, console.panel.GetValue(d.range_wheel));
+                antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = el;
+                return true;
+            }
+        } else if (problem == nullptr && !jammed) {
+            problem = "the jamming stopped: nothing to follow in angle";
+        }
         if (problem != nullptr) {
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
             events_.push_back({EngagementEvent::Kind::TrackLost, t, tracked_, 0.0, 0.0, method_, problem});
@@ -1935,6 +1997,26 @@ private:
             tracked_.clear();
             return false;
         }
+        // What the memory would carry on with: the strobe's angles, smoothed (they are as noisy as the jamming makes
+        // them), and their slow rates.
+        if (jam_angles_for_ != tracked_) {
+            jam_angles_for_ = tracked_;
+            jam_rate_az_deg_s_ = jam_rate_el_deg_s_ = 0.0;
+            jam_az_deg_ = est.true_az_deg;
+            jam_el_deg_ = est.el_deg;
+        } else if (t - jam_meas_s_ > 0.0) {
+            const double since = t - jam_meas_s_;
+            const double held_az = Wrap180(jam_az_deg_ + jam_rate_az_deg_s_ * since);
+            const double held_el = jam_el_deg_ + jam_rate_el_deg_s_ * since;
+            const double k_angle = 0.2, k_rate = 0.05;
+            const double az_err = Wrap180(est.true_az_deg - held_az), el_err = est.el_deg - held_el;
+            jam_az_deg_ = Wrap180(held_az + k_angle * az_err);
+            jam_el_deg_ = held_el + k_angle * el_err;
+            jam_rate_az_deg_s_ += k_rate * az_err / since;
+            jam_rate_el_deg_s_ += k_rate * el_err / since;
+        }
+        jam_quiet_ = false;
+        jam_meas_s_ = t;
         const double az_deg = Wrap180(est.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
         console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
         console.panel.SetValue(d.el_wheel, est.el_deg);
@@ -2395,6 +2477,16 @@ private:
     double tv_masked_s_ = 0.0;
     double tv_rate_az_deg_s_ = 0.0;
     double tv_rate_el_deg_s_ = 0.0;
+    // The jammer track's memory: the strobe's last angles (true azimuth), when measured, their rates; when the strobe went.
+    std::string jam_angles_for_;
+    std::string jam_quiet_said_for_;
+    bool jam_quiet_ = false;
+    double jam_quiet_s_ = 0.0;
+    double jam_meas_s_ = 0.0;
+    double jam_az_deg_ = 0.0;
+    double jam_el_deg_ = 0.0;
+    double jam_rate_az_deg_s_ = 0.0;
+    double jam_rate_el_deg_s_ = 0.0;
     double beam_turn_ = 0.0;
     std::size_t beam_step_ = 0;
     std::vector<Shot> shots_;

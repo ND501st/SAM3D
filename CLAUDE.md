@@ -26,14 +26,15 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/vehicles/` | Each vehicle as a body to climb (`simcore/crew_mobility.hpp`): where each seat stands up, the hatches (and when the drill keeps them shut), the roof and its keep-outs, the ways down by the wheels, the places round it and the jobs done there, the line-up for К машине. Cited like `data/systems/`. See `docs/crew/13_OUT_OF_THE_VEHICLE.md`. |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. Also our side's chain of command, its places and the means of signal (`chain_pannonia.json`, `places_pannonia.json`, `signal_means.json`; `simcore/command/`), and the talk tables ПТ-1/ПТ-2 (`talk_tables.json`, `simcore/talk_tables.hpp`). |
-| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`), his pace and his voice's carry out of doors (`walking.json`) and the crew's voices (`voices.json`). See `docs/crew/`. |
+| `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`), his pace and his voice's carry out of doors (`walking.json`), the crew's voices (`voices.json`) and the voice each seat's lines are recorded in (`recorded_voices.json`, read by `tools/voice_lines.py`). See `docs/crew/`. |
 | `data/air_war/` | The enemy air command: the fictional theatre, the four adversaries (rebels, neutral neighbour, Warsaw Pact, NATO) with doctrine, intelligence, politics, aircraft, squadrons and officers, and the quirk catalogue. Balance numbers in `data/gameplay/air_war.json`. |
 | `data/tutorials/` | The lessons (`simcore/tutorial.hpp`): a first lesson and one per seat of the Osa and of the PU-12M, each step one action on a lit control, shown over a mission named in `missions.json` (`"tutorial"`). See `docs/TUTORIALS.md`. |
 | `data/scenery/` | Presentation data: the ultra-basic models of every asset (`basic_models.json`: archetype, size, colour per type; the air war's aircraft ids). Placeholders until real models exist. |
-| `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. |
+| `data/maps/` | Generated maps (`simcore/terrain_map.hpp`): ground, rivers, roads, towns, woods, military sites, ground out to 150 km. `kesmark_range.json` is the 40 km test map. See `docs/TEST_RANGE.md`. `pannonia.json` is **the whole country** (`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`): ground at 1 km, borders, regions, rivers, and roads, railways and pipelines as networks with bridges that can be cut; the Kesmark range is a district of it and must keep agreeing (`tests/test_country_map.cpp`). |
 | `data/weather/` | Weather presets a scenario names (`"weather"`): winds, cloud layers, the air (`simcore/weather.hpp`). |
 | `data/em/` | EM libraries: radars, receivers, jammers, radios, threat libraries. Real systems cite every value (`"provenance": "per_value"`); `generic.json` is placeholder. |
 | `docs/` | Plan, roadmap, architecture, sources (with tiers), research (`docs/research/`), briefing, dev setup, reverse-engineering notes. |
+| `docs/campaign/` | **The battery's war** (planned, roadmap phases 13-21): the enemy's war aims and target picking, what we defend and why, how a battery mission starts (the regiment's order, the battery commander's sequence and working map), what is attacked, defended, ambushed, jammed and reconnoitred around the battery and why, the systems that run it as one continuous mission, the crew as people, the battery's day between fights, the enemy's reach, doctrine by opponent, and command under strain. Start at its README. |
 | `docs/crew/` | **Crew and teamwork reference** (the design pillars below): roles and knowledge, interdependence, behaviour paths, commands and callouts, skill, the drill master, commander mode, training. `generated/` is written by `tools/crew_map.py`. |
 | `reference/` | Git-ignored. Original SAM Sim files, manuals, Ghidra project. |
 | `tools/` | Setup and verify scripts for the PC (PowerShell) and Mac (bash); `panel_sheet.py` draws the cabin layout as a page; `button_map.py` draws every control's flow to subsystems, lamps and launch. |
@@ -53,6 +54,8 @@ ctest --test-dir simcore/build -C Release --output-on-failure
 ./simcore/build/air_war_demo nato 5 data out/air_war 1          # enemy air command: a campaign, its raids played as scenarios, the journal
 python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign as a page: the enemy's mind beside what our side learned
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
+./simcore/build/air_war_balance --theatre theatre_pannonia_nation.json data 10 7   # the same on the whole nation (N4); the demo takes --theatre too
+./simcore/build/air_war_bench data 400            # weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9)
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson
@@ -65,6 +68,7 @@ python tools/panel_sheet.py                       # draw the cabin panels flat: 
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
+out/voice_gen/.venv/Scripts/python -I tools/voice_lines.py   # record the fixed English lines: art/crew_voices/en/<seat>/ (docs/crew/10 section 4)
 python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json from the PU-12M interior's trace (after build_pu12m_interior.py)
 ./simcore/build/crew_balance data 10              # every crew scenario at every skill tier over 10 seeds (docs/crew/11_*)
 ./simcore/build/helper_coverage data docs/crew/generated/helper_coverage.md   # every mission from every seat following the helper vs the NPC crew
@@ -74,6 +78,8 @@ blender --background --python tools/blender/pu12m_interior_check.py -- --poses o
 python tools/em_view.py                           # EM overlays in a browser from em_demo's JSON: out/em_view.html
 ./simcore/build/map_dump data maps/kesmark_range.json out/kesmark_range_map.json   # the test map's layout (or --height e_km n_km)
 python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
+./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json         # the whole country (or --route road e1 n1 e2 n2 [cut bridges], --height e n)
+python tools/map_view.py out/pannonia_map.json --png                              # the country with the theatre's objects and fronts
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)
 
@@ -168,8 +174,10 @@ Multiplayer: the server simulates, clients mirror; players take crew seats (`doc
 Enemy air command (roadmap phase 11, `docs/air_war/`): officers with characters plan the other side's raids on what their
 intelligence believes and learn from what they think happened; raids through the battery's sector become scenarios the
 runner plays; the game's missions menu starts a campaign (1-4) and its campaign screen (`ASimCampaignHUD`) runs it, saved
-after every step; a first balance pass is done (`docs/air_war/09_BALANCE.md`). Next: a person playing a campaign through,
-the ARM drill (E6).
+after every step; a first balance pass is done (`docs/air_war/09_BALANCE.md`); once our radars have come under ARM attack the
+regiment orders the ARM drill and the raids carry it (E6). The war has a year (1985) and types the year they entered
+service: the Pact fires Kh-22 cruise missiles now, NATO's Tomahawks (1986) and CALCMs (1988) come in a later war (A16).
+Next: a person playing a campaign through.
 
 **First person** (project owner, 18 Oct 2026; roadmap phase 12, `docs/command/`): the player's character knows only what
 reaches them through people and means of signal. Intelligence, warnings and after-action reports are facts held by posts
@@ -177,7 +185,11 @@ of our side's chain of command (the national sector, the army, the division, the
 offices, placed on a map of a small city, a town, villages, works and countryside) and travel by in person, runners,
 despatch riders, couriers, telephone, radio, the warning net, sirens, the post and the news (`simcore/command/`). Never
 add an omniscient HUD panel: route new information through the pipeline. Next: deliveries as scenes in the world, the
-player telling people.
+player telling people. **The written record is the war's memory** (project owner, 22 Oct 2026;
+`docs/command/01_PRINCIPLES.md` 9): after-action reports are compiled from what the crews wrote down (the
+radiotelephonist's journal, `simcore/radio_journal.hpp`, then the board and the commander's log), never from the truth,
+and the battery's and regiment's analysis and plans are built on those reports. Keep the record's accuracy carrying
+through to the after-action loop in anything that builds reports, our side's picture or its planning.
 
 Out of the vehicle (roadmap 8.14, `docs/crew/13_OUT_OF_THE_VEHICLE.md`): a crewman's body is always somewhere (seated,
 inside, in a hatch, on the hull, on the ground) and moves only by the vehicle's real ways, leg by leg with their times
@@ -188,7 +200,14 @@ the drill master knowing the walk, wire laying.
 Voices (`docs/crew/12_COMMUNICATIONS.md`): inside a vehicle a seat hears the intercom, a radio or a telephone line only
 through its headset and its box's selector (`simcore/voice_comms.hpp`); a net only while its set is on, warm, on the net's
 numbered frequency and not jammed out (`simcore/radio_nets.hpp`). Route new speech through the callout bus's router, never
-straight to every seat.
+straight to every seat. The crew's talk (roadmap 8.15, `docs/crew/15_TALK.md`): the bus takes turns (a gap between
+speakers, urgent lines break in, stale lines dropped, one caller per fact), stress is a level per crewman from what he
+heard and saw, and the crew menu is a radial marking menu on Caps Lock (eight sectors in fixed places, the replies on U,
+I, P). A new callout or order needs a place in its crew data's `"menu"` (`test_crew_talk.cpp` checks every seat's lines).
+The emission regime (roadmap 8.16, `docs/crew/16_EMISSION.md`, `data/command/emission_regimes.json`): the regiment's
+order or the battery commander's decision, said on the nets, told to each crew by its commander with the turns and
+seconds of its bursts; the crew keeps only the regime it was told (`CrewRegime`), the commander orders by the one he heard
+(`CommanderRegime`). Never read a regime straight from the scenario's doctrine in crew behaviour.
 
 The helper (`docs/crew/14_HELPER.md`, `simcore/helper.hpp`; the missions menu's Helper, H in the cabin): it shows the
 move the player's seat's NPC would make now, so it has no rules of its own. **Every NPC act at a seat goes through
@@ -196,5 +215,39 @@ move the player's seat's NPC would make now, so it has no rules of its own. **Ev
 speaks and how fast); a direct act inside the NPC commander's think checks `!shadow_` (the shadow commander thinks in a
 player commander's place and must change nothing). After changing the crew's behaviour, the consoles or the missions,
 run `helper_coverage` and read its Gaps; `test_helper.cpp` counts the `NpcAt(` uses to make you look.
+
+**The nation on the map** (prioritised 22 Oct 2026, roadmap N0-N6, **done 23 Oct 2026**): whole conflicts simulated
+headless on the country of the briefing, so the player feels a small part of a large war. The air war's infrastructure
+kinds and checked air defence systems, our order of battle (`simcore/command/oob.hpp`), the country's map
+(`simcore/country_map.hpp`, `docs/COUNTRY_MAP.md`), the briefing's assets placed on it
+(`data/air_war/theatre_pannonia_nation.json`, which extends the tuned theatre; mobile units move between their prepared
+positions), a basic model for every equipment type, ours never drawn as the enemy's (`data/scenery/basic_models.json`).
+The air war runs on the nation's theatre (`docs/air_war/09_BALANCE.md` §8): fire channels, warning posts, a played
+raid's neighbours (drawn, and the regiment's other Osa batteries fighting in the battery fire model), cruise missiles by
+the war's year, and a rebalance for a whole nation (a front's `force_scale`); **the game's new campaigns are fought on
+it**. Unreal draws the whole country around the Kesmark range with every asset as basic models, and the campaign screen
+shows it. `theatre_pannonia.json` stays the theatre the tests and the first balance pass tuned. Left to 13.8: the
+ledgers and the factions' target choice re-read. N7 (23 Oct 2026), the air war as it was fought: weapons and attack
+profiles with damage calibrated against history (`docs/air_war/10_WEAPONS.md`, `simcore/examples/air_war_bench.cpp`,
+`09_BALANCE.md` sections 9-10), AWACS, tanker and ELINT orbits (`11_SUPPORT.md`), force build-ups (`12_FORCES.md`),
+package sizes (`13_PACKAGES.md`), our supply lines on the country's roads and railways and the enemy's armed
+reconnaissance (`simcore/air_war/logistics.hpp`, `14_LOGISTICS.md`), and the country's terrain: ranges, gorges, lakes and
+marshes (`docs/COUNTRY_MAP.md`).
+
+The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
+M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a
+time**, its doctrine and officers as built (`docs/air_war/`); the strategy layer stays thin (object roles, not an
+economy; the front as data; the regiment's tasking a rule table). Every objective has a traceable why: the enemy's war
+aims, its officers' target picking and its raids; our objects' roles, the regiment's order and the battery's task. A
+battery mission starts with the regiment's combat order and runs as one continuous session to the report from the
+records, with the enemy's packages entering it live. The battery's people have needs (sleep, food, morale) that change
+their effective skill, and the player may play any fit member of the battery; between fights the battery's activities
+hold people and equipment away from readiness, readiness is computed from where everyone is, and the war interrupts at
+any time. The enemy's reach (depth, hours, air superiority) is game logic; our doctrine is a profile per adversary; and
+command between the layers can break, so NPCs and the player improvise by sourced rules and then reconstitute.
+**The player cannot significantly change the wider war**: they change two outcomes, measured in ledgers, the survival
+of the assets they protect and the enemy's freedom of action (a battery that survives and threatens makes the enemy
+add SEAD, fire ARMs, spend sorties, re-route and lose aircraft). Targets can be rebuilt, but rebuilding needs teams,
+materials, transport and time, all of them targetable.
 
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

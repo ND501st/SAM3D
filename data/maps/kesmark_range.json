@@ -10,6 +10,7 @@
   "seed": 1985,
   "extent_km": { "west": -20, "east": 20, "south": -20, "north": 20 },
   "far_km": 150,
+  "far_ground": "maps/pannonia.json",
   "airspace": { "radius_km": 250, "ceiling_m": 25000,
                 "notes": "Aircraft may fly anywhere: the air war's border entries lie 100-185 km out. The weather (data/weather/) covers the whole airspace." },
   "terrain": {

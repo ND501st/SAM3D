@@ -67,7 +67,8 @@ bool USimAirCampaignSubsystem::NewCampaign(const FString& InFactionId, int32 See
 	const FString DataDir = DataDirectory();
 	AirWarData Data;
 	std::string Error;
-	if (!LoadAirWarData(AirWarToStd(DataDir), "air_war/theatre_pannonia.json", "air_war/faction_" + AirWarToStd(InFactionId) + ".json", Data, &Error))
+	const FString NewTheatre = TEXT("air_war/theatre_pannonia_nation.json");
+	if (!LoadAirWarData(AirWarToStd(DataDir), AirWarToStd(NewTheatre), "air_war/faction_" + AirWarToStd(InFactionId) + ".json", Data, &Error))
 	{
 		OutError = AirWarToF(Error);
 		UE_LOG(LogSAM3D, Error, TEXT("Air war: the campaign data don't load: %s"), *OutError);
@@ -81,6 +82,7 @@ bool USimAirCampaignSubsystem::NewCampaign(const FString& InFactionId, int32 See
 	}
 	Campaign = MoveTemp(New);
 	FactionId = InFactionId;
+	TheatreFile = NewTheatre;
 	CampaignSeed = FMath::Max(1, Seed);
 	bRaidActive = false;
 	bBridgeStarted = false;
@@ -151,7 +153,7 @@ bool USimAirCampaignSubsystem::SaveCampaign()
 	{
 		return false;
 	}
-	const std::string Text = simcore::airwar::SaveCampaignJson(*Campaign, "air_war/theatre_pannonia.json", "air_war/faction_" + AirWarToStd(FactionId) + ".json");
+	const std::string Text = simcore::airwar::SaveCampaignJson(*Campaign, AirWarToStd(TheatreFile), "air_war/faction_" + AirWarToStd(FactionId) + ".json");
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(SaveFile()), true);
 	FString Body = AirWarToF(Text);
 	if (bEnded)
@@ -202,7 +204,8 @@ bool USimAirCampaignSubsystem::LoadSavedCampaign(FString& OutError)
 	TUniquePtr<simcore::airwar::AirCampaign> New = MakeUnique<simcore::airwar::AirCampaign>();
 	std::string Error;
 	std::string FactionFile;
-	if (!simcore::airwar::LoadCampaignJson(AirWarToStd(Text), AirWarToStd(DataDirectory()), *New, &Error, nullptr, &FactionFile))
+	std::string SavedTheatre;
+	if (!simcore::airwar::LoadCampaignJson(AirWarToStd(Text), AirWarToStd(DataDirectory()), *New, &Error, &SavedTheatre, &FactionFile))
 	{
 		OutError = AirWarToF(Error);
 		UE_LOG(LogSAM3D, Error, TEXT("Air war: the saved campaign does not load: %s"), *OutError);
@@ -210,6 +213,7 @@ bool USimAirCampaignSubsystem::LoadSavedCampaign(FString& OutError)
 	}
 	Campaign = MoveTemp(New);
 	FactionId = AirWarToF(FactionFile).Replace(TEXT("air_war/faction_"), TEXT("")).Replace(TEXT(".json"), TEXT(""));
+	TheatreFile = AirWarToF(SavedTheatre);  // a campaign saved on the tuned theatre goes on there
 	CampaignSeed = static_cast<int32>(Campaign->Seed());
 	bRaidActive = false;
 	bBridgeStarted = false;
