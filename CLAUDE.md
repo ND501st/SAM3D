@@ -13,6 +13,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `simcore/` | **Header-only C++17 sim core** (radar, missile, aircraft, procedures, crew, world). Engine-agnostic. |
 | `simcore/include/simcore/em/` | **Electromagnetic layer** (`simcore::em`): propagation, calibrated radar, ESM/TDOA, jamming, tracking, knowledge, comms/C2, doctrine, debug overlays. See `docs/EM_ARCHITECTURE.md`, `docs/EM_HANDOFF.md`. |
 | `simcore/include/simcore/command/` | **Our side's chain of command and the information pipeline** (`simcore::command`): who is who and where, the means of signal, how a fact reaches the player's character (first person: nothing else does), the air war's news fed in. See `docs/command/`. |
+| `simcore/include/simcore/nav/` | **The route service** (`simcore::nav`, roadmap G1): mobility classes, one road graph derived from the map's data (the country's roads and the district's tracks), routes between anchors (places, positions, sites), overlays true and believed. See `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md` §5.1. |
 | `simcore/include/simcore/scenery/` | **Ultra-basic models** (`simcore::scenery`): every aircraft, vehicle, site and building as a few primitives, from `data/scenery/basic_models.json`; drawn by Unreal's `FSimBasicModels`. See `docs/scenery/`. |
 | `simcore/include/simcore/air_war/` | **Enemy air command** (`simcore::airwar`): the other side's air staff as people, its intelligence picture, the planning cycle, abstract resolution, raids generated as scenarios and the mission bridge back. See `docs/air_war/`. |
 | `simcore/tests/` | Dependency-free unit tests (`SC_TEST`, `SC_EXPECT_NEAR`). |
@@ -23,7 +24,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `data/procedures/` | Per-system consoles: controls, subsystems, procedures (loaded by `console_data.hpp`). Same sourcing rules. |
 | `data/scenarios/` | Scenarios: unit, crew, targets, triggers (loaded by `scenario.hpp`, played by `scenario_runner.hpp`). |
 | `data/cabins/` | 3D cabin layouts: stations, panels, control and lamp positions, the floor a crewman walks on up from his seat (`walk`), the display each hand wheel is worked against (`watch`) (loaded by `cabin.hpp`). Presentation data; lamps need sources. |
-| `data/vehicles/` | Each vehicle as a body to climb (`simcore/crew_mobility.hpp`): where each seat stands up, the hatches (and when the drill keeps them shut), the roof and its keep-outs, the ways down by the wheels, the places round it and the jobs done there, the line-up for К машине. Cited like `data/systems/`. See `docs/crew/13_OUT_OF_THE_VEHICLE.md`. |
+| `data/vehicles/` | Each vehicle as a body to climb (`simcore/crew_mobility.hpp`): where each seat stands up, the hatches (and when the drill keeps them shut), the roof and its keep-outs, the ways down by the wheels, the places round it and the jobs done there, the line-up for К машине. Cited like `data/systems/`. See `docs/crew/13_OUT_OF_THE_VEHICLE.md`. `mobility.json`: each kind of mover's speeds for the route service (`simcore/nav/`). |
 | `data/gameplay/` | Game-balance numbers for the gameplay engagement model (`engagement.hpp`). Not system data. |
 | `data/command/` | Command posts (PU-12M plotting board): cited like `data/systems/`; loaded by `pu12.hpp`, named by a scenario's `command_post`. Also our side's chain of command, its places and the means of signal (`chain_pannonia.json`, `places_pannonia.json`, `signal_means.json`; `simcore/command/`), and the talk tables ПТ-1/ПТ-2 (`talk_tables.json`, `simcore/talk_tables.hpp`). |
 | `data/crew/` | The crew: seats, orders, callouts (Russian and English), tasks, world-fact rules (`<system>_crew.json`), skill tiers (`skill_levels.json`), the crewman's body (`body.json`), his pace and his voice's carry out of doors (`walking.json`), the crew's voices (`voices.json`) and the voice each seat's lines are recorded in (`recorded_voices.json`, read by `tools/voice_lines.py`). See `docs/crew/`. |
@@ -185,8 +186,10 @@ reaches them through people and means of signal. Intelligence, warnings and afte
 of our side's chain of command (the national sector, the army, the division, the regiment, the battery, the town's
 offices, placed on a map of a small city, a town, villages, works and countryside) and travel by in person, runners,
 despatch riders, couriers, telephone, radio, the warning net, sirens, the post and the news (`simcore/command/`). Never
-add an omniscient HUD panel: route new information through the pipeline. Next: deliveries as scenes in the world, the
-player telling people. **The written record is the war's memory** (project owner, 22 Oct 2026;
+add an omniscient HUD panel: route new information through the pipeline. P1-P8 built (deliveries as scenes, the player
+telling people, the enemy's intercept from the calls, the crew's knowledge, radio through the EM layer, several players'
+posts, the district drawn, posts changing hands: `docs/command/07_IMPLEMENTATION_PLAN.md`); next P9, the reports from
+the records. **The written record is the war's memory** (project owner, 22 Oct 2026;
 `docs/command/01_PRINCIPLES.md` 9): after-action reports are compiled from what the crews wrote down (the
 radiotelephonist's journal, `simcore/radio_journal.hpp`, then the board and the commander's log), never from the truth,
 and the battery's and regiment's analysis and plans are built on those reports. Keep the record's accuracy carrying

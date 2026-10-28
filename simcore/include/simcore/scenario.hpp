@@ -35,6 +35,7 @@
 #include "simcore/pu12.hpp"
 #include "simcore/radio_nets.hpp"
 #include "simcore/radio_sets.hpp"
+#include "simcore/session_deliveries.hpp"
 #include "simcore/talk_tables.hpp"
 #include "simcore/target_behaviour.hpp"
 #include "simcore/terrain_map.hpp"
@@ -249,6 +250,7 @@ struct ScenarioDef {
     std::vector<ScenarioTarget> targets;
     std::vector<ScenarioNeighbour> neighbours;
     std::vector<ScenarioTrigger> triggers;
+    std::vector<DeliveryDef> deliveries;  // the chain of command's messages played in the session (roadmap P1)
     std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
     PlottingBoardDef board;
     // The player's vehicle is the command post (the console has "post"): its own board, its ASPD-U, the regiment that
@@ -332,7 +334,7 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting", "emission_orders"})) {
+                             "setting", "emission_orders", "deliveries"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -383,6 +385,7 @@ public:
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
+        if (!LoadDeliveries(root, out, console)) return false;
         return LoadEnd(root, out);
     }
 
@@ -2096,6 +2099,46 @@ private:
                 if (other.id == tr.id) return Fail(Join(p, "id"), "duplicate trigger '" + tr.id + "'");
             }
             out.triggers.push_back(std::move(tr));
+        }
+        return true;
+    }
+
+    // The chain of command's messages in the session (session_deliveries.hpp, roadmap P1).
+    bool LoadDeliveries(const json::Value& root, ScenarioDef& out, const ConsoleData& console) {
+        const json::Value* arr = OptionalArray(root, "", "deliveries");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string p = Index("deliveries", i);
+            const json::Value& v = arr->items[i];
+            DeliveryDef d;
+            std::string means;
+            if (!Keys(v, p, {"id", "after_s", "to", "means", "net", "from", "words", "paper", "air_warning", "from_bearing_deg", "azimuth_deg", "notes"}) ||
+                !RequireString(v, p, "id", d.id) || !RequireString(v, p, "means", means) || !RequireString(v, p, "from", d.from) ||
+                !RequireString(v, p, "words", d.words) || !OptionalNumber(v, p, "after_s", d.after_s) ||
+                !OptionalString(v, p, "to", d.to) || !OptionalString(v, p, "net", d.net) ||
+                !OptionalBool(v, p, "air_warning", d.air_warning) || !OptionalNumber(v, p, "from_bearing_deg", d.from_bearing_deg)) {
+                return false;
+            }
+            if (!ParseDeliveryMeans(means, d.means)) return Fail(Join(p, "means"), "unknown means '" + means + "'");
+            if (d.after_s < 0.0) return Fail(Join(p, "after_s"), "must be >= 0");
+            if (v.Find("azimuth_deg") != nullptr) {
+                if (!OptionalNumber(v, p, "azimuth_deg", d.azimuth_deg)) return false;
+                if (d.azimuth_deg < 0.0 || d.azimuth_deg >= 360.0) return Fail(Join(p, "azimuth_deg"), "must be in [0, 360)");
+                d.has_azimuth = true;
+            }
+            if (d.means == DeliveryMeans::Radio && d.net.empty()) return Fail(Join(p, "net"), "a radio delivery names its net");
+            if (!d.to.empty() && console.FindStation(d.to) == nullptr) return Fail(Join(p, "to"), "unknown station '" + d.to + "'");
+            if (const json::Value* paper = v.Find("paper")) {
+                const std::string pp = Join(p, "paper");
+                if (!Keys(*paper, pp, {"title", "text"}) || !RequireString(*paper, pp, "title", d.paper_title) ||
+                    !OptionalString(*paper, pp, "text", d.paper_text)) {
+                    return false;
+                }
+            }
+            for (const DeliveryDef& other : out.deliveries) {
+                if (other.id == d.id) return Fail(Join(p, "id"), "duplicate delivery '" + d.id + "'");
+            }
+            out.deliveries.push_back(d);
         }
         return true;
     }

@@ -92,12 +92,13 @@ bool USimAirCampaignSubsystem::NewCampaign(const FString& InFactionId, int32 See
 	LastRaidReport.Reset();
 	ReturnCountdown = -1.0f;
 	UE_LOG(LogSAM3D, Log, TEXT("Air war: a campaign against %s (seed %d)"), *AirWarToF(Campaign->Data().faction.name), CampaignSeed);
+	IFileManager::Get().Delete(*PipelineSaveFile(), false, true, true);
 	StartInfoNet();
 	Stepped();
 	return true;
 }
 
-void USimAirCampaignSubsystem::StartInfoNet()
+void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 {
 	Net.Reset();
 	Feed.Reset();
@@ -118,10 +119,91 @@ void USimAirCampaignSubsystem::StartInfoNet()
 		UE_LOG(LogSAM3D, Warning, TEXT("Air war: the information pipeline doesn't start: %s"), *AirWarToF(Error));
 		return;
 	}
+	// On the country's ground the radio's hops are worked out by the EM layer (roadmap P5): the vehicles' R-123M and the
+	// command posts' R-111, over the hills between them.
+	if (Campaign->Data().country != nullptr)
+	{
+		simcore::em::EmLibrary Lib;
+		const simcore::em::EmLoadResult Em = simcore::em::LoadEmLibraryFile(AirWarToStd(DataDirectory()) + "/em/osa_ak.json", Lib);
+		const int R123 = Lib.Radio("r123m");
+		const int R111 = Lib.Radio("r111");
+		if (Em.ok && R123 >= 0 && R111 >= 0)
+		{
+			auto Radio = std::make_shared<simcore::command::EmRadio>(Lib.radios[static_cast<std::size_t>(R123)],
+				std::make_shared<simcore::command::CountryGround>(Campaign->Data().country));
+			Radio->EquipCommandPosts(NewNet->Data(), 3, Radio->AddSet(Lib.radios[static_cast<std::size_t>(R111)]));
+			NewNet->SetRadioModel(Radio);
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Air war: the radio sets don't load (%s): the pipeline's radio goes by its range"), *AirWarToF(Em.error));
+		}
+	}
 	Net = MoveTemp(NewNet);
 	Feed = MakeUnique<simcore::command::CampaignFeed>();
 	Feed->Bind(Net.Get());
 	Feed->Pump(*Campaign);
+	FString Inputs;
+	if (bLoadInputs && FFileHelper::LoadFileToString(Inputs, *PipelineSaveFile()))
+	{
+		Error.clear();
+		if (!simcore::command::LoadPlayerInputs(*Net, AirWarToStd(Inputs), &Error))
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Air war: what you told people doesn't load: %s"), *AirWarToF(Error));
+		}
+		else if (!Error.empty())
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Air war: what you told people: %s"), *AirWarToF(Error));
+		}
+	}
+}
+
+FString USimAirCampaignSubsystem::PipelineSaveFile()
+{
+	return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AirWar"), TEXT("pipeline.json")));
+}
+
+bool USimAirCampaignSubsystem::TellFact(int32 Fact, int32 To, const FString& Mean, FString& OutWhy)
+{
+	if (!Net.IsValid() || Net->Player() < 0)
+	{
+		OutWhy = TEXT("you have nobody to tell");
+		return false;
+	}
+	std::string Why;
+	if (!Net->Tell({Net->Now(), Net->Player(), To, Fact, AirWarToStd(Mean)}, &Why))
+	{
+		OutWhy = AirWarToF(Why);
+		return false;
+	}
+	Stepped();
+	return true;
+}
+
+int32 USimAirCampaignSubsystem::GiveOrder(const FString& Text, const FString& Summary)
+{
+	if (!Net.IsValid() || Net->Player() < 0)
+	{
+		return -1;
+	}
+	const std::string Post = Net->Data().positions[static_cast<std::size_t>(Net->Player())].id;
+	int32 Given = 0;
+	for (const simcore::command::Fact& F : Net->Facts())
+	{
+		Given += F.held && F.kind == simcore::command::FactKind::Order ? 1 : 0;
+	}
+	simcore::command::Fact F;
+	F.key = "order:" + Post + ":" + std::to_string(Given + 1);
+	F.kind = simcore::command::FactKind::Order;
+	F.h = Net->Now();
+	F.text = AirWarToStd(Text);
+	F.summary = AirWarToStd(Summary);
+	F.audience = Post;
+	F.need_level = 5;
+	F.precedence = 1;
+	const int32 Index = Net->Report(F);
+	Stepped();
+	return Index;
 }
 
 void USimAirCampaignSubsystem::Stepped()
@@ -129,6 +211,8 @@ void USimAirCampaignSubsystem::Stepped()
 	if (Net.IsValid() && Feed.IsValid() && Campaign.IsValid())
 	{
 		Feed->Pump(*Campaign);
+		// What the battery said on the air is what the enemy's radio intercept hears (roadmap P3).
+		Campaign->NoteTransmissions(Feed->BatteryCalls());
 	}
 	SaveCampaign();
 }
@@ -159,6 +243,10 @@ bool USimAirCampaignSubsystem::SaveCampaign()
 	if (bEnded)
 	{
 		Body = Body.Replace(TEXT("\"save_version\""), TEXT("\"ended\": true, \"save_version\""));
+	}
+	if (Net.IsValid())
+	{
+		FFileHelper::SaveStringToFile(AirWarToF(simcore::command::SavePlayerInputs(*Net)), *PipelineSaveFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	}
 	return FFileHelper::SaveStringToFile(Body, *SaveFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 }
@@ -222,7 +310,7 @@ bool USimAirCampaignSubsystem::LoadSavedCampaign(FString& OutError)
 	Manifest.Reset();
 	LastRaidReport = TEXT("Campaign loaded.");
 	ReturnCountdown = -1.0f;
-	StartInfoNet();
+	StartInfoNet(true);
 	UE_LOG(LogSAM3D, Log, TEXT("Air war: loaded the campaign against %s at %s"), *FactionId, *AirWarToF(Campaign->Clock()));
 	return true;
 }
@@ -287,7 +375,8 @@ FString USimAirCampaignSubsystem::RaidOptions(int32 PackageId, const FString& Se
 }
 
 bool USimAirCampaignSubsystem::WriteRaidScenario(const simcore::airwar::AirCampaign& InCampaign, const simcore::airwar::Package& Package,
-	const FString& DataDir, FString& OutRelativeFile, simcore::airwar::RaidManifest& OutManifest, FString& OutError)
+	const FString& DataDir, FString& OutRelativeFile, simcore::airwar::RaidManifest& OutManifest, FString& OutError,
+	const simcore::DeliverySource* Deliveries)
 {
 	simcore::airwar::RaidScenarioBuilder Builder;
 	// On the Kesmark range map's ground when the map is there (data/maps/, simcore/terrain_map.hpp), with the day's weather;
@@ -304,6 +393,7 @@ bool USimAirCampaignSubsystem::WriteRaidScenario(const simcore::airwar::AirCampa
 				UTF8_TO_TCHAR(Format.map_file.c_str()), UTF8_TO_TCHAR(MapError.c_str()));
 		}
 	}
+	Format.deliveries = Deliveries;
 	const simcore::airwar::RaidScenario Raid = Builder.Build(InCampaign, Package, Format);
 	if (!Raid.ok)
 	{
@@ -349,7 +439,19 @@ bool USimAirCampaignSubsystem::FightPendingRaid(UObject* WorldContext, const FSt
 	}
 	const simcore::airwar::Package* P = Campaign->PlayerMission();
 	simcore::airwar::RaidManifest NewManifest;
-	if (!WriteRaidScenario(*Campaign, *P, DataDirectory(), RaidScenarioFile, NewManifest, OutError))
+	// The chain's messages as they reach the Osa with the player's character at his seat (outside: the commander's), played
+	// in the session: the warning on the battery net, the commander on the intercom, a runner with a paper (roadmap P1).
+	TUniquePtr<simcore::command::InfoNet> Played;
+	TUniquePtr<simcore::command::SessionSource> Source;
+	if (Net.IsValid())
+	{
+		Played = MakeUnique<simcore::command::InfoNet>(*Net);
+		if (simcore::command::PlayFromSeat(*Played, "osa:" + AirWarToStd(Seat.IsEmpty() ? FString(TEXT("commander")) : Seat)))
+		{
+			Source = MakeUnique<simcore::command::SessionSource>(*Played, "osa");
+		}
+	}
+	if (!WriteRaidScenario(*Campaign, *P, DataDirectory(), RaidScenarioFile, NewManifest, OutError, Source.Get()))
 	{
 		UE_LOG(LogSAM3D, Error, TEXT("Air war: raid %d can't be played (%s); it is fought without you"), P->id, *OutError);
 		Campaign->SkipPlayerMission();
@@ -519,6 +621,12 @@ void USimAirCampaignSubsystem::FinishRaid(simcore::ScenarioRunner& Runner, const
 		static_cast<int32>(Manifest->aircraft.size()), Runner.Launches(), Outcome.Lost(), Drones > 0 ? *FString::Printf(TEXT(" and %d decoys"), Drones) : TEXT(""),
 		Bridge->UnitDestroyed() ? TEXT("; our vehicle was hit") : TEXT(""));
 	Campaign->CompletePlayerMission(Outcome, Manifest->start_h + Runner.Time() / 3600.0);
+	// What the crew called goes up the chain as its commander's report (roadmap P4); the player's own, if he is him.
+	simcore::command::Fact CrewFact;
+	if (Net.IsValid() && simcore::command::CommanderReport(*Net, Runner.CrewCalls(), "osa", Manifest->start_h, "crew:raid:" + std::to_string(Manifest->package_id), CrewFact))
+	{
+		Net->AddFact(CrewFact);
+	}
 	Stepped();
 	UE_LOG(LogSAM3D, Log, TEXT("Air war: %s"), *LastRaidReport);
 	bRaidActive = false;

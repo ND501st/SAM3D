@@ -170,6 +170,25 @@ public:
         net_->AdvanceTo(c.Now());
     }
 
+    // The calls the battery's people have made on the radio by now (the player's own among them), for the enemy's
+    // radio intercept (roadmap P3: AirCampaign::NoteTransmissions; it hears each once). After Pump.
+    std::vector<airwar::Transmission> BatteryCalls() const {
+        std::vector<airwar::Transmission> out;
+        if (net_ == nullptr) return out;
+        const ChainData& d = net_->Data();
+        const SignalMean* radio = d.FindMean("radio_voice");
+        for (const RadioCall& call : net_->RadioCalls()) {
+            const std::string& who = d.positions[static_cast<std::size_t>(call.position)].id;
+            if (std::find(battery_people_.begin(), battery_people_.end(), who) == battery_people_.end()) continue;
+            airwar::Transmission t;
+            t.h = call.h;
+            t.intercept = (radio != nullptr ? radio->intercept : 1.0) * call.heard;  // the EM layer's listeners, when on (P5)
+            t.key = net_->Facts()[static_cast<std::size_t>(call.fact)].key + "@" + who + "@" + std::to_string(call.h);
+            out.push_back(t);
+        }
+        return out;
+    }
+
 private:
     InfoNet* net_ = nullptr;
     FeedRoles roles_;

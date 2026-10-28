@@ -61,6 +61,28 @@
     "sam_site": { "models": [ [ "cp_tent", 1 ], [ "ural_truck", 2 ] ], "spread_m": 30, "notes": "A SAM site of no known system (a technical battery)." },
     "aaa": { "models": [ [ "zu23", 4 ] ], "spread_m": 60 }
   },
+  "place_kinds": {
+    "military_post": { "models": [ [ "cp_tent", 1 ], [ "antenna_mast", 1 ], [ "uaz469", 1 ], [ "ural_truck", 1 ] ], "spread_m": 25, "notes": "The chain of command's places (data/command/places_pannonia.json, roadmap P7): placeholders, laid out round the place's point. A place that is a theatre object is drawn as that object; a city or a town by the country map." },
+    "civil": { "models": [ [ "block", 1 ] ], "spread_m": 0 },
+    "infrastructure": { "models": [ [ "block", 1 ] ], "spread_m": 0 },
+    "industrial": { "models": [ [ "hall", 1 ], [ "chimney", 1 ], [ "shed", 2 ] ], "spread_m": 40 },
+    "village": { "models": [ [ "church", 1 ], [ "house", 6 ], [ "barn", 2 ] ], "spread_m": 120 }
+  },
+  "places": {
+    "nv_sector_cp": { "models": [ [ "bunker", 1 ], [ "antenna_mast", 2 ], [ "uaz469", 1 ] ], "spread_m": 30 },
+    "nv_district_hall": { "models": [ [ "town_hall", 1 ] ], "spread_m": 0 },
+    "nv_hospital": { "models": [ [ "hospital", 1 ] ], "spread_m": 0 },
+    "nv_station": { "models": [ [ "station_building", 1 ] ], "spread_m": 0 },
+    "kesmark_komendatura": { "models": [ [ "barracks", 1 ], [ "uaz469", 2 ] ], "spread_m": 25 },
+    "kesmark_hall": { "models": [ [ "town_hall", 1 ] ], "spread_m": 0 },
+    "kesmark_police": { "models": [ [ "block", 1 ], [ "uaz469", 1 ] ], "spread_m": 15 },
+    "kesmark_station": { "models": [ [ "station_building", 1 ] ], "spread_m": 0 },
+    "vrbice_tower": { "models": [ [ "tent", 1 ] ], "spread_m": 0, "notes": "The observation post on the church tower: the church is the village's (drawn with Vrbice); the post's tent at its foot." },
+    "rgt_cp": { "models": [ [ "cp_tent", 1 ], [ "cp_tent", 2 ], [ "antenna_mast", 2 ], [ "ural_truck", 3 ], [ "uaz469", 2 ] ], "spread_m": 40 },
+    "rgt_rear": { "models": [ [ "tent", 1 ], [ "tent", 2 ], [ "ural_truck", 4 ], [ "fuel_tank", 1 ] ], "spread_m": 50 },
+    "tech_battery": { "models": [ [ "hall", 1 ], [ "ural_truck", 4 ], [ "crates", 2 ] ], "spread_m": 50 },
+    "div_hq": { "models": [ [ "barracks", 1 ], [ "cp_tent", 2 ], [ "antenna_mast", 1 ], [ "uaz469", 2 ] ], "spread_m": 40 }
+  },
   "ground": {
     "launcher": "osa_9a33", "reload": "tzm_9t217", "fuel": "atz_38", "command_post": "pu12m", "maintenance": "ural_truck", "dummy": "dummy_osa"
   },
@@ -131,6 +153,8 @@
     { "id": "locomotive", "name": "Diesel locomotive (M62 class)", "archetype": "wheeled", "length_m": 17.6, "width_m": 2.95, "height_m": 4.6, "axles": 3, "colour": "pact_grey" },
     { "id": "rail_wagon", "name": "Covered goods wagon", "archetype": "wheeled", "length_m": 14.7, "width_m": 2.9, "height_m": 4.0, "axles": 2, "colour": "own_grey" },
     { "id": "ural_truck", "name": "Truck", "archetype": "truck", "length_m": 7.4, "width_m": 2.5, "height_m": 2.9, "body": "cargo", "colour": "truck_green" },
+    { "id": "soldier", "name": "Soldier (a runner, a visiting officer)", "archetype": "person", "length_m": 0.4, "width_m": 0.5, "height_m": 1.75, "colour": "truck_green", "colour2": "steel_dark" },
+    { "id": "motorcycle", "name": "Despatch rider's motorcycle (M-72 class)", "archetype": "motorcycle", "length_m": 2.2, "width_m": 0.8, "height_m": 1.7, "colour": "truck_green", "colour2": "steel_dark" },
     { "id": "uaz469", "name": "UAZ-469", "archetype": "wheeled", "length_m": 4.0, "width_m": 1.8, "height_m": 2.0, "axles": 2, "cab": true, "colour": "truck_green" },
     { "id": "kub_launcher", "name": "Kub launcher (2P25)", "archetype": "tracked", "length_m": 7.4, "width_m": 3.2, "height_m": 3.4, "missiles": 3, "colour": "tank_green" },
     { "id": "kub_radar", "name": "Kub radar (1S91)", "archetype": "tracked", "length_m": 7.4, "width_m": 3.2, "height_m": 3.6, "radar": "dish", "colour": "tank_green" },

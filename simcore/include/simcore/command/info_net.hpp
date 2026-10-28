@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -90,6 +91,8 @@ struct Fact {
     bool document = false;               // a paper: its full text goes by hand (or teleprinter)
     bool broadcast = false;              // the state radio's next bulletin, to everyone it is for
     double expires_h = 1e18;             // nobody passes it on after this
+    bool held = false;                   // the origin passes it on only to whom and how he tells it (the player's own
+                                         // report or order: roadmap P2)
 
     const std::string& Told() const { return summary.empty() ? text : summary; }
 };
@@ -104,6 +107,7 @@ struct Delivery {
     std::string place;       // where they were
     bool full = false;       // they have the full text (saw it, or got the paper)
     double full_h = -1.0;    // when the paper reached them, if later
+    bool told = false;       // the player's character told them (roadmap P2)
 };
 
 struct Danger {
@@ -136,6 +140,56 @@ struct RadioCall {
     double h = 0.0;
     int position = -1;  // who called
     int fact = -1;
+    double heard = 1.0;  // the chance the enemy's listeners heard it (the radio model's; 1 without one)
+};
+
+// A radio hop as the EM layer works it out when it is on (roadmap P5, command/em_radio.hpp): whether a call from one
+// place reaches another at an hour, how surely, and how well the enemy's listeners hear it. Without a model the means'
+// range decides, its loss is the garble chance, and every call is heard.
+struct RadioPath {
+    bool up = true;
+    double margin_db = 0.0;  // above the receiver's sensitivity, raised by any jamming
+    double loss = 0.0;       // the chance the call is lost or garbled, and said again
+    double heard = 1.0;      // the chance the enemy's listeners hear it
+    std::string why;         // why it does not get through ("" it does)
+};
+struct RadioModel {
+    virtual ~RadioModel() = default;
+    // A call from post `from` at xa to post `to` at xb (theatre ENU) at campaign hour h.
+    virtual RadioPath Hop(int from, int to, const Vec3& xa, const Vec3& xb, double h) const = 0;
+};
+
+// The player's character passing a fact on (roadmap P2, docs/command/06_INTEGRATION.md §6): to whom, by what means and
+// when. A time-stamped input like the others: the pipeline plays it as it plays everyone's relays.
+struct Telling {
+    double h = 0.0;
+    int from = -1;     // the teller: the player's post at the time
+    int to = -1;
+    int fact = -1;
+    std::string mean;  // a means' id ("radio_voice", "field_telephone", "in_person", "messenger", "courier", ...)
+};
+
+// A post changing hands (roadmap P8): from hour h it is held by someone else (a replacement, a promotion), or by nobody (a
+// casualty: killed, wounded, captured, until a later change fills it), and may work from another place (its alternate
+// command post). A time-stamped input like the others.
+struct PostChange {
+    std::string position;
+    double h = 0.0;
+    bool vacant = false;
+    Holder holder;      // the new holder ("" name: the holder stays, the post only moves)
+    std::string place;  // the post works from here from h ("" where it did)
+    std::string why;    // "killed", "wounded", "replaced", "promoted", "the PU-12M lost", ...
+};
+
+// One way the player could tell someone, and what it costs: the time, the paper, the enemy listening, the road.
+struct TellOption {
+    std::string mean;             // the means' id
+    std::string name;             // its name
+    double arrive_h = -1.0;       // when they would have it (-1: not this way)
+    bool paper = false;           // the full text goes (by hand, the teleprinter)
+    double intercept = 0.0;       // how much the enemy's intercept service learns from it (the radio: everything)
+    bool road = false;            // a carrier on the road: he may not get through
+    std::string why_not;          // why not this way ("" it can)
 };
 
 // "D2 19:20" for campaign hour h, the local clock starting at start_hour.
@@ -166,6 +220,9 @@ public:
         cuts_.clear();
         jams_.clear();
         moves_.clear();
+        tells_.clear();
+        changes_.clear();
+        career_.clear();
         now_h_ = -1e18;
         const std::size_t n = data_.positions.size();
         home_.assign(n, -1);
@@ -178,6 +235,7 @@ public:
             for (const std::string& l : p.links) Connect(static_cast<int>(i), data_.PositionIndex(l), true);
         }
         player_ = data_.PositionIndex(data_.player_default);
+        others_.clear();
         in_person_ = data_.MeanIndex("in_person");
         if (in_person_ < 0) {
             if (error != nullptr) *error = "the means need 'in_person'";
@@ -202,10 +260,218 @@ public:
     void CutWire(const std::string& place, double from_h, double until_h) { cuts_.push_back({place, from_h, until_h}); }
     void JamRadio(double from_h, double until_h) { jams_.push_back({from_h, until_h}); }
     void MovePlace(const std::string& place, double h, const Vec3& pos) { moves_.push_back({place, h, pos}); }
+    // The player's character tells someone (roadmap P2). Refused, with why, unless he knows the fact by then (in full or
+    // in short), the other is someone else, and the means can reach him then. The fact is played again from its start.
+    bool Tell(const Telling& t, std::string* why = nullptr) {
+        auto fail = [&](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        const int n = static_cast<int>(data_.positions.size());
+        if (t.from < 0 || t.from >= n || t.to < 0 || t.to >= n || t.from == t.to) return fail("nobody to tell");
+        if (t.fact < 0 || static_cast<std::size_t>(t.fact) >= facts_.size()) return fail("no such news");
+        Delivery known;
+        if (!PreviewKnew(t.fact, t.from, t.h, known)) return fail("you don't know it yet");
+        bool can = false;
+        for (const TellOption& o : TellOptions(t.from, t.to, t.fact, t.h)) {
+            if (o.mean == t.mean) {
+                if (o.arrive_h < 0.0) return fail(o.why_not);
+                can = true;
+            }
+        }
+        if (!can) return fail("no such means");
+        tells_.push_back(t);
+        Replay(t.fact);
+        return true;
+    }
+    const std::vector<Telling>& Tellings() const { return tells_; }
+
+    // The player's own report or order (roadmap P2): it starts with him and goes only where he tells it. Its origin is
+    // the player's post; returns its index (-1 no player).
+    int Report(Fact f, int by = -1) {
+        if (by < 0) by = Player();
+        if (!IsPlayer(by)) return -1;
+        f.origin = data_.positions[static_cast<std::size_t>(by)].id;
+        f.witnesses.clear();
+        f.held = true;
+        const int i = AddFact(f);
+        Replay(i);
+        return i;
+    }
+
+    // The people a person can tell: his superior, his subordinates and the people he deals with.
+    std::vector<int> Contacts(int position) const {
+        std::vector<int> out;
+        if (position < 0 || static_cast<std::size_t>(position) >= edges_.size()) return out;
+        for (const Edge& e : edges_[static_cast<std::size_t>(position)]) out.push_back(e.to);
+        std::sort(out.begin(), out.end());
+        return out;
+    }
+
+    // Every way `from` could tell `to` a fact at hour h, and what each costs (roadmap P2).
+    std::vector<TellOption> TellOptions(int from, int to, int fact, double h) const {
+        std::vector<TellOption> out;
+        if (fact < 0 || static_cast<std::size_t>(fact) >= facts_.size() || from < 0 || to < 0) return out;
+        Delivery known;
+        const bool knows = PreviewKnew(fact, from, h, known);
+        const bool full = knows && known.full && known.full_h <= h + 1e-9;
+        for (const Way& w : Ways(fact, from, to, h, full)) out.push_back(w.option);
+        return out;
+    }
+
+    // The radio's hops worked out by a model (the EM layer's link budgets, jamming and listeners: roadmap P5); null:
+    // the means' range and loss. Everything is played again with it.
+    void SetRadioModel(std::shared_ptr<const RadioModel> model) {
+        radio_model_ = std::move(model);
+        for (FactState& s : states_) s = FactState();
+    }
+    const RadioModel* Radio() const { return radio_model_.get(); }
+
     // The post the player's character holds: it passes nothing on by itself.
     void SetPlayer(const std::string& position) {
         player_ = data_.PositionIndex(position);
+        others_.clear();
+        career_.clear();
         for (FactState& s : states_) s = FactState();  // who relays changed: recompute everything
+    }
+    // Several players' characters (multiplayer, roadmap P6): the first is this machine's (Player()); none of them passes
+    // anything on by himself. Unknown posts are left out.
+    void SetPlayers(const std::vector<std::string>& positions) {
+        player_ = -1;
+        others_.clear();
+        career_.clear();
+        for (const std::string& id : positions) {
+            const int p = data_.PositionIndex(id);
+            if (p < 0 || IsPlayer(p)) continue;
+            if (player_ < 0) player_ = p;
+            else others_.push_back(p);
+        }
+        for (FactState& s : states_) s = FactState();
+    }
+    bool IsPlayer(int position) const { return IsPlayerAt(position, now_h_); }
+    bool IsPlayerAt(int position, double h) const {
+        return position >= 0 && (position == PlayerAt(h) || std::find(others_.begin(), others_.end(), position) != others_.end());
+    }
+    std::vector<int> Players() const {
+        std::vector<int> out;
+        if (Player() >= 0) out.push_back(Player());
+        out.insert(out.end(), others_.begin(), others_.end());
+        return out;
+    }
+
+    // ---------------------------------------------------------------- posts change hands (roadmap P8)
+
+    // From c.h the post is held by another, by nobody, or works from another place. Everything is played again with it.
+    bool ChangeHands(const PostChange& c, std::string* why = nullptr) {
+        auto fail = [&](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        if (data_.PositionIndex(c.position) < 0) return fail("no such post: " + c.position);
+        if (!c.place.empty() && data_.PlaceIndex(c.place) < 0) return fail("no such place: " + c.place);
+        if (!c.vacant && c.holder.name.empty() && c.place.empty()) return fail("nobody holds it, and it goes nowhere");
+        changes_.push_back(c);
+        std::stable_sort(changes_.begin(), changes_.end(), [](const PostChange& a, const PostChange& b) { return a.h < b.h; });
+        ReplayAll();
+        return true;
+    }
+    // The post works from its alternate command post from hour h (its own place lost or about to be).
+    bool ToAlternate(const std::string& position, double h, const std::string& why_moved, std::string* why = nullptr) {
+        const Position* p = data_.FindPosition(position);
+        if (p == nullptr || p->alternate_place.empty()) {
+            if (why != nullptr) *why = p == nullptr ? "no such post: " + position : "it has no alternate command post";
+            return false;
+        }
+        PostChange c;
+        c.position = position;
+        c.h = h;
+        c.place = p->alternate_place;
+        c.why = why_moved;
+        return ChangeHands(c, why);
+    }
+    const std::vector<PostChange>& Changes() const { return changes_; }
+    // Who holds a post at hour h; an empty name: nobody, it is vacant.
+    Holder HolderAt(int position, double h) const {
+        if (position < 0 || static_cast<std::size_t>(position) >= data_.positions.size()) return Holder();
+        const Position& p = data_.positions[static_cast<std::size_t>(position)];
+        Holder out = p.holder;
+        for (const PostChange& c : changes_) {
+            if (c.h > h) break;
+            if (c.position != p.id) continue;
+            if (c.vacant) out = Holder();
+            else if (!c.holder.name.empty()) out = c.holder;
+        }
+        return out;
+    }
+    bool VacantAt(int position, double h) const { return !changes_.empty() && HolderAt(position, h).name.empty(); }
+    // When the post's holder at hour h took it over (-1e18: he has held it from the start).
+    double HeldSince(int position, double h) const {
+        double since = -1e18;
+        if (position < 0) return since;
+        const std::string& id = data_.positions[static_cast<std::size_t>(position)].id;
+        for (const PostChange& c : changes_) {
+            if (c.h > h) break;
+            if (c.position == id && (c.vacant || !c.holder.name.empty())) since = c.h;
+        }
+        return since;
+    }
+    // Who does a post's job at hour h: the post while it is held, else its deputy (or his, down the deputies); -1 nobody.
+    int ActingFor(int position, double h) const {
+        int at = position;
+        for (int k = 0; k < 8 && at >= 0; ++k) {
+            if (!VacantAt(at, h)) return at;
+            at = data_.PositionIndex(data_.positions[static_cast<std::size_t>(at)].deputy);
+        }
+        return -1;
+    }
+
+    // The player's career (roadmap P8): from hour h his character holds `position` and is its holder; the post he left is
+    // vacant until someone fills it (ChangeHands). What he knew goes with him (KnownByPlayer); his new post's papers are
+    // his, what was said to the man before him is not.
+    bool PlayerTo(const std::string& position, double h, std::string* why = nullptr) {
+        const int p = data_.PositionIndex(position);
+        const int was = PlayerAt(h);
+        if (p < 0 || p == was) {
+            if (why != nullptr) *why = p < 0 ? "no such post: " + position : "he holds it already";
+            return false;
+        }
+        if (career_.empty()) career_.push_back({-1e18, player_});
+        if (was >= 0) {
+            PostChange in;
+            in.position = position;
+            in.h = h;
+            in.holder = HolderAt(was, h);
+            in.why = "taken over by the player's character";
+            changes_.push_back(in);
+            PostChange out;
+            out.position = data_.positions[static_cast<std::size_t>(was)].id;
+            out.h = h;
+            out.vacant = true;
+            out.why = "left by the player's character";
+            changes_.push_back(out);
+            std::stable_sort(changes_.begin(), changes_.end(), [](const PostChange& a, const PostChange& b) { return a.h < b.h; });
+        }
+        career_.push_back({h, p});
+        std::stable_sort(career_.begin(), career_.end(), [](const std::pair<double, int>& a, const std::pair<double, int>& b) { return a.first < b.first; });
+        ReplayAll();
+        return true;
+    }
+    // The post the player's character holds at hour h.
+    int PlayerAt(double h) const {
+        int at = player_;
+        for (const std::pair<double, int>& c : career_) {
+            if (c.first <= h) at = c.second;
+        }
+        return at;
+    }
+    const std::vector<std::pair<double, int>>& Career() const { return career_; }
+    // Put back a saved record of the posts that changed hands and the player's career (player_inputs.hpp).
+    void RestorePosts(std::vector<PostChange> changes, std::vector<std::pair<double, int>> career) {
+        changes_ = std::move(changes);
+        career_ = std::move(career);
+        std::stable_sort(changes_.begin(), changes_.end(), [](const PostChange& a, const PostChange& b) { return a.h < b.h; });
+        std::stable_sort(career_.begin(), career_.end(), [](const std::pair<double, int>& a, const std::pair<double, int>& b) { return a.first < b.first; });
+        ReplayAll();
     }
 
     // ---------------------------------------------------------------- running
@@ -226,9 +492,10 @@ public:
         const auto it = by_key_.find(key);
         return it == by_key_.end() ? -1 : it->second;
     }
-    int Player() const { return player_; }
+    int Player() const { return PlayerAt(now_h_); }
 
-    // What a person has learned by now, in the order they learned it.
+    // What a person has learned by now, in the order they learned it. A post that changed hands: its holder has what came
+    // since he took it and the papers left at it (roadmap P8); a vacant post, nothing.
     std::vector<Delivery> KnownBy(int position) const {
         std::vector<Delivery> out;
         for (const FactState& s : states_) {
@@ -236,7 +503,7 @@ public:
             const int di = s.delivered[static_cast<std::size_t>(position)];
             if (di < 0) continue;
             const Delivery& d = s.deliveries[static_cast<std::size_t>(di)];
-            if (d.h <= now_h_ + 1e-9) out.push_back(d);
+            if (d.h <= now_h_ + 1e-9 && HolderHas(position, d, now_h_)) out.push_back(d);
         }
         std::sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
         return out;
@@ -250,7 +517,20 @@ public:
         if (static_cast<std::size_t>(position) >= s.delivered.size()) return nullptr;
         const int di = s.delivered[static_cast<std::size_t>(position)];
         if (di < 0 || s.deliveries[static_cast<std::size_t>(di)].h > now_h_ + 1e-9) return nullptr;
+        if (!HolderHas(position, s.deliveries[static_cast<std::size_t>(di)], now_h_)) return nullptr;
         return &s.deliveries[static_cast<std::size_t>(di)];
+    }
+    // What the player's character knows by now: what reached each post he held while he held it, and the papers of the
+    // one he holds (roadmap P8: his knowledge goes with him from post to post).
+    std::vector<Delivery> KnownByPlayer() const {
+        if (career_.size() < 2) return KnownBy(Player());
+        std::vector<Delivery> out;
+        for (const FactState& s : states_) {
+            const Delivery* d = KnewIn(s, Player(), now_h_);
+            if (d != nullptr) out.push_back(*d);
+        }
+        std::sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
+        return out;
     }
 
     // When a person would learn a fact if nothing new happened before `horizon_h` (-1: not by then). For a raid
@@ -270,6 +550,27 @@ public:
         out = copy.deliveries[static_cast<std::size_t>(di)];
         return true;
     }
+    // Everything a person would learn from `from_h` to `to_h` if nothing new happened by then (a session written ahead:
+    // roadmap P1, command/scenes.hpp), in the order they would learn it.
+    std::vector<Delivery> PreviewBetween(int position, double from_h, double to_h) const {
+        std::vector<Delivery> out;
+        if (position < 0) return out;
+        for (std::size_t i = 0; i < facts_.size(); ++i) {
+            if (facts_[i].h > to_h) continue;
+            FactState copy = states_[i];
+            Run(static_cast<int>(i), copy, to_h);
+            if (static_cast<std::size_t>(position) >= copy.delivered.size()) continue;
+            const int di = copy.delivered[static_cast<std::size_t>(position)];
+            if (di < 0) continue;
+            const Delivery& d = copy.deliveries[static_cast<std::size_t>(di)];
+            if (d.h >= from_h - 1e-9 && d.h <= to_h + 1e-9) out.push_back(d);
+        }
+        std::sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
+        return out;
+    }
+    // The times a routine starts from `from_h` to `to_h` (campaign hours).
+    std::vector<double> RoutineTimes(const Routine& r, double from_h, double to_h) const { return Occurrences(r, from_h, to_h); }
+
     // The fact about a subject of a kind, the latest added ("package:12" for a raid warning); -1 if none.
     int FindFact(FactKind kind, const std::string& subject) const {
         for (int i = static_cast<int>(facts_.size()) - 1; i >= 0; --i) {
@@ -287,10 +588,34 @@ public:
             const bool in = r.by == id || std::find(r.with.begin(), r.with.end(), id) != r.with.end();
             if (!in) continue;
             for (double s : Occurrences(r, h - r.duration_h, h)) {
-                if (h >= s && h < s + r.duration_h) return data_.PlaceIndex(r.place);
+                if (h >= s && h < s + r.duration_h) {
+                    // Held at one of its people's own place: where that post works from then (its alternate command
+                    // post, P8).
+                    const int at = data_.PlaceIndex(r.place);
+                    std::vector<std::string> who = r.with;
+                    who.insert(who.begin(), r.by);
+                    for (const std::string& w : who) {
+                        const int p = data_.PositionIndex(w);
+                        if (p < 0 || at != home_[static_cast<std::size_t>(p)]) continue;
+                        const int moved = HomeAt(p, h);
+                        if (moved != at) return moved;
+                    }
+                    return at;
+                }
             }
         }
-        return home_[static_cast<std::size_t>(position)];
+        return HomeAt(position, h);
+    }
+    // Where a post works from at hour h when nothing takes its holder elsewhere: its place, or the one it moved to (P8).
+    int HomeAt(int position, double h) const {
+        if (position < 0) return -1;
+        const std::string& id = data_.positions[static_cast<std::size_t>(position)].id;
+        int home = home_[static_cast<std::size_t>(position)];
+        for (const PostChange& c : changes_) {
+            if (c.h > h) break;
+            if (!c.place.empty() && c.position == id) home = data_.PlaceIndex(c.place);
+        }
+        return home;
     }
 
     // A place's position at hour h, as known by then (the battery's post moves with the battery).
@@ -388,6 +713,8 @@ private:
         bool travel = false;  // a carrier on the road: decide a loss when it arrives
         double depart = 0.0;
         Vec3 a, b;
+        int tell = -1;        // the player's telling (index) to start now
+        bool told = false;    // it comes by the player's telling
     };
     struct FactState {
         bool started = false;
@@ -396,6 +723,7 @@ private:
         std::vector<Delivery> deliveries;
         std::vector<Ev> queue;       // a heap, earliest first
         std::vector<RadioCall> radio;
+        std::vector<char> in_tree;   // per position: on the fact's way (relays it on, or is meant to have it)
         double done_h = -1e18;
     };
 
@@ -404,6 +732,7 @@ private:
     double start_hour_ = 0.0;
     double now_h_ = -1e18;
     int player_ = -1;
+    std::vector<int> others_;  // the other players' posts (P6)
     int in_person_ = -1;
     std::vector<int> home_;
     std::vector<std::vector<Edge>> edges_;
@@ -413,7 +742,22 @@ private:
     std::vector<Danger> dangers_;
     std::vector<WireCut> cuts_;
     std::vector<RadioJam> jams_;
+    std::shared_ptr<const RadioModel> radio_model_;
+    std::vector<PostChange> changes_;            // by hour (P8)
+    std::vector<std::pair<double, int>> career_;  // the player's posts from each hour (P8); empty: player_ throughout
     std::vector<PlaceMove> moves_;
+    std::vector<Telling> tells_;
+
+    // A fact played again from its start (a telling or a report came in): deterministic, so all that was already
+    // decided comes out the same, with the new input in its place.
+    void Replay(int fact) {
+        if (fact < 0 || static_cast<std::size_t>(fact) >= states_.size()) return;
+        states_[static_cast<std::size_t>(fact)] = FactState();
+        if (now_h_ > -1e17) Run(fact, states_[static_cast<std::size_t>(fact)], now_h_);
+    }
+    void ReplayAll() {
+        for (std::size_t i = 0; i < states_.size(); ++i) Replay(static_cast<int>(i));
+    }
 
     void Connect(int a, int b, bool link) {
         if (a < 0 || b < 0 || a == b) return;
@@ -483,6 +827,62 @@ private:
             if (c.place == id && c.from_h <= h && h < c.until_h) return true;
         }
         return false;
+    }
+    // The radio between two places at hour h: the model's hop, or the means' range; the jamming windows stop either.
+    RadioPath RadioHop(const SignalMean& m, int a, int b, const Vec3& xa, const Vec3& xb, double h) const {
+        RadioPath p;
+        if (Jammed(h)) {
+            p.up = false;
+            p.why = "the net is jammed";
+        } else if (radio_model_ != nullptr) {
+            p = radio_model_->Hop(a, b, xa, xb, h);
+        } else if (m.range_m > 0.0 && std::hypot(xb.x - xa.x, xb.y - xa.y) > m.range_m) {
+            p.up = false;
+            p.why = "out of range";
+        } else {
+            p.loss = m.loss;
+        }
+        return p;
+    }
+    // Whether the post's holder at hour h has a delivery to the post: one since he took it, or a paper left there.
+    bool HolderHas(int position, const Delivery& d, double h) const {
+        if (changes_.empty()) return true;
+        if (VacantAt(position, h)) return false;
+        return d.h >= HeldSince(position, h) - 1e-9 || (d.full && d.full_h <= h + 1e-9);
+    }
+    // How `position` knew the fact by hour h in state s: its own delivery; or, for the player's character, one that reached
+    // a post he held while he held it. Null if he did not.
+    const Delivery* KnewIn(const FactState& s, int position, double h) const {
+        if (position < 0 || static_cast<std::size_t>(position) >= s.delivered.size()) return nullptr;
+        const int di = s.delivered[static_cast<std::size_t>(position)];
+        if (di >= 0) {
+            const Delivery& d = s.deliveries[static_cast<std::size_t>(di)];
+            if (d.h <= h + 1e-9 && HolderHas(position, d, h)) return &d;
+        }
+        if (career_.size() < 2 || position != PlayerAt(h)) return nullptr;
+        const Delivery* best = nullptr;
+        for (std::size_t k = 0; k < career_.size(); ++k) {
+            const double from = k == 0 ? -1e18 : career_[k].first;
+            const double to = k + 1 < career_.size() ? career_[k + 1].first : 1e18;
+            const int post = career_[k].second;
+            if (post < 0 || from > h) continue;
+            const int dk = s.delivered[static_cast<std::size_t>(post)];
+            if (dk < 0) continue;
+            const Delivery& d = s.deliveries[static_cast<std::size_t>(dk)];
+            // Said to him while he held the post, or a paper he found there.
+            const bool his = (d.h >= from - 1e-9 && d.h < to) || (d.full && d.full_h < to && d.full_h <= h + 1e-9);
+            if (his && d.h <= h + 1e-9 && (best == nullptr || d.h < best->h)) best = &d;
+        }
+        return best;
+    }
+    bool PreviewKnew(int fact, int position, double h, Delivery& out) const {
+        if (fact < 0 || static_cast<std::size_t>(fact) >= states_.size() || position < 0) return false;
+        FactState copy = states_[static_cast<std::size_t>(fact)];
+        Run(fact, copy, h);
+        const Delivery* d = KnewIn(copy, position, h);
+        if (d == nullptr) return false;
+        out = *d;
+        return true;
     }
     bool Jammed(double h) const {
         for (const RadioJam& j : jams_) {
@@ -570,13 +970,19 @@ private:
         const std::size_t n = data_.positions.size();
         s.delivered.assign(n, -1);
         s.children.assign(n, {});
+        // Posts nobody holds when it starts (P8): their deputies act for them, with their people and what was for them.
+        std::vector<int> acting(n, -1);
+        std::vector<std::vector<int>> acts_for(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            acting[i] = static_cast<int>(i);
+            if (!VacantAt(static_cast<int>(i), f.h)) continue;
+            acting[i] = ActingFor(static_cast<int>(i), f.h);
+            if (acting[i] >= 0) acts_for[static_cast<std::size_t>(acting[i])].push_back(static_cast<int>(i));
+        }
         // Who it is for.
         std::vector<char> want(n, 0);
         for (std::size_t i = 0; i < n; ++i) {
-            const Position& p = data_.positions[i];
-            if (p.level > f.need_level) continue;
-            if (!f.audience.empty() && !data_.InSubtree(p.id, f.audience)) continue;
-            want[i] = 1;
+            if (Wants(f, i) && acting[i] >= 0) want[static_cast<std::size_t>(acting[i])] = 1;
         }
         // The shortest way along the chain (links cost more for routine facts: those go through the staff).
         const int origin = data_.PositionIndex(f.origin);
@@ -584,11 +990,12 @@ private:
         std::vector<int> parent(n, -1);
         std::vector<char> done(n, 0);
         std::vector<int> sources;
-        if (origin >= 0) sources.push_back(origin);
-        for (const std::string& w : f.witnesses) {
-            const int wi = data_.PositionIndex(w);
-            if (wi >= 0) sources.push_back(wi);
-        }
+        auto source = [&](int p) {
+            const int a = p >= 0 ? acting[static_cast<std::size_t>(p)] : -1;
+            if (a >= 0 && std::find(sources.begin(), sources.end(), a) == sources.end()) sources.push_back(a);
+        };
+        source(origin);
+        for (const std::string& w : f.witnesses) source(data_.PositionIndex(w));
         for (int src : sources) dist[static_cast<std::size_t>(src)] = 0.0;
         for (std::size_t iter = 0; iter < n; ++iter) {
             int u = -1;
@@ -599,14 +1006,20 @@ private:
             done[static_cast<std::size_t>(u)] = 1;
             // Nothing passes through the player's character on its own (a source is the exception: they saw it).
             const bool is_source = std::find(sources.begin(), sources.end(), u) != sources.end();
-            if (u == player_ && !is_source) continue;
-            for (const Edge& e : edges_[static_cast<std::size_t>(u)]) {
+            if (IsPlayerAt(u, f.h) && !is_source) continue;
+            auto relax = [&](const Edge& e) {
                 const double w = e.link && f.precedence == 0 ? 3.0 : 1.0;
-                const std::size_t v = static_cast<std::size_t>(e.to);
+                const int to = acting[static_cast<std::size_t>(e.to)];
+                if (to < 0 || to == u) return;
+                const std::size_t v = static_cast<std::size_t>(to);
                 if (dist[static_cast<std::size_t>(u)] + w < dist[v] - 1e-12) {
                     dist[v] = dist[static_cast<std::size_t>(u)] + w;
                     parent[v] = u;
                 }
+            };
+            for (const Edge& e : edges_[static_cast<std::size_t>(u)]) relax(e);
+            for (int p : acts_for[static_cast<std::size_t>(u)]) {
+                for (const Edge& e : edges_[static_cast<std::size_t>(p)]) relax(e);
             }
         }
         // Keep the branches that lead to someone it is for.
@@ -623,6 +1036,18 @@ private:
             if (needed[i] && parent[i] >= 0) s.children[static_cast<std::size_t>(parent[i])].push_back(static_cast<int>(i));
         }
         for (std::vector<int>& c : s.children) std::sort(c.begin(), c.end());
+        s.in_tree = needed;
+        // The player's tellings of it, each at its hour.
+        for (std::size_t ti = 0; ti < tells_.size(); ++ti) {
+            if (tells_[ti].fact != fi) continue;
+            Ev e;
+            e.t = tells_[ti].h;
+            e.node = tells_[ti].to;
+            e.from = tells_[ti].from;
+            e.tell = static_cast<int>(ti);
+            e.attempt = 40;
+            Push(s, e);
+        }
         // The start: the origin and the witnesses know it at h.
         for (int src : sources) {
             Ev e;
@@ -669,9 +1094,13 @@ private:
             std::pop_heap(s.queue.begin(), s.queue.end(), Later);
             const Ev e = s.queue.back();
             s.queue.pop_back();
-            // A carrier on the road: did it get through?
+            if (e.tell >= 0) {
+                StartTelling(fi, s, e);
+                continue;
+            }
+            // A carrier on the road: did it get through? (The player's runner lost, he must send again himself.)
             if (e.travel && Lost(fi, e)) {
-                if (e.attempt < 3) Send(fi, s, e.from, e.node, e.t + data_.relay.retry_h, e.full, e.attempt + 1);
+                if (e.attempt < 3 && !e.told) Send(fi, s, e.from, e.node, e.t + data_.relay.retry_h, e.full, e.attempt + 1);
                 continue;
             }
             Deliver(fi, s, e);
@@ -697,6 +1126,31 @@ private:
     void Deliver(int fi, FactState& s, const Ev& e) const {
         const Fact& f = facts_[static_cast<std::size_t>(fi)];
         const std::size_t node = static_cast<std::size_t>(e.node);
+        if (VacantAt(e.node, e.t)) {
+            // Nobody there now (a casualty since it set out, P8): his deputy has it in his place, and passes it on to his
+            // people.
+            const int a = ActingFor(e.node, e.t);
+            if (a < 0 || a == e.node) return;
+            const bool knew = s.delivered[static_cast<std::size_t>(a)] >= 0;
+            std::vector<int> added;
+            for (int c : s.children[node]) {
+                std::vector<int>& to = s.children[static_cast<std::size_t>(a)];
+                if (c != a && std::find(to.begin(), to.end(), c) == to.end()) {
+                    to.push_back(c);
+                    added.push_back(c);
+                }
+            }
+            Ev r = e;
+            r.node = a;
+            Deliver(fi, s, r);
+            // He knew it already, so he passed it on to his own people then: now to the vacant post's too.
+            if (knew && !IsPlayerAt(a, e.t) && e.t <= f.expires_h && e.from != -2) {
+                for (int c : added) {
+                    if (s.delivered[static_cast<std::size_t>(c)] < 0) Send(fi, s, a, c, e.t, e.full, 0);
+                }
+            }
+            return;
+        }
         const int place = PlaceOf(e.node, e.t);
         int& di = s.delivered[node];
         if (di >= 0) {
@@ -716,12 +1170,16 @@ private:
         d.place = place >= 0 ? data_.places[static_cast<std::size_t>(place)].id : std::string();
         d.full = e.full;
         if (e.full) d.full_h = e.t;
+        d.told = e.told;
         s.deliveries.push_back(d);
         di = static_cast<int>(s.deliveries.size()) - 1;
         // The player's character tells nobody on their own (unless they saw it themselves: then it is theirs to report
         // like any witness's; the game passes it on through them when they do).
         const bool witness = e.from == -1;
-        if (e.node == player_ && !witness) return;
+        if (IsPlayerAt(e.node, e.t) && !witness) return;
+        if (witness && f.held) return;  // his own report: it goes where and how he tells it
+        // Told by the player: he passes it on to those under him it is for, as he would have from anyone.
+        if (e.told) Extend(fi, s, e.node, e.t);
         if (e.from == -2) return;  // heard on the news: not passed on as an order
         if (e.t > f.expires_h) return;
         for (int c : s.children[node]) {
@@ -737,6 +1195,190 @@ private:
         bool travel = false;
         double depart = 0.0;
     };
+
+    bool Wants(const Fact& f, std::size_t i) const {
+        const Position& p = data_.positions[i];
+        if (p.level > f.need_level) return false;
+        return f.audience.empty() || data_.InSubtree(p.id, f.audience);
+    }
+
+    // Someone the player told: the people it is for whom it would reach through him and who are not on its way yet
+    // become his to pass it to (the way round the player's character, who passes nothing on by himself, may have left
+    // them out).
+    void Extend(int fi, FactState& s, int from, double t) const {
+        const Fact& f = facts_[static_cast<std::size_t>(fi)];
+        const std::size_t n = data_.positions.size();
+        if (s.in_tree.size() != n) s.in_tree.assign(n, 0);
+        std::vector<int> parent(n, -1);
+        std::vector<char> seen(n, 0);
+        std::vector<int> order{from};
+        seen[static_cast<std::size_t>(from)] = 1;
+        for (std::size_t q = 0; q < order.size(); ++q) {
+            const int u = order[q];
+            for (const Edge& e : edges_[static_cast<std::size_t>(u)]) {
+                const std::size_t v = static_cast<std::size_t>(e.to);
+                if (seen[v] || IsPlayerAt(static_cast<int>(v), t) || s.in_tree[v] || s.delivered[v] >= 0) continue;
+                seen[v] = 1;
+                parent[v] = u;
+                order.push_back(e.to);
+            }
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!seen[i] || static_cast<int>(i) == from || !Wants(f, i)) continue;
+            int at = static_cast<int>(i);
+            while (at != from && at >= 0 && !s.in_tree[static_cast<std::size_t>(at)]) {
+                s.in_tree[static_cast<std::size_t>(at)] = 1;
+                const int p = parent[static_cast<std::size_t>(at)];
+                if (p >= 0) {
+                    std::vector<int>& c = s.children[static_cast<std::size_t>(p)];
+                    if (std::find(c.begin(), c.end(), at) == c.end()) {
+                        c.push_back(at);
+                        std::sort(c.begin(), c.end());
+                    }
+                }
+                at = p;
+            }
+        }
+    }
+
+    // ---- the player's tellings (roadmap P2)
+    struct Way {
+        TellOption option;
+        Option go;
+        double heard = 1.0;  // a radio call: the chance the enemy's listeners hear it
+    };
+
+    // Every means from a to b at hour t0, when each would bring the fact, and what it costs. The player chooses: any
+    // precedence by any means he has (an air warning by the courier comes late).
+    std::vector<Way> Ways(int fi, int a, int b, double t0, bool full) const {
+        std::vector<Way> out;
+        const Fact& f = facts_[static_cast<std::size_t>(fi)];
+        const Position& pa = data_.positions[static_cast<std::size_t>(a)];
+        const Position& pb = data_.positions[static_cast<std::size_t>(b)];
+        const int la = PlaceOf(a, t0), lb = PlaceOf(b, t0);
+        const Vec3 xa = PlacePos(la, t0), xb = PlacePos(lb, t0);
+        const double dist = std::hypot(xb.x - xa.x, xb.y - xa.y);
+        for (std::size_t mi = 0; mi < data_.means.size(); ++mi) {
+            const SignalMean& m = data_.means[mi];
+            Way w;
+            w.option.mean = m.id;
+            w.option.name = m.name;
+            w.option.intercept = m.intercept;
+            w.go.mean = static_cast<int>(mi);
+            w.go.depart = t0;
+            const int imi = static_cast<int>(mi);
+            auto refuse = [&](const std::string& why) {
+                w.option.why_not = why;
+                out.push_back(w);
+            };
+            auto arrive = [&](double at, bool paper, bool road, double loss = -1.0) {
+                // A garbled message is repeated (voice) or sent again.
+                if (!road && Chance(loss >= 0.0 ? loss : m.loss, fi, a, b, 40, 0x51ull + static_cast<std::uint64_t>(mi))) at += 0.1;
+                w.go.t = at;
+                w.go.full = paper && full;
+                w.go.travel = road;
+                w.option.arrive_h = at;
+                w.option.paper = w.go.full;
+                w.option.road = road;
+                out.push_back(w);
+            };
+            const bool range_ok = m.range_m <= 0.0 || dist <= m.range_m;
+            const bool both = pa.Has(m.id) && pb.Has(m.id);
+            switch (m.kind) {
+                case MeanKind::InPerson: {
+                    if (la == lb && la >= 0) {
+                        arrive(t0 + HandlingH(m, f.precedence), true, false);
+                        break;
+                    }
+                    const double meet = NextMeeting(a, b, t0, data_.relay.max_wait_h);
+                    if (meet < 0.0) refuse("you don't meet him soon");
+                    else arrive(meet + HandlingH(m, 0), true, false);
+                    break;
+                }
+                case MeanKind::Messenger:
+                case MeanKind::DespatchRider:
+                    if (!pa.Has(m.id)) refuse("you have none to send");
+                    else if (!range_ok) refuse("too far for him");
+                    else arrive(t0 + HandlingH(m, 0) + TravelH(m, xa, xb, t0), true, true);
+                    break;
+                case MeanKind::Courier: {
+                    int cm = -1;
+                    const double at = NextCourier(a, b, t0, data_.relay.max_wait_h, cm);
+                    if (at < 0.0 || cm != imi) refuse("no courier run between you soon");
+                    else arrive(at + m.handling_s / 3600.0, true, true);
+                    break;
+                }
+                case MeanKind::FieldTelephone:
+                case MeanKind::CityTelephone:
+                case MeanKind::Teleprinter: {
+                    if (!both) {
+                        refuse(pa.Has(m.id) ? "he has no line" : "you have no line");
+                        break;
+                    }
+                    if (WireCutAt(la, t0) || WireCutAt(lb, t0)) {
+                        refuse("the line is cut");
+                        break;
+                    }
+                    const double connect = m.kind == MeanKind::Teleprinter ? 0.0 : (f.precedence >= 2 ? m.connect_s : m.connect_routine_s) / 3600.0;
+                    arrive(t0 + connect + HandlingH(m, f.precedence), m.kind == MeanKind::Teleprinter, false);
+                    break;
+                }
+                case MeanKind::RadioVoice: {
+                    if (!both) {
+                        refuse(pa.Has(m.id) ? "he has no set" : "you have no set");
+                        break;
+                    }
+                    const RadioPath hop = RadioHop(m, a, b, xa, xb, t0);
+                    if (!hop.up) {
+                        refuse(hop.why);
+                        break;
+                    }
+                    w.option.intercept = m.intercept * hop.heard;
+                    w.heard = hop.heard;
+                    arrive(t0 + HandlingH(m, f.precedence), false, false, hop.loss);
+                    break;
+                }
+                case MeanKind::WarningReceiver:
+                    if (f.kind != FactKind::AirWarning) refuse("only for air warnings");
+                    else if (!both || pa.level >= pb.level) refuse("not on your warning net");
+                    else if (!range_ok) refuse("out of range");
+                    else arrive(t0 + HandlingH(m, f.precedence), false, false);
+                    break;
+                case MeanKind::Siren:
+                case MeanKind::FieldPost:
+                case MeanKind::Broadcast:
+                    break;  // not a way to tell one person
+            }
+        }
+        return out;
+    }
+
+    // A telling comes due: the teller says it the way he chose, if he knows it by now and the way is still open.
+    void StartTelling(int fi, FactState& s, const Ev& e) const {
+        const Telling& t = tells_[static_cast<std::size_t>(e.tell)];
+        const Delivery* knew = KnewIn(s, t.from, e.t);
+        if (knew == nullptr) return;
+        const Delivery& known = *knew;
+        const bool full = known.full && known.full_h <= e.t + 1e-9;
+        for (const Way& w : Ways(fi, t.from, t.to, e.t, full)) {
+            if (w.option.mean != t.mean || w.option.arrive_h < 0.0) continue;
+            if (data_.means[static_cast<std::size_t>(w.go.mean)].kind == MeanKind::RadioVoice) s.radio.push_back({e.t, t.from, fi, w.heard});
+            Ev d;
+            d.t = w.go.t;
+            d.node = t.to;
+            d.from = t.from;
+            d.mean = w.go.mean;
+            d.full = w.go.full;
+            d.attempt = 40;
+            d.travel = w.go.travel;
+            d.depart = e.t;
+            d.a = PlacePos(PlaceOf(t.from, e.t), e.t);
+            d.b = PlacePos(PlaceOf(t.to, e.t), e.t);
+            d.told = true;
+            Push(s, d);
+            return;
+        }
+    }
 
     // Pass a fact from a to b, deciding at hour t (after the sender's own delay) how it goes.
     void Send(int fi, FactState& s, int a, int b, double t, bool full, int attempt) const {
@@ -767,7 +1409,7 @@ private:
 
         // The electrical and runner options, for anything that can't wait for a contact.
         std::vector<Option> fast, wire;
-        auto add = [&](std::vector<Option>& v, int mi, double at, bool paper, bool travel) {
+        auto add = [&](std::vector<Option>& v, int mi, double at, bool paper, bool travel, double loss = -1.0) {
             if (mi < 0) return;
             const SignalMean& m = M(mi);
             if (m.precedence < f.precedence) return;
@@ -778,12 +1420,15 @@ private:
             o.depart = t0;
             o.t = at;
             // A garbled message is repeated (voice) or sent again.
-            if (!travel && Chance(m.loss, fi, a, b, attempt, 0x51ull + static_cast<std::uint64_t>(mi))) o.t += 0.1;
+            if (!travel && Chance(loss >= 0.0 ? loss : m.loss, fi, a, b, attempt, 0x51ull + static_cast<std::uint64_t>(mi))) o.t += 0.1;
             v.push_back(o);
         };
+        RadioPath radio_hop;
+        radio_hop.up = false;
         if (both("radio_voice")) {
             const int mi = mean_of("radio_voice");
-            if ((M(mi).range_m <= 0.0 || dist <= M(mi).range_m) && !Jammed(t0)) add(fast, mi, t0 + HandlingH(M(mi), f.precedence), false, false);
+            radio_hop = RadioHop(M(mi), a, b, xa, xb, t0);
+            if (radio_hop.up) add(fast, mi, t0 + HandlingH(M(mi), f.precedence), false, false, radio_hop.loss);
         }
         if (both("field_telephone") && !WireCutAt(la, t0) && !WireCutAt(lb, t0)) {
             const int mi = mean_of("field_telephone");
@@ -854,7 +1499,7 @@ private:
             }
         }
         if (chosen.mean < 0) return;  // no way at all
-        if (M(chosen.mean).kind == MeanKind::RadioVoice) s.radio.push_back({t0, a, fi});
+        if (M(chosen.mean).kind == MeanKind::RadioVoice) s.radio.push_back({t0, a, fi, radio_hop.heard});
         Ev e;
         e.t = chosen.t;
         e.node = b;

@@ -36,6 +36,7 @@
 #include "simcore/air_war/types.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
+#include "simcore/session_deliveries.hpp"
 #include "simcore/terrain_map.hpp"
 
 namespace simcore {
@@ -195,6 +196,10 @@ struct ScenarioFormat {
     // With map_file, the map itself (LoadMapCached): the battery and its dummies stand on open ground (no wood, building
     // or river under a vehicle) near where the campaign has them. Null: exactly where the campaign has them.
     std::shared_ptr<const MapData> map;
+    // Our side's information pipeline seen from the player's vehicle (command::SessionSource; null: none): the raid's
+    // warning comes when it reached the vehicle through the chain, and the messages the vehicle's people get during the
+    // raid are played in it (roadmap P1). Without it, the warning comes own_intel.warning_s ahead of the first aircraft.
+    const DeliverySource* deliveries = nullptr;
 };
 
 // One scenario target, and the flight and aircraft it is.
@@ -821,17 +826,61 @@ public:
             if (pln->Quirk("comsec_leak") > 0.0) warn_s = std::max(warn_s, tune.Get("own_intel.leak_warning_s"));
         }
         const double first_s = std::max(0.0, (first_h - m.start_h) * 3600.0);
-        json::Value warn = Obj();
-        Put(warn, "id", Str("air_raid_warning"));
-        json::Value when = Obj();
-        Put(when, "after_s", Num(std::round(std::max(0.0, first_s - warn_s))));
-        Put(warn, "when", when);
-        json::Value doo = Arr();
-        json::Value act = Obj();
-        Put(act, "air_threat", Bool(true));
-        Push(doo, act);
-        Put(warn, "do", doo);
-        Push(triggers, warn);
+        double warn_after_s = std::max(0.0, first_s - warn_s);
+        std::vector<DeliveryDef> messages;
+        if (fmt.deliveries != nullptr) {
+            // From the pipeline: played as a message when it comes inside the raid; known from the start when it came
+            // before; no warning at all when it never reached the vehicle.
+            const double end_h = m.start_h + m.end_s / 3600.0;
+            messages = fmt.deliveries->Between(p.id, m.start_h, end_h);
+            bool said = false;
+            for (const DeliveryDef& msg : messages) said = said || msg.air_warning;
+            const double warned_h = fmt.deliveries->AirWarnedAt(p.id, end_h);
+            warn_after_s = said || warned_h < -1e17 || warned_h > end_h ? -1.0 : std::max(0.0, (warned_h - m.start_h) * 3600.0);
+        }
+        if (warn_after_s >= 0.0) {
+            json::Value warn = Obj();
+            Put(warn, "id", Str("air_raid_warning"));
+            json::Value when = Obj();
+            Put(when, "after_s", Num(std::round(warn_after_s)));
+            Put(warn, "when", when);
+            json::Value doo = Arr();
+            json::Value act = Obj();
+            Put(act, "air_threat", Bool(true));
+            Push(doo, act);
+            Put(warn, "do", doo);
+            Push(triggers, warn);
+        }
+        if (!messages.empty()) {
+            json::Value arr = Arr();
+            for (const DeliveryDef& msg : messages) {
+                json::Value v = Obj();
+                Put(v, "id", Str(msg.id));
+                Put(v, "after_s", Num(std::round(msg.after_s * 10.0) / 10.0));
+                if (!msg.to.empty()) Put(v, "to", Str(msg.to));
+                Put(v, "means", Str(DeliveryMeansName(msg.means)));
+                if (!msg.net.empty()) Put(v, "net", Str(msg.net));
+                Put(v, "from", Str(msg.from));
+                Put(v, "words", Str(msg.words));
+                if (!msg.paper_title.empty()) {
+                    json::Value paper = Obj();
+                    Put(paper, "title", Str(msg.paper_title));
+                    Put(paper, "text", Str(msg.paper_text));
+                    Put(v, "paper", paper);
+                }
+                if (msg.air_warning) {
+                    Put(v, "air_warning", Bool(true));
+                    // The raid's direction from the battery, as the warning gives it (roadmap P4: into the hearers' picture).
+                    const Vec3 from = clipped.front().pts[0] - m.own_enu;
+                    double az = RadToDeg(std::atan2(from.x, from.y));
+                    if (az < 0.0) az += 360.0;
+                    Put(v, "azimuth_deg", Num(std::fmod(std::round(az), 360.0)));
+                }
+                if (Carried(msg.means)) Put(v, "from_bearing_deg", Num(std::round(msg.from_bearing_deg)));
+                Push(arr, v);
+            }
+            Put(root, "deliveries", arr);
+        }
         if (any_regiment && pu12_blind) {
             json::Value tr = Obj();
             Put(tr, "id", Str("pu12_blind"));

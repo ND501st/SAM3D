@@ -135,6 +135,7 @@ public:
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
         rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
+        deliveries_.Set(def_.deliveries);
         engagement_.SetUnitHeading(def_.unit_heading_deg);
         if (console_.has_orientation) {  // roadmap 6.5: the gyro's drift at this site, the crew chief's compass work
             const OrientationDef& o = console_.orientation;
@@ -213,6 +214,7 @@ public:
         weather_.SetTime(time_);  // the clouds drift
         UpdateTargets(dt);
         DeliverOrders();
+        PlayDeliveries();
         UpdateVoice();
         UpdateOsaNet();
         UpdateIntercomCheck();
@@ -610,6 +612,48 @@ public:
 
     // The prepared position the unit stands in (present = false: none).
     const PreparedPositionDef& Prepared() const { return def_.prepared; }
+
+    // The chain of command's messages in the session (roadmap P1, session_deliveries.hpp, docs/command/06_INTEGRATION.md
+    // §6): every delivery the scenario holds, the papers a station has been handed ("" every station's), and the people
+    // coming over the ground with one, where they are now.
+    const std::vector<DeliveryDef>& Deliveries() const { return deliveries_.Defs(); }
+    std::vector<HeldPaper> MapCase(const std::string& station) const { return deliveries_.MapCase(station); }
+    // What the crew called in the fight, as its commander reports it (roadmap P4, command/session_reports.hpp): each
+    // launch and each result the judge called, right or wrong; the crew's word, not the truth.
+    struct CrewCall {
+        double time_s = 0.0;
+        std::string kind;    // "launch", "destroyed", "missed", "unknown"
+        std::string target;  // as the crew knows it (the scope's label)
+    };
+    const std::vector<CrewCall>& CrewCalls() const { return crew_calls_; }
+    struct VisitorState {
+        int index = 0;       // which of the scenario's visitors (fixed for the session: an entity id)
+        std::string id;
+        std::string model;   // its basic model ("soldier", "motorcycle", "uaz469")
+        std::string from;    // who he is
+        Vec3 position;       // ENU, on the ground
+        double heading_deg = 0.0;
+        bool at_vehicle = false;  // handing it over
+    };
+    std::vector<VisitorState> Visitors() const {
+        std::vector<VisitorState> out;
+        const std::vector<Visitor>& all = deliveries_.Visitors();
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            const Visitor& v = all[i];
+            if (!v.Present(time_)) continue;
+            const Vec3 off = v.Offset(time_);
+            VisitorState s;
+            s.index = static_cast<int>(i);
+            s.id = v.id;
+            s.model = v.model;
+            s.from = v.from;
+            s.position = GroundEnu(def_.unit_position.x + off.x, def_.unit_position.y + off.y);
+            s.heading_deg = v.HeadingDeg(time_);
+            s.at_vehicle = time_ >= v.arrive_s && time_ < v.arrive_s + Visitor::kWaitS;
+            out.push_back(s);
+        }
+        return out;
+    }
 
     // The battery around the player's vehicle (null: the scenario has none).
     const Battery* GetBattery() const { return battery_.get(); }
@@ -1993,6 +2037,59 @@ private:
     }
 
     // Orders that were shouted reach their crew member after the delay.
+    // The chain of command's messages that come due: each said on its means' channel to the seats it reaches, its paper
+    // into the map case of the seat it was for (the commander's when it names none), an air-raid warning taken by the
+    // battery (roadmap P1).
+    void PlayDeliveries() {
+        for (const DeliveryDef* d : deliveries_.Due(time_)) {
+            std::string label;
+            std::vector<std::string> heard;
+            switch (d->means) {
+                case DeliveryMeans::Radio:
+                    label = d->net;
+                    heard = HeardBy(label);
+                    break;
+                case DeliveryMeans::Telephone:
+                    label = "telephone";
+                    if (!d->to.empty()) heard.push_back(d->to);
+                    else heard = HeardBy("cabin");
+                    break;
+                case DeliveryMeans::Intercom:
+                    label = "intercom";
+                    heard = HeardBy(label);
+                    break;
+                case DeliveryMeans::WarningNet: label = "warning net"; heard = HeardBy("cabin"); break;  // the R-311's speaker
+                case DeliveryMeans::Siren: label = "sirens"; heard = HeardBy("cabin"); break;
+                case DeliveryMeans::Broadcast: label = "state radio"; heard = HeardBy("cabin"); break;
+                default: label = "at the hatch"; heard = HeardBy("cabin"); break;  // a carrier has come to the vehicle
+            }
+            Radio(label, d->from, d->words, false, heard);
+            deliveries_.Hand(*d, d->to.empty() ? Cmdr() : d->to, time_);
+            // A raid's bearing in it: each who heard it has the direction in his picture, as told (roadmap P4); with no
+            // voice paths modelled, everyone in the vehicle.
+            if (d->has_azimuth) {
+                KnownTarget k;
+                k.target = "warning:" + d->id;
+                k.has_azimuth = true;
+                k.true_azimuth = true;
+                k.azimuth_deg = d->azimuth_deg;
+                k.time_s = time_;
+                k.source = "told by " + d->from;
+                if (heard.empty()) {
+                    for (const ConsoleStation& st : console_.stations) heard.push_back(st.id);
+                }
+                for (const std::string& st : heard) pictures_[st].Learn(k);
+            }
+            log_.Record({time_, DebriefEntry::Kind::Scenario, d->from, label,
+                         std::string("message (") + DeliveryMeansName(d->means) + "): " + d->words +
+                             (d->paper_title.empty() ? std::string() : " [paper: " + d->paper_title + "]")});
+            if (d->air_warning && battery_ && !air_threat_forced_) {
+                battery_->SetAirThreat(true, time_);
+                air_threat_forced_ = true;
+            }
+        }
+    }
+
     void DeliverOrders() {
         for (std::size_t i = 0; i < pending_orders_.size();) {
             if (pending_orders_[i].at_s > time_ + 1e-9) {
@@ -4536,6 +4633,7 @@ private:
                 ++salvo_count_;
             }
             if (engagement_on_) OwnReport(BatteryFire::Event::Kind::Launch, engagement_.TrackedTarget());
+            crew_calls_.push_back({time_, "launch", engagement_on_ ? engagement_.TrackedTarget() : std::string()});
             log_.Record({time_, DebriefEntry::Kind::Launch, std::string(), console_.launch_button,
                          "missile " + std::to_string(launches_) + from +
                              (engagement_on_ ? std::string() : std::string(" (no engagement model: not resolved)"))});
@@ -8488,6 +8586,7 @@ private:
     // Targets the crew knows are destroyed (their own "Цель поражена!", the battery net's "цель … поражена"): out of
     // every seat's picture, and a late designation of one is not passed on.
     std::set<std::string> reported_kills_;
+    std::vector<CrewCall> crew_calls_;
     void HeardDestroyed(const std::string& target) {
         reported_kills_.insert(target);
         for (auto& kv : pictures_) kv.second.Forget(target);
@@ -8603,6 +8702,7 @@ private:
             if (judge.empty()) text += "; the players judge for themselves";
             log_.Record({time_, DebriefEntry::Kind::Scenario, judge.empty() ? std::string("Crew") : SpeakerName(judge), j.target, text});
             if (judge.empty()) continue;
+            crew_calls_.push_back({time_, j.call == KillAssessment::Call::Hit ? "destroyed" : j.call == KillAssessment::Call::Miss ? "missed" : "unknown", j.target});
             if (j.call == KillAssessment::Call::Hit) {
                 if (regime_cmdr_.kind == EmissionKind::Arm) npc_ssc_off_due_ = true;  // under the least emission the tracking transmitter goes off after the burst
                 Say("hit", judge);
@@ -9266,6 +9366,7 @@ private:
     ProcedureTracker player_;  // empty procedure = free play
     std::vector<TargetState> targets_;
     std::vector<bool> fired_;
+    SessionDeliveries deliveries_;
     SessionLog log_;
     double time_ = 0.0;
     double next_acmi_s_ = 0.0;

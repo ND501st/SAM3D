@@ -63,6 +63,9 @@ struct ModelLibrary {
     };
     std::map<std::string, SiteDef> systems;  // air defence system id -> site
     std::map<std::string, SiteDef> kinds;    // a theatre object's kind (air_war ObjectKind) -> its site
+    // The chain of command's places (data/command/places_pannonia.json, roadmap P7): a place's own layout, else its kind's.
+    std::map<std::string, SiteDef> places;       // place id -> its buildings and vehicles
+    std::map<std::string, SiteDef> place_kinds;  // place kind (command PlaceKindName) -> the same
 
     const ModelDef* Find(const std::string& id) const {
         for (const ModelDef& m : models) {
@@ -99,6 +102,14 @@ struct ModelLibrary {
         if (!system.empty() && systems.count(system) != 0) return SiteLayout(system);
         const auto it = kinds.find(kind);
         return it == kinds.end() ? std::vector<std::pair<std::string, Vec3>>() : Layout(it->second);
+    }
+    // A place of the chain of command drawn in the district (roadmap P7): its own layout, else its kind's; empty for what
+    // is drawn otherwise (a city or a town: the country map's towns; a theatre object: the assets).
+    std::vector<std::pair<std::string, Vec3>> PlaceLayout(const std::string& place, const std::string& kind) const {
+        const auto own = places.find(place);
+        if (own != places.end()) return Layout(own->second);
+        const auto k = place_kinds.find(kind);
+        return k == place_kinds.end() ? std::vector<std::pair<std::string, Vec3>>() : Layout(k->second);
     }
     static std::vector<std::pair<std::string, Vec3>> Layout(const SiteDef& s) {
         std::vector<std::pair<std::string, Vec3>> out;
@@ -374,6 +385,16 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
     } else if (arch == "tent") {
         o.push_back(P(Shape::Box, Vec3{L, a.width, H * 0.45}, Vec3{0.0, 0.0, H * 0.225}, c));
         Roof(o, L, a.width, H * 0.45, c);
+    } else if (arch == "person") {  // a man standing: legs, body, head (a runner, a visiting officer, a sentry)
+        o.push_back(P(Shape::Box, Vec3{0.25, a.width * 0.8, H * 0.47}, Vec3{0.0, 0.0, H * 0.235}, c2));
+        o.push_back(P(Shape::Box, Vec3{0.3, a.width, H * 0.36}, Vec3{0.0, 0.0, H * 0.65}, c));
+        o.push_back(P(Shape::Sphere, Vec3{0.22, 0.22, 0.24}, Vec3{0.0, 0.0, H * 0.9}, c2));
+    } else if (arch == "motorcycle") {  // two wheels, the frame and tank, a rider astride
+        o.push_back(P(Shape::Cylinder, Vec3{0.6, 0.6, 0.12}, Vec3{0.38 * L, 0.0, 0.3}, c2, 'y'));
+        o.push_back(P(Shape::Cylinder, Vec3{0.6, 0.6, 0.12}, Vec3{-0.38 * L, 0.0, 0.3}, c2, 'y'));
+        o.push_back(P(Shape::Box, Vec3{0.7 * L, 0.3, 0.35}, Vec3{0.0, 0.0, 0.6}, c));
+        o.push_back(P(Shape::Box, Vec3{0.3, 0.4, 0.6}, Vec3{-0.1 * L, 0.0, 1.05}, c));
+        o.push_back(P(Shape::Sphere, Vec3{0.24, 0.24, 0.26}, Vec3{-0.08 * L, 0.0, H - 0.13}, c2));
     } else if (arch == "mast") {
         o.push_back(P(Shape::Cylinder, Vec3{0.3, 0.3, H}, Vec3{0.0, 0.0, H * 0.5}, c));
         o.push_back(P(Shape::Box, Vec3{0.2, 3.0, 0.2}, Vec3{0.0, 0.0, H - 0.5}, c));
@@ -404,7 +425,7 @@ class ModelLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, ModelLibrary& out) {
         if (!Keys(root, "", {"models_id", "display_name", "status", "source", "confidence", "notes", "colours", "fallbacks", "ground", "systems", "kinds",
-                             "models"})) {
+                             "places", "place_kinds", "models"})) {
             return false;
         }
         if (!Map(root, "colours", out.colours) || !Map(root, "fallbacks", out.fallbacks) || !Map(root, "ground", out.ground)) return false;
@@ -458,7 +479,8 @@ public:
         for (const auto& kv : out.ground) {
             if (out.Find(kv.second) == nullptr) return Fail(Join("ground", kv.first), "no such model: " + kv.second);
         }
-        return Sites(root, "systems", out.systems, out) && Sites(root, "kinds", out.kinds, out);
+        return Sites(root, "systems", out.systems, out) && Sites(root, "kinds", out.kinds, out) && Sites(root, "places", out.places, out) &&
+               Sites(root, "place_kinds", out.place_kinds, out);
     }
 
     // "systems" (an air defence system's site) and "kinds" (a theatre object kind's): {id: {"models": [[model id, count],

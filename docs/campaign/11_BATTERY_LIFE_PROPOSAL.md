@@ -492,6 +492,30 @@ they go round, and a unit not told of it still plans over it. Moving a road in a
 other edit. `nav_check` passes every prepared position and place of the nation's theatre, or lists it. MSVC and GCC give
 the same routes.
 
+**Built, first form (29 Oct 2026).** `simcore/nav/routes.hpp`, `nav/anchors.hpp`, `data/vehicles/mobility.json`,
+`tests/test_nav.cpp`:
+
+- **G1.1** six mobility classes (the 9A33 and the TZM from `mon_2112_80` p11, the PU-12M from `valka_pu12`, a man on
+  foot from `stroevoy_ustav_1993`; the trucks and the motorcycle estimates), each speed by road class, cross-country,
+  in water, and by night (`korovin_tiv_2010`).
+- **G1.2** one road graph from the country's roads and the district's tracks (95 nodes, 100 edges), joined where their
+  vertices meet, with the country map's crossings under their own names; the district's main roads are the country's,
+  so its own tracks to the sites are the only lines added. Lengths to the centimetre, times in tenths of a second.
+- **G1.4** routes between anchors (the chain's places, the theatre's objects and prepared positions, the country's towns
+  and landmarks): each end off the road to the nearest point of the net, straight across country between ends near each
+  other, Dijkstra with ties by node index. Battery 21's PU-12M to the regiment's CP: 29 min for a launcher, 33 for a
+  truck, 4.5 h on foot.
+- **G1.5** overlays: the Kesmark road bridge (`b_ralje@rava`) down, the truck to the Horka siding goes round by the
+  capital road (209 min instead of 31), a unit not told still plans over it, and the route lists the entry it was planned
+  round; a launcher swims the Rava where the road meets it (41 min) unless told to keep dry.
+- A fixture map whose road is moved changes the route with no other edit; the fixture route's digest is pinned (MSVC's;
+  CI checks GCC's).
+
+Left: the trafficability tiles and the foot layer round the pond (G1.3), `nav_check`, `nav_bench` and `map_view.py
+--routes` (G1.6). The country's road net is sparse: 225 of its 329 other anchors (border posts, radar companies, the
+dam) are more than 3 km from a road, and the last kilometres to them are a straight line across country until the tiles
+come.
+
 ### G2: movers and the march (simcore; not gated)
 
 | # | Task |
@@ -628,6 +652,15 @@ points and «к бою готов» are in the radio journal; the debrief shows 
 as 21-2's commander hears the order, repeats it back and has his driver follow the route card, with the helper's
 moves; the emission regime travels the same path as before; `helper_coverage` shows the vehicle commanders' new
 duties with no new gaps.
+
+**Built: G10.1 (29 Oct 2026).** The order as a record (`simcore/command/orders.hpp`, `OrderBook`): who gave it, what,
+in what words and by what means; for each recipient the hour of every step from given to logged (each step needs the one
+before it, and carrying out needs only "heard", so nobody acts on an order he did not hear), a "cannot" with its reason,
+and every sending. The giver's rule for a silence (`ChaseRule`, game values: 30 s, twice more on the same means, then the
+telephone, then a runner) says whom to send to again, when and how. The test gives «К маршу!» on the battery net with
+21-3's set off: said again twice, the telephone (no wire yet), then a runner who reaches 21-3 in his foot route's time
+from the route service (14 min 49 s), and the debrief lists each vehicle's times to the second. Left: G10.2-G10.8 (the
+means deciding who hears, the vehicles carrying it out through `NpcDoes`, the reports in the radio journal).
 
 ### G11: Unreal, everything the player could see
 

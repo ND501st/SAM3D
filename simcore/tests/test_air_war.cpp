@@ -684,6 +684,67 @@ SC_TEST("air war: a raid through the battery's sector becomes a scenario the loa
     SC_EXPECT(played >= 1);
 }
 
+namespace {
+// The pipeline as the raid builder sees it, with one warning said on the battery net half a minute in.
+struct OneWarning : DeliverySource {
+    std::vector<DeliveryDef> Between(int package, double, double) const override {
+        DeliveryDef w;
+        w.id = "warn_" + std::to_string(package);
+        w.after_s = 30.0;
+        w.to = "commander";
+        w.means = DeliveryMeans::Radio;
+        w.net = "battery net";
+        w.from = "Captain Novak";
+        w.words = "Air raid warning";
+        w.air_warning = true;
+        return {w};
+    }
+    double AirWarnedAt(int, double) const override { return -1e18; }
+};
+}  // namespace
+
+SC_TEST("air war: the pipeline's warning in a raid gives the raid's bearing, which the crew's picture takes (P4)") {
+    const AirWarData d = Load("nato");
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 1));
+    const OneWarning source;
+    ScenarioFormat fmt;
+    fmt.deliveries = &source;
+    int checked = 0;
+    while (c.Now() < 6.0 * 24.0 && checked < 1) {
+        if (!c.Advance(6.0 * 24.0)) continue;
+        RaidScenarioBuilder builder;
+        const RaidScenario rs = builder.Build(c, *c.PlayerMission(), fmt);
+        if (!rs.ok) {
+            c.SkipPlayerMission();
+            continue;
+        }
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
+        SC_EXPECT(def.deliveries.size() == 1 && !def.targets.empty());
+        if (def.deliveries.size() != 1 || def.targets.empty()) break;
+        const DeliveryDef& w = def.deliveries[0];
+        // The way the raid's first aircraft comes from, as seen from the battery.
+        const Vec3 from = def.targets[0].start - def.unit_position;
+        double expect = RadToDeg(std::atan2(from.x, from.y));
+        if (expect < 0.0) expect += 360.0;
+        double diff = std::fabs(w.azimuth_deg - expect);
+        diff = std::min(diff, 360.0 - diff);
+        std::printf("    warning gives %.0f deg, the first aircraft comes from %.0f deg\n", w.azimuth_deg, expect);
+        SC_EXPECT(w.air_warning && w.has_azimuth && diff < 15.0);
+        const std::string told = "warning:" + w.id;
+        ScenarioRunner runner(std::move(def), std::move(console));
+        while (runner.Time() < 31.0) runner.Step(0.1);
+        const CrewPicture* pic = runner.PictureOf("commander");
+        const KnownTarget* k = pic != nullptr ? pic->Find(told) : nullptr;
+        SC_EXPECT(k != nullptr && k->has_azimuth && !k->has_range);
+        ++checked;
+    }
+    SC_EXPECT(checked == 1);
+}
+
 SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation missiles, which the bridge reads back (A11)") {
     for (const char* adversary : {"nato", "warsaw_pact"}) {
         const AirWarData d = Load(adversary);

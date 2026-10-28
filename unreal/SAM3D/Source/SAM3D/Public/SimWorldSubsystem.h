@@ -138,6 +138,27 @@ struct SAM3D_API FSimRadioMessage
 	bool HeardAt(const FString& Station) const { return !bRouted || HeardBy.Contains(Station); }
 };
 
+/** A paper handed in to a seat by the chain of command (roadmap P1, simcore/session_deliveries.hpp): in its map case from
+ *  the time it came. */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimPaper
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Command")
+	double TimeSeconds = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Command")
+	FString Title;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Command")
+	FString Text;
+
+	/** Who brought it (and from whom). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Command")
+	FString From;
+};
+
 /** A seat's voice paths as the man in it has them in front of him: his headset, his box and what it is on, its lamps. */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimSeatComms
@@ -1529,6 +1550,10 @@ public:
 	/** The last radio and intercom messages, oldest first. */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Radio")
 	TArray<FSimRadioMessage> GetRadioMessages(int32 MaxCount = 8) const;
+
+	/** The papers a seat's map case holds, in the order they came (the chain of command's, handed in at the hatch). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Command")
+	TArray<FSimPaper> GetMapCase(const FString& Station) const;
 
 	/** The voice paths at a seat (docs/crew/12_COMMUNICATIONS.md): the HUD's comms strip. */
 	FSimSeatComms GetSeatComms(const FString& Station) const;

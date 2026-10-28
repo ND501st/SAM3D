@@ -268,6 +268,19 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "end_h", Num(a.end_h));
                 Put(x, "outcome", save_detail::OutcomeJson(a.outcome));
                 break;
+            case CampaignAction::Kind::Transmit: {
+                Put(x, "kind", Str("transmit"));
+                json::Value calls = Arr();
+                for (const Transmission& t : a.calls) {
+                    json::Value j = Obj();
+                    Put(j, "h", Num(t.h));
+                    Put(j, "intercept", Num(t.intercept));
+                    Put(j, "key", Str(t.key));
+                    Push(calls, j);
+                }
+                Put(x, "calls", calls);
+                break;
+            }
         }
         Put(x, "posture", save_detail::PostureJson(a.posture));
         Push(actions, x);
@@ -310,6 +323,17 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
                 a.kind = CampaignAction::Kind::Complete;
                 a.end_h = r.Number(x, "end_h");
                 if (const json::Value* o = x.Find("outcome")) a.outcome = r.Outcome(*o);
+            } else if (kind == "transmit") {
+                a.kind = CampaignAction::Kind::Transmit;
+                if (const json::Value* calls = x.Find("calls")) {
+                    for (const json::Value& j : calls->items) {
+                        Transmission t;
+                        t.h = r.Number(j, "h");
+                        t.intercept = r.Number(j, "intercept", 1.0);
+                        t.key = r.String(j, "key");
+                        a.calls.push_back(t);
+                    }
+                }
             } else {
                 if (error != nullptr) *error = "unknown action '" + kind + "'";
                 return false;

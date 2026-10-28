@@ -24,6 +24,7 @@ namespace
 	constexpr int32 MissileIdBase = 100000;  // display ids for engagement-model missiles
 	constexpr int32 ArmIdBase = 150000;      // display ids for anti-radiation missiles (EM layer, roadmap E6)
 	constexpr int32 GroundIdBase = 200000;   // display ids for the battery's vehicles and dummy positions
+	constexpr int32 VisitorIdBase = 250000;  // display ids for the chain of command's carriers on the ground (roadmap P1)
 
 	ESimEventType ToUnrealEventType(simcore::EventType Type)
 	{
@@ -2024,6 +2025,18 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 		{
 			Out.Add(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
 		}
+		// Someone coming over the ground with a message from the chain of command: a runner, a despatch rider, the
+		// courier's car (roadmap P1). Listed while he is in the world; gone, his actor hides.
+		for (const simcore::ScenarioRunner::VisitorState& V : Runner->Visitors())
+		{
+			FSimEntityState S = MakeState(VisitorIdBase + V.index, ToF(V.from.empty() ? V.id : V.from), false, true, V.position,
+				simcore::Vec3{});
+			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
+			S.bIsGround = true;
+			S.Kind = TEXT("visitor");
+			S.Model = ToF(V.model);
+			Out.Add(S);
+		}
 	}
 	return Out;
 }
@@ -2703,6 +2716,25 @@ TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) co
 			M.HeardBy.Add(ToF(H));
 		}
 		Out.Add(M);
+	}
+	return Out;
+}
+
+TArray<FSimPaper> USimWorldSubsystem::GetMapCase(const FString& Station) const
+{
+	TArray<FSimPaper> Out;
+	if (!Runner || Station.IsEmpty())
+	{
+		return Out;
+	}
+	for (const simcore::HeldPaper& P : Runner->MapCase(TCHAR_TO_UTF8(*Station)))
+	{
+		FSimPaper Paper;
+		Paper.TimeSeconds = P.time_s;
+		Paper.Title = ToF(P.title);
+		Paper.Text = ToF(P.text);
+		Paper.From = ToF(P.from);
+		Out.Add(Paper);
 	}
 	return Out;
 }

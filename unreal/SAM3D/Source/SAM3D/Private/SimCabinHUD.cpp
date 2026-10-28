@@ -27,6 +27,11 @@ void ASimCabinHUD::DrawHUD()
 	{
 		OwnerPc = nullptr;
 	}
+	// O: the map case, the papers the chain of command handed in.
+	if (OwnerPc != nullptr && Vehicle != nullptr && !Vehicle->IsMissionMenuOpen() && OwnerPc->WasInputKeyJustPressed(EKeys::O))
+	{
+		bShowMapCase = !bShowMapCase;
+	}
 	// G: every key; N: the guide's next step.
 	if (OwnerPc != nullptr && Vehicle != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::G))
 	{
@@ -65,6 +70,10 @@ void ASimCabinHUD::DrawHUD()
 		if (bShowBoard)
 		{
 			DrawBoard(Sim, SmallFont, Vehicle != nullptr ? Vehicle->GetStationId() : FString());
+		}
+		if (Vehicle != nullptr && Sim->IsScenarioRunning())
+		{
+			DrawMapCase(Sim, SmallFont, Vehicle->GetStationId());
 		}
 	}
 	if (Vehicle != nullptr && Sim != nullptr && Canvas != nullptr && Sim->IsScenarioRunning())
@@ -791,7 +800,8 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("Caps Lock held   flick to a sector, on to a line, let go; Tab (commander) seat first"),
 				TEXT("U / I / P   «Есть!» / «Выполнено!» / «Повторите!»"),
 				TEXT("H   the helper: off, hints, on, watch the crewman"), TEXT("1-9   quick crew drills (outside the crew menu)"),
-				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)")}},
+				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)"),
+				TEXT("O   your map case: the papers handed in to you")}},
 		{TEXT("Headset and radios"),
 			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
 				TEXT("Y   answer a ringing line or telephone (again: put it down)")}},
@@ -1329,6 +1339,73 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom,
 		}
 		DrawText(L.Text, L.Ink, L.bRadio ? 30.0f : 20.0f, Y, Font);
 		Y += 16.0f;
+	}
+}
+
+void ASimCabinHUD::DrawMapCase(USimWorldSubsystem* Sim, UFont* Font, const FString& Station)
+{
+	const TArray<FSimPaper> Papers = Sim->GetMapCase(Station);
+	if (!bShowMapCase)
+	{
+		if (Papers.Num() > PapersRead)
+		{
+			const FString Note = TEXT("A paper has been handed in: your map case (O)");
+			float W = 0.0f;
+			float H = 0.0f;
+			GetTextSize(Note, W, H, Font);
+			DrawBacking(Canvas->ClipX * 0.5f - W * 0.5f, 64.0f, W, H);
+			DrawText(Note, FLinearColor(1.0f, 0.85f, 0.5f), Canvas->ClipX * 0.5f - W * 0.5f, 64.0f, Font);
+		}
+		return;
+	}
+	PapersRead = Papers.Num();
+	// A sheet of paper held up, dark ink: the newest on top.
+	const float X = 60.0f;
+	const float Y = 80.0f;
+	const float W = FMath::Min(600.0f, Canvas->ClipX - 2.0f * X);
+	const FLinearColor Ink(0.12f, 0.11f, 0.1f);
+	const FLinearColor Faint(0.35f, 0.32f, 0.28f);
+	TArray<TPair<FString, FLinearColor>> Lines;
+	if (Papers.Num() == 0)
+	{
+		Lines.Add({TEXT("The map case: nothing has been handed in."), Ink});
+	}
+	else
+	{
+		const FSimPaper& P = Papers.Last();
+		Lines.Add({P.Title, Ink});
+		Lines.Add({FString::Printf(TEXT("from %s, handed in at %d:%02d"), *P.From, static_cast<int32>(P.TimeSeconds) / 60,
+					   static_cast<int32>(P.TimeSeconds) % 60), Faint});
+		Lines.Add({FString(), Ink});
+		TArray<FString> Paragraphs;
+		P.Text.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		for (const FString& Para : Paragraphs)
+		{
+			for (const FString& L : Wrap(Para, W - 24.0f, Font))
+			{
+				Lines.Add({L, Ink});
+			}
+		}
+		if (Papers.Num() > 1)
+		{
+			Lines.Add({FString(), Ink});
+			Lines.Add({TEXT("Also in the case:"), Faint});
+			for (int32 I = Papers.Num() - 2; I >= 0 && I >= Papers.Num() - 6; --I)
+			{
+				Lines.Add({FString::Printf(TEXT("  %s (%d:%02d)"), *Papers[I].Title, static_cast<int32>(Papers[I].TimeSeconds) / 60,
+							   static_cast<int32>(Papers[I].TimeSeconds) % 60), Faint});
+			}
+		}
+	}
+	Lines.Add({FString(), Ink});
+	Lines.Add({TEXT("O: close the map case"), Faint});
+	const float LineH = 17.0f;
+	DrawRect(FLinearColor(0.86f, 0.83f, 0.74f, 0.96f), X, Y, W, 20.0f + LineH * Lines.Num());
+	float Ly = Y + 10.0f;
+	for (const TPair<FString, FLinearColor>& L : Lines)
+	{
+		DrawText(L.Key, L.Value, X + 12.0f, Ly, Font);
+		Ly += LineH;
 	}
 }
 

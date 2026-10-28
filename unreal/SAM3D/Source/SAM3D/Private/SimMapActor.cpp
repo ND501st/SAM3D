@@ -1039,6 +1039,27 @@ void ASimMapActor::BuildAssets(const FVector& FrameOriginLonLatAlt)
 		}
 	}
 	const FLinearColor Wreck(0.07f, 0.07f, 0.06f);
+	// One basic model on the ground at (E, N) of the theatre's frame, facing a horizontal direction there.
+	auto PlaceModel = [&](const std::string& Model, double E, double N, const simcore::Vec3& Facing, bool bWrecked)
+	{
+		const simcore::MapPoint Pc = ToCountry.FrameToMap(E, N);
+		const double H = CountryGround(Pc.east_m, Pc.north_m);
+		simcore::Vec3 Ae, An, Au;
+		Link.AxesAt(E, N, Ae, An, Au);
+		const simcore::Vec3 Fwd = Ae * Facing.x + An * Facing.y;
+		USceneComponent* Holder = NewObject<USceneComponent>(this);
+		Holder->SetupAttachment(Root);
+		Holder->SetRelativeLocationAndRotation(ToUnreal(Link.MapToFrame(E, N, H)), FRotationMatrix::MakeFromXZ(DirToUnreal(Fwd), DirToUnreal(Au)).Rotator());
+		Holder->RegisterComponent();
+		AssetParts.Add(Holder);
+		TArray<UStaticMeshComponent*> Built;
+		FSimBasicModels::Build(UTF8_TO_TCHAR(Model.c_str()), Holder, &Built, bWrecked ? &Wreck : nullptr);
+		for (UStaticMeshComponent* Part : Built)
+		{
+			AssetParts.Add(Part);
+		}
+		++AssetCount;
+	};
 	for (int32 I = 0; I < static_cast<int32>(Th->objects.size()); ++I)
 	{
 		const TheatreObject& O = Th->objects[static_cast<std::size_t>(I)];
@@ -1055,26 +1076,41 @@ void ASimMapActor::BuildAssets(const FVector& FrameOriginLonLatAlt)
 		const std::vector<std::pair<std::string, simcore::Vec3>> Site = Lib->ObjectLayout(ObjectKindName(O.kind), O.defence.system);
 		for (const std::pair<std::string, simcore::Vec3>& V : Site)
 		{
-			const double E = Pos.x + V.second.x, N = Pos.y + V.second.y;
-			const simcore::MapPoint Pc = ToCountry.FrameToMap(E, N);
-			const double H = CountryGround(Pc.east_m, Pc.north_m);
-			simcore::Vec3 Ae, An, Au;
-			Link.AxesAt(E, N, Ae, An, Au);
 			// Each faces out from its site's centre (launchers round their radar), the centre's north.
 			const double Len = V.second.HorizontalLength();
-			const simcore::Vec3 Fwd = Len > 1.0 ? Ae * (V.second.x / Len) + An * (V.second.y / Len) : An;
-			USceneComponent* Holder = NewObject<USceneComponent>(this);
-			Holder->SetupAttachment(Root);
-			Holder->SetRelativeLocationAndRotation(ToUnreal(Link.MapToFrame(E, N, H)), FRotationMatrix::MakeFromXZ(DirToUnreal(Fwd), DirToUnreal(Au)).Rotator());
-			Holder->RegisterComponent();
-			AssetParts.Add(Holder);
-			TArray<UStaticMeshComponent*> Built;
-			FSimBasicModels::Build(UTF8_TO_TCHAR(V.first.c_str()), Holder, &Built, Function <= 0.05 ? &Wreck : nullptr);
-			for (UStaticMeshComponent* Part : Built)
+			const simcore::Vec3 Facing = Len > 1.0 ? simcore::Vec3{V.second.x / Len, V.second.y / Len, 0.0} : simcore::Vec3{0.0, 1.0, 0.0};
+			PlaceModel(V.first, Pos.x + V.second.x, Pos.y + V.second.y, Facing, Function <= 0.05);
+		}
+	}
+	// The chain of command's places (roadmap P7): the posts, offices, works and villages that are not theatre objects; and
+	// with a campaign running, each post's holder where he is at its hour (the people move with their routines).
+	const simcore::command::InfoNet* Net = AirWar != nullptr ? AirWar->GetInfoNet() : nullptr;
+	const simcore::command::ChainData* Chain = Net != nullptr ? &Net->Data() : nullptr;
+	static TSharedPtr<simcore::command::ChainData> FileChain;
+	if (Chain == nullptr)
+	{
+		if (!FileChain.IsValid())
+		{
+			FileChain = MakeShared<simcore::command::ChainData>();
+			std::string Error;
+			if (!simcore::command::LoadChainData(TCHAR_TO_UTF8(*FindDataDirectory()), "command/chain_pannonia.json", *FileChain, &Error))
 			{
-				AssetParts.Add(Part);
+				UE_LOG(LogSAM3D, Warning, TEXT("Map: the chain of command does not load (%s): its places not drawn"), UTF8_TO_TCHAR(Error.c_str()));
 			}
-			++AssetCount;
+		}
+		Chain = FileChain->places.empty() ? nullptr : FileChain.Get();
+	}
+	if (Chain != nullptr)
+	{
+		std::vector<simcore::command::DistrictPiece> Pieces = simcore::command::DistrictPlaces(*Chain, *Lib);
+		if (Net != nullptr)
+		{
+			const std::vector<simcore::command::DistrictPiece> People = simcore::command::DistrictPeople(*Net, Net->Now());
+			Pieces.insert(Pieces.end(), People.begin(), People.end());
+		}
+		for (const simcore::command::DistrictPiece& P : Pieces)
+		{
+			PlaceModel(P.model, P.pos.x, P.pos.y, P.facing, false);
 		}
 	}
 }

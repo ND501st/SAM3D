@@ -49,8 +49,8 @@
   "intel": {
     "mobile_sigma_growth_mps": 0.15, "column_sigma_share": 0.5, "mobile_confidence_half_life_h": 18.0, "fixed_function_recovery": 0.5, "decoy_spot_skill": 0.6,
     "ghost_fix_chance": 0.35, "claim_destroy_when_off": 0.5, "launch_sighting_m": 20000.0, "recce_corridor_m": 12000.0,
-    "suspect_after_loss": 0.5,
-    "notes": "column_sigma_share: a supply column's believed position spreads at this share of its speed (it may have driven on or stopped). A mobile unit's believed position spreads at mobile_sigma_growth_mps and the belief that it is there halves every mobile_confidence_half_life_h. fixed_function_recovery: how fast the enemy assumes a struck fixed target is repaired (share per 48 h). ghost_fix_chance: an ELINT fix lands between the battery and a dummy whose decoy emitter radiates on its parameters (vr_1985_plss: active dummies). claim_destroy_when_off: pilots report a radar that went silent under ARM attack as destroyed."
+    "suspect_after_loss": 0.5, "comint_per_call": 0.3,
+    "notes": "comint_per_call: the chance one radio call of the battery's gives the enemy's direction finders a fix (times the means' intercept share), when our side's information pipeline says what the battery actually said on the air (roadmap P3); without it, the posture's radio discipline stands for the traffic. column_sigma_share: a supply column's believed position spreads at this share of its speed (it may have driven on or stopped). A mobile unit's believed position spreads at mobile_sigma_growth_mps and the belief that it is there halves every mobile_confidence_half_life_h. fixed_function_recovery: how fast the enemy assumes a struck fixed target is repaired (share per 48 h). ghost_fix_chance: an ELINT fix lands between the battery and a dummy whose decoy emitter radiates on its parameters (vr_1985_plss: active dummies). claim_destroy_when_off: pilots report a radar that went silent under ARM attack as destroyed."
   },
   "adapt": {
     "learning_rate": 0.5, "stress_per_loss": 0.08, "stress_recovery_per_day": 0.15, "reputation_per_success": 0.05,

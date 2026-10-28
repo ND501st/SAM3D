@@ -165,9 +165,12 @@ public:
 	/** The level options that play the active raid from a seat. */
 	static FString RaidOptions(int32 PackageId, const FString& Seat);
 
-	/** Write a raid of a campaign as a scenario file in Saved/AirWar/ and give its path relative to the data folder. */
+	/** Write a raid of a campaign as a scenario file in Saved/AirWar/ and give its path relative to the data folder. With
+	 *  Deliveries, the chain of command's messages to the session's seats are in it, and its warning comes when the
+	 *  pipeline brings it (roadmap P1); without, the warning net's warning at the builder's own time. */
 	static bool WriteRaidScenario(const simcore::airwar::AirCampaign& Campaign, const simcore::airwar::Package& Package,
-		const FString& DataDir, FString& OutRelativeFile, simcore::airwar::RaidManifest& OutManifest, FString& OutError);
+		const FString& DataDir, FString& OutRelativeFile, simcore::airwar::RaidManifest& OutManifest, FString& OutError,
+		const simcore::DeliverySource* Deliveries = nullptr);
 
 	/** The campaign itself, for the campaign screen (C++ only). */
 	const simcore::airwar::AirCampaign* GetCampaign() const { return Campaign.Get(); }
@@ -180,14 +183,26 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|AirWar")
 	FString GetPlayerPost() const;
 
+	/** The player's character tells someone what he knows (roadmap P2, docs/command/06_INTEGRATION.md section 6): Fact and
+	 *  To are the pipeline's indices, Mean a means' id. False (and why) if he can't. Kept with the campaign. C++ only. */
+	bool TellFact(int32 Fact, int32 To, const FString& Mean, FString& OutWhy);
+
+	/** An order of the player's own (the battery commander's: the posture he set), which reaches the vehicle commanders
+	 *  only as he tells it (roadmap P2). Its fact index; -1 none. C++ only. */
+	int32 GiveOrder(const FString& Text, const FString& Summary);
+
+	/** Where the player's tellings and reports are kept beside the campaign. */
+	static FString PipelineSaveFile();
+
 	/** The data folder (the world subsystem's resolution: the repo's data/). */
 	static FString DataDirectory();
 
 private:
 	void FinishRaid(simcore::ScenarioRunner& Runner, const TCHAR* Why);
 	void HandleWorldTearDown(UWorld* World);
-	/** Build the information pipeline for the campaign (and bring it up to the campaign's hour). */
-	void StartInfoNet();
+	/** Build the information pipeline for the campaign (and bring it up to the campaign's hour); with bLoadInputs, put
+	 *  back the player's tellings and reports from the save. */
+	void StartInfoNet(bool bLoadInputs = false);
 	/** After every step of the campaign: the pipeline catches up, and the campaign is saved. */
 	void Stepped();
 

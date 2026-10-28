@@ -74,7 +74,9 @@ public:
 
 	/** The nation's assets on the map: every theatre object as its basic models where it stands, the running campaign's
 	 *  (where it has moved them; the wrecked dark) or else TheatreFile's. Not what the scenario draws itself: its own
-	 *  battery, its dummies and its neighbours. */
+	 *  battery, its dummies and its neighbours. With them the chain of command's places that are not theatre objects
+	 *  (the posts, offices, works and villages of data/command/places_pannonia.json, roadmap P7) and, with a campaign
+	 *  running, each post's holder where he is at its hour (simcore/command/district.hpp). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	bool bDrawAssets = true;
 

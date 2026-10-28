@@ -738,6 +738,7 @@ struct TuningTable {
             {"intel.mobile_confidence_half_life_h", 18.0},
             {"intel.fixed_function_recovery", 0.5},
             {"intel.decoy_spot_skill", 0.6},
+            {"intel.comint_per_call", 0.3},  // a fix from one radio call of the battery's (fed by the pipeline: roadmap P3)
             {"intel.ghost_fix_chance", 0.35},
             {"intel.claim_destroy_when_off", 0.5},
             {"intel.launch_sighting_m", 20000.0},

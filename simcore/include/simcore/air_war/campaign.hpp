@@ -65,14 +65,22 @@ struct ObservedRaid {
 
 // One thing the player did to the campaign, in order: what a save keeps (the campaign is deterministic for its seed,
 // so replaying the same actions in the same order rebuilds it exactly; save.hpp).
+// A call the battery's people made on the air (our side's information pipeline: command/air_war_feed.hpp, roadmap P3).
+struct Transmission {
+    double h = 0.0;
+    double intercept = 1.0;  // how much one such message tells the enemy's intercept service (the radio: everything)
+    std::string key;         // the call's own name, so it is heard once
+};
+
 struct CampaignAction {
-    enum class Kind { Advance, Relocate, Skip, Complete };
+    enum class Kind { Advance, Relocate, Skip, Complete, Transmit };
     Kind kind = Kind::Advance;
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
     Vec3 to;                 // Relocate
     PackageOutcome outcome;  // Complete
     double end_h = 0.0;      // Complete
+    std::vector<Transmission> calls;  // Transmit
 };
 
 // The evidence our analysts gather from the raids they see.
@@ -263,6 +271,26 @@ public:
         MoveBattery(to);
     }
 
+    // The battery's calls on the air, from our side's information pipeline (roadmap P3, docs/command/06_INTEGRATION.md
+    // §1): from the first note on, the enemy's radio intercept hears these instead of guessing the battery's traffic
+    // from its posture's radio discipline. Each call once (by its key); recorded, so a save replays them.
+    void NoteTransmissions(const std::vector<Transmission>& calls) {
+        std::vector<Transmission> fresh;
+        for (const Transmission& t : calls) {
+            if (noted_.insert(t.key).second) fresh.push_back(t);
+        }
+        if (fresh.empty() && traffic_fed_) return;
+        Record(CampaignAction::Kind::Transmit).calls = fresh;
+        traffic_fed_ = true;
+        on_air_.insert(on_air_.end(), fresh.begin(), fresh.end());
+    }
+    // The enemy hears the battery's own calls (else it guesses from the posture).
+    bool TrafficFromPipeline() const { return traffic_fed_; }
+    // The battery's calls noted so far.
+    int CallsOnAir() const { return static_cast<int>(noted_.size()); }
+    // Radio intercept reports about the battery the enemy has had (the dummy traffic's ghosts not counted).
+    int ComintHeard() const { return comint_heard_; }
+
     // The player's actions so far, in order (save.hpp), and the seed the campaign started from.
     const std::vector<CampaignAction>& Actions() const { return actions_; }
     unsigned Seed() const { return seed_; }
@@ -275,6 +303,7 @@ public:
             switch (a.kind) {
                 case CampaignAction::Kind::Advance: Advance(a.until_h); break;
                 case CampaignAction::Kind::Relocate: RelocateBattery(a.to); break;
+                case CampaignAction::Kind::Transmit: NoteTransmissions(a.calls); break;
                 case CampaignAction::Kind::Skip:
                 case CampaignAction::Kind::Complete:
                     if (pending_ < 0) {
@@ -506,6 +535,10 @@ private:
     RaidPatterns patterns_;
     unsigned seed_ = 1;
     std::vector<CampaignAction> actions_;
+    bool traffic_fed_ = false;
+    std::set<std::string> noted_;
+    std::vector<Transmission> on_air_;  // noted, not yet heard
+    int comint_heard_ = 0;
 
     CampaignAction& Record(CampaignAction::Kind kind) {
         actions_.emplace_back();
@@ -1204,14 +1237,25 @@ private:
                 Elint(o.id, share * 3600.0 * dt * 0.25, t0 + 0.5 * dt);
             }
         }
-        // Radio intercept of the battery's net, and of its dummy traffic.
+        // Radio intercept of the battery's net, and of its dummy traffic. Fed by our side's pipeline, it hears the calls
+        // the battery's people actually made, each a bearing for its direction finders; else a guess from the posture.
         if (in.comint) {
-            const double talk = (1.0 - posture_.radio_discipline) * dt;
-            if (rng_.Chance(Clamp01(talk))) {
-                IntelReport r = ReportAbout(player_, IntelSource::Comint, t0, t0 + in.comint_delay_h, in.comint_sigma_m);
+            auto heard = [&](double when) {
+                IntelReport r = ReportAbout(player_, IntelSource::Comint, when, when + in.comint_delay_h, in.comint_sigma_m);
                 r.exists = 0.6;
                 r.label = "SAM battery (radio intercept)";
                 intel_.Queue(r);
+                ++comint_heard_;
+            };
+            if (traffic_fed_) {
+                for (const Transmission& call : on_air_) {
+                    if (call.h >= t0 + dt) continue;
+                    if (rng_.Chance(Clamp01(call.intercept * tune.Get("intel.comint_per_call")))) heard(call.h);
+                }
+                on_air_.erase(std::remove_if(on_air_.begin(), on_air_.end(), [&](const Transmission& call) { return call.h < t0 + dt; }),
+                              on_air_.end());
+            } else if (rng_.Chance(Clamp01((1.0 - posture_.radio_discipline) * dt))) {
+                heard(t0);
             }
             if (posture_.dummy_traffic && rng_.Chance(0.5 * dt)) {
                 IntelReport g = ReportAbout(player_, IntelSource::Comint, t0, t0 + in.comint_delay_h, in.comint_sigma_m);

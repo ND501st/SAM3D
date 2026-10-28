@@ -1,0 +1,52 @@
+{
+  "mobility_id": "battery_1985",
+  "status": "first pass (roadmap G1.1, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md section 5.1)",
+  "notes": "How fast each kind of thing that travels goes, for the route service (simcore/nav/routes.hpp). Speeds in km/h as the sources give them: main and secondary roads are paved, a track is a dirt road; cross_country off any road; water_kmh 0 for a vehicle that does not swim, which only a bridge takes over a river; night_factor scales every speed in the dark; swim_prep_s is the time to get into the water and out again at a crossing. A single vehicle's speeds: a column's march speed is the march plan's (data/command/battery_tactics.json). Slopes, fording depth and banks come with the trafficability tiles (G1.3).",
+  "source": "per class: mon_2112_80, voenizdat_osa_1991, korovin_tiv_2010, valka_pu12, stroevoy_ustav_1993; sam3d estimates where a class says so", "confidence": "medium",
+  "classes": [
+    {
+      "id": "osa_9a33", "name": "9A33 launcher (BAZ-5937, 6x6, amphibious)",
+      "main_kmh": 60, "secondary_kmh": 60, "track_kmh": 30, "cross_country_kmh": 10, "water_kmh": 8,
+      "night_factor": 0.69, "swim_prep_s": 600,
+      "source": "mon_2112_80 p11 and voenizdat_osa_1991 p16 (road 60 km/h, dirt roads 30, cross-country 10, water 8); korovin_tiv_2010 (dirt roads 36 km/h by day, 25 at night: the night factor); swim_prep_s sam3d estimate",
+      "confidence": "high",
+      "notes": "A secondary road is taken at the road speed: the sources give no lower one."
+    },
+    {
+      "id": "tzm_9t217", "name": "9T217 transloader (the launcher's chassis)",
+      "main_kmh": 60, "secondary_kmh": 60, "track_kmh": 30, "cross_country_kmh": 10, "water_kmh": 8,
+      "night_factor": 0.69, "swim_prep_s": 600,
+      "source": "ru_wiki (the 9T217 on the BAZ-5937 chassis of the 9A33); the launcher's speeds from mon_2112_80 p11 and korovin_tiv_2010; swim_prep_s sam3d estimate",
+      "confidence": "medium"
+    },
+    {
+      "id": "pu12m", "name": "PU-12M command post (BTR-60PB)",
+      "main_kmh": 80, "secondary_kmh": 60, "track_kmh": 30, "cross_country_kmh": 10, "water_kmh": 10,
+      "night_factor": 0.69, "swim_prep_s": 300,
+      "source": "valka_pu12 (82 km/h on roads, 10 in water); shilka_narod (up to 60 km/h): the secondary road; track, cross-country, night and swim_prep_s sam3d estimate after the launcher's",
+      "confidence": "medium"
+    },
+    {
+      "id": "truck", "name": "Truck (the fuel truck, the sergeant major's truck, the maintenance and ZIP vehicles)",
+      "main_kmh": 60, "secondary_kmh": 50, "track_kmh": 30, "cross_country_kmh": 10, "water_kmh": 0,
+      "night_factor": 0.69,
+      "source": "sam3d estimate (no source registered for the battery's trucks yet: G0); night factor as the launcher's (korovin_tiv_2010)",
+      "confidence": "estimate"
+    },
+    {
+      "id": "motorcycle", "name": "Despatch rider's motorcycle",
+      "main_kmh": 40, "secondary_kmh": 40, "track_kmh": 25, "cross_country_kmh": 10, "water_kmh": 0,
+      "night_factor": 0.69,
+      "source": "sam3d estimate: data/command/signal_means.json's despatch rider (40 km/h); off the roads an estimate",
+      "confidence": "estimate"
+    },
+    {
+      "id": "foot", "name": "A man on foot",
+      "main_kmh": 5.2, "secondary_kmh": 5.2, "track_kmh": 5.2, "cross_country_kmh": 5.2, "water_kmh": 0,
+      "night_factor": 0.8,
+      "source": "stroevoy_ustav_1993 art. 31 (110-120 steps a minute of 70-80 cm: 1.44 m/s, as data/crew/walking.json); the night factor sam3d estimate",
+      "confidence": "medium",
+      "notes": "Slopes (tobler_1993) and the woods come with the trafficability tiles (G1.3)."
+    }
+  ]
+}
