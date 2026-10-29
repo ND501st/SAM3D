@@ -17,7 +17,8 @@
 //   * Emission control: radio silence on the nets it covers, the exempt ones (air data, designation, warning: vst_1988)
 //     excepted. Time on air adds up per net in a window; past `df_fix_s` the net is taken to be fixed by direction finding
 //     and, where the scenario allows, a spot jammer comes on it `df_reaction_s` later (palii_1989; SAM3D's inference).
-//   * Lines: the RTK-1's five, laid or not, and whom they reach. A line has no emission and no jamming.
+//   * Lines: the RTK-1's five, laid or not, and whom they reach. A line has no emission and no jamming. One not laid at
+//     the start is laid by a crewman who pays the P-274M out to its far end (the runner, docs/crew/13_OUT_OF_THE_VEHICLE.md).
 // It decides nothing about the battle: the runner asks it whether a message gets through.
 #pragma once
 
@@ -28,6 +29,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "simcore/vec3.hpp"
 
 namespace simcore {
 
@@ -61,7 +64,9 @@ struct LineDef {
     int line = 1;                        // the RTK-1's lever 1-5
     std::string to;                      // a launcher's call sign, "regiment", "radar"
     std::string to_name;
-    bool laid = true;
+    bool laid = true;                    // at the start
+    bool has_far_end = false;            // where the far set stands ("far_end"), when it isn't a vehicle of the battery
+    Vec3 far_end;                        // or the radar (ENU)
     struct Call {
         double at_s = 0.0;
         std::string text;                // what the far end says once the line is answered

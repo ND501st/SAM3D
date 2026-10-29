@@ -153,7 +153,9 @@ Every producer asks the router who hears it, so nothing reaches anyone without a
 The RTK-1 takes five lines (`rtk1.line1..5`: down / up). The scenario's `lines` say which are laid and to whom (a launcher's
 TA-57, the coupled radar, the regiment's post); laying four 500 m lines adds 7 min to the deployment (`ru_pu12_text`: 25 min
 against 18). A call rings the far end (the RTK-1's acoustic signal and the line's lamp; a TA-57's bell). It is answered by
-raising the lever (RTK-1) or taking the handset (`ta57.handset`, the Osa's at a halt). A line carries voice with no
+raising the lever (RTK-1) or taking the handset (`ta57.handset`, the Osa's at a halt). A line the scenario gives as not laid
+is laid by the crew on «Линии проложить!», a man paying the P-274M out to its far end, and works only once laid
+(`docs/crew/13_OUT_OF_THE_VEHICLE.md` section 4.1). A line carries voice with no
 emission and no jamming: the commander may designate or check by line, as a veteran describes the night checks
 (`airbase_ek32_2012`).
 

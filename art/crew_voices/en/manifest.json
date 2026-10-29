@@ -702,6 +702,34 @@
    "word_error": 0.0,
    "phonemes": "ðə bˈæɾɚɹi nˈɛts sˈɛt bˈæk tə ðə wˈɜːkɪŋ fɹˈiːkwənsi!"
   },
+  "battery_commander/order_lay_lines": {
+   "seat": "battery_commander",
+   "id": "order_lay_lines",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Lay the lines!",
+   "spoken": "Lay the lines!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Lay the lines!",
+    "engine_text": "Lay the lines!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "lˈeɪ ðə lˈaɪnz!",
+   "duration_s": 0.97,
+   "speech_s": 0.89,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -1.3,
+   "flags": [],
+   "transcript": "Lay the lines.",
+   "word_error": 0.0
+  },
   "battery_commander/order_mast": {
    "seat": "battery_commander",
    "id": "order_mast",

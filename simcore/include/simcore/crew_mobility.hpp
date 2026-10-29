@@ -143,6 +143,27 @@ struct VehicleNoise {
     Vec3 at_m;
 };
 
+// Field telephone lines laid from the vehicle (the PU-12M's P-274M to the RTK-1's lines): a man pays the cable out from
+// the vehicle to the line's far end at `lay_mps`, the cable's length the way he walked, at most `cable_m` a line; the far
+// set stands `far_set_m` short of a vehicle at the far end, on the side he comes from. A job at the place "line:<n>" is
+// worked at line n's far end (the runner knows where it is).
+struct VehicleWire {
+    bool present = false;
+    double lay_mps = 1.2;
+    double cable_m = 500.0;
+    double far_set_m = 8.0;
+};
+// "line:3" -> 3 (a job at a line's far end); 0 for any other place.
+inline int LinePlace(const std::string& place) {
+    if (place.size() < 6 || place.compare(0, 5, "line:") != 0) return 0;
+    int n = 0;
+    for (std::size_t i = 5; i < place.size(); ++i) {
+        if (place[i] < '0' || place[i] > '9') return 0;
+        n = n * 10 + (place[i] - '0');
+    }
+    return n >= 1 && n <= 5 ? n : 0;
+}
+
 // "К машинам": the crew lined up beside the vehicle, first man at first_m, each next one step_m on.
 struct VehicleLineup {
     bool present = false;
@@ -165,6 +186,7 @@ struct VehicleDef {
     std::vector<VehicleJob> jobs;
     std::vector<VehicleNoise> noise;
     VehicleLineup lineup;
+    VehicleWire wire;
     double inside_noise_db = 70.0;         // the compartment's own noise (fans) for voices inside
 
     const VehicleSeat* Seat(const std::string& station) const {
@@ -235,7 +257,7 @@ class VehicleLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, VehicleDef& out) {
         if (!Keys(root, "", {"system_id", "status", "notes", "source", "confidence", "hull", "keep_out", "seats", "exits",
-                             "ways_down", "places", "jobs", "noise", "lineup", "inside_noise_db"}) ||
+                             "ways_down", "places", "jobs", "noise", "lineup", "wire", "inside_noise_db"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -245,7 +267,7 @@ public:
         }
         if (!OptionalNumber(root, "", "inside_noise_db", out.inside_noise_db)) return false;
         return LoadHull(root, out) && LoadKeepOut(root, out) && LoadSeats(root, console, out) && LoadExits(root, console, out) &&
-               LoadWays(root, out) && LoadPlaces(root, out) && LoadJobs(root, console, out) && LoadNoise(root, console, out) &&
+               LoadWays(root, out) && LoadPlaces(root, out) && LoadWire(root, out) && LoadJobs(root, console, out) && LoadNoise(root, console, out) &&
                LoadLineup(root, console, out) && CheckSeats(console, out);
     }
 
@@ -461,12 +483,28 @@ private:
             const ControlDef* c = console.panel.Find(job.control);
             if (c == nullptr) return Fail(Join(p, "control"), "unknown control '" + job.control + "'");
             if (c->station.empty()) return Fail(Join(p, "control"), "'" + job.control + "' has no owner seat");
-            if (out.Place(job.place) == nullptr) return Fail(Join(p, "place"), "unknown place '" + job.place + "'");
+            if (out.Place(job.place) == nullptr && !(out.wire.present && LinePlace(job.place) != 0)) {
+                return Fail(Join(p, "place"), "unknown place '" + job.place + "'" + (LinePlace(job.place) != 0 ? " (a line's far end needs \"wire\")" : ""));
+            }
             if (!out.JobPlace(job.control).empty()) return Fail(Join(p, "control"), "duplicate job '" + job.control + "'");
             job.station = c->station;
             if (!LoadConditions(j, p, "stay_until", console.panel, console.equipment, job.stay_until)) return false;
             out.jobs.push_back(job);
         }
+        return true;
+    }
+
+    bool LoadWire(const json::Value& root, VehicleDef& out) {
+        const json::Value* w = root.Find("wire");
+        if (w == nullptr) return true;
+        if (!Keys(*w, "wire", {"lay_mps", "cable_m", "far_set_m", "source", "confidence", "notes"}) || !Provenance(*w, "wire") ||
+            !NumberOf(*w, "wire", "lay_mps", out.wire.lay_mps) || !NumberOf(*w, "wire", "cable_m", out.wire.cable_m) ||
+            !NumberOf(*w, "wire", "far_set_m", out.wire.far_set_m)) {
+            return false;
+        }
+        if (!(out.wire.lay_mps > 0.0)) return Fail("wire.lay_mps", "must be positive");
+        if (!(out.wire.cable_m > 0.0)) return Fail("wire.cable_m", "must be positive");
+        out.wire.present = true;
         return true;
     }
 
@@ -760,6 +798,7 @@ struct MoveGoal {
     bool run = false;
     bool emergency = false;   // the emergency exits may be used
     bool shut_after = false;  // coming in: shut the hatch behind him (the last man in)
+    double max_mps = 0.0;     // on the ground no faster than this (paying a cable out); 0: his gait's pace
 
     static MoveGoal Seat() { return MoveGoal(); }
     static MoveGoal AtPlace(const std::string& id) {
@@ -777,6 +816,13 @@ struct MoveGoal {
         MoveGoal g;
         g.kind = Kind::Ground;
         g.point = enu;
+        return g;
+    }
+    // A point on the ground he is "at" by name once there (a line's far end, "line:2"), at most `max_mps` on the way.
+    static MoveGoal OnGroundAt(const Vec3& enu, const std::string& name, double max_mps = 0.0) {
+        MoveGoal g = OnGround(enu);
+        g.place = name;
+        g.max_mps = max_mps;
         return g;
     }
     static MoveGoal OnHull(const Vec3& body) {
@@ -974,7 +1020,8 @@ public:
                     }
                     const double ue = de / len, un = dn / len;
                     facing_ = std::atan2(ue, un);
-                    const double v = GroundSpeed(gait, ground, map, pos_.x, pos_.y, ue, un, goal_.run);
+                    double v = GroundSpeed(gait, ground, map, pos_.x, pos_.y, ue, un, goal_.run);
+                    if (goal_.max_mps > 0.0 && v > goal_.max_mps) v = goal_.max_mps;
                     if (v <= 0.0) {  // a wall to him: he stops there
                         legs_.clear();
                         stuck_ = true;
@@ -1061,6 +1108,7 @@ private:
             case MoveGoal::Kind::Seat: return std::string();
             case MoveGoal::Kind::Place: return g.place;
             case MoveGoal::Kind::Lineup: return "lineup";
+            case MoveGoal::Kind::Ground: return g.place.empty() ? std::string("point") : g.place;
             default: return "point";
         }
     }

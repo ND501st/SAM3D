@@ -565,9 +565,13 @@ private:
             const json::Value& e = lines->items[i];
             LineDef l;
             double n = 0.0;
-            if (!Keys(e, lp, {"line", "to", "to_name", "laid", "calls", "notes"}) || !RequireNumber(e, lp, "line", n) ||
+            if (!Keys(e, lp, {"line", "to", "to_name", "laid", "far_end", "calls", "notes"}) || !RequireNumber(e, lp, "line", n) ||
                 !RequireString(e, lp, "to", l.to) || !OptionalString(e, lp, "to_name", l.to_name) || !OptionalBool(e, lp, "laid", l.laid)) {
                 return false;
+            }
+            if (const json::Value* fe = e.Find("far_end")) {
+                if (!LoadPosition(*fe, Join(lp, "far_end"), frame_, l.far_end)) return false;
+                l.has_far_end = true;
             }
             if (const json::Value* calls = OptionalArray(e, lp, "calls")) {
                 for (std::size_t k = 0; k < calls->items.size(); ++k) {

@@ -33,6 +33,7 @@
       "missions": [
         { "file": "scenarios/osa_crew_practice.json", "title": "Osa: crew practice, one target" },
         { "file": "scenarios/pu12m_deploy.json", "title": "PU-12M: deploy the command post" },
+        { "file": "scenarios/pu12m_deploy_wire.json", "title": "PU-12M: deploy the post and lay its lines" },
         { "file": "scenarios/osa_battery_fight.json", "title": "Osa: the battery fight" },
         { "file": "scenarios/pu12m_battery.json", "title": "PU-12M: run the battery in a raid" },
         { "file": "scenarios/battery_link_practice.json", "title": "The battery: the Osa 21 and the PU-12M",

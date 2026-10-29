@@ -147,11 +147,46 @@ as a subsystem's `start_time_s`, and the drill's procedure). The later tasks fit
 
 | Task | Place(s) | Job | Needs |
 |---|---|---|---|
-| Laying a field telephone line (P-274) to a launcher or the regiment (`ru_pu12_text`: four lines at 500 m in 25-30 min) | a reel's walk from the vehicle to the far end: a moving place along a line | `line<n>.laid` on the RTK-1's lines (`radio_nets.hpp` LineDef, today taken as laid) | a place that moves with the man (the reel unrolling), the line's length as distance walked |
+| Laying a field telephone line (P-274) to a launcher or the regiment (`ru_pu12_text`: four lines at 500 m in 25-30 min) | a reel's walk from the vehicle to the far end: a moving place along a line | `line<n>.laid` on the RTK-1's lines (`radio_nets.hpp` LineDef, today taken as laid) | **built (30 Oct 2026), section 4.1** |
 | Servicing the AB-1, changing a wheel, the engine | the set, a wheel, the engine deck | maintenance switches | the fault model's repairs |
 | A dugout, a small command post, camouflage | a spot near the vehicle | a dig job with hours of time | shifts of men; tools |
 | Rest, meals, guard | the vehicle's side, a tent | the battery's routine (halts every 3-4 h, `voenizdat_osa_1991` p. 236) | the time of day |
 | Signals on the march by flags and lamps (pp. 232-239) | the commander in his hatch | a signal control | the hatch as a place to stand |
+
+### 4.1 Wire: the PU-12M's lines (built 30 Oct 2026)
+
+The first new task outside. A line of the scenario's `radio_data.lines` with `"laid": false` is laid by the crew:
+
+* **The far end** is a place that is not the vehicle's: the job's place `line:<n>` (`data/vehicles/pu12m.json`) is line n's
+  far set, the scenario's `far_end`, else beside the battery's vehicle of that call sign or the cabled radar, `far_set_m`
+  (8 m, estimate) short of it on the post's side (`ScenarioRunner::LineFarEnd`). The regiment's line has none: it is laid
+  from the regiment.
+* **The order**: «Линии проложить!» (`order_lay_lines`, the menu's "Battery net and lines"). Its drills are `lay_line1..4`,
+  one man to a line (the driver, the squad leader, the radiotelephonist, the plotter: SAM3D's choice, since the norm's seven
+  minutes for four lines of 500 m allow one line a man at the laying pace); only the lines the crew can lay now are given
+  (`ProcedureWanted`): not one laid, one with no far end of ours or one beyond the cable (the run a tenth over the straight
+  line, at most `cable_m`, 500 m). The NPC commander gives it once the post is deployed (`ready_halted`).
+* **The walk**: he goes out to `line:<n>` as to any job, and on the ground no faster than the cable is paid out (the
+  `wire.lay_mps`, 1.2 m/s, `ru_pu12_text`; `MoveGoal::max_mps`). The cable follows him: a point every 5 m, its length the way
+  he walked (`ScenarioRunner::Wires`). At the far end the run is out (the input `line<n>_run`); he connects the far set
+  (`wire.line<n>` worked there), stays while it is connected (`line<n>_laid`, 20 s, estimate), rings the post on it
+  («Линия проложена. Проверка связи.», answered at the RTK-1) and walks back at his own pace.
+* **The line** is laid while `line<n>_laid` is ready (`ScenarioRunner::LineLaid`): only then do its calls ring, a
+  designation go by it and the radar's crew ring on it. A scenario's laid lines start so (`StartLines`).
+* **The player** at a layer's seat clicks the line's switch in the cabin and is walked out along it at the laying pace;
+  arrived, the switch is worked there. Walking to the far end by himself lays no cable, and the job refuses him.
+
+In `pu12m_deploy_wire.json` (four lines to far sets 446 m out, `test_crew_mobility.cpp`) the post is deployed at 1060 s;
+the four men are out by 1069 s, each pays out 443-445 m of cable (89-90 points) at no more than 1.20 m/s, the lines are
+laid at 1464-1468 s (about 400 s from the order), the check calls ring and are answered, and the men are back in their
+seats by 1796 s, inside the norm's 25 minutes (1500 s) from the halt.
+
+A job now holds its man at its place after his drill's last step while the work he started there is under way (a
+`stay_until` subsystem starting, `CrewMember::WorkUnderWay`): a one-step drill (the line's connection, the radar cable at
+its drum) no longer lets him walk off before it is done.
+
+Left: winding the lines back in when the post leaves (the cable stays on the ground); Unreal drawing the cable on the ground
+(`Wires()` has its points); a line cut by fire or vehicles and its repair; the free men sent before the post is deployed.
 
 **Planned** (the battery's war, `docs/campaign/07_BETWEEN_FIGHTS.md`, roadmap phase 20): the battery's activities between
 fights (maintenance, rest, meals, digging, wire, guard, briefings) run as jobs at places in this form, and the time to
@@ -168,4 +203,4 @@ readiness is computed from where every person is and the legs to their seat.
 | The order menu's К машине / По местам | done |
 | The drill master knowing the walk: its ideal run walks a man out to a job and back, a job's cost counts the way (`DrillMaster::SetOutside`, the runner's `WaySeconds`) | done 29 Oct 2026, `test_crew_mobility.cpp` |
 | The lessons knowing the walk; the dismount on the safe side of a road | next |
-| Wire laying as the first new outside task | next |
+| Wire laying as the first new outside task: the PU-12M's lines paid out to their far ends (section 4.1) | done 30 Oct 2026, `test_crew_mobility.cpp`, `pu12m_deploy_wire.json` |

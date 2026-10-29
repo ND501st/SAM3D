@@ -2645,13 +2645,16 @@ ESimPlayerActionResult ASimOsaVehicle::ClickOrGoOut(int32 Item, int32 Direction)
 		const simcore::ControlDef* Def = R->Console().panel.Find(ToStdS(Control));
 		if (!Place.empty() && Def != nullptr && ToFS(Def->station) == StationId)
 		{
-			// The case of a job done outside (the AB-1, the aiming circle): he takes it out to where it is worked.
+			// The case of a job done outside (the AB-1, the aiming circle, a line's far end): he takes it out to where it is
+			// worked (a line's cable paid out on the way, at its pace).
 			PendingJob = Control;
 			PendingJobDirection = Direction;
 			const simcore::VehiclePlace* P = R->Vehicle()->Place(Place);
-			if (GoBody(Sim, simcore::MoveGoal::AtPlace(Place)))
+			const int32 Line = simcore::LinePlace(Place);
+			if (GoBody(Sim, R->PlaceGoal(Place)))
 			{
-				FeedbackText = FString::Printf(TEXT("Out to %s"), P != nullptr ? *ToFS(P->label) : *ToFS(Place));
+				const FString Where = P != nullptr ? ToFS(P->label) : Line != 0 ? FString::Printf(TEXT("the far end of line %d, paying the cable out"), Line) : ToFS(Place);
+				FeedbackText = FString::Printf(TEXT("Out to %s"), *Where);
 				FeedbackSecondsLeft = 4.0f;
 				return ESimPlayerActionResult::Sent;
 			}

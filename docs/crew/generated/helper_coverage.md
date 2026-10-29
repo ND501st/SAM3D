@@ -145,6 +145,17 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | drill 7, duty 1 | 0 |
 | driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | drill 3, duty 1 | 0 |
 
+## pu12m_deploy_wire: PU-12M: deploy the post and lay its lines
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | - | 0 |
+| battery_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 51 | 0 | drill 12, duty 54 | 115 |
+| squad_leader | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 1 | 0 | drill 8, duty 2 | 0 |
+| operator | 900 time | - | - | - | 0 | 0 | 0 | 5 | 3 | 0 | 2 | 0 | drill 1, duty 8 | 10 |
+| radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | drill 7, duty 1 | 0 |
+| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | drill 3, duty 1 | 0 |
+
 ## osa_battery_fight: Osa: the battery fight
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
@@ -633,21 +644,21 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Duty (seat): rule | Times |
 |---|---|
-| control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 1 |
+| control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
 | control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 29 |
 | control (radio_operator): a message heard: write it in the journal | 5 |
-| control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 1 |
+| control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 2 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
 | drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 10 |
 | drill (senior_operator): the least emission against ARMs: both low beams in each burst | 16 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 169 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 162 |
-| order (battery_commander): a raid within reach of the covered troops | 4 |
+| order (battery_commander): a raid within reach of the covered troops | 5 |
 | order (battery_commander): communications and every launcher ready | 6 |
 | order (battery_commander): the battery marches: the post stows for it | 2800 |
 | order (battery_commander): the combat order: К маршу! now | 2 |
-| order (battery_commander): the drills the crew needs next | 1 |
+| order (battery_commander): the drills the crew needs next | 2 |
 | order (battery_commander): the raid has gone: the all clear | 2 |
 | order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 13 |
 | order (commander): the battery's emission regime, told to the crew | 11 |
@@ -657,7 +668,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (commander): the limited regime: ВЫСОКОЕ off between bursts | 138 |
 | order (commander): the limited regime: ВЫСОКОЕ on for a burst | 134 |
 | order (commander): the search transmitter on longer than the regime's burst | 10 |
-| plot (operator): a report heard: write it on the board | 102 |
+| plot (operator): a report heard: write it on the board | 107 |
 | report (commander): a battery order heard on the net: read it back | 1 |
 | report (commander): a target destroyed: report it on the battery net | 5 |
 | report (commander): a target given on the battery net: read it back | 50 |
@@ -673,11 +684,11 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (deputy_commander): no missile left on the launcher | 2 |
 | report (deputy_commander): the TV shows a decoy | 2 |
 | report (deputy_commander): К бою: the intercom checked | 36 |
-| report (driver): a report the crew makes when its lamp or input comes on | 8 |
+| report (driver): a report the crew makes when its lamp or input comes on | 9 |
 | report (driver): stowed after the ARM attack: ready to march | 3 |
 | report (driver): the crew is stowed for the battery's march | 1 |
-| report (operator): a mark new, turned or lost on the board: tell the commander | 21 |
-| report (operator): a report the crew makes when its lamp or input comes on | 101 |
+| report (operator): a mark new, turned or lost on the board: tell the commander | 22 |
+| report (operator): a report the crew makes when its lamp or input comes on | 102 |
 | report (operator): a sign of the shot on his instrument: its jamming gone | 1 |
 | report (operator): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 21 |
 | report (operator): a sign of the shot on his instrument: the missile's reply still there after the meeting | 5 |
@@ -695,14 +706,14 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (senior_operator): the bursts read back | 13 |
 | report (senior_operator): the nearest echo, every 15 s until a track | 210 |
 | report (senior_operator): К бою: the intercom checked | 36 |
-| report (squad_leader): a report the crew makes when its lamp or input comes on | 2 |
-| wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
+| report (squad_leader): a report the crew makes when its lamp or input comes on | 4 |
+| wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 4 |
 
 ## Drills the NPC commander hands out that no order of the crew data starts
 
 A player in command can't give these from his menu (the shadow commander would): an order missing in `data/crew/<system>_crew.json`.
 
 - deputy_commander: РАБ.РЕЖ. ВКЛ (tov.power) (26 runs)
-- radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (1 runs)
+- radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (2 runs)
 
-318 runs.
+324 runs.

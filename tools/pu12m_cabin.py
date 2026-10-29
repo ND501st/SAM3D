@@ -251,6 +251,10 @@ def build():
     L.control('pwr.input', p, (-0.07, 0.0), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.045, 'color': 'black'})
     L.control('pwr.ab1_set', p, (0.06, 0.035), 'toggle', {'kind': 'socket', 'size_m': 0.034, 'color': 'chrome'})
     L.control('pwr.ab1_start', p, (0.09, -0.05), 'toggle')
+    # Line 1's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:1). Where the reels ride is not published;
+    # SAM3D puts each man's beside the AB-1 set's socket.
+    L.control('wire.line1', p, (0.025, -0.055), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
     for u, sub, lab in ((-0.115, 'ab1_on_line', 'АГРЕГАТ'), (-0.07, 'g290_on_line', 'Г-290'), (-0.025, 'external_on_line', 'СЕТЬ')):
         L.lamp('scv_' + sub, lab, p, (u, 0.065), 'white', ready(sub),
                'valka_pu12 (ŠČV input board), ru_pu12_text (supply from the set, the G-290B or a 220 V network); the '
@@ -303,6 +307,10 @@ def build():
                 notes='The aiming circle\'s case (SAM3D: the plan doesn\'t show where it is stowed). Opening it stands for '
                       'taking the PAB-2 out and setting it up on the ground (nav.pab2).')
     L.control('nav.pab2', p, (0.0, 0.0), 'toggle', {'kind': 'latch', 'size_m': 0.04, 'color': 'chrome'})
+    # Line 2's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:2). Where the reels ride is not published;
+    # SAM3D puts each man's beside the aiming circle's case.
+    L.control('wire.line2', p, (0.08, 0.0), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
     L.nameplate(p, (0.0, 0.06), 'ПАБ-2', 0.05)
 
     # ---------------------------------------------------------------------------------------------- the mast
@@ -415,6 +423,10 @@ def build():
     for u in (-0.11, -0.07, -0.03, 0.01, 0.05, 0.09):
         L.fixture(p, (u, -0.04), 'button', 0.014, 'white', ring='chrome')
     L.nameplate(p, (0.1, -0.065), 'С-23', 0.04)
+    # Line 4's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:4). Where the reels ride is not published;
+    # SAM3D puts each man's beside the S-23 behind the driver, at his place on the bench.
+    L.control('wire.line4', p, (-0.1, -0.072), 'toggle', {'kind': 'latch', 'size_m': 0.02, 'color': 'chrome'})
     p = L.panel('skc_panel', "ŠČK commander's panel", 'battery_commander', 'skc', (0.24, 0.18),
                 notes='The commander\'s panel (ЩК; csla_pu12_manual item 36). What its switches do is not published; '
                       'SAM3D gives it the lamps of the commander\'s nets.')
@@ -863,6 +875,10 @@ def rk1u(L):
     # The radar's cable (flak11 PU12-0's figure: the radar 300 m off by cable): its latch stands for laying it outside.
     # Where the cable comes in is not shown in the plan; SAM3D puts the latch beside the RK-1U's toggle.
     L.control('cable.radar', p, (0.035, -0.005), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
+    # Line 3's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:3). Where the reels ride is not published;
+    # SAM3D puts each man's beside the radar cable's latch.
+    L.control('wire.line3', p, (0.04, 0.025), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
 
 
 def rtk1(L):

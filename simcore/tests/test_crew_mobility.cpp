@@ -515,3 +515,101 @@ SC_TEST("crew mobility (G2.4): a long walk across the map goes by the foot way's
     SC_EXPECT(beside.GoTo(MoveGoal::OnGround(Vec3{8.0, 20.0, 110.0}), &l.console, pose, &why));
     SC_EXPECT(asked == 1);
 }
+
+SC_TEST("crew mobility: in the PU-12M's deployment with wire, four men each pay a P-274M out to a line's far end; a line works only once laid (8.14)") {
+    auto r = RunnerFor("pu12m_deploy_wire.json");
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    const RadioDataDef& rd = r->Def().radio_data;
+    const VehicleWire& wire = r->Vehicle()->wire;
+    SC_EXPECT(wire.present && std::fabs(wire.lay_mps - 1.2) < 1e-9);
+    // At the start no line of the crew's is laid and each can be; the regiment's is laid from the regiment.
+    for (int n = 1; n <= 4; ++n) SC_EXPECT(rd.Line(n) != nullptr && !r->LineLaid(*rd.Line(n)) && r->LineCantBeLaid(n).empty());
+    SC_EXPECT(rd.Line(5) != nullptr && r->LineLaid(*rd.Line(5)) && !r->LineCantBeLaid(5).empty());
+    SC_EXPECT(r->CheckOrder("order_lay_lines").can);
+    const char* layer[5] = {"", "driver", "squad_leader", "radio_operator", "operator"};
+    double out_s[5] = {-1, -1, -1, -1, -1}, laid_s[5] = {-1, -1, -1, -1, -1}, back_s[5] = {-1, -1, -1, -1, -1};
+    double fastest[5] = {0, 0, 0, 0, 0};
+    double deployed_s = -1.0;
+    Vec3 was[5];
+    const CrewTask* ready = r->Def().crew_data.FindTask("ready_halted");
+    SC_EXPECT(ready != nullptr);
+    while (!r->Finished() && r->Time() < 1800.0) {
+        r->Step(0.1);
+        if (deployed_s < 0.0 && ready != nullptr && r->Console().equipment.AllHold(ready->conditions, r->Console().panel)) deployed_s = r->Time();
+        for (int n = 1; n <= 4; ++n) {
+            const CrewMover* m = r->Mover(layer[n]);
+            const MoverView v = m->View(r->Pose());
+            // Out on the ground towards the far end he goes no faster than the cable is paid out.
+            if (m->At() == "line:" + std::to_string(n) && v.place == BodyPlace::Ground && m->Moving() && laid_s[n] < 0.0 && was[n].x != 0.0) {
+                fastest[n] = std::max(fastest[n], std::hypot(v.feet_enu.x - was[n].x, v.feet_enu.y - was[n].y) / 0.1);
+            }
+            was[n] = v.place == BodyPlace::Ground ? v.feet_enu : Vec3();
+            if (deployed_s > 0.0 && out_s[n] < 0.0 && r->Outside(layer[n])) out_s[n] = r->Time();
+            if (laid_s[n] < 0.0 && r->LineLaid(*rd.Line(n))) {
+                laid_s[n] = r->Time();
+                Vec3 end_at;
+                SC_EXPECT(r->LineFarEnd(n, end_at));
+                SC_EXPECT(std::hypot(v.feet_enu.x - end_at.x, v.feet_enu.y - end_at.y) < 3.0);  // he connected it at the far end
+            }
+            if (laid_s[n] > 0.0 && back_s[n] < 0.0 && m->Place() == BodyPlace::Seated) back_s[n] = r->Time();
+        }
+    }
+    std::printf("    deployed %.0f s\n", deployed_s);
+    SC_EXPECT(deployed_s > 0.0);
+    for (int n = 1; n <= 4; ++n) {
+        Vec3 end_at;
+        SC_EXPECT(r->LineFarEnd(n, end_at));
+        const Vec3 post = r->Pose().origin;
+        const double dist = std::hypot(end_at.x - post.x, end_at.y - post.y);
+        const auto w = r->Wires().find(n);
+        SC_EXPECT(w != r->Wires().end() && w->second.reached && w->second.station == layer[n]);
+        const double cable = w != r->Wires().end() ? w->second.length_m : 0.0;
+        std::printf("    line %d (%s, %.0f m off): out %.0f s, laid %.0f s, back in his seat %.0f s; %.0f m of cable, %zu points, at most %.2f m/s\n", n,
+                    layer[n], dist, out_s[n], laid_s[n], back_s[n], cable, w != r->Wires().end() ? w->second.points.size() : std::size_t(0), fastest[n]);
+        // Laid after the post was deployed, by its man, out at the laying pace: the cable about the way he walked.
+        SC_EXPECT(out_s[n] >= deployed_s && laid_s[n] > out_s[n] && back_s[n] > laid_s[n]);
+        SC_EXPECT(laid_s[n] - out_s[n] >= (dist - 10.0) / wire.lay_mps);
+        SC_EXPECT(cable > dist - 10.0 && cable < 1.1 * dist && cable <= wire.cable_m);
+        SC_EXPECT(fastest[n] <= wire.lay_mps + 0.01 && fastest[n] > 0.5 * wire.lay_mps);
+        // He rang the post on it, and the post answered.
+        bool rang = false;
+        for (const ScenarioRunner::RadioMessage& msg : r->RadioLog()) {
+            rang = rang || (msg.net == "line " + std::to_string(n) && msg.text.find("Проверка связи") != std::string::npos);
+        }
+        SC_EXPECT(rang);
+        // ru_pu12_text: deployed with four lines laid to 500 m within 25 min by day.
+        SC_EXPECT(laid_s[n] <= 1500.0);
+    }
+    SC_EXPECT(!r->CheckOrder("order_lay_lines").can);  // nothing left to lay
+    for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
+}
+
+SC_TEST("crew mobility: a line's far end beside a launcher, short of it on the post's side; one beyond the cable can't be laid") {
+    std::string t;
+    SC_EXPECT(detail::ReadTextFile(kData + "/scenarios/school_pu12m_battery_commander.json", t));
+    const std::string from = "\"line\": 1, \"to\": \"21\",";
+    const std::size_t at = t.find(from);
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    t.replace(at, from.size(), from + " \"laid\": false,");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.Step(0.1);
+    Vec3 end_at;
+    SC_EXPECT(r.LineFarEnd(1, end_at));
+    const Vec3 post = r.Pose().origin;
+    const Vec3 launcher{-2500.0, 1500.0, 0.0};
+    SC_EXPECT(std::fabs(std::hypot(end_at.x - launcher.x, end_at.y - launcher.y) - r.Vehicle()->wire.far_set_m) < 0.01);
+    SC_EXPECT(std::hypot(end_at.x - post.x, end_at.y - post.y) < std::hypot(launcher.x - post.x, launcher.y - post.y));
+    // 3.5 km off: no line of 500 m reaches it, and a line laid in the scenario stays laid.
+    SC_EXPECT(r.LineCantBeLaid(1) == "its far end is beyond the cable");
+    SC_EXPECT(!r.LineLaid(*r.Def().radio_data.Line(1)));
+    SC_EXPECT(r.LineLaid(*r.Def().radio_data.Line(2)) && r.LineCantBeLaid(2) == "laid");
+    SC_EXPECT(r.LaidLineTo("21") == nullptr && r.LaidLineTo("22") != nullptr);
+    SC_EXPECT(!r.CheckOrder("order_lay_lines").can);
+}

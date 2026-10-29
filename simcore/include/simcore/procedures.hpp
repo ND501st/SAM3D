@@ -331,7 +331,10 @@ public:
         time_s_ += dt;
         tracker_.Update(dt);
         if (!has_order_) {
-            want_ = stay_;
+            // A job's work still under way holds him at its place though his drill is over (the far set being
+            // connected), unless he has been told to be elsewhere (К машинам).
+            const bool held = stay_.empty() && !hold_at_.empty() && at_ == hold_at_ && !moving_ && WorkUnderWay(equipment);
+            want_ = held ? hold_at_ : stay_;
             idle_s_ += dt;
             if (standing_ && idle_s_ > 1.0) {  // nothing more to do up there: back to his seat
                 standing_ = false;
@@ -389,8 +392,11 @@ public:
         const std::string control_id = step->control_id;
         const StepResult r = tracker_.Attempt(panel, control_id, step->value, equipment);
         hold_.clear();  // a job's work holds him at its place until it is done
+        hold_at_.clear();
         for (const OutsideJob& j : jobs_) {
-            if (j.control == control_id) hold_ = j.stay_until;
+            if (j.control != control_id) continue;
+            hold_ = j.stay_until;
+            hold_at_ = j.place;
         }
         last_control_ = control_id;
         last_time_s_ = time_s_;
@@ -540,6 +546,15 @@ private:
     std::vector<std::string> stand_for_;
     std::vector<OutsideJob> jobs_;
     std::vector<Condition> hold_;
+    std::string hold_at_;  // the job's place hold_ keeps him at
+    // A subsystem the job waits for is coming up (not off: a job packed up waits for nothing).
+    bool WorkUnderWay(const Equipment* equipment) const {
+        if (equipment == nullptr) return false;
+        for (const Condition& c : hold_) {
+            if (c.kind == Condition::Kind::SubsystemIs && c.state == SubsystemState::Ready && equipment->State(c.id) == SubsystemState::Starting) return true;
+        }
+        return false;
+    }
     std::string at_;
     bool moving_ = false;
     std::string stay_;

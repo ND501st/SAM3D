@@ -149,6 +149,7 @@ public:
         if (!console_.post_radar_here.empty()) console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         for (const auto& c : def_.initial_controls) console_.panel.Set(c.first, c.second);
+        StartLines();
         if (console_.has_launcher) {
             launcher_ = std::make_unique<Launcher>(console_.launcher);
             for (const std::string& c : def_.empty_containers) launcher_->Unload(c);
@@ -796,6 +797,104 @@ public:
     const std::map<std::string, bool>& Hatches() const { return hatches_; }
     // The place a control is worked at ("" inside, at its seat).
     std::string JobPlace(const std::string& control) const { return def_.has_vehicle ? def_.vehicle.JobPlace(control) : std::string(); }
+    // The way to a place for a body: a place round the vehicle, "lineup", a line's far end ("line:<n>", at the pace of
+    // the cable paid out), "" his seat. What the engine asks for to walk the player out to a job.
+    MoveGoal PlaceGoal(const std::string& place) const {
+        if (place.empty()) return MoveGoal::Seat();
+        if (place == "lineup") return MoveGoal::InLineup();
+        if (const int n = LinePlace(place)) {
+            Vec3 end_at;
+            if (def_.has_vehicle && LineFarEnd(n, end_at)) return MoveGoal::OnGroundAt(end_at, place, def_.vehicle.wire.lay_mps);
+        }
+        return MoveGoal::AtPlace(place);
+    }
+
+    // ---- wire (docs/crew/13_OUT_OF_THE_VEHICLE.md §4): the RTK-1's lines laid by the crew. A line the console has
+    // ("wire.line<n>" worked at its far end, "line<n>_run", "line<n>_laid") is laid while line<n>_laid is ready; the
+    // scenario's laid lines start so. One not laid: «Линии проложить!», and its man pays the P-274M out from the vehicle
+    // to the far end at the laying pace (the cable's length the way he walked), connects the far set there and rings the
+    // post on it.
+    struct WireRun {
+        std::string station;       // who paid it out
+        std::vector<Vec3> points;  // the cable on the ground, from the vehicle's side towards the far set (ENU)
+        double length_m = 0.0;     // paid out so far
+        bool reached = false;      // run out to the far end
+    };
+    const std::map<int, WireRun>& Wires() const { return wires_; }
+    // Whether a line is laid now: by its subsystem where the crew lays it, else as the scenario says.
+    bool LineLaid(const LineDef& l) const {
+        const std::string n = std::to_string(l.line);
+        if (console_.panel.Find("wire.line" + n) != nullptr && console_.equipment.Def("line" + n + "_laid") != nullptr) {
+            return console_.equipment.IsReady("line" + n + "_laid");
+        }
+        return l.laid;
+    }
+    const LineDef* LaidLineTo(const std::string& to) const {
+        for (const LineDef& l : def_.radio_data.lines) {
+            if (l.to == to && LineLaid(l)) return &l;
+        }
+        return nullptr;
+    }
+    // Where line n's far set stands (ENU): the scenario's far_end; else beside the battery's vehicle of that call sign
+    // or the cabled radar, the wire's far_set_m short of it on the post's side. False: no far end the crew can walk to
+    // (the regiment's line is laid from the regiment).
+    bool LineFarEnd(int line, Vec3& out) const {
+        const LineDef* l = def_.radio_data.Line(line);
+        if (l == nullptr) return false;
+        if (l->has_far_end) {
+            out = l->far_end;
+            return true;
+        }
+        Vec3 at;
+        bool found = false;
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                if (!v.def.own && (v.def.id == l->to || v.def.callsign == l->to)) {
+                    at = v.position;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found && l->to == "radar" && def_.has_post_radar) {
+            at = def_.post_radar.position;
+            found = true;
+        }
+        if (!found) return false;
+        const Vec3 post = Pose().origin;
+        const Vec3 d{post.x - at.x, post.y - at.y, 0.0};
+        const double len = d.Length();
+        const double short_m = def_.has_vehicle ? def_.vehicle.wire.far_set_m : 0.0;
+        out = len > short_m ? at + d * (short_m / len) : at;
+        out.z = world_.GetTerrain().HeightAt(out.x, out.y);
+        return true;
+    }
+    // Why the crew can't lay line n now ("" : it can): a line of the scenario's on the console, not laid nor being laid,
+    // its far end ours to reach and within the cable (the run along the ground a tenth over the straight line).
+    std::string LineCantBeLaid(int line) const {
+        const LineDef* l = def_.radio_data.Line(line);
+        const std::string n = std::to_string(line);
+        if (l == nullptr) return "no line " + n;
+        if (!def_.has_vehicle || !def_.vehicle.wire.present || console_.panel.Find("wire.line" + n) == nullptr) return "not the crew's to lay";
+        if (LineLaid(*l)) return "laid";
+        if (console_.panel.Get("wire.line" + n) == 1) return "being laid";
+        Vec3 end_at;
+        if (!LineFarEnd(line, end_at)) return "its far end is not ours to reach";
+        const Vec3 post = Pose().origin;
+        if (1.1 * std::hypot(end_at.x - post.x, end_at.y - post.y) > def_.vehicle.wire.cable_m) return "its far end is beyond the cable";
+        return std::string();
+    }
+    bool AnyLineToLay() const {
+        for (const LineDef& l : def_.radio_data.lines) {
+            if (LineCantBeLaid(l.line).empty()) return true;
+        }
+        return false;
+    }
+    // A drill an order would start that has nothing to do here: laying a line that is laid, or that the crew can't lay.
+    bool ProcedureWanted(const std::string& procedure) const {
+        if (procedure.rfind("lay_line", 0) == 0) return LineCantBeLaid(std::atoi(procedure.c_str() + 8)).empty();
+        return true;
+    }
 
     // The player's body (the engine): he walks himself and reports where he is (SetPlayerBody), or asks to be walked
     // along the vehicle's ways to a goal (PlayerGoTo: out through his hatch, down, to a place; or back to his seat). Once
@@ -825,6 +924,12 @@ public:
             if (d <= best) {
                 best = d;
                 at = p.id;
+            }
+        }
+        for (const auto& w : wires_) {  // at the far end of a line he has run out (not one he walked to without the cable)
+            Vec3 end_at;
+            if (w.second.reached && w.second.station == station && LineFarEnd(w.first, end_at) && std::hypot(end_at.x - enu.x, end_at.y - enu.y) <= 3.0) {
+                at = "line:" + std::to_string(w.first);
             }
         }
         it->second.Hold(BodyPlace::Ground, enu, pose.ToMapHeading(facing_rad), at);
@@ -865,10 +970,7 @@ public:
         if (m == nullptr) return std::string();
         const std::string place = def_.vehicle.JobPlace(control);
         if (!place.empty()) {
-            if (m->Moving() || m->At() != place || m->Place() != BodyPlace::Ground) {
-                const VehiclePlace* p = def_.vehicle.Place(place);
-                return "That is done outside: " + (p != nullptr ? p->label : place);
-            }
+            if (m->Moving() || m->At() != place || m->Place() != BodyPlace::Ground) return "That is done outside: " + PlaceLabel(place);
             return std::string();
         }
         if (!m->Inside()) return "You are outside the vehicle";
@@ -1002,6 +1104,7 @@ public:
         if (order_id == "order_drop_target") drop_at_s_ = time_ + SpeakDelayS("operator") + 1.5;  // the wheels off the target
         quiet_orders_ = true;  // the order's own words were spoken: its drills don't each speak an order
         for (const OrderStart& s : o->procedures) {
+            if (!ProcedureWanted(s.procedure)) continue;
             CrewMember* m = MemberAt(s.station);
             const Procedure* p = console_.FindProcedure(s.procedure);
             if (routine_order_) routine_drills_.insert(s.station + "|" + s.procedure);
@@ -1040,6 +1143,7 @@ public:
         };
         const OrderDef* o = def_.has_crew_data ? def_.crew_data.FindOrder(order_id) : nullptr;
         if (o == nullptr) return refuse("нет такого приказа", "no such order");
+        if (order_id == "order_lay_lines" && !AnyLineToLay()) return refuse("линий для прокладки нет", "no line to lay");
         // The orders on the nets: whoever must talk on the net can (his box on its set, the set transmitting).
         const auto net_of = [&]() -> std::string {
             if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
@@ -1117,7 +1221,7 @@ public:
         }
         for (const OrderStart& s : o->procedures) {
             const Procedure* p = console_.FindProcedure(s.procedure);
-            if (p == nullptr || p->steps.empty()) continue;
+            if (p == nullptr || p->steps.empty() || !ProcedureWanted(s.procedure)) continue;
             bool someone = !SeatHolder(s.station).empty();
             for (const CrewMember& m : crew_) someone = someone || m.Role() == s.station;
             if (!someone) return refuse("нет номера расчёта", "nobody at the " + s.station + "'s seat");
@@ -3073,8 +3177,10 @@ private:
         double ring_from_s = 0.0;
         std::string text;                            // what the far end will say once answered
         std::vector<std::string> queued;             // the far end's calls waiting for the line (the radar crew's)
+        bool checked = false;                        // the man who laid it has rung the post on it
     };
     std::map<int, LineState> lines_;
+    std::map<int, WireRun> wires_;                   // the cables paid out by the crew, by line
     std::map<std::string, double> box_call_until_;   // an input -> lit until
     bool battery_duty_ = false;                      // the launchers on duty reception (the commander's order)
     double launchers_tx_from_s_ = 0.0;               // when their sets can transmit again (3 min after Д. ПРИЁМ)
@@ -3625,11 +3731,56 @@ private:
     bool LaunchersCanTransmit() const { return !battery_duty_ && time_ >= launchers_tx_from_s_; }
 
     // ---- lines (the RTK-1's five) and the boxes' calls
+    void StartLines() {
+        for (const LineDef& l : def_.radio_data.lines) {
+            const std::string n = std::to_string(l.line);
+            if (!l.laid || console_.panel.Find("wire.line" + n) == nullptr || console_.equipment.Def("line" + n + "_laid") == nullptr) continue;
+            console_.panel.Set("wire.line" + n, 1);
+            console_.equipment.SetInput("line" + n + "_run", true);
+            console_.equipment.Update(0.0, console_.panel);
+            console_.equipment.Warm("line" + n + "_laid", console_.panel);
+        }
+    }
+    // The cable paid out behind a man on his way to a line's far end: a point every 5 m, its length as he walks it.
+    // There, the run is out (line<n>_run): he connects the far set, his job's control.
+    void PayOut(const std::string& station, const CrewMover& m, const VehiclePose& pose) {
+        const int n = LinePlace(m.At());
+        if (n == 0) return;
+        const MoverView v = m.View(pose);
+        if (v.place != BodyPlace::Ground) return;
+        WireRun& w = wires_[n];
+        if (w.reached) return;
+        const Vec3 at{v.feet_enu.x, v.feet_enu.y, v.feet_enu.z};
+        if (w.station != station || w.points.empty()) {
+            w = WireRun();
+            w.station = station;
+            w.points.push_back(at);
+            wire_last_[n] = at;
+        }
+        const Vec3 last = wire_last_[n];
+        w.length_m += std::hypot(at.x - last.x, at.y - last.y);
+        wire_last_[n] = at;
+        const Vec3& p = w.points.back();
+        if (std::hypot(at.x - p.x, at.y - p.y) >= 5.0) w.points.push_back(at);
+        Vec3 end_at;
+        if (m.Moving() || !LineFarEnd(n, end_at) || std::hypot(end_at.x - at.x, end_at.y - at.y) > 3.0) return;
+        if (std::hypot(at.x - w.points.back().x, at.y - w.points.back().y) > 0.01) w.points.push_back(at);
+        w.reached = true;
+        console_.equipment.SetInput("line" + std::to_string(n) + "_run", true);
+        const LineDef* l = def_.radio_data.Line(n);
+        Event("line " + std::to_string(n), station + " ran the P-274M out to " + (l != nullptr ? l->to_name : std::string("its far end")) + ": " +
+                                              std::to_string(static_cast<int>(std::lround(w.length_m))) + " m");
+    }
     void UpdateLines() {
         for (const LineDef& l : def_.radio_data.lines) {
-            if (!l.laid) continue;
+            if (!LineLaid(l)) continue;
             LineState& st = lines_[l.line];
             const std::string lamp = "line" + std::to_string(l.line) + "_call";
+            const auto run = wires_.find(l.line);
+            if (run != wires_.end() && run->second.reached && !st.checked) {  // the man who laid it rings the post on it
+                st.checked = true;
+                st.queued.push_back("Линия проложена. Проверка связи.");
+            }
             if (!st.ringing && st.next_call < l.calls.size() && l.calls[st.next_call].at_s <= time_ + 1e-9) {
                 st.ringing = true;
                 st.ring_from_s = time_;
@@ -3665,7 +3816,7 @@ private:
         }
     }
     // A line laid to a launcher (for a designation without emission, past any jamming).
-    const LineDef* LineToLauncher(const std::string& callsign) const { return def_.radio_data.LineTo(callsign); }
+    const LineDef* LineToLauncher(const std::string& callsign) const { return LaidLineTo(callsign); }
     void UpdateBoxCalls() {
         if (!voice_) return;
         struct Call {
@@ -4441,12 +4592,12 @@ public:
     // The far end has something to say on a laid line: it rings once the line is free.
     void QueueLineCall(int line, const std::string& text) {
         const LineDef* l = def_.radio_data.Line(line);
-        if (l == nullptr || !l->laid) return;
+        if (l == nullptr || !LineLaid(*l)) return;
         lines_[line].queued.push_back(text);
     }
     bool RingLine(int line) {
         const LineDef* l = def_.radio_data.Line(line);
-        if (l == nullptr || !l->laid) return false;
+        if (l == nullptr || !LineLaid(*l)) return false;
         LineState& st = lines_[line];
         st.ringing = true;
         st.ring_from_s = time_;
@@ -4868,8 +5019,8 @@ private:
             if (off && time_ + 1e-9 >= o.from_s && time_ < o.to_s) reason = o.reason;
         }
         Event("cabled radar", off ? "off the air" + (reason.empty() ? std::string() : ": " + reason) : std::string("on the air again"));
-        const LineDef* l = def_.radio_data.LineTo("radar");
-        if (l != nullptr && l->laid) QueueLineCall(l->line, off ? "Станция выключена. Работу прекратил." : "Станция включена, работаю.");
+        const LineDef* l = LaidLineTo("radar");
+        if (l != nullptr) QueueLineCall(l->line, off ? "Станция выключена. Работу прекратил." : "Станция включена, работаю.");
     }
     // A new echo on the tube while fewer than 12 are held: a player at the tube owes it with the DT-2 (the marker on the
     // nearest one, then СЪЁМ). An NPC takes it off himself (CommandPost, take_off_new).
@@ -5578,6 +5729,7 @@ private:
     std::map<std::string, CrewMover> movers_;
     std::map<std::string, bool> hatches_;           // exit id -> standing open
     mutable std::map<std::string, double> way_s_;    // the drill master's ways: "station|from|to" -> seconds
+    std::map<int, Vec3> wire_last_;                  // where each line's layer was last step
     std::set<std::string> tracked_;                 // seats whose body the engine reports (the players')
     std::map<std::string, double> move_refused_s_;  // a seat's last refused way (tried again every 2 s)
 
@@ -5619,7 +5771,8 @@ private:
             [this](const std::string& station) -> std::pair<std::string, double> {
                 const auto it = movers_.find(station);
                 if (it == movers_.end() || (it->second.Inside() && it->second.Arrived())) return {std::string(), 0.0};
-                const std::string at = it->second.At() == "lineup" || def_.vehicle.Place(it->second.At()) != nullptr ? it->second.At() : std::string();
+                const std::string& a = it->second.At();
+                const std::string at = a == "lineup" || def_.vehicle.Place(a) != nullptr || LinePlace(a) != 0 ? a : std::string();
                 return {at, it->second.Arrived() ? 0.0 : std::max(0.1, WaySeconds(station, std::string(), at) * 0.5)};
             });
     }
@@ -5630,9 +5783,7 @@ private:
         const std::string key = station + "|" + from + "|" + to;
         const auto hit = way_s_.find(key);
         if (hit != way_s_.end()) return hit->second;
-        const auto goal = [](const std::string& place) {
-            return place.empty() ? MoveGoal::Seat() : place == "lineup" ? MoveGoal::InLineup() : MoveGoal::AtPlace(place);
-        };
+        const auto goal = [this](const std::string& place) { return PlaceGoal(place); };
         CrewMover m(&def_.vehicle, station);
         m.SetSeatTimes(def_.has_crew_data ? def_.crew_data.stand_s : def_.walking.gait.stand_up_s,
                        def_.has_crew_data ? def_.crew_data.sit_s : def_.walking.gait.sit_down_s);
@@ -5685,13 +5836,12 @@ private:
         }
         return n;
     }
-    static MoveGoal GoalFor(const std::string& want) {
-        if (want.empty()) return MoveGoal::Seat();
-        if (want == "lineup") return MoveGoal::InLineup();
-        return MoveGoal::AtPlace(want);
-    }
     std::string PlaceLabel(const std::string& id) const {
         if (id == "lineup") return "the line-up";
+        if (const int n = LinePlace(id)) {
+            const LineDef* l = def_.radio_data.Line(n);
+            return "the far end of line " + std::to_string(n) + (l != nullptr ? " (" + l->to_name + ")" : std::string());
+        }
         const VehiclePlace* p = def_.vehicle.Place(id);
         return p != nullptr ? p->label : id;
     }
@@ -5712,7 +5862,7 @@ private:
                 const auto refused = move_refused_s_.find(c.Role());
                 const bool retry = refused == move_refused_s_.end() || time_ - refused->second >= 2.0;
                 if (!there && retry) {
-                    MoveGoal g = GoalFor(want);
+                    MoveGoal g = PlaceGoal(want);
                     g.shut_after = want.empty();  // the last man in by a hatch shuts it
                     std::string why;
                     if (m.GoTo(g, &console_, pose, &why)) {
@@ -5726,6 +5876,7 @@ private:
             }
             const std::map<std::string, int> still_out = StillOut();
             m.Update(dt, pose, &world_.GetTerrain(), map, def_.walking.gait, hatches_, &still_out);
+            PayOut(c.Role(), m, pose);
             c.SetWhere(m.Moving() ? std::string("moving") : m.At(), m.Moving());
         }
     }
@@ -6614,6 +6765,12 @@ private:
         if (halted && !console_.post_radar_here.empty() && console_.equipment.GetInput(console_.post_radar_here)) {
             const CrewTask* cabled = def_.crew_data.FindTask("radar_cabled");
             if (cabled != nullptr && !console_.equipment.AllHold(cabled->conditions, console_.panel)) NpcGive("order_radar_cable", 120.0);
+        }
+        // Lines to lay at this position, once the post is deployed (ru_pu12_text: deployed in 18 min, in 25 with four
+        // lines laid to 500 m): «Линии проложить!», each line's man paying its cable out to the far end.
+        if (halted && AnyLineToLay()) {
+            const CrewTask* deployed = def_.crew_data.FindTask("ready_halted");
+            if (deployed == nullptr || console_.equipment.AllHold(deployed->conditions, console_.panel)) NpcGive("order_lay_lines", 120.0);
         }
         if (!engagement_on_) return;
         if (!halted) {  // on the march: a hostile he knows of inside 20 km stops the vehicle at once, in the column
@@ -7934,7 +8091,7 @@ private:
         }
         if (NpcOrdered("order", order_id, again_s)) return false;
         for (const OrderStart& st : o->procedures) {
-            if (!SeatFree(st.station)) return false;
+            if (ProcedureWanted(st.procedure) && !SeatFree(st.station)) return false;
         }
         const bool given = GiveCrewOrder(order_id);
         if (shadow_ && !given) return false;  // the shadow commander: the player hasn't given it yet
@@ -10002,7 +10159,7 @@ public:
         }
         std::string lines;
         for (const LineDef& l : def_.radio_data.lines) {
-            if (!l.laid) continue;
+            if (!LineLaid(l)) continue;
             const std::string to = l.to == "regiment" ? std::string("КП полка") : l.to == "radar" ? std::string("РЛР") : l.to;
             lines += (lines.empty() ? "" : "; ") + std::to_string(l.line) + " — " + to;
         }

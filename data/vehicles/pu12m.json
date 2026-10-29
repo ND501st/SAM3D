@@ -76,8 +76,20 @@
       "notes": "Setting it out and taking it back in are done at the set; he stays while it is lifted down, earthed and cabled (ab1_placed)." },
     { "control": "pwr.ab1_start", "place": "ab1", "source": "sam3d (the set is started at the set)", "confidence": "estimate" },
     { "control": "nav.pab2", "place": "pab2", "stay_until": [ { "subsystem": "pab2_measured", "is": "ready" } ], "source": "voenizdat_osa_1991 p249; flak11 (PU12-0)", "confidence": "high",
-      "notes": "He stays at the aiming circle while he measures (pab2_measured)." }
+      "notes": "He stays at the aiming circle while he measures (pab2_measured)." },
+    { "control": "wire.line1", "place": "line:1", "stay_until": [ { "subsystem": "line1_laid", "is": "ready" } ], "source": "ru_pu12_text (wire lines laid to 500 m from the post)", "confidence": "medium",
+      "notes": "He pays the cable out on his way to the line's far end (wire), connects the far set there and stays until it is connected (line1_laid); then he rings the post on it and walks back." },
+    { "control": "wire.line2", "place": "line:2", "stay_until": [ { "subsystem": "line2_laid", "is": "ready" } ], "source": "ru_pu12_text (wire lines laid to 500 m from the post)", "confidence": "medium",
+      "notes": "He pays the cable out on his way to the line's far end (wire), connects the far set there and stays until it is connected (line2_laid); then he rings the post on it and walks back." },
+    { "control": "wire.line3", "place": "line:3", "stay_until": [ { "subsystem": "line3_laid", "is": "ready" } ], "source": "ru_pu12_text (wire lines laid to 500 m from the post)", "confidence": "medium",
+      "notes": "He pays the cable out on his way to the line's far end (wire), connects the far set there and stays until it is connected (line3_laid); then he rings the post on it and walks back." },
+    { "control": "wire.line4", "place": "line:4", "stay_until": [ { "subsystem": "line4_laid", "is": "ready" } ], "source": "ru_pu12_text (wire lines laid to 500 m from the post)", "confidence": "medium",
+      "notes": "He pays the cable out on his way to the line's far end (wire), connects the far set there and stays until it is connected (line4_laid); then he rings the post on it and walks back." }
   ],
+  "wire": { "lay_mps": 1.2, "cable_m": 500, "far_set_m": 8,
+    "source": "ru_pu12_text (deployment 18 min, 25 with four wire lines laid to 500 m: a line of 500 m in the seven minutes, 1.2 m/s a man paying it out; the cable a line has, 500 m); far_set_m: sam3d estimate (the far set beside the vehicle at the far end, on the post's side)",
+    "confidence": "medium",
+    "notes": "The P-274M paid out by a man walking from the post to the line's far end (simcore/crew_mobility.hpp VehicleWire): the same pace as data/campaign/battery_area.json jobs.wire_lay_mps." },
   "noise": [
     { "subsystem": "ab1", "db_at_1m": 92.0, "at_m": [-1.0, -10.0, 0.5],
       "source": "sam3d estimate (a 1 kW petrol set)", "confidence": "estimate" },
