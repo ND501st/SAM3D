@@ -811,6 +811,9 @@ FSimTutorialStep USimWorldSubsystem::GetTutorialStep() const
 	Out.Control = ToF(St.control);
 	Out.ControlLabel = ToF(St.control_label);
 	Out.Station = ToF(St.station);
+	Out.Place = ToF(St.place);
+	Out.PlaceLabel = ToF(St.place_label);
+	Out.Away = ToF(St.away);
 	Out.Position = St.position;
 	Out.PositionLabel = ToF(St.position_label);
 	Out.CurrentPosition = St.current_position;

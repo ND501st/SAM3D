@@ -26,6 +26,9 @@
 
 namespace
 {
+	std::string ToStdS(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
+	FString ToFS(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
+
 	// Engine cube is 100 cm on a side, centred on its origin.
 	UStaticMeshComponent* MakeBox(AActor* Owner, USceneComponent* Parent, const TCHAR* Name, UStaticMesh* Cube,
 		const FVector& SizeM, const FVector& OffsetM)
@@ -367,9 +370,25 @@ void ASimOsaVehicle::LookAtLessonTarget()
 		FeedbackSecondsLeft = 2.0f;
 		return;
 	}
-	// Out of the vehicle he walks back in himself first: nothing carries him to his seat.
+	// Out of the vehicle: a job's step leads him to its place over the ground, as its switch does from inside; for a
+	// control inside he walks back in himself first: nothing carries him to his seat.
 	if (IsOutside())
 	{
+		const simcore::ScenarioRunner* R = Sim->GetScenarioRunner();
+		if (!Step.Place.IsEmpty() && R != nullptr && !IsLed())
+		{
+			if (Step.Away.IsEmpty())
+			{
+				FeedbackText = TEXT("You are there: left click works it (the mouse wheel picks which of its jobs)");
+			}
+			else if (GoBody(Sim, R->PlaceGoal(ToStdS(Step.Place))))
+			{
+				FeedbackText = FString::Printf(TEXT("To %s"), *Step.PlaceLabel);
+			}
+			FeedbackSecondsLeft = 3.0f;
+			Sim->NoteTutorialEvent(TEXT("look"));
+			return;
+		}
 		FeedbackText = TEXT("You are outside: climb back in to your seat first (F at the hatch)");
 		FeedbackSecondsLeft = 3.0f;
 		return;
@@ -499,9 +518,25 @@ void ASimOsaVehicle::RunLessonAutoplay(USimWorldSubsystem* Sim, const FSimTutori
 	}
 	if (Step.Phase == ESimTutorialPhase::Act && (Step.bWheel || !Step.Control.IsEmpty() || !Step.Order.IsEmpty()))
 	{
+		// Not where the control is worked: out to a job's place over the ground (from inside, the click below takes him),
+		// or back in to his seat for a control inside (led by the ways: the autoplay doesn't climb by the keys). Once
+		// there, the step is looked at and clicked afresh.
+		if (!Step.Away.IsEmpty() && (Step.Place.IsEmpty() || IsOutside()))
+		{
+			const simcore::ScenarioRunner* R = Sim->GetScenarioRunner();
+			if (!IsLed() && R != nullptr &&
+				GoBody(Sim, Step.Place.IsEmpty() ? simcore::MoveGoal::Seat() : R->PlaceGoal(ToStdS(Step.Place))))
+			{
+				UE_LOG(LogSAM3D, Log, TEXT("Lesson autoplay: step %d '%s': led %s"), Step.Number, *Step.Title, *Step.Away);
+			}
+			AutoClock = 1.0f;
+			AutoClicks = 0;
+			bAutoLooked = bAutoReachChecked = false;
+			return;
+		}
 		// As a person would: after L, the cross is on the step's control and in reach (the autoplay's own hand doesn't
-		// need it, so it says so here).
-		if (!bAutoReachChecked && !Step.Control.IsEmpty())
+		// need it, so it says so here). Outside, a job is worked at its place, not under the cross.
+		if (!bAutoReachChecked && !Step.Control.IsEmpty() && !IsOutside())
 		{
 			bAutoReachChecked = true;
 			const int32 Want = Cabin->FindItem(Step.Control);
@@ -2311,9 +2346,6 @@ void ASimOsaVehicle::ShowTourView()
 
 namespace
 {
-	std::string ToStdS(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
-	FString ToFS(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
-
 	// The eye above the feet standing upright (data/crew/body.json), and stooping in a compartment.
 	double StandingEyeCm(const USimWorldSubsystem* Sim)
 	{

@@ -665,9 +665,11 @@ void ASimCabinHUD::DrawGuide(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehi
 	// The status line: what happens next, always.
 	FString Status;
 	FLinearColor StatusColor = Amber;
-	// A control or the crew menu needs the lesson's seat (driving or a view doesn't).
-	const bool bAwayFromSeat = bAction && !Step.Seat.IsEmpty() && (!Step.Control.IsEmpty() || !Step.Order.IsEmpty()) &&
-		(!Vehicle->IsInCabin() || Vehicle->GetStationId() != Step.Seat);
+	// A control or the crew menu needs the lesson's seat (driving or a view doesn't); a job done outside is worked at its
+	// place instead, and simcore says where his body must go first (Away: out to it, or back in for a control inside).
+	const bool bOutsideJob = !Step.Place.IsEmpty();
+	const bool bAwayFromSeat = bAction && !bOutsideJob && Step.Away.IsEmpty() && !Step.Seat.IsEmpty() &&
+		(!Step.Control.IsEmpty() || !Step.Order.IsEmpty()) && (!Vehicle->IsInCabin() || Vehicle->GetStationId() != Step.Seat);
 	switch (Step.Phase)
 	{
 	case ESimTutorialPhase::Read:
@@ -695,6 +697,27 @@ void ASimCabinHUD::DrawGuide(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehi
 	{
 		Status = TEXT("Back to your seat first: L takes you there and looks at it (or F1 / Tab)");
 		StatusColor = Red;
+	}
+	if (bAction && !Step.Away.IsEmpty())
+	{
+		if (Vehicle->IsLed())
+		{
+			Status = bOutsideJob ? FString::Printf(TEXT("On your way out to %s"), *Step.PlaceLabel) : FString(TEXT("On your way back in"));
+		}
+		else if (!bOutsideJob)
+		{
+			Status = TEXT("Back in first: F by a wheel climbs up, F at your hatch climbs in, X sits you down");
+			StatusColor = Red;
+		}
+		else if (Vehicle->IsOutside())
+		{
+			Status = FString::Printf(TEXT("To %s: W A S D, or L leads you there"), *Step.PlaceLabel);
+		}
+		else
+		{
+			Status = FString::Printf(TEXT("Your move: the click takes you out to %s"), *Step.PlaceLabel);
+			StatusColor = Green;
+		}
 	}
 	if (Step.bInstructor && !Step.bReview)
 	{

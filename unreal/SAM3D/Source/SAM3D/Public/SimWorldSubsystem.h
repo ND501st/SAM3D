@@ -808,6 +808,17 @@ struct SAM3D_API FSimTutorialStep
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	FString Station;
 
+	/** A job done outside: the place it is worked at and its label ("" a control inside). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Place;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString PlaceLabel;
+
+	/** Where the learner's body must go before he can work it, in words ("" he is there): out to the place, or back in. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
+	FString Away;
+
 	/** The position to set and its label; the position now. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Tutorial")
 	int32 Position = -1;

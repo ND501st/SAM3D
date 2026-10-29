@@ -205,7 +205,8 @@ inside, in a hatch, on the hull, on the ground) and moves only by the vehicle's 
 at a place; the man goes there to work it. Out of the vehicle he is off the intercom and heard only in earshot. The
 drill master walks him out to a job and back in its ideal run (`DrillMaster::SetOutside`). The PU-12M's lines are laid
 by the crew: a man pays the P-274M out to the line's far end (the job's place `line:<n>`) and the line works only once
-laid (`ScenarioRunner::LineLaid`). Next: the lessons knowing the walk.
+laid (`ScenarioRunner::LineLaid`). The lessons know the walk: a step worked outside says where the learner must go,
+and the instructor leads him there (`TutorialStatus::away`). Next: the dismount on the safe side of a road.
 
 Voices (`docs/crew/12_COMMUNICATIONS.md`): inside a vehicle a seat hears the intercom, a radio or a telephone line only
 through its headset and its box's selector (`simcore/voice_comms.hpp`); a net only while its set is on, warm, on the net's

@@ -207,6 +207,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	bool IsOutside() const { return bInCabin && Body != EBodyMode::Seat && Body != EBodyMode::Cabin; }
 
+	/** Led along the vehicle's ways (to a job's place, or back to his seat): the mover walks him. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsLed() const { return bInCabin && Body == EBodyMode::Guided; }
+
 	/** Where the player's body is, for the HUD ("on the roof", "on the ground", "climbing out"...). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
 	FString GetBodyText() const;

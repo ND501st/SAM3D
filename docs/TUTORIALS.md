@@ -120,6 +120,12 @@ Top right (the left while the plotting board is up), `ASimCabinHUD::DrawGuide`:
   the tolerance as a green band, and which way to turn.
 - The lines, then "Why: ...", the hint, and a status line that always says what happens next: "Enter: continue",
   "Your move.", "Waiting for ...", "Watch: waiting for ...", or, away from the lesson's seat, "Back to your seat first".
+- **The walk** (`docs/crew/13_OUT_OF_THE_VEHICLE.md`): a step whose control is a job done outside (the AB-1 set, the
+  aiming circle, a line's far end) is worked at its place, and the card says where the learner's body must go first
+  (`TutorialStatus::away`, from where the engine reports his body): from his seat "the click takes you out to" the place
+  (its switch walks him out); outside, "To" the place (L leads him there over the ground); for a control inside while he
+  is out, "Back in first" (he climbs in himself). Skipped (N), the instructor leads him there along the vehicle's ways
+  and works it once he is there: nobody is carried.
 - The crew menu (Caps Lock, a ring of eight sectors: `docs/crew/15_TALK.md` §5) opens below the card; the sector
   with the step's line and the line itself are green, and 0 says it.
 - The card's sizes follow the window (laid out for 900 px high, up to twice that); UE5's small, medium and large

@@ -138,23 +138,23 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | - | 0 |
+| NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | - | 0 |
 | battery_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 51 | 0 | drill 12, duty 54 | 115 |
-| squad_leader | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 1 | 0 | drill 8, duty 2 | 0 |
-| operator | 900 time | - | - | - | 0 | 0 | 0 | 5 | 3 | 0 | 2 | 0 | drill 1, duty 8 | 10 |
-| radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | drill 7, duty 1 | 0 |
-| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | drill 3, duty 1 | 0 |
+| squad_leader | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | drill 8, duty 2 | 0 |
+| operator | 900 time | - | - | - | 0 | 0 | 0 | 5 | 3 | 0 | 1 | 0 | drill 1, duty 8 | 10 |
+| radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 0 | 1 | 0 | drill 13, duty 54 | 0 |
+| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 1 | 0 | drill 3, duty 1 | 0 |
 
 ## pu12m_deploy_wire: PU-12M: deploy the post and lay its lines
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | - | 0 |
+| NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | - | 0 |
 | battery_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 51 | 0 | drill 12, duty 54 | 115 |
-| squad_leader | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 1 | 0 | drill 8, duty 2 | 0 |
-| operator | 900 time | - | - | - | 0 | 0 | 0 | 5 | 3 | 0 | 2 | 0 | drill 1, duty 8 | 10 |
-| radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | drill 7, duty 1 | 0 |
-| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 2 | 0 | drill 3, duty 1 | 0 |
+| squad_leader | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | drill 8, duty 2 | 0 |
+| operator | 900 time | - | - | - | 0 | 0 | 0 | 5 | 3 | 0 | 1 | 0 | drill 1, duty 8 | 10 |
+| radio_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 0 | 1 | 0 | drill 13, duty 54 | 0 |
+| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 1 | 0 | drill 3, duty 1 | 0 |
 
 ## osa_battery_fight: Osa: the battery fight
 
@@ -646,8 +646,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 |---|---|
 | control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
 | control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 29 |
-| control (radio_operator): a message heard: write it in the journal | 5 |
-| control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 2 |
+| control (radio_operator): a message heard: write it in the journal | 7 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
 | drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 10 |
@@ -696,7 +695,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): a sign of the shot on his instrument: the target's mark gone | 13 |
 | report (operator): the track was lost | 22 |
 | report (operator): К бою: the intercom checked | 36 |
-| report (radio_operator): a report the crew makes when its lamp or input comes on | 19 |
+| report (radio_operator): a report the crew makes when its lamp or input comes on | 25 |
 | report (senior_operator): a new echo on his scope | 110 |
 | report (senior_operator): a report the crew makes when its lamp or input comes on | 52 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |

@@ -797,6 +797,16 @@ public:
     const std::map<std::string, bool>& Hatches() const { return hatches_; }
     // The place a control is worked at ("" inside, at its seat).
     std::string JobPlace(const std::string& control) const { return def_.has_vehicle ? def_.vehicle.JobPlace(control) : std::string(); }
+    // A place in words: "the line-up", a line's far end, a place round the vehicle by its label.
+    std::string PlaceLabel(const std::string& id) const {
+        if (id == "lineup") return "the line-up";
+        if (const int n = LinePlace(id)) {
+            const LineDef* l = def_.radio_data.Line(n);
+            return "the far end of line " + std::to_string(n) + (l != nullptr ? " (" + l->to_name + ")" : std::string());
+        }
+        const VehiclePlace* p = def_.vehicle.Place(id);
+        return p != nullptr ? p->label : id;
+    }
     // The way to a place for a body: a place round the vehicle, "lineup", a line's far end ("line:<n>", at the pace of
     // the cable paid out), "" his seat. What the engine asks for to walk the player out to a job.
     MoveGoal PlaceGoal(const std::string& place) const {
@@ -5836,15 +5846,6 @@ private:
         }
         return n;
     }
-    std::string PlaceLabel(const std::string& id) const {
-        if (id == "lineup") return "the line-up";
-        if (const int n = LinePlace(id)) {
-            const LineDef* l = def_.radio_data.Line(n);
-            return "the far end of line " + std::to_string(n) + (l != nullptr ? " (" + l->to_name + ")" : std::string());
-        }
-        const VehiclePlace* p = def_.vehicle.Place(id);
-        return p != nullptr ? p->label : id;
-    }
     // Each NPC goes where his drill wants him (CrewMember::WantedPlace); every body walks on; each crew member learns
     // where his body is.
     void UpdateMovers(double dt) {
@@ -6597,6 +6598,10 @@ private:
     }
     // A seat is free for a new order when an NPC there has nothing to do, or the player there has finished his.
     bool SeatFree(const std::string& seat) {
+        for (const PendingOrder& o : pending_orders_) {  // an order still being shouted to him: the next would replace it
+            const CrewMember* c = Crew(o.crew);
+            if (c != nullptr && c->Role() == seat) return false;
+        }
         if (const ProcedureTracker* t = SeatTracker(seat)) return t->GetProcedure().id.empty() || t->IsComplete();
         const CrewMember* m = MemberAt(seat);
         return m != nullptr && !m->IsBusy();
