@@ -16,6 +16,11 @@
 // A column plans on what its commander believes (an overlay, routes.hpp). A crossing down in the truth stops the column
 // when its head comes to it: the commander is the fact's first knower, says so, has it to report, and after his time at
 // the map orders the march on by a new route, the column turned about where the new way leads back (G2.7).
+//
+// With orders carried by a means (G10.2-G10.5, ColumnMarch::UseOrders and command/battery_orders.hpp) no vehicle moves
+// on an order its commander did not hear: «К маршу!» goes out on the battery net at the move-off, each vehicle leaves its
+// emplacement once he has heard it (by the net, or the runner sent when he did not answer) and catches the column up if
+// it has gone; each reports «К маршу готов», and at the end «К бою!» goes down the column by flags (lamps by night).
 #pragma once
 
 #include <algorithm>
@@ -27,6 +32,7 @@
 #include <vector>
 
 #include "simcore/battery.hpp"
+#include "simcore/command/battery_orders.hpp"
 #include "simcore/nav/anchors.hpp"
 #include "simcore/nav/routes.hpp"
 #include "simcore/radio_journal.hpp"
@@ -488,6 +494,17 @@ public:
     }
     const Overlay& Believed() const { return believed_; }
 
+    // Orders carried by a means (call before Start): the battery commander (`giver_post`) rides in the column's vehicle
+    // `giver_vehicle` and gives his orders to these vehicle commanders, each acting only once he has heard.
+    void UseOrders(const command::BatteryOrdersDef& def, const std::string& giver_vehicle, const std::string& giver_post,
+                   const std::vector<command::OrderVehicle>& crews) {
+        order_def_ = def;
+        giver_vehicle_ = giver_vehicle;
+        giver_post_ = giver_post;
+        crews_ = crews;
+        use_orders_ = true;
+    }
+
     // The plan on what he believes; the battery stands at its vehicles' starts, dug in for `leave_s`. The march order is
     // given at the plan's move-off time.
     bool Start(const MarchRequest& q) {
@@ -507,6 +524,35 @@ public:
         ordered_ = false;
         logged_ = 0;
         replan_at_ = -1.0;
+        net_.reset();
+        order_events_.clear();
+        to_log_.clear();
+        march_order_ = battle_order_ = -1;
+        on_march_ = false;
+        if (use_orders_) {
+            const Battery::Vehicle* giver = battery_->Find(giver_vehicle_);
+            // The book's hours are the session's (its debrief prints them on the session's clock).
+            net_ = std::make_unique<command::BatteryOrderNet>(order_def_, giver_post_, giver != nullptr ? giver->def.callsign : giver_vehicle_, 0.0);
+            net_->SetNight(q.night);
+            // A runner walks the route service's way on foot.
+            const Mobility* foot = lib_.Find("foot");
+            if (foot != nullptr) {
+                net_->SetWalk([this, foot](const Vec3& from, const Vec3& to) {
+                    RouteRequest rq;
+                    rq.from = {from.x, from.y};
+                    rq.to = {to.x, to.y};
+                    rq.mobility = foot;
+                    const Route r = g_.Find(rq);
+                    return r.found ? r.time_s : -1.0;
+                });
+            }
+            for (const command::OrderVehicle& c : crews_) {
+                if (battery_->Find(c.vehicle) == nullptr) continue;
+                net_->Add(c);
+                battery_->SetAbsent(c.vehicle, true);  // nothing moves before its commander hears
+            }
+            KeepNetCurrent();
+        }
         return true;
     }
 
@@ -514,11 +560,18 @@ public:
         if (battery_ == nullptr || plans_.empty()) return;
         if (replan_at_ >= 0.0 && t >= replan_at_) Replan(t);
         if (!ordered_ && t >= plans_.back().move_off_s) {
+            if (net_ != nullptr) {
+                // At the position the battery net; once on the march (a new route after a halt) flags down the column.
+                for (const command::OrderVehicle& c : net_->Vehicles()) battery_->SetAbsent(c.vehicle, true);
+                march_order_ = net_->Give("march", "К маршу!", on_march_ ? "flags" : "radio_voice", t, CrewIds());
+                journal_.Heard(t, on_march_ ? "march" : "battery net", "Battery commander", "К маршу!");
+            }
             battery_->Order(plans_.back().Order(), t);
             ordered_ = true;
         }
         battery_->Step(t, dt);
         battery_->TakeEvents();
+        if (battery_->CurrentMode() == Battery::Mode::Marching) on_march_ = true;
         // Each point the head passes: the commander says it in the cabin, the radiotelephonist hears it.
         const std::vector<Battery::Passing>& passed = battery_->Passings();
         while (ordered_ && logged_ < passed.size() && passed[logged_].head_s >= 0.0) {
@@ -531,8 +584,10 @@ public:
             journal_.Heard(ps.head_s, "march", "Battery commander", text);
             ++logged_;
         }
+        if (net_ != nullptr) StepOrders(t);
         if (ordered_ && replan_at_ < 0.0 && battery_->CurrentMode() == Battery::Mode::Marching) Lookout(t);
         if (!journal_.Busy(t)) journal_.WriteNext(t, s_.write_s);
+        if (net_ != nullptr) MarkLogged(t);
     }
     void Run(double from_s, double until_s, double dt = 1.0) {
         for (double t = from_s; t < until_s; t += dt) Step(t, dt);
@@ -542,6 +597,12 @@ public:
     const std::vector<MarchPlan>& Plans() const { return plans_; }
     const Battery& Column() const { return *battery_; }
     const RadioJournal& Journal() const { return journal_; }
+    // Orders carried by a means: the order net (its book is the record) and what happened to each order at each vehicle.
+    const command::BatteryOrderNet* Orders() const { return net_.get(); }
+    command::BatteryOrderNet* Orders() { return net_.get(); }
+    const std::vector<command::OrderEvent>& OrderEvents() const { return order_events_; }
+    int MarchOrder() const { return march_order_; }
+    int BattleOrder() const { return battle_order_; }
     // What the commander has to report up (the means are G10's): the hour and the words.
     struct Report {
         double t = 0.0;
@@ -572,6 +633,104 @@ public:
 
 private:
     double Hour(double t) const { return hour_at_zero_ + t / 3600.0; }
+
+    std::vector<std::string> CrewIds() const {
+        std::vector<std::string> ids;
+        for (const command::OrderVehicle& c : net_->Vehicles()) ids.push_back(c.vehicle);
+        return ids;
+    }
+    // The net's picture: where each vehicle is, and whether radio is his to use (not in the column on the march: p240).
+    void KeepNetCurrent() {
+        const Battery::Vehicle* giver = battery_->Find(giver_vehicle_);
+        if (giver != nullptr) net_->SetGiverAt(giver->position);
+        for (const command::OrderVehicle& c : net_->Vehicles()) {
+            const Battery::Vehicle* bv = battery_->Find(c.vehicle);
+            command::OrderVehicle* ov = net_->Vehicle(c.vehicle);
+            if (bv == nullptr || ov == nullptr) continue;
+            ov->at = bv->position;
+            ov->may_call = !on_march_ || bv->absent || bv->catching;
+        }
+    }
+    // A vehicle's own speed on each stretch of the route, to catch the column up (its class, by night its night factor).
+    std::vector<double> CatchMps(const std::string& vehicle) const {
+        const MarchPlan& p = plans_.back();
+        std::string cls;
+        for (const MarchVehicle& v : p.request.column) {
+            if (v.def.id == vehicle) cls = v.mobility.empty() ? MobilityOf(v.def.kind) : v.mobility;
+        }
+        const Mobility* m = lib_.Find(cls);
+        if (m == nullptr) return {};
+        const double f = p.request.night ? m->night_factor : 1.0;
+        std::vector<double> out;
+        for (std::size_t i = 0; i < p.route.stretches.size() && i < p.stretch_mps.size(); ++i) {
+            const RouteStretch& st = p.route.stretches[i];
+            double v = p.stretch_mps[i];
+            if (st.kind == "road") v = std::max(v, m->RoadMps(st.road) * f);
+            if (st.kind == "off_road") v = std::max(v, m->cross_country_mps * f);
+            out.push_back(v);
+        }
+        return out;
+    }
+    void StepOrders(double t) {
+        KeepNetCurrent();
+        for (const command::OrderEvent& e : net_->Step(t)) {
+            order_events_.push_back(e);
+            if (e.what == "carrying out") battery_->Join(e.vehicle, t, CatchMps(e.vehicle));
+            if (e.what == "reported") {
+                // What reaches the commander his radiotelephonist writes: off the net, or as he passes it on in the cabin.
+                journal_.Heard(e.t, e.mean == "radio_voice" ? "battery net" : "march", e.callsign, e.text);
+                to_log_.push_back(e);
+            }
+        }
+        // Done: out of the emplacement on the way («К маршу готов»), in position and deployed («К бою готов»).
+        for (const command::OrderVehicle& c : net_->Vehicles()) {
+            const Battery::Vehicle* bv = battery_->Find(c.vehicle);
+            if (bv == nullptr || bv->absent) continue;
+            if (march_order_ >= 0 && battle_order_ < 0 && net_->Heard(march_order_, c.vehicle) && t >= bv->hold_until_s) {
+                net_->Done(march_order_, c.vehicle, t, "К маршу готов");
+            }
+            if (battle_order_ >= 0 && bv->deployed) net_->Done(battle_order_, c.vehicle, t, "К бою готов");
+        }
+        // At the end: «К бою!» down the column, each vehicle stopping where it is until its commander has read it.
+        if (battle_order_ < 0 && ordered_ && Arrived()) {
+            const MarchPlan& p = plans_.back();
+            const std::size_t n = p.route.path.size();
+            const MapPoint a = p.route.path[n >= 2 ? n - 2 : 0];
+            const MapPoint b = p.route.path[n - 1];
+            double axis = RadToDeg(std::atan2(b.east_m - a.east_m, b.north_m - a.north_m));
+            if (axis < 0.0) axis += 360.0;
+            const double ar = DegToRad(axis);
+            BatteryOrder o;
+            o.kind = BatteryOrder::Kind::CombatFormation;
+            o.covered = Vec3{b.east_m + std::sin(ar) * tactics_.behind_covered_m, b.north_m + std::cos(ar) * tactics_.behind_covered_m, 0.0};
+            o.axis_deg = axis;
+            for (const command::OrderVehicle& c : net_->Vehicles()) battery_->SetAbsent(c.vehicle, true);
+            battle_order_ = net_->Give("combat_formation", "К бою!", p.request.night ? "lamps" : "flags", t, CrewIds());
+            journal_.Heard(t, "march", "Battery commander", "К бою!");
+            battery_->Order(o, t);
+            on_march_ = false;
+        }
+    }
+    // Each report on the page: the order's last step, when the writing is legible.
+    void MarkLogged(double t) {
+        if (to_log_.empty()) return;
+        const std::vector<RadioJournalEntry> page = journal_.Legible(t);
+        for (std::size_t i = 0; i < to_log_.size();) {
+            bool found = false;
+            for (const RadioJournalEntry& e : page) {
+                if (e.from == to_log_[i].callsign && std::fabs(e.heard_s - to_log_[i].t) < 1e-6 && e.text == to_log_[i].text) {
+                    net_->Logged(to_log_[i].order, to_log_[i].vehicle, e.written_s);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                to_log_.erase(to_log_.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
+        }
+    }
 
     // The head comes to a crossing down in the truth that the commander did not know of: the column stops.
     void Lookout(double t) {
@@ -662,6 +821,18 @@ private:
     std::size_t logged_ = 0;
     double replan_at_ = -1.0;
     double hour_at_zero_ = 0.0;
+    // Orders carried by a means.
+    bool use_orders_ = false;
+    command::BatteryOrdersDef order_def_;
+    std::string giver_vehicle_;
+    std::string giver_post_;
+    std::vector<command::OrderVehicle> crews_;
+    std::unique_ptr<command::BatteryOrderNet> net_;
+    std::vector<command::OrderEvent> order_events_;
+    std::vector<command::OrderEvent> to_log_;
+    int march_order_ = -1;
+    int battle_order_ = -1;
+    bool on_march_ = false;  // from the column first marching to «К бою!»
 };
 
 }  // namespace nav

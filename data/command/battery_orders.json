@@ -1,0 +1,52 @@
+{
+  "orders_id": "osa_battery_orders_1980s",
+  "display_name": "Osa-AK battery: orders carried by a means",
+  "status": "Numbers for simcore/command/battery_orders.hpp (roadmap G10.2-G10.5, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md section 5.5). The R-123M's times are the training text's, as in data/procedures/osa_ak.json; the signals' reach and the times of speech are SAM3D estimates until G0 reads the drill. The runner's pace and the way on foot are signal_means.json's messenger and relay rules.",
+  "notes": "voenizdat_osa_1991 p240: on the march the battery commander rides at the head in the PU-12M and signals by flags and lamps; radio is forbidden except for fire control. At a position the battery net is the first means, the field telephone where lines are laid, and a runner the last.",
+  "orders": {
+    "set_warm_s": {
+      "value": 600,
+      "source": "r123m_training (switch on, warm the set up for 10 min, then call)",
+      "confidence": "medium",
+      "notes": "The same 10 min as the console's r123m_left subsystem (data/procedures/osa_ak.json): a set switched off misses everything said on the net until it is warm."
+    },
+    "set_tx_s": {
+      "value": 180,
+      "source": "r123m_training (from Д. ПРИЕМ to СИМПЛЕКС wait 3 min for the transmitter valves)",
+      "confidence": "medium",
+      "notes": "After the warm-up: the commander can answer on the net only then (the console's r123m_left_tx)."
+    },
+    "flags_m": {
+      "value": 500,
+      "source": "SAM3D estimate (a flag signal read by day from one vehicle to the next; the column is 25-50 m apart, 200-800 m with an air attack expected, voenizdat_osa_1991 p232)",
+      "confidence": "estimate"
+    },
+    "lamps_m": {
+      "value": 1000,
+      "source": "SAM3D estimate (a hand lamp's signal read at night, blackout driving)",
+      "confidence": "estimate"
+    },
+    "pass_s": {
+      "value": 5,
+      "source": "SAM3D estimate (a vehicle commander seeing a signal and repeating it to the vehicle behind)",
+      "confidence": "estimate"
+    },
+    "say_s": {
+      "value": 4,
+      "source": "SAM3D estimate (a short order, a repeat-back or a report said: «Двадцать первый, к маршу!»)",
+      "confidence": "estimate"
+    },
+    "ring_s": {
+      "value": 15,
+      "source": "SAM3D estimate (a TA-57 on a direct line: wound, rung and answered; utin_2018 table 3.1 gives 1 min for a call through an exchange)",
+      "confidence": "estimate"
+    }
+  },
+  "chase": {
+    "wait_s": 30,
+    "repeats": 2,
+    "next_means": ["field_telephone", "messenger"],
+    "source": "game value (the giver waits 30 s for a repeat-back, says it twice more, then rings, then sends a runner; simcore/command/orders.hpp ChaseRule) until G0 reads the drill",
+    "confidence": "estimate"
+  }
+}

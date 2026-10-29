@@ -695,8 +695,29 @@ before it, and carrying out needs only "heard", so nobody acts on an order he di
 and every sending. The giver's rule for a silence (`ChaseRule`, game values: 30 s, twice more on the same means, then the
 telephone, then a runner) says whom to send to again, when and how. The test gives «К маршу!» on the battery net with
 21-3's set off: said again twice, the telephone (no wire yet), then a runner who reaches 21-3 in his foot route's time
-from the route service (14 min 49 s), and the debrief lists each vehicle's times to the second. Left: G10.2-G10.8 (the
-means deciding who hears, the vehicles carrying it out through `NpcDoes`, the reports in the radio journal).
+from the route service (14 min 49 s), and the debrief lists each vehicle's times to the second.
+
+**Built: G10.2-G10.5, first form (29 Oct 2026).** `simcore/command/battery_orders.hpp` (`BatteryOrderNet`) carries an
+order by a means to each vehicle commander, a person from the chain with his skill tier's times (`CommanderFromChain`,
+level C1). The battery net reaches him while his R-123M is on, warm (10 min), on the net and not jammed, and it is said
+once; flags by day and lamps by night reach a vehicle in sight, each commander passing the signal on; the field
+telephone where a line is laid; a shout in earshot; a runner walking the route service's way on foot. He hears it, acts
+after his reaction, and repeats back by the first way back he has (the net once his transmitter is ready, the signal
+back, the telephone, the runner returning). The giver's silence rule, now data (`data/command/battery_orders.json`),
+skips the telephone where no wire is laid, and a commander who hears with his set off switches it on. `Battery` keeps a
+vehicle whose commander has not heard where it is (`SetAbsent`) and lets it go when he acts (`Join`): out of its
+emplacement in its own time, and a column already gone it catches up along the route at its own class's speeds, to its
+place. `ColumnMarch::UseOrders` runs the march on it: «К маршу!» on the battery net at the move-off, each «К маршу
+готов» on the net once the vehicle is out (radio stays forbidden in the column on the march, p240, so only a vehicle out
+of it calls), «К бою!» by flags down the column at the end, each «К бою готов» on the net, every report written in the
+radio journal and logged in the book. The test (`test_nav.cpp`): 21-3's set is off; said twice more on the net, no wire,
+a runner reaches it 18 min after the order; it switches on, repeats back on the net 13 min later (the warm-up and the
+transmitter), leaves its emplacement and falls in 42 min after hearing, before the halt; every vehicle's two reports and
+every point are on the page, and the debrief lists each order's times for each vehicle. Left: the session
+(`ScenarioRunner`'s battery orders through the net, each NPC act through `NpcDoes`, the player's own vehicle at C2), the
+driver as a person, the orders group in person and the talk tables' words on the net (G10.3), the giver's picture from
+the reports on the working map (G10.4), "cannot" (a vehicle that cannot catch up), the regiment's orders and the
+emission regime on the same path (G10.7), the player's side (G10.8).
 
 ### G11: Unreal, everything the player could see
 

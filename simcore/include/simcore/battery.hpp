@@ -270,6 +270,16 @@ public:
         int crossing_stage = 0;  // 0 waiting on the near side, 1 to the water's edge, 2 in the water, 3 to the far slot
         bool afloat = false;
         bool waiting = false;    // bounding or crossing: holding until its pair's turn
+        // Orders carried by a means (command/battery_orders.hpp): a vehicle whose commander has not heard the battery's
+        // order stays where it is; once he has, it leaves its emplacement and goes to its place, on the march catching
+        // the column up along the route.
+        bool absent = false;
+        bool dug_in = false;         // still in its emplacement
+        double hold_until_s = -1.0;  // leaving its emplacement until then
+        bool catching = false;
+        bool on_route = false;       // reached the route (it first drives to it across country)
+        double catch_arc = 0.0;      // where along the route it has got to
+        std::vector<double> catch_mps;  // its own speed on each stretch (empty: a little over the column's)
     };
 
     struct Event {
@@ -349,7 +359,48 @@ public:
     // leave its emplacement when it moves.
     void SetInEmplacement(double seconds) {
         leave_s_ = seconds;
-        for (Vehicle& v : vehicles_) v.deployed = true;
+        emplacement_s_ = seconds;
+        for (Vehicle& v : vehicles_) {
+            v.deployed = true;
+            v.dug_in = true;
+        }
+    }
+
+    // Orders carried by a means: until its commander has heard, a vehicle takes no part in the battery's orders and stays
+    // where it is.
+    void SetAbsent(const std::string& id, bool absent) {
+        for (Vehicle& v : vehicles_)
+            if (v.def.id == id) v.absent = absent;
+    }
+    bool Absent(const std::string& id) const {
+        const Vehicle* v = Find(id);
+        return v != nullptr && v->absent;
+    }
+    // Its commander has heard and acts: the vehicle leaves its emplacement (if it is still dug in) and goes to its place;
+    // a column already on the march, or one forming after the battery is out of its emplacements (it heard late), it
+    // catches up along the route at `catch_mps` (its own speed on each stretch).
+    void Join(const std::string& id, double t, const std::vector<double>& catch_mps = {}) {
+        for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+            Vehicle& v = vehicles_[k];
+            if (v.def.id != id || !v.absent) continue;
+            v.absent = false;
+            const bool late = mode_ == Mode::Marching || mode_ == Mode::Halted || (mode_ == Mode::Forming && v.dug_in && t >= hold_until_s_);
+            v.hold_until_s = t + (v.dug_in ? emplacement_s_ : 0.0);
+            if (v.dug_in) events_.push_back({t, v.def.callsign, "out of the emplacement (" + Fmt(emplacement_s_) + " s)"});
+            v.dug_in = false;
+            if (route_.size() >= 2 && late) {
+                v.deployed = false;
+                v.catching = true;
+                v.on_route = false;
+                v.catch_arc = std::min(NearestArc(v.position), SlotArc(rank_[k]));
+                v.catch_mps = catch_mps.size() + 1 == route_.size() ? catch_mps : std::vector<double>();
+                events_.push_back({t, v.def.callsign, "after the column, to catch it up"});
+            }
+        }
+    }
+    bool Catching(const std::string& id) const {
+        const Vehicle* v = Find(id);
+        return v != nullptr && v->catching;
     }
 
     void SetAirThreat(bool threat, double t) {
@@ -403,7 +454,11 @@ public:
                 lead_s_ = Spacing() * static_cast<double>(vehicles_.size() - 1);
                 mode_ = Mode::Forming;
                 marched_s_ = 0.0;
-                for (Vehicle& v : vehicles_) v.deployed = false;
+                for (Vehicle& v : vehicles_) {
+                    v.deployed = false;
+                    v.catching = false;
+                    if (!v.absent) v.dug_in = false;
+                }
                 events_.push_back({t, "Battery commander", "march: form the column (" + std::to_string(vehicles_.size()) + " vehicles)"});
                 break;
             case BatteryOrder::Kind::ShortHalt: {
@@ -433,6 +488,7 @@ public:
             }
             case BatteryOrder::Kind::CombatFormation:
                 mode_ = Mode::Formation;
+                for (Vehicle& v : vehicles_) v.catching = false;  // a vehicle still catching up goes straight to its slot
                 FormationSlots(o.covered, o.axis_deg);
                 bounding_ = o.bounding;
                 if (bounding_) HoldPairsAfterFirst();
@@ -514,8 +570,10 @@ public:
         if (mode_ == Mode::Forming || mode_ == Mode::Marching) {
             bool formed = true;
             for (std::size_t k = 0; k < vehicles_.size(); ++k) {
-                vehicles_[k].goal = PointAt(SlotArc(rank_[k]));
-                if (Dist(vehicles_[k].position, vehicles_[k].goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
+                Vehicle& v = vehicles_[k];
+                if (v.absent || v.catching) continue;  // not in the column (yet): the column goes without it
+                v.goal = PointAt(SlotArc(rank_[k]));
+                if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
             }
             if (mode_ == Mode::Forming && formed && t >= hold_until_s_) {
                 mode_ = Mode::Marching;
@@ -524,8 +582,8 @@ public:
             if (mode_ == Mode::Marching) {
                 // The leader moves on as long as nobody behind has fallen too far back.
                 bool keeping_up = true;
-                for (std::size_t k = 0; k < vehicles_.size(); ++k)
-                    if (Dist(vehicles_[k].position, vehicles_[k].goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
+                for (const Vehicle& v : vehicles_)
+                    if (!v.absent && !v.catching && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
                 if (keeping_up && lead_s_ < total_ && t >= hold_until_s_) {
                     double next = Advance(lead_s_, dt);
                     // The head stops at a plan's point until its time, and at a halt.
@@ -559,8 +617,16 @@ public:
                                                                 : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
+            if (v.absent || t < v.hold_until_s) {
+                v.speed_mps = 0.0;
+                continue;
+            }
             if (!v.serving.empty()) {  // a service run goes on whatever the battery does
                 StepService(v, t, dt);
+                continue;
+            }
+            if (v.catching) {  // through the column's halts too
+                StepCatchUp(v, t, dt);
                 continue;
             }
             if (mode_ == Mode::Halted || mode_ == Mode::Waiting || t < hold_until_s_ || v.waiting) {
@@ -573,7 +639,7 @@ public:
         if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation || mode_ == Mode::Ambush || mode_ == Mode::RiverApproach ||
             mode_ == Mode::RiverCrossing) {
             for (Vehicle& v : vehicles_) {
-                if (v.deployed || !v.serving.empty() || v.waiting) continue;
+                if (v.deployed || !v.serving.empty() || v.waiting || v.absent) continue;
                 if (mode_ == Mode::RiverCrossing && v.crossing_stage != 0 && v.crossing_stage != 4) continue;
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) continue;
                 if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
@@ -693,18 +759,57 @@ private:
     double SlotArc(std::size_t k) const { return std::max(0.0, lead_s_ - Spacing() * static_cast<double>(k)); }
 
     // Where the head is `dt` on from `s`: at the tactics' march speed, or stretch by stretch at the march plan's speeds.
-    double Advance(double s, double dt) const {
-        if (route_mps_.empty()) return std::min(total_, s + tactics_.march_speed_mps * dt);
+    double Advance(double s, double dt) const { return AdvanceBy(s, dt, route_mps_, 1.0); }
+    // Along the route from `s` for `dt` at `mps` on each stretch (none: the tactics' march speed), times `factor`.
+    double AdvanceBy(double s, double dt, const std::vector<double>& mps, double factor) const {
+        if (mps.empty()) return std::min(total_, s + tactics_.march_speed_mps * factor * dt);
         double left = dt;
         for (std::size_t i = 1; i < arcs_.size() && left > 0.0; ++i) {
             if (s >= arcs_[i]) continue;
-            const double v = route_mps_[i - 1];
+            const double v = mps[i - 1] * factor;
             const double reach_s = (arcs_[i] - s) / v;
             if (reach_s >= left) return s + v * left;
             s = arcs_[i];
             left -= reach_s;
         }
         return std::min(total_, s);
+    }
+    // The place along the route nearest a point.
+    double NearestArc(const Vec3& p) const {
+        double best = 0.0, best_d = 1e300;
+        for (std::size_t i = 1; i < route_.size(); ++i) {
+            const Vec3 a = route_[i - 1];
+            const double dx = route_[i].x - a.x, dy = route_[i].y - a.y;
+            const double len2 = dx * dx + dy * dy;
+            const double u = len2 > 0.0 ? std::max(0.0, std::min(1.0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0.0;
+            const double e = std::hypot(p.x - (a.x + dx * u), p.y - (a.y + dy * u));
+            if (e < best_d - 1e-9) {
+                best_d = e;
+                best = arcs_[i - 1] + (arcs_[i] - arcs_[i - 1]) * u;
+            }
+        }
+        return best;
+    }
+    // A vehicle catching the column up: across country to the route, then along it at its own speed (or a little over
+    // the column's) to its place in the column, where it falls in.
+    void StepCatchUp(Vehicle& v, double t, double dt) {
+        const std::size_t k = static_cast<std::size_t>(&v - vehicles_.data());
+        const double slot = SlotArc(rank_[k]);
+        if (!v.on_route) {
+            v.goal = PointAt(v.catch_arc);
+            Move(v, tactics_.cross_country_speed_mps, dt, false);
+            if (Dist(v.position, v.goal) <= 1.0) v.on_route = true;
+            return;
+        }
+        const double from = v.catch_arc;
+        const double ahead = v.catch_mps.empty() ? AdvanceBy(from, dt, route_mps_, 1.3) : AdvanceBy(from, dt, v.catch_mps, 1.0);
+        v.catch_arc = std::min(slot, ahead);
+        v.goal = PointAt(v.catch_arc);
+        Move(v, (v.catch_arc - from) / dt + 0.5, dt, false);
+        if (v.catch_arc >= slot - 1e-6 && Dist(v.position, v.goal) <= tactics_.slot_tolerance_m) {
+            v.catching = false;
+            events_.push_back({t, v.def.callsign, "in its place in the column"});
+        }
     }
 
     // The order of march by vehicle id: each named vehicle in its place, the others after them as listed.
@@ -976,6 +1081,7 @@ private:
     bool drive_own_ = false;
     std::vector<Vec3> route_;
     std::vector<double> route_mps_;
+    double emplacement_s_ = 0.0;  // to leave the emplacement (SetInEmplacement), for a vehicle that leaves late
     std::vector<BatteryMarchPoint> points_;
     std::vector<Passing> passings_;
     std::size_t next_point_ = 0;

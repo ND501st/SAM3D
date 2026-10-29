@@ -443,3 +443,124 @@ SC_TEST("nav: a column meets a bridge down that its commander was not told of (G
     swimmers.Run(0.0, swimmers.Plan().end_s + 900.0);
     SC_EXPECT(swimmers.Arrived() && swimmers.Plans().size() == 1);
 }
+
+// ---------------------------------------------------------------------------------------------- G10: orders by a means
+
+SC_TEST("nav: battery 21 marches on orders carried by a means (G10.2-G10.5's done-when): 21-3's set is off, a runner reaches it, it catches the column up; every report in the journal") {
+    const World& w = TheWorld();
+    const double kStartHour = 20.0;
+    std::string e;
+    command::BatteryOrdersDef def;
+    SC_EXPECT(command::LoadBatteryOrders(kData, def, &e));
+    command::ChainData chain;
+    SC_EXPECT(command::LoadChainData(kData, "command/chain_pannonia.json", chain, &e));
+    SkillTable skills;
+    SC_EXPECT(LoadSkillTableFile(kData + "/crew/skill_levels.json", skills, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    // The vehicle commanders of the chain (21-6 and 21-7 have no post of their own there: class 2's times).
+    const std::vector<std::pair<std::string, std::string>> posts = {
+        {"21-1", "veh21_1_commander"}, {"21-2", "veh21_2_commander"}, {"21-5", "tzm21_chief"}, {"21-3", "veh21_3_commander"},
+        {"21-4", "veh21_4_commander"}, {"21-6", "veh21_6_commander"}, {"21-7", "veh21_7_commander"}};
+    std::vector<command::OrderVehicle> crews;
+    for (const auto& vp : posts) crews.push_back(command::CommanderFromChain(chain, skills, vp.first, vp.first, vp.second));
+    SC_EXPECT(crews[3].commander == "Radek Cerny" && crews[3].reaction_s > crews[1].reaction_s);  // class 3 against class 1
+    crews[3].set_on = false;  // 21-3's commander has his set off: he misses everything said on the net
+
+    ColumnMarch march(w.graph, w.mobility, Tactics(), &w.anchors);
+    march.UseOrders(def, "21", "bty21_commander", crews);
+    MarchRequest q = MarchTo("rava_dam", 3.0 * 3600.0);
+    q.leave_s = 300.0;
+    SC_EXPECT(march.Start(q));
+    const MarchPlan plan = march.Plan();
+    const Vec3 start3 = march.Column().Find("21-3")->position;
+    const double until = plan.end_s + 1800.0;
+    double heard3 = -1.0, fell_in3 = -1.0;
+    bool moved_early = false, column_went_on = false;
+    for (double t = 0.0; t < until; t += 1.0) {
+        march.Step(t, 1.0);
+        const command::BatteryOrderNet* net = march.Orders();
+        const Battery::Vehicle* v3 = march.Column().Find("21-3");
+        if (net == nullptr || v3 == nullptr) break;
+        const int mo = march.MarchOrder();
+        const bool heard = mo >= 0 && net->Heard(mo, "21-3");
+        if (heard && heard3 < 0.0) heard3 = t;
+        // Until its commander has heard, 21-3 stays in its emplacement.
+        if (!heard && std::hypot(v3->position.x - start3.x, v3->position.y - start3.y) > 1e-6) moved_early = true;
+        // The column does not wait for it.
+        if (!heard && march.Column().CurrentMode() == Battery::Mode::Marching) column_went_on = true;
+        if (heard3 >= 0.0 && fell_in3 < 0.0 && !v3->catching && !v3->absent && t > heard3 + q.leave_s &&
+            march.Column().CurrentMode() == Battery::Mode::Marching) {
+            fell_in3 = t;
+        }
+    }
+    const command::BatteryOrderNet* net = march.Orders();
+    SC_EXPECT(net != nullptr && march.Arrived());
+    if (net == nullptr) return;
+    for (const command::OrderEvent& ev : march.OrderEvents()) {
+        if (ev.vehicle == "21-3") std::printf("    %s %s: %s (%s) %s\n", ClockHhMm(ev.t, kStartHour).c_str(), ev.callsign.c_str(), ev.what.c_str(), ev.mean.c_str(), ev.text.c_str());
+    }
+    for (const std::string& line : net->Debrief(kStartHour)) std::printf("    %s\n", line.c_str());
+    for (const std::string& line : march.Journal().Page(until, 40)) std::printf("    %s\n", line.c_str());
+    std::printf("    21-3 heard %s, in its place in the column %s\n", ClockHhMm(heard3, kStartHour).c_str(), ClockHhMm(fell_in3, kStartHour).c_str());
+
+    // «К маршу!» on the battery net at the move-off: every commander with his set on heard it then.
+    const command::OrderBook& book = net->Book();
+    SC_EXPECT(march.MarchOrder() == 0 && march.BattleOrder() == 1 && book.Orders().size() == 2);
+    if (book.Orders().size() != 2) return;
+    const command::BatteryOrderRecord& mo = book.Orders()[0];
+    SC_EXPECT(mo.mean == "radio_voice" && mo.words == "К маршу!");
+    SC_EXPECT_NEAR(mo.given_h, plan.move_off_s / 3600.0, 1.0 / 3600.0);
+    for (const command::OrderLeg& l : mo.to) {
+        SC_EXPECT(l.Has(command::OrderStep::Logged));  // every report on the page
+        if (l.post == "veh21_3_commander") continue;
+        SC_EXPECT(l.mean == "radio_voice" && l.sent.size() == 1);
+        SC_EXPECT_NEAR(l.At(command::OrderStep::Heard), mo.given_h, 10.0 / 3600.0);
+    }
+    // 21-3: said twice more on the net, no line to ring, then a runner; he heard it from the runner, switched his set on,
+    // and repeated back on the net once it could transmit.
+    const command::OrderLeg* l3 = mo.For("veh21_3_commander");
+    SC_EXPECT(l3 != nullptr);
+    if (l3 == nullptr) return;
+    SC_EXPECT(l3->sent.size() == 4 && l3->sent[1].second == "radio_voice" && l3->sent[2].second == "radio_voice" && l3->sent[3].second == "messenger");
+    SC_EXPECT(l3->mean == "messenger");
+    // The runner walks the route service's way on foot from the PU-12M to 21-3's position.
+    RouteRequest walk;
+    walk.from = w.anchors.Find("bty21_cp")->at;
+    walk.to = w.anchors.Find("bty21_v3")->at;
+    walk.mobility = w.mobility.Find("foot");
+    const Route run = w.graph.Find(walk);
+    SC_EXPECT(run.found);
+    const double runner_s = def.runner_handling_s + run.time_s;
+    SC_EXPECT_NEAR(l3->At(command::OrderStep::Heard) - mo.given_h, (3.0 * def.chase.wait_s + runner_s) / 3600.0, 30.0 / 3600.0);
+    SC_EXPECT(l3->At(command::OrderStep::CarryingOut) > l3->At(command::OrderStep::Heard));
+    const double warm_h = (def.set_warm_s + def.set_tx_s) / 3600.0;
+    SC_EXPECT(l3->At(command::OrderStep::RepeatedBack) >= l3->At(command::OrderStep::Heard) + warm_h);
+    SC_EXPECT(!moved_early && column_went_on);
+    // It left its emplacement only once he had heard, and caught the column up long before the halt.
+    SC_EXPECT(heard3 > plan.move_off_s && fell_in3 > heard3 + q.leave_s);
+    const MarchPoint* halt = Nth(plan, "halt");
+    SC_EXPECT(halt != nullptr && fell_in3 > 0.0 && fell_in3 < halt->head_s);
+
+    // The journal: every vehicle's «К маршу готов», each point of the plan, «К бою!», every vehicle's «К бою готов».
+    const std::vector<RadioJournalEntry> page = march.Journal().Legible(until);
+    auto written = [&](const std::string& from, const std::string& text) {
+        for (const RadioJournalEntry& en : page) {
+            if (en.from == from && en.text.find(text) != std::string::npos) return true;
+        }
+        return false;
+    };
+    for (const auto& vp : posts) {
+        SC_EXPECT(written(vp.first, "К маршу готов"));
+        SC_EXPECT(written(vp.first, "К бою готов"));
+    }
+    for (const MarchPoint& p : plan.points) SC_EXPECT(written("Battery commander", p.name));
+    SC_EXPECT(written("Battery commander", "К бою!"));
+    // «К бою!» by flags down the column: every commander read it within a few passes, deployed, reported on the net.
+    const command::BatteryOrderRecord& bo = book.Orders()[1];
+    SC_EXPECT(bo.mean == "flags");
+    for (const command::OrderLeg& l : bo.to) {
+        SC_EXPECT(l.mean == "flags" && l.Has(command::OrderStep::Logged));
+        SC_EXPECT(l.At(command::OrderStep::Heard) - bo.given_h < (def.say_s + 8.0 * def.pass_s + 1.0) / 3600.0);
+    }
+    for (const Battery::Vehicle& v : march.Column().Vehicles()) SC_EXPECT(v.deployed);
+}
