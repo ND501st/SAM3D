@@ -68,6 +68,9 @@ struct OrderVehicle {
     bool jammed = false;
     bool may_call = true;      // radio allowed him now (on the march only for fire control: voenizdat_osa_1991 p240)
     bool line = false;         // a field telephone line laid to the giver
+    // Modelled seat by seat (level C2, the player's own vehicle): what reaches him on the radio and what he says on it are
+    // his seat's (Reach, SaidOnNet); the other means the net carries as for any vehicle.
+    bool seats = false;
 };
 
 // A vehicle commander from the chain of command (his name and skill tier) and the skill table (his reaction and how quick
@@ -160,6 +163,43 @@ public:
         tr->done_s = t;
         tr->report = text;
     }
+    // A vehicle modelled seat by seat: its commander heard the order on the radio at `at_s` (said at `sent_s`)...
+    void Reach(int order, const std::string& vehicle, double at_s, double sent_s) {
+        Track* tr = Of(order, vehicle);
+        if (tr == nullptr || tr->heard_s >= 0.0 || (tr->arrive_s >= 0.0 && at_s >= tr->arrive_s)) return;
+        tr->arrive_s = at_s;
+        tr->arrive_mean = "radio_voice";
+        tr->arrive_sent_s = sent_s;
+    }
+    // ...and said his repeat-back (else his report of it done) on the net at t.
+    void SaidOnNet(int order, const std::string& vehicle, double t, bool repeat_back) {
+        Track* tr = Of(order, vehicle);
+        if (tr == nullptr || tr->heard_s < 0.0) return;
+        const OrderVehicle& v = vehicles_[tr->v];
+        if (repeat_back) {
+            if (tr->back_s >= 0.0) return;
+            tr->back_s = t;
+            book_.Mark(order, v.post, OrderStep::RepeatedBack, Hour(t));
+            said_.push_back({t, order, v.vehicle, v.callsign, "repeated back", "radio_voice", "Есть " + tr->words});
+        } else {
+            if (tr->done_s < 0.0 || tr->reported_s >= 0.0) return;
+            tr->reported_s = t;
+            book_.Mark(order, v.post, OrderStep::Reported, Hour(t));
+            said_.push_back({t, order, v.vehicle, v.callsign, "reported", "radio_voice", tr->report});
+        }
+    }
+    bool RepeatedBack(int order, const std::string& vehicle) const {
+        const Track* tr = Of(order, vehicle);
+        return tr != nullptr && tr->back_s >= 0.0;
+    }
+    bool Acting(int order, const std::string& vehicle) const {
+        const Track* tr = Of(order, vehicle);
+        return tr != nullptr && tr->acting;
+    }
+    bool IsDone(int order, const std::string& vehicle) const {
+        const Track* tr = Of(order, vehicle);
+        return tr != nullptr && tr->done_s >= 0.0;
+    }
     // The giver's radiotelephonist has written the report: the order's last step.
     void Logged(int order, const std::string& vehicle, double t) {
         const Track* tr = Of(order, vehicle);
@@ -176,6 +216,7 @@ public:
 
     std::vector<OrderEvent> Step(double t) {
         std::vector<OrderEvent> out;
+        out.swap(said_);
         for (Track& tr : tracks_) {
             OrderVehicle& v = vehicles_[tr.v];
             // It reaches him: he hears it, and acts on it after his reaction.
@@ -323,7 +364,7 @@ private:
         const OrderVehicle& v = vehicles_[tr.v];
         double at = -1.0;
         if (mean == "radio_voice") {
-            if (Receives(v, t)) at = t + def_.say_s;
+            if (!v.seats && Receives(v, t)) at = t + def_.say_s;
         } else if (mean == "flags" || mean == "lamps") {
             at = SignalTimes(t)[tr.v];
         } else if (mean == "field_telephone") {
@@ -351,7 +392,7 @@ private:
                 mean = m;
             }
         };
-        if (v.set_on && v.on_net && !v.jammed && v.may_call) offer(std::max(from, TransmitsFrom(v)) + def_.say_s, "radio_voice");
+        if (!v.seats && v.set_on && v.on_net && !v.jammed && v.may_call) offer(std::max(from, TransmitsFrom(v)) + def_.say_s, "radio_voice");
         if (tr.heard_mean == "flags" || tr.heard_mean == "lamps") {
             if (repeat_back) {
                 offer(from + (tr.heard_s - tr.heard_sent_s), tr.heard_mean.c_str());
@@ -378,6 +419,7 @@ private:
     std::vector<OrderVehicle> vehicles_;
     std::vector<Track> tracks_;
     OrderBook book_;
+    std::vector<OrderEvent> said_;  // a seat's words on the net since the last step
 };
 
 namespace detail {

@@ -2,7 +2,7 @@
   "scenario_id": "osa_battery_orders",
   "setting": "war",
   "name": "Osa-AK battery: the march order carried by a means",
-  "description": "The battery stands at its position and the battery commander, in the PU-12, gives «К маршу!» on the battery net (roadmap G10.5). Each vehicle moves only once its commander has heard: 22 at once, 23 with its set off by the field telephone after the commander has called twice more, 24 with its set off and no wire by a runner, and they catch the column up. Each reports «К маршу готов» on the net as it comes out. Take any seat of our vehicle, 21, and listen to the battery net.",
+  "description": "The battery stands at its position and the battery commander, in the PU-12, gives «К маршу!» on the battery net (roadmap G10.5). Each vehicle moves only once its commander has heard: 22 at once, 23 with its set off by the field telephone after the commander has called twice more, 24 with its set off and no wire by a runner, and they catch the column up. Each reports «К маршу готов» on the net as it comes out. Our vehicle, 21, is on the net too: its commander reads the order back and reports «к маршу готов» once the crew is stowed, and the vehicle moves off only then. In the commander's seat those lines are yours (the crew menu's Battery sector; the helper shows them).",
   "source": "sam3d",
   "confidence": "estimate",
   "notes": "Fictional. Flat plain. The vehicle commanders are battery 21's posts in data/command/chain_pannonia.json with their skill tiers; the order net's numbers are data/command/battery_orders.json.",
@@ -88,6 +88,11 @@
       "chain": "command/chain_pannonia.json",
       "giver_post": "bty21_commander",
       "crews": [
+        {
+          "vehicle": "21",
+          "post": "veh21_1_commander",
+          "notes": "Our own vehicle: its commander is the crew's, seat by seat (NPC or player)."
+        },
         {
           "vehicle": "22",
           "post": "veh21_2_commander"

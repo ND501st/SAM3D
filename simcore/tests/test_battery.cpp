@@ -664,21 +664,44 @@ SC_TEST("neighbours: only an Osa battery fights; the others are drawn and plotte
     SC_EXPECT(error.find("neighbours[0].launchers") != std::string::npos);
 }
 
+// The leg of an order to one post.
+static const command::OrderLeg* LegOf(const command::BatteryOrderRecord& o, const std::string& post) {
+    for (const command::OrderLeg& l : o.to) {
+        if (l.post == post) return &l;
+    }
+    return nullptr;
+}
+
+// The battery net's lines as the radio log has them: who said «я X: <words>» (the vehicle commanders' and ours).
+static void NetLines(const ScenarioRunner& r, const std::string& words, std::set<std::string>& out) {
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+        if (m.net != "battery net") continue;
+        const std::size_t at = m.text.find(": " + words);
+        const std::size_t me = m.text.find("я ");
+        if (at != std::string::npos && me != std::string::npos && me < at) out.insert(m.text.substr(me + 3, at - me - 3));
+    }
+}
+
 SC_TEST("battery orders by a means (G10.5): «К маршу!» on the battery net; 23, its set off, by the telephone; 24 by a runner; nobody moves before he hears") {
     ScenarioDef def;
     ConsoleData console;
     std::string error;
     SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    // The battery commander rides in the PU-12; every other vehicle has a commander, battery 21's from the chain.
-    SC_EXPECT(def.battery_by_means && def.battery_giver == "PU-12" && def.battery_crews.size() == 5);
+    // The battery commander rides in the PU-12; every other vehicle has a commander, battery 21's from the chain, ours
+    // (driven by the battery) the crew's own, seat by seat.
+    SC_EXPECT(def.battery_by_means && def.battery_giver == "PU-12" && def.battery_crews.size() == 6);
     const command::OrderVehicle* c23 = nullptr;
+    const command::OrderVehicle* c21 = nullptr;
     for (const command::OrderVehicle& c : def.battery_crews) {
         if (c.vehicle == "23") c23 = &c;
+        if (c.vehicle == "21") c21 = &c;
     }
-    SC_EXPECT(c23 != nullptr && c23->commander == "Radek Cerny" && !c23->set_on && c23->line);
-    Vec3 start23, start24;
+    SC_EXPECT(c23 != nullptr && c23->commander == "Radek Cerny" && !c23->set_on && c23->line && !c23->seats);
+    SC_EXPECT(c21 != nullptr && c21->seats && c21->post == "veh21_1_commander");
+    Vec3 start21, start23, start24;
     for (const BatteryVehicleDef& v : def.battery_vehicles) {
+        if (v.id == "21") start21 = v.start;
         if (v.id == "23") start23 = v.start;
         if (v.id == "24") start24 = v.start;
     }
@@ -686,8 +709,8 @@ SC_TEST("battery orders by a means (G10.5): «К маршу!» on the battery ne
     const command::BatteryOrderNet* net = r.GetBatteryOrders();
     SC_EXPECT(net != nullptr);
     if (net == nullptr) return;
-    bool early23 = false, early24 = false, caught24 = false;
-    std::set<std::string> said;  // the reports heard on the battery net
+    bool early21 = false, early23 = false, early24 = false, caught24 = false;
+    std::set<std::string> said, read_back, again;  // on the battery net: «к маршу готов», «к маршу, понял», «X, я 10: К маршу!»
     while (!r.Finished() && r.Time() < 2400.0) {
         r.Step(0.05);
         const Battery* b = r.GetBattery();
@@ -696,11 +719,14 @@ SC_TEST("battery orders by a means (G10.5): «К маршу!» on the battery ne
             const Battery::Vehicle* v = b->Find(id);
             return v != nullptr && std::hypot(v->position.x - from.x, v->position.y - from.y) > 1e-6;
         };
+        if (!(any && net->Heard(0, "21")) && moved("21", start21)) early21 = true;
         if (!(any && net->Heard(0, "23")) && moved("23", start23)) early23 = true;
         if (!(any && net->Heard(0, "24")) && moved("24", start24)) early24 = true;
         caught24 = caught24 || b->Catching("24");
+        NetLines(r, "к маршу готов", said);
+        NetLines(r, "к маршу, понял", read_back);
         for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
-            if (m.net == "battery net" && m.text.find("К маршу готов") != std::string::npos) said.insert(m.from);
+            if (m.net == "battery net" && m.text.find(", я 10: К маршу!") != std::string::npos) again.insert(m.text.substr(0, m.text.find(',')));
         }
     }
     for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
@@ -732,8 +758,85 @@ SC_TEST("battery orders by a means (G10.5): «К маршу!» on the battery ne
         SC_EXPECT(l.Has(command::OrderStep::RepeatedBack) && l.Has(command::OrderStep::Reported));
     }
     // Nobody left before his commander heard; 24, gone after the column, caught it up.
-    SC_EXPECT(!early23 && !early24 && caught24);
-    // «К маршу готов» over the battery net from every vehicle but 23, whose came down its telephone line.
-    for (const char* v : {"22", "24", "TZM", "ATZ"}) SC_EXPECT(said.count(v) == 1);
-    SC_EXPECT(said.count("23") == 0);
+    SC_EXPECT(!early21 && !early23 && !early24 && caught24);
+    // On the battery net: the order said again to 23 and 24 by call sign; each read-back that went by radio (23's went
+    // down its telephone line, 24's on the net once its set could transmit); «к маршу готов» from every vehicle but 23.
+    SC_EXPECT(again.count("23") == 1 && again.count("24") == 1 && again.count("22") == 0);
+    for (const char* v : {"21", "22", "24", "TZM", "ATZ"}) SC_EXPECT(read_back.count(v) == 1 && said.count(v) == 1);
+    SC_EXPECT(read_back.count("23") == 0 && said.count("23") == 0);
+}
+
+SC_TEST("battery orders by a means (G10.5): our crew, ready at the position, hears «К маршу!», stows and only then moves off") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    SC_EXPECT(!def.battery_orders.empty());
+    if (def.battery_orders.empty()) return;
+    def.battery_orders[0].at_s = 60.0;  // the crew has the vehicle ready by then
+    Vec3 start;
+    for (const BatteryVehicleDef& v : def.battery_vehicles) {
+        if (v.id == "21") start = v.start;
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    double moved_s = -1.0, stow_ordered_s = -1.0;
+    while (!r.Finished() && r.Time() < 900.0) {
+        r.Step(0.05);
+        const Battery::Vehicle* own = r.GetBattery()->Find("21");
+        if (moved_s < 0.0 && own != nullptr && std::hypot(own->position.x - start.x, own->position.y - start.y) > 1e-6) moved_s = r.Time();
+        for (const ScenarioRunner::GivenOrder& g : r.OrdersGiven()) {
+            if (g.order == "order_march" && stow_ordered_s < 0.0) stow_ordered_s = g.time_s;
+        }
+    }
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(!net->Book().Orders().empty());
+    if (net->Book().Orders().empty()) return;
+    const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_1_commander");
+    SC_EXPECT(l != nullptr);
+    if (l == nullptr) return;
+    const double heard_s = l->At(command::OrderStep::Heard) * 3600.0;
+    const double done_s = l->At(command::OrderStep::Done) * 3600.0;
+    std::printf("    heard %.1f s, «К маршу!» to the crew %.1f s, stowed %.1f s, moved %.1f s\n", heard_s, stow_ordered_s, done_s, moved_s);
+    // He heard it on the net, ordered the crew to stow, and the vehicle went only once it was stowed: no fault.
+    SC_EXPECT_NEAR(heard_s, 60.0 + net->Def().say_s, 0.2);
+    SC_EXPECT(stow_ordered_s >= heard_s - 0.01 && done_s > stow_ordered_s && moved_s >= done_s - 0.1);  // times through hours: 0.01 s
+    SC_EXPECT(l->Has(command::OrderStep::RepeatedBack) && l->Has(command::OrderStep::Reported));
+    SC_EXPECT(r.Log().Summary().equipment_faults == 0);
+}
+
+SC_TEST("battery orders by a means (G10.5): in the commander's seat the read-back and «к маршу готов» are the player's, on his chest switch") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.TakeSeat("commander", "Player");
+    r.SetHelper(true);
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    auto owes = [&](const std::string& id) {
+        for (const SeatDuty& d : r.OwedDuties("commander")) {
+            if (d.kind == SeatDuty::Kind::Report && d.id == id) return true;
+        }
+        return false;
+    };
+    while (r.Time() < 10.0) r.Step(0.05);
+    // He heard it: his read-back is owed, and the vehicle (stowed) is already on its way; nothing is reported for him.
+    SC_EXPECT(net->Heard(0, "21") && !net->RepeatedBack(0, "21") && owes("order_readback"));
+    SC_EXPECT(!r.PlayerSay("commander", "report_ready_to_march"));
+    // Not with the chest switch at receive; with it at ПРД, on the air.
+    SC_EXPECT(!r.PlayerSay("commander", "order_readback"));
+    r.Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(r.PlayerSay("commander", "order_readback"));
+    r.Step(0.05);
+    SC_EXPECT(net->RepeatedBack(0, "21") && !owes("order_readback"));
+    SC_EXPECT(owes("report_ready_to_march"));
+    SC_EXPECT(r.PlayerSay("commander", "report_ready_to_march"));
+    r.Step(0.05);
+    SC_EXPECT(net->Reported(0, "21") && !owes("report_ready_to_march"));
+    // His were the only lines: the battery commander never had to say it to 21 again.
+    const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_1_commander");
+    SC_EXPECT(l != nullptr && l->sent.size() == 1);
 }

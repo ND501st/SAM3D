@@ -1408,6 +1408,12 @@ public:
         }
         // An ARM attack reported to the battery commander (refused until he has heard a sign of one).
         if ((battery_ || LinkedToPost()) && def_.crew_data.FindCallout("report_arm_attack") != nullptr) out.push_back("report_arm_attack");
+        // The battery's orders on the net (orders by a means): his read-back and his «к маршу готов».
+        if (!OwnOnOrderNet().empty()) {
+            for (const char* id : {"order_readback", "report_ready_to_march"}) {
+                if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
+            }
+        }
         return out;
     }
     // Targets given this vehicle on the battery net that its commander heard (the PU-12's designations), so far.
@@ -1948,7 +1954,10 @@ private:
         if (!def_.battery_drive_own) battery_->SetOwnPosition(def_.unit_position);
         ServiceDrills();
         battery_->Step(time_, dt);
-        if (order_net_) StepOrderNet();
+        if (order_net_) {
+            StepOrderNet();
+            UpdateOwnOrder();
+        }
         UpdateBatteryFire();
         // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
         bool has_tzm = false, has_fuel = false;
@@ -2075,6 +2084,10 @@ private:
             const std::string mean = MarchRadioBan() ? (def_.battery_night ? "lamps" : "flags") : "radio_voice";
             battery_order_ = order_net_->Give(BatteryOrderName(o.kind), BatteryOrderWords(o.kind), mean, time_, to);
             battery_order_kind_ = o.kind;
+            const std::string own = OwnOnOrderNet();
+            if (!own.empty() && mean == "radio_voice" && CmdrHearsBatteryNet()) {
+                order_net_->Reach(battery_order_, own, time_ + order_net_->Def().say_s, time_);
+            }
         }
         battery_->Order(o, time_);
     }
@@ -2084,45 +2097,226 @@ private:
     // lets an order through).
     void KeepOrderNetCurrent() {
         if (const Battery::Vehicle* g = battery_->Find(def_.battery_giver)) order_net_->SetGiverAt(g->position);
-        const bool ban = battery_->CurrentMode() == Battery::Mode::Marching && !RepellingAttack();
         const bool jammed = nets_ && nets_->Jam("battery", time_) >= 2;
         for (const command::OrderVehicle& c : def_.battery_crews) {
             const Battery::Vehicle* bv = battery_->Find(c.vehicle);
             command::OrderVehicle* ov = order_net_->Vehicle(c.vehicle);
             if (bv == nullptr || ov == nullptr) continue;
             ov->at = bv->position;
-            ov->may_call = !ban || bv->absent || bv->catching;
+            ov->may_call = NetMayCall(*bv);
             ov->on_net = !nets_ || nets_->MemberOnNet("battery", c.callsign);
             ov->jammed = jammed;
         }
     }
+    bool NetMayCall(const Battery::Vehicle& v) const {
+        const bool ban = battery_->CurrentMode() == Battery::Mode::Marching && !RepellingAttack();
+        return !ban || v.absent || v.catching;
+    }
     // Each step: who has heard (his vehicle acts), the repeat-backs, the silences chased; each vehicle done reports, and
-    // what reaches the battery commander the own crew hears where its means reach them.
+    // what reaches the battery commander the own crew hears where its means reach them: the giver's words again and the
+    // vehicle commanders' on the battery net, the signals by flags or lamps. The own vehicle's are its seats'.
     void StepOrderNet() {
         KeepOrderNetCurrent();
+        const std::string own = OwnOnOrderNet();
         for (const command::OrderEvent& e : order_net_->Step(time_)) {
             log_.Record({e.t, DebriefEntry::Kind::Scenario, e.callsign, "battery order",
                          e.what + (e.mean.empty() ? std::string() : " by " + e.mean) + ": " + e.text});
-            if (e.what == "carrying out") battery_->Join(e.vehicle, time_);
-            if (e.what != "reported") continue;
+            const bool mine = !own.empty() && e.vehicle == own;
+            if (e.what == "carrying out" && !mine) battery_->Join(e.vehicle, time_);
+            if (e.what == "sent again" && e.mean == "radio_voice") {  // to him by his call sign: «23, я 10: К маршу!»
+                Radio("battery net", "Battery commander", e.callsign + ", я " + BatteryPostCall() + ": " + e.text);
+                if (mine && CmdrHearsBatteryNet()) order_net_->Reach(e.order, e.vehicle, time_ + order_net_->Def().say_s, time_);
+                continue;
+            }
+            if (mine || (e.what != "repeated back" && e.what != "reported")) continue;
             if (e.mean == "radio_voice") {
-                Radio("battery net", e.callsign, e.text);
-            } else if (e.mean == "flags" || e.mean == "lamps") {
+                SayForVehicle(e);
+            } else if (e.what == "reported" && (e.mean == "flags" || e.mean == "lamps")) {
                 Radio(e.mean == "lamps" ? "lamp signals" : "flag signals", e.callsign, e.text, false, SignalSeers());
             }
         }
         if (battery_order_ < 0) return;
         for (const command::OrderVehicle& c : order_net_->Vehicles()) {
             const Battery::Vehicle* bv = battery_->Find(c.vehicle);
-            if (bv == nullptr || bv->absent || !order_net_->Heard(battery_order_, c.vehicle)) continue;
+            if (c.seats || bv == nullptr || bv->absent || !order_net_->Heard(battery_order_, c.vehicle)) continue;
             if (battery_order_kind_ == BatteryOrder::Kind::March && time_ >= bv->hold_until_s) {
-                order_net_->Done(battery_order_, c.vehicle, time_, c.callsign + ": " + CrewWords("ready_to_march", "К маршу готов!"));
+                order_net_->Done(battery_order_, c.vehicle, time_, NetWords("report_ready_to_march", OrderFields(c.callsign), c.callsign + ": К маршу готов!"));
             } else if (DeploysBattery(battery_order_kind_) && bv->deployed) {
-                // report_ready's short form (voenizdat_osa_1991 p246): the channels and missiles are the own crew's to say
                 order_net_->Done(battery_order_, c.vehicle, time_, c.callsign + " к бою готов!");
             }
         }
     }
+    // A vehicle commander's words on the battery net, in the crew data's words, spoken as the battery's (the callout bus
+    // takes turns on the net): «10, я 22: к маршу, понял. Приём.», «10, я 22: к маршу готов. Приём.», a launcher's
+    // «к бою готов» with its missiles (voenizdat_osa_1991 p246); a vehicle with no fire channels says the short form.
+    void SayForVehicle(const command::OrderEvent& e) {
+        std::map<std::string, std::string> f = OrderFields(e.callsign);
+        std::string id = e.what == "repeated back" ? "order_readback" : "report_ready_to_march";
+        if (e.what == "reported" && DeploysBattery(battery_order_kind_)) {
+            id.clear();
+            if (battery_fire_) {
+                for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                    if (s.callsign != e.callsign) continue;
+                    id = "report_ready";
+                    f = {{"callsign", s.callsign}, {"missiles", std::to_string(s.missiles)}};
+                }
+            }
+        }
+        if (!id.empty() && callouts_ && def_.crew_data.FindCallout(id) != nullptr) {
+            callouts_->Say(time_, id, "battery", f);
+        } else {
+            Radio("battery net", e.callsign, e.text);
+        }
+    }
+    // The blanks of a battery order's words on the net: the battery commander's call sign, the vehicle's, the order in
+    // force as said («к маршу») and in English.
+    std::map<std::string, std::string> OrderFields(const std::string& callsign) const {
+        std::map<std::string, std::string> f{{"post", BatteryPostCall()}, {"callsign", callsign}};
+        const std::string words = BatteryOrderWords(battery_order_kind_);
+        f["order"] = LowerFirst(words.substr(0, words.size() > 1 && words.back() == '!' ? words.size() - 1 : words.size()));
+        std::string en = BatteryOrderName(battery_order_kind_);
+        if (const char* id = OrderCallout(battery_order_kind_)) {
+            if (const CalloutDef* c = def_.crew_data.FindCallout(id)) en = c->en;
+        }
+        if (!en.empty() && en.back() == '!') en.pop_back();
+        if (!en.empty() && en[0] >= 'A' && en[0] <= 'Z') en[0] = static_cast<char>(en[0] - 'A' + 'a');
+        f["order_en"] = en;
+        return f;
+    }
+    std::string NetWords(const char* callout, const std::map<std::string, std::string>& fields, const std::string& fallback) const {
+        const CalloutDef* c = def_.crew_data.FindCallout(callout);
+        return c != nullptr ? FillCallout(c->ru, fields) : fallback;
+    }
+    static const char* OrderCallout(BatteryOrder::Kind k) {
+        switch (k) {
+            case BatteryOrder::Kind::March: return "order_march";
+            case BatteryOrder::Kind::ShortHalt:
+            case BatteryOrder::Kind::Halt: return "order_halt";
+            case BatteryOrder::Kind::Resume: return "order_go";
+            case BatteryOrder::Kind::CombatFormation: return "order_k_boyu";
+            case BatteryOrder::Kind::Relocate: return "order_relocate";
+            default: return nullptr;
+        }
+    }
+    // The first letter in lower case (a Cyrillic capital in UTF-8, or a Latin one): «К маршу» -> «к маршу».
+    static std::string LowerFirst(std::string s) {
+        if (s.size() >= 2 && static_cast<unsigned char>(s[0]) == 0xD0) {
+            const unsigned char c = static_cast<unsigned char>(s[1]);
+            if (c >= 0x90 && c <= 0x9F) s[1] = static_cast<char>(c + 0x20);                       // А-П -> а-п
+            if (c >= 0xA0 && c <= 0xAF) s.replace(0, 2, std::string{'\xD1', static_cast<char>(c - 0x20)});  // Р-Я -> р-я
+        } else if (!s.empty() && s[0] >= 'A' && s[0] <= 'Z') {
+            s[0] = static_cast<char>(s[0] - 'A' + 'a');
+        }
+        return s;
+    }
+    std::string BatteryPostCall() const { return OwnCallSignOn("battery"); }
+
+    // ---- The own vehicle on the order net (G10.5, level C2; docs/campaign/11_BATTERY_LIFE_PROPOSAL.md G10): its
+    // commander, at his seat, hears the battery's orders where his headset is on the battery net (or sees the flags);
+    // he reads each back on the net, an NPC by NpcDoes and a player from the crew menu, the helper showing it. On a march
+    // the vehicle moves off only once the crew is stowed (he orders «К маршу!» on the intercom if it is not), the driver
+    // says so and he reports «к маршу готов»; a deploying order moves it at once and his «к бою готов» is the report.
+    // The own vehicle's id on the order net ("" : it is not on it).
+    std::string OwnOnOrderNet() const {
+        if (!order_net_) return std::string();
+        const Battery::Vehicle* own = battery_->Own();
+        if (own == nullptr) return std::string();
+        for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+            if (c.seats && c.vehicle == own->def.id) return c.vehicle;
+        }
+        return std::string();
+    }
+    bool CmdrHearsBatteryNet() const {
+        if (!voice_) return c2_ == nullptr || c2_->Hearing();
+        const std::vector<std::string> h = BatteryNetHearers();
+        return std::find(h.begin(), h.end(), Cmdr()) != h.end();
+    }
+    bool OwnStowed() const {
+        const CrewTask* stowed = def_.crew_data.FindTask("stowed");
+        return stowed == nullptr || console_.equipment.AllHold(stowed->conditions, console_.panel);
+    }
+    // Waiting for the crew to stow for a march the battery ordered (the commander's think does nothing else meanwhile).
+    bool OwnStowing() const {
+        const std::string own = OwnOnOrderNet();
+        return !own.empty() && battery_order_ >= 0 && battery_order_kind_ == BatteryOrder::Kind::March && battery_->Absent(own) &&
+               order_net_->Heard(battery_order_, own);
+    }
+    // What his seat owes on the net now: "order_readback", "report_ready_to_march", or "".
+    std::string OwnOwesOnNet() const {
+        const std::string own = OwnOnOrderNet();
+        if (own.empty() || battery_order_ < 0 || !order_net_->Heard(battery_order_, own)) return std::string();
+        const Battery::Vehicle* bv = battery_->Find(own);
+        if (bv == nullptr || !NetMayCall(*bv)) return std::string();
+        if (!order_net_->RepeatedBack(battery_order_, own)) return "order_readback";
+        if (battery_order_kind_ == BatteryOrder::Kind::March && order_net_->IsDone(battery_order_, own) && !order_net_->Reported(battery_order_, own)) {
+            return "report_ready_to_march";
+        }
+        return std::string();
+    }
+    void UpdateOwnOrder() {
+        const std::string own = OwnOnOrderNet();
+        if (own.empty() || battery_order_ < 0 || !order_net_->Heard(battery_order_, own)) return;
+        const Battery::Vehicle* bv = battery_->Find(own);
+        if (bv == nullptr) return;
+        const bool march = battery_order_kind_ == BatteryOrder::Kind::March;
+        // What he owes on the net: said once (a line that could not go out is tried again).
+        const std::string owes = OwnOwesOnNet();
+        if (!owes.empty() && OwnSaidFor(owes) != battery_order_) {
+            SeatDuty d = SeatDuty::Report(Cmdr(), owes, owes == "order_readback" ? "a battery order heard on the net: read it back"
+                                                                                  : "the vehicle stowed and on its way: report it on the net");
+            d.fields = OrderFields(OwnCallsign());
+            d.keep_s = 1.0;  // owed again each step while it is due: gone once radio is not his to use
+            if (NpcDoes(Cmdr(), d) && SayOnRadio(owes, d.fields, false)) own_said_[owes] = battery_order_;
+        }
+        if (!order_net_->Acting(battery_order_, own)) return;  // he acts on it after his reaction
+        if (bv->absent) {
+            if (!march || OwnStowed()) {
+                battery_->Join(own, time_);
+            } else if (own_stow_ordered_ != battery_order_ &&
+                       NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_march", "the battery marches: the crew stows for it"))) {
+                if (GiveCrewOrder("order_march")) own_stow_ordered_ = battery_order_;
+            }
+            return;
+        }
+        if (march && !order_net_->IsDone(battery_order_, own) && OwnStowed() && time_ >= bv->hold_until_s) {
+            if (OwnSaidFor("ready_to_march") != battery_order_ &&
+                NpcDoes("driver", SeatDuty::Report("driver", "ready_to_march", "the crew is stowed for the battery's march"))) {
+                Say("ready_to_march", "driver");
+                own_said_["ready_to_march"] = battery_order_;
+            }
+            order_net_->Done(battery_order_, own, time_, NetWords("report_ready_to_march", OrderFields(OwnCallsign()), "К маршу готов!"));
+        }
+        if (DeploysBattery(battery_order_kind_) && bv->deployed) {
+            order_net_->Done(battery_order_, own, time_, NetWords("report_ready", RadioFields(), OwnCallsign() + " к бою готов!"));
+        }
+    }
+    // His words go out on the battery net, said by `at_s`: the order net has his repeat-back or report (a deploying
+    // order's is his «к бою готов»).
+    void OwnSaidOnNet(const std::string& callout_id, double at_s) {
+        const std::string own = OwnOnOrderNet();
+        if (own.empty() || battery_order_ < 0) return;
+        if (callout_id == "order_readback") order_net_->SaidOnNet(battery_order_, own, at_s, true);
+        if (callout_id == "report_ready_to_march") order_net_->SaidOnNet(battery_order_, own, at_s, false);
+        if (callout_id == "report_ready" && DeploysBattery(battery_order_kind_) && order_net_->Heard(battery_order_, own)) {
+            order_net_->Done(battery_order_, own, time_, NetWords("report_ready", RadioFields(), OwnCallsign() + " к бою готов!"));
+            order_net_->SaidOnNet(battery_order_, own, at_s, false);
+        }
+    }
+    // A launcher's «к бою готов» the order net carries (it has heard a deploying order): not said again by the battery's
+    // fire model.
+    bool OrderNetReports(const std::string& callsign) const {
+        if (!order_net_ || battery_order_ < 0 || !DeploysBattery(battery_order_kind_)) return false;
+        for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+            if (c.callsign == callsign && !c.seats) return order_net_->Heard(battery_order_, c.vehicle);
+        }
+        return false;
+    }
+    std::map<std::string, int> own_said_;  // each line of his on the net: the order it was last said for
+    int OwnSaidFor(const std::string& line) const {
+        const auto it = own_said_.find(line);
+        return it != own_said_.end() ? it->second : -1;
+    }
+    int own_stow_ordered_ = -1;
 
     // The reload and refuel drills: an empty launcher calls the TZM; a crew asking for fuel calls the fuel truck (or the
     // TZM). What goes across is counted off the service vehicle; it goes back when the vehicle is full or it is empty.
@@ -3588,11 +3782,14 @@ private:
         }
         const std::map<std::string, std::string> fields = NetReportFields(callout_id);
         if (!callouts_->Say(time_, callout_id, Cmdr(), fields)) return false;
+        double said_s = 0.0;
         if (const CalloutDef* def = def_.crew_data.FindCallout(callout_id)) {
-            OnAir(callouts_->LineTimeS(callout_id, Cmdr(), FillCallout(def->ru, fields)) + 0.5);
+            said_s = callouts_->LineTimeS(callout_id, Cmdr(), FillCallout(def->ru, fields));
+            OnAir(said_s + 0.5);
         }
         reports_made_.push_back({time_, station, callout_id});
         if (callout_id == "readback" && LinkedToPost()) own_readbacks_.push_back(designations_heard_.back().number);
+        if (order_net_) OwnSaidOnNet(callout_id, time_ + said_s);
         return true;
     }
     // The blanks of the commander's words on the battery net: his call sign, the post's, the latest target given him, his
@@ -4492,7 +4689,9 @@ private:
         }
         const double delay = by_player ? 0.0 : SpeakDelayS(Cmdr());
         if (!callouts_->Say(time_, id, Cmdr(), fields, delay)) return false;
-        OnAir(delay + callouts_->LineTimeS(id, Cmdr(), FillCallout(def->ru, fields)) + 0.5);  // keyed a moment before the words and after
+        const double said_s = delay + callouts_->LineTimeS(id, Cmdr(), FillCallout(def->ru, fields));
+        OnAir(said_s + 0.5);  // keyed a moment before the words and after
+        if (order_net_) OwnSaidOnNet(id, time_ + said_s);
         return true;
     }
     // The fields of the vehicle's radio reports: its callsign, the channels the КАНАЛЫ selector allows, missiles loaded.
@@ -5711,7 +5910,7 @@ private:
         const bool column = battery_ && def_.battery_drive_own &&
                             (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
         const bool halted = console_.equipment.GetInput("vehicle_stopped") && !column;
-        const bool stowing = (npc_stow_ordered_ && !npc_resumed_) || (npc_arm_stow_ordered_ && !arm_relocated_);
+        const bool stowing = (npc_stow_ordered_ && !npc_resumed_) || (npc_arm_stow_ordered_ && !arm_relocated_) || OwnStowing();
         if (engagement_on_ && engagement_.Method() != npc_track_method_) {
             npc_track_method_ = engagement_.Method();
             npc_track_since_s_ = time_;
@@ -8087,7 +8286,9 @@ private:
                 break;
             case BatteryFire::Event::Kind::Ready:
                 Event(r.callsign, "ready for action");
-                if (hears && callouts_) callouts_->Say(time_, "report_ready", "battery", {{"callsign", r.callsign}, {"missiles", std::to_string(r.missiles)}});
+                if (hears && callouts_ && !OrderNetReports(r.callsign)) {
+                    callouts_->Say(time_, "report_ready", "battery", {{"callsign", r.callsign}, {"missiles", std::to_string(r.missiles)}});
+                }
                 if (hears) {
                     reported_deployed_[r.callsign] = true;
                     Status(r.callsign, r.missiles != 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, r.missiles, 0);
@@ -9328,6 +9529,17 @@ public:
             return true;
         }
         if ((callout_id == "readback" || callout_id == "report_ready") && c2_) return PlayerOnBatteryNet(station, callout_id);
+        if (callout_id == "order_readback" || callout_id == "report_ready_to_march") {  // a battery order on the net (G10)
+            if (station != Cmdr() || OwnOwesOnNet() != callout_id) {
+                last_refusal_ = callout_id == "order_readback" ? "no battery order heard to read back"
+                                                               : "nothing to report: the vehicle is not stowed and on its way";
+                return false;
+            }
+            if (!SayOnRadio(callout_id, OrderFields(OwnCallsign()), true)) return false;
+            SettleOwedReport(station, callout_id, std::string());
+            reports_made_.push_back({time_, station, callout_id});
+            return true;
+        }
         if (station == "commander") {  // a radio callout of his goes on the air, by his chest switch at ПРД (7.8)
             const CalloutDef* cd = def_.crew_data.FindCallout(callout_id);
             if (cd != nullptr && cd->kind == CalloutKind::Radio) {

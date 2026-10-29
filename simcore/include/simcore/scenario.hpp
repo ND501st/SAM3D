@@ -1892,7 +1892,8 @@ private:
     // "by_means": { "chain": "command/chain_pannonia.json", "giver_post": "bty21_commander",
     //               "crews": [ { "vehicle": "23", "post": "veh21_3_commander", "set_on": false, "line": false } ] }
     // The battery commander rides in the command post (the own vehicle when it is the post, else the own vehicle). Every
-    // other vehicle has a commander: his post's holder and skill tier from the chain, or class 2's times.
+    // other vehicle has a commander: his post's holder and skill tier from the chain, or class 2's times. The own vehicle,
+    // when the battery drives it, is on the net too, seat by seat: its commander is the crew's (NPC or player).
     bool LoadBatteryByMeans(const json::Value& b, const std::string& data_dir, ScenarioDef& out) {
         const json::Value* m = b.Find("by_means");
         if (m == nullptr) return true;
@@ -1918,8 +1919,9 @@ private:
         }
         out.battery_crews.clear();
         for (const BatteryVehicleDef& v : out.battery_vehicles) {
-            if (v.own || v.id == out.battery_giver) continue;
+            if (v.id == out.battery_giver || (v.own && !out.battery_drive_own)) continue;
             out.battery_crews.push_back(command::CommanderFromChain(chain, out.skills, v.id, v.callsign, v.callsign + "_commander"));
+            out.battery_crews.back().seats = v.own;
         }
         if (const json::Value* cs = OptionalArray(*m, mp, "crews")) {
             for (std::size_t i = 0; i < cs->items.size(); ++i) {
@@ -1938,7 +1940,9 @@ private:
                 if (crew == nullptr) return Fail(Join(p, "vehicle"), "'" + vehicle + "' is not one of the battery's other vehicles");
                 if (!post.empty()) {
                     if (!chain_file.empty() && chain.FindPosition(post) == nullptr) return Fail(Join(p, "post"), "no post '" + post + "' in the chain");
+                    const bool seats = crew->seats;
                     *crew = command::CommanderFromChain(chain, out.skills, crew->vehicle, crew->callsign, post);
+                    crew->seats = seats;
                 }
                 crew->set_on = set_on;
                 crew->line = line;

@@ -728,10 +728,27 @@ runs still go straight to the battery (G10.7). The test (`test_battery.cpp`, `da
 «К маршу!» at the start, the crews still stowed; 22, the TZM and the ATZ hear it at once and answer; 23, its set off, hears by its telephone after
 two repeats and repeats back on the call; 24, its set off and no wire, by a runner 5 min 25 s after the order, goes
 after the column and reports on the net 13 min later, once its set can transmit; neither moved before its
-commander heard. Missions without `by_means` are unchanged (`helper_coverage` as before). Left: the player's own
-vehicle at C2, the driver as a person, the orders group in person and the talk tables' words on the net (G10.3), the
-giver's picture from the reports on the working map (G10.4), "cannot" (a vehicle that cannot catch up), the regiment's
-orders and the emission regime on the same path (G10.7), the player's side (G10.8).
+commander heard. Missions without `by_means` are unchanged (`helper_coverage` as before).
+
+**Built: the own vehicle on the net, and the words on it (29 Oct 2026; G10.5's level C2, part of G10.6 and of G10.8's
+receiving side).** With `drive_own` the player's own vehicle is on the order net too, seat by seat (`OrderVehicle::seats`):
+its commander hears an order where his headset is on the battery net (else by the means the net carries: flags, a
+runner), reads it back on the net «10, я 21: к маршу, понял. Приём.» (rrs_1986: an order acknowledged by its
+repetition) and, once the vehicle is stowed and out, reports «10, я 21: к маршу готов. Приём.» (`voenizdat_osa_1991`
+p246). An NPC commander says them by `NpcDoes`; at the player's seat they are his duties, shown by the helper and said
+from the crew menu's Battery sector on his chest switch, and a read-back not said is chased like any silence. On a
+march the vehicle stays until the crew is stowed: finding it ready, he orders «К маршу!» on the intercom, and the
+vehicle moves off once it is stowed (this closed the vehicle driving off with its launcher unlocked). The other vehicles' words go out on the battery
+net in the crew data's words (`order_readback`, `report_ready_to_march`, a launcher's `report_ready` with its missiles,
+which the battery's fire model no longer says twice), and the battery commander's repeats by call sign («23, я 10: К
+маршу!»). Tests (`test_battery.cpp`): every read-back and report on the net from every vehicle but 23 (its telephone);
+our crew, ready when «К маршу!» comes at 60 s, hears it at 64 s, stows and moves off at 70 s with no fault; at the
+player's seat the read-back is refused on receive, goes out at ПРД and settles his duty, and the battery commander never
+says it to 21 again. Left: the post's radiotelephonist writing these reports in the journal and the book's "logged"
+step in the session (the PU-12M as the own vehicle on a march), the driver as a person, the orders group in person and
+the talk tables' words on the net (G10.3), the giver's picture from the reports on the working map (G10.4), "cannot" (a
+vehicle that cannot catch up), the control points and the arrival reported (G10.6), the regiment's orders and the
+emission regime on the same path (G10.7), the player giving the orders (G10.8).
 
 ### G11: Unreal, everything the player could see
 

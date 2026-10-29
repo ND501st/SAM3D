@@ -260,11 +260,11 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
-| commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | duty 1 | 0 |
+| commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | duty 1 | 66 |
 | deputy_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
-| senior_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | drill 5, duty 2 | 0 |
+| senior_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 0 | drill 11, duty 3 | 0 |
 | operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
-| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
+| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | duty 3 | 0 |
 
 ## osa_practice: Osa: one drone
 
@@ -634,6 +634,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (commander): the limited regime: ВЫСОКОЕ on for a burst | 134 |
 | order (commander): the search transmitter on longer than the regime's burst | 10 |
 | plot (operator): a report heard: write it on the board | 102 |
+| report (commander): a battery order heard on the net: read it back | 1 |
 | report (commander): a target destroyed: report it on the battery net | 5 |
 | report (commander): a target given on the battery net: read it back | 50 |
 | report (commander): an ARM launch: reported to the battery commander | 8 |
@@ -650,6 +651,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (deputy_commander): К бою: the intercom checked | 36 |
 | report (driver): a report the crew makes when its lamp or input comes on | 8 |
 | report (driver): stowed after the ARM attack: ready to march | 3 |
+| report (driver): the crew is stowed for the battery's march | 1 |
 | report (operator): a mark new, turned or lost on the board: tell the commander | 21 |
 | report (operator): a report the crew makes when its lamp or input comes on | 101 |
 | report (operator): a sign of the shot on his instrument: its jamming gone | 1 |
@@ -661,7 +663,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): К бою: the intercom checked | 36 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
 | report (senior_operator): a new echo on his scope | 110 |
-| report (senior_operator): a report the crew makes when its lamp or input comes on | 51 |
+| report (senior_operator): a report the crew makes when its lamp or input comes on | 52 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
 | report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 6 |
 | report (senior_operator): a target that came at the battery turns away | 2 |
