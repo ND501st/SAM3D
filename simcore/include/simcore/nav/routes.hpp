@@ -198,13 +198,19 @@ struct RouteLeg {
     double time_s = 0.0;
 };
 
+// One stretch of the path, from path[i] to path[i + 1], at the class's speed there. A swim is a stretch at a crossing:
+// its point twice, as long as the river is wide. A mover goes along the path stretch by stretch (nav/march.hpp).
+using RouteStretch = RouteLeg;
+
 struct Route {
     bool found = false;
     std::string why;  // when not found
     double length_m = 0.0;
     double time_s = 0.0;
     std::vector<MapPoint> path;
-    std::vector<RouteLeg> legs;
+    std::vector<RouteStretch> stretches;  // one for each step of the path
+    std::vector<int> nodes;               // the graph's node at each point of the path (-1: an end, or a point on an edge)
+    std::vector<RouteLeg> legs;           // the stretches of one road joined
     std::vector<std::string> crossings;  // the crossings used, in order (bridges, or rivers swum where a bridge is down)
     std::vector<std::string> depends;    // the overlay entries it was planned round: when one changes, plan again
     double max_link_m = 0.0;             // the longer way off the road at an end (beyond the request's bound: no road near)
@@ -440,7 +446,11 @@ public:
             if (v == T) return q.to;
             return nodes_[static_cast<std::size_t>(v)].at;
         };
-        auto add_leg = [&r](const std::string& kind, Road road, const std::string& line, double length_m, double time_s) {
+        // Stretch by stretch: each adds the point it ends at; the legs join the stretches of one line.
+        auto go = [&r](const std::string& kind, Road road, const std::string& line, double length_m, double time_s, const MapPoint& to, int node) {
+            r.stretches.push_back({kind, road, line, length_m, time_s});
+            r.path.push_back(to);
+            r.nodes.push_back(node);
             if (length_m <= 0.0 && time_s <= 0.0) return;
             if (!r.legs.empty() && r.legs.back().kind == kind && r.legs.back().line_id == line) {
                 r.legs.back().length_m += length_m;
@@ -449,53 +459,47 @@ public:
                 r.legs.push_back({kind, road, line, length_m, time_s});
             }
         };
+        auto off_s = [&](std::int64_t length_cm) { return static_cast<double>(ds(length_cm, off_v)) / 10.0; };
         r.path.push_back(q.from);
+        r.nodes.push_back(-1);
         int prev = S;
         for (int v : chain) {
             const Via& w = via[static_cast<std::size_t>(v)];
             const MapPoint a = point(prev);
             const MapPoint b = point(v);
+            const int node = v == S || v == T ? -1 : v;
             if (w.edge == -2) {
-                add_leg("off_road", Road::Track, "", std::hypot(b.east_m - a.east_m, b.north_m - a.north_m), static_cast<double>(direct_ds) / 10.0);
+                go("off_road", Road::Track, "", std::hypot(b.east_m - a.east_m, b.north_m - a.north_m), static_cast<double>(direct_ds) / 10.0, b, -1);
             } else if (w.edge == -3) {
                 // Off the road to an edge, along it, and (at the end) off it again.
                 const NavEdge& e = edges_[static_cast<std::size_t>(parts[static_cast<std::size_t>(w.part)].edge)];
-                const Snap& sn = prev == S ? s : t;
-                const MapPoint on = sn.on;
+                const std::int64_t v_road = road_v[static_cast<std::size_t>(e.road)];
+                auto road_s = [&](double along_m) { return static_cast<double>(ds(std::llround(along_m * 100.0), v_road)) / 10.0; };
                 if (prev == S) {
-                    const double off_m = static_cast<double>(s.off_cm) / 100.0;
-                    add_leg("off_road", Road::Track, "", off_m, static_cast<double>(ds(s.off_cm, off_v)) / 10.0);
-                    r.path.push_back(on);
+                    go("off_road", Road::Track, "", static_cast<double>(s.off_cm) / 100.0, off_s(s.off_cm), s.on, -1);
                     if (v == T && t.edge == s.edge) {
-                        const double along_m = std::hypot(t.on.east_m - on.east_m, t.on.north_m - on.north_m);
-                        add_leg("road", e.road, e.line_id, along_m, static_cast<double>(ds(std::llround(along_m * 100.0), road_v[static_cast<std::size_t>(e.road)])) / 10.0);
-                        r.path.push_back(t.on);
-                        add_leg("off_road", Road::Track, "", static_cast<double>(t.off_cm) / 100.0, static_cast<double>(ds(t.off_cm, off_v)) / 10.0);
+                        const double along_m = std::hypot(t.on.east_m - s.on.east_m, t.on.north_m - s.on.north_m);
+                        go("road", e.road, e.line_id, along_m, road_s(along_m), t.on, -1);
+                        go("off_road", Road::Track, "", static_cast<double>(t.off_cm) / 100.0, off_s(t.off_cm), b, -1);
                     } else {
-                        const double along_m = std::hypot(b.east_m - on.east_m, b.north_m - on.north_m);
-                        add_leg("road", e.road, e.line_id, along_m, static_cast<double>(ds(std::llround(along_m * 100.0), road_v[static_cast<std::size_t>(e.road)])) / 10.0);
+                        const double along_m = std::hypot(b.east_m - s.on.east_m, b.north_m - s.on.north_m);
+                        go("road", e.road, e.line_id, along_m, road_s(along_m), b, node);
                     }
                 } else {
                     const double along_m = std::hypot(t.on.east_m - a.east_m, t.on.north_m - a.north_m);
-                    add_leg("road", e.road, e.line_id, along_m, static_cast<double>(ds(std::llround(along_m * 100.0), road_v[static_cast<std::size_t>(e.road)])) / 10.0);
-                    r.path.push_back(t.on);
-                    add_leg("off_road", Road::Track, "", static_cast<double>(t.off_cm) / 100.0, static_cast<double>(ds(t.off_cm, off_v)) / 10.0);
+                    go("road", e.road, e.line_id, along_m, road_s(along_m), t.on, -1);
+                    go("off_road", Road::Track, "", static_cast<double>(t.off_cm) / 100.0, off_s(t.off_cm), b, -1);
                 }
             } else {
                 const NavEdge& e = edges_[static_cast<std::size_t>(w.edge)];
-                add_leg("road", e.road, e.line_id, static_cast<double>(e.length_cm) / 100.0, static_cast<double>(ds(e.length_cm, road_v[static_cast<std::size_t>(e.road)])) / 10.0);
+                go("road", e.road, e.line_id, static_cast<double>(e.length_cm) / 100.0,
+                   static_cast<double>(ds(e.length_cm, road_v[static_cast<std::size_t>(e.road)])) / 10.0, b, node);
             }
-            if (v != S && v != T) {
-                const int c = nodes_[static_cast<std::size_t>(v)].crossing;
-                if (c >= 0) {
-                    r.crossings.push_back(crossings_[static_cast<std::size_t>(c)].id);
-                    if (w.swim) {
-                        const NavCrossing& x = crossings_[static_cast<std::size_t>(c)];
-                        add_leg("swim", Road::Track, x.river_id, x.river_width_m, static_cast<double>(swim_ds(v)) / 10.0);
-                    }
-                }
+            if (node >= 0 && nodes_[static_cast<std::size_t>(node)].crossing >= 0) {
+                const NavCrossing& x = crossings_[static_cast<std::size_t>(nodes_[static_cast<std::size_t>(node)].crossing)];
+                r.crossings.push_back(x.id);
+                if (w.swim) go("swim", Road::Track, x.river_id, x.river_width_m, static_cast<double>(swim_ds(v)) / 10.0, b, node);
             }
-            r.path.push_back(b);
             prev = v;
         }
         for (const RouteLeg& l : r.legs) r.length_m += l.length_m;

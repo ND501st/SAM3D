@@ -197,3 +197,9 @@ add_executable(country_dump examples/country_dump.cpp)
 simcore_configure_target(country_dump)
 add_test(NAME country_dump_route
          COMMAND country_dump "${CMAKE_CURRENT_SOURCE_DIR}/../data" maps/pannonia.json --route road 9 -1 68 12 b_ralje@rava)
+
+# The route service against the map's data (roadmap G1.6): the anchors off the road net or cut off from it, listed; the
+# graph's build and a sample of routes timed.
+add_executable(nav_check examples/nav_check.cpp)
+simcore_configure_target(nav_check)
+add_test(NAME nav_check COMMAND nav_check "${CMAKE_CURRENT_SOURCE_DIR}/../data" 200)

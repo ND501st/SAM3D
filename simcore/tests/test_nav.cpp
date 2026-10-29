@@ -252,3 +252,194 @@ SC_TEST("nav: anchors (G1.6's check): the battery's and the regiment's places st
         SC_EXPECT(a != nullptr && w.graph.DistanceToRoad(a->at) < 3000.0);
     }
 }
+
+// ---------------------------------------------------------------------------------------------- G2: the march
+
+namespace {
+
+BatteryTactics Tactics() {
+    BatteryTactics t;
+    std::string e;
+    if (!LoadBatteryTacticsFile(kData + "/command/battery_tactics.json", t, &e)) std::printf("    %s\n", e.c_str());
+    return t;
+}
+
+// Battery 21's column in the textbook's order of march: the PU-12M, two launchers, a TZM, two launchers, a TZM, the
+// maintenance vehicle; the launchers at their positions, the rest by the command post.
+std::vector<MarchVehicle> Battery21(bool with_maintenance = true) {
+    const World& w = TheWorld();
+    auto at = [&](const std::string& id, double de, double dn) {
+        const MapPoint p = w.anchors.Find(id)->at;
+        return Vec3{p.east_m + de, p.north_m + dn, 0.0};
+    };
+    auto v = [](const std::string& id, BatteryVehicleKind kind, Vec3 start) {
+        MarchVehicle m;
+        m.def.id = id;
+        m.def.callsign = id;
+        m.def.kind = kind;
+        m.def.start = start;
+        return m;
+    };
+    std::vector<MarchVehicle> out = {
+        v("21", BatteryVehicleKind::CommandPost, at("bty21_cp", 0.0, 0.0)),
+        v("21-1", BatteryVehicleKind::Launcher, at("bty21_v1", 0.0, 0.0)),
+        v("21-2", BatteryVehicleKind::Launcher, at("bty21_v2", 0.0, 0.0)),
+        v("21-5", BatteryVehicleKind::Reload, at("bty21_cp", -150.0, -100.0)),
+        v("21-3", BatteryVehicleKind::Launcher, at("bty21_v3", 0.0, 0.0)),
+        v("21-4", BatteryVehicleKind::Launcher, at("bty21_v4", 0.0, 0.0)),
+        v("21-6", BatteryVehicleKind::Reload, at("bty21_cp", -150.0, -200.0)),
+    };
+    if (with_maintenance) out.push_back(v("21-7", BatteryVehicleKind::Maintenance, at("bty21_cp", 100.0, -250.0)));
+    return out;
+}
+
+MarchRequest MarchTo(const std::string& to, double start_s) {
+    const World& w = TheWorld();
+    MarchRequest q;
+    q.from = w.anchors.Find("bty21_cp")->at;
+    q.to = w.anchors.Find(to)->at;
+    q.from_name = "battery 21's position";
+    q.to_name = w.anchors.Find(to)->name;
+    q.column = Battery21();
+    q.start_s = start_s;
+    return q;
+}
+
+const MarchPoint* Nth(const MarchPlan& p, const std::string& kind, int n = 0) {
+    for (const MarchPoint& m : p.points) {
+        if (m.kind == kind && n-- == 0) return &m;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+SC_TEST("nav: battery 21's march plan to the Rava dam (G2.2): the start point, a halt after 3.5 h with a regulation point after it, the route cards") {
+    const World& w = TheWorld();
+    const BatteryTactics t = Tactics();
+    const double kStartHour = 20.0;  // the session starts at 20:00; the head at the start point at 23:00
+    const MarchPlan p = PlanMarch(w.graph, w.mobility, t, MarchTo("rava_dam", 3.0 * 3600.0), Overlay(), &w.anchors);
+    SC_EXPECT(p.found);
+    if (!p.found) return;
+    for (const std::string& line : p.Document(kStartHour)) std::printf("    %s\n", line.c_str());
+    for (const std::string& line : p.Card(4, kStartHour)) std::printf("    %s\n", line.c_str());
+    // The column: eight vehicles 40 m apart, 280 m; it passes a point in 34 s at 30 km/h.
+    SC_EXPECT_NEAR(p.column_m, 280.0, 1e-9);
+    SC_EXPECT_NEAR(p.pass_s, 280.0 / t.march_speed_mps, 1e-6);
+    // The start point: a landmark beyond the column's length, at its time.
+    const MarchPoint* sp = Nth(p, "start");
+    SC_EXPECT(sp != nullptr && sp->arc_m >= p.column_m && sp->name.find("crossroads") != std::string::npos);
+    if (sp != nullptr) SC_EXPECT_NEAR(sp->head_s, 3.0 * 3600.0, 1e-6);
+    SC_EXPECT(p.move_off_s < 3.0 * 3600.0);
+    // Over 4 h of movement: one halt of 1 h after 3.5 h of it, and a regulation point after the halt.
+    const MarchPoint* halt = Nth(p, "halt");
+    const MarchPoint* reg = Nth(p, "regulation");
+    SC_EXPECT(halt != nullptr && Nth(p, "halt", 1) == nullptr && reg != nullptr);
+    if (halt == nullptr || reg == nullptr || sp == nullptr) return;
+    SC_EXPECT_NEAR(halt->head_s - sp->head_s, t.halt_interval_s, 1.0);
+    SC_EXPECT_NEAR(halt->halt_s, 3600.0, 1e-9);
+    SC_EXPECT(reg->arc_m > halt->arc_m && reg->head_s > halt->head_s + halt->halt_s);
+    // The end: the movement at the plan's speeds and the halt; on the roads at the march speed, the last way off the road
+    // at the class's cross-country speed.
+    const MarchPoint& end = p.points.back();
+    SC_EXPECT(end.kind == "end" && end.head_s > sp->head_s + 4.0 * 3600.0);
+    double moving = 0.0;
+    for (std::size_t i = 0; i < p.stretch_mps.size(); ++i) {
+        const double len = p.arcs_m[i + 1] - p.arcs_m[i];
+        if (p.arcs_m[i] >= sp->arc_m) moving += len / p.stretch_mps[i];
+        SC_EXPECT(p.stretch_mps[i] <= t.march_speed_mps + 1e-9);
+    }
+    SC_EXPECT_NEAR(end.head_s - sp->head_s, moving + 3600.0, 2.0);
+    // The route cards: the head's times are the plan's, each vehicle behind by its distance at the speed there.
+    SC_EXPECT(p.cards.size() == 8 && p.cards[0].place == 1 && p.cards[7].callsign == "21-7");
+    SC_EXPECT_NEAR(p.cards[0].at_s[0], sp->head_s, 1e-6);
+    SC_EXPECT(p.cards[7].at_s[0] > p.cards[0].at_s[0] && p.cards[7].at_s[0] <= sp->tail_s + 1e-6);
+    // A march of half an hour has no halt: the start point and the end only.
+    const MarchPlan near = PlanMarch(w.graph, w.mobility, t, MarchTo("rgt_cp", 3600.0), Overlay(), &w.anchors);
+    SC_EXPECT(near.found && near.points.size() == 2 && near.points.front().kind == "start" && near.points.back().kind == "end");
+    // By night the column is slower by the class's night factor, and the plan longer.
+    MarchRequest q = MarchTo("rava_dam", 3.0 * 3600.0);
+    q.night = true;
+    const MarchPlan night = PlanMarch(w.graph, w.mobility, t, q, Overlay(), &w.anchors);
+    SC_EXPECT(night.found && night.speed_mps < p.speed_mps && night.end_s > p.end_s);
+    std::printf("    by day the head arrives %s, by night %s\n", ClockHhMm(p.end_s, kStartHour).c_str(), ClockHhMm(night.end_s, kStartHour).c_str());
+}
+
+SC_TEST("nav: battery 21 marches to the Rava dam on the roads in its plan's times, the radiotelephonist writing each point (G2's done-when)") {
+    const World& w = TheWorld();
+    const double kStartHour = 20.0;
+    ColumnMarch march(w.graph, w.mobility, Tactics(), &w.anchors);
+    MarchRequest q = MarchTo("rava_dam", 3.0 * 3600.0);
+    q.leave_s = 300.0;  // out of the emplacements first
+    SC_EXPECT(march.Start(q));
+    const MarchPlan plan = march.Plan();
+    march.Run(0.0, plan.end_s + 900.0);
+    SC_EXPECT(march.Arrived());
+    for (const std::string& line : march.Journal().Page(plan.end_s + 900.0, 12)) std::printf("    %s\n", line.c_str());
+    for (const std::string& line : march.Record(plan.end_s + 900.0, kStartHour)) std::printf("    %s\n", line.c_str());
+    // Each point of the plan passed, and written, within two minutes of its time.
+    const std::vector<Battery::Passing>& passed = march.Column().Passings();
+    SC_EXPECT(passed.size() == plan.points.size());
+    const std::vector<RadioJournalEntry> page = march.Journal().Legible(plan.end_s + 900.0);
+    SC_EXPECT(page.size() == plan.points.size());
+    for (std::size_t i = 0; i < passed.size() && i < plan.points.size(); ++i) {
+        std::printf("    %s planned %.1f passed %.1f, tail %.1f planned %.1f\n", plan.points[i].kind.c_str(), plan.points[i].head_s, passed[i].head_s, passed[i].tail_s, plan.points[i].tail_s);
+        SC_EXPECT(passed[i].head_s >= plan.points[i].head_s - 1e-6);  // never early: each point holds the head to its time
+        SC_EXPECT_NEAR(passed[i].head_s, plan.points[i].head_s, 120.0);
+        SC_EXPECT(passed[i].tail_s >= passed[i].head_s);
+        if (i < page.size()) {
+            SC_EXPECT_NEAR(page[i].heard_s, passed[i].head_s, 1e-6);
+            SC_EXPECT(page[i].text.find(plan.points[i].name) != std::string::npos);
+        }
+    }
+    // Every vehicle in its place behind the head at the end.
+    const Battery& b = march.Column();
+    for (std::size_t k = 0; k < b.Vehicles().size(); ++k) {
+        const Vec3 at = b.Vehicles()[k].position;
+        const Vec3 goal = b.Vehicles()[k].goal;
+        SC_EXPECT(std::hypot(at.x - goal.x, at.y - goal.y) < 20.0);
+    }
+}
+
+SC_TEST("nav: a column meets a bridge down that its commander was not told of (G2.7): it stops, he reports, a new route turns it about") {
+    const World& w = TheWorld();
+    const double kStartHour = 20.0;
+    double d = 0.0;
+    const NavCrossing* bridge = w.graph.NearestCrossing(w.anchors.Find("kesmark_road_bridge")->at, &d);
+    SC_EXPECT(bridge != nullptr);
+    if (bridge == nullptr) return;
+    // The maintenance vehicle does not swim, so neither does the column.
+    ColumnMarch march(w.graph, w.mobility, Tactics(), &w.anchors);
+    Overlay truth;
+    truth.Cut("strike:1", bridge->id, 0.0, 1e18, "raid:7");
+    march.SetTruth(truth);
+    SC_EXPECT(march.Start(MarchTo("tech_battery", 1200.0)));
+    const MarchPlan first = march.Plan();
+    SC_EXPECT(first.found && first.route.Uses(bridge->id) && !first.column_class.Swims());
+    march.Run(0.0, first.end_s + 1800.0);
+    march.Run(first.end_s + 1800.0, march.Plan().end_s + 900.0);
+    for (const std::string& line : march.Journal().Page(march.Plan().end_s + 900.0, 14)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(march.Plans().size() == 2);
+    SC_EXPECT(march.Reports().size() == 1 && march.Reports()[0].text.find(bridge->id) != std::string::npos);
+    SC_EXPECT(march.Believed().Down(bridge->id, 1.0) != nullptr);
+    if (march.Plans().size() < 2 || march.Reports().empty()) return;
+    const MarchPlan& second = march.Plan();
+    SC_EXPECT(second.found && !second.route.Uses(bridge->id));
+    // Stopped short of the bridge: the report's time is before the first plan had the head at the end.
+    SC_EXPECT(march.Reports()[0].t < first.end_s);
+    // Turned about: the new order of march is the old one reversed, the maintenance vehicle leading.
+    SC_EXPECT(second.request.column.front().def.id == "21-7" && second.request.column.back().def.id == "21");
+    SC_EXPECT(march.Arrived() && second.end_s > first.end_s + 1800.0);
+    std::printf("    planned over the bridge to arrive %s; stopped %s; round it, arrived %s\n", ClockHhMm(first.end_s, kStartHour).c_str(),
+                ClockHhMm(march.Reports()[0].t, kStartHour).c_str(), ClockHhMm(second.end_s, kStartHour).c_str());
+    // A column of swimmers told of the bridge before it plans swims the river where the road met it.
+    ColumnMarch swimmers(w.graph, w.mobility, Tactics(), &w.anchors);
+    swimmers.Tell(truth.entries[0]);
+    MarchRequest q = MarchTo("tech_battery", 1200.0);
+    q.column = Battery21(false);
+    SC_EXPECT(swimmers.Start(q));
+    const MarchPoint* swim = Nth(swimmers.Plan(), "swim");
+    SC_EXPECT(swim != nullptr && swim->halt_s > 0.0);
+    swimmers.Run(0.0, swimmers.Plan().end_s + 900.0);
+    SC_EXPECT(swimmers.Arrived() && swimmers.Plans().size() == 1);
+}

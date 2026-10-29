@@ -239,6 +239,7 @@ private:
         if (net == "regiment net") return "КП полка  ";
         if (net == "battery net") return "батарейная";
         if (net == "covered net") return "прикрыв.  ";
+        if (net == "march") return "марш      ";  // the commander's word in the cabin on the march (radio forbidden)
         return net;
     }
 

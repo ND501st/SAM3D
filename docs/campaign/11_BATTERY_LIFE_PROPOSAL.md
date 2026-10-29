@@ -511,10 +511,15 @@ the same routes.
 - A fixture map whose road is moved changes the route with no other edit; the fixture route's digest is pinned (MSVC's;
   CI checks GCC's).
 
-Left: the trafficability tiles and the foot layer round the pond (G1.3), `nav_check`, `nav_bench` and `map_view.py
---routes` (G1.6). The country's road net is sparse: 225 of its 329 other anchors (border posts, radar companies, the
-dam) are more than 3 km from a road, and the last kilometres to them are a straight line across country until the tiles
-come.
+Left: the trafficability tiles and the foot layer round the pond (G1.3), `map_view.py --routes` (G1.6). The country's
+road net is sparse: 225 of its 329 other anchors (border posts, radar companies, the dam) are more than 3 km from a road,
+and the last kilometres to them are a straight line across country until the tiles come.
+
+**Built: `nav_check` (29 Oct 2026, G1.6; `simcore/examples/nav_check.cpp`, a ctest).** It builds the graph from the
+map's data, lists every place and prepared position more than 3 km from a road or by a piece of the road net cut off
+from the rest, routes battery 21 to every anchor, and times the build and 200 routes (`nav_bench`'s first form: the
+graph in 0.1 ms, a route in 0.013 ms on today's 95 nodes). Today: one road net, no anchor without a route, 83 of the
+theatre's 111 prepared positions more than 3 km from a road (the tiles' work).
 
 ### G2: movers and the march (simcore; not gated)
 
@@ -532,6 +537,37 @@ come.
 plan's times, the radiotelephonist logging the control points. A courier's delivery takes its route's time. A column
 that meets a cut bridge stops, reports and moves on once the new route is ordered. Every mission plays as before, and
 `helper_coverage`'s rows are unchanged.
+
+**Built, first form (29 Oct 2026): G2.2, G2.3's march, G2.7, the column of G2.1** (`simcore/nav/march.hpp`,
+`battery.hpp`, `tests/test_nav.cpp`):
+
+- **The march plan** (`PlanMarch`), as the 1991 textbook has the battery commander organise the march
+  (`voenizdat_osa_1991` p239, 6.3.3): the route for the column's slowest in every respect (the maintenance vehicle,
+  which does not swim, keeps the column dry); a start point at the first landmark beyond the column's length, so that it
+  has stretched out of its area; a halt of 1 h (by night `night_halt_s`) after every 3.5 h of movement while more than
+  4 h is left (`halt_interval_max_s`, new in `battery_tactics.json`); a regulation point at the first well-seen
+  landmark after each halt (a bridge, a crossroads, a village the road runs through, else the turn off the road); a
+  river swum as a stop at its bank. The plan's papers: the route, the order of march (the textbook's), the spacing, the
+  column's length and the time it takes to pass a point, the move-off time, each point with the head's and the tail's
+  times; each vehicle commander's route card with his own times.
+- **The column on the plan** (`battery.hpp`): a march order carries the plan's speed for each stretch, its points and
+  the order of march; the head is held at each point until its time and stops at its halts (they replace the scheduled
+  halt), and the head and the tail passing each point are noted. A march without them (every scenario's) moves as
+  before.
+- **The march run** (`ColumnMarch`): the battery commander at the head says each point in the cabin (radio is forbidden
+  on the march, p240) and the radiotelephonist writes it in the journal on the net "march"; the record set against the
+  plan is read from the journal. Battery 21 from its position to the Rava dam (132.8 km, by day): moves off 22:50, the
+  start point where the battery's track meets the Vrbice road 23:00, the halt at km 108 02:30-03:30, the regulation point at the turn off the
+  Hradec road 03:55, the dam 05:08, each written within a second of the plan's time.
+- **The blocked leg** (G2.7): its commander not told, the column plans over the Kesmark road bridge to the Horka siding;
+  its head finds the bridge down, the column stops, the commander has it to report and believes it from then; after 10
+  minutes at his map (a game value) he orders the march round by the capital road, the column turned about with the
+  maintenance vehicle leading, and it arrives 7.6 h after its first plan's time. A column of swimmers told of the bridge
+  beforehand swims the Rava instead.
+
+Left: the movers' levels M0-M2 and their hand-over (G2.1), relocation, the roving ambush and the service runs on
+routes (G2.3), the crew's walks, the pipeline's carriers and the supply lines on routes (G2.4-G2.6, so a courier's
+delivery takes its route's time), the report going up by a means (G10), and missions ordering marches by anchors.
 
 ### G3: coordination
 

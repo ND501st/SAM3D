@@ -13,7 +13,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `simcore/` | **Header-only C++17 sim core** (radar, missile, aircraft, procedures, crew, world). Engine-agnostic. |
 | `simcore/include/simcore/em/` | **Electromagnetic layer** (`simcore::em`): propagation, calibrated radar, ESM/TDOA, jamming, tracking, knowledge, comms/C2, doctrine, debug overlays. See `docs/EM_ARCHITECTURE.md`, `docs/EM_HANDOFF.md`. |
 | `simcore/include/simcore/command/` | **Our side's chain of command and the information pipeline** (`simcore::command`): who is who and where, the means of signal, how a fact reaches the player's character (first person: nothing else does), the air war's news fed in. See `docs/command/`. |
-| `simcore/include/simcore/nav/` | **The route service** (`simcore::nav`, roadmap G1): mobility classes, one road graph derived from the map's data (the country's roads and the district's tracks), routes between anchors (places, positions, sites), overlays true and believed. See `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md` §5.1. |
+| `simcore/include/simcore/nav/` | **The route service** (`simcore::nav`, roadmap G1): mobility classes, one road graph derived from the map's data (the country's roads and the district's tracks), routes between anchors (places, positions, sites), overlays true and believed; the march plan and the column on it (`nav/march.hpp`, G2). See `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md` §5.1-5.2. |
 | `simcore/include/simcore/scenery/` | **Ultra-basic models** (`simcore::scenery`): every aircraft, vehicle, site and building as a few primitives, from `data/scenery/basic_models.json`; drawn by Unreal's `FSimBasicModels`. See `docs/scenery/`. |
 | `simcore/include/simcore/air_war/` | **Enemy air command** (`simcore::airwar`): the other side's air staff as people, its intelligence picture, the planning cycle, abstract resolution, raids generated as scenarios and the mission bridge back. See `docs/air_war/`. |
 | `simcore/tests/` | Dependency-free unit tests (`SC_TEST`, `SC_EXPECT_NEAR`). |
@@ -81,6 +81,7 @@ python tools/em_view.py                           # EM overlays in a browser fro
 ./simcore/build/map_dump data maps/kesmark_range.json out/kesmark_range_map.json   # the test map's layout (or --height e_km n_km)
 python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
 ./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json         # the whole country (or --route road e1 n1 e2 n2 [cut bridges], --height e n)
+./simcore/build/nav_check data 200                # the route service: anchors off the road net listed, the graph and 200 routes timed
 python tools/map_view.py out/pannonia_map.json --png                              # the country with the theatre's objects and fronts
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)

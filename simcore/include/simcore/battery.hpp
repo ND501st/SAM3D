@@ -47,6 +47,7 @@ struct BatteryTactics {
     double reload_behind_m = 500.0;
     double command_post_behind_m = 1000.0;
     double halt_interval_s = 3.5 * 3600.0;
+    double halt_interval_max_s = 4.0 * 3600.0;  // a march plan: the longest movement without a halt
     double halt_duration_s = 1.5 * 3600.0;
     double night_halt_s = 3600.0;
     double threat_range_m = 50000.0;
@@ -98,6 +99,17 @@ struct BatteryVehicleDef {
     double sector_to_deg = 0.0;
 };
 
+// A point of a march plan on the column's route (nav/march.hpp): the start point, a halt, a regulation point, a river
+// swum, the end. The battery commander notes the head and the tail passing it; the head does not pass it before its time
+// (the regulation points keep the column to the plan's times: voenizdat_osa_1991 p239).
+struct BatteryMarchPoint {
+    std::string kind;  // "start", "halt", "regulation", "swim", "end"
+    std::string name;
+    double arc_m = 0.0;          // along the route from its first point
+    double not_before_s = -1.0;  // the head passes it no earlier (< 0: no time)
+    double halt_s = 0.0;         // the column stops there this long (a halt; a river swum, vehicle by vehicle)
+};
+
 struct BatteryOrder {
     enum class Kind { March, ShortHalt, CombatFormation, Halt, Resume, Ambush, RiverCrossing, FarBankHeld, Reload, Refuel, Emcon, Relocate, Emission };
     Kind kind = Kind::March;
@@ -117,6 +129,12 @@ struct BatteryOrder {
     double threat_range_m = -1.0;
     bool threat_has_azimuth = false;
     double threat_az_deg = 0.0;
+    // March by a march plan (nav/march.hpp): the column's speed from each route point to the next, the plan's points (its
+    // halts replace the halt every halt_interval_s), the order of march by vehicle id. Empty: the tactics' march speed,
+    // the scheduled halts, the vehicles as listed.
+    std::vector<double> route_mps;
+    std::vector<BatteryMarchPoint> points;
+    std::vector<std::string> order;
 };
 
 inline const char* BatteryOrderName(BatteryOrder::Kind k) {
@@ -174,7 +192,8 @@ public:
             {"fuel_truck_capacity_l", &t.fuel_truck_capacity_l}};
         // Optional: the board's warning time (board_reading.hpp).
         const std::pair<const char*, double*> optional[] = {
-            {"warning_s", &t.warning_s}, {"zone_edge_m", &t.zone_edge_m}, {"short_halt_in_column_m", &t.short_halt_in_column_m}};
+            {"warning_s", &t.warning_s}, {"zone_edge_m", &t.zone_edge_m}, {"short_halt_in_column_m", &t.short_halt_in_column_m},
+            {"halt_interval_max_s", &t.halt_interval_max_s}};
         for (const auto& f : optional) {
             const std::string p = Join("tactics", f.first);
             const json::Value* v = b->Find(f.first);
@@ -259,6 +278,14 @@ public:
         std::string text;
     };
 
+    // A march plan's point as the column passed it: when the head and the tail did (< 0: not yet).
+    struct Passing {
+        std::string kind;
+        std::string name;
+        double head_s = -1.0;
+        double tail_s = -1.0;
+    };
+
     Battery(BatteryTactics tactics, const std::vector<BatteryVehicleDef>& vehicles) : tactics_(tactics) {
         for (const BatteryVehicleDef& d : vehicles) {
             Vehicle v;
@@ -267,6 +294,7 @@ public:
             v.goal = d.start;
             if (d.kind == BatteryVehicleKind::Reload) v.stock = tactics_.tzm_capacity;
             if (d.kind == BatteryVehicleKind::Fuel) v.stock = tactics_.fuel_truck_capacity_l;
+            rank_.push_back(vehicles_.size());
             vehicles_.push_back(v);
         }
     }
@@ -292,6 +320,20 @@ public:
         for (const Vehicle& v : vehicles_)
             if (v.def.own) return &v;
         return nullptr;
+    }
+    // The march plan's points as the column passed them (a march ordered with points), and where along the route the
+    // head and the tail of the column are meant to be.
+    const std::vector<Passing>& Passings() const { return passings_; }
+    double HeadArc() const { return lead_s_; }
+    double TailArc() const { return SlotArc(vehicles_.empty() ? 0 : vehicles_.size() - 1); }
+    // A vehicle's place in the column (0 the head).
+    std::size_t PlaceOf(std::size_t vehicle) const { return vehicle < rank_.size() ? rank_[vehicle] : vehicle; }
+
+    // The column stops where it stands until it is ordered on (a road found blocked: nav/march.hpp).
+    void Block(double t, const std::string& why) {
+        mode_ = Mode::Halted;
+        halt_until_s_ = 1e18;
+        events_.push_back({t, "Battery commander", "the column stops: " + why});
     }
 
     // The player's vehicle moved (the player drives it): the battery takes its position as it is.
@@ -351,6 +393,12 @@ public:
             case BatteryOrder::Kind::March:
                 if (o.route.size() < 2) return;
                 route_ = o.route;
+                route_mps_ = o.route_mps.size() + 1 == o.route.size() ? o.route_mps : std::vector<double>();
+                points_ = o.points;
+                passings_.clear();
+                for (const BatteryMarchPoint& p : points_) passings_.push_back({p.kind, p.name, -1.0, -1.0});
+                next_point_ = 0;
+                SetOrderOfMarch(o.order);
                 BuildArcs();
                 lead_s_ = Spacing() * static_cast<double>(vehicles_.size() - 1);
                 mode_ = Mode::Forming;
@@ -367,10 +415,10 @@ public:
                 const Vec3 toward{std::sin(DegToRad(o.threat_az_deg)), std::cos(DegToRad(o.threat_az_deg)), 0.0};
                 for (std::size_t k = 0; k < vehicles_.size(); ++k) {
                     Vehicle& v = vehicles_[k];
-                    const double s = SlotArc(k);
+                    const double s = SlotArc(rank_[k]);
                     const Vec3 dir = DirectionAt(s);
                     const Vec3 left{-dir.y, dir.x, 0.0};
-                    double side = k % 2 == 0 ? 1.0 : -1.0;
+                    double side = rank_[k] % 2 == 0 ? 1.0 : -1.0;
                     if (o.threat_has_azimuth) side = Dot(left, toward) > 0.0 ? -1.0 : 1.0;
                     v.goal = PointAt(s) + left * (in_column ? 0.0 : side * tactics_.short_halt_offset_m);
                     v.deployed = false;
@@ -466,7 +514,7 @@ public:
         if (mode_ == Mode::Forming || mode_ == Mode::Marching) {
             bool formed = true;
             for (std::size_t k = 0; k < vehicles_.size(); ++k) {
-                vehicles_[k].goal = PointAt(SlotArc(k));
+                vehicles_[k].goal = PointAt(SlotArc(rank_[k]));
                 if (Dist(vehicles_[k].position, vehicles_[k].goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
             }
             if (mode_ == Mode::Forming && formed && t >= hold_until_s_) {
@@ -479,15 +527,23 @@ public:
                 for (std::size_t k = 0; k < vehicles_.size(); ++k)
                     if (Dist(vehicles_[k].position, vehicles_[k].goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
                 if (keeping_up && lead_s_ < total_ && t >= hold_until_s_) {
-                    lead_s_ = std::min(total_, lead_s_ + tactics_.march_speed_mps * dt);
+                    double next = Advance(lead_s_, dt);
+                    // The head stops at a plan's point until its time, and at a halt.
+                    if (next_point_ < points_.size() && (points_[next_point_].not_before_s > t || points_[next_point_].halt_s > 0.0) &&
+                        next > points_[next_point_].arc_m) {
+                        next = std::max(lead_s_, points_[next_point_].arc_m);
+                    }
+                    lead_s_ = next;
                     marched_s_ += dt;
                 }
                 if (lead_s_ >= total_ - 1e-6 && !arrived_logged_) {
                     arrived_logged_ = true;
                     events_.push_back({t, "Battery commander", "the head of the column is at the end of the route"});
                 }
-                if (marched_s_ >= tactics_.halt_interval_s) StartHalt(t, night_ ? tactics_.night_halt_s : tactics_.halt_duration_s,
-                                                                      "scheduled halt: checks, fuel, rest");
+                NotePassings(t);
+                if (points_.empty() && marched_s_ >= tactics_.halt_interval_s) {
+                    StartHalt(t, night_ ? tactics_.night_halt_s : tactics_.halt_duration_s, "scheduled halt: checks, fuel, rest");
+                }
             }
         }
         if (mode_ == Mode::Ambush && ambush_roving_ && t >= ambush_next_move_s_) {
@@ -633,8 +689,57 @@ private:
         }
         return Vec3{0.0, 1.0, 0.0};
     }
-    // Vehicle k's place in the column: behind the leader by k spacings (never before the start of the route).
+    // The k-th place in the column: behind the leader by k spacings (never before the start of the route).
     double SlotArc(std::size_t k) const { return std::max(0.0, lead_s_ - Spacing() * static_cast<double>(k)); }
+
+    // Where the head is `dt` on from `s`: at the tactics' march speed, or stretch by stretch at the march plan's speeds.
+    double Advance(double s, double dt) const {
+        if (route_mps_.empty()) return std::min(total_, s + tactics_.march_speed_mps * dt);
+        double left = dt;
+        for (std::size_t i = 1; i < arcs_.size() && left > 0.0; ++i) {
+            if (s >= arcs_[i]) continue;
+            const double v = route_mps_[i - 1];
+            const double reach_s = (arcs_[i] - s) / v;
+            if (reach_s >= left) return s + v * left;
+            s = arcs_[i];
+            left -= reach_s;
+        }
+        return std::min(total_, s);
+    }
+
+    // The order of march by vehicle id: each named vehicle in its place, the others after them as listed.
+    void SetOrderOfMarch(const std::vector<std::string>& order) {
+        std::size_t place = 0;
+        std::vector<bool> placed(vehicles_.size(), false);
+        for (const std::string& id : order) {
+            for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+                if (placed[k] || vehicles_[k].def.id != id) continue;
+                rank_[k] = place++;
+                placed[k] = true;
+            }
+        }
+        for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+            if (!placed[k]) rank_[k] = place++;
+        }
+    }
+
+    // The head reaching the plan's next point (after its time), and the tail passing the points the head has passed.
+    void NotePassings(double t) {
+        while (next_point_ < points_.size()) {
+            const BatteryMarchPoint& p = points_[next_point_];
+            if (lead_s_ < p.arc_m - 1e-6 || p.not_before_s > t) break;
+            passings_[next_point_].head_s = t;
+            ++next_point_;
+            if (p.halt_s > 0.0) {
+                StartHalt(t, p.halt_s, (p.kind == "swim" ? "swimming: " : "halt: ") + p.name);
+                break;
+            }
+        }
+        const double tail = TailArc();
+        for (std::size_t i = 0; i < next_point_; ++i) {
+            if (passings_[i].tail_s < 0.0 && (tail >= points_[i].arc_m - 1e-6 || lead_s_ >= total_ - 1e-6)) passings_[i].tail_s = t;
+        }
+    }
 
     void FormationSlots(const Vec3& covered, double axis_deg) {
         const double a = DegToRad(axis_deg);
@@ -870,6 +975,11 @@ private:
     bool night_ = false;
     bool drive_own_ = false;
     std::vector<Vec3> route_;
+    std::vector<double> route_mps_;
+    std::vector<BatteryMarchPoint> points_;
+    std::vector<Passing> passings_;
+    std::size_t next_point_ = 0;
+    std::vector<std::size_t> rank_;  // each vehicle's place in the column
     std::vector<double> arcs_;
     double total_ = 0.0;
     double lead_s_ = 0.0;
