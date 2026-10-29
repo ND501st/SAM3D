@@ -377,14 +377,17 @@ public:
         return v != nullptr && v->absent;
     }
     // Its commander has heard and acts: the vehicle leaves its emplacement (if it is still dug in) and goes to its place;
-    // a column already on the march, or one forming after the battery is out of its emplacements (it heard late), it
-    // catches up along the route at `catch_mps` (its own speed on each stretch).
+    // away from its place in a column already on the march, or in one forming after the battery is out of its
+    // emplacements (it heard late), it catches the column up along the route at `catch_mps` (its own speed on each
+    // stretch). One in its place that heard a halt late just stops.
     void Join(const std::string& id, double t, const std::vector<double>& catch_mps = {}) {
         for (std::size_t k = 0; k < vehicles_.size(); ++k) {
             Vehicle& v = vehicles_[k];
             if (v.def.id != id || !v.absent) continue;
             v.absent = false;
-            const bool late = mode_ == Mode::Marching || mode_ == Mode::Halted || (mode_ == Mode::Forming && v.dug_in && t >= hold_until_s_);
+            const bool away = route_.size() >= 2 && Dist(v.position, PointAt(SlotArc(rank_[k]))) > tactics_.slot_tolerance_m + Spacing();
+            const bool late = away && (mode_ == Mode::Marching || mode_ == Mode::Halted ||
+                                       (mode_ == Mode::Forming && v.dug_in && t >= hold_until_s_));
             v.hold_until_s = t + (v.dug_in ? emplacement_s_ : 0.0);
             if (v.dug_in) events_.push_back({t, v.def.callsign, "out of the emplacement (" + Fmt(emplacement_s_) + " s)"});
             v.dug_in = false;

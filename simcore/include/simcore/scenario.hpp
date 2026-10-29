@@ -21,6 +21,7 @@
 
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/command/battery_orders.hpp"
 #include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
@@ -288,6 +289,14 @@ struct ScenarioDef {
     bool battery_drive_own = false;
     bool battery_night = false;
     bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
+    // Battery orders carried by a means (roadmap G10.5; "battery.by_means"): a moving order goes out on the battery net
+    // (flags or lamps under the march's radio ban) and the battery's other vehicles act on it only once their commanders
+    // have heard it (command/battery_orders.hpp). Off: every vehicle takes it at once.
+    bool battery_by_means = false;
+    command::BatteryOrdersDef battery_orders_def;
+    std::vector<command::OrderVehicle> battery_crews;  // every vehicle but the own and the giver's: its commander
+    std::string battery_giver;                         // the vehicle the battery commander rides in (the command post)
+    std::string battery_giver_post = "battery_commander";
     // The battery's launchers when the player's vehicle is not one of them (the PU-12M): their gameplay tuning and their
     // tracking radar's reach, from "battery.launchers": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json" }.
     bool has_launcher_tuning = false;
@@ -1880,12 +1889,74 @@ private:
     //                "own": { "id": "21", "callsign": "21" },
     //                "vehicles": [ { "id": "22", "callsign": "22", "kind": "launcher", "position": {...} }, ... ],
     //                "orders": [ { "at_s": 0, "order": "march", "route": [ {...}, {...} ] }, ... ] }
+    // "by_means": { "chain": "command/chain_pannonia.json", "giver_post": "bty21_commander",
+    //               "crews": [ { "vehicle": "23", "post": "veh21_3_commander", "set_on": false, "line": false } ] }
+    // The battery commander rides in the command post (the own vehicle when it is the post, else the own vehicle). Every
+    // other vehicle has a commander: his post's holder and skill tier from the chain, or class 2's times.
+    bool LoadBatteryByMeans(const json::Value& b, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* m = b.Find("by_means");
+        if (m == nullptr) return true;
+        const std::string mp = Join("battery", "by_means");
+        std::string chain_file, error;
+        if (!m->Is(json::Type::Object) || !Keys(*m, mp, {"chain", "giver_post", "crews", "notes"}) ||
+            !OptionalString(*m, mp, "chain", chain_file) || !OptionalString(*m, mp, "giver_post", out.battery_giver_post)) {
+            return message_.empty() ? Fail(mp, "expected an object") : false;
+        }
+        if (!command::LoadBatteryOrders(data_dir, out.battery_orders_def, &error)) return Fail(mp, error);
+        command::ChainData chain;
+        if (!chain_file.empty() && !command::LoadChainData(data_dir, chain_file, chain, &error)) return Fail(Join(mp, "chain"), error);
+        if (!out.has_skills) {
+            if (!LoadSkillTableFile(data_dir + "/crew/skill_levels.json", out.skills, &error)) return Fail(mp, error);
+            out.has_skills = true;
+        }
+        out.battery_giver = out.battery_vehicles.front().id;
+        for (const BatteryVehicleDef& v : out.battery_vehicles) {
+            if (v.kind == BatteryVehicleKind::CommandPost) {
+                out.battery_giver = v.id;
+                break;
+            }
+        }
+        out.battery_crews.clear();
+        for (const BatteryVehicleDef& v : out.battery_vehicles) {
+            if (v.own || v.id == out.battery_giver) continue;
+            out.battery_crews.push_back(command::CommanderFromChain(chain, out.skills, v.id, v.callsign, v.callsign + "_commander"));
+        }
+        if (const json::Value* cs = OptionalArray(*m, mp, "crews")) {
+            for (std::size_t i = 0; i < cs->items.size(); ++i) {
+                const std::string p = Index(Join(mp, "crews"), i);
+                const json::Value& c = cs->items[i];
+                std::string vehicle, post;
+                bool set_on = true, line = false;
+                if (!Keys(c, p, {"vehicle", "post", "set_on", "line", "notes"}) || !RequireString(c, p, "vehicle", vehicle) ||
+                    !OptionalString(c, p, "post", post) || !OptionalBool(c, p, "set_on", set_on) || !OptionalBool(c, p, "line", line)) {
+                    return false;
+                }
+                command::OrderVehicle* crew = nullptr;
+                for (command::OrderVehicle& o : out.battery_crews) {
+                    if (o.vehicle == vehicle) crew = &o;
+                }
+                if (crew == nullptr) return Fail(Join(p, "vehicle"), "'" + vehicle + "' is not one of the battery's other vehicles");
+                if (!post.empty()) {
+                    if (!chain_file.empty() && chain.FindPosition(post) == nullptr) return Fail(Join(p, "post"), "no post '" + post + "' in the chain");
+                    *crew = command::CommanderFromChain(chain, out.skills, crew->vehicle, crew->callsign, post);
+                }
+                crew->set_on = set_on;
+                crew->line = line;
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        out.battery_by_means = true;
+        return true;
+    }
+
     bool LoadBattery(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
         const json::Value* b = root.Find("battery");
         if (b == nullptr) return true;
         const std::string bp = "battery";
         if (!b->Is(json::Type::Object) ||
-            !Keys(*b, bp, {"tactics", "drive_own", "night", "share_picture", "deployed", "own", "launchers", "vehicles", "orders", "notes"})) {
+            !Keys(*b, bp, {"tactics", "drive_own", "night", "share_picture", "deployed", "own", "launchers", "vehicles", "orders", "by_means",
+                           "notes"})) {
             return message_.empty() ? Fail(bp, "expected an object") : false;
         }
         std::string tactics = "command/battery_tactics.json";
@@ -1961,6 +2032,7 @@ private:
         } else if (!message_.empty()) {
             return false;
         }
+        if (!LoadBatteryByMeans(*b, data_dir, out)) return false;
         if (const json::Value* os = OptionalArray(*b, bp, "orders")) {
             for (std::size_t i = 0; i < os->items.size(); ++i) {
                 const std::string p = Index(Join(bp, "orders"), i);

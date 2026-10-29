@@ -255,6 +255,17 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | operator | 900 time | 3 | 377 | 400 | 1 | 4 | 0 | 0 | 6 | 27 | 0 | 0 | drill 11, duty 6, wheel 156 | 0 |
 | driver | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 1 | 27 | 0 | 0 | drill 1, duty 1 | 0 |
 
+## osa_battery_orders: Osa: the march order, carried to every vehicle
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | duty 1 | 0 |
+| deputy_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
+| senior_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | drill 5, duty 2 | 0 |
+| operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
+| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
+
 ## osa_practice: Osa: one drone
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
@@ -617,7 +628,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 13 |
 | order (commander): the battery's emission regime, told to the crew | 11 |
 | order (commander): the commander's next order | 189 |
-| order (commander): the drills the crew needs next | 104 |
+| order (commander): the drills the crew needs next | 105 |
 | order (commander): the least emission: the operator told the tracking transmitter's rule | 3 |
 | order (commander): the limited regime: ВЫСОКОЕ off between bursts | 138 |
 | order (commander): the limited regime: ВЫСОКОЕ on for a burst | 134 |
@@ -636,8 +647,8 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (deputy_commander): a sign of the shot on his instrument: the target's elevation dropping fast | 24 |
 | report (deputy_commander): no missile left on the launcher | 2 |
 | report (deputy_commander): the TV shows a decoy | 2 |
-| report (deputy_commander): К бою: the intercom checked | 35 |
-| report (driver): a report the crew makes when its lamp or input comes on | 7 |
+| report (deputy_commander): К бою: the intercom checked | 36 |
+| report (driver): a report the crew makes when its lamp or input comes on | 8 |
 | report (driver): stowed after the ARM attack: ready to march | 3 |
 | report (operator): a mark new, turned or lost on the board: tell the commander | 21 |
 | report (operator): a report the crew makes when its lamp or input comes on | 101 |
@@ -647,17 +658,17 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): a sign of the shot on his instrument: the target flying on unchanged | 7 |
 | report (operator): a sign of the shot on his instrument: the target's mark gone | 13 |
 | report (operator): the track was lost | 22 |
-| report (operator): К бою: the intercom checked | 35 |
+| report (operator): К бою: the intercom checked | 36 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
 | report (senior_operator): a new echo on his scope | 110 |
-| report (senior_operator): a report the crew makes when its lamp or input comes on | 50 |
+| report (senior_operator): a report the crew makes when its lamp or input comes on | 51 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
 | report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 6 |
 | report (senior_operator): a target that came at the battery turns away | 2 |
 | report (senior_operator): no reply mark beside the echo | 57 |
 | report (senior_operator): the bursts read back | 13 |
 | report (senior_operator): the nearest echo, every 15 s until a track | 210 |
-| report (senior_operator): К бою: the intercom checked | 35 |
+| report (senior_operator): К бою: the intercom checked | 36 |
 | report (squad_leader): a report the crew makes when its lamp or input comes on | 2 |
 | wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
 
@@ -668,4 +679,4 @@ A player in command can't give these from his menu (the shadow commander would):
 - deputy_commander: РАБ.РЕЖ. ВКЛ (tov.power) (26 runs)
 - radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (1 runs)
 
-300 runs.
+306 runs.

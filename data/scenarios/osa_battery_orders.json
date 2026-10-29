@@ -1,0 +1,195 @@
+{
+  "scenario_id": "osa_battery_orders",
+  "setting": "war",
+  "name": "Osa-AK battery: the march order carried by a means",
+  "description": "The battery stands at its position and the battery commander, in the PU-12, gives «К маршу!» on the battery net (roadmap G10.5). Each vehicle moves only once its commander has heard: 22 at once, 23 with its set off by the field telephone after the commander has called twice more, 24 with its set off and no wire by a runner, and they catch the column up. Each reports «К маршу готов» on the net as it comes out. Take any seat of our vehicle, 21, and listen to the battery net.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Flat plain. The vehicle commanders are battery 21's posts in data/command/chain_pannonia.json with their skill tiers; the order net's numbers are data/command/battery_orders.json.",
+  "seed": 1,
+  "origin": {
+    "lat_deg": 46.9,
+    "lon_deg": 19.7,
+    "alt_m": 110
+  },
+  "terrain": {
+    "type": "flat",
+    "height_m": 110
+  },
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12"
+  },
+  "battery": {
+    "share_picture": true,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 200,
+          "north_m": 0,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": 600,
+          "north_m": -300,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 900,
+          "north_m": -500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": 1600,
+          "north_m": -500,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": 1700,
+          "north_m": -700,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 1600,
+          "north_m": -1000,
+          "up_m": 3
+        }
+      }
+    ],
+    "drive_own": true,
+    "by_means": {
+      "chain": "command/chain_pannonia.json",
+      "giver_post": "bty21_commander",
+      "crews": [
+        {
+          "vehicle": "22",
+          "post": "veh21_2_commander"
+        },
+        {
+          "vehicle": "23",
+          "post": "veh21_3_commander",
+          "set_on": false,
+          "line": true,
+          "notes": "His set off; a field telephone line laid to the PU-12 at the position."
+        },
+        {
+          "vehicle": "24",
+          "post": "veh21_4_commander",
+          "set_on": false,
+          "notes": "His set off and no wire: only a runner reaches him."
+        },
+        {
+          "vehicle": "TZM",
+          "post": "tzm21_chief"
+        }
+      ],
+      "notes": "The ATZ has no post of its own in the chain: class 2 times."
+    },
+    "orders": [
+      {
+        "at_s": 0,
+        "order": "march",
+        "route": [
+          {
+            "east_m": 0,
+            "north_m": 0,
+            "up_m": 3
+          },
+          {
+            "east_m": 0,
+            "north_m": 30000,
+            "up_m": 3
+          }
+        ]
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 3
+    },
+    "heading_deg": 35,
+    "inputs": {
+      "vehicle_stopped": false
+    },
+    "readiness": "powered",
+    "empty_containers": [
+      "2-I",
+      "1-I",
+      "3-II",
+      "2-II",
+      "1-II"
+    ]
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class2"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 2400,
+    "when_targets_gone": false
+  },
+  "crew_commander": "npc",
+  "battery_commander": "npc"
+}

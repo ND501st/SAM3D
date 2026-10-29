@@ -713,11 +713,25 @@ of it calls), «К бою!» by flags down the column at the end, each «К бо
 radio journal and logged in the book. The test (`test_nav.cpp`): 21-3's set is off; said twice more on the net, no wire,
 a runner reaches it 18 min after the order; it switches on, repeats back on the net 13 min later (the warm-up and the
 transmitter), leaves its emplacement and falls in 42 min after hearing, before the halt; every vehicle's two reports and
-every point are on the page, and the debrief lists each order's times for each vehicle. Left: the session
-(`ScenarioRunner`'s battery orders through the net, each NPC act through `NpcDoes`, the player's own vehicle at C2), the
-driver as a person, the orders group in person and the talk tables' words on the net (G10.3), the giver's picture from
-the reports on the working map (G10.4), "cannot" (a vehicle that cannot catch up), the regiment's orders and the
-emission regime on the same path (G10.7), the player's side (G10.8).
+every point are on the page, and the debrief lists each order's times for each vehicle.
+
+**Built: G10.5 in the session (29 Oct 2026).** A scenario's `"battery": {"by_means": {...}}` runs the game session's
+battery orders on the order net (`ScenarioRunner::BatteryTakes`): the scheduled orders, the triggers', the NPC battery
+commander's (short halt, relocation, resume) and the player's. The giver is the battery commander in the PU-12; every
+other vehicle's commander is a post of the chain (`crews` names it, with his set and his wire). A moving order goes out
+on the battery net (flags or lamps under the march's radio ban); each vehicle stays where it is until its commander has
+heard and joins then; his «К маршу готов» or «к бою готов» goes back by the first way he has, and what comes over the
+net the own crew hears there. Forming up, before the column moves off, the commanders still answer on the net (as in
+`ColumnMarch`); an order taken on the telephone is repeated back on the same call. The other vehicles' commanders are
+the net's people, not seats of the own vehicle, so `NpcDoes` stays the own crew's; the emission regime and the service
+runs still go straight to the battery (G10.7). The test (`test_battery.cpp`, `data/scenarios/osa_battery_orders.json`):
+«К маршу!» at the start, the crews still stowed; 22, the TZM and the ATZ hear it at once and answer; 23, its set off, hears by its telephone after
+two repeats and repeats back on the call; 24, its set off and no wire, by a runner 5 min 25 s after the order, goes
+after the column and reports on the net 13 min later, once its set can transmit; neither moved before its
+commander heard. Missions without `by_means` are unchanged (`helper_coverage` as before). Left: the player's own
+vehicle at C2, the driver as a person, the orders group in person and the talk tables' words on the net (G10.3), the
+giver's picture from the reports on the working map (G10.4), "cannot" (a vehicle that cannot catch up), the regiment's
+orders and the emission regime on the same path (G10.7), the player's side (G10.8).
 
 ### G11: Unreal, everything the player could see
 

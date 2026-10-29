@@ -360,7 +360,9 @@ private:
                 if (seen >= 0.0) offer(seen, night_ ? "lamps" : "flags");
             }
         }
-        if (v.line) offer(from + def_.ring_s + def_.say_s, "field_telephone");
+        // An order taken on the telephone is repeated back on the same call: no ring.
+        const bool on_the_call = repeat_back && tr.heard_mean == "field_telephone";
+        if (v.line) offer(from + (on_the_call ? 0.0 : def_.ring_s) + def_.say_s, "field_telephone");
         if (Dist(giver_at_, v.at) <= def_.earshot_m) offer(from + def_.say_s, "in_person");
         if (repeat_back && tr.heard_mean == "messenger") offer(from + RunnerS(v), "messenger");
         return best;

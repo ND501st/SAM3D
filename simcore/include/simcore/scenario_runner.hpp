@@ -196,6 +196,7 @@ public:
                 battery_->SetInEmplacement(0.0);  // set up where it stands, nothing dug in to climb out of
             }
             battery_orders_done_.assign(def_.battery_orders.size(), 0);
+            if (def_.battery_by_means) StartOrderNet();
         }
         StartRadioTuning();
         RecordWorkPlaces();
@@ -659,9 +660,12 @@ public:
     const Battery* GetBattery() const { return battery_.get(); }
     bool OrderBattery(const BatteryOrder& o) {
         if (!battery_) return false;
-        battery_->Order(o, time_);
+        BatteryTakes(o);
         return true;
     }
+    // The battery's orders carried by a means (null: the scenario's battery takes them at once): the book of every order
+    // and each vehicle's times, the debrief's lines.
+    const command::BatteryOrderNet* GetBatteryOrders() const { return order_net_.get(); }
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
@@ -1872,7 +1876,7 @@ private:
                 if (c2_) c2_->SetFailed(a.c2_id, false, time_);
                 return;
             case TriggerAction::Kind::BatteryOrder:
-                if (battery_) battery_->Order(a.battery_order, time_);
+                if (battery_) BatteryTakes(a.battery_order);
                 return;
             case TriggerAction::Kind::AirThreat:
                 if (battery_) {
@@ -1901,7 +1905,7 @@ private:
             const BatteryOrder& o = def_.battery_orders[i];
             // The regime ordered at 0 s is the combat order's: the commander knows it before the battery deploys.
             if (o.at_s <= 0.0 && (o.kind == BatteryOrder::Kind::Emcon || o.kind == BatteryOrder::Kind::Emission)) regime_from_combat_order_ = true;
-            battery_->Order(o, time_);
+            BatteryTakes(o);
         }
         if ((c2_ || post_) && !air_threat_forced_) {
             // The battery commander reads the board (he is in the post): a track that will reach the edge of the
@@ -1944,6 +1948,7 @@ private:
         if (!def_.battery_drive_own) battery_->SetOwnPosition(def_.unit_position);
         ServiceDrills();
         battery_->Step(time_, dt);
+        if (order_net_) StepOrderNet();
         UpdateBatteryFire();
         // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
         bool has_tzm = false, has_fuel = false;
@@ -1975,11 +1980,7 @@ private:
             if (MarchRadioBan() && e.who == "Battery commander") {
                 // voenizdat_osa_1991 pp. 232-239: on the march the battery commander, at the column's head in the
                 // PU-12M, signals by flags and lamps; the column's drivers and commanders see them.
-                std::vector<std::string> seen;
-                for (const char* st : {"driver", "commander", "battery_commander", "squad_leader"}) {
-                    if (console_.FindStation(st) != nullptr) seen.push_back(st);
-                }
-                Radio(def_.battery_night ? "lamp signals" : "flag signals", e.who, e.text, false, seen);
+                Radio(def_.battery_night ? "lamp signals" : "flag signals", e.who, e.text, false, SignalSeers());
                 continue;
             }
             Radio("battery net", e.who, e.text);
@@ -2014,6 +2015,114 @@ private:
         return false;
     }
     bool MarchRadioBan() const { return OnMarch() && !RepellingAttack(); }
+    // Who in the own vehicle sees flag and lamp signals: its driver and commander (the post's too).
+    std::vector<std::string> SignalSeers() const {
+        std::vector<std::string> seen;
+        for (const char* st : {"driver", "commander", "battery_commander", "squad_leader"}) {
+            if (console_.FindStation(st) != nullptr) seen.push_back(st);
+        }
+        return seen;
+    }
+
+    // ---- The battery's orders carried by a means (roadmap G10.5; command/battery_orders.hpp, "battery.by_means")
+
+    void StartOrderNet() {
+        const Battery::Vehicle* giver = battery_->Find(def_.battery_giver);
+        order_net_ = std::make_unique<command::BatteryOrderNet>(def_.battery_orders_def, def_.battery_giver_post,
+                                                               giver != nullptr ? giver->def.callsign : def_.battery_giver, 0.0);
+        order_net_->SetNight(def_.battery_night);
+        for (const command::OrderVehicle& c : def_.battery_crews) order_net_->Add(c);
+        KeepOrderNetCurrent();
+    }
+    static bool MovesBattery(BatteryOrder::Kind k) {
+        return k == BatteryOrder::Kind::March || k == BatteryOrder::Kind::ShortHalt || k == BatteryOrder::Kind::CombatFormation ||
+               k == BatteryOrder::Kind::Halt || k == BatteryOrder::Kind::Resume || k == BatteryOrder::Kind::Ambush ||
+               k == BatteryOrder::Kind::RiverCrossing || k == BatteryOrder::Kind::FarBankHeld || k == BatteryOrder::Kind::Relocate;
+    }
+    // Orders a vehicle reports done by «к бою готов» once it stands deployed.
+    static bool DeploysBattery(BatteryOrder::Kind k) {
+        return k == BatteryOrder::Kind::ShortHalt || k == BatteryOrder::Kind::CombatFormation || k == BatteryOrder::Kind::Ambush ||
+               k == BatteryOrder::Kind::RiverCrossing || k == BatteryOrder::Kind::Relocate;
+    }
+    // The words of an order or a report: the crew data's (data/crew/<system>_crew.json), else `fallback`.
+    std::string CrewWords(const char* callout, const std::string& fallback) const {
+        const CalloutDef* c = def_.crew_data.FindCallout(callout);
+        return c != nullptr && !c->ru.empty() ? c->ru : fallback;
+    }
+    std::string BatteryOrderWords(BatteryOrder::Kind k) const {
+        switch (k) {
+            case BatteryOrder::Kind::March: return CrewWords("order_march", "К маршу!");
+            case BatteryOrder::Kind::ShortHalt:
+            case BatteryOrder::Kind::Halt: return CrewWords("order_halt", "Стой!");
+            case BatteryOrder::Kind::Resume: return CrewWords("order_go", "Вперёд!");
+            case BatteryOrder::Kind::CombatFormation: return CrewWords("order_k_boyu", "К бою!");
+            case BatteryOrder::Kind::Relocate: return CrewWords("order_relocate", "Смена позиции!");
+            default: return BatteryOrderName(k);
+        }
+    }
+    // Every battery order goes through here. With orders by a means a moving order goes out on the battery net (flags or
+    // lamps under the march's radio ban), and each of the battery's other vehicles stays where it is until its commander
+    // has heard it; the own vehicle's crew hears it seat by seat as before. The emission regime and the service runs the
+    // battery takes at once (G10.7 puts the regime on this path).
+    void BatteryTakes(const BatteryOrder& o) {
+        if (order_net_ != nullptr && MovesBattery(o.kind)) {
+            KeepOrderNetCurrent();
+            std::vector<std::string> to;
+            for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+                battery_->SetAbsent(c.vehicle, true);
+                to.push_back(c.vehicle);
+            }
+            const std::string mean = MarchRadioBan() ? (def_.battery_night ? "lamps" : "flags") : "radio_voice";
+            battery_order_ = order_net_->Give(BatteryOrderName(o.kind), BatteryOrderWords(o.kind), mean, time_, to);
+            battery_order_kind_ = o.kind;
+        }
+        battery_->Order(o, time_);
+    }
+    // The net's picture of each vehicle commander: where his vehicle is, whether radio is his to use (on the march only a
+    // vehicle out of the column calls; forming up, before the column moves off, they still answer on the net, as in
+    // nav::ColumnMarch), whether his set is on the battery net and the net not jammed out (strong jamming; weak jamming
+    // lets an order through).
+    void KeepOrderNetCurrent() {
+        if (const Battery::Vehicle* g = battery_->Find(def_.battery_giver)) order_net_->SetGiverAt(g->position);
+        const bool ban = battery_->CurrentMode() == Battery::Mode::Marching && !RepellingAttack();
+        const bool jammed = nets_ && nets_->Jam("battery", time_) >= 2;
+        for (const command::OrderVehicle& c : def_.battery_crews) {
+            const Battery::Vehicle* bv = battery_->Find(c.vehicle);
+            command::OrderVehicle* ov = order_net_->Vehicle(c.vehicle);
+            if (bv == nullptr || ov == nullptr) continue;
+            ov->at = bv->position;
+            ov->may_call = !ban || bv->absent || bv->catching;
+            ov->on_net = !nets_ || nets_->MemberOnNet("battery", c.callsign);
+            ov->jammed = jammed;
+        }
+    }
+    // Each step: who has heard (his vehicle acts), the repeat-backs, the silences chased; each vehicle done reports, and
+    // what reaches the battery commander the own crew hears where its means reach them.
+    void StepOrderNet() {
+        KeepOrderNetCurrent();
+        for (const command::OrderEvent& e : order_net_->Step(time_)) {
+            log_.Record({e.t, DebriefEntry::Kind::Scenario, e.callsign, "battery order",
+                         e.what + (e.mean.empty() ? std::string() : " by " + e.mean) + ": " + e.text});
+            if (e.what == "carrying out") battery_->Join(e.vehicle, time_);
+            if (e.what != "reported") continue;
+            if (e.mean == "radio_voice") {
+                Radio("battery net", e.callsign, e.text);
+            } else if (e.mean == "flags" || e.mean == "lamps") {
+                Radio(e.mean == "lamps" ? "lamp signals" : "flag signals", e.callsign, e.text, false, SignalSeers());
+            }
+        }
+        if (battery_order_ < 0) return;
+        for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+            const Battery::Vehicle* bv = battery_->Find(c.vehicle);
+            if (bv == nullptr || bv->absent || !order_net_->Heard(battery_order_, c.vehicle)) continue;
+            if (battery_order_kind_ == BatteryOrder::Kind::March && time_ >= bv->hold_until_s) {
+                order_net_->Done(battery_order_, c.vehicle, time_, c.callsign + ": " + CrewWords("ready_to_march", "К маршу готов!"));
+            } else if (DeploysBattery(battery_order_kind_) && bv->deployed) {
+                // report_ready's short form (voenizdat_osa_1991 p246): the channels and missiles are the own crew's to say
+                order_net_->Done(battery_order_, c.vehicle, time_, c.callsign + " к бою готов!");
+            }
+        }
+    }
 
     // The reload and refuel drills: an empty launcher calls the TZM; a crew asking for fuel calls the fuel truck (or the
     // TZM). What goes across is counted off the service vehicle; it goes back when the vehicle is full or it is empty.
@@ -5146,6 +5255,9 @@ private:
     }
     std::vector<Seat> seats_;
     std::unique_ptr<Battery> battery_;
+    std::unique_ptr<command::BatteryOrderNet> order_net_;  // battery orders carried by a means (G10.5)
+    int battery_order_ = -1;                               // the moving order in force, in the net's book
+    BatteryOrder::Kind battery_order_kind_ = BatteryOrder::Kind::March;
     std::vector<RadioMessage> radio_;
     void Radio(const std::string& net, const std::string& from, const std::string& text, bool callout = false) {
         Radio(net, from, text, callout, HeardBy(net));
@@ -5760,7 +5872,7 @@ private:
                         o.threat_has_azimuth = true;
                         o.threat_az_deg = k.azimuth_deg;
                     }
-                    if (!shadow_) battery_->Order(o, time_);
+                    if (!shadow_) BatteryTakes(o);
                 } else if (NpcDoes("driver", SeatDuty::Halt("driver", "the commander's halt: a hostile inside 20 km"))) {  // our driver stops the vehicle
                     npc_halt_at_ = time_ + SpeakDelayS("driver") + 2.0;
                 }
@@ -6890,7 +7002,7 @@ private:
                 BatteryOrder o;
                 o.kind = BatteryOrder::Kind::Relocate;
                 o.covered = def_.doctrine.relocate_to;
-                battery_->Order(o, time_);
+                BatteryTakes(o);
                 Event(def_.id, "attacked by ARMs: the crew is stowed and the battery changes position (the regiment's standing order)");
             }
             return true;
@@ -6912,7 +7024,7 @@ private:
                 if (battery_ && def_.battery_drive_own && !shadow_) {
                     BatteryOrder o;
                     o.kind = BatteryOrder::Kind::Resume;
-                    battery_->Order(o, time_);
+                    BatteryTakes(o);
                 }
                 Event(def_.id, "the crew is stowed and marches on");
             }
