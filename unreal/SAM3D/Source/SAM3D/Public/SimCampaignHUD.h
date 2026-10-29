@@ -82,6 +82,8 @@ private:
 	int32 TellBy = 0;
 	bool bHasMark = false;
 	FVector2D MarkKm = FVector2D::ZeroVector;
+	/** The battery's march there on the roads, in hours (< 0: none found): G9.5. */
+	double MarkMarchH = -1.0;
 	FString Message;
 
 	/** This frame's clickable areas (filled while drawing, read by the next input). */

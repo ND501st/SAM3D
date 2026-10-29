@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <initializer_list>
 #include <map>
 #include <string>
@@ -864,6 +865,15 @@ public:
         stand_up_s_ = stand_up_s;
         sit_down_s_ = sit_down_s;
     }
+    // His way on foot across the map (roadmap G2.4): with one given, a walk to a point on the map more than `min_m` from
+    // where he leaves the vehicle goes by it (the route service's foot way: round the pond, along the track) instead of
+    // the straight line, each of its points a ground leg. It gives the way's points from the start to the end (ENU,
+    // both ends included); none: straight.
+    using FootRoute = std::function<std::vector<Vec3>(const Vec3& from_enu, const Vec3& to_enu)>;
+    void SetFootRoute(FootRoute route, double min_m = 150.0) {
+        foot_route_ = std::move(route);
+        foot_min_m_ = min_m;
+    }
 
     // Plan the way to a goal from where he is. False (and why) if there is none: the exits shut by the drill, a place
     // the vehicle doesn't have. A goal given while he is on his way takes over when the current leg ends.
@@ -1182,12 +1192,27 @@ private:
 
     void AddGroundWalk(std::vector<MoveLeg>& legs, const Vec3& from_m, const Vec3& to, bool to_map, const VehiclePose& pose) const {
         const Vec3 to_m = to_map ? pose.ToBody(to) : to;
+        Vec3 off_m = from_m;  // where he leaves the vehicle's side
         for (const Vec3& c : AroundHull(from_m, to_m)) {
             MoveLeg l;
             l.kind = LegKind::GroundWalk;
             l.to = Vec3{c.x, c.y, 0.0};
             l.after = BodyPlace::Ground;
             legs.push_back(l);
+            off_m = l.to;
+        }
+        // A long way across the map: by the foot way's points (G2.4).
+        const Vec3 off = pose.ToEnu(off_m);
+        if (to_map && foot_route_ && std::hypot(to.x - off.x, to.y - off.y) > foot_min_m_) {
+            const std::vector<Vec3> way = foot_route_(off, to);
+            for (std::size_t k = 1; k + 1 < way.size(); ++k) {
+                MoveLeg l;
+                l.kind = LegKind::GroundWalk;
+                l.to = Vec3{way[k].x, way[k].y, 0.0};
+                l.to_map = true;
+                l.after = BodyPlace::Ground;
+                legs.push_back(l);
+            }
         }
         MoveLeg l;
         l.kind = LegKind::GroundWalk;
@@ -1443,6 +1468,8 @@ private:
     double pace_ = 1.0;
     double stand_up_s_ = 1.5;
     double sit_down_s_ = 1.5;
+    FootRoute foot_route_;
+    double foot_min_m_ = 150.0;
 };
 
 

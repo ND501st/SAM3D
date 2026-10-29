@@ -78,6 +78,7 @@ struct CampaignAction {
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
     Vec3 to;                 // Relocate
+    double march_h = 0.0;    // Relocate: the march on the roads (0: there at once)
     PackageOutcome outcome;  // Complete
     double end_h = 0.0;      // Complete
     std::vector<Transmission> calls;  // Transmit
@@ -182,7 +183,8 @@ public:
         if (!ok_ || pending_ >= 0) return pending_ >= 0;
         Record(CampaignAction::Kind::Advance).until_h = until_h;
         while (now_h_ < until_h - 1e-9) {
-            const double step_end = std::min(until_h, std::floor(now_h_ + 1.0 + 1e-9));
+            double step_end = std::min(until_h, std::floor(now_h_ + 1.0 + 1e-9));
+            if (marching_ && march_until_h_ > now_h_ + 1e-9) step_end = std::min(step_end, march_until_h_);  // it arrives then
             if (StepTo(step_end)) return true;
         }
         return false;
@@ -253,6 +255,10 @@ public:
 
     // Can the battery move there? Within `max_m` of where it is, and no closer than 8 km to the enemy's front.
     bool CanRelocateBattery(const Vec3& to, std::string* why = nullptr, double max_m = 30000.0) const {
+        if (marching_) {
+            if (why != nullptr) *why = "on the march already";
+            return false;
+        }
         const Vec3 here = truth_[static_cast<std::size_t>(player_)].pos;
         if (Dist2d(here, to) > max_m) {
             if (why != nullptr) *why = "too far for one move (" + std::to_string(static_cast<int>(max_m / 1000.0)) + " km at most)";
@@ -265,11 +271,27 @@ public:
         return true;
     }
 
-    // The player moved the battery (and its dummies with it).
-    void RelocateBattery(const Vec3& to) {
-        Record(CampaignAction::Kind::Relocate).to = to;
-        MoveBattery(to);
+    // The player moved the battery (and its dummies with it): at once, or (roadmap G9.5) as a march on the roads that takes
+    // `march_h` (nav::SessionNav::MarchHours), the battery out of the fight and still at its old position on the enemy's
+    // picture until it arrives.
+    void RelocateBattery(const Vec3& to, double march_h = 0.0) {
+        CampaignAction& a = Record(CampaignAction::Kind::Relocate);
+        a.to = to;
+        a.march_h = std::max(0.0, march_h);
+        if (a.march_h <= 0.0) {
+            MoveBattery(to);
+            return;
+        }
+        marching_ = true;
+        march_to_ = to;
+        march_until_h_ = now_h_ + a.march_h;
+        Log("own_intel", "battery", "The battery is on the march to its new position, " + std::to_string(static_cast<int>(a.march_h * 60.0 + 0.5)) +
+                                        " minutes by the roads.", true);
     }
+    // On the march to a new position (G9.5): where to, and the hour it arrives.
+    bool Marching() const { return marching_; }
+    const Vec3& MarchTo() const { return march_to_; }
+    double MarchArriveH() const { return march_until_h_; }
 
     // The battery's calls on the air, from our side's information pipeline (roadmap P3, docs/command/06_INTEGRATION.md
     // §1): from the first note on, the enemy's radio intercept hears these instead of guessing the battery's traffic
@@ -302,7 +324,7 @@ public:
             posture_ = a.posture;
             switch (a.kind) {
                 case CampaignAction::Kind::Advance: Advance(a.until_h); break;
-                case CampaignAction::Kind::Relocate: RelocateBattery(a.to); break;
+                case CampaignAction::Kind::Relocate: RelocateBattery(a.to, a.march_h); break;
                 case CampaignAction::Kind::Transmit: NoteTransmissions(a.calls); break;
                 case CampaignAction::Kind::Skip:
                 case CampaignAction::Kind::Complete:
@@ -499,6 +521,9 @@ private:
     Rng rng_{1};
     bool ok_ = false;
     double now_h_ = 0.0;
+    bool marching_ = false;  // the player's battery on the march to a new position (G9.5)
+    Vec3 march_to_;
+    double march_until_h_ = 0.0;
     int day_ = 1;
     SupportLevel support_;         // the enemy's support orbits, as of the last plan (docs/air_war/11_SUPPORT.md)
     SupplyNetwork supply_;         // the player's side's supply lines (docs/air_war/14_LOGISTICS.md)
@@ -569,6 +594,7 @@ private:
         rc.weather = WeatherAt(now_h_);
         rc.rng = &rng_;
         rc.awacs = support_.awacs;
+        if (marching_) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;  // on the march: not in the fight
         return rc;
     }
 
@@ -655,12 +681,17 @@ private:
         }
         Deliver();
         now_h_ = t1;
+        if (marching_ && now_h_ + 1e-9 >= march_until_h_) {  // the march's end: at the new position
+            marching_ = false;
+            MoveBattery(march_to_);
+        }
         return false;
     }
 
     bool Pacing() const {
         const TuningTable& t = data_.tuning;
         if (truth_[static_cast<std::size_t>(player_)].function <= 0.3) return false;  // the battery is being repaired
+        if (marching_) return false;                                                    // on the march to a new position
         if (now_h_ - last_player_mission_h_ < t.Get("pacing.min_gap_h")) return false;
         return player_missions_today_ < static_cast<int>(t.Get("pacing.max_per_day") + 0.5);
     }
@@ -1588,6 +1619,7 @@ private:
             const TheatreObject& o = data_.theatre.objects[i];
             ObjectState& st = truth_[i];
             const bool player = static_cast<int>(i) == player_;
+            if (player && marching_) continue;
             const double every = player ? posture_.relocate_every_h : o.relocate_h;
             if (every <= 0.0 || now_h_ - st.last_moved_h < every || st.function <= 0.0) continue;
             if (!player && !o.prepared.empty()) {

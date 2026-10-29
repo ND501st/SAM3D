@@ -840,3 +840,195 @@ SC_TEST("battery orders by a means (G10.5): in the commander's seat the read-bac
     const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_1_commander");
     SC_EXPECT(l != nullptr && l->sent.size() == 1);
 }
+
+SC_TEST("battery orders (G10.6): a vehicle broken down on the march says it cannot, and every reply is written in the journal") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    ScenarioTrigger tr;
+    tr.id = "22 breaks down";
+    tr.after_s = 400.0;
+    TriggerAction a;
+    a.kind = TriggerAction::Kind::Breakdown;
+    a.vehicle = "22";
+    a.reason = "the transmission";
+    tr.actions.push_back(a);
+    def.triggers.push_back(tr);
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr && r.GetBatteryJournal() != nullptr);
+    if (net == nullptr || r.GetBatteryJournal() == nullptr) return;
+    Vec3 at_breakdown;
+    while (!r.Finished() && r.Time() < 900.0) {
+        r.Step(0.05);
+        if (std::fabs(r.Time() - 400.05) < 0.03) at_breakdown = r.GetBattery()->Find("22")->position;
+    }
+    const Battery::Vehicle* v22 = r.GetBattery()->Find("22");
+    SC_EXPECT(v22 != nullptr && v22->broken);
+    if (v22 == nullptr) return;
+    // It stays where it broke down; its commander said so on the net (out of the column, radio is his), and the giver's
+    // picture has it.
+    SC_EXPECT(std::hypot(v22->position.x - at_breakdown.x, v22->position.y - at_breakdown.y) < 1.0);
+    const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_2_commander");
+    SC_EXPECT(l != nullptr && l->cannot == "the transmission" && l->cannot_h * 3600.0 > 400.0);
+    const command::BatteryOrderNet::Word* w = net->LastFrom("22");
+    SC_EXPECT(w != nullptr && w->what == "cannot");
+    // Every reply that reached the battery commander is on his radiotelephonist's page, and its order's leg logged.
+    bool cannot_written = false;
+    for (const RadioJournalEntry& e : r.GetBatteryJournal()->Written()) {
+        if (e.from == "22" && e.said.find("не могу") != std::string::npos) cannot_written = true;
+    }
+    SC_EXPECT(cannot_written);
+    int logged = 0, reported = 0;
+    for (const command::OrderLeg& leg : net->Book().Orders()[0].to) {
+        reported += leg.Has(command::OrderStep::Reported) ? 1 : 0;
+        if (!leg.Has(command::OrderStep::Logged)) continue;
+        ++logged;
+        SC_EXPECT(leg.At(command::OrderStep::Logged) >= leg.At(command::OrderStep::Reported));
+    }
+    std::printf("    %d reported, %d logged; the journal has %d lines\n", reported, logged, static_cast<int>(r.GetBatteryJournal()->Written().size()));
+    SC_EXPECT(reported >= 4 && logged == reported);
+    SC_EXPECT(r.Debrief().find("Battery orders (the order book") != std::string::npos);
+}
+
+SC_TEST("battery orders (G10.6): at the end of the route «К бою!» goes down the column by flags and each vehicle reports «к бою готов»") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    SC_EXPECT(!def.battery_orders.empty() && def.battery_orders[0].route.size() == 2);
+    if (def.battery_orders.empty() || def.battery_orders[0].route.size() != 2) return;
+    def.battery_orders[0].route[1].y = 3000.0;  // a short march: 3 km, every set on (the whole column)
+    for (command::OrderVehicle& c : def.battery_crews) c.set_on = true;
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    while (!r.Finished() && r.Time() < 2400.0 && net->Book().Orders().size() < 2) r.Step(0.05);
+    SC_EXPECT(net->Book().Orders().size() == 2);
+    if (net->Book().Orders().size() < 2) return;
+    const command::BatteryOrderRecord& battle = net->Book().Orders()[1];
+    SC_EXPECT(battle.kind == "combat_formation" && battle.mean == "flags");
+    while (!r.Finished() && r.Time() < 2400.0) r.Step(0.05);
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    // Every vehicle read it and deployed; the launchers' «к бою готов» and the others' came back.
+    int done = 0;
+    for (const command::OrderLeg& leg : net->Book().Orders()[1].to) {
+        SC_EXPECT(leg.Has(command::OrderStep::Heard));
+        done += leg.Has(command::OrderStep::Reported) ? 1 : 0;
+    }
+    SC_EXPECT(done == static_cast<int>(net->Book().Orders()[1].to.size()));
+    for (const Battery::Vehicle& v : r.GetBattery()->Vehicles()) {
+        if (v.def.id != "PU-12") SC_EXPECT(v.deployed);
+    }
+}
+
+SC_TEST("battery orders (G10.7): the regiment's order of the emission regime reaches the battery commander, then the battery on the order net") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    ScenarioDef::EmissionOrderDef eo;
+    eo.at_s = 120.0;
+    eo.regime = def.emission.Make(EmissionKind::Limited, "regiment");
+    def.emission_orders.push_back(eo);
+    for (command::OrderVehicle& c : def.battery_crews) c.set_on = true;  // the whole battery on the net
+    const double relay_s = def.emission.relay_s;
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    const command::BatteryOrderNet* rgt = r.GetRegimentOrders();
+    SC_EXPECT(net != nullptr && rgt != nullptr);
+    if (net == nullptr || rgt == nullptr) return;
+    while (!r.Finished() && r.Time() < 400.0) r.Step(0.05);
+    for (const std::string& line : rgt->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    // The regiment's book: said to the battery commander, read back, passed on and reported done.
+    SC_EXPECT(rgt->Book().Orders().size() == 1);
+    if (rgt->Book().Orders().size() != 1) return;
+    const command::OrderLeg& bc = rgt->Book().Orders()[0].to.front();
+    SC_EXPECT(bc.Has(command::OrderStep::Heard) && bc.Has(command::OrderStep::RepeatedBack) && bc.Has(command::OrderStep::Done) &&
+              bc.Has(command::OrderStep::Reported));
+    // The battery's book: the regime given after he had it and passed it on, to every vehicle, each reading it back.
+    int regime = -1;
+    for (std::size_t i = 0; i < net->Book().Orders().size(); ++i) {
+        if (net->Book().Orders()[i].kind == "emission") regime = static_cast<int>(i);
+    }
+    SC_EXPECT(regime >= 0);
+    if (regime < 0) return;
+    const command::BatteryOrderRecord& o = net->Book().Orders()[static_cast<std::size_t>(regime)];
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(o.given_h * 3600.0 >= bc.At(command::OrderStep::CarryingOut) * 3600.0 + relay_s - 0.1);
+    for (const command::OrderLeg& leg : o.to) SC_EXPECT(leg.Has(command::OrderStep::Heard) && leg.Has(command::OrderStep::RepeatedBack));
+    // Our commander has it once he heard it on the net, and read it back like the others.
+    SC_EXPECT(r.CommanderRegime().kind == EmissionKind::Limited && r.CommanderRegime().from == "regiment");
+    SC_EXPECT(net->RepeatedBack(regime, "21"));
+}
+
+SC_TEST("battery orders (G10.8): from the PU-12M the battery commander gives the planned march when it is due; the replies are in the post's journal") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/pu12m_battery_orders.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr && r.GetBattery() != nullptr && r.GetBattery()->Own() != nullptr);
+    if (net == nullptr || r.GetBattery() == nullptr || r.GetBattery()->Own() == nullptr) return;
+    const Vec3 post_at = r.GetBattery()->Own()->position;
+    double post_moved_s = -1.0;
+    while (!r.Finished() && r.Time() < 2400.0) {
+        r.Step(0.05);
+        const Vec3 p = r.GetBattery()->Own()->position;
+        if (post_moved_s < 0.0 && std::hypot(p.x - post_at.x, p.y - post_at.y) > 1.0) post_moved_s = r.Time();
+    }
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(net->Book().Orders().size() >= 1);
+    if (net->Book().Orders().empty()) return;
+    // The NPC battery commander gave the planned march when it was due, on the battery net; nobody moved before hearing.
+    const command::BatteryOrderRecord& march = net->Book().Orders()[0];
+    SC_EXPECT(march.kind == "march" && march.mean == "radio_voice");
+    SC_EXPECT_NEAR(march.given_h * 3600.0, 60.0, 1.5);
+    bool given = false;
+    for (const ScenarioRunner::GivenOrder& g : r.OrdersGiven()) given = given || g.order == "order_battery_march";
+    SC_EXPECT(given);
+    // The post itself moved only once stowed (after the order), and the replies are on its radiotelephonist's page.
+    std::printf("    the post moved off at %.0f s\n", post_moved_s);
+    SC_EXPECT(post_moved_s > 60.0);
+    // The column waited for its commander's post, and at the route's end he gave «К бою!» from it.
+    SC_EXPECT(net->Book().Orders().size() >= 2 && net->Book().Orders().back().kind == "combat_formation");
+    SC_EXPECT(net->Book().Orders().back().given_h * 3600.0 > post_moved_s);
+    int logged = 0;
+    for (const command::OrderLeg& leg : march.to) {
+        SC_EXPECT(leg.Has(command::OrderStep::RepeatedBack));
+        logged += leg.Has(command::OrderStep::Logged) ? 1 : 0;
+    }
+    SC_EXPECT(logged >= 1);
+    SC_EXPECT(r.GetBatteryJournal() == &r.Journal());
+}
+
+SC_TEST("battery orders (G10.8): in the battery commander's seat the march is the player's to give, from the menu's Battery orders") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/pu12m_battery_orders.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.TakeSeat("battery_commander", "Player");
+    r.SetHelper(true);
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    auto owes = [&](const std::string& id) {
+        for (const SeatDuty& d : r.OwedDuties("battery_commander")) {
+            if (d.kind == SeatDuty::Kind::Order && d.id == id) return true;
+        }
+        return false;
+    };
+    while (r.Time() < 30.0) r.Step(0.05);
+    SC_EXPECT(!owes("order_battery_march") && net->Book().Orders().empty());
+    // «К бою!» is not in the combat order yet; a halt he may give at any time.
+    ScenarioRunner::OrderCheck why;
+    SC_EXPECT(!r.TryCrewOrder("order_battery_k_boyu", &why));
+    while (r.Time() < 65.0) r.Step(0.05);
+    // Due at 60 s: owed (the helper shows it), and nobody gives it for him.
+    SC_EXPECT(owes("order_battery_march") && net->Book().Orders().empty());
+    SC_EXPECT(r.TryCrewOrder("order_battery_march", &why));
+    r.Step(0.05);
+    SC_EXPECT(net->Book().Orders().size() == 1 && net->Book().Orders()[0].kind == "march");
+    SC_EXPECT(!owes("order_battery_march"));
+}

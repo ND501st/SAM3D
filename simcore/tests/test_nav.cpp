@@ -1,6 +1,7 @@
 // The route service (simcore/nav/, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md §5.1, roadmap G1).
 #include <cmath>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -563,4 +564,170 @@ SC_TEST("nav: battery 21 marches on orders carried by a means (G10.2-G10.5's don
         SC_EXPECT(l.At(command::OrderStep::Heard) - bo.given_h < (def.say_s + 8.0 * def.pass_s + 1.0) / 3600.0);
     }
     for (const Battery::Vehicle& v : march.Column().Vehicles()) SC_EXPECT(v.deployed);
+}
+
+namespace {
+
+// Whether a path touches `ground` anywhere: every 10 m along each stretch.
+bool Crosses(const GroundGrid& grid, const Route& r, Ground ground) {
+    for (std::size_t i = 0; i + 1 < r.path.size(); ++i) {
+        const MapPoint& a = r.path[i];
+        const MapPoint& b = r.path[i + 1];
+        const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+        for (double d = 0.0; d <= len; d += 10.0) {
+            const double f = len > 0.0 ? d / len : 0.0;
+            if (grid.At({a.east_m + (b.east_m - a.east_m) * f, a.north_m + (b.north_m - a.north_m) * f}) == ground) return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+SC_TEST("nav: the ground off the road (G1.3): a man on foot goes round the pond, a truck round the woods; without a grid, straight") {
+    MobilityLibrary lib;
+    std::string e;
+    SC_EXPECT(LoadMobility(kData, "vehicles/mobility.json", lib, &e));
+    const Mobility* foot = lib.Find("foot");
+    const Mobility* truck = lib.Find("truck");
+    SC_EXPECT(foot != nullptr && truck != nullptr);
+    if (foot == nullptr || truck == nullptr) return;
+    // The data's factors: a truck does not go into the marsh; a man is slower in the woods than in the open.
+    SC_EXPECT(truck->GroundMps()[static_cast<std::size_t>(Ground::Marsh)] == 0.0);
+    SC_EXPECT(foot->GroundMps()[static_cast<std::size_t>(Ground::Woods)] < foot->cross_country_mps);
+    SC_EXPECT(foot->GroundMps()[static_cast<std::size_t>(Ground::Water)] == 0.0);
+    // A 4 km square: a pond 1 km across in the middle, a wood north of it, a road along its south edge.
+    MapDef map;
+    map.west_m = -2000.0;
+    map.east_m = 2000.0;
+    map.south_m = -2000.0;
+    map.north_m = 2000.0;
+    MapLakeDef pond;
+    pond.id = "pond";
+    pond.points = {{-500.0, -500.0}, {500.0, -500.0}, {500.0, 500.0}, {-500.0, 500.0}};
+    map.lakes.push_back(pond);
+    MapPolygonDef wood;
+    wood.id = "wood";
+    wood.points = {{-300.0, 700.0}, {300.0, 700.0}, {300.0, 1300.0}, {-300.0, 1300.0}};
+    map.forests.push_back(wood);
+    MapLineDef road;
+    road.id = "road";
+    road.line_class = "secondary";
+    road.points = {{-2000.0, -1800.0}, {2000.0, -1800.0}};
+    map.roads.push_back(road);
+    const GroundGrid grid = GroundGrid::FromMap(map, 50.0);
+    SC_EXPECT(grid.Cols() == 80 && grid.Rows() == 80);
+    SC_EXPECT(grid.At({0.0, 0.0}) == Ground::Water && grid.At({0.0, 1000.0}) == Ground::Woods && grid.At({-1000.0, 0.0}) == Ground::Open);
+    SC_EXPECT(grid.Census()[static_cast<std::size_t>(Ground::Water)] == 400);      // the pond: 20 by 20 cells of 50 m
+    SC_EXPECT(grid.Census()[static_cast<std::size_t>(Ground::Woods)] == 12 * 12);  // the wood: 600 m square
+    RoadGraph g = RoadGraph::Build({&road}, {});
+    RouteRequest q;
+    q.from = {-1000.0, 0.0};
+    q.to = {1000.0, 0.0};
+    q.mobility = foot;
+    // No grid (the country): straight across, through the pond as if it were not there.
+    const Route straight = g.Find(q);
+    SC_EXPECT(straight.found && straight.path.size() == 2);
+    SC_EXPECT_NEAR(straight.time_s, 2000.0 / (std::round(foot->cross_country_mps * 100.0) / 100.0), 0.5);  // whole cm/s
+    // With the district's ground: round the pond, a little longer, never in the water.
+    g.SetGround(std::make_shared<GroundGrid>(grid));
+    const Route round_pond = g.Find(q);
+    std::printf("    on foot: straight %.0f s, round the pond %.0f s, %.0f m, %zu points\n", straight.time_s, round_pond.time_s, round_pond.length_m,
+                round_pond.path.size());
+    SC_EXPECT(round_pond.found && !Crosses(grid, round_pond, Ground::Water));
+    SC_EXPECT(round_pond.time_s > straight.time_s && round_pond.time_s < 1.5 * straight.time_s);
+    SC_EXPECT(round_pond.length_m > 1000.0 + 1000.0 * std::sqrt(2.0) - 30.0);  // at least round the pond's corners
+    double sum_s = 0.0;
+    for (const RouteStretch& s : round_pond.stretches) sum_s += s.time_s;
+    SC_EXPECT_NEAR(sum_s, round_pond.time_s, 0.05);  // the stretches' times are the route's
+    // A truck across the wood's line: round it (the woods at 0.3 of its speed), quicker than through.
+    q.from = {-1000.0, 1000.0};
+    q.to = {1000.0, 1000.0};
+    q.mobility = truck;
+    const Route round_wood = g.Find(q);
+    const double v = truck->cross_country_mps;
+    const double through_s = 1400.0 / v + 600.0 / (v * 0.3);
+    std::printf("    the truck: through the wood %.0f s, round it %.0f s\n", through_s, round_wood.time_s);
+    SC_EXPECT(round_wood.found && !Crosses(grid, round_wood, Ground::Woods));
+    SC_EXPECT(round_wood.time_s < through_s && round_wood.time_s > 2000.0 / v);
+}
+
+SC_TEST("nav: the Kesmark range's ground (G1.3): its woods, marshes, water and towns laid at 100 m; battery 21's routes over them") {
+    const World& w = TheWorld();
+    const GroundGrid grid = GroundGrid::FromMap(w.district, 100.0);
+    const auto n = grid.Census();
+    std::printf("    %d by %d cells: open %d, woods %d, marsh %d, water %d, built-up %d\n", grid.Cols(), grid.Rows(), n[0], n[1], n[2], n[3], n[4]);
+    for (int k : n) SC_EXPECT(k > 0);
+    RoadGraph g = w.graph;
+    g.SetGround(std::make_shared<GroundGrid>(grid));
+    for (const std::string& to : {"bty21_v2", "rgt_cp", "tech_battery"}) {
+        RouteRequest q;
+        q.from = w.anchors.Find("bty21_cp")->at;
+        q.to = w.anchors.Find(to)->at;
+        q.mobility = w.mobility.Find("osa_9a33");
+        const Route flat = w.graph.Find(q);
+        const Route ground = g.Find(q);
+        std::printf("    to %s: %.0f s straight off the road, %.0f s over the ground\n", to.c_str(), flat.time_s, ground.time_s);
+        SC_EXPECT(flat.found && ground.found);
+        SC_EXPECT(ground.time_s >= flat.time_s * 0.98);  // never much quicker than the open field (the grid's steps apart)
+    }
+}
+
+SC_TEST("nav: movers on routes (G2.1): a column goes stretch by stretch at its route's times, halts, and keeps its place handed between M1 and M2") {
+    Route r;
+    r.found = true;
+    r.path = {{0.0, 0.0}, {1000.0, 0.0}, {1000.0, 1000.0}};
+    r.stretches = {{"road", Road::Main, "a", 1000.0, 100.0}, {"road", Road::Track, "b", 1000.0, 200.0}};
+    r.time_s = 300.0;
+    r.length_m = 2000.0;
+    Movers movers;
+    Mover col;
+    col.id = "column";
+    col.kind = "column";
+    col.mobility = "osa_9a33";
+    col.route = r;
+    col.depart_s = 10.0;
+    col.vehicles = 5;
+    col.spacing_m = 50.0;
+    movers.Add(col);
+    double t = 0.0;
+    auto run_to = [&](double until) {
+        while (t < until - 1e-9) {
+            t += 1.0;
+            movers.Step(t, 1.0);
+        }
+    };
+    const Mover* m = movers.Find("column");
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    run_to(60.0);
+    SC_EXPECT(m->state == MoverState::Moving);
+    SC_EXPECT_NEAR(m->arc_m, 500.0, 1e-6);  // 50 s at 10 m/s on the first stretch
+    movers.Halt("column", 90.0);
+    run_to(90.0);
+    SC_EXPECT_NEAR(m->arc_m, 500.0, 1e-6);  // halted 30 s where it was
+    run_to(210.0);
+    SC_EXPECT_NEAR(m->arc_m, 1350.0, 1e-6);  // 170 s moving: the first stretch, then 70 s at 5 m/s
+    const MapPoint head = movers.Head(*m), tail = movers.Tail(*m);
+    SC_EXPECT_NEAR(head.north_m, 350.0, 1e-6);
+    SC_EXPECT_NEAR(tail.north_m, 150.0, 1e-6);  // its 200 m behind
+    // Seen: M2, and the session drives it; the place it hands back is the place it goes on from.
+    std::vector<std::string> changed = movers.UpdateLevels({{1000.0, 600.0}}, 500.0);
+    SC_EXPECT(m->level == MoverLevel::M2 && changed.size() == 1);
+    movers.SetArc("column", 1600.0);
+    movers.Step(t, 1.0);
+    SC_EXPECT_NEAR(m->arc_m, 1600.0, 1e-6);  // M2: the session's
+    // 520 m from the viewer: inside the margin, still M2; 1.5 km away: M1, at the route's time to its place.
+    changed = movers.UpdateLevels({{1000.0, 1120.0}}, 500.0);
+    SC_EXPECT(m->level == MoverLevel::M2 && changed.empty());
+    changed = movers.UpdateLevels({{1000.0, 2130.0}}, 500.0);
+    SC_EXPECT(m->level == MoverLevel::M1 && changed.size() == 1);
+    SC_EXPECT_NEAR(m->moved_s, 220.0, 1e-6);
+    run_to(300.0);
+    SC_EXPECT(m->state == MoverState::Arrived);
+    SC_EXPECT_NEAR(m->arrived_s, 290.0, 1e-6);  // 80 s on from where it was handed back
+    SC_EXPECT_NEAR(m->arc_m, 2000.0, 1e-6);
+    // The battery's own elements are M2 wherever the viewer is.
+    movers.UpdateLevels({{50000.0, 50000.0}}, 500.0, {"column"});
+    SC_EXPECT(m->level == MoverLevel::M2);
 }

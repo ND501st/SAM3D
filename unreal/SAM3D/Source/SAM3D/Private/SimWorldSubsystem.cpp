@@ -25,6 +25,7 @@ namespace
 	constexpr int32 ArmIdBase = 150000;      // display ids for anti-radiation missiles (EM layer, roadmap E6)
 	constexpr int32 GroundIdBase = 200000;   // display ids for the battery's vehicles and dummy positions
 	constexpr int32 VisitorIdBase = 250000;  // display ids for the chain of command's carriers on the ground (roadmap P1)
+	constexpr int32 MoverIdBase = 300000;    // display ids for the world's movers in sight (roadmap G11): mover * 1000 + vehicle
 
 	ESimEventType ToUnrealEventType(simcore::EventType Type)
 	{
@@ -2034,6 +2035,17 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 			S.bIsGround = true;
 			S.Kind = TEXT("visitor");
+			S.Model = ToF(V.model);
+			Out.Add(S);
+		}
+		// The world's movers inside the visual range (roadmap G11): another unit's column, a convoy, a carrier, each
+		// vehicle where the simulation has it. Out of range they are not listed, and their actors hide.
+		for (const simcore::ScenarioRunner::WorldMover& V : Runner->MoversInView())
+		{
+			FSimEntityState S = MakeState(MoverIdBase + V.id, ToF(V.mover), false, true, V.position, simcore::Vec3{});
+			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
+			S.bIsGround = true;
+			S.Kind = ToF(V.kind);
 			S.Model = ToF(V.model);
 			Out.Add(S);
 		}

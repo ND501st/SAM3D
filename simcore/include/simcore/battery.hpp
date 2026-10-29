@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -60,6 +61,8 @@ struct BatteryTactics {
     double tzm_capacity = 12.0;
     double fuel_truck_capacity_l = 3800.0;
     double slot_tolerance_m = 15.0;
+    double breakdown_per_100km = 0.0;  // a fault on the march, each vehicle, per 100 km (0: none; G3.5, a fixed chance while G6 is on hold)
+    double repair_s = 1800.0;          // a fault on the march repaired where it stands (by the maintenance vehicle when it has one)
 };
 
 enum class BatteryVehicleKind { Launcher, Reload, CommandPost, Maintenance, Fuel };
@@ -115,6 +118,8 @@ struct BatteryOrder {
     Kind kind = Kind::March;
     double at_s = 0.0;
     std::vector<Vec3> route;  // March: the road, first point to last. Ambush: the prepared points
+    std::string to_place;     // March: where to, by a place's id (an anchor of the route service): the route is planned on
+                              // the roads when the order is given (roadmap G2.3, nav/session.hpp)
     Vec3 covered;             // CombatFormation: the covered unit's position. RiverCrossing: the crossing point (near bank)
                               // Relocate: where the own vehicle goes (the others keep their places around it)
     double axis_deg = 0.0;    // direction of advance, or across the river (true, clockwise from north)
@@ -124,6 +129,7 @@ struct BatteryOrder {
     std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
     bool radiate = false;     // Emcon: the radars may radiate again (false: radiation off, the battery fights silent)
     EmissionRegime regime;    // Emission: the battery's emission regime (emission_regime.hpp)
+    std::string from;         // "regiment": the regiment's order, passed on by the battery commander ("" or "battery": his own)
     // ShortHalt: the target the halt is for, as the battery commander knows it: its range (< 0: not known) and, if
     // known, its true azimuth from the battery.
     double threat_range_m = -1.0;
@@ -193,7 +199,7 @@ public:
         // Optional: the board's warning time (board_reading.hpp).
         const std::pair<const char*, double*> optional[] = {
             {"warning_s", &t.warning_s}, {"zone_edge_m", &t.zone_edge_m}, {"short_halt_in_column_m", &t.short_halt_in_column_m},
-            {"halt_interval_max_s", &t.halt_interval_max_s}};
+            {"halt_interval_max_s", &t.halt_interval_max_s}, {"breakdown_per_100km", &t.breakdown_per_100km}, {"repair_s", &t.repair_s}};
         for (const auto& f : optional) {
             const std::string p = Join("tactics", f.first);
             const json::Value* v = b->Find(f.first);
@@ -280,6 +286,12 @@ public:
         bool on_route = false;       // reached the route (it first drives to it across country)
         double catch_arc = 0.0;      // where along the route it has got to
         std::vector<double> catch_mps;  // its own speed on each stretch (empty: a little over the column's)
+        // Broken down where it stands (a fault on the march: G3.5): it takes no part in the battery's moves.
+        bool broken = false;
+        std::string broken_why;
+        double odo_m = 0.0;          // driven on the march (a fault's chance per kilometre)
+        double repair_at_s = -1.0;   // broken down: repaired then (< 0: waiting for the maintenance vehicle)
+        std::string helping;         // the maintenance vehicle: the broken-down vehicle it stays with
     };
 
     struct Event {
@@ -376,6 +388,8 @@ public:
         const Vehicle* v = Find(id);
         return v != nullptr && v->absent;
     }
+    // The vehicle the battery commander rides in: while it is absent (its crew still stowing) the column does not form.
+    void SetLeader(const std::string& id) { leader_ = id; }
     // Its commander has heard and acts: the vehicle leaves its emplacement (if it is still dug in) and goes to its place;
     // away from its place in a column already on the march, or in one forming after the battery is out of its
     // emplacements (it heard late), it catches the column up along the route at `catch_mps` (its own speed on each
@@ -405,6 +419,30 @@ public:
         const Vehicle* v = Find(id);
         return v != nullptr && v->catching;
     }
+    // A vehicle breaks down where it stands: it stops, and the column goes on without it.
+    void Breakdown(const std::string& id, double t, const std::string& why) {
+        for (Vehicle& v : vehicles_) {
+            if (v.def.id != id || v.broken) continue;
+            v.broken = true;
+            v.broken_why = why;
+            v.catching = false;
+            v.speed_mps = 0.0;
+            v.goal = v.position;
+            events_.push_back({t, v.def.callsign, "broken down: " + why});
+        }
+    }
+    bool Broken(const std::string& id) const {
+        const Vehicle* v = Find(id);
+        return v != nullptr && v->broken;
+    }
+    // Faults on the march (G3.5): each vehicle at the tactics' chance per kilometre driven, the rolls repeatable from the seed.
+    // The column goes on without it; the maintenance vehicle at the tail stops when it comes up to it and repairs it in
+    // `repair_s` (its crew alone, if there is none or it is busy); then both catch the column up.
+    void SetBreakdownSeed(std::uint64_t seed) { breakdown_seed_ = seed; }
+
+    // The march's route, and whether the head of the column has come to its end.
+    const std::vector<Vec3>& Route() const { return route_; }
+    bool AtRouteEnd() const { return arrived_logged_; }
 
     void SetAirThreat(bool threat, double t) {
         if (threat == air_threat_) return;
@@ -565,6 +603,7 @@ public:
     }
 
     void Step(double t, double dt) {
+        StepRepairs(t);
         if (mode_ == Mode::Halted && t >= halt_until_s_) {
             mode_ = Mode::Forming;
             marched_s_ = 0.0;
@@ -574,7 +613,8 @@ public:
             bool formed = true;
             for (std::size_t k = 0; k < vehicles_.size(); ++k) {
                 Vehicle& v = vehicles_[k];
-                if (v.absent || v.catching) continue;  // not in the column (yet): the column goes without it
+                if (v.absent && v.def.id == leader_) formed = false;  // the column does not move off without its commander
+                if (v.absent || v.catching || v.broken) continue;  // not in the column (yet): the column goes without it
                 v.goal = PointAt(SlotArc(rank_[k]));
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
             }
@@ -586,7 +626,7 @@ public:
                 // The leader moves on as long as nobody behind has fallen too far back.
                 bool keeping_up = true;
                 for (const Vehicle& v : vehicles_)
-                    if (!v.absent && !v.catching && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
+                    if (!v.absent && !v.catching && !v.broken && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
                 if (keeping_up && lead_s_ < total_ && t >= hold_until_s_) {
                     double next = Advance(lead_s_, dt);
                     // The head stops at a plan's point until its time, and at a halt.
@@ -620,7 +660,7 @@ public:
                                                                 : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
-            if (v.absent || t < v.hold_until_s) {
+            if (v.absent || v.broken || t < v.hold_until_s) {
                 v.speed_mps = 0.0;
                 continue;
             }
@@ -636,13 +676,15 @@ public:
                 v.speed_mps = 0.0;
                 continue;
             }
+            const Vec3 was = v.position;
             Move(v, v.afloat ? tactics_.water_speed_mps : speed, dt, mode_ == Mode::Marching);
+            if (mode_ == Mode::Marching) MarchWear(v, t, Dist(was, v.position));
         }
         // Stopped at a short-halt point, a formation slot, an ambush point or a river position: deploy.
         if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation || mode_ == Mode::Ambush || mode_ == Mode::RiverApproach ||
             mode_ == Mode::RiverCrossing) {
             for (Vehicle& v : vehicles_) {
-                if (v.deployed || !v.serving.empty() || v.waiting || v.absent) continue;
+                if (v.deployed || !v.serving.empty() || v.waiting || v.absent || v.broken) continue;
                 if (mode_ == Mode::RiverCrossing && v.crossing_stage != 0 && v.crossing_stage != 4) continue;
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) continue;
                 if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
@@ -1082,6 +1124,83 @@ private:
     int regime_orders_ = 0;
     bool night_ = false;
     bool drive_own_ = false;
+    std::string leader_;
+    std::uint64_t breakdown_seed_ = 1;
+
+    // A repeatable number in [0, 1) for vehicle k's kilometre n (SplitMix64's finaliser).
+    double BreakdownRoll(std::size_t k, long long n) const {
+        std::uint64_t z = breakdown_seed_ * 0x9E3779B97F4A7C15ull + static_cast<std::uint64_t>(k) * 0xBF58476D1CE4E5B9ull +
+                          static_cast<std::uint64_t>(n) * 0x94D049BB133111EBull;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        z ^= z >> 31;
+        return static_cast<double>(z >> 11) * (1.0 / 9007199254740992.0);
+    }
+    void MarchWear(Vehicle& v, double t, double moved_m) {
+        if (tactics_.breakdown_per_100km <= 0.0 || moved_m <= 0.0) return;
+        const long long before = static_cast<long long>(std::floor(v.odo_m / 1000.0));
+        v.odo_m += moved_m;
+        const long long after = static_cast<long long>(std::floor(v.odo_m / 1000.0));
+        const std::size_t k = static_cast<std::size_t>(&v - vehicles_.data());
+        for (long long n = before + 1; n <= after && !v.broken; ++n) {
+            if (BreakdownRoll(k, n) >= tactics_.breakdown_per_100km / 100.0) continue;
+            Breakdown(v.def.id, t, "a fault on the march");
+            Vehicle* fixer = nullptr;
+            for (Vehicle& m : vehicles_) {
+                // The maintenance vehicle behind it (at the tail, it comes up to it), free.
+                if (m.def.kind == BatteryVehicleKind::Maintenance && &m != &v && !m.absent && !m.broken && m.helping.empty() &&
+                    NearestArc(m.position) <= NearestArc(v.position) + Spacing()) {
+                    fixer = &m;
+                }
+            }
+            if (fixer != nullptr) {
+                fixer->helping = v.def.id;
+                events_.push_back({t, fixer->def.callsign, "to " + v.def.callsign + ", to repair it"});
+            } else {
+                v.repair_at_s = t + tactics_.repair_s;
+            }
+        }
+    }
+    void StepRepairs(double t) {
+        for (Vehicle& m : vehicles_) {
+            if (m.helping.empty() || m.broken) continue;
+            Vehicle* v = nullptr;
+            for (Vehicle& c : vehicles_) {
+                if (c.def.id == m.helping) v = &c;
+            }
+            if (v == nullptr || !v->broken) {
+                m.helping.clear();
+                continue;
+            }
+            if (Dist(m.position, v->position) <= Spacing() + tactics_.slot_tolerance_m) {  // come up to it: stops and repairs
+                m.broken = true;
+                m.broken_why = "with " + v->def.callsign + ", repairing it";
+                m.speed_mps = 0.0;
+                m.goal = m.position;
+                m.catching = false;
+                v->repair_at_s = m.repair_at_s = t + tactics_.repair_s;
+                events_.push_back({t, m.def.callsign, "stops with " + v->def.callsign + " and repairs it"});
+            }
+        }
+        for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+            Vehicle& v = vehicles_[k];
+            if (!v.broken || v.repair_at_s < 0.0 || t < v.repair_at_s) continue;
+            v.broken = false;
+            v.broken_why.clear();
+            v.repair_at_s = -1.0;
+            v.helping.clear();
+            if (route_.size() >= 2 && (mode_ == Mode::Marching || mode_ == Mode::Halted || mode_ == Mode::Forming)) {
+                v.deployed = false;
+                v.catching = true;
+                v.on_route = false;
+                v.catch_arc = std::min(NearestArc(v.position), SlotArc(rank_[k]));
+                v.catch_mps.clear();
+                events_.push_back({t, v.def.callsign, "repaired: after the column, to catch it up"});
+            } else {
+                events_.push_back({t, v.def.callsign, "repaired"});
+            }
+        }
+    }
     std::vector<Vec3> route_;
     std::vector<double> route_mps_;
     double emplacement_s_ = 0.0;  // to leave the emplacement (SetInEmplacement), for a vehicle that leaves late

@@ -75,13 +75,14 @@ struct MarchRequest {
 };
 
 struct MarchPoint {
-    std::string kind;     // "start", "halt", "regulation", "swim", "end"
+    std::string kind;     // "start", "halt", "regulation", "swim", "regulator", "end"
     std::string name;
     double arc_m = 0.0;   // along the route
     MapPoint at;
     double head_s = 0.0;  // the head passes it (at a halt: stops there)
     double tail_s = 0.0;  // the tail passes it (at a halt: after the column moves off again)
     double halt_s = 0.0;
+    double hold_s = 0.0;  // a regulator's: the head waits here this long for its slot (nav/movement.hpp, G3)
 };
 
 // A vehicle commander's route card: his place in the column and his vehicle's time at each of the plan's points.
@@ -172,6 +173,7 @@ struct MarchPlan {
                                      : p.kind == "regulation" ? "Regulation point"
                                      : p.kind == "halt"       ? "Halt"
                                      : p.kind == "swim"       ? "Swim"
+                                     : p.kind == "regulator"  ? "Regulator"
                                                               : "End";
             if (p.kind == "halt" || p.kind == "swim") {
                 std::snprintf(buf, sizeof(buf), "  %s: %s (km %.1f): %s-%s", what.c_str(), p.name.c_str(), p.arc_m / 1000.0,
@@ -217,6 +219,12 @@ inline Mobility ColumnClass(const std::vector<const Mobility*>& classes) {
         c.water_mps = std::min(c.water_mps, m->water_mps);
         c.night_factor = std::min(c.night_factor, m->night_factor);
         c.swim_prep_s = std::max(c.swim_prep_s, m->swim_prep_s);
+    }
+    // Off the road on each ground the slowest there (G1.3): its speed there as a share of the column's cross-country one.
+    for (std::size_t k = 0; k < c.ground_factor.size(); ++k) {
+        double least = 1e9;
+        for (const Mobility* m : classes) least = std::min(least, m->cross_country_mps * m->ground_factor[k]);
+        c.ground_factor[k] = classes.empty() || c.cross_country_mps <= 0.0 ? 1.0 : std::min(1.0, least / c.cross_country_mps);
     }
     return c;
 }

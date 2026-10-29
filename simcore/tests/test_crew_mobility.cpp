@@ -3,6 +3,7 @@
 // sending a crewman out for a job done outside, keeping the hatches shut in combat work and the voices in earshot.
 #include <cmath>
 #include <string>
+#include <vector>
 
 #include "simcore/cabin.hpp"
 #include "simcore/console_data.hpp"
@@ -437,4 +438,43 @@ SC_TEST("crew mobility: a player inside can't set out the AB-1 from his seat; ou
     SC_EXPECT(r->Console().panel.Get("pwr.ab1_set") == 1);
     // And from out there his own console inside is out of reach.
     SC_EXPECT(r->SeatSet("driver", "pwr.input", 1, &why) == StepResult::Blocked);
+}
+
+SC_TEST("crew mobility (G2.4): a long walk across the map goes by the foot way's points; a short one, or one with no way given, straight") {
+    const Loaded l = LoadVehicleOf("pu12m");
+    VehiclePose pose;
+    pose.origin = Vec3{0.0, 0.0, 110.0};
+    FlatTerrain ground(110.0);
+    std::map<std::string, bool> hatches;
+    const Vec3 far_point{0.0, 600.0, 110.0};
+    // The foot way (nav::SessionNav::FootWay in a session): round a pond between the vehicle and the goal, by a point 300 m east.
+    int asked = 0;
+    auto way = [&asked](const Vec3& a, const Vec3& b) {
+        ++asked;
+        return std::vector<Vec3>{a, Vec3{300.0, 300.0, 0.0}, b};
+    };
+    CrewMover straight(&l.vehicle, "driver");
+    CrewMover round_pond(&l.vehicle, "driver");
+    round_pond.SetFootRoute(way);
+    std::string why;
+    SC_EXPECT(straight.GoTo(MoveGoal::OnGround(far_point), &l.console, pose, &why));
+    SC_EXPECT(round_pond.GoTo(MoveGoal::OnGround(far_point), &l.console, pose, &why));
+    SC_EXPECT(asked == 1);
+    bool via = false;
+    for (const MoveLeg& leg : round_pond.Legs()) via = via || (leg.kind == LegKind::GroundWalk && leg.to_map && std::fabs(leg.to.x - 300.0) < 1e-9);
+    SC_EXPECT(via);
+    const double t_straight = WalkUntilArrived(straight, l.vehicle, l.walking.gait, pose, &ground, hatches, 1800.0);
+    hatches.clear();
+    const double t_round = WalkUntilArrived(round_pond, l.vehicle, l.walking.gait, pose, &ground, hatches, 1800.0);
+    std::printf("    600 m across the map: straight %.0f s, round the pond %.0f s\n", t_straight, t_round);
+    SC_EXPECT(t_round > t_straight + 100.0);  // two legs of 424 m against 600 m at a walk
+    const MoverView v = round_pond.View(pose);
+    SC_EXPECT(!round_pond.Moving() && v.place == BodyPlace::Ground);
+    SC_EXPECT_NEAR(v.feet_enu.x, far_point.x, 0.01);
+    SC_EXPECT_NEAR(v.feet_enu.y, far_point.y, 0.01);
+    // A walk to a point beside the vehicle does not ask for the way.
+    CrewMover beside(&l.vehicle, "driver");
+    beside.SetFootRoute(way);
+    SC_EXPECT(beside.GoTo(MoveGoal::OnGround(Vec3{8.0, 20.0, 110.0}), &l.console, pose, &why));
+    SC_EXPECT(asked == 1);
 }

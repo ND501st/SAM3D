@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -32,6 +33,7 @@
 #include "simcore/emission_regime.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/instructor.hpp"
+#include "simcore/nav/session.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
 #include "simcore/radio_nets.hpp"
@@ -137,13 +139,14 @@ struct CrewDoctrineDef {
 };
 
 struct TriggerAction {
-    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat, Instructor };
+    enum class Kind { SetInput, Order, Queue, End, C2Source, C2Fail, C2Restore, BatteryOrder, AirThreat, Instructor, Breakdown };
     Kind kind = Kind::SetInput;
     std::string input;      // SetInput
     bool value = true;      // SetInput
     std::string crew;       // Order, Queue
     std::string procedure;  // Order, Queue
-    std::string reason;     // End, C2Fail
+    std::string reason;     // End, C2Fail, Breakdown
+    std::string vehicle;    // Breakdown: a battery vehicle that breaks down where it stands
     std::string c2_id;      // C2Source (a source id or "none"), C2Fail, C2Restore
     simcore::BatteryOrder battery_order;  // BatteryOrder
     bool air_threat = false;              // AirThreat
@@ -286,6 +289,10 @@ struct ScenarioDef {
     BatteryTactics battery_tactics;
     std::vector<BatteryVehicleDef> battery_vehicles;
     std::vector<BatteryOrder> battery_orders;  // scheduled by at_s
+    std::shared_ptr<const command::ChainData> battery_chain;  // by_means's chain (the staff list and the diagram: G8, G9.4)
+    // The route service in the session (roadmap G2.3, G11; nav/session.hpp): "nav": {"country": ..., "chain": ...,
+    // "movers": [...]}. A march may then name where it goes ("to_place"), and the world's movers go on the roads.
+    std::shared_ptr<const nav::SessionNav> nav;
     bool battery_drive_own = false;
     bool battery_night = false;
     bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
@@ -343,7 +350,7 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting", "emission_orders", "deliveries"})) {
+                             "setting", "emission_orders", "deliveries", "nav"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -370,6 +377,7 @@ public:
         if (!LoadPost(root, data_dir, out, console)) return false;
         if (!LoadRadioData(root, data_dir, out, console)) return false;
         if (!CheckRegimentGroups(out)) return false;
+        if (!LoadNav(root, data_dir, out)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
         if (const json::Value* cc = root.Find("crew_commander")) {
@@ -1251,16 +1259,28 @@ private:
         if (!Keys(a, p, {"set_input", "value", "order", "queue", "crew", "end", "c2_source", "c2_fail", "c2_restore", "reason",
                          "battery_order", "route", "covered", "axis_deg", "air_threat", "bounding", "roving", "points",
                          "crossing", "width_m", "vehicle", "radiate", "regime", "on_turns", "off_turns", "from", "instructor", "target",
-                         "to"})) {
+                         "to", "breakdown", "to_place"})) {
             return false;
         }
         const int kinds = (a.Find("set_input") != nullptr) + (a.Find("order") != nullptr) + (a.Find("queue") != nullptr) +
                           (a.Find("end") != nullptr) + (a.Find("c2_source") != nullptr) + (a.Find("c2_fail") != nullptr) +
                           (a.Find("c2_restore") != nullptr) + (a.Find("battery_order") != nullptr) +
-                          (a.Find("air_threat") != nullptr) + (a.Find("instructor") != nullptr);
+                          (a.Find("air_threat") != nullptr) + (a.Find("instructor") != nullptr) + (a.Find("breakdown") != nullptr);
         if (kinds != 1) {
             return Fail(p, "needs exactly one of set_input, order, queue, end, c2_source, c2_fail, c2_restore, battery_order, "
-                           "air_threat or instructor");
+                           "air_threat, instructor or breakdown");
+        }
+        // {"breakdown": "23", "reason": "..."}: a battery vehicle breaks down where it stands (its commander reports that he
+        // cannot carry out the battery's order: command/battery_orders.hpp).
+        if (a.Find("breakdown") != nullptr) {
+            out.kind = TriggerAction::Kind::Breakdown;
+            if (!def.has_battery) return Fail(p, "the scenario has no battery block");
+            if (!RequireString(a, p, "breakdown", out.vehicle) || !OptionalString(a, p, "reason", out.reason)) return false;
+            bool known = false;
+            for (const BatteryVehicleDef& v : def.battery_vehicles) known = known || v.id == out.vehicle;
+            if (!known) return Fail(Join(p, "breakdown"), "unknown battery vehicle '" + out.vehicle + "'");
+            if (out.reason.empty()) out.reason = "broken down";
+            return true;
         }
         // {"instructor": "turn", "target": "t1", "to": 90}: the trainer's instructor gives an order (instructor.hpp).
         if (a.Find("instructor") != nullptr) {
@@ -1838,10 +1858,14 @@ private:
         }
         if (out.kind == BatteryOrder::Kind::Emission) {
             if (!LoadEmissionRegime(o, p, def, out.regime)) return false;
+            out.from = out.regime.from;
         } else {
-            for (const char* k : {"regime", "on_turns", "off_turns", "from"}) {
+            for (const char* k : {"regime", "on_turns", "off_turns"}) {
                 if (o.Find(k) != nullptr) return Fail(Join(p, k), "only an \"emission\" order has it");
             }
+            // "from": "regiment": the regiment's order, which reaches the battery commander and he passes on (G10.7).
+            if (!OptionalString(o, p, "from", out.from)) return false;
+            if (!out.from.empty() && out.from != "regiment" && out.from != "battery") return Fail(Join(p, "from"), "\"regiment\" or \"battery\"");
         }
         if (!OptionalBool(o, p, "bounding", out.bounding) || !OptionalBool(o, p, "roving", out.roving) ||
             !OptionalNumber(o, p, "width_m", out.width_m) || !OptionalString(o, p, "vehicle", out.vehicle) ||
@@ -1864,6 +1888,14 @@ private:
             if (out.width_m <= 0.0) return Fail(Join(p, "width_m"), "must be > 0");
         }
         if (out.kind == BatteryOrder::Kind::March) {
+            // Where to by a place (G2.3): the route is the battery commander's, planned on the roads when he gives it.
+            if (!OptionalString(o, p, "to_place", out.to_place)) return false;
+            if (!out.to_place.empty()) {
+                if (!def.nav) return Fail(Join(p, "to_place"), "a march to a place needs the scenario's \"nav\" (the roads)");
+                if (def.nav->GetAnchors().Find(out.to_place) == nullptr) return Fail(Join(p, "to_place"), "no place called '" + out.to_place + "'");
+                if (o.Find("route") != nullptr) return Fail(Join(p, "route"), "a march to a place has its route planned on the roads");
+                return true;
+            }
             const json::Value* route = OptionalArray(o, p, "route");
             if (route == nullptr || route->items.size() < 2) return message_.empty() ? Fail(Join(p, "route"), "a march needs a route of 2 or more positions") : false;
             for (std::size_t i = 0; i < route->items.size(); ++i) {
@@ -1871,6 +1903,8 @@ private:
                 if (!LoadPosition(route->items[i], Index(Join(p, "route"), i), frame_, v)) return false;
                 out.route.push_back(v);
             }
+        } else if (o.Find("to_place") != nullptr) {
+            return Fail(Join(p, "to_place"), "only a march goes to a place");
         }
         if (out.kind == BatteryOrder::Kind::Relocate) {
             const json::Value* c = o.Find("covered");
@@ -1906,6 +1940,7 @@ private:
         if (!command::LoadBatteryOrders(data_dir, out.battery_orders_def, &error)) return Fail(mp, error);
         command::ChainData chain;
         if (!chain_file.empty() && !command::LoadChainData(data_dir, chain_file, chain, &error)) return Fail(Join(mp, "chain"), error);
+        if (!chain_file.empty()) out.battery_chain = std::make_shared<const command::ChainData>(chain);
         if (!out.has_skills) {
             if (!LoadSkillTableFile(data_dir + "/crew/skill_levels.json", out.skills, &error)) return Fail(mp, error);
             out.has_skills = true;
@@ -1951,6 +1986,55 @@ private:
             return false;
         }
         out.battery_by_means = true;
+        return true;
+    }
+
+    //   "nav": { "country": "maps/pannonia.json", "chain": "command/chain_pannonia.json",
+    //            "movers": [{"id": "rgt_convoy", "kind": "convoy", "mobility": "truck", "from": "rgt_cp", "to": "tech_battery",
+    //                        "depart_s": 60, "vehicles": 8, "spacing_m": 50}] }
+    // The route service in the session (roadmap G2.3, G11): the country's roads with the scenario's map's tracks, the
+    // chain's places and the country's towns as places, and the world's movers on the roads between them.
+    bool LoadNav(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* n = root.Find("nav");
+        if (n == nullptr) return true;
+        const std::string p = "nav";
+        std::string country = "maps/pannonia.json", chain, error;
+        if (!n->Is(json::Type::Object) || !Keys(*n, p, {"country", "chain", "movers", "notes"}) || !OptionalString(*n, p, "country", country) ||
+            !OptionalString(*n, p, "chain", chain)) {
+            return message_.empty() ? Fail(p, "expected an object") : false;
+        }
+        auto s = std::make_shared<nav::SessionNav>();
+        if (!s->Init(data_dir, country, out.map ? &out.map->Def() : nullptr, chain, &error)) return Fail(p, error);
+        // The roads lie in the country's frame: the scenario's origin must be the country's (within a few metres).
+        if (std::fabs(s->Origin().lat_rad - out.origin.lat_rad) > 1e-6 || std::fabs(s->Origin().lon_rad - out.origin.lon_rad) > 1e-6) {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf), "the scenario's origin must be the country's (%.4f, %.4f) for its roads to lie under it",
+                          s->Origin().LatDeg(), s->Origin().LonDeg());
+            return Fail(Join(p, "country"), buf);
+        }
+        if (const json::Value* ms = OptionalArray(*n, p, "movers")) {
+            for (std::size_t i = 0; i < ms->items.size(); ++i) {
+                const std::string mp = Index(Join(p, "movers"), i);
+                const json::Value& m = ms->items[i];
+                nav::SessionMoverDef d;
+                double vehicles = 1.0;
+                if (!Keys(m, mp, {"id", "kind", "mobility", "from", "to", "depart_s", "vehicles", "spacing_m", "model", "notes"}) ||
+                    !RequireString(m, mp, "id", d.id) || !RequireString(m, mp, "from", d.from) || !RequireString(m, mp, "to", d.to) ||
+                    !OptionalString(m, mp, "kind", d.kind) || !OptionalString(m, mp, "mobility", d.mobility) ||
+                    !OptionalNumber(m, mp, "depart_s", d.depart_s) || !OptionalNumber(m, mp, "vehicles", vehicles) ||
+                    !OptionalNumber(m, mp, "spacing_m", d.spacing_m) || !OptionalString(m, mp, "model", d.model)) {
+                    return false;
+                }
+                if (vehicles < 1.0 || vehicles > 200.0) return Fail(Join(mp, "vehicles"), "1 to 200");
+                if (d.spacing_m < 0.0) return Fail(Join(mp, "spacing_m"), "must be >= 0");
+                d.vehicles = static_cast<int>(vehicles);
+                std::string why;
+                if (!s->AddMover(d, &why)) return Fail(mp, why);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        out.nav = s;
         return true;
     }
 
@@ -2042,7 +2126,7 @@ private:
                 const std::string p = Index(Join(bp, "orders"), i);
                 const json::Value& o = os->items[i];
                 if (!Keys(o, p, {"at_s", "order", "route", "covered", "axis_deg", "bounding", "roving", "points", "crossing", "width_m",
-                                 "vehicle", "radiate", "regime", "on_turns", "off_turns", "from", "notes"})) {
+                                 "vehicle", "radiate", "regime", "on_turns", "off_turns", "from", "to_place", "notes"})) {
                     return false;
                 }
                 std::string kind;

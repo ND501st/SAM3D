@@ -266,6 +266,28 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
 | driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | duty 3 | 0 |
 
+## pu12m_battery_orders: PU-12M: give the battery its march order
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | - | 0 |
+| battery_commander | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 1401 | 0 | 0 | duty 1401 | 10 |
+| squad_leader | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | - | 0 |
+| operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 1 | 3 | 0 | 0 | drill 1, duty 1 | 0 |
+| radio_operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 4 | 3 | 51 | 0 | drill 5, duty 55 | 0 |
+| driver | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | drill 3 | 0 |
+
+## pu12m_battery_march: PU-12M: march the battery to the Lazne woods on the roads
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | - | 0 |
+| battery_commander | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 1401 | 0 | 0 | duty 1401 | 10 |
+| squad_leader | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | - | 0 |
+| operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | drill 1 | 0 |
+| radio_operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 4 | 2 | 51 | 0 | drill 5, duty 55 | 0 |
+| driver | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | drill 3 | 0 |
+
 ## osa_practice: Osa: one drone
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
@@ -613,7 +635,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 |---|---|
 | control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 1 |
 | control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 29 |
-| control (radio_operator): a message heard: write it in the journal | 3 |
+| control (radio_operator): a message heard: write it in the journal | 5 |
 | control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 1 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
@@ -622,7 +644,9 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 169 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 162 |
 | order (battery_commander): a raid within reach of the covered troops | 4 |
-| order (battery_commander): communications and every launcher ready | 4 |
+| order (battery_commander): communications and every launcher ready | 6 |
+| order (battery_commander): the battery marches: the post stows for it | 2800 |
+| order (battery_commander): the combat order: К маршу! now | 2 |
 | order (battery_commander): the drills the crew needs next | 1 |
 | order (battery_commander): the raid has gone: the all clear | 2 |
 | order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 13 |
@@ -661,7 +685,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): a sign of the shot on his instrument: the target's mark gone | 13 |
 | report (operator): the track was lost | 22 |
 | report (operator): К бою: the intercom checked | 36 |
-| report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
+| report (radio_operator): a report the crew makes when its lamp or input comes on | 19 |
 | report (senior_operator): a new echo on his scope | 110 |
 | report (senior_operator): a report the crew makes when its lamp or input comes on | 52 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
@@ -681,4 +705,4 @@ A player in command can't give these from his menu (the shadow commander would):
 - deputy_commander: РАБ.РЕЖ. ВКЛ (tov.power) (26 runs)
 - radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (1 runs)
 
-306 runs.
+318 runs.

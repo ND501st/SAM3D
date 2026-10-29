@@ -100,7 +100,7 @@
       "superior": "rgt_commander", "place": "bty21_cp", "seat": "post:battery_commander", "links": ["kesmark_commandant"],
       "deputy": "veh21_2_commander", "alternate_place": "bty21_v2",
       "holder": { "name": "Andrej Novak", "rank": "Captain", "skill": "class2" },
-      "means": ["in_person", "field_telephone", "radio_voice", "messenger"],
+      "means": ["in_person", "field_telephone", "radio_voice", "messenger", "sent_by_vehicle"],
       "duties": "Commands the four vehicles from the PU-12M; covers the Kesmark bridges; goes to the regiment's evening briefing; tells the vehicle commanders at the morning orders.",
       "notes": "Deputy and alternate place (roadmap P8): with him a casualty the senior vehicle commander (21-2's, a senior lieutenant) commands, and with the PU-12M lost the post works from his vehicle; SAM3D's assumption, the usual practice of a battery's senior officer standing in." },
     { "id": "bty21_starshina", "title": "Battery sergeant major", "unit": "Battery 21", "kind": "staff", "level": 4,

@@ -139,6 +139,13 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 			UE_LOG(LogSAM3D, Warning, TEXT("Air war: the radio sets don't load (%s): the pipeline's radio goes by its range"), *AirWarToF(Em.error));
 		}
 	}
+	// The pipeline's carriers on the country's roads (roadmap G2.5): a runner, a despatch rider, a man sent in a truck
+	// take their routes' times, not the straight line's.
+	if (EnsureRoads())
+	{
+		NewNet->SetRouteTime(simcore::nav::CarrierRoutes(std::make_shared<simcore::nav::RoadGraph>(Roads->Graph()),
+			std::make_shared<simcore::nav::MobilityLibrary>(Roads->MobilityClasses())));
+	}
 	Net = MoveTemp(NewNet);
 	Feed = MakeUnique<simcore::command::CampaignFeed>();
 	Feed->Bind(Net.Get());
@@ -532,9 +539,58 @@ bool USimAirCampaignSubsystem::RelocateBattery(FVector2D EastNorthKm, FString& O
 		OutWhy = AirWarToF(Why);
 		return false;
 	}
-	Campaign->RelocateBattery(To);
+	// A march on the roads that takes its time (G9.5); with no way on the roads, there at once as before.
+	FString RoadWhy;
+	const double MarchH = MarchHoursTo(EastNorthKm, &RoadWhy);
+	if (MarchH < 0.0)
+	{
+		UE_LOG(LogSAM3D, Warning, TEXT("Air war: no march on the roads (%s): the battery moves at once"), *RoadWhy);
+	}
+	Campaign->RelocateBattery(To, FMath::Max(0.0, MarchH));
 	Stepped();
 	return true;
+}
+
+bool USimAirCampaignSubsystem::EnsureRoads()
+{
+	if (!bRoadsTried)
+	{
+		bRoadsTried = true;
+		const std::string Data = AirWarToStd(DataDirectory());
+		std::string Error;
+		TUniquePtr<simcore::nav::SessionNav> NewRoads = MakeUnique<simcore::nav::SessionNav>();
+		TUniquePtr<simcore::BatteryTactics> NewTactics = MakeUnique<simcore::BatteryTactics>();
+		if (NewRoads->Init(Data, "maps/pannonia.json", nullptr, "command/chain_pannonia.json", &Error) &&
+			simcore::LoadBatteryTacticsFile(Data + "/command/battery_tactics.json", *NewTactics, &Error))
+		{
+			Roads = MoveTemp(NewRoads);
+			RoadTactics = MoveTemp(NewTactics);
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Air war: no roads for the battery's marches and the carriers: %s"), *AirWarToF(Error));
+		}
+	}
+	return Roads.IsValid();
+}
+
+double USimAirCampaignSubsystem::MarchHoursTo(FVector2D EastNorthKm, FString* OutWhy)
+{
+	if (!Campaign.IsValid())
+	{
+		if (OutWhy != nullptr) *OutWhy = TEXT("no campaign");
+		return -1.0;
+	}
+	if (!EnsureRoads())
+	{
+		if (OutWhy != nullptr) *OutWhy = TEXT("no roads");
+		return -1.0;
+	}
+	const simcore::Vec3 From = Campaign->Truth()[static_cast<std::size_t>(Campaign->PlayerIndex())].pos;
+	std::string Why;
+	const double Hours = Roads->MarchHours({From.x, From.y}, {EastNorthKm.X * 1000.0, EastNorthKm.Y * 1000.0}, *RoadTactics, &Why);
+	if (Hours < 0.0 && OutWhy != nullptr) *OutWhy = AirWarToF(Why);
+	return Hours;
 }
 
 void USimAirCampaignSubsystem::OpenCampaignScreen(UObject* WorldContext)

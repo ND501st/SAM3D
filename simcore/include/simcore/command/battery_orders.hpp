@@ -20,6 +20,7 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -44,6 +45,7 @@ struct BatteryOrdersDef {
     double pass_s = 5.0;        // a vehicle commander passing a signal on
     double say_s = 4.0;         // an order, a repeat-back or a report said
     double ring_s = 15.0;       // a field telephone on a direct line rung and answered
+    double write_s = 20.0;      // the giver's radiotelephonist writes a line in the journal (an NPC's)
     double runner_mps = 5.0 / 3.6;
     double runner_handling_s = 120.0;
     double road_factor = 1.3;   // the way on foot over the straight line
@@ -94,7 +96,8 @@ inline OrderVehicle CommanderFromChain(const ChainData& chain, const SkillTable&
 }
 
 // What happened to an order at a vehicle, for the caller: "heard", "set on", "carrying out" (his vehicle acts on it:
-// Battery::Join), "repeated back", "sent again", "reported" (the giver has his report: write it).
+// Battery::Join), "repeated back", "sent again", "reported" (the giver has his report: write it), "cannot" (the giver
+// has his report that he cannot, and why).
 struct OrderEvent {
     double t = 0.0;
     int order = -1;
@@ -163,6 +166,33 @@ public:
         tr->done_s = t;
         tr->report = text;
     }
+    // He cannot carry it out (his vehicle broken down on the march, after his «К маршу готов»): he says so, and why, by
+    // the first way back he has. Only an order he has heard, and once.
+    void Cannot(int order, const std::string& vehicle, double t, const std::string& why, const std::string& text) {
+        Track* tr = Of(order, vehicle);
+        if (tr == nullptr || tr->heard_s < 0.0 || tr->cannot_s >= 0.0) return;
+        tr->cannot_s = t;
+        tr->cannot_why = why;
+        tr->cannot_text = text;
+    }
+    bool CannotSaid(int order, const std::string& vehicle) const {
+        const Track* tr = Of(order, vehicle);
+        return tr != nullptr && tr->cannot_s >= 0.0;
+    }
+    // The giver's picture: the last words he had from each vehicle (a read-back, a report, a «не могу»), never what the
+    // vehicle does unseen. Null: nothing yet.
+    struct Word {
+        double t = 0.0;
+        int order = -1;
+        std::string what;
+        std::string mean;
+        std::string text;
+    };
+    const Word* LastFrom(const std::string& vehicle) const {
+        const auto it = last_.find(vehicle);
+        return it != last_.end() ? &it->second : nullptr;
+    }
+
     // A vehicle modelled seat by seat: its commander heard the order on the radio at `at_s` (said at `sent_s`)...
     void Reach(int order, const std::string& vehicle, double at_s, double sent_s) {
         Track* tr = Of(order, vehicle);
@@ -187,6 +217,7 @@ public:
             book_.Mark(order, v.post, OrderStep::Reported, Hour(t));
             said_.push_back({t, order, v.vehicle, v.callsign, "reported", "radio_voice", tr->report});
         }
+        Note(said_.back());
     }
     bool RepeatedBack(int order, const std::string& vehicle) const {
         const Track* tr = Of(order, vehicle);
@@ -246,6 +277,18 @@ public:
                     tr.back_s = at;
                     book_.Mark(tr.order, v.post, OrderStep::RepeatedBack, Hour(at));
                     out.push_back({at, tr.order, v.vehicle, v.callsign, "repeated back", mean, "Есть " + tr.words});
+                    Note(out.back());
+                }
+            }
+            // That he cannot, and why.
+            if (tr.cannot_s >= 0.0 && tr.cannot_reported_s < 0.0) {
+                std::string mean;
+                const double at = WayBack(tr, tr.cannot_s + v.callout_delay_s, t, false, mean);
+                if (at >= 0.0) {
+                    tr.cannot_reported_s = at;
+                    book_.Cannot(tr.order, v.post, Hour(at), tr.cannot_why);
+                    out.push_back({at, tr.order, v.vehicle, v.callsign, "cannot", mean, tr.cannot_text});
+                    Note(out.back());
                 }
             }
             // The report of it done.
@@ -256,12 +299,13 @@ public:
                     tr.reported_s = at;
                     book_.Mark(tr.order, v.post, OrderStep::Reported, Hour(at));
                     out.push_back({at, tr.order, v.vehicle, v.callsign, "reported", mean, tr.report});
+                    Note(out.back());
                 }
             }
         }
         // A silence: say it again, then the next means, then a runner.
         for (Track& tr : tracks_) {
-            if (tr.back_s >= 0.0) continue;
+            if (tr.back_s >= 0.0 || tr.cannot_reported_s >= 0.0) continue;
             const OrderVehicle& v = vehicles_[tr.v];
             ChaseRule rule = def_.chase;
             rule.next_means.erase(std::remove_if(rule.next_means.begin(), rule.next_means.end(),
@@ -304,9 +348,18 @@ private:
         double done_s = -1.0;
         std::string report;
         double reported_s = -1.0;
+        double cannot_s = -1.0;
+        std::string cannot_why;
+        std::string cannot_text;
+        double cannot_reported_s = -1.0;
     };
 
     double Hour(double t) const { return hour_at_zero_ + t / 3600.0; }
+    void Note(const OrderEvent& e) {
+        Word& w = last_[e.vehicle];
+        if (w.order >= 0 && w.t > e.t) return;
+        w = {e.t, e.order, e.what, e.mean, e.text};
+    }
     static double Dist(const Vec3& a, const Vec3& b) { return std::hypot(a.x - b.x, a.y - b.y); }
     int Index(const std::string& id) const {
         for (std::size_t k = 0; k < vehicles_.size(); ++k)
@@ -420,6 +473,7 @@ private:
     std::vector<Track> tracks_;
     OrderBook book_;
     std::vector<OrderEvent> said_;  // a seat's words on the net since the last step
+    std::map<std::string, Word> last_;
 };
 
 namespace detail {
@@ -433,7 +487,7 @@ public:
         const std::pair<const char*, double*> fields[] = {{"set_warm_s", &d.set_warm_s}, {"set_tx_s", &d.set_tx_s},
                                                           {"flags_m", &d.flags_m},       {"lamps_m", &d.lamps_m},
                                                           {"pass_s", &d.pass_s},         {"say_s", &d.say_s},
-                                                          {"ring_s", &d.ring_s}};
+                                                          {"ring_s", &d.ring_s},         {"write_s", &d.write_s}};
         for (const auto& f : fields) {
             if (!Value(*b, Join("orders", f.first), f.first, *f.second)) return false;
         }

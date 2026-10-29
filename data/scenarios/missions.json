@@ -43,7 +43,9 @@
         { "file": "scenarios/osa_arm_drill.json", "title": "Osa: HARM drill, a SEAD pair ahead of the strike" },
         { "file": "scenarios/osa_arm_drill_shrike.json", "title": "Osa: Shrike drill, beaten by going silent" },
         { "file": "scenarios/osa_emission_orders.json", "title": "Osa: the emission regime, passed down before a SEAD pair" },
-        { "file": "scenarios/osa_battery_orders.json", "title": "Osa: the march order, carried to every vehicle" }
+        { "file": "scenarios/osa_battery_orders.json", "title": "Osa: the march order, carried to every vehicle" },
+        { "file": "scenarios/pu12m_battery_orders.json", "title": "PU-12M: give the battery its march order" },
+        { "file": "scenarios/pu12m_battery_march.json", "title": "PU-12M: march the battery to the Lazne woods on the roads" }
       ]
     },
     {

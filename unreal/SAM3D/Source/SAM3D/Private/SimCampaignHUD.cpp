@@ -45,6 +45,13 @@ namespace
 		return FString(UTF8_TO_TCHAR(S.c_str()));
 	}
 
+	// "2 h 05 min": a march's time on the roads (G9.5).
+	FString MarchText(double Hours)
+	{
+		const int32 Minutes = FMath::RoundToInt(static_cast<float>(Hours * 60.0));
+		return FString::Printf(TEXT("%d h %02d min"), Minutes / 60, Minutes % 60);
+	}
+
 	// The country the campaign is fought over (data/maps/pannonia.json, simcore/country_map.hpp), the map's ground: built
 	// once and kept. Its frame is the theatre's (the same origin; docs/COUNTRY_MAP.md).
 	const simcore::CountryMap* CampaignCountry()
@@ -437,7 +444,7 @@ void ASimCampaignHUD::HandleInput()
 		FString Why;
 		if (C->RelocateBattery(MarkKm, Why))
 		{
-			Message = TEXT("The battery has moved to the marked position.");
+			Message = MarkMarchH > 0.0 ? TEXT("The battery is on the march to the marked position.") : TEXT("The battery has moved to the marked position.");
 			bHasMark = false;
 		}
 		else
@@ -543,7 +550,11 @@ void ASimCampaignHUD::HandleInput()
 		{
 			MarkKm = ToTheatre(At) / 1000.0;
 			bHasMark = true;
-			Message = FString::Printf(TEXT("Marked %.0f km east, %.0f km north: M moves the battery there."), MarkKm.X, MarkKm.Y);
+			MarkMarchH = C->MarchHoursTo(MarkKm);
+			Message = MarkMarchH >= 0.0
+				? FString::Printf(TEXT("Marked %.0f km east, %.0f km north: M marches the battery there (%s by the roads)."), MarkKm.X,
+					  MarkKm.Y, *MarchText(MarkMarchH))
+				: FString::Printf(TEXT("Marked %.0f km east, %.0f km north: M moves the battery there."), MarkKm.X, MarkKm.Y);
 		}
 	}
 }
@@ -896,6 +907,14 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 	Circle(Bp, static_cast<float>(10000.0 * MapScale), FLinearColor(1.0f, 0.78f, 0.35f, 0.5f), 1.0f);
 	Diamond(Bp, 8.0f, B.function > 0.3 ? CAmber : CRed, true);
 	Label(TEXT("Battery 21"), CAmber, Bp.X - 24.0f, Bp.Y - 24.0f);
+	if (C->Marching())
+	{
+		// On the march (G9.5): where to, and when it arrives.
+		const FVector2D To = ToScreen(C->MarchTo().x, C->MarchTo().y);
+		MapLine(Bp, To, CAmber, 1.0f);
+		Diamond(To, 6.0f, CAmber, false);
+		Label(TEXT("on the march, there at ") + CampaignToF(FormatHour(C->MarchArriveH(), C->Data().theatre.start_hour)), CAmber, To.X + 9.0f, To.Y + 4.0f);
+	}
 	if (bHasMark)
 	{
 		const FVector2D M = ToScreen(MarkKm.X * 1000.0, MarkKm.Y * 1000.0);
@@ -905,7 +924,10 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		MapLine(Bp, M, Col, 1.0f);
 		DrawLine(M.X - 7.0f, M.Y, M.X + 7.0f, M.Y, Col, 2.0f);
 		DrawLine(M.X, M.Y - 7.0f, M.X, M.Y + 7.0f, Col, 2.0f);
-		Label(bOk ? FString(TEXT("M: move here")) : CampaignToF(Why), Col, M.X + 9.0f, M.Y + 4.0f);
+		const FString MoveHere = MarkMarchH >= 0.0
+			? TEXT("M: march here, ") + MarchText(MarkMarchH)
+			: FString(TEXT("M: move here"));
+		Label(bOk ? MoveHere : CampaignToF(Why), Col, M.X + 9.0f, M.Y + 4.0f);
 	}
 }
 

@@ -259,6 +259,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "kind", Str("relocate"));
                 Put(x, "east_m", Num(a.to.x));
                 Put(x, "north_m", Num(a.to.y));
+                if (a.march_h > 0.0) Put(x, "march_h", Num(a.march_h));
                 break;
             case CampaignAction::Kind::Skip:
                 Put(x, "kind", Str("skip"));
@@ -317,6 +318,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
             } else if (kind == "relocate") {
                 a.kind = CampaignAction::Kind::Relocate;
                 a.to = Vec3{r.Number(x, "east_m"), r.Number(x, "north_m"), 0.0};
+                a.march_h = r.Number(x, "march_h");
             } else if (kind == "skip") {
                 a.kind = CampaignAction::Kind::Skip;
             } else if (kind == "complete") {

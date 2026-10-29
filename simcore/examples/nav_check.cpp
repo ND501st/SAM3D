@@ -4,11 +4,16 @@
 // road, or by a piece of the road net cut off from the rest; and times the build and a sample of routes (nav_bench's
 // first form). A changed map needs no edit to the navigation: run this and read the list.
 //
-//   nav_check <data dir> [routes]      (routes: how many to time, default 200)
+//   nav_check <data dir> [routes] [--json out.json]   (routes: how many to time, default 200)
+//
+// --json writes battery 21's routes to every place of the chain, each point and stretch, for
+// `python tools/map_view.py out/pannonia_map.json --routes out.json` to draw over the country.
 //
 // Exit 0 with the lists printed; 1 if the data does not load, or a route between two places of the chain is not found.
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -20,11 +25,20 @@ using namespace simcore::nav;
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::printf("usage: nav_check <data dir> [routes]\n");
+        std::printf("usage: nav_check <data dir> [routes] [--json out.json]\n");
         return 1;
     }
     const std::string data = argv[1];
-    const int sample = argc > 2 ? std::atoi(argv[2]) : 200;
+    int sample = 200;
+    std::string json_out;
+    for (int i = 2; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--json" && i + 1 < argc) {
+            json_out = argv[++i];
+        } else {
+            sample = std::atoi(argv[i]);
+        }
+    }
     std::string text, e;
     CountryDef country;
     MapDef district;
@@ -152,17 +166,44 @@ int main(int argc, char** argv) {
     std::printf("routes: %d of %d found, %.3f ms each (%.0f h of driving)\n", routes, sample, sample > 0 ? route_ms / sample : 0.0, hours);
     std::printf("anchors: %d beyond 3 km of a road, %d by a cut-off piece, %d with no route\n", far, cut_off, failed);
 
-    // Every place of the chain reaches every other.
+    // Every place of the chain reaches every other; with --json, the routes as points and stretches (km).
+    std::ofstream js;
+    if (!json_out.empty()) {
+        js.open(json_out, std::ios::binary);
+        if (!js) {
+            std::printf("cannot write %s\n", json_out.c_str());
+            return 1;
+        }
+        js << "{\"from\": \"bty21_cp\", \"mobility\": \"truck\", \"routes\": [";
+    }
+    bool first = true;
     for (const Anchor& a : all) {
         if (a.kind != "place") continue;
         RouteRequest q;
         q.from = home->at;
         q.to = a.at;
         q.mobility = mobility.Find("truck");
-        if (!g.Find(q).found) {
+        const Route r = g.Find(q);
+        if (!r.found) {
             std::printf("FAIL: no truck route from bty21_cp to %s\n", a.id.c_str());
             return 1;
         }
+        if (!js.is_open() || r.path.size() < 2) continue;
+        char buf[96];
+        js << (first ? "\n" : ",\n") << "  {\"to\": \"" << a.id << "\", \"time_s\": " << std::llround(r.time_s)
+           << ", \"length_m\": " << std::llround(r.length_m) << ", \"points_km\": [";
+        for (std::size_t i = 0; i < r.path.size(); ++i) {
+            std::snprintf(buf, sizeof(buf), "%s[%.3f, %.3f]", i == 0 ? "" : ", ", r.path[i].east_m / 1000.0, r.path[i].north_m / 1000.0);
+            js << buf;
+        }
+        js << "], \"stretches\": [";
+        for (std::size_t i = 0; i < r.stretches.size(); ++i) js << (i == 0 ? "\"" : ", \"") << r.stretches[i].kind << "\"";
+        js << "]}";
+        first = false;
+    }
+    if (js.is_open()) {
+        js << "\n]}\n";
+        std::printf("routes written to %s\n", json_out.c_str());
     }
     return failed > 0 ? 1 : 0;
 }

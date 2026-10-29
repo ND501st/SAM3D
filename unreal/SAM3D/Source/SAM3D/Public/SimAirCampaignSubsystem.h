@@ -175,6 +175,10 @@ public:
 	/** The campaign itself, for the campaign screen (C++ only). */
 	const simcore::airwar::AirCampaign* GetCampaign() const { return Campaign.Get(); }
 
+	/** The battery's march to (east, north) km on the country's roads, in hours from the order to move off to its head
+	 *  there (roadmap G9.5); < 0 when there is no way or no roads (and why). C++ only. */
+	double MarchHoursTo(FVector2D EastNorthKm, FString* OutWhy = nullptr);
+
 	/** Our side's information pipeline (docs/command/): what has reached the player's character, from whom and how.
 	 *  Null if the chain of command's data did not load. C++ only. */
 	const simcore::command::InfoNet* GetInfoNet() const { return Net.Get(); }
@@ -205,12 +209,18 @@ private:
 	void StartInfoNet(bool bLoadInputs = false);
 	/** After every step of the campaign: the pipeline catches up, and the campaign is saved. */
 	void Stepped();
+	/** The country's roads, loaded on first use (G2.5, G9.5); false when they don't load. */
+	bool EnsureRoads();
 
 	TUniquePtr<simcore::airwar::AirCampaign> Campaign;
 	TUniquePtr<simcore::airwar::RaidManifest> Manifest;
 	TUniquePtr<simcore::airwar::MissionBridge> Bridge;
 	TUniquePtr<simcore::command::InfoNet> Net;
 	TUniquePtr<simcore::command::CampaignFeed> Feed;
+	/** The country's roads and the battery's march tactics for its moves to a new position (G9.5; loaded on first use). */
+	TUniquePtr<simcore::nav::SessionNav> Roads;
+	TUniquePtr<simcore::BatteryTactics> RoadTactics;
+	bool bRoadsTried = false;
 	FString FactionId;
 	/** The theatre the campaign is fought on (relative to data/): a new campaign the whole nation's (the nation on the map
 	 *  N4, rebalanced in docs/air_war/09_BALANCE.md section 8); a saved one the theatre it was saved with. */

@@ -13,3 +13,4 @@
 #include "simcore/command/post_view.hpp"
 #include "simcore/command/district.hpp"
 #include "simcore/command/orders.hpp"
+#include "simcore/command/people.hpp"

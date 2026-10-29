@@ -475,6 +475,12 @@ battery's field camp and daily routine (`pvo_bu_ix_1984`, the period's internal 
 its later lineage); ration, water and fuel norms; the regiment's supply organisation; maintenance (pp. 206-224, with
 20.0, for G6). Each value into data with its source and confidence; estimates marked as such.
 
+**Done, first pass (29 Oct 2026).** `docs/research/BATTERY_LIFE_RESEARCH_2026-10.md` indexes what track G's data rests
+on (the march, the orders to the vehicles and back, mobility, the battery area, the missiles' way and the visible chain),
+where each value went, and what is still to find: a march regulation of the period for the commandant's regulators and
+the movement table's gap, the camp's and the maintenance vehicle's places (`pvo_bu_ix_1984`), a breakdown rate, the
+technical battery's loading norm, ration and fuel norms.
+
 ### G1: the route service (simcore; not gated)
 
 | # | Task |
@@ -511,9 +517,19 @@ the same routes.
 - A fixture map whose road is moved changes the route with no other edit; the fixture route's digest is pinned (MSVC's;
   CI checks GCC's).
 
-Left: the trafficability tiles and the foot layer round the pond (G1.3), `map_view.py --routes` (G1.6). The country's
-road net is sparse: 225 of its 329 other anchors (border posts, radar companies, the dam) are more than 3 km from a road,
-and the last kilometres to them are a straight line across country until the tiles come.
+Left: `map_view.py --routes` (G1.6). The country's road net is sparse: 225 of its 329 other anchors (border posts,
+radar companies, the dam) are more than 3 km from a road, and outside a district's ground the last kilometres to them
+are a straight line across country.
+
+**Built: G1.3, the ground off the road (29 Oct 2026; `simcore/nav/ground.hpp`, `tests/test_nav.cpp`).** A district's
+map data laid on a grid of cells, each with the ground covering its centre (water, a road's corridor, marsh, built-up,
+woods, open); a mobility class crosses a cell at its speed on that ground (`Mobility::GroundMps`: its cross-country
+speed times its factor there, water only swimming). The way off the road between two points is an A* search over the
+cells in integer tenths of a second, so it is the same on every compiler; a river or a road is laid on every cell its
+line crosses, so neither is slipped through diagonally. On a 4 km fixture a man on foot goes round the pond (1748 s
+against 1389 s straight through it) and a truck round the wood (834 s against 1224 s through it). The Kesmark range at
+100 m is 400 by 400 cells (woods 5235, marsh 949, water 500, built-up 1318); a session with a `"nav"` lays it for its
+district, so a column's last kilometres and a crewman's walk go round its woods and water.
 
 **Built: `nav_check` (29 Oct 2026, G1.6; `simcore/examples/nav_check.cpp`, a ctest).** It builds the graph from the
 map's data, lists every place and prepared position more than 3 km from a road or by a piece of the road net cut off
@@ -565,9 +581,32 @@ that meets a cut bridge stops, reports and moves on once the new route is ordere
   maintenance vehicle leading, and it arrives 7.6 h after its first plan's time. A column of swimmers told of the bridge
   beforehand swims the Rava instead.
 
-Left: the movers' levels M0-M2 and their hand-over (G2.1), relocation, the roving ambush and the service runs on
-routes (G2.3), the crew's walks, the pipeline's carriers and the supply lines on routes (G2.4-G2.6, so a courier's
-delivery takes its route's time), the report going up by a means (G10), and missions ordering marches by anchors.
+**Built: the rest of G2's first form (29 Oct 2026)** (`nav/movers.hpp`, `nav/carriers.hpp`, `nav/session.hpp`,
+`crew_mobility.hpp`; `tests/test_nav.cpp`, `tests/test_battery_life.cpp`, `tests/test_crew_mobility.cpp`):
+
+- **Movers** (G2.1): a vehicle, column, person, carrier or convoy on its route at a level: M0 (a line's state, the air
+  war's), M1 (stretch by stretch at its route's times, halting, held when blocked or broken down), M2 (full detail, the
+  session's). The hand-over keeps the place along the route, so nothing jumps.
+- **A march to a place** (G2.3): a scenario's `"nav"` gives the session the country's roads with its map's tracks and
+  ground, the chain's places and the country's towns by id, and the world's movers; a march order may name a place
+  (`"to_place"`) instead of a route. The battery commander plans it when he gives it, from where the column stands, for
+  its slowest vehicle (`nav/march.hpp`), and the column marches on the plan. `pu12m_battery_march.json` (the missions
+  menu): battery 21 from its position by Vrbice to the Lazne woods, 22.0 km by the roads, given at 60 s, the start point
+  at 0:11:23, the head at the woods at 0:48:47, every vehicle within 1.6 km of them once deployed for «К бою!».
+- **The crew's walks** (G2.4): a crewman's walk to a point on the map more than 150 m from the vehicle goes by the
+  route service's foot way (`SessionNav::FootWay`, given each man by `CrewMover::SetFootRoute` in a session with roads),
+  each of its points a leg: 600 m across a pond, 427 s straight, 601 s round it.
+- **The pipeline's carriers** (G2.5): each means that carries goes on the roads at its class's speeds
+  (`nav/carriers.hpp`, `InfoNet::SetRouteTime`; a means may name its class, the sergeant major's truck): battery 21's
+  command post to the regiment's, a runner 271 min, a despatch rider 40 min, the sergeant major in his truck 33 min
+  (every carrier by the old straight-line rule: the runner 270 min). The campaign's pipeline in Unreal takes the
+  country's roads so.
+- **The supply lines' columns** (G2.6): the air war's columns as M0 movers on their lines' roads, where its state has
+  them, going out or coming back (`SupplyColumnMovers`): after 30 hours of the rebels' war, 14 columns, the 6 on the
+  road each where the air war has it.
+
+Left: the relocation, the roving ambush and the service runs on routes in a session; the supply columns and the
+session's carriers handed to a played raid's session.
 
 ### G3: coordination
 
@@ -583,6 +622,27 @@ delivery takes its route's time), the report going up by a means (G10), and miss
 table's gap; a TZM run waits for its battery's move; against NATO after the rollback, a column moving by day is found
 more often than one moving by night.
 
+**Built, first form (29 Oct 2026)** (`simcore/nav/movement.hpp`, `tests/test_battery_life.cpp`):
+
+- **The movement table** (G3.1, G3.3): a crossing reserved by time, unit and priority; the higher priority holds the
+  place, of equal priority the earlier asker, each slot the table's gap from the next. A march plan books its slot at
+  every crossing on its route (`BookCrossings`) and a slot that moves holds its head at the crossing (`HoldAt`, a
+  regulator's point in the plan that `battery.hpp`'s column keeps as a point's time). The commandant's regulators pass a
+  column inside its slot, hold one that comes early and send a late one to the next free slot (`PassAt`). Battery 22
+  books the Kesmark road bridge first; battery 21 asks for the same hour at a higher priority and is given it: 21 crosses
+  at 2172-2207 s, 22's slot moves to 2507 s, the table's 300 s gap after 21's. The TZM run, the lowest priority, goes
+  after both. With 21 the lower priority it is held 1100 s at a regulator before the bridge and arrives 1100 s later.
+- **The battery's own** (G3.2): the order of march as the plan's (G2), the maintenance vehicle at the tail.
+- **Exposure** (G3.4): the enemy's armed reconnaissance searching a stretch of road sees a mover moving there at the air
+  war's chance for the part of the day (`ArmedRecceSees`, `air_war/logistics.hpp`'s `ColumnFindChance`); a mover halted
+  or off the road is not seen. In 400 searches: by day 290, by night 60, by night with a night attack system 170.
+- **Breakdowns** (G3.5): a vehicle on the march breaks down at a fixed chance per 100 km (G6's wear is on hold); the
+  maintenance vehicle stops with it and repairs it, and both catch the column up. At 1 per 100 km over 12 seeds the
+  maintenance vehicle stayed and repaired with 11.
+
+Left: the regiment's other units and the rear's convoys booking the table from their own orders (the table takes them by
+name today), lay-bys for the short halts (G3.2), and the enemy's reach by day (21.1's hook).
+
 ### G4: the battery area
 
 | # | Task |
@@ -593,6 +653,25 @@ more often than one moving by night.
 
 **Done when:** at every prepared position of the theatre, the battery area lays out on open ground by the textbook's
 distances, every place reachable on foot and by its vehicles; a half-dug emplacement keeps what was dug.
+
+**Built, first form (29 Oct 2026)** (`simcore/campaign/battery_area.hpp`, `data/campaign/battery_area.json`,
+`tests/test_battery_life.cpp`):
+
+- **The layout's rules** (G4.1) from `voenizdat_osa_1991` pp. 232-239 and 249-250: the launchers in two pairs across the
+  threat (200-500 m within a pair, the pairs up to 3 km apart), each TZM within 500 m of its pair, the PU-12M behind the
+  pairs, the aiming circles 30-40 m from the post and 20-50 m from a launcher, nothing tall within 20 m of a launcher, a
+  reserve position within 2 km; the maintenance vehicle's and the camp's places sam3d's estimates until G0 reads
+  `pvo_bu_ix_1984`. Each place goes where its rule puts it on open ground (`nav/ground.hpp`'s cells), else to the
+  nearest open point that keeps every rule, searched ring by ring out to the farthest rule (2 km at most): the same task
+  and ground give the same area. Every place is an anchor (`<area>/<place>`). The check lists every rule broken and every
+  place a vehicle or a man on foot cannot reach from the post. At all 15 of the Osa batteries' prepared positions in the
+  nation's theatre the area lays out with no rule broken.
+- **Position work and wire** (G4.2) as jobs at places with their hours (`JobBoard`): an emplacement dug (3 h, an
+  estimate), nets (0.5 h), a line laid from the post to each launcher at the P-274's pace (`ru_pu12_text`). A job dropped
+  keeps what was done: a half-dug emplacement is half dug.
+
+Left: the battery area on the working map (G4.3, with G9.1), the jobs given as orders and done by people at their
+places (with G7, on hold), the camp's and the maintenance vehicle's places from a source.
 
 ### G5: stocks and logistics (with 15.1)
 
@@ -607,6 +686,23 @@ distances, every place reachable on foot and by its vehicles; a half-dug emplace
 **Done when:** after twelve missiles fired at dawn, the TZMs are back loaded at a time the road to Horka and the
 technical battery's test rate decide; with the rail bridge down the technical battery's own resupply comes late; the
 NPC battery commander's request follows his ledger, which is wrong when a launch was logged wrongly.
+
+**Built, first form (29 Oct 2026)** (`simcore/campaign/stocks.hpp`, `data/campaign/logistics.json`,
+`tests/test_battery_life.cpp`):
+
+- **Stocks in places** (G5.1): the missiles in each launcher (six, `voenizdat_osa_1991` p188), on each TZM (twelve),
+  tested and untested at the regiment's technical battery by the Horka siding, which tests 6-7 an hour (pp. 188-189).
+- **Deliveries as movers** (G5.3): the TZMs load the launchers (5-8 min each), run to the siding on the road net's route,
+  load as tested missiles come and drive back; the trains from the rear take their rail route's time. Twelve fired at
+  dawn: the road to Horka 30 min, the second TZM back at 8600 s (the test rate and the road give 8588 s), the battery
+  holding 48. The train 1.6 h by the line; with the Rava rail bridge down, no way through until it is mended.
+- **The commander's ledger** (G5.4) and **requests** (G5.2, G5.5): what he knows is what the radiotelephonist logged as
+  launched and what the TZMs' commanders reported loading. The NPC asks the regiment for missiles once his ledger says
+  the battery is six short (a game rule); the answer is an order, the TZMs' run, recorded from given to reported
+  (`command/orders.hpp`). A launch logged twice makes his request 13 for the 12 fired.
+
+Left: fuel, rations and the sergeant major's run as stocks (with G7), the field post, the request carried by a means
+(the pipeline's), and the TZMs' runs in a session as movers (G11 draws them once a session has them).
 
 ### G6: wear and maintenance (20.0 and 20.3 brought forward): on hold
 
@@ -654,6 +750,24 @@ are back, and the debrief says so. A battery on shifts is fresher on day three t
 the wire; with the wire cut he sends the sergeant major with a written report, who arrives by road in his route's time;
 a vehicle commander replaced after a raid is a new name on the staff list only once the battery commander is told.
 
+**Built, first form (29 Oct 2026)** (`simcore/command/people.hpp`, `nav/carriers.hpp`, `tests/test_battery_life.cpp`):
+
+- **One registry of people** (G8.1): the chain's holders and every change of hands, each person with his post, rank,
+  skill tier and the hours he held it (`PeopleRegistry`); who is at a place at an hour.
+- **Papers** (G8.3): the staff list as the battery commander holds it, dated, corrected only by the news that reaches him
+  (`IssueStaffList`, `AddStaffNews`, `CorrectStaffList`); the communications diagram, each contact with the means the
+  two have in common, a carried means (a runner, a despatch rider, the sergeant major's truck) from the sender's own list
+  (`CommsDiagram`). A battery commander in the own vehicle has both in his map case from the start (G9.4).
+- **Contact by means** (G8.4): the battery commander rings the regiment's duty officer on the wire at 6.28 h; with the
+  wire cut he sends the sergeant major in his truck with a written report, who arrives at 6.71 h (the road 33 min:
+  `nav/carriers.hpp`, the pipeline's carriers on the roads, G2.5). 21-2's commander, replaced at 6 h, is a new name on
+  the battery commander's staff list only at 12.48 h, when the regiment's news of it reaches him.
+- An info net fix: a telling made at the instant a delivery arrives now comes after it, so a commander can pass on a
+  report the moment he has it.
+
+Left: people moving by their routines (G8.2), the call-sign table and the order as papers, the evening briefing as a
+place driven to (G8.5), the alternate command post (G8.6).
+
 ### G9: the player's surfaces
 
 | # | Task |
@@ -668,6 +782,24 @@ a vehicle commander replaced after a raid is a new name on the staff list only o
 **Done when:** a player battery commander orders the march, the halt, the occupation and a relocation from the radial
 menu and the working map, and requests the TZM; a player driver follows the route card with the helper's next turn;
 the papers are in the map case; the campaign screen's relocation is a march with its time.
+
+**Built, first form (29 Oct 2026)** (`scenario_runner.hpp`, `air_war/campaign.hpp`, `nav/session.hpp`; Unreal's
+`ASimCampaignHUD`; `tests/test_battery_life.cpp`):
+
+- **The battery's orders in the radial menu** (G9.2) came with G10.8: the crew menu's Battery orders sector.
+- **The route card and the papers** (G9.3, G9.4): when the battery commander gives a march to a place, the own vehicle's
+  route card (its place in the column, its time at each point of the plan) goes into its commander's and its driver's
+  map cases (O in the cabin), and the order of march, every vehicle's times at the start point and the end, into the
+  battery commander's. A battery commander in the own vehicle has his battery's staff list and his communications
+  diagram there from the start (G8).
+- **The campaign's relocation as a march** (G9.5): the battery moves to the marked position on the country's roads in
+  the time its march plan gives (`SessionNav::MarchHours`, the battery's column of eight), out of the fight and still at
+  its old position on the enemy's picture until it arrives; the march is an action of the save and replays to the same
+  hour. The campaign screen shows the time by the roads at the mark and the battery on the march with the hour it
+  arrives. Rebels' campaign, 7.2 km to the north-west: 108 min, from 6.00 h to 7.80 h.
+
+Left: the working map table (G9.1), the driver's next turn from the route card (the helper's), the TZM requested from
+the menu, whom the player plays (G9.6).
 
 ### G10: battery orders, given and carried out (simcore; not gated)
 
@@ -750,6 +882,44 @@ the talk tables' words on the net (G10.3), the giver's picture from the reports 
 vehicle that cannot catch up), the control points and the arrival reported (G10.6), the regiment's orders and the
 emission regime on the same path (G10.7), the player giving the orders (G10.8).
 
+**Built: G10.6-G10.8 in the session (29 Oct 2026).**
+
+- **G10.6, the reports and the record.** Every read-back, report and «не могу» that reaches the battery commander his
+  radiotelephonist writes in the journal (pvo_bu_x_1984 art. 24; an NPC's line in `write_s`, a game value in
+  `battery_orders.json`), and the order's last step, "logged", is the line once it is legible; the battery commander's
+  own orders are on the page too. A vehicle broken down where it stands (a scenario's `"breakdown"` trigger, the hook for
+  G3.5) takes no part in the battery's moves, and its commander says on the net «10, я 22: к маршу выполнить не могу,
+  неисправность. Приём.» (out of the column, radio is his: p240's rule is for the column), which the book keeps as
+  "cannot" with its reason. The giver's picture is the last words he had from each vehicle (`BatteryOrderNet::LastFrom`),
+  never what it does unseen. At the end of the route the NPC battery commander gives «К бою!» down the column by flags
+  or lamps (the march's radio ban still holds), the battery deploys in combat formation along the last leg and each
+  vehicle reports «к бою готов» on the net, as `ColumnMarch` does. The session's debrief lists the order book: each
+  order's times for each vehicle.
+- **G10.7, the regiment's orders and the emission regime on the same path.** The regiment's duty officer
+  (`rgt_cp_duty`) says an order on the regiment's net to the battery commander, who reads it back, passes it on after
+  his reaction and the emission data's `relay_s`, and reports it done; its book is the regiment's
+  (`GetRegimentOrders`). Any battery order may say `"from": "regiment"` (a relocation on the regiment's order) and an
+  emission order from the regiment takes the same way. The battery commander's emission regime is an order on the
+  battery's net like the others («Всем, я 10: …» twice): each commander reads it back, one silent is said it again by his
+  call sign, then by the next means, and the own crew's commander has it only once he has heard it. The own vehicle
+  reads back every order it heard, in order, a moving order or a regime.
+- **G10.8, the player giving.** With the PU-12M as the player's vehicle, the moves the combat order plans (the march
+  and its route, the «К бою!» at the route's end) are the battery commander's to give when they are due: the crew
+  menu's new Battery orders sector (`order_battery_march`, `_halt`, `_resume`, `_k_boyu`, `_relocate`), an NPC by
+  `NpcDoes`, the helper showing them; one not in the combat order is greyed (no route or place for it yet), a halt or a
+  move on he may give at any time. Each goes out on the order net as any battery order, the replies come back on it in
+  the PU-12M crew data's words, and the post's own radiotelephonist writes them in its journal (an NPC, or the player at
+  his seat). The post moves off only once its crew has stowed it (the squad leader's «Свернуть!»). The mission
+  `pu12m_battery_orders.json` (the missions menu: "PU-12M: give the battery its march order").
+
+Tests (`test_battery.cpp`): 22 broken down on the march says it cannot, stays where it broke down, and every reply is on
+the giver's page and logged; a 3 km march ends with «К бою!» by flags and every vehicle's «к бою готов»; the
+regiment's emission regime reaches the battery commander, is read back, passed on 20 s after he acts and read back by
+every vehicle, our commander included; from the PU-12M the NPC gives the march at its time and the post moves only
+once stowed; in the battery commander's seat it is owed at 60 s and given from the menu, «К бою!» greyed before the
+route's end. Left: control points reported up by the post's means (with G3's regulators), the driver as a person
+(the route card, G9.3), the orders group in person, the working map's picture (G9.1).
+
 ### G11: Unreal, everything the player could see
 
 | # | Task |
@@ -764,6 +934,22 @@ emission regime on the same path (G10.7), the player giving the orders (G10.8).
 road; from a hill the regiment's convoy appears on the far road at the weather's visibility and is gone behind the
 ridge; nothing appears or vanishes inside the range or jumps on entering it; the frame time with the battery and a
 regiment's column in view is within the budget measured.
+
+**Built, first form (29 Oct 2026)** (`nav/session.hpp`, `data/gameplay/visual_range.json`, `scenario_runner.hpp`,
+Unreal's `USimWorldSubsystem::GetEntityStates`; `tests/test_battery_life.cpp`):
+
+- **Movers in the entity stream** (G11.1): every vehicle of every mover at M2 (a convoy's at its spacing behind the head
+  along the road, queued back along the first stretch before the start), with its basic model by its class (a truck
+  `ural_truck`, a man `soldier`, a motorcycle) and a fixed id (`ScenarioRunner::MoversInView`), drawn on the ground. The
+  battery's own vehicles were already in the stream.
+- **The visual range** (G11.2): 8 km by day, 3 km at dusk (the sun to 6 degrees below the horizon), 1.5 km at night,
+  the weather's visibility the cap (game values); a mover comes to M2 within it and goes back to M1 only beyond it by
+  10 %, so one at the edge does not flicker. From battery 21's command post the regiment's supply convoy (four trucks,
+  16.3 km by the roads in 23 min) comes into sight 7979 m off at the 8 km range, its largest step in a second 13.9 m
+  (a truck's speed): no jump at the hand-over, its ids kept.
+
+Left: the battery's places drawn (G11.3), presentation (G11.4), the scripted check in the game (G11.5), an optic's
+range and the terrain's mask (the ridge), and the frame-time budget.
 
 ### Milestone M-G: a night and a dawn at battery 21
 

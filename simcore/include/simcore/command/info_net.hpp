@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -326,6 +327,20 @@ public:
         for (FactState& s : states_) s = FactState();
     }
     const RadioModel* Radio() const { return radio_model_.get(); }
+
+    // The carriers' ways (roadmap G2.5, nav/carriers.hpp): when set, a carrier's travel takes its route's time on the road
+    // net (seconds; < 0: no route there, and the straight line by the road factor stands in), so a courier's delivery
+    // takes its route's time and a cut bridge lengthens it. Every fact's way is planned again.
+    using RouteTime = std::function<double(const SignalMean& m, const Vec3& a, const Vec3& b, bool night)>;
+    void SetRouteTime(RouteTime f) {
+        route_time_ = std::move(f);
+        for (FactState& s : states_) s = FactState();
+    }
+    // A carrier's travel between two points by a means (hours), as the net times it.
+    double CarrierTravelH(const std::string& mean_id, const Vec3& a, const Vec3& b, double depart_h) const {
+        const int mi = data_.MeanIndex(mean_id);
+        return mi < 0 ? -1.0 : TravelH(data_.means[static_cast<std::size_t>(mi)], a, b, depart_h);
+    }
 
     // The post the player's character holds: it passes nothing on by itself.
     void SetPlayer(const std::string& position) {
@@ -728,6 +743,7 @@ private:
     };
 
     ChainData data_;
+    RouteTime route_time_;
     unsigned seed_ = 1;
     double start_hour_ = 0.0;
     double now_h_ = -1e18;
@@ -908,6 +924,10 @@ private:
         return m.handling_s * f / 3600.0;
     }
     double TravelH(const SignalMean& m, const Vec3& a, const Vec3& b, double depart) const {
+        if (route_time_) {
+            const double s = route_time_(m, a, b, Night(depart));
+            if (s >= 0.0) return s / 3600.0;
+        }
         const double speed = m.speed_mps * (Night(depart) ? data_.relay.night_speed_factor : 1.0);
         if (speed <= 0.0) return 1e9;
         const double d = std::hypot(b.x - a.x, b.y - a.y) * data_.relay.road_factor;
@@ -1077,6 +1097,8 @@ private:
 
     static bool Later(const Ev& a, const Ev& b) {
         if (a.t != b.t) return a.t > b.t;
+        // A telling after the deliveries of its instant: the teller may learn it then (his own report, written and sent).
+        if ((a.tell >= 0) != (b.tell >= 0)) return a.tell >= 0;
         if (a.node != b.node) return a.node > b.node;
         if (a.from != b.from) return a.from > b.from;
         return a.attempt > b.attempt;

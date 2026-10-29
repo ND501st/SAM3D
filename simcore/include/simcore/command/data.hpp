@@ -134,6 +134,7 @@ struct SignalMean {
     double intercept = 0.0;          // how much one message tells the enemy's intercept service
     bool documents = false;
     int precedence = 2;              // the highest precedence it is used for
+    std::string mobility;            // a carrier's class on the route service ("" : its kind's; nav/carriers.hpp)
 };
 
 struct RelayRules {
@@ -343,7 +344,8 @@ public:
             std::string kind;
             double speed_kmh = 0.0, range_km = 0.0;
             if (!Keys(v, p, {"id", "name", "kind", "speed_kmh", "handling_s", "connect_s", "connect_routine_s", "range_km", "loss",
-                              "intercept", "documents", "precedence", "source", "confidence", "notes"}) ||
+                              "intercept", "documents", "precedence", "mobility", "source", "confidence", "notes"}) ||
+                !OptionalString(v, p, "mobility", m.mobility) ||
                 !RequireString(v, p, "id", m.id) || !RequireString(v, p, "name", m.name) || !RequireString(v, p, "kind", kind) ||
                 !Num(v, p, "speed_kmh", speed_kmh, 0.0, 1000.0) || !Num(v, p, "handling_s", m.handling_s, 0.0, 1.0e6) ||
                 !Num(v, p, "connect_s", m.connect_s, 0.0, 86400.0) || !Num(v, p, "connect_routine_s", m.connect_routine_s, 0.0, 86400.0) ||

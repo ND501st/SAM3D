@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <queue>
 #include <string>
 #include <utility>
@@ -24,6 +25,7 @@
 
 #include "simcore/console_data.hpp"
 #include "simcore/country_map.hpp"
+#include "simcore/nav/ground.hpp"
 #include "simcore/terrain_map.hpp"
 
 namespace simcore {
@@ -58,12 +60,19 @@ struct Mobility {
     double water_mps = 0.0;  // 0: does not swim
     double night_factor = 1.0;
     double swim_prep_s = 0.0;  // into the water and out again
+    GroundSpeeds ground_factor = {1.0, 1.0, 1.0, 1.0, 1.0};  // its cross-country speed's factor on each ground (by Ground)
     std::string source;
     std::string confidence;
     std::string notes;
 
     bool Swims() const { return water_mps > 0.0; }
     double RoadMps(Road r) const { return road_mps[static_cast<std::size_t>(r)]; }
+    // Its speed on each ground off the road (ground.hpp): cross-country times its factor there; water only swimming.
+    GroundSpeeds GroundMps() const {
+        GroundSpeeds s{};
+        for (std::size_t k = 0; k < s.size(); ++k) s[k] = static_cast<Ground>(k) == Ground::Water ? water_mps : cross_country_mps * ground_factor[k];
+        return s;
+    }
 };
 
 struct MobilityLibrary {
@@ -95,7 +104,7 @@ public:
             Mobility m;
             double main = 0.0, secondary = 0.0, track = 0.0, cross = 0.0, water = 0.0;
             if (!Keys(v, p, {"id", "name", "main_kmh", "secondary_kmh", "track_kmh", "cross_country_kmh", "water_kmh", "night_factor",
-                             "swim_prep_s", "source", "confidence", "notes"}) ||
+                             "swim_prep_s", "ground", "source", "confidence", "notes"}) ||
                 !RequireString(v, p, "id", m.id) || !RequireString(v, p, "name", m.name) || !Provenance(v, p) ||
                 !RequireString(v, p, "source", m.source) || !RequireString(v, p, "confidence", m.confidence) ||
                 !OptionalString(v, p, "notes", m.notes) || !Speed(v, p, "main_kmh", main) || !Speed(v, p, "secondary_kmh", secondary) ||
@@ -107,6 +116,17 @@ public:
             if (water < 0.0) return Fail(Join(p, "water_kmh"), "must not be negative");
             if (m.night_factor <= 0.0 || m.night_factor > 1.0) return Fail(Join(p, "night_factor"), "must be in (0, 1]");
             if (out.Find(m.id) != nullptr) return Fail(Join(p, "id"), "'" + m.id + "' is listed twice");
+            // Off the road on each ground: woods, marsh and built-up ground as a factor of the cross-country speed (0: not at
+            // all); the open is the cross-country speed itself, water the swimming speed.
+            if (const json::Value* g = v.Find("ground")) {
+                const std::string gp = Join(p, "ground");
+                if (!Keys(*g, gp, {"woods", "marsh", "built_up", "source", "confidence"}) || !Provenance(*g, gp)) return false;
+                for (Ground k : {Ground::Woods, Ground::Marsh, Ground::BuiltUp}) {
+                    double& factor = m.ground_factor[static_cast<std::size_t>(k)];
+                    if (!OptionalNumber(*g, gp, GroundName(k), factor)) return false;
+                    if (factor < 0.0 || factor > 1.0) return Fail(Join(gp, GroundName(k)), "must be in [0, 1]");
+                }
+            }
             m.road_mps = {main / 3.6, secondary / 3.6, track / 3.6};
             m.cross_country_mps = cross / 3.6;
             m.water_mps = water / 3.6;
@@ -302,6 +322,11 @@ public:
         return best;
     }
 
+    // The district's ground cell by cell (ground.hpp): the ways off the road go round its woods, marshes and water. None
+    // (the country): straight lines.
+    void SetGround(std::shared_ptr<const GroundGrid> grid) { ground_ = std::move(grid); }
+    const GroundGrid* GetGround() const { return ground_.get(); }
+
     // How far a point is from the nearest road (a place out of reach of the road net is for nav_check to list).
     double DistanceToRoad(const MapPoint& p) const {
         const Snap s = SnapTo(p);
@@ -324,15 +349,43 @@ public:
         const std::int64_t off_v = cmps(m.cross_country_mps);
         auto ds = [](std::int64_t length_cm, std::int64_t v) { return (length_cm * 10 + v / 2) / v; };
         auto cm = [](double a_e, double a_n, double b_e, double b_n) { return std::llround(std::hypot(b_e - a_e, b_n - a_n) * 100.0); };
+        // A way off the road between two points: across the district's ground cell by cell where a grid is laid (round
+        // the woods and the water), else straight at the class's cross-country speed. Not found on the grid (an end shut
+        // in by water): straight, as without one.
+        const GroundSpeeds ground_mps = m.GroundMps();
+        struct Off {
+            bool grid = false;
+            std::int64_t time_ds = 0;
+            std::vector<MapPoint> points;
+            std::vector<std::int64_t> at_ds;
+        };
+        auto off_way = [&](const MapPoint& a, const MapPoint& b, std::int64_t straight_cm) {
+            Off o;
+            if (ground_ && ground_->Covers(a) && ground_->Covers(b)) {
+                GroundGrid::Way w = ground_->Across(a, b, ground_mps, f);
+                if (w.found) {
+                    o.grid = true;
+                    o.time_ds = w.ds;
+                    o.points = std::move(w.points);
+                    o.at_ds = std::move(w.at_ds);
+                    return o;
+                }
+            }
+            o.time_ds = ds(straight_cm, off_v);
+            return o;
+        };
 
         // Each end's way onto the road: the nearest point of the road net, however far (a point beyond the bound is
         // reached across country all the same, and the route says how far: max_link_m).
         const Snap s = SnapTo(q.from);
         const Snap t = SnapTo(q.to);
+        const Off s_off = s.edge >= 0 ? off_way(q.from, s.on, s.off_cm) : Off();
+        const Off t_off = t.edge >= 0 ? off_way(t.on, q.to, t.off_cm) : Off();
         const std::int64_t direct_cm = cm(q.from.east_m, q.from.north_m, q.to.east_m, q.to.north_m);
         // Straight across country between ends near each other, or when there is no road at all.
-        const std::int64_t direct_ds = ds(direct_cm, off_v);
         const bool direct_ok = direct_cm <= std::llround(2.0 * q.link_max_m * 100.0) || s.edge < 0 || t.edge < 0;
+        const Off d_off = direct_ok ? off_way(q.from, q.to, direct_cm) : Off();
+        const std::int64_t direct_ds = d_off.time_ds;
         r.max_link_m = static_cast<double>(std::max(s.off_cm, t.off_cm)) / 100.0;
 
         const std::size_t n = nodes_.size();
@@ -397,7 +450,7 @@ public:
                 if (direct_ok) relax(S, T, direct_ds, {-1, -2, -1, false});
                 if (s.edge >= 0) {
                     const NavEdge& e = edges_[static_cast<std::size_t>(s.edge)];
-                    const std::int64_t link = ds(s.off_cm, off_v);
+                    const std::int64_t link = s_off.time_ds;
                     const std::int64_t v = road_v[static_cast<std::size_t>(e.road)];
                     for (int end : {e.a, e.b}) {
                         bool swim = false;
@@ -408,7 +461,7 @@ public:
                     }
                     if (t.edge == s.edge) {
                         const std::int64_t along = s.along_cm > t.along_cm ? s.along_cm - t.along_cm : t.along_cm - s.along_cm;
-                        parts.push_back({s.edge, link + ds(along, v) + ds(t.off_cm, off_v)});
+                        parts.push_back({s.edge, link + ds(along, v) + t_off.time_ds});
                         relax(S, T, parts.back().cost, {-1, -3, static_cast<int>(parts.size()) - 1, false});
                     }
                 }
@@ -425,7 +478,7 @@ public:
                 const NavEdge& e = edges_[static_cast<std::size_t>(t.edge)];
                 if (u == e.a || u == e.b) {
                     const std::int64_t along = u == e.a ? t.along_cm : e.length_cm - t.along_cm;
-                    parts.push_back({t.edge, ds(along, road_v[static_cast<std::size_t>(e.road)]) + ds(t.off_cm, off_v)});
+                    parts.push_back({t.edge, ds(along, road_v[static_cast<std::size_t>(e.road)]) + t_off.time_ds});
                     relax(u, T, parts.back().cost, {-1, -3, static_cast<int>(parts.size()) - 1, false});
                 }
             }
@@ -460,6 +513,21 @@ public:
             }
         };
         auto off_s = [&](std::int64_t length_cm) { return static_cast<double>(ds(length_cm, off_v)) / 10.0; };
+        // A way off the road: one stretch straight, or one for each corner of its way across the grid.
+        auto off_go = [&](const Off& o, const MapPoint& from, const MapPoint& to, double straight_m, double straight_s) {
+            if (!o.grid) {
+                go("off_road", Road::Track, "", straight_m, straight_s, to, -1);
+                return;
+            }
+            MapPoint last = from;
+            std::int64_t at = 0;
+            for (std::size_t i = 0; i < o.points.size(); ++i) {
+                go("off_road", Road::Track, "", std::hypot(o.points[i].east_m - last.east_m, o.points[i].north_m - last.north_m),
+                   static_cast<double>(o.at_ds[i] - at) / 10.0, o.points[i], -1);
+                last = o.points[i];
+                at = o.at_ds[i];
+            }
+        };
         r.path.push_back(q.from);
         r.nodes.push_back(-1);
         int prev = S;
@@ -469,18 +537,18 @@ public:
             const MapPoint b = point(v);
             const int node = v == S || v == T ? -1 : v;
             if (w.edge == -2) {
-                go("off_road", Road::Track, "", std::hypot(b.east_m - a.east_m, b.north_m - a.north_m), static_cast<double>(direct_ds) / 10.0, b, -1);
+                off_go(d_off, a, b, std::hypot(b.east_m - a.east_m, b.north_m - a.north_m), static_cast<double>(direct_ds) / 10.0);
             } else if (w.edge == -3) {
                 // Off the road to an edge, along it, and (at the end) off it again.
                 const NavEdge& e = edges_[static_cast<std::size_t>(parts[static_cast<std::size_t>(w.part)].edge)];
                 const std::int64_t v_road = road_v[static_cast<std::size_t>(e.road)];
                 auto road_s = [&](double along_m) { return static_cast<double>(ds(std::llround(along_m * 100.0), v_road)) / 10.0; };
                 if (prev == S) {
-                    go("off_road", Road::Track, "", static_cast<double>(s.off_cm) / 100.0, off_s(s.off_cm), s.on, -1);
+                    off_go(s_off, q.from, s.on, static_cast<double>(s.off_cm) / 100.0, off_s(s.off_cm));
                     if (v == T && t.edge == s.edge) {
                         const double along_m = std::hypot(t.on.east_m - s.on.east_m, t.on.north_m - s.on.north_m);
                         go("road", e.road, e.line_id, along_m, road_s(along_m), t.on, -1);
-                        go("off_road", Road::Track, "", static_cast<double>(t.off_cm) / 100.0, off_s(t.off_cm), b, -1);
+                        off_go(t_off, t.on, b, static_cast<double>(t.off_cm) / 100.0, off_s(t.off_cm));
                     } else {
                         const double along_m = std::hypot(b.east_m - s.on.east_m, b.north_m - s.on.north_m);
                         go("road", e.road, e.line_id, along_m, road_s(along_m), b, node);
@@ -488,7 +556,7 @@ public:
                 } else {
                     const double along_m = std::hypot(t.on.east_m - a.east_m, t.on.north_m - a.north_m);
                     go("road", e.road, e.line_id, along_m, road_s(along_m), t.on, -1);
-                    go("off_road", Road::Track, "", static_cast<double>(t.off_cm) / 100.0, off_s(t.off_cm), b, -1);
+                    off_go(t_off, t.on, b, static_cast<double>(t.off_cm) / 100.0, off_s(t.off_cm));
                 }
             } else {
                 const NavEdge& e = edges_[static_cast<std::size_t>(w.edge)];
@@ -624,6 +692,7 @@ private:
     }
 
     std::vector<MapLineDef> rivers_;
+    std::shared_ptr<const GroundGrid> ground_;
     std::vector<NavNode> nodes_;
     std::vector<NavEdge> edges_;
     std::vector<NavCrossing> crossings_;
