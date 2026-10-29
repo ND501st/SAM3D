@@ -119,6 +119,8 @@ struct VehicleWayDown {
     double down_s = 3.0;
     double up_s = 4.0;
 };
+// A way down on the vehicle's `side` (-1 its left, 1 its right; 0 no side): the side the crew keeps off at a road.
+inline bool WayOnSide(const VehicleWayDown& w, int side) { return side != 0 && w.bottom_m.x * side > 0.0; }
 
 // A place round the vehicle (body frame on the ground; z ignored) where a job is done.
 struct VehiclePlace {
@@ -911,6 +913,11 @@ public:
         stand_up_s_ = stand_up_s;
         sit_down_s_ = sit_down_s;
     }
+    // The side of the vehicle he keeps off getting down or up (-1 its left, 1 its right, 0 none): the traffic side of a
+    // road it stands at (stroevoy_ustav_1993 art. 147, 154: at a road's right edge nobody gets on or off over the left
+    // side). A way on that side is taken only when the vehicle has no other.
+    void SetKeepOffSide(int side) { keep_off_side_ = side; }
+    int KeepOffSide() const { return keep_off_side_; }
     // His way on foot across the map (roadmap G2.4): with one given, a walk to a point on the map more than `min_m` from
     // where he leaves the vehicle goes by it (the route service's foot way: round the pond, along the track) instead of
     // the straight line, each of its points a ground leg. It gives the way's points from the start to the end (ENU,
@@ -1141,15 +1148,19 @@ private:
         return best;
     }
 
-    // The way down nearest to go from the hull point `top` to the ground point `ground_m` (body frame).
+    // The way down nearest to go from the hull point `top` to the ground point `ground_m` (body frame), off the side he
+    // keeps off unless there is no other.
     const VehicleWayDown* ChooseWay(const Vec3& top, const Vec3& ground_m) const {
         const VehicleWayDown* best = nullptr;
         double best_d = 1e18;
-        for (const VehicleWayDown& w : vehicle_->ways) {
-            const double d = (w.top_m - top).HorizontalLength() + (w.bottom_m - ground_m).HorizontalLength();
-            if (d < best_d) {
-                best_d = d;
-                best = &w;
+        for (int pass = 0; pass < 2 && best == nullptr; ++pass) {
+            for (const VehicleWayDown& w : vehicle_->ways) {
+                if (pass == 0 && WayOnSide(w, keep_off_side_)) continue;
+                const double d = (w.top_m - top).HorizontalLength() + (w.bottom_m - ground_m).HorizontalLength();
+                if (d < best_d) {
+                    best_d = d;
+                    best = &w;
+                }
             }
         }
         return best;
@@ -1518,6 +1529,7 @@ private:
     double sit_down_s_ = 1.5;
     FootRoute foot_route_;
     double foot_min_m_ = 150.0;
+    int keep_off_side_ = 0;
 };
 
 

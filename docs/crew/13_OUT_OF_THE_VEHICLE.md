@@ -75,6 +75,14 @@ trained man's 1 s (0.7-1.8). He is "inside" (on the intercom, at his instruments
 (the Osa in БР with the equipment on), he can't go out, and the runner logs why (p. 207) and tries again every 2 s. The
 emergency exits (the Osa's opening windscreen) are used only for an emergency goal.
 
+**Not on the traffic side** (`stroevoy_ustav_1993` art. 147, 154: at a road's right edge nobody gets on or off over the
+left side). Where the vehicle stands at a road of the scenario's map (within half the road's width and 5 m of its centre
+line, SAM3D's estimate for its shoulder and verge: `MapTerrain::NearestRoad`), the side facing the carriageway is the
+traffic side (`ScenarioRunner::TrafficSide`; on the centre line, its left). Every mover keeps off it
+(`CrewMover::SetKeepOffSide`): his way down and up is by a wheel on the other side, round the roof if his hatch is on the
+road's side, and the traffic side's ways only if the vehicle had no other. The player climbing by a wheel on that side
+is told to take the other (Unreal). Away from roads no side is kept off.
+
 ### 2.3 Jobs outside: a step needs him where it is done
 
 `CrewMember` (procedures.hpp) knows each control's place (`SetOutsideJobs`). When a step's conditions hold and the step
@@ -203,5 +211,5 @@ readiness is computed from where every person is and the legs to their seat.
 | The order menu's К машине / По местам | done |
 | The drill master knowing the walk: its ideal run walks a man out to a job and back, a job's cost counts the way (`DrillMaster::SetOutside`, the runner's `WaySeconds`) | done 29 Oct 2026, `test_crew_mobility.cpp` |
 | The lessons knowing the walk: a step worked outside says where the learner must go (out to the job's place, back in for a control inside), the card shows it, L leads him to a job's place, and the instructor (N) leads him there before working it (`TutorialStatus::away`, `TutorialGuide::Lead`; `docs/TUTORIALS.md`) | done 30 Oct 2026, `test_tutorial.cpp` |
-| The dismount on the safe side of a road | next |
+| The dismount on the safe side of a road: at a road of the map the crew gets down and up away from the traffic (section 2.2) | done 30 Oct 2026, `test_crew_mobility.cpp` |
 | Wire laying as the first new outside task: the PU-12M's lines paid out to their far ends (section 4.1) | done 30 Oct 2026, `test_crew_mobility.cpp`, `pu12m_deploy_wire.json` |

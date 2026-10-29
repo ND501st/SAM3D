@@ -1184,6 +1184,32 @@ public:
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->ObstacleHeight(p.east_m, p.north_m);
     }
+    // The nearest point of a road's centre line to the scenario's (east, north), within `within_m` of it (ENU; its z is
+    // not the ground's), and that road's width. False if no road is that near.
+    bool NearestRoad(double east_m, double north_m, double within_m, Vec3& centre, double& width_m) const {
+        const MapPoint p = link_.FrameToMap(east_m, north_m);
+        double best = within_m;
+        bool found = false;
+        MapPoint at;
+        for (const MapLineDef& r : map_->Def().roads) {
+            for (std::size_t i = 1; i < r.points.size(); ++i) {
+                const MapPoint& a = r.points[i - 1];
+                const double de = r.points[i].east_m - a.east_m, dn = r.points[i].north_m - a.north_m;
+                const double len2 = de * de + dn * dn;
+                const double t = len2 > 0.0 ? std::clamp(((p.east_m - a.east_m) * de + (p.north_m - a.north_m) * dn) / len2, 0.0, 1.0) : 0.0;
+                const double qe = a.east_m + t * de, qn = a.north_m + t * dn;
+                const double d = std::hypot(p.east_m - qe, p.north_m - qn);
+                if (d < best) {
+                    best = d;
+                    at = MapPoint{qe, qn};
+                    width_m = r.width_m;
+                    found = true;
+                }
+            }
+        }
+        if (found) centre = link_.MapToFrame(at.east_m, at.north_m, 0.0);
+        return found;
+    }
 
     const MapData& Map() const { return *map_; }
     const std::shared_ptr<const MapData>& MapPtr() const { return map_; }

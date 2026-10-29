@@ -613,3 +613,77 @@ SC_TEST("crew mobility: a line's far end beside a launcher, short of it on the p
     SC_EXPECT(r.LaidLineTo("21") == nullptr && r.LaidLineTo("22") != nullptr);
     SC_EXPECT(!r.CheckOrder("order_lay_lines").can);
 }
+
+SC_TEST("crew mobility: at a road's edge the crew gets down and up on the side away from the traffic (art. 147, 154)") {
+    // The PU-12M school's post on the Kesmark range, set down beside the middle of a road's longest straight: on its right
+    // shoulder (the road on the post's left), on its left shoulder, and away from any road. The driver, whose hatch is on
+    // the left, goes out to the AB-1 set behind the post.
+    std::unique_ptr<ScenarioRunner> probe = RunnerFor("school_pu12m_driver.json");
+    SC_EXPECT(probe != nullptr && probe->MapGround() != nullptr);
+    if (!probe || probe->MapGround() == nullptr) return;
+    const MapTerrain& map = *probe->MapGround();
+    const MapLineDef* road = nullptr;
+    std::size_t seg = 0;
+    double longest = 0.0;
+    for (const MapLineDef& line : map.Map().Def().roads) {
+        for (std::size_t i = 1; i < line.points.size(); ++i) {
+            const double len = std::hypot(line.points[i].east_m - line.points[i - 1].east_m, line.points[i].north_m - line.points[i - 1].north_m);
+            if (len > longest) {
+                longest = len;
+                road = &line;
+                seg = i;
+            }
+        }
+    }
+    SC_EXPECT(road != nullptr && longest > 50.0);
+    if (road == nullptr) return;
+    const Vec3 a = map.Link().MapToFrame(road->points[seg - 1].east_m, road->points[seg - 1].north_m, 0.0);
+    const Vec3 b = map.Link().MapToFrame(road->points[seg].east_m, road->points[seg].north_m, 0.0);
+    const double len = std::hypot(b.x - a.x, b.y - a.y);
+    const Vec3 along{(b.x - a.x) / len, (b.y - a.y) / len, 0.0};
+    const Vec3 right{along.y, -along.x, 0.0};  // facing along it, the right hand
+    const Vec3 mid{0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.0};
+    const double heading_deg = RadToDeg(std::atan2(along.x, along.y));
+    // The post standing `off` m to the right of the road's centre line, facing along it: the side it keeps off, and the
+    // way the driver takes down on his way out to the set.
+    struct Out {
+        int side = 9;
+        double way_x = 0.0;
+        std::string way;
+    };
+    auto out_from = [&](double off) {
+        Out o;
+        std::unique_ptr<ScenarioRunner> r = RunnerFor("school_pu12m_driver.json");
+        if (!r) return o;
+        r->SetUnitPosition(Vec3{mid.x + off * right.x, mid.y + off * right.y, 0.0});
+        r->SetUnitHeading(heading_deg);
+        r->TakeSeat("driver", "Player");
+        r->SetPlayerBody("driver", BodyPlace::Seated, Vec3{}, 0.0);
+        r->Step(0.1);
+        o.side = r->TrafficSide();
+        if (!r->PlayerGoTo("driver", r->PlaceGoal("ab1"))) return o;
+        for (const MoveLeg& l : r->Mover("driver")->Legs()) {
+            if (l.kind != LegKind::ClimbDown) continue;
+            o.way = l.way;
+            if (const VehicleWayDown* w = r->Vehicle()->Way(l.way)) o.way_x = w->bottom_m.x;
+        }
+        return o;
+    };
+    const double shoulder = 0.5 * road->width_m + 2.0;
+    const Out on_right = out_from(shoulder), on_left = out_from(-shoulder);
+    std::printf("    a %.0f m road: on its right shoulder the traffic on the post's %s, the driver down by %s; on its left shoulder, on its %s, down by %s\n",
+                road->width_m, on_right.side < 0 ? "left" : "right", on_right.way.c_str(), on_left.side < 0 ? "left" : "right", on_left.way.c_str());
+    SC_EXPECT(on_right.side == -1 && on_right.way_x > 0.0);  // round to the right side, away from the road
+    SC_EXPECT(on_left.side == 1 && on_left.way_x < 0.0);
+    // Away from any road: no side kept off.
+    double away_m = 0.0;
+    for (double d = 120.0; d < 3000.0 && away_m == 0.0; d += 40.0) {
+        Vec3 c;
+        double w = 0.0;
+        if (!map.NearestRoad(mid.x + d * right.x, mid.y + d * right.y, 100.0, c, w)) away_m = d;
+    }
+    SC_EXPECT(away_m > 0.0);
+    const Out off_road = out_from(away_m);
+    std::printf("    %.0f m off the road: down by %s\n", away_m, off_road.way.c_str());
+    SC_EXPECT(off_road.side == 0 && !off_road.way.empty());
+}

@@ -2508,6 +2508,13 @@ void ASimOsaVehicle::Climb(USimWorldSubsystem* Sim)
 		{
 			if (Near2(Feet, W.top_m) < 0.9)
 			{
+				// At a road nobody gets off on the traffic side (stroevoy_ustav_1993 art. 147, 154).
+				if (simcore::WayOnSide(W, R->TrafficSide()))
+				{
+					FeedbackText = TEXT("Not down this side: the road's traffic is here. Down the other side");
+					FeedbackSecondsLeft = 3.0f;
+					return;
+				}
 				GoBody(Sim, simcore::MoveGoal::OnGround(R->Pose().ToEnu(W.bottom_m)));
 				return;
 			}
@@ -2531,6 +2538,12 @@ void ASimOsaVehicle::Climb(USimWorldSubsystem* Sim)
 		{
 			if (Near2(Feet, W.bottom_m) < 1.5)
 			{
+				if (simcore::WayOnSide(W, R->TrafficSide()))
+				{
+					FeedbackText = TEXT("Not up this side: the road's traffic is here. Up by a wheel on the other side");
+					FeedbackSecondsLeft = 3.0f;
+					return;
+				}
 				GoBody(Sim, simcore::MoveGoal::OnHull(W.top_m));
 				return;
 			}

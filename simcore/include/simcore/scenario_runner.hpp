@@ -774,6 +774,10 @@ public:
         p.heading_rad = DegToRad(def_.unit_heading_deg);
         return p;
     }
+    // The side of the vehicle toward the carriageway where it stands at a road (-1 its left, 1 its right, 0 not at a
+    // road): the crew gets on and off on the other (stroevoy_ustav_1993 art. 147, 154), the movers' ways down and up
+    // kept off it. At a road: within half the road's width and kRoadsideM of its centre line on the scenario's map.
+    int TrafficSide() const { return traffic_side_; }
     const CrewMover* Mover(const std::string& station) const {
         const auto it = movers_.find(station);
         return it != movers_.end() ? &it->second : nullptr;
@@ -958,6 +962,8 @@ public:
             return false;
         }
         tracked_.insert(station);
+        UpdateTrafficSide();
+        it->second.SetKeepOffSide(traffic_side_);
         MoveGoal g = goal;
         if (g.kind == MoveGoal::Kind::Seat || g.kind == MoveGoal::Kind::Cabin) g.shut_after = true;  // unless a man is still out
         const bool ok = it->second.GoTo(g, &console_, Pose(), why);
@@ -5740,6 +5746,10 @@ private:
     std::map<std::string, bool> hatches_;           // exit id -> standing open
     mutable std::map<std::string, double> way_s_;    // the drill master's ways: "station|from|to" -> seconds
     std::map<int, Vec3> wire_last_;                  // where each line's layer was last step
+    int traffic_side_ = 0;                           // TrafficSide, where it was last looked up
+    bool traffic_looked_ = false;
+    Vec3 traffic_at_;
+    double traffic_heading_rad_ = 0.0;
     std::set<std::string> tracked_;                 // seats whose body the engine reports (the players')
     std::map<std::string, double> move_refused_s_;  // a seat's last refused way (tried again every 2 s)
 
@@ -5790,11 +5800,12 @@ private:
     // walked on a body of his at a trained man's pace with the hatches as they stand (each way measured once).
     double WaySeconds(const std::string& station, const std::string& from, const std::string& to) const {
         if (from == to) return 0.0;
-        const std::string key = station + "|" + from + "|" + to;
+        const std::string key = station + "|" + from + "|" + to + "|" + std::to_string(traffic_side_);
         const auto hit = way_s_.find(key);
         if (hit != way_s_.end()) return hit->second;
         const auto goal = [this](const std::string& place) { return PlaceGoal(place); };
         CrewMover m(&def_.vehicle, station);
+        m.SetKeepOffSide(traffic_side_);
         m.SetSeatTimes(def_.has_crew_data ? def_.crew_data.stand_s : def_.walking.gait.stand_up_s,
                        def_.has_crew_data ? def_.crew_data.sit_s : def_.walking.gait.sit_down_s);
         std::map<std::string, bool> hatches = hatches_;
@@ -5848,14 +5859,37 @@ private:
     }
     // Each NPC goes where his drill wants him (CrewMember::WantedPlace); every body walks on; each crew member learns
     // where his body is.
+    // Beyond a road's edge, the shoulder and the verge a vehicle pulls onto (sam3d): within this of the edge it stands at
+    // the road.
+    static constexpr double kRoadsideM = 5.0;
+    // The traffic side where the vehicle stands now (TrafficSide), looked up again once it has moved or turned.
+    void UpdateTrafficSide() {
+        const VehiclePose pose = Pose();
+        if (traffic_looked_ && (pose.origin - traffic_at_).HorizontalLength() < 1.0 &&
+            std::fabs(VehiclePose::WrapAngle(pose.heading_rad - traffic_heading_rad_)) < 0.05) {
+            return;
+        }
+        traffic_looked_ = true;
+        traffic_at_ = pose.origin;
+        traffic_heading_rad_ = pose.heading_rad;
+        traffic_side_ = 0;
+        Vec3 centre;
+        double width_m = 0.0;
+        if (!map_ground_ || !map_ground_->NearestRoad(pose.origin.x, pose.origin.y, 100.0, centre, width_m)) return;
+        if (std::hypot(centre.x - pose.origin.x, centre.y - pose.origin.y) > 0.5 * width_m + kRoadsideM) return;
+        // The centre line to its right: that side; on the centre line, its left (the side the traffic passes it on).
+        traffic_side_ = pose.ToBody(centre).x > 0.3 ? 1 : -1;
+    }
     void UpdateMovers(double dt) {
         if (!def_.has_vehicle) return;
         const VehiclePose pose = Pose();
         const MapTerrain* map = map_ground_.get();
+        UpdateTrafficSide();
         for (CrewMember& c : crew_) {
             auto it = movers_.find(c.Role());
             if (it == movers_.end()) continue;
             CrewMover& m = it->second;
+            m.SetKeepOffSide(traffic_side_);
             const bool npc = SeatHolder(c.Role()).empty();
             if (npc && !PlayerBodyTracked(c.Role())) {
                 const std::string want = c.WantedPlace();
