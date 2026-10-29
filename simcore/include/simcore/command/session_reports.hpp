@@ -1,5 +1,5 @@
-// simcore/command/session_reports.hpp — what a crew called in a played fight, as a fact of the chain (roadmap P4,
-// docs/command/06_INTEGRATION.md §2).
+// simcore/command/session_reports.hpp — what a crew called in a played fight, and the battery's combat report from its
+// records, as facts of the chain (roadmap P4, P9; docs/command/06_INTEGRATION.md §1-2).
 //
 // The crew's knowledge model (crew_knowledge.hpp) is the pipeline at the scale of one vehicle and one fight. Its calls
 // leave the vehicle as its commander's report: each missile launched and each result his judge called, right or wrong
@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/campaign/report.hpp"
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/scenes.hpp"
 #include "simcore/scenario_runner.hpp"
@@ -61,6 +62,35 @@ inline bool CommanderReport(const InfoNet& net, const std::vector<ScenarioRunner
     out.summary = summary;
     out.audience = data.unit_regiment;
     out.need_level = 3;  // to the battery commander, who reports it on
+    out.precedence = 1;
+    out.held = net.IsPlayer(cmdr);
+    return true;
+}
+
+// The battery commander's combat report compiled from his post's records (roadmap P9, campaign/report.hpp;
+// ScenarioRunner::ReportFromRecords) for a session that started at campaign hour start_h: a written report from him at the
+// session's end to the regiment's staff, at priority. Only what the records hold goes up; when the player's character is
+// the battery commander it is his own, and goes where he tells it. False without a post at the battery commander's seat.
+inline bool CombatReportFact(const InfoNet& net, const campaign::CombatReport& r, double start_h, const std::string& key, Fact& out) {
+    const ChainData& data = net.Data();
+    const int cmdr = PositionAtSeat(data, "post:battery_commander");
+    if (cmdr < 0) return false;
+    const Position& p = data.positions[static_cast<std::size_t>(cmdr)];
+    out = Fact();
+    out.key = key;
+    out.kind = FactKind::RaidResult;
+    out.h = start_h + r.to_s / 3600.0;
+    out.origin = p.id;
+    for (std::size_t i = 0; i < data.positions.size(); ++i) {
+        std::string v, st;
+        if (static_cast<int>(i) != cmdr && SplitSeat(data.positions[i].seat, v, st) && v == "post") out.witnesses.push_back(data.positions[i].id);
+    }
+    const double start_hour = net.StartHour();
+    out.text = campaign::ReportText(r, [start_h, start_hour](double s) { return FormatClock(start_h + s / 3600.0, start_hour); });
+    out.summary = campaign::ReportSummary(r);
+    out.document = true;  // written: its full text goes by hand or teleprinter
+    out.audience = data.unit_regiment;
+    out.need_level = 2;  // the regiment's staff
     out.precedence = 1;
     out.held = net.IsPlayer(cmdr);
     return true;

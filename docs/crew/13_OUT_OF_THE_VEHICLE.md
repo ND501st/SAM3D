@@ -166,5 +166,6 @@ readiness is computed from where every person is and the legs to their seat.
 | The vehicles' files (Osa, PU-12M) and the first jobs | done (times estimated) |
 | Unreal: the player through the hatch, on the hull, down, over the ground, back; NPCs drawn walking; the job switches walk him out | done, to be tested in the game |
 | The order menu's К машине / По местам | done |
-| The drill master and the lessons knowing the walk's time; the dismount on the safe side of a road | next |
+| The drill master knowing the walk: its ideal run walks a man out to a job and back, a job's cost counts the way (`DrillMaster::SetOutside`, the runner's `WaySeconds`) | done 29 Oct 2026, `test_crew_mobility.cpp` |
+| The lessons knowing the walk; the dismount on the safe side of a road | next |
 | Wire laying as the first new outside task | next |

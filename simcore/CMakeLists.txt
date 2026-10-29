@@ -67,6 +67,7 @@ add_executable(simcore_tests
   tests/test_scope_feed.cpp
   tests/test_battery.cpp
   tests/test_battery_life.cpp
+  tests/test_after_action.cpp
   tests/test_comms.cpp
   tests/test_voice_comms.cpp
   tests/test_fuel.cpp

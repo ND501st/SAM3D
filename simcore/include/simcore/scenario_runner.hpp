@@ -1590,6 +1590,20 @@ public:
             std::snprintf(line, sizeof(line), "  Plotted from the journal's page: %d (%d of them as the page had it wrong)\n", journal_reads_, journal_reads_wrong_);
             out += line;
         }
+        if (post_ && (!radar_log_.empty() || !commander_log_.empty())) {  // the report from the records, the regiment's check (P9)
+            campaign::CombatReport report;
+            ReportFromRecords(report);
+            out += "  The combat report from the records: " + campaign::ReportSummary(report) + "\n";
+            campaign::RecordCheck checks[2];
+            CheckRecords(checks[0], checks[1]);
+            for (const campaign::RecordCheck& c : checks) {
+                if (c.record == "journal" && console_.post_journal_keeper.empty()) continue;
+                std::snprintf(line, sizeof(line), "  The %s against the radar company's log: %d of %d reports as said, %d a digit wrong, %d missing, %d ghosts: %s\n",
+                              c.record.c_str(), c.as_said, c.said, c.wrong, c.missing, c.ghosts,
+                              campaign::GradeWord(campaign::RecordGrade(c, def_.after_action)));
+                out += line;
+            }
+        }
         if (order_net_ && !order_net_->Book().Orders().empty()) {  // each battery order's times for each vehicle (G10.6)
             out += "  Battery orders (the order book, on the mission's clock):\n";
             for (const std::string& s : order_net_->Debrief(0.0)) out += "    " + s + "\n";
@@ -3834,6 +3848,31 @@ public:
         return out;
     }
     const RadioJournal& Journal() const { return journal_; }
+
+    // ---- the after-action report from the records (roadmap P9, campaign/report.hpp; docs/command/01_PRINCIPLES.md 9)
+    // The battery's combat report compiled from the post's records as they stand now: the radiotelephonist's journal as
+    // written, the board's marks, the battery commander's log of his launchers' reports. Never the truth. False without a
+    // post (the Osa's crew writes no journal; its commander's report is P4's, command/session_reports.hpp).
+    bool ReportFromRecords(campaign::CombatReport& out, const std::string& unit = "The battery") const {
+        if (!post_) return false;
+        const CommandPost* post = post_.get();
+        out = campaign::CompileReport(unit, 0.0, time_, campaign::JournalLines(journal_, time_), campaign::BoardRecords(post_->Board().Marks()),
+                                      commander_log_, def_.after_action, [post](const Vec3& p) { return post->PlaceWords(p); });
+        return true;
+    }
+    // The regiment's check of the post's journal and board against the radar company's log of what it said on the
+    // air-picture net. False without a post.
+    bool CheckRecords(campaign::RecordCheck& journal, campaign::RecordCheck& board) const {
+        if (!post_) return false;
+        journal = campaign::CheckJournal(campaign::JournalLines(journal_, time_), radar_log_, def_.after_action);
+        board = campaign::CheckBoard(campaign::BoardRecords(post_->Board().Marks()), radar_log_, def_.after_action);
+        return true;
+    }
+    // Every report said on the air-picture net, heard at the post or not (the radar company's own log).
+    const std::vector<campaign::SaidReport>& RadarLog() const { return radar_log_; }
+    // The battery commander's log: each launcher's launch and result as the post heard it on the battery net.
+    const std::vector<campaign::LogEntry>& CommanderLog() const { return commander_log_; }
+    const campaign::AfterActionValues& AfterAction() const { return def_.after_action; }
     // The player radiotelephonist takes a message down (radio_journal.hpp's dictation): his pencil on the page starts
     // the oldest one he heard and hasn't written (or the line he left half-written); digits fill its boxes; Finish
     // writes it as it stands, `brief` the number and the time only. False if the seat isn't the journal's keeper's held
@@ -3926,6 +3965,8 @@ private:
     std::map<int, CommandPost::AirReport> journal_air_;  // each board number's latest air report heard, for the page's entry
     int journal_press_ = 0;
     int journal_reads_ = 0, journal_reads_wrong_ = 0;    // reports plotted from the page, and those it had wrong
+    std::vector<campaign::SaidReport> radar_log_;        // what the radar company said on the air-picture net (P9)
+    std::vector<campaign::LogEntry> commander_log_;      // the launchers' reports the post heard (P9)
     // Does the journal's keeper hear this net now (his box on its set; everyone with no voice paths)?
     bool KeeperHears(const std::string& label) const {
         const std::string& keeper = console_.post_journal_keeper;
@@ -4659,6 +4700,7 @@ private:
         // What the post heard on the air-picture net, in its radio log (the plotter's headset; first person), and in the
         // radiotelephonist's head until he writes it in the journal.
         for (const CommandPost::Spoken& s : post_->TakeSpoken()) {
+            radar_log_.push_back({time_, s.report.number, s.report.text});  // the company's own log, heard here or not
             if (!s.heard) continue;
             Radio("air picture", "Regiment", s.report.text);
             if (KeeperHears("air picture")) {
@@ -5535,6 +5577,7 @@ private:
     // ---- The crew's bodies out of their seats (crew_mobility.hpp).
     std::map<std::string, CrewMover> movers_;
     std::map<std::string, bool> hatches_;           // exit id -> standing open
+    mutable std::map<std::string, double> way_s_;    // the drill master's ways: "station|from|to" -> seconds
     std::set<std::string> tracked_;                 // seats whose body the engine reports (the players')
     std::map<std::string, double> move_refused_s_;  // a seat's last refused way (tried again every 2 s)
 
@@ -5563,6 +5606,54 @@ private:
             }
             c.SetOutsideJobs(std::move(jobs));
         }
+        GiveDrillTheWays();
+    }
+    // The drill master walks a man out to a job and back as the crew does (8.14): each seat's jobs, each way's time
+    // measured on a body of that seat at a trained man's pace, and where each man is now.
+    void GiveDrillTheWays() {
+        if (!drill_ || def_.vehicle.jobs.empty()) return;
+        std::map<std::string, std::vector<OutsideJob>> jobs;
+        for (const VehicleJob& j : def_.vehicle.jobs) jobs[j.station].push_back({j.control, j.place, j.stay_until});
+        drill_->SetOutside(
+            std::move(jobs), [this](const std::string& station, const std::string& from, const std::string& to) { return WaySeconds(station, from, to); },
+            [this](const std::string& station) -> std::pair<std::string, double> {
+                const auto it = movers_.find(station);
+                if (it == movers_.end() || (it->second.Inside() && it->second.Arrived())) return {std::string(), 0.0};
+                const std::string at = it->second.At() == "lineup" || def_.vehicle.Place(it->second.At()) != nullptr ? it->second.At() : std::string();
+                return {at, it->second.Arrived() ? 0.0 : std::max(0.1, WaySeconds(station, std::string(), at) * 0.5)};
+            });
+    }
+    // The seconds a man of `station` takes from one place to another ("" his seat; a place of the vehicle's, "lineup"),
+    // walked on a body of his at a trained man's pace with the hatches as they stand (each way measured once).
+    double WaySeconds(const std::string& station, const std::string& from, const std::string& to) const {
+        if (from == to) return 0.0;
+        const std::string key = station + "|" + from + "|" + to;
+        const auto hit = way_s_.find(key);
+        if (hit != way_s_.end()) return hit->second;
+        const auto goal = [](const std::string& place) {
+            return place.empty() ? MoveGoal::Seat() : place == "lineup" ? MoveGoal::InLineup() : MoveGoal::AtPlace(place);
+        };
+        CrewMover m(&def_.vehicle, station);
+        m.SetSeatTimes(def_.has_crew_data ? def_.crew_data.stand_s : def_.walking.gait.stand_up_s,
+                       def_.has_crew_data ? def_.crew_data.sit_s : def_.walking.gait.sit_down_s);
+        std::map<std::string, bool> hatches = hatches_;
+        const VehiclePose pose = Pose();
+        const Terrain* ground = &world_.GetTerrain();
+        const auto walk = [&](const std::string& place) {
+            double s = 0.0;
+            if (!m.GoTo(goal(place), &console_, pose)) return -1.0;
+            while (m.Moving() && s < 900.0) {
+                m.Update(0.1, pose, ground, map_ground_.get(), def_.walking.gait, hatches);
+                s += 0.1;
+            }
+            return s;
+        };
+        double s = 0.0;
+        if (!from.empty() && walk(from) < 0.0) s = -1.0;
+        if (s >= 0.0) s = walk(to);
+        if (s < 0.0) return 0.0;  // no way now (a hatch the drill keeps shut): asked again later
+        way_s_[key] = s;
+        return s;
     }
     // The men still out of the vehicle, by the exit each comes back in by (his seat's): a hatch is left open for them.
     std::map<std::string, int> StillOut() const {
@@ -8747,6 +8838,10 @@ private:
         return given_elsewhere_.count(target) != 0 && reported_kills_.count(target) == 0;
     }
 
+    // The battery commander at the post writes each launch and result he hears in his log (P9: the combat report's claims).
+    void LogLauncher(const LinkReport& r, const char* kind) {
+        if (post_) commander_log_.push_back({time_, r.callsign, kind, r.number});
+    }
     // A launcher's report on the battery net (its own abstract crew's, a linked Osa's, or, in that Osa, the post's other
     // launchers'): the log, the words if the vehicle hears the net, the IT boards in the post.
     void LauncherReport(const LinkReport& r) {
@@ -8782,10 +8877,12 @@ private:
                 Event(r.callsign, "launches at " + r.target);
                 if (hears && callouts_) callouts_->Say(time_, "report_launch", "battery", {{"callsign", r.callsign}, {"number", number}});
                 if (hears) Status(r.callsign, LauncherStatus::State::Launched, r.missiles, r.number);
+                if (hears) LogLauncher(r, "launch");
                 break;
             case BatteryFire::Event::Kind::Hit:
                 Event(r.callsign, "destroys " + r.target);
                 if (hears) {
+                    LogLauncher(r, "destroyed");
                     HeardDestroyed(r.target);
                     if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", r.callsign}, {"number", number}, {"spent", "1"}});
                     Status(r.callsign, r.missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, r.missiles, 0);
@@ -8795,6 +8892,7 @@ private:
                 if (r.taken_back) {  // the kill it reported flies on: back on the board
                     Event(r.callsign, "takes back the kill of " + r.target);
                     if (hears) {
+                        LogLauncher(r, "not destroyed");
                         reported_kills_.erase(r.target);
                         if (callouts_) callouts_->Say(time_, "report_not_destroyed", "battery", {{"callsign", r.callsign}, {"number", number}});
                     }
@@ -8802,6 +8900,7 @@ private:
                 }
                 Event(r.callsign, "misses " + r.target);
                 if (hears) Status(r.callsign, LauncherStatus::State::Engaging, r.missiles, r.number);
+                if (hears) LogLauncher(r, "missed");
                 break;
             case BatteryFire::Event::Kind::Empty:
                 Event(r.callsign, "out of missiles");

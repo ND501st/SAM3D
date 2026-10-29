@@ -188,7 +188,9 @@ The record principle (`docs/command/01_PRINCIPLES.md` 9) carried into the campai
 
 1. **The report** (`campaign/report.hpp`, the pipeline's P9): compiled from the battery's records, the radiotelephonist's
    journal, the board's marks and the commander's log. Raids are given with their times, routes by grid square, and
-   sizes as written. Claims, missiles spent, damage. A raid nobody wrote down is not in it.
+   sizes as written. Claims, missiles spent, damage. A raid nobody wrote down is not in it. **First form built (P9,
+   29 Oct 2026)** for a session at the PU-12M, with the regiment's check of the records against the radar company's log,
+   the crew's mark for them and a trust per unit (`ReportTrust`); damage and the day's report are left.
 2. **Up the chain** by the means the post has (P2): the combat report at priority, the day's report routine.
 3. **The regiment's picture** (`campaign/regiment_picture.hpp`): the analysts' patterns (the air war's `RaidPatterns`,
    fed from the reports instead of the truth), the enemy's estimated aims and phase (`02` §4), and a trust per unit,

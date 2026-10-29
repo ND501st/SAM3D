@@ -374,6 +374,43 @@ SC_TEST("crew mobility: the Osa's crew chief carries the aiming circle out ahead
     SC_EXPECT(farthest > 30.0 && farthest < 40.0);
 }
 
+SC_TEST("crew mobility: the drill master walks the crew chief out to the aiming circle: its ideal Qc counts the way (8.14)") {
+    auto r = RunnerFor("school_deputy_commander.json");
+    SC_EXPECT(r != nullptr && r->Drill() != nullptr);
+    if (!r || r->Drill() == nullptr) return;
+    r->Console().equipment.SetInput("vehicle_stopped", true);
+    const DrillGoal goal(std::vector<Condition>{Condition::Ready("qc_measured")});
+    const auto set_at = [](const IdealTimeline& tl) {
+        for (const DrillAction& a : tl.actions) {
+            if (a.control == "nav.aiming_circle" && a.position == 1) return a.time_s;
+        }
+        return -1.0;
+    };
+    const IdealTimeline walked = r->Drill()->Ideal(goal, r->Console());
+    // The same planner without the ways works the aiming circle from his seat.
+    DrillMaster seated(r->Console(), &r->Def().crew_data, r->Drill()->ReactionS());
+    const IdealTimeline in_place = seated.Ideal(goal, r->Console());
+    const double way_s = r->Drill()->WalkFor("nav.aiming_circle");
+    std::printf("    the ideal: set up at %.1f s (in place %.1f s), Qc at %.1f s (in place %.1f s); the way out and back %.1f s\n", set_at(walked),
+                set_at(in_place), walked.time_s, in_place.time_s, way_s);
+    SC_EXPECT(walked.reached && in_place.reached);
+    SC_EXPECT(way_s > 30.0 && seated.WalkFor("nav.aiming_circle") == 0.0);
+    SC_EXPECT(set_at(walked) > set_at(in_place) + 0.3 * way_s);
+    SC_EXPECT(walked.time_s > in_place.time_s + 0.3 * way_s);
+    // The NPC crew chief, a trained man, sets it up about when the ideal does.
+    SC_EXPECT(r->GiveDrill("commander", "measure_qc"));
+    double set_s = -1.0;
+    while (r->Time() < 300.0 && set_s < 0.0) {
+        r->Step(0.1);
+        if (r->Console().panel.Get("nav.aiming_circle") == 1) set_s = r->Time();
+    }
+    std::printf("    the NPC crew chief sets it up at %.1f s\n", set_s);
+    SC_EXPECT(set_s > 0.0 && std::fabs(set_s - set_at(walked)) < 0.35 * set_s);
+    // Out there, the ideal's next is the measurement, with no way to walk.
+    const IdealTimeline there = r->Drill()->Ideal(goal, r->Console());
+    SC_EXPECT(there.reached && there.time_s < walked.time_s);
+}
+
 SC_TEST("crew mobility: once the engine reports the player's body, a job outside needs him out there") {
     auto r = RunnerFor("pu12m_deploy.json");
     SC_EXPECT(r != nullptr);

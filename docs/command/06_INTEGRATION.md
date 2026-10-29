@@ -21,8 +21,12 @@ And the air war shapes the pipeline: every raid is a **danger zone** on the road
 (carriers lost: 6 km, 25 %), its bombs **cut the wire** of posts within 1.5 km for 6 hours, and the battery's post and
 vehicles **move with the battery** (its position history: `AirCampaign::BatteryTrack`). Game values, in `FeedRoles`.
 
-**From the records (principle 9; planned, `07` P9).** Today `raid_result` and `battery_news` start from the fight as the
-simulation saw it. They are to be compiled from the battery's records instead: the radiotelephonist's journal
+**From the records (principle 9; `07` P9, first form built 29 Oct 2026).** In a session at the PU-12M the battery's
+combat report is compiled from its records (`simcore/campaign/report.hpp`, `ScenarioRunner::ReportFromRecords`) and goes
+up as a written fact from the battery commander (`command::CombatReportFact`); the regiment checks the records against
+the radar company's log and keeps a trust in the unit's reports. In a campaign `raid_result` and `battery_news` still
+start from the fight as the simulation saw it, since a raid is played from the Osa and the battery's post is not
+simulated there (18.1). They are to be compiled from the battery's records instead: the radiotelephonist's journal
 (`simcore/radio_journal.hpp`: what was said, what he wrote, what he lost), the board's marks and the commander's log. A
 raid's time, route and size in the combat report are the journal's; a ghost track on the board is a raid reported; a raid
 nobody wrote down is not in the report at all. `raid_seen` likewise comes from the regiment's own records of the warning

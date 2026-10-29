@@ -22,6 +22,7 @@
 
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/campaign/report.hpp"
 #include "simcore/command/battery_orders.hpp"
 #include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
@@ -265,6 +266,9 @@ struct ScenarioDef {
     PostRegiment post_regiment;
     AspdCodeTable post_codes;        // the regiment's two-digit commands' meanings ("post.codes"; empty: none)
     PlottingTuning post_plotting;    // the player's hand on the board ("post.plotting"; the defaults without it)
+    // The after-action report from the post's records and the regiment's check of them (roadmap P9,
+    // data/gameplay/after_action.json, read with any post).
+    campaign::AfterActionValues after_action;
     bool has_post_radar = false;
     RegimentRadar post_radar;
     // The cabled radar in the electromagnetic layer ("post.em"): its echoes, IFF replies and jamming strobes from the EM
@@ -1545,6 +1549,7 @@ private:
             return Fail("post.plotting", error);
         }
         if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
+        if (!campaign::LoadAfterActionValues(data_dir, "gameplay/after_action.json", out.after_action, &error)) return Fail("post", error);
         if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);
         if (!codes_file.empty() && !LoadAspdCodesFile(data_dir + "/" + codes_file, out.post_codes, &error)) return Fail("post.codes", error);
         RegimentRadarLibrary lib;
