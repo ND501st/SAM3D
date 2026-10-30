@@ -13,4 +13,5 @@
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/raid_scenario.hpp"
 #include "simcore/air_war/mission_bridge.hpp"
+#include "simcore/air_war/package_injector.hpp"
 #include "simcore/air_war/save.hpp"

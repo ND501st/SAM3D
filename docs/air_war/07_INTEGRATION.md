@@ -30,6 +30,17 @@ no longer stowing between raids, came from issues the raids exposed).
 `decoy`, `doctrine`) on or off, for a build whose loader lacks them. All are on by default. `model` writes each
 aircraft's basic model (`docs/scenery/`), `weather` the day's weather.
 
+## Into a running session (roadmap 15.3)
+
+A raid need not be a scenario of its own. `package_injector.hpp` loads the scenario the builder writes and brings its
+aircraft into a session already running (the battery's mission, `docs/campaign/05_THE_SYSTEMS.md` §6-7), moved into
+the session's frame through the geodetic and onto its clock. For it the runner gained its first calls made for the air
+war: `AddTargets`, `AddEmGear` (the package's EM library entries and jammers, `em::EmWorld::MergeLibrary`) and
+`AddTriggers` (the air-raid warning, a C2 source put out), with `TargetAppeared`; the bridge gained `Over`. The
+manifest moves with the aircraft and the battery stands where the session has it, so the bridge per package reads the
+session as it reads a raid's own scenario. `LivePackages` advances the campaign with the session's clock and hands it
+each package the campaign gives the battery, one at a time, and the outcome back with `CompletePlayerMission`.
+
 ## On the map
 
 With `map_file` the raid plays on a map's ground (`"terrain": {"type": "map"}`, `simcore/terrain_map.hpp`); the campaign

@@ -159,6 +159,18 @@ task arrives as an order into the running session.
 - **The warning** comes as today: the air-raid warning's trigger before the first aircraft, `own_intel.warning_s`
   ahead (15 min for a planner with loose lips), delivered through the warning net and the pipeline.
 
+**Built, first form (30 Oct 2026)**: `simcore/air_war/package_injector.hpp`. The raid builder is not split: the
+injector loads the scenario it writes and moves its aircraft into the running session (the frame through the geodetic,
+the clock by the package's entry), so they keep everything a played raid's have. The runner takes them with
+`AddTargets` (all or none), the package's EM library and jammers with `AddEmGear` (the unit's EM world and the post
+radar's; without an EM layer the aircraft come as plain targets), and its warning with `AddTriggers` (only the air
+threat and C2 sources: a raid's console orders were written for another crew). The manifest moves with them, so a
+`MissionBridge` per package reads the session; `MissionBridge::Over` says when its last aircraft, bomb and missile are
+done. `LivePackages` runs the campaign in step with the session: advanced to its clock every 30 s, each package it
+hands the battery injected on its own time, its outcome handed back with `CompletePlayerMission`. Left: one package at
+a time (the campaign keeps one pending, so one due meanwhile waits), the campaign's battery where the session has it
+(15.1), a package's pipeline messages and fighting neighbours, and the battery mission itself as the session (15.2).
+
 ## 8. Time and the director
 
 - **Compression**: duty passes fast. The director wakes the player at full speed on: an order or a delivery, a warning,

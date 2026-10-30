@@ -164,6 +164,20 @@ public:
     }
 
     bool UnitDestroyed() const { return unit_destroyed_; }
+    // Is the package done in the session: every aircraft of it appeared and gone (down, or past its last waypoint at the
+    // scenario's circle), its bombs and missiles landed; or the session past the raid's end, or our vehicle destroyed?
+    // A package that entered a running mission is then finished and handed back (package_injector.hpp, roadmap 15.3).
+    bool Over(const ScenarioRunner& r) const {
+        if (unit_destroyed_ || r.Time() >= m_.end_s) return true;
+        for (const RaidAircraft& a : m_.aircraft) {
+            if (!r.TargetAppeared(a.target_id) || r.TargetAlive(a.target_id)) return false;
+        }
+        for (const Impact& imp : impacts_)
+            if (!imp.done) return false;
+        for (const Arm& arm : arms_)
+            if (!arm.done) return false;
+        return r.ArmsInFlight().empty();
+    }
     double EmittedSeconds() const { return emitted_s_; }
     int ArmsFired() const { return arms_fired_ + em_arms_fired_; }
 

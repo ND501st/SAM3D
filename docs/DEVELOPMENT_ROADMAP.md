@@ -13,7 +13,7 @@ campaign playthrough left. Phase 12, our chain of command and the information pi
 reports from the records) in first form (29 Oct). The nation on the map (N0–N7) done 23 Oct. Track G, the ground: G0–G5
 and G8–G11 built in a first form (29 Oct), G6 and G7 on hold; its milestone M-G waits for a person to play the night
 march. Phase 14, the battery's mission, begun ahead of its gate (30 Oct): the regiment's task, the commander's plan
-and the mission kinds in first form (14.1, 14.3, 14.5). The EM track: E0–E7 and E10 done, E8 and E9 started. **Next: people playing it** (M2, a campaign, M-G), which
+and the mission kinds in first form (14.1, 14.3, 14.5); phase 15's packages entering a running session in first form (15.3). The EM track: E0–E7 and E10 done, E8 and E9 started. **Next: people playing it** (M2, a campaign, M-G), which
 gates **the battery's war, phases 13–21**; meanwhile the leftovers each phase lists ("Left:", "Next:").
 
 The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
@@ -330,7 +330,7 @@ oral combat order to NPC vehicle commanders who carry it out.
 **Track G** (above) carries this phase's orders to the vehicles and back (G10), gives 14.3 its places (G4) and the
 working map its surfaces (G9).
 
-## Phase 15 - The continuous mission (planned)
+## Phase 15 - The continuous mission (15.3 in first form, 30 Oct 2026)
 
 One session for the whole task instead of one scenario per raid: the battery's state carried through it, the
 enemy's packages entering it live, time compressed between events (`docs/campaign/05_THE_SYSTEMS.md` §6-8).
@@ -339,7 +339,7 @@ enemy's packages entering it live, time compressed between events (`docs/campaig
 |---|---|
 | 15.1 | **`BatteryState`** in the campaign (positions, readiness, missiles per container, fuel, damage, dummies, the board, the journal, the crew's experience), replacing the posture-only battery |
 | 15.2 | **`MissionSession`** and the `MissionScenarioBuilder`: one runner for the whole task and on into the next (the battery's days continue in it), built from the task and the battery's state |
-| 15.3 | **Packages entering live**: the runner's `AddTargets`, `AddJammer`, `AddTrigger`; the raid builder split into its scenario part and a `PackageInjector`; the bridge per package; the campaign handing packages to the session instead of stopping at one pending mission |
+| 15.3 | **Packages entering live**: the runner's `AddTargets`, `AddJammer`, `AddTrigger`; the raid builder split into its scenario part and a `PackageInjector`; the bridge per package; the campaign handing packages to the session instead of stopping at one pending mission. **First form 30 Oct 2026** (`simcore/air_war/package_injector.hpp`): the raid builder's scenario loaded and moved into the session's frame (through the geodetic) and onto its clock; `ScenarioRunner::AddTargets` (all or none), `AddEmGear` (the package's EM library entries and its jammers, in the unit's EM world and the post radar's) and `AddTriggers` (its air-raid warning and the C2 sources it puts out; a raid's console orders stay out); the manifest moved with the battery where the session has it; `MissionBridge::Over`; `LivePackages` advances the campaign with the session's clock, injects each package it hands the battery on its own time and hands the outcome back. Left: packages one at a time (the campaign keeps one pending: one due meanwhile waits and may come late), the campaign's battery where the session has it (15.1), the pipeline's messages of a package, the regiment's fighting neighbours of a package, the battery mission (pu12m) as the session (15.2) |
 | 15.4 | **Time**: compression and the events that wake the player; a coarse quiet step; both measured |
 | 15.5 | **Levels of detail**: the regiment's other batteries at L1; L2 sessions headless; `war_calibrate` comparing L1 and L2 on the same packages (closes `09_BALANCE.md` §6) |
 | 15.6 | **Districts** for the rebels' and the neutral's fronts (70-110 km from the Kesmark range), generated like the test range |

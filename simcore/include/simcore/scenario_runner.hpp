@@ -1867,6 +1867,22 @@ private:
         std::size_t route_next = 0;
     };
     static constexpr double kHeldLegM = 50000.0;  // a held target flies at a point this far along his heading
+    // A target added once the session runs (the instructor's, a package's): its state beside the scenario's own.
+    void EnterTarget(ScenarioTarget t) {
+        EngagementTarget e;
+        e.id = t.id;
+        e.target_class = t.target_class;
+        e.evade_on_launch = t.evade_on_launch;
+        e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
+        e.friendly = t.friendly;
+        e.size_m = t.size_m;
+        e.span_m = t.span_m;
+        eng_targets_.push_back(e);
+        targets_.emplace_back();
+        rwr_warned_.push_back(0);
+        if (em_link_ && !t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);
+        def_.targets.push_back(std::move(t));
+    }
 
     // Start warm: set the state's controls and inputs, warm its subsystems up in order (each sees those before it),
     // orient the vehicle if the state says so. The scenario's own inputs win over the state's.
@@ -9379,6 +9395,13 @@ public:
         }
         return false;
     }
+    // Has the target appeared (it may since have gone)?
+    bool TargetAppeared(const std::string& id) const {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id == id) return targets_[i].spawned;
+        }
+        return false;
+    }
 
     // ---- The trainer's instructor (roadmap 10.3, instructor.hpp) ----
     // One order. Turning, a height, a speed or a manoeuvre takes the target first (the trainer holds two at a time:
@@ -9462,17 +9485,6 @@ public:
         }
         if (t.waypoints.empty()) return fail(t.id + " needs a route (one waypoint at least)");
         t.appear_at_s = time_;
-        EngagementTarget e;
-        e.id = t.id;
-        e.target_class = t.target_class;
-        e.evade_on_launch = t.evade_on_launch;
-        e.evade_turn_rate_rad_s = t.evade_turn_rate_rad_s;
-        e.friendly = t.friendly;
-        e.size_m = t.size_m;
-        eng_targets_.push_back(e);
-        targets_.emplace_back();
-        rwr_warned_.push_back(0);
-        if (em_link_ && !t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);
         const Vec3 rel = t.start - def_.unit_position;
         double az = RadToDeg(std::atan2(rel.x, rel.y));
         if (az < 0.0) az += 360.0;
@@ -9480,8 +9492,97 @@ public:
         std::snprintf(text, sizeof(text), "enters %s: %.1f km out at %03.0f degrees, %.0f m up", t.name.c_str(),
                       std::hypot(rel.x, rel.y) / 1000.0, az, t.start.z);
         const std::string id = t.id;
-        def_.targets.push_back(std::move(t));
+        EnterTarget(std::move(t));
         Instructed(id, text);
+        return true;
+    }
+
+    // Aircraft entering the running session (roadmap 15.3: an enemy package come into the mission live): each appears at
+    // its `appear_at_s` (session seconds; one already past appears now) and is then one of the session's targets like
+    // the scenario's own. All or none: false, with why, for an id the session has already or twice, or one without a
+    // route. `from` names them in the log ("package 12").
+    bool AddTargets(std::vector<ScenarioTarget> ts, const std::string& from, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        std::set<std::string> ids;
+        for (const ScenarioTarget& o : def_.targets) ids.insert(o.id);
+        for (const ScenarioTarget& t : ts) {
+            if (t.id.empty()) return fail("a target needs an id");
+            if (!ids.insert(t.id).second) return fail("there is a target '" + t.id + "' already");
+            if (t.waypoints.empty()) return fail(t.id + " needs a route (one waypoint at least)");
+        }
+        if (ts.empty()) return fail("no aircraft");
+        double first_s = 1e18;
+        for (ScenarioTarget& t : ts) {
+            t.appear_at_s = std::max(t.appear_at_s, time_);
+            first_s = std::min(first_s, t.appear_at_s);
+            EnterTarget(std::move(t));
+        }
+        char text[160];
+        std::snprintf(text, sizeof(text), "%zu aircraft come into the mission, the first at %.0f s", ts.size(), first_s);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, from, "enters", text});
+        return true;
+    }
+
+    // Triggers entering the running session with a package: its air-raid warning, a C2 source its raid has put out. Only
+    // the kinds about the world (the air threat, C2 sources failing or restored) on time or a target of the session: a
+    // raid's console orders and conditions were written for another vehicle's crew. All or none: false, with why, for
+    // another kind, a condition, an unknown target, or an id the session has already.
+    bool AddTriggers(std::vector<ScenarioTrigger> ts, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        std::set<std::string> ids;
+        for (const ScenarioTrigger& o : def_.triggers) ids.insert(o.id);
+        for (const ScenarioTrigger& t : ts) {
+            if (t.id.empty() || !ids.insert(t.id).second) return fail("trigger '" + t.id + "' is the session's already (or has no id)");
+            if (!t.conditions.empty()) return fail(t.id + ": console conditions are another vehicle's");
+            bool known = t.target.empty();
+            for (const ScenarioTarget& o : def_.targets) known = known || o.id == t.target;
+            if (!known) return fail(t.id + ": no target '" + t.target + "' in the session");
+            for (const TriggerAction& a : t.actions) {
+                const bool world = a.kind == TriggerAction::Kind::AirThreat || a.kind == TriggerAction::Kind::C2Fail ||
+                                   a.kind == TriggerAction::Kind::C2Restore;
+                if (!world) return fail(t.id + ": only the air threat and C2 sources' failures enter a running session");
+            }
+        }
+        for (ScenarioTrigger& t : ts) {
+            def_.triggers.push_back(std::move(t));
+            fired_.push_back(false);
+        }
+        return true;
+    }
+
+    // A package's EM gear entering the session: the library entries the session lacks (its jammers, warning receivers,
+    // anti-radiation missiles) and its jammers (times on the session's clock, stand-off points in its frame), in the
+    // unit's EM world and the post radar's. False, with why, if the session has no EM layer (its aircraft are then the
+    // gameplay model's plain targets) or a jammer is not in `lib`. Before AddTargets: a warning receiver is made from
+    // the library when its aircraft appears.
+    bool AddEmGear(const em::EmLibrary& lib, const std::vector<EmJammerDef>& jammers, const std::string& from, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        std::vector<EmSensorLink*> links;
+        if (em_link_) links.push_back(em_link_.get());
+        if (post_em_ && post_em_->Ok()) links.push_back(post_em_.get());
+        if (links.empty()) return fail("the session has no EM layer");
+        for (const EmJammerDef& j : jammers) {
+            if (lib.Jammer(j.jammer_id) < 0) return fail("jammer '" + j.jammer_id + "' is not in the package's library");
+        }
+        std::string e;
+        for (EmSensorLink* l : links) {
+            if (!l->MergeLibrary(lib, &e)) return fail(e);
+        }
+        for (EmSensorLink* l : links) l->AddJammers(jammers);
+        if (!jammers.empty()) {
+            char text[96];
+            std::snprintf(text, sizeof(text), "%zu jammer%s with it", jammers.size(), jammers.size() == 1 ? "" : "s");
+            log_.Record({time_, DebriefEntry::Kind::Scenario, from, "enters", text});
+        }
         return true;
     }
 

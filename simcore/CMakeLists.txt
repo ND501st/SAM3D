@@ -99,6 +99,7 @@ add_executable(simcore_tests
   tests/test_ranges_history.cpp
   tests/test_instructor.cpp
   tests/test_air_war.cpp
+  tests/test_packages_live.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
   tests/test_command.cpp

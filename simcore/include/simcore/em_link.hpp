@@ -202,16 +202,27 @@ public:
         jammer_ids_.assign(def.jammers.size(), 0);
         chaff_done_.assign(def.chaff.size(), 0);
         for (std::size_t i = 0; i < def.jammers.size(); ++i) {
-            if (!def.jammers[i].target_id.empty()) continue;  // on a target: made when the target first appears
-            em::Platform sp;
-            sp.name = "Stand-off jammer";
-            sp.side = em::Side::Blue;
-            sp.kind = em::PlatformKind::FixedWing;
-            sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
-            sp.position = def.jammers[i].position;
-            const int pid = world_.AddPlatform(sp);
-            AddScriptedJammer(i, pid);
+            if (def.jammers[i].target_id.empty()) AddStandOffJammer(i);  // on a target: made when the target first appears
         }
+    }
+
+    // More of the library mid-run: the entries of `more` the scene's library lacks (em::EmWorld::MergeLibrary).
+    bool MergeLibrary(const em::EmLibrary& more, std::string* error = nullptr) { return world_.MergeLibrary(more, error); }
+
+    // Jammers entering a running session (a package's, roadmap 15.3), as the scenario's own: one on a target is made when
+    // the target first appears, a stand-off one now. False, adding none, if one is not in the library.
+    bool AddJammers(const std::vector<EmJammerDef>& js, std::string* error = nullptr) {
+        for (const EmJammerDef& j : js) {
+            if (world_.Scene().lib.Jammer(j.jammer_id) >= 0) continue;
+            if (error != nullptr) *error = "jammer '" + j.jammer_id + "' is not in the EM library";
+            return false;
+        }
+        for (const EmJammerDef& j : js) {
+            effects_.jammers.push_back(j);
+            jammer_ids_.push_back(0);
+            if (j.target_id.empty()) AddStandOffJammer(effects_.jammers.size() - 1);
+        }
+        return true;
     }
 
     // A radio source (a PU-12, an EWR site, a neighbour) on the ground at `enu`, on a two-member net with the unit using
@@ -1038,6 +1049,15 @@ private:
     void AddScriptedJammer(std::size_t index, int platform_id) {
         const int id = world_.AddJammer(platform_id, effects_.jammers[index].jammer_id, false);
         jammer_ids_[index] = id;
+    }
+    void AddStandOffJammer(std::size_t index) {
+        em::Platform sp;
+        sp.name = "Stand-off jammer";
+        sp.side = em::Side::Blue;
+        sp.kind = em::PlatformKind::FixedWing;
+        sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
+        sp.position = effects_.jammers[index].position;
+        AddScriptedJammer(index, world_.AddPlatform(sp));
     }
 
     int PlatformOf(const std::string& id) const {

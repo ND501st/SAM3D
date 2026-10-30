@@ -16,7 +16,7 @@ post). Research basis and open decisions: `docs/BRIEFING_2026-10.md`, `docs/rese
 | `simcore/include/simcore/nav/` | **The route service** (`simcore::nav`, roadmap G1): mobility classes, one road graph derived from the map's data (the country's roads and the district's tracks), routes between anchors (places, positions, sites), overlays true and believed, the ground off the road cell by cell (`nav/ground.hpp`); the march plan and the column on it (`nav/march.hpp`, G2), movers at levels M0-M2 (`nav/movers.hpp`), the pipeline's carriers on the roads (`nav/carriers.hpp`), the movement table and exposure (`nav/movement.hpp`, G3), and the session's roads, movers and visual range (`nav/session.hpp`, a scenario's `"nav"`, G11). See `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md` §5.1-5.3, 5.12. |
 | `simcore/include/simcore/campaign/` | **The battery's life on the ground** (`simcore::campaign`, track G): the battery area and its places as anchors, position work as jobs (`battery_area.hpp`, G4); the missiles from the rear, the TZMs' runs and the commander's ledger (`stocks.hpp`, G5); the combat report from the post's records, the regiment's check and its trust in each unit (`report.hpp`, P9); the regiment's combat task to the battery (`battery_task.hpp`, 14.1) and the battery commander's plan for it, timed to its ready-by (`battery_plan.hpp`, 14.3). Rules from `data/campaign/`. |
 | `simcore/include/simcore/scenery/` | **Ultra-basic models** (`simcore::scenery`): every aircraft, vehicle, site and building as a few primitives, from `data/scenery/basic_models.json`; drawn by Unreal's `FSimBasicModels`. See `docs/scenery/`. |
-| `simcore/include/simcore/air_war/` | **Enemy air command** (`simcore::airwar`): the other side's air staff as people, its intelligence picture, the planning cycle, abstract resolution, raids generated as scenarios and the mission bridge back. See `docs/air_war/`. |
+| `simcore/include/simcore/air_war/` | **Enemy air command** (`simcore::airwar`): the other side's air staff as people, its intelligence picture, the planning cycle, abstract resolution, raids generated as scenarios and the mission bridge back; a package injected into a running session and the campaign run in step with it (`package_injector.hpp`, roadmap 15.3). See `docs/air_war/`. |
 | `simcore/tests/` | Dependency-free unit tests (`SC_TEST`, `SC_EXPECT_NEAR`). |
 | `simcore/examples/` | `engagement_demo`: one radar vs one target, writes a Tacview `.acmi`. |
 | `prototype/` | Pure-Python mirror of simcore for fast experiments (runs on the Mac too). |
@@ -266,7 +266,9 @@ materials, transport and time, all of them targetable.
 Phase 14 is begun ahead of its gate (30 Oct 2026): the regiment's task given on its net, the battery commander's plan
 timed to the ready-by, his preliminary and oral combat orders on the battery net, the march and the task kind's
 formation, «к бою готова» up to the regiment as the task's readiness (`simcore/campaign/battery_task.hpp`,
-`battery_plan.hpp`, `pu12m_mission_cover.json`).
+`battery_plan.hpp`, `pu12m_mission_cover.json`). Phase 15.3 too: the enemy's packages enter a running session live
+(`simcore/air_war/package_injector.hpp`: the runner's `AddTargets`, `AddEmGear`, `AddTriggers`; `LivePackages` runs
+the campaign in step with the session).
 
 **Track G, the ground** (project owner, 28 Oct 2026; `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md`, the roadmap's
 track G; not gated): command, battery orders and movement first. Routes are derived from the map's data at load and
