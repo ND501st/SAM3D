@@ -54,7 +54,10 @@ The helper's ghost hand shows switches only, never a wheel.
 At the **PU-12M** the battery commander's fire distribution runs for a player in his seat too: each target it would give
 a launcher is a designate duty. The plotter owes every report he has heard and not written; the radio operator owes the
 air reports he heard and hasn't read out, a retune when his net is ordered to its other frequency, and the jamming he
-recognised.
+recognised. With the regiment's task (roadmap 14.3, 30 Oct 2026) the battery commander owes its preliminary order and
+its oral combat order when his plan has them (the crew menu's Battery orders: `order_battery_preliminary`,
+`order_battery_combat_order`), then the march it starts and the «К бою!» at its end; at a new position the R-111 back
+on the regiment's net (the antenna to the mast, «Р-111 на частоту полка, настроить!») before «к бою готова» goes up.
 
 A report the player then makes from the crew menu says what the NPC would have said, and tells the crew what his would
 have: the duty carries the words and the knowledge (the target, its IFF answer), so the commander learns the target is

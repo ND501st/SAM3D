@@ -67,6 +67,7 @@ add_executable(simcore_tests
   tests/test_scope_feed.cpp
   tests/test_battery.cpp
   tests/test_battery_life.cpp
+  tests/test_battery_mission.cpp
   tests/test_after_action.cpp
   tests/test_comms.cpp
   tests/test_voice_comms.cpp
@@ -131,6 +132,13 @@ simcore_configure_target(battery_link_demo)
 add_test(NAME battery_link_demo
          COMMAND battery_link_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/battery_link_practice.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data" battery_link.acmi)
+
+# A battery mission headless (roadmap 14): the regiment's task to «к бою готова» by its ready-by.
+add_executable(mission_demo examples/mission_demo.cpp)
+simcore_configure_target(mission_demo)
+add_test(NAME mission_demo
+         COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data")
 
 add_executable(scenario_demo examples/scenario_demo.cpp)
 simcore_configure_target(scenario_demo)

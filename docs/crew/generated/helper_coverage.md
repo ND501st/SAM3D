@@ -299,6 +299,17 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | radio_operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 4 | 2 | 51 | 0 | drill 5, duty 55 | 0 |
 | driver | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | drill 3 | 0 |
 
+## pu12m_mission_cover: PU-12M: the regiment's order: cover the Kesmark bridges by its ready-by
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | - | 0 |
+| battery_commander | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | duty 2 | 10 |
+| squad_leader | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | - | 0 |
+| operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | - | 0 |
+| radio_operator | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 0 | duty 54 | 0 |
+| driver | 900 time | 0 | - | - | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | - | 0 |
+
 ## osa_practice: Osa: one drone
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
@@ -628,7 +639,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | control (commander): a halt without the vehicle's Qc: the aiming circle out ahead | 6 |
 | control (commander): the aiming circle read: stow it and bring the Qc in | 6 |
 | control (commander): the words said: the chest switch back to ПРМ, to hear the net | 212 |
-| control (radio_operator): a message heard: write it in the journal | 7 |
+| control (radio_operator): a message heard: write it in the journal | 8 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
 | drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 10 |
@@ -636,10 +647,11 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 169 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 162 |
 | order (battery_commander): a raid within reach of the covered troops | 5 |
-| order (battery_commander): communications and every launcher ready | 6 |
+| order (battery_commander): communications and every launcher ready | 7 |
 | order (battery_commander): the battery marches: the post stows for it | 2800 |
 | order (battery_commander): the combat order: К маршу! now | 2 |
 | order (battery_commander): the drills the crew needs next | 2 |
+| order (battery_commander): the plan for the regiment's task: he gives the preliminary order: the vehicles to prepare for the march | 1 |
 | order (battery_commander): the raid has gone: the all clear | 2 |
 | order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 11 |
 | order (commander): the battery's emission regime, told to the crew | 14 |
@@ -677,7 +689,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): a sign of the shot on his instrument: the target's mark gone | 13 |
 | report (operator): the track was lost | 22 |
 | report (operator): К бою: the intercom checked | 36 |
-| report (radio_operator): a report the crew makes when its lamp or input comes on | 25 |
+| report (radio_operator): a report the crew makes when its lamp or input comes on | 28 |
 | report (senior_operator): a new echo on his scope | 110 |
 | report (senior_operator): a report the crew makes when its lamp or input comes on | 52 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
@@ -696,4 +708,4 @@ A player in command can't give these from his menu (the shadow commander would):
 
 - radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (2 runs)
 
-324 runs.
+330 runs.

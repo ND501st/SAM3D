@@ -22,6 +22,8 @@
 
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/campaign/battery_plan.hpp"
+#include "simcore/campaign/battery_task.hpp"
 #include "simcore/campaign/report.hpp"
 #include "simcore/command/battery_orders.hpp"
 #include "simcore/command_post.hpp"
@@ -297,6 +299,17 @@ struct ScenarioDef {
     // The route service in the session (roadmap G2.3, G11; nav/session.hpp): "nav": {"country": ..., "chain": ...,
     // "movers": [...]}. A march may then name where it goes ("to_place"), and the world's movers go on the roads.
     std::shared_ptr<const nav::SessionNav> nav;
+    // The regiment's task to the battery (roadmap 14.1, 14.3; campaign/battery_task.hpp, battery_plan.hpp): "task":
+    // {"file": ..., "given_s": ..., "means": "radio" | "in_person"}. The battery commander plans it by the textbook's
+    // sequence (data/campaign/battery_plan.json) and the battery's orders follow from his plan.
+    bool has_task = false;
+    campaign::BatteryTask task;
+    double task_given_s = 0.0;
+    std::string task_means = "radio";
+    campaign::PlanSequence plan_sequence;
+    // "clock_start": "19:00": the time of day at the session's second 0, for the order's paper, the order books and the
+    // debrief (< 0: none, the session's own clock).
+    double clock_start_s = -1.0;
     bool battery_drive_own = false;
     bool battery_night = false;
     bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
@@ -354,7 +367,7 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting", "emission_orders", "deliveries", "nav"})) {
+                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -404,6 +417,7 @@ public:
         }
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadEmissionOrders(root, out)) return false;
+        if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
         if (!LoadTargets(root, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
@@ -2002,6 +2016,55 @@ private:
             return false;
         }
         out.battery_by_means = true;
+        return true;
+    }
+
+    // "clock_start": "19:00": the session's second 0 as a time of day.
+    bool LoadClockStart(const json::Value& root, ScenarioDef& out) {
+        std::string c;
+        if (!OptionalString(root, "", "clock_start", c)) return false;
+        if (c.empty()) return true;
+        const auto digit = [&c](std::size_t i) { return c[i] >= '0' && c[i] <= '9' ? c[i] - '0' : -100; };
+        const int h = c.size() == 5 ? digit(0) * 10 + digit(1) : -1;
+        const int m = c.size() == 5 ? digit(3) * 10 + digit(4) : -1;
+        if (c.size() != 5 || c[2] != ':' || h < 0 || h > 23 || m < 0 || m > 59) {
+            return Fail("clock_start", "a time of day, \"HH:MM\"");
+        }
+        out.clock_start_s = 3600.0 * h + 60.0 * m;
+        return true;
+    }
+
+    //   "task": { "file": "campaign/tasks/bty21_cover_bridges.json", "given_s": 60, "means": "radio" }
+    // The regiment's combat order to the battery (roadmap 14.1): by radio, its short form on the regiment's command net to
+    // the battery commander, who reads it back; in person, the paper in his hands at given_s. Its places must be places of
+    // the session's roads, its sectors the battery's vehicles.
+    bool LoadTask(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* t = root.Find("task");
+        if (t == nullptr) return true;
+        const std::string p = "task";
+        std::string file, error;
+        if (!Keys(*t, p, {"file", "given_s", "means", "notes"}) || !RequireString(*t, p, "file", file) ||
+            !OptionalNumber(*t, p, "given_s", out.task_given_s) || !OptionalString(*t, p, "means", out.task_means)) {
+            return false;
+        }
+        if (out.task_given_s < 0.0) return Fail(Join(p, "given_s"), "must be >= 0");
+        if (out.task_means != "radio" && out.task_means != "in_person") return Fail(Join(p, "means"), "\"radio\" or \"in_person\"");
+        if (!out.has_battery || !out.battery_by_means) return Fail(p, "a task goes to a battery whose orders go by a means (battery.by_means)");
+        if (!out.nav) return Fail(p, "a task's places are places of the session's roads: the scenario needs \"nav\"");
+        if (out.task_means == "radio" && out.radio_data.Find("regiment") == nullptr) {
+            return Fail(Join(p, "means"), "by radio on the regiment's command net: radio_data has no net \"regiment\"");
+        }
+        if (!campaign::LoadBatteryTask(data_dir, file, out.task, &error)) return Fail(Join(p, "file"), error);
+        for (const std::string& place : out.task.Places()) {
+            if (out.nav->GetAnchors().Find(place) == nullptr) return Fail(Join(p, "file"), file + ": no place called '" + place + "' on the roads");
+        }
+        for (const campaign::TaskSector& sec : out.task.sectors) {
+            bool found = false;
+            for (const BatteryVehicleDef& v : out.battery_vehicles) found = found || (v.id == sec.vehicle && v.kind == BatteryVehicleKind::Launcher);
+            if (!found) return Fail(Join(p, "file"), file + ": a sector for '" + sec.vehicle + "', not a launcher of the battery");
+        }
+        if (!campaign::LoadPlanSequence(data_dir, "campaign/battery_plan.json", out.plan_sequence, &error)) return Fail(p, error);
+        out.has_task = true;
         return true;
     }
 

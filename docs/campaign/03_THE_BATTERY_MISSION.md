@@ -5,6 +5,11 @@ compiled from the battery's records. The tactics come from the 1991 textbook's c
 (`voenizdat_osa_1991` pp. 224-245, summarised in `docs/research/OSA_MANUALS_2026-10.md`, "Chapters 6-7"), and the
 battery's orders and drills from what `simcore/battery.hpp` already does.
 
+**Built so far (30 Oct 2026, ahead of the phase's gate):** the task (§2) as data with its paper and radio words, the
+commander's sequence (§3) as a timed plan without the working map, and each kind's formation at the march's end (§4),
+in `simcore/campaign/battery_task.hpp` and `battery_plan.hpp`; `data/scenarios/pu12m_mission_cover.json` runs one cover
+task from the regiment's order to «к бою готова» by its ready-by (`docs/campaign/05_THE_SYSTEMS.md` §4-5).
+
 ## 1. Where a mission comes from: the regiment's tasking
 
 A battery changes position only on the regiment commander's order (pp. 232-239). So every mission starts at the 15th

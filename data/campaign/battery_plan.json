@@ -1,0 +1,32 @@
+{
+  "plan_id": "osa_battery_commander_1985",
+  "status": "first form (roadmap 14.3, docs/campaign/03_THE_BATTERY_MISSION.md section 3)",
+  "notes": "The battery commander's sequence on receiving a task (simcore/campaign/battery_plan.hpp). The steps and their order are the textbook's; the book gives no times, so each step's full and short times are SAM3D estimates. Short of time he works every step toward its short time in one proportion; political work, last in the book's list, is a line in the debrief only.",
+  "source": "voenizdat_osa_1991 pp. 240-245 (the commander's sequence: task, time, preliminary orders, situation, decision, reconnaissance, the oral combat order, support, political work)",
+  "confidence": "medium",
+  "steps": [
+    { "id": "understand", "en": "understands the task: what is covered, from what, by when, with whom", "full_s": 300, "short_s": 120,
+      "source": "voenizdat_osa_1991 p240 (the step); sam3d estimate (its times)", "confidence": "estimate" },
+    { "id": "time", "en": "works out the time: the ready-by, the march, the position's preparation", "full_s": 180, "short_s": 60,
+      "source": "voenizdat_osa_1991 p240 (the step); sam3d estimate (its times)", "confidence": "estimate" },
+    { "id": "preliminary", "en": "gives the preliminary order: the vehicles to prepare for the march", "order": "order_battery_preliminary",
+      "full_s": 60, "short_s": 30,
+      "source": "voenizdat_osa_1991 p240 (preliminary orders to the vehicle commanders); sam3d estimate (the times; the words are data/crew/pu12m_crew.json's)", "confidence": "estimate" },
+    { "id": "situation", "en": "assesses the situation on the working map", "full_s": 600, "short_s": 180,
+      "source": "voenizdat_osa_1991 pp. 240-241 (the step and the working map's contents); sam3d estimate (its times)", "confidence": "estimate" },
+    { "id": "decision", "en": "decides: the positions, each launcher's sector, the emission regime, the dummies", "full_s": 600, "short_s": 180,
+      "source": "voenizdat_osa_1991 p243 (the decision's contents); sam3d estimate (its times)", "confidence": "estimate" },
+    { "id": "reconnaissance", "en": "reconnoitres the new position", "only": "reconnoitre", "full_s": 2400, "short_s": 900,
+      "source": "voenizdat_osa_1991 p243 (reconnaissance of the position); sam3d estimate (its times: a drive there and back with the vehicle commanders)", "confidence": "estimate" },
+    { "id": "combat_order", "en": "gives the oral combat order to the vehicle commanders", "order": "order_battery_combat_order", "full_s": 300, "short_s": 120,
+      "source": "voenizdat_osa_1991 p243 (the decision given as an oral combat order); sam3d estimate (the times; the words are data/crew/pu12m_crew.json's)", "confidence": "estimate" },
+    { "id": "support", "en": "organises support: the reloads, fuel, communications, the observation post", "full_s": 300, "short_s": 120, "parallel": true,
+      "source": "voenizdat_osa_1991 p240 (the step); sam3d estimate (its times, worked while the battery marches)", "confidence": "estimate" }
+  ],
+  "occupy_s": {
+    "value": 1080,
+    "source": "ru_pu12_text (the post's full deployment within 18 min: the longest of the battery's, so the battery is ready when its post is); voenizdat_osa_1991 p231 (the launchers into combat order in 35-50 s, deployed well inside it)",
+    "confidence": "low",
+    "notes": "From the head's arrival to the battery commander's «к бою готова» up to the regiment. The source describes the later PU-12 build; the PU-12M's own figure is not known. pu12m_mission_cover's run: the post ready about 17 min after its arrival, the R-111 tuned last."
+  }
+}

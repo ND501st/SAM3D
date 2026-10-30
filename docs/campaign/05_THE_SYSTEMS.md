@@ -94,6 +94,12 @@ It travels as a document fact through the pipeline (P1/P2), with a voice summary
 planner turns it into `BatteryOrder`s (`battery.hpp`): `March`, `CombatFormation`, `Ambush` (`roving`), `RiverCrossing`,
 `Relocate`, `Emcon`, `Reload`, `Refuel`.
 
+**Built, first form (30 Oct 2026).** `simcore/campaign/battery_task.hpp` loads a task from `data/campaign/tasks/` with
+every part above (the regime as readiness and an emission regime, the time as `ready_in_s` and `lasts_s`, the TZM's
+place under `area`; `cover_rebuild` as a kind), refuses one without its reasons, and writes its paper (the order's nine
+parts) and its radio summary. A scenario's `"task"` has the regiment give it on its net (`BatteryOrderNet`, G10.7), or in
+person. Not yet: it travels as a delivery of the pipeline only on the regiment's net, not down the chain's posts.
+
 ## 5. The battery commander's planner
 
 `campaign/battery_plan.hpp`: the sequence of `03` §3 as a timed plan, like the drill master's for a vehicle.
@@ -105,6 +111,16 @@ planner turns it into `BatteryOrder`s (`battery.hpp`): `March`, `CombatFormation
 - **Outputs**: the battery's orders with their times; the oral combat order as callouts to the vehicle commanders on
   the battery net or in person (`voice_comms.hpp`); the working map's marks (each with its source and time); an ideal
   timeline that the helper shows a player battery commander, and that the debrief compares against.
+
+**Built, first form (30 Oct 2026).** `simcore/campaign/battery_plan.hpp` with `data/campaign/battery_plan.json`: the
+sequence's steps with a full and a short time each (the times are estimates; the book gives none), worked in full when
+there is time and shortened in one proportion when there is not, reconnaissance only for a position new to the battery,
+support alongside the march; the march planned on the roads to the task's main position (`PlanToPlace`), 18 min to
+occupy it (the post's deployment, `ru_pu12_text`), and the formation the task's kind asks for. The preliminary order and
+the oral combat order are callouts on the battery net (read back, nobody moves on them); the combat order then sets the
+regime and each launcher's sector and starts the march. A player battery commander owes them when they fall due (the
+helper's duties). Not yet: positions chosen on the ground by sight along the attack directions (the task's are taken as
+given), the working map's marks, the ideal timeline against the drill master.
 
 ## 6. The continuous mission
 

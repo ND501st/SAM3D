@@ -12,7 +12,8 @@ Phases 9 (threats) and 10 (scenarios and training) done in simcore. Phase 11, th
 campaign playthrough left. Phase 12, our chain of command and the information pipeline: C0–C5 and P1–P8 built, P9 (the
 reports from the records) in first form (29 Oct). The nation on the map (N0–N7) done 23 Oct. Track G, the ground: G0–G5
 and G8–G11 built in a first form (29 Oct), G6 and G7 on hold; its milestone M-G waits for a person to play the night
-march. The EM track: E0–E7 and E10 done, E8 and E9 started. **Next: people playing it** (M2, a campaign, M-G), which
+march. Phase 14, the battery's mission, begun ahead of its gate (30 Oct): the regiment's task, the commander's plan
+and the mission kinds in first form (14.1, 14.3, 14.5). The EM track: E0–E7 and E10 done, E8 and E9 started. **Next: people playing it** (M2, a campaign, M-G), which
 gates **the battery's war, phases 13–21**; meanwhile the leftovers each phase lists ("Left:", "Next:").
 
 The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
@@ -306,7 +307,7 @@ ban is ever lifted by the new term; a rebuilt bridge comes back later when its m
 battery's ledger against NATO shows the SEAD, ARMs and sorties it drew, a careless battery's ends the day it is
 wrecked.
 
-## Phase 14 - The battery's mission (planned)
+## Phase 14 - The battery's mission (14.1, 14.3, 14.5 in first form, 30 Oct 2026)
 
 How a mission starts: the regiment's order with its reasons, delivered through the chain; the battery commander's
 sequence and working map (`voenizdat_osa_1991` pp. 232-245); the mission kinds; objectives and their measures
@@ -315,11 +316,11 @@ sequence and working map (`voenizdat_osa_1991` pp. 232-245); the mission kinds; 
 | # | Task |
 |---|---|
 | 14.0 | **Research**: the regiment's tasking of its batteries and the combat order's form |
-| 14.1 | **`BatteryTask`**: kind, covered object, reasons, situation (attack directions, helicopter, jammer and ARM lines), area (main, reserve, dummy positions), sectors, readiness and emission regime, time, coordination (neighbours, the friendly air corridor, IFF, call signs, nets), reports, support; a document in the pipeline |
+| 14.1 | **`BatteryTask`**: kind, covered object, reasons, situation (attack directions, helicopter, jammer and ARM lines), area (main, reserve, dummy positions), sectors, readiness and emission regime, time, coordination (neighbours, the friendly air corridor, IFF, call signs, nets), reports, support; a document in the pipeline. **First form 30 Oct 2026** (built ahead of its gate on the project owner's request): `simcore/campaign/battery_task.hpp`, the task as data (`data/campaign/tasks/`, the order's nine parts with every reason), its paper and its words on the radio; a scenario's `"task"` has the regiment give it on its net at `given_s` (or in person) and its `"clock_start"` sets the day's hour. Left: the regiment's own posts handing it down the chain (P-phase), the ARM line's use |
 | 14.2 | **The regiment's tasking**: a rule table with reasons, run by the regiment's NPC officers with their traits and quirks, at the evening briefing and on urgent triggers (an uncovered priority object, the covered troops moving, a corridor the analysts named, the enemy knowing a battery, ARM attacks, low stocks, the enemy's phase changing, a battery lost) |
-| 14.3 | **The battery commander's planner**: the sequence, positions on the map with sight along the attack directions, sectors, dummies, regime, the oral combat order, an ideal timeline; the NPC battery commander, and the helper's shadow for a player |
+| 14.3 | **The battery commander's planner**: the sequence, positions on the map with sight along the attack directions, sectors, dummies, regime, the oral combat order, an ideal timeline; the NPC battery commander, and the helper's shadow for a player. **First form 30 Oct 2026**: `simcore/campaign/battery_plan.hpp` and `data/campaign/battery_plan.json` (the textbook's sequence, each step's full and short times shortened alike to the ready-by, reconnaissance for a new position, support alongside the march; the post's 18 min deployment as the time to occupy); the NPC commander works it step by step and gives the preliminary and the oral combat order on the battery net at their times (read back, nobody moves), then the regime, the sectors and the march to the main position; in the battery commander's seat they are the player's owed orders (the crew menu's Battery orders). His order and his plan are papers in his map case; the debrief says ready in time or late. Left: positions picked on the map by sight along the attack directions (he takes the task's), dummies placed, the ideal timeline in the drill master |
 | 14.4 | **The working map** in the PU-12M: marks with their source and time, beside the board |
-| 14.5 | **The mission kinds** mapped to the battery's orders and drills: cover an object, cover troops, cover a march, cover a crossing, ambush (and roving), relocate; the end of a task |
+| 14.5 | **The mission kinds** mapped to the battery's orders and drills: cover an object, cover troops, cover a march, cover a crossing, ambush (and roving), relocate; the end of a task. **First form 30 Oct 2026**: each kind's formation at the march's end (an object: the pairs across the main attack direction at the main position; troops: behind them on their axis; a crossing; an ambush with its reserve and roving route), and «к бою готова» up to the regiment as the task's readiness (`pu12m_mission_cover.json`: the order at 19:01, ready 20:19 by 20:31). At a new position the commander has the R-111 back on the regiment's net to report. Left: cover a march (the plan refuses it), the end of a task and the relief |
 | 14.6 | **Objectives and the mission debrief**, by the player's two outcomes. Assets kept: the covered object, troops, column or rebuild, and the releases prevented. Freedom of action denied: the battery kept and how well the enemy knows it, the ledger of what it cost the enemy, reconnaissance denied. Then missiles and the record. Each with its why chain, no points; the mission kind "cover a rebuild" |
 
 **Done when:** `mission_demo` runs a cover task headless from the regiment's 19:00 order to «к бою готов» by the
