@@ -679,6 +679,62 @@ SC_TEST("battery life (G2.3, G9.4): the march to a place planned on the roads at
     SC_EXPECT(convoy_seen);  // the regiment's convoy came into sight on the way
 }
 
+SC_TEST("battery life (G2, G10.6): the regiment's change of position to a place; the march's points in the post's journal; arrived reported up") {
+    std::string text;
+    SC_EXPECT(simcore::detail::ReadTextFile(kData + "/scenarios/pu12m_battery_march.json", text));
+    const std::string march = "\"order\": \"march\",";
+    const std::size_t at = text.find(march);
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    text.replace(at, march.size(), "\"order\": \"relocate\", \"from\": \"regiment\",");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    const std::string giver = def.battery_giver;
+    ScenarioRunner r(std::move(def), std::move(console));
+    auto said_up = [&](const std::string& words) {
+        for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+            if (m.net == "regiment net" && m.text.find(words) != std::string::npos) return m.time_s;
+        }
+        return -1.0;
+    };
+    double planned_at = -1.0, end_s = 0.0;
+    while (!r.Finished() && r.Time() < 4800.0) {
+        r.Step(0.05);
+        if (planned_at < 0.0 && r.MarchPlanned() != nullptr) {
+            planned_at = r.Time();
+            end_s = r.MarchPlanned()->end_s;
+        }
+        if (said_up("в назначенный район прибыла") >= 0.0 && r.Time() > said_up("в назначенный район прибыла") + 5.0) break;
+    }
+    // The regiment's order reached the battery commander on its net, who planned the march on the roads when he passed it on.
+    const command::BatteryOrderNet* rgt = r.GetRegimentOrders();
+    SC_EXPECT(rgt != nullptr && !rgt->Book().Orders().empty());
+    if (rgt == nullptr || rgt->Book().Orders().empty()) return;
+    SC_EXPECT(planned_at > 60.0 && r.MarchPlanned() != nullptr && r.MarchPlanned()->found);
+    // The march's points in the post's journal as the head passed them, the arrival among them.
+    const RadioJournal* j = r.GetBatteryJournal();
+    SC_EXPECT(j != nullptr);
+    if (j == nullptr) return;
+    int start = 0, arrived = 0;
+    for (const RadioJournalEntry& e : j->Legible(r.Time())) {
+        if (e.net != "march") continue;
+        std::printf("    journal %6.0f s  %s\n", e.heard_s, e.text.c_str());
+        start += e.text.find("the head at the start point") == 0 ? 1 : 0;
+        arrived += e.text.find("arrived: ") == 0 ? 1 : 0;
+    }
+    SC_EXPECT(start == 1 && arrived == 1);
+    // Nothing up on the march (radio forbidden in the column); at the new place, ready, the battery commander reports it,
+    // and only then is the regiment's order done.
+    const double up_s = said_up("в назначенный район прибыла");
+    std::printf("    the head due at %.0f s; reported up at %.0f s; the regiment's order done: %s\n", end_s, up_s,
+                rgt->IsDone(0, giver) ? "yes" : "no");
+    SC_EXPECT(up_s > end_s);
+    SC_EXPECT(rgt->IsDone(0, giver));
+}
+
 SC_TEST("battery life: a scenario's \"nav\" refuses an unknown place, a bad mover, another origin, and a march to a place with a route") {
     auto refused = [](const std::string& edit_from, const std::string& edit_to, const std::string& want) {
         std::string text;

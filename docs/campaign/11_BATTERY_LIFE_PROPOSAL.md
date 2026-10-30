@@ -517,7 +517,7 @@ the same routes.
 - A fixture map whose road is moved changes the route with no other edit; the fixture route's digest is pinned (MSVC's;
   CI checks GCC's).
 
-Left: `map_view.py --routes` (G1.6). The country's road net is sparse: 225 of its 329 other anchors (border posts,
+`map_view.py --routes` draws the routes `nav_check --json` writes (G1.6, built). Left: the country's road net is sparse: 225 of its 329 other anchors (border posts,
 radar companies, the dam) are more than 3 km from a road, and outside a district's ground the last kilometres to them
 are a straight line across country.
 
@@ -605,7 +605,8 @@ that meets a cut bridge stops, reports and moves on once the new route is ordere
   them, going out or coming back (`SupplyColumnMovers`): after 30 hours of the rebels' war, 14 columns, the 6 on the
   road each where the air war has it.
 
-Left: the relocation, the roving ambush and the service runs on routes in a session; the supply columns and the
+The relocation goes to a place too (30 Oct 2026): the regiment's or the commander's change of position may name a
+`to_place`, planned on the roads like a march. Left: the roving ambush and the service runs on routes in a session; the supply columns and the
 session's carriers handed to a played raid's session.
 
 ### G3: coordination
@@ -798,8 +799,9 @@ the papers are in the map case; the campaign screen's relocation is a march with
   hour. The campaign screen shows the time by the roads at the mark and the battery on the march with the hour it
   arrives. Rebels' campaign, 7.2 km to the north-west: 108 min, from 6.00 h to 7.80 h.
 
-Left: the working map table (G9.1), the driver's next turn from the route card (the helper's), the TZM requested from
-the menu, whom the player plays (G9.6).
+The TZM and the fuel truck are asked for from the commander's crew menu (30 Oct 2026): they come only once his request
+is on the battery net, by his NPC or by a player in his seat. Left: the working map table (G9.1), the driver's next
+turn from the route card (the helper's), whom the player plays (G9.6).
 
 ### G10: battery orders, given and carried out (simcore; not gated)
 
@@ -917,7 +919,9 @@ the giver's page and logged; a 3 km march ends with «К бою!» by flags and 
 regiment's emission regime reaches the battery commander, is read back, passed on 20 s after he acts and read back by
 every vehicle, our commander included; from the PU-12M the NPC gives the march at its time and the post moves only
 once stowed; in the battery commander's seat it is owed at 60 s and given from the menu, «К бою!» greyed before the
-route's end. Left: control points reported up by the post's means (with G3's regulators), the driver as a person
+route's end. The column's control points (30 Oct 2026): the start point, regulation points, halts and the arrival go
+into the post's journal as the head passes them, and a move the regiment ordered is reported done on its net,
+«в назначенный район прибыла», once the battery is ready again. Left: the regulators' own reports (with G3), the driver as a person
 (the route card, G9.3), the orders group in person, the working map's picture (G9.1).
 
 ### G11: Unreal, everything the player could see

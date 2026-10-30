@@ -346,6 +346,17 @@ public:
     // The march plan's points as the column passed them (a march ordered with points), and where along the route the
     // head and the tail of the column are meant to be.
     const std::vector<Passing>& Passings() const { return passings_; }
+    // How many marches with a route the battery has been ordered: a new one starts its passings afresh.
+    int Marches() const { return marches_; }
+    // A point as the radiotelephonist writes it when the head passes it (the record the march is known by: decision G-6).
+    static std::string PassingText(const Passing& ps) {
+        return ps.kind == "start"        ? "the head at the start point, " + ps.name
+               : ps.kind == "regulation" ? "the head at the regulation point, " + ps.name
+               : ps.kind == "halt"       ? "halt, " + ps.name
+               : ps.kind == "swim"       ? "swimming " + ps.name
+               : ps.kind == "regulator"  ? "the head at " + ps.name
+                                         : "arrived: " + ps.name;
+    }
     double HeadArc() const { return lead_s_; }
     double TailArc() const { return SlotArc(vehicles_.empty() ? 0 : vehicles_.size() - 1); }
     // A vehicle's place in the column (0 the head).
@@ -487,6 +498,7 @@ public:
                 route_ = o.route;
                 route_mps_ = o.route_mps.size() + 1 == o.route.size() ? o.route_mps : std::vector<double>();
                 points_ = o.points;
+                ++marches_;
                 passings_.clear();
                 for (const BatteryMarchPoint& p : points_) passings_.push_back({p.kind, p.name, -1.0, -1.0});
                 next_point_ = 0;
@@ -637,11 +649,12 @@ public:
                     lead_s_ = next;
                     marched_s_ += dt;
                 }
-                if (lead_s_ >= total_ - 1e-6 && !arrived_logged_) {
+                NotePassings(t);
+                // At the end of the route once the plan's last point is passed (at its time: an early head waits there).
+                if (lead_s_ >= total_ - 1e-6 && next_point_ >= points_.size() && !arrived_logged_) {
                     arrived_logged_ = true;
                     events_.push_back({t, "Battery commander", "the head of the column is at the end of the route"});
                 }
-                NotePassings(t);
                 if (points_.empty() && marched_s_ >= tactics_.halt_interval_s) {
                     StartHalt(t, night_ ? tactics_.night_halt_s : tactics_.halt_duration_s, "scheduled halt: checks, fuel, rest");
                 }
@@ -752,6 +765,15 @@ public:
             if (v.stock <= 0.0) Release(v, t, "empty");
             return;
         }
+    }
+    // What the service vehicle alongside the served one still carries (missiles, litres); < 0: none alongside.
+    double StockAlongside(const std::string& vehicle, Service kind) const {
+        const Vehicle* target = vehicle.empty() ? Own() : Find(vehicle);
+        if (target == nullptr) return -1.0;
+        for (const Vehicle& v : vehicles_) {
+            if (v.serving == target->def.id && v.service == kind && v.alongside) return v.stock;
+        }
+        return -1.0;
     }
     // The served vehicle is full: the service vehicle goes back.
     void Done(const std::string& vehicle, Service kind, double t) {
@@ -1214,6 +1236,7 @@ private:
     double marched_s_ = 0.0;
     double halt_until_s_ = 0.0;
     bool arrived_logged_ = false;
+    int marches_ = 0;
     double leave_s_ = 0.0;
     bool bounding_ = false;
     std::size_t bound_pair_ = 0;

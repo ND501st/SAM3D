@@ -584,12 +584,7 @@ public:
         const std::vector<Battery::Passing>& passed = battery_->Passings();
         while (ordered_ && logged_ < passed.size() && passed[logged_].head_s >= 0.0) {
             const Battery::Passing& ps = passed[logged_];
-            const std::string text = ps.kind == "start"        ? "the head at the start point, " + ps.name
-                                     : ps.kind == "regulation" ? "the head at the regulation point, " + ps.name
-                                     : ps.kind == "halt"       ? "halt, " + ps.name
-                                     : ps.kind == "swim"       ? "swimming " + ps.name
-                                                               : "arrived: " + ps.name;
-            journal_.Heard(ps.head_s, "march", "Battery commander", text);
+            journal_.Heard(ps.head_s, "march", "Battery commander", Battery::PassingText(ps));
             ++logged_;
         }
         if (net_ != nullptr) StepOrders(t);

@@ -70,6 +70,12 @@
       "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
+      "id": "tv_camera", "title": "TV camera on: РАБ.РЕЖ.", "control": "tov.power", "position": 1, "procedure": "tv_camera_on",
+      "lines": ["Your first part of К бою: flip РАБ.РЕЖ. up to ВКЛ."],
+      "why": "In the drill К бою the deputy switches the TV sight's camera on (voenizdat_osa_1991 p. 247): РАБ.РЕЖ. ВКЛ opens the lens cover, and the camera on the turret looks along the tracking radar from then on.",
+      "hint": "Left click flips a switch."
+    },
+    {
       "id": "ak_zk", "title": "Connect the course setter: АК — ЗК to ЗК", "control": "orient.ak_zk", "position": 1, "procedure": "orient_vehicle",
       "lines": ["Flip АК — ЗК to ЗК."],
       "why": "АК is the gyro half-compass running on its own; ЗК connects it to the course setter, where you are about to set the hull's true heading.",
@@ -165,14 +171,8 @@
       "continue": true
     },
     {
-      "id": "tv_on", "title": "TV camera on: РАБ.РЕЖ.", "control": "tov.power", "position": 1, "procedure": "tv_watch",
-      "lines": ["Flip РАБ.РЕЖ. up to ВКЛ."],
-      "why": "The TV sight's camera on the turret looks along the tracking radar; your monitor shows its picture.",
-      "hint": "Left click."
-    },
-    {
       "id": "tv_narrow", "title": "The narrow lens: УГОЛ ЗРЕНИЯ УЗКИЙ", "control": "tov.fov", "position": 1, "procedure": "tv_watch",
-      "lines": ["Flip УГОЛ ЗРЕНИЯ to УЗКИЙ, and look at your TV monitor: the drone in the crosshair."],
+      "lines": ["The camera has been on since К бою. Flip УГОЛ ЗРЕНИЯ to УЗКИЙ, and look at your TV monitor: the drone in the crosshair."],
       "why": "The narrow lens magnifies: the target fills more of the picture and you can tell what it is.",
       "hint": "Left click.   L: look at the monitor."
     },

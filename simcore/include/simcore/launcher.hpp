@@ -9,8 +9,9 @@
 //     armed near the target, or with the medium beam against a jamming target: method Н, 1991 textbook p23-24).
 //   * The channel is busy until the shot is over (the outcome model says so, or the nominal flight time passes).
 //   * Launches are at least min_interval_s apart; the hold input is set while the next one must wait.
-//   * Reload (roadmap 7.3): with the TZM alongside and the vehicle stopped, one missile goes into an empty container
-//     every reload_s_per_missile; nothing is loaded while a channel is guiding or a pair is selected.
+//   * Reload (roadmap 7.3): with the TZM alongside and the vehicle stopped, the crane's traverse lifts up to
+//     reload_traverse missiles into one side's empty containers per lift (reload_s_per_missile for each place on it),
+//     no more than the TZM still carries; nothing is loaded while a channel is guiding or a pair is selected.
 //   * PairSpent(): no selected missile is left, so the next ones need preparing again.
 //   * Prepared missiles are held at most prep_hold.hold_s; then the gyro has overheated (the lamp flashes), the pair is
 //     prepared again with the next missiles, and the hot one rests (rest_s, or long_rest_s after `cycles` holds).
@@ -157,6 +158,8 @@ public:
     }
     int Capacity() const { return static_cast<int>(loaded_.size()); }
     double ReloadProgress() const { return reload_progress_s_; }
+    // What the TZM alongside still carries: a lift takes no more (< 0: not limited).
+    void SetReloadStock(int missiles) { reload_stock_ = missiles; }
 
     // The channel the next launch would use (0 = none: no selected missile on a free channel, or too soon).
     int NextChannel(double t, const ConsoleData& console) const {
@@ -356,12 +359,25 @@ private:
             reload_progress_s_ = 0.0;
             return;
         }
+        // The traverse (flak11: it holds up to 3 containers) takes the side of the first empty container, every empty one
+        // of that side in loading order, up to its places and the TZM's stock. A lift takes the crane's whole cycle however
+        // many it carries (sam3d reading: flak11's 6 min for six as two lifts of 3 min).
         reloading_ = empty;
         reload_progress_s_ += dt;
-        if (reload_progress_s_ >= def_.reload_s_per_missile - 1e-9) {
-            loaded_[static_cast<std::size_t>(empty)] = true;
-            rest_until_s_[static_cast<std::size_t>(empty)] = -1e9;  // a fresh missile
-            cycles_[static_cast<std::size_t>(empty)] = 0;
+        const int traverse = std::max(1, def_.reload_traverse);
+        if (reload_progress_s_ >= def_.reload_s_per_missile * traverse - 1e-9) {
+            const int side = def_.containers[static_cast<std::size_t>(empty)].channel;
+            std::vector<std::size_t> pack;
+            for (std::size_t i = 0; i < def_.containers.size(); ++i) {
+                if (!loaded_[i] && def_.containers[i].channel == side) pack.push_back(i);
+            }
+            std::sort(pack.begin(), pack.end(), [&](std::size_t a, std::size_t b) { return def_.containers[a].order < def_.containers[b].order; });
+            const int places = reload_stock_ < 0 ? traverse : std::min(traverse, reload_stock_);
+            for (std::size_t k = 0; k < pack.size() && static_cast<int>(k) < places; ++k) {
+                loaded_[pack[k]] = true;
+                rest_until_s_[pack[k]] = -1e9;  // a fresh missile
+                cycles_[pack[k]] = 0;
+            }
             reload_progress_s_ = 0.0;
             reloading_ = -1;
         }
@@ -386,6 +402,7 @@ private:
     double last_t_ = -1.0;
     int reloading_ = -1;
     double reload_progress_s_ = 0.0;
+    int reload_stock_ = -1;  // missiles the TZM alongside still carries (< 0: not limited)
     std::array<Channel, 2> channels_{};
 };
 

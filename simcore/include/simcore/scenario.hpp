@@ -1912,10 +1912,17 @@ private:
                 if (!LoadPosition(route->items[i], Index(Join(p, "route"), i), frame_, v)) return false;
                 out.route.push_back(v);
             }
-        } else if (o.Find("to_place") != nullptr) {
-            return Fail(Join(p, "to_place"), "only a march goes to a place");
+        } else if (o.Find("to_place") != nullptr && out.kind != BatteryOrder::Kind::Relocate) {
+            return Fail(Join(p, "to_place"), "only a march or a change of position goes to a place");
         }
         if (out.kind == BatteryOrder::Kind::Relocate) {
+            // To a place (G2): a march on the roads to it, planned when the order is given, the battery deploying there.
+            if (!OptionalString(o, p, "to_place", out.to_place)) return false;
+            if (!out.to_place.empty()) {
+                if (!def.nav) return Fail(Join(p, "to_place"), "a change of position to a place needs the scenario's \"nav\" (the roads)");
+                if (def.nav->GetAnchors().Find(out.to_place) == nullptr) return Fail(Join(p, "to_place"), "no place called '" + out.to_place + "'");
+                return true;
+            }
             const json::Value* c = o.Find("covered");
             if (c == nullptr) return Fail(Join(p, "covered"), "a change of position needs the new position (of the own vehicle)");
             if (!LoadPosition(*c, Join(p, "covered"), frame_, out.covered)) return false;

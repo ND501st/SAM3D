@@ -142,7 +142,7 @@
     ],
     "channel_control": "msl.channels", "channel_positions": [ [2], [1], [1, 2] ],
     "attention_input": "target_near_zone", "jam_control": "fo.pomekha", "pair_preparation": "missile_prep",
-    "hold_input": "launch_hold", "reload_input": "tzm_alongside", "stopped_input": "vehicle_stopped", "reload_s_per_missile": 60,
+    "hold_input": "launch_hold", "reload_input": "tzm_alongside", "stopped_input": "vehicle_stopped", "reload_s_per_missile": 60, "reload_traverse": 3,
     "capture_s": 0.8, "medium_s": 2.0, "narrow_s": 4.0, "fuse_range_m": 120, "min_interval_s": 4, "nominal_flight_s": 20,
     "letter": { "control": "spk.letter", "change_position": 2, "lock_inputs": [ "ch1_apch_lock", "ch2_apch_lock" ], "relock_s": 1.0,
                 "source": "voenizdat_osa_1991 p150 (СМЕНА ЛИТЕРЫ — НОРМА changes the transmitter's frequency letter; ЗАХВ. АПЧ-I, -II go out and back within 1 s); mon_2112_80 (a faulty channel: КАНАЛЫ to the good one, single missiles, then СМЕНА ЛИТ.)",
@@ -163,7 +163,7 @@
                    "notes": "Flight time is the middle of the published 24-27 s. The throw uses no channel and no hit chance, and is not a guided launch in the debrief." },
     "source": "flak11 (NVA Osa-AK: at ВНИМАНИЕ the command transmitter comes on and two missiles are selected automatically, outer ones first, left and right; K3 about 120 m before the target); samsim_thread (creator: ЗАХВАТ about 0.8 s / 60 m after launch; ePap: the lamp sequence, К3 with УЗКИЙ ЛУЧ against a jamming target); korovin_tiv_2010 (the two missiles launched 3-5 s apart, each captured by its own wide- and medium-beam antennas); samsim_osa p30 (ПУСК ГОТОВ again for the second missile)",
     "confidence": "medium",
-    "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Reloading: with tzm_alongside set and the vehicle stopped, one missile goes into an empty container every reload_s_per_missile (60 s: flak11's 6 min for six), outer containers first, only once the pair is spent and no channel is guiding; the 60 s per missile is the 6 min divided by six (the crane's three-container traverse is not modelled), the loading order is a sam3d estimate. Gyro overheating (flashing ammunition lamps) and the emergency launch are not modelled."
+    "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Reloading: with tzm_alongside set and the vehicle stopped, outer containers first, only once the pair is spent and no channel is guiding; the crane's traverse holds up to 3 containers (flak11), so it lifts one side's empty containers at a time (reload_traverse 3), a lift taking 3 x 60 s: the 6 min for six as two lifts of 3 min (sam3d reading), however many the lift carries, and no more than the TZM still has aboard; the loading order is a sam3d estimate. Gyro overheating (flashing ammunition lamps) is prep_hold, the emergency launch emergency."
   },
 
   "fuel": {
@@ -1559,6 +1559,14 @@
       "steps": [
         { "control": "pwr.gta", "position": 0, "description": "Search antenna stowed: shut down the ГТА",
           "wait_for": [ { "subsystem": "search_antenna", "is": "off" } ] }
+      ]
+    },
+    {
+      "id": "tv_camera_on", "name": "The TV camera working (РАБ.РЕЖ. ВКЛ)",
+      "source": "voenizdat_osa_1991 p247 (in the drill К бою the TV is switched on), p103 (РАБ. РЕЖ. ВКЛ. opens the lens cover); samsim_osa p17 (the switch at the deputy's console)", "confidence": "medium",
+      "notes": "Deputy commander, his first part of К бою: the operator supplies the TV (ТОВ, equipment_on), the deputy puts it to work, so the crew is ready with its TV as well as its radars. Before 30 Oct 2026 no order started it and a player in command could never get the vehicle ready (docs/crew/14_HELPER.md).",
+      "steps": [
+        { "control": "tov.power", "position": 1, "description": "РАБ.РЕЖ. ВКЛ, the TV camera working" }
       ]
     },
     {

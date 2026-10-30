@@ -455,6 +455,61 @@ SC_TEST("battery drills: the TZM drives up when the launcher is empty, reloads s
               d.find("reload done") != std::string::npos && d.find("to refuel 21") != std::string::npos);
 }
 
+SC_TEST("battery drills (G9): in the commander's seat the TZM is the player's to ask for on the net; it comes once asked") {
+    const std::string text = R"({
+      "scenario_id": "svc_player", "name": "Service", "source": "sam3d", "confidence": "estimate", "seed": 2,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "battery": { "own": { "id": "21", "callsign": "21" },
+        "vehicles": [ { "id": "TZM", "kind": "reload", "position": { "east_m": 300, "north_m": -400, "up_m": 3 } } ] },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" } ], "crew_commander": "npc",
+      "targets": [], "triggers": [], "end": { "time_limit_s": 1500, "when_targets_gone": false } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.GetLauncher() != nullptr && r.GetBattery() != nullptr && r.GetBattery()->Find("TZM") != nullptr);
+    if (r.GetLauncher() == nullptr || r.GetBattery() == nullptr || r.GetBattery()->Find("TZM") == nullptr) return;
+    r.TakeSeat("commander", "Player");
+    r.SetHelper(true);
+    auto owes = [&](SeatDuty::Kind kind, const std::string& id) {
+        for (const SeatDuty& d : r.OwedDuties("commander")) {
+            if (d.kind == kind && d.id == id) return true;
+        }
+        return false;
+    };
+    const std::vector<std::string> menu = r.PlayerRadioReports("commander");
+    SC_EXPECT(std::find(menu.begin(), menu.end(), "request_tzm") != menu.end());
+    // Missiles on the launcher: nothing to ask for.
+    r.Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(!r.PlayerSay("commander", "request_tzm") && r.LastRefusal() == "the launcher still has missiles");
+    r.Console().panel.Set("radio.chest", 0);
+    for (const char* c : {"1-I", "2-I", "3-I", "1-II", "2-II", "3-II"}) r.GetLauncher()->Unload(c);
+    for (int i = 0; i < 20 * 120; ++i) r.Step(0.05);
+    // Two minutes empty and not asked: the TZM stays where it is, and the request is his to make, on the air.
+    SC_EXPECT(r.GetBattery()->Find("TZM")->serving.empty() && r.GetLauncher()->LoadedCount() == 0);
+    SC_EXPECT(owes(SeatDuty::Kind::Report, "request_tzm"));
+    SC_EXPECT(r.ChestToTalk("commander", "request_tzm") == "radio.chest");  // the helper shows the chest switch first
+    SC_EXPECT(!r.PlayerSay("commander", "request_tzm"));
+    r.Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(r.ChestToTalk("commander", "request_tzm").empty());
+    SC_EXPECT(r.PlayerSay("commander", "request_tzm"));
+    r.Step(0.05);
+    SC_EXPECT(!owes(SeatDuty::Kind::Report, "request_tzm"));
+    // His words out, the chest switch back to receive (held, the set stays on the air).
+    for (int i = 0; i < 20 * 10; ++i) r.Step(0.05);
+    SC_EXPECT(owes(SeatDuty::Kind::Control, "radio.chest"));
+    r.Console().panel.Set("radio.chest", 0);
+    r.Step(0.05);
+    SC_EXPECT(!owes(SeatDuty::Kind::Control, "radio.chest"));
+    for (int i = 0; i < 20 * 900; ++i) r.Step(0.05);
+    std::printf("    loaded %d after the request\n", r.GetLauncher()->LoadedCount());
+    SC_EXPECT(r.GetLauncher()->LoadedCount() == 6);
+    SC_EXPECT(r.Debrief().find("to reload 21") != std::string::npos);
+}
+
 SC_TEST("battery fire: in free fire each launcher takes the targets in its sector of fire, not just the nearest") {
     std::vector<BatteryVehicleDef> v;
     auto add = [&v](const char* id, double from, double to) {

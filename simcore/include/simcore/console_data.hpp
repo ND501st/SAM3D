@@ -320,10 +320,12 @@ struct LauncherDef {
     double min_interval_s = 0.0;    // between two launches
     std::string hold_input;         // set while the next launch must wait (too soon, or no missile on a free channel)
     // Reloading from the transport-loader vehicle (TZM; roadmap 7.3): while `reload_input` is set and the vehicle is
-    // stopped (`stopped_input`), the crane puts one missile into an empty container every `reload_s_per_missile`.
+    // stopped (`stopped_input`), the crane's traverse lifts up to `reload_traverse` missiles into the empty containers of
+    // one launcher side (a channel) at a time, each lift taking `reload_s_per_missile` for every place on the traverse.
     std::string reload_input;
     std::string stopped_input;
     double reload_s_per_missile = 0.0;
+    int reload_traverse = 1;
     bool has_letter = false;
     LauncherLetterDef letter;
     bool has_emergency = false;
@@ -1389,14 +1391,15 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
                            "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
                            "nominal_flight_s", "min_interval_s", "hold_input", "reload_input", "stopped_input",
-                           "reload_s_per_missile", "letter", "emergency", "range_sweep", "prep_hold", "source", "confidence", "notes"}) ||
+                           "reload_s_per_missile", "reload_traverse", "letter", "emergency", "range_sweep", "prep_hold", "source",
+                           "confidence", "notes"}) ||
             !Provenance(*l, lp) ||
             !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
             !RefControl(*l, lp, "jam_control", out.panel, ControlKind::Discrete, false, d.jam_control) ||
             !RefInput(*l, lp, "attention_input", eq, d.attention_input) ||
             !RefInput(*l, lp, "hold_input", eq, d.hold_input) || !RefInput(*l, lp, "reload_input", eq, d.reload_input) ||
             !RefInput(*l, lp, "stopped_input", eq, d.stopped_input) ||
-            !OptionalNumber(*l, lp, "reload_s_per_missile", d.reload_s_per_missile) ||
+            !OptionalNumber(*l, lp, "reload_s_per_missile", d.reload_s_per_missile) || !OptionalInt(*l, lp, "reload_traverse", d.reload_traverse) ||
             !RefSubsystem(*l, lp, "pair_preparation", eq, true, d.pair_preparation)) {
             return false;
         }
@@ -1410,6 +1413,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (*t.second < 0.0) return Fail(Join(lp, t.first), "must be >= 0");
         }
         if (d.reload_s_per_missile < 0.0) return Fail(Join(lp, "reload_s_per_missile"), "must be >= 0");
+        if (d.reload_traverse < 1) return Fail(Join(lp, "reload_traverse"), "must be >= 1");
         if (d.reload_s_per_missile > 0.0 && (d.reload_input.empty() || d.stopped_input.empty())) {
             return Fail(Join(lp, "reload_s_per_missile"), "needs reload_input and stopped_input");
         }

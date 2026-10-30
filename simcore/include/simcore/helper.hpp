@@ -234,11 +234,18 @@ inline bool HelpFromDuty(const ScenarioRunner& r, const SeatDuty& d, HelpStep& s
     s.seat = d.seat;
     s.target_id = d.target;
     switch (d.kind) {
-        case SeatDuty::Kind::Report:
+        case SeatDuty::Kind::Report: {
+            const std::string chest = r.ChestToTalk(d.seat, d.id);
+            if (!chest.empty()) {  // a line on the air: the chest switch to ПРД first, then the words
+                HelpControl(r, chest, 1, s);
+                s.rule = d.rule + " (to say it on the air)";
+                return true;
+            }
             s.kind = HelpStep::Kind::Report;
             HelpWords(r, d.seat, d.id, d.fields, s);
             s.text = "Report: " + (s.words_ru.empty() ? d.id : s.words_ru);
             return true;
+        }
         case SeatDuty::Kind::Order:
             s.kind = HelpStep::Kind::Order;
             HelpWords(r, d.seat, d.id, d.fields, s);

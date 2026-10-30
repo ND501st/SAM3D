@@ -289,10 +289,10 @@ SC_TEST("helper: every NPC act at a seat goes through NpcDoes, so the helper kno
     SC_EXPECT(!src.empty());
     int uses = 0;
     for (std::size_t at = src.find("NpcAt("); at != std::string::npos; at = src.find("NpcAt(", at + 1)) ++uses;
-    // 24: the definition, NpcDoes itself, and the who-speaks, who-reads and how-fast choices (among them who judges a
+    // 23: the definition, NpcDoes itself, and the who-speaks, who-reads and how-fast choices (among them who judges a
     // shot's result, the deputy or else the commander, and how fast the plotter speaks); the gates that pass a player's
     // seat on to NpcDoes (the periodic contact, the battery's distribution, a ringing line); and the acts with no move in
     // a player's menu yet (docs/crew/14_HELPER.md, "Not yet").
-    if (uses != 24) std::printf("    NpcAt( appears %d times in scenario_runner.hpp, not 24: see the comment above\n", uses);
-    SC_EXPECT(uses == 24);
+    if (uses != 23) std::printf("    NpcAt( appears %d times in scenario_runner.hpp, not 23: see the comment above\n", uses);
+    SC_EXPECT(uses == 23);
 }

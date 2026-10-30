@@ -192,7 +192,7 @@ vehicle oriented, radars silent). A cold start takes the documented 3.8 min swit
 check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) speeds the sim up so that stays playable.
 
 A trigger can set the console input `tzm_alongside` (`{ "set_input": "tzm_alongside", "value": true }`) to bring the
-transport-loader vehicle up: with the vehicle stopped, the launcher reloads one missile a minute (roadmap 7.3).
+transport-loader vehicle up: with the vehicle stopped, the crane lifts one side's three containers at a time, three minutes a lift (roadmap 7.3).
 `external_power` connects an external 220 V 400 Hz supply (a cable, not a console control): at a halt it powers the
 equipment without the turbine or the take-off generator and burns no fuel; it drops out when the vehicle moves.
 
