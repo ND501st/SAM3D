@@ -511,19 +511,27 @@ public:
         frame_ = frame;
         has_frame_ = true;
     }
-    // The targets the regiment's radars cover (all of them without radars).
-    static std::vector<BoardContact> RegimentSees(const PostRegiment& r, const std::vector<BoardContact>& truth) {
+    // The targets the regiment's radars on the air at `t` cover (all of them without radars; none with every one of them
+    // off the air).
+    static std::vector<BoardContact> RegimentSees(const PostRegiment& r, const std::vector<BoardContact>& truth, double t = -1e18) {
         if (r.radars.empty()) return truth;
         std::vector<BoardContact> out;
         for (const BoardContact& c : truth) {
             for (const RegimentRadar& radar : r.radars) {
-                if (Covers(radar, c)) {
+                if (!RadarDownAt(radar, t) && Covers(radar, c)) {
                     out.push_back(c);
                     break;
                 }
             }
         }
         return out;
+    }
+    // A radar off the air at `t` (its outages: struck, wrecked).
+    static bool RadarDownAt(const RegimentRadar& radar, double t) {
+        for (const C2Outage& o : radar.outages) {
+            if (t >= o.from_s && t < o.to_s) return true;
+        }
+        return false;
     }
     static bool Covers(const RegimentRadar& radar, const BoardContact& c) {
         const double range = (Vec3{c.position.x, c.position.y, 0.0} - Vec3{radar.position.x, radar.position.y, 0.0}).Length();

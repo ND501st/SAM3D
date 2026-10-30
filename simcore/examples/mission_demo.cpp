@@ -3,7 +3,8 @@
 // regiment. Prints the order and the plan as the papers in his map case, then what happened against the plan. With
 // --war, the enemy's air campaign runs beside it on the mission's clock and its packages come in live (roadmap 15.2,
 // 15.3: campaign/mission_session.hpp), and the regiment tasks the battery on what our intelligence estimates of it
-// (roadmap 14.2: data/campaign/tasking.json).
+// (roadmap 14.2: data/campaign/tasking.json). The director (roadmap 15.4) counts what woke the battery commander and how
+// long the quiet between was.
 //
 // Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h]
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
@@ -15,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/campaign/director.hpp"
 #include "simcore/campaign/mission_session.hpp"
 #include "simcore/scenario_runner.hpp"
 
@@ -54,8 +56,10 @@ int main(int argc, char** argv) {
     }
     // Without the war: to «к бою готова» up to the regiment, and a minute after it. With it: to the scenario's end.
     double ready_seen_s = -1.0;
+    campaign::Director director(r.Cmdr());
     while (!r.Finished() && (s.Campaign() != nullptr || md.hours > 0.0 || ready_seen_s < 0.0 || r.Time() < ready_seen_s + 60.0)) {
         s.Step(0.1);
+        director.Step(r);
         if (ready_seen_s < 0.0 && r.TaskReadyS() >= 0.0) ready_seen_s = r.Time();
     }
     for (const HeldPaper& h : r.MapCase("battery_commander")) {
@@ -107,5 +111,6 @@ int main(int argc, char** argv) {
     const std::string with_outcomes = s.Debrief();
     const std::size_t outcomes_at = with_outcomes.find("The battery's two outcomes");
     if (outcomes_at != std::string::npos) std::printf("==== %s", with_outcomes.substr(outcomes_at).c_str());
+    std::printf("==== The director\n  %s", director.Text(r.Time()).c_str());
     return r.TaskReadyS() >= 0.0 && r.TaskReadyS() <= p.ready_by_s && war_ok ? 0 : 1;
 }

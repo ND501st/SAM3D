@@ -18,7 +18,8 @@
 //     rounds, the package's SEAD and jamming, night and weather for the optical ones); an aircraft they hit goes down in
 //     the scenario, half way through their zone (17.1's first form). The regiment's other Osa batteries fight in the
 //     runner's battery fire model instead (ScenarioRunner::NeighbourFights): their kills, missiles and radar time are
-//     read from it;
+//     read from it. Each kill is reported up and the regiment tells the battery on its command net
+//     (ScenarioRunner::RegimentTellsDestroyed): the post wipes the mark when it hears it;
 //   * what the enemy learns: every second our radars radiate (ELINT), every launch an enemy aircraft sees.
 // Every event goes into the runner's log, so the debrief shows it. Finish() turns it all into a PackageOutcome for
 // AirCampaign::CompletePlayerMission.
@@ -336,14 +337,17 @@ private:
     std::vector<std::string> kill_by_;  // per aircraft: the neighbour that shot it down
 
     // The neighbours' fire (see the header): each aircraft's pass through each zone is rolled once, as it enters.
+    static constexpr double kRegimentTellsS = 90.0;  // sam3d: the neighbour reports up, the regiment passes it on
     // The fighting neighbours' kills, as the runner's fire model made them.
-    void ReadNeighbourKills(const ScenarioRunner& r) {
+    void ReadNeighbourKills(ScenarioRunner& r) {
         for (const auto& k : r.NeighbourKills()) {
             for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
                 if (m_.aircraft[i].target_id != k.first || !kill_by_[i].empty()) continue;
                 kill_by_[i] = k.second;
                 for (const RaidNeighbour& nb : m_.neighbours) {
-                    if (nb.id == k.second) notes_.push_back(k.first + " shot down by " + nb.name);
+                    if (nb.id != k.second) continue;
+                    notes_.push_back(k.first + " shot down by " + nb.name);
+                    r.RegimentTellsDestroyed(k.first, nb.name, kRegimentTellsS);
                 }
             }
         }
@@ -375,6 +379,7 @@ private:
                     if (r.DestroyTarget(a.target_id, nb.name)) {
                         kill_by_[i] = nb.id;
                         notes_.push_back(a.target_id + " shot down by " + nb.name);
+                        r.RegimentTellsDestroyed(a.target_id, nb.name, kRegimentTellsS);
                     }
                     continue;
                 }

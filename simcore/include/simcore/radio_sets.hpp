@@ -261,6 +261,7 @@ inline std::string MissingRadioRole(const RadioSetBinding& b, bool r111) {
 struct RegimentMessage {
     double at_s = 0.0;
     std::string text;
+    std::string destroyed;  // a target it tells the post was destroyed (by a neighbour): heard, the post knows it ("" none)
 };
 
 struct RadioPlan {

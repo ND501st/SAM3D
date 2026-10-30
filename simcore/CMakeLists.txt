@@ -103,6 +103,7 @@ add_executable(simcore_tests
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp
   tests/test_comms_jamming.cpp
+  tests/test_director.cpp
   tests/test_regiment.cpp
   tests/test_picture_lost.cpp
   tests/test_logistics.cpp

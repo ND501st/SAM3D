@@ -584,6 +584,8 @@ public:
     };
     static constexpr std::size_t kRadioKept = 64;
     const std::vector<RadioMessage>& RadioLog() const { return radio_; }
+    // Every message logged since the start, kept or not: RadioLog()[i] is message RadioTotal() - RadioLog().size() + i.
+    std::size_t RadioTotal() const { return radio_total_; }
 
     // What the player's crew has in front of it besides its knowledge (roadmap 7.7): in the command post its own board's
     // marks of the last five plots; in a launcher only the designations its crew has heard on the net (the board is in
@@ -3539,6 +3541,7 @@ private:
                 ++m.said;
                 if (hear && on_box) {
                     Radio("regiment net", "Regiment", text);
+                    if (!plan.messages[i].destroyed.empty()) HeardDestroyed(plan.messages[i].destroyed);
                     r111_call_until_ = time_ + r111_->Def().call_s;
                     if (heard_back && talker) {
                         Transmitted("regiment", "Radiotelephone operator", 3.0);
@@ -5092,6 +5095,96 @@ public:
     };
     const EmissionRecord& GetEmissionRecord() const { return emission_record_; }
 
+    // ---- Our radars and warning posts through the session (roadmap 17.3; campaign/mission_session.hpp follows the war's
+    // damage to them). A radar of the regiment joins the post's feed in play: false, with why, if the post has no
+    // regiment's radars, the type is not in its library, or the id is the session's already.
+    bool AddRegimentRadar(const std::string& id, const std::string& type, const Vec3& at, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        if (!post_ || def_.post_regiment.radars.empty()) return fail("the post has no regiment's radars to join");
+        for (const RegimentRadar& r : def_.post_regiment.radars) {
+            if (r.id == id) return fail("radar '" + id + "' is the session's already");
+        }
+        const RegimentRadar* t = def_.post_radar_types.Find(type);
+        if (t == nullptr) return fail("no radar type '" + type + "' in the post's library");
+        RegimentRadar r = *t;
+        r.id = id;
+        r.type = type;
+        r.position = at;
+        def_.post_regiment.radars.push_back(r);
+        Event("regiment's radar", id + " (" + type + ") feeds the regiment's picture");
+        return true;
+    }
+    // A radar of the regiment's off the air from now (struck) or back on it (repaired): its picture stops at the board, or
+    // comes again. False for an unknown radar, or one already so.
+    bool SetRegimentRadarDown(const std::string& id, bool down, const std::string& reason) {
+        for (RegimentRadar& r : def_.post_regiment.radars) {
+            if (r.id != id) continue;
+            if (CommandPost::RadarDownAt(r, time_) == down) return false;
+            if (down) {
+                C2Outage o;
+                o.from_s = time_;
+                o.reason = reason;
+                r.outages.push_back(o);
+            } else {
+                for (C2Outage& o : r.outages) {
+                    if (o.from_s <= time_ && o.to_s > time_) o.to_s = time_;
+                }
+            }
+            Event("regiment's radar", id + (down ? " off the air: " : " on the air again: ") + reason);
+            return true;
+        }
+        return false;
+    }
+    // A warning source of the vehicle's (c2_sources.hpp) down from now or restored, as a trigger would. False without
+    // the source.
+    bool SetC2SourceDown(const std::string& id, bool down, const std::string& reason) {
+        if (!c2_) return false;
+        bool known = false;
+        for (const C2SourceDef& s : def_.c2_sources) known = known || s.id == id;
+        if (!known) return false;
+        c2_->SetFailed(id, down, time_, reason);
+        Event("C2 source", id + (down ? " out of action: " : " working again: ") + reason);
+        return true;
+    }
+    // The regiment says something to the battery on its command net `after_s` from now: heard on the post's R-111 when
+    // it is on the net, said again until the post receipts it, as the scenario's own messages. False without the R-111
+    // worked as a set.
+    bool RegimentSays(const std::string& text, double after_s) {
+        if (!r111_) return false;
+        RegimentMessage m;
+        m.at_s = time_ + after_s;
+        m.text = text;
+        def_.radio_plan.messages.push_back(m);
+        MessageState st;
+        st.next_s = m.at_s;
+        messages_.push_back(st);
+        return true;
+    }
+
+    // A neighbour's kill (roadmap 17.1): the neighbour reports it up and the regiment tells the battery on its command net
+    // `after_s` from now, by the number the post's board has the target under. Heard at the post, the mark is known
+    // destroyed: wiped from the board as the commander reads it, given to no launcher again. False without the R-111
+    // worked as a set, or with no mark of it on the post's board (nothing for the post to match it to).
+    bool RegimentTellsDestroyed(const std::string& target, const std::string& by, double after_s) {
+        if (!r111_ || !post_) return false;
+        int number = 0;
+        double at = -1.0;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (m.target_id != target || m.time_s < at) continue;
+            number = m.number;
+            at = m.time_s;
+        }
+        if (number <= 0) return false;
+        char text[160];
+        std::snprintf(text, sizeof(text), "Regiment to the battery: target %04d destroyed by %s.", number, by.c_str());
+        if (!RegimentSays(text, after_s)) return false;
+        def_.radio_plan.messages.back().destroyed = target;
+        return true;
+    }
+
     // A lesson's cues (tutorial.hpp): a net's main station orders it to its other frequency now; a strong spot jammer
     // comes on a net; the far end of a line rings.
     bool ExternalNetOrder(const std::string& net) {
@@ -5366,7 +5459,7 @@ private:
         in.tube_speed = SeatSpeed(Cmdr());
         in.take_off_new = SeatHolder(Cmdr()).empty();
         in.send = !console_.post_sending.empty() && console_.equipment.IsReady(console_.post_sending);
-        post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth), radar, in);
+        post_->Update(time_, CommandPost::RegimentSees(def_.post_regiment, truth, time_), radar, in);
         if (in.primary || in.imitation) OweTakeOff();
         if (in.send && post_->LastSentS() == time_) {
             if (!post_sending_) Event("telecode", "the post sends its picture on: " + std::to_string(post_->Sent().size()) + " targets");
@@ -6842,8 +6935,10 @@ private:
             if (heard) journal_.Heard(time_, net, from, text);
         }
         radio_.push_back(std::move(m));
+        ++radio_total_;
         if (radio_.size() > kRadioKept) radio_.erase(radio_.begin());
     }
+    std::size_t radio_total_ = 0;
     std::vector<char> battery_orders_done_;
     bool air_threat_forced_ = false;
     std::map<std::string, double> warned_s_;  // targets the battery was warned of from the board, and when

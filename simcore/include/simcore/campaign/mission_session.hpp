@@ -14,6 +14,11 @@
 //
 // The player's two outcomes (roadmap 14.6, campaign/outcomes.hpp) are kept beside it from the truth: the task's covered
 // object while the battery stands ready over it, and each package back from the session; the debrief ends with them.
+//
+// Our radars and warning posts follow the war through the session (roadmap 17.3): the regiment's radars in the theatre
+// join the post's feed beside the scenario's own, and each of them, with every warning source of the vehicle's standing
+// at a theatre object, is off the air while the war has it struck and on it again once repaired. The regiment tells the
+// battery on its command net: at the start what is already out, later each change.
 #pragma once
 
 #include <algorithm>
@@ -86,6 +91,7 @@ public:
         while (campaign_->Advance(h0_)) campaign_->SkipPlayerMission();
         live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_);
         outcomes_.Check(CheckSuppression(*campaign_, h0_));
+        JoinOurPosts();
         return true;
     }
 
@@ -95,6 +101,7 @@ public:
         if (live_) live_->Step(*runner_);
         CarryTheMove();
         KeepOutcomes(dt);
+        if (campaign_) FollowOurPosts(false);
         if (regiment_ && runner_->Time() + 1e-9 >= next_decide_s_) {
             next_decide_s_ = runner_->Time() + kDecideEveryS;
             RegimentDecides(campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture(), BriefingNow());
@@ -138,6 +145,14 @@ public:
     int BatteryMoves() const { return moves_; }  // the campaign had our battery move where the session's arrived
     bool BatteryMoved() const { return moves_ > 0; }
     const OutcomeLedger& Outcomes() const { return outcomes_; }
+    // A radar of the regiment's or a warning source the session follows the war's damage to.
+    struct OurPost {
+        std::string object;  // the theatre object (the session's id for it too)
+        std::string name;
+        bool radar = false;  // a radar of the regiment's feed; else a warning source of the vehicle's
+        bool stands = true;  // as the session has it now
+    };
+    const std::vector<OurPost>& OurPosts() const { return ours_; }
     // The runner's debrief, then the two outcomes (from the truth: for the debrief and the reveal only), the enemy's
     // phase checked now.
     std::string Debrief() const {
@@ -233,6 +248,59 @@ private:
         }
         return n > 0 ? sum / static_cast<double>(n) : runner_->UnitPosition();
     }
+    // Our radars and warning posts (see the header): joined at the start, then followed each minute.
+    void JoinOurPosts() {
+        ScenarioRunner& r = *runner_;
+        const airwar::TheatreDef& th = campaign_->Data().theatre;
+        const Vec3 centre = BatteryCentre();
+        for (std::size_t i = 0; i < th.objects.size(); ++i) {
+            const airwar::TheatreObject& o = th.objects[i];
+            if (o.regiment_radar.empty()) continue;
+            const Vec3 at = FromTheatre(campaign_->Truth()[i].pos);
+            if (std::hypot(at.x - centre.x, at.y - centre.y) >= kOurRadarsM) continue;
+            if (r.AddRegimentRadar(o.id, o.regiment_radar, Vec3{at.x, at.y, kRadarUpM})) ours_.push_back({o.id, o.name, true, true});
+        }
+        for (const C2SourceDef& s : r.Def().c2_sources) {
+            for (const airwar::TheatreObject& o : th.objects) {
+                if (o.id == s.id) ours_.push_back({o.id, o.name, false, true});
+            }
+        }
+        FollowOurPosts(true);
+    }
+    void FollowOurPosts(bool start) {
+        if (!start && runner_->Time() + 1e-9 < next_posts_s_) return;
+        next_posts_s_ = runner_->Time() + kDecideEveryS;
+        std::vector<std::string> out, back;
+        for (OurPost& p : ours_) {
+            const bool stands = Function(p.object) > kStandsAbove;
+            if (stands == p.stands) continue;
+            p.stands = stands;
+            const std::string why = stands ? "repaired" : start ? "struck before the mission" : "struck";
+            const bool changed = p.radar ? runner_->SetRegimentRadarDown(p.object, !stands, why) : runner_->SetC2SourceDown(p.object, !stands, why);
+            if (changed && p.radar) (stands ? back : out).push_back(p.name);
+        }
+        const auto told = [this, start](const std::vector<std::string>& names, const char* one, const char* many) {
+            if (names.empty()) return;
+            std::string list;
+            for (std::size_t i = 0; i < names.size(); ++i) list += (i == 0 ? "" : i + 1 == names.size() ? " and " : ", ") + names[i];
+            const std::string text = "Regiment to the battery: " + list + (names.size() == 1 ? one : many);
+            if (!runner_->RegimentSays(text, start ? kToldAtStartS : kRegimentTellsS)) Note("not told (no R-111 in the session): " + text);
+        };
+        told(out, " is out of action; the regiment's picture is thinner.", " are out of action; the regiment's picture is thinner.");
+        told(back, " is on the air again.", " are on the air again.");
+    }
+    static constexpr double kStandsAbove = 0.3;      // as raid_scenario.hpp's: at or below it a post is out of action
+    static constexpr double kOurRadarsM = 250000.0;  // as raid_scenario.hpp's: the regiment's radars this near the battery
+    static constexpr double kRadarUpM = 2.0;         // as raid_scenario.hpp's radar positions
+    static constexpr double kToldAtStartS = 90.0;    // sam3d: after the regiment's first word to the battery
+    static constexpr double kRegimentTellsS = 180.0; // sam3d: the radar company reports up, the regiment passes it on
+
+    // A theatre point in the session's frame (on the ground).
+    Vec3 FromTheatre(const Vec3& theatre_enu) const {
+        Vec3 to = airwar::MoveFrame(LocalFrame(campaign_->Data().theatre.origin), LocalFrame(runner_->Def().origin), theatre_enu);
+        to.z = 0.0;
+        return to;
+    }
     // A session point in the theatre's frame (on the ground).
     Vec3 ToTheatre(const Vec3& session_enu) const {
         Vec3 to = airwar::MoveFrame(LocalFrame(runner_->Def().origin), LocalFrame(campaign_->Data().theatre.origin), session_enu);
@@ -250,6 +318,8 @@ private:
     double arrived_h_ = kNeverH;    // the campaign hour the battery came to the position it holds
     double next_decide_s_ = 0.0;
     std::vector<GivenTask> given_;
+    std::vector<OurPost> ours_;
+    double next_posts_s_ = 0.0;
     std::vector<std::string> notes_;
     OutcomeLedger outcomes_;
     std::string covered_place_;     // the task's covered place the ledger has

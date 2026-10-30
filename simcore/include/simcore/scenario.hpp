@@ -266,6 +266,7 @@ struct ScenarioDef {
     PlottingBoardDef post_board;
     AspdDef post_aspd;
     PostRegiment post_regiment;
+    RegimentRadarLibrary post_radar_types;  // the post's library of radar types ("post.library"): a radar joining in play
     AspdCodeTable post_codes;        // the regiment's two-digit commands' meanings ("post.codes"; empty: none)
     PlottingTuning post_plotting;    // the player's hand on the board ("post.plotting"; the defaults without it)
     // The after-action report from the post's records and the regiment's check of them (roadmap P9,
@@ -1572,6 +1573,7 @@ private:
         if (!codes_file.empty() && !LoadAspdCodesFile(data_dir + "/" + codes_file, out.post_codes, &error)) return Fail("post.codes", error);
         RegimentRadarLibrary lib;
         if (!library_file.empty() && !LoadRegimentRadarsFile(data_dir + "/" + library_file, lib, &error)) return Fail("post.library", error);
+        out.post_radar_types = lib;
         auto radar_of = [&](const json::Value& e, const std::string& rp, bool with_id, RegimentRadar& radar) {
             std::string id, type;
             // A cabled radar (no id) may also go off the air (its outages); a regiment's radar may not.

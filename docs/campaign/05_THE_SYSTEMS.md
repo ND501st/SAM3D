@@ -200,6 +200,10 @@ a time (the campaign keeps one pending, so one due meanwhile waits), the campaig
 - **Long quiet stretches**: when nothing is within reach and nothing is due, the session steps coarsely with the EM
   layer idle until the next wake event's lead time. Fuel still burns, gyros still drift, the warning net still listens.
   This is the session's own fast path, measured in 15.4.
+- **Built first, the measure (15.4, 31 Oct 2026)**: `campaign/director.hpp` watches the player's seat and wakes it only
+  on what has reached it (first person): a word heard there on a net, a line or the intercom that is not a crew callout,
+  a target new in the seat's picture, a new mark on the post's board. It measures the quiet stretches between; the
+  compression and the coarse step wait with the battery's day (G7, on hold).
 - **What the player lives**: every package that comes to the battery's area is lived at the battery. The director
   never skips one and never changes its odds. Between missions it chooses which steps of the next mission's life
   (`03` §5) are lived and which are summarised. The march may be lived; the TZM's run is summarised unless something
@@ -221,12 +225,16 @@ a time (the campaign keeps one pending, so one due meanwhile waits), the campaig
 - **Neighbours' fire**: an injected aircraft crossing a neighbour's ring (the ZU-23 at the bridges, battery 22, the
   Strela platoons, the S-125) takes that defence's kill chance, as the abstract resolution's `PassKillChance` gives it.
   It is logged as theirs, and heard on the net or seen. A neighbour at full detail is a later choice (`battery_fire.hpp`
-  already fights the battery's own other launchers).
+  already fights the battery's own other launchers). **Heard on the net, built 31 Oct 2026**: the regiment tells the
+  battery each neighbour's kill on its command net by the board's number, and the post wipes the mark on hearing it.
 - **Our fighters**: friendly aircraft in the battery's sky by the task's coordination (the corridor and its times),
   written as targets that answer IFF. The fighter regiment's notices reach the battery through the pipeline (its duty
   officer is already a post), and friendly fire follows from stale codes or a notice that never arrived.
 - **The warning net and the regiment's radars**: as the raid builder sets them today (outages for wrecked radars,
-  the PU-12M blind when none stands), carried through the session.
+  the PU-12M blind when none stands), carried through the session. **First form built (17.3, 31 Oct 2026)**: the
+  `MissionSession` joins the theatre's radars of the regiment to the PU-12M's feed and puts each, with the vehicle's
+  warning sources at theatre objects, off the air while the war has it struck and back once repaired; the regiment
+  tells the battery on its command net.
 - **Supply**: the TZM and the ATZ draw from the technical battery's and the depots' stocks and drive the real roads and
   bridges. A wrecked bridge lengthens the run (§2).
 
