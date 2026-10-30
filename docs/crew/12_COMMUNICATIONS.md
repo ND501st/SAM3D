@@ -128,7 +128,10 @@ Every producer asks the router who hears it, so nothing reaches anyone without a
 * **Jamming** (the scenario's `jamming` list: nets or a band, from-to, noise or spot, weak or strong, a spot jammer's time
   to find the new frequency): strong jamming loses every message at a receiver; weak loses each with a chance
   (`data/gameplay/comms.json`), and commands are said twice. A listener recognises it after his skill's perception time and
-  says «Помехи на …»; it is logged and reported.
+  says «Помехи на …»; it is logged and reported. A jamming listed for a net with a band reaches only the net's
+  frequencies inside the band. In a mission with an air war, each package entering the session brings its faction's
+  voice jammers onto the battery net, as strong or weak as FM 34-40-7's ratio at the worst receiver makes them, from the
+  package's take-off to its last aircraft out (`air_war/comms_jamming.hpp`, roadmap 16.2).
 * **The spare-frequency drill**: the main station orders «Переходите на запасную частоту» (circular, said twice); the
   members read back, turn their sets to the spare, and wait for its call. A member who missed the order calls the main
   station after 1-2 min, tries both frequencies after 5 min, and reports loss of communication after 10 min

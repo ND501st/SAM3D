@@ -10,6 +10,12 @@
   "notes": "Fictional order of battle: a slice of an air army assigned to this front. Aircraft types are period Soviet types named for flavour; every aircraft number is a PLACEHOLDER. The RWRs and pods are the EM layer's generic ones (data/em/generic.json): the Soviet sets are not in the EM libraries yet.",
   "em_libraries": [ "em/generic.json" ],
   "callsigns": [ "201", "305", "412", "517", "623", "734", "845", "956" ],
+  "comms_jamming": [
+    { "id": "army_jamming_battalion", "name": "the army's radio jamming battalion (R-330B)", "power_w": 1000, "band_mhz": [ 30, 100 ], "mode": "spot",
+      "follow_s": 120, "behind_km": 12.5, "range_km": 25,
+      "source": "stemasov_1969 (a SPETSNAZ-A battalion with an army on the main axis, set up 10-15 km from the line of contact, about 25 km of VHF reach, 12-15 km in barrage); gs_lesson12_1977 (the anti-aircraft battalions' command post and warning radio jammed first); ru_wiki_r330 (the R-330B: 30-100 MHz, 1 kW); williamson_1980 (NATO's view in 1980: 1.5-2 kW at 30-76 MHz); follow_s is a sam3d reading",
+      "confidence": "low", "notes": "The Soviet figure (1 kW) used, NATO's 1.5-2 kW recorded (docs/research/VOICE_JAMMING_2026-10.md section 2). Fictional against a fictional enemy: here it jams the nets of the Pact's adversary, our side." }
+  ],
   "doctrine": {
     "planning_cycle_h": 12, "lead_time_h": 3, "on_call_fraction": 0.2, "centralisation": 0.9, "simultaneous_bias": 0.8,
     "sortie_rate_per_day": 2.5, "serviceability": 0.7, "max_packages_per_cycle": 10, "delivery_risk": 0.3,

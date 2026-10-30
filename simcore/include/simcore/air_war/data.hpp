@@ -534,6 +534,24 @@ struct OfficerPoolDef {
     int quirks_max = 3;
 };
 
+// A jammer of our VHF voice nets (roadmap 16.2; docs/research/VOICE_JAMMING_2026-10.md): a ground station or a
+// helicopter's orbit behind the enemy's front line, in service from its year, on the air with the packages of its kinds
+// from their take-off. How hard it jams a receiver is FM 34-40-7's rule (air_war/comms_jamming.hpp).
+struct CommsJammerDef {
+    std::string id;
+    std::string name;
+    bool airborne = false;
+    int in_service_year = 0;       // 0: always
+    double power_w = 0.0;          // its transmitter (0: no source gives it; then weak within its range, never strong)
+    double band_lo_mhz = 30.0;
+    double band_hi_mhz = 76.0;
+    bool barrage = false;          // spread over its band; else spot, one net's frequency at a time
+    double follow_s = -1.0;        // spot: finds a net again this long after it moves (< 0: never)
+    double behind_km = 0.0;        // where it stands behind the front line
+    double range_km = 30.0;        // the farthest from it that its side says it jams
+    std::vector<MissionKind> with; // the packages it comes on with (empty: every package)
+};
+
 struct FactionDef {
     std::string id;
     std::string name;
@@ -551,6 +569,7 @@ struct FactionDef {
     std::vector<OfficerDef> officers;  // the authored staff
     std::vector<std::string> em_libraries;  // EM libraries its jammers and RWRs come from (for scenarios)
     std::vector<std::string> callsigns;     // flight call signs its planners use
+    std::vector<CommsJammerDef> comms_jamming;  // its jammers of our voice nets (none: it has none, or none known)
 
     const AircraftType* Aircraft(const std::string& id_) const {
         for (const AircraftType& a : aircraft) {
@@ -644,6 +663,12 @@ struct TuningTable {
             {"utility.min_value", 0.5},
             {"utility.min_effect", 0.05},
             {"utility.missile_cost", 0.4},      // per cruise missile spent, at a full stock (scarcer, dearer)
+            // the enemy's jamming of our voice nets (air_war/comms_jamming.hpp)
+            {"comms_jam.capture_k", 2.0},       // J/S at which an FM receiver is captured: strong
+            {"comms_jam.weak_js", 0.5},         // J/S from which words are lost: weak
+            {"comms_jam.terrain_n", 3.0},       // the distance law's exponent for the ground between
+            {"comms_jam.own_power_w", 20.0},    // our sets' transmitters on the battery's nets
+            {"comms_jam.ease_before_tot_s", 180.0},  // off this long before the time on target when ARMs fly
             // attrition (abstract resolution)
             {"attrition.low_vs_long_range_sam", 0.35},
             {"attrition.medium_vs_guns", 0.0},
@@ -1177,7 +1202,7 @@ public:
         std::string tier;
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
-                             "aircraft", "squadrons", "officer_pool", "officers"}) ||
+                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1189,8 +1214,46 @@ public:
         if (!ParseTier(tier, out.tier)) return Fail("tier", "inferior, near_peer, peer or superior");
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
-            !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out)) {
+            !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
+            !LoadCommsJamming(root, out)) {
             return false;
+        }
+        return true;
+    }
+
+    bool LoadCommsJamming(const json::Value& root, FactionDef& out) {
+        const json::Value* arr = OptionalArray(root, "", "comms_jamming");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& j = arr->items[i];
+            const std::string p = Index("comms_jamming", i);
+            CommsJammerDef c;
+            std::vector<std::string> with;
+            std::string mode;
+            if (!Keys(j, p, {"id", "name", "airborne", "in_service_year", "power_w", "band_mhz", "mode", "follow_s", "behind_km",
+                             "range_km", "with", "source", "confidence", "notes"}) ||
+                !RequireString(j, p, "id", c.id) || !RequireString(j, p, "name", c.name) || !OptionalBool(j, p, "airborne", c.airborne) ||
+                !Int(j, p, "in_service_year", c.in_service_year, 0, 2050) || !Num(j, p, "power_w", c.power_w, 0.0, 100000.0) ||
+                !RequireString(j, p, "mode", mode) || !Num(j, p, "follow_s", c.follow_s, -1.0, 86400.0) ||
+                !Num(j, p, "behind_km", c.behind_km, 0.0, 200.0) || !Num(j, p, "range_km", c.range_km, 0.1, 500.0) ||
+                !StringList(j, p, "with", with) || !Provenance(j, p)) {
+                return false;
+            }
+            const json::Value* band = OptionalArray(j, p, "band_mhz");
+            if (band == nullptr || band->items.size() != 2 || !band->items[0].Is(json::Type::Number) || !band->items[1].Is(json::Type::Number) ||
+                band->items[0].number >= band->items[1].number) {
+                return message_.empty() ? Fail(Join(p, "band_mhz"), "required, [low, high] in MHz") : false;
+            }
+            c.band_lo_mhz = band->items[0].number;
+            c.band_hi_mhz = band->items[1].number;
+            if (mode != "spot" && mode != "barrage") return Fail(Join(p, "mode"), "spot or barrage");
+            c.barrage = mode == "barrage";
+            for (std::size_t k = 0; k < with.size(); ++k) {
+                MissionKind m;
+                if (!ParseMissionKind(with[k], m)) return Fail(Index(Join(p, "with"), k), "not a mission kind");
+                c.with.push_back(m);
+            }
+            out.comms_jamming.push_back(std::move(c));
         }
         return true;
     }

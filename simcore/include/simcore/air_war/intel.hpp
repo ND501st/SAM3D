@@ -157,11 +157,12 @@ public:
     // new ones (the "percentage of known SAM sites destroyed or suppressed" a staff reports).
     // The whole country's: a battery that survives anywhere keeps the rollback from ending (the enemy's freedom of action,
     // docs/campaign/02_WHAT_WE_DEFEND.md §5).
-    double BelievedIadsShare() const {
+    // `without`: as it would be without that entry (the player's two outcomes, campaign/outcomes.hpp).
+    double BelievedIadsShare(const std::string& without = std::string()) const {
         double working = 0.0;
         double there = 0.0;
         for (const IntelEntry& e : entries) {
-            if (!e.IsSamRadar()) continue;
+            if (!e.IsSamRadar() || (!without.empty() && e.key == without)) continue;
             const double w = Clamp01(e.exists) * (1.0 - 0.7 * e.suspected_decoy);
             working += w * Clamp01(e.function);
             there += w;

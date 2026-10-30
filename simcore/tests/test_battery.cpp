@@ -1148,3 +1148,61 @@ SC_TEST("battery orders (G10.8): in the battery commander's seat the march is th
     SC_EXPECT(net->Book().Orders().size() == 1 && net->Book().Orders()[0].kind == "march");
     SC_EXPECT(!owes("order_battery_march"));
 }
+
+SC_TEST("battery fire: a launcher reports by the number it was given, whatever aircraft it found there; on its own, by the target's") {
+    std::vector<BatteryVehicleDef> v;
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    v.push_back(own);
+    BatteryVehicleDef l;
+    l.id = l.callsign = "22";
+    l.kind = BatteryVehicleKind::Launcher;
+    l.start = Vec3{0.0, 0.0, 0.0};
+    v.push_back(l);
+    Battery b(Tactics(), v);
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    // The aircraft where it was told to look is the board's 6205; it was given the board's 6202 (a stale mark of
+    // another aircraft, the post's picture late).
+    BatteryFireTarget a;
+    a.id = "a";
+    a.number = 6205;
+    a.position = Vec3{6000.0, 6000.0, 1000.0};
+    a.velocity = Vec3{-100.0, -100.0, 0.0};
+    a.agl_m = 1000.0;
+    a.alive = true;
+    const auto reported = [&](bool on_own) {
+        BatteryFire fire(t, 20000.0);
+        fire.SetAutonomous(on_own);
+        fire.Sync(b);
+        if (!on_own) fire.Assign("22", "a", 6202, 0.0);
+        std::mt19937 rng(3);
+        std::vector<BatteryFire::Event> out;
+        for (double s = 0.0; s < 45.0; s += 0.5) {
+            fire.Step(s, {a}, rng, &b, [](const std::string&) {});
+            for (const BatteryFire::Event& e : fire.TakeEvents()) {
+                if (e.callsign == "22" && e.kind != BatteryFire::Event::Kind::Empty && e.kind != BatteryFire::Event::Kind::Ready) out.push_back(e);
+            }
+        }
+        return out;
+    };
+    const std::vector<BatteryFire::Event> given = reported(false);
+    bool captured = false, launched = false;
+    for (const BatteryFire::Event& e : given) {
+        SC_EXPECT(e.target == "a" && e.number == 6202);
+        captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
+        launched = launched || e.kind == BatteryFire::Event::Kind::Launch;
+    }
+    SC_EXPECT(captured && launched);
+    const std::vector<BatteryFire::Event> own_search = reported(true);
+    SC_EXPECT(!own_search.empty());
+    for (const BatteryFire::Event& e : own_search) SC_EXPECT(e.number == 6205);
+}

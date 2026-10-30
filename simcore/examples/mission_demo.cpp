@@ -103,5 +103,9 @@ int main(int argc, char** argv) {
         const std::size_t end = debrief.find("\n\n", at);
         std::printf("==== The debrief\n%s\n", debrief.substr(at, end == std::string::npos ? std::string::npos : end - at).c_str());
     }
+    // The player's two outcomes (roadmap 14.6), from the truth.
+    const std::string with_outcomes = s.Debrief();
+    const std::size_t outcomes_at = with_outcomes.find("The battery's two outcomes");
+    if (outcomes_at != std::string::npos) std::printf("==== %s", with_outcomes.substr(outcomes_at).c_str());
     return r.TaskReadyS() >= 0.0 && r.TaskReadyS() <= p.ready_by_s && war_ok ? 0 : 1;
 }

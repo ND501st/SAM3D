@@ -11,6 +11,9 @@
 // The regiment tasks the battery in the same session (roadmap 14.2, campaign/regiment.hpp): every minute it reads what
 // reached it, our intelligence's estimates in the campaign's journal, and gives the battery its next task on the
 // regiment's net (ScenarioRunner::GiveTask), which the battery commander plans from where his battery stands.
+//
+// The player's two outcomes (roadmap 14.6, campaign/outcomes.hpp) are kept beside it from the truth: the task's covered
+// object while the battery stands ready over it, and each package back from the session; the debrief ends with them.
 #pragma once
 
 #include <algorithm>
@@ -24,6 +27,7 @@
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/package_injector.hpp"
 #include "simcore/campaign/battery_plan.hpp"
+#include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/scenario.hpp"
@@ -81,6 +85,7 @@ public:
         if (h0_ < 0.0) h0_ += 24.0;
         while (campaign_->Advance(h0_)) campaign_->SkipPlayerMission();
         live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_);
+        outcomes_.Check(CheckSuppression(*campaign_, h0_));
         return true;
     }
 
@@ -89,6 +94,7 @@ public:
         runner_->Step(dt);
         if (live_) live_->Step(*runner_);
         CarryTheMove();
+        KeepOutcomes(dt);
         if (regiment_ && runner_->Time() + 1e-9 >= next_decide_s_) {
             next_decide_s_ = runner_->Time() + kDecideEveryS;
             RegimentDecides(campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture(), BriefingNow());
@@ -131,6 +137,15 @@ public:
     double CampaignHourAtStart() const { return h0_; }
     int BatteryMoves() const { return moves_; }  // the campaign had our battery move where the session's arrived
     bool BatteryMoved() const { return moves_ > 0; }
+    const OutcomeLedger& Outcomes() const { return outcomes_; }
+    // The runner's debrief, then the two outcomes (from the truth: for the debrief and the reveal only), the enemy's
+    // phase checked now.
+    std::string Debrief() const {
+        const std::string d = runner_->Debrief();
+        if (!campaign_ && outcomes_.Assets().empty()) return d;
+        const SuppressionCheck now = campaign_ ? CheckSuppression(*campaign_, campaign_->Now()) : SuppressionCheck();
+        return d + "\n" + outcomes_.Text(campaign_ ? &now : nullptr);
+    }
 
 private:
     // The battery at the position its task names (the task's march over, or in its area from the start): the
@@ -157,6 +172,36 @@ private:
         ++moves_;
     }
     static constexpr double kArrivedM = 1000.0;  // sam3d: as the runner's kTaskInAreaM
+
+    // The two outcomes' ledgers: the task's covered object (its place's theatre object, looked up once per task) while
+    // the battery stands ready for action on the task, every object it covered as it stands now, and each package
+    // once it is back from the session.
+    void KeepOutcomes(double dt) {
+        const ScenarioRunner& r = *runner_;
+        if (r.HasTask() && !r.Def().task.covered.empty()) {
+            if (r.Def().task.covered != covered_place_) {
+                covered_place_ = r.Def().task.covered;
+                const nav::Anchor* a = r.Nav() != nullptr ? r.Nav()->GetAnchors().Find(covered_place_) : nullptr;
+                covered_object_ = a != nullptr ? a->theatre_object : std::string();
+                outcomes_.Cover(covered_place_, covered_object_, a != nullptr ? a->name : covered_place_, Function(covered_object_));
+            }
+            if (r.TaskReadyS() >= 0.0) outcomes_.Covered(covered_place_, dt, Function(covered_object_));
+        }
+        if (!campaign_) return;
+        if (r.Time() + 1e-9 >= next_seen_s_) {  // the raids resolved off the scene count too
+            next_seen_s_ = r.Time() + kDecideEveryS;
+            for (const CoveredAsset& a : outcomes_.Assets()) outcomes_.Seen(a.place, Function(a.object));
+        }
+        const std::vector<airwar::LivePackages::Played>& played = live_->PlayedPackages();
+        for (; ledgered_ < played.size() && played[ledgered_].out_s >= 0.0; ++ledgered_) {
+            for (const airwar::Package& p : campaign_->Packages()) {
+                if (p.id == played[ledgered_].package_id) {
+                    outcomes_.Played(p, played[ledgered_].outcome, played[ledgered_].release_flights, OwnObject(*campaign_));
+                }
+            }
+        }
+    }
+    double Function(const std::string& object) const { return campaign_ && !object.empty() ? ObjectFunction(*campaign_, object) : 1.0; }
     static constexpr double kDecideEveryS = 60.0;
     static constexpr double kNeverH = 1e18;
 
@@ -206,6 +251,11 @@ private:
     double next_decide_s_ = 0.0;
     std::vector<GivenTask> given_;
     std::vector<std::string> notes_;
+    OutcomeLedger outcomes_;
+    std::string covered_place_;     // the task's covered place the ledger has
+    std::string covered_object_;    // its theatre object
+    std::size_t ledgered_ = 0;      // played packages in the ledger
+    double next_seen_s_ = 0.0;
 };
 
 }  // namespace campaign

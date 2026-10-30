@@ -53,7 +53,7 @@ struct RadioNetDef {
 
 struct JammingDef {
     std::vector<std::string> nets;       // by id; empty: by band
-    double band_lo_mhz = 0.0, band_hi_mhz = 0.0;
+    double band_lo_mhz = 0.0, band_hi_mhz = 0.0;  // with nets: only their frequencies in it (none set: any)
     double from_s = 0.0, to_s = 1e18;
     bool strong = true;
     bool spot = false;                   // a spot jammer on one frequency (finds a new one after follow_s)
@@ -235,6 +235,8 @@ public:
             if (!j.nets.empty()) {
                 for (const std::string& id : j.nets) covers = covers || id == net;
                 if (covers && j.spot) covers = jam_on_[i] == number;
+                // A jammer with a band reaches only the frequencies in it (a spare outside it escapes).
+                if (covers && j.band_hi_mhz > j.band_lo_mhz) covers = mhz >= j.band_lo_mhz && mhz <= j.band_hi_mhz;
             } else {
                 covers = mhz > 0.0 && mhz >= j.band_lo_mhz && mhz <= j.band_hi_mhz;
             }

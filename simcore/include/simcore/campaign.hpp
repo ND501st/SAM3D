@@ -11,6 +11,7 @@
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_task.hpp"
 #include "simcore/campaign/mission_session.hpp"
+#include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
 #include "simcore/campaign/report.hpp"
 #include "simcore/campaign/stocks.hpp"

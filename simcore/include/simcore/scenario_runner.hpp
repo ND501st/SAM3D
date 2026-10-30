@@ -5102,6 +5102,16 @@ public:
         OnNetMoved({net, to, true});
         return true;
     }
+    // The enemy's jamming of a net on its own times (a package's jammers, air_war/comms_jamming.hpp): `by` names it in the
+    // log. False if the session has no such net.
+    bool AddNetJamming(const JammingDef& j, const std::string& by) {
+        if (!nets_ || j.nets.empty() || def_.radio_data.Find(j.nets.front()) == nullptr) return false;
+        nets_->AddJamming(j);
+        char span[64];
+        std::snprintf(span, sizeof(span), " from %.0f s to %.0f s", j.from_s, j.to_s);
+        Event(j.nets.front() + " net", by + ": " + (j.strong ? "strong " : "weak ") + (j.spot ? "spot" : "barrage") + " jamming" + span);
+        return true;
+    }
     bool StartJamming(const std::string& net) {
         if (!nets_ || def_.radio_data.Find(net) == nullptr) return false;
         JammingDef j;

@@ -77,6 +77,11 @@
     "rocket_pk_vehicle": 0.3, "revealed_by_launch_m": 15000.0,
     "notes": "A raid as the player's scenario: the flights inside clip_m of the battery, prep_s before the first aircraft appears; the mission bridge's weapon effects (roadmap E6 will replace the ARM with an EM missile)."
   },
+  "comms_jam": {
+    "capture_k": 2.0, "weak_js": 0.5, "terrain_n": 3.0, "own_power_w": 20.0, "ease_before_tot_s": 180.0,
+    "source": "fm_34_40_7 (J/S = (Pj/Pt)(Dt/Dj)^n, K = 2 to capture an FM receiver, n = 3 for rolling farmland); paprcka_1984 (jamming eased a few minutes before the anti-radiation missiles flew); own_power_w is the launchers' R-123M, about 20 W (r123_refs), the weaker side of the battery net; weak_js is a sam3d value",
+    "notes": "The enemy's jamming of our voice nets (air_war/comms_jamming.hpp, roadmap 16.2)."
+  },
   "own_intel": {
     "reveal_per_observation": 0.12, "pow_chance": 0.4, "warning_s": 300.0, "leak_warning_s": 900.0,
     "notes": "What the player's side learns: a prisoner talks with pow_chance; the warning net gives warning_s before the first aircraft, leak_warning_s when the enemy's planner has loose lips."

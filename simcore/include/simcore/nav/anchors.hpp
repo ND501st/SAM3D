@@ -18,13 +18,15 @@ struct Anchor {
     std::string kind;  // "place", "object", "position", "settlement", "landmark", "point"
     MapPoint at;
     std::string name;  // as the map or the chain names it (a march plan's landmarks)
+    std::string theatre_object;  // a chain's place at a theatre object: that object ("" none)
 };
 
 class Anchors {
 public:
     // The first one with an id holds it: a place of the chain at a theatre object keeps the chain's id and point.
-    void Add(const std::string& id, const std::string& kind, const MapPoint& at, const std::string& name = "") {
-        if (Find(id) == nullptr) all_.push_back({id, kind, at, name.empty() ? id : name});
+    void Add(const std::string& id, const std::string& kind, const MapPoint& at, const std::string& name = "",
+             const std::string& theatre_object = "") {
+        if (Find(id) == nullptr) all_.push_back({id, kind, at, name.empty() ? id : name, theatre_object});
     }
     const Anchor* Find(const std::string& id) const {
         for (const Anchor& a : all_) {
@@ -36,7 +38,7 @@ public:
 
     // Our chain's places (data/command/places_pannonia.json).
     void AddChain(const command::ChainData& chain) {
-        for (const command::Place& p : chain.places) Add(p.id, "place", {p.pos.x, p.pos.y}, p.name);
+        for (const command::Place& p : chain.places) Add(p.id, "place", {p.pos.x, p.pos.y}, p.name, p.theatre_object);
     }
     // The theatre's objects, and each one's prepared positions besides where it starts ("<id>#2", "<id>#3", ...).
     void AddTheatre(const airwar::TheatreDef& theatre) {

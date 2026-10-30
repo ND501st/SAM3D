@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "simcore/air_war/campaign.hpp"
+#include "simcore/air_war/comms_jamming.hpp"
 #include "simcore/air_war/mission_bridge.hpp"
 #include "simcore/air_war/raid_scenario.hpp"
 #include "simcore/geo.hpp"
@@ -166,6 +167,8 @@ public:
         std::size_t aircraft = 0;
         std::size_t jammers = 0;
         int lost = 0;
+        std::vector<int> release_flights;  // its flights whose release point was in the session (indices into its flights)
+        PackageOutcome outcome;            // as handed back to the campaign (once out)
     };
 
     // `h_at_zero`: the campaign's hour at the session's t = 0.
@@ -181,6 +184,7 @@ public:
             c_->CompletePlayerMission(o, HourOf(r.Time()));
             played_.back().out_s = r.Time();
             played_.back().lost = o.Lost();
+            played_.back().outcome = o;
             bridge_.reset();
             next_s_ = r.Time();
             return;
@@ -203,6 +207,7 @@ public:
                 continue;
             }
             for (const std::string& n : inj.notes) notes_.push_back("package " + std::to_string(p.id) + ": " + n);
+            JamTheBatteryNet(r, p);
             bridge_ = std::make_unique<MissionBridge>(inj.manifest, c_->Data(), r.Def().seed ^ static_cast<unsigned>(p.id));
             Played pl;
             pl.package_id = p.id;
@@ -210,6 +215,12 @@ public:
             pl.in_s = at_s;
             pl.aircraft = inj.aircraft;
             pl.jammers = inj.jammers;
+            for (const RaidAircraft& a : inj.manifest.aircraft) {
+                if (a.has_release && a.flight >= 0 &&
+                    std::find(pl.release_flights.begin(), pl.release_flights.end(), a.flight) == pl.release_flights.end()) {
+                    pl.release_flights.push_back(a.flight);
+                }
+            }
             played_.push_back(pl);
             return;
         }
@@ -222,6 +233,36 @@ public:
     double HourOf(double t_s) const { return h0_ + t_s / 3600.0; }
 
 private:
+    // The faction's jammers of our voice nets with the package (comms_jamming.hpp), against the battery where the session
+    // has it: each that reaches the battery net is on it on the package's times; the rest are noted with why not.
+    void JamTheBatteryNet(ScenarioRunner& r, const Package& p) {
+        const RadioNetDef* net = r.Def().radio_data.Find("battery");
+        const Battery* b = r.GetBattery();
+        if (net == nullptr || b == nullptr || c_->Data().faction.comms_jamming.empty()) return;
+        std::vector<Vec3> launchers;
+        Vec3 centre;
+        for (const Battery::Vehicle& v : b->Vehicles()) {
+            if (v.def.kind != BatteryVehicleKind::Launcher) continue;
+            launchers.push_back(v.position);
+            centre += v.position;
+        }
+        if (launchers.empty()) return;
+        centre = centre / static_cast<double>(launchers.size());
+        JammedBattery jb;
+        const LocalFrame session(r.Def().origin), theatre(c_->Data().theatre.origin);
+        jb.centre = MoveFrame(session, theatre, centre);
+        jb.centre.z = 0.0;
+        jb.post = r.UnitPosition() - centre;
+        for (const Vec3& l : launchers) jb.receivers.push_back(l - centre);
+        jb.net_mhz = net->frequencies_mhz;
+        const std::vector<VoiceJammer> jammers = VoiceJammersFor(c_->Data(), p, jb);
+        const std::string tag = "package " + std::to_string(p.id) + ": ";
+        for (const VoiceJammer& v : jammers) notes_.push_back(tag + v.name + " on the battery net: " + v.why);
+        for (const VoiceJammer& v : jammers) {
+            for (const JammingDef& j : VoiceJammingDefs(c_->Data(), p, {v}, h0_)) r.AddNetJamming(j, tag + v.name);
+        }
+    }
+
     AirCampaign* c_;
     std::string data_dir_;
     double h0_ = 0.0;

@@ -138,6 +138,31 @@ SC_TEST("mission session (15.2): the bridges mission with the Pact's air war on 
     const Vec3 at_end = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos;
     SC_EXPECT(std::hypot(at_end.x - at_start.x, at_end.y - at_start.y) > 2000.0);
     SC_EXPECT(c.Now() > s.CampaignHourAtStart() + 1.0);
+    // The two outcomes (14.6): the bridges covered from the battery's readiness on, every package back from the
+    // session in the ledger in its turn, the enemy's phase checked; the debrief shows both, the combat report neither.
+    const campaign::OutcomeLedger& o = s.Outcomes();
+    const campaign::CoveredAsset* bridges = o.Find("kesmark_bridges");
+    SC_EXPECT(bridges != nullptr);
+    if (bridges != nullptr) {
+        SC_EXPECT(bridges->object == "kesmark_road_bridge");
+        SC_EXPECT(bridges->covered_h > 0.0 && bridges->working_h <= bridges->covered_h + 1e-9);
+        SC_EXPECT_NEAR(bridges->covered_h, (r.Time() - r.TaskReadyS()) / 3600.0, 0.5 / 3600.0);  // from its «к бою готова» up
+    }
+    std::size_t back = 0;
+    while (back < live.PlayedPackages().size() && live.PlayedPackages()[back].out_s >= 0.0) ++back;
+    SC_EXPECT(o.Packages().size() == back);
+    for (std::size_t i = 0; i < o.Packages().size() && i < back; ++i) {
+        const campaign::PackageLedger& l = o.Packages()[i];
+        SC_EXPECT(l.id == live.PlayedPackages()[i].package_id);
+        SC_EXPECT(l.released + l.Prevented() == l.release_flights);
+    }
+    SC_EXPECT(!o.Checks().empty());
+    const std::string debrief = s.Debrief();
+    const std::size_t outcomes_at = debrief.find("The battery's two outcomes");
+    SC_EXPECT(outcomes_at != std::string::npos);
+    if (outcomes_at != std::string::npos) std::printf("%s", debrief.c_str() + outcomes_at);
+    SC_EXPECT(debrief.find("Assets kept:") != std::string::npos && debrief.find("Freedom of action denied:") != std::string::npos);
+    SC_EXPECT(r.Debrief().find("Assets kept:") == std::string::npos);
 }
 
 SC_TEST("mission bridge: a kill by the battery's launchers is the package's loss, unless the launcher takes it back") {

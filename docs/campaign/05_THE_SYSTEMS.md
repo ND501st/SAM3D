@@ -212,7 +212,7 @@ a time (the campaign keeps one pending, so one due meanwhile waits), the campaig
 | Strikes, DEAD, hunters, decoys, SEAD, escorts | In the raid scenario; ARMs as EM missiles (A11) | Injected live (§7) |
 | Stand-off and self-protection jamming, chaff | In the raid scenario (`own_unit.em.jammers`) | Injected live |
 | **Reconnaissance** | Abstract: photographs what lies along its route | In the scenario, a reconnaissance aircraft photographs what it overflies within its quality's reach (nets halve it). The photographs reach the enemy's picture only if it gets home: shooting it down denies them |
-| **Voice jamming** | A hand-written scenario only (`osa_vhf_jamming_em.json`) | A comms jammer kind in the faction data where 16.0's research supports it; the package's jammer jams the nets in its band (`radio_nets.hpp`); the nets' drills answer |
+| **Voice jamming** | A hand-written scenario only (`osa_vhf_jamming_em.json`) | A comms jammer kind in the faction data where 16.0's research supports it; the package's jammer jams the nets in its band (`radio_nets.hpp`); the nets' drills answer. **First form built (16.2, 31 Oct 2026)**: `air_war/comms_jamming.hpp`, the faction's `comms_jamming` (ground and helicopter jammers behind its front, by FM 34-40-7's J/S rule) put on the battery net by each package entering the session |
 | ELINT and COMINT | The seconds radiated, from the raid; the posture's radio discipline | The session's real emissions every minute, and its real radio calls (P3) |
 | Satellites | Abstract passes in the campaign | Unchanged; their pass times as a known hazard is a design option with no source yet (`04` §5) |
 
@@ -287,6 +287,17 @@ enemy's.
   damaged. Per day it records whether the battery held the enemy's suppression phase open (the believed share of
   working air defences with and without it). The difference comes from planning each package again without the
   battery's entry, which costs little next to a scenario.
+
+**Built, first form (31 Oct 2026).** `simcore/campaign/outcomes.hpp`, kept by the `MissionSession` and printed after
+its debrief (`MissionSession::Debrief`, `mission_demo --war`). Assets kept: the theatre object at the task's covered
+place (the anchor's `theatre_object`), the hours covered from the battery's «к бою готова» up and those hours weighted
+by its working share, the played packages' hits on it, and the flights against it with their release point in the
+session that released nothing, shot down first or broken away. Freedom of action denied: each package back from the
+session, with what it brought (suppression, jammers, decoys, escorts, cruise missiles), the ARMs it fired, its aircraft
+and missiles downed by the battery and by our others, its release flights and the enemy's own reasons from its plan;
+and the enemy's phase checked at the start and at the debrief (`IntelPicture::BelievedIadsShare` with and without the
+battery's entry, against the phase's `until_iads`). Not yet: the package planned again without the battery's entry,
+the rebuilds, troops and columns covered, the consequences that did not follow.
 
 During the campaign our side sees only what its reports show: SEAD in the raids, raids that turned back, the heights
 they came at. The regiment's picture can infer part of the ledger from those (§11). The whole ledger is shown at the
