@@ -1,38 +1,54 @@
 // mission_demo: play a battery mission headless (roadmap 14): the regiment's combat task to the battery commander, his
 // plan timed to its ready-by, his orders on the battery net, the march and the formation, and «к бою готова» up to the
-// regiment. Prints the order and the plan as the papers in his map case, then what happened against the plan.
+// regiment. Prints the order and the plan as the papers in his map case, then what happened against the plan. With
+// --war, the enemy's air campaign runs beside it on the mission's clock and its packages come in live (roadmap 15.2,
+// 15.3: campaign/mission_session.hpp).
 //
-// Usage: mission_demo [scenario.json] [data_dir]
-//   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root)
-// Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by.
+// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]]
+//   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day
+// Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
+// with --war also if no package came in.
 #include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <vector>
 
-#include "simcore/scenario.hpp"
+#include "simcore/campaign/mission_session.hpp"
 #include "simcore/scenario_runner.hpp"
 
 using namespace simcore;
 
 int main(int argc, char** argv) {
-    const std::string path = argc > 1 ? argv[1] : "data/scenarios/pu12m_mission_cover.json";
-    const std::string data_dir = argc > 2 ? argv[2] : "data";
+    std::vector<std::string> args;
+    campaign::MissionSessionDef md;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--war" && i + 1 < argc) {
+            md.faction = argv[++i];
+            if (i + 1 < argc && argv[i + 1][0] != '-') md.seed = static_cast<unsigned>(std::atoi(argv[++i]));
+            if (i + 1 < argc && argv[i + 1][0] != '-') md.day = std::atoi(argv[++i]);
+            continue;
+        }
+        args.push_back(a);
+    }
+    md.scenario = args.size() > 0 ? args[0] : "data/scenarios/pu12m_mission_cover.json";
+    const std::string data_dir = args.size() > 1 ? args[1] : "data";
 
-    ScenarioDef def;
-    ConsoleData console;
+    campaign::MissionSession s;
     std::string error;
-    if (!LoadScenarioFile(path, data_dir, def, console, &error)) {
+    if (!s.Start(md, data_dir, &error)) {
         std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }
-    if (!def.has_task) {
-        std::fprintf(stderr, "%s: no \"task\" (a battery mission starts with the regiment's task)\n", path.c_str());
+    ScenarioRunner& r = s.Runner();
+    if (!r.Def().has_task) {
+        std::fprintf(stderr, "%s: no \"task\" (a battery mission starts with the regiment's task)\n", md.scenario.c_str());
         return 1;
     }
-    ScenarioRunner r(std::move(def), std::move(console));
-    // To «к бою готова» up to the regiment, and a minute after it; or to the scenario's end.
+    // Without the war: to «к бою готова» up to the regiment, and a minute after it. With it: to the scenario's end.
     double ready_seen_s = -1.0;
-    while (!r.Finished() && (ready_seen_s < 0.0 || r.Time() < ready_seen_s + 60.0)) {
-        r.Step(0.1);
+    while (!r.Finished() && (s.Campaign() != nullptr || ready_seen_s < 0.0 || r.Time() < ready_seen_s + 60.0)) {
+        s.Step(0.1);
         if (ready_seen_s < 0.0 && r.TaskReadyS() >= 0.0) ready_seen_s = r.Time();
     }
     for (const HeldPaper& h : r.MapCase("battery_commander")) {
@@ -52,6 +68,17 @@ int main(int argc, char** argv) {
     } else {
         std::printf("  reported      never\n");
     }
+    bool war_ok = true;
+    if (const airwar::LivePackages* live = s.Packages()) {
+        std::printf("==== The enemy's packages (%s, seed %u, day %d)\n", md.faction.c_str(), md.seed, md.day);
+        for (const airwar::LivePackages::Played& pk : live->PlayedPackages()) {
+            std::printf("  package %d '%s': %zu aircraft, in at %s, back at %s, %d shot down\n", pk.package_id, pk.name.c_str(), pk.aircraft,
+                        r.TaskClock(pk.in_s).c_str(), pk.out_s >= 0.0 ? r.TaskClock(pk.out_s).c_str() : "still in", pk.lost);
+        }
+        for (const std::string& n : live->Notes()) std::printf("  (%s)\n", n.c_str());
+        std::printf("  the battery's new position is the campaign's: %s\n", s.BatteryMoved() ? "yes" : "not yet");
+        war_ok = !live->PlayedPackages().empty();
+    }
     // The debrief's account of the task.
     const std::string debrief = r.Debrief();
     const std::size_t at = debrief.find("The task (");
@@ -59,5 +86,5 @@ int main(int argc, char** argv) {
         const std::size_t end = debrief.find("\n\n", at);
         std::printf("==== The debrief\n%s\n", debrief.substr(at, end == std::string::npos ? std::string::npos : end - at).c_str());
     }
-    return r.TaskReadyS() >= 0.0 && r.TaskReadyS() <= p.ready_by_s ? 0 : 1;
+    return r.TaskReadyS() >= 0.0 && r.TaskReadyS() <= p.ready_by_s && war_ok ? 0 : 1;
 }

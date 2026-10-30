@@ -146,6 +146,16 @@ task arrives as an order into the running session.
   district generated the same way (`terrain_map.hpp`, deterministic for its seed), so the battery marches, crosses and
   moves on real ground wherever it fights.
 
+**Built, first form (30 Oct 2026)**: `simcore/campaign/mission_session.hpp`. A battery mission (a scenario with the
+regiment's `"task"`) plays in one runner with an enemy's campaign beside it: the scenario's `clock_start` on the war's
+day is the campaign's hour at the session's start, the campaign is run to there first (its packages before then
+resolved without the player), and from then on the packages it gives the battery come in live (§7). The campaign's
+battery stands where the session's launchers do from the war's first hour, so the enemy's intelligence looks at the
+battery the session plays; it moves to the main position once the session's battery has arrived, so until then the
+enemy aims where it stood. `mission_demo --war <faction> [seed [day]]` plays it headless. Left: the
+`MissionScenarioBuilder` (the session made from the task and the battery's state, not a written scenario), the next
+task arriving in the running session, `BatteryState` carried out (15.1), and the other batteries at L1.
+
 ## 7. Packages entering a running mission
 
 - **The runner gains** `AddTargets` (a package's aircraft with their behaviour, EM gear, ARMs and decoy flags, at a

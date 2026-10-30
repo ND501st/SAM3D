@@ -100,6 +100,7 @@ add_executable(simcore_tests
   tests/test_instructor.cpp
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
+  tests/test_mission_session.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
   tests/test_command.cpp
@@ -140,6 +141,10 @@ simcore_configure_target(mission_demo)
 add_test(NAME mission_demo
          COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data")
+# The same with the Pact's air war on its clock (roadmap 15.2, 15.3): its package comes in live on the march.
+add_test(NAME mission_demo_war
+         COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" --war warsaw_pact 1 1)
 
 add_executable(scenario_demo examples/scenario_demo.cpp)
 simcore_configure_target(scenario_demo)

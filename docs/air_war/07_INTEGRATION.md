@@ -39,7 +39,10 @@ war: `AddTargets`, `AddEmGear` (the package's EM library entries and jammers, `e
 `AddTriggers` (the air-raid warning, a C2 source put out), with `TargetAppeared`; the bridge gained `Over`. The
 manifest moves with the aircraft and the battery stands where the session has it, so the bridge per package reads the
 session as it reads a raid's own scenario. `LivePackages` advances the campaign with the session's clock and hands it
-each package the campaign gives the battery, one at a time, and the outcome back with `CompletePlayerMission`.
+each package the campaign gives the battery, one at a time, and the outcome back with `CompletePlayerMission`;
+`campaign/mission_session.hpp` puts it beside a battery mission on the mission's clock (roadmap 15.2). The bridge counts
+the battery's launchers' kills (the battery fire model's "destroys", unless a launcher takes the kill back), which it
+missed before 30 October 2026: a played raid's losses to the battery's other launchers never reached the campaign.
 
 ## On the map
 

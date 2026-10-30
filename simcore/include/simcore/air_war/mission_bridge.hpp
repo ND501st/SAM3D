@@ -188,15 +188,20 @@ public:
         o.played = true;
         o.truth_applied = false;
         ReadNeighbourKills(r);
-        // Which aircraft went down: our missiles' hits (the engagement model's HIT), the battery's other launchers
-        // ("destroyed by <launcher>") and anything else the world destroyed ("destroyed").
+        // Which aircraft went down: our missiles' hits (the engagement model's HIT), a neighbour's ("destroyed by
+        // <neighbour>"), the battery's launchers ("<launcher> destroys <target>", unless it "takes back the kill of" it)
+        // and anything else the world destroyed ("destroyed").
         std::vector<bool> down(m_.aircraft.size(), false);
+        const std::string kDestroys = "destroys ", kTakesBack = "takes back the kill of ";
         for (const DebriefEntry& e : r.Log().Entries()) {
             const bool hit = e.kind == DebriefEntry::Kind::Hit;
-            const bool destroyed = e.kind == DebriefEntry::Kind::Scenario && e.detail.compare(0, 9, "destroyed") == 0;
-            if (!hit && !destroyed) continue;
+            const bool scen = e.kind == DebriefEntry::Kind::Scenario;
+            const bool destroyed = scen && e.detail.compare(0, 9, "destroyed") == 0;
             for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
-                if (m_.aircraft[i].target_id == e.what) down[i] = true;
+                const std::string& id = m_.aircraft[i].target_id;
+                if ((hit || destroyed) && id == e.what) down[i] = true;
+                if (scen && e.detail == kDestroys + id) down[i] = true;
+                if (scen && e.detail == kTakesBack + id) down[i] = false;
             }
         }
         const std::size_t nf = m_.flight_in.size();
