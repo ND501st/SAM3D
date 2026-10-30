@@ -102,6 +102,7 @@ add_executable(simcore_tests
   tests/test_packages_live.cpp
   tests/test_mission_session.cpp
   tests/test_regiment.cpp
+  tests/test_picture_lost.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
   tests/test_command.cpp
@@ -146,6 +147,10 @@ add_test(NAME mission_demo
 add_test(NAME mission_demo_war
          COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data" --war warsaw_pact 1 1)
+# The task held through the whole day (15.2): the dusk and dawn packages, the regiment's tasking on its estimate.
+add_test(NAME mission_demo_day
+         COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" --war warsaw_pact 1 1 --hours 24)
 
 add_executable(scenario_demo examples/scenario_demo.cpp)
 simcore_configure_target(scenario_demo)

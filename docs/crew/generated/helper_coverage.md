@@ -249,7 +249,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 0 | 16 | 0 | 0 | - | 0 |
-| commander | 900 time | 3 | 242 | 270 | 1 | 4 | 0 | 0 | 0 | 31 | 0 | 0 | duty 37 | 3 |
+| commander | 900 time | 3 | 242 | 270 | 1 | 4 | 0 | 0 | 0 | 32 | 0 | 0 | duty 38 | 3 |
 | deputy_commander | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 7 | 16 | 0 | 0 | drill 12, duty 7 | 0 |
 | senior_operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 23 | 18 | 5 | 0 | drill 23, duty 123, wheel 747 | 0 |
 | operator | 900 time | 3 | 244 | 270 | 1 | 4 | 0 | 0 | 8 | 16 | 0 | 0 | drill 16, duty 8, wheel 193 | 0 |
@@ -259,12 +259,12 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 0 | 27 | 0 | 0 | - | 0 |
+| NPC crew | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 0 | 31 | 0 | 0 | - | 0 |
 | commander | 900 time | 3 | 388 | 402 | 1 | 4 | 0 | 0 | 0 | 29 | 0 | 0 | duty 35 | 0 |
-| deputy_commander | 900 time | 3 | 382 | 400 | 1 | 4 | 0 | 0 | 7 | 27 | 0 | 0 | drill 10, duty 7 | 0 |
-| senior_operator | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 21 | 32 | 3 | 0 | drill 40, duty 109, wheel 622 | 0 |
-| operator | 900 time | 3 | 377 | 400 | 1 | 4 | 0 | 0 | 6 | 27 | 0 | 0 | drill 11, duty 6, wheel 156 | 0 |
-| driver | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 1 | 27 | 0 | 0 | drill 1, duty 1 | 0 |
+| deputy_commander | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 7 | 31 | 0 | 0 | drill 12, duty 7 | 0 |
+| senior_operator | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 21 | 32 | 3 | 0 | drill 40, duty 109, wheel 632 | 0 |
+| operator | 900 time | 3 | 375 | 400 | 1 | 4 | 0 | 0 | 7 | 30 | 0 | 0 | drill 13, duty 7, wheel 91 | 0 |
+| driver | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 1 | 31 | 0 | 0 | drill 1, duty 1 | 0 |
 
 ## osa_battery_orders: Osa: the march order, carried to every vehicle
 
@@ -660,13 +660,13 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (commander): the least emission: the operator told the tracking transmitter's rule | 6 |
 | order (commander): the limited regime: ВЫСОКОЕ off between bursts | 124 |
 | order (commander): the limited regime: ВЫСОКОЕ on for a burst | 121 |
-| order (commander): the search transmitter on longer than the regime's burst | 24 |
+| order (commander): the search transmitter on longer than the regime's burst | 25 |
 | plot (operator): a report heard: write it on the board | 107 |
 | report (commander): a battery order heard on the net: read it back | 1 |
 | report (commander): a target destroyed: report it on the battery net | 7 |
 | report (commander): a target given on the battery net: read it back | 203 |
 | report (commander): an ARM launch: reported to the battery commander | 8 |
-| report (deputy_commander): a report the crew makes when its lamp or input comes on | 167 |
+| report (deputy_commander): a report the crew makes when its lamp or input comes on | 169 |
 | report (deputy_commander): a sign of the shot on his instrument: fire and break-up on the TV | 14 |
 | report (deputy_commander): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 2 |
 | report (deputy_commander): a sign of the shot on his instrument: the missile's reply lost before the meeting | 1 |
@@ -681,7 +681,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (driver): stowed after the ARM attack: ready to march | 3 |
 | report (driver): the crew is stowed for the battery's march | 1 |
 | report (operator): a mark new, turned or lost on the board: tell the commander | 22 |
-| report (operator): a report the crew makes when its lamp or input comes on | 102 |
+| report (operator): a report the crew makes when its lamp or input comes on | 103 |
 | report (operator): a sign of the shot on his instrument: its jamming gone | 1 |
 | report (operator): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 21 |
 | report (operator): a sign of the shot on his instrument: the missile's reply still there after the meeting | 5 |

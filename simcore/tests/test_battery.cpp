@@ -568,6 +568,67 @@ SC_TEST("battery fire: in free fire each launcher takes the targets in its secto
     SC_EXPECT(!fire.SetSector("99", 0.0, 90.0));
 }
 
+SC_TEST("battery fire: on its own, with its sector empty, a launcher takes one coming at it from any side, not one going away or above its ceiling") {
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    BatteryVehicleDef l22;
+    l22.id = l22.callsign = "22";
+    l22.kind = BatteryVehicleKind::Launcher;
+    l22.has_sector = true;
+    l22.sector_from_deg = 0.0;  // north-east
+    l22.sector_to_deg = 90.0;
+    Battery b(Tactics(), {own, l22});
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    BatteryFire fire(t, 20000.0);
+    fire.Sync(b);
+    fire.SetOnOwn("22", true);
+    auto target = [](const char* id, const Vec3& at, const Vec3& v, double agl) {
+        BatteryFireTarget tg;
+        tg.id = id;
+        tg.position = at;
+        tg.velocity = v;
+        tg.agl_m = agl;
+        return tg;
+    };
+    // South-west, out of its sector: one flying away, one above the zone's ceiling coming at it, one low coming at it.
+    const BatteryFireTarget away = target("away", Vec3{-4000.0, -4000.0, 300.0}, Vec3{-200.0, -200.0, 0.0}, 300.0);
+    const BatteryFireTarget high = target("high", Vec3{-6000.0, -6000.0, 5100.0}, Vec3{200.0, 200.0, 0.0}, 5100.0);
+    const BatteryFireTarget low = target("low", Vec3{-9000.0, -9000.0, 300.0}, Vec3{200.0, 200.0, 0.0}, 300.0);
+    std::mt19937 rng(3);
+    fire.Step(0.0, {away, high}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire.Find("22")->target.empty());
+    fire.Step(0.1, {away, high, low}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire.Find("22")->target == "low");
+    // One in its sector comes first, even farther off.
+    BatteryFire fire2(t, 20000.0);
+    fire2.Sync(b);
+    fire2.SetOnOwn("22", true);
+    const BatteryFireTarget ne = target("ne", Vec3{12000.0, 12000.0, 300.0}, Vec3{-200.0, -200.0, 0.0}, 300.0);
+    fire2.Step(0.0, {low, ne}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire2.Find("22")->target == "ne");
+    // Captured, then past it and out of its zones going away: let go for the next one.
+    BatteryFire fire3(t, 20000.0);
+    fire3.Sync(b);
+    fire3.SetOnOwn("22", true);
+    BatteryFireTarget pass = target("pass", Vec3{-3000.0, -3000.0, 300.0}, Vec3{200.0, 200.0, 0.0}, 300.0);
+    fire3.Step(0.0, {pass}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire3.Find("22")->target == "pass");
+    fire3.Step(20.0, {pass}, rng, &b, [](const std::string&) {});  // captured (the chart's 16.5 s)
+    SC_EXPECT(fire3.Find("22")->phase == BatteryFire::Phase::Tracking);
+    pass.position = Vec3{9000.0, 9000.0, 300.0};  // past it, beyond the zone's far edge, going away
+    fire3.Step(21.0, {pass}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire3.Find("22")->target.empty() && fire3.Find("22")->phase == BatteryFire::Phase::Idle);
+}
+
 #include "simcore/board_reading.hpp"
 
 SC_TEST("board reading: two crosses a minute apart give course, speed, the time to the post and to the zone's edge") {

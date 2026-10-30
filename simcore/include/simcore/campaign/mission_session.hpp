@@ -13,6 +13,7 @@
 // regiment's net (ScenarioRunner::GiveTask), which the battery commander plans from where his battery stands.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -38,6 +39,7 @@ struct MissionSessionDef {
     unsigned seed = 1;                                  // the war's
     int day = 1;                                        // the war's day the mission's clock falls on
     std::string tasking;                                // the regiment's tasking rules ("campaign/tasking.json"); "" none
+    double hours = 0.0;                                 // the session's length from its start (0: the scenario's own end)
 };
 
 class MissionSession {
@@ -58,6 +60,10 @@ public:
             regiment_ = std::make_unique<RegimentTasking>(std::move(rules), data_dir);
             // A battery without a task from the scenario plans the regiment's by the same sequence.
             if (def.has_battery && !def.has_task && !LoadPlanSequence(data_dir, "campaign/battery_plan.json", def.plan_sequence, &e)) return fail(e);
+        }
+        if (d.hours > 0.0) {  // the task held through the day: the session ends by the clock, not when the sky is empty
+            def.time_limit_s = std::max(def.time_limit_s, d.hours * 3600.0);
+            def.end_when_targets_gone = false;
         }
         const double clock_start_s = def.clock_start_s;
         runner_ = std::make_unique<ScenarioRunner>(std::move(def), std::move(console));

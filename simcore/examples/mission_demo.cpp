@@ -5,8 +5,9 @@
 // 15.3: campaign/mission_session.hpp), and the regiment tasks the battery on what our intelligence estimates of it
 // (roadmap 14.2: data/campaign/tasking.json).
 //
-// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]]
-//   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day
+// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h]
+//   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
+//   --hours: the session held that long from its start (the task through the day), not to the scenario's end
 // Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
 // with --war also if no package came in.
 #include <cstdio>
@@ -31,6 +32,10 @@ int main(int argc, char** argv) {
             md.tasking = "campaign/tasking.json";
             continue;
         }
+        if (a == "--hours" && i + 1 < argc) {
+            md.hours = std::atof(argv[++i]);
+            continue;
+        }
         args.push_back(a);
     }
     md.scenario = args.size() > 0 ? args[0] : "data/scenarios/pu12m_mission_cover.json";
@@ -49,7 +54,7 @@ int main(int argc, char** argv) {
     }
     // Without the war: to «к бою готова» up to the regiment, and a minute after it. With it: to the scenario's end.
     double ready_seen_s = -1.0;
-    while (!r.Finished() && (s.Campaign() != nullptr || ready_seen_s < 0.0 || r.Time() < ready_seen_s + 60.0)) {
+    while (!r.Finished() && (s.Campaign() != nullptr || md.hours > 0.0 || ready_seen_s < 0.0 || r.Time() < ready_seen_s + 60.0)) {
         s.Step(0.1);
         if (ready_seen_s < 0.0 && r.TaskReadyS() >= 0.0) ready_seen_s = r.Time();
     }

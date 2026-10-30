@@ -1185,8 +1185,11 @@ public:
         }
         // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
         if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
-            order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment") {
+            order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment" ||
+            order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") {
             bool done = false;
+            if (order_id == "order_battery_search_own") done = OrderSearchOwn(true, "Battery commander");
+            if (order_id == "order_battery_by_designation") done = OrderSearchOwn(false, "Battery commander");
             if (order_id == "order_battery_spare") done = OrderBatteryNetSpare("Battery commander");
             if (order_id == "order_battery_duty") done = OrderBatteryDuty(true, "Battery commander");
             if (order_id == "order_battery_simplex") done = OrderBatteryDuty(false, "Battery commander");
@@ -1252,6 +1255,7 @@ public:
         // The orders on the nets: whoever must talk on the net can (his box on its set, the set transmitting).
         const auto net_of = [&]() -> std::string {
             if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
+            if (order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") return "battery";
             if (order_id == "order_warn_covered" || order_id == "order_all_clear_covered") return "covered";
             if (order_id == "order_report_regiment") return "regiment";
             if (order_id.rfind("order_battery_emission_", 0) == 0) return "battery";
@@ -1265,6 +1269,10 @@ public:
             if (move_kind != BatteryOrder::Kind::Halt && move_kind != BatteryOrder::Kind::Resume && !PostPlanned(order_id)) {
                 return refuse("в боевом приказе этого нет", "not in the combat order: no route or position for it yet");
             }
+        }
+        if (order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") {
+            if (!battery_fire_) return refuse("пусковых на батарейной сети нет", "no launchers on the battery net");
+            if ((order_id == "order_battery_search_own") == (search_own_order_ >= 0)) return refuse("уже выполнено", "done already");
         }
         const std::string net = net_of();
         if (!net.empty() && net != "covered" && MarchRadioBan()) {  // the warnings to the covered troops are open talk
@@ -2216,6 +2224,7 @@ private:
                     battery_->SetAirThreat(a.air_threat, time_);
                     air_threat_forced_ = a.air_threat;
                 }
+                raid_warned_s_ = a.air_threat ? time_ : -1.0;  // a raid announced (the warning), not the standing readiness
                 return;
             case TriggerAction::Kind::Instructor: {  // the trainer's scripted drill (roadmap 10.3)
                 std::string why;
@@ -3122,11 +3131,16 @@ private:
         task_moved_ = true;
     }
     // An order of words only on the battery net (the task's preliminary order and the oral combat order): every vehicle
-    // commander hears it and reads it back; nobody moves on it.
-    int NoticeOnOrderNet(const std::string& kind, const std::string& words, const std::pair<std::string, std::string>& short_words) {
+    // commander hears it and reads it back (only the launchers' for a fire order); nobody moves on it.
+    int NoticeOnOrderNet(const std::string& kind, const std::string& words, const std::pair<std::string, std::string>& short_words,
+                         bool launchers_only = false) {
         KeepOrderNetCurrent();
         std::vector<std::string> to;
-        for (const command::OrderVehicle& v : order_net_->Vehicles()) to.push_back(v.vehicle);
+        for (const command::OrderVehicle& v : order_net_->Vehicles()) {
+            const Battery::Vehicle* bv = battery_ ? battery_->Find(v.vehicle) : nullptr;
+            if (launchers_only && (bv == nullptr || bv->def.kind != BatteryVehicleKind::Launcher)) continue;
+            to.push_back(v.vehicle);
+        }
         const int order = order_net_->Give(kind, words, "radio_voice", time_, to);
         order_words_[order] = short_words;
         notice_orders_.insert(order);
@@ -4140,10 +4154,74 @@ private:
                 Transmitted("battery", "Battery commander", 2.0);
             }
             const bool off = !nets_->MemberOnNet("battery", s.callsign) || nets_->Jam("battery", time_) >= 2;
-            if (off != s.on_own) Event(s.callsign, off ? "off the battery net: searches and fires on its own" : "back on the battery net");
-            battery_fire_->SetOnOwn(s.callsign, off);
+            const bool told = SearchOwnHeard(s.callsign);
+            if ((off || told) != s.on_own) {
+                Event(s.callsign, off ? "off the battery net: searches and fires on its own"
+                                      : (told ? "searches and fires on its own in its sector, by the battery commander's order"
+                                              : "back on the battery net, firing on the post's designations"));
+            }
+            battery_fire_->SetOnOwn(s.callsign, off || told);
+        }
+        UpdatePictureLost();
+    }
+    // The battery commander's order that the launchers search on their own, each in its sector, and engage what they find
+    // (pvo_bu_ix_1984: search on the senior commander's designation or independently, sudden targets engaged
+    // independently and reported afterwards; vr_1985_plss: a gap in the picture means autonomous combat), and its
+    // taking back. Words on the battery net: a launcher whose commander heard it acts on it.
+    bool OrderSearchOwn(bool on, const std::string& by) {
+        if (!post_ || !order_net_ || !battery_fire_) {
+            last_refusal_ = "no launchers on the battery net to order";
+            return false;
+        }
+        if (on == (search_own_order_ >= 0)) {
+            last_refusal_ = on ? "they search on their own already" : "they fire on the post's designations already";
+            return false;
+        }
+        const char* id = on ? "order_battery_search_own" : "order_battery_by_designation";
+        const CalloutDef* c = def_.crew_data.FindCallout(id);
+        const std::string words = c != nullptr ? c->ru : (on ? "Батарее — поиск целей самостоятельно, в своих секторах!" : "Батарее — работать по целеуказанию!");
+        const int order = NoticeOnOrderNet(on ? "search_own" : "by_designation", words,
+                                           on ? std::make_pair(std::string("поиск самостоятельно"), std::string("search on your own"))
+                                              : std::make_pair(std::string("по целеуказанию"), std::string("on the designations")),
+                                           true);
+        search_own_order_ = on ? order : -1;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", words});
+        return true;
+    }
+    // A launcher's commander heard the order to search on his own (and it stands).
+    bool SearchOwnHeard(const std::string& callsign) const {
+        if (search_own_order_ < 0 || !order_net_) return false;
+        for (const command::OrderVehicle& v : order_net_->Vehicles()) {
+            if (v.callsign == callsign) return order_net_->Heard(search_own_order_, v.vehicle);
+        }
+        return false;
+    }
+    // What the commander sees: a raid announced (the warning, not the standing readiness: an empty board is normal while
+    // nothing flies) and nothing new on his board this long means the post has no air picture to designate from (out of
+    // the nets' reach, jammed, the radar company gone): the launchers search on their own. A fresh mark on the board is
+    // the picture back: they fire on the designations again.
+    void UpdatePictureLost() {
+        if (!battery_) return;
+        double fresh_s = -1e9;
+        for (const BoardMark& m : post_->Board().Marks()) fresh_s = std::max(fresh_s, m.time_s);
+        const double since = time_ - raid_warned_s_;
+        const bool no_picture = raid_warned_s_ >= 0.0 && since >= kNoPictureS && since < kRaidWarningS && time_ - fresh_s >= kNoPictureS;
+        const bool picture = time_ - fresh_s < kPictureBackS;
+        if (search_own_order_ < 0 && no_picture && !MarchRadioBan()) {
+            SeatDuty d = SeatDuty::Order(std::string(), "order_battery_search_own", "a raid announced and nothing on the board: the launchers search on their own");
+            d.keep_s = 120.0;
+            if (NpcDoes(Cmdr(), d)) OrderSearchOwn(true, "Battery commander");
+        } else if (search_own_order_ >= 0 && picture && !MarchRadioBan()) {
+            SeatDuty d = SeatDuty::Order(std::string(), "order_battery_by_designation", "the air picture back on the board: the launchers on the designations");
+            d.keep_s = 120.0;
+            if (NpcDoes(Cmdr(), d)) OrderSearchOwn(false, "Battery commander");
         }
     }
+    static constexpr double kNoPictureS = 240.0;  // sam3d: the warning's lead and the radar company's first report, with a margin
+    static constexpr double kPictureBackS = 60.0; // sam3d: a mark plotted within the last minute
+    static constexpr double kRaidWarningS = 1800.0;  // sam3d: a raid's warning stands for half an hour
+    int search_own_order_ = -1;                   // the standing order to search on their own (the order net's), -1 none
+    double raid_warned_s_ = -1.0;                 // a raid announced then (a warning trigger: a package's), -1 none
     // The commander puts the launchers on duty reception (receive only) or back to transmit (3 min before they can).
     bool OrderBatteryDuty(bool duty, const std::string& by) {
         const std::string why = CanTalkOnNet(Cmdr(), "battery");

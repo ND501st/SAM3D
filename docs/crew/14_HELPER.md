@@ -58,6 +58,11 @@ recognised. With the regiment's task (roadmap 14.3, 30 Oct 2026) the battery com
 its oral combat order when his plan has them (the crew menu's Battery orders: `order_battery_preliminary`,
 `order_battery_combat_order`), then the march it starts and the «К бою!» at its end; at a new position the R-111 back
 on the regiment's net (the antenna to the mast, «Р-111 на частоту полка, настроить!») before «к бою готова» goes up.
+A raid announced and nothing new on his board for 4 min (the post out of the air-picture net's reach, jammed), he owes
+«Батарее — поиск целей самостоятельно, в своих секторах!» (`order_battery_search_own`, roadmap 21.5): each launcher
+that hears it searches its sector with its own radar and engages what it finds there, or with its sector empty what
+comes at it from another side; a fresh mark on the board and he owes «Батарее — работать по целеуказанию!»
+(`order_battery_by_designation`).
 
 A report the player then makes from the crew menu says what the NPC would have said, and tells the crew what his would
 have: the duty carries the words and the knowledge (the target, its IFF answer), so the commander learns the target is

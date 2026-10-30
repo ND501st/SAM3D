@@ -229,6 +229,11 @@ public:
                 continue;
             }
             const bool in_zone = tuning_.LaunchZoneFor(rel, tg->velocity, tg->agl_m) != EngagementTuning::ZoneKind::None;
+            if (s.phase == Phase::Tracking && !in_zone && (autonomous_ || s.on_own) && Dot(rel, tg->velocity) > 0.0) {
+                s.target.clear();  // on its own: one it can no longer engage, flying away, is let go for the next
+                s.phase = Phase::Idle;
+                continue;
+            }
             if (s.phase == Phase::Tracking) {
                 if (t < s.next_s || !in_zone || s.missiles <= 0) continue;
                 s.phase = Phase::Preparing;
@@ -286,16 +291,24 @@ private:
         return nullptr;
     }
 
+    // On its own: the nearest hostile in its sector; with none there, the nearest coming at it from any side (pvo_bu_ix_1984:
+    // sudden targets engaged independently; its search radar turns all round). Not one above its zone's ceiling: it could
+    // never fire at it.
     void TakeNearest(Shooter& s, const std::vector<BatteryFireTarget>& targets, double t) {
         const BatteryFireTarget* best = nullptr;
-        double best_r = reach_m_;
-        for (const BatteryFireTarget& tg : targets) {
-            if (!tg.alive || tg.friendly || Engaged(tg.id) || !InSector(s, tg.position)) continue;
-            const double r = (tg.position - s.position).Length();
-            if (r < best_r) {
-                best_r = r;
-                best = &tg;
+        for (const bool sector : {true, false}) {
+            double best_r = reach_m_;
+            for (const BatteryFireTarget& tg : targets) {
+                if (!tg.alive || tg.friendly || Engaged(tg.id)) continue;
+                if (sector ? !InSector(s, tg.position) : Dot(tg.position - s.position, tg.velocity) >= 0.0) continue;
+                if (tuning_.zone_max_alt_m > 0.0 && tg.agl_m > tuning_.zone_max_alt_m) continue;
+                const double r = (tg.position - s.position).Length();
+                if (r < best_r) {
+                    best_r = r;
+                    best = &tg;
+                }
             }
+            if (best != nullptr) break;
         }
         if (best != nullptr) Assign(s.callsign, best->id, best->number, t);
     }

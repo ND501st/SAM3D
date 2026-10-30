@@ -272,7 +272,9 @@ formation, «к бою готова» up to the regiment as the task's readiness
 `battery_plan.hpp`, `pu12m_mission_cover.json`). Phase 15.2-15.3 too, in first form: the battery's mission as one
 session with an enemy's air campaign on its clock (`simcore/campaign/mission_session.hpp`, `mission_demo --war`), its
 packages entering the running session live (`simcore/air_war/package_injector.hpp`: the runner's `AddTargets`,
-`AddEmGear`, `AddTriggers`; `LivePackages` runs the campaign in step with the session).
+`AddEmGear`, `AddTriggers`; `LivePackages` runs the campaign in step with the session), held through a whole day
+(`mission_demo --hours 24`). With no air picture on the post's board after a raid warning, the battery commander orders
+the launchers to search on their own in their sectors (roadmap 21.5, `ScenarioRunner::OrderSearchOwn`).
 
 **Track G, the ground** (project owner, 28 Oct 2026; `docs/campaign/11_BATTERY_LIFE_PROPOSAL.md`, the roadmap's
 track G; not gated): command, battery orders and movement first. Routes are derived from the map's data at load and

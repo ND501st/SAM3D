@@ -186,6 +186,36 @@
    "word_error": 0.0,
    "phonemes": "ˈeɪ.ˈɛs.pˈiː.dˈiː. ˈɔn!"
   },
+  "battery_commander/order_battery_by_designation": {
+   "seat": "battery_commander",
+   "id": "order_battery_by_designation",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: back on the post's designations!",
+   "spoken": "The battery: back on the post's designations!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: back on the post's designations!",
+    "engine_text": "The battery: back on the post's designations!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: bˈæk ɔnðə pˈoʊsts dˌɛzɪɡnˈeɪʃənz!",
+   "duration_s": 2.46,
+   "speech_s": 2.16,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -1.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "the battery back on the post's designations.",
+   "word_error": 0.0
+  },
   "battery_commander/order_battery_duty": {
    "seat": "battery_commander",
    "id": "order_battery_duty",
@@ -470,6 +500,34 @@
    "peak_db": -1.8,
    "flags": [],
    "transcript": "The battery move on.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_search_own": {
+   "seat": "battery_commander",
+   "id": "order_battery_search_own",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: search on your own, each in its sector!",
+   "spoken": "The battery: search on your own, each in its sector!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: search on your own, each in its sector!",
+    "engine_text": "The battery: search on your own, each in its sector!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: sˈɜːtʃ ˌɔn jʊɹ ˈoʊn, ˈiːtʃ ɪn ɪts sˈɛktɚ!",
+   "duration_s": 2.56,
+   "speech_s": 2.21,
+   "slot_s": 3.2,
+   "rms_db": -18.6,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "The battery, search on your own each in its sector.",
    "word_error": 0.0
   },
   "battery_commander/order_battery_simplex": {
