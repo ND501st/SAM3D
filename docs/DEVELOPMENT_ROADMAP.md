@@ -4,13 +4,16 @@ How the project gets built, in order. Complements `PROJECT_PLAN.md` (goals and m
 what blocks what, and how each task is finished. Written 30 Sep 2026; **re-sequenced 2 Oct 2026** after the research
 review (`docs/BRIEFING_2026-10.md`).
 
-**Status (22 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check).
+**Status (30 Oct 2026):** phases 0–5 done (phase 4 except Chaos Vehicles, the real model and the performance check).
 Phase 6, the accuracy pass, done. Phase 7, the battery and PU-12, done in simcore, and the PU-12M built through its P8.
-Phase 8, crew and teamwork, first passes 8.0–8.16 done; its exit (M2) waits for a person to play the missions through.
+Phase 8, crew and teamwork, first passes 8.0–8.16 done (8.14, out of the vehicle, carried on to 30 Oct: wire laying,
+the lessons' walk, the road side, the compass survey); its exit (M2) waits for a person to play the missions through.
 Phases 9 (threats) and 10 (scenarios and training) done in simcore. Phase 11, the enemy air command, built; a person's
-campaign playthrough left. Phase 12, our chain of command, C0–C5 built; P1–P3 and P9 next. The EM track: E0–E7 and E10
-done, E8 and E9 started. **Next: the nation on the map** (prioritised 22 Oct 2026, below): the country's map, ultra-basic
-placeholder models for every asset and the air war running on them; **then the battery's war, phases 13–21**.
+campaign playthrough left. Phase 12, our chain of command and the information pipeline: C0–C5 and P1–P8 built, P9 (the
+reports from the records) in first form (29 Oct). The nation on the map (N0–N7) done 23 Oct. Track G, the ground: G0–G5
+and G8–G11 built in a first form (29 Oct), G6 and G7 on hold; its milestone M-G waits for a person to play the night
+march. The EM track: E0–E7 and E10 done, E8 and E9 started. **Next: people playing it** (M2, a campaign, M-G), which
+gates **the battery's war, phases 13–21**; meanwhile the leftovers each phase lists ("Left:", "Next:").
 
 The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
 targets from the battery's PU-12 and the crew changes ripple through everything after them (re-sequenced 2 Oct 2026).
@@ -185,9 +188,9 @@ officers included, on a map of a small city, towns, villages, works and countrys
 |---|---|
 | C0-C4 | **Done in simcore, 18 Oct 2026.** Research and sources (`utin_2018`, `uvs_rf_2007`, `basta_lm`, `valka_lm`); the chain (38 posts from the national sector to a driver, the town's offices), the places (the city, the town, five villages, the posts), the means of signal (12) and the routines (briefings, visits, courier runs, the news) as data; the pipeline (`simcore/command/info_net.hpp`: facts travel hop by hop by the best means each pair has, routine news waits for contacts, carriers lost where bombs fall, wire cut, papers and summaries, the player's character passes nothing on by itself; deterministic); the air war's news fed in at its first knowers (`air_war_feed.hpp`); 6 tests |
 | C5 | **Built 18 Oct 2026:** the campaign screen shows only what reached the player's character, who told them and how; their chain and its coming contacts; the raid warning as received |
-| P1-P3 | Next: deliveries in the world (an officer who walks up and speaks, the telephone, the radio voice, the courier, papers, the evening briefing as a scene); the player telling people, by the means they choose; the pipeline's radio calls feeding the air war's intercept service (`docs/command/07_IMPLEMENTATION_PLAN.md`) |
+| P1-P3 | **Built 29 Oct 2026** (`docs/command/07_IMPLEMENTATION_PLAN.md`): deliveries in the world as scenes (`command/scenes.hpp`; a scenario's `"deliveries"` played on their channel, the carriers drawn coming over the ground, papers into the seat's map case, a campaign's raid carrying the pipeline's messages to the Osa's seats and taking its warning time from it); the player telling people by the means they choose, with its time, paper, interception and road (`InfoNet::Tell`, their reports and orders saved beside the campaign: `command/player_inputs.hpp`; the campaign screen's tell box); the battery's calls feeding the air war's intercept service (`CampaignFeed::BatteryCalls`). Left: each officer's own voice, the briefing as a scene the player drives to (track G), telling in the world, the session's own radio log as calls |
 | P9 | **After-action reports from the records** (project owner, 22 Oct 2026: `docs/command/01_PRINCIPLES.md` 9): the battery's combat report compiled from the radiotelephonist's journal (`simcore/radio_journal.hpp`), the board and the commander's log, never the truth; the regiment checks records and trusts each unit's reports as they have checked out; the crew's rating carries it. The radiotelephonist's accuracy decides what the regiment and the battery learn and plan: critical to the after-action loop. **First form built 29 Oct 2026** (`simcore/campaign/report.hpp`): the combat report from the PU-12M's journal, board and commander's log, never the truth; the regiment's check against the radar company's log, the crew's mark and a trust per unit; the report as a written fact up the chain; in the debrief. The regiment's staff who read the reports, and the next order they give, are the battery's war's 18.2 and 18.3 |
-| P4-P8 | Later (`docs/command/07_IMPLEMENTATION_PLAN.md`): the crew's knowledge joined to the pipeline, radio hops through the EM layer, multiplayer posts, the district as a level, posts changing hands. The battery's war uses P1-P3 and P9 (phases 14-18) |
+| P4-P8 | **Built 29 Oct 2026** (`docs/command/07_IMPLEMENTATION_PLAN.md`): the crew's knowledge joined to the pipeline (a warning's bearing into the picture of each crewman who heard it, the crew's launches and results as the vehicle commander's report, `command/session_reports.hpp`); radio hops through the EM layer (`command/em_radio.hpp`: each post's set to its published range over the country's ground, jammers by J/N, the enemy's listeners by their own margin; on in the game's campaigns on the nation's theatre); several players' posts in one net, each client sent its own view (`command/post_view.hpp`, in simcore); the district drawn at basic-model level (`command/district.hpp`); posts changing hands (deputies, the alternate post, replacements with only the papers, the player's career). Left: the other vehicles' crews, the enemy's comms jammers and listeners placed, masts, the campaign as a networked Unreal session, the district's art, what gives a change of hands (phase 21). The battery's war uses P1-P3 and P9 (phases 14-18) |
 
 ## The nation on the map (prioritised 22 Oct 2026; done 23 Oct 2026)
 
@@ -273,7 +276,8 @@ officers' logic (`docs/air_war/02_AIR_STAFF.md`, `04_PLANNING.md`). The plan add
 term to their target picking: what a target's loss would cut (`docs/campaign/01_WAR_AIMS_AND_TARGETS.md`).
 
 **Starts after:** the nation on the map (above, not gated: it comes first), M2 (a person plays the missions through),
-a person's playthrough of the one-battery campaign (A10, A12), and phase 12's P1-P3; P9 before phase 18. E8, E9, the scenery's models, 8.14's next steps and the other
+a person's playthrough of the one-battery campaign (A10, A12), and phase 12's P1-P3 (built 29 Oct 2026); P9 before
+phase 18 (in first form 29 Oct 2026). E8, E9, the scenery's models, 8.14's next steps and the other
 leftovers can run alongside.
 
 ## Phase 13 - Why: war aims, roles, rebuilds, and what the battery changes (planned)
