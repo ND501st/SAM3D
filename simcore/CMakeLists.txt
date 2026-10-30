@@ -101,6 +101,7 @@ add_executable(simcore_tests
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
   tests/test_mission_session.cpp
+  tests/test_regiment.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
   tests/test_command.cpp

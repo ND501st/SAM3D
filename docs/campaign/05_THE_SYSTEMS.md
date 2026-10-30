@@ -57,6 +57,16 @@ gets a test (`CLAUDE.md`).
 `campaign/regiment.hpp`, data `data/campaign/tasking.json` (the rules of `03` §1) and the division's priorities per
 campaign (`data/campaign/<faction>.json`).
 
+**Built, first form (30 Oct 2026).** Two rules, each with its reason and source: `no_task` (routine, at the 19:00
+briefing) gives a task file, battery 21's cover of the Kesmark bridges; `enemy_knows_battery` (urgent) gives a
+relocation made from the task held (`RelocateTask`: the first reserve position becomes the main one, the old main
+one a reserve, the cover, sectors and regime as they were, ready in 60 min). The regiment's picture
+(`PictureFromJournal`) is our intelligence's latest daily estimate in the campaign's journal; an estimate made
+before the battery reached the position it holds is about the old one, and each estimate moves it once.
+`MissionSession` decides every minute and gives the task on the regiment's net into the running session
+(`ScenarioRunner::GiveTask`); the battery commander plans it from where he stands, and the campaign's battery
+follows each task's arrival. Not yet: the officers, the other triggers, the five batteries, the division's list.
+
 - **Inputs**, all from what the regiment can know: the division's priority list; the regiment's picture (§11); its
   estimate of what the enemy knows of each battery (built: the daily estimate); each battery's last report
   (readiness, missiles, fuel, damage); the campaign's front data (where the covered troops are and go).

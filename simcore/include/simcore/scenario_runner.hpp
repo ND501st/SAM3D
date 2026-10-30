@@ -751,6 +751,47 @@ public:
     double TaskReadyS() const { return task_ready_s_; }
     int TaskSectorsSet() const { return task_sectors_set_; }
     std::string TaskClock(double s) const { return DayClock(s); }
+    // The regiment's next task, given into the running session now (the battery's days go on in one session, roadmap
+    // 15.2; the regiment's tasking gives it, 14.2): on its net to the battery commander ("radio") or in person, and he
+    // plans it from where his battery stands. The task before it is over: its account stays in the debrief. False, with
+    // why, without a battery to give it to.
+    bool GiveTask(campaign::BatteryTask t, const std::string& means, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        if (!battery_ || !nav_ || def_.plan_sequence.steps.empty()) return fail("the session has no battery on its roads to plan a task for");
+        if (means != "radio" && means != "in_person") return fail("a task goes by \"radio\" or \"in_person\"");
+        if (means == "radio" && !regiment_net_) return fail("the session has no regiment's net to say the task on");
+        for (const std::string& place : t.Places()) {
+            if (nav_->GetAnchors().Find(place) == nullptr) return fail(t.id + ": no place called '" + place + "' on the roads");
+        }
+        for (const campaign::TaskSector& sec : t.sectors) {
+            const Battery::Vehicle* v = battery_->Find(sec.vehicle);
+            if (v == nullptr || v->def.kind != BatteryVehicleKind::Launcher) return fail(t.id + ": a sector for '" + sec.vehicle + "', not a launcher of the battery");
+        }
+        if (def_.has_task) tasks_before_.push_back(TaskBlock());
+        // The session goes on to the new task's ready-by and a while past it, so that its readiness is seen.
+        def_.time_limit_s = std::max(def_.time_limit_s, time_ + t.ready_in_s + kTaskWatchedS);
+        def_.task = std::move(t);
+        def_.has_task = true;
+        def_.task_given_s = time_;
+        def_.task_means = means;
+        task_order_ = -1;
+        task_given_ = false;
+        task_received_s_ = -1.0;
+        task_plan_ = campaign::BatteryPlan();
+        task_steps_done_.clear();
+        task_orders_.clear();
+        task_orders_done_.clear();
+        task_formation_pending_ = false;
+        task_moved_ = false;
+        task_ready_s_ = -1.0;
+        task_sectors_set_ = 0;
+        return true;
+    }
+    int TasksGiven() const { return static_cast<int>(tasks_before_.size()) + (def_.has_task ? 1 : 0); }
+    static constexpr double kTaskWatchedS = 1200.0;  // sam3d: as the bridges mission's end, 19 min past its ready-by
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
     AimCrew AimFlags() const { return aim_crew_; }
@@ -1784,27 +1825,8 @@ public:
                 out += line;
             }
         }
-        if (def_.has_task) {  // the regiment's task: when it came, his plan, and when the battery was ready against its ready-by
-            out += "  The task (" + def_.task.id + "): " + def_.task.task_text + "\n";
-            if (task_received_s_ >= 0.0) {
-                out += "    given " + DayClock(def_.task_given_s) + " (" + def_.task_means + "), received " + DayClock(task_received_s_) +
-                       ", to be ready by " + DayClock(task_plan_.ready_by_s) + "\n";
-            } else {
-                out += "    never reached the battery commander\n";
-            }
-            if (task_plan_.planned && task_plan_.march_at_s >= 0.0) {
-                out += "    his plan: «К маршу!» " + DayClock(task_plan_.march_at_s) + ", at the position " + DayClock(task_plan_.arrive_s) +
-                       ", ready " + DayClock(task_plan_.ready_s) + "\n";
-            }
-            if (task_ready_s_ >= 0.0) {
-                const double late = task_ready_s_ - task_plan_.ready_by_s;
-                std::snprintf(line, sizeof(line), "    ready (reported up) %s: %s %.0f min\n", DayClock(task_ready_s_).c_str(),
-                              late <= 0.0 ? "in time, to spare" : "late by", std::fabs(late) / 60.0);
-                out += line;
-            } else if (task_received_s_ >= 0.0) {
-                out += "    not reported ready\n";
-            }
-        }
+        for (const std::string& before : tasks_before_) out += before;  // the tasks the regiment gave before this one
+        if (def_.has_task) out += TaskBlock();
         if (order_net_ && !order_net_->Book().Orders().empty()) {  // each battery order's times for each vehicle (G10.6)
             out += "  Battery orders (the order book, on the mission's clock):\n";
             for (const std::string& s : order_net_->Debrief(0.0)) out += "    " + s + "\n";
@@ -3127,6 +3149,31 @@ private:
                       late <= 0.0 ? "in time," : "late by", std::fabs(late) / 60.0, late <= 0.0 ? " to spare" : "");
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", buf});
     }
+    // The debrief's account of the task: when it came, his plan, and when the battery was ready against its ready-by.
+    std::string TaskBlock() const {
+        std::string out = "  The task (" + def_.task.id + "): " + def_.task.task_text + "\n";
+        if (task_received_s_ >= 0.0) {
+            out += "    given " + DayClock(def_.task_given_s) + " (" + def_.task_means + "), received " + DayClock(task_received_s_) +
+                   ", to be ready by " + DayClock(task_plan_.ready_by_s) + "\n";
+        } else {
+            out += "    never reached the battery commander\n";
+        }
+        if (task_plan_.planned && task_plan_.march_at_s >= 0.0) {
+            out += "    his plan: «К маршу!» " + DayClock(task_plan_.march_at_s) + ", at the position " + DayClock(task_plan_.arrive_s) +
+                   ", ready " + DayClock(task_plan_.ready_s) + "\n";
+        }
+        if (task_ready_s_ >= 0.0) {
+            char line[160];
+            const double late = task_ready_s_ - task_plan_.ready_by_s;
+            std::snprintf(line, sizeof(line), "    ready (reported up) %s: %s %.0f min\n", DayClock(task_ready_s_).c_str(),
+                          late <= 0.0 ? "in time, to spare" : "late by", std::fabs(late) / 60.0);
+            out += line;
+        } else if (task_received_s_ >= 0.0) {
+            out += "    not reported ready\n";
+        }
+        return out;
+    }
+    std::vector<std::string> tasks_before_;  // the debrief's accounts of the tasks given before this one
     int task_order_ = -1;               // the task in the regiment's order book (by radio)
     bool task_given_ = false;
     double task_received_s_ = -1.0;     // the battery commander has it

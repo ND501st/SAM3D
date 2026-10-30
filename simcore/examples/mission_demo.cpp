@@ -2,7 +2,8 @@
 // plan timed to its ready-by, his orders on the battery net, the march and the formation, and «к бою готова» up to the
 // regiment. Prints the order and the plan as the papers in his map case, then what happened against the plan. With
 // --war, the enemy's air campaign runs beside it on the mission's clock and its packages come in live (roadmap 15.2,
-// 15.3: campaign/mission_session.hpp).
+// 15.3: campaign/mission_session.hpp), and the regiment tasks the battery on what our intelligence estimates of it
+// (roadmap 14.2: data/campaign/tasking.json).
 //
 // Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]]
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day
@@ -27,6 +28,7 @@ int main(int argc, char** argv) {
             md.faction = argv[++i];
             if (i + 1 < argc && argv[i + 1][0] != '-') md.seed = static_cast<unsigned>(std::atoi(argv[++i]));
             if (i + 1 < argc && argv[i + 1][0] != '-') md.day = std::atoi(argv[++i]);
+            md.tasking = "campaign/tasking.json";
             continue;
         }
         args.push_back(a);
@@ -78,6 +80,16 @@ int main(int argc, char** argv) {
         for (const std::string& n : live->Notes()) std::printf("  (%s)\n", n.c_str());
         std::printf("  the battery's new position is the campaign's: %s\n", s.BatteryMoved() ? "yes" : "not yet");
         war_ok = !live->PlayedPackages().empty();
+    }
+    if (s.Regiment() != nullptr) {
+        std::printf("==== The regiment's tasking\n");
+        const campaign::RegimentPicture pic = s.Campaign() != nullptr ? campaign::PictureFromJournal(*s.Campaign()) : campaign::RegimentPicture();
+        std::printf("  its latest estimate: %s\n", pic.estimate_h >= 0.0 ? pic.estimate.c_str() : "none yet");
+        for (const campaign::MissionSession::GivenTask& g : s.TasksGiven()) {
+            std::printf("  %s: %s (rule %s)\n", r.TaskClock(g.at_s).c_str(), g.task.c_str(), g.rule.c_str());
+        }
+        if (s.TasksGiven().empty()) std::printf("  no new task\n");
+        for (const std::string& n : s.Notes()) std::printf("  (%s)\n", n.c_str());
     }
     // The debrief's account of the task.
     const std::string debrief = r.Debrief();
