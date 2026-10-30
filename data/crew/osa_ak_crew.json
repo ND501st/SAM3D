@@ -187,7 +187,7 @@
     { "callout": "order_unlock_apu", "procedures": [ { "station": "operator", "procedure": "deploy_at_halt" } ], "source": "voenizdat_osa_1991 p246", "confidence": "medium" },
     { "callout": "order_orient", "procedures": [ { "station": "deputy_commander", "procedure": "orient_vehicle" } ], "source": "voenizdat_osa_1991 p246", "confidence": "medium" },
     { "callout": "order_compass", "procedures": [], "actions": [ "compass_survey" ], "source": "voenizdat_osa_1991 p249-250", "confidence": "medium",
-      "notes": "The commander's own work: three minutes at a halt with the artillery compass in front of the vehicle; his Qc then goes to the deputy (qc_report)." },
+      "notes": "The commander's own work, his drill measure_qc: out with the aiming circle 35 m ahead of the vehicle, two and a half minutes at it, and back; his Qc then goes to the deputy once he can hear it (qc_report)." },
     { "callout": "order_dismount", "procedures": [], "actions": [ "dismount" ], "source": "stroevoy_ustav_1993 art. 154", "confidence": "high",
       "notes": "The crew leave what they are doing, get out by the vehicle's ways and line up beside it (data/vehicles/osa_ak.json lineup)." },
     { "callout": "order_mount", "procedures": [], "actions": [ "mount" ], "source": "stroevoy_ustav_1993 art. 149-150", "confidence": "high" },

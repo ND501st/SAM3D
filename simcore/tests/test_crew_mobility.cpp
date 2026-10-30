@@ -239,6 +239,18 @@ SC_TEST("crew mobility: the Osa's hatches stay shut in combat work; the opening 
         bool window = false;
         for (const MoveLeg& leg : held.Legs()) window = window || leg.exit == "windscreen";
         SC_EXPECT(window);
+        // A man already outside still comes in to his post by his hatch, and it is shut after him.
+        CrewMover back(&l.vehicle, "commander");
+        back.Hold(BodyPlace::Ground, Vec3{0.0, 20.0, 0.0}, 0.0);
+        MoveGoal seat = MoveGoal::Seat();
+        seat.shut_after = true;
+        SC_EXPECT(back.GoTo(seat, &l.console, pose, &why));
+        bool by_hatch = false, shut = false;
+        for (const MoveLeg& leg : back.Legs()) {
+            by_hatch = by_hatch || (leg.kind == LegKind::ClimbIn && leg.exit != "windscreen");
+            shut = shut || leg.kind == LegKind::ShutHatch;
+        }
+        SC_EXPECT(by_hatch && shut);
     } else {
         std::printf("    (the equipment didn't power up headless: the БР check is left to the runner test)\n");
     }
@@ -314,8 +326,11 @@ SC_TEST("crew mobility: К машинам lines the crew up beside the vehicle, 
     SC_EXPECT(r->InEarshot("commander", "driver"));
     SC_EXPECT(r->OrderMount());
     for (int i = 0; i < 1500; ++i) r->Step(0.1);
-    for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
-    for (const auto& h : r->Hatches()) SC_EXPECT(!h.second);
+    // In their seats, but for the crew chief gone out with the aiming circle (a halt without Qc), his hatch left open.
+    for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated || (v.station == "commander" && r->SurveyUnderWay()));
+    if (!r->SurveyUnderWay()) {
+        for (const auto& h : r->Hatches()) SC_EXPECT(!h.second);
+    }
 }
 
 SC_TEST("crew mobility: К машине and По местам are orders of the menu, greyed while they hold, each said once") {
@@ -338,8 +353,9 @@ SC_TEST("crew mobility: К машине and По местам are orders of the 
         SC_EXPECT(r->CheckOrder("order_mount").can);
         SC_EXPECT(r->GiveCrewOrder("order_mount"));
         for (int i = 0; i < 1500; ++i) r->Step(0.1);
-        for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
-        SC_EXPECT(!r->CheckOrder("order_mount").can);
+        // The Osa's crew chief may be out with the aiming circle (a halt without Qc): По местам can then be given again.
+        for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated || (v.station == "commander" && r->SurveyUnderWay()));
+        SC_EXPECT(!r->CheckOrder("order_mount").can || r->SurveyUnderWay());
         int said_dismount = 0, said_mount = 0;
         if (r->Callouts() != nullptr) {
             for (const SpokenCallout& c : r->Callouts()->Log()) {

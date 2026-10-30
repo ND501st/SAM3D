@@ -73,7 +73,9 @@ trained man's 1 s (0.7-1.8). He is "inside" (on the intercom, at his instruments
 
 **Exits by the drill.** A crewman leaves by his seat's exit (`stations`). If every exit he may use is shut by the drill
 (the Osa in БР with the equipment on), he can't go out, and the runner logs why (p. 207) and tries again every 2 s. The
-emergency exits (the Osa's opening windscreen) are used only for an emergency goal.
+rule is against leaving: a man already outside comes in to his post by his hatch, and it is shut after him (SAM3D's
+reading of p. 207, so the crew chief called back by a target reaches his seat). The emergency exits (the Osa's opening
+windscreen) are used only for an emergency goal.
 
 **Not on the traffic side** (`stroevoy_ustav_1993` art. 147, 154: at a road's right edge nobody gets on or off over the
 left side). Where the vehicle stands at a road of the scenario's map (within half the road's width and 5 m of its centre
@@ -103,7 +105,23 @@ The first jobs:
 | Osa | commander (crew chief) | `nav.aiming_circle`: `measure_qc` (situational) | 35 m ahead (p. 250) |
 
 The switches stay where they were in the cabins (the cases): for the player they are where the job is started from
-(§3). The deputy's `orient_vehicle` still takes the crew chief's Qc as given.
+(§3).
+
+**The crew chief's compass survey is his walk** (roadmap 6.5, `orientation.hpp`; built 30 Oct 2026). The Osa's
+orientation data names the drill that is the survey (`survey_procedure`: `measure_qc`), the measurement it waits for
+(`survey_subsystem`: `qc_measured`) and a drill that stows the instrument when he breaks off (`survey_break_procedure`:
+`break_off_qc`). An NPC crew chief takes it at a halt once his own seat has nothing in hand (his orders and his set
+first, `NpcSurvey` after his think), not while the crew is lined up and not while he can't get out (БР). He walks out
+by his hatch and a wheel to the aiming circle 35 m ahead, sets it up, and the survey runs from that moment to the
+console's reading (`qc_measured`, 150 s): its Qc, with the survey's error, is then his. He stows it and walks back, and
+tells the deputy the Qc (`qc_report`) once the deputy can hear him (`InEarshot`: inside, or near enough outside), so the
+deputy's `orient_vehicle` waits for him: about 3.6 minutes from the halt to the deputy hearing it, against 3 minutes in
+place before. Stowed before the reading, or left by an NPC called away (К машинам), it gives nothing; moving off spoils
+it. Out there he hears neither the intercom nor the reports, and no shout carries to him over the turbine: the first
+NPC inside who knows of a target signals him back by flag or lamp (pp. 232-239 for the signals; who and when: SAM3D;
+the signaller is not drawn at his hatch), and he stows the aiming circle and comes back to his post; the crew fights in
+the gyro's frame as it is. A player crew chief is handed no drill: after К бою the helper has him out to set the aiming
+circle up and, once read, stow it (`SeatDuty::Control`).
 
 ### 2.4 The voice outside
 
@@ -213,3 +231,4 @@ readiness is computed from where every person is and the legs to their seat.
 | The lessons knowing the walk: a step worked outside says where the learner must go (out to the job's place, back in for a control inside), the card shows it, L leads him to a job's place, and the instructor (N) leads him there before working it (`TutorialStatus::away`, `TutorialGuide::Lead`; `docs/TUTORIALS.md`) | done 30 Oct 2026, `test_tutorial.cpp` |
 | The dismount on the safe side of a road: at a road of the map the crew gets down and up away from the traffic (section 2.2) | done 30 Oct 2026, `test_crew_mobility.cpp` |
 | Wire laying as the first new outside task: the PU-12M's lines paid out to their far ends (section 4.1) | done 30 Oct 2026, `test_crew_mobility.cpp`, `pu12m_deploy_wire.json` |
+| The crew chief's compass survey as his walk out to the aiming circle and back, the Qc told once he is heard; a man outside comes in through a hatch combat work keeps shut (sections 2.2, 2.3) | done 30 Oct 2026, `test_orientation.cpp`, `test_crew_mobility.cpp` |

@@ -214,6 +214,18 @@ public:
         if (!has_order_) StartNext();
     }
 
+    // Is this procedure his order now, or queued after it?
+    bool Holds(const std::string& procedure_id) const {
+        if (has_order_ && tracker_.GetProcedure().id == procedure_id) return true;
+        for (const Procedure& p : queue_) {
+            if (p.id == procedure_id) return true;
+        }
+        return false;
+    }
+
+    // Taken back by the one who gave it (the crew chief breaking his own work off): stopped, with no report of an abort.
+    void Withdraw() { Stop(); }
+
     // Stop the current order and forget the queue.
     void CancelOrder() {
         if (has_order_) Report(CrewReport::Kind::Aborted, "cancelled");

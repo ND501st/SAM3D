@@ -207,7 +207,9 @@ drill master walks him out to a job and back in its ideal run (`DrillMaster::Set
 by the crew: a man pays the P-274M out to the line's far end (the job's place `line:<n>`) and the line works only once
 laid (`ScenarioRunner::LineLaid`). The lessons know the walk: a step worked outside says where the learner must go,
 and the instructor leads him there (`TutorialStatus::away`). At a road the crew gets on and off away from the traffic
-(`ScenarioRunner::TrafficSide`). Next: the NPCs' bodies mirrored to clients.
+(`ScenarioRunner::TrafficSide`). The Osa crew chief's compass survey is his walk out to the aiming circle and back
+(the orientation data's `survey_procedure`, `orientation.hpp`): he tells the deputy the Qc once back in earshot, and out
+there only a signal from the crew calls him back. Next: the NPCs' bodies mirrored to clients.
 
 Voices (`docs/crew/12_COMMUNICATIONS.md`): inside a vehicle a seat hears the intercom, a radio or a telephone line only
 through its headset and its box's selector (`simcore/voice_comms.hpp`); a net only while its set is on, warm, on the net's

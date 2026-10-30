@@ -1121,8 +1121,11 @@ private:
     }
 
     // The exit he takes: his own usual one (open by the drill), else (an emergency) any emergency exit; `near` picks
-    // the nearest of the open ones when he isn't at his seat's way (coming in from the hull).
-    const VehicleExit* ChooseExit(const ConsoleData* console, bool emergency, const Vec3* near_m, std::string* why) const {
+    // the nearest of the open ones when he isn't at his seat's way (coming in from the hull). The drill keeps a hatch
+    // shut against going out (shut_when, voenizdat_osa_1991 p207); a man outside (`coming_in`) still comes in by it to
+    // his post, and it is shut after him.
+    const VehicleExit* ChooseExit(const ConsoleData* console, bool emergency, const Vec3* near_m, std::string* why,
+                                  bool coming_in = false) const {
         const VehicleExit* best = nullptr;
         double best_d = 1e18;
         std::string shut;
@@ -1133,7 +1136,8 @@ private:
                 bool mine = near_m != nullptr;
                 for (const std::string& s : e.stations) mine = mine || s == station_;
                 if (!mine && pass == 0) continue;
-                if (console != nullptr && !e.shut_when.empty() && ConditionsHold(e.shut_when, console->panel, &console->equipment)) {
+                if (!coming_in && console != nullptr && !e.shut_when.empty() &&
+                    ConditionsHold(e.shut_when, console->panel, &console->equipment)) {
                     if (shut.empty()) shut = e.shut_why;
                     continue;
                 }
@@ -1369,7 +1373,7 @@ private:
         if (level == 3 && want <= 2) {  // up onto the hull
             const Vec3 here_m = pose.ToBody(here);
             // The way nearest to him and to where he climbs in.
-            const VehicleExit* e = want <= 1 ? ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here_m, why) : nullptr;
+            const VehicleExit* e = want <= 1 ? ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here_m, why, true) : nullptr;
             if (want <= 1 && e == nullptr) return false;
             if (e != nullptr && e->to_ground) {  // in by an emergency window from the ground
                 AddGroundWalk(legs, here_m, e->out_m, false, pose);
@@ -1391,7 +1395,7 @@ private:
             }
         }
         if (level == 2 && want <= 1) {  // in through a hatch
-            const VehicleExit* e = ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here, why);
+            const VehicleExit* e = ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here, why, true);
             if (e == nullptr || e->to_ground) {
                 e = ChooseExit(console, goal.emergency, &here, why);
                 if (e == nullptr) return false;

@@ -128,7 +128,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 495 all targets gone | 254 | 450 | 473 | 1 | 1 | 0 | 0 | 0 | 10 | 0 | 0 | - | 0 |
-| commander | 502 all targets gone | - | 453 | 473 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | duty 7 | 0 |
+| commander | 502 all targets gone | - | 453 | 473 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | duty 9 | 0 |
 | deputy_commander | 496 all targets gone | 254 | 460 | 474 | 1 | 1 | 0 | 0 | 7 | 8 | 0 | 0 | drill 15, duty 8, wheel 1 | 0 |
 | senior_operator | 499 all targets gone | 254 | 464 | 478 | 1 | 1 | 0 | 0 | 14 | 9 | 0 | 0 | drill 11, duty 14, wheel 11 | 0 |
 | operator | 495 all targets gone | 253 | 454 | 473 | 1 | 1 | 0 | 0 | 6 | 8 | 0 | 0 | drill 11, duty 6, wheel 74 | 0 |
@@ -161,7 +161,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 571 all targets gone | 254 | 540 | 554 | 1 | 4 | 0 | 0 | 0 | 6 | 0 | 0 | - | 0 |
-| commander | 591 all targets gone | - | 557 | 571 | 1 | 4 | 0 | 0 | 0 | 5 | 0 | 0 | duty 5 | 78 |
+| commander | 591 all targets gone | - | 557 | 571 | 1 | 4 | 0 | 0 | 0 | 5 | 0 | 0 | duty 7 | 78 |
 | deputy_commander | 569 all targets gone | 254 | 539 | 553 | 1 | 4 | 0 | 0 | 7 | 6 | 0 | 0 | drill 15, duty 8, wheel 2 | 0 |
 | senior_operator | 571 all targets gone | 254 | 540 | 554 | 1 | 4 | 0 | 0 | 18 | 6 | 0 | 0 | drill 9, duty 18, wheel 231 | 0 |
 | operator | 568 all targets gone | 253 | 536 | 551 | 1 | 4 | 0 | 0 | 6 | 6 | 0 | 0 | drill 11, duty 6, wheel 277 | 0 |
@@ -206,7 +206,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time | 442 | 456 | 471 | 1 | 3 | 0 | 0 | 0 | 6 | 0 | 0 | - | 0 |
 | commander | 900 time | - | - | - | 0 | 3 | 0 | 0 | 0 | 1 | 0 | 0 | duty 1 | 114 |
-| deputy_commander | 900 time | 442 | 456 | 470 | 1 | 3 | 0 | 0 | 12 | 6 | 0 | 0 | drill 14, duty 13, wheel 1 | 0 |
+| deputy_commander | 900 time | 442 | 456 | 470 | 1 | 3 | 0 | 0 | 12 | 6 | 0 | 0 | drill 9, duty 13 | 0 |
 | senior_operator | 900 time | 440 | 454 | 469 | 1 | 3 | 0 | 0 | 14 | 5 | 0 | 0 | drill 7, duty 17, wheel 1411 | 0 |
 | operator | 900 time | 440 | 452 | 468 | 1 | 3 | 0 | 0 | 8 | 5 | 0 | 0 | drill 7, duty 8, wheel 105 | 0 |
 | driver | 900 time | 442 | 456 | 471 | 1 | 3 | 0 | 0 | 2 | 6 | 0 | 0 | duty 2 | 0 |
@@ -216,7 +216,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 743 all targets gone | 254 | 276 | 571 | 1 | 3 | 0 | 0 | 0 | 11 | 0 | 0 | - | 0 |
-| commander | 759 all targets gone | 296 | 290 | - | 0 | 3 | 0 | 0 | 0 | 11 | 0 | 0 | duty 11 | 19 |
+| commander | 759 all targets gone | 295 | 290 | - | 0 | 3 | 0 | 0 | 0 | 11 | 0 | 0 | duty 13 | 19 |
 | deputy_commander | 743 all targets gone | 254 | 458 | 571 | 1 | 3 | 0 | 0 | 13 | 12 | 0 | 0 | drill 16, duty 14, wheel 2 | 0 |
 | senior_operator | 743 all targets gone | 254 | 275 | 571 | 1 | 3 | 0 | 0 | 25 | 11 | 0 | 0 | drill 10, duty 27, wheel 913 | 0 |
 | operator | 743 all targets gone | 252 | 275 | 571 | 1 | 3 | 0 | 0 | 8 | 12 | 0 | 0 | drill 11, duty 8, wheel 192 | 0 |
@@ -227,7 +227,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time limit | 255 | 425 | 449 | 2 | 2 | 0 | 0 | 0 | 6 | 1 | 0 | - | 0 |
-| commander | 900 time limit | - | 426 | 449 | 2 | 2 | 0 | 0 | 0 | 5 | 1 | 0 | duty 5 | 0 |
+| commander | 900 time limit | - | 426 | 449 | 2 | 2 | 0 | 0 | 0 | 5 | 1 | 0 | duty 7 | 0 |
 | deputy_commander | 900 time limit | 255 | 444 | 460 | 2 | 2 | 0 | 0 | 16 | 6 | 1 | 0 | drill 21, duty 17, wheel 1 | 0 |
 | senior_operator | 900 time limit | 255 | 423 | 449 | 2 | 2 | 0 | 0 | 6 | 6 | 1 | 0 | drill 9, duty 9, wheel 16 | 0 |
 | operator | 900 time limit | 253 | 451 | 465 | 2 | 2 | 0 | 0 | 4 | 6 | 0 | 0 | drill 11, duty 4, wheel 63 | 0 |
@@ -382,7 +382,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
-| deputy_commander | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 10, duty 1, wheel 2 | 0 |
+| deputy_commander | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 5, duty 1 | 0 |
 | senior_operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 11, wheel 11 | 0 |
 | operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 3 | 0 | 0 | 0 | drill 11, duty 3, wheel 76 | 0 |
 | driver | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
@@ -436,7 +436,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 731 all targets gone | 253 | 484 | 499 | 3 | 2 | 0 | 0 | 0 | 13 | 0 | 0 | - | 0 |
-| commander | 733 all targets gone | - | 484 | 498 | 3 | 2 | 0 | 0 | 0 | 11 | 0 | 0 | duty 11 | 29 |
+| commander | 753 all targets gone | - | 591 | 706 | 2 | 2 | 0 | 0 | 0 | 9 | 0 | 0 | duty 11 | 1 |
 | deputy_commander | 743 all targets gone | 253 | 484 | 498 | 4 | 2 | 0 | 0 | 16 | 12 | 0 | 0 | drill 20, duty 17, wheel 2 | 0 |
 | senior_operator | 752 all targets gone | 253 | 483 | 706 | 2 | 2 | 0 | 0 | 13 | 20 | 0 | 0 | drill 19, duty 13, wheel 438 | 0 |
 | operator | 750 all targets gone | 253 | 570 | 706 | 2 | 2 | 0 | 0 | 10 | 12 | 0 | 0 | drill 11, duty 10, wheel 116 | 0 |
@@ -590,10 +590,10 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time | 253 | 814 | - | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | - | 0 |
-| commander | 900 time | - | 787 | 853 | 1 | 1 | 0 | 0 | 0 | 9 | 0 | 0 | duty 9 | 175 |
+| commander | 900 time | - | 782 | 853 | 1 | 1 | 0 | 0 | 0 | 9 | 0 | 0 | duty 11 | 176 |
 | deputy_commander | 900 time | 253 | 814 | - | 0 | 0 | 0 | 0 | 6 | 3 | 0 | 0 | drill 3, duty 7 | 0 |
 | senior_operator | 900 time | 253 | 858 | - | 0 | 1 | 0 | 0 | 37 | 3 | 0 | 0 | drill 10, duty 40, wheel 1450 | 0 |
-| operator | 900 time | 253 | - | - | 0 | 1 | 0 | 0 | 2 | 2 | 0 | 0 | drill 7, duty 2, wheel 269 | 0 |
+| operator | 900 time | 253 | - | - | 0 | 1 | 0 | 0 | 2 | 2 | 0 | 0 | drill 7, duty 2, wheel 274 | 0 |
 | driver | 900 time | 252 | - | - | 0 | 1 | 0 | 0 | 1 | 2 | 0 | 0 | drill 2, duty 1 | 0 |
 
 ## Gaps (41)
@@ -616,7 +616,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 - **osa_vhf_jamming_em, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 4101, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
 - **osa_trainer, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: No target in the zone
 - **osa_trainer, deputy_commander**: launched never reached; no launch
-- **osa_range_ashuluk, commander**: ready_halted never reached. Last refused: Order: Пуск разрешаю!: No target in the zone
+- **osa_range_ashuluk, commander**: ready_halted never reached; captured a minute or more later; launched a minute or more later. Last refused: Order: Пуск разрешаю!: No target in the zone
 - **osa_range_ashuluk, senior_operator**: launched a minute or more later
 - **osa_range_ashuluk, operator**: captured a minute or more later; launched a minute or more later
 - **osa_range_ustka, commander**: ready_halted never reached. Last refused: Order: Вторая — пуск!: No target in the zone
@@ -645,6 +645,8 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Duty (seat): rule | Times |
 |---|---|
 | control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
+| control (commander): a halt without the vehicle's Qc: the aiming circle out ahead | 6 |
+| control (commander): the aiming circle read: stow it and bring the Qc in | 6 |
 | control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 29 |
 | control (radio_operator): a message heard: write it in the journal | 7 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
@@ -661,7 +663,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (battery_commander): the raid has gone: the all clear | 2 |
 | order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 13 |
 | order (commander): the battery's emission regime, told to the crew | 11 |
-| order (commander): the commander's next order | 189 |
+| order (commander): the commander's next order | 186 |
 | order (commander): the drills the crew needs next | 105 |
 | order (commander): the least emission: the operator told the tracking transmitter's rule | 3 |
 | order (commander): the limited regime: ВЫСОКОЕ off between bursts | 138 |

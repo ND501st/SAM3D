@@ -143,7 +143,7 @@ public:
             engagement_.SetSiteLatitude(RadToDeg(def_.origin.lat_rad));
             const bool east = ((def_.seed * 2654435761u) >> 11) & 1u;  // the sign of this gyro's own drift, per seed
             engagement_.SetGyroOwnDrift(east ? o.own_drift_deg_h : -o.own_drift_deg_h);
-            compass_ = CompassSurvey(o.survey_s, o.survey_sigma_deg, def_.seed * 40503u + 977u);
+            compass_ = CompassSurvey(o.survey_procedure.empty() ? o.survey_s : 0.0, o.survey_sigma_deg, def_.seed * 40503u + 977u);
         }
         // A radar to cable to the post is a fact of the position, there before any readiness (its cable laid in "deployed").
         if (!console_.post_radar_here.empty()) console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
@@ -231,7 +231,6 @@ public:
         UpdateRadios();
         UpdatePost();
         UpdateRadioTuning(dt);
-        NpcSurvey();
         UpdateCompass();
         if (engagement_on_) {
             aim_crew_.assigned = assigned_target_;
@@ -288,6 +287,7 @@ public:
         UpdateCounterJamming();
         UpdateStress();
         UpdateNpcCommander();
+        NpcSurvey();  // after his think: the orders and drills of his seat first, then out with the compass
         UpdateOwnReports();
         UpdateOwedDuties();
         if (drop_at_s_ >= 0.0 && time_ >= drop_at_s_ && engagement_on_) {
@@ -344,15 +344,39 @@ public:
     }
 
     // The crew chief's compass work (roadmap 6.5, orientation.hpp): the commander finds the vehicle's heading Qc with
-    // the artillery compass at a halt, then commands it to the deputy, who orients the gyro with it. False if the console
-    // has no orientation, the vehicle is moving or a survey is already running.
+    // the artillery compass at a halt, then commands it to the deputy, who orients the gyro with it. With a survey drill
+    // in the console's data (the Osa's measure_qc) an NPC crew chief works it, queued after what he is doing: he carries
+    // the aiming circle out ahead (data/vehicles/osa_ak.json), the survey runs from when it is set up to the console's
+    // reading, and he tells the deputy the Qc once back in earshot (docs/crew/13_OUT_OF_THE_VEHICLE.md). A player crew
+    // chief goes out and sets it up himself (the helper shows it). False if the console has no orientation, the vehicle
+    // is moving or a survey is already under way.
     bool StartCompassSurvey(const std::string& by = "Commander") {
-        if (!console_.has_orientation || !console_.equipment.GetInput("vehicle_stopped") || compass_.Running()) return false;
+        if (!console_.has_orientation || !console_.equipment.GetInput("vehicle_stopped") || SurveyUnderWay()) return false;
+        const OrientationDef& o = console_.orientation;
+        if (!o.survey_procedure.empty()) {
+            survey_recalled_ = false;
+            if (!SeatHolder(Cmdr()).empty()) {
+                log_.Record({time_, DebriefEntry::Kind::Scenario, by, "orientation", "the compass work: out with the aiming circle (ПАБ) ahead of the vehicle"});
+                return true;
+            }
+            CrewMember* m = MemberAt(Cmdr());
+            const Procedure* p = console_.FindProcedure(o.survey_procedure);
+            if (m == nullptr || p == nullptr) return false;
+            Hand(*m, *p, true);
+            survey_drill_ = true;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, by, "orientation", "takes the aiming circle (ПАБ) out ahead of the vehicle"});
+            return true;
+        }
         compass_.Start(time_);
         log_.Record({time_, DebriefEntry::Kind::Scenario, by, "orientation", "sets up the artillery compass (ПАБ) in front of the vehicle"});
         return true;
     }
     const CompassSurvey& Compass() const { return compass_; }
+    // A compass survey under way at this halt: the crew chief's drill handed out, the compass running, or its Qc found
+    // and not yet told to the deputy.
+    bool SurveyUnderWay() const { return compass_.Running() || survey_drill_ || qc_untold_; }
+    // The crew chief has this halt's Qc and has not yet told it (out at the aiming circle, or on his way back in).
+    bool QcUntold() const { return qc_untold_; }
     // Every designation the commander has heard on the radio so far (the latest last).
     const std::vector<C2Network::Event>& DesignationsHeard() const { return designations_heard_; }
     // When the last call tone went out (ТОН. ВЫЗОВ), or a large negative number.
@@ -1128,7 +1152,7 @@ public:
         }
         quiet_orders_ = false;
         for (const std::string& a : o->actions) {
-            if (a == "compass_survey" && !engagement_.QcKnown() && !compass_.Running()) StartCompassSurvey();
+            if (a == "compass_survey" && !engagement_.QcKnown() && !SurveyUnderWay()) StartCompassSurvey();
             if (a == "dismount" && def_.has_vehicle && def_.vehicle.lineup.present) LineUpCrew();
             if (a == "mount" && def_.has_vehicle) MountCrew();
         }
@@ -5273,31 +5297,117 @@ private:
         for (const DummyPositionDef& d : def_.prepared.dummies) work_places_.push_back({d.position, 0.0, std::string()});
     }
 
-    // The compass survey runs while the vehicle stands; its Qc is commanded to the deputy (engagement: SetCommandedQc).
-    // Moving off spoils the measurement and the halt's orientation (the gyro keeps its own, drifting, heading).
+    // The compass survey runs while the vehicle stands; its Qc is commanded to the deputy (engagement: SetCommandedQc)
+    // once the crew chief can tell him. Moving off spoils the measurement and the halt's orientation (the gyro keeps its
+    // own, drifting, heading). As his drill (survey_procedure) the survey runs from when the instrument is set up to
+    // when the console's measurement of it is ready; stowed before then, it gives nothing.
     CompassSurvey compass_;
     bool was_stopped_ = false;
     bool halt_oriented_ = false;
+    bool survey_drill_ = false;     // the survey drill handed to the NPC crew chief, not yet over
+    bool survey_set_up_ = false;    // its instrument stood set up at the last step
+    bool qc_untold_ = false;        // he has this halt's Qc and the deputy has not heard it
+    bool survey_recalled_ = false;  // signalled back from the aiming circle by the crew inside
     void UpdateCompass() {
         if (!console_.has_orientation) return;
+        const OrientationDef& o = console_.orientation;
         const bool stopped = console_.equipment.GetInput("vehicle_stopped");
         if (!stopped && was_stopped_) {
             engagement_.ClearCommandedQc();
             halt_oriented_ = false;
+            qc_untold_ = false;
+            survey_recalled_ = false;
         }
         was_stopped_ = stopped;
-        if (stopped && engagement_.QcKnown() && console_.equipment.GetInput(console_.orientation.synced_input)) halt_oriented_ = true;
+        if (stopped && engagement_.QcKnown() && console_.equipment.GetInput(o.synced_input)) halt_oriented_ = true;
         const bool was_running = compass_.Running();
-        if (compass_.Step(time_, stopped, def_.unit_heading_deg)) {
-            engagement_.SetCommandedQc(compass_.ResultDeg());
+        bool read = compass_.Step(time_, stopped, def_.unit_heading_deg);
+        if (!o.survey_procedure.empty()) {
+            const bool up = console_.panel.Get(o.survey_control) == o.survey_up_position;
+            if (up && !survey_set_up_ && stopped && !compass_.Running() && !qc_untold_ && !engagement_.QcKnown()) {
+                compass_.Start(time_);
+                log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "orientation",
+                             "sets the aiming circle (ПАБ) up and lays it on the vehicle"});
+            }
+            if (!up && compass_.Running()) {
+                compass_.Abort();
+                Event("orientation", "the aiming circle was stowed before its reading: no Qc");
+            }
+            survey_set_up_ = up;
+            if (compass_.Running() && console_.equipment.IsReady(o.survey_subsystem)) read = compass_.Finish(def_.unit_heading_deg);
+            if (compass_.Running() && SeatHolder(Cmdr()).empty() && !SeatHolds(Cmdr(), o.survey_procedure)) {
+                compass_.Abort();  // the NPC called away from it (К машинам, another drill): nobody reads it
+                Event("orientation", "the crew chief left the aiming circle before its reading: no Qc");
+            }
+            if (survey_drill_ && !compass_.Running() && !SeatHolds(Cmdr(), o.survey_procedure)) survey_drill_ = false;
+        }
+        if (read) {
+            qc_untold_ = true;
             char detail[96];
             std::snprintf(detail, sizeof(detail), "Qc by compass %s (%.1f deg)", MilsText(compass_.ResultDeg()).c_str(),
                           compass_.ResultDeg());
-            log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", detail});
-            Say("qc_report", Cmdr(), {{"qc", MilsText(compass_.ResultDeg())}});
-        } else if (was_running && !compass_.Running()) {
+            log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "orientation", detail});
+        } else if (was_running && !compass_.Running() && !stopped) {
             Event("orientation", "the compass survey was broken off: the vehicle moved");
         }
+        if (qc_untold_ && QcHeard()) {
+            qc_untold_ = false;
+            engagement_.SetCommandedQc(compass_.ResultDeg());
+            Say("qc_report", Cmdr(), {{"qc", MilsText(compass_.ResultDeg())}});
+        }
+    }
+    // Can the seat the crew chief tells his Qc to (qc_report's) hear him now: both inside, or in earshot outside.
+    bool QcHeard() const {
+        const CalloutDef* c = def_.crew_data.FindCallout("qc_report");
+        if (c == nullptr || def_.crew_data.FindSeat(c->to) == nullptr) return !Outside(Cmdr());
+        return InEarshot(Cmdr(), c->to);
+    }
+    // Is this drill the seat's now, or queued after it (the player's seat or the NPC's)?
+    bool SeatHolds(const std::string& station, const std::string& procedure_id) {
+        if (const Seat* st = FindSeat(station)) {
+            if (st->tracker.GetProcedure().id == procedure_id && !st->tracker.IsComplete()) return true;
+            for (const std::string& q : st->queued) {
+                if (q == procedure_id) return true;
+            }
+            return false;
+        }
+        const CrewMember* m = MemberAt(station);
+        return m != nullptr && m->Holds(procedure_id);
+    }
+    // A target: the NPC crew chief breaks his compass work off and goes back to his post (the crew fights in the gyro's
+    // frame as it is). Out at the instrument with it set up, he stows it first (survey_break_procedure).
+    void BreakOffSurvey() {
+        const OrientationDef& o = console_.orientation;
+        compass_.Abort();
+        if (survey_drill_) {
+            survey_drill_ = false;
+            if (CrewMember* m = MemberAt(Cmdr()); m != nullptr && m->Holds(o.survey_procedure)) {
+                m->Withdraw();
+                const Procedure* stow = console_.FindProcedure(o.survey_break_procedure);
+                if (stow != nullptr && console_.panel.Get(o.survey_control) == o.survey_up_position) m->Order(*stow);
+            }
+        }
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", "breaks off the compass work: a target"});
+    }
+    // Out of the vehicle the crew chief hears neither the intercom nor the reports, and no voice carries to him over the
+    // machinery: the first NPC inside who knows of a target signals him back from his hatch, by flag or lamp
+    // (voenizdat_osa_1991 pp. 232-239, the crews' signals; who signals and when: sam3d). He sees it out to kSignalSeenM
+    // (sam3d: he stands facing the vehicle, 20-50 m off). The signaller's body is not moved to the hatch.
+    static constexpr double kSignalSeenM = 100.0;
+    std::string RecallSignaller() {
+        const CrewMover* m = Mover(Cmdr());
+        if (m == nullptr || m->Inside() || std::hypot(m->View(Pose()).feet_m.x, m->View(Pose()).feet_m.y) > kSignalSeenM) return std::string();
+        return CrewKnowsHostile();
+    }
+    // The first NPC inside, other than the crew chief, who knows of a hostile target lately ("" none).
+    std::string CrewKnowsHostile() {
+        for (const CrewMember& c : crew_) {
+            if (c.Role() == Cmdr() || !SeatHolder(c.Role()).empty() || Outside(c.Role())) continue;
+            for (const KnownTarget& k : pictures_[c.Role()].Recent(time_, 30.0)) {
+                if (!k.friendly && k.has_range) return c.Role();
+            }
+        }
+        return std::string();
     }
 
     // ---- Transmitting from the vehicle (roadmap 7.8). The commander talks on the set his headset is on, keyed by his chest
@@ -6651,8 +6761,10 @@ private:
         shadow_target_.clear();
         ThinkAsCommander();
         if (shadow_) ShadowDrillOrders();
+        if (!shadow_) npc_thought_s_ = time_;
         shadow_ = false;
     }
+    double npc_thought_s_ = -1.0;  // when the NPC commander last thought (NpcSurvey decides with him)
     void ThinkAsCommander() {
         npc_next_think_s_ = time_ + 1.0;
         // A stop while the battery forms its column or marches is not a halt: nobody deploys for it.
@@ -8030,26 +8142,56 @@ private:
     }
     // The commander's own compass work: an NPC in his seat sets up the compass as soon as the vehicle halts (it needs no
     // power, so it runs while the equipment warms up), unless he already has this halt's Qc or something hostile is
-    // heard of (then he stays at his post).
+    // heard of (then he stays at his post). Worked out ahead of the vehicle, only while he can get out to it (the
+    // hatches stay shut in combat work).
     void NpcSurvey() {
-        if (!console_.has_orientation || halt_oriented_ || engagement_.QcKnown()) return;
+        if (!console_.has_orientation) return;
+        // A player crew chief's aiming circle still standing after its reading: stow it and bring the Qc in.
+        const OrientationDef& so = console_.orientation;
+        if (!so.survey_procedure.empty() && !SeatHolder(Cmdr()).empty() && compass_.Known() && console_.panel.Get(so.survey_control) == so.survey_up_position) {
+            NpcDoes(Cmdr(), SeatDuty::Control(Cmdr(), so.survey_control, so.survey_stowed_position, "the aiming circle read: stow it and bring the Qc in"));
+        }
+        if (halt_oriented_ || engagement_.QcKnown()) return;
         if (MemberAt(Cmdr()) == nullptr && SeatHolder(Cmdr()).empty()) return;
         bool hostile = false;
         for (const KnownTarget& k : pictures_["commander"].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
-        if (compass_.Running()) {
-            if (hostile && SeatHolder(Cmdr()).empty()) {  // a target: back to his post; the crew fights in the gyro's frame as it is
-                compass_.Abort();
-                log_.Record({time_, DebriefEntry::Kind::Scenario, "Commander", "orientation", "breaks off the compass work: a target"});
+        const bool working = compass_.Running() || survey_drill_;
+        if (working && !hostile && !survey_recalled_) {
+            const std::string by = RecallSignaller();
+            if (!by.empty()) {
+                survey_recalled_ = true;
+                Event(by, "signals the crew chief back from the aiming circle: a target");
             }
+        }
+        if (SurveyUnderWay()) {
+            // A target: back to his post; the crew fights in the gyro's frame as it is (a Qc he already has, he tells).
+            if ((hostile || survey_recalled_) && SeatHolder(Cmdr()).empty() && working) BreakOffSurvey();
             return;
         }
-        if (hostile || !console_.equipment.GetInput("vehicle_stopped")) return;
+        // Signalled back, he stays at his post while the crew still has the target.
+        if (survey_recalled_ && !Outside(Cmdr()) && CrewKnowsHostile().empty()) survey_recalled_ = false;
+        if (hostile || survey_recalled_ || !console_.equipment.GetInput("vehicle_stopped")) return;
+        const OrientationDef& o = console_.orientation;
+        const std::string place = JobPlace(o.survey_control);
+        if (!place.empty() && Mover(Cmdr()) != nullptr && Mover(Cmdr())->Inside() && WaySeconds(Cmdr(), std::string(), place) <= 0.0) return;
+        if (SeatHolder(Cmdr()).empty()) {
+            // An NPC first does what his seat has (his orders, his set: as he thinks, NpcCommanderActive), and not while
+            // the crew is told to stay (К машинам).
+            const CrewMember* m = MemberAt(Cmdr());
+            if (NpcCommanderActive() && npc_thought_s_ != time_) return;
+            if (!SeatFree(Cmdr()) || (m != nullptr && !m->StaysAt().empty())) return;
+        }
         const bool column = battery_ && def_.battery_drive_own &&
                             (battery_->CurrentMode() == Battery::Mode::Forming || battery_->CurrentMode() == Battery::Mode::Marching);
         if (column) return;  // a stop in the column is not a halt
         // A player in command: his К бою carries the compass work (the crew data's order_k_boyu actions), so a separate
-        // order is his only once К бою has been given and the Qc is still not known.
+        // order is his only once К бою has been given and the Qc is still not known; as a drill out ahead, К бою given,
+        // the aiming circle is his to set up.
         if (!SeatHolder(Cmdr()).empty() && !PlayerGave("order_k_boyu", 1e9)) return;
+        if (!SeatHolder(Cmdr()).empty() && !o.survey_procedure.empty()) {
+            NpcDoes(Cmdr(), SeatDuty::Control(Cmdr(), o.survey_control, o.survey_up_position, "a halt without the vehicle's Qc: the aiming circle out ahead"));
+            return;
+        }
         if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_compass", "a halt without the vehicle's Qc: the compass work"))) StartCompassSurvey();
     }
     bool npc_empty_reported_ = false;
