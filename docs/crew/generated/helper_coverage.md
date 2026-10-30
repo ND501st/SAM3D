@@ -479,12 +479,12 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| NPC crew | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 0 | 0 | 0 | - | 0 |
-| battery_commander | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 2 | 0 | 0 | duty 29 | 10 |
-| squad_leader | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 0 | 0 | 0 | - | 0 |
-| operator | 900 time | 0 | - | - | 0 | 3 | 27 | 44 | 8 | 0 | 0 | 0 | duty 52 | 77 |
-| radio_operator | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 2 | 0 | 0 | 0 | duty 53 | 0 |
-| driver | 900 time | 0 | - | - | 0 | 3 | 27 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| NPC crew | 900 time | 0 | - | - | 0 | 3 | 8 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| battery_commander | 900 time | 0 | - | - | 0 | 3 | 8 | 0 | 0 | 2 | 0 | 0 | duty 10 | 10 |
+| squad_leader | 900 time | 0 | - | - | 0 | 3 | 8 | 0 | 0 | 0 | 0 | 0 | - | 0 |
+| operator | 900 time | 0 | - | - | 0 | 3 | 8 | 44 | 8 | 0 | 0 | 0 | duty 52 | 77 |
+| radio_operator | 900 time | 0 | - | - | 0 | 3 | 8 | 0 | 2 | 0 | 0 | 0 | duty 53 | 0 |
+| driver | 900 time | 0 | - | - | 0 | 3 | 8 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 
 ## osa_bekaa_1982: The Bekaa, 24 July 1982: F-4Es over the mountains
 
@@ -640,7 +640,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | control (commander): the aiming circle read: stow it and bring the Qc in | 6 |
 | control (commander): the words said: the chest switch back to ПРМ, to hear the net | 212 |
 | control (radio_operator): a message heard: write it in the journal | 8 |
-| designate (battery_commander): the nearest ready launcher whose sector covers it | 37 |
+| designate (battery_commander): the nearest ready launcher whose sector covers it | 18 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
 | drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 10 |
 | drill (senior_operator): the least emission against ARMs: both low beams in each burst | 16 |

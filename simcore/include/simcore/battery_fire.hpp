@@ -59,6 +59,7 @@ public:
         bool deployed = false;
         int missiles = 6;
         std::string target;
+        int number = 0;  // the board number it was given the target by (it reports by it)
         Phase phase = Phase::Idle;
         double next_s = 0.0;
         double chance = 0.0;
@@ -181,6 +182,7 @@ public:
         if (s == nullptr || s->missiles <= 0) return false;
         if (s->target == target && s->phase != Phase::Idle) return true;
         s->target = target;
+        s->number = number;
         s->phase = Phase::Acquiring;
         s->next_s = t + (chart_.radar_on_s + chart_.capture_s) * s->time_scale;
         events_.push_back({Event::Kind::Assigned, t, callsign, target, number});
@@ -200,7 +202,7 @@ public:
                 if (t < s.next_s) continue;
                 const bool alive = tg != nullptr && tg->alive;
                 const bool hit_it = alive && Uniform(rng) < s.chance;
-                events_.push_back({hit_it ? Event::Kind::Hit : Event::Kind::Miss, t, s.callsign, s.target, tg != nullptr ? tg->number : 0});
+                events_.push_back({hit_it ? Event::Kind::Hit : Event::Kind::Miss, t, s.callsign, s.target, ReportNumber(s, tg)});
                 if (hit_it) {
                     ++s.hits;
                     hit(s.target);
@@ -221,7 +223,7 @@ public:
                 if (t < s.next_s || range > reach_m_) continue;
                 s.phase = Phase::Tracking;
                 s.next_s = t + chart_.computer_s * s.time_scale;
-                events_.push_back({Event::Kind::Captured, t, s.callsign, s.target, tg->number});
+                events_.push_back({Event::Kind::Captured, t, s.callsign, s.target, ReportNumber(s, tg)});
                 continue;
             }
             if (range > reach_m_) {
@@ -254,7 +256,7 @@ public:
                 s.chance = tuning_.HitChanceFor(tg->target_class) * tuning_.LowAltitudeFactor(tg->target_class, tg->agl_m);
                 s.phase = Phase::InFlight;
                 s.next_s = t + flight;
-                events_.push_back({Event::Kind::Launch, t, s.callsign, s.target, tg->number});
+                events_.push_back({Event::Kind::Launch, t, s.callsign, s.target, ReportNumber(s, tg)});
                 if (s.missiles == 0) events_.push_back({Event::Kind::Empty, t, s.callsign, std::string(), 0});
             }
         }
@@ -294,6 +296,10 @@ private:
     // On its own: the nearest hostile in its sector; with none there, the nearest coming at it from any side (pvo_bu_ix_1984:
     // sudden targets engaged independently; its search radar turns all round). Not one above its zone's ceiling: it could
     // never fire at it.
+    // A launcher reports by the number it was given, whatever aircraft it found there; on its own, by the target's.
+    static int ReportNumber(const Shooter& s, const BatteryFireTarget* tg) {
+        return s.number != 0 ? s.number : tg != nullptr ? tg->number : 0;
+    }
     void TakeNearest(Shooter& s, const std::vector<BatteryFireTarget>& targets, double t) {
         const BatteryFireTarget* best = nullptr;
         for (const bool sector : {true, false}) {

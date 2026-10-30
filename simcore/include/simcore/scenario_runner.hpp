@@ -9347,7 +9347,7 @@ private:
                 // when it is on the tube, else the board (a mark from the air-picture net is only as good as its square).
                 const BoardMark m = OnTheTube(board_mark);
                 if (m.type == 1 || battery_fire_->Engaged(m.target_id) || m.target_id == assigned_target_ ||
-                    m.target_id == engagement_.TrackedTarget() || DesignationPending(m.target_id)) {
+                    m.target_id == engagement_.TrackedTarget() || DesignationPending(m.target_id) || (post_ && (ToldNoTargetThere(m) || LauncherHasMark(m.number)))) {
                     continue;
                 }
                 bool alive = false;
@@ -9833,6 +9833,16 @@ private:
     void LogLauncher(const LinkReport& r, const char* kind) {
         if (post_) commander_log_.push_back({time_, r.callsign, kind, r.number});
     }
+    // What a launcher's report by number means to the post: the newest mark of that number on its board (the launcher may
+    // have found another aircraft where it was told to look); the report's own target where the board has none of it.
+    std::string ReportedTarget(const LinkReport& r) const {
+        if (!post_ || r.number <= 0) return r.target;
+        const BoardMark* newest = nullptr;
+        for (const BoardMark& m : post_->Board().Marks()) {
+            if (m.number == r.number && (newest == nullptr || m.time_s > newest->time_s)) newest = &m;
+        }
+        return newest != nullptr ? newest->target_id : r.target;
+    }
     // A launcher's report on the battery net (its own abstract crew's, a linked Osa's, or, in that Osa, the post's other
     // launchers'): the log, the words if the vehicle hears the net, the IT boards in the post.
     void LauncherReport(const LinkReport& r) {
@@ -9874,7 +9884,7 @@ private:
                 Event(r.callsign, "destroys " + r.target);
                 if (hears) {
                     LogLauncher(r, "destroyed");
-                    HeardDestroyed(r.target);
+                    HeardDestroyed(ReportedTarget(r));
                     if (callouts_) callouts_->Say(time_, "report_result", "battery", {{"callsign", r.callsign}, {"number", number}, {"spent", "1"}});
                     Status(r.callsign, r.missiles > 0 ? LauncherStatus::State::Ready : LauncherStatus::State::Empty, r.missiles, 0);
                 }
@@ -9884,7 +9894,7 @@ private:
                     Event(r.callsign, "takes back the kill of " + r.target);
                     if (hears) {
                         LogLauncher(r, "not destroyed");
-                        reported_kills_.erase(r.target);
+                        reported_kills_.erase(ReportedTarget(r));
                         if (callouts_) callouts_->Say(time_, "report_not_destroyed", "battery", {{"callsign", r.callsign}, {"number", number}});
                     }
                     break;
@@ -10036,6 +10046,58 @@ private:
         if (!voice_) return !post_ || BatteryNetUp();
         return !BatteryNetHearers().empty();
     }
+    // A launcher's «цели не наблюдаю» heard at the post: the mark (or the group's marks) he gave it, where that stood on
+    // his picture and where he told it to look, and when. That mark, or one within its search of either place, no newer
+    // than that is the picture's lag (a square reported late, a stale track), not a target: he gives it to nobody until
+    // a fresh mark comes. Dropped once older than any mark he still reads.
+    struct NoTargetThere {
+        std::vector<std::string> marks;
+        Vec3 place;  // the mark on his picture, unled
+        Vec3 point;  // where he told the launcher to look
+        double heard_s = 0.0;
+    };
+    std::vector<NoTargetThere> no_target_there_;
+    bool ToldNoTargetThere(const BoardMark& m) {
+        no_target_there_.erase(std::remove_if(no_target_there_.begin(), no_target_there_.end(),
+                                              [this](const NoTargetThere& n) { return n.heard_s < time_ - kMarkReadS; }),
+                               no_target_there_.end());
+        for (const NoTargetThere& n : no_target_there_) {
+            if (m.time_s > n.heard_s) continue;
+            if (std::find(n.marks.begin(), n.marks.end(), m.target_id) != n.marks.end() ||
+                (m.position - n.place).HorizontalLength() < kDesignationSearchM ||
+                (m.position - n.point).HorizontalLength() < kDesignationSearchM) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // A launcher's read-back heard at the post: it has that mark, whichever aircraft it found there. He gives the mark to
+    // nobody else while the launcher's last word on it (the read-back, or its reports on the IT boards under that number)
+    // is fresh, until it reports on something else.
+    static constexpr double kReadBackHoldS = 60.0;
+    struct ReadBackHeard {
+        std::string callsign;
+        int number = 0;
+        double heard_s = 0.0;
+    };
+    std::vector<ReadBackHeard> readbacks_;
+    bool LauncherHasMark(int number) {
+        readbacks_.erase(std::remove_if(readbacks_.begin(), readbacks_.end(),
+                                        [this](const ReadBackHeard& rb) {
+                                            double last_s = rb.heard_s;
+                                            for (const LauncherStatus& s : status_boards_) {
+                                                if (s.callsign != rb.callsign || s.reported_s <= rb.heard_s) continue;
+                                                if (s.target_number != rb.number) return true;
+                                                last_s = s.reported_s;
+                                            }
+                                            return last_s < time_ - kReadBackHoldS;
+                                        }),
+                         readbacks_.end());
+        for (const ReadBackHeard& rb : readbacks_) {
+            if (rb.number == number) return true;
+        }
+        return false;
+    }
     bool DesignationPending(const std::string& target) const {
         for (const VoiceDesignation& d : designations_out_) {
             if (d.mark.target_id == target) return true;
@@ -10049,11 +10111,12 @@ private:
         return false;
     }
     // The latest mark of each target on the post's board in the last two minutes, not one he heard destroyed.
+    static constexpr double kMarkReadS = 120.0;
     std::vector<BoardMark> PostMarks() const {
         std::vector<BoardMark> out;
         if (!post_) return out;
         for (const BoardMark& m : post_->Board().Marks()) {
-            if (time_ - m.time_s > 120.0 || reported_kills_.count(m.target_id) != 0) continue;
+            if (time_ - m.time_s > kMarkReadS || reported_kills_.count(m.target_id) != 0) continue;
             bool replaced = false;
             for (BoardMark& o : out) {
                 if (o.target_id == m.target_id) {
@@ -10230,6 +10293,10 @@ private:
             if (best == nullptr) {
                 Event(d.callsign, "no target where it was designated");
                 if (callouts_) callouts_->Say(time_, "report_no_target", "battery", {{"callsign", d.callsign}});
+                // Heard at the post (as a read-back would be), his marks there are the picture's lag: he holds them back.
+                if (d.by_line || (LaunchersCanTransmit() && NetHears() && (!nets_ || nets_->GetsThrough("battery", time_)))) {
+                    no_target_there_.push_back({d.group ? d.group_ids : std::vector<std::string>{d.mark.target_id}, d.mark.position, d.point, time_});
+                }
                 continue;
             }
             if (best->id != d.mark.target_id && !d.group) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
@@ -10241,9 +10308,11 @@ private:
                 Radio("line " + std::to_string(LineToLauncher(d.callsign)->line), d.callsign,
                       OwnCallSignOn("battery") + ", я " + d.callsign + ": цель " + rn + ", понял.");
                 ++readbacks_heard_;
+                readbacks_.push_back({d.callsign, d.mark.number, time_});
             } else if (LaunchersCanTransmit() && NetHears() && (!nets_ || nets_->GetsThrough("battery", time_))) {
                 if (callouts_) callouts_->Say(time_, "readback", "battery", {{"post", OwnCallSignOn("battery")}, {"callsign", d.callsign}, {"number", rn}}, 1.0);
                 ++readbacks_heard_;
+                readbacks_.push_back({d.callsign, d.mark.number, time_});
             } else {
                 ++readbacks_missed_;
                 Event(d.callsign, std::string("read back ") + rn + ": not heard at the post");

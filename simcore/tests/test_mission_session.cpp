@@ -1,8 +1,12 @@
 // The battery's mission as one session with the enemy's air war beside it (roadmap 15.2, first form):
 // simcore/campaign/mission_session.hpp.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <map>
 #include <string>
+#include <vector>
 
 #include "simcore/air_war.hpp"
 #include "simcore/campaign/mission_session.hpp"
@@ -58,7 +62,56 @@ SC_TEST("mission session (15.2): the bridges mission with the Pact's air war on 
     launchers = launchers / static_cast<double>(n);
     SC_EXPECT(std::hypot(at_start.x - launchers.x, at_start.y - launchers.y) < 50.0);  // the same origin as the theatre's
     ScenarioRunner& r = s.Runner();
-    while (!r.Finished()) s.Step(0.1);
+    // The regiment's air picture comes in squares and late: a launcher may find nothing where it was told to look
+    // («цели не наблюдаю»). The commander then gives that mark to nobody again until a fresher one is on his board.
+    // A launcher that read a mark back has it, whatever aircraft it found there: he gives it to no second launcher.
+    std::map<std::string, int> last_number;  // launcher -> the mark it was last given
+    std::map<int, double> nothing_there_s;   // mark -> when a launcher said nothing was there
+    struct Given {
+        std::string launcher;
+        double at_s = 0.0;
+    };
+    std::map<int, Given> given;  // a single mark -> the launcher it was last given to
+    int answered = 0, stale = 0, doubled = 0;
+    std::size_t seen = 0;
+    while (!r.Finished()) {
+        s.Step(0.1);
+        const std::vector<DebriefEntry>& log = r.Log().Entries();
+        for (; seen < log.size(); ++seen) {
+            const DebriefEntry& entry = log[seen];
+            if (entry.who == "Battery commander" && entry.detail.find(" by voice") != std::string::npos) {
+                const int number = std::atoi(entry.detail.c_str() + entry.detail.find(' ') + 1);
+                const auto told = nothing_there_s.find(number);
+                if (told != nothing_there_s.end()) {
+                    double mark_s = -1.0;
+                    for (const BoardMark& m : r.PostBoard()) mark_s = m.number == number ? std::max(mark_s, m.time_s) : mark_s;
+                    if (mark_s <= told->second) {
+                        ++stale;
+                        std::printf("    %.1f s: mark %d to %s again, no newer than the %.1f s «цели не наблюдаю»\n", entry.time_s, number,
+                                    entry.what.c_str(), told->second);
+                    }
+                }
+                if (entry.detail.rfind("target ", 0) == 0) {
+                    const auto before = given.find(number);
+                    if (before != given.end() && before->second.launcher != entry.what && entry.time_s - before->second.at_s < 60.0) {
+                        ++doubled;
+                        std::printf("    %.1f s: mark %d to %s, %.1f s after %s had it\n", entry.time_s, number, entry.what.c_str(),
+                                    entry.time_s - before->second.at_s, before->second.launcher.c_str());
+                    }
+                    given[number] = {entry.what, entry.time_s};
+                }
+                last_number[entry.what] = number;
+            } else if (entry.who.empty() && entry.detail == "no target where it was designated" && last_number.count(entry.what) != 0) {
+                nothing_there_s[last_number[entry.what]] = entry.time_s;
+                given.erase(last_number[entry.what]);
+                ++answered;
+            }
+        }
+    }
+    std::printf("    «цели не наблюдаю» %d times, %d designations\n", answered, r.DesignationsMade());
+    SC_EXPECT(answered > 0);
+    SC_EXPECT(stale == 0);
+    SC_EXPECT(doubled == 0);
     const airwar::LivePackages& live = *s.Packages();
     for (const std::string& note : live.Notes()) std::printf("    %s\n", note.c_str());
     SC_EXPECT(!live.PlayedPackages().empty());

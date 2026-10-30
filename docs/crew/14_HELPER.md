@@ -52,7 +52,7 @@ A target past a wheel's stop (beyond the range wheel's 28 km) is advised only as
 The helper's ghost hand shows switches only, never a wheel.
 
 At the **PU-12M** the battery commander's fire distribution runs for a player in his seat too: each target it would give
-a launcher is a designate duty. The plotter owes every report he has heard and not written; the radio operator owes the
+a launcher is a designate duty (not a mark where a launcher he heard said «цели не наблюдаю», until a fresher one comes, nor one a launcher has read back). The plotter owes every report he has heard and not written; the radio operator owes the
 air reports he heard and hasn't read out, a retune when his net is ordered to its other frequency, and the jamming he
 recognised. With the regiment's task (roadmap 14.3, 30 Oct 2026) the battery commander owes its preliminary order and
 its oral combat order when his plan has them (the crew menu's Battery orders: `order_battery_preliminary`,
