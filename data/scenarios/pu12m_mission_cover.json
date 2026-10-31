@@ -285,6 +285,13 @@
       ]
     }
   },
+  "supply": {
+    "logistics": "campaign/logistics.json",
+    "siding": "tech_battery",
+    "tested": 24,
+    "untested": 24,
+    "notes": "The regiment's technical battery by the Horka siding: what it has tested and untested at the session's start is the day's situation (game values). The battery commander sends the TZM there for missiles on the battery net once it has less than a launcher's load (roadmap 17.4)."
+  },
   "task": {
     "file": "campaign/tasks/bty21_cover_bridges.json",
     "given_s": 60,

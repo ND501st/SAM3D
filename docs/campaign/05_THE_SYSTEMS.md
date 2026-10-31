@@ -236,7 +236,10 @@ a time (the campaign keeps one pending, so one due meanwhile waits), the campaig
   warning sources at theatre objects, off the air while the war has it struck and back once repaired; the regiment
   tells the battery on its command net.
 - **Supply**: the TZM and the ATZ draw from the technical battery's and the depots' stocks and drive the real roads and
-  bridges. A wrecked bridge lengthens the run (§2).
+  bridges. A wrecked bridge lengthens the run (§2). **First form built for the TZM (17.4, 31 Oct 2026)**: the battery
+  commander sends it on the battery net by his reckoning of its load, its chief plans on the bridges the commander was
+  told of and finds the others when he comes to them; the war's damage to the road bridges is the session roads' truth,
+  and the regiment tells the battery of it on its net.
 
 ## 11. The after-action loop
 

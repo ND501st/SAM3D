@@ -100,6 +100,7 @@ struct BatteryVehicleDef {
     bool has_sector = false;
     double sector_from_deg = 0.0;
     double sector_to_deg = 0.0;
+    double stock = -1.0;  // a TZM's missiles (a fuel truck's litres) at the start; < 0: the tactics' full load
 };
 
 // A point of a march plan on the column's route (nav/march.hpp): the start point, a halt, a regulation point, a river
@@ -280,6 +281,9 @@ public:
         // order stays where it is; once he has, it leaves its emplacement and goes to its place, on the march catching
         // the column up along the route.
         bool absent = false;
+        // Gone from the battery on a run of its own (the TZM to the technical battery: roadmap 17.4): it takes no part in
+        // the battery's moves or services until it is back.
+        bool away = false;
         bool dug_in = false;         // still in its emplacement
         double hold_until_s = -1.0;  // leaving its emplacement until then
         bool catching = false;
@@ -314,8 +318,8 @@ public:
             v.def = d;
             v.position = d.start;
             v.goal = d.start;
-            if (d.kind == BatteryVehicleKind::Reload) v.stock = tactics_.tzm_capacity;
-            if (d.kind == BatteryVehicleKind::Fuel) v.stock = tactics_.fuel_truck_capacity_l;
+            if (d.kind == BatteryVehicleKind::Reload) v.stock = d.stock >= 0.0 ? d.stock : tactics_.tzm_capacity;
+            if (d.kind == BatteryVehicleKind::Fuel) v.stock = d.stock >= 0.0 ? d.stock : tactics_.fuel_truck_capacity_l;
             rank_.push_back(vehicles_.size());
             vehicles_.push_back(v);
         }
@@ -398,6 +402,21 @@ public:
     bool Absent(const std::string& id) const {
         const Vehicle* v = Find(id);
         return v != nullptr && v->absent;
+    }
+    // A vehicle gone on a run of its own (roadmap 17.4), where it is now (its mover's head on the roads), or back at `at`.
+    void SetAway(const std::string& id, bool away, const Vec3& at) {
+        for (Vehicle& v : vehicles_) {
+            if (v.def.id != id) continue;
+            v.away = away;
+            v.position = at;
+            v.goal = at;
+            v.speed_mps = 0.0;
+        }
+    }
+    // What a service vehicle carries now (the TZM back from the technical battery with its load).
+    void SetStock(const std::string& id, double stock) {
+        for (Vehicle& v : vehicles_)
+            if (v.def.id == id) v.stock = std::max(0.0, stock);
     }
     // The vehicle the battery commander rides in: while it is absent (its crew still stowing) the column does not form.
     void SetLeader(const std::string& id) { leader_ = id; }
@@ -626,7 +645,7 @@ public:
             for (std::size_t k = 0; k < vehicles_.size(); ++k) {
                 Vehicle& v = vehicles_[k];
                 if (v.absent && v.def.id == leader_) formed = false;  // the column does not move off without its commander
-                if (v.absent || v.catching || v.broken) continue;  // not in the column (yet): the column goes without it
+                if (v.absent || v.away || v.catching || v.broken) continue;  // not in the column (yet): the column goes without it
                 v.goal = PointAt(SlotArc(rank_[k]));
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
             }
@@ -638,7 +657,7 @@ public:
                 // The leader moves on as long as nobody behind has fallen too far back.
                 bool keeping_up = true;
                 for (const Vehicle& v : vehicles_)
-                    if (!v.absent && !v.catching && !v.broken && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
+                    if (!v.absent && !v.away && !v.catching && !v.broken && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
                 if (keeping_up && lead_s_ < total_ && t >= hold_until_s_) {
                     double next = Advance(lead_s_, dt);
                     // The head stops at a plan's point until its time, and at a halt.
@@ -673,7 +692,7 @@ public:
                                                                 : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
-            if (v.absent || v.broken || t < v.hold_until_s) {
+            if (v.absent || v.away || v.broken || t < v.hold_until_s) {
                 v.speed_mps = 0.0;
                 continue;
             }
@@ -697,7 +716,7 @@ public:
         if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation || mode_ == Mode::Ambush || mode_ == Mode::RiverApproach ||
             mode_ == Mode::RiverCrossing) {
             for (Vehicle& v : vehicles_) {
-                if (v.deployed || !v.serving.empty() || v.waiting || v.absent || v.broken) continue;
+                if (v.deployed || !v.serving.empty() || v.waiting || v.absent || v.away || v.broken) continue;
                 if (mode_ == Mode::RiverCrossing && v.crossing_stage != 0 && v.crossing_stage != 4) continue;
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) continue;
                 if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
@@ -721,7 +740,7 @@ public:
         for (Vehicle& v : vehicles_) {
             const bool fits = kind == Service::Reload ? v.def.kind == BatteryVehicleKind::Reload
                                                       : (v.def.kind == BatteryVehicleKind::Fuel || v.def.kind == BatteryVehicleKind::Reload);
-            if (!fits || !v.serving.empty() || v.stock <= 0.0) continue;
+            if (!fits || !v.serving.empty() || v.away || v.stock <= 0.0) continue;
             // a fuel truck is preferred for fuel; a TZM only if no fuel truck can come
             const double d = Dist(v.position, target->position) + (kind == Service::Refuel && v.def.kind == BatteryVehicleKind::Reload ? 1e7 : 0.0);
             if (d < best_d) {

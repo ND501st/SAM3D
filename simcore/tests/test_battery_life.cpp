@@ -1,7 +1,8 @@
 // The battery's life on the ground (roadmap track G, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md): the pipeline's carriers
 // on the roads (G2.5), the movement table and exposure on the march (G3), breakdowns (G3.5), the battery area (G4), the
-// missiles from the rear (G5), the people and papers of the chain (G8), the march to a place in a session with its papers
-// (G2.3, G9.4), the air war's supply columns as movers (G2.6), and the world's movers in sight (G11).
+// missiles from the rear (G5) and one TZM's run on the roads round a bridge down (17.4), the people and papers of the chain
+// (G8), the march to a place in a session with its papers (G2.3, G9.4), the air war's supply columns as movers (G2.6),
+// and the world's movers in sight (G11).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -418,6 +419,252 @@ SC_TEST("battery life (G5): twelve fired at dawn; the TZMs bring twelve back in 
     wrong.Logged(0.0, 2, 1);
     wrong.Step(0.0);
     SC_EXPECT(wrong.Requests().size() == 1 && wrong.Requests()[0].missiles == 13 && wrong.TrueTotal() == 36);
+}
+
+// ---------------------------------------------------------------------------------------------- 17.4
+
+namespace {
+
+// Where a crossing is along a route (< 0: not on it).
+double ArcOfCrossing(const RoadGraph& g, const Route& r, const std::string& crossing) {
+    double arc = 0.0;
+    for (std::size_t i = 0; i < r.path.size() && i < r.nodes.size(); ++i) {
+        if (i > 0) arc += std::hypot(r.path[i].east_m - r.path[i - 1].east_m, r.path[i].north_m - r.path[i - 1].north_m);
+        const int n = r.nodes[i];
+        if (n < 0) continue;
+        const int c = g.Nodes()[static_cast<std::size_t>(n)].crossing;
+        if (c >= 0 && g.Crossings()[static_cast<std::size_t>(c)].id == crossing) return arc;
+    }
+    return -1.0;
+}
+
+// One TZM's run headless, every second: the mover at its route's times, then the run. What it saw on the way.
+struct TzmTrace {
+    Mover m;
+    double stop_s = -1.0;  // first stopped short of a bridge
+    double stop_arc_m = 0.0;
+    Route stopped_on;      // the route he stopped on
+    Route back;            // the route he took back
+    bool moved_again = false;
+};
+
+TzmTrace RunTzm(TzmRun& run, TechnicalBattery& siding, const Overlay& told, const Overlay& truth) {
+    const NavWorld& w = TheWorld();
+    LogisticsValues v;
+    std::string e;
+    if (!LoadLogisticsValues(kData, "campaign/logistics.json", v, &e)) std::printf("    %s\n", e.c_str());
+    TzmTrace tr;
+    if (!run.Start(w.graph, *w.mobility.Find("tzm_9t217"), v, "TZM", w.anchors.Find("bty21_cp")->at, w.anchors.Find("tech_battery")->at, 0, told,
+                   false, 0.0, tr.m, &e)) {
+        std::printf("    cannot start: %s\n", e.c_str());
+        return tr;
+    }
+    for (double t = 1.0; t <= 12.0 * 3600.0 && !run.Finished(); t += 1.0) {
+        siding.Step(t);
+        Movers::Advance(tr.m, t, 1.0);
+        const TzmRun::Leg before = run.GetLeg();
+        run.Step(t, w.graph, truth, siding, tr.m);
+        if (run.GetLeg() == TzmRun::Leg::Stopped && tr.stop_s < 0.0) {
+            tr.stop_s = t;
+            tr.stop_arc_m = tr.m.arc_m;
+            tr.stopped_on = tr.m.route;
+        }
+        if (before == TzmRun::Leg::Stopped && run.GetLeg() != TzmRun::Leg::Stopped) {
+            tr.moved_again = t == tr.stop_s + 600.0 && tr.m.state == MoverState::Moving;
+        }
+        if (before != TzmRun::Leg::Back && run.GetLeg() == TzmRun::Leg::Back) tr.back = tr.m.route;
+    }
+    return tr;
+}
+
+}  // namespace
+
+SC_TEST("battery life (17.4): the TZM's run on the roads: out, twelve at the crane's rate, back; told of the bridge down, it plans round from the start") {
+    const Route out = Between("bty21_cp", "tech_battery", "tzm_9t217");
+    const Route back = Between("tech_battery", "bty21_cp", "tzm_9t217");
+    SC_EXPECT(out.found && back.found && out.Uses("b_ralje@rava"));
+    LogisticsValues v;
+    std::string e;
+    SC_EXPECT(LoadLogisticsValues(kData, "campaign/logistics.json", v, &e));
+    TechnicalBattery siding;
+    siding.Init(v, 24, 0);
+    TzmRun run;
+    const TzmTrace tr = RunTzm(run, siding, Overlay(), Overlay());
+    const double load_s = v.tzm_missiles * v.load_tzm_s_per_missile;
+    std::printf("    the road %.1f min each way; at the siding at %.0f s, back at %.0f s (the roads and the crane: %.0f s)\n", out.time_s / 60.0,
+                run.AtSidingS(), run.BackS(), out.time_s + load_s + back.time_s);
+    SC_EXPECT(run.Home() && run.CannotWhy().empty() && run.Aboard() == 12 && siding.Tested() == 12);
+    SC_EXPECT(std::fabs(run.AtSidingS() - run.LeftS() - out.time_s) < 2.0);
+    SC_EXPECT(std::fabs(run.BackS() - run.LeftS() - (out.time_s + load_s + back.time_s)) < 2.0);
+    SC_EXPECT(tr.stop_s < 0.0 && run.Found().empty());
+
+    // Told the Kesmark road bridge is down, he plans round it from the start, both ways.
+    Overlay told;
+    told.Cut("wreck:kesmark_road_bridge:0", "b_ralje@rava", 0.0);
+    const NavWorld& w = TheWorld();
+    RouteRequest q;
+    q.from = w.anchors.Find("bty21_cp")->at;
+    q.to = w.anchors.Find("tech_battery")->at;
+    q.mobility = w.mobility.Find("tzm_9t217");
+    q.swim = false;
+    const Route round_out = w.graph.Find(q, told);
+    std::swap(q.from, q.to);
+    const Route round_back = w.graph.Find(q, told);
+    SC_EXPECT(round_out.found && !round_out.Uses("b_ralje@rava") && round_out.time_s > 4.0 * out.time_s);
+    TechnicalBattery siding2;
+    siding2.Init(v, 24, 0);
+    TzmRun round;
+    const TzmTrace tr2 = RunTzm(round, siding2, told, told);
+    std::printf("    told of the bridge: round it %.0f min each way; back at %.0f s\n", round_out.time_s / 60.0, round.BackS());
+    SC_EXPECT(!tr2.back.Uses("b_ralje@rava") && tr2.stop_s < 0.0);
+    SC_EXPECT(round.Home() && round.Aboard() == 12);
+    SC_EXPECT(std::fabs(round.BackS() - round.LeftS() - (round_out.time_s + load_s + round_back.time_s)) < 2.0);
+    // Waiting for the station: with none tested, the crane loads as the station tests them.
+    TechnicalBattery slow;
+    slow.Init(v, 0, 24);
+    TzmRun waits;
+    RunTzm(waits, slow, Overlay(), Overlay());
+    const double tested_by = 12.0 * 3600.0 / v.tests_per_h;
+    std::printf("    none tested at the siding: back at %.0f s (twelve tested by %.0f s)\n", waits.BackS(), tested_by);
+    SC_EXPECT(waits.Home() && waits.Aboard() == 12);
+    SC_EXPECT(waits.BackS() > tested_by + back.time_s && waits.BackS() < tested_by + v.load_tzm_s_per_missile + back.time_s + 2.0);
+}
+
+SC_TEST("battery life (17.4): a bridge he was not told of: he stops short of it, plans again after ten minutes, and plans the way back round it") {
+    const NavWorld& w = TheWorld();
+    LogisticsValues v;
+    std::string e;
+    SC_EXPECT(LoadLogisticsValues(kData, "campaign/logistics.json", v, &e));
+    Overlay truth;
+    truth.Cut("wreck:kesmark_road_bridge:0", "b_ralje@rava", 0.0);
+    TechnicalBattery siding;
+    siding.Init(v, 24, 0);
+    TzmRun run;
+    const TzmTrace tr = RunTzm(run, siding, Overlay(), truth);
+    const double bridge = ArcOfCrossing(w.graph, tr.stopped_on, "b_ralje@rava");
+    const ColumnMarchSettings s;
+    std::printf("    stopped at %.0f s, %.0f m short of the bridge; back at %.0f s\n", tr.stop_s, bridge - tr.stop_arc_m, run.BackS());
+    SC_EXPECT(tr.stop_s > 0.0 && bridge > 0.0);
+    SC_EXPECT(tr.stop_arc_m >= bridge - s.see_m - 1.0 && tr.stop_arc_m <= bridge - s.see_m + 25.0);
+    SC_EXPECT(tr.moved_again);
+    // His new route from where he stood, on what he now believes; the way back from the siding round it too.
+    RouteRequest q;
+    q.from = PointAlong(tr.stopped_on, tr.stop_arc_m);
+    q.to = w.anchors.Find("tech_battery")->at;
+    q.mobility = w.mobility.Find("tzm_9t217");
+    q.h = (tr.stop_s + s.replan_s) / 3600.0;
+    q.swim = false;
+    const Route replan = w.graph.Find(q, truth);
+    q.from = q.to;
+    q.to = w.anchors.Find("bty21_cp")->at;
+    const Route back = w.graph.Find(q, truth);
+    SC_EXPECT(replan.found && !replan.Uses("b_ralje@rava") && back.found && !tr.back.Uses("b_ralje@rava"));
+    SC_EXPECT(run.Believed().Down("b_ralje@rava", 1.0) != nullptr && run.Believed().Down("b_ralje@rava", 1.0)->id == "wreck:kesmark_road_bridge:0");
+    SC_EXPECT(run.Found().size() == 1 && run.Home() && run.Aboard() == 12);
+    const double expect = tr.stop_s + s.replan_s + replan.time_s + v.tzm_missiles * v.load_tzm_s_per_missile + back.time_s;
+    SC_EXPECT(std::fabs(run.BackS() - run.LeftS() - expect) < 2.0);
+}
+
+SC_TEST("battery life (17.4): no way on: the bridge he finds is the last way over the river; he turns back and cannot") {
+    const NavWorld& w = TheWorld();
+    LogisticsValues v;
+    std::string e;
+    SC_EXPECT(LoadLogisticsValues(kData, "campaign/logistics.json", v, &e));
+    // Told of every other way over: each crossing of each way round the Kesmark road bridge is down, until there is none.
+    RouteRequest q;
+    q.from = w.anchors.Find("bty21_cp")->at;
+    q.to = w.anchors.Find("tech_battery")->at;
+    q.mobility = w.mobility.Find("tzm_9t217");
+    q.swim = false;
+    Overlay told;
+    Overlay truth;
+    truth.Cut("wreck:kesmark_road_bridge:0", "b_ralje@rava", 0.0);
+    int rounds = 0;
+    for (Route r = w.graph.Find(q, truth); r.found && rounds < 20; r = w.graph.Find(q, truth), ++rounds) {
+        for (const std::string& c : r.crossings) {
+            told.Cut("told:" + c, c, 0.0);
+            truth.Cut("told:" + c, c, 0.0);
+        }
+    }
+    SC_EXPECT(!w.graph.Find(q, truth).found && w.graph.Find(q, told).Uses("b_ralje@rava"));
+    TechnicalBattery siding;
+    siding.Init(v, 24, 0);
+    TzmRun run;
+    const TzmTrace tr = RunTzm(run, siding, told, truth);
+    std::printf("    %zu other crossings told down; stopped at %.0f s, back at %.0f s: %s\n", told.entries.size(), tr.stop_s, run.BackS(),
+                run.CannotWhy().c_str());
+    SC_EXPECT(tr.stop_s > 0.0 && run.Home() && run.Aboard() == 0 && siding.Tested() == 24);
+    SC_EXPECT(run.CannotWhy() == "every way is cut" && run.AtSidingS() < 0.0);
+    SC_EXPECT(run.Believed().Down("b_ralje@rava", 1.0) != nullptr);
+    SC_EXPECT(!tr.back.Uses("b_ralje@rava") && tr.back.found);
+}
+
+SC_TEST("battery life (17.4): no way back: he waits short of the bridge he found and goes home once he sees it open again; an empty siding sends him back with what it had") {
+    const NavWorld& w = TheWorld();
+    LogisticsValues v;
+    std::string e;
+    SC_EXPECT(LoadLogisticsValues(kData, "campaign/logistics.json", v, &e));
+    const Route out = Between("bty21_cp", "tech_battery", "tzm_9t217");
+    const Route back = Between("tech_battery", "bty21_cp", "tzm_9t217");
+    // Every way over the river but the Kesmark road bridge is down, and he was told so; the bridge falls once he is over it,
+    // and stands open again at 03:00.
+    RouteRequest q;
+    q.from = w.anchors.Find("bty21_cp")->at;
+    q.to = w.anchors.Find("tech_battery")->at;
+    q.mobility = w.mobility.Find("tzm_9t217");
+    q.swim = false;
+    Overlay told;
+    Overlay cut;
+    cut.Cut("kesmark", "b_ralje@rava", 0.0);
+    int rounds = 0;
+    for (Route r = w.graph.Find(q, cut); r.found && rounds < 20; r = w.graph.Find(q, cut), ++rounds) {
+        for (const std::string& c : r.crossings) {
+            told.Cut("told:" + c, c, 0.0);
+            cut.Cut("told:" + c, c, 0.0);
+        }
+    }
+    Overlay truth = told;
+    truth.Cut("wreck:kesmark_road_bridge:1", "b_ralje@rava", 1.0);
+    const double open_s = 3.0 * 3600.0;
+    TechnicalBattery siding;
+    siding.Init(v, 24, 0);
+    TzmRun run;
+    Mover m;
+    SC_EXPECT(run.Start(w.graph, *w.mobility.Find("tzm_9t217"), v, "TZM", q.from, q.to, 0, told, false, 0.0, m, &e));
+    double stuck_s = -1.0;
+    for (double t = 1.0; t <= 12.0 * 3600.0 && !run.Finished(); t += 1.0) {
+        if (t >= open_s) truth.entries.back().until_h = open_s / 3600.0;
+        siding.Step(t);
+        Movers::Advance(m, t, 1.0);
+        run.Step(t, w.graph, truth, siding, m);
+        if (run.Stuck() && stuck_s < 0.0) stuck_s = t;
+    }
+    bool saw_open = false;
+    for (const StockEvent& x : run.Events()) saw_open = saw_open || x.text.find("stands open again") != std::string::npos;
+    const ColumnMarchSettings s;
+    std::printf("    over the river by %zu crossings told down: the bridge falls behind him; no way back at %.0f s, back at %.0f s\n",
+                told.entries.size(), stuck_s, run.BackS());
+    SC_EXPECT(stuck_s > 3600.0 && stuck_s < open_s && saw_open);
+    SC_EXPECT(run.Home() && !run.Stuck() && run.Aboard() == 12 && run.CannotWhy().empty());
+    SC_EXPECT(run.BackS() > open_s && run.BackS() < open_s + s.replan_s + back.time_s);
+    SC_EXPECT(run.Found().size() == 1 && run.Found()[0].until_h <= run.BackS() / 3600.0);
+
+    // Five tested and none to test, no train due: he comes back with the five.
+    TechnicalBattery few;
+    few.Init(v, 5, 0);
+    TzmRun few_run;
+    RunTzm(few_run, few, Overlay(), Overlay());
+    SC_EXPECT(few_run.Home() && few_run.Aboard() == 5 && few_run.SidingEmpty() && few.Tested() == 0);
+    SC_EXPECT(std::fabs(few_run.BackS() - few_run.LeftS() - (out.time_s + 5.0 * v.load_tzm_s_per_missile + back.time_s)) < 2.0);
+    // A train due: he waits for it and the station's tests.
+    TechnicalBattery train;
+    train.Init(v, 5, 0);
+    train.TrainDue(0.0, 2.0 * 3600.0);
+    TzmRun waits;
+    RunTzm(waits, train, Overlay(), Overlay());
+    std::printf("    five at the siding: back with %d at %.0f s; a train due at 7200 s: back with %d at %.0f s\n", few_run.Aboard(), few_run.BackS(),
+                waits.Aboard(), waits.BackS());
+    SC_EXPECT(waits.Home() && waits.Aboard() == 12 && !waits.SidingEmpty() && waits.BackS() > 7200.0 + back.time_s);
 }
 
 // ---------------------------------------------------------------------------------------------- G8

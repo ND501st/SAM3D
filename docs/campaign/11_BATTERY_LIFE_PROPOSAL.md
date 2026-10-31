@@ -703,7 +703,9 @@ NPC battery commander's request follows his ledger, which is wrong when a launch
   (`command/orders.hpp`). A launch logged twice makes his request 13 for the 12 fired.
 
 Left: fuel, rations and the sergeant major's run as stocks (with G7), the field post, the request carried by a means
-(the pipeline's), and the TZMs' runs in a session as movers (G11 draws them once a session has them).
+(the pipeline's). The TZM's run in a session is built as roadmap 17.4 (31 Oct 2026): an order on the battery net, a
+mover on the session's roads that finds a bridge down when it comes to it, the crane at the siding, the chief's report
+back; what that leaves is in 17.4's row.
 
 ### G6: wear and maintenance (20.0 and 20.3 brought forward): on hold
 

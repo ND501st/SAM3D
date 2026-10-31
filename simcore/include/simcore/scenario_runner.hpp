@@ -201,6 +201,7 @@ public:
             if (def_.battery_by_means) StartOrderNet();
         }
         if (def_.nav) nav_ = std::make_unique<nav::SessionNav>(*def_.nav);  // the session's own movers
+        StartSupply();
         HandInBatteryPapers();
         StartRadioTuning();
         RecordWorkPlaces();
@@ -610,7 +611,7 @@ public:
         }
         if (battery_) {
             for (const Battery::Vehicle& v : battery_->Vehicles()) {
-                if (v.def.own) continue;
+                if (v.def.own || v.away) continue;  // away on a run: drawn as its mover on the roads (MoversInView)
                 x.battery.push_back({v.def.callsign, BatteryVehicleKindName(v.def.kind), v.position, v.heading_deg, v.deployed});
             }
         }
@@ -1188,8 +1189,9 @@ public:
         // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
         if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
             order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment" ||
-            order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") {
+            order_id == "order_battery_search_own" || order_id == "order_battery_by_designation" || order_id == "order_tzm_run") {
             bool done = false;
+            if (order_id == "order_tzm_run") done = OrderTzmRun("Battery commander");
             if (order_id == "order_battery_search_own") done = OrderSearchOwn(true, "Battery commander");
             if (order_id == "order_battery_by_designation") done = OrderSearchOwn(false, "Battery commander");
             if (order_id == "order_battery_spare") done = OrderBatteryNetSpare("Battery commander");
@@ -1258,6 +1260,7 @@ public:
         const auto net_of = [&]() -> std::string {
             if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
             if (order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") return "battery";
+            if (order_id == "order_tzm_run") return "battery";
             if (order_id == "order_warn_covered" || order_id == "order_all_clear_covered") return "covered";
             if (order_id == "order_report_regiment") return "regiment";
             if (order_id.rfind("order_battery_emission_", 0) == 0) return "battery";
@@ -1275,6 +1278,10 @@ public:
         if (order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") {
             if (!battery_fire_) return refuse("пусковых на батарейной сети нет", "no launchers on the battery net");
             if ((order_id == "order_battery_search_own") == (search_own_order_ >= 0)) return refuse("уже выполнено", "done already");
+        }
+        if (order_id == "order_tzm_run") {
+            if (tzm_id_.empty()) return refuse("ТЗМ на батарейной сети нет", "no TZM on the battery net to send");
+            if (tzm_run_order_ >= 0) return refuse("ТЗМ уже в рейсе", "the TZM is on its run already");
         }
         const std::string net = net_of();
         if (!net.empty() && net != "covered" && MarchRadioBan()) {  // the warnings to the covered troops are open talk
@@ -2315,6 +2322,7 @@ private:
             UpdateOwnOrder();
             PostOwesOrders();
             PostStowsForMarch();
+            UpdateSupply();
         }
         UpdateBatteryFire();
         // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
@@ -2454,6 +2462,8 @@ private:
             KeepOrderNetCurrent();
             std::vector<std::string> to;
             for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+                const Battery::Vehicle* bv = battery_->Find(c.vehicle);
+                if (bv != nullptr && bv->away) continue;  // out on a run of its own (17.4): not in this move
                 battery_->SetAbsent(c.vehicle, true);
                 to.push_back(c.vehicle);
             }
@@ -2610,7 +2620,7 @@ private:
     }
     bool NetMayCall(const Battery::Vehicle& v) const {
         const bool ban = battery_->CurrentMode() == Battery::Mode::Marching && !RepellingAttack();
-        return !ban || v.absent || v.catching || v.broken;
+        return !ban || v.absent || v.away || v.catching || v.broken;
     }
     // Each step: who has heard (his vehicle acts), the repeat-backs, the silences chased; each vehicle done reports, and
     // what reaches the battery commander the own crew hears where its means reach them: the giver's words again and the
@@ -2632,6 +2642,7 @@ private:
             }
             const bool to_giver = e.what == "repeated back" || e.what == "reported" || e.what == "cannot";
             if (to_giver) GiverHears(e);
+            if ((e.what == "reported" || e.what == "cannot") && supply_orders_.count(e.order) != 0) CommanderHearsTzm(e);
             if (mine || !to_giver) continue;
             if (e.mean == "radio_voice") {
                 SayForVehicle(e);
@@ -2644,7 +2655,7 @@ private:
         GiverOrdersBattle();
         for (const command::OrderVehicle& c : order_net_->Vehicles()) {
             const Battery::Vehicle* bv = battery_->Find(c.vehicle);
-            if (c.seats || bv == nullptr || bv->absent || !order_net_->Heard(battery_order_, c.vehicle)) continue;
+            if (c.seats || bv == nullptr || bv->absent || bv->away || !order_net_->Heard(battery_order_, c.vehicle)) continue;
             if (bv->broken) {  // he cannot carry it out: he says so, and why
                 order_net_->Cannot(battery_order_, c.vehicle, time_, bv->broken_why, NetWords("report_cannot", OrderFields(c.callsign), c.callsign + ": не могу"));
                 continue;
@@ -2660,6 +2671,10 @@ private:
     // takes turns on the net): «10, я 22: к маршу, понял. Приём.», «10, я 22: к маршу готов. Приём.», a launcher's
     // «к бою готов» with its missiles (voenizdat_osa_1991 p246); a vehicle with no fire channels says the short form.
     void SayForVehicle(const command::OrderEvent& e) {
+        if (supply_orders_.count(e.order) != 0 && e.what != "repeated back") {  // the TZM's chief back: his load, or why not
+            Radio("battery net", e.callsign, e.text);
+            return;
+        }
         std::map<std::string, std::string> f = OrderFieldsFor(e.callsign, e.order);  // the order it answers (a notice too)
         std::string id = e.what == "repeated back" ? "order_readback" : e.what == "cannot" ? "report_cannot" : "report_ready_to_march";
         if (e.what == "reported" && e.order == battery_order_ && DeploysBattery(battery_order_kind_)) {
@@ -3542,6 +3557,7 @@ private:
                 if (hear && on_box) {
                     Radio("regiment net", "Regiment", text);
                     if (!plan.messages[i].destroyed.empty()) HeardDestroyed(plan.messages[i].destroyed);
+                    if (!plan.messages[i].road_crossing.empty()) HeardRoad(plan.messages[i]);
                     r111_call_until_ = time_ + r111_->Def().call_s;
                     if (heard_back && talker) {
                         Transmitted("regiment", "Radiotelephone operator", 3.0);
@@ -5197,6 +5213,81 @@ public:
         def_.radio_plan.messages.back().destroyed = target;
         return true;
     }
+
+    // The roads as they are (roadmap 17.4): a crossing of the session's roads down in truth from now, or open again. A
+    // mover finds it only when it comes to it; the battery commander knows only what he is told. False without the roads,
+    // for a crossing they do not have, or one already so.
+    bool SetCrossingDown(const std::string& crossing, bool down, const std::string& entry, const std::string& fact = "") {
+        if (!nav_ || !nav_->SetCrossingDown(crossing, down, time_ / 3600.0, entry, fact)) return false;
+        Event("roads", "the bridge " + crossing + (down ? " is down" : " is open again"));
+        return true;
+    }
+    // The regiment tells the battery on its command net that a road's bridge is down, or open again, `after_s` from now:
+    // heard on the post's R-111, the battery commander's roads have it (`entry` the damage it stands for: heard again, the
+    // same). False without the R-111 worked as a set, or for a crossing the session's roads do not have.
+    bool RegimentTellsRoad(const std::string& crossing, const std::string& name, bool down, const std::string& entry, double after_s) {
+        if (!nav_ || nav_->Graph().Crossing(crossing) == nullptr) return false;
+        if (!RegimentSays("Regiment to the battery: the " + name + (down ? " is down." : " is open again."), after_s)) return false;
+        RegimentMessage& m = def_.radio_plan.messages.back();
+        m.road_crossing = crossing;
+        m.road_down = down;
+        m.road_entry = entry;
+        return true;
+    }
+    // The battery commander sends the TZM to the regiment's technical battery for missiles (roadmap 17.4): an order on the
+    // battery net to its chief, who plans the way on the roads the commander knows. Refused (last_refusal_ why) without a
+    // TZM on the net, while a run stands, on the march (the radio ban), with the TZM full by his reckoning or not at the
+    // battery, or with no way there on the roads he knows.
+    bool OrderTzmRun(const std::string& by) {
+        auto refuse = [this](const std::string& why) {
+            last_refusal_ = why;
+            return false;
+        };
+        if (tzm_id_.empty() || !order_net_ || !nav_) return refuse("no TZM on the battery net to send");
+        if (tzm_run_order_ >= 0) return refuse("the TZM is on its run already");
+        if (MarchRadioBan()) return refuse("on the march the radio is for fire control only");
+        const Battery::Vehicle* v = battery_->Find(tzm_id_);
+        if (v == nullptr || v->away || v->broken) return refuse("the TZM is not at the battery");
+        if (tzm_reckoned_ >= static_cast<int>(def_.logistics.tzm_missiles)) return refuse("the TZM is full, by what he was told");
+        const nav::Route way = PlanTzmRun();
+        if (!way.found) return refuse("no way to the technical battery on the roads he knows: " + way.why);
+        KeepOrderNetCurrent();
+        const CalloutDef* c = def_.crew_data.FindCallout("order_tzm_run");
+        const std::string words = c != nullptr ? c->ru : "ТЗМ — на техническую батарею за ракетами!";
+        const int order = order_net_->Give("tzm_run", words, "radio_voice", time_, {tzm_id_});
+        order_words_[order] = {"на техническую батарею за ракетами", "to the technical battery for missiles"};
+        notice_orders_.insert(order);  // the battery does not move on it: the TZM's run does
+        supply_orders_.insert(order);
+        tzm_run_order_ = order;
+        tzm_told_ = roads_believed_;
+        GiverJournal().Heard(time_, "battery net", "Battery commander", words);
+        Radio("battery net", BatteryPostCall(), TzmCallsign() + ", я " + BatteryPostCall() + ": " + words);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", words});
+        return true;
+    }
+    // The TZM's way from where it stands to the technical battery now, on the roads the battery commander knows.
+    nav::Route PlanTzmRun() const {
+        nav::Route r;
+        const Battery::Vehicle* v = battery_ && !tzm_id_.empty() ? battery_->Find(tzm_id_) : nullptr;
+        const nav::Anchor* s = nav_ ? nav_->GetAnchors().Find(def_.supply_siding) : nullptr;
+        const nav::Mobility* cls = nav_ ? nav_->MobilityClasses().Find(kTzmMobility) : nullptr;
+        if (v == nullptr || s == nullptr || cls == nullptr) {
+            r.why = "no TZM run in this session";
+            return r;
+        }
+        nav::RouteRequest q;
+        q.from = {v->position.x, v->position.y};
+        q.to = s->at;
+        q.mobility = cls;
+        q.h = time_ / 3600.0;
+        q.night = def_.battery_night;
+        q.swim = false;  // loaded, it keeps out of the water (campaign/stocks.hpp)
+        return nav_->Graph().Find(q, roads_believed_);
+    }
+    const nav::Overlay& RoadsBelieved() const { return roads_believed_; }  // the battery commander's
+    const campaign::TzmRun* GetTzmRun() const { return tzm_run_.get(); }    // the last run (null: none)
+    int TzmReckoned() const { return tzm_reckoned_; }                       // his reckoning of the missiles on the TZM
+    const campaign::TechnicalBattery& Siding() const { return siding_; }
 
     // A lesson's cues (tutorial.hpp): a net's main station orders it to its other frequency now; a strong spot jammer
     // comes on a net; the far end of a line rings.
@@ -6923,6 +7014,184 @@ private:
     std::unique_ptr<Battery> battery_;
     std::unique_ptr<command::BatteryOrderNet> order_net_;  // battery orders carried by a means (G10.5)
     std::unique_ptr<nav::SessionNav> nav_;                 // the roads, the places and the world's movers (G2.3, G11)
+
+    // ---- The TZM's runs to the regiment's technical battery (roadmap 17.4; campaign/stocks.hpp): the battery commander's
+    // order on the net, its chief's run on the session's roads, his report back, and what the commander reckons and
+    // believes of the roads (the regiment's word on its net, and what the chief found).
+    static constexpr const char* kTzmMobility = "tzm_9t217";  // its class on the roads (data/vehicles/mobility.json)
+    static constexpr double kSupplyThinkS = 10.0;             // sam3d: how often the NPC looks at his reckoning
+    std::string tzm_id_;                         // the battery's TZM on the order net ("" : no runs in this session)
+    nav::Overlay roads_believed_;                // the battery commander's: the bridges he was told are down
+    campaign::TechnicalBattery siding_;
+    std::unique_ptr<campaign::TzmRun> tzm_run_;  // the last run
+    int tzm_run_order_ = -1;                     // the run's order on the net, until the commander has the chief's report
+    int tzm_started_for_ = -1;                   // the order the last run set off on
+    nav::Overlay tzm_told_;                      // the roads its chief was told of with the order
+    Vec3 tzm_home_;                              // where it left the battery
+    int tzm_reckoned_ = -1;                      // the commander's reckoning of the missiles on it (-1: no runs)
+    std::set<int> supply_orders_;                // the runs' orders on the net
+    bool siding_empty_heard_ = false;            // a chief reported the technical battery out of missiles
+    std::map<std::string, double> road_open_h_;  // the hour the regiment last said each crossing open again
+    double next_supply_think_s_ = 0.0;
+    std::size_t tzm_events_seen_ = 0;
+
+    // The technical battery's stocks at the start; the TZM on the order net; the commander's reckoning of its load (what
+    // it started with: he knows it).
+    void StartSupply() {
+        if (!def_.has_supply || !nav_ || !battery_ || !order_net_) return;
+        siding_.Init(def_.logistics, def_.siding_tested, def_.siding_untested);
+        for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+            const Battery::Vehicle* v = battery_->Find(c.vehicle);
+            if (v == nullptr || v->def.kind != BatteryVehicleKind::Reload || !tzm_id_.empty()) continue;
+            tzm_id_ = c.vehicle;
+            tzm_reckoned_ = static_cast<int>(std::lround(v->stock));
+        }
+    }
+    std::string TzmCallsign() const {
+        if (order_net_) {
+            for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+                if (c.vehicle == tzm_id_) return c.callsign;
+            }
+        }
+        return tzm_id_;
+    }
+    void UpdateSupply() {
+        if (tzm_id_.empty()) return;
+        siding_.Step(time_);
+        const Battery::Vehicle* v = battery_->Find(tzm_id_);
+        if (v == nullptr) return;
+        // The battery commander by his reckoning (sam3d): less than a launcher's load on the TZM, he sends it for missiles
+        // once the battery is ready on its task, not on the march, with the TZM free and a way there on the roads he knows.
+        if (time_ >= next_supply_think_s_) {
+            next_supply_think_s_ = time_ + kSupplyThinkS;
+            const bool short_of = tzm_reckoned_ >= 0 && tzm_reckoned_ < static_cast<int>(def_.logistics.launcher_missiles);
+            const bool may = tzm_run_order_ < 0 && !OnMarch() && (!def_.has_task || task_ready_s_ >= 0.0) && v->serving.empty() && !v->away &&
+                             !v->broken && !siding_empty_heard_;
+            if (short_of && may && PlanTzmRun().found) {
+                SeatDuty d = SeatDuty::Order(std::string(), "order_tzm_run", "the TZM short of a launcher's load: to the technical battery for missiles");
+                d.keep_s = 120.0;
+                // At the post the commander's seat (an NPC, or the player owing it); the battery commander of an Osa's
+                // session is no seat of it.
+                if (GiverIsOwn() ? NpcDoes(Cmdr(), d) : !shadow_) OrderTzmRun("Battery commander");
+            }
+        }
+        // Its chief heard the order and acts: once the TZM is free of the launchers, he sets off.
+        if (tzm_run_order_ >= 0 && tzm_started_for_ != tzm_run_order_ && order_net_->Acting(tzm_run_order_, tzm_id_) && v->serving.empty()) {
+            StartTzmRun(*v);
+        }
+        if (tzm_run_ && tzm_run_order_ >= 0 && tzm_started_for_ == tzm_run_order_ && !tzm_run_->Finished()) StepTzmRun();
+    }
+    void StartTzmRun(const Battery::Vehicle& v) {
+        tzm_started_for_ = tzm_run_order_;
+        tzm_run_.reset();
+        const nav::Anchor* s = nav_->GetAnchors().Find(def_.supply_siding);
+        const nav::Mobility* cls = nav_->MobilityClasses().Find(kTzmMobility);
+        nav::Mover* had = nav_->GetMovers().Find(tzm_id_);
+        nav::Mover m = had != nullptr ? *had : nav::Mover();
+        auto run = std::make_unique<campaign::TzmRun>();
+        std::string why = "no way to the technical battery";
+        const Vec3 home = v.position;
+        if (s == nullptr || cls == nullptr ||
+            !run->Start(nav_->Graph(), *cls, def_.logistics, tzm_id_, {home.x, home.y}, s->at, static_cast<int>(std::lround(v.stock)), tzm_told_,
+                        def_.battery_night, time_, m, &why)) {
+            order_net_->Cannot(tzm_run_order_, tzm_id_, time_, why, TzmCallsign() + ": на техническую батарею пройти не могу!");
+            return;
+        }
+        m.level = nav::MoverLevel::M1;  // the levels follow the eye from here (hidden at M0 since its last run)
+        if (had != nullptr) {
+            *had = m;
+        } else {
+            nav_->AddMover(m, kTzmMobility);
+        }
+        tzm_run_ = std::move(run);
+        tzm_home_ = home;
+        tzm_events_seen_ = 0;
+        battery_->SetAway(tzm_id_, true, home);
+        LogTzmEvents();
+    }
+    void StepTzmRun() {
+        nav::Mover* m = nav_->GetMovers().Find(tzm_id_);
+        if (m == nullptr) return;
+        tzm_run_->Step(time_, nav_->Graph(), nav_->Truth(), siding_, *m);
+        LogTzmEvents();
+        const std::string call = TzmCallsign();
+        if (!tzm_run_->Finished()) {
+            // With no way back he says so once, and waits out there for one; the order stands until he is back.
+            if (tzm_run_->Stuck() && !order_net_->CannotSaid(tzm_run_order_, tzm_id_)) {
+                order_net_->Cannot(tzm_run_order_, tzm_id_, time_, "no way back to the battery", call + ": вернуться не могу, пути перерезаны. Жду на месте.");
+            }
+            const MapPoint at = nav::PointAlong(m->route, m->arc_m);
+            battery_->SetAway(tzm_id_, true, GroundEnu(at.east_m, at.north_m));  // the net's reach from where it is
+            return;
+        }
+        // Back: the battery's vehicle again, not a mover; his report, by the first way back he has.
+        m->level = nav::MoverLevel::M0;
+        battery_->SetAway(tzm_id_, false, tzm_home_);
+        battery_->SetStock(tzm_id_, tzm_run_->Aboard());
+        if (!tzm_run_->CannotWhy().empty() && !order_net_->CannotSaid(tzm_run_order_, tzm_id_)) {
+            order_net_->Cannot(tzm_run_order_, tzm_id_, time_, tzm_run_->CannotWhy(),
+                               call + ": на техническую батарею пройти не могу, все пути перерезаны. Вернулся.");
+            return;
+        }
+        std::string text = call + (tzm_run_->AtSidingS() >= 0.0 ? ": с технической батареи прибыл" : ": вернулся") + ", ракет " +
+                           std::to_string(tzm_run_->Aboard()) + ".";
+        if (!tzm_run_->Found().empty()) text += " Мост разрушен, шёл в объезд.";
+        if (tzm_run_->SidingEmpty()) text += " На технической батарее ракет больше нет.";
+        order_net_->Done(tzm_run_order_, tzm_id_, time_, text);
+    }
+    void LogTzmEvents() {
+        const std::vector<campaign::StockEvent>& ev = tzm_run_->Events();
+        for (; tzm_events_seen_ < ev.size(); ++tzm_events_seen_) {
+            log_.Record({ev[tzm_events_seen_].t, DebriefEntry::Kind::Scenario, TzmCallsign(), "TZM run", ev[tzm_events_seen_].text});
+        }
+    }
+    // The TZM's chief's report reaches the battery commander: his roads gain the bridges the chief found down on the way
+    // (closed at the hour the regiment since said one open again), and back, his reckoning is the load reported and the
+    // run is over; out there with no way back, the run stands until he is back.
+    void CommanderHearsTzm(const command::OrderEvent& e) {
+        if (e.order != tzm_run_order_) return;
+        const bool ours = tzm_run_ && tzm_started_for_ == e.order;
+        if (ours) {
+            const double h = time_ / 3600.0;
+            for (const nav::OverlayEntry& f : tzm_run_->Found()) {
+                bool known = false;
+                for (const nav::OverlayEntry& b : roads_believed_.entries) known = known || (b.id == f.id && h < b.until_h);
+                if (known) continue;
+                nav::OverlayEntry g = f;
+                const auto open = road_open_h_.find(f.crossing);
+                if (open != road_open_h_.end() && open->second > f.from_h) g.until_h = std::min(g.until_h, open->second);
+                roads_believed_.entries.push_back(g);
+            }
+            if (!tzm_run_->Finished()) return;
+            tzm_reckoned_ = tzm_run_->Aboard();
+            if (tzm_run_->SidingEmpty()) siding_empty_heard_ = true;
+        }
+        tzm_run_order_ = -1;
+    }
+    // A launcher reported reloaded: the TZM gave it what it lacked by the post's row.
+    void TzmGave(const std::string& callsign, int missiles) {
+        if (tzm_reckoned_ < 0) return;
+        int was = 0;
+        for (const LauncherStatus& s : status_boards_) {
+            if (s.callsign == callsign) was = std::max(0, s.missiles);
+        }
+        tzm_reckoned_ = std::max(0, tzm_reckoned_ - std::max(0, missiles - was));
+    }
+    // The regiment's word on a road's bridge, heard: the commander's roads have it down from now, or open again.
+    void HeardRoad(const RegimentMessage& m) {
+        const double h = time_ / 3600.0;
+        if (m.road_down) {
+            for (const nav::OverlayEntry& e : roads_believed_.entries) {
+                if (e.id == m.road_entry && h < e.until_h) return;  // said again
+            }
+            roads_believed_.Cut(m.road_entry, m.road_crossing, h);
+            return;
+        }
+        road_open_h_[m.road_crossing] = h;
+        for (nav::OverlayEntry& e : roads_believed_.entries) {
+            if (e.crossing == m.road_crossing && h >= e.from_h && h < e.until_h) e.until_h = h;
+        }
+    }
     nav::MarchPlan march_plan_;                            // the march planned to a place (G2.3)
     bool has_march_plan_ = false;
     std::vector<HeldPaper> own_papers_;                    // the battery's papers in the map cases (G8, G9.4)
@@ -10028,7 +10297,10 @@ private:
                 break;
             case BatteryFire::Event::Kind::Reloaded:
                 Event(r.callsign, "reloaded");
-                if (hears) Status(r.callsign, LauncherStatus::State::Ready, r.missiles, 0);
+                if (hears) {
+                    TzmGave(r.callsign, r.missiles);  // before the row takes the new load
+                    Status(r.callsign, LauncherStatus::State::Ready, r.missiles, 0);
+                }
                 break;
         }
     }

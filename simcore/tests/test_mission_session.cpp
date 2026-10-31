@@ -349,3 +349,199 @@ SC_TEST("neighbours' kills (17.1): the regiment tells the battery a target a nei
     SC_EXPECT(heard);
     SC_EXPECT(wiped);
 }
+
+namespace {
+
+// The bridges mission with nothing in the air and the TZM empty: only the TZM's run (roadmap 17.4) to watch.
+bool QuietSupplyMission(double hours, ScenarioDef& def, ConsoleData& console) {
+    std::string e;
+    if (!LoadScenarioFile(kData + "/scenarios/pu12m_mission_cover.json", kData, def, console, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return false;
+    }
+    def.has_task = false;
+    def.targets.clear();
+    def.triggers.clear();
+    def.end_when_targets_gone = false;
+    def.time_limit_s = hours * 3600.0;
+    for (BatteryVehicleDef& v : def.battery_vehicles) {
+        if (v.kind == BatteryVehicleKind::Reload) v.stock = 0.0;
+    }
+    return true;
+}
+
+}  // namespace
+
+SC_TEST("supply in the session (17.4): the NPC commander orders the empty TZM to the siding on the battery net; it runs on the session's roads and comes back with twelve") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(QuietSupplyMission(3.0, def, console));
+    SC_EXPECT(def.has_supply && def.supply_siding == "tech_battery");
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.TzmReckoned() == 0 && r.Siding().Tested() == 24);
+    const nav::Route way = r.PlanTzmRun();
+    SC_EXPECT(way.found && way.Uses("b_ralje@rava"));
+    bool in_view = false;
+    while (!r.Finished() && (r.GetTzmRun() == nullptr || r.TzmReckoned() < 12)) {
+        r.Step(0.5);
+        if (r.GetTzmRun() != nullptr && r.Time() < 60.0) {
+            for (const ScenarioRunner::WorldMover& v : r.MoversInView()) in_view = in_view || v.mover == "TZM";
+        }
+    }
+    const campaign::TzmRun* run = r.GetTzmRun();
+    SC_EXPECT(run != nullptr);
+    if (run == nullptr) return;
+    // The order on the battery net: the TZM's chief heard it, read it back, carried it out and reported.
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    int order = -1;
+    for (std::size_t i = 0; net != nullptr && i < net->Book().Orders().size(); ++i) {
+        if (net->Book().Orders()[i].kind == "tzm_run") order = static_cast<int>(i);
+    }
+    SC_EXPECT(order >= 0);
+    if (order >= 0) SC_EXPECT(net->RepeatedBack(order, "TZM") && net->Reported(order, "TZM"));
+    // On the roads: seen leaving, out and back at the roads' times with the crane's half hour between.
+    const double load_s = r.Def().logistics.tzm_missiles * r.Def().logistics.load_tzm_s_per_missile;
+    std::printf("    left %.0f s, at the siding %.0f s, back %.0f s (the plan %.0f s each way, the crane %.0f s)\n", run->LeftS(), run->AtSidingS(),
+                run->BackS(), way.time_s, load_s);
+    SC_EXPECT(in_view);
+    SC_EXPECT(std::fabs(run->AtSidingS() - run->LeftS() - way.time_s) < 2.0);
+    SC_EXPECT(std::fabs(run->BackS() - run->AtSidingS() - load_s - way.time_s) < 4.0);
+    const Battery::Vehicle* tzm = r.GetBattery()->Find("TZM");
+    SC_EXPECT(tzm != nullptr && !tzm->away && std::fabs(tzm->stock - 12.0) < 1e-9);
+    SC_EXPECT(r.TzmReckoned() == 12 && r.Siding().Tested() + r.Siding().Untested() == 36);  // its station tests on meanwhile
+    const nav::Mover* m = r.Nav()->GetMovers().Find("TZM");
+    SC_EXPECT(m != nullptr && m->level == nav::MoverLevel::M0);  // hidden: the battery's vehicle again
+    bool said = false;
+    for (const ScenarioRunner::RadioMessage& x : r.RadioLog()) said = said || (x.net == "battery net" && x.text.find("ракет 12") != std::string::npos);
+    SC_EXPECT(said);
+    // A second order now: refused, the TZM full by what its chief reported.
+    SC_EXPECT(!r.OrderTzmRun("Battery commander"));
+}
+
+SC_TEST("supply in the session (17.4): a bridge down nobody told of: the TZM stops short of it, goes round, and the commander learns it from the chief's report") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(QuietSupplyMission(10.0, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.SetCrossingDown("b_ralje@rava", true, "test:1"));
+    SC_EXPECT(!r.SetCrossingDown("b_ralje@rava", true, "test:2"));  // down already
+    SC_EXPECT(!r.SetCrossingDown("no_such_crossing", true, "test:3"));
+    SC_EXPECT(r.PlanTzmRun().Uses("b_ralje@rava"));  // the commander does not know
+    double stopped_s = -1.0;
+    std::size_t believed_at_stop = 99;
+    while (!r.Finished() && (r.GetTzmRun() == nullptr || !r.GetTzmRun()->Finished() || r.TzmReckoned() < 12)) {
+        r.Step(0.5);
+        const nav::Mover* m = r.Nav()->GetMovers().Find("TZM");
+        if (stopped_s < 0.0 && m != nullptr && m->state == nav::MoverState::Blocked) {
+            stopped_s = r.Time();
+            believed_at_stop = r.RoadsBelieved().entries.size();
+        }
+    }
+    const campaign::TzmRun* run = r.GetTzmRun();
+    SC_EXPECT(run != nullptr && stopped_s > 0.0);
+    if (run == nullptr) return;
+    std::printf("    stopped short of the bridge at %.0f s; at the siding %.0f s; back %.0f s with %d\n", stopped_s, run->AtSidingS(), run->BackS(),
+                run->Aboard());
+    SC_EXPECT(believed_at_stop == 0);  // what the chief found is his until he reports it
+    SC_EXPECT(run->Found().size() == 1 && run->Found()[0].id == "test:1" && run->Home() && run->Aboard() == 12);
+    SC_EXPECT(run->AtSidingS() - run->LeftS() > 3.0 * 3600.0);  // round the river: hours, not half of one
+    // Heard: his reckoning is the twelve reported, and his roads have the bridge the chief found.
+    SC_EXPECT(r.TzmReckoned() == 12);
+    SC_EXPECT(r.RoadsBelieved().Down("b_ralje@rava", r.Time() / 3600.0) != nullptr);
+    SC_EXPECT(!r.PlanTzmRun().Uses("b_ralje@rava"));
+}
+
+SC_TEST("supply in the session (17.4): the TZM's run is longer the day the war has wrecked the road bridge; the regiment says so on its net") {
+    // The Pact's war, seed 1: the Kesmark road bridge stands at 19:00 on the first day and lies wrecked on the third.
+    double plan_s[2] = {0.0, 0.0};
+    for (int day : {1, 3}) {
+        campaign::MissionSessionDef md;
+        md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
+        md.faction = "warsaw_pact";
+        md.seed = 1;
+        md.day = day;
+        campaign::MissionSession s;
+        std::string e;
+        SC_EXPECT(s.Start(md, kData, &e));
+        if (s.Campaign() == nullptr) return;
+        const campaign::MissionSession::OurBridge* kesmark = nullptr;
+        for (const campaign::MissionSession::OurBridge& b : s.OurBridges()) kesmark = b.object == "kesmark_road_bridge" ? &b : kesmark;
+        SC_EXPECT(kesmark != nullptr && kesmark->crossing == "b_ralje@rava" && kesmark->told);
+        if (kesmark == nullptr) return;
+        const ScenarioRunner& r = s.Runner();
+        const bool down = r.Nav()->Truth().Down("b_ralje@rava", 0.0) != nullptr;
+        SC_EXPECT(down == (day == 3) && kesmark->open == (day == 1));
+        SC_EXPECT(r.PlanTzmRun().Uses("b_ralje@rava"));  // before the regiment's word, the commander plans over it
+        while (s.Runner().Time() < 300.0 && !s.Runner().Finished()) s.Step(0.1);
+        bool told = false;
+        for (const DebriefEntry& x : r.Log().Entries()) {
+            told = told || (x.what == "regiment net" && x.detail.rfind("heard", 0) == 0 && x.detail.find("Kesmark road bridge is down") != std::string::npos);
+        }
+        const nav::Route way = r.PlanTzmRun();
+        plan_s[day == 1 ? 0 : 1] = way.time_s;
+        std::printf("    day %d: the bridge %s; the TZM's way %.0f min\n", day, down ? "wrecked, the regiment told" : "standing", way.time_s / 60.0);
+        SC_EXPECT(told == (day == 3));
+        SC_EXPECT((r.RoadsBelieved().Down("b_ralje@rava", r.Time() / 3600.0) != nullptr) == (day == 3));
+        SC_EXPECT(way.found && way.Uses("b_ralje@rava") == (day == 1));
+    }
+    SC_EXPECT(plan_s[1] > 5.0 * plan_s[0]);
+}
+
+SC_TEST("supply in the session (17.4): the siding short: the TZM back with what it had, its chief says so, and the commander sends it no more") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(QuietSupplyMission(3.0, def, console));
+    def.siding_tested = 3;
+    def.siding_untested = 0;
+    ScenarioRunner r(std::move(def), std::move(console));
+    double back_s = -1.0;
+    while (!r.Finished() && (back_s < 0.0 || r.Time() < back_s + 900.0)) {
+        r.Step(0.5);
+        if (back_s < 0.0 && r.GetTzmRun() != nullptr && r.GetTzmRun()->Finished() && r.TzmReckoned() >= 0 && r.TzmReckoned() == 3) back_s = r.Time();
+    }
+    const campaign::TzmRun* run = r.GetTzmRun();
+    SC_EXPECT(run != nullptr && back_s > 0.0);
+    if (run == nullptr) return;
+    SC_EXPECT(run->Home() && run->Aboard() == 3 && run->SidingEmpty());
+    bool said = false;
+    for (const ScenarioRunner::RadioMessage& x : r.RadioLog()) said = said || x.text.find("ракет больше нет") != std::string::npos;
+    int orders = 0;
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    for (std::size_t i = 0; net != nullptr && i < net->Book().Orders().size(); ++i) orders += net->Book().Orders()[i].kind == "tzm_run" ? 1 : 0;
+    std::printf("    back with %d at %.0f s; runs ordered by %.0f s: %d\n", run->Aboard(), back_s, r.Time(), orders);
+    SC_EXPECT(said && orders == 1);
+}
+
+SC_TEST("supply in the session (17.4): the battery's march while the TZM is away is not its march: no order to it, no «к маршу готов» from the roads") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(QuietSupplyMission(3.0, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (!r.Finished() && r.Time() < 600.0) r.Step(0.5);
+    const Battery::Vehicle* tzm = r.GetBattery()->Find("TZM");
+    SC_EXPECT(tzm != nullptr && tzm->away);
+    if (tzm == nullptr || !tzm->away) return;
+    BatteryOrder o;
+    o.kind = BatteryOrder::Kind::March;
+    const Vec3 at = r.GetBattery()->Vehicles().front().position;
+    o.route = {at, {at.x + 2000.0, at.y, at.z}};
+    SC_EXPECT(r.OrderBattery(o));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    const int march = net != nullptr ? static_cast<int>(net->Book().Orders().size()) - 1 : -1;
+    while (!r.Finished() && r.Time() < 900.0) r.Step(0.5);
+    SC_EXPECT(march >= 0 && net->Book().Orders()[static_cast<std::size_t>(march)].kind != "tzm_run");
+    bool others = false;
+    std::string tzm_call = "TZM";
+    for (const command::OrderVehicle& c : net->Vehicles()) {
+        others = others || (c.vehicle != "TZM" && !c.seats && net->Heard(march, c.vehicle));
+        if (c.vehicle == "TZM") tzm_call = c.callsign;
+    }
+    SC_EXPECT(others && !net->Heard(march, "TZM"));
+    bool ready_from_tzm = false;
+    for (const DebriefEntry& x : r.Log().Entries()) {
+        ready_from_tzm = ready_from_tzm || (x.who == tzm_call && x.detail.find("аршу готов") != std::string::npos);
+    }
+    SC_EXPECT(!ready_from_tzm);
+    tzm = r.GetBattery()->Find("TZM");
+    SC_EXPECT(tzm != nullptr && tzm->away && !tzm->absent);
+}

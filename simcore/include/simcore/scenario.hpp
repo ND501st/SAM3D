@@ -25,6 +25,7 @@
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_task.hpp"
 #include "simcore/campaign/report.hpp"
+#include "simcore/campaign/stocks.hpp"
 #include "simcore/command/battery_orders.hpp"
 #include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
@@ -300,6 +301,14 @@ struct ScenarioDef {
     // The route service in the session (roadmap G2.3, G11; nav/session.hpp): "nav": {"country": ..., "chain": ...,
     // "movers": [...]}. A march may then name where it goes ("to_place"), and the world's movers go on the roads.
     std::shared_ptr<const nav::SessionNav> nav;
+    // The battery's missiles from the rear in the session (roadmap 17.4; campaign/stocks.hpp): "supply": {"logistics": ...,
+    // "siding": <a place on the roads>, "tested": n, "untested": n}. The TZM's run to the regiment's technical battery is
+    // then a battery order on the net and a mover on the session's roads.
+    bool has_supply = false;
+    campaign::LogisticsValues logistics;
+    std::string supply_siding = "tech_battery";
+    int siding_tested = 0;    // at the technical battery at the start (the day's situation)
+    int siding_untested = 0;
     // The regiment's task to the battery (roadmap 14.1, 14.3; campaign/battery_task.hpp, battery_plan.hpp): "task":
     // {"file": ..., "given_s": ..., "means": "radio" | "in_person"}. The battery commander plans it by the textbook's
     // sequence (data/campaign/battery_plan.json) and the battery's orders follow from his plan.
@@ -368,7 +377,7 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start"})) {
+                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "supply"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -397,6 +406,7 @@ public:
         if (!CheckRegimentGroups(out)) return false;
         if (!LoadNav(root, data_dir, out)) return false;
         if (!LoadBattery(root, data_dir, out)) return false;
+        if (!LoadSupply(root, data_dir, out)) return false;
         if (!LoadCrew(root, data_dir, out, console)) return false;
         if (const json::Value* cc = root.Find("crew_commander")) {
             if (!cc->Is(json::Type::String) || (cc->string != "npc" && cc->string != "script")) {
@@ -2119,6 +2129,35 @@ private:
         return true;
     }
 
+    // "supply": the TZM's runs to the regiment's technical battery on the session's roads (roadmap 17.4): the logistics'
+    // values, the siding's place and what is there at the start. Needs the roads ("nav"), the place on them, and a TZM
+    // whose commander hears the battery's orders by a means (battery.by_means).
+    bool LoadSupply(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* s = root.Find("supply");
+        if (s == nullptr) return true;
+        const std::string p = "supply";
+        std::string file = "campaign/logistics.json", error;
+        double tested = 0.0, untested = 0.0;
+        if (!s->Is(json::Type::Object) || !Keys(*s, p, {"logistics", "siding", "tested", "untested", "notes"}) ||
+            !OptionalString(*s, p, "logistics", file) || !OptionalString(*s, p, "siding", out.supply_siding) ||
+            !OptionalNumber(*s, p, "tested", tested) || !OptionalNumber(*s, p, "untested", untested)) {
+            return message_.empty() ? Fail(p, "expected an object") : false;
+        }
+        if (tested < 0.0 || untested < 0.0) return Fail(p, "tested and untested must be >= 0");
+        if (!campaign::LoadLogisticsValues(data_dir, file, out.logistics, &error)) return Fail(Join(p, "logistics"), error);
+        if (!out.nav) return Fail(p, "the TZM's run needs the session's roads (\"nav\")");
+        if (out.nav->GetAnchors().Find(out.supply_siding) == nullptr) return Fail(Join(p, "siding"), "no place called '" + out.supply_siding + "' on the roads");
+        bool tzm = false;
+        for (const command::OrderVehicle& c : out.battery_crews) {
+            for (const BatteryVehicleDef& v : out.battery_vehicles) tzm = tzm || (v.id == c.vehicle && v.kind == BatteryVehicleKind::Reload);
+        }
+        if (!tzm) return Fail(p, "the battery needs a TZM whose commander hears its orders (battery.by_means)");
+        out.siding_tested = static_cast<int>(tested);
+        out.siding_untested = static_cast<int>(untested);
+        out.has_supply = true;
+        return true;
+    }
+
     bool LoadBattery(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
         const json::Value* b = root.Find("battery");
         if (b == nullptr) return true;
@@ -2174,9 +2213,12 @@ private:
                 const json::Value& v = vs->items[i];
                 BatteryVehicleDef d;
                 std::string kind = "launcher";
-                if (!Keys(v, p, {"id", "callsign", "kind", "position", "sector_deg", "notes"}) || !RequireString(v, p, "id", d.id) ||
-                    !OptionalString(v, p, "callsign", d.callsign) || !OptionalString(v, p, "kind", kind)) {
+                if (!Keys(v, p, {"id", "callsign", "kind", "position", "sector_deg", "stock", "notes"}) || !RequireString(v, p, "id", d.id) ||
+                    !OptionalString(v, p, "callsign", d.callsign) || !OptionalString(v, p, "kind", kind) || !OptionalNumber(v, p, "stock", d.stock)) {
                     return false;
+                }
+                if (v.Find("stock") != nullptr && (d.stock < 0.0 || (kind != "reload" && kind != "fuel"))) {
+                    return Fail(Join(p, "stock"), "a TZM's missiles or a fuel truck's litres, >= 0");
                 }
                 if (const json::Value* sec = OptionalArray(v, p, "sector_deg")) {
                     if (sec->items.size() != 2 || !sec->items[0].Is(json::Type::Number) || !sec->items[1].Is(json::Type::Number)) {

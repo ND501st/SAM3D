@@ -92,6 +92,7 @@ public:
         live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_);
         outcomes_.Check(CheckSuppression(*campaign_, h0_));
         JoinOurPosts();
+        JoinOurBridges();
         return true;
     }
 
@@ -102,6 +103,7 @@ public:
         CarryTheMove();
         KeepOutcomes(dt);
         if (campaign_) FollowOurPosts(false);
+        if (campaign_) FollowOurBridges(false);
         if (regiment_ && runner_->Time() + 1e-9 >= next_decide_s_) {
             next_decide_s_ = runner_->Time() + kDecideEveryS;
             RegimentDecides(campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture(), BriefingNow());
@@ -153,6 +155,19 @@ public:
         bool stands = true;  // as the session has it now
     };
     const std::vector<OurPost>& OurPosts() const { return ours_; }
+    // A road bridge of the theatre on the session's roads (roadmap 17.4): the session follows the war's damage to it,
+    // and the regiment tells the battery of those near it on its net.
+    struct OurBridge {
+        std::string object;    // the theatre object
+        std::string name;
+        std::string crossing;  // the crossing of the session's roads it stands on
+        std::size_t index = 0; // the object's place in the theatre
+        std::string entry;     // the roads' entry for its last time down (the feed's wreck key once wrecked)
+        bool told = false;     // near the battery: the regiment tells it
+        bool open = true;      // as the session has it now
+        int downs = 0;
+    };
+    const std::vector<OurBridge>& OurBridges() const { return bridges_; }
     // The runner's debrief, then the two outcomes (from the truth: for the debrief and the reveal only), the enemy's
     // phase checked now.
     std::string Debrief() const {
@@ -289,6 +304,56 @@ private:
         told(out, " is out of action; the regiment's picture is thinner.", " are out of action; the regiment's picture is thinner.");
         told(back, " is on the air again.", " are on the air again.");
     }
+    // The theatre's road bridges on the session's roads, joined at the start and followed each minute: a bridge is down
+    // below the supply lines' rule (logistics.bridge_open, air_war/logistics.hpp), and so in the truth of the session's
+    // roads at once; the regiment tells the battery of those near it, a while after.
+    void JoinOurBridges() {
+        const nav::SessionNav* nav = runner_->Nav();
+        if (nav == nullptr) return;
+        const airwar::TheatreDef& th = campaign_->Data().theatre;
+        const Vec3 centre = BatteryCentre();
+        for (std::size_t i = 0; i < th.objects.size(); ++i) {
+            const airwar::TheatreObject& o = th.objects[i];
+            if (o.kind != airwar::ObjectKind::Bridge) continue;
+            const Vec3 at = FromTheatre(campaign_->Truth()[i].pos);
+            double d = 0.0;
+            const nav::NavCrossing* c = nav->Graph().NearestCrossing({at.x, at.y}, &d);
+            if (c == nullptr || d > kBridgeOnCrossingM) continue;
+            OurBridge b;
+            b.object = o.id;
+            b.name = o.name;
+            b.crossing = c->id;
+            b.index = i;
+            b.told = std::hypot(at.x - centre.x, at.y - centre.y) <= kRegimentRoadsM;
+            bridges_.push_back(b);
+        }
+        FollowOurBridges(true);
+    }
+    void FollowOurBridges(bool start) {
+        if (!start && runner_->Time() + 1e-9 < next_bridges_s_) return;
+        next_bridges_s_ = runner_->Time() + kDecideEveryS;
+        const double open_at = campaign_->Data().tuning.Get("logistics.bridge_open");
+        for (OurBridge& b : bridges_) {
+            const bool open = Function(b.object) >= open_at;
+            if (open == b.open) continue;
+            b.open = open;
+            if (!open) {
+                ++b.downs;
+                const double wrecked_h = campaign_->Truth()[b.index].wrecked_h;
+                // One entry for each time down: a bridge back in use before its repair is done keeps its wreck hour.
+                b.entry = (wrecked_h >= 0.0 ? "wreck:" + b.object + ":" + std::to_string(static_cast<long long>(std::llround(wrecked_h * 100.0))) + ":"
+                                            : "cut:" + b.object + ":") +
+                          std::to_string(b.downs);
+            }
+            if (!runner_->SetCrossingDown(b.crossing, !open, b.entry, b.entry) || !b.told) continue;
+            if (!runner_->RegimentTellsRoad(b.crossing, b.name, !open, b.entry, start ? kToldAtStartS : kRegimentTellsS)) {
+                Note("not told (no R-111 in the session): the " + b.name + (open ? " is open again" : " is down"));
+            }
+        }
+    }
+    static constexpr double kBridgeOnCrossingM = 100.0;  // sam3d: a bridge on the road crossing this near (the rail bridges lie
+                                                         // kilometres from any but the capital's, 134 m from its road bridge)
+    static constexpr double kRegimentRoadsM = 50000.0;   // sam3d: the bridges the regiment tells the battery of, this near it
     static constexpr double kStandsAbove = 0.3;      // as raid_scenario.hpp's: at or below it a post is out of action
     static constexpr double kOurRadarsM = 250000.0;  // as raid_scenario.hpp's: the regiment's radars this near the battery
     static constexpr double kRadarUpM = 2.0;         // as raid_scenario.hpp's radar positions
@@ -320,6 +385,8 @@ private:
     std::vector<GivenTask> given_;
     std::vector<OurPost> ours_;
     double next_posts_s_ = 0.0;
+    std::vector<OurBridge> bridges_;
+    double next_bridges_s_ = 0.0;
     std::vector<std::string> notes_;
     OutcomeLedger outcomes_;
     std::string covered_place_;     // the task's covered place the ledger has

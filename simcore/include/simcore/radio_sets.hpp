@@ -262,6 +262,10 @@ struct RegimentMessage {
     double at_s = 0.0;
     std::string text;
     std::string destroyed;  // a target it tells the post was destroyed (by a neighbour): heard, the post knows it ("" none)
+    // A road's bridge it tells the post is down, or open again (roadmap 17.4): heard, the battery commander's roads have it.
+    std::string road_crossing;  // the crossing on the session's roads ("" none)
+    bool road_down = false;
+    std::string road_entry;     // the entry's id (the bridge's damage it stands for)
 };
 
 struct RadioPlan {

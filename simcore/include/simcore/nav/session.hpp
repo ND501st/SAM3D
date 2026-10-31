@@ -317,6 +317,27 @@ public:
     Movers& GetMovers() { return movers_; }
     const Movers& GetMovers() const { return movers_; }
 
+    // The roads as they are (roadmap 17.4): the crossings down in truth, from the session's hour `h`. A unit plans on what
+    // it believes (its own overlay); a mover finds the truth only when it comes to the crossing. False for a crossing the
+    // graph does not have, or one already so.
+    bool SetCrossingDown(const std::string& crossing, bool down, double h, const std::string& entry, const std::string& fact = "") {
+        if (graph_.Crossing(crossing) == nullptr) return false;
+        if (down) {
+            if (truth_.Down(crossing, h) != nullptr) return false;
+            truth_.Cut(entry, crossing, h, 1e18, fact);
+            return true;
+        }
+        bool opened = false;
+        for (OverlayEntry& e : truth_.entries) {
+            if (e.crossing == crossing && h >= e.from_h && h < e.until_h) {
+                e.until_h = h;
+                opened = true;
+            }
+        }
+        return opened;
+    }
+    const Overlay& Truth() const { return truth_; }
+
     // To time t: the levels by the viewers and the range, then every mover on (the M2 ones by the session, at their route's
     // times stretch by stretch as the M1 ones go, so a hand-over keeps the place).
     void Step(double t, double dt, const std::vector<MapPoint>& viewers, double range_m) {
@@ -390,6 +411,7 @@ private:
     RoadGraph graph_;
     Anchors anchors_;
     Movers movers_;
+    Overlay truth_;
     std::vector<std::pair<std::string, std::string>> models_;
     double range_now_m_ = 0.0;
 };
