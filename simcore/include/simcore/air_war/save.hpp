@@ -102,6 +102,10 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "aborted_flights", Ints(o.aborted_flights));
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
+    Put(v, "reported", Bool(o.reported));
+    Put(v, "reported_destroyed", Num(o.reported_destroyed));
+    Put(v, "reported_missiles", Num(o.reported_missiles));
+    Put(v, "reported_targets", Num(o.reported_targets));
     return v;
 }
 
@@ -227,6 +231,10 @@ public:
         o.aborted_flights = Ints(v, "aborted_flights");
         o.truth_applied = Boolean(v, "truth_applied");
         o.played = Boolean(v, "played", true);
+        o.reported = Boolean(v, "reported");
+        o.reported_destroyed = Int(v, "reported_destroyed");
+        o.reported_missiles = Int(v, "reported_missiles");
+        o.reported_targets = Int(v, "reported_targets");
         return o;
     }
 

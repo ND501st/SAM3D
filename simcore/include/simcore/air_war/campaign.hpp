@@ -218,10 +218,19 @@ public:
         const int missiles_down = static_cast<int>(std::count(outcome.missiles_downed.begin(), outcome.missiles_downed.end(), own));
         kills_by_player_ += kills;
         CrewProgress(kills + missiles_down);
-        Log("player_mission", "result", "Mission against '" + p.name + "' flown: " +
-                                            (p.Missiles() > 0 ? std::to_string(outcome.missiles_downed.size()) + " of " + std::to_string(p.Missiles()) + " cruise missiles"
-                                                              : std::to_string(outcome.Lost()) + " of " + std::to_string(p.Aircraft())) +
-                                            " shot down in the battery's sector.", true);
+        if (outcome.reported) {
+            // Our side knows what the battery's records say (roadmap 18.1), not what happened.
+            Log("player_mission", "result", "Mission against '" + p.name + "' flown: the battery reports " +
+                                                std::to_string(outcome.reported_destroyed) + " destroyed of " +
+                                                std::to_string(outcome.reported_targets) + " targets plotted in its sector, " +
+                                                std::to_string(outcome.reported_missiles) + (outcome.reported_missiles == 1 ? " missile" : " missiles") +
+                                                " fired.", true);
+        } else {
+            Log("player_mission", "result", "Mission against '" + p.name + "' flown: " +
+                                                (p.Missiles() > 0 ? std::to_string(outcome.missiles_downed.size()) + " of " + std::to_string(p.Missiles()) + " cruise missiles"
+                                                                  : std::to_string(outcome.Lost()) + " of " + std::to_string(p.Aircraft())) +
+                                                " shot down in the battery's sector.", true);
+        }
         ApplyOutcome(p, outcome);
         // The rest of the raid, without the player's battery: every part of every route but what the scenario flew
         // (inside its circle while it ran, where the other defences took their chances: mission_bridge.hpp).
@@ -1484,7 +1493,23 @@ private:
 
     // ------------------------------------------------------------------ the player's side learns about the enemy
 
+    // A raid's aircraft (or cruise missiles) down as our side counts them: for a played mission whose battery reported
+    // from its records (roadmap 18.1), its reported kills and the neighbours' as they happened (their records are not
+    // kept); otherwise the truth.
+    int CountedDown(const PackageOutcome& o, int lost, bool missiles) const {
+        if (!o.played || !o.reported) return missiles ? static_cast<int>(o.missiles_downed.size()) : lost;
+        const std::string& own = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
+        int theirs = 0;
+        if (missiles) {
+            for (const std::string& by : o.missiles_downed) theirs += by != own ? 1 : 0;
+        } else {
+            for (const LossRecord& l : o.losses) theirs += l.by != own ? 1 : 0;
+        }
+        return theirs + o.reported_destroyed;
+    }
+
     void ObserveRaid(const Package& p, const PackageOutcome& o, int lost) {
+        const int down = CountedDown(o, lost, p.Missiles() > 0);
         // Only raids our side saw: those through the battery's sector, or that our radars and observers watched (all
         // raids that crossed into our territory are seen by the warning net; the detail comes from the sector's).
         {
@@ -1501,7 +1526,7 @@ private:
             r.target = ti >= 0 ? data_.theatre.objects[static_cast<std::size_t>(ti)].name : std::string("an empty field");
             r.part = p.part;
             r.aircraft = p.Aircraft();
-            r.lost = lost;
+            r.lost = p.Missiles() > 0 ? lost : down;
             r.delivered = o.delivered;
             r.near_battery = TouchesPlayer(p);
             r.played = p.played;
@@ -1524,12 +1549,12 @@ private:
         }
         if ((TouchesPlayer(p) || p.played) && p.Missiles() > 0) {
             Log("own_intel", "warning net", std::to_string(p.Missiles()) + " cruise missiles from " + p.entry + " at " +
-                                                FormatHour(p.tot_h, data_.theatre.start_hour) + ", " + std::to_string(o.missiles_downed.size()) +
+                                                FormatHour(p.tot_h, data_.theatre.start_hour) + ", " + std::to_string(down) +
                                                 " shot down" + (o.delivered ? "" : ", none reached its target") + ".", true);
         } else if (TouchesPlayer(p) || p.played) {
             Log("own_intel", "warning net", std::to_string(p.Aircraft()) + " aircraft from " + p.entry + " at " +
                                                 FormatHour(p.tot_h, data_.theatre.start_hour) + " (" + DayPartName(p.part) + "), " +
-                                                std::to_string(lost) + " shot down" + (o.delivered ? "" : ", no bombs on target") + ".", true);
+                                                std::to_string(down) + " shot down" + (o.delivered ? "" : ", no bombs on target") + ".", true);
         }
         RevealFromPatterns();
     }

@@ -4528,12 +4528,25 @@ public:
     // ---- the after-action report from the records (roadmap P9, campaign/report.hpp; docs/command/01_PRINCIPLES.md 9)
     // The battery's combat report compiled from the post's records as they stand now: the radiotelephonist's journal as
     // written, the board's marks, the battery commander's log of his launchers' reports. Never the truth. False without a
-    // post (the Osa's crew writes no journal; its commander's report is P4's, command/session_reports.hpp).
-    bool ReportFromRecords(campaign::CombatReport& out, const std::string& unit = "The battery") const {
+    // post (the Osa's crew writes no journal; its commander's report is P4's, command/session_reports.hpp). From `from_s`:
+    // the records written since (a raid's report: roadmap 18.1).
+    bool ReportFromRecords(campaign::CombatReport& out, const std::string& unit = "The battery", double from_s = 0.0) const {
         if (!post_) return false;
         const CommandPost* post = post_.get();
-        out = campaign::CompileReport(unit, 0.0, time_, campaign::JournalLines(journal_, time_), campaign::BoardRecords(post_->Board().Marks()),
-                                      commander_log_, def_.after_action, [post](const Vec3& p) { return post->PlaceWords(p); });
+        std::vector<campaign::JournalLine> journal;
+        for (const campaign::JournalLine& l : campaign::JournalLines(journal_, time_)) {
+            if (l.heard_s >= from_s) journal.push_back(l);
+        }
+        std::vector<campaign::BoardRecord> board;
+        for (const campaign::BoardRecord& m : campaign::BoardRecords(post_->Board().Marks())) {
+            if (m.time_s >= from_s) board.push_back(m);
+        }
+        std::vector<campaign::LogEntry> log;
+        for (const campaign::LogEntry& e : commander_log_) {
+            if (e.time_s >= from_s) log.push_back(e);
+        }
+        out = campaign::CompileReport(unit, from_s, time_, journal, board, log, def_.after_action,
+                                      [post](const Vec3& p) { return post->PlaceWords(p); });
         return true;
     }
     // The regiment's check of the post's journal and board against the radar company's log of what it said on the

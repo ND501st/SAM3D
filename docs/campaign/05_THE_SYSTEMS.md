@@ -255,7 +255,9 @@ The record principle (`docs/command/01_PRINCIPLES.md` 9) carried into the campai
 4. **The next order** comes from that picture (§3). A battery whose radiotelephonist lost half the raid sends its
    regiment's ambush to a corridor the enemy never flew.
 5. **Our side's journal lines** in the air war (`[ours]`) come from the reports, not the truth, as
-   `docs/air_war/README.md` already notes.
+   `docs/air_war/README.md` already notes. **First form built (18.1, 18.5, 31 Oct 2026)** for a package played in the
+   session: the post's report from its records since the package came in goes back with the package's outcome, and our
+   side's lines on it (the battery's, the warning net's) and our record of the raid count what the battery reported.
 
 ## 12. The debrief
 

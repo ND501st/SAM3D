@@ -1368,3 +1368,57 @@ SC_TEST("air war: a cruise missile salvo through the battery's sector is a scena
     SC_EXPECT(struck + static_cast<int>(o.missiles_downed.size()) == 4);  // each struck or was shot down
     SC_EXPECT(struck == 0 || o.delivered);
 }
+
+SC_TEST("air war (18.1): our side's journal says of a played raid what the battery reported from its records, not what happened") {
+    const AirWarData d = Load("warsaw_pact");
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 21));
+    bool pending = false;
+    for (int k = 0; k < 96 && !pending; ++k) pending = c.Advance(c.Now() + 1.0);
+    SC_EXPECT(pending);
+    if (!pending) return;
+    const Package& p = *c.PlayerMission();
+    int flight = -1;
+    for (std::size_t i = 0; i < p.flights.size() && flight < 0; ++i) {
+        const AircraftType* a = d.faction.Aircraft(p.flights[i].aircraft);
+        if (a != nullptr && !a->drone) flight = static_cast<int>(i);
+    }
+    SC_EXPECT(flight >= 0);
+    const bool missiles = p.Missiles() > 0;
+    // The truth: two of its aircraft down to the battery. The records: one kill reported (the other never logged).
+    PackageOutcome o;
+    o.package_id = p.id;
+    o.played = true;
+    for (int k = 0; k < 2; ++k) {
+        LossRecord l;
+        l.flight = flight;
+        l.by = d.theatre.objects[static_cast<std::size_t>(c.PlayerIndex())].id;
+        o.losses.push_back(l);
+    }
+    o.reported = true;
+    o.reported_destroyed = 1;
+    o.reported_missiles = 3;
+    o.reported_targets = 4;
+    const std::size_t from = c.Journal().size();
+    c.CompletePlayerMission(o, c.Now() + 0.25);
+    bool reported = false, warned = false, enemy_knows = false;
+    for (std::size_t i = from; i < c.Journal().size(); ++i) {
+        const JournalEntry& j = c.Journal()[i];
+        if (j.visible) std::printf("    our side: %s\n", j.text.c_str());
+        reported = reported || (j.visible && j.kind == "player_mission" &&
+                                j.text.find("the battery reports 1 destroyed of 4 targets plotted in its sector, 3 missiles fired.") != std::string::npos);
+        warned = warned || (j.visible && j.who == "warning net" && j.text.find(", 1 shot down") != std::string::npos);
+        enemy_knows = enemy_knows || (!j.visible && j.kind == "result" && j.text.find("lost 2 of") != std::string::npos);
+    }
+    SC_EXPECT(reported);
+    SC_EXPECT(warned);
+    SC_EXPECT(missiles || enemy_knows);  // the enemy counts its own losses as they were
+    // The report is part of the saved action: the loaded campaign's journal is the same.
+    const std::string text = SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json");
+    AirCampaign loaded;
+    std::string e;
+    SC_EXPECT(LoadCampaignJson(text, kData, loaded, &e));
+    bool same = loaded.Journal().size() == c.Journal().size();
+    for (std::size_t i = 0; same && i < c.Journal().size(); ++i) same = loaded.Journal()[i].text == c.Journal()[i].text;
+    SC_EXPECT(same);
+}

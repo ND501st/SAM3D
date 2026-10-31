@@ -158,6 +158,13 @@ struct PackageOutcome {
     std::vector<int> aborted_flights;   // flights that broke away before their release point (a played mission)
     bool truth_applied = false;  // the damage is already in the truth (the abstract resolver); else the campaign applies it
     bool played = false;         // from a played mission (the mission bridge)
+    // What the battery reported of it from its records (roadmap 18.1, campaign/report.hpp): our side's journal states
+    // these for a played mission, never the truth. Not `reported`: no records kept (the Osa's crew writes no journal),
+    // and our side's journal takes the truth.
+    bool reported = false;
+    int reported_destroyed = 0;  // kills its launchers reported and did not take back
+    int reported_missiles = 0;   // launches reported
+    int reported_targets = 0;    // the hostile and unidentified targets the post wrote down, by number
 
     void AddEmission(const std::string& id, double s) {
         for (auto& e : emissions) {

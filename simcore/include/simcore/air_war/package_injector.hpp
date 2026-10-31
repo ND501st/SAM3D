@@ -180,7 +180,8 @@ public:
         if (bridge_) {
             bridge_->Step(r);
             if (!bridge_->Over(r)) return;
-            const PackageOutcome o = bridge_->Finish(r);
+            PackageOutcome o = bridge_->Finish(r);
+            ReportedFromRecords(r, played_.back().in_s, o);
             c_->CompletePlayerMission(o, HourOf(r.Time()));
             played_.back().out_s = r.Time();
             played_.back().lost = o.Lost();
@@ -228,6 +229,17 @@ public:
 
     bool Active() const { return bridge_ != nullptr; }
     const MissionBridge* Bridge() const { return bridge_.get(); }
+
+    // The battery's report of a package from its records since it came in (roadmap 18.1): what our side's journal says
+    // of it. Without a post (the Osa's crew writes no journal) nothing: our side takes the truth.
+    static void ReportedFromRecords(const ScenarioRunner& r, double from_s, PackageOutcome& o) {
+        campaign::CombatReport rep;
+        if (!r.ReportFromRecords(rep, "The battery", from_s)) return;
+        o.reported = true;
+        o.reported_destroyed = rep.destroyed;
+        o.reported_missiles = rep.missiles;
+        o.reported_targets = static_cast<int>(rep.targets.size());
+    }
     const std::vector<Played>& PlayedPackages() const { return played_; }
     const std::vector<std::string>& Notes() const { return notes_; }  // packages that could not come in, gear left out
     double HourOf(double t_s) const { return h0_ + t_s / 3600.0; }

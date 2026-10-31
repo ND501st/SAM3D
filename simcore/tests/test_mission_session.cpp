@@ -156,6 +156,26 @@ SC_TEST("mission session (15.2): the bridges mission with the Pact's air war on 
         SC_EXPECT(l.id == live.PlayedPackages()[i].package_id);
         SC_EXPECT(l.released + l.Prevented() == l.release_flights);
     }
+    // Our side's journal says of each package back what the battery's records reported (18.1): the post's combat report
+    // from the package's coming in, its kills as the commander's log has them, never the truth.
+    for (std::size_t i = 0; i < back; ++i) {
+        const airwar::LivePackages::Played& p = live.PlayedPackages()[i];
+        SC_EXPECT(p.outcome.reported);
+        int claimed = 0;
+        for (const campaign::LogEntry& le : r.CommanderLog()) {
+            if (le.time_s < p.in_s || le.time_s > p.out_s) continue;
+            claimed += le.kind == "destroyed" ? 1 : le.kind == "not destroyed" ? -1 : 0;
+        }
+        SC_EXPECT(p.outcome.reported_destroyed == std::max(0, claimed));
+        const std::string said = "the battery reports " + std::to_string(p.outcome.reported_destroyed) + " destroyed of " +
+                                 std::to_string(p.outcome.reported_targets) + " targets plotted";
+        bool in_journal = false;
+        for (const airwar::JournalEntry& j : c.Journal()) {
+            in_journal = in_journal || (j.visible && j.kind == "player_mission" && j.text.find(said) != std::string::npos);
+        }
+        std::printf("    package %d: %d down in truth; %s, %d missiles fired\n", p.package_id, p.lost, said.c_str(), p.outcome.reported_missiles);
+        SC_EXPECT(in_journal);
+    }
     SC_EXPECT(!o.Checks().empty());
     const std::string debrief = s.Debrief();
     const std::size_t outcomes_at = debrief.find("The battery's two outcomes");

@@ -391,18 +391,18 @@ the road bridge falls.
 **Track G** (above): 17.4 is a use of the route service and movers (G1, G2) and stocks (G5); 17.5's batteries move on
 the movement table (G3).
 
-## Phase 18 - The after-action loop (planned)
+## Phase 18 - The after-action loop (18.1 and 18.5 in first form for a played package, 31 Oct 2026)
 
 The fight, the record, the report, the regiment's picture, the next order (`docs/command/01_PRINCIPLES.md` 9;
 `docs/campaign/05_THE_SYSTEMS.md` §11-12).
 
 | # | Task |
 |---|---|
-| 18.1 | **The report from the records** (P9) after every engagement and each day, sent up by the post's means. P9 built the report, the check and the trust for a session at the PU-12M; left: the campaign's raids (the post's records when the player is in the Osa), the day's report |
+| 18.1 | **The report from the records** (P9) after every engagement and each day, sent up by the post's means. P9 built the report, the check and the trust for a session at the PU-12M. **Each package's report in the session, 31 Oct 2026**: as a package goes back to the campaign, the post's combat report from its records since the package came in (`ScenarioRunner::ReportFromRecords` from a time) goes with its outcome (`PackageOutcome::reported`, saved with the campaign's action): the kills the launchers reported and did not take back, the launches, the targets the post wrote down by number. Left: the report carried up by a means (it reaches the regiment as it is compiled), the post's records when the player is in the Osa (its commander's report, P4), the day's report |
 | 18.2 | **The regiment's picture** from the reports: the analysts' patterns, the enemy's estimated aims and phase, a trust per unit kept by checking records against one another |
 | 18.3 | **The next order** from that picture: 14.2's rules fed by 18.2, never by the truth |
 | 18.4 | **Consequences delivered** as facts: the bridge stood, the train passed, the depot is empty |
-| 18.5 | **Our side's journal** in the air war from the reports |
+| 18.5 | **Our side's journal** in the air war from the reports. **First form for a played package, 31 Oct 2026** (`air_war/campaign.hpp`): the battery's line in our side's journal is its report ("the battery reports 1 destroyed of 5 targets plotted in its sector"), and the warning net's line and our record of the raid count its reported kills with the neighbours' (as they happened: their records are not kept), never the truth; the enemy's own journal keeps its true losses. Left: the abstract raids (still the truth), the neighbours' records, ARM attacks and damage as reported |
 | 18.6 | **A person plays a campaign at battery 21 through**, in a seat and in command |
 
 **Done when:** a battery whose radiotelephonist lost the 05:12 raid sends its regiment's next ambush to the wrong

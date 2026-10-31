@@ -101,7 +101,8 @@ a page with the enemy's mind beside what our side learned, day by day, and the r
 What our side learns is to come from its records, not from the fight's truth (`docs/command/01_PRINCIPLES.md` 9, planned
 as `docs/command/07_IMPLEMENTATION_PLAN.md` P9): the battery's after-action report is compiled from its radiotelephonist's
 journal and its board, so the `[ours]` lines will be as right or as wrong as the crew wrote them, and so will our side's
-answer to the enemy's next raid.
+answer to the enemy's next raid. A package played in a battery's mission session at the PU-12M does so already (roadmap
+18.1, 18.5): its `[ours]` lines count the kills the battery reported, while the enemy's own lines keep its true losses.
 
 **The battery's war** (`docs/campaign/`, roadmap phases 13-21) builds on this command as it is: it adds each faction's
 war aims to its file and one term to its officers' target picking (what a target's loss would cut, as their picture
