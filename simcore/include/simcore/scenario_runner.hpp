@@ -17,6 +17,11 @@
 // runs the search and tracking picture, sets the console's capture and zone inputs,
 // lets the aiming crew turn their wheels, and resolves each launch as a hit or
 // a miss (step 1b, and on launch). Without one, launches are only recorded.
+//
+// The presentation feed (fx/events.hpp, docs/fx/README.md 3.1): where the models decide (our launch and the shot's end,
+// an aircraft destroyed, the neighbours' and the battery's launchers' missiles, an ARM's burst) the runner pushes an
+// event for the game to show and sound. Nothing in the simulation reads it; its few draws (where a burst is, whether a
+// wreck burns) come from a generator of its own, so the simulation's random sequence is the same with it or without.
 #pragma once
 
 #include <cmath>
@@ -42,6 +47,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
+#include "simcore/fx/events.hpp"
 #include "simcore/instructor.hpp"
 #include "simcore/launcher.hpp"
 #include "simcore/battery.hpp"
@@ -134,6 +140,7 @@ public:
         }
         engagement_.SetOpticalConditions(def_.optics);
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
+        fx_rng_.seed(def_.seed + kFxSeed);  // the presentation's own draws (fx/events.hpp): never a model's generator
         rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
         deliveries_.Set(def_.deliveries);
@@ -327,6 +334,15 @@ public:
         if (!engagement_on_) return {};
         return engagement_.MissilesInFlight(time_, world_, eng_targets_);
     }
+    // The presentation feed (fx/events.hpp): what happened, for the game to show and sound. Nothing in the simulation
+    // reads it. The mission bridge (air_war/mission_bridge.hpp) pushes its own events here too.
+    fx::Feed& Fx() { return fx_; }
+    const fx::Feed& Fx() const { return fx_; }
+    // Switched off, the runner and the bridge push nothing into the feed and draw nothing for it (the presentation's own
+    // generator stays where it was): what is left is the simulation alone, which must run exactly as with it on (the
+    // tests compare the two). On by default.
+    void SetFxOn(bool on) { fx_on_ = on; }
+    bool FxOn() const { return fx_on_; }
     SessionLog& Log() { return log_; }
     const SessionLog& Log() const { return log_; }
     // The crew members, in the scenario's order (their slips, omissions, skill: the balance tool, the debrief).
@@ -2072,6 +2088,17 @@ private:
         arm_carriers_.resize(def_.targets.size());
         for (const EmSensorLink::ArmResult& r : em_link_->TakeArmResults()) {
             arm_results_.push_back(r);
+            if (fx_on_) {
+                fx::Event burst;  // the feed: where it burst (the EM ARM itself is drawn as an entity while it flies)
+                burst.kind = fx::EventKind::ArmBurst;
+                burst.t_s = time_;
+                burst.end_t_s = time_;
+                burst.position = burst.aim = r.burst_point;
+                burst.end = r.hit ? fx::BurstEnd::Hit : fx::BurstEnd::Ground;
+                burst.source = r.carrier;
+                burst.weapon = r.weapon;
+                fx_.Push(burst);
+            }
             char m[32];
             std::snprintf(m, sizeof(m), "%.0f", r.miss_m);
             const std::string who = r.carrier.empty() ? std::string("ARM") : r.carrier;
@@ -6339,6 +6366,7 @@ private:
             if (engagement_on_) {
                 const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
                 engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
+                FxLaunch(launches_);
                 if (!HasRwr(engagement_.TrackedTarget())) CueTarget(engagement_.TrackedTarget(), true);
             }
             if (launcher_) {
@@ -6371,6 +6399,7 @@ private:
         }
         Event(button, "missile " + container + " thrown off unguided; it climbs " +
                           std::to_string(static_cast<int>(console_.launcher.emergency.flight_s + 0.5)) + " s, then self-destructs");
+        FxUnguided(kFxThrownOffBase + launcher_->EmergencyThrown(), engagement_.UnitHeadingDeg(), console_.launcher.emergency.flight_s);
         if (launcher_->PairSpent()) console_.equipment.Restart(console_.launcher.pair_preparation);
         launcher_->Step(time_, console_);
         console_.equipment.Update(0.0, console_.panel);
@@ -9047,9 +9076,266 @@ private:
         }
     }
 
+    // ---- The presentation feed (fx/events.hpp, docs/fx/README.md 3.1): pushed where the models decide, never read by the
+    // simulation. Its draws (a burst's place, whether a wreck burns) come from fx_rng_ alone; switched off (SetFxOn) it
+    // pushes and draws nothing.
+    fx::Feed fx_;
+    std::mt19937 fx_rng_{1u};
+    bool fx_on_ = true;
+    static constexpr unsigned kFxSeed = 0xF0E5u;           // sam3d: the presentation generator's seed, after the scenario's
+    static constexpr double kFxLaunchUpM = 3.5;            // the missile on its rails above the ground (sam3d)
+    static constexpr double kFxLaunchElevationDeg = 27.0;  // voenizdat_osa_1991: the 9M33 leaves at a constant 27 degrees
+    static constexpr double kFxLaunchSpeedMps = 30.0;      // its speed off the rails, for the drawing (sam3d)
+    static constexpr double kFxSelfDestructMinS = 25.0;    // voenizdat_osa_1991 p22: it destroys itself 25-28 s after launch
+    static constexpr double kFxSelfDestructMaxS = 28.0;
+    static constexpr double kFxFlyOnMinS = 0.5;            // a missile that missed is shown flying on at least this long (sam3d)
+    static constexpr int kFxThrownOffBase = 1000;          // a thrown-off missile's number: this + its count (never a launch's)
+    static constexpr double kFxUnguidedMps = 500.0;        // an unguided missile's average speed, when the tuning has none (sam3d)
+    static constexpr double kFxHitOffsetM = 5.0;           // a hit's burst within the warhead's reach of the target (sam3d)
+    static constexpr double kFxNearMinM = 10.0;            // a near burst beside it (sam3d)
+    static constexpr double kFxNearMaxM = 25.0;
+    static constexpr double kFxPastMinM = 500.0;           // a neighbour's missile that missed flies on this far past its
+    static constexpr double kFxPastMaxM = 2000.0;          // target before it destroys itself (sam3d)
+    static constexpr double kFxPastMps = 500.0;
+    static constexpr double kFxWreckFireChance = 0.7;      // a wreck we didn't watch burning (sam3d)
+    static constexpr double kFxWreckFallsChance = 0.5;     // ... dropping out of the sky at once (sam3d)
+
+    double FxDraw() { return Uniform01(fx_rng_); }
+    double FxBetween(double lo, double hi) { return lo + (hi - lo) * FxDraw(); }
+    // A point lo..hi m from `at`, in a direction drawn evenly over the sphere.
+    Vec3 FxAround(const Vec3& at, double lo, double hi) {
+        const double az = FxBetween(0.0, kTwoPi);
+        const double el = std::asin(FxBetween(-1.0, 1.0));
+        return at + DirectionFromAzEl(az, el) * FxBetween(lo, hi);
+    }
+    // A system as the munitions library knows it: an air defence system id (air_war/data.hpp AirDefenceSystems), the
+    // console's or tuning's "osa_ak" as "osa".
+    static std::string FxSystem(const std::string& system_id) {
+        return system_id.compare(0, 3, "osa") == 0 ? std::string("osa") : system_id;
+    }
+    std::string FxOwnWeapon() const { return FxSystem(console_.system_id); }
+    // A launcher's rails over the ground where it stands (ours too: the unit's ENU z is not the ground far from the
+    // origin, and stays the start's as the vehicle drives).
+    Vec3 FxRails(const Vec3& at) const { return GroundEnu(at.x, at.y) + Vec3{0.0, 0.0, kFxLaunchUpM}; }
+    // A missile leaving `from` toward `toward` at the 9M33's 27 degrees.
+    static Vec3 FxLaunchVelocity(const Vec3& from, const Vec3& toward) {
+        return DirectionFromAzEl(AzimuthOf(toward - from), DegToRad(kFxLaunchElevationDeg)) * kFxLaunchSpeedMps;
+    }
+    // A scenario target's aircraft (appeared, alive or not), and its index (def_.targets.size(): none).
+    std::size_t TargetIndexOf(const std::string& id) const {
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            if (def_.targets[i].id == id) return i;
+        }
+        return def_.targets.size();
+    }
+    const Aircraft* AircraftOf(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        return i < def_.targets.size() && targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+    }
+
+    // Our missile leaves the launcher (EngagementModel::OnLaunch has just taken it).
+    void FxLaunch(int number) {
+        if (!fx_on_) return;
+        const std::string target = engagement_.TrackedTarget();
+        const Aircraft* a = target.empty() ? nullptr : AircraftOf(target);
+        const double flight_s = engagement_.ShotFlightTime(number);
+        if (a == nullptr || flight_s <= 0.0) {  // no target track: it goes off unguided and destroys itself
+            FxUnguided(number, engagement_.UnitHeadingDeg(), FxBetween(kFxSelfDestructMinS, kFxSelfDestructMaxS));
+            return;
+        }
+        fx::Event e;
+        e.kind = fx::EventKind::MissileLaunch;
+        e.t_s = time_;
+        e.position = FxRails(def_.unit_position);
+        e.velocity = FxLaunchVelocity(e.position, a->position);
+        e.aim = a->position;
+        e.end_t_s = time_ + flight_s;
+        e.source = "own";
+        e.target = target;
+        e.number = number;
+        e.weapon = FxOwnWeapon();
+        fx_.Push(e);
+    }
+
+    // A missile that leaves with no target (no track at launch, or ИЗДЕЛИЯ thrown off): along its launch line on the hull's
+    // `azimuth_deg`, destroying itself after `flight_s`.
+    void FxUnguided(int number, double azimuth_deg, double flight_s) {
+        if (!fx_on_) return;
+        fx::Event e;
+        e.kind = fx::EventKind::MissileLaunch;
+        e.t_s = time_;
+        e.position = FxRails(def_.unit_position);
+        e.velocity = DirectionFromAzEl(DegToRad(azimuth_deg), DegToRad(kFxLaunchElevationDeg)) * kFxLaunchSpeedMps;
+        e.end_t_s = time_ + flight_s;
+        e.source = "own";
+        e.number = number;
+        e.weapon = FxOwnWeapon();
+        fx_.Push(e);
+        const double v = def_.tuning.missile_average_speed_mps > 0.0 ? def_.tuning.missile_average_speed_mps : kFxUnguidedMps;
+        e.kind = fx::EventKind::MissileEnd;
+        e.end = fx::BurstEnd::Wide;
+        e.aim = e.position + e.velocity.Normalized() * (v * flight_s);
+        fx_.Push(e);
+    }
+
+    // Our shot's end (the engagement model's Hit or Miss): MissileEnd, and AircraftDown for a hit. `assessed`: the kill
+    // assessment has just opened it, and its draw is the end (the signs the crew sees follow from it); else the
+    // presentation draws one by the same chances.
+    void FxShotEnd(const EngagementEvent& ev, bool assessed) {
+        if (!fx_on_) return;
+        const bool hit = ev.kind == EngagementEvent::Kind::Hit;
+        const KillAssessmentTuning& kt = def_.tuning.kill;
+        KillAssessment::End end = KillAssessment::End::Wide;
+        bool fire = false, falls = false;
+        if (assessed && kill_.EndOf(ev.shot, end)) {
+            fire = kill_.TvFire(ev.shot);
+            falls = kill_.Falls(ev.shot);
+        } else {
+            if (hit) {
+                end = KillAssessment::End::Hit;
+            } else if (ev.detail == "track lost") {
+                end = KillAssessment::End::Early;
+            } else if (ev.detail == "out of reach" || ev.detail == "target already down") {
+                end = KillAssessment::End::Wide;
+            } else {
+                const double d = FxDraw();
+                end = d < kt.early_burst_chance ? KillAssessment::End::Early
+                      : d < kt.early_burst_chance + kt.near_burst_chance ? KillAssessment::End::NearBurst
+                                                                          : KillAssessment::End::Wide;
+            }
+            fire = hit && FxDraw() < kt.tv_fire_chance;
+            falls = hit && FxDraw() < kt.elevation_drop_chance;
+        }
+        fx::Event e;
+        e.kind = fx::EventKind::MissileEnd;
+        e.t_s = time_;
+        e.end_t_s = time_;
+        e.source = "own";
+        e.target = ev.target;
+        e.number = ev.shot;
+        e.weapon = FxOwnWeapon();
+        double launch_t = time_;
+        EngagementModel::MissileView v;
+        if (engagement_.ShotView(ev.shot, time_, world_, eng_targets_, v)) {
+            e.position = v.position;
+            e.velocity = v.velocity;
+            launch_t = v.launch_t_s;
+        } else {
+            e.position = FxRails(def_.unit_position);
+        }
+        const Aircraft* a = AircraftOf(ev.target);
+        const Vec3 at = a != nullptr ? a->position : e.position;
+        switch (end) {
+            case KillAssessment::End::Hit:
+                e.end = fx::BurstEnd::Hit;
+                e.aim = FxAround(at, 0.0, kFxHitOffsetM);
+                break;
+            case KillAssessment::End::NearBurst:
+                e.end = fx::BurstEnd::NearBurst;
+                e.aim = FxAround(at, kFxNearMinM, kFxNearMaxM);
+                break;
+            case KillAssessment::End::Wide:
+            case KillAssessment::End::Early: {
+                // It flies on to destroy itself 25-28 s after its launch, and always some time after now: an
+                // "out of reach" miss is decided at the end of its flight time (26 s), and a missile that ended now would
+                // look like a burst on an aircraft that flies on.
+                e.end = end == KillAssessment::End::Wide ? fx::BurstEnd::Wide : fx::BurstEnd::Early;
+                const double sd = fx::SelfDestructTime(launch_t, time_, FxDraw(), kFxSelfDestructMinS, kFxSelfDestructMaxS, kFxFlyOnMinS);
+                e.aim = e.position + e.velocity * (sd - time_);
+                e.end_t_s = sd;
+                break;
+            }
+        }
+        e.fire = hit && fire;
+        e.falls = hit && falls;
+        fx_.Push(e);
+        if (hit) FxDown(ev.target, "own", fire, falls);
+    }
+
+    // An aircraft destroyed: its wreck's start.
+    void FxDown(const std::string& id, const std::string& by, bool fire, bool falls) {
+        if (!fx_on_) return;
+        const std::size_t i = TargetIndexOf(id);
+        const Aircraft* a = AircraftOf(id);
+        if (a == nullptr) return;
+        fx::Event e;
+        e.kind = fx::EventKind::AircraftDown;
+        e.t_s = time_;
+        e.position = a->position;
+        e.velocity = a->velocity;
+        e.aim = a->position;
+        e.source = by;
+        e.target = id;
+        e.world_id = a->id;
+        e.fire = fire;
+        e.falls = falls;
+        e.model = def_.targets[i].model;
+        fx_.Push(e);
+    }
+    // ... with the presentation's own draws (another's kill: nobody's instruments decided how it looked).
+    void FxDown(const std::string& id, const std::string& by) {
+        if (!fx_on_) return;
+        const bool fire = FxDraw() < kFxWreckFireChance;
+        const bool falls = FxDraw() < kFxWreckFallsChance;
+        FxDown(id, by, fire, falls);
+    }
+
+    // A launcher of the battery or of a neighbour fires (BatteryFire's Launch), and its missile's end (Hit, Miss). Both
+    // carry the target's World id, so the game follows it.
+    void FxSamLaunch(const BatteryFire::Shooter& s, const std::string& target, const std::string& weapon) {
+        if (!fx_on_) return;
+        const Aircraft* a = AircraftOf(target);
+        if (a == nullptr) return;
+        fx::Event e;
+        e.kind = fx::EventKind::SamLaunch;
+        e.t_s = time_;
+        e.position = FxRails(s.position);
+        e.velocity = FxLaunchVelocity(e.position, a->position);
+        e.aim = a->position;
+        e.end_t_s = s.phase == BatteryFire::Phase::InFlight ? s.next_s : time_;
+        e.source = s.callsign;
+        e.target = target;
+        e.world_id = a->id;
+        e.number = s.launches;
+        e.weapon = weapon;
+        fx_.Push(e);
+    }
+    void FxSamEnd(const BatteryFire::Shooter& s, const std::string& target, const std::string& weapon, bool hit) {
+        if (!fx_on_) return;
+        const Aircraft* a = AircraftOf(target);
+        if (a == nullptr) return;
+        fx::Event e;
+        e.kind = fx::EventKind::SamEnd;
+        e.t_s = time_;
+        e.end_t_s = time_;
+        e.position = FxRails(s.position);
+        e.source = s.callsign;
+        e.target = target;
+        e.world_id = a->id;
+        e.number = s.launches;
+        e.weapon = weapon;
+        if (hit) {
+            e.end = fx::BurstEnd::Hit;
+            e.aim = FxAround(a->position, 0.0, kFxHitOffsetM);
+        } else {  // it flies on past the target and destroys itself
+            e.end = fx::BurstEnd::SelfDestruct;
+            Vec3 dir = a->position - e.position;
+            dir = dir.LengthSquared() > 1.0 ? dir.Normalized() : Vec3{0.0, 0.0, 1.0};
+            const double past = FxBetween(kFxPastMinM, kFxPastMaxM);
+            e.aim = a->position + dir * past;
+            e.velocity = dir * kFxPastMps;
+            e.end_t_s = time_ + past / kFxPastMps;
+        }
+        fx_.Push(e);
+    }
+
     void UpdateCallouts() {
         if (!callouts_) {
-            if (engagement_on_) engagement_.TakeEvents();  // nobody to say them
+            if (engagement_on_) {  // nobody to say them; the feed still shows how each shot ended
+                for (const EngagementEvent& e : engagement_.TakeEvents()) {
+                    if (e.kind == EngagementEvent::Kind::Hit || e.kind == EngagementEvent::Kind::Miss) FxShotEnd(e, false);
+                }
+            }
             return;
         }
         // Automatic reports: a seat says it when its condition becomes true. A lamp that flickers (out for a moment
@@ -9157,6 +9443,7 @@ private:
                         if (e.detail != "target already down") {
                             kill_.Open(time_, e.shot, e.target, e.kind == EngagementEvent::Kind::Hit, e.detail, e.view);
                         }
+                        FxShotEnd(e, e.detail != "target already down");  // the feed's end is the one the signs show
                         break;
                     case EngagementEvent::Kind::Track: break;  // the capture and TV-track reports are automatic (inputs)
                 }
@@ -9386,8 +9673,12 @@ private:
             if (e.kind == BatteryFire::Event::Kind::Launch) {
                 ++neighbour_launches_[nb.id];
                 Event(e.target, "missile launched at it by " + nb.name);
+                FxSamLaunch(shooters[k], e.target, FxSystem(nb.system));
             } else if (e.kind == BatteryFire::Event::Kind::Hit) {
+                FxSamEnd(shooters[k], e.target, FxSystem(nb.system), true);
                 if (DestroyTarget(e.target, nb.name)) neighbour_kills_[e.target] = nb.id;
+            } else if (e.kind == BatteryFire::Event::Kind::Miss) {
+                FxSamEnd(shooters[k], e.target, FxSystem(nb.system), false);
             }
         }
     }
@@ -9521,6 +9812,14 @@ private:
         // while its set on that net is up.
         for (const BatteryFire::Event& e : battery_fire_->TakeEvents()) {
             const BatteryFire::Shooter* sh = battery_fire_->Find(e.callsign);
+            if (sh != nullptr && !sh->external) {  // the feed: its missile, and the wreck of what it hit
+                const std::string sys_id = FxSystem(def_.has_launcher_tuning ? def_.launcher_tuning.system_id : def_.tuning.system_id);
+                if (e.kind == BatteryFire::Event::Kind::Launch) FxSamLaunch(*sh, e.target, sys_id);
+                if (e.kind == BatteryFire::Event::Kind::Hit || e.kind == BatteryFire::Event::Kind::Miss) {
+                    FxSamEnd(*sh, e.target, sys_id, e.kind == BatteryFire::Event::Kind::Hit);
+                }
+                if (e.kind == BatteryFire::Event::Kind::Hit) FxDown(e.target, e.callsign);
+            }
             const int missiles = sh != nullptr ? sh->missiles : -1;
             LauncherReport({e.kind, e.callsign, e.target, e.number, missiles});
             if (sh != nullptr && !sh->external) net_reports_.push_back({e.kind, e.callsign, e.target, e.number, missiles});
@@ -9604,13 +9903,17 @@ public:
         out.swap(own_reports_);
         return out;
     }
-    bool DestroyTarget(const std::string& id, const std::string& by) {
+    // A target destroyed by something outside the engagement model (a neighbour, another launcher, the bridge). The feed
+    // gets its wreck (AircraftDown) unless `wreck` is false: a cruise missile gone by its own warhead is no wreck (the
+    // bridge shows its CruiseImpact).
+    bool DestroyTarget(const std::string& id, const std::string& by, bool wreck = true) {
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             if (def_.targets[i].id != id) continue;
             Aircraft* a = targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
             if (a == nullptr || !a->alive) return false;
             a->alive = false;
             Event(id, "destroyed by " + by);
+            if (wreck) FxDown(id, by);
             return true;
         }
         return false;
@@ -9628,6 +9931,15 @@ public:
             return a != nullptr ? a->position : Vec3{};
         }
         return Vec3{};
+    }
+    // How it moves now (ENU m/s; zero if it has not appeared), and its World id (= Unreal's entity id; -1 if it has not).
+    Vec3 TargetVelocity(const std::string& id) const {
+        const Aircraft* a = AircraftOf(id);
+        return a != nullptr ? a->velocity : Vec3{};
+    }
+    int TargetWorldId(const std::string& id) const {
+        const Aircraft* a = AircraftOf(id);
+        return a != nullptr ? a->id : -1;
     }
     // Is the target in the sky now (appeared, not destroyed, not past its last waypoint)?
     bool TargetAlive(const std::string& id) const {

@@ -78,10 +78,22 @@ hand-written scenario) accepts, and a manifest for the bridge:
 
 Stepped after every `ScenarioRunner::Step`, from the runner's public state only:
 
-- **release**: a strike, DEAD, helicopter or recce aircraft alive within `scenario.release_capture_m` of its release
-  point drops its load (photographs, for recce); it lands `scenario.weapon_fall_s` later where it was aimed, scattered by
-  a couple of hundred metres; our vehicle, the battery's other vehicles, dummies and the objects inside the scenario take
-  their chances (`scenario.bomb_lethal_m`, `bomb_pk_vehicle`, `rocket_pk_vehicle`, `strike.hit_chance`);
+- **release**: a strike, DEAD, helicopter or recce aircraft alive drops its load (photographs, for recce). A load that
+  falls (bombs, dispensers, a guided bomb) goes where its throw from the aircraft's state best meets the aim, within
+  `scenario.release_capture_m` of its line, in the attack run (a level or laydown attack from its farthest throw short
+  of the target, a toss or dive from its pull-up or roll-in, a pop-up in its dive after its apex, never in the climb):
+  at the step the throw comes to reach the aim, or the step after the two came closest, and at the latest at its
+  release point; rockets, missiles, guns, a weapon not in weapons.json and a recce's camera within
+  `scenario.release_capture_m` of the release point (`simcore/air_war/weapon_flight.hpp`, docs/fx/README.md 3.1). It
+  lands after the weapon's own flight from the aircraft's height over the ground, its speed and its path angle
+  (`scenario.weapon_fall_s` only for a weapon not in weapons.json), where it was aimed, scattered by a couple of
+  hundred metres, the loads still falling when the session ends landing in `Finish` (in a session that runs on, a
+  package over by its clock lands them at their own times before it is handed back: `LivePackages`); our vehicle, the
+  battery's other vehicles, dummies and the objects inside the scenario take their chances (`scenario.bomb_lethal_m`,
+  `bomb_pk_vehicle`, `rocket_pk_vehicle`, `strike.hit_chance`). Known gap: the planner's toss route levels off at
+  `delivery.loft_release_m` before its release point, from where no throw reaches the aim, so a toss lets go in its
+  climb about 1.8 km before the planned toss point, the aim a third farther than the throw (docs/fx/README.md 7); left
+  until the toss points are set from the throw, the planner's data unchanged;
 - **ARMs** (A11, 20 Oct 2026): with the EM layer a SEAD or hunter aircraft with a warning receiver carries EM ARMs, the
   target's `"arms"` written by the generator (its type's `arm_em`, or by the war's year its `arm_em_by_year`, `data/air_war/faction_*.json`: the F-4G's AGM-78B Standard ARM class in a war before 1987, its HARM class after,
   the F-4E's Shrike class, the MiG-25BM's Kh-58 class; default the HARM class with `arm_memory`, else the Shrike class),

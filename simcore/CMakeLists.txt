@@ -112,7 +112,14 @@ add_executable(simcore_tests
   tests/test_scenery.cpp
   tests/test_world_map.cpp
   tests/test_country_map.cpp
-  tests/test_nav.cpp)
+  tests/test_nav.cpp
+  tests/test_fx_acoustics.cpp
+  tests/test_fx_bridge.cpp
+  tests/test_fx_contrails.cpp
+  tests/test_fx_events.cpp
+  tests/test_fx_explosions.cpp
+  tests/test_fx_trajectories.cpp
+  tests/test_munitions.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")

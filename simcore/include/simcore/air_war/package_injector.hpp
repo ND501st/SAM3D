@@ -155,8 +155,10 @@ inline InjectedPackage InjectPackage(ScenarioRunner& r, const RaidScenario& rs, 
 
 // The air war run in step with a session. The campaign is advanced to the session's clock every `every_s`; a package it
 // hands to the player's battery is built as a raid and enters the session on its own time (at once if that is past),
-// its bridge follows it, and once it is over (MissionBridge::Over) the campaign takes its outcome and goes on. One
-// package at a time, as the campaign keeps one player mission pending: another that comes due meanwhile waits for it.
+// its bridge follows it, and once it is over (MissionBridge::Over) and its last load still falling has landed (a
+// package over by its clock may still have bombs in the air: they land in the session at their own times) the
+// campaign takes its outcome and goes on. One package at a time, as the campaign keeps one player mission pending:
+// another that comes due meanwhile waits for it.
 class LivePackages {
 public:
     struct Played {
@@ -178,8 +180,17 @@ public:
     // After every runner.Step().
     void Step(ScenarioRunner& r) {
         if (bridge_) {
-            bridge_->Step(r);
-            if (!bridge_->Over(r)) return;
+            if (!landing_) {
+                bridge_->Step(r);
+                if (!bridge_->Over(r)) return;
+                landing_ = true;
+            } else {
+                bridge_->LandFalling(r);
+            }
+            // Over by its clock with loads still falling: they land in the session at their own times, and the package
+            // is handed back once the last has (MissionBridge::FallingUntil).
+            if (r.Time() < bridge_->FallingUntil()) return;
+            landing_ = false;
             PackageOutcome o = bridge_->Finish(r);
             ReportedFromRecords(r, played_.back().in_s, o);
             c_->CompletePlayerMission(o, HourOf(r.Time()));
@@ -282,6 +293,7 @@ private:
     double every_s_ = 30.0;
     double next_s_ = 0.0;
     std::unique_ptr<MissionBridge> bridge_;
+    bool landing_ = false;  // the package is over; its loads still falling land before it is handed back
     std::vector<Played> played_;
     std::vector<std::string> notes_;
 };

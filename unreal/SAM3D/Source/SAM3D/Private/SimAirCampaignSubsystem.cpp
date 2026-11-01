@@ -9,6 +9,7 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
+#include "SimMunitionModels.h"
 #include "SimWorldSubsystem.h"
 
 namespace
@@ -635,6 +636,7 @@ void USimAirCampaignSubsystem::Tick(float DeltaTime)
 	if (!bBridgeStarted)
 	{
 		Bridge = MakeUnique<simcore::airwar::MissionBridge>(*Manifest, Campaign->Data(), static_cast<unsigned>(CampaignSeed) * 977u + static_cast<unsigned>(Manifest->package_id));
+		Bridge->SetMunitions(FSimMunitionModels::Library());  // a gun pass's rounds at the rate the game draws them
 		bBridgeStarted = true;
 		RaidWorld = World;
 	}

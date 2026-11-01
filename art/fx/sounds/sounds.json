@@ -1,0 +1,211 @@
+{
+  "S_FX_Explosion_Small_Near": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 3.2399
+  },
+  "S_FX_Explosion_Small_Far": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 6.1811
+  },
+  "S_FX_Explosion_Ground_Small_Near": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 3.5985
+  },
+  "S_FX_Explosion_Medium_Near": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 4.7264
+  },
+  "S_FX_Explosion_Medium_Far": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 7.5622
+  },
+  "S_FX_Explosion_Large_Near": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 5.6418
+  },
+  "S_FX_Explosion_Large_Far": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 9.0268
+  },
+  "S_FX_Cluster_Ripple": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 4.0
+  },
+  "S_FX_Sonic_Boom_Short": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 2.6
+  },
+  "S_FX_Sonic_Boom_Long": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 2.7
+  },
+  "S_FX_Jet_Roar_Turbojet": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 6.0
+  },
+  "S_FX_Jet_Roar_Turbofan": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 6.0
+  },
+  "S_FX_Jet_Whine_Turbojet": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 4.0
+  },
+  "S_FX_Jet_Whine_Turbofan": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 4.0
+  },
+  "S_FX_Afterburner": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 4.0
+  },
+  "S_FX_Rocket_Motor_Small": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.0
+  },
+  "S_FX_Rocket_Motor_Large": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.0
+  },
+  "S_FX_Prop_Turboprop": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 4.0
+  },
+  "S_FX_Rotor_Helicopter": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 4.0
+  },
+  "S_FX_Fire_Loop": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 6.0
+  },
+  "S_FX_Gun_23mm_Quad": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.0,
+    "rate_hz": 58.0
+  },
+  "S_FX_Gun_23mm_Twin": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.0,
+    "rate_hz": 30.0
+  },
+  "S_FX_Gun_20mm_Gatling": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.0,
+    "rate_hz": 100.0
+  },
+  "S_FX_Gun_30mm_Gatling": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.0,
+    "rate_hz": 65.0
+  },
+  "S_FX_Gun_Burst_Tail": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 2.5
+  },
+  "S_FX_Gun_57mm_Single": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 2.0
+  },
+  "S_FX_Bullet_Crack": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 0.4
+  },
+  "S_FX_Missile_Launch": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 3.5
+  },
+  "S_FX_Bomb_Rush": {
+    "kind": "riser",
+    "loop": false,
+    "seconds": 3.0
+  },
+  "S_FX_Flare_Pop": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 1.2
+  },
+  "S_FX_Debris_Rain": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 4.0
+  },
+  "S_FX_Fireball_Roar": {
+    "kind": "one_shot",
+    "loop": false,
+    "seconds": 5.6
+  },
+  "S_FX_Rec_Jet_Far": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.6081
+  },
+  "S_FX_Rec_Jet_Heavy": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 8.0024
+  },
+  "S_FX_Rec_Prop_Turboprop": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 3.5473
+  },
+  "S_FX_Rec_Rotor_Near": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 5.0102
+  },
+  "S_FX_Rec_Rotor_Far": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 8.0011
+  },
+  "S_FX_Rec_Rocket_Motor_Far": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 9.9655
+  },
+  "S_FX_Rec_Rocket_Motor_Large": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 9.9525
+  },
+  "S_FX_Rec_Rocket_Motor_Far_Large": {
+    "kind": "loop",
+    "loop": true,
+    "seconds": 9.9889
+  },
+  "S_FX_Rec_Blast_Tail": {
+    "kind": "tail",
+    "loop": false,
+    "seconds": 11.0
+  }
+}

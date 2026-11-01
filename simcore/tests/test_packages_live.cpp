@@ -1,12 +1,14 @@
 // The enemy's packages entering a running mission (roadmap 15.3): ScenarioRunner::AddTargets, AddEmGear and
 // AddTriggers, and simcore/air_war/package_injector.hpp (InjectPackage, LivePackages).
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/fx/events.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "test_framework.hpp"
@@ -37,6 +39,62 @@ bool FirstRaid(AirCampaign& c, RaidScenario& rs) {
         c.SkipPlayerMission();
     }
     return false;
+}
+
+// The campaign's first package to the battery (seed `seed`) run in step with a session that starts three minutes before
+// it (as the test "the campaign runs in step with a session" below), to its hand-back: its twin's raid, what the
+// session's feed showed of its loads, and how much of the feed and of the bridge's log ("enemy air") came dated after
+// the session's time when it came.
+struct LiveRun {
+    bool ok = false;
+    RaidScenario rs;  // as its twin built it
+    LivePackages::Played played;
+    std::vector<fx::Event> releases, impacts;
+    int ahead = 0;
+    double end_s = 0.0;  // the raid's end on the session's clock
+};
+LiveRun RunFirstPackage(const AirWarData& d, unsigned seed) {
+    LiveRun out;
+    AirCampaign c1;
+    SC_EXPECT(c1.Init(d, seed));
+    if (!FirstRaid(c1, out.rs)) return out;
+    const double due_h = c1.Now();
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, seed));
+    c.Posture().emission = 0.1;
+    c.Posture().relocate_every_h = 20.0;
+    while (c.Advance(due_h - 0.05)) c.SkipPlayerMission();
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(out.rs.json_text, kData, def, console, &e));
+    def.targets.clear();
+    def.triggers.clear();
+    def.em.jammers.clear();
+    def.time_limit_s = 3600.0;
+    def.end_when_targets_gone = false;
+    ScenarioRunner r(std::move(def), std::move(console));
+    LivePackages live(c, kData, c.Now());
+    std::uint64_t cursor = 0;
+    std::size_t log_seen = 0;
+    while (!r.Finished() && r.Time() < 3600.0) {
+        r.Step(0.1);
+        live.Step(r);
+        for (const fx::Event& ev : r.Fx().Since(cursor)) {
+            if (ev.kind == fx::EventKind::WeaponRelease) out.releases.push_back(ev);
+            if (ev.kind == fx::EventKind::WeaponImpact) out.impacts.push_back(ev);
+            out.ahead += ev.t_s > r.Time() + 1e-9 ? 1 : 0;
+        }
+        cursor = r.Fx().Last();
+        const std::vector<DebriefEntry>& log = r.Log().Entries();
+        for (; log_seen < log.size(); ++log_seen) out.ahead += log[log_seen].who == "enemy air" && log[log_seen].time_s > r.Time() + 1e-9 ? 1 : 0;
+        if (!live.PlayedPackages().empty() && !live.Active()) break;
+    }
+    if (live.PlayedPackages().size() != 1) return out;
+    out.played = live.PlayedPackages().front();
+    out.end_s = out.rs.manifest.end_s + out.played.in_s;
+    out.ok = true;
+    return out;
 }
 
 // The raid's own triggers and EM jammers, as its scenario has them.
@@ -223,6 +281,60 @@ SC_TEST("packages live (15.3): the campaign runs in step with a session, hands i
         live.Step(r);
     }
     SC_EXPECT(c.Now() > before_h);
+}
+
+// A package over by its clock (the session past its raid's end, MissionBridge::Over) while its loads still fall: they land
+// in the session at their own times and the package is handed back only once the last has (LivePackages,
+// MissionBridge::FallingUntil); nothing of it is dated ahead of the session (Finish would have landed them at once, their
+// blasts and impacts dated seconds later than the session). The raid's end is put (scenario.margin_s) a second after the
+// last release a first run of the same package showed.
+SC_TEST("packages live (15.3): a package over by its clock while its loads still fall is handed back once they have landed") {
+    const AirWarData d = LoadWar("nato");
+    LiveRun first;
+    unsigned seed = 1;
+    double last_release_s = -1.0, last_impact_s = -1.0;
+    for (; seed <= 4; ++seed) {
+        first = RunFirstPackage(d, seed);
+        if (!first.ok || first.releases.empty()) continue;
+        last_release_s = last_impact_s = -1.0;
+        for (const fx::Event& ev : first.releases) {
+            last_release_s = std::fmax(last_release_s, ev.t_s);
+            last_impact_s = std::fmax(last_impact_s, ev.end_t_s);
+        }
+        if (last_impact_s > last_release_s + 2.0) break;  // a load still falls a second after the last release
+    }
+    SC_EXPECT(seed <= 4 && first.ok && first.ahead == 0);
+    if (seed > 4 || !first.ok) return;
+    const double end_s = last_release_s + 1.0;
+    AirWarData shortened = d;
+    shortened.tuning.values["scenario.margin_s"] = d.tuning.Get("scenario.margin_s") + (end_s - first.end_s);
+    const LiveRun second = RunFirstPackage(shortened, seed);
+    SC_EXPECT(second.ok);
+    if (!second.ok) return;
+    std::printf("    seed %u, package %d '%s': in at %.0f s, its last release at %.1f s, its end put at %.1f s; its last load lands at "
+                "%.1f s, handed back at %.1f s (%d of %d loads landed)\n",
+                seed, second.played.package_id, second.played.name.c_str(), second.played.in_s, last_release_s, second.end_s,
+                last_impact_s, second.played.out_s, static_cast<int>(second.impacts.size()), static_cast<int>(second.releases.size()));
+    SC_EXPECT(second.played.package_id == first.played.package_id && second.played.in_s == first.played.in_s);
+    SC_EXPECT_NEAR(second.end_s, end_s, 1e-6);
+    // The same releases, all before its end; every load landed in the session, at its own time.
+    SC_EXPECT(second.releases.size() == first.releases.size() && second.impacts.size() == second.releases.size());
+    double last_s = -1.0;
+    for (const fx::Event& rel : second.releases) {
+        SC_EXPECT(rel.t_s < end_s);
+        last_s = std::fmax(last_s, rel.end_t_s);
+        int landed = 0;
+        for (const fx::Event& imp : second.impacts) {
+            if (imp.source != rel.source) continue;
+            ++landed;
+            SC_EXPECT(imp.t_s >= rel.end_t_s - 1e-9 && imp.t_s < rel.end_t_s + 0.1 + 1e-9);
+        }
+        SC_EXPECT(landed == 1);
+    }
+    SC_EXPECT_NEAR(last_s, last_impact_s, 1e-6);
+    // Handed back once the last has landed, not at its end; nothing dated ahead of the session.
+    SC_EXPECT(second.played.out_s > end_s + 1.0 && second.played.out_s >= last_s - 1e-9 && second.played.out_s < last_s + 0.1 + 1e-6);
+    SC_EXPECT(second.ahead == 0 && second.played.outcome.delivered);
 }
 
 SC_TEST("packages live (15.3): a package's EM gear and warning enter a running session: its library, a stand-off jammer on at its time, an air threat") {

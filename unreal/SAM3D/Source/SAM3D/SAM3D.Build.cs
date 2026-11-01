@@ -19,6 +19,13 @@ public class SAM3D : ModuleRules
 			"CesiumRuntime"  // Cesium for Unreal: georeference, terrain height sampling
 		});
 
+		// Munition models built at run time from simcore's triangle meshes (FSimMunitionModels, docs/fx/README.md 4.3).
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"MeshDescription",
+			"StaticMeshDescription"
+		});
+
 		// simcore is a header-only C++17 library that lives at the repo root (../../../../simcore).
 		// It is shared with the standalone tests and runs on any platform.
 		string SimCoreInclude = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", "..", "..", "simcore", "include"));

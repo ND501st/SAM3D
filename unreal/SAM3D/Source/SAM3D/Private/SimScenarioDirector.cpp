@@ -102,6 +102,15 @@ void ASimScenarioDirector::BeginPlay()
 		ScenarioFile = CommandLineScenario;
 		CabinFile.Reset();
 	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("-SimFxShots="), CommandLineScenario) ||
+		FParse::Value(FCommandLine::Get(), TEXT("-SimFxShotsNight="), CommandLineScenario))
+	{
+		// The effects' photographer (docs/fx/README.md 4.1) shoots in a running scenario: the first practice when none
+		// is named (it brings its own aircraft where the scenario has none to shoot).
+		ScenarioFile = TEXT("scenarios/osa_practice.json");
+		CabinFile.Reset();
+		UE_LOG(LogSAM3D, Log, TEXT("The effects' photographer: %s"), *ScenarioFile);
+	}
 	else if (ShouldShowMissionMenu())
 	{
 		ShowMissionMenu();
@@ -342,7 +351,7 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 		return;
 	}
 
-	for (const FSimEntityState& State : Sim->GetEntityStates())
+	for (const FSimEntityState& State : Sim->GetEntityStatesCached())  // the frame's one snapshot, not a copy
 	{
 		if (!State.bAlive || SpawnedActors.Contains(State.Id))
 		{
@@ -380,7 +389,10 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 			}
 			else if (!State.bIsGround && Actor->GetClass() == ASimEntityActor::StaticClass() && Actor->UseBasicModel(State.Model))
 			{
-				Actor->SetActorScale3D(FVector(1.0));  // aircraft and missiles at their real size (docs/scenery/)
+				// Aircraft at their real size (docs/scenery/), and missiles too: ours, the ARMs and the cruise missiles wear
+				// their munition's mesh (FSimMunitionModels, docs/fx/README.md 4.3). MissileScale is only for the cone that
+				// stands in for a missile without a model.
+				Actor->SetActorScale3D(FVector(1.0));
 			}
 			UE_LOG(LogSAM3D, Log, TEXT("Entity %d '%s' drawn as %s"), State.Id, *State.Name,
 				Actor->GetBasicModel().IsEmpty() ? TEXT("a placeholder") : *Actor->GetBasicModel());

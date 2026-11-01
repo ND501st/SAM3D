@@ -7,7 +7,17 @@
 #include "SimBasicModels.h"
 #include "SimPu12MastComponent.h"
 #include "SimWorldSubsystem.h"
+#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+
+// The effects' subsystem (u1's USimFxSubsystem: the wrecks' falls) arrives with the weapons effects; until its header is
+// in, a destroyed aircraft simply hides.
+#if __has_include("SimFxSubsystem.h")
+#include "SimFxSubsystem.h"
+#define SIM_ENTITY_HAS_FX_SUBSYSTEM 1
+#else
+#define SIM_ENTITY_HAS_FX_SUBSYSTEM 0
+#endif
 
 ASimEntityActor::ASimEntityActor()
 {
@@ -130,47 +140,178 @@ bool ASimEntityActor::UseVehicleModel(const FString& Kind)
 	return true;
 }
 
+FVector ASimEntityActor::GroundBelow(const FVector& At)
+{
+	// A ground vehicle's sim position is where its antennas are, a few metres up: draw it on the ground below. The trace
+	// is made again every half second (Cesium's tiles load late) or once it has moved more than a metre; between, the
+	// ground's offset found last is kept.
+	UWorld* MyWorld = GetWorld();
+	const double Now = MyWorld != nullptr ? MyWorld->GetTimeSeconds() : 0.0;
+	if (MyWorld != nullptr && (LastGroundTraceSeconds < 0.0 || Now - LastGroundTraceSeconds >= 0.5 ||
+								  FVector::DistSquared(At, LastGroundTraceFrom) > 100.0 * 100.0))
+	{
+		LastGroundTraceSeconds = Now;
+		LastGroundTraceFrom = At;
+		GroundOffset = FVector::ZeroVector;
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(SimEntityGround), false, this);
+		if (MyWorld->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 2000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+		{
+			GroundOffset = Hit.ImpactPoint - At;
+		}
+	}
+	return At + GroundOffset;
+}
+
+void ASimEntityActor::DarkenAsWreck()
+{
+	if (bDarkened)
+	{
+		return;
+	}
+	bDarkened = true;
+	UMaterialInterface* Dark = FSimBasicModels::ColourMaterial(FString(TEXT("#2b2a28")));
+	if (Dark == nullptr)
+	{
+		return;
+	}
+	auto Paint = [Dark](UStaticMeshComponent* C)
+	{
+		if (C != nullptr)
+		{
+			for (int32 I = 0; I < FMath::Max(1, C->GetNumMaterials()); ++I)
+			{
+				C->SetMaterial(I, Dark);
+			}
+		}
+	};
+	Paint(Mesh);
+	for (TObjectPtr<UStaticMeshComponent>& Part : ModelParts)
+	{
+		Paint(Part.Get());
+	}
+}
+
+void ASimEntityActor::FollowWreck(const USimWorldSubsystem& Sim)
+{
+#if SIM_ENTITY_HAS_FX_SUBSYSTEM
+	const USimFxSubsystem* Fx = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimFxSubsystem>() : nullptr;
+	FVector Loc;
+	FRotator Rot;
+	bool bVisible = false;
+	if (Fx != nullptr && Fx->GetWreckPose(EntityId, Loc, Rot, bVisible))
+	{
+		bWreckSeen = true;
+		if (bVisible)
+		{
+			// Falling, burning: drawn where its wreck is, blackened.
+			DarkenAsWreck();
+			SetActorLocationAndRotation(Loc, Rot);
+			SetActorHiddenInGame(false);
+		}
+		else if (bHideWhenInactive)
+		{
+			SetActorHiddenInGame(true);  // down: the impact's explosion and smoke take its place
+		}
+		return;
+	}
+#endif
+	// No wreck (yet): the effects may hear of the kill a frame after this actor does (their subsystem ticks after the
+	// actors), so it stays where it was drawn for two frames before it hides; not a blink out and back.
+	if (bHideWhenInactive && (bWreckSeen || GFrameCounter - InactiveSinceFrame > 2))
+	{
+		SetActorHiddenInGame(true);
+	}
+	// Its wreck has come and gone, or none came in 5 s of sim time (no effects): nothing more to draw, ever (an aircraft
+	// destroyed stays destroyed in its world), so it stops ticking. Sim time: a paused game still waits for the wreck.
+	if (bWreckSeen || Sim.GetSimTimeSeconds() - InactiveSinceSimSeconds > 5.0)
+	{
+		SetActorTickEnabled(false);
+	}
+}
+
 void ASimEntityActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
 	UWorld* MyWorld = GetWorld();
 	const USimWorldSubsystem* Sim = MyWorld ? MyWorld->GetSubsystem<USimWorldSubsystem>() : nullptr;
-	FSimEntityState State;
-	if (Sim == nullptr || !Sim->GetEntityState(EntityId, State))
+	if (Sim == nullptr)
 	{
 		return;
 	}
-
-	if (State.bAlive)
+	// The frame's one snapshot (no copy); an id it has never listed falls back to GetEntityState's not-alive answer.
+	const FSimEntityState* State = Sim->FindEntityStateCached(EntityId);
+	FSimEntityState Unlisted;
+	if (State == nullptr)
 	{
-		FVector At = State.Location;
-		if (State.bIsGround)
+		if (!Sim->GetEntityState(EntityId, Unlisted))
 		{
-			// A ground vehicle's sim position is where its antennas are, a few metres up: draw it on the ground below.
-			FHitResult Hit;
-			FCollisionQueryParams Params(SCENE_QUERY_STAT(SimEntityGround), false, this);
-			if (MyWorld->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 2000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+			return;
+		}
+		State = &Unlisted;
+	}
+
+	if (State->bAlive)
+	{
+		if (bReportedInactive)
+		{
+			// Back in the list: a mover come into sight again, a visitor come back.
+			bReportedInactive = false;
+			SetActorHiddenInGame(false);
+		}
+#if SIM_ENTITY_HAS_FX_SUBSYSTEM
+		// Down in the effects while the simulation still lists it (their kill event come a step early, or the effects'
+		// photographer's shoot-down of a live aircraft): its wreck is drawn, not the aircraft flying on.
+		if (!State->bIsMissile && !State->bIsGround)
+		{
+			const USimFxSubsystem* Fx = MyWorld->GetSubsystem<USimFxSubsystem>();
+			FVector WreckAt;
+			FRotator WreckRot;
+			bool bWreckVisible = false;
+			if (Fx != nullptr && Fx->GetWreckPose(EntityId, WreckAt, WreckRot, bWreckVisible))
 			{
-				At = Hit.ImpactPoint;
+				FollowWreck(*Sim);
+				return;
 			}
 		}
-		SetActorLocationAndRotation(At, State.Rotation);
+#endif
+		// Drawn at the render time, between sim steps: carried on by its velocity (ground vehicles stand still in a step).
+		FVector At = Sim->GetRenderLocation(*State);
+		if (State->bIsGround)
+		{
+			At = GroundBelow(At);
+		}
+		SetActorLocationAndRotation(At, State->Rotation);
 		if (Mast != nullptr)
 		{
 			// a battery's post raises its mast and sets the AB-1 out when it deploys, at the mast's own pace
-			Mast->SetTargetExtension(State.bDeployed ? 1.f : 0.f);
-			Mast->SetGeneratorOut(State.bDeployed);
+			Mast->SetTargetExtension(State->bDeployed ? 1.f : 0.f);
+			Mast->SetGeneratorOut(State->bDeployed);
 		}
+		return;
 	}
-	else if (!bReportedInactive)
+	const bool bAircraft = !State->bIsMissile && !State->bIsGround;
+	if (!bReportedInactive)
 	{
 		bReportedInactive = true;
-		SetActorLocationAndRotation(State.Location, State.Rotation);
-		if (bHideWhenInactive)
+		InactiveSinceSimSeconds = Sim->GetSimTimeSeconds();
+		InactiveSinceFrame = GFrameCounter;
+		// Hidden where it was last drawn: a finished missile where it burst, not at the origin. A destroyed aircraft is
+		// left to its wreck (FollowWreck).
+		if (bHideWhenInactive && !bAircraft)
 		{
 			SetActorHiddenInGame(true);
 		}
 		OnEntityInactive();
+		if (State->bIsMissile && GetClass() == ASimEntityActor::StaticClass())
+		{
+			SetActorTickEnabled(false);  // a missile's number never flies again
+			return;
+		}
+	}
+	if (bAircraft)
+	{
+		FollowWreck(*Sim);  // shown again, darkened, while its wreck falls
 	}
 }

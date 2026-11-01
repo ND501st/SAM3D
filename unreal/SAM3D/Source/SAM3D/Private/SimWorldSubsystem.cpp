@@ -1,6 +1,17 @@
 #include "SimWorldSubsystem.h"
 
 #include "SimBasicModels.h"
+#include "SimMunitionModels.h"
+#include "Stats/Stats.h"
+
+// "stat SAM3DFx": the weapons effects' costs (docs/fx/README.md 5); the entity snapshot is one of them. The group is
+// declared once, in the effects' header (a second declaration in the same unity translation unit would not compile).
+#if __has_include("SimFxImpl.h")
+#include "SimFxImpl.h"
+#else
+DECLARE_STATS_GROUP(TEXT("SAM3DFx"), STATGROUP_SAM3DFx, STATCAT_Advanced);
+#endif
+DECLARE_CYCLE_STAT(TEXT("Entity snapshot"), STAT_SimFxEntitySnapshot, STATGROUP_SAM3DFx);
 
 #include "Misc/FileHelper.h"
 
@@ -213,6 +224,28 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 			Self->PumpConsole();
 		}
 	} PumpAfterStep{this};
+	// The frame's one entity snapshot, after the steps (docs/fx/README.md 4.3): built right after them, so this tick's own
+	// broadcasts see them, else on the way out (before the pump above). The effects and their sound after this tick and the
+	// entity actors early next frame all read it. Built by the first reader of a new frame instead, the actors' before
+	// this tick, a step then rebuilt it for the effects: two BuildEntityLists on every frame that stepped (the fix-up
+	// review of 1 Nov).
+	struct FSnapshotAfterStep
+	{
+		const USimWorldSubsystem* Self;
+		bool bBuilt;
+		void Build()
+		{
+			Self->RebuildEntityCache();
+			bBuilt = true;
+		}
+		~FSnapshotAfterStep()
+		{
+			if (!bBuilt)
+			{
+				Build();
+			}
+		}
+	} SnapshotAfterStep{this, false};
 
 	const double Scale = GetTimeScale();
 	if (EmLayer && EmLayer->IsRunning())
@@ -260,6 +293,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 			Accumulator -= ScenarioStepSeconds;
 			++Steps;
 		}
+		SnapshotAfterStep.Build();
 		BroadcastNewDebriefEntries();
 		UpdateTutorial(DeltaTime);
 		return;
@@ -280,6 +314,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		Accumulator -= FixedStepSeconds;
 		++Steps;
 	}
+	SnapshotAfterStep.Build();
 	BroadcastEvents();
 }
 
@@ -294,6 +329,7 @@ void USimWorldSubsystem::ResetSimulation(double OriginLatitudeDeg, double Origin
 	DemoGround = simcore::FlatTerrain(OriginAltitudeM);
 	SimWorld = MakeUnique<simcore::World>(
 		simcore::GeoPoint::FromDegrees(OriginLatitudeDeg, OriginLongitudeDeg, OriginAltitudeM), &DemoGround);
+	ResetEntityCache();
 	Accumulator = 0.0;
 	bDemoActive = false;
 	bDemoLaunched = false;
@@ -345,6 +381,7 @@ void USimWorldSubsystem::StartDemoScenario()
 	Target.max_turn_rate_rad_s = simcore::DegToRad(4.0);
 	Target.waypoints = {simcore::Vec3(-1500.0, 15000.0, 2500.0), simcore::Vec3(2000.0, -30000.0, 2500.0)};
 	DemoTargetId = SimWorld->AddAircraft(Target);
+	InvalidateEntityCache();
 
 	bDemoActive = true;
 	bDemoLaunched = false;
@@ -403,6 +440,7 @@ void USimWorldSubsystem::ClearScenario()
 	Runner = nullptr;
 	Link.Reset();
 	OwnedRunner.Reset();
+	ResetEntityCache();
 }
 
 bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutError)
@@ -457,6 +495,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	}
 	Accumulator = 0.0;
 	DebriefEntriesSent = 0;
+	ResetEntityCache();
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
 		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
 	ApplyHelperLevel();
@@ -474,6 +513,7 @@ bool USimWorldSubsystem::SwitchLinkedVehicle()
 		return false;
 	}
 	Runner = Runner == &Link->Osa() ? &Link->Post() : &Link->Osa();
+	ResetEntityCache();  // its world's aircraft and its movers
 	const FString DataDir = ResolveDataDirectory();
 	const FString CabinFile = GetDefaultCabinFile();
 	FString Error;
@@ -1961,31 +2001,237 @@ FSimEntityState USimWorldSubsystem::MakeState(int32 Id, const FString& Name, boo
 	return S;
 }
 
+simcore::ScenarioRunner* USimWorldSubsystem::GetFxRunner() const
+{
+	// In a battery link the Osa fires, whichever vehicle the player is in (both share an origin: battery_link.hpp).
+	return Link ? &Link->Osa() : Runner;
+}
+
+double USimWorldSubsystem::GetRenderTimeSeconds() const
+{
+	const double Now = GetSimTimeSeconds();
+	if (bPaused || IsMirrorOnly())
+	{
+		return Now;
+	}
+	if (Runner)
+	{
+		// The leftover is under a step while the sim keeps up; a finished scenario no longer steps (its accumulator grows).
+		return (Link ? Link->Finished() : Runner->Finished()) ? Now : Now + FMath::Clamp(Accumulator, 0.0, ScenarioStepSeconds);
+	}
+	return SimWorld ? Now + FMath::Clamp(Accumulator, 0.0, FixedStepSeconds) : Now;
+}
+
+FVector USimWorldSubsystem::GetRenderLocation(const FSimEntityState& State) const
+{
+	if (!State.bAlive)
+	{
+		return State.Location;
+	}
+	// At most 0.15 s ahead: three scenario steps, so a hitch or a clock jump can't throw it far off its path.
+	const double Ahead = FMath::Clamp(GetRenderTimeSeconds() - State.SimTimeSeconds, 0.0, 0.15);
+	return State.Location + State.Velocity * Ahead;
+}
+
+void USimWorldSubsystem::ResetEntityCache()
+{
+	EntityCache.Reset();
+	EntityCachePrev.Reset();
+	EntityIndex.Reset();
+	GoneEntities.Reset();
+	EntityCacheFrame = MAX_uint64;
+	bEntityCacheDirty = true;
+	AircraftLooks.Reset();
+	AircraftLookTargets = 0;
+	ArmModels.Reset();
+	OurMissileModelId.Reset();
+	MissileLaunches.Reset();
+	FxFeedCursor = 0;
+	FxFeedRunner = nullptr;
+}
+
+const FSimAircraftLook& USimWorldSubsystem::AircraftLookOf(const simcore::Aircraft& A) const
+{
+	const size_t Targets = Runner ? Runner->Def().targets.size() : 0;
+	if (Targets != AircraftLookTargets)
+	{
+		AircraftLooks.Reset();  // targets joined the scenario (a package entered it): look them up again
+		AircraftLookTargets = Targets;
+	}
+	if (const FSimAircraftLook* Found = AircraftLooks.Find(A.id))
+	{
+		return *Found;
+	}
+	// Its basic model: its scenario target's own, else its class's (docs/scenery/).
+	FSimAircraftLook Look;
+	Look.Name = ToF(A.name);
+	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
+	if (Models != nullptr && Runner)
+	{
+		for (const simcore::ScenarioTarget& T : Runner->Def().targets)
+		{
+			if (T.name == A.name || T.id == A.name)
+			{
+				Look.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
+				break;
+			}
+		}
+	}
+	return AircraftLooks.Add(A.id, MoveTemp(Look));
+}
+
+const FString& USimWorldSubsystem::ArmModelOf(const std::string& LibraryName) const
+{
+	const FString Name = ToF(LibraryName);
+	if (const FString* Found = ArmModels.Find(Name))
+	{
+		return *Found;
+	}
+	const simcore::scenery::MunitionSpec* Spec = FSimMunitionModels::Resolve(Name);
+	if (Spec == nullptr && Runner != nullptr && Runner->Em() != nullptr)
+	{
+		// The EM layer lists an ARM by its library name ("AGM-45 Shrike class ..."); the munitions library knows it by its
+		// library id (agm45_class_shrike, an alias).
+		for (const simcore::em::ArmDef& Def : Runner->Em()->World().Scene().lib.arms)
+		{
+			if (Def.name == LibraryName)
+			{
+				Spec = FSimMunitionModels::Resolve(ToF(Def.id));
+				break;
+			}
+		}
+	}
+	return ArmModels.Add(Name, Spec != nullptr && Spec->HasMesh() ? ToF(Spec->id) : FString(TEXT("missile_arm")));
+}
+
+const FString& USimWorldSubsystem::OurMissileModel() const
+{
+	if (OurMissileModelId.IsEmpty())
+	{
+		// Our system's missile (the Osa-AK's 9M33M2, an Osa-AKM's 9M33M3) when the munitions library knows it; else the
+		// 9M33's basic model id, which the library also maps.
+		OurMissileModelId = TEXT("missile_9m33");
+		const simcore::ScenarioRunner* Fx = GetFxRunner();
+		const simcore::scenery::MunitionSpec* Spec = Fx != nullptr ? FSimMunitionModels::Resolve(ToF(Fx->Console().system_id)) : nullptr;
+		if (Spec != nullptr && Spec->kind == "sam" && Spec->HasMesh())
+		{
+			OurMissileModelId = ToF(Spec->id);
+		}
+	}
+	return OurMissileModelId;
+}
+
+void USimWorldSubsystem::ReadFxLaunches(const simcore::ScenarioRunner& FxRunner) const
+{
+	if (FxFeedRunner != &FxRunner)
+	{
+		FxFeedRunner = &FxRunner;  // another runner's feed: its own numbers
+		FxFeedCursor = 0;
+		MissileLaunches.Reset();
+	}
+	const simcore::fx::Feed& Feed = FxRunner.Fx();
+	if (Feed.Last() <= FxFeedCursor)
+	{
+		return;
+	}
+	for (const simcore::fx::Event& E : Feed.Since(FxFeedCursor))
+	{
+		if (E.kind == simcore::fx::EventKind::MissileLaunch)
+		{
+			FSimFxMissileLaunch& L = MissileLaunches.FindOrAdd(E.number);
+			L.Position = E.position;
+			L.Velocity = E.velocity;
+			L.TimeSeconds = E.t_s;
+			L.EndTimeSeconds = E.end_t_s;
+			const simcore::scenery::MunitionSpec* Spec = E.weapon.empty() ? nullptr : FSimMunitionModels::Resolve(ToF(E.weapon));
+			L.Model = Spec != nullptr && Spec->HasMesh() ? ToF(Spec->id) : FString();
+		}
+	}
+	FxFeedCursor = Feed.Last();
+}
+
+bool USimWorldSubsystem::MissileDisplayState(const simcore::ScenarioRunner& FxRunner, int32 Number, const simcore::Vec3& SimPos,
+	const simcore::Vec3& SimVel, simcore::Vec3& OutPos, simcore::Vec3& OutVel) const
+{
+	const FSimFxMissileLaunch* L = MissileLaunches.Find(Number);
+	if (L == nullptr || L->Velocity.Length() < 1e-6)
+	{
+		return false;  // no launch heard: the simulation's line
+	}
+	const double Since = FxRunner.Time() - L->TimeSeconds;
+	OutPos = simcore::fx::MissileDisplayPosition(L->Position, L->Velocity, Since, SimPos);
+	OutVel = simcore::fx::MissileDisplayVelocity(L->Position, L->Velocity, Since, SimPos, SimVel);
+	return true;
+}
+
+const TArray<FSimEntityState>& USimWorldSubsystem::GetEntityStatesCached() const
+{
+	// Tick builds it once a frame after the steps, so last frame's is this frame's until this frame's tick; older than that
+	// (no tick: a world not ticking) it is built here.
+	if (bEntityCacheDirty || EntityCacheFrame == MAX_uint64 || GFrameCounter > EntityCacheFrame + 1)
+	{
+		RebuildEntityCache();
+	}
+	return EntityCache;
+}
+
+const FSimEntityState* USimWorldSubsystem::FindEntityStateCached(int32 Id) const
+{
+	const TArray<FSimEntityState>& States = GetEntityStatesCached();
+	if (const int32* At = EntityIndex.Find(Id))
+	{
+		return &States[*At];
+	}
+	return GoneEntities.Find(Id);
+}
+
 TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 {
-	TArray<FSimEntityState> Out;
-	const simcore::World* W = ActiveWorld();
-	if (W == nullptr)
+	return GetEntityStatesCached();
+}
+
+void USimWorldSubsystem::RebuildEntityCache() const
+{
+	SCOPE_CYCLE_COUNTER(STAT_SimFxEntitySnapshot);
+	EntityCacheFrame = GFrameCounter;
+	bEntityCacheDirty = false;
+	// The last snapshot is kept a moment: whoever has left the list since is remembered where it was.
+	Swap(EntityCache, EntityCachePrev);
+	EntityCache.Reset();
+	EntityIndex.Reset();
+	TArray<FSimEntityState>& Out = EntityCache;
+	if (const simcore::World* W = ActiveWorld())
 	{
-		return Out;
+		BuildEntityList(*W, Out);
 	}
-	// Each aircraft's basic model: its scenario target's own, else its class's (docs/scenery/).
+	const double Now = GetSimTimeSeconds();
+	EntityIndex.Reserve(Out.Num());
+	for (int32 I = 0; I < Out.Num(); ++I)
+	{
+		Out[I].SimTimeSeconds = Now;
+		EntityIndex.Add(Out[I].Id, I);
+	}
+	// A missile that has finished, a mover gone out of sight: its last state, not alive (where it was, not the origin).
+	for (FSimEntityState& Old : EntityCachePrev)
+	{
+		if (Old.Id >= MissileIdBase && Old.bAlive && !EntityIndex.Contains(Old.Id))
+		{
+			Old.bAlive = false;
+			GoneEntities.Add(Old.Id, MoveTemp(Old));
+		}
+	}
+	EntityCachePrev.Reset();
+}
+
+void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<FSimEntityState>& Out) const
+{
+	const simcore::World* W = &InWorld;
 	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
 	for (const simcore::Aircraft& A : W->AircraftList())
 	{
-		FSimEntityState S = MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity);
-		if (Models != nullptr && Runner)
-		{
-			for (const simcore::ScenarioTarget& T : Runner->Def().targets)
-			{
-				if (T.name == A.name || T.id == A.name)
-				{
-					S.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
-					break;
-				}
-			}
-		}
-		Out.Add(S);
+		const FSimAircraftLook& Look = AircraftLookOf(A);
+		FSimEntityState& S = Out.Add_GetRef(MakeState(A.id, Look.Name, false, A.alive, A.position, A.velocity));
+		S.Model = Look.Model;
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
@@ -2019,15 +2265,30 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 	}
 	if (Runner && !IsMirrorOnly())
 	{
-		for (const simcore::EngagementModel::MissileView& M : Runner->MissilesInFlight())
+		// Our missiles, from the runner that fires them (in a battery link the Osa's, whichever vehicle the player is in),
+		// drawn on their display path: out of the launcher at its angle, gathering onto the simulation's line
+		// (simcore/fx/trajectories.hpp; docs/fx/README.md 3.3).
+		if (simcore::ScenarioRunner* Fx = GetFxRunner())
 		{
-			Out.Add(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number), true, true,
-				M.position, M.velocity));
+			ReadFxLaunches(*Fx);
+			const FString& MissileModel = OurMissileModel();
+			for (const simcore::EngagementModel::MissileView& M : Fx->MissilesInFlight())
+			{
+				simcore::Vec3 Pos = M.position;
+				simcore::Vec3 Vel = M.velocity;
+				MissileDisplayState(*Fx, M.number, M.position, M.velocity, Pos, Vel);
+				FSimEntityState& S = Out.Add_GetRef(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number),
+					true, true, Pos, Vel));
+				const FSimFxMissileLaunch* Launch = MissileLaunches.Find(M.number);
+				S.Model = Launch != nullptr && !Launch->Model.IsEmpty() ? Launch->Model : MissileModel;
+			}
 		}
-		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed).
+		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed), each
+		// with its munition's model.
 		for (const simcore::EmSensorLink::ArmView& A : Runner->ArmsInFlight())
 		{
-			Out.Add(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
+			FSimEntityState& S = Out.Add_GetRef(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
+			S.Model = ArmModelOf(A.name);
 		}
 		// Someone coming over the ground with a message from the chain of command: a runner, a despatch rider, the
 		// courier's car (roadmap P1). Listed while he is in the world; gone, his actor hides.
@@ -2053,26 +2314,25 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 			Out.Add(S);
 		}
 	}
-	return Out;
 }
 
 bool USimWorldSubsystem::GetEntityState(int32 Id, FSimEntityState& OutState) const
 {
-	for (const FSimEntityState& S : GetEntityStates())
+	if (const FSimEntityState* S = FindEntityStateCached(Id))
 	{
-		if (S.Id == Id)
-		{
-			OutState = S;
-			return true;
-		}
+		OutState = *S;
+		return true;
 	}
-	// A missile that has finished: report it as no longer alive so its actor hides.
+	// A display id this snapshot never listed (a missile that finished before it was seen, a mover after the player
+	// changed vehicle): no longer alive, so its actor hides where it is.
 	if (Id >= MissileIdBase && Runner)
 	{
 		OutState = FSimEntityState();
 		OutState.Id = Id;
-		OutState.bIsMissile = true;
+		OutState.bIsMissile = Id < GroundIdBase;
+		OutState.bIsGround = Id >= GroundIdBase;
 		OutState.bAlive = false;
+		OutState.SimTimeSeconds = GetSimTimeSeconds();
 		return true;
 	}
 	return false;

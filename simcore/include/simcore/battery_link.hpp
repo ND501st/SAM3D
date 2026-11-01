@@ -10,7 +10,9 @@
 //     post's other launchers' reports are heard in the Osa;
 //   - the Osa's place in the post's fire distribution: its missiles and the target its crew is on;
 //   - the battery commander's emission regime, said on the battery net, to the Osa's commander (if his set hears the
-//     net), and the Osa's report of an ARM attack to the battery commander (docs/crew/16_EMISSION.md).
+//     net), and the Osa's report of an ARM attack to the battery commander (docs/crew/16_EMISSION.md);
+//   - for the game's eyes only (the presentation feed, fx/events.hpp): the missiles of the battery's other launchers,
+//     which fire in the post's runner, shown in the Osa's feed, the one the game reads.
 //
 // The file (data/scenarios/<link>.json):
 //   { "link_id", "name", "description", "osa": "scenarios/<the Osa's>.json", "post": "scenarios/<the post's>.json",
@@ -20,12 +22,16 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/fx/events.hpp"
 #include "simcore/json.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
@@ -92,6 +98,7 @@ private:
         for (const std::string& az : osa_->TakeArmAttackReports()) post_->HearArmAttackReport(callsign_, az);  // an ARM attack
         for (int number : osa_->TakeReadbacks()) post_->HearReadback(callsign_, number);
         for (const ScenarioRunner::LinkReport& r : osa_->TakeOwnReports()) post_->HearBatteryReport(r);
+        ShowPostMissiles();  // before the reports: the burst comes before the wreck
         for (const ScenarioRunner::LinkReport& r : post_->TakeNetReports()) {
             if (r.kind == BatteryFire::Event::Kind::Hit) osa_->DestroyTarget(r.target, r.callsign);
             osa_->HearBatteryReport(r);
@@ -105,11 +112,30 @@ private:
         post_->SetExternalLauncherState(callsign_, l != nullptr ? l->LoadedCount() : -1, target, osa_->Tracking());
     }
 
+    // The presentation feed (fx/events.hpp): the game draws and hears the Osa's runner's feed whichever vehicle the
+    // player is in, but the battery's other launchers fire in the post's runner. Their missiles (SamLaunch, SamEnd) go
+    // into the Osa's feed as well, with the Osa's World id of their target; the wreck of what they hit comes with the
+    // kill (DestroyTarget). A neighbour that fights in the Osa's own runner shows there already.
+    void ShowPostMissiles() {
+        const std::vector<fx::Event> seen = post_->Fx().Since(post_fx_seen_);
+        post_fx_seen_ = post_->Fx().Last();
+        if (!osa_->FxOn()) return;
+        for (const fx::Event& e : seen) {
+            if (e.kind != fx::EventKind::SamLaunch && e.kind != fx::EventKind::SamEnd) continue;
+            const std::size_t slash = e.source.find('/');  // a neighbour's launcher: "<neighbour>/<n>"
+            if (slash != std::string::npos && osa_->NeighbourFights(e.source.substr(0, slash))) continue;
+            fx::Event c = e;
+            c.world_id = osa_->TargetWorldId(e.target);
+            osa_->Fx().Push(c);
+        }
+    }
+
     std::string callsign_;
     std::unique_ptr<ScenarioRunner> osa_;
     std::unique_ptr<ScenarioRunner> post_;
     std::string pending_target_;
     double pending_until_s_ = -1.0;
+    std::uint64_t post_fx_seen_ = 0;  // the post's feed read so far
 };
 
 namespace detail {
