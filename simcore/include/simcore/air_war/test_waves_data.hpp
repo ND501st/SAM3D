@@ -24,14 +24,7 @@ namespace airwar {
 // How a kind of weapon of weapons.json is drawn and flown once released (game values).
 struct WaveWeaponKind {
     std::string kind;          // bomb, retarded_bomb, cluster, runway, guided_bomb, missile, rockets, atgm, gun
-    std::string model;         // data/scenery/basic_models.json
-    std::string type = "Weapon+Bomb";  // Tacview type tags
     double release_m = 1500.0; // released this far (horizontally) from its aim point
-    double speed_mps = 250.0;  // its speed to the ground (at least its carrier's)
-    double rcs_m2 = 0.05;
-    double size_m = 0.5;
-    int shown = 2;             // at most this many of a load are drawn as objects
-    double ripple_s = 0.3;     // between two of them
     double scatter_m = 30.0;   // about the aim point
 };
 
@@ -177,20 +170,16 @@ private:
             const json::Value& v = ks->items[i];
             const std::string p = Index("weapon_kinds", i);
             WaveWeaponKind k;
-            double release_km = k.release_m / 1000.0, shown = k.shown;
-            if (!Keys(v, p, {"kind", "model", "type", "release_km", "speed_mps", "rcs_m2", "size_m", "shown", "ripple_s", "scatter_m", "notes"}) ||
-                !RequireString(v, p, "kind", k.kind) || !RequireString(v, p, "model", k.model) || !OptionalString(v, p, "type", k.type) ||
-                !OptionalNumber(v, p, "release_km", release_km) || !OptionalNumber(v, p, "speed_mps", k.speed_mps) ||
-                !OptionalNumber(v, p, "rcs_m2", k.rcs_m2) || !OptionalNumber(v, p, "size_m", k.size_m) || !OptionalNumber(v, p, "shown", shown) ||
-                !OptionalNumber(v, p, "ripple_s", k.ripple_s) || !OptionalNumber(v, p, "scatter_m", k.scatter_m)) {
+            double release_km = k.release_m / 1000.0;
+            if (!Keys(v, p, {"kind", "release_km", "scatter_m", "notes"}) || !RequireString(v, p, "kind", k.kind) ||
+                !OptionalNumber(v, p, "release_km", release_km) || !OptionalNumber(v, p, "scatter_m", k.scatter_m)) {
                 return false;
             }
-            if (!(release_km > 0.0) || !(k.speed_mps > 0.0) || !(k.rcs_m2 > 0.0) || !(k.size_m > 0.0) || shown < 1.0 || k.ripple_s < 0.0) {
-                return Fail(p, "release_km, speed_mps, rcs_m2 and size_m > 0, shown >= 1, ripple_s >= 0");
+            if (!(release_km > 0.0) || k.scatter_m < 0.0) {
+                return Fail(p, "release_km > 0, scatter_m >= 0");
             }
             if (out.Kind(k.kind) != nullptr) return Fail(Join(p, "kind"), "twice: '" + k.kind + "'");
             k.release_m = release_km * 1000.0;
-            k.shown = static_cast<int>(shown);
             out.weapon_kinds.push_back(std::move(k));
         }
         for (const WeaponDef& w : out.weapons.weapons) {

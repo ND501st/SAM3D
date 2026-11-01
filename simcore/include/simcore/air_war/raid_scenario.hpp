@@ -226,6 +226,13 @@ struct RaidAircraft {
     bool missile = false;            // a cruise missile: it strikes where it arrives, and is never a crew lost
     double speed_mps = 0.0;          // the type's cruise speed (a defence can't take what is too fast for it)
     double hit_chance = 0.0;         // a missile's own accuracy (0: strike.hit_chance)
+    // Its flight's weapons (Flight::weapon, weapons, delivery: the planner's weaponeering, docs/air_war/10_WEAPONS.md):
+    // a weapons.json id ("" none: the type's strike_power), how many on it, how it puts them on the target. The bridge
+    // times their fall by them (weapon_flight.hpp) and the presentation feed shows them (fx/events.hpp).
+    std::string weapon;
+    int weapons = 0;
+    Delivery delivery = Delivery::Count;
+    std::string arm_weapon;          // the EM library's ARM it carries (AircraftType::ArmEm): the feed's name for it
 };
 
 // One of our other air defences whose reach overlaps the scenario. As the raid's aircraft pass through its zone it takes
@@ -570,6 +577,10 @@ public:
                 ra.missile = a->missile;
                 ra.speed_mps = a->cruise_mps;
                 ra.hit_chance = a->hit_chance;
+                ra.weapon = fl.weapon;
+                ra.weapons = fl.weapons;
+                ra.delivery = fl.delivery;
+                ra.arm_weapon = arm_em;
                 m.aircraft.push_back(ra);
                 ++n_targets;
                 end_s = std::max(end_s, (cl.t_h.back() - m.start_h) * 3600.0);

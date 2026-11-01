@@ -57,7 +57,12 @@ struct SAM3D_API FSimEntityState
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	FString Model;
 
-	/** Ours: our battery's vehicles and missiles, an aircraft that answers IFF as a friend ("iff": "friend"). */
+	/** The simulation time of this state (s): drawn between steps it is carried on by Velocity to the render time
+	 *  (USimWorldSubsystem::GetRenderTimeSeconds, docs/fx/README.md 4.3). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	double SimTimeSeconds = 0.0;
+
+	/** Ours: our battery's vehicles and missiles, an aircraft of our side (ScenarioTarget::friendly). */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	bool bFriendly = false;
 
@@ -85,6 +90,26 @@ struct SAM3D_API FSimViewPlace
 	/** Roughly how big it is (m), for how far the camera stands off. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Views")
 	double SizeM = 30.0;
+};
+
+/** Where and how one of our missiles left the launcher, from the fx feed's MissileLaunch (its drawn path starts there). */
+struct FSimFxMissileLaunch
+{
+	simcore::Vec3 Position;
+	simcore::Vec3 Velocity;
+	double TimeSeconds = 0.0;
+	double EndTimeSeconds = 0.0;
+	/** The munition it is drawn with (the event's weapon resolved in the munitions library); empty: our system's. */
+	FString Model;
+};
+
+/** An aircraft's name and basic model, looked up once per scenario (not per frame). */
+struct FSimAircraftLook
+{
+	FString Name;
+	FString Model;
+	bool bFriendly = false;
+	bool bIsWeapon = false;
 };
 
 /** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
@@ -1651,11 +1676,27 @@ public:
 
 	// ------------------------------------------------------------------ both modes
 
+	/** Every entity now (a copy of the cached snapshot, for Blueprints; C++ reads GetEntityStatesCached). */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
 	TArray<FSimEntityState> GetEntityStates() const;
 
+	/** One entity by id, from the cached snapshot (O(1)). A finished missile, or a mover or visitor gone out of the list,
+	 *  is given as its last state, not alive (where it was, not the origin). Any other display id (100000 and up) while a
+	 *  scenario runs answers true, not alive, at the origin, so its actor hides. False for any other id never listed. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
 	bool GetEntityState(int32 Id, FSimEntityState& OutState) const;
+
+	/** The entities, built once a frame at the end of Tick, after its steps (or on a read when it was invalidated, or no
+	 *  tick built it last frame): every actor, view and effect reads this one snapshot (docs/fx/README.md 4.3). The
+	 *  reference is valid until the next rebuild. */
+	const TArray<FSimEntityState>& GetEntityStatesCached() const;
+
+	/** GetEntityState without the copy: a pointer into the snapshot (or the last state of one gone), null if unknown.
+	 *  Valid until the next rebuild (the next Tick). */
+	const FSimEntityState* FindEntityStateCached(int32 Id) const;
+
+	/** Drop the snapshot: the next read rebuilds it (Tick rebuilds it itself; for tests and scripted steps). */
+	void InvalidateEntityCache() const { bEntityCacheDirty = true; }
 
 	/** The places the views visit that are no entities, registered by `Owner` (the scenario director's sites and scenery,
 	 *  the map's assets): replaces what that owner registered before. */
@@ -1666,6 +1707,19 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
 	double GetSimTimeSeconds() const;
+
+	/** The moment being drawn: sim time plus the fixed step's leftover in the accumulator (between two steps); the sim
+	 *  time itself when paused, finished or on a network client (which never steps). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
+	double GetRenderTimeSeconds() const;
+
+	/** Where an entity is drawn now: its state carried on by its velocity to the render time, at most 0.15 s (not alive:
+	 *  where it was). */
+	FVector GetRenderLocation(const FSimEntityState& State) const;
+
+	/** The runner whose fx::Feed the effects read: in a battery link the Osa's (it fires), else the scenario's runner;
+	 *  null without a scenario. */
+	simcore::ScenarioRunner* GetFxRunner() const;
 
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
 	void SetSimPaused(bool bInPaused) { bPaused = bInPaused; }
@@ -1709,18 +1763,42 @@ private:
 	void BroadcastNewDebriefEntries();
 	FSimEntityState MakeState(int32 Id, const FString& Name, bool bMissile, bool bAlive, const simcore::Vec3& Pos,
 		const simcore::Vec3& Vel) const;
-	TArray<FSimEntityState> BuildEntityStates() const;
 
-	/** GetEntityStates' list, built once a frame: every entity actor asks for its own each tick, and with the testbed's
-	 *  waves there are hundreds. */
+	// The entity snapshot (docs/fx/README.md 4.3): rebuilt once a frame at the end of Tick, never per actor.
+	void RebuildEntityCache() const;
+	/** Every entity of the active world and the runner, into Out (in the snapshot's order). */
+	void BuildEntityList(const simcore::World& InWorld, TArray<FSimEntityState>& Out) const;
+	/** A new scenario, world or vehicle: the snapshot, the lookups and the feed's cursor start again. */
+	void ResetEntityCache();
+	/** An aircraft's name and basic model (its scenario target's own, else its class's), looked up once. */
+	const FSimAircraftLook& AircraftLookOf(const simcore::Aircraft& A) const;
+	/** The model an anti-radiation missile is drawn with: its munition, else "missile_arm". */
+	const FString& ArmModelOf(const std::string& LibraryName) const;
+	/** The model our missiles are drawn with: our system's missile in the munitions library, else "missile_9m33". */
+	const FString& OurMissileModel() const;
+	/** Reads the fx runner's feed since the last read: each of our missiles' launch, for its drawn path. */
+	void ReadFxLaunches(const simcore::ScenarioRunner& FxRunner) const;
+	/** Our missile `Number`'s drawn position and velocity now (ENU), from its launch onto the simulation's line; false
+	 *  without its launch (it keeps the simulation's). */
+	bool MissileDisplayState(const simcore::ScenarioRunner& FxRunner, int32 Number, const simcore::Vec3& SimPos,
+		const simcore::Vec3& SimVel, simcore::Vec3& OutPos, simcore::Vec3& OutVel) const;
+
 	mutable TArray<FSimEntityState> EntityCache;
-	mutable TMap<int32, int32> EntityCacheIndex;
-	mutable uint64 EntityCacheFrame = TNumericLimits<uint64>::Max();
-	mutable double EntityCacheSimTime = -1.0;
-	mutable const void* EntityCacheSource = nullptr;
-
+	mutable TArray<FSimEntityState> EntityCachePrev;
+	mutable TMap<int32, int32> EntityIndex;
+	/** The last state of each display entity that left the list (a finished missile, a mover out of sight), not alive. */
+	mutable TMap<int32, FSimEntityState> GoneEntities;
+	mutable uint64 EntityCacheFrame = MAX_uint64;
+	mutable bool bEntityCacheDirty = true;
+	mutable TMap<int32, FSimAircraftLook> AircraftLooks;
+	mutable size_t AircraftLookTargets = 0;
 	TArray<FName> ViewPlaceOwners;
 	TMap<FName, TArray<FSimViewPlace>> ViewPlaces;
+	mutable TMap<FString, FString> ArmModels;
+	mutable FString OurMissileModelId;
+	mutable TMap<int32, FSimFxMissileLaunch> MissileLaunches;
+	mutable uint64 FxFeedCursor = 0;
+	mutable const simcore::ScenarioRunner* FxFeedRunner = nullptr;
 
 	const simcore::World* ActiveWorld() const;
 	/** The board, radio and battery extras: built from the runner here, or the mirrored view on a client. */

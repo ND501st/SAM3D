@@ -21,9 +21,14 @@ public:
 	static const simcore::scenery::ModelLibrary* Library();
 
 	/** Build a model under Parent (its origin at Parent's, x forward); one component per part. Returns the parts built
-	 *  (0 if there is no such model). Override, if given, colours every part (a wreck, a highlight). */
+	 *  (0 if there is no such model). Override, if given, colours every part (a wreck, a highlight). A munition (a model
+	 *  id the munitions library names as one: missile_9m33, missile_arm, kh22m, tlam_c, agm86c; or a munition's own id)
+	 *  is one component with its munition mesh (FSimMunitionModels), shadows off. */
 	static int32 Build(const FString& ModelId, USceneComponent* Parent, TArray<UStaticMeshComponent*>* OutParts = nullptr,
 		const FLinearColor* Override = nullptr);
+
+	/** The munition mesh a model id is drawn with, or null: aircraft, vehicles and equipment keep their parts. */
+	static UStaticMesh* MunitionMesh(const FString& ModelId);
 
 	/** A part's transform in its model (Unreal centimetres: X forward, Y right, Z up), for this mesh's bounds. */
 	static FTransform PartTransform(const simcore::scenery::Part& Part, const UStaticMesh* Mesh);

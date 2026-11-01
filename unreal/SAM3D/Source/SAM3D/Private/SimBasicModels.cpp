@@ -7,6 +7,7 @@
 #include "Materials/MaterialInterface.h"
 #include "SAM3D.h"
 #include "SimAirCampaignSubsystem.h"
+#include "SimMunitionModels.h"
 #include "UObject/Package.h"
 
 namespace
@@ -105,11 +106,58 @@ FTransform FSimBasicModels::PartTransform(const simcore::scenery::Part& Part, co
 	return FTransform(Rotation, Location, Scale);
 }
 
+UStaticMesh* FSimBasicModels::MunitionMesh(const FString& ModelId)
+{
+	const simcore::scenery::MunitionLibrary* Munitions = FSimMunitionModels::Library();
+	if (Munitions == nullptr || ModelId.IsEmpty())
+	{
+		return nullptr;
+	}
+	const std::string Id(TCHAR_TO_UTF8(*ModelId));
+	const simcore::scenery::ModelLibrary* Lib = Library();
+	if (Lib != nullptr && Lib->Find(Id) != nullptr && Munitions->models.find(Id) == Munitions->models.end())
+	{
+		// A basic model the munitions library doesn't name as a munition's: an aircraft, a vehicle, equipment (the
+		// Strela-2 in a man's hands): drawn as it always was.
+		return nullptr;
+	}
+	return FSimMunitionModels::Mesh(ModelId);
+}
+
 int32 FSimBasicModels::Build(const FString& ModelId, USceneComponent* Parent, TArray<UStaticMeshComponent*>* OutParts,
 	const FLinearColor* Override)
 {
+	if (Parent == nullptr)
+	{
+		return 0;
+	}
+	AActor* Owner = Parent->GetOwner();
+	// A munition (our missiles, the ARMs, the cruise missiles): one component with its mesh built from its shape
+	// (FSimMunitionModels, docs/fx/README.md 4.3), at its real size, casting no shadow.
+	if (UStaticMesh* Munition = MunitionMesh(ModelId))
+	{
+		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(Owner != nullptr ? static_cast<UObject*>(Owner) : static_cast<UObject*>(Parent));
+		C->SetStaticMesh(Munition);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetGenerateOverlapEvents(false);
+		C->SetCastShadow(false);
+		C->SetupAttachment(Parent);
+		if (Override != nullptr)
+		{
+			if (UMaterialInterface* Mat = ColourMaterial(*Override))
+			{
+				C->SetMaterial(0, Mat);
+			}
+		}
+		C->RegisterComponent();
+		if (OutParts != nullptr)
+		{
+			OutParts->Add(C);
+		}
+		return 1;
+	}
 	const simcore::scenery::ModelLibrary* Lib = Library();
-	if (Lib == nullptr || Parent == nullptr)
+	if (Lib == nullptr)
 	{
 		return 0;
 	}
@@ -118,7 +166,6 @@ int32 FSimBasicModels::Build(const FString& ModelId, USceneComponent* Parent, TA
 	{
 		return 0;
 	}
-	AActor* Owner = Parent->GetOwner();
 	int32 Built = 0;
 	for (const simcore::scenery::Part& Part : Model->parts)
 	{

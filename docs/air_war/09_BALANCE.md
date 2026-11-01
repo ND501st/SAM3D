@@ -567,3 +567,44 @@ battery's sector more often when it radiates (4-7 a week for the neutral).
 - The direct-hit tail of unguided bombs (gross errors) if a target's survival turns on single hits.
 - Exercise records as a second check (`docs/research/AIR_WAR_MISSIONS_2026-10.md` §7).
 - Our side's reports of the supply war through the chain of command, and the regiment's answer to cut lines (13.x).
+
+## 11. The weapons' effects branch: before and after (1 November 2026)
+
+The branch that gives the fight its effects (`docs/fx/`) changed the mission bridge's timing: a release where the
+aircraft's own path takes it to the release point (a pop-up only in its dive after the apex), each load falling for its
+own time and landing then, and a package handed back to the campaign only once its last load has landed
+(`LivePackages`). `air_war_balance data 20 7` was built and run from HEAD before the branch and from the branch.
+
+| Adversary, battery (tuned theatre) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 21.9 = 21.9 | 2.3 % = 2.3 % | 100 %, 100 % | 2.9 = 2.9 |
+| Rebels, careful | 18.8 = 18.8 | 2.1 % = 2.1 % | 100 %, 100 % | 1.0 = 1.0 |
+| Neutral, careless | 35.1 = 35.1 | 4.4 % = 4.4 % | 100 %, 100 % | 7.7 = 7.7 |
+| Neutral, careful | 25.2 = 25.2 | 5.2 % = 5.2 % | 100 %, 100 % | 2.9 = 2.9 |
+| Warsaw Pact, careless | 560.1 = 560.1 | 1.1 % = 1.1 % | 26 %, 78 % | 6.8 = 6.8 |
+| Warsaw Pact, careful | 560.6 = 560.6 | 1.3 % = 1.3 % | 39 %, 80 % | 9.3 = 9.3 |
+| NATO, careless | 515.9 = 515.9 | 0.9 % = 0.9 % | 40 %, 69 % | 5.2 = 5.2 |
+| NATO, careful | 496.2 = 496.2 | 0.7 % = 0.7 % | 56 %, 64 % | 8.1 = 8.1 |
+
+The two outputs are the same byte for byte, and the same as §10: the balance tool resolves the battery's raids by the
+abstract model (`SkipPlayerMission`), so the bridge, where everything the branch changed lives, never runs in it.
+
+The raids played through the bridge were read with `air_war_demo <faction> <seed> data <out> 7`, seeds 1-3 for each
+adversary, before and after (summed over the three seeds):
+
+| Adversary | Raids played | Aircraft | Our launches | Shot down (by neighbours) | Radars on, s | ARMs | Our vehicle hit | Enemy aircraft lost |
+|---|---|---|---|---|---|---|---|---|
+| Rebels | 3 = 3 | 5 = 5 | 10 = 10 | 2 (0) = 2 (0) | 5647 = 5647 | 0 = 0 | 0 = 0 | 3 = 3 |
+| Neutral | 8 = 8 | 33 = 33 | 2 = 2 | 0 (0) = 0 (0) | 3753 = 3753 | 0 = 0 | 0 = 0 | 1 = 1 |
+| Warsaw Pact | 33 = 33 | 105 = 105 | 0 = 0 | 1 (1) = 1 (1) | 7997 = 7997 | 84 = 84 | 6 = 6 | 0 = 0 |
+| NATO | 21 = 21 | 165 = 165 | 0 = 0 | 3 (13) = 3 (13) | 11754 = 11754 | 42 = 42 | 2 = 2 | 0 = 0 |
+
+The enemy's knowledge of the battery at the end and the journal's length are the same too. What differs is only the
+order of the aircraft's releases and hits inside a package's line in the journal (a load now lands at its own time, so
+two aircraft's hits can swap places; in one neutral campaign the same number of hits is credited to different aircraft).
+
+**No rebalance is needed.** The caveat: the balance tool does not play raids through the bridge, so its tables cannot
+show the bridge's effect; the demo's three seeds are the check of it, and a larger played sample is left for a person's
+campaign playthrough. Known gaps the branch leaves in the bridge's deliveries (`docs/fx/README.md` §7): the toss lets
+go about 1.8 km early (its aim a third farther than its throw, the planner's data unchanged), and the pop-up's
+terrain-following climb tops out near its release point (about 1140 m) instead of the planner's apex.

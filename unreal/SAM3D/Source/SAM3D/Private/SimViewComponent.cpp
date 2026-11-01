@@ -155,7 +155,9 @@ bool USimViewComponent::StateOf(const FSubject& S, FSubjectState& Out) const
 	{
 		return false;
 	}
-	Out.Location = E.Location;
+	// Where its actor draws it: carried on to the render time between sim steps (else a missile followed at 700 m/s
+	// would jump 35 m a step against the drawn one).
+	Out.Location = W->GetRenderLocation(E);
 	Out.Velocity = E.Velocity;
 	Out.Rotation = E.Rotation;
 	Out.Name = E.Name;

@@ -4,11 +4,12 @@
   "status": "First pass, 18 October 2026 (docs/TEST_RANGE.md).",
   "source": "sam3d estimate: cloud heights, kinds and shares after wmo_cloud_atlas and wmo_306; the wind profile after stull_1988; cloud extinction from liquid water after kunkel_1984 and wallace_hobbs_2006",
   "confidence": "estimate",
-  "notes": "Typical days, not climatology: values are chosen inside the ranges the cloud atlas gives for the temperate latitudes (low cloud up to 2 km, middle 2-7 km, high 5-13 km) and the boundary-layer textbook gives for a plain. Altitudes are above mean sea level; cover in oktas (eighths of the sky, as a METAR reports it: FEW 1-2, SCT 3-4, BKN 5-7, OVC 8). Winds from the given true bearing. 'air_war' names the air war's weather (Clear, Cloudy, Poor: simcore/air_war/types.hpp) the preset plays. A scenario names a preset in its \"weather\".",
+  "notes": "Typical days, not climatology: values are chosen inside the ranges the cloud atlas gives for the temperate latitudes (low cloud up to 2 km, middle 2-7 km, high 5-13 km) and the boundary-layer textbook gives for a plain. Altitudes are above mean sea level; cover in oktas (eighths of the sky, as a METAR reports it: FEW 1-2, SCT 3-4, BKN 5-7, OVC 8). Winds from the given true bearing. 'air_war' names the air war's weather (Clear, Cloudy, Poor: simcore/air_war/types.hpp) the preset plays. A scenario names a preset in its \"weather\". 'upper_rh_pct' (optional): the relative humidity over water above the boundary layer, between the clouds, for contrails (simcore/fx/air.hpp; 40 % when not given): dry under a high, moist ahead of a front.",
   "presets": [
     {
       "id": "clear", "name": "Clear, a high-pressure day", "air_war": "clear",
-      "source": "sam3d estimate after wmo_cloud_atlas (cirrus heights), stull_1988 (fair-weather boundary layer)", "confidence": "estimate",
+      "source": "sam3d estimate after wmo_cloud_atlas (cirrus heights), stull_1988 (fair-weather boundary layer); upper_rh_pct: sam3d estimate", "confidence": "estimate",
+      "upper_rh_pct": 30,
       "surface": { "temperature_c": 12, "dewpoint_c": 3, "qnh_hpa": 1022, "visibility_km": 40, "rain_mmh": 0,
                    "wind_10m": { "speed_mps": 3, "from_deg": 330 } },
       "boundary_layer": { "surface_layer_m": 80, "top_m": 900, "veer_deg": 25 },
@@ -68,7 +69,8 @@
     },
     {
       "id": "poor", "name": "Rain under a low overcast, a front coming through", "air_war": "poor",
-      "source": "sam3d estimate after wmo_cloud_atlas (nimbostratus, stratus fractus), stull_1988, kunkel_1984; the rain rate as the air war's raid scenarios use (simcore/air_war/raid_scenario.hpp)", "confidence": "estimate",
+      "source": "sam3d estimate after wmo_cloud_atlas (nimbostratus, stratus fractus), stull_1988, kunkel_1984; the rain rate as the air war's raid scenarios use (simcore/air_war/raid_scenario.hpp); upper_rh_pct: sam3d estimate", "confidence": "estimate",
+      "upper_rh_pct": 70,
       "surface": { "temperature_c": 8, "dewpoint_c": 7, "qnh_hpa": 1002, "visibility_km": 6, "rain_mmh": 4,
                    "wind_10m": { "speed_mps": 8, "from_deg": 220 } },
       "boundary_layer": { "surface_layer_m": 100, "top_m": 1000, "veer_deg": 20 },

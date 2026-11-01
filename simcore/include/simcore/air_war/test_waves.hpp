@@ -11,8 +11,9 @@
 // attack out to the front, transports and trainers across, helicopters low.
 //
 // A strike aircraft's load is released when it comes within its weapon's release range of its aim, still flying (the
-// runner asks Releases each step): each weapon drawn is a target of the session flying from the aircraft to the aim
-// point and on into the ground ("weapon": its impact ends it). All numbers are game values for a testbed.
+// runner asks Releases each step): a WaveRelease, which the runner gives the presentation feed as the load's release
+// and, after its flight (weapon_flight.hpp), its impact; the game draws and sounds both. A cruise missile is a target
+// of the session ("weapon": its impact ends it). All numbers are game values for a testbed.
 #pragma once
 
 #include <algorithm>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "simcore/air_war/test_waves_data.hpp"
+#include "simcore/air_war/weapon_flight.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/scenario.hpp"
@@ -52,6 +54,21 @@ struct Wave {
     std::vector<ScenarioTarget> aircraft;
     std::vector<EmJammerDef> jammers;
     std::vector<std::string> flights;  // "Hammer 12: 4 F-16A, strike (NATO)" for the log
+};
+
+// A load let go: the presentation feed's release and, at impact_t_s, its impact (fx/events.hpp; the runner pushes both).
+// The weapons themselves are the effects layer's to draw and fly, not objects of the session.
+struct WaveRelease {
+    std::string carrier;       // the aircraft's target id
+    std::string carrier_name;
+    std::string weapon;        // weapons.json id
+    std::string weapon_name;
+    std::string delivery;      // weapons.json's delivery name
+    int count = 1;             // how many of it
+    double t_s = 0.0;
+    Vec3 position, velocity;   // the aircraft's at the release
+    Vec3 impact;               // on the ground
+    double impact_t_s = 0.0;
 };
 
 // An airborne aircraft as the session has it (for its release): false if it is not in the world or not alive.
@@ -95,10 +112,10 @@ public:
         return w;
     }
 
-    // The weapons released by `t`: each aircraft with a load still to drop that has come within its weapon's release
-    // range of its aim. One shot down or gone first drops nothing.
-    std::vector<ScenarioTarget> Releases(double t, const WaveScene& scene, const AircraftLookup& lookup) {
-        std::vector<ScenarioTarget> out;
+    // The loads released by `t`: each aircraft with a load still to drop that has come within its weapon's release range
+    // of its aim. One shot down or gone first drops nothing.
+    std::vector<WaveRelease> Releases(double t, const WaveScene& scene, const AircraftLookup& lookup) {
+        std::vector<WaveRelease> out;
         for (Pending& p : pending_) {
             if (p.done) continue;
             Vec3 pos, vel;
@@ -117,30 +134,25 @@ public:
             const WeaponDef* wd = def_->weapons.Find(p.weapon);
             const WaveWeaponKind* k = wd != nullptr ? def_->Kind(wd->kind) : nullptr;
             if (wd == nullptr || k == nullptr) continue;
-            const int shown = std::max(1, std::min(p.count, k->shown));
-            const Vec3 fwd = vel.HorizontalLength() > 1.0 ? Vec3{vel.x, vel.y, 0.0}.Normalized() : Vec3{0.0, 1.0, 0.0};
-            const Vec3 side{fwd.y, -fwd.x, 0.0};
-            for (int j = 0; j < shown; ++j) {
-                ScenarioTarget wt;
-                wt.id = p.carrier + "/" + std::to_string(++released_);
-                wt.name = wd->name + " " + std::to_string(released_) + " from " + p.carrier_name;
-                wt.type = k->type;
-                wt.target_class = "cruise_missile";
-                wt.model = k->model;
-                wt.weapon = true;
-                wt.rcs_m2 = k->rcs_m2;
-                wt.size_m = k->size_m;
-                wt.span_m = k->size_m;
-                wt.speed_mps = std::max(k->speed_mps, vel.Length());
-                wt.max_turn_rate_rad_s = DegToRad(30.0);
-                wt.appear_at_s = t + k->ripple_s * j;
-                wt.start = pos + side * ((j - 0.5 * (shown - 1)) * 6.0);
-                const double sx = Uniform(-k->scatter_m, k->scatter_m), sy = Uniform(-k->scatter_m, k->scatter_m);
-                const Vec3 impact = OnGround(scene, p.aim.x + sx, p.aim.y + sy, 0.0);
-                const Vec3 dir = (impact - wt.start).Normalized();
-                wt.waypoints = {impact, impact + dir * 3000.0};  // on into the ground: its impact ends it
-                out.push_back(std::move(wt));
-            }
+            WaveRelease r;
+            r.carrier = p.carrier;
+            r.carrier_name = p.carrier_name;
+            r.weapon = p.weapon;
+            r.weapon_name = wd->name;
+            r.delivery = p.delivery;
+            r.count = std::max(1, p.count);
+            r.t_s = t;
+            r.position = pos;
+            r.velocity = vel;
+            r.impact = OnGround(scene, p.aim.x + Uniform(-k->scatter_m, k->scatter_m), p.aim.y + Uniform(-k->scatter_m, k->scatter_m), 0.0);
+            // It lands after its own flight from here (weapon_flight.hpp, as the raids' loads): by its kind, the delivery,
+            // the aircraft's height over the ground where it lands, its speed and its path angle.
+            const ReleaseState st = ReleaseStateOf(*scene.frame, pos, vel, p.delivery);
+            const double agl = scene.frame->AltitudeOf(pos) - scene.frame->AltitudeOf(r.impact);
+            const double flight = WeaponFlightOf(p.delivery, p.weapon, agl, st.speed_mps, st.path_deg, (r.impact - pos).Length(),
+                                                 &def_->weapons).time_s;
+            r.impact_t_s = t + (flight > 0.0 ? flight : 15.0);
+            out.push_back(std::move(r));
             ++drops_;
         }
         pending_.erase(std::remove_if(pending_.begin(), pending_.end(), [](const Pending& p) { return p.done; }), pending_.end());
@@ -154,11 +166,31 @@ public:
     const std::vector<std::string>& WeaponsLoaded() const { return weapons_loaded_; }
 
 private:
+    // How a load is put on its aim: a helicopter fires hovering, a guided weapon or missile from its stand-off, a low
+    // flight lays it down (or pops up to it), a higher one dives or bombs level; always one its weapon allows.
+    static std::string DeliveryFor(const WeaponDef& w, bool low, bool helicopter) {
+        std::vector<Delivery> want;
+        if (helicopter) want.push_back(Delivery::HoverFire);
+        if (w.standoff_m > 0.0) want.push_back(Delivery::Standoff);
+        if (low) {
+            want.push_back(Delivery::Laydown);
+            want.push_back(Delivery::PopUp);
+        } else {
+            want.push_back(Delivery::Dive);
+            want.push_back(Delivery::Level);
+        }
+        for (Delivery d : want) {
+            if (w.Can(d)) return DeliveryName(d);
+        }
+        return w.deliveries.empty() ? std::string() : std::string(DeliveryName(w.deliveries.front()));
+    }
+
     struct Pending {
         std::string carrier;
         std::string carrier_name;
         Vec3 aim;
         std::string weapon;
+        std::string delivery;  // weapons.json's name: laydown, popup, dive, level, standoff, hover_fire
         int count = 1;
         double release_m = 1500.0;
         double not_before_s = 0.0;
@@ -470,6 +502,7 @@ private:
                     p.carrier_name = name;
                     p.aim = aim + Vec3{Uniform(-60.0, 60.0), Uniform(-60.0, 60.0), 0.0};
                     p.weapon = load.first;
+                    p.delivery = DeliveryFor(*wd, low, a.helicopter);
                     p.count = load.second;
                     p.release_m = std::max(kind->release_m, wd->standoff_m);
                     p.not_before_s = t0;

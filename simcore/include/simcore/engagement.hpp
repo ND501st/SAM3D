@@ -929,24 +929,33 @@ public:
     }
 
     // Missiles in flight for display: an illustrative straight path from the launch point to the target,
-    // advanced by the fraction of the flight time elapsed. Not a flight path.
+    // advanced by the fraction of the flight time elapsed. Not a flight path. `launch_t_s` and `flight_time_s` (the
+    // time it was given to the meeting) let the game phase the motor (fx/trajectories.hpp).
     struct MissileView {
         int number = 0;
         Vec3 position;
         Vec3 velocity;
+        double launch_t_s = 0.0;
+        double flight_time_s = 0.0;
     };
 
     std::vector<MissileView> MissilesInFlight(double t, World& world, const std::vector<EngagementTarget>& targets) const {
         std::vector<MissileView> out;
         for (const Shot& s : shots_) {
             if (s.done) continue;
-            const Aircraft* a = TargetAircraft(world, targets, s.target_id);
-            if (a == nullptr) continue;
-            const double f = Clamp((t - s.launch_t) / s.flight_time_s, 0.0, 1.0);
-            const Vec3 path = a->position - s.launch_pos;
-            out.push_back({s.number, s.launch_pos + path * f, path / s.flight_time_s});
+            MissileView v;
+            if (ViewOf(s, t, world, targets, v)) out.push_back(v);
         }
         return out;
+    }
+
+    // One shot's display state at `t` on the same illustrative line, finished or not (its end, for the presentation
+    // feed: fx/events.hpp). False for an unknown number or a shot with no target.
+    bool ShotView(int number, double t, World& world, const std::vector<EngagementTarget>& targets, MissileView& out) const {
+        for (const Shot& s : shots_) {
+            if (s.number == number) return ViewOf(s, t, world, targets, out);
+        }
+        return false;
     }
 
     // Tacview: an illustrative missile path (straight line from the unit to the target), not a flight path.
@@ -1180,6 +1189,21 @@ private:
             if (t.id == id && t.world_id >= 0) return world.FindAircraft(t.world_id);
         }
         return nullptr;
+    }
+
+    // A shot's place on its illustrative line at `t` (MissilesInFlight, ShotView).
+    static bool ViewOf(const Shot& s, double t, World& world, const std::vector<EngagementTarget>& targets, MissileView& out) {
+        if (s.flight_time_s <= 0.0) return false;
+        const Aircraft* a = TargetAircraft(world, targets, s.target_id);
+        if (a == nullptr) return false;
+        const double f = Clamp((t - s.launch_t) / s.flight_time_s, 0.0, 1.0);
+        const Vec3 path = a->position - s.launch_pos;
+        out.number = s.number;
+        out.position = s.launch_pos + path * f;
+        out.velocity = path / s.flight_time_s;
+        out.launch_t_s = s.launch_t;
+        out.flight_time_s = s.flight_time_s;
+        return true;
     }
 
     void Measure(double dt, World& world, const std::vector<EngagementTarget>& targets) {
