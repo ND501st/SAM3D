@@ -404,6 +404,31 @@ void ASimScenarioDirector::SpawnNeighbourSites(USimWorldSubsystem* Sim)
 	bNeighboursSpawned = true;
 	NeighboursSpawnedAt = TimeSinceBeginPlay;
 	int32 Vehicles = 0;
+	TArray<FSimViewPlace> Places;  // each site, and each scenery model, for the views (F12)
+	// One model standing on the ground at (east, north) of the scenario, facing a true heading: kept with the sites, so
+	// it is put on the level's ground as they are.
+	auto Stand = [&](const std::string& Model, double East, double North, double HeadingDeg)
+	{
+		const simcore::Vec3 Enu = Runner->GroundEnu(East, North);
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* Site = MyWorld->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
+		if (Site == nullptr)
+		{
+			return FVector::ZeroVector;
+		}
+		USceneComponent* Root = NewObject<USceneComponent>(Site, TEXT("Root"));
+		Site->SetRootComponent(Root);
+		Root->RegisterComponent();
+		const FVector At = Sim->ToUnreal(Enu);  // through the level's georeference where it has one (Cesium's X is east)
+		Site->SetActorLocationAndRotation(At, FRotator(0.0, Sim->HeadingToYawDeg(At, HeadingDeg), 0.0));
+		FSimBasicModels::Build(UTF8_TO_TCHAR(Model.c_str()), Root);
+		NeighbourSites.Add(Site);
+		NeighbourSiteAt.Add(At);
+		NeighbourSiteGrounded.Add(false);
+		++Vehicles;
+		return At;
+	};
 	const std::vector<std::pair<std::string, simcore::Vec3>> Fighting = Runner->NeighbourLaunchers();
 	for (const simcore::ScenarioNeighbour& Nb : Runner->Neighbours())
 	{
@@ -426,32 +451,31 @@ void ASimScenarioDirector::SpawnNeighbourSites(USimWorldSubsystem* Sim)
 		}
 		for (const std::pair<std::string, simcore::Vec3>& V : Layout)
 		{
-			const simcore::Vec3 Enu = Runner->GroundEnu(Nb.position.x + V.second.x, Nb.position.y + V.second.y);
-			FActorSpawnParameters Params;
-			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			AActor* Site = MyWorld->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
-			if (Site == nullptr)
-			{
-				continue;
-			}
-			USceneComponent* Root = NewObject<USceneComponent>(Site, TEXT("Root"));
-			Site->SetRootComponent(Root);
-			Root->RegisterComponent();
 			// Each vehicle faces out from the site's centre (an S-75's launchers round its radar).
 			const double HeadingDeg = V.second.HorizontalLength() > 1.0 ? FMath::RadiansToDegrees(FMath::Atan2(V.second.x, V.second.y)) : 0.0;
-			const FVector At = Sim->ToUnreal(Enu);  // through the level's georeference where it has one (Cesium's X is east)
-			Site->SetActorLocationAndRotation(At, FRotator(0.0, Sim->HeadingToYawDeg(At, HeadingDeg), 0.0));
-			FSimBasicModels::Build(UTF8_TO_TCHAR(V.first.c_str()), Root);
-			NeighbourSites.Add(Site);
-			NeighbourSiteAt.Add(At);
-			NeighbourSiteGrounded.Add(false);
-			++Vehicles;
+			Stand(V.first, Nb.position.x + V.second.x, Nb.position.y + V.second.y, HeadingDeg);
 		}
+		FSimViewPlace Place;
+		Place.Name = UTF8_TO_TCHAR(Nb.name.c_str());
+		Place.Location = Sim->ToUnreal(Runner->GroundEnu(Nb.position.x, Nb.position.y));
+		Place.SizeM = Runner->NeighbourFights(Nb.id) ? 600.0 : 40.0;
+		Places.Add(Place);
 	}
-	if (!Runner->Neighbours().empty())
+	// The scenario's scenery: radars and whatever else stands there (the dynamic campaign testbed's).
+	for (const simcore::ScenarioScenery& Sc : Runner->Scenery())
 	{
-		UE_LOG(LogSAM3D, Log, TEXT("Neighbours: %d air defences near the scenario, %d vehicles drawn"),
-			static_cast<int32>(Runner->Neighbours().size()), Vehicles);
+		FSimViewPlace Place;
+		Place.Name = UTF8_TO_TCHAR(Sc.name.c_str());
+		Place.Location = Stand(Sc.model, Sc.position.x, Sc.position.y, Sc.heading_deg);
+		Place.bFriendly = Sc.friendly;
+		Place.SizeM = 15.0;
+		Places.Add(Place);
+	}
+	Sim->SetViewPlaces(TEXT("Scenario"), MoveTemp(Places));
+	if (!Runner->Neighbours().empty() || !Runner->Scenery().empty())
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Neighbours: %d air defences and %d scenery models near the scenario, %d vehicles drawn"),
+			static_cast<int32>(Runner->Neighbours().size()), static_cast<int32>(Runner->Scenery().size()), Vehicles);
 	}
 }
 

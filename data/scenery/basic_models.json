@@ -141,6 +141,13 @@
 
     { "id": "missile_9m33", "name": "9M33 missile", "archetype": "missile", "length_m": 3.16, "diameter_m": 0.21, "colour": "missile_white" },
     { "id": "missile_arm", "name": "Anti-radiation missile", "archetype": "missile", "length_m": 4.2, "diameter_m": 0.25, "colour": "missile_white" },
+    { "id": "weapon_bomb", "name": "Bomb (the testbed's waves)", "archetype": "missile", "length_m": 2.2, "diameter_m": 0.36, "colour": "nato_olive" },
+    { "id": "weapon_cluster", "name": "Cluster bomb (the testbed's waves)", "archetype": "missile", "length_m": 2.3, "diameter_m": 0.4, "colour": "steel_dark" },
+    { "id": "weapon_guided_bomb", "name": "Guided bomb (the testbed's waves)", "archetype": "missile", "length_m": 4.3, "diameter_m": 0.46, "colour": "nato_olive" },
+    { "id": "weapon_agm", "name": "Air-to-ground missile (the testbed's waves)", "archetype": "missile", "length_m": 2.5, "diameter_m": 0.3, "colour": "missile_white" },
+    { "id": "weapon_rocket", "name": "Unguided rocket (the testbed's waves)", "archetype": "missile", "length_m": 1.4, "diameter_m": 0.08, "colour": "metal" },
+    { "id": "weapon_atgm", "name": "Anti-tank missile (the testbed's waves)", "archetype": "missile", "length_m": 1.2, "diameter_m": 0.15, "colour": "nato_olive" },
+    { "id": "weapon_shells", "name": "A burst of shells (the testbed's waves)", "archetype": "missile", "length_m": 1.0, "diameter_m": 0.05, "colour": "#ffd27a" },
     { "id": "kh22m", "name": "Kh-22M cruise missile", "archetype": "drone", "length_m": 11.7, "span_m": 3.0, "height_m": 0.9, "colour": "pact_silver" },
     { "id": "tlam_c", "name": "BGM-109C Tomahawk", "archetype": "drone", "length_m": 5.6, "span_m": 2.7, "height_m": 0.5, "colour": "nato_grey" },
     { "id": "agm86c", "name": "AGM-86C CALCM", "archetype": "drone", "length_m": 6.3, "span_m": 3.7, "height_m": 0.6, "colour": "nato_grey" },

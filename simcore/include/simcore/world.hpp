@@ -108,6 +108,15 @@ public:
         time_s_ += dt;
     }
 
+    // Takes an aircraft out of the world for good (one long gone: the testbed's waves keep the list short). A missile
+    // still after it self-destructs on the next step. False if there is none with that id.
+    bool RemoveAircraft(int id) {
+        const std::size_t i = IndexOfAircraft(id);
+        if (i == kNotFound) return false;
+        aircraft_.erase(aircraft_.begin() + static_cast<std::ptrdiff_t>(i));
+        return true;
+    }
+
     std::vector<Aircraft>& AircraftList() { return aircraft_; }
     const std::vector<Aircraft>& AircraftList() const { return aircraft_; }
     const std::vector<Missile>& MissileList() const { return missiles_; }

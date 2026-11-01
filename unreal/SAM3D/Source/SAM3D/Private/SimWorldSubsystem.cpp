@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "Cesium3DTileset.h"
+#include "CoreGlobals.h"
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
 #include "Engine/Engine.h"
@@ -1963,33 +1964,86 @@ FSimEntityState USimWorldSubsystem::MakeState(int32 Id, const FString& Name, boo
 
 TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 {
+	// Once a frame (and again if the simulation stepped or changed within it).
+	const void* Source = Runner ? static_cast<const void*>(Runner) : static_cast<const void*>(ActiveWorld());
+	const double SimTime = GetSimTimeSeconds();
+	if (EntityCacheFrame != GFrameCounter || EntityCacheSimTime != SimTime || EntityCacheSource != Source)
+	{
+		EntityCache = BuildEntityStates();
+		EntityCacheIndex.Reset();
+		for (int32 I = 0; I < EntityCache.Num(); ++I)
+		{
+			EntityCacheIndex.Add(EntityCache[I].Id, I);
+		}
+		EntityCacheFrame = GFrameCounter;
+		EntityCacheSimTime = SimTime;
+		EntityCacheSource = Source;
+	}
+	return EntityCache;
+}
+
+void USimWorldSubsystem::SetViewPlaces(FName Owner, TArray<FSimViewPlace>&& Places)
+{
+	if (!ViewPlaceOwners.Contains(Owner))
+	{
+		ViewPlaceOwners.Add(Owner);
+	}
+	ViewPlaces.Add(Owner, MoveTemp(Places));
+}
+
+TArray<FSimViewPlace> USimWorldSubsystem::GetViewPlaces() const
+{
+	TArray<FSimViewPlace> Out;
+	for (const FName& Owner : ViewPlaceOwners)
+	{
+		if (const TArray<FSimViewPlace>* Places = ViewPlaces.Find(Owner))
+		{
+			Out.Append(*Places);
+		}
+	}
+	return Out;
+}
+
+TArray<FSimEntityState> USimWorldSubsystem::BuildEntityStates() const
+{
 	TArray<FSimEntityState> Out;
 	const simcore::World* W = ActiveWorld();
 	if (W == nullptr)
 	{
 		return Out;
 	}
-	// Each aircraft's basic model: its scenario target's own, else its class's (docs/scenery/).
+	// Each aircraft's basic model: its scenario target's own, else its class's (docs/scenery/); whether it is ours, and
+	// whether it is a weapon on its way to the ground.
 	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
+	std::map<std::string, const simcore::ScenarioTarget*> TargetByName;
+	if (Runner)
+	{
+		for (const simcore::ScenarioTarget& T : Runner->Def().targets)
+		{
+			TargetByName.emplace(T.name, &T);
+			TargetByName.emplace(T.id, &T);
+		}
+	}
 	for (const simcore::Aircraft& A : W->AircraftList())
 	{
 		FSimEntityState S = MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity);
-		if (Models != nullptr && Runner)
+		const auto Found = TargetByName.find(A.name);
+		if (Found != TargetByName.end())
 		{
-			for (const simcore::ScenarioTarget& T : Runner->Def().targets)
+			const simcore::ScenarioTarget& T = *Found->second;
+			if (Models != nullptr)
 			{
-				if (T.name == A.name || T.id == A.name)
-				{
-					S.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
-					break;
-				}
+				S.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
 			}
+			S.bFriendly = T.friendly;
+			S.bIsWeapon = T.weapon;
 		}
 		Out.Add(S);
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
 		FSimEntityState S = MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity);
+		S.bFriendly = true;
 		if (Models != nullptr)
 		{
 			S.Model = ToF(Models->ForTarget(std::string(), "missile", std::string()));
@@ -2007,6 +2061,7 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 				FSimEntityState S = MakeState(GroundIdBase + I, UTF8_TO_TCHAR(V.id.c_str()), false, true, V.position, simcore::Vec3{});
 				S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 				S.bIsGround = true;
+				S.bFriendly = true;
 				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
 				S.bDeployed = V.deployed;
 				if (Models != nullptr)
@@ -2021,8 +2076,10 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 	{
 		for (const simcore::EngagementModel::MissileView& M : Runner->MissilesInFlight())
 		{
-			Out.Add(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number), true, true,
-				M.position, M.velocity));
+			FSimEntityState S = MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number), true, true,
+				M.position, M.velocity);
+			S.bFriendly = true;
+			Out.Add(S);
 		}
 		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed).
 		for (const simcore::EmSensorLink::ArmView& A : Runner->ArmsInFlight())
@@ -2038,6 +2095,7 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 			S.bIsGround = true;
 			S.Kind = TEXT("visitor");
+			S.bFriendly = true;
 			S.Model = ToF(V.model);
 			Out.Add(S);
 		}
@@ -2049,6 +2107,7 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 			S.bIsGround = true;
 			S.Kind = ToF(V.kind);
+			S.bFriendly = true;
 			S.Model = ToF(V.model);
 			Out.Add(S);
 		}
@@ -2058,13 +2117,11 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 
 bool USimWorldSubsystem::GetEntityState(int32 Id, FSimEntityState& OutState) const
 {
-	for (const FSimEntityState& S : GetEntityStates())
+	GetEntityStates();  // the frame's list and its index
+	if (const int32* I = EntityCacheIndex.Find(Id))
 	{
-		if (S.Id == Id)
-		{
-			OutState = S;
-			return true;
-		}
+		OutState = EntityCache[*I];
+		return true;
 	}
 	// A missile that has finished: report it as no longer alive so its actor hides.
 	if (Id >= MissileIdBase && Runner)

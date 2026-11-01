@@ -179,7 +179,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 		HandleMissionMenu(Pc);
 		return;
 	}
-	// The camera views (F1-F11) and the time keys; the free camera's W A S D are its own, not the driver's.
+	// The camera views (F1-F12) and the time keys; the free camera's W A S D are its own, not the driver's.
 	if (!bTouring && ShotDelayLeft < 0.0f)
 	{
 		Views->UpdateViews(Pc, DeltaSeconds);

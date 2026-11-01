@@ -98,7 +98,8 @@
       "id": "test_range", "label": "Test range",
       "notes": "The Kesmark test map (data/maps/kesmark_range.json): 40 by 40 km of ground with its towns, woods, roads and military sites, the airspace and the weather beyond it. NPC commanders fight; take any seat to watch or join in.",
       "missions": [
-        { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" }
+        { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" },
+        { "file": "scenarios/dynamic_campaign_test.json", "title": "Dynamic campaign test: the capital's air defences under endless waves (F12 visits every asset)", "level": "/Game/Maps/KesmarkRange" }
       ]
     }
   ]

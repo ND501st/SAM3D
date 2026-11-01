@@ -36,6 +36,7 @@
 
 #include "simcore/board_reading.hpp"
 #include "simcore/acmi.hpp"
+#include "simcore/air_war/test_waves.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_comms.hpp"
 #include "simcore/debrief.hpp"
@@ -219,6 +220,7 @@ public:
         time_ += dt;
         weather_.SetTime(time_);  // the clouds drift
         UpdateTargets(dt);
+        UpdateWaves();
         DeliverOrders();
         PlayDeliveries();
         UpdateVoice();
@@ -2003,13 +2005,96 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             TargetState& s = targets_[i];
             if (!s.spawned || s.gone) continue;
-            const Aircraft* a = world_.FindAircraft(s.world_id);
+            Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr || !a->alive) {
                 s.gone = true;
+            } else if (def_.targets[i].weapon && (a->next_waypoint >= a->waypoints.size() ||
+                                                  world_.Frame().AltitudeOf(a->position) <= world_.GetTerrain().HeightAt(a->position.x, a->position.y) + 1.0)) {
+                // A weapon ends where it strikes: it no longer flies (its actor goes as an inactive one does).
+                a->alive = false;
+                s.gone = true;
+                ++weapon_impacts_;
+                Event(def_.targets[i].id, "impact");
             } else if (a->next_waypoint >= a->waypoints.size()) {
                 s.gone = true;
                 Event(def_.targets[i].id, "passed its last waypoint");
             }
+        }
+    }
+
+    // ---- The dynamic campaign testbed's waves (scenario "waves", air_war/test_waves.hpp): a wave when one is due, the
+    // strike aircraft's loads released, and the waves' aircraft long gone taken out of the world (first marked dead, so
+    // the EM layer and the board let them go, then removed).
+    std::unique_ptr<airwar::TestWaves> waves_;
+    std::vector<std::size_t> wave_targets_;          // the waves' targets still in the world (indices into def_.targets)
+    std::map<std::string, std::size_t> wave_index_;  // a wave aircraft's id -> its index (for its release)
+    std::map<std::size_t, double> wave_gone_s_;      // when each went
+    int weapon_impacts_ = 0;
+
+    void EnterWaveTarget(ScenarioTarget t) {
+        t.appear_at_s = std::max(t.appear_at_s, time_);
+        const std::size_t i = def_.targets.size();
+        wave_index_[t.id] = i;
+        EnterTarget(std::move(t));
+        wave_targets_.push_back(i);
+    }
+
+    void UpdateWaves() {
+        if (!def_.waves) return;
+        if (!waves_) waves_ = std::make_unique<airwar::TestWaves>(def_.waves, def_.seed);
+        airwar::WaveScene scene;
+        scene.frame = &world_.Frame();
+        scene.terrain = &world_.GetTerrain();
+        scene.centre = def_.unit_position;
+        scene.defences.push_back(def_.unit_position);
+        for (const ScenarioNeighbour& nb : def_.neighbours) scene.defences.push_back(nb.position);
+        if (battery_) {
+            for (const Battery::Vehicle& v : battery_->Vehicles()) scene.defences.push_back(v.position);
+        }
+        for (const ScenarioScenery& s : def_.scenery) scene.objects.push_back(s.position);
+        scene.em = em_link_ ? &em_link_->World().Scene().lib : nullptr;
+        if (waves_->Due(time_, WavesAirborne())) {
+            airwar::Wave w = waves_->Next(time_, scene);
+            char who[32];
+            std::snprintf(who, sizeof(who), "wave %d", w.number);
+            std::string e;
+            if (em_link_ && !w.jammers.empty() && !AddEmGear(def_.em.library, w.jammers, who, &e)) Event(who, "its jammers stay out: " + e);
+            const std::size_t n = w.aircraft.size();
+            for (ScenarioTarget& t : w.aircraft) EnterWaveTarget(std::move(t));
+            std::string flights;
+            for (const std::string& f : w.flights) flights += (flights.empty() ? "" : "; ") + f;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, who, "enters", std::to_string(n) + " aircraft: " + flights});
+        }
+        const auto lookup = [this](const std::string& id, Vec3& position, Vec3& velocity) {
+            const auto it = wave_index_.find(id);
+            if (it == wave_index_.end()) return false;
+            const TargetState& s = targets_[it->second];
+            const Aircraft* a = s.spawned && !s.gone ? world_.FindAircraft(s.world_id) : nullptr;
+            if (a == nullptr || !a->alive) return false;
+            position = a->position;
+            velocity = a->velocity;
+            return true;
+        };
+        for (ScenarioTarget& t : waves_->Releases(time_, scene, lookup)) EnterWaveTarget(std::move(t));
+        // The long gone leave the world.
+        const double after_s = def_.waves->remove_after_s;
+        for (std::size_t k = 0; k < wave_targets_.size();) {
+            const std::size_t i = wave_targets_[k];
+            if (!targets_[i].gone) {
+                ++k;
+                continue;
+            }
+            const auto g = wave_gone_s_.emplace(i, time_).first;
+            Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a != nullptr && time_ - g->second >= after_s && a->alive) a->alive = false;  // let the sensors drop it
+            if (a != nullptr && time_ - g->second < after_s + 5.0) {
+                ++k;
+                continue;
+            }
+            if (a != nullptr) world_.RemoveAircraft(targets_[i].world_id);
+            wave_index_.erase(def_.targets[i].id);
+            wave_gone_s_.erase(g);
+            wave_targets_.erase(wave_targets_.begin() + static_cast<std::ptrdiff_t>(k));
         }
     }
 
@@ -2084,6 +2169,7 @@ private:
             const std::string who = r.carrier.empty() ? std::string("ARM") : r.carrier;
             if (r.hit && r.hit_what == "unit") {
                 Event(who, std::string("its anti-radiation missile bursts ") + m + " m from the vehicle: out of action");
+                if (!def_.end_on_unit_hit) continue;  // the testbed runs on
                 Finish("the vehicle was hit by an anti-radiation missile");
                 return;
             }
@@ -10036,6 +10122,19 @@ public:
         std::snprintf(text, sizeof(text), "%zu aircraft come into the mission, the first at %.0f s", ts.size(), first_s);
         log_.Record({time_, DebriefEntry::Kind::Scenario, from, "enters", text});
         return true;
+    }
+
+    // ---- The dynamic campaign testbed's waves (scenario "waves", air_war/test_waves.hpp).
+    const airwar::TestWaves* Waves() const { return waves_.get(); }
+    int WeaponImpacts() const { return weapon_impacts_; }
+    const std::vector<ScenarioScenery>& Scenery() const { return def_.scenery; }
+    // The waves' aircraft and weapons in the sky or still to enter it (weapons not counted).
+    int WavesAirborne() const {
+        int n = 0;
+        for (std::size_t i : wave_targets_) {
+            if (!targets_[i].gone && !def_.targets[i].weapon) ++n;
+        }
+        return n;
     }
 
     // Triggers entering the running session with a package: its air-raid warning, a C2 source its raid has put out. Only

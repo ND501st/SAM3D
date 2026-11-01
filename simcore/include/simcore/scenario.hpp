@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/test_waves_data.hpp"
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
 #include "simcore/campaign/battery_plan.hpp"
@@ -108,6 +109,9 @@ struct ScenarioTarget {
     bool decoy = false;
     // Anti-radiation missiles it carries (roadmap E6, em/arm.hpp): "arms". Count 0: none.
     ArmCarrierDef arms;
+    // A weapon in flight to the ground ("weapon": true): a bomb, an air-to-ground missile, a cruise missile. It ends at
+    // its impact (the ground, or the end of its route), not by flying on (the testbed's waves, air_war/test_waves.hpp).
+    bool weapon = false;
 };
 
 // How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
@@ -194,6 +198,17 @@ struct ScenarioNeighbour {
     int missiles = -1;      // its missiles ready, all launchers together (-1: six each)
 };
 
+// A model standing in the scenario ("scenery": a radar, a vehicle, a building of data/scenery/basic_models.json):
+// presentation only, drawn where it stands and visited by the views (the dynamic campaign testbed's radars).
+struct ScenarioScenery {
+    std::string id;
+    std::string name;
+    std::string model;
+    Vec3 position;              // ENU
+    double heading_deg = 0.0;   // true, clockwise from north
+    bool friendly = true;       // ours (the default) or the enemy's
+};
+
 struct ScenarioDef {
     std::string id;
     std::string name;
@@ -257,6 +272,11 @@ struct ScenarioDef {
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
     std::vector<ScenarioNeighbour> neighbours;
+    std::vector<ScenarioScenery> scenery;
+    // "waves": "gameplay/test_waves.json": random waves of every adversary's and our own aircraft for as long as the
+    // session runs, the strike aircraft dropping their loads (the dynamic campaign testbed, air_war/test_waves.hpp).
+    std::string waves_file;
+    std::shared_ptr<const airwar::WavesDef> waves;
     std::vector<ScenarioTrigger> triggers;
     std::vector<DeliveryDef> deliveries;  // the chain of command's messages played in the session (roadmap P1)
     std::string command_post_file;  // the battery command post's plotting board, e.g. "command/pu12.json"; "" = none
@@ -338,6 +358,9 @@ struct ScenarioDef {
     double launcher_reach_m = 0.0;
     double time_limit_s = 600.0;
     bool end_when_targets_gone = true;  // end once every target is destroyed or past its last waypoint
+    // "end": {"on_unit_hit": false}: the vehicle put out of action (an ARM's burst) is logged and the session runs on (a
+    // testbed that must not stop, docs/DYNAMIC_CAMPAIGN_TEST.md).
+    bool end_on_unit_hit = true;
     // "crew_commander": "npc": the vehicle commander is an NPC who runs the crew by doctrine (roadmap 8.6,
     // docs/crew/07_COMMANDER_MODE.md §4) instead of the scenario's triggers giving every order. "script" (default): the
     // triggers give the orders.
@@ -377,7 +400,7 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "supply"})) {
+                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "supply", "scenery", "waves"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -430,6 +453,7 @@ public:
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
         if (!LoadTargets(root, out)) return false;
+        if (!LoadScenery(root, out) || !LoadWaves(root, data_dir, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
         return LoadEnd(root, out);
@@ -1165,6 +1189,41 @@ private:
         return true;
     }
 
+    // "scenery": [{"id", "name", "model", "position", "heading_deg", "side": "own" | "enemy"}].
+    bool LoadScenery(const json::Value& root, ScenarioDef& out) {
+        const json::Value* arr = OptionalArray(root, "", "scenery");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& v = arr->items[i];
+            const std::string p = Index("scenery", i);
+            ScenarioScenery s;
+            std::string side = "own";
+            const json::Value* at = nullptr;
+            if (!Keys(v, p, {"id", "name", "model", "position", "heading_deg", "side", "notes"}) || !RequireString(v, p, "id", s.id) ||
+                !RequireString(v, p, "name", s.name) || !RequireString(v, p, "model", s.model) || !RequireObject(v, p, "position", at) ||
+                !LoadPosition(*at, Join(p, "position"), frame_, s.position) || !OptionalNumber(v, p, "heading_deg", s.heading_deg) ||
+                !OptionalString(v, p, "side", side)) {
+                return false;
+            }
+            if (side != "own" && side != "enemy") return Fail(Join(p, "side"), "\"own\" or \"enemy\"");
+            s.friendly = side == "own";
+            for (const ScenarioScenery& o : out.scenery) {
+                if (o.id == s.id) return Fail(Join(p, "id"), "duplicate '" + s.id + "'");
+            }
+            out.scenery.push_back(std::move(s));
+        }
+        return true;
+    }
+
+    bool LoadWaves(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        if (!OptionalString(root, "", "waves", out.waves_file) || out.waves_file.empty()) return message_.empty();
+        auto waves = std::make_shared<airwar::WavesDef>();
+        std::string e;
+        if (!airwar::LoadWavesFile(data_dir, out.waves_file, *waves, &e)) return Fail("waves", e);
+        out.waves = std::move(waves);
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         if (const json::Value* nbs = OptionalArray(root, "", "neighbours")) {
             for (std::size_t i = 0; i < nbs->items.size(); ++i) {
@@ -1201,7 +1260,8 @@ private:
             const json::Value& t = arr->items[i];
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
-                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "notes"})) {
+                             "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
+                             "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1223,7 +1283,8 @@ private:
             }
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
             if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr) ||
-                !OptionalBool(t, p, "decoy", tg.decoy) || !OptionalString(t, p, "model", tg.model)) {
+                !OptionalBool(t, p, "decoy", tg.decoy) || !OptionalString(t, p, "model", tg.model) ||
+                !OptionalBool(t, p, "weapon", tg.weapon)) {
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
@@ -2429,9 +2490,10 @@ private:
     bool LoadEnd(const json::Value& root, ScenarioDef& out) {
         const json::Value* e = root.Find("end");
         if (e == nullptr) return true;
-        if (!Keys(*e, "end", {"time_limit_s", "when_targets_gone"}) ||
+        if (!Keys(*e, "end", {"time_limit_s", "when_targets_gone", "on_unit_hit"}) ||
             !OptionalNumber(*e, "end", "time_limit_s", out.time_limit_s) ||
-            !OptionalBool(*e, "end", "when_targets_gone", out.end_when_targets_gone)) {
+            !OptionalBool(*e, "end", "when_targets_gone", out.end_when_targets_gone) ||
+            !OptionalBool(*e, "end", "on_unit_hit", out.end_on_unit_hit)) {
             return false;
         }
         if (out.time_limit_s <= 0.0) return Fail("end.time_limit_s", "must be > 0");

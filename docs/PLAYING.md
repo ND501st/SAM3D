@@ -52,7 +52,7 @@ missions. (Left/Right on the mission's page still pick where to start.) The grou
 | Drills | Scripted shoots: the scenario gives the orders. Watch, or take a seat and keep up. |
 | Ranges and history | Range days and the Osa's battles. |
 | Air war | Raids planned by the enemy air command (and the campaign screen). |
-| Test range | The Kesmark map with a raid at the bridges. |
+| Test range | The Kesmark map with a raid at the bridges; the dynamic campaign test, the capital's air defences under endless waves of every aircraft (docs/DYNAMIC_CAMPAIGN_TEST.md). |
 
 ## The helper
 
@@ -160,8 +160,9 @@ As in DCS: each F key is a kind of view, and pressing it again moves to the next
 | F8 | Aircraft | the next |
 | F10 | The map, from above | back to the middle, the first height |
 | F11 | Free camera: W A S D, Q down, E up, Shift faster, wheel the speed | |
+| F12 | Every asset in turn, ours and the enemy's: your vehicle, the aircraft, their bombs and missiles, our missiles, the battery's vehicles, then the air defence sites, radars and the map's objects; the label says whose | the next (Shift+F12: the one before) |
 
-Right mouse + drag turns the camera (F2, F7, F8; looks in F11; pans in F10). The wheel brings it closer or further,
+Right mouse + drag turns the camera (F2, F7, F8, F12; looks in F11; pans in F10). The wheel brings it closer or further,
 closes F5's lens, sets F10's height. F3, F4 and F10 follow whatever the last view followed: F8 then F4 chases the
 drone. F5 looks through the air as it is: a drone 50 km out is lost in the haze, and comes out of it as it closes.
 
@@ -179,7 +180,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 
 | Keys | What |
 |---|---|
-| F1-F8, F10, F11 | Camera views (above) |
+| F1-F8, F10-F12 | Camera views (above) |
 | F9 | The trainer's instructor panel (roadmap 10.3; where the simulation runs: single player or the server) |
 | Right mouse, wheel | Turn the camera, closer / further |
 | Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |

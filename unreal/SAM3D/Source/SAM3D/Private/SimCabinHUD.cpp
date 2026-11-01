@@ -107,7 +107,7 @@ void ASimCabinHUD::DrawHUD()
 	if (Vehicle != nullptr && !Vehicle->IsInCabin() && Canvas != nullptr && Sim != nullptr && Sim->IsScenarioRunning())
 	{
 		const bool bFree = Vehicle->GetViews() != nullptr && Vehicle->GetViews()->IsFreeCamera();
-		DrawText(FString::Printf(TEXT("%s   F1 the cabin   F2-F11 views   right mouse turns, wheel zooms   Ctrl+Z time   G keys   Esc menu%s"),
+		DrawText(FString::Printf(TEXT("%s   F1 the cabin   F2-F12 views   right mouse turns, wheel zooms   Ctrl+Z time   G keys   Esc menu%s"),
 					 bFree ? TEXT("W A S D Q E fly") : TEXT("W A S D drive"), *SwitchHint),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 20.0f, Canvas->ClipY - 40.0f, GEngine != nullptr ? GEngine->GetMediumFont() : nullptr);
 	}
@@ -801,6 +801,7 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("F5    the nearest aircraft from your vehicle; again: the next"), TEXT("F6    your missile in flight; again: the next"),
 				TEXT("F7    the battery's vehicles; again: the next"), TEXT("F8    the aircraft; again: the next"),
 				TEXT("F10   the map from above (wheel: height, right drag: pan)"), TEXT("F11   free camera (W A S D Q E, Shift faster)"),
+				TEXT("F12   every asset, ours and the enemy's (again: next, Shift: back)"),
 				TEXT("Right mouse + drag   turn the camera"), TEXT("Wheel   closer / further, the lens on F5")}},
 		{TEXT("Time"), {TEXT("Ctrl+Z   faster (x2 .. x32)"), TEXT("Alt+Z    slower"), TEXT("Shift+Z  normal time")}},
 		{TEXT("The game"), {TEXT("Esc   pause: resume, restart, the missions, quit; the debrief"), TEXT("G     this card"),

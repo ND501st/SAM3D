@@ -56,6 +56,35 @@ struct SAM3D_API FSimEntityState
 	 *  model, else its class's; our missiles' and the battery vehicles' by their kind. Empty: no model known. */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	FString Model;
+
+	/** Ours: our battery's vehicles and missiles, an aircraft that answers IFF as a friend ("iff": "friend"). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	bool bFriendly = false;
+
+	/** A weapon falling or flying to the ground (a bomb, an air-to-ground or cruise missile: ScenarioTarget::weapon). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
+	bool bIsWeapon = false;
+};
+
+/** Something standing in the world that the views visit but that is no entity: an air defence site near the scenario, a
+ *  scenery model, a theatre object on the map (F12, USimViewComponent). */
+USTRUCT(BlueprintType)
+struct SAM3D_API FSimViewPlace
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Views")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Views")
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Views")
+	bool bFriendly = true;
+
+	/** Roughly how big it is (m), for how far the camera stands off. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Views")
+	double SizeM = 30.0;
 };
 
 /** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
@@ -1628,6 +1657,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
 	bool GetEntityState(int32 Id, FSimEntityState& OutState) const;
 
+	/** The places the views visit that are no entities, registered by `Owner` (the scenario director's sites and scenery,
+	 *  the map's assets): replaces what that owner registered before. */
+	void SetViewPlaces(FName Owner, TArray<FSimViewPlace>&& Places);
+
+	/** Every registered place, the owners' in the order they registered. */
+	TArray<FSimViewPlace> GetViewPlaces() const;
+
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
 	double GetSimTimeSeconds() const;
 
@@ -1673,6 +1709,18 @@ private:
 	void BroadcastNewDebriefEntries();
 	FSimEntityState MakeState(int32 Id, const FString& Name, bool bMissile, bool bAlive, const simcore::Vec3& Pos,
 		const simcore::Vec3& Vel) const;
+	TArray<FSimEntityState> BuildEntityStates() const;
+
+	/** GetEntityStates' list, built once a frame: every entity actor asks for its own each tick, and with the testbed's
+	 *  waves there are hundreds. */
+	mutable TArray<FSimEntityState> EntityCache;
+	mutable TMap<int32, int32> EntityCacheIndex;
+	mutable uint64 EntityCacheFrame = TNumericLimits<uint64>::Max();
+	mutable double EntityCacheSimTime = -1.0;
+	mutable const void* EntityCacheSource = nullptr;
+
+	TArray<FName> ViewPlaceOwners;
+	TMap<FName, TArray<FSimViewPlace>> ViewPlaces;
 
 	const simcore::World* ActiveWorld() const;
 	/** The board, radio and battery extras: built from the runner here, or the mirrored view on a client. */

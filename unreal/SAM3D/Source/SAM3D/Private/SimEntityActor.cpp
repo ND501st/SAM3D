@@ -137,13 +137,26 @@ void ASimEntityActor::Tick(float DeltaSeconds)
 	UWorld* MyWorld = GetWorld();
 	const USimWorldSubsystem* Sim = MyWorld ? MyWorld->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	FSimEntityState State;
-	if (Sim == nullptr || !Sim->GetEntityState(EntityId, State))
+	if (Sim == nullptr)
 	{
+		return;
+	}
+	if (!Sim->GetEntityState(EntityId, State))
+	{
+		// No longer in the simulation at all (the testbed's waves take the long gone out of the world): hidden.
+		if (bHideWhenInactive && !IsHidden())
+		{
+			SetActorHiddenInGame(true);
+		}
 		return;
 	}
 
 	if (State.bAlive)
 	{
+		if (IsHidden() && !bReportedInactive)
+		{
+			SetActorHiddenInGame(false);  // listed again (a mover back in sight)
+		}
 		FVector At = State.Location;
 		if (State.bIsGround)
 		{

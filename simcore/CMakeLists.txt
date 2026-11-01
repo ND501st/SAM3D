@@ -100,6 +100,7 @@ add_executable(simcore_tests
   tests/test_instructor.cpp
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
+  tests/test_dynamic_campaign.cpp
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp
   tests/test_comms_jamming.cpp

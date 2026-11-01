@@ -1059,7 +1059,9 @@ void ASimMapActor::BuildAssets(const FVector& FrameOriginLonLatAlt)
 			AssetParts.Add(Part);
 		}
 		++AssetCount;
+		return Holder->GetComponentLocation();
 	};
+	TArray<FSimViewPlace> Places;  // each object drawn, for the views (F12): the theatre is our own side's
 	for (int32 I = 0; I < static_cast<int32>(Th->objects.size()); ++I)
 	{
 		const TheatreObject& O = Th->objects[static_cast<std::size_t>(I)];
@@ -1074,13 +1076,27 @@ void ASimMapActor::BuildAssets(const FVector& FrameOriginLonLatAlt)
 			continue;  // the player's own battery: the scenario's vehicles
 		}
 		const std::vector<std::pair<std::string, simcore::Vec3>> Site = Lib->ObjectLayout(ObjectKindName(O.kind), O.defence.system);
+		FVector First = FVector::ZeroVector;
 		for (const std::pair<std::string, simcore::Vec3>& V : Site)
 		{
 			// Each faces out from its site's centre (launchers round their radar), the centre's north.
 			const double Len = V.second.HorizontalLength();
 			const simcore::Vec3 Facing = Len > 1.0 ? simcore::Vec3{V.second.x / Len, V.second.y / Len, 0.0} : simcore::Vec3{0.0, 1.0, 0.0};
-			PlaceModel(V.first, Pos.x + V.second.x, Pos.y + V.second.y, Facing, Function <= 0.05);
+			const FVector At = PlaceModel(V.first, Pos.x + V.second.x, Pos.y + V.second.y, Facing, Function <= 0.05);
+			First = &V == &Site.front() ? At : First;
 		}
+		if (!Site.empty())
+		{
+			FSimViewPlace Place;
+			Place.Name = UTF8_TO_TCHAR(O.name.c_str());
+			Place.Location = First;
+			Place.SizeM = 60.0;
+			Places.Add(Place);
+		}
+	}
+	if (USimWorldSubsystem* Views = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+	{
+		Views->SetViewPlaces(TEXT("Map"), MoveTemp(Places));
 	}
 	// The chain of command's places (roadmap P7): the posts, offices, works and villages that are not theatre objects; and
 	// with a campaign running, each post's holder where he is at its hour (the people move with their routines).
