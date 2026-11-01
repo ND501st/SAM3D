@@ -85,6 +85,10 @@ Ctrl+Z speeds time up to x32. The other views are in `docs/PLAYING.md`.
 
 ## Known limits
 
+The project owner's review of 2 Nov 2026 turned several of these into the roadmap's track R
+(`docs/DEVELOPMENT_ROADMAP.md`): damage short of a kill, the guns' accuracy at range, assets drawn under the map,
+aircraft attitude, the map's realism, the time of day and the pilots' defensive reactions.
+
 - **The other sites are not the Osa's model.** They fire by the raids' abstract chance per pass, not by a guidance
   model, and their missiles' speed (700 m/s), the launch interval and the reload are game values. Their radars do not
   radiate in the EM layer, so the enemy's ARMs and warning receivers do not see them.

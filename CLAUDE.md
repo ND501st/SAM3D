@@ -289,4 +289,11 @@ Every other phase (G0-G5, G8-G11) is built in a first form (29 Oct 2026; what ea
 lines): a scenario's `"nav"` gives the session the roads, its places and its movers, and a march order may name a place
 (`to_place`) that the battery commander plans on the roads when he gives it. Next: a person playing M-G's night march.
 
+**Track R, the review** (project owner, 2 Nov 2026; `docs/DEVELOPMENT_ROADMAP.md` track R; priority, not gated):
+damage states drawn by chance per burst (none, light, moderate, heavy, destroyed; flak bursting 5-50 m away mostly does
+nothing) with the AAA's accuracy falling with range, both in simcore and drawn from the same bursts; nothing drawn under
+the map; aircraft flown with bank, pitch and roll; a more realistic map (free Fab, Epic and online assets as
+placeholders, each with its licence recorded); the time of day in the missions menu; pilots who break, dive and jettison
+on a warning, a sighted launch or flak, or damage. Damage seen by our crews goes into the records as they saw it.
+
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

@@ -15,6 +15,9 @@ and G8–G11 built in a first form (29 Oct), G6 and G7 on hold; its milestone M-
 march. Phase 14, the battery's mission, begun ahead of its gate (30 Oct): the regiment's task and its tasking, the
 commander's plan and the mission kinds in first form (14.1-14.3, 14.5); phase 15's battery mission with the enemy's air war on its clock and its packages entering live in first form (15.2, 15.3), held through a whole day; the battery searching on its own when its post has no air picture (21.5). The EM track: E0–E7 and E10 done, E8 and E9 started. **Next: people playing it** (M2, a campaign, M-G), which
 gates **the battery's war, phases 13–21**; meanwhile the leftovers each phase lists ("Left:", "Next:").
+**Priority from 2 Nov 2026: track R** (the owner's review of the dynamic campaign test): damage states drawn by
+chance and the AAA's accuracy by range first, then nothing drawn under the map, flight with attitude, a more realistic
+map, the time of day in the menu, and pilots who defend themselves.
 
 The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
 targets from the battery's PU-12 and the crew changes ripple through everything after them (re-sequenced 2 Oct 2026).
@@ -253,6 +256,64 @@ regiment's briefing for the order, plans the march on the working map, gives the
 gets the vehicle whose set is off moving by runner, watches every vehicle form up and march in Unreal, is held by the
 regulator at the bridge, occupies, reports ready, fights the dawn raid and relocates on the regiment's order; then
 plays the same night from a vehicle commander's seat, hearing the order on the net and carrying it out.
+
+## Track R: the review of 2 Nov 2026 (priority)
+
+The project owner, 2 Nov 2026, on reviewing the dynamic campaign test (`docs/DYNAMIC_CAMPAIGN_TEST.md`): in priority
+order, first a preliminary damage model built on probabilities. It matters most for air-bursting AAA: flak bursts
+close to an aircraft (5-50 m) very often do no damage. Second, the AAA is far too accurate at long range. Its spread
+and its fuzing are the same as at close range, so with damage modelled the guns would be unrealistic and unbalanced.
+Third, ground vehicles and even aircraft are drawn beneath the map. Fourth, the map needs more realism: terrain and more
+features. Free Fab, Epic and Unreal assets, and 3D models found online, may be used as placeholders. Fifth, aircraft do
+not pitch, yaw or roll realistically. Sixth, an engaged aircraft whose warning receiver sounds, or whose pilot sees
+"smoke in the air", should manoeuvre to defend itself and sometimes jettison its tanks and its load. Seventh, a time of
+day setting in the missions menu.
+
+Like the nation on the map and track G, this track is **not gated**. It comes **before** the leftovers and the battery's
+war. It stays inside the gameplay-level decision below: damage is a chance drawn per burst, not a physics model.
+
+**What is there today** (2 Nov 2026):
+- An aircraft is alive or destroyed. Every defence decides a kill once per pass:
+  - the testbed's neighbours by `WavePassKillChance` (air_war/test_waves.hpp);
+  - the air war by `PassKillChance` (air_war/planner.hpp);
+  - our Osa by the outcome resolver (phase 3, 6.7).
+- The flak's bursts are scattered in Unreal alone (`SimFxAudio.cpp`, `effects.json`): a fixed ±35 m about the aim and a
+  ±0.12 s fuze jitter, the same at every range. The burst picture and the kill are drawn independently.
+- An aircraft is a point that turns at a fixed rate at constant speed (`aircraft.hpp`). Unreal turns the model to its
+  velocity: it never banks, and it never pitches except along its path.
+- Evasion (`target_behaviour.hpp`): only when our Osa launches at the aircraft or locks it with a warning receiver
+  aboard. The pilot never reacts to the other sites, to flak, or to what he sees. Nothing is jettisoned.
+- Ground vehicles are put on the ground by a trace from 20 m above their sim position down to 50 m below it
+  (`ASimEntityActor::GroundBelow`). Aircraft are drawn at their sim height without a check.
+- The time of day:
+  - simcore has a scenario's `environment.daylight` (true or false) and the air war's `start_hour`;
+  - Unreal's sky has its own `LocalTimeHours` (10.5 by default);
+  - nothing joins the two, and the menu offers neither.
+
+| # | Task |
+|---|---|
+| R0 | **Research.** Light and heavy AAA: the fragments' lethal radius per calibre, the time fuze's error, the guns' dispersion and their fire control's errors at range (the SON-9, the SON-30, the Shilka's radar, optical sights), and rounds fired per aircraft brought down (Korea, Vietnam, 1973). Battle damage: the share of aircraft hit that came home, how long a fatally hit aircraft flew on, and when crews jettisoned. Pilots' reactions to warnings and sighted launches in the period. Candidate public sources, to register in `docs/SOURCES.md` with tiers: Ball's *Fundamentals of Aircraft Combat Survivability* (the textbook's vulnerable areas and Pk given a hit), Soviet and Warsaw Pact AAA firing textbooks where a public copy exists (preferred by tier), declassified US Vietnam-era loss and damage studies, Israeli 1973 accounts. Findings go into `docs/research/` and then data |
+| R1 | **Damage states** (simcore, `simcore/damage.hpp`, `data/gameplay/damage.json`). Each burst near an aircraft draws an outcome. Inputs: the miss distance, the warhead or shell (its charge and fragments, from `munitions.json`; the chance falls off steeply with distance) and the aircraft's size and kind. Outcomes: **none**; **light** (largely unaffected); **moderate** (may trail smoke, jettison tanks or its load, break away and abandon the mission); **heavy** (trails smoke, may burn, crashes after 10 s to 5 min unless it reaches home or the crew ejects); **destroyed** outright. The owner's starting rule accumulates: 3+ light hits make moderate, 2+ moderate make heavy. Every number is a game value in the data, tunable. The Osa's resolver, `WavePassKillChance` and the air war's `PassKillChance` keep their calibrated totals of aircraft brought down (6.7; `docs/air_war/09_BALANCE.md` §9). The new share of damaged aircraft that fly on is calibrated against R0's ratios of damaged to lost. Damage is in the fx feed (smoke, fire, falling stores, a late crash) and in the debrief and outcomes ledgers (14.6). The enemy repairs its damaged aircraft over days (the squadrons' availability). **First person and the record:** our crews see only what is in their visual range, so a smoking aircraft that flies on goes into the journal as hit, sometimes claimed as down. The report from the records (P9) carries that claim, never the truth |
+| R2 | **AAA accuracy by range** (simcore, with R1). The gun's bursts are computed in simcore from: the aim error, which grows with range; the prediction error over the shell's time of flight, which grows with the target's manoeuvre; the time fuze's error for the 85-130 mm guns; and the fire control (radar, or optical by day only). Flak is computed shell by shell (the S-60 fires 120 a minute). Light guns (ZU-23, Shilka) are computed burst by burst, as a pattern with a hit chance per round from the pattern's area against the aircraft's. Each burst's miss distance goes to R1. Unreal draws simcore's bursts (`effects.json`'s `flak_offset_m` is removed), so the sky shows the same bursts that decide the damage. **Done when:** close range is deadly, long range fills the sky with bursts and few hits, and the rounds fired per aircraft brought down fall within R0's historical bands (`air_war_bench`) |
+| R3 | **Flight with attitude** (simcore `aircraft.hpp`, Unreal). A point mass flown by bank-to-turn: bank = atan(v·ω/g) within each type's g and roll rate limits, pitch from the flight path and the angle of attack, speed traded in climbs and lost in hard turns, roll-in and roll-out at the turn points. Helicopters lean nose-down to fly forward and level in the hover. The type limits are cited in the air war's aircraft data. simcore holds each aircraft's orientation, the entity stream carries it, and Unreal draws it. **Done when:** a hand-calculated coordinated-turn test passes, and the testbed's waves bank, pull and roll visibly. The Python prototype is kept in sync |
+| R4 | **Defensive reactions** (simcore `target_behaviour.hpp`; needs R1 and R3). A pilot reacts to three things: his warning receiver on any radar of the EM layer, which means **the neighbours' radars radiate** (today's known limit); a launch or flak he sees, its smoke or bursts within his visual range by the light and weather; and his own damage. By his doctrine and the threat he may break, dive, jink, use chaff or flares if carried, or press on. In some circumstances he jettisons his drop tanks or his load: a heavy threat, fighters, damage. The stores fall in the fx feed. A raid that jettisons or aborts has been denied its target, and the enemy's freedom of action ledger counts that (14.6). Sources from R0 |
+| R5 | **Nothing under the map** (Unreal and simcore; a bug, diagnosed first). An automated check in the dynamic campaign test lists every entity below the ground as drawn. Find where simcore's ground and the drawn ground disagree, then make them one ground: the drawn heights from the same data simcore samples, a check at sample points within a tolerance, and ground vehicles traced from well above. No aircraft is ever drawn below the ground. Its height above the ground is held in simcore by the drawn ground's own heights (terrain following, the waves' heights), not pushed up in Unreal. **Done when:** the check lists none, over a whole testbed hour and the missions menu's maps |
+| R6 | **A more realistic map** (Unreal; free assets as placeholders). Finer terrain over the play area. Land cover drawn as it is in the data: fields, woods as stands of trees, towns with buildings, roads and rivers that follow the map, and bridges. Materials and lighting to match. Placeholders: Fab, Epic and Quixel assets free for use in Unreal, and online models under a permissive licence (CC0, CC-BY). Each asset is recorded with its origin and licence in an asset register, as the sources are. Assets whose licence does not allow redistribution stay out of git, fetched per machine like `reference/`. What is drawn is what blocks sight: woods and towns give E9 its obstacle heights for the line of sight |
+| R7 | **The time of day in the missions menu** (simcore, Unreal). The menu offers the mission's own time, dawn, day, dusk, night, or an hour. simcore takes the hour (`start_hour`) and derives the light from the sun's elevation at the map's place and date: the TV sight's daylight, the visual range by day, dusk and night, the air war's night factor and the waves. Unreal's sky takes the same hour. A historical mission may hold its time (the Angola night raid) or allow a change, as its entry in `missions.json` says |
+
+**Order:** R1 and R2 together first, as asked: one without the other is unbalanced. R0's reading feeds them, and
+they start on their game values without waiting for it. R5's diagnosis runs alongside, since the bug shows in every
+mission. Then R3, R6 and R7. R4 last, on R1 and R3.
+
+**Done when (milestone M-R):** the owner plays an hour of the dynamic campaign test and sees:
+- flak filling the sky at long range with few hits;
+- close bursts that mostly do nothing;
+- damaged aircraft that smoke, jettison and turn for home, some of them crashing minutes later;
+- the crews' journals writing "hit", not "destroyed";
+- aircraft banking and pulling in turns, and breaking away when warned or when they see the smoke;
+- nothing under the ground;
+- a map with fields, woods and towns;
+- the same hour at night, chosen in the menu, looking and fighting like night.
 
 ## The battery's war: phases 13-21 (planned 22 Oct 2026)
 
