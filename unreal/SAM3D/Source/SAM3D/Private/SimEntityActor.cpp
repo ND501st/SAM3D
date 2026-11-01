@@ -59,6 +59,10 @@ bool ASimEntityActor::UseBasicModel(const FString& ModelId)
 	{
 		return !ModelId.IsEmpty();
 	}
+	if (FSimBasicModels::Library() == nullptr || FSimBasicModels::Library()->Find(TCHAR_TO_UTF8(*ModelId)) != nullptr)
+	{
+		FSimBasicModels::RemoveTurningAntennas(this);  // the old model's: its parts go below
+	}
 	TArray<UStaticMeshComponent*> Parts;
 	if (FSimBasicModels::Build(ModelId, Root, &Parts) == 0)
 	{

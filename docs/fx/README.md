@@ -160,8 +160,11 @@ shots are pushed into it whatever the switch says. It is filled where the models
 * The dynamic campaign testbed's waves (`air_war/test_waves.hpp`, `docs/DYNAMIC_CAMPAIGN_TEST.md`): each load a
   `WeaponRelease` within its weapon kind's release range of its aim (a delivery its weapon allows, `end_t_s` from
   `WeaponFlightOf` as the bridge's) and its `WeaponImpact` at that time; a wave's cruise missile a `CruiseImpact` where
-  it ends (`weapon` its model); the scenario's gun neighbours a `GunPass` of 1.5-4 s at the nearest enemy aircraft in
-  their reach, then a pause of 2-6 s (rounds as the bridge's own figures). For show: nothing is hit.
+  it ends (`weapon` its model). Our air defence round it (the neighbours the battery fire model does not fight,
+  `ScenarioRunner::FireNeighbourDefences`): a gun site's `GunPass` of 1.5-4 s at the nearest enemy aircraft in its
+  reach, then a pause of 2-6 s (rounds as the bridge's own figures); a missile site's `SamLaunch` (`weapon` its system,
+  `end_t_s` the meeting) and its `SamEnd`, `Hit` on the aircraft or `SelfDestruct` past it. A hit brings the aircraft
+  down: its `AircraftDown` follows.
 
 ### 3.2 `scenery/munitions.hpp` and `data/scenery/munitions.json`
 

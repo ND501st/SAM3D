@@ -51,6 +51,11 @@ struct WavesDef {
     std::vector<WaveFriendlyType> friendly;
     std::vector<std::string> friendly_callsigns;
     std::vector<WaveWeaponKind> weapon_kinds;
+    // Our air defence round the testbed (its scenario's neighbours, by system): each system's figures as the enemy air
+    // command's theatre has them (the first object of that system in "defences"), and the raids' tuning ("tuning"),
+    // so a neighbour shoots on the pass as the raids' resolver has it (test_waves.hpp, WavePassKillChance).
+    std::map<std::string, DefenceDef> defences;
+    TuningTable tuning;
     // Timing.
     double first_wave_s = 45.0;
     double interval_min_s = 100.0;
@@ -69,6 +74,11 @@ struct WavesDef {
     double support_orbit_m = 105000.0;
     double city_radius_m = 6000.0;
 
+    const DefenceDef* Defence(const std::string& system) const {
+        const auto it = defences.find(system);
+        return it == defences.end() ? nullptr : &it->second;
+    }
+
     const WaveWeaponKind* Kind(const std::string& kind) const {
         for (const WaveWeaponKind& k : weapon_kinds) {
             if (k.kind == kind) return &k;
@@ -83,7 +93,7 @@ class WavesLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, const std::string& data_dir, WavesDef& out) {
         if (!Keys(root, "", {"waves_id", "status", "source", "confidence", "notes", "theatre", "weapons", "factions", "timing",
-                             "geometry", "weapon_kinds", "friendly", "friendly_callsigns"}) ||
+                             "geometry", "weapon_kinds", "friendly", "friendly_callsigns", "defences", "tuning"}) ||
             !Provenance(root, "") || !RequireString(root, "", "waves_id", out.id)) {
             return false;
         }
@@ -91,6 +101,21 @@ public:
         if (!RequireString(root, "", "theatre", theatre) || !RequireString(root, "", "weapons", weapons)) return false;
         if (!LoadTheatreFile(data_dir + "/" + theatre, out.theatre, &e)) return Fail("theatre", e);
         if (!LoadWeaponsFile(data_dir + "/" + weapons, out.weapons, &e)) return Fail("weapons", e);
+        // "defences": theatre files, the first object of each system in the first file that has it.
+        std::string tuning;
+        if (!OptionalString(root, "", "tuning", tuning)) return false;
+        if (const json::Value* ds = root.Find("defences")) {
+            if (!ds->Is(json::Type::Array)) return Fail("defences", "expected a list of theatre files");
+            for (std::size_t i = 0; i < ds->items.size(); ++i) {
+                if (!ds->items[i].Is(json::Type::String)) return Fail(Index("defences", i), "expected a theatre file");
+                TheatreDef d;
+                if (!LoadTheatreFile(data_dir + "/" + ds->items[i].string, d, &e)) return Fail(Index("defences", i), e);
+                for (const TheatreObject& o : d.objects) {
+                    if (o.defence.present && !o.defence.system.empty()) out.defences.emplace(o.defence.system, o.defence);
+                }
+            }
+        }
+        if (!tuning.empty() && !LoadTuningFile(data_dir + "/" + tuning, out.tuning, &e)) return Fail("tuning", e);
         const json::Value* fs = OptionalArray(root, "", "factions");
         if (fs == nullptr || fs->items.empty()) return message_.empty() ? Fail("factions", "required, a list of faction files") : false;
         for (std::size_t i = 0; i < fs->items.size(); ++i) {

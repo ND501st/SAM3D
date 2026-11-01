@@ -41,6 +41,24 @@
             "north_m": -6100,
             "up_m": 9.0
           }
+        },
+        {
+          "id": "capital_p15",
+          "type": "p15",
+          "position": {
+            "east_m": 7000,
+            "north_m": 6100,
+            "up_m": 11.5
+          }
+        },
+        {
+          "id": "capital_p18",
+          "type": "p18",
+          "position": {
+            "east_m": -2100,
+            "north_m": 6600,
+            "up_m": 1.0
+          }
         }
       ]
     }

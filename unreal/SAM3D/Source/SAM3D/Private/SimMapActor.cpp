@@ -390,6 +390,7 @@ void ASimMapActor::Clear()
 		}
 	}
 	AssetParts.Reset();
+	FSimBasicModels::RemoveTurningAntennas(this);
 	AssetCount = 0;
 	BoxCount = 0;
 }

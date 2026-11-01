@@ -3,9 +3,11 @@
   "status": "First pass, 1 November 2026: the dynamic campaign testbed (docs/DYNAMIC_CAMPAIGN_TEST.md).",
   "source": "sam3d",
   "confidence": "estimate",
-  "notes": "Game values for a testbed of the game's look, sound and play, not system data and not the air war: random waves of every adversary's aircraft (every type of data/air_war/faction_*.json comes round, whatever the war's year) and of our own side's, the strike aircraft releasing the weapons of their loads (data/air_war/weapons.json) as the presentation feed's releases and impacts (simcore/fx/events.hpp), which the game draws and sounds with the munitions library: each weapon kind below says how far from its aim it is let go. Read by simcore/air_war/test_waves_data.hpp, flown by test_waves.hpp. The enemy's come from their fronts' entries in the theatre, from entry_km out. Our side has no faction file: its types, speeds, heights and echoes below are PLACEHOLDERS, drawn with the models of data/scenery/basic_models.json.",
+  "notes": "Game values for a testbed of the game's look, sound and play, not system data and not the air war: random waves of every adversary's aircraft (every type of data/air_war/faction_*.json comes round, whatever the war's year) and of our own side's, the strike aircraft releasing the weapons of their loads (data/air_war/weapons.json) as the presentation feed's releases and impacts (simcore/fx/events.hpp), which the game draws and sounds with the munitions library: each weapon kind below says how far from its aim it is let go. Read by simcore/air_war/test_waves_data.hpp, flown by test_waves.hpp. The enemy's come from their fronts' entries in the theatre, from entry_km out. Our side has no faction file: its types, speeds, heights and echoes below are PLACEHOLDERS, drawn with the models of data/scenery/basic_models.json. Our air defence round the capital (the scenario's neighbours other than the Osa batteries) shoots at the enemy's with each system's figures in the nation's theatre, else the tuned theatre it extends (defences) and the raids' tuning (tuning): the raids' chance per pass, simcore/air_war/test_waves.hpp WavePassKillChance.",
   "theatre": "air_war/theatre_pannonia.json",
   "weapons": "air_war/weapons.json",
+  "defences": ["air_war/theatre_pannonia_nation.json", "air_war/theatre_pannonia.json"],
+  "tuning": "gameplay/air_war.json",
   "factions": [
     "air_war/faction_nato.json",
     "air_war/faction_warsaw_pact.json",

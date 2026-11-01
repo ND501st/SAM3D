@@ -41,6 +41,12 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
 | building, church, tower, tent | walls and a 45-degree pitched roof (or flat), a tower and spire; cylinders for chimneys, cooling towers and tanks |
 | tree, mast, crates, bridge | trunk and crown; pole and crossbar; stacked boxes; a deck on piers |
 
+A search radar's antenna turns: a model's `antenna_rpm` (turns a minute) turns the part its archetype marks as the
+antenna (`Part::turns`: the dish, the array, the radar post's antenna) round the vertical through its centre. In Unreal
+it is a rotating movement on that part (`FSimBasicModels::Build`). The P-15 and P-19 turn in 6 s (`rusarmy_p15_p19`,
+`ru_wiki_p19`), the P-18 in 10 s (`ru_wiki_p18`); the P-14's 4 and the P-40's 6 turns a minute are estimates. The
+PRV-11 height finder and the fire-control radars do not turn.
+
 ## Munitions
 
 Written 31 October 2026 (docs/fx/README.md section 3.2). `data/scenery/munitions.json` (62 munitions), loaded by

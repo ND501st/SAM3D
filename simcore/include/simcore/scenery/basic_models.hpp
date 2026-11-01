@@ -39,6 +39,7 @@ struct Part {
     double roll_deg = 0.0;
     double yaw_deg = 0.0;
     std::string colour;  // "#rrggbb"
+    bool turns = false;  // a radar's antenna: it turns round the vertical through its centre at its model's antenna_rpm
 };
 
 struct ModelDef {
@@ -48,6 +49,7 @@ struct ModelDef {
     double length_m = 0.0;
     double span_m = 0.0;   // aircraft: wing span, helicopters: the rotor; ground: width
     double height_m = 0.0;
+    double antenna_rpm = 0.0;  // a search radar's antenna turns (its parts marked `turns`); 0: it stands still
     std::vector<Part> parts;
 };
 
@@ -135,7 +137,7 @@ namespace detail {
 
 // The archetype's parameters, as read from the data.
 struct Params {
-    double length = 0.0, span = 0.0, width = 0.0, height = 0.0, diameter = 0.0, rotor = 0.0, missile = 0.0, elevation = 0.0, antenna_h = 0.0;
+    double length = 0.0, span = 0.0, width = 0.0, height = 0.0, diameter = 0.0, rotor = 0.0, missile = 0.0, elevation = 0.0, antenna_h = 0.0, antenna_rpm = 0.0;
     int engines = 1, axles = 2, missiles = 0, rails = 1, barrels = 1;
     bool biplane = false, high_wing = false, wings = false, turret = false, mast = false, cab = false, gun = false, tower = false;
     std::string wing = "swept", tail = "conventional", radar = "none", body = "cargo", roof = "pitched", crown = "cone";
@@ -298,11 +300,13 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
             const double dish = a.diameter > 0.0 ? a.diameter : std::min(3.0, 0.9 * W);
             o.push_back(P(Shape::Cylinder, Vec3{0.25, 0.25, H - top}, Vec3{-0.1 * L, 0.0, top + (H - top) * 0.5}, dark));
             o.push_back(P(Shape::Cylinder, Vec3{dish, dish, 0.25}, Vec3{-0.1 * L, 0.0, H - 0.6}, c, 'x', 15.0));
+            o.back().turns = true;
         } else if (a.radar == "bar") {
             // span_m and antenna_h_m: the array's own width and height where the data gives them.
             const double bw = a.span > 0.0 ? a.span : std::max(2.5, 1.4 * W), bh = a.antenna_h > 0.0 ? a.antenna_h : 1.0;
             o.push_back(P(Shape::Cylinder, Vec3{0.25, 0.25, H - top}, Vec3{0.0, 0.0, top + (H - top) * 0.5}, dark));
             o.push_back(P(Shape::Box, Vec3{0.5, bw, bh}, Vec3{0.0, 0.0, H - bh * 0.5}, c));
+            o.back().turns = true;
         }
         if (a.mast) o.push_back(P(Shape::Cylinder, Vec3{0.18, 0.18, 2.6 * H}, Vec3{-0.35 * L, 0.0, H + 1.3 * H}, dark));
     } else if (arch == "truck") {
@@ -330,6 +334,7 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
             const double bw = a.span > 0.0 ? a.span : 7.0, bh = a.antenna_h > 0.0 ? a.antenna_h : 1.6;
             o.push_back(P(Shape::Cylinder, Vec3{0.25, 0.25, H - bed_h}, Vec3{-0.15 * L, 0.0, bed_h + (H - bed_h) * 0.5}, dark));
             o.push_back(P(Shape::Box, Vec3{0.6, bw, bh}, Vec3{-0.15 * L, 0.0, H - bh * 0.5}, c));
+            o.back().turns = true;
         }
     } else if (arch == "launcher") {
         const double W = a.width;
@@ -350,6 +355,7 @@ inline std::vector<Part> Expand(const std::string& arch, const Params& a, const 
         o.push_back(P(Shape::Box, Vec3{L, W, cab_h}, Vec3{0.0, 0.0, cab_h * 0.5}, c));
         o.push_back(P(Shape::Cylinder, Vec3{0.6, 0.6, post}, Vec3{0.0, 0.0, cab_h + post * 0.5}, dark));
         o.push_back(P(Shape::Box, Vec3{0.6, S, ah}, Vec3{0.0, 0.0, cab_h + post + ah * 0.5}, c2));
+        o.back().turns = true;
     } else if (arch == "gun") {
         o.push_back(P(Shape::Box, Vec3{0.6 * L, a.width, 0.7}, Vec3{0.0, 0.0, 0.35}, c));
         o.push_back(P(Shape::Box, Vec3{0.8, 1.2, 0.9}, Vec3{0.0, 0.0, 1.15}, c));
@@ -440,13 +446,13 @@ public:
             ModelDef m;
             Params a;
             if (!Keys(v, p, {"id", "name", "archetype", "length_m", "span_m", "width_m", "height_m", "diameter_m", "rotor_m", "missile_m",
-                             "antenna_h_m", "elevation_deg", "engines", "axles", "missiles", "rails", "barrels", "biplane", "high_wing", "wings", "turret",
+                             "antenna_h_m", "antenna_rpm", "elevation_deg", "engines", "axles", "missiles", "rails", "barrels", "biplane", "high_wing", "wings", "turret",
                              "mast", "cab", "gun", "tower", "wing", "tail", "radar", "body", "roof", "crown", "colour", "colour2", "notes"}) ||
                 !RequireString(v, p, "id", m.id) || !RequireString(v, p, "name", m.name) || !RequireString(v, p, "archetype", m.archetype) ||
                 !OptionalNumber(v, p, "length_m", a.length) || !OptionalNumber(v, p, "span_m", a.span) || !OptionalNumber(v, p, "width_m", a.width) ||
                 !OptionalNumber(v, p, "height_m", a.height) || !OptionalNumber(v, p, "diameter_m", a.diameter) ||
                 !OptionalNumber(v, p, "rotor_m", a.rotor) || !OptionalNumber(v, p, "missile_m", a.missile) ||
-                !OptionalNumber(v, p, "antenna_h_m", a.antenna_h) ||
+                !OptionalNumber(v, p, "antenna_h_m", a.antenna_h) || !OptionalNumber(v, p, "antenna_rpm", a.antenna_rpm) ||
                 !OptionalNumber(v, p, "elevation_deg", a.elevation) || !OptionalInt(v, p, "engines", a.engines) ||
                 !OptionalInt(v, p, "axles", a.axles) || !OptionalInt(v, p, "missiles", a.missiles) || !OptionalInt(v, p, "rails", a.rails) ||
                 !OptionalInt(v, p, "barrels", a.barrels) || !OptionalBool(v, p, "biplane", a.biplane) ||
@@ -468,6 +474,11 @@ public:
             m.length_m = a.length;
             m.span_m = a.span > 0.0 ? a.span : (a.rotor > 0.0 ? a.rotor : a.width);
             m.height_m = a.height;
+            m.antenna_rpm = a.antenna_rpm;
+            if (a.antenna_rpm < 0.0) return Fail(Join(p, "antenna_rpm"), "turns a minute, 0 or more");
+            bool antenna = false;
+            for (const Part& part : m.parts) antenna = antenna || part.turns;
+            if (a.antenna_rpm > 0.0 && !antenna) return Fail(Join(p, "antenna_rpm"), "the model has no antenna to turn (radar, or the radar archetype)");
             for (const ModelDef& q : out.models) {
                 if (q.id == m.id) return Fail(Join(p, "id"), "duplicate model");
             }

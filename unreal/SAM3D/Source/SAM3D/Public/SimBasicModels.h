@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "SimCoreIncludes.h"
 
+class AActor;
 class UMaterialInterface;
 class USceneComponent;
 class UStaticMesh;
@@ -26,6 +27,10 @@ public:
 	 *  is one component with its munition mesh (FSimMunitionModels), shadows off. */
 	static int32 Build(const FString& ModelId, USceneComponent* Parent, TArray<UStaticMeshComponent*>* OutParts = nullptr,
 		const FLinearColor* Override = nullptr);
+
+	/** A search radar's antenna (a part marked turns, its model's antenna_rpm) turns on a rotating movement of the
+	 *  owner's: this removes them all. Call it where the owner destroys the parts it built, before building new ones. */
+	static void RemoveTurningAntennas(AActor* Owner);
 
 	/** The munition mesh a model id is drawn with, or null: aircraft, vehicles and equipment keep their parts. */
 	static UStaticMesh* MunitionMesh(const FString& ModelId);

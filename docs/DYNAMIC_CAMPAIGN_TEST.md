@@ -21,8 +21,9 @@ origin), and its heights come from the map's ground.
   - **ten S-60 batteries** in two rings, at 3.3 km and 5.3 km;
   - two KS-30 batteries;
   - three ZU-23 sites, AA machine guns and two Strela-2 teams.
-- **Radars:** a P-14 with its PRV-11, a P-15, a P-18, a P-19, a P-40 and the regiment's PU-12. The P-19 and the P-40
-  also feed the regiment's picture (`c2.regiment`).
+- **Radars:** a P-14 with its PRV-11, a P-15, a P-18, a P-19, a P-40 and the regiment's PU-12. The search radars'
+  antennas turn (`docs/scenery/README.md`). The P-15, the P-18, the P-19 and the P-40 feed the regiment's picture
+  (`c2.regiment`, `data/command/regiment_radars.json`): the PU-12M's board holds what they cover.
 
 ## The waves
 
@@ -52,8 +53,20 @@ The waves come from `data/gameplay/test_waves.json`, made by `simcore/air_war/te
   raids' weapon flight model (`air_war/weapon_flight.hpp`), and then as an impact. The game flies, bursts and sounds the
   munitions from the munitions library. A cruise missile is an aircraft of the session, and its warhead goes off where
   it ends. These weapons do no damage; ARMs do, through the EM layer.
-- **Our guns.** The S-60s, KS-30s, Shilkas, ZU-23s and machine guns fire gun passes of a few seconds at the nearest
-  enemy aircraft within their reach, then pause. They are drawn and heard, but they hit nothing.
+- **Our air defence.** Every site but the Osa batteries (which fight in the battery fire model) engages the enemy's
+  aircraft in its reach (`ScenarioRunner::FireNeighbourDefences`):
+  - each takes an aircraft on once as it comes into its reach. Whether it is shot down on that pass is the raids' own
+    chance per pass (`air_war/test_waves.hpp` `WavePassKillChance`), with the system's reach, lethality, cover low
+    and medium, fire channels and fastest target from the nation's theatre (`theatre_pannonia_nation.json`, else the
+    tuned theatre it extends; `defences` in `test_waves.json`) and the raids' tuning (`gameplay/air_war.json`). Nothing
+    suppresses or jams them, and the pilots do not evade. That chance is the raids' calibrated loss per pass, so most
+    missiles miss: in a test half hour about one in twenty-five hit, and some fifteen aircraft came down;
+  - the Kub, the S-75M2, the S-125M1, the Strelas and the MANPADS launch, as many at once as their fire channels and a
+    few seconds apart. The missile bursts on the aircraft at the meeting if it hit, or flies on and destroys itself.
+    An empty site reloads in ten minutes;
+  - the S-60s, KS-30s, Shilkas, ZU-23s and machine guns fire passes of a few seconds at the nearest aircraft in reach,
+    then pause. The pass that took on a new aircraft brings it down at its end if it hit;
+  - a kill is in the debrief ("destroyed by" the site) and its wreck falls.
 - **Clean-up.** An aircraft that has finished its route leaves the world a minute later, so four hours do not fill it.
 
 An ARM that knocks out your vehicle is logged and the session runs on (`"end": {"on_unit_hit": false}`).
@@ -72,8 +85,10 @@ Ctrl+Z speeds time up to x32. The other views are in `docs/PLAYING.md`.
 
 ## Known limits
 
-- **Only the Osa batteries shoot anything down.** The guns' passes are for show (above). The Kub, the S-75M2, the
-  S-125M1, the Strelas and the MANPADS are drawn and plotted on the post's board, but they do not fire: the battery fire
-  model has only the Osa.
+- **The other sites are not the Osa's model.** They fire by the raids' abstract chance per pass, not by a guidance
+  model, and their missiles' speed (700 m/s), the launch interval and the reload are game values. Their radars do not
+  radiate in the EM layer, so the enemy's ARMs and warning receivers do not see them.
+- **The PRV-11 and the P-14 are drawn but feed nothing.** The regiment's radar list has no sourced range for them, and
+  a height finder is not a search radar.
 - **Our side's aircraft are placeholders.** Their types, speeds and heights are game numbers. The waves' weapons do no
   damage.

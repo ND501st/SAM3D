@@ -2061,7 +2061,6 @@ private:
     std::map<std::string, std::size_t> wave_index_;  // a wave aircraft's id -> its index (for its release)
     std::map<std::size_t, double> wave_gone_s_;      // when each went
     std::vector<airwar::WaveRelease> wave_loads_;    // loads released and still falling or flying to the ground
-    std::vector<double> gun_next_s_;                 // each neighbour's next gun pass (the testbed's guns, for show)
     int weapon_impacts_ = 0;
 
     // A load let go: the feed's release (the game flies and bursts it), its landing kept for its time.
@@ -2085,54 +2084,226 @@ private:
         wave_loads_.push_back(std::move(r));
     }
 
-    // The testbed's gun neighbours (the S-60s, KS-30s, Shilkas, ZU-23s and machine guns) fire for show at the waves'
-    // enemy aircraft inside their reach: a pass of a few seconds on the nearest, then a pause, as the presentation feed's
-    // GunPass (fx/events.hpp). Like the drawn missiles of a neighbour that does not fight, nothing is hit: only an Osa
-    // battery fights in the battery fire model. Rounds a minute as the mission bridge's (air_war/mission_bridge.hpp,
-    // GunRoundsPerMin: the munitions' rate_rpm, wiki_guns), the pass and the pause game values (sam3d).
-    void ShowNeighbourGuns() {
-        if (!fx_on_) return;
-        gun_next_s_.resize(def_.neighbours.size(), 0.0);
+    // The testbed's air defence round the capital (its neighbours that the battery fire model does not fight: the Kub,
+    // the S-75M2, the S-125M1, the Strelas, the MANPADS and the guns) engages the waves' enemy aircraft. Each takes on an
+    // aircraft once as it comes into its reach: whether it is shot down on that pass is the raids' own chance per pass
+    // (air_war/test_waves.hpp WavePassKillChance, with the system's figures from the theatre: WavesDef::defences), drawn
+    // from the defences' own generator. A missile site launches (its fire channels at once, a few seconds apart) and
+    // its missile bursts at the meeting, on the aircraft if it hit, or flies on and destroys itself; it reloads once
+    // empty. A gun site fires passes of a few seconds at the nearest aircraft in reach (rounds a minute as the mission
+    // bridge's, air_war/mission_bridge.hpp GunRoundsPerMin: the munitions' rate_rpm, wiki_guns), and the pass that
+    // engaged a new aircraft brings it down at its end if it hit. Missile speed, reload and the pauses are game values
+    // (sam3d).
+    static constexpr double kNbMissileMps = 700.0;
+    static constexpr double kNbMissileMinS = 3.0;
+    static constexpr double kNbMissileMaxS = 45.0;
+    static constexpr double kNbLaunchGapS = 4.0;
+    static constexpr double kNbReloadS = 600.0;
+    static constexpr unsigned kDefenceSeed = 0xDEF5u;
+    struct NeighbourShot {
+        std::size_t neighbour = 0;
+        std::size_t target = 0;  // index into def_.targets
+        double end_s = 0.0;
+        bool hit = false;
+        bool missile = false;
+        int number = 0;
+    };
+    struct NeighbourDefenceState {
+        int missiles = -1;              // ready (-1: guns)
+        double reload_s = 0.0;          // when an empty site has reloaded
+        double next_s = 0.0;            // its next launch or gun pass
+        int launches = 0;
+        std::set<std::size_t> engaged;  // aircraft (target indices) engaged on their pass through its reach
+    };
+    std::vector<NeighbourDefenceState> nb_defence_;
+    std::vector<NeighbourShot> nb_shots_;
+    std::mt19937 defence_rng_{1u};
+    bool defence_seeded_ = false;
+    int nb_launches_ = 0;
+    int nb_kills_ = 0;
+
+    static double GunRoundsPerMin(const std::string& sys) {
+        return sys == "zsu234" ? 3400.0 : sys == "s60" ? 120.0 : sys == "ks30" ? 12.0 : (sys == "zu23" || sys == "aaa") ? 2000.0 : 0.0;
+    }
+
+    void FireNeighbourDefences() {
+        if (!def_.waves) return;
+        if (!defence_seeded_) {
+            defence_rng_.seed(def_.seed + kDefenceSeed);
+            defence_seeded_ = true;
+        }
+        if (nb_defence_.size() != def_.neighbours.size()) {
+            nb_defence_.resize(def_.neighbours.size());
+            for (std::size_t j = 0; j < def_.neighbours.size(); ++j) {
+                const airwar::DefenceDef* d = def_.waves->Defence(def_.neighbours[j].system);
+                nb_defence_[j].missiles = d != nullptr ? d->missiles : -1;
+            }
+        }
+        EndNeighbourShots();
         for (std::size_t j = 0; j < def_.neighbours.size(); ++j) {
             const ScenarioNeighbour& nb = def_.neighbours[j];
-            const std::string& sys = nb.system;
-            const double rpm = sys == "zsu234" ? 3400.0 : sys == "s60" ? 120.0 : sys == "ks30" ? 12.0 : (sys == "zu23" || sys == "aaa") ? 2000.0 : 0.0;
-            if (rpm <= 0.0 || time_ < gun_next_s_[j]) continue;
+            const airwar::DefenceDef* d = def_.waves->Defence(nb.system);
+            if (nb.fights || d == nullptr) continue;
+            NeighbourDefenceState& st = nb_defence_[j];
+            const bool guns = d->missiles < 0;
+            const double rpm = GunRoundsPerMin(nb.system);
+            if (guns && rpm <= 0.0) continue;
+            if (!guns && st.missiles == 0) {
+                if (time_ < st.reload_s) continue;
+                st.missiles = d->missiles;
+                Event(nb.id, "reloaded");
+            }
             const Vec3 site = GroundEnu(nb.position.x, nb.position.y);
-            const double reach_m = nb.radius_m > 0.0 ? nb.radius_m : 3000.0;
-            const Aircraft* best = nullptr;
-            std::size_t best_i = 0;
-            double best_d = reach_m;
+            const double reach_m = nb.radius_m > 0.0 ? nb.radius_m : d->radius_m;
+            // Who is in its reach: the nearest, and the nearest it has not yet engaged. One that has left is free to be
+            // engaged again on its next pass.
+            std::size_t near_i = 0, fresh_i = 0;
+            const Aircraft* near_a = nullptr;
+            const Aircraft* fresh_a = nullptr;
+            double near_d = reach_m, fresh_d = reach_m;
             for (std::size_t i : wave_targets_) {
                 const ScenarioTarget& t = def_.targets[i];
                 if (t.friendly || t.weapon || !targets_[i].spawned || targets_[i].gone) continue;
                 const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
                 if (a == nullptr || !a->alive) continue;
-                const double d = (a->position - site).Length();
-                if (d < best_d) {
-                    best_d = d;
-                    best = a;
-                    best_i = i;
+                const double dx = a->position.x - site.x, dy = a->position.y - site.y;
+                const double dist = std::sqrt(dx * dx + dy * dy);
+                if (dist >= reach_m) {
+                    st.engaged.erase(i);
+                    continue;
+                }
+                if (dist < near_d) {
+                    near_d = dist;
+                    near_a = a;
+                    near_i = i;
+                }
+                if (st.engaged.count(i) == 0 && dist < fresh_d && !Targeted(j, i)) {
+                    fresh_d = dist;
+                    fresh_a = a;
+                    fresh_i = i;
                 }
             }
-            if (best == nullptr) {
-                gun_next_s_[j] = time_ + 1.0;  // nothing in reach: look again in a second
+            if (time_ < st.next_s) continue;
+            if (guns) {
+                const Aircraft* a = fresh_a != nullptr ? fresh_a : near_a;
+                const std::size_t i = fresh_a != nullptr ? fresh_i : near_i;
+                if (a == nullptr) {
+                    st.next_s = time_ + 1.0;  // nothing in reach: look again in a second
+                    continue;
+                }
+                const double pass_s = 1.5 + 2.5 * Uniform01(defence_rng_);
+                if (fresh_a != nullptr) {  // a new aircraft in its reach: this pass decides it
+                    st.engaged.insert(i);
+                    if (Uniform01(defence_rng_) < NeighbourKillChance(*d, reach_m, site, *a)) {
+                        nb_shots_.push_back({j, i, time_ + pass_s, true, false, 0});
+                    }
+                }
+                st.next_s = time_ + pass_s + 2.0 + 4.0 * Uniform01(defence_rng_);
+                if (fx_on_) {
+                    fx::Event e;
+                    e.kind = fx::EventKind::GunPass;
+                    e.t_s = time_;
+                    e.end_t_s = time_ + pass_s;
+                    e.position = site;
+                    e.aim = a->position;
+                    e.source = nb.id;
+                    e.target = def_.targets[i].id;
+                    e.world_id = a->id;
+                    e.number = std::max(1, static_cast<int>(std::lround(rpm / 60.0 * pass_s)));  // a KS-30 fires a round or two
+                    e.weapon = nb.system;
+                    fx_.Push(e);
+                }
                 continue;
             }
-            const double pass_s = 1.5 + 2.5 * FxDraw();
-            fx::Event e;
-            e.kind = fx::EventKind::GunPass;
-            e.t_s = time_;
-            e.end_t_s = time_ + pass_s;
-            e.position = site;
-            e.aim = best->position;
-            e.source = nb.id;
-            e.target = def_.targets[best_i].id;
-            e.world_id = best->id;
-            e.number = std::max(1, static_cast<int>(std::lround(rpm / 60.0 * pass_s)));  // a KS-30 fires a round or two
-            e.weapon = sys;
-            fx_.Push(e);
-            gun_next_s_[j] = time_ + pass_s + 2.0 + 4.0 * FxDraw();
+            // A missile site: as many aircraft at once as its fire channels.
+            if (fresh_a == nullptr) continue;
+            int in_flight = 0;
+            for (const NeighbourShot& s : nb_shots_) in_flight += s.neighbour == j && s.missile ? 1 : 0;
+            if (airwar::EngagedAircraft(d->channels, 1.0, in_flight + 1) <= in_flight) continue;
+            st.engaged.insert(fresh_i);
+            const double k = NeighbourKillChance(*d, reach_m, site, *fresh_a);
+            if (k <= 0.0) continue;  // out of its cover (too fast, too high or too low for it): it lets it pass
+            const bool hit = Uniform01(defence_rng_) < k;
+            const Vec3 rails = FxRails(nb.position);
+            const double flight_s = std::min(kNbMissileMaxS, std::max(kNbMissileMinS, (fresh_a->position - rails).Length() / kNbMissileMps));
+            --st.missiles;
+            ++st.launches;
+            ++nb_launches_;
+            st.next_s = time_ + kNbLaunchGapS;
+            if (st.missiles == 0) st.reload_s = time_ + kNbReloadS;
+            nb_shots_.push_back({j, fresh_i, time_ + flight_s, hit, true, st.launches});
+            Event(nb.id, "launches at " + def_.targets[fresh_i].id);
+            if (fx_on_) {
+                fx::Event e;
+                e.kind = fx::EventKind::SamLaunch;
+                e.t_s = time_;
+                e.position = rails;
+                e.velocity = FxLaunchVelocity(rails, fresh_a->position);
+                e.aim = fresh_a->position;
+                e.end_t_s = time_ + flight_s;
+                e.source = nb.id;
+                e.target = def_.targets[fresh_i].id;
+                e.world_id = fresh_a->id;
+                e.number = st.launches;
+                e.weapon = nb.system;
+                fx_.Push(e);
+            }
+        }
+    }
+
+    // A missile of neighbour j already on its way to aircraft i.
+    bool Targeted(std::size_t j, std::size_t i) const {
+        for (const NeighbourShot& s : nb_shots_) {
+            if (s.neighbour == j && s.target == i) return true;
+        }
+        return false;
+    }
+
+    double NeighbourKillChance(const airwar::DefenceDef& d, double reach_m, const Vec3& site, const Aircraft& a) const {
+        const double agl = world_.Frame().AltitudeOf(a.position) - world_.GetTerrain().HeightAt(a.position.x, a.position.y);
+        const bool helicopter = a.speed_mps < 90.0;  // the runner does not know its type here: slow means a helicopter
+        return airwar::WavePassKillChance(d, reach_m, site, a.position, a.velocity, agl, helicopter, def_.waves->tuning);
+    }
+
+    // The shots whose time has come: a hit brings its aircraft down (its wreck in the feed); a missile that missed, or
+    // whose aircraft is already down, flies on and destroys itself.
+    void EndNeighbourShots() {
+        for (std::size_t k = 0; k < nb_shots_.size();) {
+            const NeighbourShot s = nb_shots_[k];
+            if (s.end_s > time_ + 1e-9) {
+                ++k;
+                continue;
+            }
+            nb_shots_.erase(nb_shots_.begin() + static_cast<std::ptrdiff_t>(k));
+            const ScenarioNeighbour& nb = def_.neighbours[s.neighbour];
+            const std::string id = def_.targets[s.target].id;
+            const Aircraft* a = targets_[s.target].spawned ? world_.FindAircraft(targets_[s.target].world_id) : nullptr;
+            const bool down = s.hit && a != nullptr && a->alive;
+            if (s.missile && fx_on_ && a != nullptr) {
+                fx::Event e;
+                e.kind = fx::EventKind::SamEnd;
+                e.t_s = e.end_t_s = time_;
+                e.position = FxRails(nb.position);
+                e.source = nb.id;
+                e.target = id;
+                e.world_id = a->id;
+                e.number = s.number;
+                e.weapon = nb.system;
+                if (down) {
+                    e.end = fx::BurstEnd::Hit;
+                    e.aim = FxAround(a->position, 0.0, kFxHitOffsetM);
+                } else {  // it flies on past the target and destroys itself
+                    e.end = fx::BurstEnd::SelfDestruct;
+                    Vec3 dir = a->position - e.position;
+                    dir = dir.LengthSquared() > 1.0 ? dir.Normalized() : Vec3{0.0, 0.0, 1.0};
+                    const double past = FxBetween(kFxPastMinM, kFxPastMaxM);
+                    e.aim = a->position + dir * past;
+                    e.velocity = dir * kFxPastMps;
+                    e.end_t_s = time_ + past / kFxPastMps;
+                }
+                fx_.Push(e);
+            }
+            if (down && DestroyTarget(id, nb.name)) ++nb_kills_;
         }
     }
 
@@ -2210,7 +2381,7 @@ private:
         };
         for (airwar::WaveRelease& r : waves_->Releases(time_, scene, lookup)) ReleaseWaveLoad(std::move(r));
         LandWaveLoads();
-        ShowNeighbourGuns();
+        FireNeighbourDefences();
         // The long gone leave the world.
         const double after_s = def_.waves->remove_after_s;
         for (std::size_t k = 0; k < wave_targets_.size();) {
@@ -10558,6 +10729,9 @@ public:
     // ---- The dynamic campaign testbed's waves (scenario "waves", air_war/test_waves.hpp).
     const airwar::TestWaves* Waves() const { return waves_.get(); }
     int WeaponImpacts() const { return weapon_impacts_; }
+    // The testbed's air defence (FireNeighbourDefences, the neighbours that do not fight in the battery fire model): its missiles launched and the aircraft it brought down.
+    int DefenceLaunches() const { return nb_launches_; }
+    int DefenceKills() const { return nb_kills_; }
     const std::vector<ScenarioScenery>& Scenery() const { return def_.scenery; }
     // The waves' aircraft and weapons in the sky or still to enter it (weapons not counted).
     int WavesAirborne() const {

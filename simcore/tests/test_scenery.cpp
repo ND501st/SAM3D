@@ -259,3 +259,26 @@ SC_TEST("scenery: the loader refuses a kind's site with an unknown model") {
                                     bad, &e));
     SC_EXPECT(e.find("kinds.refinery.models[1]") != std::string::npos);
 }
+
+SC_TEST("scenery: a search radar's antenna turns at its turns a minute, the rest of it stands still") {
+    const ModelLibrary lib = Library();
+    for (const char* id : {"p14", "p15", "p18", "p19", "p40"}) {
+        const ModelDef* m = lib.Find(id);
+        SC_EXPECT(m != nullptr);
+        if (m == nullptr) continue;
+        int turning = 0;
+        for (const Part& p : m->parts) turning += p.turns ? 1 : 0;
+        SC_EXPECT(m->antenna_rpm > 0.0 && turning == 1 && m->parts.size() > 1);  // the antenna only
+    }
+    // ru_wiki_p19, rusarmy_p15_p19: 6 s a turn; ru_wiki_p18: 10 s.
+    SC_EXPECT_NEAR(lib.Find("p19")->antenna_rpm, 10.0, 1e-9);
+    SC_EXPECT_NEAR(lib.Find("p18")->antenna_rpm, 6.0, 1e-9);
+    const ModelDef* tank = lib.Find("t55");
+    SC_EXPECT(tank != nullptr && tank->antenna_rpm == 0.0);
+    // Turns a minute on a model with no antenna are refused.
+    ModelLibrary bad;
+    std::string e;
+    SC_EXPECT(!LoadModelLibraryJson(R"({"models_id": "x", "models": [{"id": "a", "name": "A", "archetype": "tower", "height_m": 5, "diameter_m": 2, "antenna_rpm": 6, "colour": "#ffffff"}]})",
+                                    bad, &e));
+    SC_EXPECT(e.find("antenna_rpm") != std::string::npos);
+}

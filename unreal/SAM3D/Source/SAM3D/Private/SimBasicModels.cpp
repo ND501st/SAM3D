@@ -3,6 +3,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "GameFramework/RotatingMovementComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "SAM3D.h"
@@ -180,6 +181,19 @@ int32 FSimBasicModels::Build(const FString& ModelId, USceneComponent* Parent, TA
 		C->SetCastShadow(true);
 		C->SetupAttachment(Parent);
 		C->SetRelativeTransform(PartTransform(Part, Mesh));
+		if (Part.turns && Model->antenna_rpm > 0.0 && Owner != nullptr)
+		{
+			// A search radar's antenna turns round the vertical through its centre at the model's turns a minute (6 degrees
+			// a second for each): a rotating movement on the part, about the part's centre whatever the mesh's pivot. The
+			// owner removes it with the part (RemoveTurningAntennas).
+			C->SetMobility(EComponentMobility::Movable);
+			URotatingMovementComponent* Turn = NewObject<URotatingMovementComponent>(Owner);
+			Turn->RotationRate = FRotator(0.0, Model->antenna_rpm * 6.0, 0.0);
+			Turn->bRotationInLocalSpace = false;
+			Turn->PivotTranslation = (Mesh->GetBounds().Origin * FVector(Part.size.x, Part.size.y, Part.size.z));
+			Turn->SetUpdatedComponent(C);
+			Turn->RegisterComponent();
+		}
 		UMaterialInterface* Mat = Override != nullptr ? ColourMaterial(*Override) : ColourMaterial(UTF8_TO_TCHAR(Part.colour.c_str()));
 		if (Mat != nullptr)
 		{
@@ -193,4 +207,21 @@ int32 FSimBasicModels::Build(const FString& ModelId, USceneComponent* Parent, TA
 		++Built;
 	}
 	return Built;
+}
+
+void FSimBasicModels::RemoveTurningAntennas(AActor* Owner)
+{
+	if (Owner == nullptr)
+	{
+		return;
+	}
+	TArray<URotatingMovementComponent*> Turns;
+	Owner->GetComponents(Turns);
+	for (URotatingMovementComponent* T : Turns)
+	{
+		if (T != nullptr)
+		{
+			T->DestroyComponent();
+		}
+	}
 }
