@@ -2052,12 +2052,12 @@ void USimWorldSubsystem::ResetEntityCache()
 
 const FSimAircraftLook& USimWorldSubsystem::AircraftLookOf(const simcore::Aircraft& A) const
 {
-	const size_t Targets = Runner ? Runner->Def().targets.size() : 0;
-	if (Targets < AircraftLookTargets)
+	const size_t TargetCount = Runner ? Runner->Def().targets.size() : 0;
+	if (TargetCount < AircraftLookTargets)
 	{
 		AircraftLooks.Reset();  // another scenario: look them up again (targets joining one only add to it; ids are new)
 	}
-	AircraftLookTargets = Targets;
+	AircraftLookTargets = TargetCount;
 	if (const FSimAircraftLook* Found = AircraftLooks.Find(A.id))
 	{
 		return *Found;
