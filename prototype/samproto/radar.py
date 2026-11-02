@@ -84,11 +84,17 @@ class Footprints:
     def top_bound(self, e0: float, n0: float, e1: float, n1: float, below: float) -> tuple[float | None, float]:
         return (1e300, self.spacing_m) if self.spacing_m > 0.0 else (None, 0.0)
 
+    def chords(self, e0: float, n0: float, e1: float, n1: float, below: float) -> list[tuple[float, float, float]] | None:
+        """Mirror of Terrain::ObstacleChords: (t_in, t_out, top) for each footprint the ground segment crosses whose top
+        is no lower than `below`, exactly; None: not known so (looked at at the spacing instead)."""
+        return None
+
 
 def obstacles_along(fp: Footprints | None, ax: float, ay: float, ux: float, uy: float, total: float, s0: float, s1: float,
                     below: float, skip: float):
     """Mirror of simcore terrain.hpp ObstaclesAlong: yields (s, top) for the footprints over [s0, s1] of the path (less
-    `skip` at either end) at their own spacing, where something there may stand higher than `below`."""
+    `skip` at either end), at their cuts when the footprints know them, else at their own spacing, where something there
+    may stand higher than `below`."""
     if fp is None or fp.spacing_m <= 0.0:
         return
     lo, hi = max(s0, skip), min(s1, total - skip)
@@ -96,6 +102,15 @@ def obstacles_along(fp: Footprints | None, ax: float, ay: float, ux: float, uy: 
         return
     bound, spacing = fp.top_bound(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below)
     if bound is None or bound < below or spacing <= 0.0:
+        return
+    cuts = fp.chords(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below)
+    if cuts is not None:  # each cut at its ends and its middle (R6's second review: a corner cut short is not stepped over)
+        for t_in, t_out, top in cuts:
+            a = lo + (hi - lo) * min(1.0, max(0.0, t_in))
+            b = lo + (hi - lo) * min(1.0, max(0.0, t_out))
+            yield a, top
+            yield 0.5 * (a + b), top
+            yield b, top
         return
     steps = int(math.ceil((hi - lo) / spacing))
     for k in range(steps + 1):

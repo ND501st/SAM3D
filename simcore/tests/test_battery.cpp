@@ -1271,4 +1271,43 @@ SC_TEST("battery fire: a launcher behind a ridge neither takes nor captures a ta
         for (const BatteryFire::Event& e : fire.TakeEvents()) captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
     }
     SC_EXPECT(!captured && fire.Shooters().front().phase == BatteryFire::Phase::Acquiring);
+
+    // R6's review: a missile in flight needs the track, as the player's does. Launched on a target 2 km north (short of
+    // the ridge, in sight), which then drops behind the ridge (9 km north): the missile is lost within a second, never a
+    // hit, and the launcher looks for the target again.
+    BatteryFire flying(t, 20000.0);
+    flying.SetGround(&ridge, &frame);
+    flying.Sync(b);
+    SC_EXPECT(flying.Assign("22", "low", 1, 0.0));
+    BatteryFireTarget near_tg = tg;
+    near_tg.position = GroundPointInFrame(frame, 0.0, 2000.0, 100.0);
+    std::mt19937 rng2(5);
+    double launched_s = -1.0, lost_s = -1.0;
+    bool hit_any = false;
+    for (double s = 0.0; s < 120.0; s += 0.5) {
+        flying.Step(s, {launched_s < 0.0 ? near_tg : tg}, rng2, &b, [](const std::string&) {});
+        for (const BatteryFire::Event& e : flying.TakeEvents()) {
+            if (e.kind == BatteryFire::Event::Kind::Launch && launched_s < 0.0) launched_s = s;
+            if (e.kind == BatteryFire::Event::Kind::Miss && lost_s < 0.0) lost_s = s;
+            hit_any = hit_any || e.kind == BatteryFire::Event::Kind::Hit;
+        }
+        if (lost_s >= 0.0) break;
+    }
+    SC_EXPECT(launched_s >= 0.0 && lost_s >= launched_s && lost_s <= launched_s + 1.0 && !hit_any);
+    SC_EXPECT(flying.Shooters().front().phase == BatteryFire::Phase::Acquiring);
+    // In sight all the way, the same launch is resolved at its meeting time (a hit or a miss by the chance, not lost).
+    BatteryFire seen_fire(t, 20000.0);
+    seen_fire.SetGround(&ridge, &frame);
+    seen_fire.Sync(b);
+    SC_EXPECT(seen_fire.Assign("22", "low", 1, 0.0));
+    std::mt19937 rng3(5);
+    double launch3 = -1.0, result3 = -1.0;
+    for (double s = 0.0; s < 120.0 && result3 < 0.0; s += 0.5) {
+        seen_fire.Step(s, {near_tg}, rng3, &b, [](const std::string&) {});
+        for (const BatteryFire::Event& e : seen_fire.TakeEvents()) {
+            if (e.kind == BatteryFire::Event::Kind::Launch && launch3 < 0.0) launch3 = s;
+            if ((e.kind == BatteryFire::Event::Kind::Hit || e.kind == BatteryFire::Event::Kind::Miss) && result3 < 0.0) result3 = s;
+        }
+    }
+    SC_EXPECT(launch3 >= 0.0 && result3 >= launch3 + 3.5);  // 2 km at 500 m/s: about 4 s
 }

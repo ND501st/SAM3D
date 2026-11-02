@@ -7,7 +7,8 @@
 // 1.2 s; the result watched 10 s), every time scaled by its crew's tier (docs/crew/05_SKILL.md: the tier's reaction
 // against the reference tier's). Its sensors are geometric (the target within the tracking radar's reach and, given the
 // ground (SetGround), in its search antenna's line of sight over the ground, the woods and the buildings, the rule the
-// player's Osa sees by: engagement.hpp SearchAntennaSees, roadmap R6); it fires only inside the firing zones of the
+// player's Osa sees by: engagement.hpp SearchAntennaSees, roadmap R6), and a missile in flight that loses the target
+// so is lost, as the player's is (no guidance commands without the track); it fires only inside the firing zones of the
 // gameplay tuning, from its own position; each launch is resolved with the same
 // hit chance as the player's (the class's chance and its low-altitude factor; no crew mistakes, no manoeuvre). Six
 // missiles; when empty it asks for the TZM and is reloaded one missile a minute alongside it (flak11).
@@ -217,8 +218,17 @@ public:
             if (s.target.empty() && (autonomous_ || s.on_own) && s.missiles > 0) TakeNearest(s, targets, t);
             const BatteryFireTarget* tg = FindTarget(targets, s.target);
             if (s.phase == Phase::InFlight) {
-                if (t < s.next_s) continue;
                 const bool alive = tg != nullptr && tg->alive;
+                // The missile flies on the launcher's commands, which need its track: the target out of reach, or behind
+                // the ground, a wood or a building, and the missile is lost, as the player's is (engagement.hpp
+                // ResolveShots: "track lost: no guidance commands"). The launcher looks for it again.
+                if (alive && t < s.next_s && !((tg->position - s.position).Length() <= reach_m_ && Sees(s, *tg, t))) {
+                    events_.push_back({Event::Kind::Miss, t, s.callsign, s.target, ReportNumber(s, tg)});
+                    s.phase = Phase::Acquiring;
+                    s.next_s = t;
+                    continue;
+                }
+                if (t < s.next_s) continue;
                 const bool hit_it = alive && Uniform(rng) < s.chance;
                 events_.push_back({hit_it ? Event::Kind::Hit : Event::Kind::Miss, t, s.callsign, s.target, ReportNumber(s, tg)});
                 if (hit_it) {

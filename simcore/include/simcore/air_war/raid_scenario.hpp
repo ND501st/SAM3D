@@ -1040,6 +1040,9 @@ private:
         const auto open = [&](double e, double n) {
             const double k = kOpenClearM, d = 0.7071 * kOpenClearM;
             const double ring[9][2] = {{0.0, 0.0}, {k, 0.0}, {-k, 0.0}, {0.0, k}, {0.0, -k}, {d, d}, {d, -d}, {-d, d}, {-d, -d}};
+            // Every footprint within kOpenClearM, whole (roadmap R6's review: a house between the ring's points is not
+            // missed); the ring for the clutter of the towns the map does not lay out.
+            if (ground.ObstacleHeightWithin(e, n, kOpenClearM) > kOpenObstacleM) return false;
             for (const auto& o : ring) {
                 if (ground.ObstacleHeightAt(e + o[0], n + o[1]) > kOpenObstacleM) return false;
             }

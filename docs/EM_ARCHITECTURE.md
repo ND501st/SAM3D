@@ -525,15 +525,24 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     (`ObstacleGrid`, `DetailObstacleGrids`) remain as a picture: each node holds what stands over it.
   * **Footprints between the samples** (`terrain.hpp` `ObstaclesAlong`; `Terrain::ObstacleSpacingM`, `ObstacleTopAt`,
     `ObstacleTopBoundM`). A path sampled every 50-100 m would step over a 7 m house, so where the terrain has footprints
-    each stretch between two samples is bounded first (the blocks', then for a short stretch the cells' tallest top) and
-    looked at at the narrowest side among the footprints there (no finer than 4 m, a game value: a revetment's 2.5 m
-    bank may be stepped over) only where the ray runs lower than that bound. `HasLineOfSight` is blocked by the first
+    each stretch between two samples is bounded first (the blocks', then for a short stretch the cells' tallest top) and,
+    only where the ray runs lower than that bound, every footprint the stretch crosses is found exactly
+    (`Terrain::ObstacleChords`, `MapData::ObstacleChords`: the stretch walks every cell it passes through, a corner
+    clipped too, and each footprint's cut is the segment's own entry and exit, a turned rectangle's slabs or a circle's
+    roots), and the ray is looked at at each cut's ends and middle (over a flat roof it is lowest at an end): a ray
+    cutting a corner 0.1 m deep is blocked (R6's second review: at the narrowest side's spacing a quarter of the corner
+    cuts on the Kesmark map had been stepped over). A terrain that does not know its cuts is looked at at the
+    narrowest side among the footprints there (no finer than 4 m). `HasLineOfSight` is blocked by the first
     footprint over the ray; `AnalysePath` adds each stretch's highest footprint over the ray to its profile where one
     comes within 10 m of the ray (`kFootprintNearRayM`), so it is a diffraction edge where it stands. A terrain
     without footprints (a bare one, a test's function of east and north) keeps the samples alone.
     `test_map_obstacles.cpp`: a 12 m-wide, 20 m-tall box blocks a ray 0.5 m inside its end and not 0.5 m outside, 0.5 m
-    under its roof and not 0.5 m over it, at 50, 100 and 400 m sampling; a house on the map proper and one in the capital
-    likewise.
+    under its roof and not 0.5 m over it, at 50, 100 and 400 m sampling; cut 0.1 m into its corner it blocks, 0.1 m clear
+    of it it does not; a house on the map proper and one in the capital likewise; every fifth building and wood block on
+    the Kesmark map (8086) blocks a ray cutting its corner 0.3 m deep 2 m under its roof.
+  * **A site's open ground** (`air_war/raid_scenario.hpp` `OpenGroundShift`): a raid's positions are moved off any
+    footprint within 20 m of a spot, found whole (`MapData::ObstacleHeightWithin`), not at nine points round it,
+    between which a house could stand.
   * **Low pilots climb over the canopy.** `TargetPilot::HoldHeight` holds the wanted height over the ground plus the
     obstacles, here and ahead (the footprints between its 100 m look-ahead points too, where one may top what he holds
     over already); a terrain-following helicopter over a forest flies its height over the treetops. The
@@ -548,9 +557,10 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     (`Terrain::ObstacleTallestM`: a box's top over the ground under it, 5 m to spare; `AnalysePath` within 100 m more,
     `kObstacleFarBelowRayM`, where an edge could still diffract down to 30 MHz), and a stretch between samples only
     where the ray runs under the blocks' bound (`ObstacleTopCeilingM` first: the tallest top anywhere). The dynamic
-    campaign test's hour in `ground_check data 3600`: 69.5 s of wall time (r6 before the footprints 89 s,
-    r-track 53 s; Kesmark's raid 0.5 s). If it tells in the game's fixed step: obstacle profiles
-    cached per path.
+    campaign test's hour in `ground_check data 3600`: 64.1 s of wall time with the exact cuts (69.4 s at the
+    narrowest side's spacing, 88.6 s before the footprints), against r-track's 48.4 s, run in turn on one machine: a
+    third slower than before the obstacles; Kesmark's raid 0.5 s against 0.4 s. If it tells in the game's fixed step:
+    obstacle profiles cached per path.
 * Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
   (fields, orchards) in place of the towns' two heights.
 

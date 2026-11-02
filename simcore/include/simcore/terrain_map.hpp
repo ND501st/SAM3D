@@ -736,6 +736,83 @@ public:
         if (top > Terrain::kNoObstacleTop) spacing_m = side;
         return top;
     }
+    // Every box over the ground segment from (e0, n0) to (e1, n1) whose top is no lower than `below_m`, told to `sink`
+    // with where the segment goes in and comes out of its footprint (Terrain::ObstacleChords; roadmap R6's review: a ray
+    // cutting a corner is not stepped over). The segment walks every cell it passes through (a corner clipped too) in
+    // each dense grid it reaches and, unless it lies in one, the loose cells; a box is told once per grid, in the cell
+    // where the walk first meets it. The clutter of the towns not laid out is not a footprint.
+    void ObstacleChords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const {
+        const double de = e1 - e0, dn = n1 - n0;
+        bool going = true;
+        const auto tell = [&](std::uint32_t k, double cell_in, double cell_out, double walk_in) {
+            const Foot& f = feet_[k];
+            if (f.top < below_m) return;
+            double t_in = 0.0, t_out = 1.0;
+            if (!f.Chord(e0, n0, de, dn, t_in, t_out)) return;
+            const double first = std::max(t_in, walk_in);  // where the walk first meets it
+            if (first < cell_in - kWalkEps || first > cell_out + kWalkEps) return;
+            going = sink.Chord(t_in, t_out, f.top);
+        };
+        const double w = std::min(e0, e1), s = std::min(n0, n1), ea = std::max(e0, e1), nn = std::max(n0, n1);
+        bool inside_one = false;
+        for (const FootCells& c : rects_) {
+            if (!going) return;
+            if (!c.Overlaps(w, s, ea, nn)) continue;
+            inside_one = inside_one || (c.Covers(e0, n0) && c.Covers(e1, n1));
+            double walk_in = 0.0;
+            WalkCells(e0, n0, e1, n1, c.west_m, c.south_m, c.cell_m, c.cols, c.rows, walk_in,
+                      [&](long long col, long long row, double t0, double t1) {
+                          const std::size_t i = static_cast<std::size_t>(row) * static_cast<std::size_t>(c.cols) + static_cast<std::size_t>(col);
+                          if (c.top[i] < below_m) return true;
+                          for (std::uint32_t k = c.first[i]; k < c.first[i + 1] && going; ++k) tell(c.feet[k], t0, t1, walk_in);
+                          return going;
+                      });
+        }
+        if (inside_one || !going || loose_.empty()) return;
+        double walk_in = 0.0;
+        WalkCells(e0, n0, e1, n1, 0.0, 0.0, kLooseCellM, -1, -1, walk_in, [&](long long col, long long row, double t0, double t1) {
+            const auto it = loose_.find(PairKey(col, row));
+            if (it == loose_.end()) return true;
+            for (std::size_t j = 0; j < it->second.size() && going; ++j) tell(it->second[j], t0, t1, walk_in);
+            return going;
+        });
+    }
+    // The tallest box (its top over the ground at its centre) whose footprint comes within `radius_m` of (east, north);
+    // 0: none. A spot's clearance looked at whole (roadmap R6's review: a house between a few points is not missed).
+    double ObstacleHeightWithin(double e, double n, double radius_m) const {
+        double most = 0.0;
+        const auto near_enough = [&](std::uint32_t k) {
+            const Foot& f = feet_[k];
+            const double de = e - f.e, dn = n - f.n;
+            double d = 0.0;
+            if (f.round) {
+                d = std::max(0.0, std::hypot(de, dn) - f.half_l);
+            } else {
+                const double u = std::max(0.0, std::fabs(de * f.sin_h + dn * f.cos_h) - f.half_l);
+                const double v = std::max(0.0, std::fabs(de * f.cos_h - dn * f.sin_h) - f.half_w);
+                d = std::hypot(u, v);
+            }
+            if (d <= radius_m) most = std::max(most, f.top - GroundHeight(f.e, f.n));
+        };
+        const double w = e - radius_m, ea = e + radius_m, s = n - radius_m, nn = n + radius_m;
+        for (const FootCells& c : rects_) {
+            if (!c.Overlaps(w, s, ea, nn)) continue;
+            for (int r = c.Row(s); r <= c.Row(nn); ++r) {
+                for (int col = c.Col(w); col <= c.Col(ea); ++col) {
+                    const std::size_t i = static_cast<std::size_t>(r) * static_cast<std::size_t>(c.cols) + static_cast<std::size_t>(col);
+                    for (std::uint32_t k = c.first[i]; k < c.first[i + 1]; ++k) near_enough(c.feet[k]);
+                }
+            }
+        }
+        for (long long y = CellIndex(s, kLooseCellM); y <= CellIndex(nn, kLooseCellM); ++y) {
+            for (long long x = CellIndex(w, kLooseCellM); x <= CellIndex(ea, kLooseCellM); ++x) {
+                const auto it = loose_.find(PairKey(x, y));
+                if (it == loose_.end()) continue;
+                for (std::uint32_t k : it->second) near_enough(k);
+            }
+        }
+        return most;
+    }
     // The narrowest side of any box that blocks sight (no less than kFootSpacingFloorM; 0: none), and the tallest top
     // of any (above sea level; Terrain::kNoObstacleTop: none).
     double NarrowestObstacle() const { return narrowest_m_; }
@@ -820,6 +897,39 @@ private:
             if (round) return de * de + dn * dn <= half_l * half_l;
             return std::fabs(de * sin_h + dn * cos_h) <= half_l && std::fabs(de * cos_h - dn * sin_h) <= half_w;
         }
+        // Where the ground segment from (e0, n0) along (de, dn) (t from 0 to 1) is inside it: [t_in, t_out]. False:
+        // never.
+        bool Chord(double e0, double n0, double de, double dn, double& t_in, double& t_out) const {
+            const double we = e0 - e, wn = n0 - n;
+            t_in = 0.0;
+            t_out = 1.0;
+            if (round) {
+                const double a = de * de + dn * dn, b = 2.0 * (we * de + wn * dn), c = we * we + wn * wn - half_l * half_l;
+                if (a < 1e-18) return c <= 0.0;
+                const double disc = b * b - 4.0 * a * c;
+                if (disc < 0.0) return false;
+                const double root = std::sqrt(disc);
+                t_in = std::max(0.0, (-b - root) / (2.0 * a));
+                t_out = std::min(1.0, (-b + root) / (2.0 * a));
+                return t_in <= t_out;
+            }
+            // The slabs along its length and across its width.
+            const double p0[2] = {we * sin_h + wn * cos_h, we * cos_h - wn * sin_h};
+            const double dp[2] = {de * sin_h + dn * cos_h, de * cos_h - dn * sin_h};
+            const double half[2] = {half_l, half_w};
+            for (int k = 0; k < 2; ++k) {
+                if (std::fabs(dp[k]) < 1e-12) {
+                    if (std::fabs(p0[k]) > half[k]) return false;
+                    continue;
+                }
+                double ta = (-half[k] - p0[k]) / dp[k], tb = (half[k] - p0[k]) / dp[k];
+                if (ta > tb) std::swap(ta, tb);
+                t_in = std::max(t_in, ta);
+                t_out = std::min(t_out, tb);
+                if (t_in > t_out) return false;
+            }
+            return true;
+        }
         // Its bounds' half extents east and north.
         double HalfE() const { return round ? half_l : half_l * std::fabs(sin_h) + half_w * std::fabs(cos_h); }
         double HalfN() const { return round ? half_l : half_l * std::fabs(cos_h) + half_w * std::fabs(sin_h); }
@@ -864,6 +974,66 @@ private:
     static long long CellIndex(double v, double cell_m) { return static_cast<long long>(std::floor(v / cell_m)); }
     static long long PairKey(long long x, long long y) { return x * 2000003LL + y; }
     static long long CellKey(double e, double n, double cell_m) { return PairKey(CellIndex(e, cell_m), CellIndex(n, cell_m)); }
+    // The cells of a lattice (west, south, cell; cols and rows, or -1: unbounded) the ground segment from (e0, n0) to
+    // (e1, n1) passes through, in order, every one: `visit(col, row, t_in, t_out)`, the segment's fractions in it;
+    // false stops. `walk_in`: where the segment comes into a bounded lattice (0 when it starts inside).
+    template <class Visit>
+    static void WalkCells(double e0, double n0, double e1, double n1, double west, double south, double cell, long long cols,
+                          long long rows, double& walk_in, Visit visit) {
+        const double de = e1 - e0, dn = n1 - n0;
+        double ta = 0.0, tb = 1.0;
+        if (cols > 0 && rows > 0) {  // clipped to the lattice
+            const double lo[2] = {west, south};
+            const double hi[2] = {west + cell * static_cast<double>(cols), south + cell * static_cast<double>(rows)};
+            const double p0[2] = {e0, n0}, dp[2] = {de, dn};
+            for (int k = 0; k < 2; ++k) {
+                if (std::fabs(dp[k]) < 1e-12) {
+                    if (p0[k] < lo[k] || p0[k] > hi[k]) return;
+                    continue;
+                }
+                double t0 = (lo[k] - p0[k]) / dp[k], t1 = (hi[k] - p0[k]) / dp[k];
+                if (t0 > t1) std::swap(t0, t1);
+                ta = std::max(ta, t0);
+                tb = std::min(tb, t1);
+            }
+            if (ta > tb) return;
+        }
+        walk_in = ta;
+        const auto index = [&](double v, double origin, long long count) {
+            long long i = static_cast<long long>(std::floor((v - origin) / cell));
+            if (count > 0) i = std::max(0LL, std::min(count - 1, i));
+            return i;
+        };
+        const double start = ta + std::min(1e-9, 0.5 * (tb - ta));  // the start cell from a point just inside, off an edge
+        long long cx = index(e0 + de * start, west, cols), cy = index(n0 + dn * start, south, rows);
+        const long long step_x = de > 0.0 ? 1 : -1, step_y = dn > 0.0 ? 1 : -1;
+        constexpr double kNever = 1e300;
+        const auto next_edge = [&](long long ci, long long step, double origin, double p, double d) {
+            if (std::fabs(d) < 1e-12) return kNever;
+            const double edge = origin + cell * static_cast<double>(step > 0 ? ci + 1 : ci);
+            return (edge - p) / d;
+        };
+        double tx = next_edge(cx, step_x, west, e0, de), ty = next_edge(cy, step_y, south, n0, dn);
+        const double dtx = std::fabs(de) < 1e-12 ? kNever : cell / std::fabs(de);
+        const double dty = std::fabs(dn) < 1e-12 ? kNever : cell / std::fabs(dn);
+        double t = ta;
+        const long long most = 4 + static_cast<long long>(std::fabs(de) / cell) + static_cast<long long>(std::fabs(dn) / cell);
+        for (long long guard = 0; guard <= most; ++guard) {
+            const double t_out = std::min({tx, ty, tb});
+            if (!visit(cx, cy, t, t_out)) return;
+            if (t_out >= tb) return;
+            t = t_out;
+            if (tx <= ty) {
+                cx += step_x;
+                tx += dtx;
+            } else {
+                cy += step_y;
+                ty += dty;
+            }
+            if (cols > 0 && (cx < 0 || cx >= cols || cy < 0 || cy >= rows)) return;
+        }
+    }
+    static constexpr double kWalkEps = 1e-9;              // of a segment: a cut met on a cell's edge is told in both cells
     static constexpr double kLooseCellM = 50.0;           // beyond the map proper and the detail areas
     static constexpr double kBlockM = 500.0;              // the coarse bound's blocks
     static constexpr double kFineBoundAreaM2 = 250000.0;  // a segment whose bounds are no larger is bounded by the finer cells
@@ -2027,6 +2197,16 @@ public:
     double ObstacleTopBoundM(double e0, double n0, double e1, double n1, double below_m, double& spacing_m) const override {
         const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);
         return map_->ObstacleTopBound(a.east_m, a.north_m, b.east_m, b.north_m, below_m, spacing_m);
+    }
+    bool ObstacleChords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const override {
+        const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);  // affine: a fraction stays a fraction
+        map_->ObstacleChords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, sink);
+        return true;
+    }
+    // The tallest box whose footprint comes within `radius_m` of the scenario's (east, north) (MapData::ObstacleHeightWithin).
+    double ObstacleHeightWithin(double east_m, double north_m, double radius_m) const {
+        const MapPoint p = link_.FrameToMap(east_m, north_m);
+        return map_->ObstacleHeightWithin(p.east_m, p.north_m, radius_m);
     }
     // The nearest point of a road's centre line to the scenario's (east, north), within `within_m` of it (ENU; its z is
     // not the ground's), and that road's width. False if no road is that near.

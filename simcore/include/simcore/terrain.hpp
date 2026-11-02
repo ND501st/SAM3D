@@ -12,6 +12,19 @@
 
 namespace simcore {
 
+// What a terrain tells of each footprint a ground segment crosses (Terrain::ObstacleChords): the fractions of the
+// segment where it goes in and comes out (0..1, in <= out) and its top above sea level. Return false to stop.
+class ObstacleChordSink {
+public:
+    virtual bool Chord(double t_in, double t_out, double top_m) = 0;
+
+protected:
+    ObstacleChordSink() = default;
+    ObstacleChordSink(const ObstacleChordSink&) = default;
+    ObstacleChordSink& operator=(const ObstacleChordSink&) = default;
+    ~ObstacleChordSink() = default;
+};
+
 class Terrain {
 public:
     Terrain() = default;
@@ -42,6 +55,15 @@ public:
         return spacing_m > 0.0 ? 1e300 : kNoObstacleTop;
     }
 
+    // Every footprint the ground segment from (e0, n0) to (e1, n1) crosses whose top is no lower than `below_m`, told to
+    // `sink` with where the segment goes in and comes out of it: exactly, so a ray cutting a building's corner is not
+    // stepped over however short its cut (roadmap R6's review). A footprint may be told more than once. False: this
+    // terrain does not know them so; a path looks at ObstacleTopAt at the spacing instead (ObstaclesAlong).
+    virtual bool ObstacleChords(double /*e0*/, double /*n0*/, double /*e1*/, double /*n1*/, double /*below_m*/,
+                                ObstacleChordSink& /*sink*/) const {
+        return false;
+    }
+
     // No footprint anywhere stands higher than this (above sea level): a path whose ray runs higher asks nothing more.
     virtual double ObstacleTopCeilingM() const { return 1e300; }
     // No woods or building anywhere stands higher than this over the ground under it (ObstacleHeightAt never more): a
@@ -57,8 +79,10 @@ public:
 // docs/EM_ARCHITECTURE.md section 27).
 constexpr double kObstacleSkipM = 60.0;
 
-// The woods and buildings over one stretch of a straight path, between two of its samples, at the terrain's own spacing
-// (Terrain::ObstacleSpacingM, roadmap R6): a narrow building between two samples is not stepped over. The path starts at
+// The woods and buildings over one stretch of a straight path, between two of its samples: each footprint the stretch
+// crosses, at the ends and the middle of its cut (Terrain::ObstacleChords), or, on a terrain that does not know its
+// footprints so, at the terrain's own spacing (Terrain::ObstacleSpacingM, roadmap R6): a narrow building between two
+// samples, or a corner cut short, is not stepped over. The path starts at
 // (ax, ay) and runs along the unit direction (ux, uy) for total_m; the stretch is [s0, s1] of it, less skip_m at either
 // end of the path (kObstacleSkipM). Looked at only where something there may stand higher than `below_m` (above sea
 // level: Terrain::ObstacleTopBoundM, which gives the spacing too), so open ground, and a ray high over the roofs, cost
@@ -73,6 +97,19 @@ inline void ObstaclesAlong(const Terrain& t, double ax, double ay, double ux, do
     if (hi < lo || below_m > t.ObstacleTopCeilingM()) return;
     double spacing = 0.0;
     if (t.ObstacleTopBoundM(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below_m, spacing) < below_m || spacing <= 0.0) return;
+    // The cuts: the ray over a flat roof is lowest at one end of its cut (the Earth's bulge across a cut is under a
+    // millimetre), so its ends and its middle are what the visitor needs.
+    struct Cuts final : ObstacleChordSink {
+        Visit& v;
+        double lo_m, hi_m;
+        Cuts(Visit& visit_fn, double l, double h) : v(visit_fn), lo_m(l), hi_m(h) {}
+        bool Chord(double t_in, double t_out, double top_m) override {
+            const double a = lo_m + (hi_m - lo_m) * (t_in < 0.0 ? 0.0 : t_in > 1.0 ? 1.0 : t_in);
+            const double b = lo_m + (hi_m - lo_m) * (t_out < 0.0 ? 0.0 : t_out > 1.0 ? 1.0 : t_out);
+            return v(a, top_m) && v(0.5 * (a + b), top_m) && v(b, top_m);
+        }
+    } cuts(visit, lo, hi);
+    if (t.ObstacleChords(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below_m, cuts)) return;
     const int steps = static_cast<int>(std::ceil((hi - lo) / spacing));
     for (int k = 0; k <= steps; ++k) {
         const double s = steps > 0 ? lo + (hi - lo) * static_cast<double>(k) / steps : lo;

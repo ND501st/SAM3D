@@ -412,3 +412,133 @@ SC_TEST("obstacles: the map's buildings mask exactly their footprints, in the ma
         SC_EXPECT(m->ObstacleHeight(out_e, out_n) == 0.0);
     }
 }
+
+namespace {
+
+// OneBoxTerrain that knows its footprint's cuts exactly (Terrain::ObstacleChords, as MapTerrain does).
+class OneBoxExact final : public Terrain {
+public:
+    double HeightAt(double, double) const override { return 0.0; }
+    double ObstacleHeightAt(double e, double n) const override { return box_.ObstacleHeightAt(e, n); }
+    double ObstacleSpacingM() const override { return box_.ObstacleSpacingM(); }
+    double ObstacleTopAt(double e, double n) const override { return box_.ObstacleTopAt(e, n); }
+    double ObstacleTopBoundM(double e0, double n0, double e1, double n1, double below, double& spacing_m) const override {
+        return box_.ObstacleTopBoundM(e0, n0, e1, n1, below, spacing_m);
+    }
+    bool ObstacleChords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const override {
+        if (OneBoxTerrain::kTop < below_m) return true;
+        const double p0[2] = {e0, n0}, dp[2] = {e1 - e0, n1 - n0}, half[2] = {OneBoxTerrain::kHalfE, OneBoxTerrain::kHalfN};
+        double t_in = 0.0, t_out = 1.0;
+        for (int k = 0; k < 2; ++k) {
+            if (std::fabs(dp[k]) < 1e-12) {
+                if (std::fabs(p0[k]) > half[k]) return true;
+                continue;
+            }
+            const double ta = (-half[k] - p0[k]) / dp[k], tb = (half[k] - p0[k]) / dp[k];
+            t_in = std::max(t_in, std::min(ta, tb));
+            t_out = std::min(t_out, std::max(ta, tb));
+        }
+        if (t_in <= t_out) sink.Chord(t_in, t_out, OneBoxTerrain::kTop);
+        return true;
+    }
+
+private:
+    OneBoxTerrain box_;
+};
+
+bool OpaqueForSight(MapPart p) {
+    return p != MapPart::Marsh && p != MapPart::Pad && p != MapPart::Runway && p != MapPart::Mast && p != MapPart::Chimney &&
+           p != MapPart::Tower && p != MapPart::Launcher && p != MapPart::Tent;
+}
+
+}  // namespace
+
+// R6's second review: a ray cutting a building's corner was stepped over when its cut was shorter than the footprint's
+// spacing (a quarter of the corner rays on the Kesmark map). A terrain that knows its footprints' cuts exactly is looked
+// at at them, however short.
+SC_TEST("obstacles: a ray cutting a box's corner 0.1 m deep is blocked, at any sampling; 0.1 m clear of it is not") {
+    const OneBoxExact box;
+    const double c = std::sqrt(0.5);
+    for (const double spacing : {50.0, 100.0, 400.0}) {
+        const auto diagonal = [&](double off, bool path) {
+            const double pe = 6.0 + off * c, pn = 15.0 + off * c;  // the ray's nearest point to the north-east corner
+            const Vec3 a{pe - 700.0 * c, pn + 700.0 * c, 0.0}, z{pe + 700.0 * c, pn - 700.0 * c, 0.0};
+            return path ? em::AnalysePath(box, a, 10.0, z, 10.0, spacing).line_of_sight : HasLineOfSight(box, a, 10.0, z, 10.0, spacing);
+        };
+        for (const bool path : {false, true}) {
+            SC_EXPECT(!diagonal(-0.1, path) && !diagonal(-2.0, path) && !diagonal(-8.0, path));
+            SC_EXPECT(diagonal(0.1, path) && diagonal(1.0, path));
+        }
+        // Across it, as before: 0.5 m inside its end blocked, 0.5 m outside clear; under and over its roof.
+        SC_EXPECT(!HasLineOfSight(box, Vec3{-1013.0, 14.5, 0.0}, 10.0, Vec3{987.0, 14.5, 0.0}, 10.0, spacing));
+        SC_EXPECT(HasLineOfSight(box, Vec3{-1013.0, 15.5, 0.0}, 10.0, Vec3{987.0, 15.5, 0.0}, 10.0, spacing));
+        SC_EXPECT(!HasLineOfSight(box, Vec3{-1013.0, 0.0, 0.0}, 19.5, Vec3{987.0, 0.0, 0.0}, 19.5, spacing));
+        SC_EXPECT(HasLineOfSight(box, Vec3{-1013.0, 0.0, 0.0}, 20.5, Vec3{987.0, 0.0, 0.0}, 20.5, spacing));
+    }
+}
+
+SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a corner 0.3 m deep, 2 m under the roof") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    const MapTerrain ground(m, m->Def().origin);
+    const Terrain& t = ground;
+    const GroundOnly bare(t);
+    const double c = std::sqrt(0.5);
+    int tried = 0, stepped_los = 0, stepped_path = 0;
+    std::size_t index = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (!OpaqueForSight(b.part) || (index++ % 5) != 0) continue;  // every fifth, for the time
+        const double top = b.base_m + b.height_m, up = top - 2.0;
+        const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
+        double pe = 0.0, pn = 0.0, de = 0.0, dn = 0.0;  // the cut's middle, inside it, and the ray's direction
+        if (MapPartIsRound(b.part)) {
+            const double r = 0.5 * b.length_m;
+            pe = b.east_m + std::sqrt(std::max(0.0, r * r - 0.09));  // a 0.6 m chord at its side
+            pn = b.north_m;
+            dn = 1.0;
+        } else {
+            // The corner (+along, +across), the ray at 45 degrees to its sides cutting 0.3 m into it.
+            const double hl = 0.5 * b.length_m, hw = 0.5 * b.width_m;
+            const double ce = b.east_m + hl * sh + hw * ch, cn = b.north_m + hl * ch - hw * sh;
+            pe = ce - (sh + ch) * c * 0.3;
+            pn = cn - (ch - sh) * c * 0.3;
+            de = (sh - ch) * c;
+            dn = (ch + sh) * c;
+        }
+        const double reach = 300.0;
+        const Vec3 a{pe - reach * de, pn - reach * dn, 0.0}, z{pe + reach * de, pn + reach * dn, 0.0};
+        if (!HasLineOfSight(bare, a, up, z, up, 100.0)) continue;  // the ground in the way: nothing to show
+        if (t.ObstacleTopAt(pe, pn) < up) continue;
+        ++tried;
+        if (HasLineOfSight(t, a, up, z, up, 100.0)) ++stepped_los;
+        if (em::AnalysePath(t, a, up, z, up, 100.0).line_of_sight) ++stepped_path;
+    }
+    std::printf("    %d corner and side cuts: %d stepped over by HasLineOfSight, %d by AnalysePath\n", tried, stepped_los, stepped_path);
+    SC_EXPECT(tried > 1000);
+    SC_EXPECT(stepped_los == 0 && stepped_path == 0);
+}
+
+// R6's second review: a raid's sites were judged open by looking at nine points 20 m round the spot, between which a
+// house can stand. The clearance is looked at whole (MapData::ObstacleHeightWithin).
+SC_TEST("obstacles: a house between the points round a spot is within its clearance") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    const MapTerrain ground(m, m->Def().origin);
+    int tried = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::House || b.length_m > 12.0 || b.width_m > 12.0 || b.height_m <= 3.5) continue;
+        // A spot 17 m from the house's middle, half-way between two of the ring's points (22.5 degrees off north): the
+        // nearest ring points are about 7.8 m from the house's middle.
+        const double bearing = 22.5 * 3.14159265358979 / 180.0;
+        const double se = b.east_m - 17.0 * std::sin(bearing), sn = b.north_m - 17.0 * std::cos(bearing);
+        const double k = 20.0, d = 0.7071 * 20.0;
+        const double ring[9][2] = {{0.0, 0.0}, {k, 0.0}, {-k, 0.0}, {0.0, k}, {0.0, -k}, {d, d}, {d, -d}, {-d, d}, {-d, -d}};
+        bool ring_sees = false;
+        for (const auto& o : ring) ring_sees = ring_sees || m->ObstacleHeight(se + o[0], sn + o[1]) > 3.0;
+        if (ring_sees) continue;  // the ring catches this one (or another nearby): not the case shown
+        ++tried;
+        SC_EXPECT(ground.ObstacleHeightWithin(se, sn, 20.0) > 3.0);
+        if (tried >= 50) break;
+    }
+    SC_EXPECT(tried > 10);
+}

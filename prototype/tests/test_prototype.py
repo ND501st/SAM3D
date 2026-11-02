@@ -157,3 +157,36 @@ def test_a_narrow_box_blocks_exactly_where_it_stands():
         assert em.analyse_path(flat(), -1013, 15.5, 10.0, 987, 15.5, 10.0, spacing, footprints=box).line_of_sight
     # Without the footprints the samples step over it.
     assert has_line_of_sight(flat(), Vec3(-1013, 0, 0), 10.0, Vec3(987, 0, 0), 10.0, 50.0)
+
+
+class _OneBoxExact(_OneBox):
+    """Mirror of test_map_obstacles.cpp's OneBoxExact: the same box, its cuts known exactly."""
+
+    def chords(self, e0, n0, e1, n1, below):
+        if 20.0 < below:
+            return []
+        t_in, t_out = 0.0, 1.0
+        for p0, dp, half in ((e0, e1 - e0, 6.0), (n0, n1 - n0, 15.0)):
+            if abs(dp) < 1e-12:
+                if abs(p0) > half:
+                    return []
+                continue
+            ta, tb = (-half - p0) / dp, (half - p0) / dp
+            t_in, t_out = max(t_in, min(ta, tb)), min(t_out, max(ta, tb))
+        return [(t_in, t_out, 20.0)] if t_in <= t_out else []
+
+
+def test_a_ray_cutting_a_corner_short_is_blocked():
+    # Mirror of test_map_obstacles.cpp (R6's second review): cut 0.1 m into the corner, blocked; 0.1 m clear, clear.
+    box = _OneBoxExact()
+    c = math.sqrt(0.5)
+    for spacing in (50.0, 100.0, 400.0):
+        def diagonal(off, path):
+            pe, pn = 6.0 + off * c, 15.0 + off * c
+            a, z = Vec3(pe - 700 * c, pn + 700 * c, 0), Vec3(pe + 700 * c, pn - 700 * c, 0)
+            if path:
+                return em.analyse_path(flat(), a.x, a.y, 10.0, z.x, z.y, 10.0, spacing, footprints=box).line_of_sight
+            return has_line_of_sight(flat(), a, 10.0, z, 10.0, spacing, footprints=box)
+        for path in (False, True):
+            assert not diagonal(-0.1, path) and not diagonal(-2.0, path) and not diagonal(-8.0, path)
+            assert diagonal(0.1, path) and diagonal(1.0, path)
