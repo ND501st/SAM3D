@@ -178,6 +178,13 @@ void ASimSkyWeatherActor::ApplyWeather()
 void ASimSkyWeatherActor::UpdateSun()
 {
 	USimWorldSubsystem* Sim = GetWorld()->GetSubsystem<USimWorldSubsystem>();
+	simcore::SkyClock Clock;
+	if (Sim != nullptr && Sim->GetSkyClock(Clock))
+	{
+		// The scenario's own sun (roadmap R7): the one the simulation's light is read from.
+		SetSunDirection(Clock.SunAtSession(Sim->GetSimTimeSeconds()));
+		return;
+	}
 	const simcore::World* W = Sim != nullptr ? Sim->GetSimWorld() : nullptr;
 	const double LatDeg = W != nullptr ? W->Frame().Origin().LatDeg() : 46.9;
 	const double LonDeg = W != nullptr ? W->Frame().Origin().LonDeg() : 19.7;
@@ -194,7 +201,11 @@ void ASimSkyWeatherActor::UpdateSun()
 		Utc += 24.0;
 		Day = Day > 1 ? Day - 1 : 365;
 	}
-	const simcore::SunPosition S = simcore::SunAt(LatDeg, LonDeg, Day, Utc);
+	SetSunDirection(simcore::SunAt(LatDeg, LonDeg, Day, Utc));
+}
+
+void ASimSkyWeatherActor::SetSunDirection(const simcore::SunPosition& S)
+{
 	// The direction to the sun in Unreal (X north, Y east, Z up); the light shines the other way.
 	const double Ce = FMath::Cos(S.elevation_rad);
 	const FVector ToSun(Ce * FMath::Cos(S.azimuth_rad), Ce * FMath::Sin(S.azimuth_rad), FMath::Sin(S.elevation_rad));

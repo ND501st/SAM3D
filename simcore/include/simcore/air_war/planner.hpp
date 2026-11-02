@@ -581,8 +581,9 @@ private:
         const FactionDef& f = c_->data->faction;
         const double start = c_->now_h + f.doctrine.lead_time_h;
         const double end = start + f.doctrine.planning_cycle_h;
-        const double local = std::fmod(c_->data->theatre.start_hour + start, 24.0);
-        double delta = std::fmod(DayPartHour(part) - local + 48.0, 24.0);
+        const double abs_local = c_->data->theatre.start_hour + start;
+        const double local = std::fmod(abs_local, 24.0);
+        double delta = std::fmod(TheatrePartHour(c_->data->theatre, abs_local, part) - local + 48.0, 24.0);
         tot_h = start + delta;
         return tot_h < end + 1e-9;
     }
@@ -1421,7 +1422,7 @@ private:
             for (RoutePoint& rp : fl.route) rp.t_h += shift;
         }
         p.tot_h += shift;
-        p.part = DayPartAt(c_->data->theatre.start_hour + p.tot_h);
+        p.part = TheatrePartAt(c_->data->theatre, c_->data->theatre.start_hour + p.tot_h);
         p.interference = true;
         p.coordination *= 0.5;
         p.load_factor = 0.6;

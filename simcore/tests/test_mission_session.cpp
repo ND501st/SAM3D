@@ -421,7 +421,9 @@ SC_TEST("supply in the session (17.4): the NPC commander orders the empty TZM to
 SC_TEST("supply in the session (17.4): a bridge down nobody told of: the TZM stops short of it, goes round, and the commander learns it from the chief's report") {
     ScenarioDef def;
     ConsoleData console;
-    SC_EXPECT(QuietSupplyMission(10.0, def, console));
+    // The mission starts at 19:00 on 15 October: dark by the sun (R7, docs/LIGHT.md), so the detour round the river is
+    // driven at night speeds there and back, some eleven hours; the session is given fourteen.
+    SC_EXPECT(QuietSupplyMission(14.0, def, console));
     ScenarioRunner r(std::move(def), std::move(console));
     SC_EXPECT(r.SetCrossingDown("b_ralje@rava", true, "test:1"));
     SC_EXPECT(!r.SetCrossingDown("b_ralje@rava", true, "test:2"));  // down already

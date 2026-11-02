@@ -38,6 +38,7 @@
 #include "simcore/emission_regime.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/instructor.hpp"
+#include "simcore/light.hpp"
 #include "simcore/nav/session.hpp"
 #include "simcore/position_prep.hpp"
 #include "simcore/pu12.hpp"
@@ -349,6 +350,14 @@ struct ScenarioDef {
     // "clock_start": "19:00": the time of day at the session's second 0, for the order's paper, the order books and the
     // debrief (< 0: none, the session's own clock).
     double clock_start_s = -1.0;
+    // The sky clock (roadmap R7, light.hpp): the origin's place, the "date" (15 October without one), "utc_offset_h" (the
+    // longitude's hour without one) and the local hour of second 0: "clock_start" when given, else 23:00 for a scenario
+    // whose legacy keys say night ("environment.daylight": false or "battery.night": true), else 10:30. The runner's
+    // light is the sun of this clock; the legacy keys only choose the start hour of a scenario without a clock.
+    SkyClock clock;
+    bool clock_given = false;  // "clock_start" was in the file
+    int year = 1985;           // the "date"'s year (the default's)
+    LightValues light_values;  // data/gameplay/light.json
     bool battery_drive_own = false;
     bool battery_night = false;
     bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
@@ -409,7 +418,8 @@ public:
         if (!Keys(root, "", {"scenario_id", "name", "description", "source", "confidence", "notes", "seed", "origin",
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
-                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "supply", "scenery", "waves"})) {
+                             "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
+                             "scenery", "waves"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -465,7 +475,8 @@ public:
         if (!LoadScenery(root, out) || !LoadWaves(root, data_dir, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
-        return LoadEnd(root, out);
+        if (!LoadEnd(root, out)) return false;
+        return LoadSky(root, data_dir, out);
     }
 
 private:
@@ -2101,6 +2112,44 @@ private:
         return true;
     }
 
+    // The sky clock (roadmap R7, light.hpp): "date": "1985-10-15", "utc_offset_h": 1, with the origin and "clock_start".
+    bool LoadSky(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        SkyClock& c = out.clock;
+        c.lat_deg = RadToDeg(out.origin.lat_rad);
+        c.lon_deg = RadToDeg(out.origin.lon_rad);
+        std::string date;
+        if (!OptionalString(root, "", "date", date)) return false;
+        if (!date.empty() && !ParseIsoDate(date, out.year, c.day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
+        c.utc_offset_h = std::round(c.lon_deg / 15.0);
+        if (!OptionalNumber(root, "", "utc_offset_h", c.utc_offset_h)) return false;
+        if (c.utc_offset_h < -12.0 || c.utc_offset_h > 14.0) return Fail("utc_offset_h", "hours ahead of UTC, -12 to 14");
+        std::string error;
+        if (std::ifstream(data_dir + "/gameplay/light.json").good() &&
+            !LoadLightValues(data_dir, "gameplay/light.json", out.light_values, &error)) {
+            return Fail("", error);  // there but wrong; a data folder without it keeps the code's thresholds
+        }
+        const json::Value* env = root.Find("environment");
+        const json::Value* bat = root.Find("battery");
+        const bool daylight_given = env != nullptr && env->Find("daylight") != nullptr;
+        const bool night_given = bat != nullptr && bat->Find("night") != nullptr;
+        out.clock_given = out.clock_start_s >= 0.0;
+        if (out.clock_given) {
+            c.start_local_h = out.clock_start_s / 3600.0;
+            const SunLight l = LightAt(c, 0.0, out.light_values);
+            if (daylight_given && out.optics.daylight != l.daylight) {
+                return Fail("environment.daylight", std::string("the sun at clock_start says ") + (l.daylight ? "daylight" : "no daylight") +
+                                                        " (" + LightPhaseName(l.phase) + "): leave the key out, the clock decides");
+            }
+            if (night_given && out.battery_night != l.dark) {
+                return Fail("battery.night", std::string("the sun at clock_start says ") + (l.dark ? "night" : "not night") + " (" +
+                                                 LightPhaseName(l.phase) + "): leave the key out, the clock decides");
+            }
+        } else {
+            c.start_local_h = !out.optics.daylight || out.battery_night ? 23.0 : 10.5;
+        }
+        return true;
+    }
+
     // "clock_start": "19:00": the session's second 0 as a time of day.
     bool LoadClockStart(const json::Value& root, ScenarioDef& out) {
         std::string c;
@@ -2534,6 +2583,24 @@ inline bool LoadScenario(const std::string& json_text, const std::string& data_d
     out = std::move(def);
     console = std::move(loaded);
     return true;
+}
+
+// The time of day chosen in the missions menu (roadmap R7): the session's second 0 at a local hour of the scenario's own
+// day. The paper clock ("clock_start") moves with it only when the scenario has one; the legacy light keys then follow
+// the sun so they no longer choose anything.
+inline void SetStartHour(ScenarioDef& def, double local_h) {
+    local_h -= 24.0 * std::floor(local_h / 24.0);
+    def.clock.start_local_h = local_h;
+    if (def.clock_given) def.clock_start_s = local_h * 3600.0;
+    const SunLight l = LightAt(def.clock, 0.0, def.light_values);
+    def.optics.daylight = l.daylight;
+    def.battery_night = l.dark;
+}
+
+// A preset of the menu's: the mission's own (nothing changes), an hour, or dawn, day, dusk or night by the scenario's sun.
+inline void ApplyTimeChoice(ScenarioDef& def, TimePreset p, double hour = 0.0) {
+    if (p == TimePreset::Mission) return;
+    SetStartHour(def, p == TimePreset::Hour ? hour : PresetHour(def.clock, p));
 }
 
 inline bool LoadScenarioFile(const std::string& path, const std::string& data_dir, ScenarioDef& out,

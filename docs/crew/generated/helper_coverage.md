@@ -260,7 +260,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 0 | 31 | 0 | 0 | - | 0 |
-| commander | 900 time | 3 | 388 | 402 | 1 | 4 | 0 | 0 | 0 | 29 | 0 | 0 | duty 35 | 0 |
+| commander | 900 time | 3 | 387 | 401 | 1 | 4 | 0 | 0 | 0 | 29 | 0 | 0 | duty 35 | 0 |
 | deputy_commander | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 7 | 31 | 0 | 0 | drill 12, duty 7 | 0 |
 | senior_operator | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 21 | 32 | 3 | 0 | drill 40, duty 109, wheel 632 | 0 |
 | operator | 900 time | 3 | 375 | 400 | 1 | 4 | 0 | 0 | 7 | 30 | 0 | 0 | drill 13, duty 7, wheel 91 | 0 |
@@ -607,6 +607,17 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | operator | 900 time | 253 | - | - | 0 | 1 | 0 | 0 | 2 | 2 | 0 | 0 | drill 7, duty 2, wheel 274 | 0 |
 | driver | 900 time | 252 | - | - | 0 | 1 | 0 | 0 | 1 | 2 | 0 | 0 | drill 2, duty 1 | 0 |
 
+## dynamic_campaign_test: Dynamic campaign test: the capital's air defences under endless waves (F12 visits every asset)
+
+| Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NPC crew | 900 time | 4 | 60 | 153 | 3 | 25 | 0 | 0 | 0 | 54 | 2 | 0 | - | 0 |
+| commander | 900 time | 4 | 59 | 153 | 2 | 29 | 0 | 0 | 61 | 35 | 2 | 0 | duty 232 | 23 |
+| deputy_commander | 900 time | 4 | 61 | 153 | 2 | 29 | 0 | 0 | 24 | 21 | 0 | 0 | drill 14, duty 24 | 0 |
+| senior_operator | 900 time | 2 | 62 | 153 | 3 | 30 | 0 | 0 | 95 | 47 | 22 | 0 | drill 58, duty 163, wheel 2115 | 0 |
+| operator | 900 time | 4 | 59 | 153 | 3 | 29 | 0 | 0 | 25 | 70 | 4 | 0 | drill 13, duty 25, wheel 1090 | 0 |
+| driver | 900 time | 4 | 60 | 153 | 3 | 25 | 0 | 0 | 0 | 54 | 2 | 0 | - | 0 |
+
 ## Gaps (21)
 
 - **battery_link_practice (osa), commander**: launched never reached; no launch. Last refused: Order: Пуск разрешаю!: nothing tracked
@@ -638,14 +649,14 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | control (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 2 |
 | control (commander): a halt without the vehicle's Qc: the aiming circle out ahead | 6 |
 | control (commander): the aiming circle read: stow it and bring the Qc in | 6 |
-| control (commander): the words said: the chest switch back to ПРМ, to hear the net | 212 |
+| control (commander): the words said: the chest switch back to ПРМ, to hear the net | 277 |
 | control (radio_operator): a message heard: write it in the journal | 8 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 18 |
-| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 97 |
-| drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 10 |
-| drill (senior_operator): the least emission against ARMs: both low beams in each burst | 16 |
-| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 169 |
-| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 162 |
+| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 136 |
+| drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 13 |
+| drill (senior_operator): the least emission against ARMs: both low beams in each burst | 22 |
+| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 187 |
+| drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 178 |
 | order (battery_commander): a raid within reach of the covered troops | 5 |
 | order (battery_commander): communications and every launcher ready | 7 |
 | order (battery_commander): the battery marches: the post stows for it | 2800 |
@@ -653,52 +664,53 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | order (battery_commander): the drills the crew needs next | 2 |
 | order (battery_commander): the plan for the regiment's task: he gives the preliminary order: the vehicles to prepare for the march | 1 |
 | order (battery_commander): the raid has gone: the all clear | 2 |
-| order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 11 |
-| order (commander): the battery's emission regime, told to the crew | 14 |
-| order (commander): the commander's next order | 194 |
-| order (commander): the drills the crew needs next | 101 |
+| order (commander): a hostile far out after a quiet spell: the radar seats reminded of the regime | 13 |
+| order (commander): the battery's emission regime, told to the crew | 15 |
+| order (commander): the commander's next order | 209 |
+| order (commander): the drills the crew needs next | 104 |
 | order (commander): the least emission: the operator told the tracking transmitter's rule | 6 |
 | order (commander): the limited regime: ВЫСОКОЕ off between bursts | 124 |
 | order (commander): the limited regime: ВЫСОКОЕ on for a burst | 121 |
-| order (commander): the search transmitter on longer than the regime's burst | 25 |
+| order (commander): the search transmitter on longer than the regime's burst | 39 |
 | plot (operator): a report heard: write it on the board | 107 |
 | report (commander): a battery order heard on the net: read it back | 1 |
-| report (commander): a target destroyed: report it on the battery net | 7 |
-| report (commander): a target given on the battery net: read it back | 203 |
-| report (commander): an ARM launch: reported to the battery commander | 8 |
-| report (deputy_commander): a report the crew makes when its lamp or input comes on | 169 |
-| report (deputy_commander): a sign of the shot on his instrument: fire and break-up on the TV | 14 |
+| report (commander): a target destroyed: report it on the battery net | 8 |
+| report (commander): a target given on the battery net: read it back | 264 |
+| report (commander): an ARM launch: reported to the battery commander | 13 |
+| report (deputy_commander): a report the crew makes when its lamp or input comes on | 188 |
+| report (deputy_commander): a sign of the shot on his instrument: fire and break-up on the TV | 15 |
 | report (deputy_commander): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 2 |
 | report (deputy_commander): a sign of the shot on his instrument: the missile's reply lost before the meeting | 1 |
 | report (deputy_commander): a sign of the shot on his instrument: the missile's reply still there after the meeting | 2 |
 | report (deputy_commander): a sign of the shot on his instrument: the target flying on unchanged | 2 |
-| report (deputy_commander): a sign of the shot on his instrument: the target whole on the TV | 9 |
-| report (deputy_commander): a sign of the shot on his instrument: the target's elevation dropping fast | 24 |
+| report (deputy_commander): a sign of the shot on his instrument: the target whole on the TV | 10 |
+| report (deputy_commander): a sign of the shot on his instrument: the target's elevation dropping fast | 25 |
 | report (deputy_commander): no missile left on the launcher | 2 |
 | report (deputy_commander): the TV shows a decoy | 2 |
-| report (deputy_commander): К бою: the intercom checked | 36 |
+| report (deputy_commander): К бою: the intercom checked | 37 |
 | report (driver): a report the crew makes when its lamp or input comes on | 9 |
 | report (driver): stowed after the ARM attack: ready to march | 3 |
 | report (driver): the crew is stowed for the battery's march | 1 |
 | report (operator): a mark new, turned or lost on the board: tell the commander | 22 |
-| report (operator): a report the crew makes when its lamp or input comes on | 103 |
+| report (operator): a report the crew makes when its lamp or input comes on | 109 |
 | report (operator): a sign of the shot on his instrument: its jamming gone | 1 |
-| report (operator): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 21 |
+| report (operator): a sign of the shot on his instrument: the burst at the meeting, the missile's reply gone | 22 |
 | report (operator): a sign of the shot on his instrument: the missile's reply still there after the meeting | 5 |
-| report (operator): a sign of the shot on his instrument: the target flying on unchanged | 7 |
+| report (operator): a sign of the shot on his instrument: the target flying on unchanged | 8 |
 | report (operator): a sign of the shot on his instrument: the target's mark gone | 13 |
-| report (operator): the track was lost | 22 |
-| report (operator): К бою: the intercom checked | 36 |
+| report (operator): the track was lost | 28 |
+| report (operator): К бою: the intercom checked | 37 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 28 |
-| report (senior_operator): a new echo on his scope | 110 |
-| report (senior_operator): a report the crew makes when its lamp or input comes on | 52 |
+| report (senior_operator): a new echo on his scope | 152 |
+| report (senior_operator): a reply mark beside the echo | 5 |
+| report (senior_operator): a report the crew makes when its lamp or input comes on | 55 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
-| report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 6 |
-| report (senior_operator): a target that came at the battery turns away | 2 |
-| report (senior_operator): no reply mark beside the echo | 57 |
+| report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 8 |
+| report (senior_operator): a target that came at the battery turns away | 6 |
+| report (senior_operator): no reply mark beside the echo | 68 |
 | report (senior_operator): the bursts read back | 13 |
-| report (senior_operator): the nearest echo, every 15 s until a track | 210 |
-| report (senior_operator): К бою: the intercom checked | 36 |
+| report (senior_operator): the nearest echo, every 15 s until a track | 221 |
+| report (senior_operator): К бою: the intercom checked | 37 |
 | report (squad_leader): a report the crew makes when its lamp or input comes on | 4 |
 | wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 4 |
 
@@ -708,4 +720,4 @@ A player in command can't give these from his menu (the shadow commander would):
 
 - radio_operator: R-111 (FuG-3): РЕЖ. РАБОТЫ МОЩНОСТЬ 1 % (radio.fug3.mode) (2 runs)
 
-330 runs.
+336 runs.

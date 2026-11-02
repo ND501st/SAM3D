@@ -458,9 +458,37 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	const bool bLink = FFileHelper::LoadFileToString(Text, *Path) && Text.Contains(TEXT("\"link_id\""));
 	TUniquePtr<simcore::BatteryLink> NewLink;
 	TUniquePtr<simcore::ScenarioRunner> NewRunner;
+	// The time of day (roadmap R7): the menu's ?SimTime=<preset> (and ?SimHour=<h> for an hour), or -SimTime= on the
+	// command line (a developer's override, even of a mission that holds its time). None: the mission's own.
+	simcore::TimePreset TimeChoice = simcore::TimePreset::Mission;
+	double TimeHour = 0.0;
+	{
+		const FString TimeOption = GetLaunchOption(TEXT("SimTime"));
+		if (!TimeOption.IsEmpty() && !simcore::ParseTimePreset(ToStd(TimeOption.ToLower()), TimeChoice))
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("SimTime=%s is not mission, dawn, day, dusk, night or hour: the mission's own time"), *TimeOption);
+			TimeChoice = simcore::TimePreset::Mission;
+		}
+		FString ShotsFolder;
+		if (TimeOption.IsEmpty() && (FParse::Param(FCommandLine::Get(), TEXT("SimFxShotsNight")) ||
+			FParse::Value(FCommandLine::Get(), TEXT("-SimFxShotsNight="), ShotsFolder)))
+		{
+			TimeChoice = simcore::TimePreset::Night;  // the effects' night photographs (docs/fx/README.md)
+		}
+		const FString HourOption = GetLaunchOption(TEXT("SimHour"));
+		if (!HourOption.IsEmpty())
+		{
+			TimeHour = FCString::Atod(*HourOption);
+			if (TimeOption.IsEmpty())
+			{
+				TimeChoice = simcore::TimePreset::Hour;  // -SimHour=17.5 alone means that hour
+			}
+		}
+	}
+	const auto ApplyTime = [TimeChoice, TimeHour](simcore::ScenarioDef& Def) { simcore::ApplyTimeChoice(Def, TimeChoice, TimeHour); };
 	if (bLink)
 	{
-		std::unique_ptr<simcore::BatteryLink> Loaded = simcore::LoadBatteryLinkFile(ToStd(Path), ToStd(DataDir), &Error);
+		std::unique_ptr<simcore::BatteryLink> Loaded = simcore::LoadBatteryLinkFile(ToStd(Path), ToStd(DataDir), &Error, nullptr, ApplyTime);
 		if (Loaded)
 		{
 			NewLink = TUniquePtr<simcore::BatteryLink>(Loaded.release());
@@ -472,6 +500,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 		simcore::ConsoleData Console;
 		if (simcore::LoadScenarioFile(ToStd(Path), ToStd(DataDir), Def, Console, &Error))
 		{
+			ApplyTime(Def);
 			NewRunner = MakeUnique<simcore::ScenarioRunner>(std::move(Def), std::move(Console));
 		}
 	}
@@ -503,6 +532,12 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	ResetEntityCache();
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
 		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
+	{
+		const simcore::SunLight& Light = Runner->LightNow();
+		const FString Chosen = TimeChoice == simcore::TimePreset::Mission ? FString(TEXT("the mission's own")) : ToF(simcore::TimePresetName(TimeChoice));
+		UE_LOG(LogSAM3D, Log, TEXT("Time of day: %s %s (%s, the sun %.1f deg)"), *Chosen,
+			*ToF(simcore::FormatLocalHour(Runner->Clock().start_local_h)), *ToF(simcore::LightPhaseName(Light.phase)), Light.sun_elevation_deg);
+	}
 	ApplyHelperLevel();
 	LoadCrewPresentation(DataDir);
 	BroadcastNewDebriefEntries();
@@ -1094,6 +1129,16 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 			Out.Level = ToF(M.level);
 			Out.Tutorial = ToF(M.tutorial);
 			Out.Start = ToF(M.start);
+			Out.bTimeFixed = M.time_fixed;
+			Out.StartHour = static_cast<float>(M.clock.start_local_h);
+			for (const simcore::TimePreset P : M.time_options)
+			{
+				Out.TimeOptions.Add(ToF(simcore::TimePresetName(P)));
+			}
+			for (const std::string& Label : simcore::TimeChoiceLabels(M))
+			{
+				Out.TimeLabels.Add(ToF(Label));
+			}
 			for (const simcore::MissionVehicle& V : M.vehicles)
 			{
 				FSimMissionVehicle& OutV = Out.Vehicles.AddDefaulted_GetRef();
@@ -2561,6 +2606,30 @@ bool USimWorldSubsystem::GetEntityState(int32 Id, FSimEntityState& OutState) con
 		return true;
 	}
 	return false;
+}
+
+bool USimWorldSubsystem::GetSunNow(double& ElevationDeg, double& AzimuthDeg, bool& bDaylight, float& NightShare) const
+{
+	if (!Runner)
+	{
+		return false;
+	}
+	const simcore::SunLight& Light = Runner->LightNow();
+	ElevationDeg = Light.sun_elevation_deg;
+	AzimuthDeg = Light.sun_azimuth_deg;
+	bDaylight = Light.daylight;
+	NightShare = static_cast<float>(Light.night_share);
+	return true;
+}
+
+bool USimWorldSubsystem::GetSkyClock(simcore::SkyClock& Out) const
+{
+	if (!Runner)
+	{
+		return false;
+	}
+	Out = Runner->Clock();
+	return true;
 }
 
 double USimWorldSubsystem::GetSimTimeSeconds() const

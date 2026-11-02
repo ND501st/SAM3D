@@ -179,7 +179,6 @@ struct FSimFxShots::FState
 	std::vector<std::pair<double, simcore::fx::Event>> Pending;
 
 	bool bPausedByUs = false;
-	bool bNightApplied = false;
 	bool bInjectedContrail = false;  // the photographer's own aircraft put into this runner's scenario
 	bool bInjectedDown = false;
 	bool bInjectedAbF15 = false;
@@ -1011,15 +1010,8 @@ void FSimFxShots::Tick(USimFxSubsystem& Fx, float RealDt)
 		return;
 	}
 
-	// Night: the sky's clock at 23:00 (it moves on with the simulation's time from there).
-	if (bNight && !S.bNightApplied)
-	{
-		for (TActorIterator<ASimSkyWeatherActor> It(W); It; ++It)
-		{
-			It->LocalTimeHours = 23.0f;
-			S.bNightApplied = true;
-		}
-	}
+	// Night: the scenario itself was loaded at night (USimWorldSubsystem::LoadScenario reads -SimFxShotsNight as
+	// -SimTime=night, roadmap R7), so the simulation's light and the sky's sun are one night.
 
 	simcore::ScenarioRunner* Runner = Sim != nullptr ? Sim->GetFxRunner() : nullptr;
 	if (Runner == nullptr)

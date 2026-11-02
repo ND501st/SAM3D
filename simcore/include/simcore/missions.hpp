@@ -6,6 +6,9 @@
 // (the crew data's commander_seat). Taking that seat is the game's "in command" half; any other seat is "in the crew".
 // A battery link (simcore/battery_link.hpp) lists the vehicles the player may start in, each with its own seats.
 // Loading checks every scenario as the game would load it, so a mission in the menu always starts.
+// The time of day (roadmap R7, light.hpp): a mission plays at its own hour or, unless its entry holds it ("time":
+// "fixed", a historical mission's night raid), at dawn, by day, at dusk, by night or at an hour the player sets, each by
+// the scenario's own sun ("time_options" narrows the list).
 #pragma once
 
 #include <cstddef>
@@ -17,6 +20,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/json.hpp"
+#include "simcore/light.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/tutorial.hpp"
 
@@ -37,6 +41,7 @@ struct MissionVehicle {
     std::string scenario_file;  // relative to the data folder
     std::string system_id;
     std::vector<MissionSeat> seats;
+    SkyClock clock;  // its scenario's sky clock (R7)
 
     const MissionSeat* Commander() const {
         for (const MissionSeat& s : seats) {
@@ -58,6 +63,11 @@ struct MissionDef {
     std::string tutorial;     // the guide shown over it (data/tutorials/, simcore/tutorial.hpp), relative to the data folder
     std::string start;        // where the menu starts the player by default: a seat id, "outside", or "" the commander's seat
     std::vector<MissionVehicle> vehicles;
+    // The time of day the menu offers (R7): "time": "fixed" holds the mission's own; else "time_options" (all six by
+    // default), the first always the mission's own. `clock`: the first vehicle's scenario's, for the menu's labels.
+    bool time_fixed = false;
+    std::vector<TimePreset> time_options;
+    SkyClock clock;
 
     const MissionVehicle* Vehicle(const std::string& vehicle_id) const {
         for (const MissionVehicle& v : vehicles) {
@@ -141,7 +151,7 @@ public:
 
 private:
     bool LoadMission(const json::Value& e, const std::string& p, MissionDef& m) {
-        if (!Keys(e, p, {"file", "title", "vehicles", "level", "tutorial", "start"}) || !RequireString(e, p, "file", m.file) ||
+        if (!Keys(e, p, {"file", "title", "vehicles", "level", "tutorial", "start", "time", "time_options"}) || !RequireString(e, p, "file", m.file) ||
             !RequireString(e, p, "title", m.title) || !OptionalString(e, p, "level", m.level) ||
             !OptionalString(e, p, "tutorial", m.tutorial) || !OptionalString(e, p, "start", m.start)) {
             return false;
@@ -158,6 +168,7 @@ private:
             if (!BindTutorial(guide, scenario, console, &error)) return Fail(Join(p, "tutorial"), m.tutorial + ": " + error);
         }
         m.id = MissionIdOf(m.file);
+        if (!LoadTime(e, p, m)) return false;
         if (!m.level.empty() && m.level.rfind("/Game/", 0) != 0) return Fail(Join(p, "level"), "a level path starting /Game/");
         const std::string path = data_dir_ + "/" + m.file;
         std::string text;
@@ -171,6 +182,7 @@ private:
             if (vehicles != nullptr) return Fail(Join(p, "vehicles"), "only a battery link has vehicles to choose");
             MissionVehicle v;
             if (!LoadVehicle(m.file, Join(p, "file"), v, &m)) return false;
+            m.clock = v.clock;
             m.vehicles.push_back(std::move(v));
             return StartKnown(m, p);
         }
@@ -194,9 +206,40 @@ private:
             const std::string label = v.label;
             if (!LoadVehicle(v.id == "osa" ? def.osa_file : def.post_file, vp, v, nullptr)) return false;
             v.label = label;
+            if (m.vehicles.empty()) m.clock = v.clock;
             m.vehicles.push_back(std::move(v));
         }
         return StartKnown(m, p);
+    }
+
+    // "time": "fixed" | "choice" (the default), "time_options": ["mission", "dawn", "day", "dusk", "night", "hour"].
+    bool LoadTime(const json::Value& e, const std::string& p, MissionDef& m) {
+        std::string time = "choice";
+        if (!OptionalString(e, p, "time", time)) return false;
+        if (time != "fixed" && time != "choice") return Fail(Join(p, "time"), "must be \"fixed\" or \"choice\"");
+        m.time_fixed = time == "fixed";
+        const json::Value* o = e.Find("time_options");
+        if (o == nullptr) {
+            m.time_options = m.time_fixed ? std::vector<TimePreset>{TimePreset::Mission}
+                                          : std::vector<TimePreset>{TimePreset::Mission, TimePreset::Dawn, TimePreset::Day,
+                                                                    TimePreset::Dusk, TimePreset::Night, TimePreset::Hour};
+            return true;
+        }
+        const std::string op = Join(p, "time_options");
+        if (m.time_fixed) return Fail(op, "a mission whose time is fixed has no options");
+        if (!o->Is(json::Type::Array) || o->items.empty()) return Fail(op, "a non-empty list");
+        for (std::size_t i = 0; i < o->items.size(); ++i) {
+            TimePreset t = TimePreset::Mission;
+            if (!o->items[i].Is(json::Type::String) || !ParseTimePreset(o->items[i].string, t)) {
+                return Fail(Index(op, i), "one of mission, dawn, day, dusk, night, hour");
+            }
+            for (TimePreset had : m.time_options) {
+                if (had == t) return Fail(Index(op, i), "listed twice");
+            }
+            m.time_options.push_back(t);
+        }
+        if (m.time_options.front() != TimePreset::Mission) return Fail(op, "the first is \"mission\", the mission's own time");
+        return true;
     }
 
     // The default start is "outside" or a seat of the mission's first vehicle.
@@ -216,6 +259,7 @@ private:
         if (!LoadScenarioFile(data_dir_ + "/" + file, data_dir_, def, console, &error)) return Fail(p, error);
         v.scenario_file = file;
         v.system_id = console.system_id;
+        v.clock = def.clock;
         if (v.label.empty()) v.label = console.display_name.empty() ? console.system_id : console.display_name;
         bool commander = false;
         for (const ConsoleStation& st : console.stations) {
@@ -240,6 +284,22 @@ private:
 };
 
 }  // namespace detail
+
+// The menu's words for a mission's time options, in its order (R7): "The mission's own 10:30", "Dusk 17:08", "An hour".
+inline std::vector<std::string> TimeChoiceLabels(const MissionDef& m) {
+    std::vector<std::string> out;
+    for (TimePreset t : m.time_options) {
+        switch (t) {
+            case TimePreset::Mission: out.push_back("The mission's own " + FormatLocalHour(m.clock.start_local_h)); break;
+            case TimePreset::Dawn: out.push_back("Dawn " + FormatLocalHour(PresetHour(m.clock, t))); break;
+            case TimePreset::Day: out.push_back("Day " + FormatLocalHour(PresetHour(m.clock, t))); break;
+            case TimePreset::Dusk: out.push_back("Dusk " + FormatLocalHour(PresetHour(m.clock, t))); break;
+            case TimePreset::Night: out.push_back("Night " + FormatLocalHour(PresetHour(m.clock, t))); break;
+            case TimePreset::Hour: out.push_back("An hour"); break;
+        }
+    }
+    return out;
+}
 
 // A catalogue from its JSON text, the scenarios it names under `data_dir`. False with `error` naming the mission and the
 // problem if any of them would not start.

@@ -381,6 +381,7 @@ public:
     // Whether the battery drives the player's vehicle too (a demo, or an NPC driver). Off: it only gives it a goal.
     void SetDriveOwn(bool on) { drive_own_ = on; }
     void SetNight(bool night) { night_ = night; }
+    bool Night() const { return night_; }
     // The battery stands in a prepared position: the first move order costs `seconds` to climb out and clear the nets.
     // The battery starts dug in at a prepared position: every vehicle is set up there (deployed) and takes `seconds` to
     // leave its emplacement when it moves.

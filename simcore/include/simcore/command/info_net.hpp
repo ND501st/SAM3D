@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "simcore/command/data.hpp"
+#include "simcore/light.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -501,6 +502,17 @@ public:
 
     double Now() const { return now_h_; }
     double StartHour() const { return start_hour_; }
+    // The sun's night instead of the fixed 20:00-06:00 (roadmap R7, light.hpp): the couriers' night speed by the sky of
+    // the session this net runs in. `clock`'s day is the day of this net's hour 0; its start hour is taken as this net's.
+    void SetSky(const SkyClock& clock, const LightValues& values) {
+        sky_ = clock;
+        sky_.start_local_h = start_hour_;
+        sky_values_ = values;
+        has_sky_ = true;
+    }
+    bool HasSky() const { return has_sky_; }
+    // Night at hour `h` of this net: dark by the sun with a sky, else local 20:00 to 06:00.
+    bool NightAt(double h) const { return Night(h); }
     const ChainData& Data() const { return data_; }
     const std::vector<Fact>& Facts() const { return facts_; }
     int FactIndex(const std::string& key) const {
@@ -746,6 +758,9 @@ private:
     RouteTime route_time_;
     unsigned seed_ = 1;
     double start_hour_ = 0.0;
+    SkyClock sky_;
+    LightValues sky_values_;
+    bool has_sky_ = false;
     double now_h_ = -1e18;
     int player_ = -1;
     std::vector<int> others_;  // the other players' posts (P6)
@@ -907,6 +922,7 @@ private:
         return false;
     }
     bool Night(double h) const {
+        if (has_sky_) return LightAt(sky_, h * 3600.0, sky_values_).dark;
         double local = start_hour_ + h;
         local -= 24.0 * std::floor(local / 24.0);
         return local >= 20.0 || local < 6.0;

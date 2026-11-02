@@ -608,3 +608,43 @@ show the bridge's effect; the demo's three seeds are the check of it, and a larg
 campaign playthrough. Known gaps the branch leaves in the bridge's deliveries (`docs/fx/README.md` §7): the toss lets
 go about 1.8 km early (its aim a third farther than its throw, the planner's data unchanged), and the pop-up's
 terrain-following climb tops out near its release point (about 1140 m) instead of the planner's apex.
+
+## 12. The nation's theatre by the sun (2 November 2026)
+
+Roadmap R7 gave every session one sun (`docs/LIGHT.md`), and the air war uses it only once a theatre has a `"date"`
+(`DayPartBySun`, `DayPartHourBySun`, §5 there). `theatre_pannonia_nation.json` now has one: 15 October 1985, UTC+1. At
+its origin (46.9 N 19.7 E) the parts of the day become the sun's, and the planner aims each at its sun's middle:
+
+| Part | The buckets (undated, still the tuned theatre's) | By the sun on 15 October | The planner's aim |
+|---|---|---|---|
+| Dawn | 04:00-07:00 | 05:29-06:41 (the sun from 6 degrees down to 6 up) | 05:30 → sunrise, 06:04 |
+| Day | 07:00-18:00 | 06:41-16:13 | 12:00 → noon, 11:27 |
+| Dusk | 18:00-21:00 | 16:13-17:25 | 19:30 → sunset, 16:50 |
+| Night | 21:00-04:00 | 17:25-05:29 | 01:00 → midnight, 23:27 |
+
+`air_war_balance data 20 7` (the tuned theatre, undated) is byte for byte the same totals as §11: R7 changes nothing
+there. Nor in the raids it plays as sessions (`air_war_demo`, `test_packages_live.cpp`): a raid from an undated
+theatre carries no clock and keeps the legacy light keys from the planner's part (`docs/LIGHT.md` §5), so it is lit as it
+was planned and as before R7. `--theatre theatre_pannonia_nation.json data 10 7` was run undated (identical to §10's nation table) and dated:
+
+| Adversary, battery (the nation) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 17.9 → 16.1 | 7.3 % → 6.2 % | 100 %, 100 % | 1.4 → 1.5 |
+| Rebels, careful | 18.6 → 15.7 | 4.3 % → 8.3 % | 100 %, 100 % | 0.6 → 0.5 |
+| Neutral, careless | 30.9 → 28.4 | 3.6 % → 4.9 % | 100 %, 100 % | 7.3 → 6.0 |
+| Neutral, careful | 25.6 → 31.6 | 4.3 % → 4.4 % | 100 %, 100 % | 4.3 → 3.6 |
+| Warsaw Pact, careless | 1044.3 → 1035.5 | 2.0 % → 2.0 % | 38 %, 72 % → 35 %, 72 % | 7.8 → 9.8 |
+| Warsaw Pact, careful | 1009.4 → 1059.2 | 2.1 % → 1.7 % | 42 %, 72 % → 36 %, 72 % | 7.0 → 8.6 |
+| NATO, careless | 736.8 → 747.7 | 1.5 % → 1.8 % | 71 %, 69 % → 69 %, 67 % | 5.9 → 6.3 |
+| NATO, careful | 732.3 → 740.5 | 1.7 % → 1.6 % | 66 %, 66 % → 70 %, 65 % | 6.8 → 6.5 |
+
+The shapes hold and most of the shift is within ten seeds' noise: the light air arms lose one aircraft a week or so,
+so a loss rate moving between 4 and 8 % is a fraction of an aircraft. What moved with the sun: the rebels' strikes
+fell from 17 % to 6 % of their packages when careless (their dusk is an hour and a quarter now, not three, and their
+night twelve hours, not seven), the Pact offers the battery one or two raids a week more, its opening blows leave 35-36 % of the radar SAM sites working
+on day 3 against 38-42 %, and the bridges are cut a little less (Pact 93 and 71 line-hours a week against 102 and 75;
+NATO 114 and 111 against 113 and 127). `air_war_bench data 400` builds its benches on the tuned theatre's values, undated, and runs as before.
+
+**No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11
+were read on its buckets).
+

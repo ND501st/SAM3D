@@ -4,7 +4,10 @@
 
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Engine/DirectionalLight.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/DefaultPawn.h"
 #include "GameFramework/PlayerController.h"
@@ -21,6 +24,7 @@
 #include "SimMissionMenuHUD.h"
 #include "SimModelGallery.h"
 #include "SimOsaVehicle.h"
+#include "SimSkyWeatherActor.h"
 #include "UnrealClient.h"
 
 ASimScenarioDirector::ASimScenarioDirector()
@@ -186,6 +190,7 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 		}
 		return;
 	}
+	FindLevelSun();
 	const FString Cabin = CabinFile.IsEmpty() ? Sim->GetDefaultCabinFile() : (CabinFile == TEXT("none") ? FString() : CabinFile);
 	if (!Cabin.IsEmpty() && !Sim->LoadCabin(Cabin, Error) && GEngine != nullptr)
 	{
@@ -279,6 +284,58 @@ void ASimScenarioDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void ASimScenarioDirector::FindLevelSun()
+{
+	LevelSun.Reset();
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+	if (TActorIterator<ASimSkyWeatherActor>(World))
+	{
+		return;  // the sky actor turns its own sun by the scenario's clock
+	}
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		UDirectionalLightComponent* Light = It->GetComponent();
+		if (Light == nullptr || !Light->IsUsedAsAtmosphereSunLight())
+		{
+			continue;
+		}
+		if (Light->GetMobility() != EComponentMobility::Movable)
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Sky: the level's sun %s is not Movable: the scenario's time of day changes the simulation's light but not this level's picture (make it Movable to follow the sun)"),
+				*It->GetName());
+			return;
+		}
+		LevelSun = Light;
+		NextLevelSunAt = 0.0f;
+		UE_LOG(LogSAM3D, Log, TEXT("Sky: the level's sun %s follows the scenario's sun"), *It->GetName());
+		UpdateLevelSun();
+		return;
+	}
+}
+
+void ASimScenarioDirector::UpdateLevelSun()
+{
+	UDirectionalLightComponent* Light = LevelSun.Get();
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	double ElevationDeg = 0.0;
+	double AzimuthDeg = 0.0;
+	bool bDaylight = true;
+	float NightShare = 0.0f;
+	if (Light == nullptr || Sim == nullptr || !Sim->GetSunNow(ElevationDeg, AzimuthDeg, bDaylight, NightShare))
+	{
+		return;
+	}
+	// The direction to the sun in Unreal (X north, Y east, Z up); the light shines the other way (as ASimSkyWeatherActor).
+	const double El = FMath::DegreesToRadians(ElevationDeg);
+	const double Az = FMath::DegreesToRadians(AzimuthDeg);
+	const FVector ToSun(FMath::Cos(El) * FMath::Cos(Az), FMath::Cos(El) * FMath::Sin(Az), FMath::Sin(El));
+	Light->SetWorldRotation((-ToSun).Rotation());
+}
+
 void ASimScenarioDirector::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -287,6 +344,11 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 	if (Sim == nullptr)
 	{
 		return;
+	}
+	if (LevelSun.IsValid() && TimeSinceBeginPlay >= NextLevelSunAt)
+	{
+		NextLevelSunAt = TimeSinceBeginPlay + 1.0f;
+		UpdateLevelSun();
 	}
 	if (!bTerrainRequested && TerrainTileset != nullptr && Sim->IsScenarioRunning() &&
 		TimeSinceBeginPlay >= TerrainSampleDelaySeconds)
