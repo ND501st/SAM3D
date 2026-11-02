@@ -74,6 +74,21 @@
 namespace simcore {
 
 // Game-balance numbers. Every field is loaded from data/gameplay/<system>.json.
+// Where a vehicle's search antenna stands (above sea level): `antenna_height_m` over the ground under the vehicle at
+// `position` (ENU; its east and north), the same rule for the player's vehicle (EngagementModel::Measure) and the
+// battery's other launchers (battery_fire.hpp); with no height (0), the vehicle's own point.
+inline double SearchAntennaAltitude(const Terrain& terrain, const LocalFrame& frame, const Vec3& position, double antenna_height_m) {
+    return antenna_height_m > 0.0 ? terrain.HeightAt(position.x, position.y) + antenna_height_m : frame.AltitudeOf(position);
+}
+
+// Whether a search antenna there sees `target` over the ground, the woods and the buildings (radar.hpp HasLineOfSight,
+// sampled every 100 m, the footprints between the samples at their own spacing).
+inline bool SearchAntennaSees(const Terrain& terrain, const LocalFrame& frame, const Vec3& position, double antenna_height_m,
+                              const Vec3& target) {
+    return HasLineOfSight(terrain, position, SearchAntennaAltitude(terrain, frame, position, antenna_height_m), target,
+                          frame.AltitudeOf(target), 100.0);
+}
+
 struct EngagementTuning {
     std::string system_id;
     // Firing zone, for the ЦЕЛЬ В ЗОНЕ / ВНИМАНИЕ lamps and the outcome's zone factor.
@@ -137,6 +152,9 @@ struct EngagementTuning {
     double tv_size_min_mils = 0.0;
     // Search radar.
     double clutter_altitude_m = 0.0;
+    // Its antenna's height over the ground under the vehicle, for the line of sight (search.antenna_height_m, as
+    // data/em/<system>.json gives the radar's). 0: from the vehicle's own point (a tuning built by hand).
+    double search_antenna_height_m = 0.0;
     // Tracking.
     double az_tolerance_deg = 0.0;
     double range_gate_m = 0.0;
@@ -431,10 +449,12 @@ public:
             }
             t.has_arm_table = true;
         }
-        if (!Group(root, "search", {"clutter_altitude_m"}, g) ||
-            !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0)) {
+        if (!Group(root, "search", {"clutter_altitude_m", "antenna_height_m"}, g) ||
+            !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0) ||
+            !OptionalNumber(*g, "search", "antenna_height_m", t.search_antenna_height_m)) {
             return false;
         }
+        if (t.search_antenna_height_m < 0.0) return Fail("search.antenna_height_m", "must be >= 0");
         if (!Group(root, "track",
                    {"az_tolerance_deg", "range_gate_m", "lock_time_s", "min_altitude_m", "clutter_altitude_m",
                     "tv_max_range_m", "max_angular_rate_deg_s", "em_capture_looks", "em_capture_hits"},
@@ -1210,6 +1230,7 @@ private:
         const LocalFrame& frame = world.Frame();
         const Terrain& terrain = world.GetTerrain();
         const double unit_alt = frame.AltitudeOf(unit_);
+        const double antenna_alt = SearchAntennaAltitude(terrain, frame, unit_, tuning_.search_antenna_height_m);
         for (const EngagementTarget& tg : targets) {
             Geometry& g = geo_[tg.id];
             g.target_class = tg.target_class;
@@ -1226,7 +1247,7 @@ private:
             g.az_deg = Wrap180(g.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
-            g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
+            g.los = HasLineOfSight(terrain, unit_, antenna_alt, a->position, alt, 100.0);
             g.cloud_transmission = world.GetWeather().HasClouds() ? world.GetWeather().CloudTransmission(unit_, unit_alt, a->position, alt) : 1.0;
             const Vec3 dir = los.Normalized();
             g.rel = los;

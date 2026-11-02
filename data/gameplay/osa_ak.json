@@ -40,8 +40,9 @@
   },
 
   "search": {
-    "clutter_altitude_m": 150,
-    "notes": "Game value: with СДЦ (MTI) off, targets below this height are lost in ground clutter."
+    "clutter_altitude_m": 150, "antenna_height_m": 5.0,
+    "source": "antenna_height_m: data/em/osa_ak.json, osa_ak_soc antenna_height_m (an estimate: the antenna on the turret roof of the deployed vehicle); tests/test_engagement_model.cpp keeps the two the same.",
+    "notes": "clutter_altitude_m is a game value: with СДЦ (MTI) off, targets below this height are lost in ground clutter. antenna_height_m: the SOC's line of sight to a target starts this high over the ground under the vehicle, for the player's Osa and for the battery's other launchers (engagement.hpp SearchAntennaAltitude)."
   },
 
   "track": {
