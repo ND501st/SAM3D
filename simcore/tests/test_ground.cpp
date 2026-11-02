@@ -112,6 +112,34 @@ SC_TEST("ground: beyond the far ground a district's ground is the country's latt
     SC_EXPECT(m->DrawsCell(2, c, r));
 }
 
+SC_TEST("ground: no ground is drawn twice: the land beyond's 4 km cells meet the country's lattice at its nodes") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    // Pannonia spans 330 km east (-180 to 150) and 320 km north (-180 to 140), the far ground out to 150 km north: the
+    // country's lattice covers both, grown to 332 by 332 km so its edges are nodes of the 4 km lattice beyond (which
+    // starts 100 km west and south of it).
+    const MapGrid& cg = m->CountryGrid();
+    const MapGrid& bg = m->BeyondGrid();
+    SC_EXPECT_NEAR(cg.EastOf(cg.cols - 1), 152000.0, 1e-6);
+    SC_EXPECT_NEAR(cg.NorthOf(cg.rows - 1), 152000.0, 1e-6);
+    const double k_east = (cg.EastOf(cg.cols - 1) - bg.west_m) / bg.spacing_m;
+    const double k_north = (cg.NorthOf(cg.rows - 1) - bg.south_m) / bg.spacing_m;
+    SC_EXPECT_NEAR(k_east, std::round(k_east), 1e-9);
+    SC_EXPECT_NEAR(k_north, std::round(k_north), 1e-9);
+    std::string why;
+    SC_EXPECT(NoGroundDrawnTwice(*m, &why));
+    if (!why.empty()) std::printf("    %s\n", why.c_str());
+    // The strip drawn twice before the lattice was grown: at 150.5 km east the country's lattice is the ground, and the
+    // land beyond's cell there is not drawn.
+    SC_EXPECT(m->LevelAt(150500.0, 0.0) == 2);
+    int c = 0, r = 0;
+    bg.CellOf(150500.0, 0.0, c, r);
+    SC_EXPECT(!m->DrawsCell(3, c, r));
+    // The land beyond's next cell east, outside the country's lattice, is drawn: no hole either.
+    bg.CellOf(153000.0, 0.0, c, r);
+    SC_EXPECT(m->DrawsCell(3, c, r));
+}
+
 SC_TEST("ground: a map point's ground point in a frame 68 km off is straight under the frame's up, and maps back exactly") {
     const std::shared_ptr<const MapData> m = KesmarkMap();
     if (!m) return;
@@ -230,7 +258,8 @@ SC_TEST("ground floor: a terrain-following helicopter over a ridge keeps its ski
         least = std::min(least, frame.AltitudeOf(a.position) - a.bottom_m - ground.HeightAt(a.position.x, a.position.y));
     }
     std::printf("    the skids' least height over the ground: %.2f m (the ridge 180 m)\n", least);
-    SC_EXPECT(least >= 1.0 - 1e-6);
+    // To a millimetre: the pilot's height hold (HoldHeight) sets frame z, and z is altitude only to the Earth's curve.
+    SC_EXPECT(least >= 1.0 - 1e-3);
     SC_EXPECT(a.position.x > 8000.0);  // flew over it
 }
 

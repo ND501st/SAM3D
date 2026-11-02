@@ -394,13 +394,23 @@ SC_TEST("threats 9.3: terrain following holds its height over a ridge, climbing 
     a.waypoints = {{0.0, 16000.0, 60.0}};
     a.velocity = {0.0, 200.0, 0.0};
     double t = 0.0, min_clear = 1e9, max_agl_flat = 0.0, agl_at_crest = 0.0;
-    Fly(pilot, a, ridge, frame, t, 75.0, [&](const std::string&) {
+    double last_z = a.position.z, max_climb = 0.0;
+    int pulled_up = 0;
+    Fly(pilot, a, ridge, frame, t, 75.0, [&](const std::string& ev) {
+        // The climb in a step is the pilot's alone (BeforeStep levels the world's move): never over his limit, and the
+        // ground floor (roadmap R5) adds nothing to it nor reports a pull-up for a pilot holding his own height.
+        max_climb = std::max(max_climb, (a.position.z - last_z) / 0.1);
+        last_z = a.position.z;
+        if (ev == "pulled up over the ground") ++pulled_up;
         const double agl = Agl(a, ridge, frame);
         min_clear = std::min(min_clear, agl);
         if (a.position.y < 4000.0) max_agl_flat = std::max(max_agl_flat, agl);
         if (std::fabs(a.position.y - 8000.0) < 100.0) agl_at_crest = agl;
     });
-    std::printf("    lowest %.0f m above the ground; at the crest %.0f m; on the flat up to %.0f m\n", min_clear, agl_at_crest, max_agl_flat);
+    std::printf("    lowest %.0f m above the ground; at the crest %.0f m; on the flat up to %.0f m; climb up to %.1f m/s\n", min_clear,
+                agl_at_crest, max_agl_flat, max_climb);
+    SC_EXPECT(max_climb <= b.max_climb_mps + 1e-6);
+    SC_EXPECT(pulled_up == 0);
     SC_EXPECT(min_clear > 30.0);           // never close to flying into the ridge
     SC_EXPECT(agl_at_crest > 40.0);        // over the top at about its height
     SC_EXPECT(max_agl_flat < 75.0);        // and low on the flat

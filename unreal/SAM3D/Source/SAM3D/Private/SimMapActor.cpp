@@ -429,6 +429,68 @@ FVector ASimMapActor::GroundVertex(const simcore::MapFrameLink& Link, const simc
 	return ToUnreal(Link.GroundPoint(Grid.EastOf(C), Grid.NorthOf(R), Grid.At(C, R)));
 }
 
+bool ASimMapActor::BuildForFrame(const FVector& FrameOriginLonLatAlt, FString& OutError)
+{
+	return Build(FrameOriginLonLatAlt, FindDataDirectory(), OutError);
+}
+
+bool ASimMapActor::DrawnGroundAt(const FVector& UnrealPos, FVector& OutGround) const
+{
+	// Straight down the frame's up (Unreal Z: a ground point keeps its east and north, MapFrameLink::GroundPoint), so a
+	// face is found by its corners' X and Y alone; the skirts, edge-on from above, have none.
+	bool bFound = false;
+	double Highest = -UE_BIG_NUMBER;
+	for (const TObjectPtr<UProceduralMeshComponent>& TilePtr : GroundTiles)
+	{
+		UProceduralMeshComponent* Tile = TilePtr.Get();
+		if (Tile == nullptr)
+		{
+			continue;
+		}
+		const FBox Box = Tile->Bounds.GetBox();
+		if (UnrealPos.X < Box.Min.X || UnrealPos.X > Box.Max.X || UnrealPos.Y < Box.Min.Y || UnrealPos.Y > Box.Max.Y)
+		{
+			continue;
+		}
+		const FProcMeshSection* Section = Tile->GetProcMeshSection(0);
+		if (Section == nullptr)
+		{
+			continue;
+		}
+		const FTransform& Xf = Tile->GetComponentTransform();
+		const TArray<FProcMeshVertex>& Verts = Section->ProcVertexBuffer;
+		const TArray<uint32>& Index = Section->ProcIndexBuffer;
+		for (int32 I = 0; I + 2 < Index.Num(); I += 3)
+		{
+			const FVector A = Xf.TransformPosition(Verts[static_cast<int32>(Index[I])].Position);
+			const FVector B = Xf.TransformPosition(Verts[static_cast<int32>(Index[I + 1])].Position);
+			const FVector C = Xf.TransformPosition(Verts[static_cast<int32>(Index[I + 2])].Position);
+			const double D = (B.X - A.X) * (C.Y - A.Y) - (C.X - A.X) * (B.Y - A.Y);
+			if (FMath::Abs(D) < 1.0)  // under a square centimetre from above: a skirt
+			{
+				continue;
+			}
+			const double U = ((UnrealPos.X - A.X) * (C.Y - A.Y) - (C.X - A.X) * (UnrealPos.Y - A.Y)) / D;
+			const double V = ((B.X - A.X) * (UnrealPos.Y - A.Y) - (UnrealPos.X - A.X) * (B.Y - A.Y)) / D;
+			if (U < -1e-9 || V < -1e-9 || U + V > 1.0 + 1e-9)
+			{
+				continue;
+			}
+			const double Z = A.Z + U * (B.Z - A.Z) + V * (C.Z - A.Z);
+			if (Z > Highest)
+			{
+				Highest = Z;
+				bFound = true;
+			}
+		}
+	}
+	if (bFound)
+	{
+		OutGround = FVector(UnrealPos.X, UnrealPos.Y, Highest);
+	}
+	return bFound;
+}
+
 bool ASimMapActor::GroundAt(const FVector& UnrealPos, FVector& OutGround, FVector* OutNormal) const
 {
 	if (!Map || !GroundLink)

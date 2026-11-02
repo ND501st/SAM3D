@@ -56,6 +56,8 @@ about d²/2R (≈ 785 m at 100 km), so use `LocalFrame::AltitudeOf` whenever alt
   (`ViewVehicle::ground`, `ViewWork::ground`), because their `position` is where the antennas are.
 * **Held over the ground in simcore, never pushed up in Unreal.**
   * `TargetPilot::GroundFloor` keeps an aircraft's belly (`Aircraft::bottom_m`) a metre over the ground 3 s ahead.
+    A pilot who holds his own height (terrain following, a pop-up, a dive) already climbs for the ground ahead within
+    his limit, so for him the floor is only a limit: no second climb in the same step, no "pulled up" event.
   * A weapon ends where its line crosses the ground, or on its aim when it flies low.
   * An aircraft that still ends up under the ground is counted (`ScenarioRunner::TerrainStrikes`) and goes down.
   * Unreal only stops the 0.15 s it draws ahead between steps at the ground (`FSimEntityState::GroundClearSeconds`).
@@ -63,9 +65,16 @@ about d²/2R (≈ 785 m at 100 km), so use `LocalFrame::AltitudeOf` whenever alt
   from the map's own link. Only a level without a map actor (Cesium) traces, and that trace is ground-only (see the
   known limitations).
 * **The checks.**
-  * `simcore/ground_check.hpp`, run by `ground_check` and the dynamic campaign test, lists anything under the ground.
-  * In the game, `sam3d.ground.check` and `-SimGroundCheck=<s>` (`tools/ue_ground_check.py`) do the same for what is
-    drawn.
+  * `simcore/ground_check.hpp`, run by `ground_check` and the dynamic campaign test, lists aircraft, weapons,
+    missiles, visitors and movers under the ground. It cannot judge what is put on the ground by `GroundEnu` or
+    `GroundAt` (the battery's rows, the works, the neighbours, the scenery, the own vehicle): those are on the sim's
+    ground by construction, and only the game's check can find them off the drawn mesh.
+  * `NoGroundDrawnTwice`: no drawn cell of a coarse level shares area with a finer level. The country's lattice is
+    grown to the next node of the 4 km land beyond so their edges meet.
+  * In the game, `sam3d.ground.check` and `-SimGroundCheck=<s>` (`tools/ue_ground_check.py`) judge every shown entity
+    actor against the ground tiles' meshes as built (`ASimMapActor::DrawnGroundAt`, not `GroundAt`, which placed
+    them). `SAM3D.Map.GroundAgrees` builds the map actor for the testbed's frame and checks its meshes against the
+    sim's ground on every level.
 
 ## Time
 

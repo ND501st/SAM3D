@@ -108,6 +108,17 @@ attitude, the map's realism, the time of day and the pilots' defensive reactions
   * The reconnaissance helicopters fly low.
   * A low weapon ends on its aim.
   * A diving weapon ends where its line meets the ground.
+* Against the base (da0038a), R5 changes only the testbed's rows: `crew_balance data 10` and
+  `air_war_balance data 20 7` are byte-identical. In `helper_coverage` the testbed's Kills fall (NPC 25 to 23,
+  commander 29 to 22, deputy 29 to 22), and two gaps appear, "fewer kills (22 vs 23)" for the commander and deputy.
+  * The Kills column counts every enemy target dead in the scenario, by any site. In the commander's 900 s the base
+    has 32 "destroyed by" events and R5 23, nearly all by the neighbours' abstract fire (the city park's Osa battery,
+    the S-60s, the ZSUs). The player's own Osa launches the same in both: 2 for the commander, 3 for the NPC crew.
+  * The waves are the same to wave 3. From wave 4 the generator, which reads the war's state, draws another war:
+    other types and sizes (the base's wave 4 has 18 aircraft, R5's 11). The aircraft fly differently (held over the
+    ground, weapons ending on their aim), so the state it reads differs.
+  * So the drop and the two gaps are the testbed's random war, not a helper path: the gaps compare a seat with the NPC
+    row of the same build, within one or two of the 150-odd targets.
 
 - **The other sites are not the Osa's model.** They fire by the raids' abstract chance per pass, not by a guidance
   model, and their missiles' speed (700 m/s), the launch interval and the reload are game values. Their radars do not

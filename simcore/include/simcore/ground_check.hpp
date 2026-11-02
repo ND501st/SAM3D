@@ -7,11 +7,17 @@
 //   * an aircraft whose lowest point (its centre less Aircraft::bottom_m) is under the ground;
 //   * a weapon in flight (a bomb's or cruise missile's body), our missiles and the enemy's ARMs, by their centre (their
 //     own kinds, "weapon", "missile", "arm": a missile skimming the ground is triaged, not taken for an aircraft);
-//   * a ground item off its ground point: the battery's vehicles and dummies and the works (at the ground point each
-//     row carries: the data's z is an antenna's, roadmap R5 step 2b), the visitors and the world's movers (at their
-//     positions); our neighbours' sites, their launchers, the scenery and our own vehicle are drawn on the ground
-//     under their data's east and north (GroundEnu), and that point is checked.
+//   * a ground item off the ground: the visitors and the world's movers, at the positions their own code moves them to;
+//     the battery's vehicles and dummies and the works at the ground point each view row carries (the data's z is an
+//     antenna's, roadmap R5 step 2b).
 // Listed when more than `tolerance_m` under the ground, a ground item also when more than `float_m` over it.
+//
+// What this cannot see (roadmap R5's review). The battery's and the works' rows are built on GroundEnu, the very
+// ground they are judged against: judging them is only a guard that the rows the game draws by keep carrying a ground
+// point (not the data's antenna point), never a search. Our neighbours' sites, their launchers, the scenery and our
+// own vehicle carry no drawn point here at all: the game puts them on its ground (ASimMapActor::GroundAt), so they are
+// not listed, and the game's own check (USimWorldSubsystem::StartGroundCheck, which judges entity actors against the
+// ground tiles' meshes as built) and SAM3D.Map.GroundAgrees are where placing and drawing can disagree.
 // simcore/examples/ground_check.cpp runs it over the testbed's hour and every map mission (docs/TEST_RANGE.md).
 #pragma once
 
@@ -27,7 +33,7 @@ namespace simcore {
 struct BelowGround {
     double t_s = 0.0;
     std::string id;
-    std::string kind;     // aircraft, weapon, missile, arm, battery, work, visitor, mover, neighbour, launcher, scenery, own
+    std::string kind;     // aircraft, weapon, missile, arm, battery, work, visitor, mover
     Vec3 position;        // ENU, the point judged (an aircraft's centre, a ground item's ground point)
     double below_m = 0.0;  // how far its lowest point is under the ground (negative: over it, floating)
     bool floating = false;
@@ -66,14 +72,10 @@ inline std::vector<BelowGround> EntitiesOffGround(ScenarioRunner& r, double tole
     for (const EngagementModel::MissileView& m : r.MissilesInFlight()) air("missile " + std::to_string(m.number), "missile", m.position, 0.0);
     for (const EmSensorLink::ArmView& a : r.ArmsInFlight()) air(a.name, "arm", a.position, 0.0);
     const em::ViewExtras x = r.ViewExtrasNow(0);
-    for (const em::ViewVehicle& v : x.battery) ground(v.id, "battery", v.ground);
+    for (const em::ViewVehicle& v : x.battery) ground(v.id, "battery", v.ground);  // a guard on the row, see above
     for (const em::ViewWork& k : x.works) ground("works", "work", k.ground);
     for (const ScenarioRunner::VisitorState& v : r.Visitors()) ground(v.id, "visitor", v.position);
     for (const ScenarioRunner::WorldMover& m : r.MoversInView()) ground(m.mover, "mover", m.position);
-    for (const ScenarioNeighbour& nb : r.Neighbours()) ground(nb.id, "neighbour", r.GroundEnu(nb.position.x, nb.position.y));
-    for (const std::pair<std::string, Vec3>& l : r.NeighbourLaunchers()) ground(l.first, "launcher", r.GroundEnu(l.second.x, l.second.y));
-    for (const ScenarioScenery& s : r.Scenery()) ground(s.id, "scenery", r.GroundEnu(s.position.x, s.position.y));
-    ground("own", "own", r.GroundEnu(r.UnitPosition().x, r.UnitPosition().y));
     return out;
 }
 

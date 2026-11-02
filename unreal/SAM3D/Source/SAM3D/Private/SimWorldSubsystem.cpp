@@ -2143,7 +2143,11 @@ void USimWorldSubsystem::TickGroundCheck()
 			}
 			const FVector At = Actor->GetActorLocation();
 			FVector Ground;
-			if (!GroundAt(At, Ground, nullptr, Actor))
+			// On a map's level judged against the ground tiles' meshes as built (DrawnGroundAt), not GroundAt, which
+			// placed the ground items: a placement and a drawing that disagree show (roadmap R5's review).
+			const ASimMapActor* Map = GroundMap.Get();
+			const bool bHasGround = Map != nullptr ? Map->DrawnGroundAt(At, Ground) : GroundAt(At, Ground, nullptr, Actor);
+			if (!bHasGround)
 			{
 				continue;
 			}

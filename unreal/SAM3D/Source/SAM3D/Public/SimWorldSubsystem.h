@@ -1784,7 +1784,9 @@ public:
 	static const FName GroundTag;
 
 	/** The game's own "nothing under the map" check (roadmap R5; tools/ue_ground_check.py, sam3d.ground.check): for
-	 *  `Seconds` of sim time, once a second, every shown entity actor against GroundAt; what is under it (an aircraft by
+	 *  `Seconds` of sim time, once a second, every shown entity actor against the ground as drawn (on a map's level the
+	 *  ground tiles' built meshes, ASimMapActor::DrawnGroundAt, not GroundAt that placed them; else GroundAt's trace);
+	 *  what is under it (an aircraft by
 	 *  its bounds' bottom, the rest by its location) or a ground item floating over it is logged "Below ground:" /
 	 *  "Floats:". Started from the command line by -SimGroundCheck=<s>, which also ends the game after the summary. */
 	void StartGroundCheck(double Seconds, bool bExitAfter);

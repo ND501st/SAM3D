@@ -42,7 +42,7 @@ namespace simcore
  *
  * One ground (roadmap R5): every vertex is simcore's (MapData::DrawnLevels, MapFrameLink::GroundPoint), every cell split
  * as simcore samples it (MapGrid::SampleTri), so what the sim has on the ground stands on what is drawn; GroundAt gives
- * it without a trace. SAM3D.Map.GroundAgrees checks the vertices.
+ * it without a trace. SAM3D.Map.GroundAgrees checks the built meshes against the sim's ground (DrawnGroundAt).
  *
  * -SimMapShots=<folder> photographs the map from a few views (the battery's position, over the town, the bridges, the
  * woods, high above with the far ground and the cloud, the country from very high, the refinery and the capital's
@@ -110,9 +110,20 @@ public:
 	 *  the ground is hit). The triangle's normal too, if asked. False before the map is drawn or beyond its ground. */
 	bool GroundAt(const FVector& UnrealPos, FVector& OutGround, FVector* OutNormal = nullptr) const;
 
-	/** A vertex of the drawn ground: node (C, R) of a level's lattice in the frame the map is drawn in (the contract
-	 *  SAM3D.Map.GroundAgrees checks against simcore's MapFrameLink::GroundPoint). */
+	/** A vertex of the drawn ground: node (C, R) of a level's lattice in the frame the map is drawn in (BuildGround's). */
 	static FVector GroundVertex(const simcore::MapFrameLink& Link, const simcore::MapGrid& Grid, int32 C, int32 R);
+
+	/** The ground as built (roadmap R5's checks): the highest face of the ground tiles' meshes straight under (or over)
+	 *  a point, read from their sections' vertices and triangles, nothing simcore computes. GroundAt places things;
+	 *  this is what they are judged against (SAM3D.Map.GroundAgrees, the ground check), so a wrong vertex, split or
+	 *  tile, or a coarse cell drawn over a finer level, shows. False where no tile has a face over the point. */
+	bool DrawnGroundAt(const FVector& UnrealPos, FVector& OutGround) const;
+
+	/** Draw the map for a frame at (lon, lat, alt) (degrees, m) from the data folder FindDataDirectory finds. */
+	bool BuildForFrame(const FVector& FrameOriginLonLatAlt, FString& OutError);
+
+	/** The repository's data folder, from the project's (or the game's) folder. */
+	static FString FindDataDirectory();
 
 	/** The map drawn now (null before). */
 	const simcore::MapData* GetMapData() const { return Map.get(); }
@@ -131,7 +142,6 @@ private:
 	void BuildCountry(const FVector& FrameOriginLonLatAlt);
 	void BuildAssets(const FVector& FrameOriginLonLatAlt);
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
-	static FString FindDataDirectory();
 
 	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Map")
 	TObjectPtr<USceneComponent> Root;

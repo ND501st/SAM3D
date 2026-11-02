@@ -1,46 +1,100 @@
 #include "Misc/AutomationTest.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "Math/RandomStream.h"
+#include "Misc/ScopeExit.h"
 #include "SimMapActor.h"
 #include "SimWorldSubsystem.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-// One ground (roadmap R5): the map actor's drawn vertices are the sim's ground points put through EnuToUnreal, on every
-// drawn level of the test map, and the map's triangles agree with the frame's ground (simcore::DrawnGroundAgrees).
+// One ground (roadmap R5): the map actor built for the dynamic campaign testbed's frame draws, on every level of the
+// test map, the ground the sim samples. Judged on the ground tiles' meshes as built (ASimMapActor::DrawnGroundAt reads
+// their sections' vertices and triangles, nothing simcore computes), so a wrong vertex index, a cell split the other
+// way, a skipped cell or a coarse cell drawn over a finer level fails; and the actor's GroundAt, which places things,
+// is on that mesh.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimMapGroundAgreesTest, "SAM3D.Map.GroundAgrees",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSimMapGroundAgreesTest::RunTest(const FString& Parameters)
 {
-	std::string Error;
-	const std::shared_ptr<const simcore::MapData> Map =
-		simcore::LoadMapCached(TCHAR_TO_UTF8(*ASimMapActor::FindDataDirectory()), "maps/kesmark_range.json", &Error);
-	TestTrue(FString::Printf(TEXT("the test map loads %s"), UTF8_TO_TCHAR(Error.c_str())), Map != nullptr);
-	if (!Map)
+	// A world of its own, not begun (the map actor's BeginPlay would draw for no scenario): the actor only builds.
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, TEXT("SAM3DMapGroundAgrees"));
+	FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+	Context.SetCurrentWorld(World);
+	ON_SCOPE_EXIT
 	{
-		return true;
+		GEngine->DestroyWorldContext(World);
+		World->DestroyWorld(false);
+	};
+	ASimMapActor* MapActor = World->SpawnActor<ASimMapActor>();
+	if (!TestNotNull(TEXT("a map actor"), MapActor))
+	{
+		return false;
 	}
-	// The dynamic campaign testbed's frame (data/scenarios/dynamic_campaign_test.json), as the level draws it.
-	const simcore::MapFrameLink Link(Map->Def().origin, simcore::GeoPoint::FromDegrees(47.420689, 20.177063, 108.9));
+	MapActor->CountryFile = TEXT("");  // the country's lines and towns are not ground; its lattices are the map's own
+	MapActor->bDrawAssets = false;
+	MapActor->bCollision = false;
+	// The dynamic campaign testbed's frame (data/scenarios/dynamic_campaign_test.json), 68 km off the map's origin.
+	const double LatDeg = 47.420689, LonDeg = 20.177063, AltM = 108.9;
+	FString Error;
+	const bool bBuilt = MapActor->BuildForFrame(FVector(LonDeg, LatDeg, AltM), Error);
+	if (!TestTrue(FString::Printf(TEXT("the map is drawn for the testbed's frame %s"), *Error), bBuilt))
+	{
+		return false;
+	}
+	const simcore::MapData* Map = MapActor->GetMapData();
+	if (!TestNotNull(TEXT("the map's data"), Map))
+	{
+		return false;
+	}
+	const simcore::MapFrameLink Link(Map->Def().origin, simcore::GeoPoint::FromDegrees(LatDeg, LonDeg, AltM));
 	const std::vector<const simcore::MapGrid*> Levels = Map->DrawnLevels();
 	TestEqual(TEXT("four drawn levels: core, far, country, beyond"), static_cast<int32>(Levels.size()), 4);
-	double Worst = 0.0;
-	for (const simcore::MapGrid* G : Levels)
+	FRandomStream Random(0x52355);
+	for (std::size_t Li = 0; Li < Levels.size(); ++Li)
 	{
-		const int32 StepC = FMath::Max(1, G->cols / 17), StepR = FMath::Max(1, G->rows / 17);
-		for (int32 R = 0; R < G->rows; R += StepR)
+		const simcore::MapGrid& G = *Levels[Li];
+		const int32 Level = static_cast<int32>(Li);
+		// A triangle is flat, the frame's ground bends between its corners: the sim's point stands over the face by up
+		// to the chord's sag, s^2 / 4R (1 cm at 500 m, 0.6 m on the 4 km land beyond), as DrawnGroundAgrees allows.
+		const double SagCm = 100.0 * (1.1 * G.spacing_m * G.spacing_m / (4.0 * 6371000.0) + 0.01);
+		double WorstCm = 0.0, WorstPlacedCm = 0.0;
+		int32 Done = 0, Missing = 0;
+		for (int32 Tried = 0; Done < 150 && Tried < 15000; ++Tried)
 		{
-			for (int32 C = 0; C < G->cols; C += StepC)
+			const double E = G.west_m + Random.FRand() * G.spacing_m * (G.cols - 1);
+			const double N = G.south_m + Random.FRand() * G.spacing_m * (G.rows - 1);
+			if (Map->LevelAt(E, N) != static_cast<int>(Li))
 			{
-				const FVector Drawn = ASimMapActor::GroundVertex(Link, *G, C, R);
-				const FVector Sim = USimWorldSubsystem::EnuToUnreal(Link.GroundPoint(G->EastOf(C), G->NorthOf(R), G->At(C, R)));
-				Worst = FMath::Max(Worst, FVector::Dist(Drawn, Sim));
+				continue;
+			}
+			++Done;
+			// The sim's ground point there (MapData::GroundHeight on its level's triangle, put in the frame).
+			const FVector Sim = USimWorldSubsystem::EnuToUnreal(Link.GroundPoint(E, N, Map->GroundHeight(E, N)));
+			FVector Drawn;
+			if (!MapActor->DrawnGroundAt(Sim, Drawn))
+			{
+				++Missing;
+				continue;
+			}
+			WorstCm = FMath::Max(WorstCm, FMath::Abs(Sim.Z - Drawn.Z));
+			FVector Placed;
+			if (MapActor->GroundAt(Sim, Placed))
+			{
+				WorstPlacedCm = FMath::Max(WorstPlacedCm, FMath::Abs(Placed.Z - Drawn.Z));
 			}
 		}
+		TestEqual(FString::Printf(TEXT("level %d: 150 points where it is the ground"), Level), Done, 150);
+		TestEqual(FString::Printf(TEXT("level %d: drawn ground under every one"), Level), Missing, 0);
+		TestTrue(FString::Printf(TEXT("level %d: the drawn mesh is the sim's ground (worst %.2f cm, sag %.2f cm)"), Level, WorstCm, SagCm),
+			WorstCm <= SagCm);
+		TestTrue(FString::Printf(TEXT("level %d: GroundAt places on the drawn mesh (worst %.2f cm)"), Level, WorstPlacedCm),
+			WorstPlacedCm <= SagCm);
 	}
-	TestTrue(FString::Printf(TEXT("drawn vertices on the sim's ground points (worst %.3f cm)"), Worst), Worst < 0.1);
 	std::string Why;
-	TestTrue(FString::Printf(TEXT("the drawn ground agrees with the frame's: %s"), UTF8_TO_TCHAR(Why.c_str())),
-		simcore::DrawnGroundAgrees(*Map, Link, 400, &Why));
+	const bool bOnce = simcore::NoGroundDrawnTwice(*Map, &Why);
+	TestTrue(FString::Printf(TEXT("no ground drawn twice %s"), UTF8_TO_TCHAR(Why.c_str())), bOnce);
 	return true;
 }
 

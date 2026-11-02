@@ -546,8 +546,9 @@ public:
     // The ground's lattices as they are drawn, finest first: the map proper, the far ground, the country's, the land
     // beyond (those it has). A coarser level leaves out only the cells lying wholly inside a finer level (DrawsCell), so
     // no point is left without ground; the ground at a point is the finest level covering it (LevelAt), on that cell's
-    // triangles. Where a coarser level's edge does not fall on a finer level's (the land beyond on the country's east),
-    // the two overlap by less than a coarse cell and the finer is the ground.
+    // triangles. Every level's edges fall on the next coarser level's nodes (the country's lattice is grown to the 4 km
+    // beyond's), so a coarse cell is wholly inside a finer level or wholly outside it, and every point of the ground is
+    // drawn by exactly one cell (NoGroundDrawnTwice).
     // A finer level of detail anywhere (roadmap R6) is a level added here, never in the game alone.
     std::vector<const MapGrid*> DrawnLevels() const {
         std::vector<const MapGrid*> out;
@@ -685,12 +686,23 @@ private:
                 }
             }
         };
+        // The country's lattice covers the country and the far ground both (pannonia ends 140 km north, the far ground
+        // 150 km), grown in whole cells of the 4 km lattice beyond (pannonia's 330 by 320 km becomes 332 by 332), so
+        // every level's edge falls on the next coarser level's nodes and a coarse cell lies wholly inside a finer level
+        // or wholly outside it: no strip drawn twice, no coarse triangle over the finer ground (roadmap R5's review,
+        // NoGroundDrawnTwice). The country's ground there is its natural ground, as everywhere.
         const double sp = def_.far_grid_m;
-        lattice(country_, cg.west_m, cg.south_m, static_cast<int>(std::lround((cg.east_m - cg.west_m) / sp)) + 1,
-                static_cast<int>(std::lround((cg.north_m - cg.south_m) / sp)) + 1, sp);
-        const double w1 = country_.EastOf(country_.cols - 1), n1 = country_.NorthOf(country_.rows - 1);
-        lattice(beyond_, cg.west_m - kBeyondM, cg.south_m - kBeyondM, static_cast<int>((w1 - cg.west_m + 2.0 * kBeyondM) / kBeyondSpacingM) + 1,
-                static_cast<int>((n1 - cg.south_m + 2.0 * kBeyondM) / kBeyondSpacingM) + 1, kBeyondSpacingM);
+        const double per = kBeyondSpacingM / sp;  // country cells to a beyond cell (4 at 1 km)
+        const double snap = std::round(per) == per ? kBeyondSpacingM : sp;
+        const auto whole = [snap](double span) { return std::ceil(span / snap - 1e-9) * snap; };
+        const double west = cg.west_m - whole(std::max(0.0, cg.west_m + def_.far_m));
+        const double south = cg.south_m - whole(std::max(0.0, cg.south_m + def_.far_m));
+        const double east = west + whole(std::max(cg.east_m, def_.far_m) - west);
+        const double north = south + whole(std::max(cg.north_m, def_.far_m) - south);
+        lattice(country_, west, south, static_cast<int>(std::lround((east - west) / sp)) + 1,
+                static_cast<int>(std::lround((north - south) / sp)) + 1, sp);
+        lattice(beyond_, west - kBeyondM, south - kBeyondM, static_cast<int>(std::lround((east - west + 2.0 * kBeyondM) / kBeyondSpacingM)) + 1,
+                static_cast<int>(std::lround((north - south + 2.0 * kBeyondM) / kBeyondSpacingM)) + 1, kBeyondSpacingM);
     }
     static constexpr double kBeyondM = 100000.0;        // the land drawn beyond the country's borders (a game value)
     static constexpr double kBeyondSpacingM = 4000.0;
@@ -1374,6 +1386,34 @@ inline bool DrawnGroundAgrees(const MapData& map, const MapFrameLink& link, int 
             std::snprintf(text, sizeof(text), "level %zu: only %d of %d points where it is the ground", li, done, samples);
             if (why != nullptr) *why = text;
             return false;
+        }
+    }
+    return true;
+}
+
+// Roadmap R5's other half: no ground drawn twice. Every cell a level draws (DrawsCell) shares no area with any finer
+// level, so no coarse triangle can lie over (and hide) the finer ground the sim stands things on, or under it. False,
+// and why, at the first cell that does.
+inline bool NoGroundDrawnTwice(const MapData& map, std::string* why = nullptr) {
+    const std::vector<const MapGrid*> levels = map.DrawnLevels();
+    char text[256];
+    for (std::size_t li = 1; li < levels.size(); ++li) {
+        const MapGrid& g = *levels[li];
+        for (int r = 0; r + 1 < g.rows; ++r) {
+            for (int c = 0; c + 1 < g.cols; ++c) {
+                const double w = g.EastOf(c), e = g.EastOf(c + 1), s = g.NorthOf(r), n = g.NorthOf(r + 1);
+                for (std::size_t j = 0; j < li; ++j) {
+                    const MapGrid& f = *levels[j];
+                    const double fe = f.EastOf(f.cols - 1), fn = f.NorthOf(f.rows - 1);
+                    const double across = std::min(e, fe) - std::max(w, f.west_m), up = std::min(n, fn) - std::max(s, f.south_m);
+                    if (across <= 1e-6 || up <= 1e-6) continue;  // no area in common
+                    if (!map.DrawsCell(li, c, r)) break;           // wholly inside a finer level: not drawn
+                    std::snprintf(text, sizeof(text), "level %zu's cell (%.0f..%.0f, %.0f..%.0f) is drawn and overlaps level %zu by %.0f x %.0f m",
+                                  li, w, e, s, n, j, across, up);
+                    if (why != nullptr) *why = text;
+                    return false;
+                }
+            }
         }
     }
     return true;

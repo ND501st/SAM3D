@@ -107,7 +107,7 @@ public:
         }
         if (ControlsHeight() && dt > 0.0) HoldHeight(a, terrain, frame, dt);
         if (dt > 0.0) {
-            const std::string g = GroundFloor(a, terrain, frame, dt);
+            const std::string g = GroundFloor(a, terrain, frame, dt, ControlsHeight());
             if (!g.empty() && event.empty()) event = g;
         }
         return event;
@@ -128,7 +128,7 @@ public:
     }
     // Only the ground floor (roadmap R5): an aircraft past its last waypoint, flying on until it leaves the world.
     void HoldOverGround(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
-        if (a.alive && dt > 0.0) GroundFloor(a, terrain, frame, dt);
+        if (a.alive && dt > 0.0) GroundFloor(a, terrain, frame, dt, false);
     }
     // The route it is on: during a jink the one it will go back to, else the aircraft's own.
     std::pair<std::vector<Vec3>, std::size_t> Route(const Aircraft& a) const {
@@ -248,9 +248,19 @@ private:
     // metre over the highest ground of the next kFloorLookS; under it he pulls up at his climb limit, and never lets
     // his belly under the ground here. A weapon has none (it ends on the ground). Returns "pulled up over the ground"
     // when a pull-up starts.
-    std::string GroundFloor(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
+    // A pilot who held his own height this step (`held`: HoldHeight ran, for terrain following, a pop-up, a dive) climbed
+    // for the ground ahead within his limit and keeps his belly over the ground here: for him the floor is only a
+    // limit, never a second climb on top of his own in the same step, and no event (roadmap R5's review: TF over a
+    // ridge climbed at twice its rate).
+    std::string GroundFloor(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt, bool held) {
         if (weapon_ || !a.alive || dt <= 0.0) return std::string();
         const double here = terrain.HeightAt(a.position.x, a.position.y);
+        if (held) {
+            const double under = here + a.bottom_m - frame.AltitudeOf(a.position);
+            if (under > 0.0) a.position.z += under;  // never the belly under the ground here (HoldHeight keeps it over)
+            pulled_up_ = false;
+            return std::string();
+        }
         double ground = here;
         const double vh = std::hypot(a.velocity.x, a.velocity.y);
         if (vh > 1.0) {
