@@ -425,6 +425,8 @@ public:
     void SetTerrain(const Terrain* terrain) {
         world_.SetTerrain(terrain != nullptr ? terrain : (map_ground_ ? static_cast<const Terrain*>(map_ground_.get()) : &ground_));
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
+        if (battery_fire_) battery_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());
+        if (neighbour_fire_) neighbour_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());
     }
 
     // The scenario's weather (its winds and clouds, drifted to now) and its map's ground (null on flat ground).
@@ -10644,6 +10646,7 @@ private:
             double reach = def_.has_launcher_tuning ? def_.launcher_reach_m : console_.track.max_range_m;
             if (!(reach > 0.0)) reach = 28000.0;
             neighbour_fire_ = std::make_unique<BatteryFire>(tuning, reach);
+            neighbour_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());  // they see as our Osa does (roadmap R6)
             neighbour_fire_->SetAutonomous(true);
             neighbour_fire_rng_.seed(def_.seed * 6151u + 11u);
             for (std::size_t j = 0; j < def_.neighbours.size(); ++j) {
@@ -10726,6 +10729,7 @@ private:
             double reach = def_.has_launcher_tuning ? def_.launcher_reach_m : console_.track.max_range_m;
             if (!(reach > 0.0)) reach = 28000.0;
             battery_fire_ = std::make_unique<BatteryFire>(tuning, reach);
+            battery_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());  // they see as our Osa does (roadmap R6)
             battery_fire_->SetAutonomous(def_.battery_commander == "none" || (!c2_ && !post_));
             battery_fire_rng_.seed(def_.seed * 4099u + 7u);
         }

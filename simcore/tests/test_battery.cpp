@@ -1206,3 +1206,69 @@ SC_TEST("battery fire: a launcher reports by the number it was given, whatever a
     SC_EXPECT(!own_search.empty());
     for (const BatteryFire::Event& e : own_search) SC_EXPECT(e.number == 6205);
 }
+
+// Roadmap R6's review: the battery's other launchers (and the regiment's other batteries in the battery fire model) see
+// over the ground, the woods and the buildings as the player's Osa does (engagement.hpp SearchAntennaSees: the search
+// antenna 5 m over the ground), not through them. Placeholder ground and numbers.
+SC_TEST("battery fire: a launcher behind a ridge neither takes nor captures a target it cannot see; over open ground it does") {
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    BatteryVehicleDef l22;
+    l22.id = l22.callsign = "22";
+    l22.kind = BatteryVehicleKind::Launcher;
+    Battery b(Tactics(), {own, l22});
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    t.search_antenna_height_m = 5.0;
+    const LocalFrame frame(GeoPoint::FromDegrees(47.0, 20.0, 0.0));
+    // A 60 m ridge running east-west 3 km north of the launcher (the grid 30 x 30 km round it), and the same ground flat.
+    std::vector<double> heights(61 * 61, 0.0);
+    for (int col = 0; col < 61; ++col) heights[static_cast<std::size_t>(36 * 61 + col)] = 60.0;
+    const GridTerrain ridge(-15000.0, -15000.0, 500.0, 61, 61, heights);
+    const FlatTerrain flat(0.0);
+    // A target 9 km north, 100 m up, coming south: under the ridge's shadow from the launcher (the ray 3 km out is 35 m up).
+    BatteryFireTarget tg;
+    tg.id = "low";
+    tg.position = GroundPointInFrame(frame, 0.0, 9000.0, 100.0);
+    tg.velocity = Vec3{0.0, -1.0, 0.0};  // slow: it stays put over the test's minute
+    tg.agl_m = 100.0;
+    for (const Terrain* ground : {static_cast<const Terrain*>(&ridge), static_cast<const Terrain*>(&flat)}) {
+        BatteryFire fire(t, 20000.0);
+        fire.SetGround(ground, &frame);
+        fire.SetAutonomous(true);
+        fire.Sync(b);
+        std::mt19937 rng(5);
+        bool captured = false;
+        std::string took;
+        for (double s = 0.0; s < 60.0; s += 0.5) {
+            fire.Step(s, {tg}, rng, &b, [](const std::string&) {});
+            took = took.empty() ? fire.Shooters().front().target : took;
+            for (const BatteryFire::Event& e : fire.TakeEvents()) captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
+        }
+        if (ground == &ridge) {
+            SC_EXPECT(took.empty() && !captured);
+        } else {
+            SC_EXPECT(took == "low" && captured);
+        }
+    }
+    // Given a target by the commander behind the ridge, it searches (Acquiring) and never captures it.
+    BatteryFire fire(t, 20000.0);
+    fire.SetGround(&ridge, &frame);
+    fire.Sync(b);
+    SC_EXPECT(fire.Assign("22", "low", 1, 0.0));
+    std::mt19937 rng(5);
+    bool captured = false;
+    for (double s = 0.0; s < 60.0; s += 0.5) {
+        fire.Step(s, {tg}, rng, &b, [](const std::string&) {});
+        for (const BatteryFire::Event& e : fire.TakeEvents()) captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
+    }
+    SC_EXPECT(!captured && fire.Shooters().front().phase == BatteryFire::Phase::Acquiring);
+}

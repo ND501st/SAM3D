@@ -5,8 +5,10 @@
 // not: each is a Shooter with an abstract crew that works through the textbook's network chart (voenizdat_osa_1991
 // Fig. 7.2: the tracking radar onto the target 10 s, capture 6-7 s, computer 3 s, missile preparation 15 s, launch
 // 1.2 s; the result watched 10 s), every time scaled by its crew's tier (docs/crew/05_SKILL.md: the tier's reaction
-// against the reference tier's). Its sensors are geometric (the target within the tracking radar's reach); it fires
-// only inside the firing zones of the gameplay tuning, from its own position; each launch is resolved with the same
+// against the reference tier's). Its sensors are geometric (the target within the tracking radar's reach and, given the
+// ground (SetGround), in its search antenna's line of sight over the ground, the woods and the buildings, the rule the
+// player's Osa sees by: engagement.hpp SearchAntennaSees, roadmap R6); it fires only inside the firing zones of the
+// gameplay tuning, from its own position; each launch is resolved with the same
 // hit chance as the player's (the class's chance and its low-altitude factor; no crew mistakes, no manoeuvre). Six
 // missiles; when empty it asks for the TZM and is reloaded one missile a minute alongside it (flak11).
 //
@@ -22,8 +24,12 @@
 #include <utility>
 #include <vector>
 
+#include <unordered_map>
+
 #include "simcore/battery.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/geo.hpp"
+#include "simcore/terrain.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -74,6 +80,8 @@ public:
         bool has_sector = false;    // its sector of fire (true azimuth from its position, clockwise from..to)
         double sector_from_deg = 0.0;
         double sector_to_deg = 0.0;
+        // Whether it saw each target when last looked (SetGround): target id -> (when, seen).
+        std::unordered_map<std::string, std::pair<double, bool>> sight;
     };
 
     // Whether a point is in a shooter's sector of fire (any point when it has none).
@@ -111,6 +119,15 @@ public:
     BatteryFire(EngagementTuning tuning, double reach_m, NetworkChart chart = NetworkChart())
         : tuning_(std::move(tuning)), reach_m_(reach_m), chart_(chart) {}
 
+    // The ground the launchers look over: with it, a target is captured, tracked and fired at only while the launcher's
+    // search antenna (the tuning's search.antenna_height_m over the ground under it) sees it over the ground, the woods
+    // and the buildings, as the player's Osa does (EngagementModel::Measure). Without it (null), they see through them.
+    // Both must outlive this.
+    void SetGround(const Terrain* terrain, const LocalFrame* frame) {
+        terrain_ = terrain;
+        frame_ = frame;
+    }
+
     // The battery's launchers other than the player's, where they are and whether they are set up.
     void Sync(const Battery& battery) {
         for (const Battery::Vehicle& v : battery.Vehicles()) {
@@ -125,6 +142,7 @@ public:
                 s->sector_from_deg = v.def.sector_from_deg;
                 s->sector_to_deg = v.def.sector_to_deg;
             }
+            if ((s->position - v.position).LengthSquared() > 1.0) s->sight.clear();  // moved: look again
             s->position = v.position;
             s->deployed = v.deployed;
         }
@@ -219,14 +237,15 @@ public:
             }
             const Vec3 rel = tg->position - s.position;
             const double range = rel.Length();
+            const bool seen = range <= reach_m_ && Sees(s, *tg, t);
             if (s.phase == Phase::Acquiring) {
-                if (t < s.next_s || range > reach_m_) continue;
+                if (t < s.next_s || !seen) continue;
                 s.phase = Phase::Tracking;
                 s.next_s = t + chart_.computer_s * s.time_scale;
                 events_.push_back({Event::Kind::Captured, t, s.callsign, s.target, ReportNumber(s, tg)});
                 continue;
             }
-            if (range > reach_m_) {
+            if (!seen) {  // out of reach, or behind the ground, a wood or a building: the lock is lost
                 s.phase = Phase::Acquiring;
                 continue;
             }
@@ -309,7 +328,7 @@ private:
                 if (sector ? !InSector(s, tg.position) : Dot(tg.position - s.position, tg.velocity) >= 0.0) continue;
                 if (tuning_.zone_max_alt_m > 0.0 && tg.agl_m > tuning_.zone_max_alt_m) continue;
                 const double r = (tg.position - s.position).Length();
-                if (r < best_r) {
+                if (r < best_r && Sees(s, tg, t)) {
                     best_r = r;
                     best = &tg;
                 }
@@ -318,6 +337,18 @@ private:
         }
         if (best != nullptr) Assign(s.callsign, best->id, best->number, t);
     }
+
+    // Whether the shooter's search antenna sees the target (SetGround; always without the ground). Looked again at most
+    // every kSightRefreshS for a target: the line of sight changes slowly against the chart's seconds.
+    bool Sees(Shooter& s, const BatteryFireTarget& tg, double t) const {
+        if (terrain_ == nullptr || frame_ == nullptr) return true;
+        auto it = s.sight.find(tg.id);
+        if (it != s.sight.end() && t >= it->second.first && t < it->second.first + kSightRefreshS) return it->second.second;
+        const bool seen = SearchAntennaSees(*terrain_, *frame_, s.position, tuning_.search_antenna_height_m, tg.position);
+        s.sight[tg.id] = {t, seen};
+        return seen;
+    }
+    static constexpr double kSightRefreshS = 0.5;  // a game value
 
     // Empty: ask for the TZM; alongside it, one missile a minute (flak11: six in 6 min).
     void Reload(Shooter& s, double t, Battery* battery) {
@@ -345,6 +376,8 @@ private:
     EngagementTuning tuning_;
     double reach_m_;
     NetworkChart chart_;
+    const Terrain* terrain_ = nullptr;
+    const LocalFrame* frame_ = nullptr;
     double time_scale_ = 1.0;
     bool autonomous_ = false;
     std::vector<Shooter> shooters_;
