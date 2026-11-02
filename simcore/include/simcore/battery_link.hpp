@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -157,8 +158,11 @@ public:
 }  // namespace detail
 
 // Load a link and both its scenarios. Null with `error` set when a file is missing or the two don't fit together.
+// `adjust` is applied to each half once loaded, before the checks (roadmap R7: the menu's time of day, ApplyTimeChoice),
+// so the two halves still have to agree after it.
 inline std::unique_ptr<BatteryLink> LoadBatteryLinkFile(const std::string& path, const std::string& data_dir,
-                                                        std::string* error = nullptr, BatteryLinkDef* def_out = nullptr) {
+                                                        std::string* error = nullptr, BatteryLinkDef* def_out = nullptr,
+                                                        const std::function<void(ScenarioDef&)>& adjust = {}) {
     auto fail = [&](const std::string& why) -> std::unique_ptr<BatteryLink> {
         if (error != nullptr) *error = path + ": " + why;
         return nullptr;
@@ -176,6 +180,10 @@ inline std::unique_ptr<BatteryLink> LoadBatteryLinkFile(const std::string& path,
     std::string e;
     if (!LoadScenarioFile(data_dir + "/" + def.osa_file, data_dir, osa, osa_console, &e)) return fail("osa: " + e);
     if (!LoadScenarioFile(data_dir + "/" + def.post_file, data_dir, post, post_console, &e)) return fail("post: " + e);
+    if (adjust) {
+        adjust(osa);
+        adjust(post);
+    }
     if (osa.battery_commander != "post") return fail("osa: its battery_commander must be \"post\"");
     if (!osa.has_battery || osa.tuning_file.empty()) return fail("osa: needs a battery and the engagement model");
     if (!post.has_post || !post.has_battery) return fail("post: its own unit must be the command post, with a battery");
@@ -191,6 +199,10 @@ inline std::unique_ptr<BatteryLink> LoadBatteryLinkFile(const std::string& path,
     if (std::fabs(osa.origin.lat_rad - post.origin.lat_rad) > 1e-12 || std::fabs(osa.origin.lon_rad - post.origin.lon_rad) > 1e-12 ||
         std::fabs(osa.origin.alt_m - post.origin.alt_m) > 1e-6) {
         return fail("the two scenarios need the same origin");
+    }
+    if (osa.clock.day_of_year != post.clock.day_of_year || std::fabs(osa.clock.utc_offset_h - post.clock.utc_offset_h) > 1e-6 ||
+        std::fabs(osa.clock.start_local_h - post.clock.start_local_h) > 1e-6) {
+        return fail("the two scenarios need the same clock (date, utc_offset_h and the hour of second 0)");
     }
     if (def_out != nullptr) *def_out = def;
     return std::make_unique<BatteryLink>(std::move(osa), std::move(osa_console), std::move(post), std::move(post_console), def.callsign);

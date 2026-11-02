@@ -139,7 +139,7 @@ public:
             e.span_m = t.span_m;
             eng_targets_.push_back(e);
         }
-        engagement_.SetOpticalConditions(def_.optics);
+        UpdateLight();  // the sun at second 0 (roadmap R7): the TV's daylight from here, the battery's night below
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
         fx_rng_.seed(def_.seed + kFxSeed);  // the presentation's own draws (fx/events.hpp): never a model's generator
         rwr_warned_.assign(def_.targets.size(), 0);
@@ -199,7 +199,7 @@ public:
         if (def_.has_battery) {
             battery_ = std::make_unique<Battery>(def_.battery_tactics, def_.battery_vehicles);
             battery_->SetDriveOwn(def_.battery_drive_own);
-            battery_->SetNight(def_.battery_night);
+            battery_->SetNight(light_.dark);
             if (def_.prepared.present && def_.prepared.emplacement) {
                 battery_->SetInEmplacement(def_.prepared.values.leave_emplacement_s);
             } else if (def_.battery_deployed) {
@@ -225,6 +225,7 @@ public:
     void Step(double dt) {
         if (finished_) return;
         time_ += dt;
+        UpdateLight();
         weather_.SetTime(time_);  // the clouds drift
         UpdateTargets(dt);
         UpdateWaves();
@@ -327,6 +328,10 @@ public:
     int DesignationSlips() const { return designation_slips_; }
 
     const ScenarioDef& Def() const { return def_; }
+    // The session's sky (roadmap R7, light.hpp): the scenario's clock and the light of its sun now, which the TV, the
+    // battery's night, the visual range, the guns' sights and the waves all read. A world fact, never a crewman's.
+    const SkyClock& Clock() const { return def_.clock; }
+    const SunLight& LightNow() const { return light_; }
     ConsoleData& Console() { return console_; }
     const ConsoleData& Console() const { return console_; }
     World& GetWorld() { return world_; }
@@ -1973,6 +1978,33 @@ private:
         Event(def_.id, "starts " + st.id + (st.description.empty() ? std::string() : ": " + st.description));
     }
 
+    // The sun now, at most once a simulated second: when the TV's daylight or the battery's dark changes, everything that
+    // reads it is told, and the debrief has a line (a world fact, not the crew's knowledge).
+    void UpdateLight() {
+        if (light_init_ && time_ < light_next_s_) return;
+        light_next_s_ = time_ + 1.0;
+        const SunLight l = LightAt(def_.clock, time_, def_.light_values);
+        const bool changed = !light_init_ || l.daylight != light_.daylight || l.dark != light_.dark;
+        const bool phase = light_init_ && l.phase != light_.phase;
+        light_ = l;
+        if (!changed && !phase) return;
+        if (changed) {
+            em::OpticalConditions o = def_.optics;
+            o.daylight = light_.daylight;
+            engagement_.SetOpticalConditions(o);
+            if (battery_) battery_->SetNight(light_.dark);
+            if (order_net_) order_net_->SetNight(light_.dark);
+        }
+        if (light_init_) {
+            char buf[96];
+            std::snprintf(buf, sizeof(buf), "%s: the sun %.1f deg %s the horizon%s", LightPhaseName(light_.phase),
+                          std::fabs(light_.sun_elevation_deg), light_.sun_elevation_deg < 0.0 ? "below" : "above",
+                          changed ? (light_.dark ? ", dark" : (light_.daylight ? ", daylight" : "")) : "");
+            Event("light", buf);
+        }
+        light_init_ = true;
+    }
+
     void Event(const std::string& what, const std::string& detail) {
         if (shadow_) return;  // the shadow commander's thoughts are not events
         log_.Record({time_, DebriefEntry::Kind::Scenario, std::string(), what, detail});
@@ -2311,7 +2343,7 @@ private:
     double NeighbourKillChance(const airwar::DefenceDef& d, double reach_m, const Vec3& site, const Aircraft& a) const {
         const double agl = world_.Frame().AltitudeOf(a.position) - world_.GetTerrain().HeightAt(a.position.x, a.position.y);
         const bool helicopter = a.speed_mps < 90.0;  // the runner does not know its type here: slow means a helicopter
-        return airwar::WavePassKillChance(d, reach_m, site, a.position, a.velocity, agl, helicopter, def_.waves->tuning);
+        return airwar::WavePassKillChance(d, reach_m, site, a.position, a.velocity, agl, helicopter, def_.waves->tuning, light_.dark);
     }
 
     // The shots whose time has come: a hit brings its aircraft down (its wreck in the feed); a missile that missed, or
@@ -2371,7 +2403,7 @@ private:
         st.pass_start_s = st.next_group_s = time_;
         st.pass_end_s = time_ + pass_s;
         st.rounds_due = 0.0;
-        st.errors = fc != nullptr ? DrawPassErrors(*fc, a.velocity, !def_.optics.daylight, defence_rng_) : PassErrors{};
+        st.errors = fc != nullptr ? DrawPassErrors(*fc, a.velocity, light_.dark, defence_rng_) : PassErrors{};
         st.next_s = st.pass_end_s + 2.0 + 4.0 * Uniform01(defence_rng_);
         if (fx_on_ && !g.time_fuze) {
             const ScenarioNeighbour& nb = def_.neighbours[j];
@@ -3045,7 +3077,7 @@ private:
             if (MarchRadioBan() && e.who == "Battery commander") {
                 // voenizdat_osa_1991 pp. 232-239: on the march the battery commander, at the column's head in the
                 // PU-12M, signals by flags and lamps; the column's drivers and commanders see them.
-                Radio(def_.battery_night ? "lamp signals" : "flag signals", e.who, e.text, false, SignalSeers());
+                Radio(light_.dark ? "lamp signals" : "flag signals", e.who, e.text, false, SignalSeers());
                 continue;
             }
             Radio("battery net", e.who, e.text);
@@ -3097,7 +3129,7 @@ private:
         const double hour_at_zero = def_.clock_start_s >= 0.0 ? def_.clock_start_s / 3600.0 : 0.0;
         order_net_ = std::make_unique<command::BatteryOrderNet>(def_.battery_orders_def, def_.battery_giver_post,
                                                                giver != nullptr ? giver->def.callsign : def_.battery_giver, hour_at_zero);
-        order_net_->SetNight(def_.battery_night);
+        order_net_->SetNight(light_.dark);
         for (const command::OrderVehicle& c : def_.battery_crews) order_net_->Add(c);
         KeepOrderNetCurrent();
         // The regiment's orders to the battery commander, on the regiment's command net (his R-111 in the PU-12M).
@@ -3157,7 +3189,7 @@ private:
                 battery_->SetAbsent(c.vehicle, true);
                 to.push_back(c.vehicle);
             }
-            const std::string mean = MarchRadioBan() ? (def_.battery_night ? "lamps" : "flags") : "radio_voice";
+            const std::string mean = MarchRadioBan() ? (light_.dark ? "lamps" : "flags") : "radio_voice";
             battery_order_ = order_net_->Give(BatteryOrderName(o.kind), BatteryOrderWords(o.kind), mean, time_, to);
             battery_order_kind_ = o.kind;
             order_words_[battery_order_] = KindWords(o.kind);
@@ -3189,7 +3221,7 @@ private:
         if (column.empty()) return;
         const Vec3 head = battery_->Own() != nullptr ? battery_->Own()->position : column.front().def.start;
         std::string why;
-        nav::MarchPlan plan = nav_->PlanTo({head.x, head.y}, o.to_place, column, battery_->Tactics(), time_, &why);
+        nav::MarchPlan plan = nav_->PlanTo({head.x, head.y}, o.to_place, column, battery_->Tactics(), time_, &why, DarkAt(time_));
         if (!plan.found) {
             Event("battery", "no march to " + o.to_place + ": " + why);
             return;
@@ -3287,7 +3319,7 @@ private:
     void StepNav(double dt) {
         if (!nav_) return;
         const Vec3 eye = battery_ && battery_->Own() != nullptr ? battery_->Own()->position : def_.unit_position;
-        const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, def_.battery_night ? -12.0 : 30.0, nav_->Range());
+        const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range());
         nav_->Step(time_, dt, {{eye.x, eye.y}}, range);
     }
 
@@ -3674,6 +3706,7 @@ private:
     // the task's readiness, against the order's ready-by. In the post an NPC battery commander gives each of these by
     // NpcDoes; a player owes them from the crew menu, the helper showing them.
     // The time of day at a session second by the scenario's clock ("19:05"); the session's own clock without one.
+    bool DarkAt(double s) const { return LightAt(def_.clock, s, def_.light_values).dark; }  // the sun then (R7)
     std::string DayClock(double s) const {
         if (def_.clock_start_s < 0.0) return SessionClock(s);
         const long long m = (std::llround(def_.clock_start_s + std::max(0.0, s)) / 60) % (24 * 60);
@@ -3777,7 +3810,8 @@ private:
             column.push_back(m);
         }
         std::string why;
-        const nav::MarchPlan p = nav_->PlanTo({head->position.x, head->position.y}, def_.task.main, column, battery_->Tactics(), time_, &why);
+        const nav::MarchPlan p = nav_->PlanTo({head->position.x, head->position.y}, def_.task.main, column, battery_->Tactics(), time_, &why,
+                                              DarkAt(time_));
         return p.found ? std::max(0.0, p.end_s - time_) : -1.0;
     }
     static constexpr double kTaskInAreaM = 1000.0;  // sam3d: the battery stands in its area within this of the main position
@@ -5970,7 +6004,7 @@ public:
         q.to = s->at;
         q.mobility = cls;
         q.h = time_ / 3600.0;
-        q.night = def_.battery_night;
+        q.night = light_.dark;
         q.swim = false;  // loaded, it keeps out of the water (campaign/stocks.hpp)
         return nav_->Graph().Find(q, roads_believed_);
     }
@@ -7785,7 +7819,7 @@ private:
         const Vec3 home = v.position;
         if (s == nullptr || cls == nullptr ||
             !run->Start(nav_->Graph(), *cls, def_.logistics, tzm_id_, {home.x, home.y}, s->at, static_cast<int>(std::lround(v.stock)), tzm_told_,
-                        def_.battery_night, time_, m, &why)) {
+                        light_.dark, time_, m, &why)) {
             order_net_->Cannot(tzm_run_order_, tzm_id_, time_, why, TzmCallsign() + ": на техническую батарею пройти не могу!");
             return;
         }
@@ -12741,6 +12775,9 @@ private:
     SessionDeliveries deliveries_;
     SessionLog log_;
     double time_ = 0.0;
+    SunLight light_;
+    bool light_init_ = false;
+    double light_next_s_ = 0.0;
     double next_acmi_s_ = 0.0;
     int launches_ = 0;
     bool finished_ = false;

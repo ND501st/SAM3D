@@ -211,18 +211,19 @@ public:
     const GeoPoint& Origin() const { return country_.ground.origin; }
 
     // The battery commander's march to an anchor (G2.3): from where the column stands, on the roads for its slowest, the
-    // order to move off given at `move_off_s` (the start point's time follows from it).
+    // order to move off given at `move_off_s` (the start point's time follows from it); `night`: a march in the dark (R7: the
+    // session's sun at the move off), its night speeds and gaps.
     MarchPlan PlanTo(const MapPoint& from, const std::string& to, const std::vector<MarchVehicle>& column, const BatteryTactics& tactics,
-                     double move_off_s, std::string* why = nullptr) const {
+                     double move_off_s, std::string* why = nullptr, bool night = false) const {
         const Anchor* a = anchors_.Find(to);
         if (ready_ && a == nullptr) {
             if (why != nullptr) *why = "no place called '" + to + "'";
             return MarchPlan{};
         }
-        return PlanBetween(from, a != nullptr ? a->at : MapPoint{}, a != nullptr ? a->name : to, column, tactics, move_off_s, why);
+        return PlanBetween(from, a != nullptr ? a->at : MapPoint{}, a != nullptr ? a->name : to, column, tactics, move_off_s, why, night);
     }
     MarchPlan PlanBetween(const MapPoint& from, const MapPoint& to, const std::string& to_name, const std::vector<MarchVehicle>& column,
-                          const BatteryTactics& tactics, double move_off_s, std::string* why = nullptr) const {
+                          const BatteryTactics& tactics, double move_off_s, std::string* why = nullptr, bool night = false) const {
         if (!ready_) {
             if (why != nullptr) *why = "no roads in this session";
             return MarchPlan{};
@@ -235,6 +236,7 @@ public:
         q.column = column;
         q.start_s = move_off_s;
         q.move_off_s = move_off_s;
+        q.night = night;
         MarchPlan p = PlanMarch(graph_, mobility_, tactics, q, Overlay(), &anchors_);
         if (!p.found && why != nullptr) *why = p.why.empty() ? "no way there" : p.why;
         return p;

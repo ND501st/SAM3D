@@ -685,7 +685,7 @@ private:
         {
             // Our supply lines (logistics.hpp): what our side's people on them would report goes in the journal.
             std::vector<std::string> events;
-            supply_.Step(data_, truth_, dt, DayPartAt(data_.theatre.start_hour + t0) != DayPart::Day, &events);
+            supply_.Step(data_, truth_, dt, TheatrePartAt(data_.theatre, data_.theatre.start_hour + t0) != DayPart::Day, &events);
             for (const std::string& ev : events) Log("logistics", "our side", ev, false);
         }
         Deliver();

@@ -618,11 +618,13 @@ private:
 // its reach: the raids' own kill chance per pass (planner.hpp, PassKillChance), on what is left of the chord the
 // aircraft will fly through the reach on its present heading, at the height band it flies (above ground: under
 // kWaveLowAglM low, under kWaveMediumAglM medium, else high; game values, sam3d). Nothing suppresses or jams it and the
-// pilot does not evade: the testbed is not the air war. 0 for an aircraft faster than the defence can engage.
+// pilot does not evade: the testbed is not the air war. 0 for an aircraft faster than the defence can engage. `dark`:
+// the session's sun is down (roadmap R7, light.hpp): a defence without radar fire control aims by eye and its chance takes
+// the air war's night factor (attrition.night, as mission_bridge.hpp has it for the abstract raids).
 constexpr double kWaveLowAglM = 1500.0;
 constexpr double kWaveMediumAglM = 8000.0;
 inline double WavePassKillChance(const DefenceDef& d, double radius_m, const Vec3& site, const Vec3& position, const Vec3& velocity,
-                                 double agl_m, bool helicopter, const TuningTable& tune) {
+                                 double agl_m, bool helicopter, const TuningTable& tune, bool dark = false) {
     const double speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
     if (d.max_target_mps > 0.0 && speed > d.max_target_mps) return 0.0;
     const double dx = position.x - site.x, dy = position.y - site.y;
@@ -634,7 +636,8 @@ inline double WavePassKillChance(const DefenceDef& d, double radius_m, const Vec
         chord = std::max(0.0, std::sqrt(std::max(0.0, radius_m * radius_m - cross2)) - along);
     }
     const Profile p = agl_m < kWaveLowAglM ? Profile::Low : agl_m < kWaveMediumAglM ? Profile::Medium : Profile::High;
-    return PassKillChance(d.lethality, chord, radius_m, p, helicopter, d.low_cover, d.medium_cover, d.radar, 0.0, 0.0, 1.0, 0.0, tune);
+    const double env = !d.radar && dark ? tune.Get("attrition.night") : 1.0;
+    return PassKillChance(d.lethality, chord, radius_m, p, helicopter, d.low_cover, d.medium_cover, d.radar, 0.0, 0.0, env, 0.0, tune);
 }
 
 }  // namespace airwar

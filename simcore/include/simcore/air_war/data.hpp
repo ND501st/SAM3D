@@ -22,6 +22,7 @@
 #include "simcore/country_map.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
+#include "simcore/light.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -173,6 +174,10 @@ struct TheatreDef {
     double ground_height_m = 0.0;
     double start_hour = 6.0;    // local time at campaign hour 0
     int year = 1985;            // the war's year: only what is in service by then flies (AircraftType::in_service_year)
+    // "date": the war's first day (roadmap R7, docs/LIGHT.md). With one, the parts of the day are the sun's at the
+    // theatre's origin (DayPartBySun); without (0), the fixed buckets (DayPartAt) the first balance pass was tuned on.
+    int day_of_year = 0;
+    double utc_offset_h = 1.0;
     std::vector<FrontDef> fronts;
     std::vector<TheatreObject> objects;  // a supply line's columns among them, after the written objects
     std::vector<SupplyLineDef> supply_lines;
@@ -203,6 +208,62 @@ struct TheatreDef {
         return nullptr;
     }
 };
+
+// ------------------------------------------------------------------------------------------------ the sun's parts of the day (R7)
+
+// The theatre's sky: its origin, its first day, campaign hour 0 at start_hour.
+inline SkyClock TheatreSky(const TheatreDef& t) {
+    SkyClock c;
+    c.lat_deg = RadToDeg(t.origin.lat_rad);
+    c.lon_deg = RadToDeg(t.origin.lon_rad);
+    c.day_of_year = t.day_of_year > 0 ? t.day_of_year : 288;
+    c.utc_offset_h = t.utc_offset_h;
+    c.start_local_h = t.start_hour;
+    return c;
+}
+
+// The part of the day by the sun at an absolute local hour (start_hour + campaign hour): light.hpp's phases.
+inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const LightValues& v = LightValues()) {
+    switch (LightAt(TheatreSky(t), (abs_local_h - t.start_hour) * 3600.0, v).phase) {
+        case LightPhase::Day: return DayPart::Day;
+        case LightPhase::Dawn: return DayPart::Dawn;
+        case LightPhase::Dusk: return DayPart::Dusk;
+        case LightPhase::Night: return DayPart::Night;
+    }
+    return DayPart::Day;
+}
+
+// The local hour a planner aims at for a part on the campaign's day `day` (0 the first): the middle of the part by the
+// sun, sunrise for the dawn and sunset for the dusk (the sun on the horizon, between low_sun and twilight), noon for the
+// day, midnight for the night. Without a crossing (the polar day or night), the buckets' hour.
+inline double DayPartHourBySun(const TheatreDef& t, int day, DayPart part) {
+    SkyClock c = TheatreSky(t);
+    c.day_of_year = c.DayOfYearAt(24.0 * 3600.0 * day);
+    double h = DayPartHour(part);
+    switch (part) {
+        case DayPart::Dawn:
+            if (!SunCrossing(c.lat_deg, c.lon_deg, c.day_of_year, c.utc_offset_h, 0.0, true, h)) h = DayPartHour(part);
+            return h;
+        case DayPart::Dusk:
+            if (!SunCrossing(c.lat_deg, c.lon_deg, c.day_of_year, c.utc_offset_h, 0.0, false, h)) h = DayPartHour(part);
+            return h;
+        case DayPart::Day: return SolarNoonLocal(c);
+        case DayPart::Night: {
+            h = SolarNoonLocal(c) + 12.0;
+            return h - 24.0 * std::floor(h / 24.0);
+        }
+    }
+    return h;
+}
+
+// The theatre's part of the day at an absolute local hour: by the sun when it has a date, else the buckets.
+inline DayPart TheatrePartAt(const TheatreDef& t, double abs_local_h) {
+    return t.day_of_year > 0 ? DayPartBySun(t, abs_local_h) : DayPartAt(abs_local_h);
+}
+// The hour a planner aims at for a part, on the local day holding `abs_local_h`.
+inline double TheatrePartHour(const TheatreDef& t, double abs_local_h, DayPart part) {
+    return t.day_of_year > 0 ? DayPartHourBySun(t, static_cast<int>(std::floor(abs_local_h / 24.0)), part) : DayPartHour(part);
+}
 
 // ------------------------------------------------------------------------------------------------ weapons
 
@@ -876,7 +937,8 @@ public:
     // added, one with a base object's id replacing it where it stands.
     bool LoadTheatre(const json::Value& root, TheatreDef& out, const TheatreDef* base = nullptr) {
         if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "extends", "remove", "country",
-                             "origin", "ground_height_m", "start_hour", "year", "fronts", "objects", "supply_lines", "country_map"})) {
+                             "origin", "ground_height_m", "start_hour", "year", "date", "utc_offset_h", "fronts", "objects", "supply_lines",
+                             "country_map"})) {
             return false;
         }
         if (root.Find("extends") != nullptr && base == nullptr) {
@@ -904,7 +966,7 @@ public:
         }
         out.origin = GeoPoint::FromDegrees(lat, lon, alt);
         if (!Num(root, "", "ground_height_m", out.ground_height_m, -500.0, 5000.0) ||
-            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0) || !Int(root, "", "year", out.year, 1950, 2050)) {
+            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0) || !Int(root, "", "year", out.year, 1950, 2050) || !LoadDate(root, out)) {
             return false;
         }
         const json::Value* fronts = OptionalArray(root, "", "fronts");
@@ -926,12 +988,24 @@ public:
         return OptionalString(root, "", "country_map", out.country_map) && LoadSupplyLines(root, out) && MakeColumns(out);
     }
 
+    // "date": "1985-10-15" (its year the war's "year"), "utc_offset_h": the theatre's clock ahead of UTC (R7).
+    bool LoadDate(const json::Value& root, TheatreDef& out) {
+        std::string date;
+        if (!OptionalString(root, "", "date", date)) return false;
+        if (!date.empty()) {
+            int y = 0;
+            if (!ParseIsoDate(date, y, out.day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
+            if (y != out.year) return Fail("date", "its year must be the war's \"year\"");
+        }
+        return Num(root, "", "utc_offset_h", out.utc_offset_h, -12.0, 14.0);
+    }
+
     bool ExtendTheatre(const json::Value& root, TheatreDef& out) {
         if (root.Find("country") != nullptr || root.Find("origin") != nullptr) {
             return Fail(root.Find("country") != nullptr ? "country" : "origin", "an extending theatre keeps its base's");
         }
         if (!Num(root, "", "ground_height_m", out.ground_height_m, -500.0, 5000.0) ||
-            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0) || !Int(root, "", "year", out.year, 1950, 2050)) {
+            !Num(root, "", "start_hour", out.start_hour, 0.0, 24.0) || !Int(root, "", "year", out.year, 1950, 2050) || !LoadDate(root, out)) {
             return false;
         }
         if (const json::Value* fronts = OptionalArray(root, "", "fronts")) {

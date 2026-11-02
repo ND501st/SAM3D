@@ -113,6 +113,7 @@ add_executable(simcore_tests
   tests/test_command.cpp
   tests/test_scenery.cpp
   tests/test_world_map.cpp
+  tests/test_light.cpp
   tests/test_country_map.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp
