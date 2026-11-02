@@ -535,7 +535,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | Seat | End | Ready | Captured | Launched | Launches | Kills | Designations | Plots | Reports | Orders | Out of order | Faults | Helper moves | Refused |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 0 | 50 | 0 | 0 | - | 0 |
-| commander | 875 all targets gone | 5 | 419 | 454 | 1 | 1 | 0 | 0 | 0 | 48 | 0 | 0 | duty 48 | 6 |
+| commander | 875 all targets gone | 5 | 419 | 454 | 1 | 1 | 0 | 0 | 0 | 48 | 0 | 0 | duty 48 | 5 |
 | deputy_commander | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 1 | 50 | 0 | 0 | drill 4, duty 1 | 0 |
 | senior_operator | 875 all targets gone | 3 | 403 | 454 | 1 | 1 | 0 | 0 | 17 | 45 | 1 | 0 | drill 44, duty 18, wheel 74 | 0 |
 | operator | 842 all targets gone | 4 | - | - | 0 | 1 | 0 | 0 | 2 | 50 | 0 | 0 | drill 4, duty 2, wheel 49 | 0 |
@@ -592,7 +592,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 0 | 28 | 0 | 0 | - | 0 |
 | commander | 900 time | 5 | 463 | - | 0 | 2 | 0 | 0 | 48 | 37 | 0 | 0 | duty 181 | 0 |
 | deputy_commander | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 2 | 28 | 0 | 0 | drill 9, duty 2 | 0 |
-| senior_operator | 900 time | 3 | 558 | - | 0 | 2 | 0 | 0 | 35 | 43 | 0 | 0 | drill 41, duty 40, wheel 227 | 0 |
+| senior_operator | 900 time | 3 | 558 | - | 0 | 2 | 0 | 0 | 39 | 46 | 0 | 0 | drill 39, duty 45, wheel 216 | 0 |
 | operator | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 3 | 28 | 0 | 0 | drill 4, duty 3, wheel 213 | 0 |
 | driver | 900 time | 4 | 406 | - | 0 | 2 | 0 | 0 | 0 | 28 | 0 | 0 | - | 0 |
 
@@ -652,7 +652,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | control (commander): the words said: the chest switch back to ПРМ, to hear the net | 277 |
 | control (radio_operator): a message heard: write it in the journal | 8 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 18 |
-| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 135 |
+| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 136 |
 | drill (senior_operator): a target ordered taken: ВЫСОКОЕ on until the tracking radar has it | 13 |
 | drill (senior_operator): the least emission against ARMs: both low beams in each burst | 22 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 187 |
@@ -701,15 +701,15 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): the track was lost | 28 |
 | report (operator): К бою: the intercom checked | 37 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 28 |
-| report (senior_operator): a new echo on his scope | 151 |
+| report (senior_operator): a new echo on his scope | 152 |
 | report (senior_operator): a reply mark beside the echo | 5 |
-| report (senior_operator): a report the crew makes when its lamp or input comes on | 56 |
+| report (senior_operator): a report the crew makes when its lamp or input comes on | 55 |
 | report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
 | report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 8 |
 | report (senior_operator): a target that came at the battery turns away | 6 |
-| report (senior_operator): no reply mark beside the echo | 67 |
+| report (senior_operator): no reply mark beside the echo | 68 |
 | report (senior_operator): the bursts read back | 13 |
-| report (senior_operator): the nearest echo, every 15 s until a track | 216 |
+| report (senior_operator): the nearest echo, every 15 s until a track | 221 |
 | report (senior_operator): К бою: the intercom checked | 37 |
 | report (squad_leader): a report the crew makes when its lamp or input comes on | 4 |
 | wheel (battery_commander): a new echo on the IT-45: take it off with the DT-2 | 4 |
