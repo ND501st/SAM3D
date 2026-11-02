@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "simcore/aircraft.hpp"
 #include "simcore/em/optical.hpp"
@@ -213,7 +215,10 @@ SC_TEST("map: the Kesmark range loads and lays out the same every time") {
 SC_TEST("map: towns and villages hold most of their buildings, inside their radius") {
     const auto map = Kesmark();
     if (!map) return;
-    for (const MapSettlementDef& s : map->Def().settlements) {
+    std::vector<MapSettlementDef> all = map->Def().settlements;
+    all.insert(all.end(), map->Def().detail_settlements.begin(), map->Def().detail_settlements.end());
+    SC_EXPECT(!map->Def().detail_settlements.empty());
+    for (const MapSettlementDef& s : all) {
         int n = 0;
         for (const MapBox& b : map->Layout().boxes) {
             if ((b.part == MapPart::House || b.part == MapPart::Flats) &&
@@ -301,6 +306,134 @@ SC_TEST("map: the ground is a plain with hills, a river valley, levelled sites a
     SC_EXPECT(map->ObstacleHeight(6400, -9600) < 3.0);
     // Far beyond the map the ground carries on.
     SC_EXPECT(map->GroundHeight(-140000, 100000) > 50.0);
+}
+
+SC_TEST("map: the map proper's layout is the same with the detail areas (counts per part, the last box)") {
+    const auto map = Kesmark();
+    if (!map) return;
+    // The core's boxes as laid before the detail areas (roadmap R6, recorded from r-track at acea88a): the detail
+    // areas' towns draw on their own random streams, so nothing in the map proper moves.
+    const std::pair<MapPart, std::size_t> before[] = {
+        {MapPart::Bridge, 3},  {MapPart::Canopy, 8842}, {MapPart::Chimney, 1},   {MapPart::Farm, 204},     {MapPart::Flats, 77},
+        {MapPart::House, 1836}, {MapPart::Industrial, 6}, {MapPart::Launcher, 3}, {MapPart::Marsh, 951},   {MapPart::Mast, 7},
+        {MapPart::Military, 21}, {MapPart::Pad, 6},      {MapPart::Revetment, 54}, {MapPart::Station, 1}, {MapPart::Tank, 8},
+        {MapPart::Tent, 17},   {MapPart::Tower, 1}};
+    std::size_t counts[static_cast<int>(MapPart::Count)] = {};
+    const MapBox* last = nullptr;
+    std::size_t total = 0;
+    for (const MapBox& b : map->Layout().boxes) {
+        if (!map->Def().InCore(b.east_m, b.north_m)) continue;
+        ++counts[static_cast<int>(b.part)];
+        ++total;
+        last = &b;
+    }
+    std::size_t expected = 0;
+    for (const auto& p : before) {
+        if (counts[static_cast<int>(p.first)] != p.second) std::printf("    %s: %zu, was %zu\n", MapPartName(p.first), counts[static_cast<int>(p.first)], p.second);
+        SC_EXPECT(counts[static_cast<int>(p.first)] == p.second);
+        expected += p.second;
+    }
+    SC_EXPECT(total == expected && total == 12038);
+    SC_EXPECT(last != nullptr && last->part == MapPart::Marsh && last->east_m == 16250.0 && last->north_m == -8450.0);
+}
+
+SC_TEST("map: the detail areas are levels of the ground: their edges the coarse ground's, inside it within the micro relief") {
+    const auto map = Kesmark();
+    if (!map) return;
+    const MapDef& d = map->Def();
+    SC_EXPECT(d.detail.size() == 2);
+    SC_EXPECT(map->DetailGrids().size() == d.detail.size() && map->DetailObstacleGrids().size() == d.detail.size());
+    for (std::size_t i = 0; i < d.detail.size(); ++i) {
+        const MapDetailDef& a = d.detail[i];
+        const MapGrid& coarse = d.InCore(a.centre.east_m, a.centre.north_m) ? map->CoreGrid() : map->FarGrid();
+        SC_EXPECT(map->LevelAt(a.centre.east_m, a.centre.north_m) == static_cast<int>(map->DetailGrids()[i].spacing_m < 15.0 ? 0 : 1));
+        // Every 100 m along the edge: the coarse level's triangles (its cells beyond the edge meet these nodes).
+        double edge = 0.0;
+        for (double t = -a.half_m; t <= a.half_m; t += 100.0) {
+            const double pts[4][2] = {{a.centre.east_m + t, a.centre.north_m - a.half_m}, {a.centre.east_m + t, a.centre.north_m + a.half_m},
+                                      {a.centre.east_m - a.half_m, a.centre.north_m + t}, {a.centre.east_m + a.half_m, a.centre.north_m + t}};
+            for (const auto& p : pts) edge = std::max(edge, std::fabs(map->GroundHeight(p[0], p[1]) - coarse.SampleTri(p[0], p[1])));
+        }
+        // Inside: never further from the coarse ground than the micro relief, and some relief where nothing is near.
+        double inside = 0.0;
+        for (double n = -a.half_m + 37.0; n < a.half_m; n += 211.0) {
+            for (double e = -a.half_m + 53.0; e < a.half_m; e += 197.0) {
+                const double x = a.centre.east_m + e, y = a.centre.north_m + n;
+                inside = std::max(inside, std::fabs(map->GroundHeight(x, y) - coarse.SampleTri(x, y)));
+            }
+        }
+        std::printf("    %s: %d x %d at %.0f m; edge off the coarse ground by %.4f m, inside by up to %.2f m (micro %.1f m)\n", a.id.c_str(),
+                    map->DetailGrids()[i].cols, map->DetailGrids()[i].rows, a.spacing_m, edge, inside, a.micro_m);
+        SC_EXPECT(edge < 0.02);
+        SC_EXPECT(inside <= a.micro_m + 1e-9);
+        SC_EXPECT(inside > 0.1 * a.micro_m);
+    }
+    // A loader refuses an area whose edges do not fall on the coarse ground's nodes.
+    std::string text, e;
+    SC_EXPECT(detail::ReadTextFile(kData + "/maps/kesmark_range.json", text));
+    const std::string from = "\"east_km\": 9.5, \"north_km\": -6.5";
+    SC_EXPECT(text.find(from) != std::string::npos);
+    text.replace(text.find(from), from.size(), "\"east_km\": 9.51, \"north_km\": -6.5");
+    MapDef bad;
+    SC_EXPECT(!LoadMapDefJson(text, bad, &e));
+    SC_EXPECT(e.find("nodes") != std::string::npos);
+}
+
+SC_TEST("map: the capital is laid out on the country's roads and river, its sites clear, its blocks standing in the way") {
+    const auto map = Kesmark();
+    if (!map) return;
+    const MapDef& d = map->Def();
+    const MapData::DetailLines& lines = map->ImportedLines();
+    SC_EXPECT(lines.rivers.size() >= 1 && lines.roads.size() >= 4 && lines.railways.size() >= 1);
+    // No building of the capital on its roads (the rule: its middle half its length and 4 m clear of a road's edge) or
+    // within 30 m of the Rava's edge.
+    const MapSettlementDef& cap = d.detail_settlements.front();
+    SC_EXPECT(cap.id == "capital");
+    int buildings = 0, on_road = 0, wet = 0;
+    for (const MapBox& b : map->Layout().boxes) {
+        if (b.part != MapPart::House && b.part != MapPart::Flats) continue;
+        if (std::hypot(b.east_m - cap.centre.east_m, b.north_m - cap.centre.north_m) > cap.radius_m + 60.0) continue;
+        ++buildings;
+        for (const MapLineDef& r : lines.roads) on_road += mapgeo::DistToLine(r.points, b.east_m, b.north_m) < 0.5 * r.width_m + 4.0 ? 1 : 0;
+        for (const MapLineDef& r : lines.railways) on_road += mapgeo::DistToLine(r.points, b.east_m, b.north_m) < 0.5 * r.width_m + 4.0 ? 1 : 0;
+        for (const MapLineDef& r : lines.rivers) wet += mapgeo::DistToLine(r.points, b.east_m, b.north_m) < 0.5 * r.width_m + 30.0 ? 1 : 0;
+    }
+    std::printf("    the capital: %d buildings, %d on a road, %d in the river; %zu roads, %zu railways, %zu rivers imported\n", buildings, on_road, wet,
+                lines.roads.size(), lines.railways.size(), lines.rivers.size());
+    SC_EXPECT(on_road == 0 && wet == 0);
+    // The Rava's bridges at the capital, and the strips of its lines on the detail ground (every midpoint between two
+    // strip points within 0.3 m of the ground plus the lift, but on a bridge's ramps).
+    int bridges = 0;
+    for (const MapCrossing& c : map->Layout().crossings) bridges += d.InDetail(c.at.east_m, c.at.north_m) && !d.InCore(c.at.east_m, c.at.north_m) ? 1 : 0;
+    SC_EXPECT(bridges >= 2);
+    double worst = 0.0;
+    for (const MapStrip& s : map->Layout().strips) {
+        if (s.surface == MapSurface::Water) continue;
+        const double lift = s.surface == MapSurface::Rail ? 0.45 : 0.25;
+        for (std::size_t i = 1; i < s.points.size(); ++i) {
+            const double e = 0.5 * (s.points[i - 1].x + s.points[i].x), n = 0.5 * (s.points[i - 1].y + s.points[i].y);
+            if (!d.InDetail(e, n)) continue;
+            bool ramp = false;
+            for (const MapCrossing& c : map->Layout().crossings) ramp = ramp || std::hypot(e - c.at.east_m, n - c.at.north_m) < c.half_length_m + 150.0;
+            if (ramp) continue;
+            worst = std::max(worst, std::fabs(0.5 * (s.points[i - 1].z + s.points[i].z) - map->GroundHeight(e, n) - lift));
+        }
+    }
+    std::printf("    strips in the detail areas: at most %.3f m off the ground between their points\n", worst);
+    SC_EXPECT(worst < 0.3);
+    // The blocks of flats round its middle stand in the way; a site of the dynamic campaign test is clear.
+    double tallest = 0.0;
+    for (double n = -300.0; n <= 300.0; n += 25.0) {
+        for (double e = -300.0; e <= 300.0; e += 25.0) tallest = std::max(tallest, map->ObstacleHeight(cap.centre.east_m + e, cap.centre.north_m + n));
+    }
+    SC_EXPECT(tallest > 10.0);
+    const MapSiteDef* s60 = Site(*map, "capital_s60_1");
+    SC_EXPECT(s60 != nullptr);
+    if (s60 != nullptr) {
+        std::printf("    the capital's middle: %.1f m tall at most; S-60 battery 1's position: %.1f m\n", tallest,
+                    map->ObstacleHeight(s60->centre.east_m, s60->centre.north_m));
+        SC_EXPECT(map->ObstacleHeight(s60->centre.east_m, s60->centre.north_m) < 1.0);
+    }
 }
 
 SC_TEST("map: a scenario anywhere sees the same ground, and the ground falls away with the Earth's curvature") {

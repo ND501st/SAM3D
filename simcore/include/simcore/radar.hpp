@@ -75,10 +75,12 @@ inline double RadarHorizonRange(double radar_height_m, double target_height_m,
 // Line of sight between two ENU points over terrain, using the classic path-profile
 // method: a straight ray over an Earth "bulge" of s(D-s)/(2kR). Endpoint heights are
 // altitudes above the ellipsoid (use LocalFrame::AltitudeOf). Small-area approximation,
-// fine for ranges below ~300 km.
+// fine for ranges below ~300 km. Woods and buildings (Terrain::ObstacleHeightAt) stand on
+// the profile beyond `obstacle_skip_m` from either end (roadmap E9, terrain.hpp kObstacleSkipM).
 inline bool HasLineOfSight(const Terrain& terrain, const Vec3& a_enu, double a_alt_m,
                            const Vec3& b_enu, double b_alt_m, double sample_spacing_m = 50.0,
-                           double k = kStandardRefractionK, double clearance_m = 0.0) {
+                           double k = kStandardRefractionK, double clearance_m = 0.0,
+                           double obstacle_skip_m = kObstacleSkipM) {
     const double dx = b_enu.x - a_enu.x;
     const double dy = b_enu.y - a_enu.y;
     const double ground_dist = std::sqrt(dx * dx + dy * dy);
@@ -91,7 +93,9 @@ inline bool HasLineOfSight(const Terrain& terrain, const Vec3& a_enu, double a_a
         const double s = t * ground_dist;
         const double ray_alt = a_alt_m + (b_alt_m - a_alt_m) * t;
         const double bulge = s * (ground_dist - s) / (2.0 * re);
-        const double ground = terrain.HeightAt(a_enu.x + dx * t, a_enu.y + dy * t) + bulge;
+        const double x = a_enu.x + dx * t, y = a_enu.y + dy * t;
+        double ground = terrain.HeightAt(x, y) + bulge;
+        if (s > obstacle_skip_m && ground_dist - s > obstacle_skip_m) ground += terrain.ObstacleHeightAt(x, y);
         if (ground + clearance_m >= ray_alt) return false;
     }
     return true;

@@ -102,6 +102,7 @@ add_executable(simcore_tests
   tests/test_packages_live.cpp
   tests/test_dynamic_campaign.cpp
   tests/test_ground.cpp
+  tests/test_map_obstacles.cpp
   tests/test_damage.cpp
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp

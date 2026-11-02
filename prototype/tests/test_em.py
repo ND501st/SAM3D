@@ -158,3 +158,17 @@ def test_arm_seeker_power_tuning_and_memory_point():
     assert math.hypot(p[0], p[1]) == pytest.approx(flat + drop, abs=1.5)
     # A line of sight above the horizon never meets the ground within 20 km.
     assert em.arm_ground_point((0.0, 0.0, 1000.0), em.direction_from_az_el(0.0, 0.1), lambda x, y: 0.0, 20000.0) is None
+
+
+def test_obstacles_stand_on_the_profile_like_clutter():
+    # Mirror of test_map_obstacles.cpp: a 20 m strip of woods across a flat 10 km path between two masts 5 m up.
+    flat = lambda e, n: 0.0  # noqa: E731
+    strip = lambda e, n: 20.0 if abs(e - 5000.0) < 100.0 else 0.0  # noqa: E731
+    bare = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 5.0, 50.0)
+    wooded = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 5.0, 50.0, obstacle=strip)
+    assert bare.line_of_sight and bare.worst_v_geometry < 0.0
+    assert not wooded.line_of_sight and wooded.worst_v_geometry > 0.0
+    # Woods round an end within the skip do not hide it.
+    around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
+    assert em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 50.0, obstacle=around).line_of_sight
+    assert not em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0).line_of_sight

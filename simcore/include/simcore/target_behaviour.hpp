@@ -290,16 +290,19 @@ private:
     static constexpr double kFloorClearM = 1.0;
 
     // Climb or sink toward the wanted height over the highest ground ahead, within the vertical rate; never into the ground.
+    // The height wanted is over the woods and buildings standing there (Terrain::ObstacleHeightAt, roadmap R6/E9): a low
+    // pilot clears the canopy he sees, he does not fly through it.
     void HoldHeight(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
         const double here = terrain.HeightAt(a.position.x, a.position.y);
-        double ground = here;
+        double ground = here + terrain.ObstacleHeightAt(a.position.x, a.position.y);
         const double vh = std::hypot(a.velocity.x, a.velocity.y);
         if (vh > 1.0 && b_.lookahead_s > 0.0) {
             const double reach = vh * b_.lookahead_s;
             const int samples = 2 + static_cast<int>(reach / 100.0);
             for (int i = 1; i <= samples; ++i) {
                 const double f = reach * i / samples / vh;
-                const double h = terrain.HeightAt(a.position.x + a.velocity.x * f, a.position.y + a.velocity.y * f);
+                const double x = a.position.x + a.velocity.x * f, y = a.position.y + a.velocity.y * f;
+                const double h = terrain.HeightAt(x, y) + terrain.ObstacleHeightAt(x, y);
                 if (h > ground) ground = h;
             }
         }

@@ -121,7 +121,7 @@ SC_TEST("country map: the range's far ground is the country's, so what stands th
     int compared = 0;
     for (double n = -rd.far_m; n <= rd.far_m; n += 2000.0) {
         for (double e = -rd.far_m; e <= rd.far_m; e += 2000.0) {
-            if (rd.InCore(e, n) || NearFarSite(e, n)) continue;
+            if (rd.InCore(e, n) || rd.InDetail(e, n) || NearFarSite(e, n)) continue;  // a detail area: its micro relief
             worst = std::max(worst, std::fabs(r->GroundHeight(e, n) - c->Natural(e, n)));
             ++compared;
         }
@@ -200,7 +200,9 @@ SC_TEST("country map: the theatre's towns and the range's settlements are the co
         SC_EXPECT(s != nullptr);
         if (s != nullptr) SC_EXPECT(std::hypot(s->centre.east_m - o.pos.x, s->centre.north_m - o.pos.y) < 500.0);
     }
-    for (const MapSettlementDef& rs : r->Def().settlements) {
+    std::vector<MapSettlementDef> range_towns = r->Def().settlements;
+    range_towns.insert(range_towns.end(), r->Def().detail_settlements.begin(), r->Def().detail_settlements.end());
+    for (const MapSettlementDef& rs : range_towns) {
         const CountrySettlementDef* s = c->Settlement(rs.id);
         SC_EXPECT(s != nullptr);
         if (s != nullptr) SC_EXPECT(std::hypot(s->centre.east_m - rs.centre.east_m, s->centre.north_m - rs.centre.north_m) < 1.0);

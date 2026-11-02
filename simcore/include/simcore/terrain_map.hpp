@@ -109,6 +109,28 @@ struct MapPolygonDef {
     std::vector<MapPoint> points;
 };
 
+// A detail area (roadmap R6): a square of finer ground where play happens close up, one more drawn level of the map's
+// ground (MapData::DrawnLevels). Its edges fall on the nodes of the level it lies in (the map proper's or the far
+// ground's), so a coarse cell is wholly inside it (not drawn) or wholly outside. Its ground is the coarse level's
+// triangles at its own spacing plus a little micro relief, faded to nothing at its edge, along lines, on sites and in
+// towns; its obstacle heights at a finer spacing.
+struct MapDetailDef {
+    std::string id;
+    MapPoint centre;
+    double half_m = 5000.0;   // half its side
+    double spacing_m = 10.0;  // its ground's
+    double micro_m = 0.0;     // the micro relief's amplitude
+    bool Contains(double e, double n) const { return std::fabs(e - centre.east_m) <= half_m && std::fabs(n - centre.north_m) <= half_m; }
+};
+
+// Representative clutter heights for the far ground's towns the map does not lay out (ITU-R P.1812, data/gameplay/
+// clutter.json, read by LoadMap): dense urban within `dense_share` of a town's radius, suburban beyond. 0: none.
+struct MapClutterDef {
+    double dense_urban_m = 0.0;
+    double suburban_m = 0.0;
+    double dense_share = 0.45;
+};
+
 struct MapSiteDef {
     std::string id;
     std::string name;
@@ -155,6 +177,11 @@ struct MapDef {
     std::vector<MapLineDef> roads;
     std::vector<MapLineDef> railways;
     std::vector<MapSettlementDef> settlements;
+    // Towns laid out in the detail areas (roadmap R6, "detail_settlements"): on their own random stream, after the rest,
+    // so the map proper's layout is the same with or without them; their streets along the country's roads there.
+    std::vector<MapSettlementDef> detail_settlements;
+    std::vector<MapDetailDef> detail;  // the detail areas (terrain.detail)
+    MapClutterDef clutter;
     int farmsteads = 0;
     int farm_buildings_min = 2, farm_buildings_max = 4;
     std::vector<MapPolygonDef> forests;
@@ -179,6 +206,14 @@ struct MapDef {
     double far_grid_m = 1000.0;
 
     bool InCore(double e, double n) const { return e >= west_m && e <= east_m && n >= south_m && n <= north_m; }
+    // The detail area holding (east, north), or null.
+    const MapDetailDef* DetailAt(double e, double n) const {
+        for (const MapDetailDef& d : detail) {
+            if (d.Contains(e, n)) return &d;
+        }
+        return nullptr;
+    }
+    bool InDetail(double e, double n) const { return DetailAt(e, n) != nullptr; }
 };
 
 // ---------------------------------------------------------------------------------------------- what is built
@@ -418,6 +453,24 @@ public:
         return false;
     }
 
+    // How far (east, north) lies from the nearest segment's edge (0 on it), up to `cap_m` (under half a cell).
+    double EdgeDistance(double e, double n, double cap_m) const {
+        double best = cap_m;
+        const long long cx = Cell(e), cy = Cell(n);
+        for (long long y = cy - 1; y <= cy + 1; ++y) {
+            for (long long x = cx - 1; x <= cx + 1; ++x) {
+                const auto it = buckets_.find(Key(x, y));
+                if (it == buckets_.end()) continue;
+                for (std::size_t i : it->second) {
+                    const Seg& s = segs_[i];
+                    const double d = DistToSegment(e, n, s.a.east_m, s.a.north_m, s.b.east_m, s.b.north_m) - s.half_width;
+                    best = std::min(best, std::max(0.0, d));
+                }
+            }
+        }
+        return best;
+    }
+
 private:
     struct Seg {
         MapPoint a, b;
@@ -524,14 +577,24 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
 
 class MapData {
 public:
-    // Bakes the ground and lays the map out. Takes a second or so for a 40 km map.
+    // Bakes the ground and lays the map out. Takes a second or two for a 40 km map with its detail areas. The order
+    // matters: the detail areas' ground fades its micro relief off the lines (the indices, with the country's lines
+    // imported into the areas), and the map proper is laid before the detail areas' towns, which draw on their own
+    // random streams, so the map proper's layout does not depend on them.
     static std::shared_ptr<const MapData> Build(MapDef def) {
         std::shared_ptr<MapData> m(new MapData(std::move(def)));
         m->Bake();
+        m->SetLevels(false);
+        m->ImportDetailLines();
+        m->BuildIndices();
+        m->BakeDetail();
         m->Lay();
+        m->LayDetailSettlements();
         m->BakeObstacles();
         return m;
     }
+    MapData(const MapData&) = delete;             // DrawnLevels points into it
+    MapData& operator=(const MapData&) = delete;
 
     const MapDef& Def() const { return def_; }
     const MapLayout& Layout() const { return layout_; }
@@ -542,29 +605,39 @@ public:
     const MapGrid& CountryGrid() const { return country_; }
     const MapGrid& BeyondGrid() const { return beyond_; }
     const MapGrid& ObstacleGrid() const { return obstacles_; }
+    // The detail areas' ground and obstacle grids, in the order of Def().detail (roadmap R6).
+    const std::vector<MapGrid>& DetailGrids() const { return detail_ground_; }
+    const std::vector<MapGrid>& DetailObstacleGrids() const { return detail_obstacles_; }
+    bool InDetail(double e, double n) const { return def_.InDetail(e, n); }
+    // The country's roads, railways and rivers through the detail areas beyond the map proper, clipped to each area and
+    // a kilometre round it (the country's ids; laid as strips and bridges, and kept clear of by the areas' towns). Not
+    // in Def(): the route service and NearestRoad keep the country's own lines.
+    struct DetailLines {
+        std::vector<MapLineDef> roads, railways, rivers;
+    };
+    const DetailLines& ImportedLines() const { return detail_lines_; }
+    // The levelled sites (a centre, a radius, the height levelled to): what the ground is flattened for.
+    struct Flat {
+        double e, n, r, h;
+    };
+    const std::vector<Flat>& Flats() const { return flats_; }
 
-    // The ground's lattices as they are drawn, finest first: the map proper, the far ground, the country's, the land
-    // beyond (those it has). A coarser level leaves out only the cells lying wholly inside a finer level (DrawsCell), so
-    // no point is left without ground; the ground at a point is the finest level covering it (LevelAt), on that cell's
-    // triangles. Every level's edges fall on the next coarser level's nodes (the country's lattice is grown to the 4 km
-    // beyond's), so a coarse cell is wholly inside a finer level or wholly outside it, and every point of the ground is
-    // drawn by exactly one cell (NoGroundDrawnTwice).
-    // A finer level of detail anywhere (roadmap R6) is a level added here, never in the game alone.
-    std::vector<const MapGrid*> DrawnLevels() const {
-        std::vector<const MapGrid*> out;
-        for (const MapGrid* g : {&core_, &far_, &country_, &beyond_}) {
-            if (g->cols > 1 && g->rows > 1) out.push_back(g);
-        }
-        return out;
-    }
+    // The ground's lattices as they are drawn, finest first: the detail areas (roadmap R6), the map proper, the far
+    // ground, the country's, the land beyond (those it has). A coarser level leaves out only the cells lying wholly
+    // inside a finer level (DrawsCell), so no point is left without ground; the ground at a point is the finest level
+    // covering it (LevelAt), on that cell's triangles. Every level's edges fall on the next coarser level's nodes (a
+    // detail area's on the map proper's or the far ground's, the country's lattice grown to the 4 km beyond's), so a
+    // coarse cell is wholly inside a finer level or wholly outside it, and every point of the ground is drawn by
+    // exactly one cell (NoGroundDrawnTwice).
+    // A finer level of detail anywhere is a level added here, never in the game alone.
+    std::vector<const MapGrid*> DrawnLevels() const { return levels_; }
     // Whether level `level` of DrawnLevels draws its cell (c, r) (corners c..c+1, r..r+1): not wholly inside a finer one.
     bool DrawsCell(std::size_t level, int c, int r) const {
-        const std::vector<const MapGrid*> levels = DrawnLevels();
-        if (level >= levels.size()) return false;
-        const MapGrid& g = *levels[level];
+        if (level >= levels_.size()) return false;
+        const MapGrid& g = *levels_[level];
         const double w = g.EastOf(c), s = g.NorthOf(r), e = g.EastOf(c + 1), n = g.NorthOf(r + 1);
         for (std::size_t j = 0; j < level; ++j) {
-            const MapGrid& f = *levels[j];
+            const MapGrid& f = *levels_[j];
             if (f.Covers(w, s) && f.Covers(e, s) && f.Covers(w, n) && f.Covers(e, n)) return false;
         }
         return true;
@@ -583,8 +656,16 @@ public:
         return g != nullptr ? g->SampleTri(e, n) : Analytic(e, n);
     }
 
-    // How high woods and buildings stand above the ground (inside the map; 0 beyond it). For E9's obstacle heights.
-    double ObstacleHeight(double e, double n) const { return obstacles_.Covers(e, n) ? obstacles_.Sample(e, n) : 0.0; }
+    // How high woods and buildings stand above the ground (roadmap E9): a detail area's grid at its finer spacing, the
+    // map proper's, and beyond them the far ground's woods (each block's top) and, in the far ground's towns the map
+    // does not lay out, a representative clutter height (MapClutterDef).
+    double ObstacleHeight(double e, double n) const {
+        for (const MapGrid& g : detail_obstacles_) {
+            if (g.Covers(e, n)) return g.Sample(e, n);
+        }
+        if (obstacles_.Covers(e, n)) return obstacles_.Sample(e, n);
+        return FarObstacle(e, n);
+    }
 
     // The river's surface where it passes (east, north).
     double WaterHeight(double e, double n) const { return std::max(Analytic(e, n) + kBedDepthM - 0.3, GroundHeight(e, n) + 0.3); }
@@ -605,26 +686,63 @@ public:
 private:
     static constexpr double kBedDepthM = kRiverBedDepthM;
 
-    struct Flat {
-        double e, n, r, h;
-    };
-
     explicit MapData(MapDef def) : def_(std::move(def)) {}
 
     // The lattice drawing the ground at (east, north) and its place in DrawnLevels (null, -1: none).
     const MapGrid* LevelGridAt(double e, double n, int* index) const {
-        const MapGrid* levels[4] = {&core_, &far_, &country_, &beyond_};
-        int drawn = 0;
-        for (const MapGrid* g : levels) {
-            if (g->cols < 2 || g->rows < 2) continue;
-            if (g->Covers(e, n)) {
-                if (index != nullptr) *index = drawn;
-                return g;
+        for (std::size_t i = 0; i < levels_.size(); ++i) {
+            if (levels_[i]->Covers(e, n)) {
+                if (index != nullptr) *index = static_cast<int>(i);
+                return levels_[i];
             }
-            ++drawn;
         }
         if (index != nullptr) *index = -1;
         return nullptr;
+    }
+
+    // The drawn levels, finest first: the detail areas (once baked, by spacing), then the map proper, the far ground,
+    // the country's lattice, the land beyond.
+    void SetLevels(bool with_detail) {
+        levels_.clear();
+        if (with_detail) {
+            std::vector<std::size_t> order(detail_ground_.size());
+            for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
+            std::stable_sort(order.begin(), order.end(),
+                             [this](std::size_t a, std::size_t b) { return detail_ground_[a].spacing_m < detail_ground_[b].spacing_m; });
+            for (std::size_t i : order) {
+                if (detail_ground_[i].cols > 1 && detail_ground_[i].rows > 1) levels_.push_back(&detail_ground_[i]);
+            }
+        }
+        for (const MapGrid* g : {&core_, &far_, &country_, &beyond_}) {
+            if (g->cols > 1 && g->rows > 1) levels_.push_back(g);
+        }
+    }
+
+    static std::uint64_t HashId(const std::string& id) {  // FNV-1a
+        std::uint64_t h = 0xCBF29CE484222325ull;
+        for (char ch : id) {
+            h ^= static_cast<std::uint64_t>(static_cast<unsigned char>(ch));
+            h *= 0x100000001B3ull;
+        }
+        return h;
+    }
+
+    // Beyond the map proper and the detail areas: the far ground's woods (the block's top over the ground here), then
+    // the clutter of the far ground's towns the map does not lay out.
+    double FarObstacle(double e, double n) const {
+        if (!far_canopy_.empty()) {
+            const double fb = def_.far_block_m;
+            const auto it = far_canopy_.find(CanopyKey((std::floor(e / fb) + 0.5) * fb, (std::floor(n / fb) + 0.5) * fb));
+            if (it != far_canopy_.end()) return std::max(0.0, it->second - GroundHeight(e, n));
+        }
+        for (const ClutterTown& t : clutter_towns_) {
+            const double d = std::hypot(e - t.e, n - t.n);
+            if (d < t.r) return d < t.dense_r ? def_.clutter.dense_urban_m : def_.clutter.suburban_m;
+        }
+        return 0.0;
+    }
+    static long long CanopyKey(double e, double n) {
+        return static_cast<long long>(std::floor(e / 10.0)) * 2000003LL + static_cast<long long>(std::floor(n / 10.0));
     }
 
     // Relief, hills and the river valley: the ground before the sites are levelled.
@@ -722,21 +840,189 @@ private:
         layout_.boxes.push_back(b);
     }
 
-    void Lay() {
-        noise::Stream rng(noise::Mix64(def_.seed ^ 0x1A70Full));
-        // Indices: what buildings and woods keep clear of.
+    // ------------------------------------------------------------------ detail areas (roadmap R6)
+
+    // The country's roads, railways and rivers through each detail area beyond the map proper (an area inside it has
+    // the district's own lines), clipped to the area and a kilometre round it.
+    void ImportDetailLines() {
+        if (!def_.far_ground) return;
+        constexpr double kMarginM = 1000.0;
+        for (const MapDetailDef& a : def_.detail) {
+            const double w = a.centre.east_m - a.half_m - kMarginM, e = a.centre.east_m + a.half_m + kMarginM;
+            const double s = a.centre.north_m - a.half_m - kMarginM, n = a.centre.north_m + a.half_m + kMarginM;
+            if (w < def_.east_m && e > def_.west_m && s < def_.north_m && n > def_.south_m) continue;  // the map proper's
+            const auto clip = [&](const std::vector<MapLineDef>& from, std::vector<MapLineDef>& to) {
+                for (const MapLineDef& line : from) {
+                    std::vector<std::vector<MapPoint>> runs;
+                    bool open = false;
+                    for (std::size_t i = 1; i < line.points.size(); ++i) {
+                        MapPoint p = line.points[i - 1], q = line.points[i];
+                        if (!ClipSegment(w, s, e, n, p, q)) {
+                            open = false;
+                            continue;
+                        }
+                        if (!open) runs.push_back({p});
+                        else if (std::hypot(runs.back().back().east_m - p.east_m, runs.back().back().north_m - p.north_m) > 0.01) runs.push_back({p});
+                        runs.back().push_back(q);
+                        open = true;  // the next segment carries on this run if it starts where this one ended
+                    }
+                    for (std::size_t k = 0; k < runs.size(); ++k) {
+                        if (runs[k].size() < 2) continue;
+                        MapLineDef c = line;
+                        if (runs.size() > 1) c.id += "#" + std::to_string(k + 1);
+                        c.points = runs[k];
+                        to.push_back(std::move(c));
+                    }
+                }
+            };
+            clip(def_.far_ground->roads, detail_lines_.roads);
+            clip(def_.far_ground->railways, detail_lines_.railways);
+            clip(def_.far_ground->rivers, detail_lines_.rivers);
+        }
+    }
+
+    // Liang-Barsky: clips p-q to the box; false if none of it is inside.
+    static bool ClipSegment(double w, double s, double e, double n, MapPoint& p, MapPoint& q) {
+        const double dx = q.east_m - p.east_m, dy = q.north_m - p.north_m;
+        double t0 = 0.0, t1 = 1.0;
+        const double pp[4] = {-dx, dx, -dy, dy};
+        const double qq[4] = {p.east_m - w, e - p.east_m, p.north_m - s, n - p.north_m};
+        for (int k = 0; k < 4; ++k) {
+            if (pp[k] == 0.0) {
+                if (qq[k] < 0.0) return false;
+                continue;
+            }
+            const double r = qq[k] / pp[k];
+            if (pp[k] < 0.0) t0 = std::max(t0, r);
+            else t1 = std::min(t1, r);
+        }
+        if (t0 > t1) return false;
+        const MapPoint a = p;
+        p = {a.east_m + t0 * dx, a.north_m + t0 * dy};
+        q = {a.east_m + t1 * dx, a.north_m + t1 * dy};
+        return true;
+    }
+
+    // What buildings, woods and the detail ground's micro relief keep clear of: the lines (the map's and the detail
+    // areas' imported ones), the water, the sites. And the far ground's towns the map does not lay out (their clutter).
+    void BuildIndices() {
         for (const MapLineDef& r : def_.roads) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : def_.railways) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : def_.rivers) {
             water_.Add(r.points, 0.5 * r.width_m);
             lines_.Add(r.points, 0.5 * r.width_m);
         }
+        for (const MapLineDef& r : detail_lines_.roads) lines_.Add(r.points, 0.5 * r.width_m);
+        for (const MapLineDef& r : detail_lines_.railways) lines_.Add(r.points, 0.5 * r.width_m);
+        for (const MapLineDef& r : detail_lines_.rivers) {
+            water_.Add(r.points, 0.5 * r.width_m);
+            lines_.Add(r.points, 0.5 * r.width_m);
+        }
         for (const MapSiteDef& s : def_.sites) {
             occupied_.Take(s.centre.east_m, s.centre.north_m, SiteClearance(s));
         }
-        LayLines();
+        if (!def_.far_ground) return;
+        for (const MapSettlementDef& t : def_.far_ground->settlements) {
+            bool laid = def_.InCore(t.centre.east_m, t.centre.north_m);
+            for (const MapSettlementDef& s : def_.settlements) laid = laid || s.id == t.id;
+            for (const MapSettlementDef& s : def_.detail_settlements) laid = laid || s.id == t.id;
+            if (laid) continue;
+            const bool dense = t.kind != "village";
+            clutter_towns_.push_back({t.centre.east_m, t.centre.north_m, t.radius_m, dense ? def_.clutter.dense_share * t.radius_m : 0.0});
+        }
+    }
+
+    // How much of the micro relief a detail area's node keeps (0 to 1): none on and near the lines (15 m from their
+    // edge, then over 45 m), on levelled sites and in towns (50 m beyond their edge, then over 50 m).
+    double MicroWeight(double e, double n, const std::vector<const Flat*>& flats, const std::vector<const MapSettlementDef*>& towns) const {
+        const double from_line = lines_.EdgeDistance(e, n, 60.0);
+        double m = noise::Smooth(Clamp((from_line - 15.0) / 45.0, 0.0, 1.0));
+        for (const Flat* f : flats) {
+            if (m <= 0.0) return 0.0;
+            m *= noise::Smooth(Clamp((std::hypot(e - f->e, n - f->n) - f->r) / 50.0, 0.0, 1.0));
+        }
+        for (const MapSettlementDef* t : towns) {
+            if (m <= 0.0) return 0.0;
+            m *= noise::Smooth(Clamp((std::hypot(e - t->centre.east_m, n - t->centre.north_m) - t->radius_m - 50.0) / 50.0, 0.0, 1.0));
+        }
+        return m;
+    }
+
+    // Each detail area's ground: the coarse level's triangles at the area's spacing (so its edge is the coarse edge
+    // exactly), plus micro relief faded to nothing over the last 300 m to the edge and by MicroWeight. Then the areas
+    // join DrawnLevels, finest first.
+    void BakeDetail() {
+        detail_ground_.assign(def_.detail.size(), MapGrid());
+        for (std::size_t i = 0; i < def_.detail.size(); ++i) {
+            const MapDetailDef& a = def_.detail[i];
+            MapGrid& g = detail_ground_[i];
+            g.spacing_m = a.spacing_m;
+            g.west_m = a.centre.east_m - a.half_m;
+            g.south_m = a.centre.north_m - a.half_m;
+            g.cols = static_cast<int>(std::lround(2.0 * a.half_m / a.spacing_m)) + 1;
+            g.rows = g.cols;
+            g.values.assign(static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows), 0.0);
+            // The sites and towns that reach into it.
+            std::vector<const Flat*> flats;
+            for (const Flat& f : flats_) {
+                if (std::fabs(f.e - a.centre.east_m) < a.half_m + f.r + 100.0 && std::fabs(f.n - a.centre.north_m) < a.half_m + f.r + 100.0) flats.push_back(&f);
+            }
+            std::vector<const MapSettlementDef*> towns;
+            for (const std::vector<MapSettlementDef>* list : {&def_.settlements, &def_.detail_settlements}) {
+                for (const MapSettlementDef& t : *list) {
+                    const double reach = a.half_m + t.radius_m + 150.0;
+                    if (std::fabs(t.centre.east_m - a.centre.east_m) < reach && std::fabs(t.centre.north_m - a.centre.north_m) < reach) towns.push_back(&t);
+                }
+            }
+            const std::uint64_t seed = noise::Mix64(def_.seed ^ 0xDE7A11ull ^ HashId(a.id));
+            for (int r = 0; r < g.rows; ++r) {
+                for (int c = 0; c < g.cols; ++c) {
+                    const double e = g.EastOf(c), n = g.NorthOf(r);
+                    double v = GroundHeight(e, n);  // the coarse level's triangles (the detail levels are not in yet)
+                    if (a.micro_m > 0.0) {
+                        const double to_edge = a.half_m - std::max(std::fabs(e - a.centre.east_m), std::fabs(n - a.centre.north_m));
+                        const double w = noise::Smooth(Clamp(to_edge / 300.0, 0.0, 1.0));
+                        if (w > 0.0) {
+                            const double m = MicroWeight(e, n, flats, towns);
+                            if (m > 0.0) v += w * m * a.micro_m * (2.0 * noise::Fbm(seed, e, n, 400.0, 3) - 1.0);
+                        }
+                    }
+                    g.At(c, r) = v;
+                }
+            }
+        }
+        SetLevels(true);
+    }
+
+    // The detail areas' towns, each on its own random stream (so the map proper's layout is the same with or without
+    // them), after the country's lines through the areas are laid as strips and bridges. The far ground's woods give way.
+    void LayDetailSettlements() {
+        LayLinesOf(detail_lines_.roads, detail_lines_.railways, detail_lines_.rivers);
+        for (const MapSettlementDef& s : def_.detail_settlements) {
+            const double clear = s.radius_m + 100.0;
+            std::vector<MapBox>& boxes = layout_.boxes;
+            boxes.erase(std::remove_if(boxes.begin(), boxes.end(),
+                                       [&](const MapBox& b) {
+                                           if (b.part != MapPart::Canopy || def_.InCore(b.east_m, b.north_m)) return false;
+                                           if (std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) >= clear) return false;
+                                           canopy_cells_.erase(CanopyKey(b.east_m, b.north_m));
+                                           far_canopy_.erase(CanopyKey(b.east_m, b.north_m));
+                                           return true;
+                                       }),
+                        boxes.end());
+            noise::Stream rng(noise::Mix64(def_.seed ^ HashId(s.id)));
+            LaySettlement(s, rng, detail_lines_.roads);
+            layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
+        }
+    }
+
+    // ------------------------------------------------------------------ the map proper
+
+    void Lay() {
+        noise::Stream rng(noise::Mix64(def_.seed ^ 0x1A70Full));
+        LayLinesOf(def_.roads, def_.railways, def_.rivers);
         for (const MapSiteDef& s : def_.sites) LaySite(s, rng);
-        for (const MapSettlementDef& s : def_.settlements) LaySettlement(s, rng);
+        for (const MapSettlementDef& s : def_.settlements) LaySettlement(s, rng, def_.roads);
         LayFarmsteads(rng);
         LayWoods(rng);
         LayMarshes();
@@ -745,9 +1031,9 @@ private:
     }
 
     // Roads, railways and rivers as strips; a bridge wherever a road or rail crosses a river.
-    void LayLines() {
-        const auto crossings_of = [this](const MapLineDef& line, bool rail) {
-            for (const MapLineDef& river : def_.rivers) {
+    void LayLinesOf(const std::vector<MapLineDef>& roads, const std::vector<MapLineDef>& railways, const std::vector<MapLineDef>& rivers) {
+        const auto crossings_of = [this, &rivers](const MapLineDef& line, bool rail) {
+            for (const MapLineDef& river : rivers) {
                 for (std::size_t i = 1; i < line.points.size(); ++i) {
                     for (std::size_t j = 1; j < river.points.size(); ++j) {
                         double t = 0.0, u = 0.0;
@@ -785,14 +1071,14 @@ private:
                 }
             }
         };
-        for (const MapLineDef& r : def_.roads) crossings_of(r, false);
-        for (const MapLineDef& r : def_.railways) crossings_of(r, true);
-        for (const MapLineDef& r : def_.roads) {
+        for (const MapLineDef& r : roads) crossings_of(r, false);
+        for (const MapLineDef& r : railways) crossings_of(r, true);
+        for (const MapLineDef& r : roads) {
             const MapSurface s = r.line_class == "main" ? MapSurface::MainRoad : (r.line_class == "track" ? MapSurface::Track : MapSurface::Road);
             Strip(r, s, 0.25);
         }
-        for (const MapLineDef& r : def_.railways) Strip(r, MapSurface::Rail, 0.45);
-        for (const MapLineDef& r : def_.rivers) Strip(r, MapSurface::Water, 0.0);
+        for (const MapLineDef& r : railways) Strip(r, MapSurface::Rail, 0.45);
+        for (const MapLineDef& r : rivers) Strip(r, MapSurface::Water, 0.0);
     }
 
     void Strip(const MapLineDef& line, MapSurface surface, double lift_m) {
@@ -804,7 +1090,8 @@ private:
             const MapPoint& a = line.points[i - 1];
             const MapPoint& b = line.points[i];
             const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
-            const bool core = def_.InCore(a.east_m, a.north_m) || def_.InCore(b.east_m, b.north_m);
+            const bool core = def_.InCore(a.east_m, a.north_m) || def_.InCore(b.east_m, b.north_m) || def_.InDetail(a.east_m, a.north_m) ||
+                              def_.InDetail(b.east_m, b.north_m);
             const double step = core ? 0.5 * def_.core_spacing_m : 0.5 * def_.far_spacing_m;
             const int n = std::max(1, static_cast<int>(std::ceil(len / step)));
             for (int k = (i == 1 ? 0 : 1); k <= n; ++k) {
@@ -977,7 +1264,8 @@ private:
         occupied_.Take(e, n, 0.5 * std::hypot(length, width));
     }
 
-    void LaySettlement(const MapSettlementDef& s, noise::Stream& rng) {
+    // A town or village: houses along the roads through it (`roads`), then the blocks behind.
+    void LaySettlement(const MapSettlementDef& s, noise::Stream& rng, const std::vector<MapLineDef>& roads) {
         const bool village = s.kind == "village";
         const bool city = s.kind == "city";
         const double lot = village ? 30.0 : (city ? 36.0 : 32.0);
@@ -988,7 +1276,7 @@ private:
             ht = rng.Range(4.5, 7.0);
         };
         // Houses along every road through the settlement, end on to the street.
-        for (const MapLineDef& road : def_.roads) {
+        for (const MapLineDef& road : roads) {
             if (road.line_class == "track") continue;
             for (std::size_t i = 1; i < road.points.size() && placed < s.buildings; ++i) {
                 const MapPoint& a = road.points[i - 1];
@@ -1098,12 +1386,14 @@ private:
 
     // A canopy block, unless something stands there.
     void Canopy(double e, double n, double size, std::uint64_t seed) {
-        const long long key = static_cast<long long>(std::floor(e / 10.0)) * 2000003LL + static_cast<long long>(std::floor(n / 10.0));
+        const long long key = CanopyKey(e, n);
         if (canopy_cells_.count(key) != 0) return;  // a named forest, a copse and the river's trees may claim one block
         if (water_.Near(e, n, 10.0) || lines_.Near(e, n, 0.5 * size + 4.0) || !occupied_.Free(e, n, 0.5 * size)) return;
         canopy_cells_.insert(key);
         const double u = noise::Value(seed, e, n, 300.0);
         Box(MapPart::Canopy, e, n, size, size, def_.canopy_min_m + (def_.canopy_max_m - def_.canopy_min_m) * u, 0.0, 1.0);
+        // The far ground's woods as obstacles (E9: what is drawn there blocks sight): each block's top by its centre.
+        if (size == def_.far_block_m && !def_.InCore(e, n)) far_canopy_[key] = layout_.boxes.back().base_m + layout_.boxes.back().height_m;
     }
 
     void LayWoods(noise::Stream& rng) {
@@ -1187,6 +1477,37 @@ private:
     }
 
     // The tallest thing standing over each cell of the map, above the ground (woods and buildings).
+    // Thin or porous things (masts, chimneys, towers, launchers, tents) and what lies flat do not hide what is behind
+    // them; a 50 m cell made opaque by a 0.6 m mast would.
+    static bool Opaque(MapPart p) {
+        return !(p == MapPart::Marsh || p == MapPart::Pad || p == MapPart::Runway || p == MapPart::Mast || p == MapPart::Chimney ||
+                 p == MapPart::Tower || p == MapPart::Launcher || p == MapPart::Tent);
+    }
+
+    // The tallest thing standing over each node, above the ground there: every node whose cell the box's footprint
+    // reaches (within half a cell).
+    void Stamp(MapGrid& g, const MapBox& bx) const {
+        const double reach = 0.5 * std::hypot(bx.length_m, std::max(bx.width_m, MapPartIsRound(bx.part) ? bx.length_m : 0.0));
+        const double top = bx.base_m + bx.height_m;
+        const int c0 = std::max(0, static_cast<int>(std::floor((bx.east_m - reach - g.west_m) / g.spacing_m)));
+        const int c1 = std::min(g.cols - 1, static_cast<int>(std::ceil((bx.east_m + reach - g.west_m) / g.spacing_m)));
+        const int r0 = std::max(0, static_cast<int>(std::floor((bx.north_m - reach - g.south_m) / g.spacing_m)));
+        const int r1 = std::min(g.rows - 1, static_cast<int>(std::ceil((bx.north_m + reach - g.south_m) / g.spacing_m)));
+        const double half_cell = 0.5 * g.spacing_m;
+        for (int r = r0; r <= r1; ++r) {
+            for (int c = c0; c <= c1; ++c) {
+                const double de = g.EastOf(c) - bx.east_m, dn = g.NorthOf(r) - bx.north_m;
+                const double along = de * std::sin(bx.heading_rad) + dn * std::cos(bx.heading_rad);
+                const double across = de * std::cos(bx.heading_rad) - dn * std::sin(bx.heading_rad);
+                if (std::fabs(along) > 0.5 * bx.length_m + half_cell || std::fabs(across) > 0.5 * bx.width_m + half_cell) continue;
+                double& v = g.At(c, r);
+                v = std::max(v, top - GroundHeight(g.EastOf(c), g.NorthOf(r)));
+            }
+        }
+    }
+
+    // The tallest thing standing over each cell of the map proper (50 m) and of each detail area (25 m), above the
+    // ground (woods and buildings).
     void BakeObstacles() {
         obstacles_.west_m = def_.west_m;
         obstacles_.south_m = def_.south_m;
@@ -1194,37 +1515,47 @@ private:
         obstacles_.cols = core_.cols;
         obstacles_.rows = core_.rows;
         obstacles_.values.assign(core_.values.size(), 0.0);
+        detail_obstacles_.assign(def_.detail.size(), MapGrid());
+        for (std::size_t i = 0; i < def_.detail.size(); ++i) {
+            const MapDetailDef& a = def_.detail[i];
+            MapGrid& g = detail_obstacles_[i];
+            g.spacing_m = kDetailObstacleSpacingM;
+            g.west_m = a.centre.east_m - a.half_m;
+            g.south_m = a.centre.north_m - a.half_m;
+            g.cols = static_cast<int>(std::lround(2.0 * a.half_m / g.spacing_m)) + 1;
+            g.rows = g.cols;
+            g.values.assign(static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows), 0.0);
+        }
         for (const MapBox& bx : layout_.boxes) {
-            if (bx.part == MapPart::Marsh || bx.part == MapPart::Pad || bx.part == MapPart::Runway) continue;
-            if (!def_.InCore(bx.east_m, bx.north_m)) continue;
-            const double reach = 0.5 * std::hypot(bx.length_m, std::max(bx.width_m, MapPartIsRound(bx.part) ? bx.length_m : 0.0));
-            const double top = bx.base_m + bx.height_m;
-            const int c0 = std::max(0, static_cast<int>(std::floor((bx.east_m - reach - obstacles_.west_m) / obstacles_.spacing_m)));
-            const int c1 = std::min(obstacles_.cols - 1, static_cast<int>(std::ceil((bx.east_m + reach - obstacles_.west_m) / obstacles_.spacing_m)));
-            const int r0 = std::max(0, static_cast<int>(std::floor((bx.north_m - reach - obstacles_.south_m) / obstacles_.spacing_m)));
-            const int r1 = std::min(obstacles_.rows - 1, static_cast<int>(std::ceil((bx.north_m + reach - obstacles_.south_m) / obstacles_.spacing_m)));
-            for (int r = r0; r <= r1; ++r) {
-                for (int c = c0; c <= c1; ++c) {
-                    const double de = obstacles_.EastOf(c) - bx.east_m, dn = obstacles_.NorthOf(r) - bx.north_m;
-                    const double along = de * std::sin(bx.heading_rad) + dn * std::cos(bx.heading_rad);
-                    const double across = de * std::cos(bx.heading_rad) - dn * std::sin(bx.heading_rad);
-                    const double half_cell = 0.5 * obstacles_.spacing_m;
-                    if (std::fabs(along) > 0.5 * bx.length_m + half_cell || std::fabs(across) > 0.5 * bx.width_m + half_cell) continue;
-                    double& v = obstacles_.At(c, r);
-                    v = std::max(v, top - core_.At(c, r));
+            if (!Opaque(bx.part)) continue;
+            if (def_.InCore(bx.east_m, bx.north_m)) Stamp(obstacles_, bx);
+            for (std::size_t i = 0; i < def_.detail.size(); ++i) {
+                const MapDetailDef& a = def_.detail[i];
+                const double reach = 0.5 * std::hypot(bx.length_m, bx.width_m) + kDetailObstacleSpacingM;
+                if (std::fabs(bx.east_m - a.centre.east_m) < a.half_m + reach && std::fabs(bx.north_m - a.centre.north_m) < a.half_m + reach) {
+                    Stamp(detail_obstacles_[i], bx);
                 }
             }
         }
     }
+    static constexpr double kDetailObstacleSpacingM = 25.0;
 
     MapDef def_;
     MapGrid core_, far_, country_, beyond_, obstacles_;
+    std::vector<MapGrid> detail_ground_, detail_obstacles_;  // per detail area, in Def().detail's order
+    std::vector<const MapGrid*> levels_;                    // DrawnLevels
+    DetailLines detail_lines_;
     std::vector<Flat> flats_;
     MapLayout layout_;
     mapgeo::SegmentIndex lines_{250.0};
     mapgeo::SegmentIndex water_{250.0};
     mapgeo::Occupancy occupied_{40.0};
     std::unordered_set<long long> canopy_cells_;
+    std::unordered_map<long long, double> far_canopy_;  // the far ground's wood blocks: their tops (CanopyKey of the centre)
+    struct ClutterTown {
+        double e, n, r, dense_r;
+    };
+    std::vector<ClutterTown> clutter_towns_;
 };
 
 // ---------------------------------------------------------------------------------------------- frames
@@ -1429,7 +1760,7 @@ public:
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->GroundHeight(p.east_m, p.north_m);
     }
-    double ObstacleHeightAt(double east_m, double north_m) const {
+    double ObstacleHeightAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->ObstacleHeight(p.east_m, p.north_m);
     }
@@ -1478,7 +1809,7 @@ public:
     bool Load(const json::Value& root, MapDef& out) {
         if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "origin", "seed", "extent_km",
                              "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads",
-                             "forests", "woods", "marshes", "lakes", "sites"}) ||
+                             "forests", "woods", "marshes", "lakes", "sites", "detail_settlements"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !OptionalString(root, "", "far_ground", out.far_ground_file) ||
             !Provenance(root, "") || !OriginAndSeed(root, out)) {
@@ -1514,14 +1845,36 @@ public:
                LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) &&
                LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadLakes(root, out.lakes) &&
                LoadWoods(root, out) &&
-               LoadSites(root, out);
+               LoadSites(root, out) && LoadDetail(root, out) && LoadSettlements(root, "detail_settlements", out.detail_settlements) &&
+               DetailTownsInAreas(out);
     }
 
     // The ground another file shapes (a country's, named as a district's "far_ground"): its origin, seed, terrain, rivers
-    // and lakes. The rest of that file is its own loader's business.
+    // and lakes; and its roads and railways (imported into the district's detail areas) and its towns (their places,
+    // radii and kinds: the clutter of those the district does not lay out). The rest of that file is its own loader's
+    // business.
     bool LoadGround(const json::Value& root, MapDef& out) {
-        return OriginAndSeed(root, out) && LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) &&
-               LoadLakes(root, out.lakes);
+        if (!OriginAndSeed(root, out) || !LoadTerrain(root, out) || !LoadLines(root, "rivers", "river", out.rivers) ||
+            !LoadLakes(root, out.lakes) || !LoadLines(root, "roads", "", out.roads) || !LoadLines(root, "railways", "rail", out.railways)) {
+            return false;
+        }
+        if (const json::Value* list = OptionalArray(root, "", "settlements")) {
+            for (std::size_t i = 0; i < list->items.size(); ++i) {
+                const json::Value& v = list->items[i];
+                const std::string p = Index("settlements", i);
+                MapSettlementDef s;
+                double r = 0.5;
+                if (!RequireString(v, p, "id", s.id) || !RequireString(v, p, "kind", s.kind) || !Centre(v, p, s.centre) ||
+                    !Number(v, p, "radius_km", r) || !OptionalString(v, p, "name", s.name)) {
+                    return false;
+                }
+                s.radius_m = r * 1000.0;
+                out.settlements.push_back(std::move(s));
+            }
+        } else if (!Message().empty()) {
+            return false;
+        }
+        return true;
     }
 
 protected:  // the country map's loader (simcore/country_map.hpp) reads its terrain, lines and polygons the same way
@@ -1577,7 +1930,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         const json::Value* t = root.Find("terrain");
         if (t == nullptr) return Fail("terrain", "required");
         if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "ridges", "valleys", "valley",
-                                  "notes"}) ||
+                                  "detail", "notes"}) ||
             !Number(*t, "terrain", "base_m", out.base_m) || !OptionalNumber(*t, "terrain", "core_spacing_m", out.core_spacing_m) ||
             !OptionalNumber(*t, "terrain", "far_spacing_m", out.far_spacing_m) || !OptionalNumber(*t, "terrain", "roughness_m", out.roughness_m)) {
             return false;
@@ -1660,11 +2013,13 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         return true;
     }
 
-    bool LoadSettlements(const json::Value& root, MapDef& out) {
-        const json::Value* list = OptionalArray(root, "", "settlements");
+    bool LoadSettlements(const json::Value& root, MapDef& out) { return LoadSettlements(root, "settlements", out.settlements); }
+
+    bool LoadSettlements(const json::Value& root, const char* key, std::vector<MapSettlementDef>& into) {
+        const json::Value* list = OptionalArray(root, "", key);
         if (list == nullptr) return Message().empty();
         for (std::size_t i = 0; i < list->items.size(); ++i) {
-            const std::string p = Index("settlements", i);
+            const std::string p = Index(key, i);
             const json::Value& v = list->items[i];
             MapSettlementDef s;
             double r = 0.5, heading = 0.0;
@@ -1678,7 +2033,62 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             if (r <= 0.0 || s.buildings < 0) return Fail(p, "needs a radius > 0 and buildings >= 0");
             s.radius_m = r * 1000.0;
             s.heading_rad = DegToRad(heading);
-            out.settlements.push_back(std::move(s));
+            into.push_back(std::move(s));
+        }
+        return true;
+    }
+
+    // terrain.detail: the detail areas (roadmap R6). Each is a level of the drawn ground, so its edges must fall on the
+    // nodes of the level it lies in (the map proper's, or the far ground's beyond it) and it lies wholly in one of them;
+    // its spacing divides that level's; the areas do not overlap.
+    bool LoadDetail(const json::Value& root, MapDef& out) {
+        const json::Value* t = root.Find("terrain");
+        if (t == nullptr) return true;
+        const json::Value* list = OptionalArray(*t, "terrain", "detail");
+        if (list == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index("terrain.detail", i);
+            const json::Value& v = list->items[i];
+            MapDetailDef d;
+            double half_km = 5.0;
+            if (!Keys(v, p, {"id", "east_km", "north_km", "half_km", "spacing_m", "micro_m", "source", "confidence", "notes"}) ||
+                !RequireString(v, p, "id", d.id) || !Centre(v, p, d.centre) || !Number(v, p, "half_km", half_km) ||
+                !Number(v, p, "spacing_m", d.spacing_m) || !OptionalNumber(v, p, "micro_m", d.micro_m)) {
+                return false;
+            }
+            d.half_m = half_km * 1000.0;
+            if (d.spacing_m < 5.0 || d.spacing_m > out.core_spacing_m) return Fail(Join(p, "spacing_m"), "needs 5 m <= spacing_m <= core_spacing_m");
+            if (d.micro_m < 0.0 || d.micro_m > 1.5) return Fail(Join(p, "micro_m"), "needs 0 <= micro_m <= 1.5");
+            const double w = d.centre.east_m - d.half_m, e = d.centre.east_m + d.half_m;
+            const double s = d.centre.north_m - d.half_m, n = d.centre.north_m + d.half_m;
+            const bool in_core = out.InCore(w, s) && out.InCore(e, n);
+            const bool outside_core = w >= out.east_m || e <= out.west_m || s >= out.north_m || n <= out.south_m;
+            if (!in_core && !outside_core) return Fail(p, "must lie wholly inside the map proper or wholly outside it");
+            if (std::max({std::fabs(w), std::fabs(e), std::fabs(s), std::fabs(n)}) > out.far_m) return Fail(p, "must lie inside the far ground");
+            const double coarse = in_core ? out.core_spacing_m : out.far_spacing_m;
+            const double west0 = in_core ? out.west_m : -out.far_m, south0 = in_core ? out.south_m : -out.far_m;
+            const auto on_node = [](double v0, double step) { return std::fabs(v0 / step - std::round(v0 / step)) < 1e-9; };
+            if (!on_node(w - west0, coarse) || !on_node(e - west0, coarse) || !on_node(s - south0, coarse) || !on_node(n - south0, coarse)) {
+                return Fail(p, "its edges must fall on the nodes of the ground it lies in (every " + std::to_string(static_cast<int>(coarse)) + " m)");
+            }
+            if (!on_node(coarse, d.spacing_m)) return Fail(Join(p, "spacing_m"), "must divide the spacing of the ground it lies in");
+            for (const MapDetailDef& o : out.detail) {
+                if (o.id == d.id) return Fail(Join(p, "id"), "'" + d.id + "' is listed twice");
+                if (std::fabs(o.centre.east_m - d.centre.east_m) < o.half_m + d.half_m && std::fabs(o.centre.north_m - d.centre.north_m) < o.half_m + d.half_m) {
+                    return Fail(p, "overlaps the detail area '" + o.id + "'");
+                }
+            }
+            out.detail.push_back(std::move(d));
+        }
+        return true;
+    }
+
+    // A detail area's town lies inside one (its streets are the area's lines, its ground the area's).
+    bool DetailTownsInAreas(const MapDef& out) {
+        for (std::size_t i = 0; i < out.detail_settlements.size(); ++i) {
+            if (!out.InDetail(out.detail_settlements[i].centre.east_m, out.detail_settlements[i].centre.north_m)) {
+                return Fail(Index("detail_settlements", i), "must lie in a detail area (terrain.detail)");
+            }
         }
         return true;
     }
@@ -1868,6 +2278,25 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
     }
     MapDef def;
     if (!LoadMapDefJson(text, def, error)) return nullptr;
+    // The representative clutter heights of the far ground's towns (data/gameplay/clutter.json; none without it).
+    std::string clutter_text;
+    if (detail::ReadTextFile(data_dir + "/gameplay/clutter.json", clutter_text)) {
+        json::Value root;
+        std::string parse_error;
+        if (!json::Parse(clutter_text, root, &parse_error)) {
+            if (error) *error = "gameplay/clutter.json: " + parse_error;
+            return nullptr;
+        }
+        const json::Value* values = root.Find("values");
+        const auto value = [values](const char* key, double& out) {
+            const json::Value* v = values != nullptr ? values->Find(key) : nullptr;
+            const json::Value* n = v != nullptr ? v->Find("value") : nullptr;
+            if (n != nullptr && n->Is(json::Type::Number)) out = n->number;
+        };
+        value("dense_urban_m", def.clutter.dense_urban_m);
+        value("suburban_m", def.clutter.suburban_m);
+        value("dense_share", def.clutter.dense_share);
+    }
     if (!def.far_ground_file.empty()) {
         // A district: its far ground is its country's (the same frame, so one ground meets the other at the map's edge).
         std::string far_text;

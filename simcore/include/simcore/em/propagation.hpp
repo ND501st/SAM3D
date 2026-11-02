@@ -150,9 +150,11 @@ struct PathGeometry {
 // Sample the terrain profile between two ENU points. Endpoint altitudes are above the ellipsoid
 // (LocalFrame::AltitudeOf). Spacing is relaxed for long paths so a profile never exceeds
 // `max_samples` (the profile still catches ridges wider than the spacing).
+// Woods and buildings (Terrain::ObstacleHeightAt, roadmap E9) are added to the profile as ITU-R P.1812 adds its
+// representative clutter heights (itu_r_p1812), beyond `obstacle_skip_m` from either end (terrain.hpp kObstacleSkipM).
 inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, double a_alt_m, const Vec3& b_enu,
                                 double b_alt_m, double spacing_m = 100.0, int max_samples = 600,
-                                double k = kStandardRefractionK) {
+                                double k = kStandardRefractionK, double obstacle_skip_m = kObstacleSkipM) {
     PathGeometry g;
     const double dx = b_enu.x - a_enu.x;
     const double dy = b_enu.y - a_enu.y;
@@ -167,13 +169,21 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     g.samples = n - 1;
     const double inv_n = 1.0 / static_cast<double>(n);
     int worst_i = -1;
+    // The profile's height at sample i: the ground, the woods and buildings on it away from the ends, the Earth's bulge.
+    auto profile_at = [&](int i) {
+        const double t = static_cast<double>(i) * inv_n;
+        const double s = t * g.ground_range_m;
+        const double x = a_enu.x + dx * t, y = a_enu.y + dy * t;
+        double h = terrain.HeightAt(x, y) + s * (g.ground_range_m - s) / (2.0 * re);
+        if (s > obstacle_skip_m && g.ground_range_m - s > obstacle_skip_m) h += terrain.ObstacleHeightAt(x, y);
+        return h;
+    };
     for (int i = 1; i < n; ++i) {
         const double t = static_cast<double>(i) * inv_n;
         const double s = t * g.ground_range_m;
         const double rest = g.ground_range_m - s;
         const double ray_alt = a_alt_m + dz * t;
-        const double bulge = s * rest / (2.0 * re);
-        const double ground = terrain.HeightAt(a_enu.x + dx * t, a_enu.y + dy * t) + bulge;
+        const double ground = profile_at(i);
         const double h = ground - ray_alt;  // > 0: the ground is above the ray
         if (-h < g.min_clearance_m) g.min_clearance_m = -h;
         if (h >= 0.0) g.line_of_sight = false;
@@ -188,11 +198,7 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     // sub-path's ray are lines in these coordinates. (Recomputed here, only for blocked paths.)
     if (worst_i > 0 && g.worst_v_geometry >= 0.0) {
         auto pos = [&](int i) { return static_cast<double>(i) * inv_n * g.ground_range_m; };
-        auto ground_at = [&](int i) {
-            const double t = static_cast<double>(i) * inv_n;
-            const double s = t * g.ground_range_m;
-            return terrain.HeightAt(a_enu.x + dx * t, a_enu.y + dy * t) + s * (g.ground_range_m - s) / (2.0 * re);
-        };
+        auto ground_at = [&](int i) { return profile_at(i); };
         const double sm = pos(worst_i);
         const double em = ground_at(worst_i);
         // A sub-edge must be a crest of its own, with a valley of at least kValleyM between it and the main edge:

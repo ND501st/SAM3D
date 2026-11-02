@@ -19,7 +19,16 @@ public:
     Terrain& operator=(const Terrain&) = default;
     virtual ~Terrain() = default;
     virtual double HeightAt(double east_m, double north_m) const = 0;
+    // How high woods and buildings stand above the ground there (roadmap E9): what a line of sight and a radio path
+    // must clear besides the ground, and what a low pilot climbs over. None on a bare terrain.
+    virtual double ObstacleHeightAt(double /*east_m*/, double /*north_m*/) const { return 0.0; }
 };
+
+// A path's profile (radar.hpp HasLineOfSight, em/propagation.hpp AnalysePath) carries the woods and buildings as
+// ITU-R P.1812 carries its representative clutter heights, except within this distance of either end: a radar or a
+// vehicle at a wood's edge, in a clearing or in a street is not hidden by the cell it stands in (a game value,
+// docs/EM_ARCHITECTURE.md section 27).
+constexpr double kObstacleSkipM = 60.0;
 
 // Flat terrain at a constant height.
 class FlatTerrain final : public Terrain {

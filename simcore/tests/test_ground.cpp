@@ -89,10 +89,14 @@ SC_TEST("ground: beyond the far ground a district's ground is the country's latt
     SC_EXPECT(m != nullptr);
     if (!m) return;
     const std::vector<const MapGrid*> levels = m->DrawnLevels();
-    SC_EXPECT(levels.size() == 4);  // the map proper, the far ground, the country's 1 km, the 4 km beyond
+    // The detail areas (battery 21's at 10 m, the capital's at 20 m: roadmap R6), the map proper, the far ground, the
+    // country's 1 km, the 4 km beyond.
+    SC_EXPECT(levels.size() == 6);
     SC_EXPECT(m->CountryGrid().spacing_m == 1000.0 && m->BeyondGrid().spacing_m == 4000.0);
-    SC_EXPECT(m->LevelAt(0.0, 0.0) == 0 && m->LevelAt(60000.0, 0.0) == 1 && m->LevelAt(-170000.0, -20000.0) == 2 &&
-              m->LevelAt(-250000.0, 0.0) == 3 && m->LevelAt(1.0e7, 0.0) == -1);
+    SC_EXPECT(levels[0]->spacing_m == 10.0 && levels[1]->spacing_m == 20.0 && levels[2] == &m->CoreGrid());
+    SC_EXPECT(m->LevelAt(9500.0, -6500.0) == 0 && m->LevelAt(36000.0, 58000.0) == 1);
+    SC_EXPECT(m->LevelAt(0.0, 0.0) == 2 && m->LevelAt(60000.0, 0.0) == 3 && m->LevelAt(-170000.0, -20000.0) == 4 &&
+              m->LevelAt(-250000.0, 0.0) == 5 && m->LevelAt(1.0e7, 0.0) == -1);
     // At a node of the country's grid outside the far ground (the country spans -180 to 150 km east, -180 to 140 km north): the country's natural ground (country_map.hpp's BakeGround).
     const MapDef& cg = *m->Def().far_ground;
     SC_EXPECT_NEAR(m->GroundHeight(-170000.0, -20000.0), NaturalGround(cg, -170000.0, -20000.0), 1e-9);
@@ -103,13 +107,21 @@ SC_TEST("ground: beyond the far ground a district's ground is the country's latt
     // The cells drawn: a far cell inside the map proper is not; a country cell under the far ground is not, one beyond is.
     int c = 0, r = 0;
     m->FarGrid().CellOf(100.0, 100.0, c, r);
-    SC_EXPECT(!m->DrawsCell(1, c, r));
+    SC_EXPECT(!m->DrawsCell(3, c, r));
     m->FarGrid().CellOf(60000.0, 100.0, c, r);
-    SC_EXPECT(m->DrawsCell(1, c, r));
+    SC_EXPECT(m->DrawsCell(3, c, r));
     m->CountryGrid().CellOf(100.0, 100.0, c, r);
-    SC_EXPECT(!m->DrawsCell(2, c, r));
+    SC_EXPECT(!m->DrawsCell(4, c, r));
     m->CountryGrid().CellOf(-170400.0, -20300.0, c, r);
+    SC_EXPECT(m->DrawsCell(4, c, r));
+    // A cell of the map proper inside battery 21's area is not drawn, one beyond it is; a far cell in the capital's is
+    // not.
+    m->CoreGrid().CellOf(9500.0, -6500.0, c, r);
+    SC_EXPECT(!m->DrawsCell(2, c, r));
+    m->CoreGrid().CellOf(2000.0, -6500.0, c, r);
     SC_EXPECT(m->DrawsCell(2, c, r));
+    m->FarGrid().CellOf(36100.0, 58100.0, c, r);
+    SC_EXPECT(!m->DrawsCell(3, c, r));
 }
 
 SC_TEST("ground: no ground is drawn twice: the land beyond's 4 km cells meet the country's lattice at its nodes") {
@@ -131,13 +143,13 @@ SC_TEST("ground: no ground is drawn twice: the land beyond's 4 km cells meet the
     if (!why.empty()) std::printf("    %s\n", why.c_str());
     // The strip drawn twice before the lattice was grown: at 150.5 km east the country's lattice is the ground, and the
     // land beyond's cell there is not drawn.
-    SC_EXPECT(m->LevelAt(150500.0, 0.0) == 2);
+    SC_EXPECT(m->LevelAt(150500.0, 0.0) == 4);
     int c = 0, r = 0;
     bg.CellOf(150500.0, 0.0, c, r);
-    SC_EXPECT(!m->DrawsCell(3, c, r));
+    SC_EXPECT(!m->DrawsCell(5, c, r));
     // The land beyond's next cell east, outside the country's lattice, is drawn: no hole either.
     bg.CellOf(153000.0, 0.0, c, r);
-    SC_EXPECT(m->DrawsCell(3, c, r));
+    SC_EXPECT(m->DrawsCell(5, c, r));
 }
 
 SC_TEST("ground: a map point's ground point in a frame 68 km off is straight under the frame's up, and maps back exactly") {

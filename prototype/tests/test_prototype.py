@@ -117,3 +117,15 @@ def test_waypoint_inside_turn_circle_is_passed():
     for _ in range(120):
         b.step(0.1)
     assert b.next_wp == 1 and abs(b.position.x) < 1.0
+
+
+def test_line_of_sight_over_woods():
+    # Mirror of test_map_obstacles.cpp: a wood 20 m tall between two points 8 m up blocks them; 40 m up it does not;
+    # woods within 60 m of an end do not hide it.
+    wood = lambda e, n: 20.0 if 200.0 < e < 400.0 else 0.0  # noqa: E731
+    assert not has_line_of_sight(flat(), Vec3(0, 0, 8), 8.0, Vec3(600, 0, 8), 8.0, 50.0, obstacle=wood)
+    assert has_line_of_sight(flat(), Vec3(0, 0, 40), 40.0, Vec3(600, 0, 40), 40.0, 50.0, obstacle=wood)
+    assert has_line_of_sight(flat(), Vec3(0, 0, 8), 8.0, Vec3(600, 0, 8), 8.0, 50.0)
+    around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
+    assert has_line_of_sight(flat(), Vec3(0, 0, 2), 2.0, Vec3(2000, 0, 300), 300.0, 10.0, obstacle=around)
+    assert not has_line_of_sight(flat(), Vec3(0, 0, 2), 2.0, Vec3(2000, 0, 300), 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0)

@@ -121,7 +121,10 @@ class PathGeometry:
 
 
 def analyse_path(terrain: TerrainFn, a_e: float, a_n: float, a_alt: float, b_e: float, b_n: float, b_alt: float,
-                 spacing_m: float = 100.0, max_samples: int = 600, k: float = K_STD) -> PathGeometry:
+                 spacing_m: float = 100.0, max_samples: int = 600, k: float = K_STD,
+                 obstacle: TerrainFn | None = None, obstacle_skip_m: float = 60.0) -> PathGeometry:
+    """`obstacle(e, n)`: woods and buildings on the profile beyond `obstacle_skip_m` from either end, as ITU-R
+    P.1812's representative clutter heights (simcore em/propagation.hpp AnalysePath)."""
     g = PathGeometry()
     dx, dy = b_e - a_e, b_n - a_n
     g.ground_range_m = math.hypot(dx, dy)
@@ -137,7 +140,10 @@ def analyse_path(terrain: TerrainFn, a_e: float, a_n: float, a_alt: float, b_e: 
         s = t * g.ground_range_m
         rest = g.ground_range_m - s
         ray = a_alt + dz * t
-        ground = terrain(a_e + dx * t, a_n + dy * t) + s * rest / (2.0 * re)
+        x, y = a_e + dx * t, a_n + dy * t
+        ground = terrain(x, y) + s * rest / (2.0 * re)
+        if obstacle is not None and s > obstacle_skip_m and rest > obstacle_skip_m:
+            ground += obstacle(x, y)
         h = ground - ray
         g.min_clearance_m = min(g.min_clearance_m, -h)
         if h >= 0.0:

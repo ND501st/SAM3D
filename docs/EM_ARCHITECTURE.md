@@ -498,7 +498,29 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
 
 * **Deygout diffraction.** `AnalysePath` keeps, besides the main edge, the worst crest on each side of it measured against the line to the main edge's top (`sub_v_geometry_a/b`); `DiffractionLossDb` sums J(v) over the three. A sub-edge must be a crest of its own, with a 20 m valley between it and the main edge, so the flat top of one wide ridge stays one edge. Sub-edges are only looked for when the main edge blocks the ray. Two 300 m ridges on a 20 km path: 21 dB at 50 MHz for one, 38 dB for two.
 * **Rain.** `Environment::rain_rate_mmh` (scenario `own_unit.em.rain_mmh`) adds ITU-R P.838-3 specific attenuation (k R^alpha, horizontal polarisation, 1-40 GHz table; f^2 below 1 GHz) times the P.530 distance factor to a path's atmospheric loss, for radars and radios. Radar and radio calibration always uses the dry environment (`EmWorld::Dry`), so rain lowers ranges instead of being fitted away. 10 GHz, 50 mm/h: 1.66 dB/km; over 30 km 17.7 dB.
-* Left: forest and urban obstacle heights (needs a land-cover layer), sea areas and ducting.
+* **Woods and buildings (roadmap R6, 2 November 2026).** `Terrain::ObstacleHeightAt` (0 on a bare terrain) gives how
+  high woods and buildings stand over the ground. `HasLineOfSight` (radar.hpp: the radars' detection, the gameplay
+  engagement's line of sight) and `AnalysePath` (the EM layer's `PathCache`, the PU-12M's radios over the country) add it
+  to the profile as ITU-R P.1812 adds its representative clutter heights (`itu_r_p1812`), so a wood or a town between a
+  radar and a low target blocks it, and over a wood's edge it is a diffraction edge like a ridge's (its height above
+  the ray in J(v)). The prototype mirrors both (`has_line_of_sight`, `analyse_path`, `obstacle=`).
+  * **The 60 m skip** (terrain.hpp `kObstacleSkipM`, a game value): within 60 m of either end the obstacles are left
+    out, so a radar at a wood's edge, in a clearing or in a street, or a target over a wood, is not hidden by the cell
+    it stands in or flies over.
+  * **On the map** (`MapData::ObstacleHeight`, `simcore/terrain_map.hpp`): the tallest box over each node, above the
+    ground there, at 50 m on the map proper and 25 m in the detail areas (`docs/TEST_RANGE.md`). Thin or porous parts
+    (masts, chimneys, towers, launchers, tents) and flat ones (marsh, pads, runways) are left out: a 0.6 m mast must
+    not make a 50 m cell opaque. Beyond the map proper and the detail areas: each wood block of the far ground by its
+    top, and in the far ground's towns the map does not lay out a representative clutter height
+    (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban 10 m beyond; villages
+    suburban), so what the game draws there blocks sight too.
+  * **Low pilots climb over the canopy.** `TargetPilot::HoldHeight` holds the wanted height over the ground plus the
+    obstacles, here and ahead; a terrain-following helicopter over a forest flies its height over the treetops. The
+    ground floor (R5) is still over the bare ground.
+  * The country's own ground (`command/em_radio.hpp`'s `CountryGround`) carries no obstacles yet.
+  * Balance against r-track (the merged R5 and R7, before obstacles): see `docs/DEVELOPMENT_ROADMAP.md` track R, R6.
+* Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
+  (fields, orchards) in place of the towns' two heights.
 
 ## 28. Scale (E8, started 16 October 2026)
 

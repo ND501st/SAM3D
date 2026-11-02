@@ -569,9 +569,21 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		}
 	}
 	const FLinearColor TownColour(0.21f, 0.2f, 0.18f);
+	const std::vector<const simcore::MapGrid*> Levels = M.DrawnLevels();
+	// The detail areas (roadmap R6) come first in the levels: one inside the map proper is drawn as the map proper is
+	// (its colours, collision, shadows), one beyond it as the far ground near the scenario is.
+	const auto IsCoreLike = [&](std::size_t Level)
+	{
+		const simcore::MapGrid* G = Levels[Level];
+		return G == &M.CoreGrid() || (Level < M.DetailGrids().size() && D.InCore(G->west_m + 1.0, G->south_m + 1.0));
+	};
+	const auto IsFarLike = [&](std::size_t Level)
+	{
+		return Levels[Level] == &M.FarGrid() || (Level < M.DetailGrids().size() && !IsCoreLike(Level));
+	};
 	const auto Colour = [&](std::size_t Level, double E, double N, double H)
 	{
-		if (Level == 0)
+		if (IsCoreLike(Level))
 		{
 			return GroundColour(D, E, N, H);
 		}
@@ -587,13 +599,12 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 			return GroundColour(D, E, N, H);
 		}
 		const simcore::MapPoint P = ToCountry.FrameToMap(E, N);
-		return CoverTint(GroundColour(Level == 1 ? D : Country->Def().ground, E, N, H), Country->LandCoverAt(P.east_m, P.north_m));
+		return CoverTint(GroundColour(IsFarLike(Level) ? D : Country->Def().ground, E, N, H), Country->LandCoverAt(P.east_m, P.north_m));
 	};
 	// The scenario's origin in the map: the far ground's tiles within 15 km of it take queries (the camera's, physics').
 	const simcore::MapPoint Here = Link.FrameToMap(0.0, 0.0);
 	constexpr double QueryReachM = 15000.0;
 	constexpr double SkirtM = 5.0;
-	const std::vector<const simcore::MapGrid*> Levels = M.DrawnLevels();
 	// One square of a level as a mesh of its own: cells [C0, C1) x [R0, R1).
 	auto AddSection = [&](std::size_t Level, int32 C0, int32 C1, int32 R0, int32 R1)
 	{
@@ -714,16 +725,16 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		const double E0 = G.EastOf(C0), E1 = G.EastOf(C1), N0 = G.NorthOf(R0), N1 = G.NorthOf(R1);
 		const double Away = FMath::Sqrt(FMath::Square(FMath::Max3(E0 - Here.east_m, 0.0, Here.east_m - E1)) +
 										FMath::Square(FMath::Max3(N0 - Here.north_m, 0.0, Here.north_m - N1)));
-		const bool bCollide = Level == 0 ? bCollision : (Level == 1 && bCollision && Away < QueryReachM);
+		const bool bCollide = IsCoreLike(Level) ? bCollision : (IsFarLike(Level) && bCollision && Away < QueryReachM);
 		// A component per square: each cooks its own collision once (sections of one component would re-cook all of it).
 		UProceduralMeshComponent* Tile = NewObject<UProceduralMeshComponent>(this);
 		Tile->SetupAttachment(Root);
 		Tile->bUseAsyncCooking = true;
-		Tile->SetCastShadow(Level == 0);
+		Tile->SetCastShadow(IsCoreLike(Level));
 		Tile->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, Uv, Colours, Tangents, bCollide);
 		Tile->SetMaterial(0, GroundMaterial);
 		Tile->SetCollisionEnabled(!bCollide ? ECollisionEnabled::NoCollision
-											: (Level == 0 ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly));
+											: (IsCoreLike(Level) ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly));
 		Tile->RegisterComponent();
 		GroundTiles.Add(Tile);
 	};
@@ -948,7 +959,10 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		};
 		for (int32 i = 0; i < static_cast<int32>(P.size()); ++i)
 		{
-			const bool bOut = !UnderMap(P[static_cast<std::size_t>(i)].east_m, P[static_cast<std::size_t>(i)].north_m, 0.0);
+			// Not under the map proper, nor in a detail area beyond it (the map lays the country's lines there as its own
+			// strips and bridges, roadmap R6).
+			const simcore::MapPoint Pm = ToMap.FrameToMap(P[static_cast<std::size_t>(i)].east_m, P[static_cast<std::size_t>(i)].north_m);
+			const bool bOut = !UnderMap(P[static_cast<std::size_t>(i)].east_m, P[static_cast<std::size_t>(i)].north_m, 0.0) && !D.InDetail(Pm.east_m, Pm.north_m);
 			if (bOut && RunStart < 0)
 			{
 				RunStart = i;
@@ -1044,6 +1058,16 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 	for (const simcore::CountrySettlementDef& S : Cd.settlements)
 	{
 		if (UnderMap(S.centre.east_m, S.centre.north_m, S.radius_m))
+		{
+			continue;
+		}
+		// A town the map lays out itself in a detail area (the capital, roadmap R6) is drawn with the map's boxes.
+		bool bLaidByMap = false;
+		for (const simcore::MapSettlementDef& Laid : Map->Def().detail_settlements)
+		{
+			bLaidByMap = bLaidByMap || Laid.id == S.id;
+		}
+		if (bLaidByMap)
 		{
 			continue;
 		}

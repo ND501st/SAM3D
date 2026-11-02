@@ -8,11 +8,12 @@ the cloud the game shows is the cloud the TV sight cannot see through.
 
 ## What is on it
 
-`data/maps/kesmark_range.json`, built by `simcore/terrain_map.hpp` (deterministic for its seed; about 0.7 s):
+`data/maps/kesmark_range.json`, built by `simcore/terrain_map.hpp` (deterministic for its seed; a few seconds with
+its detail areas):
 
 | Thing | How it is made |
 |---|---|
-| Ground | A plain at 110 m with three octaves of gentle relief, hills (Polany hill under the P-40, Ludas, the Kesmark heights, Varos hill, the neutral neighbour's hills beyond the border), the Rava's valley carved along the river, sites levelled. Baked at 50 m inside the map, 500 m out to 150 km |
+| Ground | A plain at 110 m with three octaves of gentle relief, hills (Polany hill under the P-40, Ludas, the Kesmark heights, Varos hill, the neutral neighbour's hills beyond the border), the Rava's valley carved along the river, sites levelled. Baked at 50 m inside the map, 500 m out to 150 km, finer in the two detail areas (below) |
 | River | The Rava through both Kesmark bridges (12, -6) and (14, -4) and the Rava marshes |
 | Roads, railway | Main and secondary roads and tracks between the places; the railway through Kesmark station, the rail bridge and the Horka siding. A bridge wherever a road or the railway crosses the river |
 | Towns | Kesmark (1400 buildings), five villages (90-110), Novo Varosd and four towns beyond the map; houses end on to the streets, flats in a town's centre; 70 lone farmsteads |
@@ -20,8 +21,43 @@ the cloud the game shows is the cloud the TV sight cannot see through.
 | Military sites | Battery 21's position (four launcher revetments, the PU-12M's pad), its two dummy positions, the ZU-23 at the bridges, the fuel depot, Kecel air base (runway, taxiway, 12 shelters, apron, hangars, tower), its guns, the S-125 at Kecel, the regiment's and division's posts, the missile technical battery, the P-40 and P-19 posts, the garrison barracks, the sector bunker, the church tower, the sugar factory, the station, Tiszavar air base and the Paksany power station far out |
 
 Every one is a box (cylinders for tanks, chimneys, cooling towers). Positions come from the theatre and places files;
-a test checks they agree (`test_world_map.cpp`). The woods' and buildings' heights are also kept as an obstacle grid
-(`MapData::ObstacleHeight`) for E9's forest and urban obstacles; the line of sight does not use it yet.
+a test checks they agree (`test_world_map.cpp`). The woods' and buildings' heights are also kept as obstacle grids
+(`MapData::ObstacleHeight`): the line of sight and the radio paths carry them (E9, `docs/EM_ARCHITECTURE.md` §27).
+
+## Detail areas (roadmap R6)
+
+Where play happens close up the ground is finer: two **detail areas** (`terrain.detail`), each a level of the drawn
+ground of its own (`MapData::DrawnLevels`, finest first; `docs/ARCHITECTURE.md`, "One ground, one vertical"), so the
+sim and the picture still share one ground:
+
+| Area | Where | Ground | Obstacles | What is in it |
+|---|---|---|---|---|
+| `bty21` | 9.5 km east, 6.5 km south, 12 km square (inside the map proper) | 10 m, micro relief 0.8 m | 25 m | Battery 21's position, both Kesmark bridges, Vrbice, the station |
+| `capital` | 36 km east, 58 km north, 15 km square (on the far ground) | 20 m, micro relief 0.6 m | 25 m | The capital, laid out (12000 buildings), and the dynamic campaign test round it |
+
+* **Edges on the coarse nodes.** An area's edges fall on the nodes of the ground it lies in (the map proper's 50 m, the
+  far ground's 500 m) and its spacing divides that ground's, so a coarse cell is wholly inside it (not drawn) or wholly
+  outside (`NoGroundDrawnTwice`); the loader refuses an area that does not.
+* **Its ground** is the coarse level's triangles sampled at its nodes, so at its edge it is the coarse ground exactly,
+  plus micro relief (`noise::Fbm`, 400 m, three octaves) faded to nothing over the last 300 m to the edge, within 15-60 m
+  of every road, railway and river, on every levelled site and in every town (50-100 m beyond its edge).
+* **The capital's lines.** The country's roads, railways and the Rava through the capital (`data/maps/pannonia.json`)
+  are imported, clipped to the area and a kilometre round it, and laid as the map's own strips and bridges
+  (`MapData::ImportedLines`); not in the map file's lines, so the route service and `NearestRoad` are unchanged.
+* **The capital's town** (`detail_settlements`) is laid after everything else on its own random stream: houses along
+  the imported roads, blocks of flats within 0.45 of its 7 km radius, nothing within 30 m of the Rava. The map proper's
+  layout is unchanged by it: the core's boxes per part are recorded in `test_world_map.cpp` (12038, from r-track before
+  R6) and checked. The far ground's woods within 100 m of its radius give way.
+* **The dynamic campaign test's positions are map sites** (`capital_*`, 32 of them: the Osa positions of battery 21
+  and of battery 22, the Kub, S-75 and S-125, the gun sites, the radars), so the town keeps clear of them and their
+  ground is levelled. Three on the Rava's bank are left out (the ZU-23 at the road bridge and at the river port, S-60
+  battery 6), because a levelled site would fill the river's bed.
+* **Obstacles at 25 m** in each area, from the same boxes (`MapData::DetailObstacleGrids`).
+
+Unreal draws every level it is given (`ASimMapActor::BuildGround`): the area inside the map proper as the map proper
+(collision, shadows, its colours), the capital's as the far ground near the scenario; the country's hashed town blocks
+and strategic ribbons are not drawn where the map lays its own (the capital, the detail areas). Trees, roofs, field
+parcels and real assets are the next step (R6's dressing).
 
 ## The airspace and the weather
 
@@ -100,4 +136,8 @@ and quits.
 * On a Cesium level, ground items are put on the tiles by a ground-only trace from 3 km up; the tiles are not the
   sim's ground (`docs/ARCHITECTURE.md`, known limitations). Woods and buildings are not part of the drawn ground that
   aircraft are held over.
-* The obstacle grid is not yet used by line of sight or propagation (E9).
+* Obstacles are boxes widened to whole cells (50 m on the map proper, 25 m in the detail areas), sampled bilinearly:
+  a wood's edge is soft by half a cell. Beyond them, far woods are whole 400 m blocks and the far ground's other towns
+  two clutter heights.
+* The detail areas' ground is drawn at 10 m and 20 m with collision: about 2 million vertices more to cook when the
+  map loads.

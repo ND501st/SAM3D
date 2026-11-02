@@ -67,8 +67,14 @@ def radar_horizon(h_radar: float, h_target: float, k: float = K_STD) -> float:
     return math.sqrt(2 * re * max(h_radar, 0.0)) + math.sqrt(2 * re * max(h_target, 0.0))
 
 
+# Woods and buildings stand on the profile beyond this from either end (simcore terrain.hpp kObstacleSkipM, a game value).
+OBSTACLE_SKIP_M = 60.0
+
+
 def has_line_of_sight(terrain: TerrainFn, a: Vec3, a_alt: float, b: Vec3, b_alt: float,
-                      spacing_m: float = 50.0, k: float = K_STD, clearance_m: float = 0.0) -> bool:
+                      spacing_m: float = 50.0, k: float = K_STD, clearance_m: float = 0.0,
+                      obstacle: TerrainFn | None = None, obstacle_skip_m: float = OBSTACLE_SKIP_M) -> bool:
+    """`obstacle(e, n)`: how high woods and buildings stand there (simcore Terrain::ObstacleHeightAt; None: none)."""
     dx, dy = b.x - a.x, b.y - a.y
     dist = math.hypot(dx, dy)
     if dist < 1.0:
@@ -79,7 +85,10 @@ def has_line_of_sight(terrain: TerrainFn, a: Vec3, a_alt: float, b: Vec3, b_alt:
         t = i / n
         s = t * dist
         ray = a_alt + (b_alt - a_alt) * t
-        ground = terrain(a.x + dx * t, a.y + dy * t) + s * (dist - s) / (2 * re)
+        x, y = a.x + dx * t, a.y + dy * t
+        ground = terrain(x, y) + s * (dist - s) / (2 * re)
+        if obstacle is not None and s > obstacle_skip_m and dist - s > obstacle_skip_m:
+            ground += obstacle(x, y)
         if ground + clearance_m >= ray:
             return False
     return True

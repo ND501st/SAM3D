@@ -48,6 +48,12 @@ about d²/2R (≈ 785 m at 100 km), so use `LocalFrame::AltitudeOf` whenever alt
   at 4 km. Each cell is two triangles split along its (c+1, r)-(c, r+1) diagonal (`MapGrid::SampleTri`).
   `MapData::GroundHeight` samples the finest level that covers the point (`LevelAt`). A cell is left undrawn
   (`DrawsCell`) only when it lies wholly inside a finer level. `country_map.hpp` samples its own grid the same way.
+  A map's detail areas (roadmap R6, `terrain.detail`) are levels too, ahead of the map proper: their edges on the
+  coarse level's nodes, their ground that level's triangles at a finer spacing plus faded micro relief
+  (`docs/TEST_RANGE.md`, "Detail areas").
+* **What stands on the ground blocks sight** (E9 in R6): `Terrain::ObstacleHeightAt` (the map's woods and buildings)
+  is on every line of sight's and radio path's profile beyond 60 m from either end, and low pilots hold their height
+  over it (`docs/EM_ARCHITECTURE.md` §27).
 * **One vertical: the frame's z.** A ground point keeps its east and north and finds its z where `AltitudeOf` gives
   the ground's height (`GroundPointInFrame`, `MapFrameLink::GroundPoint`, `ScenarioRunner::GroundEnu`). The drawn
   vertices are those points through `EnuToUnreal`. `DrawnGroundAgrees` and the automation test
