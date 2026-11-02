@@ -101,6 +101,7 @@ add_executable(simcore_tests
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
   tests/test_dynamic_campaign.cpp
+  tests/test_ground.cpp
   tests/test_damage.cpp
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp
@@ -239,3 +240,9 @@ add_test(NAME country_dump_route
 add_executable(nav_check examples/nav_check.cpp)
 simcore_configure_target(nav_check)
 add_test(NAME nav_check COMMAND nav_check "${CMAKE_CURRENT_SOURCE_DIR}/../data" 200)
+
+# Roadmap R5, nothing under the map: the testbed's hour and every map mission's ten minutes, everything judged against
+# the ground once a second (simcore/ground_check.hpp). The test plays the Kesmark range's test scenario two minutes.
+add_executable(ground_check examples/ground_check.cpp)
+simcore_configure_target(ground_check)
+add_test(NAME ground_check COMMAND ground_check "${CMAKE_CURRENT_SOURCE_DIR}/../data" 120 scenarios/kesmark_range_test.json)

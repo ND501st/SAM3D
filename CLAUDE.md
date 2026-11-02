@@ -87,6 +87,8 @@ python tools/em_view.py                           # EM overlays in a browser fro
 python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
 ./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json         # the whole country (or --route road e1 n1 e2 n2 [cut bridges], --height e n)
 ./simcore/build/nav_check data 200                # the route service: anchors off the road net listed, the graph and 200 routes timed
+./simcore/build/ground_check data 3600            # nothing under the map (R5): the testbed's hour and every map mission, anything under the ground listed
+python tools/ue_ground_check.py                   # the same in the game (-SimGroundCheck): every drawn actor against the drawn ground, from the logs
 python tools/map_view.py out/pannonia_map.json --png                              # the country with the theatre's objects and fronts
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)

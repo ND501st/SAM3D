@@ -41,6 +41,32 @@ is +X east, +Y south at its origin), and the director puts the georeference orig
 `LocalFrame` converts geodetic ↔ ENU exactly (via ECEF). Far from the origin, ENU `z` differs from altitude by
 about d²/2R (≈ 785 m at 100 km), so use `LocalFrame::AltitudeOf` whenever altitude matters.
 
+### One ground, one vertical (roadmap R5)
+
+* **One ground.** On a map's level the sim samples exactly the triangles Unreal draws. Each map has drawn levels
+  (`MapData::DrawnLevels`): the core at 50 m, the far ground at 500 m, the country's 1 km lattice and the land beyond
+  at 4 km. Each cell is two triangles split along its (c+1, r)-(c, r+1) diagonal (`MapGrid::SampleTri`).
+  `MapData::GroundHeight` samples the finest level that covers the point (`LevelAt`). A cell is left undrawn
+  (`DrawsCell`) only when it lies wholly inside a finer level. `country_map.hpp` samples its own grid the same way.
+* **One vertical: the frame's z.** A ground point keeps its east and north and finds its z where `AltitudeOf` gives
+  the ground's height (`GroundPointInFrame`, `MapFrameLink::GroundPoint`, `ScenarioRunner::GroundEnu`). The drawn
+  vertices are those points through `EnuToUnreal`. `DrawnGroundAgrees` and the automation test
+  `SAM3D.Map.GroundAgrees` check the two.
+* **Ground items carry their ground point.** The view stream's battery rows and works carry it
+  (`ViewVehicle::ground`, `ViewWork::ground`), because their `position` is where the antennas are.
+* **Held over the ground in simcore, never pushed up in Unreal.**
+  * `TargetPilot::GroundFloor` keeps an aircraft's belly (`Aircraft::bottom_m`) a metre over the ground 3 s ahead.
+  * A weapon ends where its line crosses the ground, or on its aim when it flies low.
+  * An aircraft that still ends up under the ground is counted (`ScenarioRunner::TerrainStrikes`) and goes down.
+  * Unreal only stops the 0.15 s it draws ahead between steps at the ground (`FSimEntityState::GroundClearSeconds`).
+* **Unreal reads the drawn ground with no trace.** `USimWorldSubsystem::GroundAt` gives the map actor's drawn ground
+  from the map's own link. Only a level without a map actor (Cesium) traces, and that trace is ground-only (see the
+  known limitations).
+* **The checks.**
+  * `simcore/ground_check.hpp`, run by `ground_check` and the dynamic campaign test, lists anything under the ground.
+  * In the game, `sam3d.ground.check` and `-SimGroundCheck=<s>` (`tools/ue_ground_check.py`) do the same for what is
+    drawn.
+
 ## Time
 
 `USimWorldSubsystem` accumulates frame time and calls `World::Step(0.01)` in a loop (fixed 100 Hz, capped per frame).
@@ -172,6 +198,15 @@ Generic simcore models (used by the demo, not by the Osa's outcomes):
 - Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
   deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
 - Radar physics: single-look SNR threshold, no clutter or multipath.
+- The ground (roadmap R5) on a Cesium level is in an interim state. With no map actor there are two grounds: Cesium's
+  tiles and the scenario's own terrain.
+  - Unreal puts ground items on the first static surface of a ground-only trace (WorldStatic objects; entity actors,
+    pawns and actors tagged `SimNotGround` are ignored) from 3 km over to 3 km under (`USimWorldSubsystem::GroundAt`).
+  - Aircraft are held over the sim's terrain, not over the tiles.
+  - One ground there waits on R6's map. Without a map actor, `ground_check` and `SAM3D.Map.GroundAgrees` say nothing
+    about the tiles.
+  - On a map's level the obstacle heights (woods, buildings) are still bilinear and not part of the drawn ground.
+    Aircraft are held over the ground, not over the boxes.
 - ISA atmosphere treats geopotential altitude as geometric (< 0.5 % error below 32 km).
 
 Osa model gaps found by the October 2026 research review (`docs/research/OSA_RESEARCH_2026-10.md`), scheduled as

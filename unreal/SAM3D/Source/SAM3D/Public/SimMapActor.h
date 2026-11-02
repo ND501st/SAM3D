@@ -18,6 +18,7 @@ namespace simcore
 	class CountryMap;
 	class MapData;
 	class MapFrameLink;
+	struct MapGrid;
 }
 
 /**
@@ -34,9 +35,14 @@ namespace simcore
  * Preview" draws it at the map's own origin.
  *
  * Beyond the map, the whole country it lies in (CountryFile, simcore/country_map.hpp) at strategic scale: its ground at
- * 1 km in place of the map's far ground (the same ground function, so the two agree), the land beyond its borders
- * coarser, its rivers, roads, railways and oil pipelines as ribbons, its towns as blocks on a patch, its border. And the
- * nation's assets (bDrawAssets): every object of the theatre as the basic models of its system's or its kind's site.
+ * 1 km beyond the map's far ground and the land beyond its borders at 4 km (levels of the map's own ground, which the
+ * sim samples), its rivers, roads, railways and oil pipelines as ribbons, its towns as blocks on ground tinted a town's,
+ * its border. And the nation's assets (bDrawAssets): every object of the theatre as the basic models of its system's or
+ * its kind's site.
+ *
+ * One ground (roadmap R5): every vertex is simcore's (MapData::DrawnLevels, MapFrameLink::GroundPoint), every cell split
+ * as simcore samples it (MapGrid::SampleTri), so what the sim has on the ground stands on what is drawn; GroundAt gives
+ * it without a trace. SAM3D.Map.GroundAgrees checks the vertices.
  *
  * -SimMapShots=<folder> photographs the map from a few views (the battery's position, over the town, the bridges, the
  * woods, high above with the far ground and the cloud, the country from very high, the refinery and the capital's
@@ -54,12 +60,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	FString MapFile = TEXT("maps/kesmark_range.json");
 
-	/** Draw the ground beyond the map (out to its far_km, coarser), so aircraft from the borders fly over land. */
+	/** Deprecated (roadmap R5): the ground is always drawn whole, every level simcore samples (the map proper, its far
+	 *  ground, the country's lattices), so nothing the sim has on the ground stands over a hole or under the mesh. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	bool bDrawFarGround = true;
 
-	/** Every how many grid samples the map's ground gets a vertex (1: every 50 m sample of kesmark_range). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "1", ClampMax = "8"))
+	/** Deprecated (roadmap R5): a vertex at every sample, as simcore samples the ground (1 is the only value used). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "1", ClampMax = "1"))
 	int32 GroundStep = 1;
 
 	/** Collision on the map's ground, bridges, runways and pads (the vehicle finds the ground by tracing). */
@@ -98,7 +105,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Map")
 	int32 GetAssetCount() const { return AssetCount; }
 
+	/** The drawn ground under (or over) a point of the level (roadmap R5): the map's height there on the triangle it is
+	 *  drawn as, straight down the scenario frame's up, as simcore's GroundEnu has it (no trace, so nothing standing on
+	 *  the ground is hit). The triangle's normal too, if asked. False before the map is drawn or beyond its ground. */
+	bool GroundAt(const FVector& UnrealPos, FVector& OutGround, FVector* OutNormal = nullptr) const;
+
+	/** A vertex of the drawn ground: node (C, R) of a level's lattice in the frame the map is drawn in (the contract
+	 *  SAM3D.Map.GroundAgrees checks against simcore's MapFrameLink::GroundPoint). */
+	static FVector GroundVertex(const simcore::MapFrameLink& Link, const simcore::MapGrid& Grid, int32 C, int32 R);
+
+	/** The map drawn now (null before). */
+	const simcore::MapData* GetMapData() const { return Map.get(); }
+
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
@@ -110,9 +130,6 @@ private:
 	void BuildBoxes(const simcore::MapFrameLink& Link);
 	void BuildCountry(const FVector& FrameOriginLonLatAlt);
 	void BuildAssets(const FVector& FrameOriginLonLatAlt);
-	// The ground's height (above sea level) at a point of the country: the map's own where the map draws its ground, the
-	// country's else.
-	double CountryGround(double East, double North) const;
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
 	static FString FindDataDirectory();
 
@@ -130,6 +147,8 @@ private:
 
 	std::shared_ptr<const simcore::MapData> Map;
 	std::shared_ptr<const simcore::CountryMap> Country;
+	// The map's frame to the frame it is drawn in (set by Build): GroundAt's.
+	std::shared_ptr<const simcore::MapFrameLink> GroundLink;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CountryStrips;

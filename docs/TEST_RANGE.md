@@ -62,10 +62,21 @@ python tools/map_view.py out/kesmark_range_map.json --png                       
 
 `Content/Maps/KesmarkRange` (made by `tools/ue_build_kesmark_range.py` through the editor commandlet) holds no geometry:
 
-* `ASimMapActor` draws the map at play time in the running scenario's frame: the ground as a procedural mesh with
-  vertex-coloured fields and collision inside the map (the vehicle traces for the ground), the roads, railway and river
-  as ribbons, every box as instanced engine cubes and cylinders, one component and colour per kind. "Build Preview" in
-  the editor draws it at the map's own origin.
+* `ASimMapActor` draws the map at play time in the running scenario's frame.
+  * The ground: every drawn level (`MapData::DrawnLevels`) is a procedural mesh with vertex-coloured fields. The
+    levels are the map at 50 m, the far ground at 500 m, the country at 1 km and the land beyond at 4 km. Each mesh's
+    vertices are the sim's own ground points (one ground, roadmap R5; `docs/ARCHITECTURE.md`).
+  * Collision: inside the map, and on far tiles within 15 km.
+  * The roads, railway and river are ribbons. Every box is an instanced engine cube or cylinder, one component and
+    colour per kind.
+  * "Build Preview" in the editor draws it at the map's own origin.
+* Ground items stand on that ground through `USimWorldSubsystem::GroundAt`, from the map's own link, with no trace:
+  your vehicle, the battery, the works, the visitors, the movers and the neighbours' sites.
+* **Nothing under the map** (R5):
+  * `ground_check data 3600` plays the dynamic campaign testbed for an hour and every map mission for ten minutes. It
+    lists anything under the ground in simcore.
+  * `python tools/ue_ground_check.py` does the same in the game, with `-SimGroundCheck=<s>`, from the drawn actors.
+  * `sam3d.ground.check [s]` starts the check in a running game.
 * `ASimSkyWeatherActor`: the sun (a directional light at the sun's place), a physically based sky atmosphere whose haze
   is set from the day's visibility (Koschmieder: 3.912 / visibility, less Rayleigh), the engine's volumetric cloud on
   the main layer, and with `-SimCloudCells` the sim's own cloud cells as boxes, drifting.
@@ -86,4 +97,7 @@ and quits.
 * Buildings scatter on lots and a grid rather than real streets; no roofs, no detail, by design.
 * Ground colour is by patches of farmland tint, not a land-use map.
 * A scenario played in the level on its own flat ground gets a warning: its line of sight is not the drawn ground's.
+* On a Cesium level, ground items are put on the tiles by a ground-only trace from 3 km up; the tiles are not the
+  sim's ground (`docs/ARCHITECTURE.md`, known limitations). Woods and buildings are not part of the drawn ground that
+  aircraft are held over.
 * The obstacle grid is not yet used by line of sight or propagation (E9).

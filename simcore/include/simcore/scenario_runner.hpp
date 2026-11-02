@@ -630,11 +630,13 @@ public:
         if (battery_) {
             for (const Battery::Vehicle& v : battery_->Vehicles()) {
                 if (v.def.own || v.away) continue;  // away on a run: drawn as its mover on the roads (MoversInView)
-                x.battery.push_back({v.def.callsign, BatteryVehicleKindName(v.def.kind), v.position, v.heading_deg, v.deployed});
+                x.battery.push_back({v.def.callsign, BatteryVehicleKindName(v.def.kind), v.position, v.heading_deg, v.deployed,
+                                     GroundEnu(v.position.x, v.position.y)});
             }
         }
         for (std::size_t i = 0; i < def_.prepared.dummies.size(); ++i) {
-            x.battery.push_back({"dummy " + std::to_string(i + 1), "dummy", def_.prepared.dummies[i].position, 0.0, true});
+            const Vec3& at = def_.prepared.dummies[i].position;
+            x.battery.push_back({"dummy " + std::to_string(i + 1), "dummy", at, 0.0, true, GroundEnu(at.x, at.y)});
         }
         x.works = Works();
         return x;
@@ -660,6 +662,7 @@ public:
                 }
             }
             k.nets = def_.prepared.nets && here;
+            k.ground = GroundEnu(w.position.x, w.position.y);
             out.push_back(k);
         }
         return out;
@@ -1923,6 +1926,7 @@ private:
         std::vector<Vec3> route_waypoints;
         std::size_t route_next = 0;
         AircraftDamage damage;  // what the testbed's defences did to it (damage.hpp, roadmap R1)
+        Vec3 last_position;     // where the world had it before this step (a weapon's impact between the two)
     };
     static constexpr double kHeldLegM = 50000.0;  // a held target flies at a point this far along his heading
     // A target added once the session runs (the instructor's, a package's): its state beside the scenario's own.
@@ -1990,17 +1994,23 @@ private:
             a.max_turn_rate_rad_s = t.max_turn_rate_rad_s;
             a.rcs_m2 = t.rcs_m2;
             a.waypoints = t.waypoints;
+            a.bottom_m = t.BottomM();
             targets_[i].pilot = TargetPilot(t.behaviour, t.evade);
+            targets_[i].pilot.SetWeapon(t.weapon);
             targets_[i].pilot.OnSpawn(a);
             targets_[i].world_id = world_.AddAircraft(std::move(a));
             targets_[i].spawned = true;
             eng_targets_[i].world_id = targets_[i].world_id;
             Event(t.id, "appeared: " + t.name);
         }
-        for (TargetState& s : targets_) {
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            TargetState& s = targets_[i];
             if (!s.spawned || s.gone) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr) continue;
+            s.last_position = a->position;
+            // A weapon on to its aim, its last waypoint, strikes there: it passes it close, not half a kilometre short.
+            if (def_.targets[i].weapon && a->next_waypoint + 1 == a->waypoints.size()) a->waypoint_capture_radius_m = kWeaponAimCaptureM;
             if (s.held && !s.pilot.Evading()) {  // the instructor's heading (a jink he ordered steers itself)
                 a->waypoints = {a->position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
                 a->next_waypoint = 0;
@@ -2010,11 +2020,26 @@ private:
         world_.Step(dt);
         for (std::size_t i = 0; i < targets_.size(); ++i) {
             TargetState& s = targets_[i];
-            if (!s.spawned || s.gone) continue;
+            if (!s.spawned) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr) continue;
-            const std::string what = s.pilot.AfterStep(*a, world_.GetTerrain(), world_.Frame(), dt, time_);
-            if (!what.empty()) Event(def_.targets[i].id, what);
+            if (s.gone) {
+                // Past its last waypoint and flying on until it is taken out of the world (a wave's long gone): no more
+                // pilot's work, but still held over the ground (roadmap R5).
+                if (a->alive && !def_.targets[i].weapon) s.pilot.HoldOverGround(*a, world_.GetTerrain(), world_.Frame(), dt);
+            } else {
+                const std::string what = s.pilot.AfterStep(*a, world_.GetTerrain(), world_.Frame(), dt, time_);
+                if (!what.empty()) Event(def_.targets[i].id, what);
+            }
+            // The safety net under the pilot's floor (roadmap R5): an aircraft whose belly is under the ground has flown
+            // into it. The pilot's floor never lets one; a count above 0 is a bug.
+            if (a->alive && !def_.targets[i].weapon &&
+                world_.Frame().AltitudeOf(a->position) - a->bottom_m < world_.GetTerrain().HeightAt(a->position.x, a->position.y) - 0.01) {
+                ++terrain_strikes_;
+                Event(def_.targets[i].id, "flew into the ground");
+                FxDown(def_.targets[i].id, "ground", true, false);
+                a->alive = false;
+            }
         }
         for (const SimEvent& e : world_.DrainEvents()) {
             if (e.type == EventType::AircraftDestroyed) Event(TargetIdOf(e.aircraft_id), "destroyed");
@@ -2025,10 +2050,13 @@ private:
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr || !a->alive) {
                 s.gone = true;
-            } else if (def_.targets[i].weapon && (a->next_waypoint >= a->waypoints.size() ||
-                                                  world_.Frame().AltitudeOf(a->position) <= world_.GetTerrain().HeightAt(a->position.x, a->position.y) + 1.0)) {
+            } else if (def_.targets[i].weapon && (a->next_waypoint >= a->waypoints.size() || AboveGround(a->position) <= 1.0)) {
                 // A weapon ends where it strikes: it no longer flies (its actor goes as an inactive one does), and the
-                // presentation feed has its warhead (a cruise missile's: fx/events.hpp).
+                // presentation feed has its warhead (a cruise missile's: fx/events.hpp). Where it strikes is on the
+                // ground (roadmap R5): the crossing between where it was and where it is, or its aim (its last waypoint)
+                // when it got there flying over the ground (a low one, at its floor).
+                const bool at_aim = a->next_waypoint >= a->waypoints.size() && AboveGround(a->position) > 1.0 && !a->waypoints.empty();
+                a->position = at_aim ? GroundEnu(a->waypoints.back().x, a->waypoints.back().y) : ImpactPoint(s.last_position, a->position);
                 a->alive = false;
                 s.gone = true;
                 ++weapon_impacts_;
@@ -2063,6 +2091,24 @@ private:
     std::map<std::size_t, double> wave_gone_s_;      // when each went
     std::vector<airwar::WaveRelease> wave_loads_;    // loads released and still falling or flying to the ground
     int weapon_impacts_ = 0;
+    int terrain_strikes_ = 0;
+    static constexpr double kWeaponAimCaptureM = 25.0;  // a weapon passes its aim this close (a game value)
+
+    // How far a point is above the ground under it (the altitude less the terrain's height there).
+    double AboveGround(const Vec3& p) const { return world_.Frame().AltitudeOf(p) - world_.GetTerrain().HeightAt(p.x, p.y); }
+    // Where a weapon strikes, on the ground: where its path from `from` to `to` crossed the ground (eight halvings), or
+    // the ground under `to` if it never went under (it reached its aim, or is within a metre of the ground).
+    Vec3 ImpactPoint(const Vec3& from, const Vec3& to) const {
+        if (AboveGround(to) > 0.0 || !(AboveGround(from) > 0.0)) return GroundEnu(to.x, to.y);
+        Vec3 lo = from, hi = to;  // above, under
+        for (int k = 0; k < 8; ++k) {
+            const Vec3 mid = (lo + hi) * 0.5;
+            if (AboveGround(mid) > 0.0) lo = mid;
+            else hi = mid;
+        }
+        const Vec3 at = (lo + hi) * 0.5;
+        return GroundEnu(at.x, at.y);
+    }
 
     // A load let go: the feed's release (the game flies and bursts it), its landing kept for its time.
     void ReleaseWaveLoad(airwar::WaveRelease r) {
@@ -11019,6 +11065,8 @@ public:
     // ---- The dynamic campaign testbed's waves (scenario "waves", air_war/test_waves.hpp).
     const airwar::TestWaves* Waves() const { return waves_.get(); }
     int WeaponImpacts() const { return weapon_impacts_; }
+    // Aircraft that flew into the ground (roadmap R5's safety net under the pilot's floor: always 0 unless a bug).
+    int TerrainStrikes() const { return terrain_strikes_; }
     // The testbed's air defence (FireNeighbourDefences, the neighbours that do not fight in the battery fire model): its missiles launched and the aircraft it brought down.
     int DefenceLaunches() const { return nb_launches_; }
     int DefenceKills() const { return nb_kills_; }
@@ -11799,11 +11847,10 @@ public:
     const std::vector<ScenarioNeighbour>& Neighbours() const { return def_.neighbours; }
     double GroundHeightAt(double east_m, double north_m) const { return world_.GetTerrain().HeightAt(east_m, north_m); }
     // The point on the ground under (east, north), in ENU: the terrain's height is an altitude, and ENU up is not altitude
-    // far from the origin (the Earth curves away: 70 m at 30 km).
+    // far from the origin (the Earth curves away: 70 m at 30 km). Its x and y are (east, north) exactly; its z is the
+    // frame's up to the ground there (roadmap R5: the vertical the game's ground is drawn on, geo.hpp GroundPointInFrame).
     Vec3 GroundEnu(double east_m, double north_m) const {
-        GeoPoint g = world_.Frame().EnuToGeodetic(Vec3{east_m, north_m, 0.0});
-        g.alt_m = GroundHeightAt(east_m, north_m);
-        return world_.Frame().GeodeticToEnu(g);
+        return GroundPointInFrame(world_.Frame(), east_m, north_m, GroundHeightAt(east_m, north_m));
     }
     // A neighbour that fights in the battery fire model here (an Osa battery with "fights", and the Osa's tuning to fight
     // by); the mission bridge leaves its chances to the runner.

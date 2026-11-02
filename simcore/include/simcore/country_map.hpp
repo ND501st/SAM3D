@@ -240,8 +240,9 @@ public:
     // The ground as the terrain shapes it (the same function a district map uses).
     double Natural(double e, double n) const { return NaturalGround(def_.ground, e, n); }
 
-    // The ground's height above sea level: the baked grid, the analytic ground beyond it.
-    double GroundHeight(double e, double n) const { return grid_.Covers(e, n) ? grid_.Sample(e, n) : Natural(e, n); }
+    // The ground's height above sea level: the baked grid (on the triangles each cell is drawn as: MapGrid::SampleTri),
+    // the analytic ground beyond it.
+    double GroundHeight(double e, double n) const { return grid_.Covers(e, n) ? grid_.SampleTri(e, n) : Natural(e, n); }
 
     bool Inside(double e, double n) const { return def_.outline.size() >= 3 && mapgeo::InPolygon(def_.outline, e, n); }
 

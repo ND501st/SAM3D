@@ -30,6 +30,7 @@
 #include "simcore/crew_audio.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
+#include "simcore/ground_check.hpp"
 #include "simcore/command_post.hpp"
 #include "simcore/radio_sets.hpp"
 #include "simcore/cabin.hpp"

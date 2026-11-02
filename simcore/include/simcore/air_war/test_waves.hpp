@@ -249,21 +249,17 @@ private:
     static Vec3 Toward(double bearing_rad) { return Vec3{std::sin(bearing_rad), std::cos(bearing_rad), 0.0}; }
     static double BearingOf(const Vec3& d) { return std::atan2(d.x, d.y); }
 
-    // A point `up_m` above the ground at (east, north).
+    // A point `up_m` above the ground at (east, north) (straight up the frame's z, as the runner's GroundEnu: roadmap R5).
     static Vec3 OnGround(const WaveScene& s, double e, double n, double up_m) {
         const double ground = s.terrain != nullptr ? s.terrain->HeightAt(e, n) : 0.0;
         if (s.frame == nullptr) return Vec3{e, n, ground + up_m};
-        GeoPoint g = s.frame->EnuToGeodetic(Vec3{e, n, 0.0});
-        g.alt_m = ground + up_m;
-        return s.frame->GeodeticToEnu(g);
+        return GroundPointInFrame(*s.frame, e, n, ground + up_m);
     }
     // A point at a height above sea level: the centre's ground plus `above_m`.
     static Vec3 AtHeight(const WaveScene& s, double e, double n, double above_m) {
         const double base = s.terrain != nullptr ? s.terrain->HeightAt(s.centre.x, s.centre.y) : 0.0;
         if (s.frame == nullptr) return Vec3{e, n, base + above_m};
-        GeoPoint g = s.frame->EnuToGeodetic(Vec3{e, n, 0.0});
-        g.alt_m = std::max(base + above_m, (s.terrain != nullptr ? s.terrain->HeightAt(e, n) : 0.0) + 150.0);
-        return s.frame->GeodeticToEnu(g);
+        return GroundPointInFrame(*s.frame, e, n, std::max(base + above_m, (s.terrain != nullptr ? s.terrain->HeightAt(e, n) : 0.0) + 150.0));
     }
 
     // The direction from the centre to one of the faction's front entries (through the geodetic: the theatre's frame
@@ -339,6 +335,7 @@ private:
         t.appear_at_s = at_s;
         t.formation = formation;
         t.size_m = helicopter ? 14.0 : 10.0;
+        t.bottom_m = helicopter ? 2.5 : 1.5;  // its belly under its centre (roadmap R5; a weapon's is set with its load)
         return t;
     }
 
@@ -435,7 +432,10 @@ private:
                     break;
                 }
                 case FlightRole::Recce: {
-                    low = Uniform(0.0, 1.0) < 0.5;
+                    // A helicopter on reconnaissance flies low (roadmap R5); the coin is tossed for every type, so the
+                    // waves' draws stay as they were.
+                    const bool coin = Uniform(0.0, 1.0) < 0.5;
+                    low = a.helicopter || coin;
                     const double h = low ? low_h : mid_h;
                     const Vec3 over = s.centre + Toward(Uniform(0.0, 2.0 * kPi)) * Uniform(0.0, 3000.0);
                     const Vec3 out = s.centre + Toward(bearing + kPi + DegToRad(Uniform(-40.0, 40.0))) * 40000.0;
@@ -487,14 +487,20 @@ private:
             if (legs.size() < 2) continue;
             Route(t, s, legs, low, a.helicopter ? 8.0 : 120.0);
             if (t.weapon) {
-                // On to the aim point and into the ground there.
+                // On to the aim point and into the ground there. A low one flies at the ground's height (agl 0: the
+                // pilot's floor) onto the aim and ends there, its last waypoint (roadmap R5: it no longer flies on 3 km
+                // past at 2 m, over the ground it never meets); a high one dives on through the aim, 2 km under the
+                // ground 3 km beyond, and ends where it strikes.
                 const Vec3 impact = OnGround(s, aim.x, aim.y, 0.0);
                 t.waypoints.back() = low ? Vec3{impact.x, impact.y, t.start.z} : impact;
-                const Vec3 dir = Vec3{aim.x - legs[legs.size() - 2].at.x, aim.y - legs[legs.size() - 2].at.y, 0.0}.Normalized();
-                const Vec3 beyond = impact + dir * 3000.0 - Vec3{0.0, 0.0, low ? 0.0 : 2000.0};
-                t.waypoints.push_back(low ? Vec3{beyond.x, beyond.y, t.start.z} : beyond);
-                t.behaviour.waypoint_agl_m.push_back(low ? 0.0 : -1.0);
+                if (!low) {
+                    const Vec3 dir = Vec3{aim.x - legs[legs.size() - 2].at.x, aim.y - legs[legs.size() - 2].at.y, 0.0}.Normalized();
+                    t.waypoints.push_back(impact + dir * 3000.0 - Vec3{0.0, 0.0, 2000.0});
+                    t.behaviour.waypoint_agl_m.push_back(-1.0);
+                }
             }
+            // How far its belly is below its centre (the pilot's ground floor, roadmap R5): game values.
+            t.bottom_m = t.weapon ? 0.3 : (a.helicopter ? 2.5 : 1.5);
             Spread(t, k, n, a.helicopter ? 120.0 : (t.weapon ? 400.0 : 250.0));
             if (!a.drone && !a.missile) {
                 t.evade.present = true;

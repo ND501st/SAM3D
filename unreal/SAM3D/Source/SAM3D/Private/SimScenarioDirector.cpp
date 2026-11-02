@@ -432,12 +432,20 @@ void ASimScenarioDirector::SpawnNeighbourSites(USimWorldSubsystem* Sim)
 		USceneComponent* Root = NewObject<USceneComponent>(Site, TEXT("Root"));
 		Site->SetRootComponent(Root);
 		Root->RegisterComponent();
+		Site->Tags.Add(USimWorldSubsystem::GroundTag);  // a site is set on the ground, never the ground (roadmap R5)
 		const FVector At = Sim->ToUnreal(Enu);  // through the level's georeference where it has one (Cesium's X is east)
 		Site->SetActorLocationAndRotation(At, FRotator(0.0, Sim->HeadingToYawDeg(At, HeadingDeg), 0.0));
 		FSimBasicModels::Build(UTF8_TO_TCHAR(Model.c_str()), Root);
 		NeighbourSites.Add(Site);
 		NeighbourSiteAt.Add(At);
-		NeighbourSiteGrounded.Add(false);
+		// On a map's level its drawn ground at once (one ground, roadmap R5: the sim's GroundEnu is on it already).
+		FVector Ground;
+		const bool bOnMap = Sim->GetGroundMap() != nullptr && Sim->GroundAt(At, Ground, nullptr, Site);
+		if (bOnMap)
+		{
+			Site->SetActorLocation(Ground);
+		}
+		NeighbourSiteGrounded.Add(bOnMap);
 		++Vehicles;
 		return At;
 	};
@@ -507,16 +515,16 @@ void ASimScenarioDirector::GroundNeighbourSites(bool bFirstMinuteOver)
 			Grounded += Site != nullptr ? 1 : 0;
 			continue;
 		}
-		// A kilometre either way of the sim's ground: the real ground under a flat scenario, a map's under its own. A trace
-		// straight down a Cesium tile's seam can slip through, so a metre to each side too.
-		FCollisionQueryParams Params(SCENE_QUERY_STAT(SimNeighbourGround), false, Site);
+		// The level's ground (USimWorldSubsystem::GroundAt: a map's drawn ground, else a ground-only trace 3 km either way).
+		// A trace straight down a Cesium tile's seam can slip through, so a metre to each side too.
+		const USimWorldSubsystem* Sim = MyWorld->GetSubsystem<USimWorldSubsystem>();
 		const FVector At = NeighbourSiteAt[i];
 		for (const FVector& Side : {FVector::ZeroVector, FVector(100.0, 0.0, 0.0), FVector(-100.0, 0.0, 0.0), FVector(0.0, 100.0, 0.0), FVector(0.0, -100.0, 0.0)})
 		{
-			FHitResult Hit;
-			if (MyWorld->LineTraceSingleByChannel(Hit, At + Side + FVector(0.0, 0.0, 100000.0), At + Side - FVector(0.0, 0.0, 100000.0), ECC_Visibility, Params))
+			FVector Ground;
+			if (Sim != nullptr && Sim->GroundAt(At + Side, Ground, nullptr, Site))
 			{
-				Site->SetActorLocation(FVector(At.X, At.Y, Hit.ImpactPoint.Z));
+				Site->SetActorLocation(FVector(At.X, At.Y, Ground.Z));
 				NeighbourSiteGrounded[i] = true;
 				++Grounded;
 				break;

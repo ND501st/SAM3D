@@ -77,9 +77,10 @@ protected:
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
 private:
-	/** Where a ground vehicle is drawn: on the level's ground below its sim position (a trace every 0.5 s, or when it has
-	 *  moved more than a metre). */
-	FVector GroundBelow(const FVector& At);
+	/** Where a ground vehicle is drawn: on the level's ground at its sim position (roadmap R5). On a map's level the map's
+	 *  drawn ground (USimWorldSubsystem::GroundAt, every frame, no trace); on a Cesium level a ground-only trace every
+	 *  0.5 s, or when it has moved more than a metre. */
+	FVector GroundBelow(const FVector& At, const USimWorldSubsystem& Sim);
 	/** A destroyed aircraft: its wreck's pose while it falls (shown, darkened), hidden once it is down or with no wreck. */
 	void FollowWreck(const USimWorldSubsystem& Sim);
 	/** Every part in one dark colour, once (a burnt wreck). */

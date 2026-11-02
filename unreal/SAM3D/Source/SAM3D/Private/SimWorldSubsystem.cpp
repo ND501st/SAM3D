@@ -27,6 +27,10 @@ DECLARE_CYCLE_STAT(TEXT("Entity snapshot"), STAT_SimFxEntitySnapshot, STATGROUP_
 #include "SAM3D.h"
 #include "SimCrewSeatComponent.h"
 #include "SimKnowledgeComponent.h"
+#include "EngineUtils.h"
+#include "GameFramework/Pawn.h"
+#include "SimEntityActor.h"
+#include "SimMapActor.h"
 #include "Subsystems/EngineSubsystem.h"
 
 namespace
@@ -222,6 +226,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		{
 			Self->PumpKnowledge();
 			Self->PumpConsole();
+			Self->TickGroundCheck();
 		}
 	} PumpAfterStep{this};
 	// The frame's one entity snapshot, after the steps (docs/fx/README.md 4.3): built right after them, so this tick's own
@@ -1824,7 +1829,7 @@ TArray<FSimPositionWorkState> USimWorldSubsystem::GetPositionWorks() const
 	for (const simcore::em::ViewWork& K : X->works)
 	{
 		FSimPositionWorkState W;
-		W.Location = ToUnreal(K.position);
+		W.Location = ToUnreal(K.ground);  // its ground point (roadmap R5)
 		W.YawDeg = HeadingToYawDeg(W.Location, K.heading_deg);
 		W.bEmplacement = K.emplacement;
 		W.bNets = K.nets;
@@ -2028,9 +2033,170 @@ FVector USimWorldSubsystem::GetRenderLocation(const FSimEntityState& State) cons
 	{
 		return State.Location;
 	}
-	// At most 0.15 s ahead: three scenario steps, so a hitch or a clock jump can't throw it far off its path.
-	const double Ahead = FMath::Clamp(GetRenderTimeSeconds() - State.SimTimeSeconds, 0.0, 0.15);
+	// At most 0.15 s ahead: three scenario steps, so a hitch or a clock jump can't throw it far off its path; and never
+	// into the ground (roadmap R5): a diving aircraft or a weapon stops at it until the next step.
+	double Ahead = FMath::Clamp(GetRenderTimeSeconds() - State.SimTimeSeconds, 0.0, 0.15);
+	if (State.GroundClearSeconds >= 0.0)
+	{
+		Ahead = FMath::Min(Ahead, State.GroundClearSeconds);
+	}
 	return State.Location + State.Velocity * Ahead;
+}
+
+// ---------------------------------------------------------------------------------------------- the ground (roadmap R5)
+
+const FName USimWorldSubsystem::GroundTag(TEXT("SimNotGround"));
+
+void USimWorldSubsystem::SetGroundMap(ASimMapActor* Map)
+{
+	GroundMap = Map;
+}
+
+ASimMapActor* USimWorldSubsystem::GetGroundMap() const
+{
+	return GroundMap.Get();
+}
+
+bool USimWorldSubsystem::GroundAt(const FVector& Where, FVector& OutGround, FVector* OutNormal, const AActor* Ignore) const
+{
+	// One ground: on a map's level the drawn triangles themselves, as the sim samples them, with no trace.
+	if (const ASimMapActor* Map = GroundMap.Get())
+	{
+		if (Map->GroundAt(Where, OutGround, OutNormal))
+		{
+			return true;
+		}
+	}
+	return TraceGroundAt(Where, OutGround, OutNormal, Ignore);
+}
+
+bool USimWorldSubsystem::TraceGroundAt(const FVector& Where, FVector& OutGround, FVector* OutNormal, const AActor* Ignore) const
+{
+	// A level without a map actor (Cesium's tiles, docs/ARCHITECTURE.md "Known limitations"): the first static surface
+	// from 3 km over to 3 km under, only the ground's kind (WorldStatic), never a vehicle, a pawn or a site set on it.
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+	const FVector Reach(0.0, 0.0, 300000.0);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimGround), false, Ignore);
+	TArray<FHitResult> Hits;
+	World->LineTraceMultiByObjectType(Hits, Where + Reach, Where - Reach, FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+	for (const FHitResult& Hit : Hits)
+	{
+		const AActor* Actor = Hit.GetActor();
+		if (Actor != nullptr && (Actor->IsA<ASimEntityActor>() || Actor->IsA<APawn>() || Actor->ActorHasTag(GroundTag)))
+		{
+			continue;
+		}
+		OutGround = Hit.ImpactPoint;
+		if (OutNormal != nullptr)
+		{
+			*OutNormal = Hit.ImpactNormal;
+		}
+		return true;
+	}
+	return false;
+}
+
+void USimWorldSubsystem::StartGroundCheck(double Seconds, bool bExitAfter)
+{
+	GroundCheckUntil = GetSimTimeSeconds() + FMath::Max(1.0, Seconds);
+	GroundCheckNext = 0.0;
+	GroundChecks = 0;
+	GroundListings = 0;
+	GroundListed.Reset();
+	bGroundCheckExit = bExitAfter;
+	UE_LOG(LogSAM3D, Log, TEXT("Ground check: started for %.0f s of sim time"), Seconds);
+}
+
+void USimWorldSubsystem::TickGroundCheck()
+{
+	if (!bGroundCheckArgRead)
+	{
+		bGroundCheckArgRead = true;
+		float Seconds = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimGroundCheck="), Seconds) && Seconds > 0.0f)
+		{
+			StartGroundCheck(Seconds, true);
+		}
+	}
+	if (GroundCheckUntil < 0.0)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	const double Now = GetSimTimeSeconds();
+	const bool bOver = Now >= GroundCheckUntil || (Runner != nullptr && (Link ? Link->Finished() : Runner->Finished()));
+	if (World != nullptr && Now >= GroundCheckNext && Runner != nullptr)
+	{
+		GroundCheckNext = Now + 1.0;
+		++GroundChecks;
+		for (TActorIterator<ASimEntityActor> It(World); It; ++It)
+		{
+			const ASimEntityActor* Actor = *It;
+			const FSimEntityState* State = Actor->IsHidden() ? nullptr : FindEntityStateCached(Actor->EntityId);
+			if (State == nullptr || !State->bAlive)
+			{
+				continue;
+			}
+			const FVector At = Actor->GetActorLocation();
+			FVector Ground;
+			if (!GroundAt(At, Ground, nullptr, Actor))
+			{
+				continue;
+			}
+			double Bottom = At.Z;
+			if (!State->bIsGround && !State->bIsMissile && !State->bIsWeapon)
+			{
+				FVector Origin, Extent;
+				Actor->GetActorBounds(false, Origin, Extent);
+				Bottom = Origin.Z - Extent.Z;  // an aircraft by its model's lowest point
+			}
+			const double BelowM = (Ground.Z - Bottom) / 100.0;
+			const bool bBelow = BelowM > 0.25;
+			const bool bFloats = State->bIsGround && -BelowM > 1.0;
+			if (!bBelow && !bFloats)
+			{
+				continue;
+			}
+			++GroundListings;
+			const FString Name = State->Name.IsEmpty() ? Actor->GetName() : State->Name;
+			bool bSeen = false;
+			GroundListed.Add(Name, &bSeen);
+			if (!bSeen)
+			{
+				const simcore::Vec3 Enu = ToEnu(At);
+				UE_LOG(LogSAM3D, Warning, TEXT("%s: %s by %.2f m at %.0f, %.0f (t %.1f s)"), bBelow ? TEXT("Below ground") : TEXT("Floats"),
+					*Name, FMath::Abs(BelowM), Enu.x, Enu.y, Now);
+			}
+		}
+	}
+	if (bOver)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Ground check: %s, %d checks over %.0f s, %d listings of %d things"),
+			GroundListings == 0 ? TEXT("PASS") : TEXT("FAIL"), GroundChecks, Now, GroundListings, GroundListed.Num());
+		GroundCheckUntil = -1.0;
+		if (bGroundCheckExit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+}
+
+namespace
+{
+FAutoConsoleCommandWithWorldAndArgs GSimGroundCheckCommand(TEXT("sam3d.ground.check"),
+	TEXT("sam3d.ground.check [seconds=60]: every shown entity against the drawn ground once a second, logging what is under it (roadmap R5)."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		USimWorldSubsystem* Sim = World != nullptr ? World->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		if (Sim != nullptr)
+		{
+			Sim->StartGroundCheck(Args.Num() > 0 ? FCString::Atod(*Args[0]) : 60.0, false);
+		}
+	}));
 }
 
 void USimWorldSubsystem::ResetEntityCache()
@@ -2231,6 +2397,21 @@ void USimWorldSubsystem::RebuildEntityCache() const
 	EntityCachePrev.Reset();
 }
 
+namespace
+{
+// How long something at P moving at V may be carried on before its lowest point (`BottomM` under P) meets the world's
+// ground (roadmap R5): negative when it is not coming down.
+double GroundClearOf(const simcore::World& W, const simcore::Vec3& P, const simcore::Vec3& V, double BottomM)
+{
+	if (V.z >= 0.0)
+	{
+		return -1.0;
+	}
+	const double Gap = W.Frame().AltitudeOf(P) - BottomM - W.GetTerrain().HeightAt(P.x, P.y);
+	return FMath::Max(0.0, Gap) / -V.z;
+}
+}
+
 void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<FSimEntityState>& Out) const
 {
 	const simcore::World* W = &InWorld;
@@ -2242,6 +2423,7 @@ void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<F
 		S.Model = Look.Model;
 		S.bFriendly = Look.bFriendly;
 		S.bIsWeapon = Look.bIsWeapon;
+		S.GroundClearSeconds = GroundClearOf(*W, A.position, A.velocity, Look.bIsWeapon ? 0.0 : A.bottom_m);
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
@@ -2261,7 +2443,8 @@ void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<F
 			for (int32 I = 0; I < static_cast<int32>(X->battery.size()); ++I)
 			{
 				const simcore::em::ViewVehicle& V = X->battery[static_cast<size_t>(I)];
-				FSimEntityState S = MakeState(GroundIdBase + I, UTF8_TO_TCHAR(V.id.c_str()), false, true, V.position, simcore::Vec3{});
+				// On its ground point (roadmap R5): the row's position is where its antennas are.
+				FSimEntityState S = MakeState(GroundIdBase + I, UTF8_TO_TCHAR(V.id.c_str()), false, true, V.ground, simcore::Vec3{});
 				S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 				S.bIsGround = true;
 				S.bFriendly = true;
@@ -2302,6 +2485,7 @@ void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<F
 		{
 			FSimEntityState& S = Out.Add_GetRef(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
 			S.Model = ArmModelOf(A.name);
+			S.GroundClearSeconds = GroundClearOf(*W, A.position, A.velocity, 0.0);
 		}
 		// Someone coming over the ground with a message from the chain of command: a runner, a despatch rider, the
 		// courier's car (roadmap P1). Listed while he is in the world; gone, his actor hides.

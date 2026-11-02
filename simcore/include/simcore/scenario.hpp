@@ -112,6 +112,15 @@ struct ScenarioTarget {
     // A weapon in flight to the ground ("weapon": true): a bomb, an air-to-ground missile, a cruise missile. It ends at
     // its impact (the ground, or the end of its route), not by flying on (the testbed's waves, air_war/test_waves.hpp).
     bool weapon = false;
+    // How far its lowest point is below its centre ("bottom_m"; < 0: by its kind, BottomM): the pilot keeps that much
+    // more than a metre over the ground (target_behaviour.hpp, roadmap R5).
+    double bottom_m = -1.0;
+    // Game values: a helicopter's skids or wheels 2.5 m under its centre, an aircraft's belly 1.5 m, a weapon's 0.3 m.
+    double BottomM() const {
+        if (bottom_m >= 0.0) return bottom_m;
+        if (weapon) return 0.3;
+        return type.find("Rotorcraft") != std::string::npos ? 2.5 : 1.5;
+    }
 };
 
 // How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
@@ -1261,7 +1270,7 @@ private:
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
                              "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
-                             "notes"})) {
+                             "bottom_m", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1284,7 +1293,7 @@ private:
             if (tg.formation < 1) return Fail(Join(p, "formation"), "must be >= 1");
             if (!OptionalNumber(t, p, "size_m", tg.size_m) || !OptionalString(t, p, "rwr", tg.rwr) ||
                 !OptionalBool(t, p, "decoy", tg.decoy) || !OptionalString(t, p, "model", tg.model) ||
-                !OptionalBool(t, p, "weapon", tg.weapon)) {
+                !OptionalBool(t, p, "weapon", tg.weapon) || !OptionalNumber(t, p, "bottom_m", tg.bottom_m)) {
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");

@@ -16,11 +16,19 @@
 // roads) and scattered woods, so aircraft coming in from the borders fly over land, not off an edge. A district of a
 // country names the country's file as its "far_ground": beyond the map proper the ground is then the country's (its
 // ranges, gorges, lakes and rivers), so what stands there, what the sim sees and what the game draws are one ground.
+//
+// One ground (roadmap R5). The ground is a few lattices, finest first (MapData::DrawnLevels: the map proper, the far
+// ground, the country's 1 km grid, the 4 km land beyond it), and each is sampled on the triangles the game draws (each
+// cell split along its (c+1, r)-(c, r+1) diagonal: MapGrid::SampleTri, Unreal's SimMapActor), so a height the sim
+// takes is a height on the drawn mesh. The game places every vertex by MapFrameLink::GroundPoint (the point of the
+// scenario's frame straight under the map's east and north, at the height), the vertical the sim uses (geo.hpp
+// GroundPointInFrame). DrawnGroundAgrees checks the two.
 #pragma once
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -166,6 +174,9 @@ struct MapDef {
     // own terrain carries on out to far_m.
     std::string far_ground_file;
     std::shared_ptr<const MapDef> far_ground;
+    // The country's grid spacing (its "grid_km"), as the country is drawn beyond the far ground (with far_ground: its
+    // own extent is far_ground's west_m .. north_m).
+    double far_grid_m = 1000.0;
 
     bool InCore(double e, double n) const { return e >= west_m && e <= east_m && n >= south_m && n <= north_m; }
 };
@@ -274,7 +285,8 @@ struct MapLayout {
     }
 };
 
-// A square grid of heights (row 0 southmost, column 0 westmost), bilinear between samples.
+// A square grid of heights (row 0 southmost, column 0 westmost): bilinear between samples (Sample), or on the two
+// triangles each cell is drawn as (SampleTri: the ground).
 struct MapGrid {
     double west_m = 0.0;
     double south_m = 0.0;
@@ -295,6 +307,27 @@ struct MapGrid {
         const int x0 = std::min(static_cast<int>(fx), cols - 2), y0 = std::min(static_cast<int>(fy), rows - 2);
         const double tx = fx - x0, ty = fy - y0;
         return (At(x0, y0) * (1 - tx) + At(x0 + 1, y0) * tx) * (1 - ty) + (At(x0, y0 + 1) * (1 - tx) + At(x0 + 1, y0 + 1) * tx) * ty;
+    }
+    // The cell (c, r) holding (east, north) (clamped onto the grid; its corners c..c+1, r..r+1).
+    void CellOf(double e, double n, int& c, int& r) const {
+        const double fx = Clamp((e - west_m) / spacing_m, 0.0, static_cast<double>(cols - 1));
+        const double fy = Clamp((n - south_m) / spacing_m, 0.0, static_cast<double>(rows - 1));
+        c = std::min(static_cast<int>(fx), cols - 2);
+        r = std::min(static_cast<int>(fy), rows - 2);
+    }
+    // The height on the triangle of its cell, as the game draws it. The contract with Unreal's SimMapActor: a cell's
+    // corners A (c, r), B (c+1, r), C (c, r+1), D (c+1, r+1) make the triangles {A, B, C} and {B, D, C}, split along the
+    // diagonal B-C (from (c+1, r) to (c, r+1)).
+    double SampleTri(double e, double n) const {
+        int x0 = 0, y0 = 0;
+        CellOf(e, n, x0, y0);
+        const double tx = Clamp((e - west_m) / spacing_m - x0, 0.0, 1.0), ty = Clamp((n - south_m) / spacing_m - y0, 0.0, 1.0);
+        if (tx + ty <= 1.0) {
+            const double h00 = At(x0, y0);
+            return h00 + (At(x0 + 1, y0) - h00) * tx + (At(x0, y0 + 1) - h00) * ty;
+        }
+        const double h11 = At(x0 + 1, y0 + 1);
+        return h11 + (At(x0, y0 + 1) - h11) * (1.0 - tx) + (At(x0 + 1, y0) - h11) * (1.0 - ty);
     }
     double EastOf(int c) const { return west_m + spacing_m * c; }
     double NorthOf(int r) const { return south_m + spacing_m * r; }
@@ -504,14 +537,49 @@ public:
     const MapLayout& Layout() const { return layout_; }
     const MapGrid& CoreGrid() const { return core_; }
     const MapGrid& FarGrid() const { return far_; }
+    // With a country's far ground (far_ground): its ground at its own grid spacing over its extent, and the land beyond
+    // its borders at 4 km, 100 km out (the lattices the game draws there; empty without far_ground).
+    const MapGrid& CountryGrid() const { return country_; }
+    const MapGrid& BeyondGrid() const { return beyond_; }
     const MapGrid& ObstacleGrid() const { return obstacles_; }
 
-    // The ground's height above sea level at (east, north) of the map frame: the baked grids, the analytic ground
-    // beyond them.
+    // The ground's lattices as they are drawn, finest first: the map proper, the far ground, the country's, the land
+    // beyond (those it has). A coarser level leaves out only the cells lying wholly inside a finer level (DrawsCell), so
+    // no point is left without ground; the ground at a point is the finest level covering it (LevelAt), on that cell's
+    // triangles. Where a coarser level's edge does not fall on a finer level's (the land beyond on the country's east),
+    // the two overlap by less than a coarse cell and the finer is the ground.
+    // A finer level of detail anywhere (roadmap R6) is a level added here, never in the game alone.
+    std::vector<const MapGrid*> DrawnLevels() const {
+        std::vector<const MapGrid*> out;
+        for (const MapGrid* g : {&core_, &far_, &country_, &beyond_}) {
+            if (g->cols > 1 && g->rows > 1) out.push_back(g);
+        }
+        return out;
+    }
+    // Whether level `level` of DrawnLevels draws its cell (c, r) (corners c..c+1, r..r+1): not wholly inside a finer one.
+    bool DrawsCell(std::size_t level, int c, int r) const {
+        const std::vector<const MapGrid*> levels = DrawnLevels();
+        if (level >= levels.size()) return false;
+        const MapGrid& g = *levels[level];
+        const double w = g.EastOf(c), s = g.NorthOf(r), e = g.EastOf(c + 1), n = g.NorthOf(r + 1);
+        for (std::size_t j = 0; j < level; ++j) {
+            const MapGrid& f = *levels[j];
+            if (f.Covers(w, s) && f.Covers(e, s) && f.Covers(w, n) && f.Covers(e, n)) return false;
+        }
+        return true;
+    }
+    // The level of DrawnLevels the ground at (east, north) is drawn by (-1: none, beyond every lattice: Analytic).
+    int LevelAt(double e, double n) const {
+        int index = -1;
+        LevelGridAt(e, n, &index);
+        return index;
+    }
+
+    // The ground's height above sea level at (east, north) of the map frame: on the triangles of the lattice drawn
+    // there (LevelAt), the analytic ground beyond every lattice.
     double GroundHeight(double e, double n) const {
-        if (core_.Covers(e, n)) return core_.Sample(e, n);
-        if (far_.Covers(e, n)) return far_.Sample(e, n);
-        return Analytic(e, n);
+        const MapGrid* g = LevelGridAt(e, n, nullptr);
+        return g != nullptr ? g->SampleTri(e, n) : Analytic(e, n);
     }
 
     // How high woods and buildings stand above the ground (inside the map; 0 beyond it). For E9's obstacle heights.
@@ -541,6 +609,22 @@ private:
     };
 
     explicit MapData(MapDef def) : def_(std::move(def)) {}
+
+    // The lattice drawing the ground at (east, north) and its place in DrawnLevels (null, -1: none).
+    const MapGrid* LevelGridAt(double e, double n, int* index) const {
+        const MapGrid* levels[4] = {&core_, &far_, &country_, &beyond_};
+        int drawn = 0;
+        for (const MapGrid* g : levels) {
+            if (g->cols < 2 || g->rows < 2) continue;
+            if (g->Covers(e, n)) {
+                if (index != nullptr) *index = drawn;
+                return g;
+            }
+            ++drawn;
+        }
+        if (index != nullptr) *index = -1;
+        return nullptr;
+    }
 
     // Relief, hills and the river valley: the ground before the sites are levelled.
     double Natural(double e, double n) const { return NaturalGround(def_, e, n); }
@@ -580,7 +664,36 @@ private:
         };
         fill(core_, def_.west_m, def_.south_m, def_.east_m, def_.north_m, def_.core_spacing_m);
         fill(far_, -def_.far_m, -def_.far_m, def_.far_m, def_.far_m, def_.far_spacing_m);
+        if (!def_.far_ground || def_.far_grid_m <= 0.0) return;
+        // The country's ground as it is drawn beyond the far ground (country_map.hpp's BakeGround: its natural ground at
+        // its grid's nodes over its extent), and the land beyond its borders at 4 km, 100 km out (the same frame: the
+        // far ground's origin is the map's). Nodes wholly under the far ground are never drawn or sampled: left 0.
+        const MapDef& cg = *def_.far_ground;
+        const auto lattice = [this, &cg](MapGrid& g, double west, double south, int cols, int rows, double spacing) {
+            g.spacing_m = spacing;
+            g.west_m = west;
+            g.south_m = south;
+            g.cols = cols;
+            g.rows = rows;
+            g.values.assign(static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows), 0.0);
+            const double inside = def_.far_m - 2.0 * spacing;  // under the far ground, two cells in from its edge
+            for (int r = 0; r < g.rows; ++r) {
+                for (int c = 0; c < g.cols; ++c) {
+                    const double e = g.EastOf(c), n = g.NorthOf(r);
+                    if (std::fabs(e) < inside && std::fabs(n) < inside) continue;
+                    g.At(c, r) = NaturalGround(cg, e, n);
+                }
+            }
+        };
+        const double sp = def_.far_grid_m;
+        lattice(country_, cg.west_m, cg.south_m, static_cast<int>(std::lround((cg.east_m - cg.west_m) / sp)) + 1,
+                static_cast<int>(std::lround((cg.north_m - cg.south_m) / sp)) + 1, sp);
+        const double w1 = country_.EastOf(country_.cols - 1), n1 = country_.NorthOf(country_.rows - 1);
+        lattice(beyond_, cg.west_m - kBeyondM, cg.south_m - kBeyondM, static_cast<int>((w1 - cg.west_m + 2.0 * kBeyondM) / kBeyondSpacingM) + 1,
+                static_cast<int>((n1 - cg.south_m + 2.0 * kBeyondM) / kBeyondSpacingM) + 1, kBeyondSpacingM);
     }
+    static constexpr double kBeyondM = 100000.0;        // the land drawn beyond the country's borders (a game value)
+    static constexpr double kBeyondSpacingM = 4000.0;
 
     // ------------------------------------------------------------------ laying the map out
 
@@ -1093,7 +1206,7 @@ private:
     }
 
     MapDef def_;
-    MapGrid core_, far_, obstacles_;
+    MapGrid core_, far_, country_, beyond_, obstacles_;
     std::vector<Flat> flats_;
     MapLayout layout_;
     mapgeo::SegmentIndex lines_{250.0};
@@ -1144,6 +1257,23 @@ public:
         up = Rotate({cl * co, cl * so, sl});
     }
 
+    // The scenario's (east, north) over the map's (east, north): the inverse of FrameToMap (exactly: FrameToMap of it
+    // is the map's point again).
+    void MapToFrameEN(double map_e, double map_n, double& east_m, double& north_m) const {
+        const double de = map_e - off_e_, dn = map_n - off_n_;
+        const double det = a_ * d_ - b_ * c_;
+        east_m = (d_ * de - b_ * dn) / det;
+        north_m = (a_ * dn - c_ * de) / det;
+    }
+    // The point of the ground, or anything standing on it, in the scenario's ENU: `alt_m` above sea level straight under
+    // the scenario's frame (its z) at the map's (east, north) (roadmap R5: the vertical the sim's GroundEnu uses, so what
+    // the game draws there is where the sim has the ground). Not MapToFrame, whose vertical is the map's local up.
+    Vec3 GroundPoint(double map_e, double map_n, double alt_m) const {
+        double x = 0.0, y = 0.0;
+        MapToFrameEN(map_e, map_n, x, y);
+        return GroundPointInFrame(frame_, x, y, alt_m);
+    }
+
     const LocalFrame& MapFrame() const { return map_; }
     const LocalFrame& Frame() const { return frame_; }
 
@@ -1169,6 +1299,85 @@ private:
     Vec3 frame_ecef_;
     double off_e_ = 0.0, off_n_ = 0.0, a_ = 1.0, b_ = 0.0, c_ = 0.0, d_ = 1.0;
 };
+
+// Roadmap R5's contract, checked: at `samples` random points of every drawn level (where it is the ground), the sim's
+// height (MapData::GroundHeight) is the height on the drawn triangle of the cell's corners to a millimetre, and the
+// sim's ground point there in the scenario's frame (GroundPointInFrame) lies on the triangle the game draws through
+// the corners' GroundPoints, within the chord's sag under the Earth's curve (a triangle is flat, the ground's frame z
+// bends: s^2 / 4R over a cell of side s, 1 cm at 500 m, 0.6 m on the 4 km land beyond). False, and why, at the first
+// point that does not.
+inline bool DrawnGroundAgrees(const MapData& map, const MapFrameLink& link, int samples, std::string* why = nullptr) {
+    const std::vector<const MapGrid*> levels = map.DrawnLevels();
+    std::uint64_t seed = 0x52355EEDULL;
+    const auto uniform = [&seed]() {
+        seed = noise::Mix64(seed);
+        return static_cast<double>(seed >> 11) * (1.0 / 9007199254740992.0);
+    };
+    char text[256];
+    for (std::size_t li = 0; li < levels.size(); ++li) {
+        const MapGrid& g = *levels[li];
+        const double sag_m = 1.1 * g.spacing_m * g.spacing_m / (4.0 * wgs84::kMeanRadius) + 2e-3;
+        const double width = g.spacing_m * (g.cols - 1), height = g.spacing_m * (g.rows - 1);
+        int done = 0;
+        for (int tried = 0; done < samples && tried < 100 * samples; ++tried) {
+            const double e = g.west_m + uniform() * width, n = g.south_m + uniform() * height;
+            if (map.LevelAt(e, n) != static_cast<int>(li)) continue;
+            int c = 0, r = 0;
+            g.CellOf(e, n, c, r);
+            if (!map.DrawsCell(li, c, r)) {
+                std::snprintf(text, sizeof(text), "level %zu: the ground at (%.0f, %.0f) is a cell it does not draw", li, e, n);
+                if (why != nullptr) *why = text;
+                return false;
+            }
+            const double tx = (e - g.EastOf(c)) / g.spacing_m, ty = (n - g.NorthOf(r)) / g.spacing_m;
+            // The triangle's corners (map east, north) and weights at the point.
+            int cc[3], rr[3];
+            double wt[3];
+            if (tx + ty <= 1.0) {
+                cc[0] = c; rr[0] = r; cc[1] = c + 1; rr[1] = r; cc[2] = c; rr[2] = r + 1;
+                wt[0] = 1.0 - tx - ty; wt[1] = tx; wt[2] = ty;
+            } else {
+                cc[0] = c + 1; rr[0] = r + 1; cc[1] = c; rr[1] = r + 1; cc[2] = c + 1; rr[2] = r;
+                wt[0] = tx + ty - 1.0; wt[1] = 1.0 - tx; wt[2] = 1.0 - ty;
+            }
+            double h_tri = 0.0;
+            Vec3 corner[3];
+            for (int k = 0; k < 3; ++k) {
+                const double hk = g.At(cc[k], rr[k]);
+                h_tri += wt[k] * hk;
+                corner[k] = link.GroundPoint(g.EastOf(cc[k]), g.NorthOf(rr[k]), hk);
+            }
+            const double h = map.GroundHeight(e, n);
+            if (std::fabs(h - h_tri) > 1e-3) {
+                std::snprintf(text, sizeof(text), "level %zu at (%.0f, %.0f): the sim's ground %.3f m, the drawn triangle's %.3f m", li, e, n, h, h_tri);
+                if (why != nullptr) *why = text;
+                return false;
+            }
+            // The drawn triangle in the scenario's frame, at the point's (x, y): weights from the corners' x, y.
+            double x = 0.0, y = 0.0;
+            link.MapToFrameEN(e, n, x, y);
+            const Vec3 a = corner[0], b = corner[1], d = corner[2];
+            const double det = (b.x - a.x) * (d.y - a.y) - (d.x - a.x) * (b.y - a.y);
+            const double u = ((x - a.x) * (d.y - a.y) - (d.x - a.x) * (y - a.y)) / det;
+            const double v = ((b.x - a.x) * (y - a.y) - (x - a.x) * (b.y - a.y)) / det;
+            const double z_drawn = a.z + u * (b.z - a.z) + v * (d.z - a.z);
+            const double z_sim = GroundPointInFrame(link.Frame(), x, y, h).z;
+            if (std::fabs(z_drawn - z_sim) > sag_m) {
+                std::snprintf(text, sizeof(text), "level %zu at (%.0f, %.0f): the sim's ground point is %.3f m off the drawn triangle (allowed %.3f)", li,
+                              e, n, z_sim - z_drawn, sag_m);
+                if (why != nullptr) *why = text;
+                return false;
+            }
+            ++done;
+        }
+        if (done < samples) {
+            std::snprintf(text, sizeof(text), "level %zu: only %d of %d points where it is the ground", li, done, samples);
+            if (why != nullptr) *why = text;
+            return false;
+        }
+    }
+    return true;
+}
 
 // The map's ground as a scenario's terrain: heights above sea level under the scenario's (east, north).
 class MapTerrain final : public Terrain {
@@ -1638,6 +1847,26 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
             if (error) *error = "map: far_ground " + def.far_ground_file + ": its origin must be the map's";
             return nullptr;
         }
+        // Its extent and grid, as the country is drawn beyond the far ground (country_map.hpp reads them the same way).
+        // Without an extent no country is drawn around the map: no lattices beyond the far ground (far_grid_m 0).
+        bool extent = false;
+        if (const json::Value* ext = root.Find("extent_km")) {
+            const json::Value* w = ext->Find("west");
+            const json::Value* e = ext->Find("east");
+            const json::Value* s = ext->Find("south");
+            const json::Value* n = ext->Find("north");
+            if (w != nullptr && e != nullptr && s != nullptr && n != nullptr && e->number > w->number && n->number > s->number) {
+                ground->west_m = w->number * 1000.0;
+                ground->east_m = e->number * 1000.0;
+                ground->south_m = s->number * 1000.0;
+                ground->north_m = n->number * 1000.0;
+                extent = true;
+            }
+        }
+        if (const json::Value* g = root.Find("grid_km")) {
+            if (g->Is(json::Type::Number) && g->number >= 0.1 && g->number <= 10.0) def.far_grid_m = g->number * 1000.0;
+        }
+        if (!extent) def.far_grid_m = 0.0;
         def.far_ground = std::move(ground);
     }
     return MapData::Build(std::move(def));

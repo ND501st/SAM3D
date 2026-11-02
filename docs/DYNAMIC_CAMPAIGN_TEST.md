@@ -93,8 +93,21 @@ Ctrl+Z speeds time up to x32. The other views are in `docs/PLAYING.md`.
 
 The project owner's review of 2 Nov 2026 turned several of these into the roadmap's track R
 (`docs/DEVELOPMENT_ROADMAP.md`): damage short of a kill and the guns' accuracy at range (R1-R2, done in first form,
-`docs/DAMAGE.md`), assets drawn under the map, aircraft attitude, the map's realism, the time of day and the pilots'
-defensive reactions.
+`docs/DAMAGE.md`), assets drawn under the map (R5, done in first form: one ground and the checks below), aircraft
+attitude, the map's realism, the time of day and the pilots' defensive reactions.
+
+**Nothing under the ground (R5).**
+
+* The test "dynamic campaign: nothing is under the ground" plays ten minutes of the waves and judges everything every
+  five seconds against the drawn ground (`simcore/ground_check.hpp`).
+* `ground_check data 3600` plays the whole testbed hour and the missions menu's maps. It is in `tools/verify.ps1` and
+  `tools/verify.sh`.
+* `python tools/ue_ground_check.py` checks the same in the game.
+* What keeps the waves over the ground:
+  * The pilots hold the belly a metre over the ground 3 s ahead.
+  * The reconnaissance helicopters fly low.
+  * A low weapon ends on its aim.
+  * A diving weapon ends where its line meets the ground.
 
 - **The other sites are not the Osa's model.** They fire by the raids' abstract chance per pass, not by a guidance
   model, and their missiles' speed (700 m/s), the launch interval and the reload are game values. Their radars do not

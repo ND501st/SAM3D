@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "simcore/air_war/test_waves.hpp"
+#include "simcore/ground_check.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "simcore/scenery/basic_models.hpp"
@@ -290,4 +291,30 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
     SC_EXPECT(friend_seen && enemy_seen);
     const std::string d = r.Debrief();
     SC_EXPECT(d.find("wave 1") != std::string::npos && d.find("impact") != std::string::npos && d.find("destroyed by") != std::string::npos);
+}
+
+// Roadmap R5, "nothing under the map": ten minutes of the testbed's waves, judged every five seconds against the ground
+// the game draws (simcore/ground_check.hpp): no aircraft, weapon, missile or ground item under it, none flown into it.
+SC_TEST("dynamic campaign: nothing is under the ground, and no aircraft flies into it") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/dynamic_campaign_test.json", kData, def, console, &e));
+    if (def.waves == nullptr) return;
+    ScenarioRunner r(std::move(def), std::move(console));
+    int checks = 0;
+    std::size_t listed = 0;
+    double next_s = 0.0;
+    while (r.Time() < 600.0 && !r.Finished()) {
+        r.Step(0.1);
+        if (r.Time() + 1e-9 < next_s) continue;
+        next_s += 5.0;
+        ++checks;
+        for (const BelowGround& b : EntitiesOffGround(r)) {
+            if (++listed <= 5) std::printf("    %s\n", b.Line().c_str());
+        }
+    }
+    SC_EXPECT(checks >= 100);
+    SC_EXPECT(listed == 0u);
+    SC_EXPECT(r.TerrainStrikes() == 0);
 }

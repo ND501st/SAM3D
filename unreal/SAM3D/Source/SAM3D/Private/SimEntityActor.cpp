@@ -144,11 +144,17 @@ bool ASimEntityActor::UseVehicleModel(const FString& Kind)
 	return true;
 }
 
-FVector ASimEntityActor::GroundBelow(const FVector& At)
+FVector ASimEntityActor::GroundBelow(const FVector& At, const USimWorldSubsystem& Sim)
 {
-	// A ground vehicle's sim position is where its antennas are, a few metres up: draw it on the ground below. The trace
-	// is made again every half second (Cesium's tiles load late) or once it has moved more than a metre; between, the
-	// ground's offset found last is kept.
+	// One ground (roadmap R5): on a map's level the map's drawn ground at this east and north, the very triangles the sim
+	// samples, so a battery row's ground point is already on it.
+	FVector Ground;
+	if (Sim.GetGroundMap() != nullptr && Sim.GroundAt(At, Ground, nullptr, this))
+	{
+		return Ground;
+	}
+	// A level without a map actor (Cesium's tiles, which load late): a ground-only trace from 3 km over (GroundAt's
+	// fallback), made again every half second or once it has moved more than a metre; between, the offset found is kept.
 	UWorld* MyWorld = GetWorld();
 	const double Now = MyWorld != nullptr ? MyWorld->GetTimeSeconds() : 0.0;
 	if (MyWorld != nullptr && (LastGroundTraceSeconds < 0.0 || Now - LastGroundTraceSeconds >= 0.5 ||
@@ -157,11 +163,9 @@ FVector ASimEntityActor::GroundBelow(const FVector& At)
 		LastGroundTraceSeconds = Now;
 		LastGroundTraceFrom = At;
 		GroundOffset = FVector::ZeroVector;
-		FHitResult Hit;
-		FCollisionQueryParams Params(SCENE_QUERY_STAT(SimEntityGround), false, this);
-		if (MyWorld->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 2000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+		if (Sim.GroundAt(At, Ground, nullptr, this))
 		{
-			GroundOffset = Hit.ImpactPoint - At;
+			GroundOffset = Ground - At;
 		}
 	}
 	return At + GroundOffset;
@@ -289,7 +293,7 @@ void ASimEntityActor::Tick(float DeltaSeconds)
 		FVector At = Sim->GetRenderLocation(*State);
 		if (State->bIsGround)
 		{
-			At = GroundBelow(At);
+			At = GroundBelow(At, *Sim);
 		}
 		SetActorLocationAndRotation(At, State->Rotation);
 		if (Mast != nullptr)

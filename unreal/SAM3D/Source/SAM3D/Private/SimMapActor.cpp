@@ -132,12 +132,29 @@ void ASimMapActor::BeginPlay()
 {
 	Super::BeginPlay();
 	SetActorTransform(FTransform::Identity);  // the meshes are in the sim's frame: the actor stays at the origin
+	// The level's drawn ground is this map's: entities are put on it by GroundAt, not by traces (roadmap R5).
+	if (USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+	{
+		Sim->SetGroundMap(this);
+	}
 	CheckTimer = 0.0f;
 	if (FParse::Value(FCommandLine::Get(), TEXT("SimMapShots="), ShotFolder) && !ShotFolder.IsEmpty())
 	{
 		ShotIndex = 0;
 		ShotTimer = 12.0f;  // the scenario loads, the map is drawn, the ground's collision cooks, the sky captures
 	}
+}
+
+void ASimMapActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+	{
+		if (Sim->GetGroundMap() == this)
+		{
+			Sim->SetGroundMap(nullptr);
+		}
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void ASimMapActor::RunShots(float DeltaSeconds)
@@ -186,7 +203,7 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 		const auto At = [&](double Ek, double Nk, double Up)
 		{
 			const double E = Ek * 1000.0, N = Nk * 1000.0;
-			return ToUnreal(Link.MapToFrame(E, N, Map->GroundHeight(E, N) + Up));
+			return ToUnreal(Link.GroundPoint(E, N, Map->GroundHeight(E, N) + Up));
 		};
 		const FVector From = At(V.E, V.N, V.Up), To = At(V.Te, V.Tn, V.TUp);
 		if (ShotCamera == nullptr)
@@ -334,8 +351,9 @@ bool ASimMapActor::Build(const FVector& FrameOriginLonLatAlt, const FString& Dat
 	}
 	const double T1 = FPlatformTime::Seconds();
 	Clear();
-	const simcore::MapFrameLink Link(Map->Def().origin,
+	GroundLink = std::make_shared<const simcore::MapFrameLink>(Map->Def().origin,
 		simcore::GeoPoint::FromDegrees(FrameOriginLonLatAlt.Y, FrameOriginLonLatAlt.X, FrameOriginLonLatAlt.Z));
+	const simcore::MapFrameLink& Link = *GroundLink;
 	BuildGround(Link);
 	BuildStrips(Link);
 	BuildBoxes(Link);
@@ -406,6 +424,48 @@ UMaterialInterface* ASimMapActor::ColourMaterial(const FLinearColor& Colour)
 	return Mid;
 }
 
+FVector ASimMapActor::GroundVertex(const simcore::MapFrameLink& Link, const simcore::MapGrid& Grid, int32 C, int32 R)
+{
+	return ToUnreal(Link.GroundPoint(Grid.EastOf(C), Grid.NorthOf(R), Grid.At(C, R)));
+}
+
+bool ASimMapActor::GroundAt(const FVector& UnrealPos, FVector& OutGround, FVector* OutNormal) const
+{
+	if (!Map || !GroundLink)
+	{
+		return false;
+	}
+	const simcore::Vec3 P = USimWorldSubsystem::UnrealToEnu(UnrealPos);
+	const simcore::MapPoint Mp = GroundLink->FrameToMap(P.x, P.y);
+	const int32 Level = Map->LevelAt(Mp.east_m, Mp.north_m);
+	if (Level < 0)
+	{
+		return false;
+	}
+	const double H = Map->GroundHeight(Mp.east_m, Mp.north_m);
+	OutGround = ToUnreal(simcore::GroundPointInFrame(GroundLink->Frame(), P.x, P.y, H));
+	if (OutNormal != nullptr)
+	{
+		// The face of the triangle the point is on: {A, B, C} or {B, D, C} of its cell (MapGrid::SampleTri).
+		const std::vector<const simcore::MapGrid*> Levels = Map->DrawnLevels();
+		const simcore::MapGrid& G = *Levels[static_cast<std::size_t>(Level)];
+		int C = 0, R = 0;
+		G.CellOf(Mp.east_m, Mp.north_m, C, R);
+		const double Tx = (Mp.east_m - G.EastOf(C)) / G.spacing_m, Ty = (Mp.north_m - G.NorthOf(R)) / G.spacing_m;
+		const bool bLower = Tx + Ty <= 1.0;
+		const FVector A = bLower ? GroundVertex(*GroundLink, G, C, R) : GroundVertex(*GroundLink, G, C + 1, R + 1);
+		const FVector B = GroundVertex(*GroundLink, G, C + 1, R);
+		const FVector Cc = GroundVertex(*GroundLink, G, C, R + 1);
+		FVector Nrm = FVector::CrossProduct(B - A, Cc - A).GetSafeNormal();
+		if (Nrm.Z < 0.0)
+		{
+			Nrm = -Nrm;
+		}
+		*OutNormal = Nrm.IsNearlyZero() ? FVector::UpVector : Nrm;
+	}
+	return true;
+}
+
 void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 {
 	UMaterialInterface* GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapVertexColor.M_SimMapVertexColor"));
@@ -415,117 +475,205 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	}
 	const simcore::MapData& M = *Map;
 	const simcore::MapDef& D = M.Def();
-	// The far ground is drawn where the map has it, the country's 1 km ground only beyond (BuildCountry): a district's
-	// far ground is its country's ground ("far_ground"), at the map's own spacing and with its far sites levelled, so the
-	// far boxes and lines stand on what is drawn and the sim sees it. With the country drawn it takes its land cover.
-	const simcore::MapFrameLink ToCountry(Country ? Country->Def().ground.origin : D.origin, D.origin);
-	const auto FarColour = [&](double E, double N, double H)
-	{
-		const FLinearColor Fields = GroundColour(M.Def(), E, N, H);
-		if (!Country)
-		{
-			return Fields;
-		}
-		const simcore::MapPoint P = ToCountry.FrameToMap(E, N);
-		return CoverTint(Fields, Country->LandCoverAt(P.east_m, P.north_m));
-	};
+	// One ground (roadmap R5): every level simcore samples (MapData::DrawnLevels: the map proper at 50 m, its far
+	// ground at 500 m, the country's 1 km grid and the 4 km land beyond it), each vertex simcore's node placed straight
+	// down the scenario frame's up (MapFrameLink::GroundPoint), each cell the two triangles MapGrid::SampleTri samples,
+	// a coarser level leaving out only the cells wholly under a finer one (MapData::DrawsCell). No sinks, no patches
+	// laid over it: what stands on the sim's ground stands on this. A skirt 5 m deep hangs from every edge where a level
+	// stops, to hide the cracks where a coarse edge meets the finer level's nodes.
 	if (Country && !D.far_ground)
 	{
-		UE_LOG(LogSAM3D, Warning, TEXT("Map %s: no \"far_ground\" (the country's file): its far ground is its own, not the country's drawn around it"),
-			*MapFile);
+		UE_LOG(LogSAM3D, Warning, TEXT("Map %s: no \"far_ground\" (the country's file): the country's ground is not drawn round it"), *MapFile);
 	}
-	// One square of the grid as a mesh of its own, cells [C0, C1) x [R0, R1) every Step samples. Far squares skip the
-	// cells under the map and sink their edge against it, so no crack shows between the two.
-	auto AddSection = [&](const simcore::MapGrid& G, int32 C0, int32 C1, int32 R0, int32 R1, int32 Step, bool bFar, bool bCollide)
+	const simcore::MapFrameLink ToCountry(Country ? Country->Def().ground.origin : D.origin, D.origin);
+	const simcore::MapFrameLink CountryToMap(D.origin, Country ? Country->Def().ground.origin : D.origin);
+	// The towns the map does not draw itself: their ground in the town's colour (the patch laid over it before R5).
+	struct FTown
 	{
-		const int32 Nc = (C1 - C0) / Step + 1, Nr = (R1 - R0) / Step + 1;
+		double E, N, R2;
+	};
+	TArray<FTown> Towns;
+	if (Country)
+	{
+		for (const simcore::CountrySettlementDef& S : Country->Def().settlements)
+		{
+			const simcore::MapPoint P = CountryToMap.FrameToMap(S.centre.east_m, S.centre.north_m);
+			const bool bUnderMap = P.east_m > D.west_m - S.radius_m && P.east_m < D.east_m + S.radius_m && P.north_m > D.south_m - S.radius_m &&
+								   P.north_m < D.north_m + S.radius_m;
+			if (!bUnderMap)
+			{
+				Towns.Add({P.east_m, P.north_m, S.radius_m * S.radius_m});
+			}
+		}
+	}
+	const FLinearColor TownColour(0.21f, 0.2f, 0.18f);
+	const auto Colour = [&](std::size_t Level, double E, double N, double H)
+	{
+		if (Level == 0)
+		{
+			return GroundColour(D, E, N, H);
+		}
+		for (const FTown& T : Towns)
+		{
+			if (FMath::Square(E - T.E) + FMath::Square(N - T.N) < T.R2)
+			{
+				return TownColour;
+			}
+		}
+		if (!Country)
+		{
+			return GroundColour(D, E, N, H);
+		}
+		const simcore::MapPoint P = ToCountry.FrameToMap(E, N);
+		return CoverTint(GroundColour(Level == 1 ? D : Country->Def().ground, E, N, H), Country->LandCoverAt(P.east_m, P.north_m));
+	};
+	// The scenario's origin in the map: the far ground's tiles within 15 km of it take queries (the camera's, physics').
+	const simcore::MapPoint Here = Link.FrameToMap(0.0, 0.0);
+	constexpr double QueryReachM = 15000.0;
+	constexpr double SkirtM = 5.0;
+	const std::vector<const simcore::MapGrid*> Levels = M.DrawnLevels();
+	// One square of a level as a mesh of its own: cells [C0, C1) x [R0, R1).
+	auto AddSection = [&](std::size_t Level, int32 C0, int32 C1, int32 R0, int32 R1)
+	{
+		const simcore::MapGrid& G = *Levels[Level];
+		const int32 Nc = C1 - C0 + 1, Nr = R1 - R0 + 1;
+		TArray<int32> Tris;
+		TArray<uint8> Drawn;
+		Drawn.SetNumZeroed((C1 - C0) * (R1 - R0));
+		bool bAny = false;
+		for (int32 r = R0; r < R1; ++r)
+		{
+			for (int32 c = C0; c < C1; ++c)
+			{
+				const bool bDraws = M.DrawsCell(Level, c, r);
+				Drawn[(r - R0) * (C1 - C0) + (c - C0)] = bDraws ? 1 : 0;
+				bAny = bAny || bDraws;
+			}
+		}
+		if (!bAny)
+		{
+			return;
+		}
 		TArray<FVector> Verts;
 		TArray<FVector> Normals;
 		TArray<FLinearColor> Colours;
 		TArray<FVector2D> Uv;
-		TArray<int32> Tris;
 		TArray<FProcMeshTangent> Tangents;
 		Verts.Reserve(Nc * Nr);
 		Normals.Reserve(Nc * Nr);
 		Colours.Reserve(Nc * Nr);
 		Uv.Reserve(Nc * Nr);
-		const double Mid = G.EastOf((C0 + C1) / 2), MidN = G.NorthOf((R0 + R1) / 2);
 		simcore::Vec3 Ae, An, Au;
-		Link.AxesAt(Mid, MidN, Ae, An, Au);
-		const auto InCore = [&](double E, double N)
-		{ return E > D.west_m + 1.0 && E < D.east_m - 1.0 && N > D.south_m + 1.0 && N < D.north_m - 1.0; };
+		Link.AxesAt(G.EastOf((C0 + C1) / 2), G.NorthOf((R0 + R1) / 2), Ae, An, Au);
+		const auto NormalAt = [&](int32 Gc, int32 Gr)
+		{
+			const double He = G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr);
+			const double Hn = G.At(Gc, FMath::Min(Gr + 1, G.rows - 1)) - G.At(Gc, FMath::Max(Gr - 1, 0));
+			const simcore::Vec3 Local(-He / (2.0 * G.spacing_m), -Hn / (2.0 * G.spacing_m), 1.0);
+			return DirToUnreal((Ae * Local.x + An * Local.y + Au * Local.z).Normalized());
+		};
 		for (int32 r = 0; r < Nr; ++r)
 		{
 			for (int32 c = 0; c < Nc; ++c)
 			{
-				const int32 Gc = FMath::Min(C0 + c * Step, G.cols - 1), Gr = FMath::Min(R0 + r * Step, G.rows - 1);
-				const double E = G.EastOf(Gc), N = G.NorthOf(Gr);
-				double H = G.At(Gc, Gr);
-				if (bFar && D.InCore(E, N))
-				{
-					H -= 3.0;  // tucked under the map's edge
-				}
-				Verts.Add(ToUnreal(Link.MapToFrame(E, N, H)));
-				const double He = G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr);
-				const double Hn = G.At(Gc, FMath::Min(Gr + 1, G.rows - 1)) - G.At(Gc, FMath::Max(Gr - 1, 0));
-				const simcore::Vec3 Local(-He / (2.0 * G.spacing_m), -Hn / (2.0 * G.spacing_m), 1.0);
-				const simcore::Vec3 Nrm = (Ae * Local.x + An * Local.y + Au * Local.z).Normalized();
-				Normals.Add(DirToUnreal(Nrm));
-				Colours.Add(bFar ? FarColour(E, N, H) : GroundColour(M.Def(), E, N, H));
+				const int32 Gc = C0 + c, Gr = R0 + r;
+				const double E = G.EastOf(Gc), N = G.NorthOf(Gr), H = G.At(Gc, Gr);
+				Verts.Add(GroundVertex(Link, G, Gc, Gr));
+				Normals.Add(NormalAt(Gc, Gr));
+				Colours.Add(Colour(Level, E, N, H));
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
 			}
 		}
+		// A skirt down from the edge between two nodes of the grid: both faces, so it hides the crack from either side.
+		const auto Skirt = [&](int32 Ca, int32 Ra, int32 Cb, int32 Rb)
+		{
+			const int32 Base = Verts.Num();
+			for (const FIntPoint& Node : {FIntPoint(Ca, Ra), FIntPoint(Cb, Rb)})
+			{
+				const double E = G.EastOf(Node.X), N = G.NorthOf(Node.Y), H = G.At(Node.X, Node.Y);
+				Verts.Add(GroundVertex(Link, G, Node.X, Node.Y));
+				Verts.Add(ToUnreal(Link.GroundPoint(E, N, H - SkirtM)));
+				const FVector Nrm = NormalAt(Node.X, Node.Y);
+				Normals.Add(Nrm);
+				Normals.Add(Nrm);
+				const FLinearColor Col = Colour(Level, E, N, H);
+				Colours.Add(Col);
+				Colours.Add(Col);
+				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
+				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
+			}
+			const int32 Ta = Base, Ba = Base + 1, Tb = Base + 2, Bb = Base + 3;
+			Tris.Append({Ta, Tb, Ba, Tb, Bb, Ba, Ta, Ba, Tb, Tb, Ba, Bb});
+		};
+		const auto DrawnAt = [&](int32 c, int32 r)
+		{
+			if (c < 0 || r < 0 || c >= G.cols - 1 || r >= G.rows - 1)
+			{
+				return false;
+			}
+			if (c >= C0 && c < C1 && r >= R0 && r < R1)
+			{
+				return Drawn[(r - R0) * (C1 - C0) + (c - C0)] != 0;
+			}
+			return M.DrawsCell(Level, c, r);
+		};
 		for (int32 r = 0; r + 1 < Nr; ++r)
 		{
 			for (int32 c = 0; c + 1 < Nc; ++c)
 			{
-				if (bFar)
+				const int32 Gc = C0 + c, Gr = R0 + r;
+				if (Drawn[r * (C1 - C0) + c] == 0)
 				{
-					const double Ce = G.EastOf(C0 + c * Step) + 0.5 * Step * G.spacing_m, Cn = G.NorthOf(R0 + r * Step) + 0.5 * Step * G.spacing_m;
-					if (InCore(Ce, Cn))
-					{
-						continue;
-					}
+					continue;
 				}
 				const int32 A = r * Nc + c, B = A + 1, Cc = A + Nc, Dd = Cc + 1;
-				// The face's normal is (C - A) x (B - A) for (A, B, C): A, B (east), C (north) faces up.
+				// The face's normal is (C - A) x (B - A) for (A, B, C): A, B (east), C (north) faces up. The split along
+				// B-C is simcore's (MapGrid::SampleTri): the contract.
 				Tris.Append({A, B, Cc, B, Dd, Cc});
+				if (!DrawnAt(Gc, Gr - 1))
+				{
+					Skirt(Gc, Gr, Gc + 1, Gr);
+				}
+				if (!DrawnAt(Gc, Gr + 1))
+				{
+					Skirt(Gc, Gr + 1, Gc + 1, Gr + 1);
+				}
+				if (!DrawnAt(Gc - 1, Gr))
+				{
+					Skirt(Gc, Gr, Gc, Gr + 1);
+				}
+				if (!DrawnAt(Gc + 1, Gr))
+				{
+					Skirt(Gc + 1, Gr, Gc + 1, Gr + 1);
+				}
 			}
 		}
-		if (Tris.Num() == 0)
-		{
-			return;
-		}
+		// Collision: the map proper's (bCollision), the far ground's near the scenario for queries only.
+		const double E0 = G.EastOf(C0), E1 = G.EastOf(C1), N0 = G.NorthOf(R0), N1 = G.NorthOf(R1);
+		const double Away = FMath::Sqrt(FMath::Square(FMath::Max3(E0 - Here.east_m, 0.0, Here.east_m - E1)) +
+										FMath::Square(FMath::Max3(N0 - Here.north_m, 0.0, Here.north_m - N1)));
+		const bool bCollide = Level == 0 ? bCollision : (Level == 1 && bCollision && Away < QueryReachM);
 		// A component per square: each cooks its own collision once (sections of one component would re-cook all of it).
 		UProceduralMeshComponent* Tile = NewObject<UProceduralMeshComponent>(this);
 		Tile->SetupAttachment(Root);
 		Tile->bUseAsyncCooking = true;
-		Tile->SetCastShadow(!bFar);
+		Tile->SetCastShadow(Level == 0);
 		Tile->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, Uv, Colours, Tangents, bCollide);
 		Tile->SetMaterial(0, GroundMaterial);
-		Tile->SetCollisionEnabled(bCollide ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		Tile->SetCollisionEnabled(!bCollide ? ECollisionEnabled::NoCollision
+											: (Level == 0 ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly));
 		Tile->RegisterComponent();
 		GroundTiles.Add(Tile);
 	};
-
-	const simcore::MapGrid& Core = M.CoreGrid();
-	const int32 Step = FMath::Max(1, GroundStep);
-	const int32 Tile = 50 * Step;
-	for (int32 R0 = 0; R0 < Core.rows - 1; R0 += Tile)
+	for (std::size_t Level = 0; Level < Levels.size(); ++Level)
 	{
-		for (int32 C0 = 0; C0 < Core.cols - 1; C0 += Tile)
+		const simcore::MapGrid& G = *Levels[Level];
+		const int32 Square = 50;
+		for (int32 R0 = 0; R0 < G.rows - 1; R0 += Square)
 		{
-			AddSection(Core, C0, FMath::Min(C0 + Tile, Core.cols - 1), R0, FMath::Min(R0 + Tile, Core.rows - 1), Step, false, bCollision);
-		}
-	}
-	if (bDrawFarGround)
-	{
-		const simcore::MapGrid& Far = M.FarGrid();
-		for (int32 R0 = 0; R0 < Far.rows - 1; R0 += 50)
-		{
-			for (int32 C0 = 0; C0 < Far.cols - 1; C0 += 50)
+			for (int32 C0 = 0; C0 < G.cols - 1; C0 += Square)
 			{
-				AddSection(Far, C0, FMath::Min(C0 + 50, Far.cols - 1), R0, FMath::Min(R0 + 50, Far.rows - 1), 1, true, false);
+				AddSection(Level, C0, FMath::Min(C0 + Square, G.cols - 1), R0, FMath::Min(R0 + Square, G.rows - 1));
 			}
 		}
 	}
@@ -561,8 +709,8 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 			const double Dx = B.x - A.x, Dy = B.y - A.y, L = FMath::Max(FMath::Sqrt(Dx * Dx + Dy * Dy), 1e-6);
 			const double Re = Dy / L, Rn = -Dx / L;  // to the right of the line
 			const double Half = 0.5 * S.width_m;
-			Verts[K].Add(ToUnreal(Link.MapToFrame(P.x - Re * Half, P.y - Rn * Half, P.z)));
-			Verts[K].Add(ToUnreal(Link.MapToFrame(P.x + Re * Half, P.y + Rn * Half, P.z)));
+			Verts[K].Add(ToUnreal(Link.GroundPoint(P.x - Re * Half, P.y - Rn * Half, P.z)));
+			Verts[K].Add(ToUnreal(Link.GroundPoint(P.x + Re * Half, P.y + Rn * Half, P.z)));
 			Normals[K].Add(Up);
 			Normals[K].Add(Up);
 		}
@@ -602,7 +750,7 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 		const FVector Forward = DirToUnreal(Ae * S + An * C);
 		const FVector Up = DirToUnreal(Au);
 		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, Up).Rotator();
-		const FVector At = ToUnreal(Link.MapToFrame(B.east_m, B.north_m, B.base_m + 0.5 * B.height_m));
+		const FVector At = ToUnreal(Link.GroundPoint(B.east_m, B.north_m, B.base_m + 0.5 * B.height_m));
 		const bool bRound = simcore::MapPartIsRound(B.part);
 		const FVector Scale(B.length_m, bRound ? B.length_m : B.width_m, B.height_m);  // the engine's cube and cylinder are 1 m
 		Instances[static_cast<int32>(B.part)].Add(FTransform(Rot, At, Scale));
@@ -630,155 +778,41 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 	}
 }
 
-double ASimMapActor::CountryGround(double East, double North) const
-{
-	// The map's own ground where the map draws it (its rivers' banks and hills at 50 m, its far ground at 500 m), the
-	// country's 1 km ground beyond.
-	if (Map)
-	{
-		const simcore::MapFrameLink ToMap(Map->Def().origin, Country ? Country->Def().ground.origin : Map->Def().origin);
-		const simcore::MapPoint P = ToMap.FrameToMap(East, North);
-		if (Map->Def().InCore(P.east_m, P.north_m) || (bDrawFarGround && Map->FarGrid().Covers(P.east_m, P.north_m)) || !Country)
-		{
-			return Map->GroundHeight(P.east_m, P.north_m);
-		}
-	}
-	return Country ? Country->GroundHeight(East, North) : 0.0;
-}
-
 void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 {
 	const simcore::CountryMap& Cm = *Country;
 	const simcore::CountryDef& Cd = Cm.Def();
-	const simcore::MapFrameLink Link(Cd.ground.origin,
+	const simcore::MapFrameLink Link(Map->Def().origin,
 		simcore::GeoPoint::FromDegrees(FrameOriginLonLatAlt.Y, FrameOriginLonLatAlt.X, FrameOriginLonLatAlt.Z));
 	const simcore::MapFrameLink ToMap(Map->Def().origin, Cd.ground.origin);
 	const simcore::MapDef& D = Map->Def();
-	// Whether a point of the country lies under the map (which draws its own ground, lines and buildings there).
+	// Whether a point of the country lies under the map proper (which draws its own lines and buildings there).
 	const auto UnderMap = [&](double E, double N, double Margin)
 	{
 		const simcore::MapPoint P = ToMap.FrameToMap(E, N);
 		return P.east_m > D.west_m - Margin && P.east_m < D.east_m + Margin && P.north_m > D.south_m - Margin && P.north_m < D.north_m + Margin;
 	};
-	// Whether the map draws the ground there: its far ground (out to far_km, the country's ground at the map's spacing)
-	// when drawn, else only the map proper.
-	const auto UnderMapGround = [&](double E, double N, double Margin)
+	// The country's ground is drawn with the map's (BuildGround: the country's lattices are levels of the map's ground,
+	// roadmap R5). Here what stands on it: its lines, lakes and towns, each on the ground the sim samples there
+	// (MapData::GroundHeight), placed down the frame's up (MapFrameLink::GroundPoint).
+	const auto GroundOf = [&](double E, double N)
 	{
-		if (!bDrawFarGround)
-		{
-			return UnderMap(E, N, Margin);
-		}
 		const simcore::MapPoint P = ToMap.FrameToMap(E, N);
-		return FMath::Abs(P.east_m) < D.far_m + Margin && FMath::Abs(P.north_m) < D.far_m + Margin;
+		return Map->GroundHeight(P.east_m, P.north_m);
 	};
-	const simcore::MapGrid& G = Cm.Grid();
-	const double W0 = G.west_m, W1 = G.EastOf(G.cols - 1), S0 = G.south_m, S1 = G.NorthOf(G.rows - 1);
-	const auto InGrid = [&](double E, double N) { return E > W0 + 1.0 && E < W1 - 1.0 && N > S0 + 1.0 && N < S1 - 1.0; };
-	UMaterialInterface* GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapVertexColor.M_SimMapVertexColor"));
-	if (GroundMaterial == nullptr)
+	const auto PointOf = [&](double E, double N, double H)
 	{
-		GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
-	}
-
-	// The ground: one mesh per square of cells, its points every Spacing from (E0, N0); cells where the map draws its
-	// ground (or, beyond the country's grid, inside it) skipped and their edge sunk 3 m against the finer ground.
-	const auto AddSquare = [&](double E0, double N0, double Spacing, int32 Nc, int32 Nr, bool bBeyond)
-	{
-		TArray<FVector> Verts;
-		TArray<FVector> Normals;
-		TArray<FLinearColor> Colours;
-		TArray<FVector2D> Uv;
-		TArray<int32> Tris;
-		const TArray<FProcMeshTangent> Tangents;
-		simcore::Vec3 Ae, An, Au;
-		Link.AxesAt(E0 + 0.5 * Spacing * (Nc - 1), N0 + 0.5 * Spacing * (Nr - 1), Ae, An, Au);
-		for (int32 R = 0; R < Nr; ++R)
-		{
-			for (int32 C = 0; C < Nc; ++C)
-			{
-				const double E = E0 + C * Spacing, N = N0 + R * Spacing;
-				double H = Cm.GroundHeight(E, N);
-				if (UnderMapGround(E, N, 1.0) || (bBeyond && InGrid(E, N)))
-				{
-					H -= 3.0;
-				}
-				Verts.Add(ToUnreal(Link.MapToFrame(E, N, H)));
-				const double He = Cm.GroundHeight(E + Spacing, N) - Cm.GroundHeight(E - Spacing, N);
-				const double Hn = Cm.GroundHeight(E, N + Spacing) - Cm.GroundHeight(E, N - Spacing);
-				const simcore::Vec3 Local(-He / (2.0 * Spacing), -Hn / (2.0 * Spacing), 1.0);
-				Normals.Add(DirToUnreal((Ae * Local.x + An * Local.y + Au * Local.z).Normalized()));
-				Colours.Add(CoverTint(GroundColour(Cd.ground, E, N, H), Cm.LandCoverAt(E, N)));
-				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
-			}
-		}
-		for (int32 R = 0; R + 1 < Nr; ++R)
-		{
-			for (int32 C = 0; C + 1 < Nc; ++C)
-			{
-				const double Ce = E0 + (C + 0.5) * Spacing, Cn = N0 + (R + 0.5) * Spacing;
-				if (UnderMapGround(Ce, Cn, -1.0) || (bBeyond && InGrid(Ce, Cn)))
-				{
-					continue;
-				}
-				const int32 A = R * Nc + C, B = A + 1, Cc = A + Nc, Dd = Cc + 1;
-				Tris.Append({A, B, Cc, B, Dd, Cc});
-			}
-		}
-		if (Tris.Num() == 0)
-		{
-			return;
-		}
-		UProceduralMeshComponent* Tile = NewObject<UProceduralMeshComponent>(this);
-		Tile->SetupAttachment(Root);
-		Tile->SetCastShadow(false);
-		Tile->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, Uv, Colours, Tangents, false);
-		Tile->SetMaterial(0, GroundMaterial);
-		Tile->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Tile->RegisterComponent();
-		GroundTiles.Add(Tile);
+		const simcore::MapPoint P = ToMap.FrameToMap(E, N);
+		return ToUnreal(Link.GroundPoint(P.east_m, P.north_m, H));
 	};
-	// The country's grid at its own spacing (1 km), in squares of 50 cells.
-	for (int32 R0 = 0; R0 < G.rows - 1; R0 += 50)
+	// The spacing of the ground drawn at a point: a line is resampled at a quarter of it, so it follows the triangles.
+	const auto SpacingAt = [&](double E, double N)
 	{
-		for (int32 C0 = 0; C0 < G.cols - 1; C0 += 50)
-		{
-			AddSquare(G.EastOf(C0), G.NorthOf(R0), G.spacing_m, FMath::Min(50, G.cols - 1 - C0) + 1, FMath::Min(50, G.rows - 1 - R0) + 1, false);
-		}
-	}
-	// The land beyond its borders, 100 km out, at 4 km: what aircraft from the neighbours' bases fly over.
-	const double Beyond = 100000.0, Coarse = 4000.0;
-	const int32 Bc = static_cast<int32>((W1 - W0 + 2.0 * Beyond) / Coarse) + 1, Br = static_cast<int32>((S1 - S0 + 2.0 * Beyond) / Coarse) + 1;
-	for (int32 R0 = 0; R0 < Br - 1; R0 += 40)
-	{
-		for (int32 C0 = 0; C0 < Bc - 1; C0 += 40)
-		{
-			AddSquare(W0 - Beyond + C0 * Coarse, S0 - Beyond + R0 * Coarse, Coarse, FMath::Min(40, Bc - 1 - C0) + 1, FMath::Min(40, Br - 1 - R0) + 1, true);
-		}
-	}
-
-	// The lines as ribbons at strategic widths, on the ground's highest corner of the mesh cell under each point (so the
-	// mesh never covers them: the map's far ground where it draws it, else the country's 1 km), every 400 m; not where
-	// the map draws its own.
-	const auto CellTop = [](const simcore::MapGrid& Gr, double E, double N)
-	{
-		const int32 C = FMath::Clamp(static_cast<int32>((E - Gr.west_m) / Gr.spacing_m), 0, Gr.cols - 2);
-		const int32 R = FMath::Clamp(static_cast<int32>((N - Gr.south_m) / Gr.spacing_m), 0, Gr.rows - 2);
-		return FMath::Max(FMath::Max(Gr.At(C, R), Gr.At(C + 1, R)), FMath::Max(Gr.At(C, R + 1), Gr.At(C + 1, R + 1)));
+		const simcore::MapPoint P = ToMap.FrameToMap(E, N);
+		const int32 Level = Map->LevelAt(P.east_m, P.north_m);
+		return Level < 0 ? 4000.0 : Map->DrawnLevels()[static_cast<std::size_t>(Level)]->spacing_m;
 	};
-	const auto MeshTop = [&](double E, double N)
-	{
-		if (UnderMapGround(E, N, 0.0))
-		{
-			const simcore::MapPoint P = ToMap.FrameToMap(E, N);
-			const simcore::MapGrid& Mg = D.InCore(P.east_m, P.north_m) ? Map->CoreGrid() : Map->FarGrid();
-			return CellTop(Mg, P.east_m, P.north_m);
-		}
-		if (!InGrid(E, N))
-		{
-			return Cm.GroundHeight(E, N);
-		}
-		return CellTop(G, E, N);
-	};
+	constexpr double Lift = 0.15;  // a line's ribbon over the ground (a game value)
 	CountryStrips = NewObject<UProceduralMeshComponent>(this, TEXT("CountryStrips"));
 	CountryStrips->SetupAttachment(Root);
 	CountryStrips->SetCastShadow(false);
@@ -796,9 +830,10 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 	Kinds[2].Colour = SurfaceColour(simcore::MapSurface::Road);
 	Kinds[3].Colour = SurfaceColour(simcore::MapSurface::Rail);
 	Kinds[4].Colour = FLinearColor(0.42f, 0.12f, 0.08f);
-	const auto Ribbon = [&](const std::vector<simcore::MapPoint>& Points, double Width, double Lift, FKind& K, bool bClosed)
+	const auto Ribbon = [&](const std::vector<simcore::MapPoint>& Points, double Width, FKind& K, bool bClosed)
 	{
-		// Resampled every 400 m; a run is broken where it passes under the map.
+		// Resampled at a quarter of the ground's spacing (at most every 400 m), each point level across at the highest of
+		// the ground under its middle and its two edges; a run is broken where it passes under the map.
 		if (Points.size() < 2)
 		{
 			return;
@@ -810,7 +845,8 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 			const simcore::MapPoint& A = Points[i];
 			const simcore::MapPoint& B = Points[(i + 1) % Points.size()];
 			const double L = FMath::Sqrt(FMath::Square(B.east_m - A.east_m) + FMath::Square(B.north_m - A.north_m));
-			const int32 Steps = FMath::Max(1, static_cast<int32>(L / 400.0));
+			const double Every = FMath::Min(400.0, 0.25 * SpacingAt(A.east_m, A.north_m));
+			const int32 Steps = FMath::Max(1, static_cast<int32>(FMath::CeilToDouble(L / Every)));
 			for (int32 s = 0; s < Steps; ++s)
 			{
 				const double T = static_cast<double>(s) / Steps;
@@ -833,11 +869,12 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 				const simcore::MapPoint& Qb = P[static_cast<std::size_t>(FMath::Min(i + 1, To))];
 				const double Dx = Qb.east_m - Qa.east_m, Dy = Qb.north_m - Qa.north_m, L = FMath::Max(FMath::Sqrt(Dx * Dx + Dy * Dy), 1e-6);
 				const double Re = Dy / L, Rn = -Dx / L, Half = 0.5 * Width;
-				const double H = MeshTop(Q.east_m, Q.north_m) + Lift;
+				const double El = Q.east_m - Re * Half, Nl = Q.north_m - Rn * Half, Er = Q.east_m + Re * Half, Nr = Q.north_m + Rn * Half;
+				const double H = FMath::Max3(GroundOf(Q.east_m, Q.north_m), GroundOf(El, Nl), GroundOf(Er, Nr)) + Lift;
 				simcore::Vec3 Ae, An, Au;
 				Link.AxesAt(Q.east_m, Q.north_m, Ae, An, Au);
-				K.Verts.Add(ToUnreal(Link.MapToFrame(Q.east_m - Re * Half, Q.north_m - Rn * Half, H)));
-				K.Verts.Add(ToUnreal(Link.MapToFrame(Q.east_m + Re * Half, Q.north_m + Rn * Half, H)));
+				K.Verts.Add(PointOf(El, Nl, H));
+				K.Verts.Add(PointOf(Er, Nr, H));
 				K.Normals.Add(DirToUnreal(Au));
 				K.Normals.Add(DirToUnreal(Au));
 			}
@@ -867,24 +904,24 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 	};
 	for (const simcore::MapLineDef& L : Cd.ground.rivers)
 	{
-		Ribbon(L.points, FMath::Max(L.width_m, 60.0), 1.5, Kinds[0], false);
+		Ribbon(L.points, FMath::Max(L.width_m, 60.0), Kinds[0], false);
 	}
 	for (const simcore::MapLineDef& L : Cd.ground.roads)
 	{
 		const bool bMain = L.line_class == "main";
-		Ribbon(L.points, bMain ? 30.0 : 18.0, 2.5, Kinds[bMain ? 1 : 2], false);
+		Ribbon(L.points, bMain ? 30.0 : 18.0, Kinds[bMain ? 1 : 2], false);
 	}
 	for (const simcore::MapLineDef& L : Cd.ground.railways)
 	{
-		Ribbon(L.points, 14.0, 2.5, Kinds[3], false);
+		Ribbon(L.points, 14.0, Kinds[3], false);
 	}
 	for (const simcore::MapLineDef& L : Cd.pipelines)
 	{
-		Ribbon(L.points, 8.0, 2.0, Kinds[4], false);  // the pipeline's cleared strip
+		Ribbon(L.points, 8.0, Kinds[4], false);  // the pipeline's cleared strip
 	}
-	Ribbon(Cd.outline, 25.0, 2.0, Kinds[4], true);  // the border
-	// The lakes: their surface as a sheet of 250 m cells at their level (on the mesh where its coarse ground stands
-	// higher, as the rivers' ribbons are), not where the map draws its own.
+	Ribbon(Cd.outline, 25.0, Kinds[4], true);  // the border
+	// The lakes: their surface as a sheet of 250 m cells at their level, not where the map draws its own. Under it the
+	// ground lies below the level (NaturalGround deepens it from the shore), drawn under the water: no lift.
 	for (const simcore::MapLakeDef& Lake : Cd.ground.lakes)
 	{
 		double Lo0 = 1e18, Lo1 = 1e18, Hi0 = -1e18, Hi1 = -1e18;
@@ -905,15 +942,15 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 				{
 					continue;
 				}
-				const double H = FMath::Max(Lake.level_m, MeshTop(Ce, Cn)) + 1.0;
+				const double H = Lake.level_m;
 				simcore::Vec3 Ae, An, Au;
 				Link.AxesAt(Ce, Cn, Ae, An, Au);
 				FKind& K = Kinds[0];
 				const int32 A = K.Verts.Num(), B = A + 1, Cc = A + 2, Dd = A + 3;
-				K.Verts.Add(ToUnreal(Link.MapToFrame(E, N, H)));
-				K.Verts.Add(ToUnreal(Link.MapToFrame(E + Cell, N, H)));
-				K.Verts.Add(ToUnreal(Link.MapToFrame(E, N + Cell, H)));
-				K.Verts.Add(ToUnreal(Link.MapToFrame(E + Cell, N + Cell, H)));
+				K.Verts.Add(PointOf(E, N, H));
+				K.Verts.Add(PointOf(E + Cell, N, H));
+				K.Verts.Add(PointOf(E, N + Cell, H));
+				K.Verts.Add(PointOf(E + Cell, N + Cell, H));
 				for (int32 i = 0; i < 4; ++i)
 				{
 					K.Normals.Add(DirToUnreal(Au));
@@ -937,11 +974,11 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		++Section;
 	}
 
-	// The towns beyond the map: a patch of town ground and blocks on it (the capital's and the cities' taller), placed by
-	// a hash of the town's id so they stand where they stood.
+	// The towns beyond the map: blocks on the town's ground (tinted in BuildGround: no patch laid over it, R5), the
+	// capital's and the cities' taller, placed by a hash of the town's id so they stand where they stood. Each stands
+	// on the lowest corner of its footprint, so none floats on a slope.
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-	UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	TArray<FTransform> Patches, Houses, Blocks;
+	TArray<FTransform> Houses, Blocks;
 	for (const simcore::CountrySettlementDef& S : Cd.settlements)
 	{
 		if (UnderMap(S.centre.east_m, S.centre.north_m, S.radius_m))
@@ -951,9 +988,6 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(S.centre.east_m, S.centre.north_m, Ae, An, Au);
 		const FVector Up = DirToUnreal(Au);
-		const FRotator Flat = FRotationMatrix::MakeFromXZ(DirToUnreal(An), Up).Rotator();
-		const double Hc = MeshTop(S.centre.east_m, S.centre.north_m);
-		Patches.Add(FTransform(Flat, ToUnreal(Link.MapToFrame(S.centre.east_m, S.centre.north_m, Hc + 0.5)), FVector(2.0 * S.radius_m, 2.0 * S.radius_m, 1.0)));
 		const bool bBig = S.kind == "capital" || S.kind == "city";
 		const int32 Count = S.kind == "capital" ? 420 : S.kind == "city" ? 200 : S.kind == "town" ? 90 : 20;
 		const uint64 Seed = static_cast<uint64>(GetTypeHash(FString(UTF8_TO_TCHAR(S.id.c_str()))));
@@ -965,8 +999,16 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 			const double E = S.centre.east_m + Rr * FMath::Sin(A), N = S.centre.north_m + Rr * FMath::Cos(A);
 			const double Hb = bBig ? 12.0 + 30.0 * U3 * (1.0 - Rr / S.radius_m) : 6.0 + 4.0 * U3;
 			const FVector Size = bBig ? FVector(40.0, 18.0, Hb) : FVector(12.0, 9.0, Hb);
-			const FRotator Rot = FRotationMatrix::MakeFromXZ(DirToUnreal(Ae * FMath::Sin(U3 * 3.0) + An * FMath::Cos(U3 * 3.0)), Up).Rotator();
-			(bBig ? Blocks : Houses).Add(FTransform(Rot, ToUnreal(Link.MapToFrame(E, N, MeshTop(E, N) + 0.5 * Hb)), Size));
+			const double Turn = U3 * 3.0;  // the box's long side, from north
+			double Base = 1e18;
+			for (const FVector2D& Corner : {FVector2D(0.5, 0.5), FVector2D(0.5, -0.5), FVector2D(-0.5, 0.5), FVector2D(-0.5, -0.5)})
+			{
+				const double Along = Corner.X * Size.X, Across = Corner.Y * Size.Y;
+				const double Ec = E + Along * FMath::Sin(Turn) + Across * FMath::Cos(Turn), Nc = N + Along * FMath::Cos(Turn) - Across * FMath::Sin(Turn);
+				Base = FMath::Min(Base, GroundOf(Ec, Nc));
+			}
+			const FRotator Rot = FRotationMatrix::MakeFromXZ(DirToUnreal(Ae * FMath::Sin(Turn) + An * FMath::Cos(Turn)), Up).Rotator();
+			(bBig ? Blocks : Houses).Add(FTransform(Rot, PointOf(E, N, Base + 0.5 * Hb), Size));
 		}
 	}
 	const auto AddInstances = [&](const TCHAR* Name, UStaticMesh* Mesh, const TArray<FTransform>& Xf, const FLinearColor& Colour, bool bShadow)
@@ -986,7 +1028,6 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		Parts.Add(H);
 		BoxCount += Xf.Num();
 	};
-	AddInstances(TEXT("Country_TownGround"), Cylinder, Patches, FLinearColor(0.21f, 0.2f, 0.18f), false);
 	AddInstances(TEXT("Country_Houses"), Cube, Houses, PartColour(simcore::MapPart::House), true);
 	AddInstances(TEXT("Country_Blocks"), Cube, Blocks, PartColour(simcore::MapPart::Flats), true);
 }
@@ -1027,7 +1068,8 @@ void ASimMapActor::BuildAssets(const FVector& FrameOriginLonLatAlt)
 	}
 	const simcore::GeoPoint FrameOrigin = simcore::GeoPoint::FromDegrees(FrameOriginLonLatAlt.Y, FrameOriginLonLatAlt.X, FrameOriginLonLatAlt.Z);
 	const simcore::MapFrameLink Link(Th->origin, FrameOrigin);
-	const simcore::MapFrameLink ToCountry(Country ? Country->Def().ground.origin : Th->origin, Th->origin);
+	const simcore::MapFrameLink ToMap(Map->Def().origin, Th->origin);
+	const simcore::MapFrameLink MapLink(Map->Def().origin, FrameOrigin);
 	// What the scenario draws itself: its neighbours (ASimScenarioDirector), its own battery and its dummies (entities).
 	TSet<FString> Skip;
 	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
@@ -1040,17 +1082,19 @@ void ASimMapActor::BuildAssets(const FVector& FrameOriginLonLatAlt)
 		}
 	}
 	const FLinearColor Wreck(0.07f, 0.07f, 0.06f);
-	// One basic model on the ground at (E, N) of the theatre's frame, facing a horizontal direction there.
+	// One basic model on the ground at (E, N) of the theatre's frame, facing a horizontal direction there: on the ground
+	// the sim samples and the map draws (roadmap R5), down the frame's up.
 	auto PlaceModel = [&](const std::string& Model, double E, double N, const simcore::Vec3& Facing, bool bWrecked)
 	{
-		const simcore::MapPoint Pc = ToCountry.FrameToMap(E, N);
-		const double H = CountryGround(Pc.east_m, Pc.north_m);
+		const simcore::MapPoint Pm = ToMap.FrameToMap(E, N);
+		const double H = Map->GroundHeight(Pm.east_m, Pm.north_m);
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(E, N, Ae, An, Au);
 		const simcore::Vec3 Fwd = Ae * Facing.x + An * Facing.y;
 		USceneComponent* Holder = NewObject<USceneComponent>(this);
 		Holder->SetupAttachment(Root);
-		Holder->SetRelativeLocationAndRotation(ToUnreal(Link.MapToFrame(E, N, H)), FRotationMatrix::MakeFromXZ(DirToUnreal(Fwd), DirToUnreal(Au)).Rotator());
+		Holder->SetRelativeLocationAndRotation(ToUnreal(MapLink.GroundPoint(Pm.east_m, Pm.north_m, H)),
+			FRotationMatrix::MakeFromXZ(DirToUnreal(Fwd), DirToUnreal(Au)).Rotator());
 		Holder->RegisterComponent();
 		AssetParts.Add(Holder);
 		TArray<UStaticMeshComponent*> Built;

@@ -1207,21 +1207,15 @@ void ASimOsaVehicle::Drive(float DeltaSeconds, APlayerController* Pc)
 
 void ASimOsaVehicle::FollowGround()
 {
-	// Sit on whatever has collision below (Cesium terrain tiles have collision by default).
-	UWorld* World = GetWorld();
-	if (World == nullptr)
+	// Sit on the level's ground (USimWorldSubsystem::GroundAt, roadmap R5): a map's drawn triangles where the level has a
+	// map actor, else the first static surface on a ground-only trace from 3 km over (Cesium's tiles have collision; a
+	// trace that starts inside the ground never hits its surface, and the vehicle can begin under the real terrain).
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	FVector Ground, Normal;
+	if (Sim != nullptr && Sim->GroundAt(GetActorLocation(), Ground, &Normal, this))
 	{
-		return;
-	}
-	const FVector Here = GetActorLocation();
-	FHitResult Hit;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimOsaGround), false, this);
-	// Start well above: the vehicle can begin under the real terrain (scenario heights are approximate and Cesium
-	// heights are above the ellipsoid), and a trace that starts inside the ground never hits its surface.
-	if (World->LineTraceSingleByChannel(Hit, Here + FVector(0, 0, 300000.0), Here - FVector(0, 0, 300000.0), ECC_Visibility, Params))
-	{
-		const FRotator Pitch = FRotationMatrix::MakeFromXZ(FRotator(0.0, HeadingDeg, 0.0).Vector(), Hit.ImpactNormal).Rotator();
-		SetActorLocationAndRotation(Hit.ImpactPoint, Pitch);
+		const FRotator Pitch = FRotationMatrix::MakeFromXZ(FRotator(0.0, HeadingDeg, 0.0).Vector(), Normal).Rotator();
+		SetActorLocationAndRotation(Ground, Pitch);
 	}
 	else
 	{
@@ -2368,14 +2362,14 @@ FString ASimOsaVehicle::GetBodyText() const
 
 double ASimOsaVehicle::GroundZ(const FVector& VehicleCm) const
 {
-	UWorld* World = GetWorld();
+	// The level's ground round the vehicle (USimWorldSubsystem::GroundAt, roadmap R5), in the vehicle's frame.
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	const FTransform T = GetActorTransform();
 	const FVector At = T.TransformPosition(FVector(VehicleCm.X, VehicleCm.Y, 0.0));
-	FHitResult Hit;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimWalkGround), false, this);
-	if (World != nullptr && World->LineTraceSingleByChannel(Hit, At + FVector(0.0, 0.0, 5000.0), At - FVector(0.0, 0.0, 5000.0), ECC_Visibility, Params))
+	FVector Ground;
+	if (Sim != nullptr && Sim->GroundAt(At, Ground, nullptr, this))
 	{
-		return T.InverseTransformPosition(Hit.ImpactPoint).Z;
+		return T.InverseTransformPosition(Ground).Z;
 	}
 	return 0.0;  // the ground the vehicle stands on
 }

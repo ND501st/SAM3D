@@ -12,6 +12,7 @@ class ACesium3DTileset;
 class USimKnowledgeComponent;
 class USimCrewSeatComponent;
 class ACesiumGeoreference;
+class ASimMapActor;
 
 /** Snapshot of one simulated entity, converted to Unreal units (cm, degrees). */
 USTRUCT(BlueprintType)
@@ -69,6 +70,10 @@ struct SAM3D_API FSimEntityState
 	/** A weapon falling or flying to the ground (a bomb, an air-to-ground or cruise missile: ScenarioTarget::weapon). */
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Sim")
 	bool bIsWeapon = false;
+
+	/** How long it may be carried on by Velocity before its lowest point meets the ground (s; roadmap R5): an aircraft or
+	 *  weapon diving at the ground is not drawn into it between steps. Negative: no limit. */
+	double GroundClearSeconds = -1.0;
 };
 
 /** Something standing in the world that the views visit but that is no entity: an air defence site near the scenario, a
@@ -1532,6 +1537,17 @@ public:
 	bool ApplyConsoleSnapshot(const TArray<uint8>& Bytes, uint32& Seq);
 	/** Server: console snapshots and seat procedures to seated players (called after the sim steps). */
 	void PumpConsole();
+	/** The ground check's second (StartGroundCheck), after the steps. */
+	void TickGroundCheck();
+	bool TraceGroundAt(const FVector& Where, FVector& OutGround, FVector* OutNormal, const AActor* Ignore) const;
+	TWeakObjectPtr<ASimMapActor> GroundMap;
+	bool bGroundCheckArgRead = false;
+	bool bGroundCheckExit = false;
+	double GroundCheckUntil = -1.0;
+	double GroundCheckNext = 0.0;
+	int32 GroundChecks = 0;
+	int32 GroundListings = 0;
+	TSet<FString> GroundListed;
 
 	// ------------------------------------------------------------------ battery, board and radio (roadmap 7.7)
 
@@ -1754,6 +1770,24 @@ public:
 	/** Flat mapping without a georeference: ENU (x=E, y=N, z=U) m <-> Unreal (X=N, Y=E, Z=U) cm. */
 	static FVector EnuToUnreal(const simcore::Vec3& Enu);
 	static simcore::Vec3 UnrealToEnu(const FVector& Unreal);
+
+	/** The level's drawn ground (roadmap R5, one ground): the map actor that draws it registers itself here. */
+	void SetGroundMap(ASimMapActor* Map);
+	ASimMapActor* GetGroundMap() const;
+
+	/** The ground under (and over) `Where`: on a level with a map actor its drawn triangles, from the map's own link (no
+	 *  trace: what the sim samples is what is drawn); else (a Cesium level) the first WorldStatic surface on a trace from
+	 *  3 km over it to 3 km under, entity actors, pawns and actors tagged GroundTag ignored. False: no ground there. */
+	bool GroundAt(const FVector& Where, FVector& OutGround, FVector* OutNormal = nullptr, const AActor* Ignore = nullptr) const;
+
+	/** Actors with this tag are not ground for GroundAt's trace (the neighbours' sites, put on the ground themselves). */
+	static const FName GroundTag;
+
+	/** The game's own "nothing under the map" check (roadmap R5; tools/ue_ground_check.py, sam3d.ground.check): for
+	 *  `Seconds` of sim time, once a second, every shown entity actor against GroundAt; what is under it (an aircraft by
+	 *  its bounds' bottom, the rest by its location) or a ground item floating over it is logged "Below ground:" /
+	 *  "Floats:". Started from the command line by -SimGroundCheck=<s>, which also ends the game after the summary. */
+	void StartGroundCheck(double Seconds, bool bExitAfter);
 
 private:
 	FString ResolveDataDirectory() const;
