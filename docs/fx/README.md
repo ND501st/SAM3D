@@ -456,7 +456,8 @@ compression, trails cut at visual range, the ribbon pool by owner, the ribbon se
 run headless. `tools/test_fx_tools.py` checks the air absorption against ISO 9613-1, pitching, level flattening and the
 recordings' level match.
 
-Pictures: the game run with `-SimFxShots=<folder>` (and `-SimFxShotsOnly=a+b`, `-SimFxShotsNight`) photographs each
+Pictures: the game run with `-SimFxShots=<folder>` (and `-SimFxShotsOnly=a+b`, `-SimFxShotsNight`, which loads the
+scenario at night as `-SimTime=night` does, so the simulation's light and the sky's sun are one: roadmap R7, docs/LIGHT.md) photographs each
 subject at its delays, near and far, and logs the effects' cost (`SimFxShots.cpp`: per shot the sprites, ribbons,
 lights and the frame's effects time; per subject the mean and peak of the effects' and the sound's time, the most
 sprites, ribbons and lights, and the frame); the effects are cleared between

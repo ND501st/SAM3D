@@ -40,7 +40,11 @@ saves), and isn't for editing: an update overwrites it. `play.ps1 -NoBuild` play
 
 ## The missions menu
 
-Up/Down a mission, H the helper (Off, Hints, On: below), Enter (or Start) to choose who to play, Q to quit. Choosing
+Up/Down a mission, H the helper (Off, Hints, On: below), T the time of day (Shift+T back), Enter (or Start) to choose
+who to play, Q to quit. The time of day is the mission's own, dawn, day, dusk, night or an hour (`,` and `.` move it by
+half an hour), each by the sun at the mission's place and date: the TV sees only by day and in twilight, the battery
+signals by lamps and marches by night in the dark, and the sky follows the same sun (docs/LIGHT.md). The lessons, the
+battles on their dates and the air war's raids hold their own time. Choosing
 shows the mission's crew: every crewman of its vehicles, in command or in the crew, with his duties under the one chosen,
 and outside with no seat. Up/Down or 1-9 a crewman, Enter, Play or a second click on him to play, Esc or Back to the
 missions. (Left/Right on the mission's page still pick where to start.) The groups:
