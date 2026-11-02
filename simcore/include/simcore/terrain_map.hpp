@@ -503,7 +503,17 @@ public:
         }
         return true;
     }
-    void Take(double e, double n, double radius_m) { buckets_[Cell(e) * 1000003LL + Cell(n)].push_back({e, n, radius_m}); }
+    // A circle up to a cell across is filed by its centre (Free's reach finds it); a wider one (a site's clearance) in
+    // every bucket its square covers, so a query far from its centre but inside it still meets it.
+    void Take(double e, double n, double radius_m) {
+        if (radius_m <= cell_) {
+            buckets_[Cell(e) * 1000003LL + Cell(n)].push_back({e, n, radius_m});
+            return;
+        }
+        for (long long y = Cell(n - radius_m); y <= Cell(n + radius_m); ++y) {
+            for (long long x = Cell(e - radius_m); x <= Cell(e + radius_m); ++x) buckets_[x * 1000003LL + y].push_back({e, n, radius_m});
+        }
+    }
 
 private:
     struct Circle {
@@ -671,6 +681,10 @@ public:
         return FarObstacle(e, n);
     }
 
+    // How far a site keeps the map's buildings and woods off its centre (its levelled ground reaches as far, but for an
+    // airfield's and a town's sites).
+    static double ClearanceOf(const MapSiteDef& s) { return SiteClearance(s); }
+
     // The river's surface where it passes (east, north).
     double WaterHeight(double e, double n) const { return std::max(Analytic(e, n) + kBedDepthM - 0.3, GroundHeight(e, n) + 0.3); }
 
@@ -731,20 +745,32 @@ private:
         return h;
     }
 
-    // Beyond the map proper and the detail areas: the far ground's woods (the block's top over the ground here), then
-    // the clutter of the far ground's towns the map does not lay out.
+    // Beyond the map proper and the detail areas: whatever the map lays out there (the 100 m wood blocks of forests and
+    // copses running out past the core, the towns laid beyond it: the tallest top over each 50 m cell), the far ground's
+    // woods (the block's top over the ground here), then the clutter of the far ground's towns the map does not lay out.
+    // A top is kept absolute, so the ground plus the obstacle is never below anything drawn there.
     double FarObstacle(double e, double n) const {
+        double top = -1e300;
+        if (!laid_tops_.empty()) {
+            const auto it = laid_tops_.find(LaidKey(LaidCell(e), LaidCell(n)));
+            if (it != laid_tops_.end()) top = it->second;
+        }
         if (!far_canopy_.empty()) {
             const double fb = def_.far_block_m;
             const auto it = far_canopy_.find(CanopyKey((std::floor(e / fb) + 0.5) * fb, (std::floor(n / fb) + 0.5) * fb));
-            if (it != far_canopy_.end()) return std::max(0.0, it->second - GroundHeight(e, n));
+            if (it != far_canopy_.end()) top = std::max(top, it->second);
         }
+        if (top > -1e299) return std::max(0.0, top - GroundHeight(e, n));
         for (const ClutterTown& t : clutter_towns_) {
+            if (std::fabs(e - t.e) >= t.r || std::fabs(n - t.n) >= t.r) continue;
             const double d = std::hypot(e - t.e, n - t.n);
             if (d < t.r) return d < t.dense_r ? def_.clutter.dense_urban_m : def_.clutter.suburban_m;
         }
         return 0.0;
     }
+    static constexpr double kLaidCellM = 50.0;
+    static long long LaidCell(double v) { return static_cast<long long>(std::floor(v / kLaidCellM)); }
+    static long long LaidKey(long long x, long long y) { return x * 2000003LL + y; }
     static long long CanopyKey(double e, double n) {
         return static_cast<long long>(std::floor(e / 10.0)) * 2000003LL + static_cast<long long>(std::floor(n / 10.0));
     }
@@ -1533,6 +1559,7 @@ private:
         for (const MapBox& bx : layout_.boxes) {
             if (!Opaque(bx.part)) continue;
             if (def_.InCore(bx.east_m, bx.north_m)) Stamp(obstacles_, bx);
+            else if (!(bx.part == MapPart::Canopy && bx.length_m == def_.far_block_m)) StampLaid(bx);  // the far blocks: far_canopy_
             for (std::size_t i = 0; i < def_.detail.size(); ++i) {
                 const MapDetailDef& a = def_.detail[i];
                 const double reach = 0.5 * std::hypot(bx.length_m, bx.width_m) + kDetailObstacleSpacingM;
@@ -1543,6 +1570,24 @@ private:
         }
     }
     static constexpr double kDetailObstacleSpacingM = 25.0;
+
+    // A box beyond the map proper into laid_tops_: its top over every 50 m cell its footprint (the turned box's bounds)
+    // reaches.
+    void StampLaid(const MapBox& bx) {
+        const bool round = MapPartIsRound(bx.part);
+        const double sh = std::fabs(std::sin(bx.heading_rad)), ch = std::fabs(std::cos(bx.heading_rad));
+        const double half_e = round ? 0.5 * bx.length_m : 0.5 * (bx.length_m * sh + bx.width_m * ch);
+        const double half_n = round ? 0.5 * bx.length_m : 0.5 * (bx.length_m * ch + bx.width_m * sh);
+        const double top = bx.base_m + bx.height_m;
+        const long long x1 = static_cast<long long>(std::ceil((bx.east_m + half_e) / kLaidCellM)) - 1;
+        const long long y1 = static_cast<long long>(std::ceil((bx.north_m + half_n) / kLaidCellM)) - 1;
+        for (long long y = LaidCell(bx.north_m - half_n); y <= y1; ++y) {
+            for (long long x = LaidCell(bx.east_m - half_e); x <= x1; ++x) {
+                const auto ins = laid_tops_.emplace(LaidKey(x, y), top);
+                if (!ins.second) ins.first->second = std::max(ins.first->second, top);
+            }
+        }
+    }
 
     MapDef def_;
     MapGrid core_, far_, country_, beyond_, obstacles_;
@@ -1556,6 +1601,7 @@ private:
     mapgeo::Occupancy occupied_{40.0};
     std::unordered_set<long long> canopy_cells_;
     std::unordered_map<long long, double> far_canopy_;  // the far ground's wood blocks: their tops (CanopyKey of the centre)
+    std::unordered_map<long long, double> laid_tops_;   // the rest laid beyond the map proper: the top over each 50 m cell
     struct ClutterTown {
         double e, n, r, dense_r;
     };

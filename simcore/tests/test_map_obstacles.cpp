@@ -154,10 +154,25 @@ SC_TEST("obstacles: masts, chimneys, towers, launchers and tents are not; the fa
             const long long key = static_cast<long long>(std::floor(e / d.far_block_m)) * 1000003LL + static_cast<long long>(std::floor(n / d.far_block_m));
             bool in_town = false;
             for (const MapSettlementDef& s : d.far_ground->settlements) in_town = in_town || std::hypot(e - s.centre.east_m, n - s.centre.north_m) < s.radius_m;
-            if (h <= 0.0) ++open;
-            else if (woods.count(key) != 0) ++wooded;
-            else if (in_town) ++towns;
-            else ++stray;
+            if (h <= 0.0) {
+                ++open;
+            } else if (woods.count(key) != 0) {
+                ++wooded;
+            } else if (in_town) {
+                ++towns;
+            } else {
+                // Something else the map lays out beyond the map proper (a site, a farm) standing in the 50 m cell.
+                bool laid = false;
+                for (const MapBox& b : m->Layout().boxes) {
+                    if (std::fabs(b.east_m - e) < 50.0 + 0.5 * std::max(b.length_m, b.width_m) &&
+                        std::fabs(b.north_m - n) < 50.0 + 0.5 * std::max(b.length_m, b.width_m) && h <= b.base_m + b.height_m - m->GroundHeight(e, n) + 1e-6) {
+                        laid = true;
+                        break;
+                    }
+                }
+                if (laid) ++towns;
+                else ++stray;
+            }
         }
     }
     std::printf("    the far ground every 5 km: %d open, %d in woods, %d in towns, %d other\n", open, wooded, towns, stray);
@@ -174,6 +189,74 @@ SC_TEST("obstacles: masts, chimneys, towers, launchers and tents are not; the fa
         SC_EXPECT(mid == 20.0 || mid >= d.canopy_min_m - 0.5);
         SC_EXPECT(edge == 10.0 || edge >= d.canopy_min_m - 0.5);
     }
+}
+
+SC_TEST("obstacles: what is laid beyond the map proper (woods running out of it, the towns laid there) stands no higher than its obstacle") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    const MapDef& d = m->Def();
+    // Every opaque box beyond the map proper and the detail areas, at its centre and at its corners 1 m in: the ground
+    // plus the obstacle there reaches its top.
+    int boxes = 0, over = 0, houses = 0, small_woods = 0, far_town = 0;
+    double worst = 0.0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (d.InCore(b.east_m, b.north_m) || d.InDetail(b.east_m, b.north_m)) continue;
+        if (b.part == MapPart::Marsh || b.part == MapPart::Pad || b.part == MapPart::Runway || b.part == MapPart::Mast ||
+            b.part == MapPart::Chimney || b.part == MapPart::Tower || b.part == MapPart::Launcher || b.part == MapPart::Tent) {
+            continue;
+        }
+        ++boxes;
+        houses += b.part == MapPart::House ? 1 : 0;
+        small_woods += b.part == MapPart::Canopy && b.length_m < d.far_block_m ? 1 : 0;
+        const double top = b.base_m + b.height_m;
+        const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
+        const double hl = std::max(0.0, 0.5 * b.length_m - 1.0), hw = std::max(0.0, 0.5 * b.width_m - 1.0);
+        const double at[5][2] = {{0.0, 0.0}, {hl, hw}, {hl, -hw}, {-hl, hw}, {-hl, -hw}};
+        bool short_of = false;
+        for (const auto& p : at) {
+            const double e = b.east_m + p[0] * sh + p[1] * ch, n = b.north_m + p[0] * ch - p[1] * sh;
+            if (d.InCore(e, n) || d.InDetail(e, n)) continue;
+            const double gap = top - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
+            worst = std::max(worst, gap);
+            short_of = short_of || gap > 1e-6;
+        }
+        over += short_of ? 1 : 0;
+    }
+    // A town the district lays out beyond the map proper (Novo Varosd): its houses block sight.
+    for (const MapSettlementDef& s : d.settlements) {
+        if (s.id != "novo_varosd") continue;
+        for (const MapBox& b : m->Layout().boxes) {
+            if (b.part != MapPart::House || std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) > s.radius_m) continue;
+            ++far_town;
+            SC_EXPECT(m->ObstacleHeight(b.east_m, b.north_m) >= b.base_m + b.height_m - m->GroundHeight(b.east_m, b.north_m) - 1e-6);
+        }
+    }
+    std::printf("    beyond the map proper: %d boxes (%d houses, %d small wood blocks), %d short of their obstacle (worst %.2f m); "
+                "%d houses in Novo Varosd\n",
+                boxes, houses, small_woods, over, worst, far_town);
+    SC_EXPECT(boxes > 1000 && houses > 1000 && small_woods > 1000 && far_town > 100);
+    SC_EXPECT(over == 0);
+}
+
+SC_TEST("obstacles: no house or block of flats stands within a site's clearance, however far from the site's centre") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    int inside = 0, checked = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::House && b.part != MapPart::Flats) continue;
+        ++checked;
+        for (const MapSiteDef& s : m->Def().sites) {
+            if (s.kind == "tower") continue;  // a church tower's own nave stands 17 m off it
+            const double r = MapData::ClearanceOf(s);
+            if (std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) >= r) continue;
+            if (inside < 5) std::printf("    a %s %.0f m from %s (clearance %.0f m)\n", MapPartName(b.part),
+                                        std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m), s.id.c_str(), r);
+            ++inside;
+        }
+    }
+    std::printf("    %d houses and flats, %d inside a site's clearance\n", checked, inside);
+    SC_EXPECT(checked > 10000);
+    SC_EXPECT(inside == 0);
 }
 
 SC_TEST("obstacles: a terrain-following pilot holds his height over the forest's canopy, not over the ground under it") {

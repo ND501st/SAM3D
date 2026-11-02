@@ -46,11 +46,13 @@ sim and the picture still share one ground:
   (`MapData::ImportedLines`); not in the map file's lines, so the route service and `NearestRoad` are unchanged.
 * **The capital's town** (`detail_settlements`) is laid after everything else on its own random stream: houses along
   the imported roads, blocks of flats within 0.45 of its 7 km radius, nothing within 30 m of the Rava. The map proper's
-  layout is unchanged by it: the core's boxes per part are recorded in `test_world_map.cpp` (12038, from r-track before
-  R6) and checked. The far ground's woods within 100 m of its radius give way.
+  layout is unchanged by it: the core's boxes per part are recorded in `test_world_map.cpp` and checked (12038 from
+  r-track before R6; 12029 since R6's review, when a site's clearance began to be found however far a block stands from
+  its centre, `mapgeo::Occupancy`, and 9 wood blocks inside the 140 m clearance of two field posts and the P-40 post
+  went). The far ground's woods within 100 m of its radius give way.
 * **The dynamic campaign test's positions are map sites** (`capital_*`, 32 of them: the Osa positions of battery 21
-  and of battery 22, the Kub, S-75 and S-125, the gun sites, the radars), so the town keeps clear of them and their
-  ground is levelled. Three on the Rava's bank are left out (the ZU-23 at the road bridge and at the river port, S-60
+  and of battery 22, the Kub, S-75 and S-125, the gun sites, the radars), so the town keeps clear of them (no house or
+  block of flats inside a site's clearance: `test_map_obstacles.cpp`) and their ground is levelled. Three on the Rava's bank are left out (the ZU-23 at the road bridge and at the river port, S-60
   battery 6), because a levelled site would fill the river's bed.
 * **Obstacles at 25 m** in each area, from the same boxes (`MapData::DetailObstacleGrids`).
 

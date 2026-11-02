@@ -232,11 +232,11 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 		// From 60 m off the bridge's side, a little above the water, at its middle.
 		All.Add(FView{TEXT("bridge_pier"), E + 0.06 * Sn, N - 0.06 * Se, 2.5, E, N, 2.0});
 	}
-	for (const simcore::MapSettlementDef& S : Map->Def().detail_settlements)
+	if (!Map->Def().detail_settlements.empty())
 	{
+		const simcore::MapSettlementDef& S = Map->Def().detail_settlements.front();
 		const double E = S.centre.east_m / 1000.0, N = S.centre.north_m / 1000.0;
 		All.Add(FView{TEXT("capital_150m"), E, N - 1.5, 150.0, E, N, 0.0});
-		break;
 	}
 	const int32 Count = All.Num();
 	ShotTimer -= DeltaSeconds;

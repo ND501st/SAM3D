@@ -510,8 +510,11 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
   * **On the map** (`MapData::ObstacleHeight`, `simcore/terrain_map.hpp`): the tallest box over each node, above the
     ground there, at 50 m on the map proper and 25 m in the detail areas (`docs/TEST_RANGE.md`). Thin or porous parts
     (masts, chimneys, towers, launchers, tents) and flat ones (marsh, pads, runways) are left out: a 0.6 m mast must
-    not make a 50 m cell opaque. Beyond the map proper and the detail areas: each wood block of the far ground by its
-    top, and in the far ground's towns the map does not lay out a representative clutter height
+    not make a 50 m cell opaque. Beyond the map proper and the detail areas: whatever the map lays out there (the
+    forests' and copses' 100 m blocks running out past it, the towns laid beyond it such as Novo Varosd) by the tallest
+    top over each 50 m cell, each 400 m wood block of the far ground by its top (both kept as absolute tops, so the
+    ground plus the obstacle never falls short of what is drawn), and in the far ground's towns the map does not lay out
+    a representative clutter height
     (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban 10 m beyond; villages
     suburban), so what the game draws there blocks sight too.
   * **Low pilots climb over the canopy.** `TargetPilot::HoldHeight` holds the wanted height over the ground plus the
@@ -523,6 +526,10 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     stands: nothing drawn stands above the profile the sight lines use. The other way round, an obstacle cell is
     soft by half a cell at a wood's edge, so a ray can be blocked a few metres outside the drawn trees.
   * Balance against r-track (the merged R5 and R7, before obstacles): see `docs/DEVELOPMENT_ROADMAP.md` track R, R6.
+  * **The cost.** Every line-of-sight sample and every `HoldHeight` probe now reads `ObstacleHeight` (a grid sample on
+    the map and in the areas; beyond them a hash lookup and the ground's height, or the clutter towns' scan). The
+    dynamic campaign test's hour in `ground_check data 3600` takes about 82 s of wall time against r-track's 53 s
+    (Kesmark's raid 0.6 s against 0.5 s). If it tells in the game's fixed step: obstacle profiles cached per path.
 * Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
   (fields, orchards) in place of the towns' two heights.
 

@@ -229,6 +229,34 @@ SC_TEST("map dressing: no tree tops what blocks a sight line, stands near a line
     SC_EXPECT(mean_height > 0.8 * m->Def().canopy_min_m && mean_height < m->Def().canopy_max_m + 1.0);
 }
 
+SC_TEST("map dressing: no wood's mass tops what blocks a sight line, in the map proper or beyond it") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const MapDressing& d = Dressing();
+    int over = 0, beyond = 0;
+    double worst = -1e9;
+    for (const CanopyMass& c : d.masses) {
+        const bool far_out = !m->Def().InCore(c.east_m, c.north_m);
+        beyond += far_out ? 1 : 0;
+        const double top = c.base_m + c.height_m;
+        const double sh = std::sin(c.heading_rad), ch = std::cos(c.heading_rad);
+        const double hl = 0.5 * c.length_m - 0.5, hw = 0.5 * c.width_m - 0.5;
+        const double at[5][2] = {{0.0, 0.0}, {hl, hw}, {hl, -hw}, {-hl, hw}, {-hl, -hw}};
+        bool short_of = false;
+        for (const auto& p : at) {
+            const double e = c.east_m + p[0] * sh + p[1] * ch, n = c.north_m + p[0] * ch - p[1] * sh;
+            const double gap = top - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
+            worst = std::max(worst, gap);
+            short_of = short_of || gap > 0.3;  // the trees' allowance: the core's grid is sampled between its nodes
+        }
+        over += short_of ? 1 : 0;
+    }
+    std::printf("    %zu masses (%d beyond the map proper), %d above their obstacle (worst %.2f m)\n", d.masses.size(), beyond, over, worst);
+    SC_EXPECT(beyond > 1000);
+    SC_EXPECT(over == 0);
+}
+
 SC_TEST("map dressing: a wood's open side has its rows of trees, a wood in a detail area is planted whole") {
     const MapData* m = Kesmark();
     SC_EXPECT(m != nullptr);
